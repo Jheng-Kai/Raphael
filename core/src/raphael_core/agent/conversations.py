@@ -96,7 +96,7 @@ class Conversations:
     def list(self, member_id: int, query: str = "") -> list[dict]:
         self.main(member_id)
         rows = self.conn.execute(
-            "SELECT * FROM conversations WHERE member_id = ? ORDER BY (kind = 'quick') DESC, updated_at_ms DESC, id DESC", (member_id,),
+            "SELECT c.*, (SELECT COUNT(*) FROM agent_turns t WHERE t.conversation_id = c.id AND t.member_id = c.member_id) AS turn_count FROM conversations c WHERE member_id = ? ORDER BY (kind = 'quick') DESC, updated_at_ms DESC, id DESC", (member_id,),
         )
         return [dict(row) for row in rows if query.casefold() in row["title"].casefold()]
 

@@ -6,12 +6,12 @@
 // opens with one centred line.
 // Every state comes from the core (`computer.handback`). Nothing here keeps what was on the screen or typed.
 
-import { clausesHTML } from "./connector-card";
+import { cardDisclosureHTML, cardHTML, cardPromptText } from "./card";
 import { NAME, eventLineHTML } from "./event-line";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import type { AgentTurn, ComputerCard } from "./types";
-import { btn, esc, ico, st } from "./ui";
+import { btn, esc, ico } from "./ui";
 
 const plain = (key: MessageKey): string => (t as (key: MessageKey) => string)(key);
 
@@ -44,25 +44,19 @@ export function computerStateText(card: ComputerCard): string {
 /** The card's actions: 我完成了 and 停止 while the computer is the owner's, 停止 while the task checks. */
 function actionHTML(card: ComputerCard): string {
   const on = (act: string): string => ` data-act="${act}" data-card="${esc(card.id)}"`;
-  if (card.state === "control") {
-    return `<div class="cc-actions">${btn(esc(t("card.pcStop")), "sm", on("card-stop"))}${btn(esc(t("card.pcDone")), "sm pri", on("card-done"))}</div>`;
-  }
-  if (card.state === "returning") return `<div class="cc-actions">${btn(esc(t("card.pcStop")), "sm", on("card-stop"))}</div>`;
+  if (card.state === "control") return btn(esc(t("cards.takeover")), "sm pri", on("card-takeover")) + btn(esc(t("card.pcDone")), "sm", on("card-done")) + btn(esc(t("cards.skip")), "sm card-quiet", on("card-stop"));
+  if (card.state === "returning") return btn(esc(t("card.pcStop")), "sm", on("card-stop"));
   return "";
 }
 
 export function computerCardHTML(card: ComputerCard): string {
-  const busy = card.state === "returning" ? `<span class="spin" aria-hidden="true"></span>` : "";
-  const done = card.state === "done" ? `<span class="cc-done">${ico("check")}</span>` : "";
-  const control = card.state === "control";
-  return `<div class="connector-card computer-card${control ? " has-form" : ""}" data-computer-card="${esc(card.id)}" data-card-state="${esc(card.state)}"` +
-    `${card.note ? ` data-card-note="${esc(card.note)}"` : ""} role="group" aria-label="${esc(t("card.pcTitle"))}">` +
-    `<span class="mono md" aria-hidden="true">${ico("monitor")}</span>` +
-    `<div class="cc-meta"><div class="cc-name"><span>${esc(t("card.pcTitle"))}</span>` +
-    (control ? `<span class="cc-live">${st("ok", t("card.pcControl"))}</span>` : "") + `</div>` +
-    `<div class="cc-state" aria-live="polite">${busy}${done}<span>${clausesHTML(computerStateText(card))}</span></div>` +
-    (control && card.note === "still" ? `<div class="cc-state cc-hint"><span>${clausesHTML(t("card.pcStill"))}</span></div>` : "") + `</div>` +
-    actionHTML(card) + `</div>`;
+  const active = card.state === "control";
+  return cardHTML({ title: t("card.pcTitle"), status: active || card.state === "returning" ? "waiting" : card.state === "failed" ? "failed" : "done",
+    statusText: active || card.state === "returning" ? cardPromptText("computer") : card.state === "failed" ? t("cards.failed") : t("cards.done"), body: active ? computerStateText(card) : undefined,
+    content: active ? `<div class="card-computer-screen" data-card-screen><button type="button" class="btn" data-act="card-takeover" data-card="${esc(card.id)}" aria-label="${esc(t("cards.takeover"))}">${ico("monitor")}</button></div>` +
+      (card.note === "still" ? `<p class="card-body">${esc(t("card.pcStill"))}</p>` : "") : cardDisclosureHTML(card.id, `<p class="card-body">${esc(computerStateText(card))}</p><p class="card-body">${esc(reasonText(card.reason, windowOf(card)))}</p>`),
+    actions: actionHTML(card), cls: "computer-card", attrs: ` data-computer-card="${esc(card.id)}" data-card-state="${esc(card.state)}"${card.note ? ` data-card-note="${esc(card.note)}"` : ""}`,
+  });
 }
 
 /** The cards of the owner's turn at the computer a turn handed over, below what it said. */

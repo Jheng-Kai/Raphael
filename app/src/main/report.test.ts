@@ -81,7 +81,7 @@ describe("the budget", () => {
   test("used up", () => {
     const r = buildReport(status({ state: "ok" }, 20, 20), now);
     expect(r.text).toBe("《告。本月額度已用完，聽寫先不整理。》");
-    expect(r.action).toEqual({ label: "調整上限", target: "settings" });
+    expect(r.action).toEqual({ label: "查看用量", target: "settings" });
   });
 
   test("being at the limit is being over it, as in the core", () => {
@@ -97,7 +97,7 @@ describe("the budget", () => {
     expect(buildReport(status({ state: "ok" }, 15.9, 20), now).text).toContain("一切正常");
     const r = buildReport(status({ state: "ok" }, 16, 20), now);
     expect(r.text).toContain("本月額度已使用 80%");
-    expect(r.action).toEqual({ label: "調整上限", target: "settings" });
+    expect(r.action).toEqual({ label: "查看用量", target: "settings" });
   });
 
   test("budget warning predicts the day", () => {

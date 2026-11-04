@@ -14,7 +14,7 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 32
 WEBP = b"RIFF\x10\0\0\0WEBPVP8 " + b"\0" * 16
 METHODS = {
     "members.list", "members.create", "members.update", "members.delete", "members.set_avatar",
-    "members.presets", "members.read", "members.viewing", "members.tool_choices",
+    "members.read", "members.viewing", "members.tool_choices",
     "groups.create", "groups.update", "groups.delete",
     "routines.list", "routines.create", "routines.update", "routines.delete", "routines.template",
 }  # fmt: skip
@@ -39,8 +39,8 @@ async def test_raphael_is_first_in_the_list_in_the_language_asked(rig):
         "blurb": "", "reply_style": "full", "voice": "", "read_aloud": False,
         "notify": False, "ask_before_members": False, "pinned": False, "hidden": False, "draft_first": True,
         "id": 0, "name": "Raphael", "role": "", "personality": "", "instructions": "", "avatar": "", "group_id": None,
-        "model": "", "tools": None, "position": -1, "created": 0, "unread": False,
-        "waiting": False, "preview": "", "last_at": None, "profile_ready": False,
+        "model": "", "tools": None, "position": -1, "created": 0, "unread": False, "unread_from": None,
+        "waiting": False, "activity": "idle", "activity_label": "", "preview": "", "last_at": None, "profile_ready": False, "chief": True,
     }  # fmt: skip
     rig.language = "ja"
     assert (await rig.call("members.list"))["members"][0]["name"] == "ラファエル"
@@ -147,24 +147,50 @@ async def test_what_is_not_a_picture_is_refused(rig, mime, data, kind):
     assert await refused(rig, "members.set_avatar", {"id": member["id"], "name": "x", "mime": mime, "data": data}) == kind
 
 
-async def test_the_presets_are_the_owners_own_files_if_the_folder_is_there(rig):
-    assert await rig.call("members.presets") == {"presets": []}
+async def test_a_picture_from_an_older_build_has_no_url_left(rig):
     folder = rig.local / "avatars" / "presets"
     folder.mkdir(parents=True)
-    (folder / "chibi-01.webp").write_bytes(WEBP)
-    (folder / "chibi-02.png").write_bytes(PNG)
-    (folder / "notes.txt").write_text("x")
-    (folder / "fake.png").write_bytes(b"<html>")
-    presets = (await rig.call("members.presets"))["presets"]
-    assert [p["avatar"] for p in presets] == ["preset:chibi-01", "preset:chibi-02"]
-    assert presets[0]["url"].startswith("data:image/webp;base64,")
-    member = (await rig.call("members.create", {"name": "A", "avatar": "preset:chibi-02"}))["member"]
-    assert member["avatar_url"].startswith("data:image/png;base64,")
-    gone = (await rig.call("members.create", {"name": "B", "avatar": "preset:nobody"}))["member"]
-    assert "avatar_url" not in gone  # the app shows the first character of the name
+    (folder / "old.png").write_bytes(PNG)
+    member = (await rig.call("members.create", {"name": "A", "avatar": "preset:old"}))["member"]
+    assert "avatar_url" not in member  # the app shows its slime
 
 
 # --- unread and waiting ----------------------------------------------------------------------------
+
+async def test_unread_from_keeps_the_first_unseen_turn_until_read(rig, conn):
+    member = (await rig.call("members.create", {"name": "Sample reader"}))["member"]["id"]
+    history = AgentHistory(conn)
+
+    def arrive(member_id=member, source="app"):
+        turn_id = history.add(session_id="sample", question="Sample question", route="answer",
+                              prefix="", text="Sample reply", status="done", source=source, member_id=member_id)
+        rig.service.turn_arrived(turn_id)
+        return turn_id
+
+    async def listed(member_id=member):
+        return next(m for m in (await rig.call("members.list"))["members"] if m["id"] == member_id)
+
+    await rig.call("members.viewing", {"id": member})
+    arrive()
+    arrive(0, "voice")
+    assert (await listed())["unread_from"] is None
+    assert (await listed(0))["unread_from"] is None
+    await rig.call("members.viewing", {"id": None})
+    first = arrive()
+    arrive()
+    rig.service.turn_arrived(first)
+    assert (await listed())["unread_from"] == first
+    assert (await listed())["unread"] is True
+    await rig.call("members.read", {"id": member})
+    assert (await listed())["unread_from"] is None
+    assert (await listed())["unread"] is False
+    assert (await listed(0))["unread"] is False
+    next_first = arrive()
+    assert (await listed())["unread_from"] == next_first
+    first_chief = arrive(0)
+    arrive(0, "voice")
+    assert (await listed(0))["unread_from"] == first_chief
+
 
 
 async def test_a_turn_in_a_thread_that_is_not_on_screen_is_unread_until_it_is_read(rig, conn):
@@ -253,8 +279,8 @@ async def test_deleting_a_member_takes_its_conversation_memory_and_routines(rig,
     history.add(session_id="s", question="q", route="chat", prefix="", text="a", status="done", member_id=member_id)
     history.add(session_id="s", question="r", route="exchange", prefix="", text="b", status="done", member_id=0, peer_id=member_id)
     kept = history.add(session_id="s", question="mine", route="chat", prefix="", text="c", status="done")
-    rig.memory.store_for(member_id).write("preference-format", type="preference", description="用條列", body="用條列")
-    folder = rig.memory.store_for(member_id).root
+    rig.memory.own(member_id).edit_document("用條列\n", None)
+    folder = rig.memory.homes.home(member_id)
     assert folder.exists()
     await rig.call("members.delete", {"id": member_id})
     assert [t.id for t in history.list(member_id=0)] == [kept]  # the exchange with it went too

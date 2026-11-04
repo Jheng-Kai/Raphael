@@ -53,6 +53,12 @@ class Stage:
                 async with httpx.AsyncClient(headers={"Authorization": "Bearer " + token}, trust_env=False, timeout=30) as http:
                     listed = (await http.post(endpoint, json={"jsonrpc": "2.0", "id": 0, "method": "tools/list", "params": {}})).json()
                     tools = [tool["name"] for tool in listed["result"]["tools"]]
+                    routes = {name: endpoint for name in tools}
+                    if computer_endpoint := kwargs.get("computer_endpoint"):
+                        computers = (await http.post(computer_endpoint, json={"jsonrpc":"2.0","id":0,"method":"tools/list","params":{}})).json()
+                        for tool in computers["result"]["tools"]:
+                            tools.append(tool["name"])
+                            routes[tool["name"]] = computer_endpoint
                     stage.offered.append(tools)
                     stage.prompts.append(system + "\n" + user)
                     if stage.hook is not None:
@@ -64,7 +70,7 @@ class Stage:
                         if not calls:
                             break
                         for name, arguments in calls:
-                            body = (await http.post(endpoint, json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                            body = (await http.post(routes.get(name, endpoint), json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                                                                     "params": {"name": name, "arguments": arguments}})).json()
                             results.append(body["result"]["content"][0]["text"] if "result" in body else "error: " + body["error"]["message"])
                 yield Event("final", text)

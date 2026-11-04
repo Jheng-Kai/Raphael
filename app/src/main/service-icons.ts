@@ -1,13 +1,15 @@
 // The marks of the well-known programs a connection can be, to tell them apart in the lists. Two kinds,
 // and nothing is fetched at run time:
 // - one drawn path (the existing marks are from Simple Icons 16.35.0, https://simpleicons.org, CC0-1.0;
-//   its text is in the release
-//   notices), bare, in the brand colour where that has enough contrast on every surface of both themes
-//   (`BRAND_COLORS`), else in the colour of the text;
+//   its text is in the release notices), bare, in the owner's official colour (`BRAND_COLORS`) on every
+//   surface; a mark that is black in its official form takes the colour of the text, which is its own white
+//   version on the dark theme. A many-coloured logo is drawn in the parts and colours of the official one
+//   (`COLOURED_MARKS`);
 //   OpenRouter, Brave and SearXNG are Simple Icons paths too, checked identical to the upstream files
 //   (develop branch) on 2026-10-23; the existing marks are from 16.35.0.
 //   Upstream reference: https://github.com/simple-icons/simple-icons (icons/openrouter.svg,
 //   icons/brave.svg and icons/searxng.svg).
+//   Slack's path is from Simple Icons 13.21.0 (CC0), supplied by the maintainer.
 // - the brand's own full-colour logo, a file in `service-logos/` (with where each came from in
 //   `sources.json`), for the brands Simple Icons does not have: the Microsoft marks are not in
 //   it, removed at their owners' request. A logo that is dark in its official form has a light twin
@@ -42,6 +44,7 @@ export const SERVICE_ICONS = {
   figma: { title: "Figma", path: "M15.852 8.981h-4.588V0h4.588c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.491-4.49 4.491zM12.735 7.51h3.117c1.665 0 3.019-1.355 3.019-3.019s-1.355-3.019-3.019-3.019h-3.117V7.51zm0 1.471H8.148c-2.476 0-4.49-2.014-4.49-4.49S5.672 0 8.148 0h4.588v8.981zm-4.587-7.51c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.02 3.019 3.02h3.117V1.471H8.148zm4.587 15.019H8.148c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h4.588v8.98zM8.148 8.981c-1.665 0-3.019 1.355-3.019 3.019s1.355 3.019 3.019 3.019h3.117V8.981H8.148zM8.172 24c-2.489 0-4.515-2.014-4.515-4.49s2.014-4.49 4.49-4.49h4.588v4.441c0 2.503-2.047 4.539-4.563 4.539zm-.024-7.51a3.023 3.023 0 0 0-3.019 3.019c0 1.665 1.365 3.019 3.044 3.019 1.705 0 3.093-1.376 3.093-3.068v-2.97H8.148zm7.704 0h-.098c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h.098c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.49-4.49 4.49zm-.097-7.509c-1.665 0-3.019 1.355-3.019 3.019s1.355 3.019 3.019 3.019h.098c1.665 0 3.019-1.355 3.019-3.019s-1.355-3.019-3.019-3.019h-.098z" },
   spotify: { title: "Spotify", path: "M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" },
   discord: { title: "Discord", path: "M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z" },
+  slack: { title: "Slack", path: "M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z" },
   todoist: { title: "Todoist", path: "M21 0H3C1.35 0 0 1.35 0 3v3.858s3.854 2.24 4.098 2.38c.31.18.694.177 1.004 0 .26-.147 8.02-4.608 8.136-4.675.279-.161.58-.107.748-.01.164.097.606.348.84.48.232.134.221.502.013.622l-9.712 5.59c-.346.2-.69.204-1.048.002C3.478 10.907.998 9.463 0 8.882v2.02l4.098 2.38c.31.18.694.177 1.004 0 .26-.147 8.02-4.609 8.136-4.676.279-.16.58-.106.748-.008.164.096.606.347.84.48.232.133.221.5.013.62-.208.121-9.288 5.346-9.712 5.59-.346.2-.69.205-1.048.002C3.478 14.951.998 13.506 0 12.926v2.02l4.098 2.38c.31.18.694.177 1.004 0 .26-.147 8.02-4.609 8.136-4.676.279-.16.58-.106.748-.009.164.097.606.348.84.48.232.133.221.502.013.622l-9.712 5.59c-.346.199-.69.204-1.048.001C3.478 18.994.998 17.55 0 16.97V21c0 1.65 1.35 3 3 3h18c1.65 0 3-1.35 3-3V3c0-1.65-1.35-3-3-3z" },
   obsidian: { title: "Obsidian", path: "M19.355 18.538a68.967 68.959 0 0 0 1.858-2.954.81.81 0 0 0-.062-.9c-.516-.685-1.504-2.075-2.042-3.362-.553-1.321-.636-3.375-.64-4.377a1.707 1.707 0 0 0-.358-1.05l-3.198-4.064a3.744 3.744 0 0 1-.076.543c-.106.503-.307 1.004-.536 1.5-.134.29-.29.6-.446.914l-.31.626c-.516 1.068-.997 2.227-1.132 3.59-.124 1.26.046 2.73.815 4.481.128.011.257.025.386.044a6.363 6.363 0 0 1 3.326 1.505c.916.79 1.744 1.922 2.415 3.5zM8.199 22.569c.073.012.146.02.22.02.78.024 2.095.092 3.16.29.87.16 2.593.64 4.01 1.055 1.083.316 2.198-.548 2.355-1.664.114-.814.33-1.735.725-2.58l-.01.005c-.67-1.87-1.522-3.078-2.416-3.849a5.295 5.295 0 0 0-2.778-1.257c-1.54-.216-2.952.19-3.84.45.532 2.218.368 4.829-1.425 7.531zM5.533 9.938c-.023.1-.056.197-.098.29L2.82 16.059a1.602 1.602 0 0 0 .313 1.772l4.116 4.24c2.103-3.101 1.796-6.02.836-8.3-.728-1.73-1.832-3.081-2.55-3.831zM9.32 14.01c.615-.183 1.606-.465 2.745-.534-.683-1.725-.848-3.233-.716-4.577.154-1.552.7-2.847 1.235-3.95.113-.235.223-.454.328-.664.149-.297.288-.577.419-.86.217-.47.379-.885.46-1.27.08-.38.08-.72-.014-1.043-.095-.325-.297-.675-.68-1.06a1.6 1.6 0 0 0-1.475.36l-4.95 4.452a1.602 1.602 0 0 0-.513.952l-.427 2.83c.672.59 2.328 2.316 3.335 4.711.09.21.175.43.253.653z" },
   atlassian: { title: "Atlassian", path: "M7.12 11.084a.683.683 0 00-1.16.126L.075 22.974a.703.703 0 00.63 1.018h8.19a.678.678 0 00.63-.39c1.767-3.65.696-9.203-2.406-12.52zM11.434.386a15.515 15.515 0 00-.906 15.317l3.95 7.9a.703.703 0 00.628.388h8.19a.703.703 0 00.63-1.017L12.63.38a.664.664 0 00-1.196.006z" },
@@ -69,6 +72,65 @@ export const SERVICE_ICONS = {
 
 export type MonoIconId = keyof typeof SERVICE_ICONS;
 export type ServiceIconId = MonoIconId | LogoIconId;
+
+/** The drawn pieces of a Simple Icons path, in order: each starts at its own `M`. */
+const pieces = (path: string): string[] => path.split(/(?=M)/);
+const paint = (fills: readonly string[], parts: readonly string[]): (readonly [string, string])[] => parts.map((d, i) => [fills[i]!, d] as const);
+
+/**
+ * The many-coloured logos, in the parts and colours of the official ones. Slack and Airtable colour the
+ * pieces of their Simple Icons paths; Gmail, Google Drive, Google Calendar and Figma follow the official
+ * artwork in its own coordinates.
+ */
+export const COLOURED_MARKS: Partial<Record<MonoIconId, { viewBox: string; parts: readonly (readonly [string, string])[] }>> = {
+  slack: { viewBox: "0 0 24 24", parts: paint(["#E01E5A", "#E01E5A", "#36C5F0", "#36C5F0", "#2EB67D", "#2EB67D", "#ECB22E", "#ECB22E"], pieces(SERVICE_ICONS.slack.path)) },
+  airtable: { viewBox: "0 0 24 24", parts: paint(["#FCB400", "#18BFFF", "#F82B60"], pieces(SERVICE_ICONS.airtable.path)) },
+  gmail: {
+    viewBox: "52 42 88 66",
+    parts: [
+      ["#4285F4", "M58 108h14V74L52 59v43c0 3.32 2.69 6 6 6"],
+      ["#34A853", "M120 108h14c3.32 0 6-2.69 6-6V59l-20 15"],
+      ["#FBBC04", "M120 48v26l20-15v-8c0-7.42-8.47-11.65-14.4-7.2"],
+      ["#EA4335", "M72 74V48l24 18 24-18v26L96 92"],
+      ["#C5221F", "M52 51v8l20 15V48l-5.6-4.2c-5.94-4.45-14.4-.22-14.4 7.2"],
+    ],
+  },
+  googledrive: {
+    viewBox: "0 0 87.3 78",
+    parts: [
+      ["#0066DA", "m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z"],
+      ["#00AC47", "m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0-1.2 4.5h27.5z"],
+      ["#EA4335", "m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z"],
+      ["#00832D", "m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z"],
+      ["#2684FC", "m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z"],
+      ["#FFBA00", "m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z"],
+    ],
+  },
+  googlecalendar: {
+    viewBox: "-3.75 -3.75 200 200",
+    parts: [
+      ["#FFFFFF", "M148.882 43.618l-47.368-5.263-57.895 5.263-5.264 52.632 5.263 52.632 52.632 6.579 52.632-6.579 5.263-53.947z"],
+      ["#1A73E8", "M65.211 125.276c-3.934-2.658-6.658-6.539-8.145-11.671l9.132-3.763c.829 3.158 2.276 5.605 4.342 7.342 2.053 1.737 4.553 2.592 7.474 2.592 2.987 0 5.553-.908 7.697-2.724s3.224-4.132 3.224-6.934c0-2.868-1.132-5.211-3.395-7.026s-5.105-2.724-8.5-2.724h-5.276v-9.039H76.5c2.921 0 5.382-.789 7.382-2.368 2-1.579 3-3.737 3-6.487 0-2.447-.895-4.395-2.684-5.855s-4.053-2.197-6.803-2.197c-2.684 0-4.816.711-6.395 2.145s-2.724 3.197-3.447 5.276l-9.039-3.763c1.197-3.395 3.395-6.395 6.618-8.987 3.224-2.592 7.342-3.895 12.342-3.895 3.697 0 7.026.711 9.974 2.145 2.947 1.434 5.263 3.421 6.934 5.947 1.671 2.539 2.5 5.382 2.5 8.539 0 3.224-.776 5.947-2.329 8.184-1.553 2.237-3.461 3.947-5.724 5.145v.539c2.987 1.25 5.421 3.158 7.342 5.724 1.908 2.566 2.868 5.632 2.868 9.211s-.908 6.776-2.724 9.579c-1.816 2.803-4.329 5.013-7.513 6.618-3.197 1.605-6.789 2.421-10.776 2.421C73.408 129.263 69.145 127.934 65.211 125.276z"],
+      ["#1A73E8", "M121.25 79.961l-9.974 7.25-5.013-7.605 17.987-12.974h6.895v61.197h-9.895z"],
+      ["#EA4335", "M148.882 196.25l47.368-47.368-23.684-10.526-23.684 10.526-10.526 23.684z"],
+      ["#34A853", "M33.092 172.566l10.526 23.684h105.263v-47.368H43.618z"],
+      ["#4285F4", "M11.974-3.75C3.25-3.75-3.75 3.25-3.75 11.974v136.908l23.684 10.526 23.684-10.526V43.618h105.263l10.526-23.684-10.525-23.684z"],
+      ["#188038", "M-3.75 148.882v31.579c0 8.724 7.066 15.789 15.789 15.789h31.579v-47.368z"],
+      ["#FBBC04", "M148.882 43.618v105.263h47.368V43.618l-23.684-10.526z"],
+      ["#1967D2", "M196.25 43.618V11.974c0-8.724-7.066-15.789-15.789-15.789h-31.579v47.368z"],
+    ],
+  },
+  figma: {
+    viewBox: "0 0 38 57",
+    parts: [
+      ["#1ABCFE", "M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z"],
+      ["#0ACF83", "M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z"],
+      ["#FF7262", "M19 0v19h9.5a9.5 9.5 0 1 0 0-19z"],
+      ["#F24E1E", "M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z"],
+      ["#A259FF", "M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z"],
+    ],
+  },
+};
 
 const svgFiles = import.meta.glob("./service-logos/*.svg", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 const pngFiles = import.meta.glob("./service-logos/*.png", { query: "?inline", import: "default", eager: true }) as Record<string, string>;
@@ -107,6 +169,7 @@ const MATCHERS: Partial<Record<ServiceIconId, readonly (readonly string[])[]>> =
   figma: [["figma"]],
   spotify: [["spotify"]],
   discord: [["discord"]],
+  slack: [["slack"]],
   todoist: [["todoist"]],
   obsidian: [["obsidian"]],
   atlassian: [["atlassian"], ["jira"], ["confluence"]],
@@ -177,33 +240,53 @@ export function serviceIconOf(hints: ServiceHints): ServiceIconId | null {
 }
 
 /**
- * The brand colour of a mark (Simple Icons' own), for the marks whose colour is at least 3:1 against every
- * surface of both themes (the page and the panels, light and dark). The others are drawn in the colour of
- * the text, which reads on both. The test of this file checks the numbers.
+ * The official colour of each one-colour mark, the same on every surface of both themes: the owners'
+ * colours are never changed for contrast. Marks that are black in their official form (Notion, GitHub,
+ * OpenRouter, PostHog) have none and take the colour of the text.
  */
 export const BRAND_COLORS: Partial<Record<MonoIconId, string>> = {
-  googledrive: "#4285F4",
-  gmail: "#EA4335",
-  googlecalendar: "#4285F4",
   linear: "#5E6AD2",
-  figma: "#F24E1E",
   discord: "#5865F2",
+  spotify: "#1ED760",
   todoist: "#E44332",
+  obsidian: "#7C3AED",
+  atlassian: "#0052CC",
+  cloudflare: "#F38020",
+  sentry: "#362D59",
   stripe: "#635BFF",
   zapier: "#FF4F00",
+  paypal: "#002991",
   webflow: "#146EF5",
   wix: "#0C6EFC",
+  telegram: "#26A5E4",
+  netlify: "#00C7B7",
+  neon: "#00E599",
+  prisma: "#2D3748",
   calendly: "#006BFF",
+  postman: "#FF6C37",
+  sanity: "#F03E2F",
   bitly: "#EE6123",
   brave: "#FB542B",
+  searxng: "#3050FF",
 };
 
-/** The attribute that gives a mark's wrapper its brand colour (`.logo-mono[style]` uses it); none for the others. */
-export const brandStyle = (id: MonoIconId): string => (BRAND_COLORS[id] ? ` style="--brand:${BRAND_COLORS[id]}"` : "");
+/** Near black in their official colour: on the dark theme they take the colour of the text, as their white versions do. */
+const NEAR_BLACK = new Set<MonoIconId>(["sentry", "paypal", "prisma"]);
 
-/** The mark as an inline picture in the colour of the text around it. */
-export const serviceIconSVG = (id: MonoIconId): string =>
-  `<svg class="logo" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="${SERVICE_ICONS[id].path}"/></svg>`;
+/** The attribute that gives a mark's wrapper its brand colour (`.logo-mono[style]` uses it); none for the others. */
+export const brandStyle = (id: MonoIconId): string => {
+  const colour = BRAND_COLORS[id];
+  return colour ? ` style="--brand:${NEAR_BLACK.has(id) ? `light-dark(${colour},var(--text))` : colour}"` : "";
+};
+
+/** The mark as an inline picture: in its official parts and colours, or one path in the colour around it. */
+export const serviceIconSVG = (id: MonoIconId): string => {
+  const art = COLOURED_MARKS[id];
+  const body = art
+    ? art.parts.map(([fill, d]) => `<path fill="${fill}" d="${d}"/>`).join("")
+    : `<path fill="currentColor" d="${SERVICE_ICONS[id].path}"/>`;
+  return `<svg class="logo" viewBox="${art?.viewBox ?? "0 0 24 24"}" aria-hidden="true" focusable="false">${body}</svg>`;
+};
 
 /** The first letter of a name, capitalised: used for paired user avatars. */
 export const monogram = (name: string): string => esc((Array.from(name.trim())[0] ?? "?").toUpperCase());

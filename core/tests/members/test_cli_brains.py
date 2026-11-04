@@ -10,6 +10,25 @@ from raphael_core.agent.cli.discovery import CliBrains
 from .test_answering import client, setup, member, typed  # noqa: F401
 
 
+@pytest.mark.parametrize("member_id", [0, 1])
+async def test_claude_progress_is_stored_with_one_prefix(setup, tmp_path, member_id):
+    rig, team = setup
+    if member_id:
+        assert member(team, model="cli:claude").id == member_id
+    else:
+        rig.settings.set("agent_model", "cli:claude")
+    fake_brain(rig, tmp_path, '''import json, sys
+json.loads(sys.stdin.readline())
+print(json.dumps({"type":"assistant", "message":{"content":[{"type":"text", "text":"\\u300a\\u544a\\u3002\\u6b63\\u5728\\u6aa2\\u67e5\\u300b"}]}}), flush=True)
+print(json.dumps({"type":"assistant", "message":{"content":[{"type":"tool_use", "id":"check", "name":"mcp__raphael__web_read"}]}}), flush=True)
+print(json.dumps({"type":"result", "subtype":"success", "result":"Checked."}), flush=True)
+''')
+    await typed(rig, "Check this", member_id, language="zh-TW")
+    [saved] = (await rig.call("agent.history.list", {"member_id": member_id}))["turns"]
+    lines = [message["text"] for message in saved["messages"] if message["kind"] == "progress"]
+    assert len(lines) == 1 and lines[0].count("\u544a\u3002") == (0 if member_id else 1)
+
+
 @pytest.mark.parametrize("name", ["claude", "codex"])
 async def test_cli_turn_delivers_only_current_images_natively(setup, tmp_path, client, name):
     rig, team = setup
@@ -74,7 +93,7 @@ print(json.dumps({"type":"result", "subtype":"success", "result":ANSWER}),flush=
         assert result["text"] == answer and replies == [answer]
     else:
         assert turn["status"] == "error"
-        assert result["text"] == "Claude Code stopped unexpectedly. Check its login and try again."
+        assert result["text"] == "The cause of this failure in Claude Code is unknown. Keep this conversation and try once more. Report the problem if it continues."
         assert [message["text"] for message in turn["messages"] if message["kind"] == "progress"] == ["Still checking."]
         assert "Still checking." not in replies
 
@@ -344,7 +363,7 @@ async def test_a_quick_cli_question_fails_at_once_when_rate_limited(setup, tmp_p
     launches = tmp_path / "launches.txt"
     fake_brain(rig, tmp_path, RATE_LIMITED_CODEX.replace("LAUNCHES", repr(str(launches))).replace("ANSWER_ON", "99"), name="codex")
     result = await rig.ask("Explain it")
-    assert result["text"] == "Codex CLI 目前請求太頻繁而被限流，請稍後再試。"
+    assert result["text"] == "Codex CLI 暫時收到太多請求，請稍後再試。"
     assert launches.read_text() == "x"
 
 
@@ -356,9 +375,10 @@ async def test_not_logged_in_never_starts_the_fake_cli(setup, tmp_path):
     assert result["text"] == "請先到設定 › 模型與用量 › 訂閱帳號，為 Antigravity 按下「連線」。"
 
 
-async def test_crash_does_not_publish_diagnostics_or_private_reasoning(setup, tmp_path, caplog):
+async def test_crash_does_not_publish_diagnostics_or_private_reasoning(setup, tmp_path, caplog, monkeypatch):
     rig, team = setup
     teacher = member(team, model="cli:claude")
+    monkeypatch.setattr("raphael_core.agent.cli.loop.RATE_LIMIT_WAITS_S", (0.0,))
     fake_brain(rig, tmp_path, '''import json, sys
 json.loads(sys.stdin.readline())
 print("PRIVATE-DIAGNOSTIC-SECRET",file=sys.stderr)
@@ -366,7 +386,7 @@ print(json.dumps({"type":"assistant","message":{"content":[{"type":"thinking","t
 sys.exit(1)
 ''')
     result = await typed(rig, "Hello", teacher.id)
-    assert "登入狀態" in result["text"]
+    assert result["text"] == "Claude Code 目前無法連線，請確認網路後再試。"
     history = await rig.call("agent.history.list", {"member_id": teacher.id})
     assert "PRIVATE-DIAGNOSTIC-SECRET" not in json.dumps(history) + caplog.text
     assert "PRIVATE-REASONING" not in json.dumps(history) + caplog.text
@@ -402,6 +422,58 @@ print(json.dumps({"type":"result","subtype":"success","result":"Finished."}),flu
 '''.replace("CALLS", repr(calls)).replace("ALLOWED", repr(allowed)))
 
 
+def recovering_mcp(rig, tmp_path, calls, *, failure="overloaded"):
+    record = tmp_path / "recovery.jsonl"
+    fake_brain(rig, tmp_path, '''import json, sys, urllib.request
+from pathlib import Path
+def send(value): print(json.dumps(value), flush=True)
+record = Path(RECORD)
+user = json.loads(sys.stdin.readline())["message"]["content"]
+with record.open("a", encoding="utf-8") as out:
+    out.write(json.dumps({"user": user, "resumed": "--resume" in sys.argv}) + "\\n")
+send({"type":"system", "session_id":"recovery-session"})
+if len(record.read_text(encoding="utf-8").splitlines()) == 1:
+    config = json.loads(Path(sys.argv[sys.argv.index("--mcp-config")+1]).read_text())["mcpServers"]["raphael"]
+    for number, (name, arguments) in enumerate(CALLS, 1):
+        packet = {"jsonrpc":"2.0", "id":number, "method":"tools/call", "params":{"name":name, "arguments":arguments}}
+        request = urllib.request.Request(config["url"], data=json.dumps(packet).encode(), headers={**config["headers"], "Content-Type":"application/json"})
+        result = json.load(urllib.request.urlopen(request, timeout=15))["result"]
+        assert not result["isError"], result
+    if FAILURE == "exit":
+        raise SystemExit(1)
+    send({"type":"result", "subtype":"error_during_execution", "is_error":True, "result":FAILURE})
+else:
+    assert "Do not repeat" in user and "do not ask them again" in user
+    assert all(name in user for name, arguments in CALLS)
+    send({"type":"result", "subtype":"success", "result":"The remaining work is finished."})
+'''.replace("RECORD", repr(str(record))).replace("CALLS", repr(calls)).replace("FAILURE", repr(failure)))
+    return record
+
+
+@pytest.mark.parametrize("failure", ["overloaded", "exit"])
+async def test_member_cli_recovers_after_an_answered_card_and_write(setup, tmp_path, client, monkeypatch, failure):
+    rig, team = setup
+    teacher = member(team, model="cli:claude")
+    monkeypatch.setattr("raphael_core.agent.cli.loop.RATE_LIMIT_WAITS_S", (0.0,))
+    record = recovering_mcp(rig, tmp_path, [
+        ("approve", {"tool_name": "Write", "input": {"path": "draft.txt"}}),
+        ("memory_update", {"target": "memory", "operations": [{"action": "add", "content": "Use examples."}]}),
+    ], failure=failure)
+    asked = await typed(rig, "Save a draft and remember my preference", teacher.id, language="en")
+    assert asked["status"] == "confirm"
+    result = await rig.confirm(asked["confirm"]["id"])
+    assert result["text"] == "The remaining work is finished."
+    first, resumed = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
+    assert not first["resumed"] and resumed["resumed"]
+    assert "allow" in resumed["user"]
+    [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
+    assert turn["status"] == "done" and turn["model"] == "cli:claude"
+    assert sum(step["tool"] == "memory_update" for step in turn["steps"]) == 1
+    assert any("try again" in message["text"] for message in turn["messages"] if message["kind"] == "progress")
+    assert team.memory.own(teacher.id).read().count("Use examples.") == 1
+    assert not client.chat_calls and not client.json_calls
+
+
 async def test_cli_web_search_uses_auxiliary_api_model(setup, tmp_path, client):
     from agent.test_service import found
 
@@ -434,21 +506,59 @@ def test_only_claude_code_is_offered_the_permission_prompt_tool(model, offered):
 
 
 @pytest.mark.parametrize("remember", [True, False])
-async def test_mcp_memory_write_requires_owner_request_and_is_scoped(setup, tmp_path, remember):
+async def test_mcp_memory_update_is_autonomous_and_member_scoped(setup, tmp_path, remember):
     rig, team = setup
     teacher = member(team, model="cli:claude")
-    args = {"name": "preference-examples", "type": "preference", "description": "Learning style", "body": "The owner prefers examples.", "space": "own"}
-    fake_mcp(rig, tmp_path, [("memory_write", args)], allowed=remember)
+    args = {"target": "memory", "operations": [{"action": "add", "content": "The owner prefers examples."}]}
+    fake_mcp(rig, tmp_path, [("memory_update", args)])
     result = await typed(rig, "Remember that I prefer examples" if remember else "Give an example", teacher.id)
     assert result["text"] == "Finished."
-    assert bool(team.memory.store_for(teacher.id).get("preference-examples")) is remember
-    assert team.memory.store_for(0).get("preference-examples") is None
+    assert "The owner prefers examples." in team.memory.own(teacher.id).read()
+    assert team.memory.own(0).read() == ""
     turn = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"][0]
-    assert any(step["tool"] == "memory_write" for step in turn["steps"])
+    assert any(step["tool"] == "memory_update" for step in turn["steps"])
+    assert any(message["kind"] == "event" and message["text"] == "已記下。" for message in turn["messages"])
+
+
+async def test_a_resumed_cli_turn_carries_the_memory_as_it_is_now(setup, tmp_path, client):
+    # A resumed Codex thread keeps the instructions it began with: what the file says now must come with the
+    # turn, through the path every brain reads, and what it said before must not stand beside it unmarked.
+    rig, team = setup
+    teacher = member(team, model="cli:codex")
+    inputs = tmp_path / "inputs.jsonl"
+    fake_brain(rig, tmp_path, '''import json, sys
+def send(value): print(json.dumps(value), flush=True)
+for line in sys.stdin:
+    msg = json.loads(line)
+    if msg.get("method") == "initialize": send({"id":msg["id"], "result":{}})
+    elif msg.get("method") in ("thread/start", "thread/resume"):
+        with open(INPUTS, "a", encoding="utf-8") as out:
+            out.write(json.dumps({"method": msg["method"], "system": msg["params"].get("developerInstructions", "")}) + "\\n")
+        send({"id":msg["id"], "result":{"thread":{"id":"memory-session"}}})
+    elif msg.get("method") == "turn/start":
+        with open(INPUTS, "a", encoding="utf-8") as out:
+            out.write(json.dumps({"user": msg["params"]["input"][0]["text"]}) + "\\n")
+        send({"method":"item/completed", "params":{"item":{"type":"agentMessage", "id":"final", "phase":"final_answer", "text":"Noted."}}})
+        send({"method":"turn/completed", "params":{"turn":{"status":"completed"}}})
+        break
+'''.replace("INPUTS", repr(str(inputs))), name="codex")
+    write = lambda content: team.memory.update_memory(teacher.id, {"target": "memory", "operations": [{"action": "add", "content": content}]})
+    assert write("The owner studies Japanese.").ok
+    await typed(rig, "What do you know?", teacher.id, language="en")
+    assert team.memory.update_memory(teacher.id, {"target": "memory", "operations": [{"action": "replace", "old_text": "Japanese", "content": "Korean"}]}).ok
+    assert team.memory.update_memory(0, {"target": "user", "operations": [{"action": "add", "content": "The owner is called Sam"}]}).ok
+    await typed(rig, "And now?", teacher.id, language="en")
+    start, first, resume, second = [json.loads(line) for line in inputs.read_text(encoding="utf-8").splitlines()]
+    assert start["method"] == "thread/start" and resume["method"] == "thread/resume"
+    assert "Japanese" in first["user"] and "Korean" not in first["user"]
+    assert "Korean" in second["user"] and "The owner studies Japanese" not in second["user"] and "The owner is called Sam" in second["user"]
+    assert "/2,200 chars" in second["user"]
+    # The rules are the instructions'; the files themselves are never there, where a resumed thread would keep them.
+    assert "memory_update" in start["system"] and "The owner studies" not in start["system"]
 
 
 @pytest.mark.parametrize("stop", ["cancel", "expired", "deadline"])
-async def test_paused_cli_is_reaped_and_mcp_closes(setup, tmp_path, monkeypatch, stop):
+async def test_paused_cli_cancels_on_stop_but_finishes_after_expiry_and_closes_mcp(setup, tmp_path, monkeypatch, stop):
     from pathlib import Path
     import httpx
     from agent.test_cli_brains import alive
@@ -457,7 +567,7 @@ async def test_paused_cli_is_reaped_and_mcp_closes(setup, tmp_path, monkeypatch,
         monkeypatch.setattr(cli_loop, "CONFIRM_TIMEOUT_S", .05)
     rig, team = setup
     teacher = member(team, model="cli:claude")
-    fake_mcp(rig, tmp_path, [("approve", {"tool_name": "Write", "input": {"path": "lesson.txt"}})])
+    fake_mcp(rig, tmp_path, [("approve", {"tool_name": "Write", "input": {"path": "lesson.txt"}})], allowed=False)
     pending = await typed(rig, "Make a lesson", teacher.id)
     assert pending["status"] == "confirm"
     [active] = rig.service._cli_loops
@@ -470,15 +580,62 @@ async def test_paused_cli_is_reaped_and_mcp_closes(setup, tmp_path, monkeypatch,
         rig.clock.now += 31
         if stop == "expired":
             await rig.confirm(pending["confirm"]["id"])
-        else:
-            async with asyncio.timeout(5):
-                while rig.service._cli_loops:
-                    await asyncio.sleep(.01)
+        async with asyncio.timeout(5):
+            while rig.service._cli_loops or rig.service._inflight:
+                await asyncio.sleep(.01)
+        turn = rig.service._history.get(pending["turn_id"])
+        assert turn.status == "done" and turn.text == "Finished."
     assert not alive(pid) and not config.parent.exists()
     assert not rig.service._cli_loops
     async with httpx.AsyncClient() as http:
         with pytest.raises(httpx.ConnectError):
             await http.post(url, json={})
+
+
+@pytest.mark.parametrize("stop", [False, True])
+async def test_expiry_cannot_answer_the_next_card_and_an_immediate_stop_still_stops(setup, tmp_path, stop):
+    from agent.test_cli_brains import alive
+
+    rig, team = setup
+    teacher = member(team, model="cli:claude")
+    fake_brain(rig, tmp_path, '''import json, sys, time, urllib.request
+from pathlib import Path
+config=json.loads(Path(sys.argv[sys.argv.index("--mcp-config")+1]).read_text())["mcpServers"]["raphael"]
+json.loads(sys.stdin.readline())
+for number in (1, 2):
+    packet={"jsonrpc":"2.0","id":number,"method":"tools/call","params":{"name":"approve","arguments":{"tool_name":"Write","input":{"path":str(number)+".txt"}}}}
+    request=urllib.request.Request(config["url"],data=json.dumps(packet).encode(),headers={**config["headers"],"Content-Type":"application/json"})
+    result=json.load(urllib.request.urlopen(request,timeout=15))["result"]
+    content=json.loads(result["content"][0]["text"])
+    assert content["behavior"] == ("deny" if number==1 else "allow"), content
+    if number==1:
+        assert content["message"] == "逾時未獲回應。未執行。", content
+        if STOP: time.sleep(60)
+print(json.dumps({"type":"result","subtype":"success","result":"Finished after two cards."}),flush=True)
+'''.replace("STOP", repr(stop)))
+    pending = await typed(rig, "Make two lessons", teacher.id)
+    [active] = rig.service._cli_loops
+    pid = active.driver.child.process.pid
+    try:
+        rig.clock.now += 31
+        rig.service._expire(rig.service._confirmations.sweep())
+        if stop:
+            await rig.call("agent.cancel", {"session_id": "s1"})
+            async with asyncio.timeout(2):
+                while alive(pid):
+                    await asyncio.sleep(.01)
+            assert not rig.service._cli_loops and not rig.service._inflight
+        else:
+            async with asyncio.timeout(5):
+                while not rig.service._followups:
+                    await asyncio.sleep(.01)
+            [card] = rig.service._followups
+            assert card != pending["confirm"]["id"] and alive(pid)
+            result = await rig.confirm(card)
+            assert result["text"] == "Finished after two cards."
+            assert rig.service._history.get(pending["turn_id"]).status == "done"
+    finally:
+        await active.aclose()
 
 
 async def test_spoken_cli_reply_retains_japanese_without_showing_json(setup, tmp_path):
@@ -493,20 +650,18 @@ async def test_spoken_cli_reply_retains_japanese_without_showing_json(setup, tmp
     assert reply.text == "明天練習。" and reply.say_ja == "明日練習します。"
 
 
-async def test_mcp_memory_write_safety_approval_is_audited_as_user(setup, tmp_path, monkeypatch):
-    from raphael_core.agent.safety import Screening
+async def test_mcp_memory_update_in_ask_first_is_audited_as_user(setup, tmp_path):
     rig, team = setup
     teacher = member(team, model="cli:claude")
-    args = {"name": "preference-examples", "type": "preference", "description": "Learning style", "body": "The owner prefers examples.", "space": "own"}
-    fake_mcp(rig, tmp_path, [("memory_write", args)])
-    async def screen(*args, **kwargs):
-        return Screening(verdict="ask", rule="Ask before memory changes")
-    monkeypatch.setattr(rig.service._gate, "screen", screen)
+    rig.settings.set("action_mode", "ask")
+    args = {"target": "memory", "operations": [{"action": "add", "content": "The owner prefers examples."}]}
+    fake_mcp(rig, tmp_path, [("memory_update", args)])
     pending = await typed(rig, "Remember that I prefer examples", teacher.id)
     assert pending["status"] == "confirm"
-    assert team.memory.store_for(teacher.id).get("preference-examples") is None
+    assert team.memory.own(teacher.id).read() == ""
     assert (await rig.confirm(pending["confirm"]["id"]))["text"] == "Finished."
-    [audit] = rig.conn.execute("SELECT approver FROM tool_audit WHERE tool='memory_write'").fetchall()
+    assert "The owner prefers examples." in team.memory.own(teacher.id).read()
+    [audit] = rig.conn.execute("SELECT approver FROM tool_audit WHERE tool='memory_update'").fetchall()
     assert audit[0] == "user"
 
 

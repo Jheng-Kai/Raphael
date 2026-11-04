@@ -34,16 +34,16 @@ const mount = (html: string): HTMLElement => {
 };
 
 describe("an email card", () => {
-  test("shows 寄件者, 收件者, 副本, 主旨 and the body, editable, with 捨棄 then the primary 傳送", () => {
+  test("shows sender, recipient, subject and body, with the primary Send first", () => {
     const html = mailCardHTML(draft());
-    expect(visible(html)).toContain("郵件草稿 寄件者 Gmail 收件者 副本 主旨 您好， 週四下午三點可以開會。 捨棄 傳送");
+    expect(visible(html)).toContain("郵件草稿 可以傳送 寄件者 Gmail 收件者 主旨 您好， 週四下午三點可以開會。 傳送 捨棄");
     const host = mount(html);
     expect(host.querySelector<HTMLInputElement>('[data-mail-field="to"]')!.value).toBe("mei@example.com");
-    expect(host.querySelector<HTMLInputElement>('[data-mail-field="cc"]')!.value).toBe("");
+    expect(host.querySelector('[data-mail-field="cc"]')).toBeNull();
     expect(host.querySelector<HTMLInputElement>('[data-mail-field="subject"]')!.value).toBe("週四下午三點的會議");
     expect(host.querySelector<HTMLTextAreaElement>('[data-mail-field="body"]')!.value).toBe("您好，\n週四下午三點可以開會。");
     expect(host.querySelectorAll("input:disabled, textarea:disabled")).toHaveLength(0);
-    expect(actions(html)).toEqual(["mail-from", "mail-discard", "mail-send"]);
+    expect(actions(html)).toEqual(["mail-from", "mail-send", "mail-discard"]);
     expect(html).toContain('class="btn sm" data-act="mail-discard" data-mail="dr1"');
     expect(html).toContain('class="btn sm pri" data-act="mail-send" data-mail="dr1"');
     // The card holds the digest of the version it shows; that is the one 傳送 sends.
@@ -66,17 +66,25 @@ describe("an email card", () => {
     expect(none.querySelector<HTMLButtonElement>('[data-act="mail-send"]')!.disabled).toBe(true);
   });
 
-  test("says the version only after an edit, and whose draft it is when it was handed on", () => {
-    expect(visible(mailCardHTML(draft()))).not.toContain("版");
-    expect(visible(mailCardHTML(draft({ version: 2 })))).toContain("第 2 版");
-    expect(visible(mailCardHTML(draft({ author_name: "佳佳" })))).toContain("來自 佳佳 的草稿");
+  test("keeps version identity without a technical disclosure on an editable draft", () => {
+    const host = mount(mailCardHTML(draft({ version: 2, author_name: "佳佳" })));
+    expect(host.querySelector("[data-mail-card]")!.getAttribute("data-version")).toBe("2");
+    expect(host.querySelector("[data-mail-card]")!.getAttribute("data-digest")).toBe(draft().digest);
+    expect(host.querySelector("[data-card-disclosure]")).toBeNull();
+  });
+
+  test("a handed draft names its author directly without a disclosure", () => {
+    const host = mount(mailCardHTML(draft({ author_name: "佳佳" })));
+    expect(host.querySelector(".card-body.cc-state")?.textContent).toBe("來自 佳佳 的草稿");
+    expect(host.querySelector("[data-card-disclosure]")).toBeNull();
+    expect(host.querySelector("[data-mail-card]")!.getAttribute("data-digest")).toBe(draft().digest);
   });
 
   test("asks whether a colleague may send it with a choice card: 不用 then the primary 可以", () => {
     const html = mailCardHTML(draft({ offer: { member_id: 2, name: "焦媽媽" } }), LOOK);
-    expect(visible(html)).toContain("這封回信可以交給焦媽媽寄嗎？ 不用 可以");
-    expect(actions(html).slice(-2)).toEqual(["mail-handover-no", "mail-handover-yes"]);
-    expect(html).toContain('data-face="2"');
+    expect(visible(html)).toContain("這封回信可以交給焦媽媽寄嗎？ 等你回答 可以 不用");
+    expect(actions(html).slice(-2)).toEqual(["mail-handover-yes", "mail-handover-no"]);
+    expect(html).not.toContain('data-face="2"');
     expect(html).toContain('class="btn sm pri" data-act="mail-handover-yes"');
     // The choice is the question's and nothing else: it carries no field and no send.
     expect(html).not.toContain("mail-send\" data-mail=\"dr1\" data-offer");
@@ -85,8 +93,8 @@ describe("an email card", () => {
 
   test("a draft that was sent or discarded is one quiet line and keeps no field", () => {
     const sent = mailCardHTML(draft({ state: "sent", to: "a@example.com, b@example.com" }));
-    expect(visible(sent)).toBe("週四下午三點的會議 已傳送給 a@example.com +1");
-    expect(sent).toContain('class="cc-done"');
+    expect(visible(sent)).toContain("週四下午三點的會議 完成 顯示內容 已傳送給 a@example.com +1");
+    expect(sent).toContain('card-status is-done');
     expect(sent).not.toContain("<input");
     expect(actions(sent)).toEqual([]);
     const dropped = mailCardHTML(draft({ state: "discarded" }));
@@ -95,10 +103,23 @@ describe("an email card", () => {
     expect(actions(dropped)).toEqual([]);
   });
 
+  test("a discarded draft has a short status and keeps the full explanation in its details", () => {
+    for (const [locale, status, explanation] of [
+      ["zh-TW", "已捨棄", "已捨棄，沒有寄出任何東西"],
+      ["en", "Discarded", "Discarded; nothing was sent"],
+      ["ja", "破棄済み", "破棄しました。何も送信していません"],
+    ] as const) {
+      setLocale(locale);
+      const host = mount(mailCardHTML(draft({ state: "discarded" })));
+      expect(host.querySelector(".card-status")!.textContent!.trim()).toBe(status);
+      expect(host.querySelector(".card-detail")!.textContent).toContain(explanation);
+    }
+  });
+
   test("while it is being sent its fields are still and it has no action", () => {
     const host = mount(mailCardHTML(draft({ state: "sending" })));
     expect(host.querySelectorAll("input:not(:disabled), textarea:not(:disabled)")).toHaveLength(0);
-    expect(host.querySelector(".spin")).not.toBeNull();
+    expect(host.querySelector(".card-status.is-waiting i")).not.toBeNull();
     expect(visible(host.innerHTML)).toContain("傳送中…");
     expect(host.querySelectorAll("button:not([disabled])")).toHaveLength(0);
   });
@@ -112,16 +133,16 @@ describe("an email card", () => {
     expect(mailErrorText(draft())).toBe("");
     expect(mailErrorText(draft({ state: "failed", error: "interrupted" }))).toContain("上次傳送中斷");
     const failed = mount(mailCardHTML(draft({ state: "failed", error: "error" })));
-    expect(visible(failed.innerHTML)).toContain("沒有傳送成功，信件可能沒有寄出。修改後可以再傳送");
+    expect(visible(failed.innerHTML)).toContain("請先確認信件是否已寄出，若確定未寄出，修改草稿後再傳送。");
     expect(failed.querySelector<HTMLInputElement>('[data-mail-field="to"]')!.disabled).toBe(false);
-    expect(failed.querySelector<HTMLButtonElement>('[data-act="mail-send"]')!.disabled).toBe(true);
+    expect(failed.querySelector<HTMLButtonElement>('[data-act="mail-send"]')!.disabled).toBe(false);
   });
 
   test("speaks only the window's language", () => {
     setLocale("en");
-    expect(visible(mailCardHTML(draft({ offer: { member_id: 2, name: "Jiao" } })))).toContain("Email draft From Gmail To Cc Subject 您好， 週四下午三點可以開會。 Discard Send Can Jiao send this reply? No Yes");
+    expect(visible(mailCardHTML(draft({ cc: "copy@example.invalid", offer: { member_id: 2, name: "Jiao" } })))).toContain("Email draft Ready to send From Gmail To Cc Subject 您好， 週四下午三點可以開會。 Send Discard Can Jiao send this reply? Waiting for your answer Yes No");
     setLocale("ja");
-    expect(visible(mailCardHTML(draft()))).toContain("メールの下書き 差出人 Gmail 宛先 Cc 件名 您好， 週四下午三點可以開會。 破棄 送信");
+    expect(visible(mailCardHTML(draft({ cc: "copy@example.invalid" })))).toContain("メールの下書き 送信できます 差出人 Gmail 宛先 Cc 件名 您好， 週四下午三點可以開會。 送信 破棄");
   });
 
   test("escapes what the member wrote", () => {
@@ -161,14 +182,14 @@ describe("a draft in a turn", () => {
 
 describe("what the owner types", () => {
   test("is read from the fields, and is dirty only while it differs from the version shown", () => {
-    const host = mount(mailCardHTML(draft()));
+    const host = mount(mailCardHTML(draft({ cc: "copy@example.invalid" })));
     const card = host.querySelector<HTMLElement>("[data-mail-card]")!;
     expect(mailDirty(card)).toBe(false);
-    expect(readMail(card)).toEqual({ to: "mei@example.com", cc: "", subject: "週四下午三點的會議", body: "您好，\n週四下午三點可以開會。", via: "mcp:gmail/send_email" });
+    expect(readMail(card)).toEqual({ to: "mei@example.com", cc: "copy@example.invalid", subject: "週四下午三點的會議", body: "您好，\n週四下午三點可以開會。", via: "mcp:gmail/send_email" });
     card.querySelector<HTMLInputElement>('[data-mail-field="cc"]')!.value = "boss@example.com";
     expect(mailDirty(card)).toBe(true);
     expect(readMail(card).cc).toBe("boss@example.com");
-    card.querySelector<HTMLInputElement>('[data-mail-field="cc"]')!.value = "";
+    card.querySelector<HTMLInputElement>('[data-mail-field="cc"]')!.value = "copy@example.invalid";
     expect(mailDirty(card)).toBe(false);
     card.querySelector<HTMLElement>('[data-act="mail-from"]')!.dataset.via = "mcp:work/send";
     expect(mailDirty(card)).toBe(true);

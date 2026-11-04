@@ -7,12 +7,12 @@
 //! the next paste would go to the wrong place. "Hidden" means that the page (`overlay.html`)
 //! draws nothing and stops its animation loop; the empty window stays where it is.
 //!
-//! The one time the window takes the mouse is while Raphael asks a YES/NO question
-//! ([`OverlayApi::ask`]): its buttons must be clickable. Clicking is not activating: the window has
+//! Only physical pixels reported as live controls take the mouse. A light cursor poll runs
+//! while those controls exist; a held button keeps its release. Clicking is not activating: the window has
 //! `WS_EX_NOACTIVATE` (tao gives it to a window that is not `focusable`, and
 //! [`apply_passive_style`] makes sure of it), so a click on a button reaches the page without the
 //! window becoming the foreground window, and the app the person was typing into keeps its focus.
-//! [`takes_clicks`] says which events open and close that time.
+//! [`takes_clicks`] clears obsolete geometry when the scene changes.
 //!
 //! The page learns what to do from [`OverlayEvent`]s on a channel that it opens once with the
 //! `overlay_subscribe` command, and answers a question with `overlay_confirm`. The rest of the app
@@ -26,6 +26,7 @@
 //! display turning off and on, the session locking, sleep, the webview's GPU process exiting), so
 //! that an emblem that nobody saw in a window that was in sight can be put next to it.
 
+pub(crate) mod mouse;
 mod screen;
 mod sight;
 
@@ -33,7 +34,7 @@ use std::{
     collections::VecDeque,
     sync::{
         Arc, Mutex, MutexGuard, PoisonError,
-        atomic::{AtomicU32, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
     },
     time::Instant,
 };
@@ -139,6 +140,10 @@ pub struct AskPrompt {
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum OverlayEvent {
+    /// A recording-only global key, interpreted by the shared UI cancellation gesture.
+    CancelKey { reset: bool },
+    /// The page reports this revision after applying the preceding scene.
+    Mouse { revision: u64 },
     /// The emblem appears (the appear animation) and shows `mode`. A `line` (sent only when there
     /// is one) is Raphael's greeting to a question, written beside the emblem while he listens; a
     /// dictation shows the emblem alone.
@@ -179,7 +184,7 @@ pub enum OverlayEvent {
         hold: bool,
     },
     /// Raphael asks a question: the subtitle line 《`prefix`。`text`》 and two buttons under it.
-    /// The window takes the mouse until the question is over.
+    /// Only the live controls take the mouse while the question is open.
     Ask(AskPrompt),
     /// Delivery succeeded: show 100% briefly before the normal vanish animation.
     Complete,
@@ -207,6 +212,7 @@ pub enum OverlayEvent {
 /// can fail: a problem with the window is logged, because the overlay must never get in the way
 /// of dictation.
 pub trait OverlayApi: Send + Sync + 'static {
+    fn cancel_key(&self, _reset: bool) {}
     /// The emblem appears and shows `mode`. The window is put back in its corner first (the
     /// taskbar or the screen's scale may have changed).
     fn show(&self, mode: Mode);
@@ -233,6 +239,10 @@ pub trait OverlayApi: Send + Sync + 'static {
     /// Report learned words in the usual corner. Fakes can keep the ordinary notice behavior.
     fn learned_notice(&self, text: &str) {
         self.notice(text);
+    }
+    /// New learned batches carry an opaque undo token; fakes retain their ordinary notice route.
+    fn learned_batch(&self, text: &str, _words: &[String], _undo: Option<&str>, _language: &str) {
+        self.learned_notice(text);
     }
     /// Raphael answers: the emblem appears with 《`prefix`。`text`》 as one subtitle line, then
     /// vanishes after a time that depends on the length of `text`.
@@ -292,6 +302,8 @@ impl From<&PhysicalRect<i32, u32>> for Rect {
 const WINDOW_WIDTH: f64 = 540.0;
 /// Room above the canvas for the subtitles' upper lines, in logical pixels.
 const SUBTITLE_ROOM: f64 = 40.0;
+/// Extra reading room is reserved only while the confirmation card is open.
+const CONFIRMATION_ROOM: f64 = 300.0;
 /// The emblem's circle is this far from the right edge of the work area, in logical pixels.
 const RIGHT_GAP: f64 = 18.0;
 /// The emblem's circle is this far above the taskbar, in logical pixels.
@@ -345,30 +357,34 @@ pub(crate) fn placement(work: Rect, emblem_px: u32, scale: f64) -> Placement {
     }
 }
 
+fn confirmation_placement(mut placement: Placement, scale: f64) -> Placement {
+    let extra = ((CONFIRMATION_ROOM - SUBTITLE_ROOM) * scale).round() as i32;
+    placement.window.y -= extra;
+    placement.window.h += extra;
+    placement
+}
+
 // ---------- the mouse ----------
 
-/// What an event does to whether the window takes the mouse: `Some(true)` for the question that
-/// needs its buttons clicked, `Some(false)` for everything that puts something else on the stage
-/// (the reply to the answer among them, so the corner is the apps' again as soon as the question
-/// is gone from the screen), `None` for what changes nothing on the stage.
+/// Scene changes clear the previous controls. Only reported rectangles can enable the mouse.
 pub(crate) fn takes_clicks(event: &OverlayEvent) -> Option<bool> {
     match event {
-        OverlayEvent::Ask(_) => Some(true),
-        OverlayEvent::Show { .. }
-        | OverlayEvent::Say { .. }
-        | OverlayEvent::Notice { .. }
+        OverlayEvent::Ask(_) | OverlayEvent::Show { .. } | OverlayEvent::Mode { .. } => Some(false),
+        OverlayEvent::Say { .. } => Some(false),
+        OverlayEvent::Notice { .. }
         | OverlayEvent::Operate { .. }
         | OverlayEvent::Complete
         | OverlayEvent::Release
         | OverlayEvent::Hide => Some(false),
         // The loudness and progress are about the emblem, learned words wait behind whatever is
         // on the stage, and the settings are no scene.
-        OverlayEvent::Mode { .. }
-        | OverlayEvent::Step { .. }
+        OverlayEvent::Step { .. }
         | OverlayEvent::Level { .. }
         | OverlayEvent::Progress(_)
         | OverlayEvent::Learned { .. }
         | OverlayEvent::Settings { .. }
+        | OverlayEvent::CancelKey { .. }
+        | OverlayEvent::Mouse { .. }
         | OverlayEvent::Avatar => None,
     }
 }
@@ -398,6 +414,7 @@ impl OverlayEvent {
     /// The event's `type`, for the log.
     fn kind(&self) -> &'static str {
         match self {
+            OverlayEvent::Mouse { .. } => "mouse",
             OverlayEvent::Show { .. } => "show",
             OverlayEvent::Mode { .. } => "mode",
             OverlayEvent::Level { .. } => "level",
@@ -413,6 +430,7 @@ impl OverlayEvent {
             OverlayEvent::Operate { .. } => "operate",
             OverlayEvent::Settings { .. } => "settings",
             OverlayEvent::Avatar => "avatar",
+            OverlayEvent::CancelKey { .. } => "cancelkey",
         }
     }
 }
@@ -442,6 +460,7 @@ impl Bus {
                 // report is stale by the time a page could use it.
                 OverlayEvent::Settings { .. }
                 | OverlayEvent::Avatar
+                | OverlayEvent::CancelKey { .. }
                 | OverlayEvent::Level { .. }
                 | OverlayEvent::Progress(_) => {}
                 _ => {
@@ -506,10 +525,9 @@ pub struct Overlay {
     hwnd: Option<isize>,
     /// The emblem's diameter in logical pixels, which sets the size of the window.
     emblem_px: AtomicU32,
+    question_open: AtomicBool,
     bus: Mutex<Bus>,
-    /// Whether the window takes the mouse now (see [`takes_clicks`]); the window starts out
-    /// letting it through. Held while the window is changed, so that two changes cannot cross.
-    clicks: Mutex<bool>,
+    mouse: Arc<mouse::Mouse>,
     /// When the window was created, and when it was last checked (ms after that): a long
     /// recording has no other event, and another window may come over the emblem meanwhile.
     born: Instant,
@@ -546,6 +564,10 @@ impl Overlay {
         .always_on_top(true)
         .skip_taskbar(true)
         .focusable(false)
+        .theme(
+            app.get_webview_window(crate::MAIN_WINDOW)
+                .and_then(|main| main.theme().ok()),
+        )
         .focused(false)
         .resizable(false)
         .no_redirection_bitmap(true)
@@ -561,18 +583,21 @@ impl Overlay {
             return Err(err);
         }
         apply_passive_style(&window);
+        crate::webview_power::low_memory(&window, true);
         let hwnd = native_handle(&window);
         if let Some(hwnd) = hwnd {
             screen::watch(&window, hwnd);
         }
 
+        let mouse = app.state::<mouse::Windows>().register(&window);
         let overlay = Arc::new(Overlay {
             app: app.clone(),
             window,
             hwnd,
             emblem_px: AtomicU32::new(emblem_px),
+            question_open: AtomicBool::new(false),
             bus: Mutex::new(Bus::new(emblem_px, subtitles, language)),
-            clicks: Mutex::new(false),
+            mouse,
             born: Instant::now(),
             last_sight_ms: AtomicU64::new(0),
         });
@@ -583,6 +608,10 @@ impl Overlay {
     /// Raphael's picture changed: the page asks for the new one.
     pub fn avatar_changed(&self) {
         self.publish(OverlayEvent::Avatar);
+    }
+
+    pub fn cancel_key(&self, reset: bool) {
+        self.publish(OverlayEvent::CancelKey { reset });
     }
 
     /// A new emblem size changes the window's size, so it is put in its corner again.
@@ -597,37 +626,56 @@ impl Overlay {
     }
 
     fn publish(&self, event: OverlayEvent) {
-        // The window takes the mouse before the buttons appear, and lets it go as the page moves
-        // on to something else.
-        if let Some(on) = takes_clicks(&event) {
-            self.set_clicks(on);
+        let question = match &event {
+            OverlayEvent::Ask(_) => Some(true),
+            OverlayEvent::Show { .. }
+            | OverlayEvent::Mode { .. }
+            | OverlayEvent::Say { .. }
+            | OverlayEvent::Notice { .. }
+            | OverlayEvent::Operate { .. }
+            | OverlayEvent::Hide
+            | OverlayEvent::Complete
+            | OverlayEvent::Release => Some(false),
+            _ => None,
+        };
+        if let Some(question) = question
+            && self.question_open.swap(question, Ordering::Relaxed) != question
+        {
+            self.place_window();
         }
-        lock(&self.bus).publish(event);
-    }
-
-    /// Makes the window take the mouse (`true`) or let it through (`false`). It never takes focus
-    /// either way: `WS_EX_NOACTIVATE` is part of the style that [`apply_passive_style`] puts
-    /// back after tao rebuilt it for this change.
-    fn set_clicks(&self, on: bool) {
-        let mut current = lock(&self.clicks);
-        if *current == on {
-            return;
-        }
-        match self.window.set_ignore_cursor_events(!on) {
-            Ok(()) => {
-                *current = on;
-                apply_passive_style(&self.window);
-                log::debug!(
-                    "overlay: the window {} the mouse",
-                    if on { "takes" } else { "lets through" }
-                );
+        let mut bus = lock(&self.bus);
+        // Finite captions can expire entirely in the page, without a native hide.
+        // Keep those Low throughout; live recording and questions use Normal.
+        match &event {
+            OverlayEvent::Hide
+            | OverlayEvent::Release
+            | OverlayEvent::Complete
+            | OverlayEvent::Notice { .. }
+            | OverlayEvent::Learned { .. }
+            | OverlayEvent::Say { hold: false, .. } => {
+                crate::webview_power::low_memory(&self.window, true)
             }
-            Err(err) => log::warn!("could not change whether the overlay takes the mouse: {err}"),
+            OverlayEvent::Show { .. }
+            | OverlayEvent::Mode { .. }
+            | OverlayEvent::Say { hold: true, .. }
+            | OverlayEvent::Ask(_)
+            | OverlayEvent::Operate { .. } => {
+                crate::webview_power::low_memory(&self.window, false);
+            }
+            _ => {}
+        }
+        let revision = takes_clicks(&event).map(|_| self.mouse.clear());
+        bus.publish(event);
+        if let Some(revision) = revision {
+            bus.publish(OverlayEvent::Mouse { revision });
         }
     }
 
     fn subscribe(&self, label: &str, channel: Channel<OverlayEvent>) {
-        lock(&self.bus).subscribe(label, channel);
+        let mut bus = lock(&self.bus);
+        let revision = self.mouse.clear();
+        bus.subscribe(label, channel);
+        bus.publish(OverlayEvent::Mouse { revision });
     }
 
     /// Puts the window in its corner of the primary monitor's work area, where the taskbar or the
@@ -650,11 +698,14 @@ impl Overlay {
                 "there is no primary monitor",
             ))
         })?;
-        let placement = placement(
+        let mut placement = placement(
             Rect::from(monitor.work_area()),
             self.emblem_px.load(Ordering::Relaxed),
             monitor.scale_factor(),
         );
+        if self.question_open.load(Ordering::Relaxed) {
+            placement = confirmation_placement(placement, monitor.scale_factor());
+        }
         let target = placement.window;
         // Compare with where the window really is: Windows itself moves windows when the
         // screens change.
@@ -774,6 +825,10 @@ impl OverlayApi for Overlay {
         });
     }
 
+    fn learned_batch(&self, _text: &str, words: &[String], undo: Option<&str>, language: &str) {
+        crate::learned::publish(&self.app, words, undo, language);
+    }
+
     fn say(&self, prefix: &str, text: &str) {
         self.keep_in_sight_now_and_then();
         self.publish(OverlayEvent::Say {
@@ -858,6 +913,16 @@ pub struct Confirmation {
 /// Where the page's answers go: the dictation controller's task takes them from the other end.
 /// Kept in the app state.
 pub struct ConfirmSender(pub UnboundedSender<Confirmation>);
+
+/// A confirmed gesture or an explicit Stop click from the passive overlay.
+#[tauri::command]
+pub fn overlay_cancel(app: AppHandle, webview: Webview) -> Result<(), String> {
+    crate::commands::ensure_caller(webview.label(), crate::OVERLAY_WINDOW)?;
+    let hotkeys = app
+        .try_state::<Arc<crate::hotkey::HotkeyService>>()
+        .ok_or("the hotkey service is not running")?;
+    hotkeys.window_hotkey(crate::hotkey::WindowHotkey::Cancel)
+}
 
 /// The overlay page answers the question on screen: `approved` is true for its YES button. The
 /// answer goes to the controller, which takes it only for the question that is open (`id`). Only
@@ -960,7 +1025,7 @@ fn passive_ex_style(style: isize) -> isize {
 /// The change is made on the main thread, which owns the window: from any other thread
 /// `SetWindowLongPtrW` would wait for the main thread, and that is a deadlock waiting to happen.
 #[cfg(windows)]
-fn apply_passive_style(window: &WebviewWindow) {
+pub(crate) fn apply_passive_style(window: &WebviewWindow) {
     use windows::Win32::Foundation::HWND;
 
     let hwnd = match window.hwnd() {
@@ -981,7 +1046,7 @@ fn apply_passive_style(window: &WebviewWindow) {
 }
 
 #[cfg(not(windows))]
-fn apply_passive_style(_window: &WebviewWindow) {}
+pub(crate) fn apply_passive_style(_window: &WebviewWindow) {}
 
 /// Gives the window [`passive_ex_style`] if it lost it, and says whether it had.
 ///
@@ -1043,7 +1108,12 @@ mod tests {
         // The commands cannot be called here without a running app, so read their source.
         let source = include_str!("overlay.rs").replace("\r\n", "\n");
         let production = source.split("#[cfg(test)]").next().unwrap();
-        for name in ["overlay_subscribe", "overlay_log", "overlay_confirm"] {
+        for name in [
+            "overlay_subscribe",
+            "overlay_log",
+            "overlay_confirm",
+            "overlay_cancel",
+        ] {
             let command = production
                 .split("#[tauri::command]")
                 .find(|command| command.contains(&format!("pub fn {name}(")))
@@ -1085,7 +1155,12 @@ mod tests {
         commands.sort_unstable();
         assert_eq!(
             commands,
-            ["overlay_confirm", "overlay_log", "overlay_subscribe"]
+            [
+                "overlay_cancel",
+                "overlay_confirm",
+                "overlay_log",
+                "overlay_subscribe"
+            ]
         );
     }
 
@@ -1127,6 +1202,34 @@ mod tests {
                 ((canvas + 40.0) * scale).round() as i32,
                 "emblem {e} at {scale}"
             );
+        }
+    }
+
+    #[test]
+    fn a_confirmation_expands_reading_room_without_moving_the_emblem() {
+        for scale in [1.0, 1.25, 1.5, 2.0] {
+            for emblem in [120, 150, 194] {
+                let base = placement(
+                    Rect {
+                        x: 0,
+                        y: 0,
+                        w: 1920,
+                        h: 1032,
+                    },
+                    emblem,
+                    scale,
+                );
+                let card = confirmation_placement(base, scale);
+                assert_eq!(card.window.y + card.window.h, base.window.y + base.window.h);
+                assert_eq!(card.window.x, base.window.x);
+                assert_eq!(card.canvas, base.canvas);
+                assert!(
+                    card.window.h
+                        >= ((f64::from(emblem) * CANVAS_RATIO + CONFIRMATION_ROOM) * scale).floor()
+                            as i32
+                            - 1
+                );
+            }
         }
     }
 
@@ -1381,14 +1484,29 @@ mod tests {
     // ---- the mouse ----
 
     #[test]
-    fn only_a_question_makes_the_window_take_the_mouse() {
+    fn scene_events_never_enable_the_mouse_before_controls_are_measured() {
         let ask = OverlayEvent::Ask(prompt(Tier::T2));
-        assert_eq!(takes_clicks(&ask), Some(true));
-        // everything that puts something else on the stage lets the mouse through again
-        for ends in [
-            OverlayEvent::Show {
+        assert_eq!(takes_clicks(&ask), Some(false));
+        assert_eq!(
+            takes_clicks(&OverlayEvent::Show {
                 mode: Mode::Listening,
-                line: None,
+                line: None
+            }),
+            Some(false)
+        );
+        assert_eq!(
+            takes_clicks(&OverlayEvent::Mode {
+                mode: Mode::Thinking,
+                quiet: false,
+                lines: Vec::new()
+            }),
+            Some(false)
+        );
+        for ends in [
+            OverlayEvent::Say {
+                hold: true,
+                prefix: String::new(),
+                text: String::new(),
             },
             OverlayEvent::Say {
                 hold: false,
@@ -1404,11 +1522,7 @@ mod tests {
         }
         // and what is not about the stage changes nothing
         for neutral in [
-            OverlayEvent::Mode {
-                mode: Mode::Thinking,
-                quiet: false,
-                lines: Vec::new(),
-            },
+            OverlayEvent::CancelKey { reset: true },
             OverlayEvent::Level { value: 0.5 },
             OverlayEvent::Progress(Progress::DONE),
             OverlayEvent::Learned {
@@ -1426,8 +1540,7 @@ mod tests {
 
     #[test]
     fn a_question_that_nobody_answers_is_over_with_the_next_thing_shown() {
-        // The window takes the mouse from the question until an event that ends it: replay the
-        // events of a few scenes the way `Overlay::publish` applies them.
+        // Scene changes invalidate old geometry; no scene alone may enable the mouse.
         let replay = |events: &[OverlayEvent]| {
             let mut takes = false;
             let mut seen = Vec::new();
@@ -1457,12 +1570,12 @@ mod tests {
         let level = OverlayEvent::Level { value: 0.2 };
         assert_eq!(
             replay(&[listening, thinking, ask.clone(), level.clone(), say.clone()]),
-            [false, false, true, true, false]
+            [false, false, false, false, false]
         );
         // the loudness of the room does not close the question; a hide does
         assert_eq!(
             replay(&[ask, level, OverlayEvent::Hide]),
-            [true, true, false]
+            [false, false, false]
         );
     }
 

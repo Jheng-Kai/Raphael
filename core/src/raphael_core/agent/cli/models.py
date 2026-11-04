@@ -3,15 +3,18 @@
 import asyncio
 import json
 import re
+import tempfile
 import tomllib
 
 from .process import Child
 
-# Alias display names are deliberately centralized for CLI releases that expose no model-list API.
+# What is shown until the CLI has answered (`claude_cli_models`), and if it never does.
+CLAUDE_EFFORTS = ("low", "medium", "high", "xhigh", "max")
 CLAUDE_MODELS = (
-    ("opus", "Claude Opus 5.5", "Complex reasoning and demanding work", ("low", "medium", "high", "max")),
-    ("sonnet", "Claude Sonnet 5.5", "Balanced speed and reasoning", ("low", "medium", "high")),
-    ("haiku", "Claude Haiku 5.5", "Fast everyday tasks", ()),
+    ("opus", "Claude Opus 5.5", "Complex reasoning and demanding work", CLAUDE_EFFORTS),
+    ("fable", "Claude Fable 5.1", "The toughest, longest work", CLAUDE_EFFORTS),
+    ("sonnet", "Claude Sonnet 5.5", "Balanced speed and reasoning", CLAUDE_EFFORTS),
+    ("haiku", "Claude Haiku 5.5", "Fast everyday tasks", CLAUDE_EFFORTS),
 )
 EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
 
@@ -36,6 +39,57 @@ def claude_models(folder):
         models.append({"id": f"cli:claude:{default}", "name": default.replace("-", " ").title(),
                        "description": "Configured CLI model", "is_default": True})
     return models
+
+
+def claude_rows(rows, config):
+    """The CLI's own list (`initialize`) as this app's rows, in its order; its "default" names one of the others."""
+    chosen = config.get("model")
+    fallback = next((row.get("resolvedModel") for row in rows if row.get("value") == "default"), None)
+    models = []
+    for row in rows:
+        value = row.get("value")
+        if value == "default" or not isinstance(value, str) or not re.fullmatch(r"[\w./-]{1,200}", value):
+            continue
+        name = row.get("displayName") or value
+        levels = [level for level in row.get("supportedEffortLevels") or [] if level in EFFORTS]
+        models.append({"id": f"cli:claude:{value}", "name": name if name.startswith("Claude ") else f"Claude {name}",
+                       "description": row.get("description") or "", "reasoning_efforts": levels,
+                       "default_effort": "high" if "high" in levels else None,
+                       "is_default": value == chosen if chosen else False})
+    if not chosen and fallback:
+        for model, row in zip(models, (row for row in rows if row.get("value") != "default"), strict=False):
+            if row.get("resolvedModel") == fallback:
+                model["is_default"] = True
+                break
+    return models
+
+
+async def claude_cli_models(command, environ, folder):
+    """Asks the CLI what it offers over its control channel: no message is sent, so no turn runs and nothing is
+    spent. No settings are loaded, so the owner's hooks do not run either; their default is read from the file."""
+    with tempfile.TemporaryDirectory(prefix="raphael-cli-", ignore_cleanup_errors=True) as empty:
+        child = Child([*command, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+                       "--no-session-persistence", "--strict-mcp-config", "--tools", "", "--setting-sources", ""],
+                      environ=environ, cwd=empty)
+        try:
+            async with asyncio.timeout(20):
+                await child.start()
+                await child.send({"type": "control_request", "request_id": "models", "request": {"subtype": "initialize"}})
+                while True:
+                    line = await child.process.stdout.readline()
+                    if not line:
+                        raise ValueError("model_list_unavailable")
+                    packet = json.loads(line)
+                    if packet.get("type") == "control_response":
+                        answer = packet.get("response") or {}
+                        if answer.get("subtype") != "success":
+                            raise ValueError("model_list_unavailable")
+                        rows = (answer.get("response") or {}).get("models")
+                        if not isinstance(rows, list) or not rows:
+                            raise ValueError("model_list_unavailable")
+                        return claude_rows(rows, read_settings(folder / "settings.json"))
+        finally:
+            await child.kill()
 
 
 def agy_models(output, settings):
@@ -100,7 +154,8 @@ async def codex_models(command, environ, config_path):
                 return packet.get("result") or {}
 
     try:
-        async with asyncio.timeout(12):
+        # A first start on a busy computer can take this long, and nothing waits on it but the list.
+        async with asyncio.timeout(30):
             await child.start()
             await request("initialize", {"clientInfo": {"name": "raphael", "version": "0.2.0"}, "capabilities": {}})
             await child.send({"jsonrpc": "2.0", "method": "initialized", "params": {}})

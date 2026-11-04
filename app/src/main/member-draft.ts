@@ -1,28 +1,24 @@
 // Inline editable draft panel for `team_admin_batch` confirmations, and the settled one-line
 // summary (`已建立 COO、PM、RD`) once the owner confirms.
 
-import { avatarHTML } from "./avatar";
+import { cardHTML } from "./card";
 import { hasDetail, highlightHTML } from "./conversation";
 import { t } from "./i18n";
-import { INSTRUCTIONS_MAX, NAME_MAX, PERSONALITY_MAX, ROLE_MAX, faceHTML } from "./members";
+import { INSTRUCTIONS_MAX, NAME_MAX, PERSONALITY_MAX, ROLE_MAX } from "./members";
 import type {
   AgentQuestion,
   AgentTurn,
-  AvatarPreset,
   GroupDraft,
   MemberDraft,
   MemberGroup,
 } from "./types";
 import {
   type Choice,
-  actionRow,
   btn,
-  closeMenu,
   esc,
   ico,
   iconButton,
   openMenu,
-  openPopover,
   sel,
 } from "./ui";
 
@@ -47,25 +43,17 @@ export function settledDraftHTML(turn: AgentTurn, open: boolean, query = ""): st
     return `<p class="bot-renamed" role="status">${highlightHTML(turn.text.trim(), query)}</p>`;
   }
   const id = esc(turn.id);
-  const summary = highlightHTML(turn.text.trim(), query);
   const lines = (turn.detail ?? "")
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-  return (
-    `<div class="draft-done${open ? " is-open" : ""}" data-draft-done="${id}">` +
-    btn(
-      `<span class="draft-done-mark">${ico("check")}</span>` +
-        `<span class="draft-done-text">${summary}</span>` +
-        `<span class="steps-chev">${ico("right")}</span>`,
-      "draft-done-sum",
-      ` data-act="draft-done" aria-expanded="${open}" aria-controls="draft-done-${id}"`,
-    ) +
-    `<ul class="draft-done-list" id="draft-done-${id}"${open ? "" : " hidden"}>` +
-    lines.map((line) => `<li class="draft-done-item">${highlightHTML(line, query)}</li>`).join("") +
-    `</ul>` +
-    `</div>`
-  );
+  return cardHTML({ title: turn.text.trim(), status: "done", cls: `draft-done${open ? " is-open" : ""}`,
+    attrs: ` data-draft-done="${id}"`,
+    content: btn(`${ico("right")}<span>${esc(t(open ? "cards.hide" : "cards.show"))}</span>`, "card-disclosure-toggle draft-done-sum",
+      ` data-act="draft-done" aria-expanded="${open}" aria-controls="draft-done-${id}"`) +
+      `<ul class="draft-done-list" id="draft-done-${id}"${open ? "" : " hidden"}>` +
+      lines.map(line => `<li class="draft-done-item">${highlightHTML(line, query)}</li>`).join("") + `</ul>`,
+  });
 }
 
 export function draftGroupChoices(
@@ -96,18 +84,8 @@ export function draftGroupChoices(
   return choices;
 }
 
-export function presetUrlOf(avatarPreset: string, presets: readonly AvatarPreset[]): string | null {
-  const raw = (avatarPreset ?? "").trim();
-  if (!raw) return null;
-  const normalized = raw.startsWith("preset:") ? raw : `preset:${raw}`;
-  const stem = raw.startsWith("preset:") ? raw.slice("preset:".length) : raw;
-  const found = presets.find((p) => p.avatar === raw || p.avatar === normalized || p.name === stem);
-  return found?.url ?? null;
-}
-
 export interface DraftPanelHost {
   groups(): readonly MemberGroup[];
-  presets(): readonly AvatarPreset[];
   onConfirm(drafts: MemberDraft[], groups?: GroupDraft[]): void;
   onCancel(): void;
 }
@@ -143,31 +121,19 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
     return allCreate ? t("members.draftCreateCount", { p0: count }) : t("members.draftSaveCount", { p0: count });
   }
 
-  function cardHTML(draft: MemberDraft, choices: Choice[], presets: readonly AvatarPreset[]): string {
+  function draftRowHTML(draft: MemberDraft, choices: Choice[]): string {
     const id = esc(draft.id);
     const expanded = openMore.has(draft.id);
-    const avatarUrl = presetUrlOf(draft.avatar_preset, presets);
-    const face = faceHTML({ id: draft.member_id ?? -1, name: draft.name, avatar_url: avatarUrl }, 40);
     const peek = morePreview(draft);
     const removeLabel = t("members.draftRemove", { p0: draft.name.trim() || t("members.name") });
     return (
       `<article class="draft-card" data-draft-id="${id}">` +
       `<div class="draft-card-top">` +
-      btn(
-        face,
-        "draft-av-btn",
-        ` data-draft-act="avatar" aria-label="${esc(t("members.changeAvatar"))}" title="${esc(t("members.changeAvatar"))}" aria-haspopup="menu" aria-expanded="false"${isBusy || draft.member_id === 0 ? " disabled" : ""}`,
-      ) +
       `<div class="draft-card-ident">` +
       `<input type="text" class="mb-fin draft-name" data-draft-field="name" maxlength="${NAME_MAX}" value="${esc(draft.name)}" placeholder="${esc(t("members.name"))}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false"${isBusy ? " disabled" : ""}>` +
-      `<input type="text" class="mb-fin draft-role" data-draft-field="role" maxlength="${ROLE_MAX}" value="${esc(draft.role)}" placeholder="${esc(t("members.role"))}" aria-label="${esc(t("members.role"))}" autocomplete="off" spellcheck="false"${isBusy ? " disabled" : ""}>` +
-      (draft.member_id === 0 ? "" : `<span class="draft-group-wrap">${sel(choices, (draft.group ?? "").trim(), t("members.group"), ` data-draft-act="group"${isBusy ? " disabled" : ""}`)}</span>`) +
       `</div>` +
       iconButton("x", removeLabel, ` data-draft-act="remove"${isBusy ? " disabled" : ""}`, "draft-remove") +
       `</div>` +
-      (draft.member_id === 0 ? "" : `<div class="draft-card-blurb">` +
-      `<input type="text" class="mb-fin draft-blurb" data-draft-field="blurb" maxlength="160" value="${esc(draft.blurb)}" placeholder="${esc(t("members.profile.blurb"))}" aria-label="${esc(t("members.profile.blurb"))}" autocomplete="off"${isBusy ? " disabled" : ""}>` +
-      `</div>`) +
       `<div class="draft-more${expanded ? " is-open" : ""}">` +
       btn(
         `<span class="steps-chev">${ico("right")}</span><span>${esc(t("members.draftMore"))}</span>` +
@@ -176,6 +142,11 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
         ` data-draft-act="more" aria-expanded="${expanded}" aria-controls="draft-more-${id}"`,
       ) +
       `<div class="draft-more-body" id="draft-more-${id}"${expanded ? "" : " hidden"}>` +
+      `<input type="text" class="mb-fin draft-role" data-draft-field="role" maxlength="${ROLE_MAX}" value="${esc(draft.role)}" placeholder="${esc(t("members.role"))}" aria-label="${esc(t("members.role"))}" autocomplete="off" spellcheck="false"${isBusy ? " disabled" : ""}>` +
+      (draft.member_id === 0 ? "" : `<span class="draft-group-wrap">${sel(choices, (draft.group ?? "").trim(), t("members.group"), ` data-draft-act="group"${isBusy ? " disabled" : ""}`)}</span>`) +
+      (draft.member_id === 0 ? "" : `<div class="draft-card-blurb">` +
+      `<input type="text" class="mb-fin draft-blurb" data-draft-field="blurb" maxlength="160" value="${esc(draft.blurb)}" placeholder="${esc(t("members.profile.blurb"))}" aria-label="${esc(t("members.profile.blurb"))}" autocomplete="off"${isBusy ? " disabled" : ""}>` +
+      `</div>`) +
       `<label class="draft-field"><span>${esc(t("members.personality"))}</span>` +
       `<textarea class="mb-fin mb-ta draft-personality" data-draft-field="personality" maxlength="${PERSONALITY_MAX}" rows="2"${isBusy ? " disabled" : ""}>${esc(draft.personality)}</textarea></label>` +
       `<label class="draft-field"><span>${esc(t("members.instructions"))}</span>` +
@@ -193,29 +164,16 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
     const focusedField = active && el.contains(active) ? active.dataset.draftField : undefined;
 
     const choices = draftGroupChoices(host.groups(), currentGroups, currentDrafts);
-    const presets = host.presets();
     const groupPills = currentGroups
       .map((g) => `<label class="draft-group-pill">${ico("folder")}<input class="mb-fin draft-group-name" data-draft-group="${esc(g.id)}" aria-label="${esc(t("members.group"))}" maxlength="24" value="${esc(g.name)}"${isBusy ? " disabled" : ""}></label>`)
       .join("");
 
     el.setAttribute("aria-label", t("members.draftTitle"));
-    el.innerHTML =
-      `<div class="draft-head">` +
-      `<span class="draft-face">${avatarHTML({ size: 28 })}</span>` +
-      `<span class="draft-title">${esc(t("members.draftTitle"))}</span>` +
-      groupPills +
-      `</div>` +
-      `<div class="draft-list">` +
-      currentDrafts.map((draft) => cardHTML(draft, choices, presets)).join("") +
-      `</div>` +
-      actionRow({
-        secondary: btn(esc(t("common.cancel")), "draft-cancel", ` data-draft-act="cancel"${isBusy ? " disabled" : ""}`),
-        primary: {
-          label: esc(primaryLabel()),
-          attrs: ` data-draft-act="confirm"${isBusy ? " disabled" : ""}`,
-        },
-        cls: "draft-actions",
-      });
+    el.innerHTML = cardHTML({ title: t("members.draftTitle"), status: "waiting",
+      body: t("cards.teamReview"),
+      content: groupPills + `<div class="draft-list">${currentDrafts.map(draft => draftRowHTML(draft, choices)).join("")}</div>`,
+      actions: btn(esc(primaryLabel()), "pri", ` data-draft-act="confirm"${isBusy ? " disabled" : ""}`) + btn(esc(t("common.cancel")), "draft-cancel", ` data-draft-act="cancel"${isBusy ? " disabled" : ""}`),
+    });
 
     if (focusedCardId && focusedField) {
       const input = el.querySelector<HTMLInputElement | HTMLTextAreaElement>(
@@ -223,35 +181,6 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
       );
       input?.focus({ preventScroll: true });
     }
-  }
-
-  function openDraftAvatarMenu(anchor: HTMLElement, draft: MemberDraft): void {
-    const presets = host.presets();
-    const grid = presets.length
-      ? `<div class="mb-presets" role="group" aria-label="${esc(t("settings.avatar"))}">` +
-        presets
-          .map(
-            (preset, i) =>
-              `<button type="button" role="menuitem" tabindex="-1" class="mb-preset" data-preset="${esc(preset.avatar)}" aria-label="${esc(t("members.preset", { p0: i + 1 }))}">` +
-              `<img src="${esc(preset.url)}" alt="" draggable="false"></button>`,
-          )
-          .join("") +
-        `</div><div class="menu-sep" role="separator"></div>`
-      : "";
-    const resetBtn = `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-preset=""><span class="mt">${esc(t("members.draftDefaultAvatar"))}</span></button>`;
-    const pop = openPopover(anchor, grid + resetBtn, {
-      className: "menu mb-avpop",
-      role: "menu",
-      label: t("settings.avatar"),
-    });
-    pop.addEventListener("click", (e) => {
-      const target = (e.target as Element).closest<HTMLElement>("button[data-preset]");
-      if (!target) return;
-      closeMenu();
-      draft.avatar_preset = target.dataset.preset ?? "";
-      draw();
-    });
-    pop.querySelector<HTMLElement>("button")?.focus();
   }
 
   el.addEventListener("input", (e) => {
@@ -325,8 +254,7 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
         draft.group = value;
         draw();
       });
-    } else if (action === "avatar") {
-      openDraftAvatarMenu(act, draft);
+
     } else if (action === "more") {
       const body = card.querySelector<HTMLElement>(".draft-more-body");
       const wrap = card.querySelector<HTMLElement>(".draft-more");

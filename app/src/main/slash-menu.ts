@@ -1,91 +1,67 @@
-// Only command discovery belongs in the composer. The core expands a command when sending,
-// preserving the owner's original /name text in the conversation.
-import { membersCommandsList } from "./api";
+// Discovery and completion share the mention menu. The core resolves the selected name at send time.
+import { membersCommandsList, membersSkillsList } from "./api";
+import { eventRead } from './event-read';
+import { RECALL } from "./composer-history";
 import { t } from "./i18n";
-import type { MemberCommand } from "./types";
+import type { MemberCommand, MemberSkill } from "./types";
 import { textPositionRect } from "./text-position";
-import { closeMenu, esc, menuIsOpenFor, openPopover, placeMenu } from "./ui";
+import { closeMenu, matchingChoices, menuIsOpenFor, openMenu, placeMenu, type Choice } from "./ui";
 
-export interface SlashMenuOptions { memberId(): number }
-export interface SlashMenu { refresh(): Promise<void>; destroy(): void }
+export interface SlashMenuOptions { memberId(): number; scope?: object }
+export interface SlashMenu { refresh(fromEvent?: boolean): Promise<void>; destroy(): void }
+const queryOf = (text: string): string | undefined => /^\/([^\s/]*)$/u.exec(text)?.[1];
 export const matchingCommands = (commands: readonly MemberCommand[], text: string): MemberCommand[] => {
-  const query = /^\/([\w-]*)$/.exec(text)?.[1];
-  return query === undefined ? [] : commands.filter(command => command.name.toLowerCase().startsWith(query.toLowerCase()));
+  const query = queryOf(text)?.toLocaleLowerCase();
+  return query === undefined ? [] : commands.filter(command => command.name.toLocaleLowerCase().includes(query));
 };
 
 export function mountSlashMenu(input: HTMLTextAreaElement | HTMLInputElement, options: SlashMenuOptions): SlashMenu {
-  let alive = true;
-  let generation = 0;
+  let alive = true, generation = 0;
   let loadedFor: number | null = null;
-  let commands: MemberCommand[] = [];
-  let shown: MemberCommand[] = [];
-  let selected = 0;
-  let panel: HTMLElement | null = null;
+  let commands: MemberCommand[] = [], skills: MemberSkill[] = [];
   function close(): void {
-    if (panel?.isConnected && menuIsOpenFor(input)) closeMenu();
-    panel = null;
-    input.removeAttribute("aria-activedescendant");
-  }
-  function choose(index: number): void {
-    const command = shown[index];
-    if (!command) return;
-    input.value = `/${command.name} `;
-    input.setSelectionRange(input.value.length, input.value.length);
-    close();
-    input.focus();
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  }
-  function highlight(): void {
-    panel?.querySelectorAll<HTMLElement>("[data-slash]").forEach((button, index) => button.setAttribute("aria-selected", String(index === selected)));
-    const active = panel?.querySelector<HTMLElement>(`[data-slash="${selected}"]`);
-    if (active) { input.setAttribute("aria-activedescendant", active.id); active.scrollIntoView?.({ block: "nearest" }); }
+    if (menuIsOpenFor(input) && document.querySelector("#app-popover.slash-menu")) closeMenu();
   }
   function draw(): void {
-    if (!alive || document.activeElement !== input || loadedFor !== options.memberId()) { close(); return; }
-    shown = matchingCommands(commands, input.value);
+    const query = queryOf(input.value);
+    if (!alive || document.activeElement !== input || loadedFor !== options.memberId() || query === undefined) { close(); return; }
+    const choices: Choice[] = [
+      ...commands.map(command => ({ value: command.name, label: "/" + command.name, desc: command.description, group: t("completion.commands") })),
+      ...skills.filter(skill => skill.enabled).map(skill => ({ value: skill.slash_name ?? skill.name, label: "/" + (skill.slash_name ?? skill.name), desc: skill.description,
+        aliases: [skill.name], source: skill.plugin, group: t("completion.skills") })),
+    ];
+    const matched = matchingChoices(choices, query);
+    const shown = query ? matched.slice(0, 8) : matched;
     if (!shown.length) { close(); return; }
-    selected = Math.min(selected, shown.length - 1);
-    panel = openPopover(input, shown.map((command, index) => `<button type="button" role="option" tabindex="-1" id="slash-command-${command.id}" data-slash="${index}" aria-selected="${selected === index}"><span class="mtd"><span class="mt">/${esc(command.name)}</span><span class="mdesc">${esc(command.description)}</span></span></button>`).join(""), { className: "menu slash-menu", role: "listbox", label: t("members.profile.slashCommands"), placement: "start", anchorRect: () => textPositionRect(input, 0) });
+    openMenu(input, shown, "", value => {
+      input.value = `/${value} `;
+      input.setSelectionRange(input.value.length, input.value.length);
+      input.focus();
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }, undefined, [], { placement: "start", anchorRect: () => textPositionRect(input, 0), selectionIndicator: false, focus: false, completion: true, className: "slash-menu" });
+    const panel = document.querySelector<HTMLElement>("#app-popover")!;
+    panel.querySelectorAll<HTMLElement>("[data-value]").forEach((row, index) => { row.dataset.slash = String(index); });
     panel.style.minWidth = `${Math.min(360, input.getBoundingClientRect().width, innerWidth - 16)}px`;
     placeMenu();
-    panel.addEventListener("pointerdown", event => event.preventDefault());
-    panel.addEventListener("click", event => {
-      const button = (event.target as Element).closest<HTMLElement>("[data-slash]");
-      if (button) choose(Number(button.dataset.slash));
-    });
-    highlight();
   }
-  async function refresh(): Promise<void> {
-    const mine = ++generation;
-    const memberId = options.memberId();
+  async function refresh(fromEvent=false): Promise<void> {
+    const mine = ++generation, memberId = options.memberId();
     close();
     try {
-      const answer = await membersCommandsList(memberId);
+      const [commandAnswer, skillAnswer] = await Promise.all(fromEvent ? [eventRead(`members.commands.list:${memberId}`,()=>membersCommandsList(memberId),options.scope ?? input),eventRead(`members.skills.list:${memberId}`,()=>membersSkillsList(memberId),options.scope ?? input)] : [membersCommandsList(memberId), membersSkillsList(memberId)]);
       if (!alive || mine !== generation || memberId !== options.memberId()) return;
-      commands = answer.commands;
-      loadedFor = memberId;
-      draw();
+      commands = commandAnswer.commands; skills = skillAnswer.skills;
+      loadedFor = memberId; draw();
     } catch { if (mine === generation) { loadedFor = null; close(); } }
   }
-  const onInput = (): void => {
-    selected = 0;
-    if (!/^\/[\w-]*$/.test(input.value)) { close(); return; }
+  const onInput = (event?: Event): void => {
+    if ((event as InputEvent | undefined)?.inputType === RECALL || queryOf(input.value) === undefined) { close(); return; }
     if (loadedFor === options.memberId()) draw(); else void refresh();
   };
   const onBlur = (): void => { generation++; close(); };
-  const key = (raw: Event): void => {
-    const event = raw as KeyboardEvent;
-    if (event.isComposing || event.keyCode === 229 || !panel?.isConnected || !menuIsOpenFor(input)) return;
-    if (!["ArrowUp", "ArrowDown", "Enter", "Tab", "Escape"].includes(event.key)) return;
-    if (event.key === "Tab" || event.key === "Escape") close();
-    else if (event.key === "Enter") choose(selected);
-    else { selected = (selected + (event.key === "ArrowDown" ? 1 : -1) + shown.length) % shown.length; highlight(); }
-    if (event.key !== "Tab") event.preventDefault();
-    event.stopImmediatePropagation();
-  };
   input.addEventListener("input", onInput);
   input.addEventListener("focus", onInput);
+  input.addEventListener("compositionend", onInput);
   input.addEventListener("blur", onBlur);
-  input.addEventListener("keydown", key, true);
-  return { refresh, destroy() { alive = false; generation++; close(); input.removeEventListener("input", onInput); input.removeEventListener("focus", onInput); input.removeEventListener("blur", onBlur); input.removeEventListener("keydown", key, true); } };
+  return { refresh, destroy() { alive = false; generation++; close(); input.removeEventListener("input", onInput); input.removeEventListener("focus", onInput); input.removeEventListener("compositionend", onInput); input.removeEventListener("blur", onBlur); } };
 }

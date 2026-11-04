@@ -71,6 +71,10 @@ class Channel(Protocol):
         """Send `text`, in as many messages as the app needs."""
         ...
 
+    async def send_attachment(self, chat: str, file) -> bool:
+        """Upload stored bytes, returning False when the channel's size limit is exceeded."""
+        ...
+
     def busy(self, chat: str) -> AbstractAsyncContextManager[None]:
         """Show that Raphael is working on an answer, for as long as the context is open. Best
         effort: a failure is not an error."""

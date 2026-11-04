@@ -797,3 +797,21 @@ test("with reduced motion the operating ring stands still too", () => {
   e.step(1);
   expect(e.rot).toBe(0);
 });
+
+
+test("a 180 Hz display draws at most sixty frames while simulation keeps elapsed time", async () => {
+  const frames: FrameRequestCallback[] = [];
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
+  vi.spyOn(performance, "now").mockReturnValue(0);
+  const emblem = await import("./emblem");
+  const { ctx } = recordingContext();
+  const canvas = { ...fakeCanvas(), getContext: () => ctx } as unknown as HTMLCanvasElement;
+  const e = new emblem.Emblem(canvas, 150); e.appear();
+  const draw = vi.spyOn(e, "draw"), step = vi.spyOn(e, "step");
+  for (let i = 1; i <= 180; i++) frames.shift()!(i * 1000 / 180);
+  expect(draw.mock.calls.length).toBeGreaterThan(20);
+  expect(step.mock.calls.length).toBeLessThanOrEqual(60);
+  expect(draw.mock.calls.length).toBeLessThanOrEqual(60);
+  expect(step.mock.calls.reduce((sum, [dt]) => sum + dt, 0)).toBeGreaterThan(.97);
+  e.dispose();
+});

@@ -1,64 +1,29 @@
-// The profile and details panel share the member-owned skill and command editor. New members
-// keep these in a draft; existing members write each explicit resource action immediately.
+// The profile and details panel share the member-owned skill and command editor. Each explicit
+// resource action is written immediately.
+import { noticeHTML } from "./missing";
 import * as api from "./api";
+import { eventRead } from './event-read';
 import { openActions } from "./member-column";
-import { describeError } from "./format";
-import { t } from "./i18n";
-import type { Member, MemberCommand, MemberPatch, MemberSkill, MemberVoice, Routine, WireAttachment } from "./types";
+import { describeError, formatDate } from "./format";
+import { onLocaleChange, t } from "./i18n";
+import type { Member, MemberCommand, MemberPatch, MemberSkill, MemberVoice, WireAttachment } from "./types";
 import { btn, esc, iconButton, openMenu, sel, tg, toaster } from "./ui";
 
-export interface ProfileDraft {
-  skills: (MemberSkill & { importedIds?: number[] })[];
-  commands: MemberCommand[];
-  memories: { name: string; body: string; description: string }[];
-  routines: Routine[];
-}
-export const emptyProfileDraft = (): ProfileDraft => ({ skills: [], commands: [], memories: [], routines: [] });
-let draftSerial = 0;
-export const nextProfileDraftId = (): number => --draftSerial;
-
-/** Removes each successful item from the queue, so a failed import can be retried safely. */
-export async function flushMemberProfileDraft(memberId: number, draft: ProfileDraft): Promise<void> {
-  while (draft.skills.length) {
-    const skill = draft.skills[0]!;
-    if (!skill.importedIds) {
-      const answer = await api.membersSkillsImport(memberId, skill.source);
-      skill.importedIds = (answer.skills ?? [answer.skill]).map(imported => imported.id);
-    }
-    for (const id of skill.importedIds) await api.membersSkillsUpdate(memberId, id, skill.enabled);
-    draft.skills.shift();
-  }
-  while (draft.commands.length) {
-    const { name, description, template } = draft.commands[0]!;
-    await api.membersCommandsSave(memberId, { name, description, template });
-    draft.commands.shift();
-  }
-  while (draft.memories.length) {
-    const { body, description } = draft.memories[0]!;
-    await api.core("memory.create", { member_id: memberId, space: "own", body, description });
-    draft.memories.shift();
-  }
-  while (draft.routines.length) {
-    const { title, prompt, schedule, enabled } = draft.routines[0]!;
-    await api.routinesCreate({ member_id: memberId, title, prompt, schedule, enabled });
-    draft.routines.shift();
-  }
-}
-
 export interface ResourceHost {
-  memberId: number | null;
+  memberId: number;
+  scope?: object;
   tab: "skills" | "commands" | "voice";
   /** The narrow details panel gives skills and commands separate subpages. */
   standalone?: boolean;
   member?: Member;
-  draft?: ProfileDraft;
   /** Profile fields remain drafts until its footer is saved. The details panel writes now. */
   patch?(patch: MemberPatch): void;
   changed?(): void;
   onCount?(counts: { skills: number; commands: number }): void;
+  draft?: { text: string; save(text: string): Promise<void>; discard(): Promise<void> };
 }
 export interface ResourceEditor {
-  refresh(): Promise<void>;
+  refresh(fromEvent?: boolean): Promise<void>;
   suggest(command: Omit<MemberCommand, "id">): void;
   destroy(): void;
 }
@@ -68,20 +33,23 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
   let busy = false;
   let failed = false;
   let generation = 0;
-  let loaded = host.memberId === null;
-  let skills: MemberSkill[] = host.draft?.skills ?? [];
-  let commands: MemberCommand[] = host.draft?.commands ?? [];
+  let loaded = !!host.draft;
+  let skills: MemberSkill[] = [];
+  let commands: MemberCommand[] = [];
   let voices: MemberVoice[] = [];
   let configured = false;
   const voiceState = { voice: host.member?.voice ?? "", read_aloud: host.member?.read_aloud ?? false, notify: host.member?.notify ?? false };
   let command: Omit<MemberCommand, "id"> & { id?: number } = { name: "", description: "", template: "" };
   let suggested = false;
   let source = "";
+  let undo: string | null = null;
+  let editing: { id?: number; text: string; revision?: string } | null = host.draft ? { text: host.draft.text } : null;
   const counts = (): void => { if (host.tab !== "voice") host.onCount?.({ skills: skills.length, commands: commands.length }); };
   const empty = (text: string): string => `<p class="mp-empty">${esc(text)}</p>`;
   const label = (text: string, content: string): string => `<label class="mp-label"><span>${esc(text)}</span>${content}</label>`;
   const input = (id: string, value: string, placeholder: string, max = 200): string => `<input id="${id}" class="mb-fin" maxlength="${max}" value="${esc(value)}" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}" autocomplete="off">`;
   const capture = (): void => {
+    if (editing) editing.text = container.querySelector<HTMLTextAreaElement>("#mp-skill-text")?.value ?? editing.text;
     source = container.querySelector<HTMLInputElement>("#mp-skill-source")?.value ?? source;
     command.name = container.querySelector<HTMLInputElement>("#mp-command-name")?.value ?? command.name;
     command.description = container.querySelector<HTMLInputElement>("#mp-command-description")?.value ?? command.description;
@@ -92,9 +60,11 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     capture();
     const off = busy ? " disabled" : "";
     const skillHTML = `<section class="mp-card"><h3>${esc(t("members.profile.skillsTitle"))}</h3>` +
-      `<div class="mp-add">${input("mp-skill-source", source, t("members.profile.source"), 2048)}${btn(esc(t("members.profile.import")), "sm", ` data-res="import"${off}`)}</div>` +
-      skills.map(s => `<div class="mp-resource"><div><b>${esc(s.name)}</b><p>${esc(s.description || s.source)}</p></div>${tg(s.enabled, `${t("members.profile.enable")} ${s.name}`, ` data-res="skill-toggle" data-id="${s.id}"${off}`)}${iconButton("more", t("members.more", { p0: s.name }), ` data-res="skill-menu" data-id="${s.id}" aria-haspopup="menu" aria-expanded="false"${off}`)}</div>`).join("") +
-      (skills.length ? "" : empty(t("members.profile.noSkills"))) + `</section>`;
+      (host.draft ? "" : `<div class="mp-add">${input("mp-skill-source", source, t("members.profile.source"), 2048)}${btn(esc(t("members.profile.import")), "sm", ` data-res="import"${off}`)}</div>`) +
+      skills.map(s => `<div class="mp-resource"><div><b>${esc(s.name)}</b><p>${esc(s.description || s.source)}</p><p>${esc(s.provenance === "learned" ? t("skills.learnedAt", { p0: s.learned_at ? formatDate(s.learned_at) : "" }) : t(s.provenance === "owner" || s.source === "owner" ? "skills.owner" : "skills.imported"))}</p></div>${tg(s.enabled, `${t("members.profile.enable")} ${s.name}`, ` data-res="skill-toggle" data-id="${s.id}"${off}`)}${iconButton("more", t("members.more", { p0: s.name }), ` data-res="skill-menu" data-id="${s.id}" aria-haspopup="menu" aria-expanded="false"${off}`)}</div>`).join("") +
+      (skills.length || host.draft ? "" : empty(t("members.profile.noSkills"))) +
+      (editing ? `<label class="mp-label"><span>${esc(t("skills.instructions"))}</span><textarea id="mp-skill-text" class="mb-fin mb-ta" rows="12" spellcheck="false"${off}>${esc(editing.text)}</textarea></label><div class="mp-end">${btn(esc(t("common.cancel")), "sm", ` data-res="skill-cancel"${off}`)}${btn(esc(t("skills.save")), "sm", ` data-res="skill-save"${off}`)}</div>` : "") +
+      (undo ? `<div class="mp-end">${btn(esc(t("skills.undo")), "sm", ` data-res="skill-undo"${off}`)}</div>` : "") + `</section>`;
     const commandsHTML = `<section class="mp-card"><h3>${esc(t("members.profile.commands"))}</h3>` +
       commands.map(c => `<div class="mp-resource"><div><b>/${esc(c.name)}</b><p>${esc(c.description)}</p></div>${iconButton("more", t("members.more", { p0: c.name }), ` data-res="command-menu" data-id="${c.id}" aria-haspopup="menu" aria-expanded="false"${off}`)}</div>`).join("") +
       (commands.length ? "" : empty(t("members.profile.noCommands"))) +
@@ -104,22 +74,23 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     const voiceChoices = [{ value: "", label: t("members.profile.defaultVoice") }, ...voices.map(v => ({ value: v.id, label: v.name }))];
     if (voiceState.voice && !voiceChoices.some(v => v.value === voiceState.voice)) voiceChoices.push({ value: voiceState.voice, label: voiceState.voice });
     container.innerHTML = failed ? `<div class="mp-error" role="alert">${btn(esc(t("members.profile.retry")), "sm", ' data-res="retry"')}</div>` : !loaded ? `<span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span>` :
-      host.tab === "voice" ? `<section class="mp-card">${label(t("members.profile.voiceLabel"), sel(voiceChoices, voiceState.voice, t("members.profile.voiceLabel"), ` data-res="voice"${!configured || busy ? " disabled" : ""}`))}${configured ? "" : empty(t("members.profile.voiceUnconfigured"))}</section>` +
+      host.tab === "voice" ? `<section class="mp-card">${label(t("members.profile.voiceLabel"), sel(voiceChoices, voiceState.voice, t("members.profile.voiceLabel"), ` data-res="voice"${!configured || busy ? " disabled" : ""}`))}${configured ? "" : noticeHTML("voice", "voice", "fish")}</section>` +
         `<section class="mp-card">${(["read_aloud", "notify"] as const).map(key => `<div class="mp-resource"><span>${esc(t(key === "read_aloud" ? "members.profile.readAloud" : "members.profile.notify"))}</span>${tg(voiceState[key], t(key === "read_aloud" ? "members.profile.readAloud" : "members.profile.notify"), ` data-res="${key}"${off}`)}</div>`).join("")}</section>` :
       (host.tab === "skills" ? skillHTML : "") + (host.tab === "commands" || !host.standalone ? commandsHTML : "");
   }
-  async function refresh(): Promise<void> {
+  async function refresh(fromEvent = false): Promise<void> {
     const mine = ++generation;
     try {
       if (host.tab === "voice") {
-        const answer = await api.membersVoices();
+        const answer = await (fromEvent ? eventRead('members.voices',()=>api.membersVoices(),host.scope ?? container) : api.membersVoices());
         if (!alive || mine !== generation) return;
         voices = answer.voices;
         configured = answer.configured;
-      } else if (host.memberId !== null) {
-        const [s, c] = await Promise.all([api.membersSkillsList(host.memberId), api.membersCommandsList(host.memberId)]);
+      } else {
+        const [s, c] = await Promise.all(fromEvent ? [eventRead(`members.skills.list:${host.memberId}`,()=>api.membersSkillsList(host.memberId),host.scope ?? container),eventRead(`members.commands.list:${host.memberId}`,()=>api.membersCommandsList(host.memberId),host.scope ?? container)] : [api.membersSkillsList(host.memberId), api.membersCommandsList(host.memberId)]);
         if (!alive || mine !== generation) return;
         skills = s.skills;
+        undo = s.undo ?? null;
         commands = c.commands;
         if (suggested && command.id === undefined && command.name) command.id = commands.find(saved => saved.name === command.name)?.id;
         counts();
@@ -144,10 +115,24 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
   }
   async function patch(next: MemberPatch): Promise<void> {
     if (host.patch) host.patch(next);
-    else if (host.memberId !== null) await api.membersUpdate(host.memberId, next);
+    else await api.membersUpdate(host.memberId, next);
     Object.assign(voiceState, next);
   }
   function choose(action: string | undefined, id: number, target: HTMLButtonElement): void {
+    if (action === "skill-cancel") {
+      if (host.draft) void run(async () => { await host.draft!.discard(); editing = null; });
+      else { editing = null; draw(); }
+      return;
+    }
+    if (action === "skill-edit") {
+      void (async () => {
+        try {
+          const answer = await api.core<{ skill: MemberSkill; text: string }>("members.skills.read", { member_id: host.memberId, id });
+          if (alive) { editing = { id, text: answer.text, revision: answer.skill?.revision ?? undefined }; draw(); }
+        } catch (error) { toaster.info(describeError(error)); }
+      })();
+      return;
+    }
     if (action === "retry") { void refresh(); return; }
     if (action === "voice") {
       openMenu(target, [{ value: "", label: t("members.profile.defaultVoice") }, ...voices.map(v => ({ value: v.id, label: v.name }))], voiceState.voice, value => void run(() => patch({ voice: value })));
@@ -157,48 +142,49 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     if (action === "command-edit") { suggested = false; command = { ...commands.find(c => c.id === id)! }; container.innerHTML = ""; draw(); container.querySelector<HTMLInputElement>("#mp-command-name")?.focus(); return; }
     if (action === "command-cancel") { suggested = false; command = { name: "", description: "", template: "" }; container.innerHTML = ""; draw(); return; }
     void run(async () => {
-      if (action === "import") {
+      if (action === "skill-save" && editing) {
+        if (host.draft) { await host.draft.save(editing.text); editing = null; return; }
+        await api.core("members.skills.update", { member_id: host.memberId, id: editing.id, text: editing.text, expected_hash: editing.revision });
+        editing = null;
+        await refresh();
+      } else if (action === "skill-undo" && undo) {
+        await api.core("members.skills.update", { member_id: host.memberId, undo });
+        editing = null;
+        await refresh();
+      } else if (action === "import") {
         const value = source.trim();
         if (!value) return;
-        if (host.memberId === null) {
-          if (!skills.some(s => s.source === value)) skills.push({ id: nextProfileDraftId(), source: value, name: value, description: "", enabled: true });
-        } else {
-          const answer = await api.membersSkillsImport(host.memberId, value);
-          for (const skill of answer.skills ?? [answer.skill]) {
-            const index = skills.findIndex(existing => existing.id === skill.id);
-            if (index < 0) skills.push(skill); else skills[index] = skill;
-          }
+        const answer = await api.membersSkillsImport(host.memberId, value);
+        for (const skill of answer.skills ?? [answer.skill]) {
+          const index = skills.findIndex(existing => existing.id === skill.id);
+          if (index < 0) skills.push(skill); else skills[index] = skill;
         }
         source = "";
         const field = alive ? container.querySelector<HTMLInputElement>("#mp-skill-source") : null;
         if (field) field.value = "";
       } else if (action === "skill-toggle") {
         const skill = skills.find(s => s.id === id)!;
-        if (host.memberId !== null) await api.membersSkillsUpdate(host.memberId, id, !skill.enabled);
+        await api.membersSkillsUpdate(host.memberId, id, !skill.enabled);
         skill.enabled = !skill.enabled;
       } else if (action === "skill-delete") {
-        if (host.memberId !== null) await api.membersSkillsDelete(host.memberId, id);
+        await api.membersSkillsDelete(host.memberId, id);
         const index = skills.findIndex(s => s.id === id);
         if (index >= 0) skills.splice(index, 1);
+        editing = null;
+        await refresh();
       } else if (action === "command-delete") {
-        if (host.memberId !== null) await api.membersCommandsDelete(host.memberId, id);
+        await api.membersCommandsDelete(host.memberId, id);
         const index = commands.findIndex(c => c.id === id);
         if (index >= 0) commands.splice(index, 1);
       } else if (action === "command-save") {
         const name = command.name.trim().replace(/^\//, "").toLowerCase();
         if (!/^[a-z][a-z0-9_-]{0,31}$/.test(name) || !command.template.includes("{input}")) { toaster.info(t("members.profile.badCommand", { input: "{input}" })); return; }
         const next = { ...command, name, description: command.description.trim(), template: command.template.trim() };
-        if (host.memberId !== null) {
-          const saved = (await api.membersCommandsSave(host.memberId, next) as { command?: MemberCommand } | undefined)?.command;
-          if (saved) {
-            const index = commands.findIndex(existing => existing.id === saved.id);
-            if (index < 0) commands.push(saved); else commands[index] = saved;
-          } else commands = (await api.membersCommandsList(host.memberId)).commands;
-        } else {
-          const index = commands.findIndex(c => c.id === next.id || c.name.toLowerCase() === name.toLowerCase());
-          const saved = { ...next, id: index >= 0 ? commands[index]!.id : nextProfileDraftId() };
-          if (index >= 0) commands[index] = saved; else commands.push(saved);
-        }
+        const saved = (await api.membersCommandsSave(host.memberId, next) as { command?: MemberCommand } | undefined)?.command;
+        if (saved) {
+          const index = commands.findIndex(existing => existing.id === saved.id);
+          if (index < 0) commands.push(saved); else commands[index] = saved;
+        } else commands = (await api.membersCommandsList(host.memberId)).commands;
         command = { name: "", description: "", template: "" };
         suggested = false;
         if (alive) container.innerHTML = "";
@@ -212,13 +198,14 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     const action = target.dataset.res;
     const id = Number(target.dataset.id);
 
-    if (action === "skill-menu") openActions(target, [{ id: "skill-delete", label: t("members.profile.delete"), icon: "trash" }], choice => choose(choice, id, target));
+    if (action === "skill-menu") openActions(target, [{ id: "skill-edit", label: t("members.profile.editResource"), icon: "pencil" }, { id: "skill-delete", label: t("members.profile.delete"), icon: "trash" }], choice => choose(choice, id, target));
     else if (action === "command-menu") openActions(target, [{ id: "command-edit", label: t("members.profile.editResource"), icon: "pencil" }, { id: "command-delete", label: t("members.profile.delete"), icon: "trash" }], choice => choose(choice, id, target));
     else choose(action, id, target);
   };
   container.addEventListener("click", click);
+  const stopLocale = onLocaleChange(draw);
   draw();
-  void refresh();
+  if (!host.draft) void refresh();
   return {
     refresh,
     suggest(next) {
@@ -228,21 +215,21 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
       container.innerHTML = "";
       draw();
     },
-    destroy() { alive = false; generation++; container.removeEventListener("click", click); },
+    destroy() { alive = false; generation++; stopLocale(); container.removeEventListener("click", click); },
   };
 }
 
 /** Converts the user's selected crop into the file sent to members.set_avatar. */
-export async function croppedMemberPicture(file: WireAttachment, crop: { x: number; y: number; zoom: number }): Promise<WireAttachment> {
+export async function croppedMemberPicture(file: WireAttachment, crop: { x: number; y: number; zoom: number }, side = 512, mime = "image/png"): Promise<WireAttachment> {
   const image = new Image();
   await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error(t("agent.attachUnreadable", { p0: file.name }))); image.src = `data:${file.mime};base64,${file.data}`; });
   const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 512;
+  canvas.width = canvas.height = side;
   const context = canvas.getContext("2d");
   if (!context) throw new Error(t("agent.attachUnreadable", { p0: file.name }));
-  const scale = 512 / Math.min(image.naturalWidth, image.naturalHeight) * crop.zoom;
+  const scale = side / Math.min(image.naturalWidth, image.naturalHeight) * crop.zoom;
   const width = image.naturalWidth * scale;
   const height = image.naturalHeight * scale;
-  context.drawImage(image, (512 - width) * crop.x, (512 - height) * crop.y, width, height);
-  return { name: "avatar.png", mime: "image/png", data: canvas.toDataURL("image/png").split(",")[1]! };
+  context.drawImage(image, (side - width) * crop.x, (side - height) * crop.y, width, height);
+  return { name: "avatar.png", mime, data: canvas.toDataURL(mime, 0.9).split(",")[1]! };
 }

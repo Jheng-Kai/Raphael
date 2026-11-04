@@ -83,6 +83,7 @@ class HistoryStore:
         limit: int = 50,
         before_ms: int | None = None,
         after_ms: int | None = None,
+        before_id: int | None = None,
     ) -> list[HistoryItem]:
         """Newest first.
 
@@ -98,8 +99,12 @@ class HistoryStore:
             conditions.append("(text LIKE ? ESCAPE '\\' OR raw_text LIKE ? ESCAPE '\\')")
             params += [pattern, pattern]
         if before_ms is not None:
-            conditions.append("created_at_ms < ?")
-            params.append(before_ms)
+            if before_id is None:
+                conditions.append("created_at_ms < ?")
+                params.append(before_ms)
+            else:
+                conditions.append("(created_at_ms < ? OR (created_at_ms = ? AND id < ?))")
+                params.extend((before_ms, before_ms, before_id))
         if after_ms is not None:
             conditions.append("created_at_ms >= ?")
             params.append(after_ms)
@@ -108,6 +113,9 @@ class HistoryStore:
             f"SELECT {_COLUMNS} FROM history{where} {_NEWEST_FIRST} LIMIT ?", [*params, limit]
         )
         return [_to_item(row) for row in rows]
+
+    def count(self) -> int:
+        return self._conn.execute("SELECT COUNT(*) FROM history").fetchone()[0]
 
     def delete(self, id: int) -> bool:
         with self._conn:

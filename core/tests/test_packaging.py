@@ -128,6 +128,12 @@ def test_the_audit_requires_every_pinned_license_text(build, bundle):
         build.audit_bundle(bundle)
 
 
+def test_the_audit_requires_the_shared_catalog_search_data(build, bundle):
+    (bundle / "_internal/raphael_core/connectors/finder-data.json").unlink()
+    with pytest.raises(RuntimeError, match="finder-data.json"):
+        build.audit_bundle(bundle)
+
+
 @pytest.mark.parametrize("name", [
     "_internal/opencc/clib/bin/opencc.exe",
     "_internal/opencc/clib/bin/opencc_dict.exe",

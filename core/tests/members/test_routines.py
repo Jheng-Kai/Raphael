@@ -2,6 +2,7 @@
 its thread."""
 
 import asyncio
+import pytest
 
 from raphael_core.agent.history import AgentHistory
 from raphael_core.members.service import CATCH_UP_MS, TICK_S
@@ -29,8 +30,8 @@ async def test_a_due_routine_runs_once_as_a_task_of_its_member_and_is_moved_on_f
     (task,) = rig.background.submitted
     assert task == {
         "session_id": f"routine:{routine['id']}", "text": "PRIVATE-PROMPT 看今天的進度",
-        # a model kept on the member is not used: the team answers with Raphael's
-        "language": "zh-TW", "model": "openai/gpt-6-luna", "member_id": member_id, "routine_id": routine["id"],
+        # A routine uses its member's selected brain.
+        "language": "zh-TW", "model": "own/model", "member_id": member_id, "routine_id": routine["id"],
     }  # fmt: skip
     moved = rig.service.store.routine(routine["id"])
     assert moved.last_run_ms == rig.wall.now
@@ -51,6 +52,52 @@ async def test_raphael_has_routines_too_run_on_the_answer_model(rig, conn):
     assert rig.service.tick() == [routine["id"]]
     (task,) = rig.background.submitted
     assert task["member_id"] == 0 and task["model"]  # the answer model, from the settings
+
+
+async def test_an_unfinished_routine_run_exposes_its_real_owner_question_status(rig, conn):
+    routine = await make(rig, member_id=0)
+    turn = AgentHistory(conn).add(session_id="sample-question", question="Review samples", route="routine", prefix="", text="Choose a sample", status="confirm", member_id=0)
+    conn.execute("INSERT INTO routine_runs(routine_id,started,status,turn_id) VALUES(?,1,'running',?)", (routine["id"],turn))
+    conn.commit()
+    result = await rig.call("routines.runs", {"routine_id":routine["id"]})
+    assert result["runs"][0]["status"] == "confirm"
+    assert result["runs"][0]["finished"] is None
+
+
+@pytest.mark.parametrize("kind", ["ask_owner", "permission", "children"])
+async def test_routine_waiting_status_comes_from_its_real_background_question_store(rig, conn, kind):
+    from raphael_core.agent.owner_questions import OwnerQuestions
+    from raphael_core.background.tasks import Question
+    from raphael_core.home import HomeOverview
+    routine = await make(rig, member_id=0, schedule={"kind":"every", "hours":3, "from":"08:00", "to":"23:00"})
+    rig.wall.now = routine["next_run"]
+    rig.service.tick()
+    store = rig.background.store
+    task_id, turn_id = rig.background.attached[0]
+    store.set_state(task_id, "waiting")
+    questions = OwnerQuestions(conn)
+    if kind == "ask_owner":
+        card = questions.open(store.get(task_id), "ask_owner", {"question":"Choose a sample", "options":[], "free_text":True})
+    elif kind == "permission":
+        store.add_question(Question("sample-permission", task_id, 0, "", "Allow sample read", "T2", rig.wall.now, rig.wall.now+60000, 60, "waiting"))
+    assert AgentHistory(conn).get(turn_id).status == "running"
+    result = await rig.call("routines.runs", {"routine_id":routine["id"]})
+    assert result["runs"][0]["status"] == ("running" if kind == "children" else "confirm")
+    home = HomeOverview(conn, rig.rpc, rig.service, now_ms=rig.wall, tz=rig.service._tz)
+    async def status(_): return {"spend":{"month_usd":0,"limit_usd":0,"daily":[]}}
+    async def stats(_): return {"all":{"words":0,"audio_seconds":0},"time_saved_seconds":0}
+    async def allowances(_): return {}
+    rig.rpc.register("status.get", status)
+    rig.rpc.register("stats.summary", stats)
+    rig.rpc.register("usage.allowances", allowances)
+    overview = await home.read({})
+    exceptions = [item for item in overview["calendar_items"] if item.get("run_status") == "confirm"]
+    assert bool(exceptions) == (kind != "children")
+    if kind == "ask_owner":
+        questions.settle(card["id"], {"state":"answered", "answer":"Sample A"})
+    elif kind == "permission":
+        store.close_question("sample-permission", "approved")
+    assert (await rig.call("routines.runs", {"routine_id":routine["id"]}))["runs"][0]["status"] == "running"
 
 
 async def test_a_routine_missed_while_the_core_was_off_runs_once_within_twelve_hours(rig):

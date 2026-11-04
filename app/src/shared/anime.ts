@@ -18,12 +18,12 @@ const OPENING = new RegExp(`^《(?:${PREFIXES.join("|")})[。.：:]\\s*`, "iu");
  * closes it with 》. Anything else, a 》 that ends a book's title included, is kept as it is.
  */
 export function plainReplies(texts: readonly string[]): string[] {
-  const plain = [...texts];
+  const plain = texts.map(replyBody);
   let open = -1;
   const close = (end: number): void => {
     if (open >= 0 && end >= open && plain[end].trimEnd().endsWith("》")) plain[end] = plain[end].trimEnd().slice(0, -1);
   };
-  texts.forEach((text, index) => {
+  plain.forEach((text, index) => {
     const opening = OPENING.exec(text.trimStart());
     if (!opening) return;
     close(index - 1);
@@ -32,6 +32,26 @@ export function plainReplies(texts: readonly string[]): string[] {
   });
   close(texts.length - 1);
   return plain;
+}
+
+/** Older stored CLI envelopes still read as words; authored JSON without reply keys stays intact. */
+export function replyBody(text: string): string {
+  return replyMessages(text).join("\n\n");
+}
+
+/** Preserve authored reply envelopes as separate messages; never split Markdown text. */
+export function replyMessages(text: string): string[] {
+  let body = text;
+  for (let depth = 0; depth < 4; depth++) {
+    try {
+      const value = JSON.parse(body);
+      if (!value || Array.isArray(value) || typeof value !== "object" || !("text" in value || "messages" in value)) return [body];
+      const messages = Array.isArray(value.messages) ? value.messages.filter((item: unknown) => typeof item === "string" && item.trim()) : [];
+      if (messages.length) return messages;
+      body = typeof value.text === "string" ? value.text : "";
+    } catch { return [body]; }
+  }
+  return [];
 }
 
 /** Raphael's words: `replyLine("答", "好的")` is 《答。好的》; an English prefix reads 《Answer. Done》. */

@@ -1,7 +1,7 @@
 {
   "name": "app",
   "private": true,
-  "version": "0.3.0",
+  "version": "1.0.0",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -11,11 +11,14 @@
     "test": "vitest run",
     "check:contrast": "node scripts/check-palette.mjs",
     "look": "node scripts/look/index.mjs",
+    "native": "node scripts/look/native/index.mjs",
     "verify": "node scripts/verify.mjs",
     "judge": "node scripts/guardian.mjs"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.12.0"
+    "@tauri-apps/api": "^2.12.0",
+    "highlight.js": "11.11.1",
+    "mermaid": "11.12.2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.0",

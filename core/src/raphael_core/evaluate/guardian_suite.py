@@ -77,7 +77,7 @@ def capture(driver, turns, result, directory, registry):
     by_name = {name: item for item in registry for name in [item.tool_key, *item.execution_keys, *item.api_names, *item.mcp_names]}
     for trace in driver.traces:
         registered = by_name.get(trace["name"])
-        role = "chief" if trace["actor"] == 0 else "member"
+        role = trace["role"]
         schema_matches = registered and digest(registered.schemas.get(role)) == trace["input_schema_hash"]
         result["tools"].append({**trace, "tool_key": registered.tool_key if registered else trace["name"],
                                 "schema_hash": registered.schema_hash if schema_matches else None,

@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from urllib.parse import quote
 
-from ..agent.cli.loop import APPROVE, MEMORY_TOOLS
+from ..agent.cli.loop import APPROVE
 from ..agent.harness_tools import definitions_for
 from ..agent.mcp_server import RaphaelMcp
 from ..agent.plugins import make_offer, tool_key
@@ -87,14 +87,14 @@ async def inventory(servers=()):
         return "raphael/core/" + name
 
     for role, member in (("chief", 0), ("member", 1)):
-        for name, item in {**_DEFINITIONS, **dict(definitions_for(member))}.items():
+        from ..agent.speaker import Speaker
+        speaker = Speaker(id=member, capabilities=frozenset({"chief"}) if role == "chief" else frozenset())
+        for name, item in {**_DEFINITIONS, **dict(definitions_for(speaker))}.items():
             register(builtin(name), name, item["parameters"], role)
         for name in TEAM_TOOLS:
-            if name in ("create_member", "room_meeting") and member:
-                continue
             definition = worker_definition(name)["function"]
             register(builtin(name), name, definition["parameters"], role)
-        for definition in MEMORY_TOOLS + [APPROVE]:
+        for definition in [APPROVE]:
             function = definition["function"]
             register(builtin(function["name"]), function["name"], function["parameters"], role)
         for definition in computer_definitions():
@@ -125,8 +125,9 @@ async def inventory(servers=()):
     alias_keys = {alias: external_keys[tool.key] for alias, tool in make_offer(plugins).by_alias.items()}
     for role, member in (("chief", 0), ("member", 1)):
         snapshot = take_snapshot(AllRegistered(), memory=True, attachments=True,
-                                 speaker=Speaker(id=member, name="Fixture", role="Assistant"),
-                                 team=TEAM_TOOLS if not member else ("ask_member",),
+                                 speaker=Speaker(id=member, name="Fixture", role="Assistant",
+                                                 capabilities=frozenset({"chief"}) if role == "chief" else frozenset()),
+                                 team=TEAM_TOOLS,
                                  interactive=True, max_tier=Tier.T3)
         if snapshot.pool:
             snapshot.show(snapshot.pool.by_alias)
@@ -136,7 +137,7 @@ async def inventory(servers=()):
             {"type": "function", "function": {"name": "find_tools", **_DEFINITIONS["find_tools"]}}]
         api = [*api, *conditional]
         api = [*api, *computer_definitions()]
-        mcp = RaphaelMcp(lambda: [*snapshot.definitions, *conditional, *MEMORY_TOOLS, APPROVE], None)
+        mcp = RaphaelMcp(lambda: [*snapshot.definitions, *conditional, APPROVE], None)
         listing = (await mcp._dispatch({"method": "tools/list"}))["result"]["tools"]
         for surface, definitions in (("api", [d["function"] for d in api]), ("mcp", listing)):
             for definition in definitions:

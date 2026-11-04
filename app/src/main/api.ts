@@ -4,6 +4,7 @@
 
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { withWindowHotkeyPause } from "./window-hotkeys";
+import type { DesktopState, DesktopSession } from "./desktop-viewer";
 import type { LanguageGroup } from "./languages";
 import type { TelegramStatus } from "./messaging";
 import type { AvatarCrop } from "./avatar";
@@ -20,7 +21,6 @@ import type {
   NewConnection,
   StoreService,
   AudioDevices,
-  AvatarPreset,
   BrainSettings,
   CliBrain,
   CliBrainId,
@@ -44,6 +44,7 @@ import type {
   MainEvent,
   MicAccess,
   ModelCatalog,
+  ChatGptStatus,
   ModelProvider,
   ProviderKind,
   ProviderModel,
@@ -54,6 +55,7 @@ import type {
   Status,
   StatsSummary,
   WireAttachment,
+  PageOpened,
 } from "./types";
 
 /** Calls `method` of the core. Only the methods of the main window go through (commands.rs). */
@@ -61,16 +63,31 @@ export function core<T>(method: string, params: object = {}): Promise<T> {
   return invoke<T>("core_call", { method, params });
 }
 
+export const ownerQuestionAnswer = (id: string, answer: string | null): Promise<{ status: string }> =>
+  core("owner_questions.answer", { id, answer });
+
 // ---------- status ----------
 
 export const statusGet = (): Promise<Status> => core("status.get");
-export const homeOverview = (): Promise<HomeOverview> => core("home.overview", {
+export const homeOverview = (refresh = false, month?: string): Promise<HomeOverview> => core("home.overview", {
+  ...(month ? { month } : {}),
+  refresh,
   tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
   ui_language: document.documentElement.lang || "zh-TW",
 });
 
 /** Asks OpenRouter again; answers with the `openrouter` part of the status. */
 export const statusCheckOpenrouter = (): Promise<Status["openrouter"]> => core("status.check_openrouter");
+
+export const desktopStatus = (member_id: number, conversation_id?: number): Promise<DesktopState> => core("computer.viewer_status", { member_id, conversation_id });
+export const desktopWallpaper = (): Promise<{ image?: string }> => core("computer.wallpaper");
+export const desktopOpen = (member_id: number, options?: { conversation_id?: number; preview?: boolean }): Promise<DesktopSession> => core("computer.viewer_open", { member_id, ...options });
+export const desktopRenew = (session: string): Promise<DesktopState> => core("computer.viewer_renew", { session });
+export const desktopControl = (session: string, held: boolean, takeover?: string): Promise<DesktopState> => core("computer.viewer_control", { session, held, takeover });
+export const desktopClose = (session: string): Promise<unknown> => core("computer.viewer_close", { session });
+export const desktopRevoke = (member_id: number): Promise<{ granted: boolean }> => core("computer.revoke", { member_id });
+export interface TeachingDraft { id: string; state: string; text: string; conversation_id?: number }
+export const desktopTeach = (params: { action: string; session?: string; member_id?: number; id?: string; text?: string }): Promise<TeachingDraft & { skill?: import("./types").MemberSkill }> => core("computer.teach", params);
 
 // ---------- usage and prices ----------
 
@@ -82,12 +99,17 @@ export async function usageAnalytics(params: UsageRequest): Promise<UsageAnalyti
   const [report,members] = await Promise.all([core<UsageAnalytics>("usage.analytics",params),membersList().catch(() => null)]);
   return !report.members ? report : {...report,members:report.members.map(row => {
     const member=members?.members?.find(member=>member.id===row.id);
-    return {...row,name:member?.name ?? row.name,avatar_url:member?.avatar_url};
+    return {...row,name:member?.name ?? row.name,avatar:member?.avatar,avatar_url:member?.avatar_url};
   })};
 }
 /** Every OpenRouter model Raphael could use, with its price and what each role can make of it. */
 export const modelsCatalog = (): Promise<ModelCatalog> => core("models.catalog");
 export const brainsCli = (): Promise<{ clis: CliBrain[] }> => core("brains.cli");
+export const chatgptStatus = (): Promise<ChatGptStatus> => core("chatgpt.status");
+export const chatgptSignIn = (language: string): Promise<ChatGptStatus> => core("chatgpt.sign_in", { enable_plan: true, language });
+export const chatgptCancel = (): Promise<{ cancelled: boolean }> => core("chatgpt.cancel");
+export const chatgptSignOut = (): Promise<{ signed_out: boolean }> => core("chatgpt.sign_out");
+export const chatgptModels = (): Promise<{ models: unknown[] }> => core("chatgpt.models");
 export const brainsCliLogin = (id: CliBrainId): Promise<{ started: boolean; reconnected?: boolean }> => core("brains.cli_login", { id });
 export const brainsCliDisconnect = (id: CliBrainId): Promise<{ disconnected: true }> => core("brains.cli_disconnect", { id });
 
@@ -108,11 +130,12 @@ export interface HistoryQuery {
   limit?: number;
   /** Only items older than this: the cursor of the next page. */
   before_ms?: number;
+  before_id?: number;
   /** Only items from this time on (with `before_ms`, one day: from its midnight to the next). */
   after_ms?: number;
 }
 
-export const historyList = (q: HistoryQuery): Promise<{ items: HistoryItem[] }> => core("history.list", q);
+export const historyList = (q: HistoryQuery): Promise<{ items: HistoryItem[]; total?: number }> => core("history.list", q);
 export const historyDelete = (id: number): Promise<{ deleted: boolean }> => core("history.delete", { id });
 /** Deletes the whole dictation history (Settings › 資料); says how many items went. */
 export const historyClear = (): Promise<{ deleted: number }> => core("history.clear");
@@ -131,8 +154,10 @@ export interface AgentHistoryQuery {
 
 /** The turns of the conversations, newest first. */
 export const agentHistoryList = (q: AgentHistoryQuery = {}): Promise<{ turns: AgentTurn[] }> => core("agent.history.list", q);
-/** Forgets every turn; says how many there were. */
-export const agentHistoryClear = (): Promise<{ deleted: number }> => core("agent.history.clear");
+/** What the owner typed into a composer, newest first, whichever conversation or room it went to (the arrow keys of a composer walk it). */
+export const agentSent = async (limit = 50): Promise<string[]> => (await core<{ texts: string[] }>("agent.history.sent", { limit })).texts;
+/** Forgets Raphael conversation turns; says how many there were. */
+export const agentHistoryClear = (): Promise<{ deleted: number }> => core("agent.history.clear", { member_id: 0 });
 /** Stops the background task `taskId` (the one that runs, or one that waits); says whether there was one to stop. */
 export const workerCancel = (taskId: number): Promise<{ cancelled: boolean }> => core("worker.cancel", { task_id: taskId });
 /** Runs a task that did not finish again, as a new task; its id. */
@@ -161,7 +186,7 @@ export const agentAskText = (text: string, attachments: WireAttachment[] = [], m
 export const agentRetract = (sessionId: string, memberId: number, turnId?: number): Promise<void> =>
   invoke("agent_retract", { sessionId, memberId, ...(turnId !== undefined ? { turnId } : {}) });
 /** Stop one typed task tree while retaining completed actions and history. */
-export const agentStop = (sessionId: string, memberId: number): Promise<unknown> => core("agent.history.stop", {session_id:sessionId,member_id:memberId});
+export const agentStop = (sessionId: string, memberId: number): Promise<{stopped: boolean; returned?: {session_id: string; text: string; attachments?: import("./types").TurnAttachment[]; quote?: import("./types").MessageQuote}[]}> => core("agent.history.stop", {session_id:sessionId,member_id:memberId});
 /** The YES/NO question that waits for an answer now, if one does. */
 export const agentQuestionOpen = (): Promise<AgentQuestion | null> => invoke("agent_question_open");
 /**
@@ -184,8 +209,9 @@ export const agentQuestionAnswer = (id: string, approved: boolean, always = fals
  */
 export const agentPageShown = (shown: boolean): Promise<void> => invoke("agent_page_shown", { shown });
 /** A thread's voice button uses the key's recording flow, with its recipient fixed at the press. */
-export const agentVoice = (edge: "down" | "up", memberId = 0): Promise<void> =>
-  invoke("window_hotkey", { kind: edge === "down" ? "agent_down" : "agent_up", ...(memberId === 0 ? {} : { memberId }) });
+export const agentVoice = (edge: "down" | "up", memberId = 0, conversationId?: number, destination?: "quick"): Promise<void> =>
+  invoke("window_hotkey", { kind: edge === "down" ? "agent_down" : "agent_up", memberId,
+    ...(conversationId === undefined ? {} : { conversationId }), ...(destination ? { destination } : {}) });
 
 // ---------- members, their groups and their routines (the 拉斐爾 page) ----------
 
@@ -207,8 +233,6 @@ export const membersDelete = (id: number): Promise<{ deleted: boolean }> => core
 export const membersSetPrimary = (id: number): Promise<{ primary_id: number }> => core("members.set_primary", { id });
 /** A picture of this PC for a member: name, type and bytes in base64, checked by the core as the composer's images are. */
 export const membersSetAvatar = (id: number, file: WireAttachment): Promise<{ member: Member }> => core("members.set_avatar", { id, ...file });
-/** The images of the presets folder (`<app data>\avatars\presets`), none when it is not there. */
-export const membersPresets = (): Promise<{ presets: AvatarPreset[] }> => core("members.presets");
 /** The owner read the thread of member `id`: it is no longer unread. */
 export const membersRead = (id: number): Promise<unknown> => core("members.read", { id });
 /** The thread on screen now (null for none): what arrives there is no news. */
@@ -223,18 +247,31 @@ export const groupsUpdate = (id: number, patch: Partial<Pick<MemberGroup, "name"
 /** Deletes a group; its members are 未分組 from then on. */
 export const groupsDelete = (id: number): Promise<{ deleted: boolean }> => core("groups.delete", { id });
 
-export const routinesList = (memberId?: number): Promise<{ routines: Routine[] }> => core("routines.list", memberId === undefined ? {} : { member_id: memberId });
+export interface RoutineEventChoice {
+  id: string; toolkit: string; slug: string; input: "" | "repository" | "channel"; label: string; app: string; app_name: string;
+}
+export const routinesList = (memberId?: number, pick?: {event:string;value:string}): Promise<{ routines: Routine[]; events?: RoutineEventChoice[]; event_apps?: string[]; when?: Routine["when"]; event_error?: string }> => core("routines.list", { ...(memberId === undefined ? {} : {member_id:memberId}), ...pick });
 export const routinesCreate = (
-  routine: Pick<Routine, "member_id" | "title" | "prompt" | "schedule"> & { enabled?: boolean },
+  routine: Pick<Routine, "member_id" | "title" | "prompt" | "schedule" | "when"> & { enabled?: boolean },
 ): Promise<{ routine: Routine }> => core("routines.create", routine);
 export const routinesUpdate = (
   id: number,
-  patch: Partial<Pick<Routine, "title" | "prompt" | "schedule" | "enabled">>,
+  patch: Partial<Pick<Routine, "title" | "prompt" | "schedule" | "when" | "enabled">>,
 ): Promise<{ routine: Routine }> => core("routines.update", { id, ...patch });
+export const routineWebhook = (id: number, reveal = false): Promise<{address:string;secret?:string;address_changed?:boolean}> => core("routines.webhook", {id,reveal});
 export const routinesDelete = (id: number): Promise<{ deleted: boolean }> => core("routines.delete", { id });
 /** The routine the core would offer member `memberId` now (its group's places), in `uiLanguage`; null for none. */
 export const routinesTemplate = (memberId: number, uiLanguage?: string): Promise<{ offer: RoutineOffer | null }> =>
   core("routines.template", uiLanguage ? { member_id: memberId, ui_language: uiLanguage } : { member_id: memberId });
+
+// ---------- the app's own calendar ----------
+
+/** What the window sends: a time as an instant, or a date for all day. What is left out of a change stays. */
+export interface CalendarFields { title?: string; start?: string; end?: string; all_day?: boolean; notes?: string }
+export interface CalendarEventView { id: number; title: string; start: string; end: string; all_day: boolean; notes: string; added_by: number | null }
+export const calendarAdd = (fields: CalendarFields): Promise<{ event: CalendarEventView }> => core("calendar.add", fields);
+export const calendarUpdate = (id: number, fields: CalendarFields): Promise<{ event: CalendarEventView }> => core("calendar.update", { id, ...fields });
+export const calendarDelete = (id: number): Promise<{ deleted: boolean }> => core("calendar.delete", { id });
 
 // ---------- Raphael's picture ----------
 
@@ -295,7 +332,14 @@ export const connectorsCatalog = (): Promise<{ items: import("./plugins-data").T
 export const connectorsCategories = (): Promise<{ items: Array<{ id: string; name: string }> }> => connectorCall("connectors.categories");
 export const connectorsTools = (id: string): Promise<{ items: import("./plugins-data").ConnectorTool[] }> => connectorCall("connectors.tools", { id });
 export const connectorsSetTools = (id: string, changes: { disabled_tools?: string[]; enabled?: boolean }): Promise<unknown> => connectorCall("connectors.set_tools", { id, ...changes });
-export const connectorsConnect = (toolkit: string): Promise<{ connected: boolean; error?: string }> => connectorCall("connectors.connect", { toolkit });
+/** What adding the toolkit asks of the owner and where they find it: the fields, never a value. */
+export const connectorsToolkit = (toolkit: string): Promise<import("./plugins-data").ToolkitPlan> => connectorCall("connectors.toolkit", { toolkit });
+/**
+ * Adds an app of the store. `fields` are what its form asked for (the owner's own key, or a developer app's id and secret):
+ * they go to the core in this call, which hands them to Composio, and to nothing else.
+ */
+export const connectorsConnect = (toolkit: string, fields?: Record<string, string>): Promise<{ connected: boolean; error?: string }> =>
+  connectorCall("connectors.connect", fields ? { toolkit, fields } : { toolkit });
 export const connectorsGoogleConnect = (): Promise<{ connected: boolean; error?: string }> => connectorCall("connectors.google.connect");
 export const connectorsDisconnect = (id: string): Promise<unknown> => connectorCall("connectors.disconnect", { id });
 export const connectorsSetKey = (key: string): Promise<{ configured: boolean }> => connectorCall("connectors.set_key", { key });
@@ -308,8 +352,8 @@ export const integrationsConnect = (target: { catalog_id: string } | { id: strin
 /** Ends the wait for a login; the call that waits then answers `cancelled`. */
 export const integrationsConnectCancel = (): Promise<{ cancelled: boolean }> => core("integrations.connect_cancel");
 /** Starts the sign-in of a chat's connector card; the card's new states arrive as `AgentTurn`. */
-export const cardConnect = (id: string): Promise<{ card: import("./types").ConnectorCard; started: boolean }> =>
-  core("integrations.card_connect", { id });
+export const cardConnect = (id: string, fields?: Record<string, string>): Promise<{ card: import("./types").ConnectorCard; started: boolean }> =>
+  core("integrations.card_connect", fields ? { id, fields } : { id });
 /** Ends a card's sign-in that is under way. */
 export const cardCancel = (id: string): Promise<{ cancelled: boolean }> => core("integrations.card_cancel", { id });
 /** The key typed into a secret card goes to the core's vault and nowhere else: not to `agent.ask`, a history or a log. */
@@ -334,8 +378,8 @@ export const mailSave = (id: string, digest: string, fields: { to: string; cc: s
   core("integrations.draft_save", { id, digest, ...fields });
 
 /** 傳送: the version whose digest the card holds, once. */
-export const mailSend = (id: string, digest: string): Promise<{ draft: import("./types").MailDraftCard | null; sent: boolean }> =>
-  core("integrations.draft_send", { id, digest });
+export const mailSend = (id: string, digest: string, retryVersion?: number): Promise<{ draft: import("./types").MailDraftCard | null; sent: boolean }> =>
+  core("integrations.draft_send", { id, digest, ...(retryVersion === undefined ? {} : { retry_version: retryVersion }) });
 
 /** 捨棄: nothing outside changes. */
 export const mailDiscard = (id: string): Promise<{ draft: import("./types").MailDraftCard | null; discarded: boolean }> =>
@@ -362,10 +406,15 @@ export const integrationsSetToolEnabled = (id: string, tool: string, enabled: bo
 export const integrationsSetToolsEnabled = (id: string, tools: string[], enabled: boolean): Promise<Record<string, unknown>> =>
   core("integrations.set_tools_enabled", { id, tools, enabled });
 export const integrationsAudit = (limit = 8): Promise<{ entries: AuditEntry[] }> => core("integrations.audit", { limit });
+export const connectionProposal = (params: Record<string, unknown>): Promise<{ proposal: import("./types").ConnectionProposal }> => core("integrations.proposal", params);
 /** The owner's apps and how many are connected: the one count the sidebar, the 連接 tab and every model's roster share. */
 export const integrationsInventory = (): Promise<AppsInventory> => core("integrations.inventory");
 
-// ---------- messaging apps (Telegram) ----------
+// ---------- messaging apps ----------
+export const messagingCall = <T>(kind: "telegram" | "slack" | "discord", method: string, params?: object): Promise<T> => core(`messaging.${kind}.${method}`, params);
+export interface FileCheckpoint { id: string; turn: number; created: number; state: string; partial?: boolean; uncovered?: string[]; review_token?: string; files: { path: string; diff: string }[] }
+export const computerCheckpoints = (member_id: number): Promise<{ checkpoints: FileCheckpoint[]; busy: boolean; confirmation_required?: boolean; coverage_warning?: boolean }> => core("computer.checkpoints", { member_id, action: "list" });
+export const computerRestore = (member_id: number, id: string, confirmed = true, review_token?: string): Promise<{ restored: string[]; skipped: string[] }> => core("computer.checkpoints", { member_id, action: "restore", id, confirmed, ...(review_token ? { review_token } : {}) });
 
 export const telegramStatus = (): Promise<TelegramStatus> => core("messaging.telegram.status");
 /** Checks the bot token with Telegram and, if it works, keeps it in the vault. The token never comes back. */
@@ -408,6 +457,10 @@ export const modelsEnsure = (names: string[]): Promise<{ ok: boolean }> => core(
 export const openLink = (url: string): Promise<void> => invoke("open_link", { url });
 /** Opens a chat http(s) address through the shell's scheme and credential checks. */
 export const openExternalUrl = (url: string): Promise<void> => invoke("open_external_url", { url });
+/** A sign-in in the browser has finished: the owner's way back is this window coming to the front. */
+export const mainWindowForward = (): Promise<void> => invoke("main_window_forward");
+export const pagesOpen = (id: string, theme: "dark" | "light"): Promise<PageOpened> => core("pages.open", { id, theme });
+export const pagesToolCall = (id: string, tool: string, args: object): Promise<{ status: string; ok?: boolean; tool_result?: object | null; error?: string | null }> => core("pages.tool_call", { id, tool, arguments: args });
 
 
 export const deviceSettingsGet = (): Promise<DeviceSettings> => invoke("device_settings_get");
@@ -440,13 +493,14 @@ export async function subscribeMainEvents(handler: (event: MainEvent) => void): 
 
 /** Open only an opaque stored attachment, never a path supplied by a page. */
 export const openAttachment = (id: string): Promise<void> => invoke("open_attachment", { id });
+export const openTeamFile = (path: string): Promise<void> => invoke("open_team_file", { path });
 
 // Retained execution metrics; exporting always requests the entire selected period.
 export async function usageRuns(params: RunRequest): Promise<RunReport> {
   const [report, members] = await Promise.all([core<RunReport>("usage.runs", params), membersList().catch(() => null)]);
   return { ...report, ...(report.groups ? { groups: { ...report.groups, member: report.groups.member.map(group => {
     const member = members?.members.find(member => member.name === group.label || member.id === 0 && group.label === "Raphael");
-    return { ...group, member_id: member?.id ?? (group.label === "Raphael" ? 0 : undefined), avatar_url: member?.avatar_url };
+    return { ...group, member_id: member?.id ?? (group.label === "Raphael" ? 0 : undefined), avatar: member?.avatar, avatar_url: member?.avatar_url };
   }) } } : {}) };
 }
 export const usageExport = (params: RunRequest): Promise<{ csv: string }> => core("usage.export", params);
@@ -455,9 +509,9 @@ export const saveUsageCsv = (csv: string): Promise<boolean> => invoke("save_usag
 // Group threads reuse the same worker and safety gate as individual conversations.
 export const routineRuns = (routineId: number): Promise<{ runs: RoutineRun[]; total?: number }> => core("routines.runs", { routine_id: routineId });
 export const roomsList = (): Promise<{ rooms: Room[] }> => core("rooms.list");
-export const roomsCreate = (room: { name?: string; member_ids: number[]; group_id?: number | null; is_team?: boolean; default_responder?: string; request_id?: string }): Promise<{ room: Room }> => core("rooms.create", room);
+export const roomsCreate = (room: { name?: string; member_ids: number[]; group_id?: number | null; default_responder?: string; request_id?: string }): Promise<{ room: Room }> => core("rooms.create", room);
 export const roomsDelete = (roomId: number): Promise<{ deleted: boolean }> => core("rooms.delete", { room_id: roomId });
-export const roomsUpdate = (roomId: number, patch: { name?: string; member_ids?: number[]; default_responder?: string; roles?: Record<string, string> }): Promise<{ room: Room }> => core("rooms.update", { room_id: roomId, ...patch });
+export const roomsUpdate = (roomId: number, patch: { name?: string; member_ids?: number[]; default_responder?: string; roles?: Record<string, string>; pinned?: boolean; hidden?: boolean; read?: boolean; read_through?: number }): Promise<{ room: Room }> => core("rooms.update", { room_id: roomId, ...patch });
 export const roomTranscribe = (data: string, uiLanguage: string): Promise<{ text: string }> => core("rooms.transcribe", { data, ui_language: uiLanguage });
 export const roomMessages = (roomId: number, before?: number): Promise<{ messages: RoomMessage[]; exchange?: import("./types").RoomExchange | null; handoffs?: import("./types").HandoffView[] }> => core("rooms.messages", { room_id: roomId, before });
 export const roomSend = (roomId: number, text: string, requestId: string, uiLanguage: string, attachments: WireAttachment[] = [], replyTo?: number): Promise<{ message_id: number; duplicate: boolean }> => core("rooms.send", { room_id: roomId, text, request_id: requestId, ui_language: uiLanguage, ...(attachments.length ? { attachments } : {}), ...(replyTo !== undefined ? { reply_to: replyTo } : {}) });
@@ -465,7 +519,7 @@ export const roomStop = (roomId: number): Promise<{ stopped: boolean }> => core(
 export const keepAwakeGet = (): Promise<boolean> => invoke("schedule_keep_awake_get");
 export const keepAwakeSet = (enabled: boolean): Promise<boolean> => invoke("schedule_keep_awake_set", { enabled });
 // Member profile resources use the same member boundary as conversations.
-export const membersSkillsList = (memberId: number): Promise<{ skills: import("./types").MemberSkill[] }> => core("members.skills.list", { member_id: memberId });
+export const membersSkillsList = (memberId: number): Promise<{ skills: import("./types").MemberSkill[]; undo?: string | null }> => core("members.skills.list", { member_id: memberId });
 export const membersSkillsImport = (memberId: number, source: string): Promise<{ skill: import("./types").MemberSkill; skills?: import("./types").MemberSkill[] }> => core("members.skills.import", { member_id: memberId, source });
 export const membersSkillsUpdate = (memberId: number, id: number, enabled: boolean): Promise<unknown> => core("members.skills.update", { member_id: memberId, id, enabled });
 /** A skill and its whole Markdown document, for its page (one that is switched off too). */

@@ -21,6 +21,89 @@ async def create(rig, ids, **kwargs):
     return (await rig.call("rooms.create", {"name":"Team", "member_ids":ids, **kwargs}))["room"]
 
 
+async def test_members_find_and_post_into_their_existing_room_with_real_chief_membership(rig, rooms):
+    from raphael_core.agent.team import team_tools_for
+    peer = (await rig.call("members.create", {"name": "Reviewer"}))["member"]["id"]
+    outsider = (await rig.call("members.create", {"name": "Other reviewer"}))["member"]["id"]
+    room = await create(rig, [0, peer])
+    before = rig.conn.execute("SELECT COUNT(*) FROM rooms").fetchone()[0]
+    assert rooms.member_rooms(0)["rooms"][0]["member_ids"] == [0, peer]
+    assert rooms.member_rooms(peer)["rooms"][0]["id"] == room["id"]
+    assert rooms.member_rooms(outsider) == {"rooms": []}
+    offered = team_tools_for(rig.service, replace(rig.service.speaker(peer), depth=MAX_DEPTH), always=True)
+    assert {"room_list", "room_post"} <= set(offered) and "ask_member" not in offered
+    turn = AgentHistory(rig.conn).add(session_id="review", question="Review", route="exchange", prefix="",
+        text="Reviewed", status="done", member_id=peer, peer_id=0, source="member", scope="exchange")
+    args = {"room_id": room["id"], "text": "Synthetic review completed."}
+    posted = rooms.post(peer, args, turn)
+    assert rooms.post(peer, args, turn)["duplicate"]
+    with pytest.raises(RpcError, match="only a room member"):
+        rooms.post(outsider, args, turn)
+    message = (await rig.call("rooms.messages", {"room_id": room["id"]}))["messages"][0]
+    assert message["id"] == posted["message_id"] and message["member_id"] == peer
+    assert message["text"] == args["text"]
+    assert message["status"] == "done" and AgentHistory(rig.conn).get(message["turn_id"]).scope == "room"
+    assert rig.conn.execute("SELECT COUNT(*) FROM rooms").fetchone()[0] == before
+
+
+async def test_sidebar_room_summary_read_position_and_actions_persist(rig, rooms):
+    room = await create(rig, [0])
+    await rig.call("rooms.send", {"room_id": room["id"], "text": "Please review", "request_id": "sidebar"})
+    turn_id = rig.background.attached[-1][1]
+    AgentHistory(rig.conn).resolve(turn_id, prefix="", text="The review is complete.", status="done")
+    rooms.turn_arrived(turn_id)
+    await rooms.wait_idle()
+    before = (await rig.call("rooms.list", {}))["rooms"][0]
+    assert before["preview"] == "The review is complete."
+    assert before["unread"] and before["last_at"] is not None
+    await rig.call("rooms.update", {"room_id": room["id"], "pinned": True, "hidden": True, "read": True})
+    after = (await rig.call("rooms.list", {}))["rooms"][0]
+    assert after["pinned"] and after["hidden"] and not after["unread"]
+    latest = [message for message in (await rig.call("rooms.messages", {"room_id": room["id"]}))["messages"]
+              if message["member_id"] is None or message["status"] == "done" and message["text"] != "(pass)"][-1]
+    assert before["last_at"] == latest["created"]
+    assert (after["preview"], after["last_at"]) == (latest["text"][:300], latest["created"])
+    assert rig.conn.execute("SELECT read_message_id FROM rooms WHERE id=?", (room["id"],)).fetchone()[0] > 0
+    # Repeating the acknowledgement must not create a notification/refresh loop.
+    count = len(rig.notes)
+    await rig.call("rooms.update", {"room_id": room["id"], "read": True})
+    assert len(rig.notes) == count
+
+
+@pytest.mark.parametrize("key", ["read", "hidden", "pinned"])
+async def test_sidebar_room_actions_reject_non_boolean_flags(rig, rooms, key):
+    room = await create(rig, [0])
+    with pytest.raises(RpcError):
+        await rig.call("rooms.update", {"room_id": room["id"], key: "true"})
+
+
+async def test_sidebar_summary_excludes_silent_passes_and_other_rooms(rig, rooms):
+    first = await create(rig, [0])
+    other = await create(rig, first["member_ids"])
+    await rig.call("rooms.send", {"room_id": first["id"], "text": "Private room one", "request_id": "summary-pass"})
+    turn_id = rig.background.attached[-1][1]
+    AgentHistory(rig.conn).resolve(turn_id, prefix="", text="(pass)", status="done")
+    rooms.turn_arrived(turn_id)
+    await rooms.wait_idle()
+    listed = {item["id"]: item for item in (await rig.call("rooms.list", {}))["rooms"]}
+    assert listed[first["id"]]["preview"] == "Private room one"
+    assert not listed[first["id"]]["unread"]
+    assert listed[other["id"]]["preview"] == ""
+
+
+async def test_sidebar_read_acknowledges_only_messages_the_owner_saw(rig, rooms):
+    room = await create(rig, [0])
+    other = await create(rig, room["member_ids"])
+    for room_id, text in [(room["id"], "Seen"), (room["id"], "Arrived later"), (other["id"], "Other room")]:
+        rig.conn.execute("INSERT INTO room_messages (room_id,text,created) VALUES (?,?,?)", (room_id, text, rig.wall()))
+    rig.conn.commit()
+    ids = [row[0] for row in rig.conn.execute("SELECT id FROM room_messages ORDER BY id")]
+    await rig.call("rooms.update", {"room_id": room["id"], "read": True, "read_through": ids[0]})
+    assert rig.conn.execute("SELECT read_message_id FROM rooms WHERE id=?", (room["id"],)).fetchone()[0] == ids[0]
+    with pytest.raises(RpcError):
+        await rig.call("rooms.update", {"room_id": room["id"], "read": True, "read_through": ids[2]})
+
+
 async def test_mentions_use_whole_names_text_order_and_ignore_email_addresses(rig, rooms):
     ids = [(await rig.call("members.create", {"name":name}))["member"]["id"]
            for name in ("Ops", "Ops Lead", "Sam")]
@@ -37,6 +120,53 @@ async def test_mentions_use_whole_names_text_order_and_ignore_email_addresses(ri
     rooms.turn_arrived(rig.background.attached[-1][1])
     await rooms.wait_idle()
     assert rig.background.submitted[-1]["member_id"] == ids[1]
+
+
+async def test_mentions_are_read_from_the_words_exactly_as_the_composer_draws_its_chips(rig, rooms):
+    # The composer shows an address as a chip by the rule below (app/src/main/mention-text.ts, the same table in
+    # mention-text.test.ts): the name whole after an @ that no letter or digit precedes, the longest name at each @,
+    # nothing inside code or a quotation. The words are sent unchanged; the core alone decides who is addressed.
+    ids = {name: (await rig.call("members.create", {"name":name}))["member"]["id"] for name in ("Ops", "Ops Lead", "小森", "小晴")}
+    room = await create(rig, [0, *ids.values()])
+    cases = [
+        ("@Ops Lead ", ["Ops Lead"]),               # what the menu writes: @Name and a space
+        ("請 @小森 看一下", ["小森"]),
+        ("@小森，@小晴。", ["小森", "小晴"]),
+        ("@小森請看一下", []),                       # a letter right after the name: not an address
+        ("請@小森 看", []),                          # a letter right before the @: not an address
+        ("@ops lead", ["Ops Lead"]),                # case is not part of a name
+        ("@Ops Lead and @Ops", ["Ops Lead", "Ops"]),
+        ("`@小森` 「@小晴」 \"@Ops\"", []),           # code and quotations are not addresses
+        ("\n> @小森\n@小晴 ", ["小晴"]),
+        ("＠Ops Lead and @Ops", ["Ops Lead", "Ops"]),
+        ("請 ＠小森 看一下", ["小森"]),
+        ("＠小森，＠小晴。", ["小森", "小晴"]),
+        ("＠小森請看一下", []),
+        ("請＠小森 看", []),
+        ("jo＠Ops.com and ＠Opsgenie", []),
+        ("`＠小森` 「＠小晴」 \"＠Ops\"", []),
+        ("\n> ＠小森\n＠小晴 ", ["小晴"]),
+    ]
+    for words, named in cases:
+        assert rooms._targets(room, words) == [ids[name] for name in named], words
+    words = "請 ＠小森 看一下"
+    await rig.call("rooms.send", {"room_id": room["id"], "request_id": "full-width", "text": words})
+    assert rig.background.submitted[-1]["member_id"] == ids["小森"]
+    assert rig.conn.execute("SELECT text FROM room_messages WHERE request_id='full-width'").fetchone()[0] == words
+
+
+async def test_what_the_owner_typed_in_a_room_joins_what_they_typed_for_the_arrow_keys(rig, rooms):
+    room = await create(rig, [0])
+    history = AgentHistory(rig.conn, rig.wall)
+    history.add(session_id="private", question="typed in a private chat", route="answer", prefix="", text="the answer", status="done", source="app")
+    rig.wall.now += 1000
+    await rig.call("rooms.send", {"room_id": room["id"], "text": "  typed in the room  ", "request_id": "arrow-keys"})
+    rig.wall.now += 1000
+    rig.conn.execute("INSERT INTO room_messages (room_id, member_id, text, created) VALUES (?, 0, 'a member says', ?)", (room["id"], rig.wall()))
+    rig.conn.commit()
+    # Only the owner's own words, newest first, from the room and the private chat alike; a member's are never among them.
+    assert history.sent(50) == ["typed in the room", "typed in a private chat"]
+    assert history.sent(1) == ["typed in the room"]
 
 
 async def test_hidden_passes_do_not_truncate_visible_history_pages(rig, rooms):

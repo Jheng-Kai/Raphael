@@ -1,14 +1,15 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, test, vi } from "vitest";
-import { membersCommandsList } from "./api";
+import { membersCommandsList, membersSkillsList } from "./api";
+import { RECALL } from "./composer-history";
 import { matchingCommands, mountSlashMenu } from "./slash-menu";
 import { closeMenu } from "./ui";
 import { teamMentions } from "./team-mentions";
 import type { MembersList } from "./types";
-vi.mock("./api", () => ({ membersCommandsList: vi.fn() }));
+vi.mock("./api", () => ({ membersCommandsList: vi.fn(), membersSkillsList: vi.fn() }));
 const commands = [{ id: 1, name: 'review', description: 'Review code', template: 'Secret expansion {input}' }, { id: 2, name: 'research', description: 'Find sources', template: '{input}' }];
 const flush = async (): Promise<void> => { for (let i = 0; i < 15; i++) await Promise.resolve(); };
-beforeEach(() => { closeMenu(); document.body.innerHTML = ''; vi.resetAllMocks(); vi.mocked(membersCommandsList).mockResolvedValue({ commands }); });
+beforeEach(() => { closeMenu(); document.body.innerHTML = ''; vi.resetAllMocks(); vi.mocked(membersCommandsList).mockResolvedValue({ commands }); vi.mocked(membersSkillsList).mockResolvedValue({ skills: [] }); });
 const setup = () => { const input = document.createElement('textarea'); document.body.append(input); input.focus(); let id = 7; const menu = mountSlashMenu(input, { memberId: () => id }); return { input, menu, selectMember: (next: number) => { id = next; } }; };
 const type = (input: HTMLTextAreaElement, value: string) => { input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); };
 
@@ -41,6 +42,14 @@ test.each([undefined, 0, 2])('primary %s swaps mention order without changing ro
   teamMentions(input, list, [0, 2]);
   expect([...document.querySelectorAll<HTMLElement>('#app-popover [data-value]')].slice(1).map(row => row.dataset.value)).toEqual(primary_id === 2 ? ['Bob', 'Raphael'] : ['Raphael', 'Bob']);
   document.querySelector<HTMLElement>('[data-value="Raphael"]')!.click(); expect(input.value).toBe('@Raphael ');
+  menu.destroy();
+});
+
+test('a recalled command is not typing: the slash menu stays shut and the arrow keys stay the history\'s', async () => {
+  const { input, menu } = setup(); type(input, '/'); await flush();
+  expect(document.querySelector('.slash-menu')).not.toBeNull();
+  input.value = '/review'; input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: RECALL }));
+  expect(document.querySelector('.slash-menu')).toBeNull();
   menu.destroy();
 });
 
@@ -117,4 +126,21 @@ test('menu placement is recalculated after applying the composer width on a narr
     if (width) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', width);
     else delete (HTMLElement.prototype as unknown as Record<string, unknown>).offsetWidth;
   }
+});
+
+test('commands and enabled skills share grouped completion, plugin attribution and Tab selection', async () => {
+  vi.mocked(membersSkillsList).mockResolvedValue({ skills: [
+    { id: 10, name: 'review', description: 'Check sources', source: 'plugin:Field Notes', plugin: 'Field Notes', enabled: true, slash_name: 'field-notes:review' },
+    { id: 11, name: 'outline', description: 'Prepare structure', source: 'owner', enabled: true, slash_name: 'outline' },
+    { id: 12, name: 'hidden', description: 'Disabled guidance', source: 'owner', enabled: false },
+  ] });
+  const { input, menu } = setup(); type(input, '/'); await flush();
+  expect([...document.querySelectorAll('.menu-head')].map(head => head.textContent)).toEqual(['指令', '技能']);
+  expect(document.querySelector('.slash-menu')!.textContent).toContain('Field Notes');
+  expect(document.querySelector('.slash-menu')!.textContent).not.toContain('hidden');
+  type(input, '/field-notes:rev'); await flush();
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+  expect(input.value).toBe('/field-notes:review ');
+  expect(document.querySelector('#app-popover')).toBeNull();
+  menu.destroy();
 });

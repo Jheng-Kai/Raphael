@@ -28,10 +28,13 @@ from __future__ import annotations
 import enum
 import json
 import sqlite3
+import secrets
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 
 from ..clock import wall_clock_ms
+from .learning import accepted, target_term
 from .mishearing import may_become_rule
 from .textnorm import apply_replacements, replacement_key
 
@@ -125,6 +128,7 @@ class DictionaryStore:
     ) -> None:
         self._conn = conn
         self._now_ms = now_ms
+        self._learning_undo: dict[str, tuple[float, list[dict]]] = {}
 
     def add(self, word: str, misheard: Sequence[str] = (), source: str = "manual") -> Entry:
         """Add a word, or merge `misheard` into the entry it already has and return that entry.
@@ -179,6 +183,8 @@ class DictionaryStore:
 
     def _put(self, word: str, forms: list[str], source: str) -> Entry:
         """Add the word, or merge `forms` into its entry; part of a transaction."""
+        if source == "learned" and (not target_term(word) or any(not accepted(word, form) for form in forms)):
+            raise ValueError("Automatic entries must be uncommon single terms")
         row = self._conn.execute(
             "SELECT id, word, misheard, source FROM dictionary WHERE word = ?", (word,)
         ).fetchone()
@@ -262,6 +268,8 @@ class DictionaryStore:
         if undone is not None and undone["status"] != _BLOCKED and form_key in by_key:
             self._withdraw(by_key[form_key], word_key)
             return Learned.REVERTED
+        if not accepted(word, misheard):
+            return Learned.NOTHING
         own = self._evidence(word_key, form_key)
         if own is not None and own["status"] == _BLOCKED:
             return Learned.NOTHING
@@ -291,6 +299,45 @@ class DictionaryStore:
         if rule:
             return Learned.RULE
         return Learned.TERM if known is None else Learned.PENDING
+
+    def learning_snapshot(self, word: str) -> dict:
+        key = replacement_key(word)
+        row = next((row for row in self._conn.execute("SELECT * FROM dictionary")
+                    if replacement_key(row["word"]) == key), None)
+        evidence = self._conn.execute("SELECT * FROM dictionary_evidence WHERE word_key = ?", (key,)).fetchall()
+        return {"word": row["word"] if row else word, "row": dict(row) if row else None, "evidence": [dict(e) for e in evidence]}
+
+    def remember_learning(self, before: list[dict]) -> str:
+        now = time.monotonic()
+        self._learning_undo = {k: v for k, v in self._learning_undo.items() if now - v[0] < 600}
+        token = secrets.token_urlsafe(24)
+        changes = [{"before": item, "after": self.learning_snapshot(item["word"])} for item in before]
+        self._learning_undo[token] = (now, changes)
+        # A notice is transient; keep memory bounded even under synthetic event floods.
+        if len(self._learning_undo) > 64:
+            del self._learning_undo[next(iter(self._learning_undo))]
+        return token
+
+    def undo_learning(self, token: str) -> bool:
+        batch = self._learning_undo.pop(token, None)
+        if batch is None or time.monotonic() - batch[0] >= 600:
+            return False
+        changed = False
+        with self._conn:
+            for item in batch[1]:
+                before, after = item["before"], item["after"]
+                if self.learning_snapshot(after["word"]) != after:
+                    continue  # Never overwrite a later edit or a new learning observation.
+                key = replacement_key(after["word"])
+                self._conn.execute("DELETE FROM dictionary WHERE word = ?", (after["word"],))
+                self._conn.execute("DELETE FROM dictionary_evidence WHERE word_key = ?", (key,))
+                for table, rows in (("dictionary", [before["row"]] if before["row"] else []), ("dictionary_evidence", before["evidence"])):
+                    for row in rows:
+                        columns = ",".join(row)
+                        placeholders = ",".join("?" for _ in row)
+                        self._conn.execute(f"INSERT INTO {table} ({columns}) VALUES ({placeholders})", tuple(row.values()))
+                changed = True
+        return changed
 
     def _evidence(self, word_key: str, form_key: str) -> sqlite3.Row | None:
         return self._conn.execute(

@@ -117,18 +117,19 @@ describe("the list", () => {
   test("the model in use is marked, and only a downloaded one that is not in use can be deleted", () => {
     const html = localListHTML(view(), null);
     expect(rowOf(html, "qwen3-asr")).toContain('aria-current="true"');
-    expect(rowOf(html, "qwen3-asr")).not.toContain('data-act="delete"');
-    expect(rowOf(html, "sensevoice")).not.toContain('data-act="delete"');
+    expect(rowOf(html, "qwen3-asr")).not.toContain('data-act="local-menu"');
+    expect(rowOf(html, "sensevoice")).not.toContain('data-act="local-menu"');
     const deletable = rowOf(html, "paraformer-zh");
-    expect(deletable).toContain('data-act="delete"');
-    expect(deletable).toContain('aria-label="刪除 Paraformer"');
+    expect(deletable).toContain('data-act="local-menu"');
+    expect(deletable).toContain('aria-label="「Paraformer」的選項"');
+    expect(deletable).not.toContain("danger");
     expect(deletable).not.toContain("aria-current");
   });
 
   test("with the cloud in use no model is in use, and the downloaded ones can be deleted", () => {
     const html = localListHTML(view({ active: null }), null);
     expect(html).not.toContain("aria-current");
-    expect(rowOf(html, "qwen3-asr")).toContain('data-act="delete"');
+    expect(rowOf(html, "qwen3-asr")).toContain('data-act="local-menu"');
   });
 
   test("every action is a real button, never a word to click", () => {
@@ -199,7 +200,7 @@ describe("the model that backs up the cloud", () => {
     const row = rowOf(localListHTML(backup, null), "qwen3-asr");
     expect(row).toContain("備援");
     expect(row).not.toContain("已下載");
-    expect(row).toContain('data-act="delete"');
+    expect(row).toContain('data-act="local-menu"');
   });
 
   test("asks about deleting it with half a sentence more: another model takes over", () => {
@@ -248,14 +249,14 @@ describe("a download", () => {
   test("other models can not be chosen meanwhile", () => {
     const html = localListHTML(busy, null);
     expect(rowOf(html, "breeze-asr-25")).toMatch(/data-act="use"[^>]*disabled/);
-    expect(rowOf(html, "paraformer-zh")).not.toContain('data-act="delete"');
+    expect(rowOf(html, "paraformer-zh")).not.toContain('data-act="local-menu"');
   });
 });
 
 describe("while there is no catalogue", () => {
   test("says it is being read, or that it cannot be had", () => {
     expect(localListHTML(view({ models: "loading" }), null)).toContain("正在載入…");
-    expect(localListHTML(view({ models: "failed" }), null)).toContain("目前無法取得本機模型清單");
+    expect(localListHTML(view({ models: "failed" }), null)).toContain("目前無法取得本機語音模型清單，請重新開啟語音模型選單，仍然失敗時重新啟動拉斐爾。");
   });
 });
 

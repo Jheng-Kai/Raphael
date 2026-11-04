@@ -2,25 +2,25 @@
 // role, instructions and group, with 「取消」 and 「建立」), the routine the core offers with a
 // new member of a group with places to look (taken only with 「加入」), the question before a member
 // or a group is deleted, a group's name, a group's 看的地方, and the popover that changes a picture
-// (the presets, if the owner has any, and 「從電腦選…」).
+// (the slimes and, for the owner and Raphael, 「從電腦選…」).
 //
 // Each dialog sits over the window on a dimmed scrim, grows in as the settings' dialogs do (styles.css,
 // nothing under reduced motion), closes on Escape, on its × and on a click beside it, and gives the
 // focus back to what had it. What a person types goes into the page through `esc` only.
 
-import { t } from "./i18n";
-import { openMemberProfile } from "./member-profile";
-export { openEditMemberDialog, openMemberProfile } from "./member-profile";
+import { pickSlime, slimePickerHTML } from "./slime";
+import { onLocaleChange, t } from "./i18n";
+export { openEditMemberDialog } from "./member-profile";
 export type { MemberProfileHost, ProfileTab } from "./member-profile";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import {
   GROUP_NAME_MAX,
   cleanName,
   parseSource,
-  scheduleText,
+  routineSentenceHTML,
   sourceLabel,
 } from "./members";
-import type { AvatarPreset, Member, MemberGroup, MemberSource, NewMember, RoutineOffer, WireAttachment } from "./types";
+import type { MemberGroup, MemberSource, RoutineOffer, WireAttachment } from "./types";
 import { type ActionRowOptions, actionRow, btn, closeMenu, esc, ico, iconButton, openPopover, toaster } from "./ui";
 
 // ---------- the dialog ----------
@@ -44,6 +44,8 @@ export interface DialogOptions {
   onEnter?(dialog: Dialog): void;
   /** Whether the dialog may be closed by Escape, the backdrop or × right now. */
   canClose?(): boolean;
+  /** It is about to leave the document: the last moment something running in it can be carried out alive. */
+  onClosing?(): void;
   /** The dialog closed, however it was. */
   onClose?(): void;
   /** A class of the dialog's own, for its layout. */
@@ -66,17 +68,20 @@ export function openDialog(o: DialogOptions): Dialog {
   let open = true;
   const mayClose = (): boolean => !o.canClose || o.canClose();
   let stopOutside = (): void => {};
+  let stopLocale = (): void => {};
   const dialog: Dialog = {
     el: scrim.querySelector<HTMLElement>(".mb-dialog")!,
     close() {
       if (!open) return;
       open = false;
       stopOutside();
+      stopLocale();
       closeMenu();
       const keepFocus =
         document.activeElement instanceof HTMLElement &&
         document.activeElement !== document.body &&
         !scrim.contains(document.activeElement);
+      o.onClosing?.();
       scrim.remove();
       document.removeEventListener("keydown", onKey, true);
       if (!keepFocus) opener?.focus({ preventScroll: true });
@@ -128,21 +133,23 @@ export function openDialog(o: DialogOptions): Dialog {
   });
   document.addEventListener("keydown", onKey, true);
   document.body.append(scrim);
+  // Transient forms have a locale-specific snapshot; reopening rebuilds it from its source.
+  stopLocale = onLocaleChange(() => { if (mayClose()) dialog.close(); });
   stopOutside = registerDismissal(dialog.el, () => dialog.close(), mayClose);
   (dialog.el.querySelector<HTMLElement>("input:not([type=file]), textarea") ?? dialog.el.querySelector<HTMLElement>('[data-dlg="cancel"]') ?? dialog.el.querySelector<HTMLElement>(".mb-dlg-act .btn"))?.focus();
   return dialog;
 }
 
-/** Asks before something is deleted: 「刪除「name」？」 with 「取消」 and 「刪除」. Resolves true for 刪除. */
-export function confirmDelete(name: string): Promise<boolean> {
+/** Confirms deletion or history clearing with the shared compact destructive dialog. */
+export function confirmDelete(name: string, options: { clearHistory?: boolean } = {}): Promise<boolean> {
   return new Promise((resolve) => {
     let answer = false;
     openDialog({
-      title: t("members.deleteConfirm", { p0: name }),
+      title: options.clearHistory ? t("conversations.clearConfirm", { p0: name }) : t("members.deleteConfirm", { p0: name }),
       body: `<p>${esc(t("members.deleteHint"))}</p>`,
       describedByBody: true,
       cls: "mb-confirm",
-      actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(t("members.delete")), attrs: ' data-dlg="delete"' } },
+      actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(options.clearHistory ? t("conversations.clear") : t("members.delete")), attrs: ' data-dlg="delete"' } },
       onAct(act, _target, dialog) {
         answer = act === "delete";
         dialog.close();
@@ -162,7 +169,7 @@ export function offerRoutine(offer: RoutineOffer): Promise<boolean> {
     openDialog({
       title: t("members.offerTitle"),
       cls: "mb-confirm mb-offer",
-      body: `<div class="mb-offer-t"><b>${esc(offer.title)}</b><i>${esc(scheduleText(offer.schedule))}</i></div>`,
+      body: `<div class="mb-offer-t"><b>${esc(offer.title)}</b>${routineSentenceHTML({schedule:offer.schedule})}</div>`,
       actions: { secondary: btn(esc(t("members.offerNo")), "", ' data-dlg="no"'), primary: { label: esc(t("members.offerYes")), attrs: ' data-dlg="yes"' } },
       onAct(act, _target, dialog) {
         answer = act === "yes";
@@ -324,7 +331,7 @@ export function pickPicture(then: (file: File) => void): void {
   }
   // The native chooser starts with a synthetic click. Keep its hidden input inside the active
   // modal so the shared outside-click dismissal does not consume that click and close it.
-  const dialogs = document.querySelectorAll<HTMLElement>(".mb-dialog");
+  const dialogs = document.querySelectorAll<HTMLElement>(".mb-dialog, .modal-scrim:not([hidden]) .modal");
   (dialogs[dialogs.length - 1] ?? document.body).append(picker);
   picked = then;
   picker.value = "";
@@ -332,32 +339,24 @@ export function pickPicture(then: (file: File) => void): void {
 }
 
 export interface AvatarPickerOptions {
-  presets: readonly AvatarPreset[];
-  /** A preset was chosen: its avatar value, `preset:<stem>`. */
-  onPreset?(avatar: string): void;
-  /** 「從電腦選…」: what it does (the file dialog, or Raphael's own picker of the app). */
-  onComputer(): void;
+  /** A slime was chosen: its avatar value. */
+  onSlime?(avatar: string): void;
+  /** 「從電腦選…」, for a picture that is the owner's own or Raphael's; a member is a slime. */
+  onComputer?(): void;
   /** More actions under 從電腦選 (Raphael's 還原). */
   more?: readonly { label: string; run(): void }[];
+  /** Whether the slimes are offered: a member's picture, not the owner's. */
+  slimes?: boolean;
+  /** The picture it has now, which the slimes start from. */
+  current?: string | null;
 }
 
-/** The small popover of a picture: the preset grid, if there are presets, and 「從電腦選…」. */
+/** The small popover of a picture: the slimes and, for the owner and Raphael, 「從電腦選…」. */
 export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions): void {
-  const grid = o.presets.length
-    ? `<div class="mb-presets" role="group" aria-label="${esc(t("settings.avatar"))}">` +
-      o.presets
-        .map(
-          (preset, i) =>
-            `<button type="button" role="menuitem" tabindex="-1" class="mb-preset" data-preset="${esc(preset.avatar)}" aria-label="${esc(t("members.preset", { p0: i + 1 }))}">` +
-            `<img src="${esc(preset.url)}" alt="" draggable="false"></button>`,
-        )
-        .join("") +
-      `</div><div class="menu-sep" role="separator"></div>`
-    : "";
-  const actions = [{ label: t("members.fromPc"), run: o.onComputer }, ...(o.more ?? [])];
+  const actions = [...(o.onComputer ? [{ label: t("members.fromPc"), run: o.onComputer }] : []), ...(o.more ?? [])];
   const el = openPopover(
     anchor,
-    grid +
+    (o.slimes ? slimePickerHTML(o.current, esc) : "") +
       actions
         .map((action, i) => `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-pick="${i}"><span class="mt">${esc(action.label)}</span></button>`)
         .join(""),
@@ -366,31 +365,16 @@ export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions): v
   el.addEventListener("click", (e) => {
     const target = (e.target as Element).closest<HTMLElement>("button");
     if (!target) return;
+    // Trying slimes is the point of this menu, so a press on one leaves it where it is.
+    const slime = pickSlime(target);
+    if (slime) { o.onSlime?.(slime); return; }
     closeMenu();
-    if (target.dataset.preset !== undefined) o.onPreset?.(target.dataset.preset);
-    else actions[Number(target.dataset.pick)]?.run();
+    actions[Number(target.dataset.pick)]?.run();
   });
   el.querySelector<HTMLElement>("button")?.focus();
 }
 
-// ---------- 新增成員 ----------
-
-/** What 建立 hands over: the member, and a picture of this PC to set once it exists. */
-export interface NewMemberResult {
-  member: NewMember;
-  picture: WireAttachment | null;
-}
-
-export interface NewMemberOptions {
-  groups: readonly MemberGroup[];
-  /** The group it starts in (the one the menu was opened from), null for 未分組. */
-  groupId: number | null;
-  presets: readonly AvatarPreset[];
-  /** The names already taken (the names are unique). */
-  taken: readonly string[];
-  /** Makes the member; true when it was made and the dialog may close. */
-  create(result: NewMemberResult): Promise<boolean | Member>;
-}
+// ---------- the groups' dropdowns ----------
 
 /** The value of a group in the dropdowns: its id, or `none` for 未分組. */
 export const groupValue = (id: number | null): string => (id === null ? "none" : String(id));
@@ -401,8 +385,3 @@ export const groupChoices = (groups: readonly MemberGroup[]): { value: string; l
   { value: "none", label: t("members.ungrouped") },
   ...groups.map((group) => ({ value: String(group.id), label: group.name })),
 ];
-
-/** 新增成員, the mockup's `new-member`. */
-export function openNewMember(o: NewMemberOptions): Dialog {
-  return openMemberProfile(o);
-}

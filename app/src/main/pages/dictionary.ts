@@ -294,9 +294,12 @@ export function createDictionary(app: AppContext): DictionaryPage {
     renderHints();
     el.querySelector("h1")!.textContent = t("main.003");
     newButton.innerHTML = t("dictionary.007", { p0: ico("plus") });
-    el.querySelector(".lede")!.outerHTML = t("dictionary.009");
     el.querySelector(".tabs")!.setAttribute("aria-label", t("common.filter"));
-    for (const f of FILTERS) el.querySelector<HTMLElement>(`[data-filter="${f.id}"]`)!.textContent = f.name;
+    for (const f of FILTERS) {
+      const label = el.querySelector<HTMLElement>(`[data-filter="${f.id}"] .tab-label`)!;
+      label.dataset.label = f.name;
+      label.querySelector("span")!.textContent = f.name;
+    }
     wordInput.placeholder = t("dictionary.010");
     wordInput.setAttribute("aria-label", t("dictionary.011"));
     importFile.setAttribute("aria-label", t("dictionary.034"));

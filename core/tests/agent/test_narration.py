@@ -6,6 +6,7 @@ import json
 import pytest
 
 from raphael_core.brain.openrouter import ChatToolCall, ChatTurn
+from raphael_core.agent.actions import is_action
 from .conftest import decision
 from .test_service import make_rig  # noqa: F401
 from .test_plugins import plugins, calls  # noqa: F401
@@ -16,7 +17,9 @@ def chat(text, *calls):
 
 
 async def typed(rig, text="Check the time", member_id=0):
-    return await rig.call("agent.ask", {"session_id": "live", "text": text, "ui_language": "en", "source": "app", "member_id": member_id})
+    rig.typed_count = getattr(rig, "typed_count", 0) + 1
+    session = "live" if rig.typed_count == 1 else f"live-{rig.typed_count}"
+    return await rig.call("agent.ask", {"session_id": session, "text": text, "ui_language": "en", "source": "app", "member_id": member_id})
 
 
 async def test_progress_is_persisted_and_notified_before_each_tool_round(make_rig, client):
@@ -27,7 +30,7 @@ async def test_progress_is_persisted_and_notified_before_each_tool_round(make_ri
     async def second(**kwargs):
         [turn] = await rig.turns()
         assert turn["status"] == "running"
-        assert [m["kind"] for m in turn["messages"]] == ["progress"]
+        assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["progress"]
         assert turn["messages"][0]["text"] == "《Notice. I will check the current time.》"
         assert kwargs["messages"][-1]["role"] == "tool"
         assert any(m.get("content") == "I will check the current time." for m in kwargs["messages"])
@@ -40,7 +43,7 @@ async def test_progress_is_persisted_and_notified_before_each_tool_round(make_ri
     result = await typed(rig)
     assert result["text"] == "It is Friday."
     [turn] = await rig.turns()
-    assert [m["kind"] for m in turn["messages"]] == ["progress", "progress", "reply"]
+    assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["progress", "progress", "reply"]
     assert turn["messages"][-1]["text"] == "《Answer. It is Friday.》"
     assert len({data["turn_id"] for method, data in notes if method == "agent.turn"}) == 1
     assert turn["cost_usd"] == pytest.approx(0.9)
@@ -61,7 +64,7 @@ async def test_a_permission_pauses_the_sequence_and_yes_continues_the_same_turn(
     assert calls == ["look", "note"]
     [turn] = await rig.turns()
     assert turn["status"] == "done"
-    assert [m["kind"] for m in turn["messages"]] == ["progress", "progress", "reply"]
+    assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["progress", "progress", "reply"]
     assert turn["cost_usd"] == pytest.approx(0.9)  # typed turns do not pay for routing
     assert [m["role"] for m in client.chat_calls[1]["messages"]][-2:] == ["tool", "tool"]
 
@@ -94,7 +97,7 @@ async def test_cancel_ends_a_running_turn_and_clearing_cannot_resurrect_it(make_
     assert turn["status"] == "running"
     await rig.call("agent.cancel", {"session_id": "live"})
     await task
-    assert (await rig.turns())[0]["status"] == "denied"
+    assert (await rig.turns())[0]["status"] == "cancelled"
     await rig.call("agent.history.clear", {})
     assert await rig.turns() == []
 
@@ -116,7 +119,7 @@ async def test_a_resumed_turn_can_be_cancelled(make_rig, plugins, client):
     await rig.call("agent.cancel", {"session_id": "live"})
     await task
     [turn] = await rig.turns()
-    assert turn["status"] == "denied"
+    assert turn["status"] == "cancelled"
     assert turn["messages"][-1]["kind"] == "reply"
     assert turn["text"] and turn["cost_usd"] >= 0.3
 

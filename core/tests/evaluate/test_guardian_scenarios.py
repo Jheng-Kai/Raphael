@@ -20,6 +20,10 @@ from raphael_core.integrations.config import ServerConfig, ToolRecord
 from test_guardian import FakeBrains, FakeClient as GuardianFakeClient
 
 
+# Hang guard on a slow CI runner, not a speed assertion.
+HANG_GUARD_S = 60
+
+
 class FakeClient(GuardianFakeClient):
     async def decide(self, **kwargs):
         from raphael_core.brain.openrouter import Decision
@@ -29,6 +33,17 @@ class FakeClient(GuardianFakeClient):
 
 def selected(identifier):
     return next(cell for cell in cells() if cell.id == identifier)
+
+
+@pytest.mark.parametrize("operation,tool", [("self-check", "self_check"), ("help", "raphael_help")])
+async def test_read_only_diagnostics_use_the_production_harness(tmp_path, operation, tool):
+    driver = RpcDriver(tmp_path, "fake/model", FakeClient([("", [(tool, {})]), ("已檢查現有設定。", [])]), Budget(5))
+    try:
+        reasons, _ = await driver.execute(selected("S21.diagnostics." + operation))
+        assert not reasons
+        assert driver.recorder.receipts == []
+    finally:
+        await driver.aclose()
 
 
 @pytest.mark.parametrize('identifier',['S03.immediate-start','S03.primary-dispatch','S08.immediate-start','S08.completion'])
@@ -45,7 +60,7 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
             if child:
                 calls=[] if any(m['role']=='tool' for m in messages) else [('Guardian__read',{})]
             else:
-                calls=[] if any(m['role']=='tool' for m in messages) or 'handoff_results' in str(messages) or 'Close this exchange' in messages[0]['content'] or 'Close this exchange' in str(messages) else [('handoff',arguments())]
+                calls=[] if any(m['role']=='tool' for m in messages) or 'handoff_results' in str(messages) or 'where this has landed' in messages[0]['content'] or 'where this has landed' in str(messages) else [('handoff',arguments())]
             self.turns=iter([('已讀取信件。'+driver.nonce if not calls else '',calls)])
             return await super().chat_tools(**kwargs)
     def arguments():
@@ -57,7 +72,7 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
         async def run(self,*,endpoint,token,system,user,**kwargs):
             yield Event('model','owner-model')
             child='Acceptance criteria' in system
-            if child or ('Delegated work results' not in user and 'Close this exchange' not in user):
+            if child or ('Delegated work results' not in user and 'where this has landed' not in user):
                 async with httpx.AsyncClient() as http:
                     response=await http.post(endpoint,headers={'Authorization':'Bearer '+token},json={
                         'jsonrpc':'2.0','id':1,'method':'tools/call','params':{
@@ -70,7 +85,7 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
     driver=RpcDriver(tmp_path,model,Client([]),Budget(40),brains=FakeBrains(tmp_path) if brain=='cli' else None)
     driver.app.background._host=WorkerHost(connect=Links(),grace_s=.3)
     try:
-        reasons,turns=await asyncio.wait_for(driver.execute(selected(identifier)),10)
+        reasons,turns=await asyncio.wait_for(driver.execute(selected(identifier)),HANG_GUARD_S)
         assert not reasons,reasons
         # Live, a room cell's owner view held no model, so the Codex brain could never pass it.
         assert {turn.get('model') for turn in turns}=={model},turns
@@ -114,7 +129,7 @@ async def test_a_primary_contact_that_does_not_dispatch_what_it_is_given_fails_s
     driver=RpcDriver(tmp_path,'fake/model',Client([]),Budget(60))
     driver.app.background._host=WorkerHost(connect=Links(),grace_s=.3)
     try:
-        reasons,_=await asyncio.wait_for(driver.execute(selected('S03.primary-dispatch')),20)
+        reasons,_=await asyncio.wait_for(driver.execute(selected('S03.primary-dispatch')),HANG_GUARD_S)
         assert expected<=set(reasons),reasons
     finally:
         await driver.aclose()
@@ -127,13 +142,13 @@ async def test_room_work_done_without_a_handoff_fails_at_once(tmp_path):
     class Client(FakeClient):
         async def chat_tools(self,**kwargs):
             messages=kwargs['messages']
-            calls=[] if any(m['role']=='tool' for m in messages) or 'Close this exchange' in str(messages) else [('Guardian__read',{})]
+            calls=[] if any(m['role']=='tool' for m in messages) or 'where this has landed' in str(messages) else [('Guardian__read',{})]
             self.turns=iter([('已讀取信件。' if not calls else '',calls)])
             return await super().chat_tools(**kwargs)
     driver=RpcDriver(tmp_path,'fake/model',Client([]),Budget(40))
     driver.app.background._host=WorkerHost(connect=Links(),grace_s=.3)
     try:
-        reasons,_=await asyncio.wait_for(driver.execute(selected('S08.immediate-start')),10)
+        reasons,_=await asyncio.wait_for(driver.execute(selected('S08.immediate-start')),HANG_GUARD_S)
         assert 'dispatch_receipt_or_owner' in reasons
     finally:
         await driver.aclose()
@@ -144,18 +159,20 @@ async def test_s01_edits_cancels_and_applies_once_on_both_production_brains(tmp_
     calls = [("group_create", {"name": "驗證團隊"}), *[("member_create", {
         "name": name, "role": name, "instructions": "Review evidence for " + name, "group": "驗證團隊"
     }) for name in ("行銷", "信件助理", "HiKari", "PM", "RD")]]
-    client = FakeClient([("", calls), ("等待確認。", []), ("", calls), ("等待確認。", [])])
+    # The last reply is the turn going on after the owner's yes to the second draft.
+    client = FakeClient([("", calls), ("等待確認。", []), ("", calls), ("等待確認。", []), ("團隊已建立。", [])])
     if brain == "C":
         from raphael_core.agent.cli.drivers import Driver
 
         async def run(driver, **kwargs):
-            async with httpx.AsyncClient(headers={"Authorization": "Bearer " + kwargs["token"]}, trust_env=False) as http:
-                for index, (name, arguments) in enumerate(calls):
-                    response = await http.post(kwargs["endpoint"], json={"jsonrpc": "2.0", "id": index,
-                        "method": "tools/call", "params": {"name": name, "arguments": arguments}})
-                    assert not response.json()["result"]["isError"]
+            if "team_changes" not in kwargs["user"]:
+                async with httpx.AsyncClient(headers={"Authorization": "Bearer " + kwargs["token"]}, trust_env=False) as http:
+                    for index, (name, arguments) in enumerate(calls):
+                        response = await http.post(kwargs["endpoint"], json={"jsonrpc": "2.0", "id": index,
+                            "method": "tools/call", "params": {"name": name, "arguments": arguments}})
+                        assert not response.json()["result"]["isError"]
             yield Event("model", "test-model")
-            yield Event("final", "等待確認。")
+            yield Event("final", "團隊已建立。" if "team_changes" in kwargs["user"] else "等待確認。")
         monkeypatch.setattr(Driver, "run", run)
     registry = await inventory()
     result = await run_cell(selected("S01"), brain, "cli:codex:test-model" if brain == "C" else "fake/model", tmp_path,
@@ -527,6 +544,63 @@ async def test_rpc_cli_brain_reaches_the_production_authenticated_mcp(tmp_path, 
         await driver.aclose()
 
 
+@pytest.mark.parametrize("operation", ["create", "list", "move", "delete"])
+async def test_calendar_cells_check_the_production_store_after_the_tool(tmp_path, operation):
+    from datetime import datetime
+
+    client = FakeClient([])
+    driver = RpcDriver(tmp_path, "fake/model", client, Budget(20))
+    title = "驗證行程" + driver.nonce
+    tool = {"create": "calendar_add", "list": "calendar_list", "move": "calendar_update", "delete": "calendar_delete"}[operation]
+    args = {"title": title, "start": datetime.now().strftime("%Y-%m-%dT15:00")} if operation == "create" else {} if operation == "list" else {"id": 1}
+    if operation == "move":
+        args["start"] = datetime.now().strftime("%Y-%m-%dT17:00")
+    client.turns = iter([("", [(tool, args)]), (title, [])])
+    try:
+        reasons, _ = await asyncio.wait_for(driver.execute(selected("S21.calendar." + operation)), HANG_GUARD_S)
+        assert not reasons
+        assert driver.traces[-1]["name"] == tool
+        assert driver.recorder.receipts == []
+    finally:
+        await driver.aclose()
+
+
+async def test_the_real_app_wires_the_calendar_to_a_cli_brain_and_to_home(tmp_path, monkeypatch):
+    from datetime import datetime
+    from raphael_core.agent.cli import loop
+
+    class Driver:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def run(self, *, endpoint, token, **kwargs):
+            yield Event("model", "owner-model")
+            async with httpx.AsyncClient() as http:
+                response = await http.post(endpoint, headers={"Authorization": "Bearer " + token},
+                    json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                          "params": {"name": "calendar_add", "arguments": {"title": title, "start": datetime.now().strftime("%Y-%m-%dT15:00")}}})
+                assert not response.json()["result"]["isError"]
+            yield Event("final", "已加到今天的行程。")
+
+        async def interrupt(self):
+            pass
+
+    monkeypatch.setattr(loop, "Driver", Driver)
+    driver = RpcDriver(tmp_path, "cli:codex:owner-model?effort=high", FakeClient([]), Budget(20), brains=FakeBrains(tmp_path))
+    title = "驗證行程" + driver.nonce
+    try:
+        reasons, _ = await asyncio.wait_for(driver.execute(selected("S21.calendar.create")), HANG_GUARD_S)
+        assert not reasons
+        assert driver.traces[0]["name"] == "calendar_add"
+        home = await driver.app.call("home.overview", {})
+        assert [item["title"] for item in home["calendar_events"] if item["kind"] == "own"] == [title]
+        assert home["calendar_google"] == "not_connected"
+        listed = await driver.app.calendar.tool(0, "calendar_list", {})
+        assert listed["google"] == "not_connected" and [item["source"] for item in listed["items"]] == ["own"]
+    finally:
+        await driver.aclose()
+
+
 @pytest.mark.parametrize('calls,reason',[(0,'no_completed_action'),(1,'action_not_in_flight')])
 async def test_a_stop_cell_without_its_held_call_fails_at_once(tmp_path,calls,reason):
     # Live, a member read the mail once where the cell waited for a second read, until its timeout.
@@ -535,7 +609,7 @@ async def test_a_stop_cell_without_its_held_call_fails_at_once(tmp_path,calls,re
     made=[]
     class Client(FakeClient):
         async def chat_tools(self,**kwargs):
-            asked=not any(m['role']=='tool' for m in kwargs['messages']) and 'Close this exchange' not in str(kwargs['messages'])
+            asked=not any(m['role']=='tool' for m in kwargs['messages']) and 'where this has landed' not in str(kwargs['messages'])
             call=asked and len(made)<calls
             made.extend([1] if call else [])
             self.turns=iter([('' if call else '好了。',[('Guardian__read',{})] if call else [])])
@@ -543,7 +617,7 @@ async def test_a_stop_cell_without_its_held_call_fails_at_once(tmp_path,calls,re
     driver=RpcDriver(tmp_path,'fake/model',Client([]),Budget(40))
     driver.app.background._host=WorkerHost(connect=Links(),grace_s=.1)
     try:
-        reasons,_=await asyncio.wait_for(driver.execute(selected('S11')),15)
+        reasons,_=await asyncio.wait_for(driver.execute(selected('S11')),HANG_GUARD_S)
         assert reason in reasons
     finally:
         await driver.aclose()
@@ -580,7 +654,7 @@ async def test_p04_short_wrapup_and_stop_through_production_paths(tmp_path,monke
     driver=RpcDriver(tmp_path,model,Client([]),Budget(40),brains=FakeBrains(tmp_path) if brain=='cli' else None)
     driver.app.background._host=WorkerHost(connect=Links(),grace_s=.1)
     try:
-        reasons,_=await asyncio.wait_for(driver.execute(selected(identifier)),15)
+        reasons,_=await asyncio.wait_for(driver.execute(selected(identifier)),HANG_GUARD_S)
         assert not reasons,reasons
         if stopping:
             assert any(event[0]=='guardian.stop_timings' for event in driver.events)

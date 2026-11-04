@@ -34,7 +34,7 @@ separate checks.
 
 The primary footer action fills the available centered action row (R-UI-37),
 including welcome and completion, while secondary actions stay to its left.
-Headings use the 28px onboarding scale. The welcome and completion screens omit redundant
+Tutorial step headings use the 28px onboarding scale; welcome and abilities titles use 44px. The welcome and completion screens omit redundant
 subtitles; essential tutorial guidance remains visible (R-UI-02/37).
 
 `onboarding-abilities` and `onboarding-done` capture the intermediate choice and
@@ -47,19 +47,27 @@ required by the shared guardian hand-off gate.
 Ability choices form one vertical checklist (R-UI-35), including at full-screen
 widths. The rendered audit rejects side-by-side ability choices.
 
-## First Bot conversation setup (P05a)
+## No conversation setup (owner round 4)
 
-Open the first Bot's empty conversation before its profile has been confirmed.
-Three cards collect name, personality and first work. Each supports two suggestions
-and free text; Back preserves answers. Cancel dismisses the cards for the session
-without saving. Review sends an ordinary localized conversation request and opens
-the shared editable team proposal. Confirmation saves the profile on identity 0;
-the resulting centered rename line appears once without a duplicate answer avatar.
+Raphael is usable immediately, including fresh installs and cleared conversations.
+The frontend no longer uses profile_ready to hide the ordinary empty thread/composer.
+The naming/personality/work wizard, its styles and its strings are removed. The
+ordinary editable member proposal remains available from Create from description.
 
 ```powershell
-npm run look -- first-bot-choice first-bot-free-text admin-draft-onboarding bot-renamed-centred --theme both --width 1120,720,1920x1080
+npm run look -- no-naming onboarding after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
-The fixture proves choice/free-text navigation, no pre-confirmation writes and the
-shared confirmation boundary. Core tests recreate MembersService to read back the
-saved name, personality and instructions. Native desktop relaunch is unverified.
+Welcome content and Start form one centered block with a consistent gap. Manual
+initial and second launches reveal/focus the main window; only --autostart stays
+hidden. Every launch opens at the designed 1280x800, centred; window-state restores
+nothing, not even a last maximized window. Rust policy
+regressions live in first_run.rs and window_state_tests in lib.rs.
+
+## Owner round 6 contracts
+
+Owner round 6: onboarding keeps the welcome title at 44px (within the owner-requested 40–48px range). onboarding-abilities is a representative step consumer and retains its existing 28px heading and step layout. The 44px requirement applies only to the welcome title. welcome-alignment checks that rendered title size.
+
+## Owner round 7 contracts
+
+The abilities headline now shares the welcome hero size (44px), overriding the round 6 abilities exception. Its optional-setup helper paragraph is removed; the vertical checklist and primary action retain their existing flow. onboarding-abilities-hero checks the rendered headline and absence of the paragraph. Other tutorial step titles are unchanged.

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, test, vi } from "vitest";
-const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { state: "ok" }, spend: { month_usd: 0, limit_usd: 10 } })), core: vi.fn(), agentHistoryList: vi.fn(), agentQuestionOpen: vi.fn(), agentAskText: vi.fn(), membersList: vi.fn(), roomsList: vi.fn(), roomMessages: vi.fn(), membersCommandsList: vi.fn(), membersRead: vi.fn(), roomSend: vi.fn() }));
+const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { state: "ok" }, spend: { month_usd: 0, limit_usd: 10 } })), core: vi.fn(), agentHistoryList: vi.fn(), agentQuestionOpen: vi.fn(), agentAskText: vi.fn(), membersList: vi.fn(), roomsList: vi.fn(), roomMessages: vi.fn(), membersCommandsList: vi.fn(), membersRead: vi.fn(), roomSend: vi.fn(), desktopStatus: vi.fn(), desktopOpen: vi.fn(), desktopClose: vi.fn() }));
 vi.mock("../api", () => api);
 import { createAgent } from "./agent";
 import { Cleared } from "../cleared";
@@ -23,7 +23,8 @@ test("the stacked member and conversation title toggles details with one state; 
   expect(title.querySelector(".conversation-caption")?.textContent).toBe("Research");
   expect(title.querySelector("button")).toBeNull();
   expect(page.el.querySelector(".conversation-head")?.textContent).not.toContain(" / ");
-  expect(page.el.querySelectorAll(".mb-head .ra-tools button")).toHaveLength(1);
+  expect(page.el.querySelectorAll('.mb-head .ra-tools [data-act="settings"]')).toHaveLength(1);
+  expect(page.el.querySelector('.desktop-panel')?.closest('.mb-det')).not.toBeNull();
   const expectedGear = document.createElement("div"); expectedGear.innerHTML = ico("gear");
   expect(page.el.querySelector('[data-act="settings"] path')?.getAttribute("d")).toBe(expectedGear.querySelector("path")?.getAttribute("d"));
   expect(page.el.querySelector('[data-act="clear"]')).toBeNull();
@@ -119,18 +120,22 @@ test("two conversations of one member retain independent approval cards", async 
   const page = createAgent({ go() {}, device: () => ({}), onEvent(handler: typeof emit) { emit = handler; return () => {}; }, undo: { begin() {} }, cleared: new Cleared() } as unknown as AppContext);
   document.body.append(page.el); page.show(); await flush();
   for (const id of [1, 2]) emit({ type: "AgentQuestion", id: `q-${id}`, member_id: 0, conversation_id: id, text: `儲存摘要 ${id}？`, prefix: "問", tier: "T2", timeout_ms: 60_000 });
-  expect(page.el.querySelector<HTMLElement>(".ask-card")!.dataset.id).toBe("q-1");
+  expect(page.el.querySelector<HTMLElement>(".ask-card-host")!.dataset.id).toBe("q-1");
   if (page.el.querySelector(".conversation-trigger")!.getAttribute("aria-expanded") !== "true") page.el.querySelector<HTMLButtonElement>(".conversation-trigger")!.click(); await flush();
   document.querySelector<HTMLButtonElement>('.mb-det [data-conversation-open="2"]')!.click(); await flush();
-  expect(page.el.querySelector<HTMLElement>(".ask-card")!.dataset.id).toBe("q-2");
+  expect(page.el.querySelector<HTMLElement>(".ask-card-host")!.dataset.id).toBe("q-2");
   emit({ type: "AgentQuestionClosed", id: "q-1" });
-  expect(page.el.querySelector<HTMLElement>(".ask-card")!.dataset.id).toBe("q-2");
+  expect(page.el.querySelector<HTMLElement>(".ask-card-host")!.dataset.id).toBe("q-2");
   document.querySelector<HTMLButtonElement>('.mb-det [data-conversation-open="1"]')!.click(); await flush();
-  expect(page.el.querySelector<HTMLElement>(".ask-card")!.hidden).toBe(true);
+  expect(page.el.querySelector<HTMLElement>(".ask-card-host")!.hidden).toBe(true);
   page.hide();
 });
 
-test("rooms hide the member picker and keep replies outside private conversations", async () => {
+test("rooms close the private desktop lease, hide the member picker and keep replies outside private conversations", async () => {
+  vi.useFakeTimers();
+  api.desktopStatus.mockResolvedValue({ state: "running", ready: true, control: "member" });
+  api.desktopOpen.mockResolvedValue({ session: "navigation", url: "http://127.0.0.1:5000/navigation/vnc.html" });
+  api.desktopClose.mockResolvedValue({});
   const people = { members: [{ id: 0, name: "Raphael", avatar: "", role: "", instructions: "", group_id: null }], groups: [] };
   const conversations = [{ id: 1, member_id: 0, title: "Main", is_default: 1 }, { id: 2, member_id: 0, title: "Research" }];
   api.membersList.mockResolvedValue(people);
@@ -144,7 +149,12 @@ test("rooms hide the member picker and keep replies outside private conversation
     ? [{ id: 2, member_id: 0, conversation_id: 2, question: "Research", text: "Named answer", status: "done", created_at_ms: 1000, source: "app", route: "answer", prefix: "" }] : [] }));
   const page = createAgent({ go() {}, device: () => ({}), onEvent: () => () => {}, undo: { begin() {} }, cleared: new Cleared() } as unknown as AppContext);
   document.body.append(page.el); page.show(); await flush();
+  if (page.el.querySelector('.conversation-trigger')!.getAttribute('aria-expanded') !== 'true') page.el.querySelector<HTMLButtonElement>('.conversation-trigger')!.click();
+  await flush();
+  expect(page.el.querySelector('.desktop-panel iframe')).not.toBeNull();
   window.dispatchEvent(new CustomEvent("raphael:open-room", { detail: { roomId: 7 } })); await flush();
+  expect(page.el.querySelector('.desktop-panel iframe')).toBeNull();
+  expect(api.desktopClose).toHaveBeenCalledWith("navigation");
   expect(page.el.querySelector<HTMLElement>(".mb-chat:not(.au-room-pane)")!.hidden).toBe(true);
   expect(page.el.querySelector<HTMLElement>(".au-room-pane")!.hidden).toBe(false);
   expect(page.el.querySelector(".au-room-pane .conversation-trigger")).toBeNull();

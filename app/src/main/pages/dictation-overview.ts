@@ -1,3 +1,4 @@
+import { visibilityGate } from "../window-visibility";
 // Dictation overview: four usage numbers, activity grid and shortcuts.
 
 import { onLocaleChange, t } from "../i18n";
@@ -10,7 +11,7 @@ import { bindingLabels } from "../keys";
 import { loadingHTML } from "../loading";
 import { durationParts, formatCount, hasDictations, periodSpeed } from "../stats";
 import type { AppContext, Page, PageId, SettingsPane, StatsSummary } from "../types";
-import { btn, esc, iconBtn, keys } from "../ui";
+import { esc, iconBtn, keys } from "../ui";
 import "../dictation-overview.css";
 
 /** How often the page is read again while it is on screen. */
@@ -90,6 +91,7 @@ export function createDictationOverview(app: AppContext): Page {
   const ver = el.querySelector<HTMLElement>(".ver")!;
 
   let visible = false;
+  const poll = visibilityGate(() => void load(), () => visible);
   let timer: ReturnType<typeof setInterval> | undefined;
   /** Counts the loads, so that an answer that comes after a newer load started is dropped. */
   let loads = 0;
@@ -115,7 +117,7 @@ export function createDictationOverview(app: AppContext): Page {
     // an app from before the question key has no `agent_keys` yet
     const agentKeys = d.agent_keys ?? [];
     return (
-      `<div class="card-head"><h2>${esc(t("home.shortcuts"))}</h2>${btn(t("home.018"), "sm", ' data-go="settings" data-pane="dictation"')}</div>` +
+      `<div class="card-head"><h2>${esc(t("home.shortcuts"))}</h2>${iconBtn("pencil", t("home.018"), ' data-go="settings" data-pane="dictation"')}</div>` +
       shortcut(t("home.020"), d.dictation_keys) +
       (agentKeys.length ? shortcut(t("home.askRaphael"), agentKeys) : "") +
       (d.paste_last_keys.length ? shortcut(t("home.021"), d.paste_last_keys) : "") +
@@ -266,7 +268,7 @@ export function createDictationOverview(app: AppContext): Page {
       void load();
       clearInterval(timer);
       timer = setInterval(() => {
-        if (!document.hidden) void load();
+        poll.run();
       }, REFRESH_MS);
     },
     hide() {

@@ -23,8 +23,9 @@ sees). What happens to it after that is the owner's, through four methods the ca
 
 A member's preference to write drafts first (`Speaker.draft_first`, on unless the owner turns it off)
 never takes the owner's rules away: where it is off the member sends through the gate like any tool, and
-a rule that asks first has the question asked. Rooms, an exchange between members, a quick question, a
-spoken request and a message from a phone are never shown a draft, and never carry what it says.
+a rule that asks first has the question asked. Background and routine owner waits show the same draft
+in the originating conversation; room drafts remain in their room and thread. An exchange between
+members, a quick question, a spoken request and a message from a phone never carry a draft.
 
 A draft holds the owner's own words for the mail; they are shown in their chat and kept in the database
 like the rest of the conversation, and never logged.
@@ -228,7 +229,16 @@ class DraftStore:
         """The draft still waiting for the owner in this chat (the latest), if any: what a member's revision replaces."""
         row = self._conn.execute(
             f"SELECT {_COLUMNS} FROM email_drafts WHERE holder_id=? AND conversation_id IS ? AND state='draft'"
+            " AND NOT EXISTS (SELECT 1 FROM agent_turns WHERE id=email_drafts.turn_id AND scope='room')"
             " ORDER BY created_at_ms DESC, rowid DESC LIMIT 1", (holder_id, conversation_id)).fetchone()
+        return None if row is None else _draft(row)
+
+    def open_in_room(self, holder_id: int, room_id: int, thread_id: int | None) -> Draft | None:
+        """The latest open draft held in this room and thread."""
+        row = self._conn.execute(
+            f"SELECT {_COLUMNS} FROM email_drafts WHERE holder_id=? AND conversation_id IS NULL AND state='draft'"
+            " AND turn_id IN (SELECT id FROM agent_turns WHERE scope='room' AND room_id=? AND thread_id IS ?)"
+            " ORDER BY created_at_ms DESC, rowid DESC LIMIT 1", (holder_id, room_id, thread_id)).fetchone()
         return None if row is None else _draft(row)
 
     def revise(self, draft: Draft, *, send_via: str, to: str, cc: str, subject: str, body: str, by_owner: bool,
@@ -361,7 +371,12 @@ class EmailDrafts:
             if offer is None or offer == author_id:
                 raise DraftError("unknown_member")
         send_via = self.choose_sender(via)
-        existing = self.store.open_in_chat(author_id, conversation_id) if revise else None
+        existing = None
+        if revise:
+            origin = self._history.get(turn_id)
+            existing = (self.store.open_in_room(author_id, origin.room_id, origin.thread_id)
+                        if origin is not None and origin.scope == "room"
+                        else self.store.open_in_chat(author_id, conversation_id))
         draft = None
         if existing is not None and existing.author_id == author_id:
             draft = self.store.revise(existing, send_via=send_via or existing.send_via, to=to, cc=cc, subject=subject, body=body,
@@ -481,6 +496,15 @@ class EmailDrafts:
         digest = params.get("digest")
         if not isinstance(digest, str):
             raise invalid_params("digest must be text")
+        retry_version = params.get("retry_version")
+        if retry_version is not None:
+            if type(retry_version) is not int or retry_version != draft.version or draft.state != "failed" or digest != draft.digest:
+                return {"draft": self._view(draft.id), "sent": False}
+            # Only the owner's explicit retry creates a new attempt. Replayed clicks keep their old version.
+            draft = self.store.revise(draft, send_via=draft.send_via, to=draft.to, cc=draft.cc,
+                                      subject=draft.subject, body=draft.body, by_owner=True, base_digest=digest)
+            if draft is None:
+                return {"draft": self._view(params["id"]), "sent": False}
         if digest != draft.digest or draft.state != "draft":
             return {"draft": self._view(draft.id), "sent": False}
         tool = self.sender(draft.send_via)

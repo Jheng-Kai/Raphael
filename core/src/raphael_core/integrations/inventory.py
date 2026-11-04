@@ -106,7 +106,10 @@ def public_app(app: Mapping) -> dict:
     """Only the public metadata of a connection, never its provider configuration or a credential."""
     state = app["state"] if "state" in app else legacy_state(app)
     return {"id": app["id"], "name": app["name"], "enabled": bool(app["enabled"]), "state": state,
-            "tools": app["tools"] if type(app.get("tools")) is int else 0, "connected": state == READY}
+            "tools": app["tools"] if type(app.get("tools")) is int else 0, "connected": state == READY,
+            **({"last_used_at": app["last_used_at"]} if type(app.get("last_used_at")) is int else {}),
+            **({"plugin": app["plugin"][:100]} if isinstance(app.get("plugin"), str) else {}),
+            **({"aliases": list(app["services"])} if app.get("services") else {})}
 
 
 @dataclass(frozen=True)

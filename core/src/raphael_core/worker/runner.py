@@ -4,16 +4,20 @@ It speaks JSON-RPC with the core that started it, on stdin and stdout, and ends 
 a core that is gone leaves it nothing to do. The core calls:
 
 - `worker.hello {}`: answered with the protocol version and the process id (the start-up handshake);
-- `task.run {task_id, system, user, tools, limits}`: carry the task out (`loop.run_task`) and answer
-  with how it ended. One task at a time. A task that goes on after the owner answered its question
-  is given `messages` (the whole conversation, as it was given back) in place of `system` and
-  `user`; a task that pauses for a question answers with the conversation as it stands
-  (`messages`) and the id of the call that waits (`waiting_call`);
+- `task.run {task_id, system, user, tools, limits, context_window}`: carry the task out
+  (`loop.run_task`) and answer with how it ended. Tasks run side by side, one per id. A task that goes
+  on after the owner answered its question is given `messages` (the whole conversation, as it was given
+  back) in place of `system` and `user`; a task that pauses for a question answers with the conversation
+  as it stands (`messages`) and the id of the call that waits (`waiting_call`);
 - `task.cancel {task_id}` (a notification): stop the task at once.
 
 and, while a task runs, the worker calls the core's `host.chat {task_id, messages, tools}` for a
-reply of the model and `host.tool {task_id, call_id, name, arguments}` for the result of a tool. A
-refusal of either comes as an error whose data says `stop`, and the loop ends with it.
+reply of the model (with `room`, how many times the usual limit on a reply, when it asks again for a
+call that the limit cut off; the reply says `finish_reason: "length"` when it was cut off),
+`host.tool {task_id, call_id, name, arguments}` for the result of a tool and
+`host.summarize {task_id, system, user, max_tokens}` for the checkpoint of a long task. A refusal of
+any comes as an error whose data says `stop`, and the loop ends with it. A task here has nobody in it
+to read a note about a call that repeats itself, so the loop ends it (`tool_guardrails`).
 
 stdout is claimed for the protocol before anything else is done (`stdio_server.claim_stdout`). This
 module imports the loop and the channel and nothing of the core's other side: no keys, no database,
@@ -34,6 +38,8 @@ from raphael_core.stdio_server import _decoded_lines, claim_stdout
 
 from .channel import Peer
 from .loop import Call, Limits, Outcome, Stop, ToolOutcome, Turn, run_task
+from .stall_guards import LENGTH
+from .tool_guardrails import ToolGuardrails
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +57,15 @@ class CoreHost:
         except RpcError as error:
             data = error.data if isinstance(error.data, dict) else {}
             if error.code == WORKER_STOPPED and isinstance(data.get("stop"), str):
-                detail = data.get("detail")
-                raise Stop(data["stop"], detail if isinstance(detail, str) else None) from None
+                detail, window = data.get("detail"), data.get("window")
+                raise Stop(data["stop"], detail if isinstance(detail, str) else None,
+                           window=window if type(window) is int else None) from None
             raise
 
-    async def chat(self, messages: Sequence[dict], tools: Sequence[dict]) -> Turn:
-        reply = await self._ask("host.chat", {"messages": list(messages), "tools": list(tools)})
+    async def chat(self, messages: Sequence[dict], tools: Sequence[dict], room: int = 1) -> Turn:
+        reply = await self._ask(
+            "host.chat", {"messages": list(messages), "tools": list(tools), **({"room": room} if room > 1 else {})}
+        )
         calls = [
             Call(
                 id=str(call.get("id", "")),
@@ -67,8 +76,16 @@ class CoreHost:
             for call in reply.get("calls", [])
             if isinstance(call, dict)
         ]
-        content = reply.get("content")
-        return Turn(content if isinstance(content, str) else "", calls)
+        content, prompt_tokens = reply.get("content"), reply.get("prompt_tokens")
+        return Turn(content if isinstance(content, str) else "", calls,
+                    responses_output=reply.get("responses_output", []),
+                    finish_reason=LENGTH if reply.get("finish_reason") == LENGTH else "",
+                    prompt_tokens=prompt_tokens if type(prompt_tokens) is int else 0,
+                    tools=[item for item in reply["tools"] if _is_tool(item)] if isinstance(reply.get("tools"), list) else None)
+
+    async def summarize(self, system: str, user: str, max_tokens: int) -> str:
+        reply = await self._ask("host.summarize", {"system": system, "user": user, "max_tokens": max_tokens})
+        return reply["text"]
 
     async def tool(self, call_id: str, name: str, arguments: dict) -> ToolOutcome:
         reply = await self._ask(
@@ -84,6 +101,8 @@ class CoreHost:
             truncated=reply.get("truncated") is True,
             tools=[t for t in (reply.get("tools") or []) if _is_tool(t)],
             instruction=instruction if isinstance(instruction, str) else "",
+            blocks=reply.get("blocks") or [],
+            replace_tools=reply.get("replace_tools") is True,
         )
 
 
@@ -121,12 +140,14 @@ def _result(outcome: Outcome) -> dict:
 
 
 class Worker:
-    """What the process does with its peer: the methods the core calls."""
+    """What the process does with its peer: the methods the core calls. Tasks run side by side, each
+    on its own id; the core decides how many."""
 
     def __init__(self, peer: Peer) -> None:
         self._peer = peer
-        self._task_id: int | None = None
-        self._cancelled = asyncio.Event()
+        self._cancelled: dict[int, asyncio.Event] = {}
+        self._owner_inputs = {}
+        peer.register("task.steer", self._steer)
         peer.register("worker.hello", self._hello)
         peer.register("task.run", self._run)
         peer.register("task.cancel", self._cancel)
@@ -150,22 +171,28 @@ class Worker:
             raise invalid_params("system and user must be strings")
         if not isinstance(tools, list) or not all(_is_tool(tool) for tool in tools):
             raise invalid_params("tools must be a list of tools in the chat format")
-        if self._task_id is not None:
-            raise RpcError(BUSY, "A task is running")
-        self._task_id = task_id
-        self._cancelled = asyncio.Event()
+        if task_id in self._cancelled:
+            raise RpcError(BUSY, "That task is running")
+        cancelled = self._cancelled[task_id] = asyncio.Event()
+        from .owner_input import OwnerInput
+        inbox = self._owner_inputs[task_id] = OwnerInput()
+        window = params.get("context_window")
         try:
             outcome = await run_task(
                 CoreHost(self._peer, task_id),
+                owner_input=inbox,
                 system=system if isinstance(system, str) else "",
                 user=user if isinstance(user, str) else "",
                 tools=tools,
                 messages=messages,
                 limits=_limits(params.get("limits")),
-                cancelled=self._cancelled,
+                cancelled=cancelled,
+                guardrails=ToolGuardrails(hard_stop=True),  # nobody is in a background task to read a note
+                context_window=window if type(window) is int else None,
             )
         finally:
-            self._task_id = None
+            self._owner_inputs.pop(task_id, None)
+            del self._cancelled[task_id]
         logger.info(
             "Task ended: status=%s kind=%s model_calls=%d tool_calls=%d",
             outcome.status,
@@ -175,9 +202,18 @@ class Worker:
         )
         return _result(outcome)
 
+    async def _steer(self, params: dict) -> dict:
+        task_id, text = params.get("task_id"), params.get("text")
+        if type(task_id) is not int or not isinstance(text, str) or not text.strip() or len(text) > 12000:
+            raise invalid_params("invalid owner input")
+        inbox = self._owner_inputs.get(task_id)
+        return {"accepted": bool(inbox and inbox.add(text))}
+
     async def _cancel(self, params: dict) -> dict:
-        if self._task_id is not None and params.get("task_id") in (None, self._task_id):
-            self._cancelled.set()
+        task_id = params.get("task_id")
+        for running, cancelled in self._cancelled.items():
+            if task_id in (None, running):
+                cancelled.set()
         return {}
 
 

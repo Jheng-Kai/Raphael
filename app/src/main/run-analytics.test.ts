@@ -2,7 +2,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { mountRunAnalytics } from "./run-analytics";
 import type { RunAnalyticsApi, RunReport } from "./run-analytics-types";
-import { setLocale } from "./i18n";
+import { setLocale, t } from "./i18n";
 
 afterEach(() => document.body.replaceChildren());
 it("separates the ledger bill from retained work and only shows applicable exclusions", async () => {
@@ -22,10 +22,14 @@ it("separates the ledger bill from retained work and only shows applicable exclu
   expect(host.querySelector(".run-bill-total")?.textContent).toBe("US$1.24");
   expect(host.querySelector(".run-bill h3")?.textContent).toBe("本月花費");
   expect(host.querySelector(".run-work h3")?.textContent).toBe("對話與工作的明細");
-  expect(host.querySelector(".run-retained")?.textContent).toContain("刪除紀錄");
+  expect(host.querySelector(".run-retained")).toBeNull();
   expect(host.querySelector(".run-exclusions")).toBeNull();
   expect(host.querySelector('[data-bill-purpose="stt"]')?.textContent).toContain("40%");
   expect(host.querySelector('[data-bill-purpose="future-purpose"]')?.textContent).toContain("其他");
+  const face = host.querySelector(".run-tiles"), records: MutationRecord[] = [];
+  const observer = new MutationObserver(batch => records.push(...batch)); observer.observe(host, { childList: true, subtree: true });
+  await view.refresh(); await Promise.resolve();
+  expect(host.querySelector(".run-tiles")).toBe(face); expect(records).toHaveLength(0); observer.disconnect();
   vi.mocked(api.usageRuns).mockResolvedValue({...report,fish_voice:true});
   vi.mocked(api.usageAllowances).mockResolvedValue({brains:[{id:"codex",name:"Codex",windows:[]}]});
   await view.refresh();
@@ -35,6 +39,27 @@ it("separates the ledger bill from retained work and only shows applicable exclu
   host.querySelector<HTMLButtonElement>('[data-run-act="show-allowance"]')!.click();
   expect(heading.scrollIntoView).toHaveBeenCalled();
   expect(document.activeElement).toBe(heading);
+  view.destroy();
+});
+it("ChatGPT sits with the other subscriptions once signed in, and its button opens its usage page", async () => {
+  const report: RunReport = { range: "month", start_day: null, end_day: "2026-10-24", summary: { duration_ms: 0, cost_usd: 0, tokens: 0, ai_steps: 0, tools: 0, errors: 0 }, bill: { cost_usd: 0, purposes: [] }, fish_voice: false, total: 0, groups: { member: [], model: [], day: [], provider: [], routine: [] } };
+  const chatgptStatus = vi.fn().mockResolvedValue({ signed_in: true, plan_scope_granted: true }), openExternalUrl = vi.fn().mockResolvedValue(undefined);
+  const api: RunAnalyticsApi = { usageRuns: vi.fn().mockResolvedValue(report), usageExport: vi.fn(), saveUsageCsv: vi.fn(), usageAllowances: vi.fn().mockResolvedValue({ brains: [{ id: "codex", name: "Codex", windows: [] }] }), chatgptStatus, openExternalUrl };
+  const host = document.createElement("div"); document.body.append(host);
+  const view = mountRunAnalytics(host, api); await view.ready;
+  const card = host.querySelector(".run-allowance [data-allowance=\"chatgpt\"]")!;
+  expect(card.classList.contains("run-subscription")).toBe(true);
+  expect(card.querySelector("h4")!.textContent).toContain("ChatGPT");
+  card.querySelector<HTMLButtonElement>('[data-run-act="chatgpt-usage"]')!.click();
+  expect(openExternalUrl).toHaveBeenCalledWith("https://chatgpt.com/settings/usage");
+  for (const answer of [{ signed_in: false }, { signed_in: true, plan_scope_granted: false }]) {
+    chatgptStatus.mockResolvedValueOnce(answer);
+    host.querySelector<HTMLButtonElement>('[data-run-act="allowance"]')!.click();
+    await vi.waitFor(() => expect(host.querySelector('[data-allowance="chatgpt"]')).toBeNull());
+    chatgptStatus.mockResolvedValue({ signed_in: true, plan_scope_granted: true });
+    host.querySelector<HTMLButtonElement>('[data-run-act="allowance"]')!.click();
+    await vi.waitFor(() => expect(host.querySelector('[data-allowance="chatgpt"]')).not.toBeNull());
+  }
   view.destroy();
 });
 it("shows catalog model names, localized members and durations, and expands the member top five", async () => {
@@ -82,7 +107,7 @@ it("retries a failed load and does not open a save dialog after the view is dest
   const api: RunAnalyticsApi = { usageRuns: vi.fn().mockRejectedValueOnce("offline").mockResolvedValue(report), usageExport: vi.fn().mockImplementation(() => new Promise(resolve => { finish = resolve; })), usageAllowances: vi.fn().mockResolvedValue({ brains: [] }), saveUsageCsv: vi.fn() };
   const host = document.createElement("div"); document.body.append(host);
   const view = mountRunAnalytics(host, api); await view.ready;
-  expect(host.querySelector('[role="alert"]')!.textContent).toContain("offline");
+  expect(host.querySelector('[role="alert"]')!.textContent).toContain(t("missing.unknown"));
   host.querySelector<HTMLButtonElement>('[data-run-act="retry"]')!.click();
   await vi.waitFor(() => expect(host.querySelector('[role="alert"]')).toBeNull());
   host.querySelector<HTMLButtonElement>('[data-run-act="export"]')!.click();
@@ -122,7 +147,7 @@ it("renders and refreshes all allowance sources with maker marks and honest unkn
   expect(section.querySelectorAll(".run-subscription")).toHaveLength(3);
   expect(section.querySelectorAll("h4 .mono")).toHaveLength(3);
   expect(section.textContent).toContain("更新於");
-  expect(section.textContent).toContain("這個 CLI 不提供剩餘額度");
+  expect(section.textContent).toContain("尚未取得這個帳號的剩餘額度");
   expect(section.textContent).toContain("接近額度上限");
   expect(section.textContent).not.toContain("null%");
   expect(section.querySelectorAll('[role="progressbar"]')).toHaveLength(2);

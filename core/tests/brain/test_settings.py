@@ -16,10 +16,9 @@ def test_defaults_and_set(conn):
     assert s.get("monthly_limit_usd") == 20.0
 
 
-def test_catppuccin_skin_is_saved_and_read_back(conn):
-    store = SettingsStore(conn)
-    store.set("skin", "catppuccin")
-    assert SettingsStore(conn).get("skin") == "catppuccin"
+def test_a_retired_saved_skin_is_ignored(conn):
+    conn.execute("INSERT INTO settings (key, value) VALUES ('skin', ?)", (json.dumps("lagoon"),))
+    assert "skin" not in SettingsStore(conn).all()
 
 
 def test_rejects_unknown_key_and_wrong_type(conn):
@@ -32,11 +31,12 @@ def test_rejects_unknown_key_and_wrong_type(conn):
 
 def test_the_defaults_are_the_documented_ones():
     assert DEFAULTS == {
+        "routine_webhook_port": 0,
+        "chief_pinned": False,
         "first_bot_profile": {},
         "owner_name": "",
         "owner_about": "",
         "owner_photo": "",
-        "skin": "default",
         "monthly_limit_usd": 10.0,
         "cleanup_model": "openai/gpt-6-luna",
         "languages": ["zh-TW"],
@@ -47,6 +47,8 @@ def test_the_defaults_are_the_documented_ones():
         "quick_model": "",
         "quick_effort": "low",
         "assistant_model": "",
+        "image_model": "",
+        "video_model": "",
         "action_mode": "direct",
         "router_model": "",
         "memory_model": "",
@@ -63,6 +65,7 @@ def test_the_defaults_are_the_documented_ones():
         "stt_local_model": "qwen3-asr",
         "model_favorites": {"cleanup": [], "answer": [], "stt": []},
         "disconnected_clis": [],
+        "chatgpt.registrations.v1": {},
         "web_search_service": "openrouter",
         "web_read_service": "builtin",
         "vision_model": "",
@@ -77,6 +80,11 @@ def test_the_defaults_are_the_documented_ones():
         "tts_fish_voice": "",
         "tts_fish_model": "s2.1-pro-free",
         "tts_language": "ja",
+        "computer_vm_mode": "per-bot",
+        "computer_ssh_alias": "",
+        "local_commands_mode": "ask",
+        "local_commands_seen": False,
+        "computer_vm_idle_minutes": 15,
     }
 
 

@@ -1,6 +1,6 @@
 // Numbers, times and dates as the main window shows them. Times are local.
 
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
 import { backendMessage } from "./i18n/backend";
 
 const pad = (n: number): string => String(n).padStart(2, "0");
@@ -20,6 +20,23 @@ export function formatUsd(n: number): string {
 export function formatClock(ms: number): string {
   const d = new Date(ms);
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** A short local timestamp, with the year only outside the current year. */
+export function formatShortDateTime(ms: number, nowMs = Date.now()): string {
+  const date = new Date(ms);
+  const year = date.getFullYear() === new Date(nowMs).getFullYear() ? "" : `${date.getFullYear()}/`;
+  return `${year}${date.getMonth() + 1}/${date.getDate()} ${formatClock(ms)}`;
+}
+
+/** A complete local calendar date in the UI language, independent of the OS locale. */
+export function formatDate(value: string | number): string {
+  const date = new Date(typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const locale = getLocale();
+  return locale === "en"
+    ? date.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" })
+    : `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())}`;
 }
 
 /** The local calendar day `ms` falls on, as a number that grows by one with each day. */
@@ -70,6 +87,7 @@ export function formatRetention(days: number): string {
  * `Raphael's core is not running`, or one of the Chinese messages the Rust side writes itself.
  */
 export function describeError(err: unknown): string {
+  if (err instanceof Error && ["NotAllowedError", "NotFoundError", "NotReadableError"].includes(err.name)) return t("missing.microphone");
   const text = err instanceof Error ? err.message : typeof err === "string" ? err : asText(err);
   // CORE_EXITED and TIMEOUT of rpc.rs, and the message of core_call for a core that is missing.
   if (text.includes("core is not running") || text.startsWith("[-32000]")) return t("format.010");

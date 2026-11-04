@@ -26,13 +26,19 @@
     </div>
     <!-- The buttons of a question (an `ask` event), under its line: no, always (only a question with the
          third answer), yes. Their words come from the event. -->
-    <div id="ask" class="ask" hidden>
-      <button type="button" id="ask-no" class="ask-btn ask-no"></button>
-      <button type="button" id="ask-always" class="ask-btn ask-always" hidden></button>
-      <button type="button" id="ask-yes" class="ask-btn ask-yes" data-hold="idle">
+    <button type="button" id="overlay-stop" class="btn task-action" hidden></button>
+    <div id="ask" class="ask ask-card" role="region" aria-labelledby="ask-title" hidden>
+      <h2 id="ask-title" class="ask-title"></h2>
+      <div id="ask-details" class="ask-details"></div>
+      <button type="button" id="ask-expand" class="btn sm" aria-controls="ask-details" aria-expanded="false" hidden></button>
+      <div class="ask-actions">
+      <button type="button" id="ask-no" class="btn ask-btn ask-no"></button>
+      <button type="button" id="ask-always" class="btn ask-btn ask-always" hidden></button>
+      <button type="button" id="ask-yes" class="btn pri ask-btn ask-yes" data-hold="idle">
         <span class="ask-label"></span>
         <i class="ask-fill" aria-hidden="true"></i>
       </button>
+      </div>
     </div>
     <script type="module" src="/src/overlay/overlay.ts"></script>
   </body>

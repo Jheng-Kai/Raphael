@@ -51,6 +51,10 @@ class AuditLog:
         self._conn = conn
         self._now_ms = now_ms
 
+    def last_used(self) -> dict[str, int]:
+        return {row["server"]: row["at_ms"] for row in self._conn.execute(
+            "SELECT server, max(at_ms) AS at_ms FROM tool_audit WHERE outcome = 'ok' GROUP BY server")}
+
     def add(
         self,
         *,
@@ -60,14 +64,14 @@ class AuditLog:
         approver: str,
         outcome: str,
         task_id: int | None = None,
-    ) -> None:
+    ) -> int | None:
         """Write a row, made now. A database that fails does not stop the call it records: it is
         logged by the type of the error."""
         if approver not in APPROVERS or outcome not in OUTCOMES:
             raise ValueError("Not an approver or an outcome the audit knows")
         try:
             with self._conn:
-                self._conn.execute(
+                row = self._conn.execute(
                     "INSERT INTO tool_audit (at_ms, server, tool, tier, approver, outcome, task_id)"
                     " VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (self._now_ms(), server, tool, tier, approver, outcome, task_id),
@@ -76,8 +80,22 @@ class AuditLog:
                     "DELETE FROM tool_audit WHERE id <= (SELECT max(id) FROM tool_audit) - ?",
                     (KEEP_ROWS,),
                 )
+            return row.lastrowid
         except sqlite3.Error as exc:
             logger.warning("Could not write the audit of a tool call: %s", type(exc).__name__)
+        return None
+
+    def settle(self, entry_id: int | None, outcome: str) -> None:
+        """Replace a background launch outcome with its final state, without another payload row."""
+        if outcome not in OUTCOMES:
+            raise ValueError("Not an outcome the audit knows")
+        if entry_id is None:
+            return
+        try:
+            with self._conn:
+                self._conn.execute("UPDATE tool_audit SET outcome=? WHERE id=?", (outcome, entry_id))
+        except sqlite3.Error as exc:
+            logger.warning("Could not settle the audit of a tool call: %s", type(exc).__name__)
 
     def recent(self, limit: int = LIST_DEFAULT) -> list[AuditEntry]:
         """The latest rows, newest first."""

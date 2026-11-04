@@ -1,10 +1,10 @@
-/* The overlay window is transparent and click-through, except while a question is up: then the
-   whole window takes the mouse, and only the question's buttons answer it. The canvas sits in
-   its bottom-right corner; every word is right-aligned to the left of the emblem.
+/* The overlay window is transparent and click-through except while a task or question accepts
+   input. The canvas sits in its bottom-right corner; captions stand to the left of the emblem.
    --e is the emblem's diameter and --c its square canvas (1.3 times larger, room for the rays);
    overlay.ts sets both from the size in the settings. */
 
 @import "../assets/fonts/inter.css";
+@import "../main/styles.css";
 
 :root {
   --e: 150px;
@@ -17,11 +17,9 @@
      wraps grows upwards from here. */
   --line-bottom: calc(var(--margin) + var(--e) * 0.35);
 
-  /* The buttons of a question sit at a fixed place inside the window, whatever the length of its
-     words: --ask-h tall, their right edge --subs-right from the window's right edge and their
-     bottom edge --ask-bottom above the window's bottom edge. They are two pills, 84 px wide at
-     least and 260 px at most together. */
-  --ask-h: 36px;
+  /* The confirmation card grows upward from a fixed bottom edge. Its actions have their own
+     row beneath the title and scrollable details. */
+  --ask-h: 30px;
   --ask-gap: 10px;
   --ask-bottom: calc(var(--margin) + var(--e) * 0.2 - 6px);
 
@@ -144,8 +142,8 @@ body {
   position: fixed;
   right: var(--subs-right);
   bottom: var(--ask-bottom);
-  display: flex;
-  gap: var(--ask-gap);
+  display: grid;
+  gap: var(--sp-3);
   /* Never wider than the window: a long answer word shrinks its pill instead of pushing it off the left edge. */
   max-width: calc(100vw - var(--subs-right) - 8px);
   opacity: 0;
@@ -162,54 +160,31 @@ body {
   outline: none;
 }
 
-/* The page is click-through; only the buttons are not. */
-.ask-btn {
+/* Confirmation actions use the app's button component and theme tokens. */
+/* Compact answers at the end of the card, not two halves of it. */
+.ask-btn { pointer-events: auto; position: relative; overflow: hidden; min-width: 64px; flex: none; height: var(--ask-h); min-height: var(--ask-h); padding-inline: var(--sp-4); }
+.ask-card {
+  box-sizing: border-box;
+  width: min(360px, calc(540px - var(--subs-right) - 16px));
+  max-width: calc(100vw - var(--subs-right) - 16px);
+  max-height: min(380px, calc(var(--c) + 300px - var(--ask-bottom) - 16px));
+  padding: var(--sp-4);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--pop);
+  font: var(--fs-sm)/1.6 var(--voice);
   pointer-events: auto;
-  position: relative;
-  overflow: hidden;
-  min-width: 84px;
-  flex: 0 1 auto;
-  height: var(--ask-h);
-  padding: 0 20px;
-  border-radius: calc(var(--ask-h) / 2);
-  border: 1.5px solid rgba(255, 255, 255, 0.92);
-  background: rgba(14, 20, 34, 0.86);
-  color: #fff;
-  font: 700 15px/1 var(--zh-sub);
-  white-space: nowrap;
-  cursor: pointer;
-  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
-  transition: background 0.12s ease, transform 0.08s ease;
+  text-align: left;
 }
-
-.ask:lang(ja) .ask-btn {
-  font-family: var(--ja);
-}
-
-.ask:lang(en) .ask-btn {
-  font-family: var(--ui);
-}
-
-.ask-btn:hover:not(:disabled) {
-  background: rgba(52, 55, 61, 0.94);
-}
-
-.ask-btn:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-/* YES wears the app's accent. */
-.ask-yes {
-  border-color: #a8c9ed;
-  background: #a8c9ed;
-  color: #1b3154;
-}
-
-.ask-yes:hover:not(:disabled) {
-  background: #b8d0f8;
-  border-color: #b8d0f8;
-}
-
+.ask-title { margin: 0; font: 600 var(--fs-md)/1.5 var(--voice); overflow-wrap: anywhere; }
+.ask-details { max-height: 5lh; overflow-y: auto; overflow-wrap: anywhere; white-space: pre-wrap; user-select: text; color: var(--text-2); }
+.ask-card[data-expanded="true"] .ask-details { max-height: 9lh; }
+.ask-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
+#ask-expand { justify-self: start; }
+.subs.asking { visibility: hidden; }
+#overlay-stop { position: fixed; right: var(--margin); bottom: calc(var(--margin) + var(--e) + 8px); pointer-events: auto; }
 /* After an answer: the one that was chosen stays, the other dims, neither takes a click. */
 .ask-btn:disabled {
   cursor: default;
@@ -230,7 +205,7 @@ body {
   bottom: 5px;
   height: 3px;
   border-radius: 2px;
-  background: #1b3154;
+  background: var(--on-accent);
   transform: scaleX(0);
   transform-origin: left center;
   pointer-events: none;
@@ -244,7 +219,7 @@ body {
   bottom: 5px;
   height: 3px;
   border-radius: 2px;
-  background: rgba(27, 49, 84, 0.28);
+  background: color-mix(in srgb, var(--on-accent) 28%, transparent);
   pointer-events: none;
 }
 
@@ -260,8 +235,8 @@ body {
 /* The pointer is on the button while it is held, so this has to win over the hover colour. */
 .ask-yes[data-hold="armed"],
 .ask-yes[data-hold="armed"]:hover:not(:disabled) {
-  background: #c8e0f8;
-  border-color: #c8e0f8;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
   box-shadow: 0 0 0 2px rgba(200, 224, 248, 0.6), 0 1px 8px rgba(0, 0, 0, 0.5);
 }
 

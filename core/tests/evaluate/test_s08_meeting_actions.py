@@ -20,7 +20,7 @@ from test_guardian_scenarios import FakeClient
 from test_p14_scenarios import asked
 
 GO = "執行會議的每一項工作"
-WRAPUP = "### 結論\n分工完成。\n### 待你決定\n無。\n### 下一步\n信件助理與 PM 各自回報。"
+WRAPUP = "分工完成，信件助理與 PM 各自回報。"
 CELL = next(cell for cell in cells() if cell.id == "S08.meeting-actions")
 
 
@@ -40,7 +40,7 @@ def act(system, user, results, *, promise=False):
             return "", [("Guardian__read", {})]
         nonce = re.search(r"nonce: (\w+)", "\n".join(results))
         return f"已讀取信件，信中的 nonce 是 {nonce.group(1) if nonce else '?'}。", []
-    if "Close this exchange" in user:
+    if "where this has landed" in user:
         return WRAPUP, []
     delegated = "Delegated work results" in user or "handoff_results" in user
     if GO in asked(user) and not results and not delegated:

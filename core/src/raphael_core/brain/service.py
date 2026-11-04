@@ -10,8 +10,8 @@ handler below; what a handler alone does not show is here:
   RpcError(INVALID_PARAMS), and so is a value that a store refuses (it raises ValueError,
   KeyError or TypeError). A param that may be null may also be left out. A whole number is an
   int and a bool is no number.
-- A dictation is not lost to bookkeeping. If the history cannot be written, the text still comes
-  back (with id None); if the key store fails, it comes back as spoken, without cleanup.
+- If history cannot be written, cleaned text still comes back (with id None). Cleanup failures
+  retain recovery text and a reason; the device refuses automatic delivery of those results.
 - Voice questions share dictation cleanup and spend accounting but never write a history row.
   Transcript-only consumers still use `brain.normalize_transcript` for dictionary and script
   normalization without model calls, history or cost.
@@ -316,6 +316,7 @@ class Brain:
             "dictionary.import": self._dictionary_import,
             "dictionary.delete": self._dictionary_delete,
             "dictionary.learn": self._dictionary_learn,
+            "dictionary.undo": self._dictionary_undo,
             "settings.get": self._settings_get,
             "settings.set": self._settings_set,
             "languages.list": self._languages_list,
@@ -413,8 +414,7 @@ class Brain:
             # The model answered, so the time it took is a round trip to OpenRouter.
             self._openrouter.latency_ms = result.llm_ms
         if result.parts:
-            # Cleaned in pieces, some of which may have fallen back: each is finished as it would
-            # be alone, and they are joined with what they were cut at: a paragraph break, a space.
+            # All pieces succeeded. Finish each and retain its sentence/paragraph boundary.
             text = join_parts(
                 [
                     replace(
@@ -497,15 +497,16 @@ class Brain:
         query = _opt_str(params, "query")
         limit = _opt_int(params, "limit")
         before_ms = _opt_int(params, "before_ms")
+        before_id = _opt_int(params, "before_id")
         after_ms = _opt_int(params, "after_ms")
         # A limit is clamped into 1..200. The lower end matters: SQLite reads a negative LIMIT as
         # "no limit", which would hand over the whole history.
         limit = HISTORY_DEFAULT_LIMIT if limit is None else min(max(limit, 1), HISTORY_MAX_LIMIT)
         with _store_call():
             items = self._history.list(
-                query=query, limit=limit, before_ms=before_ms, after_ms=after_ms
+                query=query, limit=limit, before_ms=before_ms, after_ms=after_ms, before_id=before_id
             )
-        return {"items": [asdict(item) for item in items]}
+        return {"items": [asdict(item) for item in items], "total": self._history.count()}
 
     async def _history_latest(self, params: dict) -> dict:
         latest = self._history.latest()
@@ -558,6 +559,9 @@ class Brain:
         with _store_call():
             return {"deleted": self._dictionary.delete(entry_id)}
 
+    async def _dictionary_undo(self, params: dict) -> dict:
+        return {"undone": self._dictionary.undo_learning(_str(params, "token"))}
+
     async def _dictionary_learn(self, params: dict) -> dict:
         """`{corrections: [{word, misheard}]}` from the app's correction watch: the user replaced
         `misheard` with `word` in a dictation it pasted. Learns at most LEARN_MAX different ones
@@ -579,23 +583,28 @@ class Brain:
             if not isinstance(correction, dict):
                 raise invalid_params("corrections must be a list of objects")
             pairs.append((_str(correction, "word").strip(), _str(correction, "misheard").strip()))
+        snapshots: list[dict] = []
         learned: list[str] = []
         rules: list[str] = []
         reverted: list[str] = []
         # The same pair twice in one dictation is one sighting, not two.
         for word, misheard in list(dict.fromkeys(pairs))[:LEARN_MAX]:
+            snapshot = self._dictionary.learning_snapshot(word)
             outcome = self._dictionary.learn_pair(word, misheard)
             if outcome is Learned.REVERTED:
                 if misheard not in reverted:
                     reverted.append(misheard)  # the word whose rule was withdrawn
             elif outcome is not Learned.NOTHING and word not in learned:
                 learned.append(word)
+                snapshots.append(snapshot)
             if outcome is Learned.RULE and word not in rules:
                 rules.append(word)
         logger.info(
             "Learned %d of %d corrections, withdrew %d", len(learned), len(pairs), len(reverted)
         )
         result: dict = {"learned": learned}
+        if snapshots and params.get("undoable") is True:
+            result["undo"] = self._dictionary.remember_learning(snapshots)
         if rules:
             result["rules"] = rules
         if reverted:
@@ -611,6 +620,9 @@ class Brain:
         key = _str(params, "key")
         value = _required(params, "value")
         with _store_call():
+            if key in ("agent_model", "quick_model") and isinstance(value, str) and value.strip():
+                from .model_ref import api_ref
+                value = api_ref(value.strip())
             role = ROLE_OF_SETTING.get(key)
             if role is not None:
                 self._check_model(role, value)
@@ -919,6 +931,20 @@ class Brain:
                 pid = model["id"][1:].partition(":")[0] if model["id"].startswith("@") else "openrouter"
                 model["provider_id"] = pid
                 model["provider_name"] = self._providers.config(pid)["name"] if self._providers else "OpenRouter"
+        if self._providers:
+            for kind in ("image", "video"):
+                view[kind] = []
+                for row in self._providers.media_choices(kind):
+                    pid, _ = self._providers.resolve(row["reference"])
+                    view[kind].append({"id": row["reference"], "name": row["name"],
+                        "provider": self._providers.config(pid)["name"], "provider_id": pid,
+                        "provider_name": self._providers.config(pid)["name"],
+                        "input_per_mtok": row.get("price_in"), "output_per_mtok": row.get("price_out"),
+                        "image_output_per_mtok": row.get("image_output_per_mtok"),
+                        "per_image": row.get("per_image"), "per_request": row.get("per_request"),
+                        "per_minute": None, "free": False, "variable_price": False,
+                        "context_length": row.get("context"), "created_at_ms": None,
+                        "capabilities": {}, "roles": {}})
         return view
 
     def _replace_vanished(self, entries: list[CatalogEntry]) -> list[dict[str, str]]:

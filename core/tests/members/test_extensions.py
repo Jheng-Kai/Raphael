@@ -43,17 +43,18 @@ async def test_duplicate_copies_profile_and_commands_without_history(rig):
     assert rig.service.store.unread() == set()
 
 
-async def test_manual_memory_create_is_bounded_private_and_owner_authored(rig):
+async def test_the_owners_edit_of_a_memory_is_private_to_its_member(rig):
     from raphael_core.protocol import RpcError
 
     one = (await rig.call("members.create", {"name": "Ada"}))["member"]["id"]
-    note = (await rig.call("memory.create", {"member_id": one, "space": "own", "body": "My favorite topic is history."}))["note"]
-    assert note["body"] == "My favorite topic is history." and note["origin"] == "said"
-    assert (await rig.call("memory.list", {"member_id": one}))["memories"][0]["name"] == note["name"]
-    assert (await rig.call("memory.list", {"member_id": 0}))["memories"] == []
-    for bad in ({"space": "shared", "body": "Topic"}, {"body": "x" * 1201}, {"member_id": 999, "body": "Topic"}):
+    saved = await rig.call("memory.update", {"member_id": one, "space": "own", "text": "My favorite topic is history."})
+    assert saved["text"].strip() == "My favorite topic is history." and saved["entries"] == 1
+    assert (await rig.call("memory.get", {"member_id": one}))["text"].strip() == "My favorite topic is history."
+    assert (await rig.call("memory.get", {"member_id": 0}))["text"] == ""
+    assert (await rig.call("memory.get", {"member_id": one, "space": "shared"}))["text"] == ""
+    for bad in ({"text": "x" * 64_001}, {"member_id": 999, "text": "Topic"}):
         with pytest.raises(RpcError):
-            await rig.call("memory.create", {"member_id": one, **bad})
+            await rig.call("memory.update", {"member_id": one, **bad})
 
 
 async def test_finished_and_waiting_notices_require_opt_in_and_read_aloud_is_once(rig):

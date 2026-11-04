@@ -85,7 +85,7 @@ class P02Brain(FakeClient):
             return (f"共 {snapshot['count']} 位。{people}。{self.contact(snapshot, names)}。{self.chief(snapshot, names)}。"
                     f"應用程式：{apps or '無'}。已連結應用程式：{self.connected(snapshot)} 個。"), []
         if 'You are in a group chat' in user:
-            if 'Close this exchange' in user:
+            if 'where this has landed' in user:
                 return '決策：採用已核對的方案。負責人：PM；下一步：RD 核對證據。', []
             self.room_calls += 1
             target = 'PM' if snapshot['self_id'] == 1 else '行銷'
@@ -96,6 +96,8 @@ class P02Brain(FakeClient):
         return '已開啟會議。', []
 
     async def complete_json(self, **kwargs):
+        if kwargs.get('schema_name') == 'raphael_room_listener':
+            return Completion({'speak':False,'urgency':0,'reason':'fixture silence'}, kwargs['model'], 0, 0, 0, 0)
         if kwargs.get('schema_name') != 'raphael_room_route':
             raise RuntimeError('fixture has no auxiliary response')
         request = json.loads(kwargs['user'])
@@ -109,7 +111,7 @@ class P02Brain(FakeClient):
         user = '\n'.join(str(m.get('content','')) for m in messages[1:])
         calls = []
         if self.scenario == 'S07.meeting' and 'You are in a group chat' not in user and not any(m.get('role')=='tool' for m in messages):
-            calls = [('room_meeting', {'member_ids':[0,1,3,4,5], 'agenda':'Review source evidence',
+            calls = [('room_meeting', {'member_ids':[1,3,4,5], 'agenda':'@行銷 @HiKari @PM @RD review source evidence',
                                       'roles':{'4':'moderator','1':'pro','5':'con'}})]
             text = ''
         else:
@@ -154,7 +156,7 @@ def cli_brain(monkeypatch, client, scenario, limited=()):
                 async with httpx.AsyncClient() as http:
                     response = await http.post(endpoint, headers={'Authorization':'Bearer ' + token}, json={
                         'jsonrpc':'2.0','id':1,'method':'tools/call','params':{'name':'room_meeting','arguments':{
-                            'member_ids':[0,1,3,4,5], 'agenda':'Review source evidence',
+                            'member_ids':[1,3,4,5], 'agenda':'@行銷 @HiKari @PM @RD review source evidence',
                             'roles':{'4':'moderator','1':'pro','5':'con'}}}})
                     assert not response.json()['result']['isError'], response.text
                 answer = '已開啟會議。'
@@ -198,17 +200,16 @@ async def test_s07_meeting_goes_on_when_one_cli_member_is_rate_limited(tmp_path,
         reasons, _ = await driver.execute(next(cell for cell in cells() if cell.id=='S07.meeting'))
         conn = driver.app._conn
         origin = conn.execute("SELECT MIN(origin_message_id) FROM room_exchanges").fetchone()[0]
-        assert conn.execute('SELECT state FROM room_exchanges WHERE origin_message_id=?', (origin,)).fetchone()[0] == 'done'
+        assert conn.execute('SELECT state FROM room_exchanges WHERE origin_message_id=?', (origin,)).fetchone()[0] == 'stopped'
         intents = conn.execute('SELECT recipient_id, state, reason FROM room_reply_intents WHERE origin_message_id=?', (origin,)).fetchall()
         assert {tuple(i) for i in intents if i['state'] != 'done'} == {(5, 'blocked', 'cli_rate_limited')}
         spoken = conn.execute("SELECT m.member_id FROM room_messages m JOIN agent_turns t ON t.id=m.turn_id "
                               "WHERE m.origin_message_id=? AND m.kind='message' AND t.status='done'", (origin,)).fetchall()
         assert {row[0] for row in spoken} == {1, 3, 4}
-        [wrapup] = conn.execute("SELECT t.status, t.question, t.text FROM room_messages m JOIN agent_turns t ON t.id=m.turn_id "
-                                "WHERE m.origin_message_id=? AND m.kind='wrapup' AND m.member_id=0", (origin,)).fetchall()
-        assert wrapup['status'] == 'done' and wrapup['text'].startswith('決策')
-        unfinished = json.loads(wrapup['question'].split('Replies that did not finish (untrusted data): ')[1].split('\n')[0])
-        assert unfinished == [{'name': 'RD', 'reason': 'rate-limited (too many requests)'}]
+        [notice] = conn.execute("SELECT t.question,t.text,t.model,t.cost_usd FROM room_messages m "
+            "JOIN agent_turns t ON t.id=m.turn_id WHERE m.origin_message_id=? AND m.kind='wrapup'", (origin,)).fetchall()
+        assert notice['question'] == '' and notice['model'] is None and notice['cost_usd'] == 0
+        assert 'RD' in notice['text'] and '限流' in notice['text']
         assert 'meeting_pending_or_blocked_intents' in reasons
     finally:
         await driver.aclose()
@@ -259,11 +260,11 @@ class NoPrimary(P02Brain):
 
 
 class PrimaryAsChief(P02Brain):
-    """A brain that takes the primary contact for the chief of staff once they are two people."""
+    """A stale brain that keeps naming Raphael after the chief capability moves."""
 
     @staticmethod
     def chief(snapshot, names):
-        return f"幕僚長：{names[snapshot['primary_id']]}"
+        return f"幕僚長：{names[0]}"
 
 
 class NoChief(P02Brain):
@@ -279,7 +280,7 @@ class NoChief(P02Brain):
                                          (NoPrimary, 'roster_primary_missing'), (PrimaryAsChief, 'roster_chief_wrong'),
                                          (NoChief, 'roster_chief_missing')])
 async def test_a_roster_that_gets_the_primary_contact_or_the_chief_wrong_fails_s02_on_both_brains(tmp_path, monkeypatch, brain, liar, reason):
-    # The owner chooses 行銷 as the primary between the two rounds, and Raphael stays the chief of staff throughout.
+    # The owner chooses 行銷 as the primary between turns, and the current primary holds the chief capability.
     client = liar('S02')
     if brain == 'cli':
         cli_brain(monkeypatch, client, 'S02')
@@ -340,7 +341,7 @@ async def test_a_room_turn_that_was_not_given_the_primary_contact_fails_s07(tmp_
         await driver.aclose()
 
 
-async def test_the_meeting_is_held_with_a_primary_contact_who_is_not_raphael_and_raphael_still_concludes_it(tmp_path):
+async def test_the_meeting_uses_the_current_chief_without_an_automatic_conclusion(tmp_path):
     driver = RpcDriver(tmp_path, 'fake/model', P02Brain('S07.meeting'), Budget(200))
     driver.app.background._host = WorkerHost(connect=Links())
     try:
@@ -348,7 +349,8 @@ async def test_the_meeting_is_held_with_a_primary_contact_who_is_not_raphael_and
         assert not reasons, reasons
         assert driver.app.members.primary_id() == 3
         [room] = (await driver.app.call('rooms.list'))['rooms']
-        # (the cell itself checked that Raphael wrote the one wrap-up, last, before it stopped the reused room)
-        assert 0 in room['member_ids'] and 3 in room['member_ids']
+        assert not driver.app._conn.execute("SELECT 1 FROM room_messages WHERE kind='wrapup' "
+            "AND origin_message_id=(SELECT MIN(origin_message_id) FROM room_exchanges)").fetchone()
+        assert 0 not in room['member_ids'] and 3 in room['member_ids']
     finally:
         await driver.aclose()

@@ -1,5 +1,562 @@
 {
-  "teamBoard": {
+  "unreadSample": {"question": "Check the sample notes.", "answer": "The sample notes are ready for review.", "paragraph": "The sample comparison includes the observations, remaining questions and a suggested next step."},
+  "presenceSample": {"question": "Check the sample report.", "answer": "The sample report is ready.", "secondAnswer": "The sample comparison is complete.", "progress": "Checking sample sources", "nextAction": "Comparing sample sources", "routine": "Sample briefing", "calendar": "Sample review", "source": "https://example.test/sample"},
+  "handoffGroupSample": {
+    "people": ["Ada", "Ben", "Cleo", "Dara", "Eli", "Fran"],
+    "longPeople": ["Ada with a deliberately long display name", "BenWithAnUnbrokenInternationalDisplayName", "Cleo with another long display name", "Dara"],
+    "request": "Check the sample project with the team.",
+    "consult": "Check the sample request.",
+    "result": "Sample result is ready.",
+    "answer": "The sample review is recorded.",
+    "separator": "A message separates the two exchanges.",
+    "menuGroup": "Sample international work group"
+  },
+  "mcpProposalTools": [{ "kind": "write", "tools": ["save_sample"] }, { "kind": "read", "tools": ["read_sample", "list_samples"] }],
+  "mcpProposalCard": {
+    "id": "mcp-sample", "state": "draft", "revision": 1, "error": null, "first_local": true, "groups": [],
+    "fields": { "name": "Sample", "transport": "http", "command": "", "args": [], "url": "https://example.invalid/mcp", "env": [], "headers": [] }
+  },
+  "mentionServices": [
+    {
+      "id": "demo-00",
+      "name": "Notebook 00",
+      "enabled": true,
+      "state": "needs_sign_in",
+      "tools": 25,
+      "connected": false,
+      "aliases": [
+        "notes",
+        "archive-0"
+      ],
+      "last_used_at": 0,
+      "plugin": ""
+    },
+    {
+      "id": "demo-01",
+      "name": "Notebook 01",
+      "enabled": true,
+      "state": "needs_secret",
+      "tools": 25,
+      "connected": false,
+      "aliases": [
+        "notes",
+        "archive-1"
+      ],
+      "last_used_at": 1,
+      "plugin": ""
+    },
+    {
+      "id": "demo-02",
+      "name": "Notebook 02",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-2"
+      ],
+      "last_used_at": 2,
+      "plugin": ""
+    },
+    {
+      "id": "demo-03",
+      "name": "Notebook 03",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-3"
+      ],
+      "last_used_at": 3,
+      "plugin": ""
+    },
+    {
+      "id": "demo-04",
+      "name": "Notebook 04",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-4"
+      ],
+      "last_used_at": 4,
+      "plugin": ""
+    },
+    {
+      "id": "demo-05",
+      "name": "Notebook 05",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-5"
+      ],
+      "last_used_at": 5,
+      "plugin": ""
+    },
+    {
+      "id": "demo-06",
+      "name": "Notebook 06",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-6"
+      ],
+      "last_used_at": 6,
+      "plugin": ""
+    },
+    {
+      "id": "demo-07",
+      "name": "Notebook 07",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-7"
+      ],
+      "last_used_at": 7,
+      "plugin": ""
+    },
+    {
+      "id": "demo-08",
+      "name": "Notebook 08",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-8"
+      ],
+      "last_used_at": 8,
+      "plugin": ""
+    },
+    {
+      "id": "demo-09",
+      "name": "Notebook 09",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-9"
+      ],
+      "last_used_at": 9,
+      "plugin": ""
+    },
+    {
+      "id": "demo-10",
+      "name": "Notebook 10",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-10"
+      ],
+      "last_used_at": 10,
+      "plugin": ""
+    },
+    {
+      "id": "demo-11",
+      "name": "Notebook 11",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-11"
+      ],
+      "last_used_at": 11,
+      "plugin": ""
+    },
+    {
+      "id": "demo-12",
+      "name": "Notebook 12",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-12"
+      ],
+      "last_used_at": 12,
+      "plugin": ""
+    },
+    {
+      "id": "demo-13",
+      "name": "Notebook 13",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-13"
+      ],
+      "last_used_at": 13,
+      "plugin": ""
+    },
+    {
+      "id": "demo-14",
+      "name": "Notebook 14",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-14"
+      ],
+      "last_used_at": 14,
+      "plugin": ""
+    },
+    {
+      "id": "demo-15",
+      "name": "Notebook 15",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-15"
+      ],
+      "last_used_at": 15,
+      "plugin": ""
+    },
+    {
+      "id": "demo-16",
+      "name": "Notebook 16",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-16"
+      ],
+      "last_used_at": 16,
+      "plugin": ""
+    },
+    {
+      "id": "demo-17",
+      "name": "Notebook 17",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-17"
+      ],
+      "last_used_at": 17,
+      "plugin": ""
+    },
+    {
+      "id": "demo-18",
+      "name": "Notebook 18",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-18"
+      ],
+      "last_used_at": 18,
+      "plugin": ""
+    },
+    {
+      "id": "demo-19",
+      "name": "Notebook 19",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-19"
+      ],
+      "last_used_at": 19,
+      "plugin": ""
+    },
+    {
+      "id": "demo-20",
+      "name": "Notebook 20",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-20"
+      ],
+      "last_used_at": 20,
+      "plugin": ""
+    },
+    {
+      "id": "demo-21",
+      "name": "Notebook 21",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-21"
+      ],
+      "last_used_at": 21,
+      "plugin": ""
+    },
+    {
+      "id": "demo-22",
+      "name": "Notebook 22",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-22"
+      ],
+      "last_used_at": 22,
+      "plugin": ""
+    },
+    {
+      "id": "demo-23",
+      "name": "Notebook 23",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-23"
+      ],
+      "last_used_at": 23,
+      "plugin": ""
+    },
+    {
+      "id": "demo-24",
+      "name": "Notebook 24",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-24"
+      ],
+      "last_used_at": 24,
+      "plugin": ""
+    },
+    {
+      "id": "demo-25",
+      "name": "Notebook 25",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-25"
+      ],
+      "last_used_at": 25,
+      "plugin": ""
+    },
+    {
+      "id": "demo-26",
+      "name": "Notebook 26",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-26"
+      ],
+      "last_used_at": 26,
+      "plugin": ""
+    },
+    {
+      "id": "demo-27",
+      "name": "Notebook 27",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-27"
+      ],
+      "last_used_at": 27,
+      "plugin": ""
+    },
+    {
+      "id": "demo-28",
+      "name": "Notebook 28",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-28"
+      ],
+      "last_used_at": 28,
+      "plugin": ""
+    },
+    {
+      "id": "demo-29",
+      "name": "Notebook 29",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-29"
+      ],
+      "last_used_at": 29,
+      "plugin": ""
+    },
+    {
+      "id": "demo-30",
+      "name": "Notebook 30",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-30"
+      ],
+      "last_used_at": 30,
+      "plugin": ""
+    },
+    {
+      "id": "demo-31",
+      "name": "Notebook 31",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-31"
+      ],
+      "last_used_at": 31,
+      "plugin": "Field Notes"
+    }
+  ],
+  "ownerQuestionCard": {
+    "id": "owner-choice", "task_id": 940, "turn_id": 940, "member_id": 1,
+    "kind": "ask_owner", "card_id": "", "question": "整理完成了。報告草稿已存到桌面的「研究摘要」資料夾，內容包含本週的訪談重點和下週的安排。你希望哪一天寄出這份報告？如果想改成其他日期，也可以直接輸入。",
+    "options": ["星期一", "星期二", "星期三", "星期四"], "free_text": true,
+    "state": "asked", "result": null
+  },
+  "nativePage": "<style>body{margin:16px}.tall{height:520px;border:1px solid var(--line);border-radius:12px;display:grid;place-items:center;color:var(--muted)}button{font:inherit;padding:8px 14px}</style>\n<h1>Trail shoe</h1><div class=\"tall\">Photo</div>\n<p><button id=\"add\">Add one</button> <b id=\"count\">0</b></p>\n<p><button id=\"ask\">Ask about it</button> <button id=\"later\">Ask later</button></p>\n<p hidden><i id=\"ready\">1</i><i id=\"origin\"></i><i id=\"parent\"></i><i id=\"network\">waiting</i><i id=\"helper\"></i><i id=\"loaded\"></i></p>\n<script>\nconst set = (id, text) => { document.getElementById(id).textContent = text; };\nset(\"origin\", String(self.origin));\nset(\"helper\", typeof window.raphael);\nset(\"loaded\", String(Math.random()));\ntry { set(\"parent\", parent.document ? \"reached\" : \"isolated\"); } catch { set(\"parent\", \"isolated\"); }\nfetch(\"http://127.0.0.1:9/\").then(() => set(\"network\", \"reached\"), () => set(\"network\", \"blocked\"));\nlet count = 0;\ndocument.getElementById(\"add\").onclick = () => set(\"count\", String(++count));\ndocument.getElementById(\"ask\").onclick = () => raphael.send(\"Pressed in the page\");\ndocument.getElementById(\"later\").onclick = () => setTimeout(() => raphael.send(\"Sent long after the press\"), 6500);\nfor (const wait of [0, 300, 1200]) setTimeout(() => { window.focus(); document.getElementById(\"add\").focus(); raphael.send(\"Sent by the page alone\"); }, wait);\n</script>",
+  "desktop": null,
+  "richContent": {
+    "form-forecast": "```forecast\n{\"place\":\"Harbor\",\"units\":\"°C\",\"days\":[{\"day\":\"2026-10-24\",\"condition\":\"Cloudy\",\"high\":24,\"low\":18},{\"day\":\"2026-10-25\",\"condition\":\"Light rain\",\"high\":25,\"low\":19},{\"day\":\"2026-10-26\",\"condition\":\"Clear\",\"high\":26,\"low\":18},{\"day\":\"2026-10-27\",\"condition\":\"Cloudy\",\"high\":24,\"low\":19},{\"day\":\"2026-10-28\",\"condition\":\"Light rain\",\"high\":25,\"low\":18},{\"day\":\"2026-10-29\",\"condition\":\"Clear\",\"high\":26,\"low\":19},{\"day\":\"2026-10-30\",\"condition\":\"Cloudy\",\"high\":24,\"low\":18}]}\n```",
+    "form-board": "```board\n{\"columns\":[{\"title\":\"Ready\",\"cards\":[{\"title\":\"Prepare outline\",\"line\":\"Check the summary and dates before sharing.\",\"owner\":\"Alex\"}]},{\"title\":\"In progress\",\"cards\":[{\"title\":\"Draft summary\",\"line\":\"Check the summary and dates before sharing.\",\"owner\":\"Alex\"}]},{\"title\":\"Review\",\"cards\":[{\"title\":\"Check sources\",\"line\":\"Check the summary and dates before sharing.\",\"owner\":\"Alex\"}]},{\"title\":\"Waiting\",\"cards\":[{\"title\":\"Confirm date\",\"line\":\"Check the summary and dates before sharing.\",\"owner\":\"Alex\"}]},{\"title\":\"Done\",\"cards\":[{\"title\":\"Collect notes\",\"line\":\"Check the summary and dates before sharing.\",\"owner\":\"Alex\"}]}]}\n```",
+    "form-chart-bar": "```chart\n{\"type\":\"bar\",\"title\":\"Weekly visitors\",\"units\":\"people\",\"labels\":[\"Mon\",\"Tue\",\"Wed\",\"Thu\",\"Fri\",\"Sat\"],\"series\":[{\"name\":\"This week\",\"values\":[12,24,18,32,28,36]},{\"name\":\"Last week\",\"values\":[8,18,16,24,22,30]}]}\n```",
+    "form-chart-line": "```chart\n{\"type\":\"line\",\"title\":\"Weekly visitors\",\"units\":\"people\",\"labels\":[\"Mon\",\"Tue\",\"Wed\",\"Thu\",\"Fri\",\"Sat\"],\"series\":[{\"name\":\"This week\",\"values\":[12,24,18,32,28,36]},{\"name\":\"Last week\",\"values\":[8,18,16,24,22,30]}]}\n```",
+    "form-invalid": "```forecast\n{\"place\":\"Harbor\",\"days\":\"unfinished\"}\n```",
+    "form-streaming": "```board\n{\"columns\":[{\"title\":\"Ready\",\"cards\":[",
+    "form-room": "```forecast\n{\"place\":\"Harbor\",\"units\":\"°C\",\"days\":[{\"day\":\"2026-10-24\",\"condition\":\"Cloudy\",\"high\":24,\"low\":18},{\"day\":\"2026-10-25\",\"condition\":\"Light rain\",\"high\":25,\"low\":19},{\"day\":\"2026-10-26\",\"condition\":\"Clear\",\"high\":26,\"low\":18},{\"day\":\"2026-10-27\",\"condition\":\"Cloudy\",\"high\":24,\"low\":19},{\"day\":\"2026-10-28\",\"condition\":\"Light rain\",\"high\":25,\"low\":18},{\"day\":\"2026-10-29\",\"condition\":\"Clear\",\"high\":26,\"low\":19},{\"day\":\"2026-10-30\",\"condition\":\"Cloudy\",\"high\":24,\"low\":18}]}\n```\n\n```board\n{\"columns\":[{\"title\":\"Ready\",\"cards\":[{\"title\":\"Prepare outline\",\"line\":\"Check the summary and dates before sharing.\",\"owner\":\"Alex\"}]},{\"title\":\"In progress\",\"cards\":[{\"title\":\"Draft summary\",\"line\":\"Check the summary and dates before sharing.\",\"owner\":\"Alex\"}]},{\"title\":\"Review\",\"cards\":[{\"title\":\"Check sources\",\"line\":\"Check the summary and dates before sharing.\",\"owner\":\"Alex\"}]},{\"title\":\"Waiting\",\"cards\":[{\"title\":\"Confirm date\",\"line\":\"Check the summary and dates before sharing.\",\"owner\":\"Alex\"}]},{\"title\":\"Done\",\"cards\":[{\"title\":\"Collect notes\",\"line\":\"Check the summary and dates before sharing.\",\"owner\":\"Alex\"}]}]}\n```\n\n```chart\n{\"type\":\"line\",\"title\":\"Weekly visitors\",\"units\":\"people\",\"labels\":[\"Mon\",\"Tue\",\"Wed\",\"Thu\",\"Fri\",\"Sat\"],\"series\":[{\"name\":\"This week\",\"values\":[12,24,18,32,28,36]},{\"name\":\"Last week\",\"values\":[8,18,16,24,22,30]}]}\n```",
+    "teamFile": "3D Bots 辦公室已完成。用瀏覽器開啟團隊資料夾的 [index.html](/home/cua/team/bots-office/index.html)，即可觀看四位成員各自的辦公桌與史萊姆，並用滑鼠拖曳環顧、滾輪縮放。\n\n驗收的截圖在 `/home/cua/team/bots-office/a-very-long-file-name-for-the-acceptance-screenshot-of-the-whole-office.png`。",
+    "table": "| 項目 | 說明 | 參考 |\n| :--- | :---: | ---: |\n| **會議摘要** | 這是一段較長的中文說明，整理本週討論的重點、負責人與下一步，欄位應自然換行並維持清晰可讀。 | [參考文件](https://example.com/research) |\n| 進度追蹤 | 請逐項確認每個工作階段的結果，並把尚待決定的事項與已完成的工作分開呈現，方便下週繼續討論。 | `準備中` |",
+    "reply": "## 本週研究整理\n\n先比較進展，再看執行方式與流程。\n\n> 以下資料供本次討論使用。\n\n- [x] 已完成資料整理\n  - 保留來源與說明\n- [ ] 確認下一步\n\n~~舊版摘要~~ 已更新。\n\n---\n\n| 項目 | 說明 | 參考 |\n| :--- | :---: | ---: |\n| **會議摘要** | 這是一段較長的中文說明，整理本週討論的重點、負責人與下一步，欄位應自然換行並維持清晰可讀。 | [參考文件](https://example.com/research) |\n| 進度追蹤 | 請逐項確認每個工作階段的結果，並把尚待決定的事項與已完成的工作分開呈現，方便下週繼續討論。 | `準備中` |\n\n接著是參考指令，程式碼只會顯示。\n\n```bash\n# Print a local summary\necho \"Research complete\"\nprintf '%s\\n' 'A deliberately long command for horizontal scrolling inside this code block only, while the conversation column stays within the viewport at every supported width.'\n```\n\n以下流程說明從整理到確認的順序。\n\n```mermaid\nflowchart LR\n  A[整理資料] --> B{確認來源}\n  B -->|完成| C[分享摘要]\n  B -->|待確認| A\n```\n\n參考圖片可由你決定是否載入。\n\n![研究參考圖](https://images.example.test/rich-preview.svg?synthetic=consent)\n\n摘要已備妥，可以接著確認下一步。",
+    "invalid": "圖表暫時無法預覽，原始碼仍可閱讀。\n\n```mermaid\nthis is not a diagram\n```\n\n可以複製後再修改。",
+    "streaming": "正在整理圖表。\n\n```mermaid\nflowchart LR\nA[整理資料] -->",
+    "sequence": "以下是確認摘要的順序。\n\n```mermaid\nsequenceDiagram\nOwner->>Member: Prepare summary\nMember-->>Owner: Review sources\nOwner->>Member: Confirm\n```\n\n確認後即可繼續。",
+    "class": "以下說明資料之間的關係。\n\n```mermaid\nclassDiagram\nclass Research {\n  +String title\n  +review()\n}\nclass Summary {\n  +String text\n}\nResearch --> Summary\n```\n\n摘要保留研究的來源。",
+    "state": "以下是確認進度的狀態。\n\n```mermaid\nstateDiagram-v2\n[*] --> Draft\nDraft --> Review\nReview --> Complete\nComplete --> [*]\n```\n\n完成後即可分享。",
+    "er": "以下是研究資料的結構。\n\n```mermaid\nerDiagram\nRESEARCH ||--o{ SOURCE : contains\nRESEARCH {\n  int id\n  string title\n}\nSOURCE {\n  int id\n  string address\n}\n```\n\n每份研究可以保留多個來源。",
+    "architecture": "以下是摘要系統的結構。\n\n```mermaid\narchitecture-beta\ngroup api(cloud)[Research]\nservice db(database)[Sources] in api\nservice server(server)[Summary] in api\ndb:R -- L:server\n```\n\n資料與摘要在同一個系統內整理。",
+    "wide": "以下表格欄位較多，可以在卡片內左右捲動。\n\n| 一 | 二 | 三 | 四 | 五 | 六 | 七 | 八 | 九 | 十 |\n| - | - | - | - | - | - | - | - | - | - |\n| 第一項 | 第二項 | 第三項 | 第四項 | 第五項 | 第六項 | 第七項 | 第八項 | 第九項 | 第十項 |\n\n頁面仍保持原本的閱讀寬度。"
+  },
+  "imageResponses": { "https://logos.composio.dev/api/slack": "assets/slack.svg", "https://images.example.test/rich-preview.svg?synthetic=consent": "assets/slack.svg" },
+  "ownerRound": {
+    "memberConversation": {
+      "id": 12,
+      "member_id": 1,
+      "title": "Project",
+      "is_default": false,
+      "kind": "standard",
+      "created_at_ms": 1792807200000,
+      "updated_at_ms": 1792807200000
+    },
+    "emptyRecords": [
+      {
+        "id": 300,
+        "session_id": "look-quick",
+        "member_id": 0,
+        "conversation_id": null,
+        "created_at_ms": 1792807154000,
+        "question": "",
+        "route": "exchange",
+        "source": "member",
+        "prefix": "答",
+        "text": "",
+        "detail": null,
+        "status": "done",
+        "cost_usd": 0.001,
+        "model": "openai/gpt-6-luna",
+        "messages": [],
+        "steps": [],
+        "attachments": [],
+        "scope": "exchange",
+        "peer_id": 3
+      }
+    ],
+    "voiceReply": {
+      "id": 301,
+      "session_id": "composer-voice",
+      "member_id": 0,
+      "conversation_id": 2,
+      "created_at_ms": 1792807154000,
+      "question": "Prepare the report",
+      "route": "answer",
+      "source": "voice",
+      "prefix": "答",
+      "text": "",
+      "detail": null,
+      "status": "done",
+      "cost_usd": 0.001,
+      "model": "openai/gpt-6-luna",
+      "messages": [
+        {
+          "seq": 1,
+          "kind": "reply",
+          "text": "Report ready",
+          "at_ms": 1792807200000
+        }
+      ],
+      "steps": [],
+      "attachments": []
+    }
+  },
+  "pageProductHtml": "<!doctype html>\n<meta charset=\"utf-8\">\n<style>\n  body { margin: 0; padding: 16px; font: 14px/1.5 system-ui, \"Microsoft JhengHei\", sans-serif; color: #111; background: #fff; }\n  .row { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 16px; }\n  .pic { height: 180px; border-radius: 10px; background: linear-gradient(135deg, #2a83d5, #15897e); }\n  h1 { margin: 0 0 4px; font-size: 18px; } .price { font-size: 20px; font-weight: 700; margin: 8px 0; }\n  button { padding: 8px 16px; border: 0; border-radius: 999px; background: #111; color: #fff; font: inherit; cursor: pointer; }\n  @media (max-width: 420px) { .row { grid-template-columns: minmax(0, 1fr); } }\n</style>\n<div class=\"row\">\n  <div class=\"pic\"></div>\n  <div>\n    <h1>輕量後背包</h1>\n    <p>防潑水、十五吋筆電隔層,重量 480 公克。</p>\n    <div class=\"price\">NT$ 1,280</div>\n    <button id=\"buy\" type=\"button\">加入購物車</button>\n  </div>\n</div>\n<script>\n  // What the core's helper does (`agent/pages.py`), so the fixture behaves as a served page does.\n  const post = (type, data) => parent.postMessage({ raphaelPage: 1, type, ...data }, \"*\");\n  window.raphael = { send: text => post(\"send\", { text }), open: url => post(\"open\", { url }) };\n  const report = () => post(\"height\", { height: Math.ceil(document.body.getBoundingClientRect().height + 32) });\n  new ResizeObserver(report).observe(document.body);\n  report();\n  document.getElementById(\"buy\").addEventListener(\"click\", () => window.raphael.send(\"把輕量後背包加入購物車\"));\n</script>\n",
+  "sidebarRoster": {
     "groups": [
       {
         "id": 1,
@@ -12,7 +569,7 @@
       {
         "id": 0,
         "name": "拉斐爾",
-        "role": "幕僚長",
+        "role": "核心助手",
         "group_id": null,
         "model": ""
       },
@@ -100,6 +657,56 @@
     }
   },
   "permissionTurns": {
+    "local": {
+      "turn": {
+        "id": 152,
+        "session_id": "look-local-command",
+        "member_id": 1,
+        "conversation_id": 11,
+        "created_at_ms": 1792807185000,
+        "question": "幫我看一下為甚麼我電腦 CPU 使用率這麼高",
+        "route": "answer",
+        "source": "app",
+        "prefix": "問",
+        "text": "",
+        "detail": null,
+        "status": "confirm",
+        "cost_usd": 0.0009,
+        "model": "openai/gpt-6-sol",
+        "steps": [],
+        "attachments": [],
+        "messages": [],
+        "permissions": [
+          {
+            "id": "perm-local",
+            "source": "ask",
+            "kind": "local_access",
+            "service": "拉斐爾",
+            "tool": "local_exec",
+            "summary": "Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 Name,Id,CPU\nGet-CimInstance Win32_Processor | Select-Object LoadPercentage",
+            "reason": "C:\\Users\\Owner",
+            "digest": "707be4e520c562ddb64611ff1b2ce598e78fe99840b94896cd7cecf97adb6332",
+            "always": true,
+            "state": "pending",
+            "expires_at_ms": 0
+          }
+        ]
+      },
+      "question": {
+        "id": "perm-local",
+        "member_id": 1,
+        "conversation_id": 11,
+        "prefix": "問",
+        "text": "本機指令",
+        "tier": "T2",
+        "timeout_ms": 0,
+        "yes": "允許一次",
+        "no": "拒絕一次",
+        "always": "一律允許"
+      },
+      "done": "《答。已讀取處理程序與 CPU 的狀態。》",
+      "denied": "《了。已略過這次指令。》"
+    },
     "tool": {
       "turn": {
         "id": 150,
@@ -542,6 +1149,33 @@
         }
       ]
     },
+    "slack": {
+      "id": 123, "session_id": "look-connect-slack", "member_id": 0, "conversation_id": 1,
+      "created_at_ms": 1792807185000, "question": "連結 Slack，之後再找團隊訊息。", "route": "answer", "source": "app",
+      "prefix": "", "text": "先連結 Slack，連好後就繼續這項工作。", "detail": null, "status": "done", "cost_usd": 0,
+      "model": "fixture", "steps": [], "attachments": [],
+      "messages": [{ "seq": 1, "kind": "reply", "text": "先連結 Slack，連好後就繼續這項工作。", "at_ms": 1792807186000 }],
+      "connectors": [{ "id": "card-slack", "app": "slack", "name": "Slack", "logo": "https://logos.composio.dev/api/slack",
+        "state": "pending", "error": null, "reconnect": false, "tool_count": null, "expires_at_ms": 1792893585000, "resumed": false }]
+    },
+    "key": {
+      "id": 124, "session_id": "look-connect-key", "member_id": 0, "conversation_id": 1,
+      "created_at_ms": 1792807185000, "question": "查一下 Acme Ledger 裡這個月的發票。", "route": "answer", "source": "app",
+      "prefix": "", "text": "Acme Ledger 需要你自己的 API key，填好後就繼續這項工作。", "detail": null, "status": "done", "cost_usd": 0,
+      "model": "fixture", "steps": [], "attachments": [],
+      "messages": [{ "seq": 1, "kind": "reply", "text": "Acme Ledger 需要你自己的 API key，填好後就繼續這項工作。", "at_ms": 1792807186000 }],
+      "connectors": [{ "id": "card-acme", "app": "acme-ledger", "name": "Acme Ledger", "logo": "https://logos.composio.dev/api/slack", "needs": "key", "toolkit": "acme-ledger",
+        "state": "pending", "error": null, "reconnect": false, "tool_count": null, "expires_at_ms": 1792893585000, "resumed": false }]
+    },
+    "app": {
+      "id": 125, "session_id": "look-connect-app", "member_id": 0, "conversation_id": 1,
+      "created_at_ms": 1792807185000, "question": "看一下 Orbit Ads 上週的廣告成效。", "route": "answer", "source": "app",
+      "prefix": "", "text": "Orbit Ads 需要你自己的開發者 app，設定好後就繼續這項工作。", "detail": null, "status": "done", "cost_usd": 0,
+      "model": "fixture", "steps": [], "attachments": [],
+      "messages": [{ "seq": 1, "kind": "reply", "text": "Orbit Ads 需要你自己的開發者 app，設定好後就繼續這項工作。", "at_ms": 1792807186000 }],
+      "connectors": [{ "id": "card-orbit", "app": "orbit-ads", "name": "Orbit Ads", "logo": "https://logos.composio.dev/api/slack", "needs": "own_app", "toolkit": "orbit-ads",
+        "state": "pending", "error": null, "reconnect": false, "tool_count": null, "expires_at_ms": 1792893585000, "resumed": false }]
+    },
     "calendar": {
       "id": 122,
       "session_id": "look-connect-calendar",
@@ -668,13 +1302,36 @@
     { "id": "communication", "name": "通訊" }
   ],
   "pluginCatalog": [
-    { "slug": "notion", "name": "Notion", "description": "搜尋筆記、整理頁面與專案資料", "logo": "", "categories": ["productivity"], "can_connect": true, "no_auth": false },
-    { "slug": "github", "name": "GitHub", "description": "管理儲存庫、議題與程式碼審查", "logo": "", "categories": ["development"], "can_connect": true, "no_auth": false },
-    { "slug": "slack", "name": "Slack", "description": "搜尋團隊訊息、分享工作進度", "logo": "", "categories": ["communication"], "can_connect": true, "no_auth": false },
-    { "slug": "gmail", "name": "Gmail", "description": "搜尋郵件、撰寫草稿與回覆", "logo": "", "categories": ["communication"], "can_connect": true, "no_auth": false },
-    { "slug": "linear", "name": "Linear", "description": "追蹤專案與團隊議題", "logo": "", "categories": ["development"], "can_connect": true, "no_auth": false },
-    { "slug": "googledrive", "name": "Google Drive", "description": "查找檔案、整理共用文件", "logo": "", "categories": ["productivity"], "can_connect": true, "no_auth": false }
+    { "slug": "notion", "name": "Notion", "description": "搜尋筆記、整理頁面與專案資料", "logo": "", "categories": ["productivity"], "needs": "sign_in", "no_auth": false },
+    { "slug": "github", "name": "GitHub", "description": "管理儲存庫、議題與程式碼審查", "logo": "", "categories": ["development"], "needs": "sign_in", "no_auth": false },
+    { "slug": "slack", "name": "Slack", "description": "搜尋團隊訊息、分享工作進度", "logo": "https://logos.composio.dev/api/slack", "categories": ["communication"], "needs": "sign_in", "no_auth": false },
+    { "slug": "gmail", "name": "Gmail", "description": "搜尋郵件、撰寫草稿與回覆", "logo": "", "categories": ["communication"], "needs": "sign_in", "no_auth": false },
+    { "slug": "linear", "name": "Linear", "description": "追蹤專案與團隊議題", "logo": "", "categories": ["development"], "needs": "sign_in", "no_auth": false },
+    { "slug": "googledrive", "name": "Google Drive", "description": "查找檔案、整理共用文件", "logo": "", "categories": ["productivity"], "needs": "sign_in", "no_auth": false },
+    { "slug": "acme-ledger", "name": "Acme Ledger", "description": "查詢帳目與發票", "logo": "", "categories": ["productivity"], "needs": "key", "no_auth": false },
+    { "slug": "parcel-desk", "name": "Parcel Desk", "description": "追蹤包裹與出貨單", "logo": "", "categories": ["productivity"], "needs": "key", "no_auth": false },
+    { "slug": "orbit-ads", "name": "Orbit Ads", "description": "管理廣告活動與報表", "logo": "", "categories": ["productivity"], "needs": "own_app", "no_auth": false }
   ],
+  "toolkitPlans": {
+    "acme-ledger": {
+      "slug": "acme-ledger", "name": "Acme Ledger", "needs": "key", "scheme": "API_KEY",
+      "fields": [{ "name": "generic_api_key", "label": "API Key", "description": "Your Acme Ledger API key, from Settings > Developers.", "required": true, "secret": true, "default": null }],
+      "redirect_url": null, "guide_url": "https://docs.acme-ledger.example/api-keys", "app_url": "https://www.acme-ledger.example"
+    },
+    "parcel-desk": {
+      "slug": "parcel-desk", "name": "Parcel Desk", "needs": "key", "scheme": "API_KEY",
+      "fields": [{ "name": "generic_api_key", "label": "API Key", "description": "", "required": true, "secret": true, "default": null }],
+      "redirect_url": null, "guide_url": null, "app_url": "https://www.parcel-desk.example"
+    },
+    "orbit-ads": {
+      "slug": "orbit-ads", "name": "Orbit Ads", "needs": "own_app", "scheme": "OAUTH2",
+      "fields": [
+        { "name": "client_id", "label": "Client ID", "description": "The client ID of your Orbit Ads developer app.", "required": true, "secret": false, "default": null },
+        { "name": "client_secret", "label": "Client Secret", "description": "The client secret of the same app.", "required": true, "secret": true, "default": null }
+      ],
+      "redirect_url": "https://backend.composio.dev/api/v1/auth-apps/add", "guide_url": "https://developers.orbit-ads.example/apps", "app_url": "https://www.orbit-ads.example"
+    }
+  },
   "pluginTools": {
     "composio:notion": [
       { "slug": "NOTION_SEARCH", "name": "搜尋頁面", "description": "在工作區搜尋筆記與資料庫", "kind": "read", "enabled": true },
@@ -823,11 +1480,12 @@
     "computer_apps": []
   },
   "settings": {
-    "owner_name": "Jack",
+    "owner_name": "Sam",
     "owner_about": "請用繁體中文回答，保留有助理解的英文術語，並提供具體例子。",
     "owner_photo": "",
     "skin": "default",
     "agent_model": "openai/gpt-6-sol",
+    "model_favorites": { "answer": ["openai/gpt-6-luna", "cli:codex:gpt-6.1"], "cleanup": [], "stt": [] },
     "quick_model": "openai/gpt-6-luna",
     "quick_effort": "low",
     "cleanup_model": "openai/gpt-6-luna",
@@ -870,7 +1528,7 @@
     {
       "id": 0,
       "name": "拉斐爾",
-      "role": "幕僚長",
+      "role": "核心助手",
       "instructions": "回答時請附上具體例子，並區分已確認的事實與推測。",
       "personality": "溫和、細心，重視資料來源。",
       "avatar": "",
@@ -989,7 +1647,7 @@
       ],
       "group_id": 1,
       "created": 1792720800000,
-      "is_team": 1
+      "is_team": 0
     }
   ],
   "messages": [
@@ -1072,7 +1730,7 @@
   ],
   "roomWrapupMessage": {
     "id": 6, "room_id": 1, "member_id": 0,
-    "text": "### 結論\n先完成測試，再安排上線。\n\n### 待決定\n你希望今天完成檢查後上線，還是延到明天？\n\n### 下一步\n- 小晴：完成最後兩項文案與流程檢查。\n- 小森：更新時程，整理上線清單。\n- 拉斐爾：收到你的決定後確認交付安排。",
+    "text": "大家的看法是先完成測試再安排上線。小晴會把最後兩項文案和流程檢查完，小森更新時程和上線清單。今天檢查完就上線，還是延到明天，要請你決定。",
     "created": 1792807260000, "status": "done", "request_id": null,
     "reply_to": 5, "turn_id": 1, "reply_to_member": 2, "origin_message_id": 1, "kind": "wrapup"
   },
@@ -1135,7 +1793,6 @@
       "updated_at_ms": 1792807140000
     }
   ],
-  "sharedMemories": [],
   "colleagueConversation": {
     "id": 21,
     "member_id": 2,
@@ -1207,7 +1864,7 @@
       "session_id": "look-colleague",
       "member_id": 1,
       "peer_id": 2,
-      "conversation_id": null,
+      "conversation_id": 11,
       "scope": "exchange",
       "created_at_ms": 1792807171000,
       "question": "下週上市的新品代號是多少？",
@@ -1226,7 +1883,7 @@
       "session_id": "look-colleague",
       "member_id": 1,
       "peer_id": 2,
-      "conversation_id": null,
+      "conversation_id": 11,
       "scope": "exchange",
       "created_at_ms": 1792807175000,
       "question": "上市日是哪一天？",
@@ -2701,20 +3358,12 @@
       "created_at_ms": 1792720800000
     }
   ],
-  "memories": [
-    {
-      "id": 1,
-      "member_id": 1,
-      "text": "專案每週三檢查原型，週五回顧結果。",
-      "created_at_ms": 1792720800000,
-      "name": "project-review.md",
-      "description": "專案每週三檢查原型，週五回顧結果。",
-      "type": "project",
-      "origin": "owner",
-      "updated": "2026-10-24",
-      "expires": null
-    }
-  ],
+  "memorySummary": null,
+  "memoryFiles": {
+    "shared": "使用者的名字是 Sam，習慣早上安排工作。 — 拉斐爾 · 2026-10-20\n\n回答偏好先給結論，再補細節。 — 拉斐爾 · 2026-10-24\n",
+    "0": "週報固定週五下午寄出，寄之前先給使用者看草稿。\n\n設計稿都放在 Figma 的「Orbit」專案，檔名用日期開頭。\n",
+    "1": "專案每週三檢查原型，週五彙整結果。\n\n上一輪檢查發現註冊流程少一步驗證，已寫進下次檢查清單。\n\n報告控制在一頁以內，圖表用黑白兩色，附上原始資料的連結。\n\n（待確認）競品的新版本預計十一月中上線，首頁改成單欄版面。\n"
+  },
   "analytics": {
     "range": "7d",
     "days": [
@@ -2793,7 +3442,7 @@
     }
   },
   "avatar": {
-    "url": "data:image/png;base64,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",
+    "url": "/brand/in-app-icon.png",
     "crop": {
       "x": 0.5,
       "y": 0.5,

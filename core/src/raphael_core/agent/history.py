@@ -3,7 +3,9 @@
 A turn is written when the assistant has its answer, or when it has asked for a yes or a no
 (`status` "confirm"), and the row is completed when that is answered (`resolve`). The app's page of
 conversations shows them, and they are the one continuous conversation the model reads: the
-latest turns as they were said, the earlier ones through a summary (`memory.conversation`).
+latest turns as they were said, the earlier ones through a summary (`memory.conversation`). A request
+that failed, was refused or stopped, or was never answered is in that conversation too (`is_unfinished`),
+told as one that did not finish, with what its steps already did (`Turn.work`).
 
 A turn keeps file metadata and opaque IDs for locally stored copies. The bytes live in
 its data folder, outside the database; legacy turns with names and types remain readable.
@@ -26,11 +28,10 @@ something through `ask_member` and the other answered (kept as a separate exchan
 naming the requester), and a routine's run (`route` and `source` "routine"), whose `question` is the
 routine's title and whose answer is what the run reported.
 
-Private reads always select scope=private. Room turns require a room/thread, never resolve or
+Private reads include the member's own exchanges. Room turns require a room/thread, never resolve or
 touch a private conversation, and remain available through the room service and internal audit.
 A member's own chat also lists its exchanges with colleagues where they came (`list` and `after`
-with `exchanges`), each drawn as one line; what a model reads (context, search, reflection) never
-includes them.
+with `exchanges`), each drawn as one line; context and search also include its own delegated work.
 
 The conversation is not pruned: unlike the dictations, which go after the retention setting, the
 turns stay until the user clears them (`clear`). Nothing here logs a question or an answer.
@@ -48,12 +49,18 @@ from dataclasses import dataclass, field
 from ..clock import wall_clock_ms
 from ..protocol import RpcError
 from ..memory.terms import QueryWord, fts_quote, index_terms, query_words
-from .steps import Step
+from .steps import Step, reason_of, work_summary
 from .quotes import quote_from_wire
 from .conversations import Conversations
+from .public_events import event_text
+from .actions import is_action
 
 # Where a turn came from when nobody says: the hotkey and the overlay.
 VOICE = "voice"
+# The statuses of a turn that ended without the answer asked for: it failed, the owner said no or
+# stopped it, or nobody answered it. It is part of the conversation all the same: the owner said it. A turn
+# still "running" or waiting for a yes ("confirm") is not over, and says nothing yet.
+UNFINISHED = ("error", "denied", "expired", "cancelled")
 
 
 @dataclass
@@ -82,6 +89,25 @@ class Turn:
     room_id: int | None = None
     thread_id: int | None = None
     source_turn_id: int | None = None
+    # For a turn that did not finish, what it already did (`steps.work_summary`); set where the model
+    # reads the turn (`AgentHistory.with_work`), empty otherwise.
+    work: str = ""
+
+
+def is_unfinished(turn: Turn) -> bool:
+    """Whether the owner asked for `turn` and it ended without an answer (UNFINISHED). What a routine
+    or a colleague asked is not the owner's, and a failed routine is no part of their conversation."""
+    return (
+        turn.status in UNFINISHED
+        and turn.source not in ("routine", "member")
+        and turn.route not in ("routine", "exchange")
+    )
+
+
+def is_readable(turn: Turn) -> bool:
+    """Whether the model reads `turn` as part of the conversation: it was answered, or it is a request
+    of the owner's that did not finish. Not a turn that is running or waits for a yes."""
+    return turn.status == "done" or is_unfinished(turn)
 
 
 _COLUMNS = (
@@ -125,20 +151,30 @@ def _to_turn(row: sqlite3.Row) -> Turn:
     return Turn(**data)
 
 
-# A member's exchanges with colleagues: what another member asked it (`ask_member`) or handed it
-# (`handoff`), written in its thread outside its private conversations. Room work stays in rooms.
+# A member's exchanges with colleagues: what another member asked it (`ask_member`) or handed it (`handoff`), kept
+# outside its private conversations. Room work stays in rooms.
 _EXCHANGES = "scope = 'exchange' AND peer_id IS NOT NULL"
+# What its own page lists of them: work handed to it, since that is where it does the work. A question is the asker's
+# record alone (`_colleague_events`): a member the owner never spoke to would otherwise fill up with other members' talk.
+_HANDED = _EXCHANGES + " AND EXISTS (SELECT 1 FROM worker_tasks w WHERE w.turn_id = agent_turns.id AND w.mode = 'work')"
+# The turns the model reads as the conversation (`is_readable`), as SQL.
+_READABLE = (
+    f"(status = 'done' OR (status IN ({', '.join(repr(status) for status in UNFINISHED)})"
+    " AND source NOT IN ('routine', 'member') AND route NOT IN ('routine', 'exchange')))"
+)
+
+
+def _anything(step: Step) -> bool:
+    return True
 
 
 def _thread(member_id: int, conversation_id: int | None, exchanges: bool) -> tuple[str, list[object]]:
     """The conditions of a member's thread as its chat lists it, and their params."""
-    where, params = "scope = 'private' AND member_id = ?", [member_id]
+    scopes = f"(scope = 'private' OR ({_HANDED}))" if exchanges else "scope = 'private'"
+    where, params = f"{scopes} AND status != 'withdrawn' AND member_id = ?", [member_id]
     if conversation_id is not None:
         where += " AND conversation_id = ?"
         params.append(conversation_id)
-    if exchanges:
-        where = f"(({where}) OR ({_EXCHANGES} AND member_id = ?))"
-        params.append(member_id)
     return where, params
 
 
@@ -149,12 +185,13 @@ def _filters(
     """The conditions of a search besides its words, as SQL to add to its WHERE, and their params:
     the turns of the thread of `member_id`, made from `since_ms` on, and none of the ids of
     `exclude`."""
-    where, params = (" AND t.scope = 'private'", [])
+    scopes = "t.scope = 'private'" if member_id is None else "t.scope IN ('private', 'exchange')"
+    where, params = (f" AND {scopes} AND t.status != 'withdrawn'", [])
     if member_id is not None:
         where += " AND t.member_id = ?"
         params.append(member_id)
     if conversation_id is not None:
-        where += " AND t.conversation_id = ?"
+        where += " AND (t.conversation_id = ? OR t.scope = 'exchange')"
         params.append(conversation_id)
     if since_ms is not None:
         where += " AND t.created_at_ms >= ?"
@@ -174,6 +211,20 @@ class AgentHistory:
     ) -> None:
         self._conn = conn
         self._now_ms = now_ms
+        self._events_indexed = False
+
+    def _repair_event_index(self) -> None:
+        if self._events_indexed:
+            return
+        # Older indexes included transport keys. Repair only turns with structured receipts.
+        rows = self._conn.execute("SELECT DISTINCT t.id, t.question, t.text, t.detail FROM agent_turns t"
+                                  " JOIN agent_messages m ON m.turn_id=t.id WHERE m.kind='event'"
+                                  " AND ltrim(m.text) LIKE '{%'").fetchall()
+        if rows:
+            with self._conn:
+                for row in rows:
+                    self._index(row["id"], row["question"], row["text"], row["detail"])
+        self._events_indexed = True
 
     def add(
         self,
@@ -198,6 +249,7 @@ class AgentHistory:
         room_id: int | None = None,
         thread_id: int | None = None,
         source_turn_id: int | None = None,
+        admission: str | None = None,
     ) -> int:
         """Store a new turn, made now, in the thread of `member_id`, with the steps taken for it,
         and return its id. `attachments` are the names and the types of the files handed with the
@@ -216,7 +268,7 @@ class AgentHistory:
             raise ValueError("room source requires room scope")
         with self._conn:
             conversations = Conversations(self._conn, self._now_ms)
-            conversation_id = conversations.resolve(member_id, conversation_id) if scope == "private" else None
+            conversation_id = conversations.resolve(member_id, conversation_id) if scope in ("private", "exchange") else None
             cursor = self._conn.execute(
                 "INSERT INTO agent_turns (created_at_ms, session_id, question, route, prefix,"
                 " text, detail, status, cost_usd, source, model, attachments, member_id, peer_id, quote, conversation_id, scope, room_id, thread_id, source_turn_id)"
@@ -247,14 +299,20 @@ class AgentHistory:
             self._index(turn_id, question, text, detail)
             if conversation_id is not None:
                 conversations.touch(conversation_id, question)
+            if admission is not None:
+                self._conn.execute(
+                    "INSERT INTO agent_inbox(turn_id,request_id,member_id,conversation_id,seq,state,payload_json,created_at_ms)"
+                    " SELECT ?,?,?,?,COALESCE(MAX(seq),0)+1,'queued',?,? FROM agent_inbox WHERE member_id=? AND conversation_id=?",
+                    (turn_id, session_id, member_id, conversation_id, admission, self._now_ms(), member_id, conversation_id),
+                )
         return turn_id
 
     def _index(self, turn_id: int, question: str, text: str, detail: str | None) -> None:
         """Put a turn into the search, in place of what it held for it."""
         saved = self._conn.execute(
-            "SELECT text FROM agent_messages WHERE turn_id = ? ORDER BY seq", (turn_id,)
+            "SELECT kind, text FROM agent_messages WHERE turn_id = ? ORDER BY seq", (turn_id,)
         ).fetchall()
-        terms = index_terms(question, text, (detail or "") + "\n" + "\n".join(row[0] for row in saved))
+        terms = index_terms(question, text, (detail or "") + "\n" + "\n".join(event_text(row["text"]) if row["kind"] == "event" else row["text"] for row in saved if not (row["kind"] == "event" and is_action(row["text"]))))
         self._conn.execute("DELETE FROM agent_turns_fts WHERE rowid = ?", (turn_id,))
         self._conn.execute(
             "INSERT INTO agent_turns_fts (rowid, pairs, chars) VALUES (?, ?, ?)",
@@ -282,7 +340,7 @@ class AgentHistory:
                     step.server,
                     step.outcome,
                     max(int(step.ms), 0),
-                    step.reason,
+                    step.reason or (reason_of(step.outcome, None) if step.outcome == 'blocked' else None),
                     step.detail,
                 ),
             )
@@ -330,7 +388,7 @@ class AgentHistory:
     def _with_messages(self, turns: list[Turn]) -> list[Turn]:
         saved = self.messages(turn.id for turn in turns if turn.id is not None)
         for turn in turns:
-            turn.messages = [m["text"] for m in saved.get(turn.id, [])]
+            turn.messages = [event_text(m["text"]) if m["kind"] == "event" else m["text"] for m in saved.get(turn.id, []) if not (m["kind"] == "event" and is_action(m["text"]))]
         return turns
 
     def messages(self, turn_ids: Iterable[int]) -> dict[int, list[dict]]:
@@ -399,7 +457,7 @@ class AgentHistory:
     ) -> list[Turn]:
         """The thread of `member_id`, newest first. `before_id` keeps the turns made before that
         one: the cursor for the next page. With `exchanges`, what colleagues asked or handed the
-        member (`_EXCHANGES`) is among them, where it came: the line its own chat shows."""
+        member (`_HANDED`) is among them, where it came."""
         where, params = _thread(member_id, conversation_id, exchanges)
         if before_id is not None:
             where += " AND id < ?"
@@ -409,6 +467,23 @@ class AgentHistory:
             [*params, limit],
         )
         return [_to_turn(row) for row in rows]
+
+    def sent(self, limit: int) -> list[str]:
+        """What the owner typed into a composer, newest first, whichever private conversation or room it went to (only
+        their own words; typed means `source` "app", so not spoken, routine, colleague, resumed, draft or phone ones). Words
+        sent twice in a row are one entry. Up to `limit` of them."""
+        # A few more rows than asked for: a run of repeats collapses into one.
+        rows = self._conn.execute(
+            "SELECT text FROM ("
+            " SELECT created_at_ms AS at, question AS text FROM agent_turns"
+            "  WHERE scope = 'private' AND source = 'app' AND status != 'withdrawn' AND route <> 'draft' AND trim(question) <> ''"
+            " UNION ALL SELECT created AS at, text FROM room_messages WHERE member_id IS NULL AND trim(text) <> ''"
+            ") ORDER BY at DESC LIMIT ?", (limit * 4,)).fetchall()
+        texts: list[str] = []
+        for (text,) in rows:
+            if not texts or texts[-1] != text:
+                texts.append(text)
+        return texts[:limit]
 
     def asked_from(self, turn_ids: Iterable[int]) -> dict[int, list[Turn]]:
         """What each of `turn_ids` asked or handed colleagues while it ran, by that turn: the
@@ -425,19 +500,37 @@ class AgentHistory:
                 found.setdefault(turn.source_turn_id, []).append(turn)
         return found
 
-    def recent(self, count: int, *, member_id: int = 0, conversation_id: int | None = None) -> list[Turn]:
+    def recent(
+        self, count: int, *, member_id: int = 0, conversation_id: int | None = None,
+        unfinished: bool = False, changes: Callable[[Step], bool] | None = None,
+    ) -> list[Turn]:
         """The last `count` turns of the thread of `member_id` that were answered, oldest first:
         the context of what is asked next. A turn that is waiting for a yes or a no, was refused
-        or failed says nothing."""
+        or failed says nothing. With `unfinished`, the owner's requests that did not finish are among
+        them, in their place (`is_unfinished`), each told what it already did (`with_work`)."""
         if count <= 0:
             return []
-        condition = "" if conversation_id is None else " AND conversation_id = ?"
+        condition = "" if conversation_id is None else " AND (conversation_id = ? OR scope = 'exchange')"
+        said = _READABLE if unfinished else "status = 'done'"
         rows = self._conn.execute(
-            f"SELECT {_COLUMNS} FROM agent_turns WHERE scope = 'private' AND status = 'done' AND member_id = ?"
+            f"SELECT {_COLUMNS} FROM agent_turns WHERE scope IN ('private', 'exchange') AND {said} AND member_id = ?"
             + condition + " ORDER BY id DESC LIMIT ?",
             [member_id, *([] if conversation_id is None else [conversation_id]), count],
         )
-        return self._with_messages([_to_turn(row) for row in reversed(rows.fetchall())])
+        turns = self._with_messages([_to_turn(row) for row in reversed(rows.fetchall())])
+        return self.with_work(turns, changes) if unfinished else turns
+
+    def with_work(self, turns: list[Turn], changes: Callable[[Step], bool] | None = None) -> list[Turn]:
+        """`turns`, with `Turn.work` set for each one that did not finish: what its steps already did
+        (`steps.work_summary`). `changes` says which step changed something (`ToolGate.step_changes`);
+        without it every step counts as a change, since a step not known to only read may have changed
+        something."""
+        waiting = [turn for turn in turns if turn.id is not None and is_unfinished(turn)]
+        if waiting:
+            steps = self.steps(turn.id for turn in waiting)
+            for turn in waiting:
+                turn.work = work_summary(steps.get(turn.id, []), changes or _anything)
+        return turns
 
     def after(
         self, turn_id: int, *, limit: int | None = None, member_id: int = 0,
@@ -499,12 +592,13 @@ class AgentHistory:
         limit = max(1, min(limit, most))
         if not words:
             return []
+        self._repair_event_index()
         where, params = _filters(since_ms, exclude, member_id, conversation_id)
         found = self._find(words, limit, where, params)
         if not found and any(len(word.pairs) > 1 for word in words):
             pairs = dict.fromkeys(pair for word in words for pair in word.pairs)
             found = self._find([QueryWord(pair, (pair,)) for pair in pairs], limit, where, params)
-        return found
+        return self._with_messages(found)
 
     def _find(
         self, words: Sequence[QueryWord], limit: int, where: str, params: Sequence[object]
@@ -584,15 +678,15 @@ class AgentHistory:
         return cursor.rowcount > 0
 
     def clear_member(self, member_id: int) -> int:
-        """Clear this member's private thread without deleting room or exchange audit rows."""
+        """Remove all of this member's rows and peer exchanges outside room history."""
         both = (member_id, member_id)
-        ids = "SELECT id FROM agent_turns WHERE scope = 'private' AND (member_id = ? OR peer_id = ?)"
+        ids = "SELECT id FROM agent_turns WHERE scope != 'room' AND (member_id = ? OR peer_id = ?)"
         with self._conn:
             self._conn.execute(f"DELETE FROM agent_messages WHERE turn_id IN ({ids})", both)
             self._conn.execute(f"DELETE FROM agent_steps WHERE turn_id IN ({ids})", both)
             self._conn.execute(f"DELETE FROM agent_turns_fts WHERE rowid IN ({ids})", both)
             cursor = self._conn.execute(
-                "DELETE FROM agent_turns WHERE scope = 'private' AND (member_id = ? OR peer_id = ?)", both
+                "DELETE FROM agent_turns WHERE scope != 'room' AND (member_id = ? OR peer_id = ?)", both
             )
         return cursor.rowcount
 

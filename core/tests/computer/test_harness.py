@@ -1,6 +1,7 @@
 """The interactive harness resumes after the existing desktop permission flow."""
 
 import asyncio
+import json
 
 from agent.test_narration import chat
 from .test_operate import operating, shell, PRESS_SEVEN  # noqa: F401
@@ -31,7 +32,8 @@ async def test_desktop_permission_resumes_the_same_harness_turn(operating, clien
     assert done['status'] == 'done' and done['turn_id'] == asked['turn_id']
     assert done['text'] == '已按下七。'
     [turn] = await operating.turns(quick=False)
-    assert [m['kind'] for m in turn['messages']] == ['progress', 'reply']
+    assert [m['kind'] for m in turn['messages']] == ['progress', 'event', 'event', 'reply']
+    assert all(json.loads(m['text'])['type'] == 'action' for m in turn['messages'] if m['kind'] == 'event')
     assert any(op == 'act' for op, args in shell.requests)
     assert client.chat_calls[-1]['messages'][-1]['role'] == 'tool'
 

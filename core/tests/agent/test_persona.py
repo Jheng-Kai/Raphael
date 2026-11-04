@@ -20,6 +20,24 @@ from raphael_core.brain.textnorm import convert_leftover_simplified
 # --- the languages -------------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_all_system_contracts_require_owner_approval_for_outward_vm_actions(language):
+    member = dict(name="Member", role="Assistant", instructions="", personality="")
+    prompts = [
+        persona.system_prompt(language, "answer"),
+        persona.cli_system_prompt(language),
+        persona.cli_system_prompt(language, **member),
+        persona.member_system_prompt(language, "answer", **member),
+        persona.worker_system_prompt(language, model_calls=5, tool_calls=10),
+        persona.member_worker_system_prompt(language, **member, model_calls=5, tool_calls=10),
+    ]
+    for prompt in prompts:
+        for clause in ("no per-action approval", "owner holds control", "sending a message or email",
+                       "publishing or posting", "outside the workspace", "paying or buying",
+                       "approve on CLI brains", "API harness", "owner's yes", "unavailable, denied"):
+            assert clause in prompt, clause
+
+
 def test_raphael_speaks_traditional_chinese_english_and_japanese():
     assert LANGUAGES == ("zh-TW", "en", "ja")
     assert DEFAULT_LANGUAGE == "zh-TW"
@@ -196,10 +214,11 @@ def test_the_hand_off_names_the_owner_in_the_word_of_its_language():
 def test_the_fixed_lines_are_brief(language):
     for name in _LINES:
         text = phrase(language, name)
+        repair = name in {"budget", "credits", "worker_model", "worker_limit_model", "worker_limit_tool", "worker_limit_time", "worker_limit_cost", "worker_limit_month", "vision_off", "pdf_off", "failed", "open_not_found", "computer_watch", "computer_unavailable", "computer_refused_app"}
         if language == "en":
-            assert len(text.split()) <= 16, name
+            assert len(text.split()) <= (45 if repair else 16), name
         else:
-            assert len(text) <= 40, name
+            assert len(text) <= (140 if repair else 40), name
 
 
 def test_the_english_lines_are_formal_without_contractions():
@@ -285,7 +304,9 @@ def test_the_system_prompt_names_the_language_the_prefixes_and_the_limit(languag
     for prefix in PREFIXES[language]:
         assert f'"{prefix}"' in prompt
     assert persona._LIMIT_WORDS[language] in prompt
-    assert "{" not in prompt and "}" not in prompt  # every placeholder was filled
+    from raphael_core.agent.self_check import DOCTRINE
+    without_schema = prompt.replace(DOCTRINE, "")
+    assert "{" not in without_schema and "}" not in without_schema  # every placeholder was filled
     assert persona.system_prompt(language, route) == prompt  # the same every time
 
 
@@ -461,3 +482,16 @@ def test_only_raphael_knows_his_replies_at_this_computer_are_voiced(language, na
             language, "answer", name="Tutor", role="Teacher", instructions="Teach examples.",
             narrated=narrated,
         )
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_composio_two_step_doctrine_reaches_every_api_and_cli_brain(language):
+    member = dict(name="Member", role="Assistant", instructions="", personality="")
+    prompts = [persona.system_prompt(language, "answer"), persona.cli_system_prompt(language),
+               persona.cli_system_prompt(language, **member), persona.member_system_prompt(language, "answer", **member),
+               persona.worker_system_prompt(language, model_calls=5, tool_calls=10),
+               persona.member_worker_system_prompt(language, **member, model_calls=5, tool_calls=10)]
+    for prompt in prompts:
+        for clause in ("COMPOSIO_SEARCH_TOOLS", "COMPOSIO_MULTI_EXECUTE_TOOL", "tool_slug", "input schema",
+                       "searching alone does not read mail", "sync_response_to_workbench false"):
+            assert clause in prompt

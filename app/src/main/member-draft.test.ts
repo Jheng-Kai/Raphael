@@ -6,7 +6,6 @@ import {
   draftGroupChoices,
   hasDrafts,
   isSettledDraftTurn,
-  presetUrlOf,
   settledDraftHTML,
 } from "./member-draft";
 import { emptyTimelineState, turnHTML } from "./timeline";
@@ -77,18 +76,20 @@ describe("member draft helpers", () => {
     expect(choices.map((c) => c.label)).toEqual(["未分組", "專案工作", "個人公司"]);
   });
 
-  test("presetUrlOf resolves preset stem or full preset:<stem>", () => {
-    const presets = [{ avatar: "preset:1", name: "1", url: "data:image/png;base64,AAAA" }];
-    expect(presetUrlOf("preset:1", presets)).toBe("data:image/png;base64,AAAA");
-    expect(presetUrlOf("1", presets)).toBe("data:image/png;base64,AAAA");
-    expect(presetUrlOf("", presets)).toBeNull();
-  });
 });
 
 describe("DraftPanelController", () => {
+  test("explains why member settings need review in every language", () => {
+    for (const [locale, words] of [["zh-TW", "建立後就能一起工作"], ["en", "work together after they are created"], ["ja", "作成後に一緒に作業できます"]] as const) {
+      setLocale(locale);
+      const panel=createDraftPanel({groups:()=>[],onConfirm:vi.fn(),onCancel:vi.fn()});
+      panel.sync(sampleQuestion());
+      expect(panel.el.querySelector('.card-body.cc-state')?.textContent).toContain(words);
+    }
+  });
   test("group edits preserve draft membership and reach the shared confirmation", () => {
     const onConfirm = vi.fn();
-    const panel = createDraftPanel({ groups: () => [], presets: () => [], onConfirm, onCancel: vi.fn() });
+    const panel = createDraftPanel({ groups: () => [], onConfirm, onCancel: vi.fn() });
     panel.sync(sampleQuestion());
     const input = panel.el.querySelector<HTMLInputElement>('[data-draft-group="group-1"]')!;
     input.value = "Studio";
@@ -105,7 +106,6 @@ describe("DraftPanelController", () => {
     const onCancel = vi.fn();
     const panel = createDraftPanel({
       groups: () => [{ id: 1, name: "專案工作", position: 0, sources: [] }],
-      presets: () => [],
       onConfirm,
       onCancel,
     });
@@ -156,7 +156,7 @@ describe("settled draft summary in timeline", () => {
   test("isSettledDraftTurn detects settled batch turns and renders expandable one-line summary without duplicate bubble", () => {
     expect(isSettledDraftTurn(baseTurn)).toBe(true);
     const closed = turnHTML(baseTurn, emptyTimelineState(), false, { face: () => "" });
-    expect(closed).toContain('class="draft-done"');
+    expect(closed).toContain('conversation-card connector-card draft-done');
     expect(closed).toContain('data-act="draft-done" aria-expanded="false"');
     expect(closed).toContain("已建立 COO、PM、RD");
     expect(closed).toContain('id="draft-done-99" hidden');
@@ -164,7 +164,7 @@ describe("settled draft summary in timeline", () => {
     expect(closed).not.toContain("《答。已建立 COO、PM、RD》");
 
     const opened = settledDraftHTML(baseTurn, true);
-    expect(opened).toContain('class="draft-done is-open"');
+    expect(opened).toContain('conversation-card connector-card draft-done is-open');
     expect(opened).toContain('aria-expanded="true"');
     expect(opened).toContain("COO · 首席營運長 · 個人公司");
   });

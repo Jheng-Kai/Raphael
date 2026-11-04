@@ -86,3 +86,47 @@ def test_without_a_time_zone_the_local_time_of_this_pc_is_used():
     after = int(datetime(2026, 10, 23, 8, 0).timestamp() * 1000)  # naive: this PC's local time
     due = datetime.fromtimestamp(next_run(daily, after) / 1000)
     assert (due.year, due.month, due.day, due.hour, due.minute) == (2026, 10, 23, 9, 0)
+
+
+def test_window_reanchors_each_local_day_and_keeps_its_last_time():
+    value = {"kind": "every", "hours": 3, "from": "08:00", "to": "23:00"}
+    schedule = parse_schedule(value)
+    assert schedule.to_json() == value
+    at = ms(2026, 10, 23, 7)
+    actual = []
+    for _ in range(7):
+        at = next_run(schedule, at, tz=TZ)
+        actual.append(at)
+    assert actual == [ms(2026, 10, 23, hour) for hour in (8, 11, 14, 17, 20, 23)] + [ms(2026, 10, 24, 8)]
+
+
+@pytest.mark.parametrize("window", [
+    {"from": "08:00"}, {"to": "23:00"}, {"from": "23:00", "to": "08:00"},
+    {"from": "08:00", "to": "08:00"}, {"from": "24:00", "to": "25:00"},
+    {"from": "8:00", "to": "23:00"}, {"from": None, "to": "23:00"},
+])
+def test_bad_windows_are_refused(window):
+    with pytest.raises(ScheduleError):
+        parse_schedule({"kind": "every", "hours": 3, **window})
+
+
+def test_window_uses_local_wall_times_across_daylight_saving_and_date_bounds():
+    from zoneinfo import ZoneInfo
+    zone = ZoneInfo("America/New_York")
+    schedule = parse_schedule({"kind": "every", "hours": 3, "from": "08:00", "to": "23:00",
+                               "start_date": "2026-03-08", "until": "2026-03-09"})
+    stamp = lambda text: int(datetime.fromisoformat(text).replace(tzinfo=zone).timestamp() * 1000)
+    assert next_run(schedule, stamp("2026-03-07T22:00"), tz=zone) == stamp("2026-03-08T08:00")
+    assert next_run(schedule, stamp("2026-03-08T23:00"), tz=zone) == stamp("2026-03-09T08:00")
+    assert next_run(schedule, stamp("2026-03-09T23:00"), tz=zone) is None
+
+
+@pytest.mark.parametrize("language,words", [("zh-TW", "每 3 小時"), ("ja", "3時間ごと"), ("en", "Every 3 hours")])
+def test_model_schema_and_public_routine_wording_include_the_window(language, words):
+    from raphael_core.agent.harness_tools import SCHEDULE
+    from raphael_core.agent.public_events import event_record, event_text
+    assert {"from", "to"} <= SCHEDULE["properties"].keys()
+    assert "one routine" in SCHEDULE["description"]
+    text = event_text(event_record("routine_create", {"routine": {"id": 1, "member_id": 0, "title": "Review", "schedule": {
+        "kind": "every", "hours": 3, "from": "08:00", "to": "23:00"}}}, language))
+    assert words in text and "08:00" in text and "23:00" in text

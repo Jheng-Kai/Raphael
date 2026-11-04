@@ -89,7 +89,7 @@ class RunAnalytics:
                 if kind == "task" and not only and self.conn.execute("SELECT 1 FROM routine_runs WHERE turn_id=?", (item["turn_id"],)).fetchone():
                     continue
                 mid = item["member_id"]
-                member, avatar = members.get(mid, (str(mid), ""))
+                member, avatar = members.get(mid, ("", ""))
                 metric = self.conn.execute("SELECT * FROM run_metrics WHERE kind=? AND run_id=?", (kind, item["id"])).fetchone()
                 metric = dict(metric) if metric else None
                 model = item.get("model") or ""
@@ -127,7 +127,7 @@ class RunAnalytics:
                     backing = [{"tokens": metric["tokens"] if metric else None, "ai_steps": max(metric["ai_steps"],steps[2]) if metric else steps[2], "tools": steps[0], "errors": steps[1], "model": source.get("model") or ""}]
                 base = backing[0] if backing else {}
                 started, finished = record["started"], record["finished"]
-                member, avatar = members.get(record["member_id"], (str(record["member_id"]), ""))
+                member, avatar = members.get(record["member_id"], ("", ""))
                 model = base.get("model", "")
                 rows.append({**base, "kind": "routine", "id": record["id"], "at_ms": started, "started_at_ms": started,
                              "duration_ms": max(0, finished-started) if finished is not None else base.get("duration_ms"),
@@ -152,6 +152,9 @@ class RunAnalytics:
         for grouping in ("member", "model", "day", "provider", "routine"):
             values = defaultdict(lambda: {"tokens": 0, "cost_usd": 0, "runs": 0})
             for row in rows:
+                # A member that is gone has no name to show, so it is no group of its own.
+                if grouping == "member" and not row["member_name"]:
+                    continue
                 label = (row["member_name"] if grouping == "member" else
                          datetime.fromtimestamp(row["at_ms"] / 1000, zone).date().isoformat() if grouping == "day" else row[grouping]) or "unknown"
                 entry = values[label]

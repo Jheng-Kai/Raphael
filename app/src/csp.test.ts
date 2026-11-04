@@ -41,9 +41,9 @@ describe("content security policy", () => {
     expect(scripts).not.toContain("'unsafe-inline'");
   });
 
-  test("sources are the app itself, its IPC, local data and allowed media/YouTube embeds: no wildcard", () => {
+  test("sources are the app itself, its IPC, loopback desktop and allowed media/YouTube embeds: no wildcard host", () => {
     const allowed = new Set(["'self'", "'none'", "data:", "ipc:", "http://ipc.localhost"]);
-    const frameHosts = new Set(["'self'", "https://www.youtube-nocookie.com", "https://www.youtube.com"]);
+    const frameHosts = new Set(["'self'", "http://127.0.0.1:*", "https://www.youtube-nocookie.com", "https://www.youtube.com"]);
     for (const [name, sources] of policy()) {
       for (const source of sources) {
         if (source === "'unsafe-inline'") {
@@ -60,6 +60,15 @@ describe("content security policy", () => {
     expect(policy().get("frame-src")).toEqual(
       expect.arrayContaining(["https://www.youtube-nocookie.com", "https://www.youtube.com"]),
     );
+  });
+
+  test("the desktop port exception is only for loopback frames and cannot load main-window scripts or connections", () => {
+    expect(policy().get("frame-src")).toContain("http://127.0.0.1:*");
+    for (const name of ["script-src", "connect-src", "default-src"]) {
+      expect(policy().get(name)).not.toContain("http://127.0.0.1:*");
+    }
+    expect(policy().get("frame-src")).not.toContain("http:");
+    expect(policy().get("frame-src")).not.toContain("*");
   });
 
   test("the main window lets HTML5 drops deliver file bytes to its composer", () => {

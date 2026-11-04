@@ -17,8 +17,9 @@ import re
 import threading
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http import HTTPStatus
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -27,6 +28,9 @@ if TYPE_CHECKING:
 import httpx
 
 from .settings import DEFAULTS
+from .streams import MalformedStream, chat_completion
+from ..failures import classify, redact
+from ..retry_utils import CONNECT_TIMEOUT_S, provider_retry_after_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +148,11 @@ class ChatTurn:
     # Whether the reply supplied a usable cost (or a provider adapter priced its usage). When
     # unknown, cost_usd 0.0 is not a price: a spending guard must charge an estimate for it.
     usage_known: bool = True
+    # Ephemeral Responses continuation items; never published as public narration/history.
+    responses_output: list[dict] = field(default_factory=list, repr=False)
+    # Why the reply ended as the provider says it ("stop", "tool_calls", "length" when the output limit
+    # cut it off), or "" when it does not say.
+    finish_reason: str = ""
 
 
 @dataclass
@@ -177,14 +186,20 @@ class OpenRouterError(Exception):
     there was no reply. `kind` says what went wrong:
 
     - auth: no key, a key that cannot be read or cannot be one, or a key OpenRouter rejects (401)
-    - credits: no credit left, or a spending limit reached (402, or 403 naming a limit)
+    - credits: no credit left, or a spending limit reached (402, 403 naming a limit, or a 429 saying the quota is spent)
+    - usage_limit: a 429 saying the plan's allowance is spent, and not for a few seconds
     - rate_limit: 429
+    - context_overflow: the conversation holds more than the model reads (400 naming the context length)
+    - payload_too_large: the request is too big to send (413)
+    - content_policy: the provider's filter stopped the prompt or the answer
     - bad_request: the request was refused (400, a 403 that is no limit, any other 4xx)
     - server: a 5xx, or an error OpenRouter reports inside a 200 reply
     - timeout: no answer in time (httpx timeout, or 408)
-    - network: no connection
+    - network: no connection, or one that broke
     - bad_response: a reply that is not what the API sends
     - truncated: empty output, or an output limit reached before usable JSON
+
+    `retry_after` is how long the provider asked to wait, in seconds, when it said (its Retry-After header).
     """
 
     def __init__(self, status: int, kind: str, message: str) -> None:
@@ -192,6 +207,7 @@ class OpenRouterError(Exception):
         self.status = status
         self.kind = kind
         self.message = message
+        self.retry_after: float | None = None
 
     def __str__(self) -> str:
         return self.message
@@ -205,7 +221,7 @@ class _Reply:
 
 
 def _failure(
-    status: int, kind: str, message: str, cause: Exception | None = None
+    status: int, kind: str, message: str, cause: Exception | None = None, retry_after: float | None = None
 ) -> OpenRouterError:
     """The error to raise, after logging its status and kind as a warning.
 
@@ -218,7 +234,47 @@ def _failure(
         logger.warning(
             "OpenRouter call failed: status=%s kind=%s cause=%s", status, kind, type(cause).__name__
         )
-    return OpenRouterError(status, kind, message)
+    failure = classify({"kind": kind, "status": status, "message": message, "retry_after": retry_after})
+    error = OpenRouterError(status, kind, failure.reason)
+    error.diagnostic = failure
+    error.retry_after = retry_after
+    return error
+
+
+def request_timeout(timeout_s: float) -> httpx.Timeout:
+    """Connecting is quick or it is not going to happen; every other wait of the request is `timeout_s`."""
+    return httpx.Timeout(timeout_s, connect=min(timeout_s, CONNECT_TIMEOUT_S))
+
+
+def retry_after_of(response: httpx.Response, decoded: Any) -> float | None:
+    """How long the provider asked us to wait, in seconds: its Retry-After header, else a field of its error body."""
+    return provider_retry_after_seconds(SimpleNamespace(response=response, body=decoded))
+
+
+async def exchange(
+    client: httpx.AsyncClient, method: str, url: str, timeout_s: float, stream: bool, **request: Any
+) -> tuple[httpx.Response, Any]:
+    """Send a request and read what comes back: the response, and its body decoded (None if it is no JSON).
+
+    With `stream`, a reply that arrives as server-sent events is read as it arrives, and `timeout_s` is how long the
+    connection may stay silent before the answer begins (`brain.streams`); that body is returned as the completion it
+    adds up to. A server that ignores the stream and answers whole is read as ever, and so is any failure.
+    """
+    if not stream:
+        response = await client.request(method, url, timeout=request_timeout(timeout_s), **request)
+        return response, _decoded(response)
+    async with client.stream(method, url, timeout=request_timeout(timeout_s), **request) as response:
+        if response.is_success and response.headers.get("content-type", "").startswith("text/event-stream"):
+            return response, await chat_completion(response, timeout_s)
+        await response.aread()
+        return response, _decoded(response)
+
+
+def _decoded(response: httpx.Response) -> Any:
+    try:
+        return response.json()
+    except ValueError:  # an HTML page, an empty body, bytes that are not UTF-8
+        return None
 
 
 def _authorization(key: str | None) -> str:
@@ -255,21 +311,27 @@ _KIND_OF_STATUS = {
 }
 
 
-def _kind_for(status: int, error: dict) -> str:
+def _kind_for(status: int, error: dict, retry_after: float | None = None) -> str:
     """The kind of error that an HTTP status other than 2xx stands for."""
     if status == HTTPStatus.FORBIDDEN:
         # A budget block names where the limit comes from (the key, a workspace, a guardrail).
         # Any other 403 refuses this request: moderation, a guardrail rule, missing permission.
         metadata = error.get("metadata")
         limited = isinstance(metadata, dict) and metadata.get("limit_source")
-        return "credits" if limited else "bad_request"
-    if status in _KIND_OF_STATUS:
-        return _KIND_OF_STATUS[status]
-    if status >= HTTPStatus.INTERNAL_SERVER_ERROR:
+        kind = "credits" if limited else "bad_request"
+    elif status in _KIND_OF_STATUS:
+        kind = _KIND_OF_STATUS[status]
+    elif status >= HTTPStatus.INTERNAL_SERVER_ERROR:
         return "server"
-    if status >= HTTPStatus.BAD_REQUEST:
-        return "bad_request"
-    return "bad_response"  # a redirect, say: a captive portal answering instead of OpenRouter
+    elif status >= HTTPStatus.BAD_REQUEST:
+        kind = "bad_request"
+    else:
+        return "bad_response"  # a redirect, say: a captive portal answering instead of OpenRouter
+    if kind not in ("bad_request", "rate_limit"):
+        return kind
+    # What the words say can make a refusal of it a context that does not fit, and a throttle a spent quota.
+    said = classify({"kind": kind, "status": status, "message": _message(error, ""), "retry_after": retry_after}, record=False).kind
+    return said if said in ("context_overflow", "payload_too_large", "content_policy", "credits", "usage_limit") else kind
 
 
 def _reported_error(error: dict, status: int, default_message: str) -> OpenRouterError:
@@ -537,6 +599,7 @@ def _to_chat_turn(reply: _Reply, requested_model: str) -> ChatTurn:
         completion_tokens=_usage_count(usage, "completion_tokens"),
         latency_ms=reply.latency_ms,
         usage_known=_known_cost(usage),
+        finish_reason=choice["finish_reason"] if isinstance(choice.get("finish_reason"), str) else "",
     )
 
 
@@ -848,6 +911,10 @@ class OpenRouterClient:
         Like plan_tools, this requires every parameter from the provider (a provider that cannot
         take tools is left out), sends no temperature, denies data collection and tries the
         `fallbacks` if the model fails.
+
+        The reply is streamed: `timeout_s` is how long the connection may stay silent while the model
+        thinks, not how long the whole reply may take, and a stream that has begun to answer and goes quiet
+        is a dead connection long before that (`brain.streams`).
         """
         body: dict[str, Any] = {
             "model": model,
@@ -863,7 +930,7 @@ class OpenRouterClient:
         if models:
             body["models"] = models
         reply = await self._request(
-            "POST", "/chat/completions", self._stored_key(), timeout_s, body
+            "POST", "/chat/completions", self._stored_key(), timeout_s, body, stream=True
         )
         return _to_chat_turn(reply, model)
 
@@ -988,20 +1055,24 @@ class OpenRouterClient:
         *,
         public: bool = False,
         base_url: str = BASE_URL,
+        stream: bool = False,
     ) -> _Reply:
         """Send one request and return the decoded reply, or raise the OpenRouterError it earns.
 
         A `public` request is for an endpoint that needs no key: `key` is ignored and not sent.
-        `path` is under `base_url`.
+        `path` is under `base_url`. With `stream` the reply is asked for as a stream and read as one
+        (`exchange`).
         """
         headers = dict(_APP_HEADERS)
         if not public:
             headers["Authorization"] = _authorization(key)
+        if stream:
+            body = {**body, "stream": True}
         client = self._client()  # made before the clock starts: building it takes a while
         started = time.perf_counter()
         try:
-            response = await client.request(
-                method, base_url + path, headers=headers, json=body, timeout=timeout_s
+            response, decoded = await exchange(
+                client, method, base_url + path, timeout_s, stream, headers=headers, json=body
             )
         except httpx.TimeoutException as exc:
             raise _failure(0, "timeout", _described(exc)) from exc
@@ -1009,19 +1080,22 @@ class OpenRouterClient:
             raise _failure(0, "bad_response", _described(exc)) from exc
         except httpx.TransportError as exc:
             raise _failure(0, "network", _described(exc)) from exc
+        except MalformedStream as exc:
+            raise _failure(0, "bad_response", _described(exc)) from exc
         latency_ms = round((time.perf_counter() - started) * 1000)
 
         status = response.status_code
-        try:
-            decoded = response.json()
-        except ValueError:  # an HTML page, an empty body, bytes that are not UTF-8
-            decoded = None
         error = _error_object(decoded)
 
         if not response.is_success:
-            raise _failure(status, _kind_for(status, error), _message(error, f"HTTP {status}"))
+            reason = redact(_message(error, f"HTTP {status}"), secrets=[
+                value.removeprefix("Bearer ") for value in headers.values()])
+            wait = retry_after_of(response, decoded)
+            raise _failure(status, _kind_for(status, error, wait), reason, retry_after=wait)
         if isinstance(decoded, dict) and decoded.get("error"):
             # OpenRouter answers 200 once a provider has accepted the request; a failure after
             # that is reported in the body.
+            error = {**error, "message": redact(_message(error, "OpenRouter reported an error"),
+                                                secrets=headers.values())}
             raise _reported_error(error, status, "OpenRouter reported an error")
         return _Reply(status, decoded, latency_ms)

@@ -180,8 +180,8 @@ export function avatarHTML(o: AvatarOptions): string {
   const kind = o.loop && !reduced ? "loop" : o.size > 40 ? "128" : "64";
   return (
     `<span class="${cls}" ${box} aria-hidden="true">` +
-    `<img class="em-l" src="/brand/app-emblem-light-${kind}.webp" alt="" draggable="false">` +
-    `<img class="em-d" src="/brand/app-emblem-dark-${kind}.webp" alt="" draggable="false">` +
+    `<img class="em-l" src="/brand/app-emblem-light-${kind}.webp" alt="" draggable="false" loading="lazy">` +
+    `<img class="em-d" src="/brand/app-emblem-dark-${kind}.webp" alt="" draggable="false" loading="lazy">` +
     `</span>`
   );
 }

@@ -115,6 +115,14 @@ async def test_the_whole_conversation_and_the_tools_are_sent_and_every_parameter
     assert request.headers["authorization"] == "Bearer sk-or-v1-test"
 
 
+async def test_a_reply_cut_off_by_the_output_limit_says_so(client_with):
+    cut = await turn(client_with(lambda request: reply('{"text": "half', finish="length")))
+    whole = await turn(client_with(lambda request: reply("done")))
+    assert cut.finish_reason == "length" and whole.finish_reason == "stop"
+    odd = await turn(client_with(lambda request: reply("done", finish=None)))
+    assert odd.finish_reason == ""
+
+
 async def test_without_tools_the_model_can_only_answer(client_with):
     seen = []
 

@@ -427,7 +427,6 @@ impl Tracker {
             .find(|word| word.start <= edit.new.start && edit.new.end <= word.end)?;
         if !(2..=MAX_CJK).contains(&word.len())
             || !self.current[word.clone()].iter().copied().all(is_han)
-            || is_common_grammar_word(&self.current[word.clone()])
         {
             return None;
         }
@@ -464,84 +463,6 @@ fn valid_word_ranges(words: &[Range<usize>], text_len: usize) -> bool {
             .iter()
             .all(|word| word.start < word.end && word.end <= text_len)
         && words.windows(2).all(|pair| pair[0].end <= pair[1].start)
-}
-
-/// These common grammar/stance/time words are conservative exclusions, not a POS or semantic
-/// classifier. Word boundaries alone cannot prove that an edit is a misheard name or noun.
-fn is_common_grammar_word(chars: &[char]) -> bool {
-    matches!(
-        chars.iter().collect::<String>().as_str(),
-        "已經"
-            | "已经"
-            | "已是"
-            | "一直"
-            | "一起"
-            | "一些"
-            | "一樣"
-            | "一样"
-            | "因為"
-            | "因为"
-            | "所以"
-            | "但是"
-            | "可是"
-            | "如果"
-            | "雖然"
-            | "虽然"
-            | "就是"
-            | "只是"
-            | "還是"
-            | "还是"
-            | "不是"
-            | "不要"
-            | "不能"
-            | "不會"
-            | "不会"
-            | "不再"
-            | "沒有"
-            | "没有"
-            | "可以"
-            | "可能"
-            | "能夠"
-            | "能够"
-            | "應該"
-            | "应该"
-            | "需要"
-            | "自己"
-            | "我們"
-            | "我们"
-            | "你們"
-            | "你们"
-            | "他們"
-            | "他们"
-            | "她們"
-            | "她们"
-            | "這個"
-            | "这个"
-            | "那個"
-            | "那个"
-            | "這些"
-            | "这些"
-            | "那些"
-            | "什麼"
-            | "什么"
-            | "怎麼"
-            | "怎么"
-            | "為什麼"
-            | "为什么"
-            | "如何"
-            | "感覺"
-            | "感觉"
-            | "感到"
-            | "覺得"
-            | "觉得"
-            | "記得"
-            | "记得"
-            | "今年"
-            | "明年"
-            | "今天"
-            | "明天"
-            | "昨天"
-    )
 }
 
 fn is_han(character: char) -> bool {
@@ -917,21 +838,15 @@ mod tests {
     }
 
     #[test]
-    fn grammar_words_are_excluded_even_when_the_old_spelling_was_fragmented() {
-        for (from, to) in [
-            ("以經", "已經"),
-            ("可已", "可以"),
-            ("可熊", "可能"),
-            ("敢覺", "感覺"),
-            ("感倒", "感到"),
-            ("今夭", "今天"),
-        ] {
-            let pasted = format!("今天討論{from}的相關內容，下午還會繼續確認其他細節");
-            assert!(
-                with_han_word(&pasted, from, to).is_empty(),
-                "{to} is a grammar exclusion"
-            );
-        }
+    fn core_owns_the_common_vocabulary_decision_for_extracted_candidates() {
+        let pasted = "今天討論以經完成的資料內容，下午再去清理新訊息並確認沒有紀錄。";
+        assert_eq!(
+            with_han_word(pasted, "以經", "已經"),
+            vec![Correction {
+                word: "已經".into(),
+                misheard: "以經".into()
+            }]
+        );
     }
 
     #[test]

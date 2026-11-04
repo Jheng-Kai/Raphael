@@ -45,7 +45,7 @@ import httpx
 from ..agent.ledger import Ledger
 from ..brain.catalog import IMAGE_INPUT, LLM, CatalogEntry, find
 from ..brain.providers.base import ModelProvider
-from ..brain.settings import DEFAULTS, SettingsStore, api_model
+from ..brain.settings import DEFAULTS, SettingsStore, api_model, hosted_providers
 from ..protocol import INTERNAL_ERROR, INVALID_PARAMS, RpcError, invalid_params
 from ..router import Router
 from . import pdf, tts, web
@@ -127,6 +127,7 @@ class ServiceHub:
         transcribe: Transcribe | None = None,
     ) -> None:
         self._transcribe = transcribe
+        self._provider = client
         self._settings = SettingsStore(conn)
         self._keys = keys
         self._models = models
@@ -192,7 +193,7 @@ class ServiceHub:
         """The model that reads images (the `vision_model` setting, or the answer model when it is
         ""), and whether OpenRouter's list says it reads them: None when the list does not say."""
         chosen = self._text("vision_model")
-        model = api_model(self._settings, chosen or self._text("agent_model"))
+        model = api_model(self._settings, chosen or self._text("agent_model"), api_providers=hosted_providers(self._provider))
         return model, self._sees(model)
 
     def _text(self, key: str) -> str:
@@ -259,6 +260,30 @@ class ServiceHub:
             voice=self._text("tts_fish_voice") if voice is None else voice,
             model=self._text("tts_fish_model"),
         )
+
+    async def audio_file(self, text: str, *, voice: str | None = None) -> Attachment:
+        import io
+        import wave
+        from contextlib import aclosing
+        from .attachments import MAX_FILE_BYTES
+
+        if not self.enabled("voice"):
+            raise ServiceError("disabled")
+        pcm = bytearray()
+        async with aclosing(self.speech(text, voice=voice)) as stream:
+            async for chunk in stream:
+                pcm.extend(chunk)
+                if len(pcm) > MAX_FILE_BYTES - 44:
+                    raise ServiceError("size")
+        if not pcm or len(pcm) % 2:
+            raise ServiceError("bad_response")
+        output = io.BytesIO()
+        with wave.open(output, "wb") as audio:
+            audio.setnchannels(1)
+            audio.setsampwidth(2)
+            audio.setframerate(tts.PCM_RATE)
+            audio.writeframes(pcm)
+        return Attachment("speech.wav", "audio/wav", output.getvalue())
 
     async def read_attachment(
         self, attachment: Attachment, question: str, ledger: Ledger

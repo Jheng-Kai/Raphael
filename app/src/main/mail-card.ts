@@ -7,6 +7,8 @@
 // Every state comes from the core (`agent.drafts`). What the owner types lives in the fields only until it is
 // saved as a version (`mail-actions.ts`); a card drawn again takes it from the old field to the new one (`carryMail`).
 
+import { cardDisclosureHTML, cardHTML, cardPromptText } from "./card";
+import { noticeHTML } from "./missing";
 import { NAME, eventLineHTML } from "./event-line";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
@@ -67,56 +69,48 @@ function senderRow(draft: MailDraftCard, editable: boolean): string {
   const choices = draft.senders.map((sender) => ({ value: sender.key, label: sender.name }));
   const known = draft.senders.some((sender) => sender.key === draft.from.key);
   const label = plain("mail.from");
-  const control = draft.senders.length === 0 || !known
+  const control = draft.senders.length === 0
     ? `<span class="mail-none">${esc(plain("mail.noSender"))}</span>`
-    : sel(choices, draft.from.key, label, ` data-act="mail-from" data-via="${esc(draft.from.key)}"${editable ? "" : " disabled"}`);
+    : sel(known ? choices : [{ value: "", label: plain("mail.noSender") }, ...choices], known ? draft.from.key : "", label, ` data-act="mail-from" data-via="${esc(draft.from.key)}"${editable ? "" : " disabled"}`);
   return `<div class="mail-row"><span class="mail-k">${esc(label)}</span>${control}</div>`;
 }
 
 /** The editable card, or while it is sent, the same card with its fields still and a ring. */
 function editableHTML(draft: MailDraftCard): string {
-  const editable = mailEditable(draft);
-  const sending = draft.state === "sending";
-  const note = mailErrorText(draft);
-  const canSend = draft.state === "draft" && draft.senders.some((sender) => sender.key === draft.from.key);
-  return `<div class="mail-card" data-mail-card="${esc(draft.id)}" data-mail-state="${esc(draft.state)}" data-digest="${esc(draft.digest)}"` +
-    ` data-version="${draft.version}" data-from="${esc(draft.from.key)}" data-senders="${esc(JSON.stringify(draft.senders))}"` +
-    ` role="group" aria-label="${esc(plain("mail.title"))}">` +
-    `<div class="mail-head">${senderMarkHTML(draft.from.name)}<b class="mail-title">${esc(plain("mail.title"))}</b>` +
-    (draft.version > 1 ? `<span class="mail-ver">${esc(t("mail.version", { p0: draft.version }))}</span>` : "") +
-    (draft.author_name ? `<span class="mail-by">${esc(t("mail.handedBy", { p0: draft.author_name }))}</span>` : "") + `</div>` +
-    `<div class="mail-rows">` + senderRow(draft, editable) +
-    fieldRow(draft, "to", plain("mail.to"), editable) + fieldRow(draft, "cc", plain("mail.cc"), editable) +
-    fieldRow(draft, "subject", plain("mail.subject"), editable) + `</div>` +
-    `<textarea class="mb-fin mb-ta mail-body" data-mail-field="body" aria-label="${esc(plain("mail.body"))}" rows="7" maxlength="50000"` +
-    ` spellcheck="false"${editable ? "" : " disabled"}>${esc(draft.body)}</textarea>` +
-    (note ? `<div class="mail-note" role="status" data-mail-error="${esc(draft.error ?? draft.state)}">${esc(note)}</div>` : "") +
-    (sending ? `<div class="mail-note is-busy" role="status"><span class="spin" aria-hidden="true"></span><span>${esc(plain("mail.sending"))}</span></div>` : "") +
-    (sending ? "" : `<div class="mail-actions">` +
-      btn(esc(plain("mail.discard")), "sm", ` data-act="mail-discard" data-mail="${esc(draft.id)}"`) +
-      btn(esc(plain("mail.send")), "sm pri", ` data-act="mail-send" data-mail="${esc(draft.id)}"${canSend ? "" : " disabled"}`) + `</div>`) +
-    `</div>`;
+  const editable = mailEditable(draft), sending = draft.state === "sending", failed = draft.state === "failed";
+  const canSend = editable && draft.senders.some(sender => sender.key === draft.from.key);
+  const well = `<div class="card-well"><div class="mail-rows">${senderRow(draft, editable)}${fieldRow(draft, "to", plain("mail.to"), editable)}` +
+    (draft.cc ? fieldRow(draft, "cc", plain("mail.cc"), editable) : "") + fieldRow(draft, "subject", plain("mail.subject"), editable) + `</div>` +
+    `<textarea class="mb-fin mb-ta mail-body" data-mail-field="body" aria-label="${esc(plain("mail.body"))}" rows="5" maxlength="50000" spellcheck="false"${editable ? "" : " disabled"}>${esc(draft.body)}</textarea></div>`;
+  return cardHTML({ title: plain("mail.title"), mark: senderMarkHTML(draft.from.name), status: failed ? "failed" : sending ? "waiting" : "ready",
+    statusText: failed ? t("cards.sendFailed") : sending ? t("mail.sending") : cardPromptText("draft"),
+    body: failed ? t("cards.retained") : draft.author_name ? t("mail.handedBy", { p0: draft.author_name }) : undefined,
+    content: well + (!draft.senders.some(sender => sender.key === draft.from.key) ? noticeHTML("mail", "store") : "") +
+      (mailErrorText(draft) ? `<div class="mail-note" role="status" data-mail-error="${esc(draft.error ?? draft.state)}">${esc(mailErrorText(draft))}</div>` : ""),
+    actions: sending ? "" : btn(esc(failed ? t("cards.retry") : plain("mail.send")), "sm pri", ` data-act="mail-send" data-mail="${esc(draft.id)}"${canSend ? "" : " disabled"}`) +
+      btn(esc(plain("mail.discard")), "sm", ` data-act="mail-discard" data-mail="${esc(draft.id)}"`),
+    cls: "mail-card", attrs: ` data-mail-card="${esc(draft.id)}" data-mail-state="${esc(draft.state)}" data-digest="${esc(draft.digest)}" data-version="${draft.version}" data-from="${esc(draft.from.key)}" data-senders="${esc(JSON.stringify(draft.senders))}"`,
+  });
 }
 
 /** A draft that is over, in one quiet line: what it was about and what became of it. */
 function settledHTML(draft: MailDraftCard): string {
   const sent = draft.state === "sent";
-  const words = sent ? t("mail.sent", { p0: recipientsLine(draft.to) }) : plain("mail.discarded");
-  const done = sent ? `<span class="cc-done">${ico("check")}</span>` : "";
-  return `<div class="connector-card mail-done" data-mail-card="${esc(draft.id)}" data-mail-state="${esc(draft.state)}" role="group" aria-label="${esc(plain("mail.title"))}">` +
-    senderMarkHTML(draft.from.name) +
-    `<div class="cc-meta"><div class="cc-name">${esc(draft.subject || plain("mail.title"))}</div>` +
-    `<div class="cc-state" aria-live="polite">${done}<span>${esc(words)}</span></div></div></div>`;
+  return cardHTML({ title: draft.subject || plain("mail.title"), mark: senderMarkHTML(draft.from.name), status: sent ? "done" : "ready",
+    statusText: sent ? t("cards.done") : t("mail.discardedShort"),
+    content: cardDisclosureHTML(draft.id, `<div class="card-well"><p class="card-body">${esc(sent ? t("mail.sent", { p0: recipientsLine(draft.to) }) : plain("mail.discarded"))}</p><p class="card-body">${esc(draft.subject)}</p><p class="card-body">${esc(draft.body)}</p></div>`),
+    cls: "mail-done", attrs: ` data-mail-card="${esc(draft.id)}" data-mail-state="${esc(draft.state)}"`,
+  });
 }
 
 /** The choice card of a draft offered to a colleague: they may send it, or not. Answering it never sends the mail. */
-function offerHTML(draft: MailDraftCard, look: MailLook): string {
+function offerHTML(draft: MailDraftCard, _look: MailLook): string {
   if (!draft.offer || draft.state !== "draft") return "";
   const on = (act: string): string => ` data-act="${act}" data-mail="${esc(draft.id)}"`;
-  return `<div class="connector-card mail-offer" data-mail-offer="${esc(draft.id)}" role="group" aria-label="${esc(draft.offer.name)}">` +
-    `<span class="mail-face">${look.memberFace?.(draft.offer.member_id, 26) ?? ""}</span>` +
-    `<div class="cc-meta"><div class="cc-name mail-ask">${esc(t("mail.handover", { p0: draft.offer.name }))}</div></div>` +
-    `<div class="cc-actions">${btn(esc(plain("mail.handoverNo")), "sm", on("mail-handover-no"))}${btn(esc(plain("mail.handoverYes")), "sm pri", on("mail-handover-yes"))}</div></div>`;
+  return cardHTML({ title: t("mail.handover", { p0: draft.offer.name }), status: "waiting", statusText: cardPromptText("handover"), actions:
+    btn(esc(plain("mail.handoverYes")), "sm pri", on("mail-handover-yes")) + btn(esc(plain("mail.handoverNo")), "sm", on("mail-handover-no")),
+    cls: "mail-offer", attrs: ` data-mail-offer="${esc(draft.id)}"`,
+  });
 }
 
 export function mailCardHTML(draft: MailDraftCard, look: MailLook = {}): string {
@@ -164,7 +158,7 @@ export function mailDirty(card: Element): boolean {
  * Call the result once `after` is in the page. The words pass from one field to the next and are kept nowhere else.
  */
 export function carryMail(before: Element, after: Element): () => void {
-  const focused: { id: string; field: string; start: number | null; end: number | null }[] = [];
+  const focused: { field: HTMLInputElement | HTMLTextAreaElement; start: number | null; end: number | null }[] = [];
   for (const old of before.querySelectorAll<HTMLElement>("[data-mail-card]")) {
     const id = old.dataset.mailCard ?? "";
     const fresh = [...after.querySelectorAll<HTMLElement>("[data-mail-card]")].find((card) => card.dataset.mailCard === id);
@@ -174,14 +168,13 @@ export function carryMail(before: Element, after: Element): () => void {
       const next = fresh.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-mail-field="${name}"]`);
       if (!next) continue;
       if (field.value !== field.defaultValue) next.value = field.value;
-      if (field === document.activeElement) focused.push({ id, field: name, start: field.selectionStart, end: field.selectionEnd });
+      if (field === document.activeElement) focused.push({ field: next, start: field.selectionStart, end: field.selectionEnd });
     }
   }
   return () => {
     for (const item of focused) {
-      const card = [...after.querySelectorAll<HTMLElement>("[data-mail-card]")].find((node) => node.dataset.mailCard === item.id);
-      const field = card?.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-mail-field="${item.field}"]`);
-      if (!field || field.disabled) continue;
+      const field = item.field;
+      if (field.disabled) continue;
       field.focus({ preventScroll: true });
       if (item.start !== null && item.end !== null) field.setSelectionRange(Math.min(item.start, field.value.length), Math.min(item.end, field.value.length));
     }

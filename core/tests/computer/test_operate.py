@@ -138,7 +138,7 @@ async def test_a_message_from_a_phone_cannot_operate_this_computer(operating, cl
 async def test_without_a_shell_nothing_is_operated(rig, client):
     client.decisions.append(decision("operate"))
     answer = await rig.ask("在小算盤按七")
-    assert (answer["prefix"], answer["text"]) == ("否", "目前無法操作電腦。")
+    assert (answer["prefix"], answer["text"]) == ("否", "目前無法操作電腦。請先親自完成這一步，若連其他視窗也無法使用請重新啟動拉斐爾。")
     assert client.chat_calls == []
 
 
@@ -213,16 +213,16 @@ def test_the_worker_is_never_given_or_let_through_a_step_on_the_desktop(conn):
     # with a memory, the worker reads notes and past turns, and still gets no step on the desktop
     remembering = take_snapshot(None, memory=True)
     offered = {d["function"]["name"] for d in remembering.definitions}
-    assert {"memory_read", "history_search"} <= offered
-    assert not {"memory_write", "memory_delete"} & offered
+    assert "history_search" in offered
+    assert not {"memory_read", "memory_write", "memory_delete"} & offered
     assert not PRESENCE_TOOLS & offered
 
 
 class _Notes:
-    """A memory with one note in its index, for the run's prompt."""
+    """A memory with one entry, for the run's prompt."""
 
-    def index(self):
-        return "- [user] 主人住在台北 (10/22) → user-city"
+    def snapshot(self, member_id=0):
+        return "主人住在台北"
 
     def after_turn(self, member_id=0):
         pass

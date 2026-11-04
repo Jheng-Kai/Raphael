@@ -17,7 +17,7 @@ function top(): { layer: Layer; panel: HTMLElement } | null {
   return null;
 }
 const inside = (layer: Layer, panel: HTMLElement, target: EventTarget | null): boolean =>
-  target instanceof Node && (panel.contains(target) || !!layer.anchor?.contains(target));
+  target instanceof Node && ((target instanceof Element && !!target.closest("#window-chrome")) || panel.contains(target) || !!layer.anchor?.contains(target));
 
 function listen(): void {
   if (listening) return;

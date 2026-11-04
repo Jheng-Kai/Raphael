@@ -10,7 +10,7 @@ from urllib.parse import parse_qsl, quote, urlsplit
 
 import httpx
 
-from ..openrouter import OpenRouterError, _Reply
+from ..openrouter import OpenRouterError, _Reply, request_timeout
 from .clients import CompatibleProvider, model_info
 
 
@@ -79,7 +79,7 @@ class BedrockProvider(CompatibleProvider):
         started = time.perf_counter()
         try:
             response = await self._client().request(method, url, content=payload, headers=headers,
-                                                   timeout=timeout_s, follow_redirects=False)
+                                                   timeout=request_timeout(timeout_s), follow_redirects=False)
         except httpx.TimeoutException:
             raise OpenRouterError(0, "timeout", "Bedrock request timed out") from None
         except httpx.TransportError:

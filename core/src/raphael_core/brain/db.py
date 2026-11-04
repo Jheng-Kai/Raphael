@@ -1024,6 +1024,351 @@ CREATE UNIQUE INDEX one_primary_contact ON members(primary_contact) WHERE primar
 PRAGMA user_version = 39;
 COMMIT;
 """
+from .conversation_cleanup import migrate as _conversation_cleanup
+
+_MIGRATIONS[40] = _conversation_cleanup
+_MIGRATIONS[41] = """
+BEGIN;
+DROP TRIGGER room_chief_required;
+CREATE TRIGGER room_chief_required BEFORE DELETE ON room_members
+WHEN OLD.member_id=COALESCE((SELECT id FROM members WHERE primary_contact=1),0)
+AND EXISTS(SELECT 1 FROM rooms WHERE id=OLD.room_id AND is_team=0)
+BEGIN SELECT RAISE(ABORT,'The chief cannot leave a room'); END;
+PRAGMA user_version = 41;
+COMMIT;
+"""
+_MIGRATIONS[42] = """
+BEGIN;
+ALTER TABLE connect_cards ADD COLUMN app_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE connect_cards ADD COLUMN provider TEXT NOT NULL DEFAULT 'google';
+PRAGMA user_version = 42;
+COMMIT;
+"""
+_MIGRATIONS[43] = """
+BEGIN;
+ALTER TABLE connect_cards ADD COLUMN app_logo TEXT NOT NULL DEFAULT '';
+PRAGMA user_version = 43;
+COMMIT;
+"""
+_MIGRATIONS[44] = """
+BEGIN;
+ALTER TABLE rooms ADD COLUMN read_message_id INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE rooms ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE rooms ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;
+PRAGMA user_version = 44;
+COMMIT;
+"""
+_MIGRATIONS[45] = """
+BEGIN;
+CREATE TABLE computer_grants (
+    member_id INTEGER PRIMARY KEY,
+    granted INTEGER NOT NULL CHECK(granted IN (0, 1)),
+    updated_at_ms INTEGER NOT NULL
+);
+CREATE TRIGGER clear_computer_grant AFTER DELETE ON members BEGIN
+  DELETE FROM computer_grants WHERE member_id=OLD.id;
+END;
+PRAGMA user_version = 45;
+COMMIT;
+"""
+_MIGRATIONS[46] = """
+BEGIN;
+CREATE TABLE pages (
+    id TEXT PRIMARY KEY,
+    turn_id INTEGER NOT NULL,
+    member_id INTEGER NOT NULL,
+    conversation_id INTEGER,
+    title TEXT NOT NULL,
+    html TEXT NOT NULL,
+    fallback TEXT NOT NULL,
+    height INTEGER NOT NULL,
+    rev INTEGER NOT NULL,
+    source TEXT NOT NULL CHECK(source IN ('html', 'mcp')),
+    server TEXT,
+    tool TEXT,
+    tool_input TEXT NOT NULL,
+    tool_result TEXT NOT NULL,
+    network TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL
+);
+CREATE INDEX pages_by_turn ON pages(turn_id);
+CREATE TABLE page_revisions (
+    page_id TEXT NOT NULL,
+    rev INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    html TEXT NOT NULL,
+    at_ms INTEGER NOT NULL,
+    PRIMARY KEY(page_id, rev)
+);
+CREATE TRIGGER clear_page_revisions AFTER DELETE ON pages BEGIN
+  DELETE FROM page_revisions WHERE page_id=OLD.id;
+END;
+CREATE TRIGGER clear_turn_pages AFTER DELETE ON agent_turns BEGIN
+  DELETE FROM pages WHERE turn_id=OLD.id;
+END;
+CREATE TRIGGER clear_conversation_pages AFTER DELETE ON conversations BEGIN
+  DELETE FROM pages WHERE conversation_id=OLD.id;
+END;
+CREATE TRIGGER clear_member_pages AFTER DELETE ON members BEGIN
+  DELETE FROM pages WHERE member_id=OLD.id;
+END;
+PRAGMA user_version = 46;
+COMMIT;
+"""
+# One model answers for every member, chosen in one place: what the composer used to save per member goes.
+_MIGRATIONS[47] = """
+BEGIN;
+UPDATE members SET model = '';
+PRAGMA user_version = 47;
+COMMIT;
+"""
+# The app's own calendar (`own_calendar`): a timed event is two instants, an all-day one two local dates, the last included.
+_MIGRATIONS[48] = """
+BEGIN;
+CREATE TABLE calendar_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  all_day INTEGER NOT NULL DEFAULT 0,
+  start_ms INTEGER,
+  end_ms INTEGER,
+  start_date TEXT,
+  end_date TEXT,
+  notes TEXT NOT NULL DEFAULT '',
+  added_by INTEGER,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL
+);
+CREATE INDEX calendar_events_timed ON calendar_events(start_ms);
+CREATE INDEX calendar_events_all_day ON calendar_events(start_date);
+PRAGMA user_version = 48;
+COMMIT;
+"""
+
+_MIGRATIONS[49] = """
+BEGIN;
+CREATE TABLE owner_questions (
+    id TEXT PRIMARY KEY,
+    task_id INTEGER NOT NULL REFERENCES worker_tasks(id) ON DELETE CASCADE,
+    turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE,
+    member_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    card_id TEXT NOT NULL DEFAULT '',
+    payload TEXT NOT NULL,
+    result TEXT,
+    created_at_ms INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX owner_question_wait ON owner_questions(task_id) WHERE result IS NULL;
+CREATE INDEX owner_question_turn ON owner_questions(turn_id);
+CREATE TRIGGER clear_turn_owner_questions AFTER DELETE ON agent_turns BEGIN
+  DELETE FROM owner_questions WHERE turn_id=OLD.id;
+END;
+CREATE TRIGGER clear_task_owner_questions AFTER DELETE ON worker_tasks BEGIN
+  DELETE FROM owner_questions WHERE task_id=OLD.id;
+END;
+PRAGMA user_version = 49;
+COMMIT;
+"""
+
+_MIGRATIONS[50] = """
+BEGIN;
+ALTER TABLE routines ADD COLUMN when_json TEXT;
+ALTER TABLE routines ADD COLUMN app_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE routines ADD COLUMN last_checked_ms INTEGER;
+ALTER TABLE routines ADD COLUMN last_error TEXT NOT NULL DEFAULT '';
+ALTER TABLE routines ADD COLUMN poll_initialized INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE routines ADD COLUMN poll_failures INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE routine_receipts (
+  routine_id INTEGER NOT NULL REFERENCES routines(id) ON DELETE CASCADE,
+  item_id TEXT NOT NULL,
+  item TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL,
+  PRIMARY KEY(routine_id,item_id)
+);
+CREATE TRIGGER clear_routine_receipts AFTER DELETE ON routines BEGIN
+  DELETE FROM routine_receipts WHERE routine_id=OLD.id;
+END;
+PRAGMA user_version = 50;
+COMMIT;
+"""
+
+# Each member answers on its own model again. Those migration 47 cleared keep what they answer on today, so that Raphael's
+# next change moves none of them. The literal is the default of this version, for an owner who has never chosen one.
+_MIGRATIONS[51] = """
+BEGIN;
+UPDATE members SET model = COALESCE((SELECT json_extract(value, '$') FROM settings WHERE key = 'agent_model'), 'openai/gpt-6-luna')
+WHERE model = '';
+PRAGMA user_version = 51;
+COMMIT;
+"""
+
+# Login cards keep the existing secret-card flow and preserve all outstanding connection cards.
+_MIGRATIONS[52] = """
+BEGIN;
+DROP TRIGGER clear_secret_cards;
+ALTER TABLE secret_cards RENAME TO secret_cards_previous;
+CREATE TABLE secret_cards (
+    id TEXT PRIMARY KEY,
+    turn_id INTEGER NOT NULL,
+    member_id INTEGER NOT NULL,
+    conversation_id INTEGER,
+    server_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('env','header','login')),
+    secret TEXT NOT NULL,
+    name TEXT NOT NULL,
+    language TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('pending','failed','saved','resuming','resumed','cancelled','expired')),
+    error TEXT NOT NULL DEFAULT '',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    done TEXT NOT NULL DEFAULT '[]',
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    expires_at_ms INTEGER NOT NULL,
+    resumed_at_ms INTEGER,
+    UNIQUE(turn_id, server_id, kind, secret)
+);
+INSERT INTO secret_cards SELECT * FROM secret_cards_previous;
+DROP TABLE secret_cards_previous;
+CREATE TRIGGER clear_secret_cards AFTER DELETE ON agent_turns BEGIN
+  DELETE FROM secret_cards WHERE turn_id=OLD.id;
+END;
+CREATE TABLE computer_logins (
+    member_id INTEGER NOT NULL,
+    origin TEXT NOT NULL,
+    reference TEXT NOT NULL UNIQUE,
+    PRIMARY KEY(member_id, origin)
+);
+PRAGMA user_version = 52;
+COMMIT;
+"""
+
+_MIGRATIONS[53] = """
+BEGIN;
+CREATE TABLE connection_proposals (
+  id TEXT PRIMARY KEY,
+  turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE,
+  member_id INTEGER NOT NULL,
+  conversation_id INTEGER,
+  language TEXT NOT NULL,
+  server_id TEXT NOT NULL,
+  fields TEXT NOT NULL,
+  external INTEGER NOT NULL DEFAULT 1,
+  state TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  tested_digest TEXT NOT NULL DEFAULT '',
+  error TEXT NOT NULL DEFAULT '',
+  done TEXT NOT NULL DEFAULT '[]'
+);
+CREATE TRIGGER clear_connection_proposals AFTER DELETE ON agent_turns BEGIN
+  DELETE FROM connection_proposals WHERE turn_id=OLD.id;
+END;
+PRAGMA user_version = 53;
+COMMIT;
+"""
+
+def _merge_daily_windows(conn):
+    import json
+    import re
+    from ..clock import wall_clock_ms
+    from ..members.schedule import next_run, parse_schedule, ScheduleError
+
+    groups = {}
+    cursor = conn.execute("SELECT * FROM routines ORDER BY id")
+    cursor.row_factory = sqlite3.Row
+    for row in cursor.fetchall():
+        try:
+            schedule = parse_schedule(json.loads(row["schedule"]))
+        except (ValueError, TypeError, ScheduleError):
+            continue
+        if schedule.kind != "daily" or schedule.start_date or schedule.until or schedule.max_runs or row["when_json"]:
+            continue
+        key = (row["member_id"], row["prompt"], row["app_name"], row["enabled"])
+        groups.setdefault(key, []).append((row, schedule.time))
+    with conn:
+        for rows in groups.values():
+            times = sorted(int(time[:2]) * 60 + int(time[3:]) for _, time in rows)
+            if len(times) < 2:
+                continue
+            step = times[1] - times[0]
+            if step <= 0 or step % 60 or any(b - a != step for a, b in zip(times, times[1:])):
+                continue
+            kept = rows[0][0]
+            schedule = parse_schedule({"kind": "every", "hours": step // 60,
+                                       "from": f"{times[0] // 60:02}:{times[0] % 60:02}",
+                                       "to": f"{times[-1] // 60:02}:{times[-1] % 60:02}"})
+            last = max((row["last_run_ms"] for row, _ in rows if row["last_run_ms"] is not None), default=None)
+            title = re.sub(r"\s*[（(]\d{1,2}:\d{2}[）)]\s*$", "", kept["title"])
+            conn.execute("UPDATE routines SET schedule=?,title=?,last_run_ms=?,next_run_ms=? WHERE id=?",
+                         (json.dumps(schedule.to_json()), title, last, next_run(schedule, wall_clock_ms()) if kept["enabled"] else None, kept["id"]))
+            for row, _ in rows[1:]:
+                rid = row["id"]
+                conn.execute("UPDATE routine_runs SET routine_id=? WHERE routine_id=?", (kept["id"], rid))
+                conn.execute(
+                    "INSERT INTO routine_receipts(routine_id,item_id,item,state) SELECT ?,item_id,item,state FROM routine_receipts WHERE routine_id=?"
+                    " ON CONFLICT(routine_id,item_id) DO UPDATE SET item=excluded.item,state=excluded.state"
+                    " WHERE (CASE excluded.state WHEN 'fired' THEN 2 WHEN 'pending' THEN 1 ELSE 0 END)"
+                    " > (CASE routine_receipts.state WHEN 'fired' THEN 2 WHEN 'pending' THEN 1 ELSE 0 END)", (kept["id"], rid))
+                conn.execute("DELETE FROM routine_receipts WHERE routine_id=?", (rid,))
+                conn.execute("DELETE FROM routines WHERE id=?", (rid,))
+        conn.execute("PRAGMA user_version = 54")
+
+
+_MIGRATIONS[54] = _merge_daily_windows
+
+_MIGRATIONS[55] = """
+BEGIN;
+ALTER TABLE routine_runs ADD COLUMN trigger_json TEXT NOT NULL DEFAULT '{}';
+PRAGMA user_version = 55;
+COMMIT;
+"""
+
+_MIGRATIONS[56] = """
+BEGIN;
+ALTER TABLE permission_cards ADD COLUMN message TEXT NOT NULL DEFAULT '{}';
+PRAGMA user_version = 56;
+COMMIT;
+"""
+
+_MIGRATIONS[57] = """
+BEGIN;
+ALTER TABLE member_unread ADD COLUMN unread_from INTEGER;
+PRAGMA user_version = 57;
+COMMIT;
+"""
+
+_MIGRATIONS[58] = """
+BEGIN;
+CREATE TABLE agent_inbox (
+    turn_id INTEGER PRIMARY KEY REFERENCES agent_turns(id) ON DELETE CASCADE,
+    request_id TEXT NOT NULL,
+    member_id INTEGER NOT NULL,
+    conversation_id INTEGER NOT NULL,
+    seq INTEGER NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('queued','steering','started','terminal')),
+    outcome TEXT,
+    payload_json TEXT NOT NULL,
+    boot_id TEXT,
+    created_at_ms INTEGER NOT NULL,
+    claimed_at_ms INTEGER,
+    settled_at_ms INTEGER
+);
+CREATE UNIQUE INDEX agent_inbox_request ON agent_inbox(member_id, conversation_id, request_id) WHERE state!='terminal';
+CREATE INDEX agent_inbox_scope ON agent_inbox(member_id, conversation_id, state, seq);
+CREATE UNIQUE INDEX agent_inbox_started ON agent_inbox(member_id, conversation_id) WHERE state='started';
+CREATE TRIGGER agent_inbox_delete AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM agent_inbox WHERE turn_id=OLD.id;
+END;
+PRAGMA user_version = 58;
+COMMIT;
+"""
+
+_MIGRATIONS[59] = """
+BEGIN;
+ALTER TABLE worker_tasks ADD COLUMN requires_artifact INTEGER NOT NULL DEFAULT 0 CHECK (requires_artifact IN (0,1));
+PRAGMA user_version = 59;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 
@@ -1050,7 +1395,7 @@ def migrate(conn: sqlite3.Connection) -> None:
     is its own transaction: one that fails leaves the database at the version before it.
     """
     (version,) = conn.execute("PRAGMA user_version").fetchone()
-    for target in range(version + 1, LATEST_VERSION + 1):
+    for target in sorted(target for target in _MIGRATIONS if version < target <= LATEST_VERSION):
         step = _MIGRATIONS[target]
         try:
             if callable(step):

@@ -281,7 +281,7 @@ async def test_no_key_is_not_configured_and_asks_nobody(router, fake_client, key
     keys.clear()
     with pytest.raises(RpcError) as caught:
         await transcribe(router)
-    assert caught.value.code == NOT_CONFIGURED and caught.value.data == {"kind": "no_key"}
+    assert caught.value.code == NOT_CONFIGURED and caught.value.data == {"kind": "no_key", "missing": {"resource": "stt", "requirement": "cloud_credentials", "state": "missing", "repair": "models"}}
     assert fake_client.calls == [] and spend_rows(conn) == []
 
 

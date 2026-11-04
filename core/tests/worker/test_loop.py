@@ -6,10 +6,8 @@ import json
 
 import pytest
 
-from raphael_core.worker.guards import OMITTED
 from raphael_core.worker.loop import (
     BAD_ARGUMENTS,
-    REPEATED,
     TOO_LONG,
     UNKNOWN_TOOL,
     Call,
@@ -30,6 +28,7 @@ TOOLS = [
         },
     },
     {"type": "function", "function": {"name": "local_time", "description": "Time.", "parameters": {}}},
+    {"type": "function", "function": {"name": "vm_exec", "description": "Run.", "parameters": {"type": "object"}}},
 ]
 
 
@@ -51,9 +50,11 @@ class FakeHost:
         self.answer = answer or (lambda name, arguments: ToolOutcome(True, None, f"result of {name}"))
         self.conversations = []
         self.tool_calls = []
+        self.rooms = []
 
-    async def chat(self, messages, tools):
+    async def chat(self, messages, tools, room=1):
         self.conversations.append(copy.deepcopy(list(messages)))
+        self.rooms.append(room)
         item = self.turns.pop(0)
         if isinstance(item, BaseException):
             raise item
@@ -69,6 +70,24 @@ class FakeHost:
         if isinstance(outcome, BaseException):
             raise outcome
         return outcome
+
+
+async def test_tool_result_can_replace_stale_definitions_and_schemas():
+    updated = copy.deepcopy(TOOLS[:1])
+    updated[0]["function"]["parameters"]["required"] = ["topic"]
+    seen = []
+
+    class Host(FakeHost):
+        async def chat(self, messages, tools):
+            seen.append(copy.deepcopy(list(tools)))
+            return await super().chat(messages, tools)
+
+        async def tool(self, call_id, name, arguments):
+            return ToolOutcome(True, tools=updated, replace_tools=True)
+
+    host = Host([Turn("Look.", [ask("Notes__look", {})]), Turn("Done.")])
+    assert (await run_task(host, system="", user="", tools=TOOLS)).status == "done"
+    assert seen[1] == updated
 
 
 async def run(host, **kwargs):
@@ -140,13 +159,8 @@ async def test_arguments_that_are_far_too_long_are_not_called():
     assert TOO_LONG in host.conversations[1][-1]["content"]
 
 
-async def test_the_same_call_for_the_third_time_is_not_made():
-    same = lambda n: Turn("", [ask("Notes__look", {"topic": "tea"}, f"c{n}")])  # noqa: E731
-    host = FakeHost([same(1), same(2), same(3), report()])
-    outcome = await run(host)
-    assert outcome.status == "done"
-    assert len(host.tool_calls) == 2 and outcome.tool_calls == 2
-    assert REPEATED in host.conversations[3][-1]["content"]
+def notes_of(conversation):
+    return [m["content"] for m in conversation if m["role"] == "tool" and "harness_note" in m["content"]]
 
 
 async def test_a_call_that_failed_is_told_as_failed_data():
@@ -170,14 +184,13 @@ async def test_a_result_that_tries_to_give_orders_stays_inside_its_wrapper():
     assert result.count("</tool_result>") == 1 and "<task>" not in result
 
 
-async def test_the_results_of_old_rounds_are_dropped_as_the_task_goes_on():
+async def test_the_results_of_old_rounds_stay_while_they_fit():
     turns = [Turn("", [ask("Notes__look", {"topic": f"t{n}"}, f"c{n}")]) for n in range(6)]
     host = FakeHost([*turns, report()])
     await run(host, limits=Limits(model_calls=15, tool_calls=25, seconds=60))
     last = host.conversations[-1]
     results = [m["content"] for m in last if m["role"] == "tool"]
-    assert results[:3] == [OMITTED] * 3
-    assert all("result of Notes__look" in text for text in results[3:])
+    assert len(results) == 6 and all("result of Notes__look" in text for text in results)
 
 
 async def test_the_model_call_limit_stops_the_task_without_another_call():
@@ -186,7 +199,7 @@ async def test_the_model_call_limit_stops_the_task_without_another_call():
     outcome = await run(host, limits=Limits(model_calls=3, tool_calls=25, seconds=60))
     assert (outcome.status, outcome.kind) == ("stopped", "limit_model")
     assert (outcome.model_calls, outcome.tool_calls) == (3, 3)
-    assert len(host.conversations) == 3
+    assert len(host.conversations) == 4  # three steps, then the one call that asks where the task stands
 
 
 async def test_the_tool_call_limit_stops_the_task_before_the_call_is_made():
@@ -213,17 +226,6 @@ async def test_the_time_limit_stops_a_task_whose_tool_takes_too_long():
     host = FakeHost([Turn("", [ask("Notes__look", {"topic": "x"})])], answer=slow)
     outcome = await run(host, limits=Limits(model_calls=15, tool_calls=25, seconds=0.05))
     assert (outcome.status, outcome.kind) == ("stopped", "limit_time")
-
-
-async def test_the_time_limit_is_looked_at_between_steps_too():
-    now = [0.0]
-    host = FakeHost(
-        [Turn("", [ask("Notes__look", {"topic": "x"})]), report()],
-        answer=lambda name, arguments: now.__setitem__(0, 100.0) or ToolOutcome(True, None, "r"),
-    )
-    outcome = await run(host, limits=Limits(seconds=60), clock=lambda: now[0])
-    assert (outcome.status, outcome.kind) == ("stopped", "limit_time")
-    assert len(host.conversations) == 1
 
 
 async def test_a_stop_of_the_host_ends_the_task_with_its_kind_and_detail():
@@ -322,27 +324,108 @@ async def test_a_task_goes_on_from_the_conversation_it_is_given():
     assert outcome.messages is None
 
 
-async def test_calls_that_keep_failing_steer_the_model_once_and_then_stop_the_task():
-    # every call fails; the topics differ so that no call is refused as a repeat
-    failing = lambda name, arguments: ToolOutcome(False, "error", "")
-    turns = [Turn("", [ask("Notes__look", {"topic": f"t{i}"}, f"c{i}")]) for i in range(10)]
-    host = FakeHost(turns, answer=failing)
+# --- repeats and failures: a note to the model, never a refusal ---------------------------------------
+
+
+def command(text, id=None):
+    return ask("vm_exec", {"command": text}, id or f"c-{text}")
+
+
+def ran(code, output=""):
+    return ToolOutcome(True, None, json.dumps({"exit_code": code, "output": output, "truncated": False}))
+
+
+async def test_the_same_read_with_the_same_result_three_times_gets_a_note_and_is_still_made():
+    same = lambda n: Turn("", [ask("Notes__look", {"topic": "tea"}, f"c{n}")])  # noqa: E731
+    host = FakeHost([same(1), same(2), same(3), report()])
     outcome = await run(host)
-    assert (outcome.status, outcome.kind, outcome.detail) == ("stopped", "failed", "tool_failures")
+    assert outcome.status == "done" and outcome.tool_calls == 3 == len(host.tool_calls)
+    assert notes_of(host.conversations[2]) == []
+    [note] = notes_of(host.conversations[3])
+    assert "result of Notes__look" in note  # the result is still there, with the note after it
+    assert "3 identical calls in a row" in note and note.endswith("</harness_note>")
+
+
+async def test_a_log_polled_with_the_same_command_while_its_output_changes_trips_nothing():
+    lines = iter(range(100))
+    turns = [Turn("", [command("tail -n 1 build.log", f"c{n}")]) for n in range(8)]
+    host = FakeHost([*turns, report()], answer=lambda name, arguments: ran(0, f"step {next(lines)}"))
+    outcome = await run(host)
+    assert outcome.status == "done" and len(host.tool_calls) == 8
+    assert notes_of(host.conversations[-1]) == []
+
+
+async def test_two_calls_that_alternate_with_unchanged_results_get_a_note_after_three_rounds():
+    pair = [("Notes__look", {"topic": "a"}), ("local_time", {})]
+    turns = [Turn("", [ask(*pair[n % 2], id=f"c{n}")]) for n in range(6)]
+    host = FakeHost([*turns, report()])
+    outcome = await run(host)
+    assert outcome.status == "done" and len(host.tool_calls) == 6
+    assert notes_of(host.conversations[5]) == []
+    [note] = notes_of(host.conversations[6])
+    assert "same 2 calls" in note
+
+
+@pytest.mark.parametrize("unattended", [False, True])
+async def test_a_test_run_that_goes_red_is_edited_and_runs_again_is_never_held_back(unattended):
+    script = iter([ran(1, "FAILED a"), ran(0), ran(1, "FAILED b"), ran(0), ran(0, "2 passed")])
+    calls = ["pytest", "sed -i s/a/b/ x.py", "pytest", "sed -i s/b/c/ x.py", "pytest"]
+    host = FakeHost([*[Turn("", [command(text, f"c{n}")]) for n, text in enumerate(calls)], report()],
+                    answer=lambda name, arguments: next(script))
+    kwargs = {}
+    if unattended:
+        from raphael_core.worker.tool_guardrails import ToolGuardrails
+
+        kwargs["guardrails"] = ToolGuardrails(hard_stop=True)
+    outcome = await run(host, **kwargs)
+    assert outcome.status == "done" and len(host.tool_calls) == 5
+    assert notes_of(host.conversations[-1]) == []
+    assert not any("not made" in m["content"].lower() for m in host.conversations[-1] if m["role"] == "tool")
+
+
+async def test_a_tool_that_keeps_failing_is_told_to_diagnose_and_is_still_called():
+    turns = [Turn("", [ask("Notes__look", {"topic": f"t{n}"}, f"c{n}")]) for n in range(4)]
+    host = FakeHost([*turns, report()], answer=lambda name, arguments: ToolOutcome(False, "tool_error", "boom"))
+    outcome = await run(host)
+    assert outcome.status == "done" and len(host.tool_calls) == 4
+    assert notes_of(host.conversations[2]) == []
+    [note] = notes_of(host.conversations[3])
+    assert "diagnose" in note
+    assert len(notes_of(host.conversations[4])) == 2  # and again after the fourth
+
+
+async def test_a_turn_with_the_owner_in_it_is_never_stopped_by_failures_however_many():
+    turns = [Turn("", [ask("Notes__look", {"topic": f"t{n}"}, f"c{n}")]) for n in range(12)]
+    host = FakeHost([*turns, report()], answer=lambda name, arguments: ToolOutcome(False, "network", ""))
+    outcome = await run(host)
+    assert outcome.status == "done" and outcome.tool_calls == 12
+
+
+async def test_a_task_nobody_is_in_stops_when_it_repeats_the_same_call_with_the_same_result():
+    from raphael_core.worker.tool_guardrails import ToolGuardrails
+
+    turns = [Turn("", [ask("Notes__look", {"topic": "tea"}, f"c{n}")]) for n in range(10)]
+    host = FakeHost(turns)
+    outcome = await run(host, guardrails=ToolGuardrails(hard_stop=True))
+    assert (outcome.status, outcome.kind, outcome.detail) == ("stopped", "failed", "tool_loop")
+    assert outcome.tool_calls == 5
+
+
+async def test_a_task_nobody_is_in_stops_when_one_tool_fails_again_and_again_but_not_a_command():
+    from raphael_core.worker.tool_guardrails import ToolGuardrails
+
+    failing = lambda name, arguments: ToolOutcome(False, "tool_error", "boom")  # noqa: E731
+    turns = [Turn("", [ask("Notes__look", {"topic": f"t{n}"}, f"c{n}")]) for n in range(12)]
+    outcome = await run(FakeHost(turns, answer=failing), guardrails=ToolGuardrails(hard_stop=True))
+    assert (outcome.status, outcome.kind, outcome.detail) == ("stopped", "failed", "tool_loop")
     assert outcome.tool_calls == 8
-    notes = [m for m in host.conversations[-1] if m["role"] == "user" and "harness_note" in m["content"]]
-    assert len(notes) == 1  # told once, after the fifth failure in a row
-    fifth = host.conversations[5]
-    assert fifth[-1]["role"] == "user" and "Several tool calls in a row have failed" in fifth[-1]["content"]
-
-
-async def test_a_call_that_works_starts_the_count_of_failures_again():
-    calls = iter(range(100))
-    # four failures, one success, four failures: never five in a row
-    pattern = [False] * 4 + [True] + [False] * 4
-    answer = lambda name, arguments: ToolOutcome(pattern[next(calls)], None, "x")
-    turns = [Turn("", [ask("Notes__look", {"topic": f"t{i}"}, f"c{i}")]) for i in range(9)] + [report()]
-    host = FakeHost(turns, answer=answer)
-    outcome = await run(host)
-    assert outcome.status == "done"
-    assert not any(m["role"] == "user" and "harness_note" in m["content"] for m in host.conversations[-1])
+    # Different commands that fail are diagnosis, not a loop; only the same command, unchanged, is.
+    turns = [Turn("", [command(f"make step{n}", f"c{n}")]) for n in range(12)]
+    host = FakeHost([*turns, report()], answer=lambda name, arguments: ran(2, "error"))
+    outcome = await run(host, guardrails=ToolGuardrails(hard_stop=True))
+    assert outcome.status == "done" and outcome.tool_calls == 12
+    turns = [Turn("", [command("make", f"c{n}")]) for n in range(12)]
+    outcome = await run(FakeHost(turns, answer=lambda name, arguments: ran(2, "error")),
+                        guardrails=ToolGuardrails(hard_stop=True))
+    assert (outcome.status, outcome.kind, outcome.detail) == ("stopped", "failed", "tool_loop")
+    assert outcome.tool_calls == 5

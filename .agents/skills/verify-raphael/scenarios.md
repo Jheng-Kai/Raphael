@@ -54,10 +54,12 @@ read-back assertion. Discovery, denied calls, old schema/HEAD/run evidence and
 driver-initiated setup RPCs never count. Dynamic identities include provider,
 server ID and original operation, independently of display names and aliases.
 
-Current executable flows are S17's missing-auth/missing-permission cases and
-S21.routines create/list/edit/pause/resume/delete. Routine setup uses RPC; the model
-must select the mutation/read tool, and the driver reads the result back through
-RPC. All other complete owner contracts remain explicit failures with their
+Current executable flows are S17's missing-auth/missing-permission cases,
+S21.routines create/list/edit/pause/resume/delete and S21.calendar
+create/list/move/delete. Routine setup uses RPC; the model must select the
+mutation/read tool, and the driver reads the result back through RPC. The calendar
+cells ask in the owner's words (今天的行程) and fail when the turn reaches for another
+calendar through find_app or connect_app. All other complete owner contracts remain explicit failures with their
 responsible PRs in `guardian_scenarios.py`. The coverage guard itself is executable,
 but S22 correctly fails until the mapped calls pass on both brains and every
 API/MCP surface is present. There are known API/MCP gaps for CLI memory/approval
@@ -83,7 +85,8 @@ That fixture is not live model, connector, native or design acceptance.
 
 ## S01 team setup acceptance (P05)
 
-S01 uses the production AgentService loops for both brains. It checks that a
+S01 uses the production AgentService loops for both brains, with the owner's setting
+on 先詢問 (in 自動 a team is made at once). It checks that a
 five-member team is proposed without roster mutation, cancels and replays the old
 confirmation, then requests the team again, edits the first prompt, applies once
 and reads back the saved prompt. Replaying approval must not change the roster.
@@ -98,8 +101,7 @@ The owner's primary contact is Raphael until they choose another member (`member
 the roster's primary (`roster_primary_missing`, `roster_primary_stale`, `roster_primary_wrong`) and Raphael as the chief of staff (`roster_chief_missing`,
 `roster_chief_wrong`). `S03.primary-dispatch` makes 行銷 the primary and tells it, in its own chat, to have 信件助理 read the mail now: one durable task
 from the primary to 信件助理 (`dispatcher_not_primary`), the primary's centred 已轉交給 line (`handoff_line_missing`), one receipt, so the primary did not read the
-mail itself (`primary_did_the_work`), and the usual immediate-start, scope, result and no-routine checks. `S07.meeting` is held with HiKari as the primary: Raphael
-is in the room and writes its one wrap-up as before, and every room turn must carry the roster with that primary and Raphael as the chief
+mail itself (`primary_did_the_work`), and the usual immediate-start, scope, result and no-routine checks. `S07.meeting` is held with HiKari as the primary: only the requested members participate, without a mandatory Raphael (0), fixed rounds or automatic wrap-up. Every room turn must carry the roster with HiKari as both primary and chief
 (`meeting_turn_primary_unknown`). Offline honest fake brains and a lying brain for each check are in core/tests/evaluate/test_p02_scenarios.py and
 test_guardian_scenarios.py.
 
@@ -116,3 +118,8 @@ with. Without the other brain (or in API-only mode, where no CLI starts) it is S
 "formal contrast brain unavailable". Offline honest fake brains on both brains and one
 negative test per check live in `core/tests/evaluate/test_p19_scenarios.py`; the native
 Alt+Space entry still needs its own live check.
+
+
+Phase 3 adds S21.skills.list and S21.skills.manage for the shared skills_list and
+skill_manage tool definitions. Manifest registration is coverage bookkeeping only; it is
+not live/API/CLI provider acceptance. The offline skill-growth native journey uses fakes.

@@ -5,13 +5,15 @@ import { expect, it } from "vitest";
 
 const root = resolve(__dirname, "../..");
 const read = (path: string): string => readFileSync(path, "utf8");
+// RAPHAEL_STAGED_DOCS names a folder that mirrors the tree with edited documents not applied yet.
+const stagedRoot = process.env.RAPHAEL_STAGED_DOCS ? resolve(root, process.env.RAPHAEL_STAGED_DOCS) : null;
+const located = (path: string): string => stagedRoot && existsSync(join(stagedRoot, path)) ? join(stagedRoot, path) : join(root, path);
 const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]);
 const sources = walk(join(root, "app/src/main")).filter(path => path.endsWith(".ts") && !path.endsWith(".test.ts"));
 
 it("mechanical rules link existing named tests", () => {
   for (const name of ["RULES", "ARCHITECTURE"]) {
-    const deployed = join(root, `.agents/product/${name}.md`), staged = join(root, `.fold/.agents/product/${name}.md`);
-    const spec = read(existsSync(staged) ? staged : deployed);
+    const spec = read(located(`.agents/product/${name}.md`));
     const rows = spec.split("\n").filter(line => /^\| (?:R-[A-Z]+-\d+|A-\d+) \|/.test(line));
     expect(rows.length).toBeGreaterThan(10);
     const ids = rows.map(row => row.split("|")[1]!.trim());
@@ -32,6 +34,18 @@ it("mechanical rules link existing named tests", () => {
     }
   }
 });
+
+it("a rule named in the code is in the ledger", () => {
+  const ledger = read(located(".agents/product/RULES.md"));
+  const known = new Set([...ledger.matchAll(/^(?:\| )?(R-[A-Z]+(?:-[A-Z]+)*-\d+)(?: \||:)/gm)].map(match => match[1]));
+  const unknownOnPurpose = "R-UI-99"; // test_design_judge.py proves an unknown rule id is refused
+  const code = ["app/src", "app/scripts", "core/src", "core/tests"].flatMap(dir => walk(join(root, dir)))
+    .filter(path => /\.(?:ts|mjs|py|css)$/.test(path));
+  const dangling = code.flatMap(path => [...read(path).matchAll(/\bR-[A-Z]+(?:-[A-Z]+)*-\d+\b/g)]
+    .filter(match => !known.has(match[0]) && match[0] !== unknownOnPurpose)
+    .map(match => `${path.slice(root.length + 1)}: ${match[0]}`));
+  expect(dangling).toEqual([]);
+}, 60_000);
 
 it("core IPC has one frontend boundary", () => {
   const violations: string[] = [];

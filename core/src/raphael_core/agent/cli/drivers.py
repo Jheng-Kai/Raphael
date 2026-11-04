@@ -2,6 +2,8 @@
 
 Only public text and explicit reasoning summaries are forwarded. Raw diagnostics,
 reasoning blocks, command output and provider credentials never become UI messages.
+Active-turn steering adapts Hermes agent/transports/codex_app_server_session.py
+(MIT, c419cf7c); see THIRD_PARTY_NOTICES.md.
 """
 
 import asyncio
@@ -10,12 +12,15 @@ import hashlib
 import json
 import os
 import logging
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
 from .process import Child, PrivateFiles, secure_directory
+from .native_diagnostics import capture as native_capture, directory as native_directory, enabled as native_enabled
 from ..quota import parse_quota
+from ...failures import classify
 from ...clock import wall_clock_ms
 
 logger = logging.getLogger(__name__)
@@ -64,11 +69,43 @@ class Driver:
         self.turn = None
         self.quota = quota
         self.exhausted = False
+        self.reset_at_ms = None
+        self._diagnostic_secrets = []
+        self._steers = {}
+
+    async def steer(self, text):
+        if self.name != "codex" or not self.child or not self.session or not self.turn or not text.strip():
+            return False
+        thread, turn = self.session, self.turn
+        identifier = "steer:" + uuid.uuid4().hex
+        future = asyncio.get_running_loop().create_future()
+        self._steers[identifier] = (future, turn)
+        try:
+            await self.child.send({"jsonrpc": "2.0", "id": identifier, "method": "turn/steer",
+                                   "params": {"threadId": thread, "input": [{"type": "text", "text": text}], "expectedTurnId": turn}})
+            return await asyncio.wait_for(future, 10)
+        except (OSError, TimeoutError, RuntimeError):
+            return False
+        finally:
+            self._steers.pop(identifier, None)
+
+    def _close_steers(self):
+        self.turn = None
+        for future, _ in self._steers.values():
+            if not future.done():
+                future.set_result(False)
+
+    def native_diagnostic(self, stage, value):
+        native_capture(stage, value, self._diagnostic_secrets)
 
     def _event(self, kind, text):
-        # Only normalized quota metadata crosses this boundary, never provider diagnostics.
-        if kind == "error" and self.exhausted:
-            text = "quota"
+        if kind == "error":
+            failure = classify(text, secrets=self._diagnostic_secrets)
+            if self.exhausted and failure.kind not in ("credits", "auth_expired", "refused"):
+                failure = classify({"kind": "usage_limit", "message": failure.reason})
+            if failure.kind == "usage_limit" and self.reset_at_ms:
+                failure = classify({"kind": failure.kind, "message": failure.reason, "resets_at": self.reset_at_ms / 1000})
+            return Event(kind, failure.kind, failure.wire())
         elif kind == "final" and self.quota and not self.exhausted:
             self.quota(self.name, {"exhausted": False})
         return Event(kind, text)
@@ -83,25 +120,35 @@ class Driver:
                 pass
         if self.child:
             await self.child.kill()
+        self._close_steers()
 
-    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=()):
+    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=(), computer_endpoint=None, structured=None):
         files = PrivateFiles()
         codex_auth = None
+        self._diagnostic_secrets = [token]
         try:
             await files.secure()
             prompt_file = files.write("system.txt", system)
             mcp = {"mcpServers": {"raphael": {"type": "http", "url": endpoint,
                                               "headers": {"Authorization": f"Bearer {token}"}}}}
+            self.computer_endpoint = computer_endpoint
+            if computer_endpoint:
+                mcp["mcpServers"]["computer"] = {"type": "http", "url": computer_endpoint,
+                    "headers": {"Authorization": f"Bearer {token}"}}
             config = files.write("mcp.json", json.dumps(mcp))
             command = list(self.command)
             environ = dict(os.environ if self.environ is None else self.environ)
             child_cwd = cwd or str(files.path)
             if self.name == "claude":
                 command += ["-p", "--output-format", "stream-json", "--input-format", "stream-json", "--verbose",
+                            "--setting-sources", "", "--disable-slash-commands",
                             "--include-partial-messages", "--append-system-prompt-file", prompt_file,
                             "--mcp-config", config, "--strict-mcp-config", "--tools", "",
-                            "--allowedTools", "mcp__raphael__*",
-                            "--permission-prompt-tool", "mcp__raphael__approve"]
+                            "--allowedTools", "mcp__raphael__*,mcp__computer__*" if computer_endpoint else "mcp__raphael__*"]
+                if structured is not None:
+                    command += ["--json-schema", json.dumps(structured)]
+                else:
+                    command += ["--permission-prompt-tool", "mcp__raphael__approve"]
                 if session:
                     command += ["--resume", session]
                 if self.model:
@@ -112,6 +159,8 @@ class Driver:
                 # The thread's `config` is not applied to MCP servers: they are set when the server
                 # starts, the token passed through the environment, never on the command line.
                 home, environ, auth = await codex_home(child_cwd, environ, owner=self.home)
+                if auth:
+                    self._diagnostic_secrets.extend(auth.get("tokens", {}).values())
                 codex_auth = home / "auth.json"
                 if auth is not None:
                     descriptor = os.open(codex_auth, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
@@ -122,6 +171,11 @@ class Driver:
                 session = session.removeprefix(CODEX_SESSION_PREFIX) if session and session.startswith(CODEX_SESSION_PREFIX) else None
                 overrides = {**CODEX_ISOLATION, "mcp_servers.raphael.url": endpoint,
                              "mcp_servers.raphael.bearer_token_env_var": "RAPHAEL_MCP_TOKEN"}
+                if computer_endpoint:
+                    overrides.update({"mcp_servers.computer.url": computer_endpoint,
+                        "mcp_servers.computer.bearer_token_env_var": "RAPHAEL_MCP_TOKEN",
+                        "mcp_servers.computer.required": True, "mcp_servers.computer.startup_readiness": "catalog",
+                        "mcp_servers.computer.omit_tools_from": ["deferred", "code_mode"]})
                 command += ["app-server", "--strict-config"]
                 for key, value in overrides.items():
                     command += ["-c", f"{key}={json.dumps(value)}"]
@@ -130,7 +184,7 @@ class Driver:
                 # rules only from its home folder, so it runs with a private home inside the
                 # member's workspace: Raphael's server and the persona are there, the owner's own
                 # agy settings are never touched, and the login (in the OS store) still applies.
-                home = antigravity_home(cwd or str(files.path), endpoint, token, system)
+                home = antigravity_home(cwd or str(files.path), endpoint, token, system, computer_endpoint=computer_endpoint)
                 command += ["--input-format", "stream-json", "--output-format", "stream-json", "-p="]
                 if self.model:
                     command += ["--model", self.model]
@@ -143,6 +197,9 @@ class Driver:
             elif self.name == "gemini":
                 environ["USERPROFILE"] = environ["HOME"] = str(home)
             self.child = Child(command, environ=environ, cwd=child_cwd)
+            self.native_diagnostic("launch", {"brain": self.name, "executable": self.command[0], "model": self.model,
+                "cwd": child_cwd, "home": environ.get("HOME"), "profile": environ.get("USERPROFILE"),
+                "appdata": environ.get("APPDATA"), "sandbox": "read-only" if self.name == "codex" else None})
             await self.child.start()
             if self.name == "claude":
                 content = ([{"type": "text", "text": user}] + [
@@ -169,12 +226,16 @@ class Driver:
                 async for event in self._rpc(user, system, endpoint, token, session, permission, image_paths):
                     yield Event("session", CODEX_SESSION_PREFIX + event.text) if event.kind == "session" else event
         except (OSError, ValueError, TimeoutError, EOFError, asyncio.IncompleteReadError) as error:
+            self.native_diagnostic("transport", {"type": type(error).__name__, "message": str(error)})
             logger.warning("CLI transport failed: %s", type(error).__name__)
-            yield self._event("error", "protocol_or_process_error")
+            yield self._event("error", {"kind": "network", "message": "CLI process ended before completion"}
+                              if isinstance(error, (EOFError, asyncio.IncompleteReadError)) else error)
         finally:
             try:
                 await self.interrupt()
             finally:
+                if self.child and self.child.stderr_tail is not None:
+                    self.native_diagnostic("stderr-tail", self.child.stderr_tail.decode("utf-8", errors="replace"))
                 if codex_auth is not None:
                     codex_auth.unlink(missing_ok=True)
                 await files.aclose()
@@ -189,6 +250,13 @@ class Driver:
         if not isinstance(value, dict):
             raise ValueError("invalid_packet")
         self._observe_quota(value)
+        if native_enabled():
+            params = value.get("params") or {}
+            error = value.get("error") or (params.get("error") if value.get("method") == "error" else None)
+            if value.get("method") == "turn/completed":
+                error = (params.get("turn") or {}).get("error") or error
+            if error:
+                self.native_diagnostic("codex-error-event", error)
         return value
 
     def _observe_quota(self, packet):
@@ -206,6 +274,7 @@ class Driver:
             data = parse_quota(packet, wall_clock_ms())
             if data is not None:
                 self.exhausted = data["exhausted"]
+                self.reset_at_ms = data.get("reset_at_ms")
                 if self.quota:
                     self.quota(self.name, data)
 
@@ -226,18 +295,18 @@ class Driver:
                 elif event.get("type") == "content_block_start":
                     block = event.get("content_block", {})
                     if block.get("type") == "tool_use":
-                        yield Event("tool_start", data={"name": block.get("name", "tool")})
+                        yield Event("tool_start", data={"id": block.get("id"), "name": block.get("name", "tool")})
             elif kind == "assistant":
                 for block in packet.get("message", {}).get("content", []):
                     if block.get("type") == "text" and not partial:
                         yield Event("text_delta", block.get("text", ""))
                     elif block.get("type") == "tool_use":
-                        yield Event("tool_start", data={"name": block.get("name", "tool")})
+                        yield Event("tool_start", data={"id": block.get("id"), "name": block.get("name", "tool")})
                 partial = False
             elif kind == "user":
                 for block in packet.get("message", {}).get("content", []):
                     if isinstance(block, dict) and block.get("type") == "tool_result":
-                        yield Event("tool_end", data={"ok": not block.get("is_error", False)})
+                        yield Event("tool_end", data={"id": block.get("tool_use_id"), "ok": not block.get("is_error", False)})
             elif kind == "result":
                 if packet.get("session_id"):
                     self.session = packet["session_id"]
@@ -245,9 +314,11 @@ class Driver:
                 yield Event("usage", data=packet.get("usage", {}))
                 if packet.get("is_error") or packet.get("subtype") != "success":
                     # api_error_status is the HTTP status of the API error that ended the turn.
-                    yield self._event("error", "rate_limited" if packet.get("api_error_status") == 429 else "cli_failed")
+                    yield self._event("error", {"error": packet.get("result") or packet.get("errors") or "CLI failed",
+                                                "status": packet.get("api_error_status")})
                 else:
-                    yield self._event("final", packet.get("result") or "")
+                    output = packet.get("structured_output")
+                    yield self._event("final", json.dumps(output) if output is not None else packet.get("result") or "")
                 return
 
     async def _antigravity(self):
@@ -274,8 +345,7 @@ class Driver:
                     yield Event("session", self.session)
                 yield Event("usage", data=result.get("usage") or {})
                 if result.get("status") != "SUCCESS":
-                    error = str(result.get("error") or "").lower()
-                    yield self._event("error", "quota" if "quota" in error or "rate limit" in error else "cli_failed")
+                    yield self._event("error", result.get("error") or "CLI failed")
                 else:
                     yield self._event("final", result.get("response") or "")
                 return
@@ -300,6 +370,12 @@ class Driver:
         while True:
             packet = await self._read()
             method, params = packet.get("method", ""), packet.get("params", {})
+            if not method and packet.get("id") in self._steers:
+                future, turn = self._steers[packet['id']]
+                result = packet.get('result') or {}
+                if not future.done():
+                    future.set_result('error' not in packet and result.get('turnId') in (None, turn))
+                continue
             if not method and packet.get("id") in pending:
                 label = pending.pop(packet["id"])
                 if "error" in packet:
@@ -309,7 +385,7 @@ class Driver:
                         arguments.pop("threadId", None)
                         await request("thread/start", arguments, "session")
                         continue
-                    yield self._event("error", "cli_request_failed")
+                    yield self._event("error", packet.get("error") or "CLI request failed")
                     return
                 result = packet.get("result") or {}
                 if label == "initialize":
@@ -345,7 +421,7 @@ class Driver:
                     # Codex asks before it calls an MCP tool. Raphael's own server screens every call
                     # through the safety gate (and asks the owner when the rules say so), so a call to
                     # it is accepted here; any other server is declined.
-                    await response(packet["id"], {"action": "accept", "content": {}} if params.get("serverName") == "raphael"
+                    await response(packet["id"], {"action": "accept", "content": {}} if params.get("serverName") == "raphael" or (params.get("serverName") == "computer" and getattr(self, "computer_endpoint", None))
                                    else {"action": "decline"})
                 else:
                     # No filesystem, terminal or arbitrary client-side RPC outside our gate.
@@ -366,6 +442,7 @@ class Driver:
                     if method == "item/started":
                         final_text = ""
                     yield Event("tool_start" if method.endswith("started") else "tool_end", data={
+                        "id": item.get("id"), "server": item.get("server"),
                         "name": item.get("tool", item["type"]), "effect": item["type"] == "fileChange",
                         "ok": item.get("status") == "completed"})
             elif method == "thread/tokenUsage/updated":
@@ -373,16 +450,17 @@ class Driver:
             elif method == "turn/started":
                 self.turn = (params.get("turn") or {}).get("id")
             elif method == "turn/completed":
+                self._close_steers()
                 turn = params.get("turn") or {}
                 if turn.get("status") == "completed":
                     yield self._event("final", final_text)
                 else:
-                    yield self._event("error", "rate_limited" if passing_limit(turn.get("error")) else "cli_turn_failed")
+                    yield self._event("error", turn.get("error") or "CLI turn failed")
                 return
             elif method == "error":
                 if params.get("willRetry") is True:
                     continue  # Codex retries the turn itself; its outcome still comes as turn/completed
-                yield self._event("error", "rate_limited" if passing_limit(params.get("error")) else "cli_error")
+                yield self._event("error", params.get("error") or "CLI error")
                 return
 
 
@@ -423,7 +501,7 @@ async def codex_home(workspace, environ, *, owner=None):
     owner = Path(owner or environ.get("USERPROFILE") or environ.get("HOME") or Path.home())
     source = Path(environ.get("CODEX_HOME") or owner / ".codex") / "auth.json"
     identity = hashlib.sha256(os.path.normcase(str(Path(workspace).resolve())).encode()).hexdigest()[:24]
-    home = owner / ".raphael" / "codex-brains" / identity
+    home = (native_directory("codex-brains") or owner / ".raphael" / "codex-brains") / identity
     home.mkdir(parents=True, exist_ok=True)
     await secure_directory(home)
     (home / "auth.json").unlink(missing_ok=True)
@@ -452,7 +530,7 @@ async def codex_home(workspace, environ, *, owner=None):
     return home, environ, auth
 
 
-def antigravity_home(workspace, endpoint, token, system):
+def antigravity_home(workspace, endpoint, token, system, *, computer_endpoint=None):
     """The private home Antigravity runs with, inside the member's private workspace: Raphael's MCP
     server (its tools allowed and nothing else, since print mode denies every other permission),
     and the persona as the home's global rules."""
@@ -461,10 +539,13 @@ def antigravity_home(workspace, endpoint, token, system):
     (gemini / "config").mkdir(parents=True, exist_ok=True)
     (gemini / "antigravity-cli").mkdir(parents=True, exist_ok=True)
     server = {"serverUrl": endpoint, "headers": {"Authorization": f"Bearer {token}"}, "disabled": False}
+    servers = {"raphael": server}
+    if computer_endpoint:
+        servers["computer"] = {**server, "serverUrl": computer_endpoint}
     (gemini / "config" / "mcp_config.json").write_text(
-        json.dumps({"mcpServers": {"raphael": server}}), encoding="utf-8")
+        json.dumps({"mcpServers": servers}), encoding="utf-8")
     (gemini / "antigravity-cli" / "settings.json").write_text(
-        json.dumps({"permissions": {"allow": ["mcp(raphael/*)"]}}), encoding="utf-8")
+        json.dumps({"permissions": {"allow": ["mcp(raphael/*)", *(["mcp(computer/*)"] if computer_endpoint else [])]}}), encoding="utf-8")
     (gemini / "GEMINI.md").write_text(system, encoding="utf-8")
     return home
 

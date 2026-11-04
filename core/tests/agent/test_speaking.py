@@ -13,6 +13,7 @@ import logging
 import pytest
 
 from raphael_core.agent.persona import phrase
+from raphael_core.agent.actions import is_action
 
 from .conftest import completion, decision
 from .test_narration import chat
@@ -392,10 +393,10 @@ async def test_a_narrated_final_speaks_japanese_and_waits_for_voice_but_progress
     announced = []
 
     def notify(method, params):
-        if method == "agent.turn":
+        if method == "agent.turn" and not params.get("activity_only"):
             turn = rig.history.get(params["turn_id"])
             messages = rig.history.messages([turn.id]).get(turn.id, [])
-            announced.append((turn.status, [m["kind"] for m in messages]))
+            announced.append((turn.status, [m["kind"] for m in messages if not is_action(m["text"])]))
 
     rig = make_rig(speaker=speaker, notify=notify)
     speaker.gate = asyncio.Event()
@@ -414,7 +415,8 @@ async def test_a_narrated_final_speaks_japanese_and_waits_for_voice_but_progress
         try:
             await until(lambda: speaker.waiting)
             assert not asking.done()
-            assert all(status == "running" for status, _ in announced)
+            assert announced[0][0] == "queued"
+            assert all(status in ("queued", "running") for status, _ in announced)
             count = len(announced)
         finally:
             speaker.gate.set()
@@ -429,7 +431,7 @@ async def test_a_narrated_final_speaks_japanese_and_waits_for_voice_but_progress
     assert '"say_ja"' in first[0]["content"]
     assert first[1]["content"].rstrip().endswith('except the field "say_ja", which is Japanese.')
     [turn] = await rig.turns()
-    assert [m["kind"] for m in turn["messages"]] == ["progress", "reply"]
+    assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["progress", "reply"]
     assert japanese not in repr(result) + repr(turn) + caplog.text
     assert japanese not in repr([tuple(row) for row in rig.conn.execute("SELECT * FROM agent_messages")])
 
@@ -441,7 +443,7 @@ def announced():
 
 @pytest.fixture
 def timed_rig(make_rig, speaker, announced):
-    return make_rig(speaker=speaker, notify=lambda method, params: announced.append((method, params)))
+    return make_rig(speaker=speaker, notify=lambda method, params: announced.append((method, params)) if method == "agent.turn" else None)
 
 
 async def test_the_reply_waits_for_the_voice_and_comes_when_it_is_ready(timed_rig, client, speaker):
@@ -491,7 +493,7 @@ async def test_with_no_voice_the_reply_and_its_announcement_do_not_wait(
 ):
     speaker.can = False
     speaker.gate = asyncio.Event()  # would hold a reply for ever if it were waited for
-    rig = make_rig(speaker=speaker, notify=lambda m, p: announced.append((m, p)))
+    rig = make_rig(speaker=speaker, notify=lambda m, p: announced.append((m, p)) if m == "agent.turn" else None)
     client.decisions.append(decision("chat"))
     client.replies.append(spoken("答", "好。"))
     result = await asyncio.wait_for(rig.ask("你好"), 2)

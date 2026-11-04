@@ -1961,10 +1961,41 @@ async def test_home_overview_is_wired_without_waiting_for_speech(make_app, monke
 
     monkeypatch.setattr("raphael_core.agent.cli.allowances.read_allowances", no_clis)
     app = make_app()
+    timezone_updates = []
+    async def refresh_timezone():
+        timezone_updates.append(app.vm.timezone())
+    app.home.timezone_changed = refresh_timezone
+    assert app.vm.timezone() is None
     value = await app.call("home.overview", {"tz": "Asia/Taipei", "ui_language": "en"})
+    assert app.vm.timezone() == "Asia/Taipei"
+    with pytest.raises(RpcError):
+        await app.call("home.overview", {"tz": "invalid/timezone"})
+    assert app.vm.timezone() == "Asia/Taipei"
+    await app.call("home.overview", {"tz": "Europe/Paris"})
+    assert app.vm.timezone() == "Europe/Paris"
+    await app.home._timezone_task
+    assert timezone_updates == ["Asia/Taipei", "Europe/Paris"]
     assert value["today"] == value["reports"] == value["calendar"] == []
     assert len(value["usage"]["daily"]) == 14
     assert value["dictation"]["words"] == 0
+
+
+async def test_home_answers_while_desktops_reconcile_a_new_time_zone(make_app, monkeypatch):
+    # Recreating a desktop for a new zone takes seconds; Home stayed on its skeleton while it waited.
+    async def no_clis(brains):
+        return {"brains": []}
+
+    monkeypatch.setattr("raphael_core.agent.cli.allowances.read_allowances", no_clis)
+    app = make_app()
+    release = asyncio.Event()
+    async def slow_refresh():
+        await release.wait()
+    app.home.timezone_changed = slow_refresh
+    value = await asyncio.wait_for(app.call("home.overview", {"tz": "Asia/Taipei"}), timeout=5)
+    assert value["today"] == []
+    assert not app.home._timezone_task.done()
+    release.set()
+    await app.home._timezone_task
 
 
 ASSISTANT_METHODS = {
@@ -2076,7 +2107,7 @@ async def test_without_a_key_the_assistant_still_runs_commands_and_says_why_it_c
     assert (done["prefix"], done["text"]) == ("了", "")
     assert actions.calls == [("press_key", "volume_mute", 1)]
     refused = await app.call("agent.ask", ask_params("what is the weather", "en", "a2"))
-    assert (refused["prefix"], refused["text"]) == ("Negative", "No OpenRouter key is set.")
+    assert refused["prefix"] == "Negative" and "provider is not connected" in refused["text"]
 
 
 async def test_a_dictation_for_the_assistant_and_its_question_go_together(make_app):
@@ -2116,7 +2147,8 @@ async def test_the_workers_methods_are_on_the_app_from_the_start(make_app):
 async def test_the_assistant_and_the_worker_go_through_the_one_gate(make_app):
     app = make_app()
     assert app.agent._gate is app.gate and app.background._gate is app.gate
-    assert app.gate.plugins is app.integrations
+    assert app.gate.plugins is app.tool_hub and app.tool_hub.delegate.delegate is app.vm_tools and app.vm_tools.delegate is app.integrations
+    assert app.agent._plugins is app.tool_hub
 
 
 async def test_a_task_for_the_background_goes_through_the_whole_app_with_the_fake_llm(make_app):

@@ -1,17 +1,27 @@
-"""Room exchanges route once, hand off explicitly and serialize shared member turns."""
+"""Room exchanges: everyone reads and decides for themselves, addresses are answered, member turns one at a time."""
 import pytest
 from raphael_core.agent.history import AgentHistory
 from raphael_core.members.rooms import RoomsService
 
 
 class Decision:
-    def __init__(self, *answers):
-        self.answers = list(answers)
+    """The members' own decisions: each name given speaks the next time it reads the room, by the urgency given or 0.5."""
+
+    def __init__(self, *speakers, **urgency):
+        self.speakers = list(speakers)
+        self.urgency = urgency
         self.calls = []
 
-    async def room_responder(self, **kwargs):
+    def can_ask(self, model):
+        return not model.startswith("cli:")
+
+    async def room_listener(self, **kwargs):
         self.calls.append(kwargs)
-        return self.answers.pop(0) if self.answers else {"choice":"none", "confidence":1, "reason":"nothing material"}
+        name = kwargs["member"]["name"]
+        speak = name in self.speakers
+        if speak:
+            self.speakers.remove(name)
+        return {"speak": speak, "urgency": self.urgency.get(name, .5), "reason": "fixture"}
 
 
 @pytest.fixture
@@ -23,14 +33,14 @@ def exchange(rig):
 
 async def test_routing_cost_counts_toward_exchange_cap_and_deleted_rooms_leave_no_queue(rig, exchange):
     room, ids = await team(rig)
-    class CostlyDecision:
-        async def room_responder(self, **kwargs):
+    class CostlyDecision(Decision):
+        async def room_listener(self, **kwargs):
             kwargs["ledger"].add(model="fake/router", cost_usd=10)
-            return {"choice":ids[0], "confidence":.9}
-    exchange._exchanges.decision = CostlyDecision()
+            return await super().room_listener(**kwargs)
+    exchange._exchanges.decision = CostlyDecision("Alice")
     await send(rig, room, "Choose a lead")
     result = await history(rig, room)
-    assert result["exchange"]["cost"] == 10 and result["exchange"]["reason"] == "cost"
+    assert result["exchange"]["cost"] == 30 and result["exchange"]["reason"] == "cost"
     assert not rig.background.submitted
     await rig.call("rooms.delete", {"room_id":room["id"]})
     assert not rig.conn.execute("SELECT 1 FROM room_exchanges").fetchone()
@@ -66,22 +76,16 @@ async def test_mention_and_reply_target_do_not_force_a_discussion(rig, exchange)
     await finish(rig, exchange, "Ready")
     messages = (await history(rig, room))["messages"]
     alice = next(m for m in messages if m["member_id"] == ids[0])
-    await finish(rig, exchange, "Conclusion")
     await send(rig, room, "More details", "two", reply_to=alice["id"])
     assert rig.background.submitted[-1]["member_id"] == ids[0]
     assert (await history(rig, room))["messages"][-1]["reply_reference"]["author_kind"] == "owner"
 
 
-async def test_decider_role_address_and_low_confidence_fallback(rig, exchange):
+async def test_a_saved_default_responder_speaks_without_anyone_being_asked(rig, exchange):
     room, ids = await team(rig, default_responder="member:2")
-    exchange._exchanges.decision = Decision({"choice":ids[0], "confidence":.9, "reason":"PM owns planning"})
-    await send(rig, room, "PM, what is the plan?")
-    assert rig.background.submitted[-1]["member_id"] == ids[0]
-    await finish(rig, exchange, "Ready")
-    await finish(rig, exchange, "Conclusion")
-    exchange._exchanges.decision = Decision({"choice":ids[0], "confidence":.4, "reason":"uncertain"})
-    await send(rig, room, "Hello", "two")
+    await send(rig, room, "Hello")
     assert rig.background.submitted[-1]["member_id"] == ids[1]
+    assert not exchange._exchanges.decision.calls
 
 
 async def test_decider_and_worker_read_only_the_origin_thread(rig, exchange):
@@ -89,7 +93,7 @@ async def test_decider_and_worker_read_only_the_origin_thread(rig, exchange):
     with rig.conn:
         rig.conn.execute("INSERT INTO room_messages(room_id,text,created) VALUES (?,'Other thread secret',1)", (room['id'],))
         thread = rig.conn.execute("INSERT INTO room_threads(room_id,created) VALUES (?,1)", (room['id'],)).lastrowid
-    decision = Decision({"choice":ids[0], "confidence":1})
+    decision = Decision("Alice")
     exchange._exchanges.decision = decision
     await send(rig, room, "Current thread question", thread_id=thread)
     assert [m['text'] for m in decision.calls[0]['transcript']] == ['Current thread question']
@@ -97,7 +101,7 @@ async def test_decider_and_worker_read_only_the_origin_thread(rig, exchange):
     assert 'Current thread question' in rig.background.submitted[-1]['text']
 
 
-async def test_everyone_is_sequential_pass_is_hidden_and_wrapup_is_once(rig, exchange):
+async def test_everyone_is_sequential_a_pass_is_hidden_and_no_one_sums_up(rig, exchange):
     room, ids = await team(rig)
     await send(rig, room, "@everyone report")
     assert len(rig.background.submitted) == 1
@@ -107,27 +111,11 @@ async def test_everyone_is_sequential_pass_is_hidden_and_wrapup_is_once(rig, exc
     await finish(rig, exchange, "(pass)")
     assert rig.background.submitted[-1]["member_id"] == ids[1]
     await finish(rig, exchange, "Bob owns release")
-    assert rig.background.submitted[-1]["member_id"] == 0
-    await finish(rig, exchange, "Conclusion: test first. Owner decides release. Alice: test; Bob: release.")
     result = await history(rig, room)
     assert all(m["text"] != "(pass)" for m in result["messages"])
-    assert result["messages"][-1]["kind"] == "wrapup"
+    assert all(m["kind"] != "wrapup" for m in result["messages"])
     assert result["exchange"]["state"] == "done"
-    assert result["exchange"]["turns_taken"] == 4
-
-
-async def test_wrapup_answers_the_last_visible_reply_and_all_passes_remain_safe(rig, exchange):
-    room, ids = await team(rig)
-    for key, first in (("one", "Alice owns testing"), ("two", "(pass)")):
-        await send(rig, room, "@everyone report", key)
-        await finish(rig, exchange, first)
-        await finish(rig, exchange, "(pass)")
-        await finish(rig, exchange, "")
-        pending = (await history(rig, room))["messages"][-1]
-        assert pending["kind"] == "wrapup"
-        assert pending["reply_to_member"] is None
-        assert pending["reply_to"] is None
-        await finish(rig, exchange, "Conclusion")
+    assert result["exchange"]["turns_taken"] == 3
 
 
 async def test_a_removed_default_responder_is_presented_as_auto_for_room_editing(rig, exchange):
@@ -145,22 +133,22 @@ async def test_explicit_handoffs_survive_the_fourth_hop_and_repeated_speakers(ri
         await finish(rig, exchange, text)
     assert [s["member_id"] for s in rig.background.submitted] == [ids[0],ids[1],ids[0],ids[1],ids[0]]
     await finish(rig, exchange, 'Ready')
-    assert rig.background.submitted[-1]['member_id'] == 0
-    await finish(rig, exchange, "Wrap-up")
     assert (await history(rig, room))["exchange"]["hops"] == 4
+    assert (await history(rig, room))["exchange"]["state"] == "done"
 
 
-async def test_material_chime_ins_are_bounded_and_cannot_repeat(rig, exchange):
+async def test_colleagues_read_what_was_said_and_the_talk_stops_when_no_one_has_more(rig, exchange):
     room, ids = await team(rig)
-    exchange._exchanges.decision = Decision(*[{"choice":i,"confidence":.9,"reason":"material concern"} for i in (ids[1],0,ids[1])])
+    exchange._exchanges.decision = Decision("Bob", "Alice")
     await send(rig, room, "@Alice plan")
     await finish(rig, exchange, "Ship today")
     assert rig.background.submitted[-1]["member_id"] == ids[1]
     await finish(rig, exchange, "Test first")
-    await finish(rig, exchange, "Owner decides")
-    if (await history(rig, room))["exchange"]["state"] == "running":
-        await finish(rig, exchange, "Wrap-up")
-    assert (await history(rig, room))["exchange"]["chime_ins"] <= 2
+    assert rig.background.submitted[-1]["member_id"] == ids[0]
+    await finish(rig, exchange, "Fair, test first")
+    result = await history(rig, room)
+    assert result["exchange"]["state"] == "done"
+    assert [m["member_id"] for m in result["messages"]] == [None, ids[0], ids[1], ids[0]]
 
 
 async def test_interjection_preempts_old_queue_stop_and_duplicate_notifications(rig, exchange):
@@ -180,6 +168,21 @@ async def test_interjection_preempts_old_queue_stop_and_duplicate_notifications(
     assert len(rig.background.submitted) == 2
 
 
+async def test_only_stop_cancels_the_replies_and_the_work_assigned_to_members(rig, exchange):
+    cancelled = []
+
+    async def cancel_room(room_id, *, work=True):
+        cancelled.append(work)
+
+    rig.background.cancel_room = cancel_room
+    room, ids = await team(rig)
+    await send(rig, room, "@Alice build the program")
+    await send(rig, room, "@Bob check the logo", "two")
+    assert cancelled == []
+    await rig.call("rooms.stop", {"room_id":room["id"]})
+    assert cancelled == [True]
+
+
 async def test_cost_and_restart_stop_without_replay(rig, exchange):
     room, ids = await team(rig)
     await send(rig, room, "@everyone report")
@@ -192,24 +195,20 @@ async def test_cost_and_restart_stop_without_replay(rig, exchange):
     assert len(rig.background.submitted) == 2
 
 
-async def test_six_explicit_recipients_all_answer_before_the_seventh_wrapup(rig, exchange):
+async def test_six_explicit_recipients_all_answer(rig, exchange):
     room, ids = await team(rig)
     extra = [(await rig.call("members.create", {"name":f"Person{i}"}))["member"]["id"] for i in range(3)]
     await rig.call("rooms.update", {"room_id":room["id"], "member_ids":[0,*ids,*extra]})
     await send(rig, room, "@everyone report")
     for _ in range(6):
         await finish(rig, exchange, "Progress confirmed")
-        if (await history(rig, room))["exchange"]["state"] == "done":
-            break
     result = await history(rig, room)
-    assert result["exchange"]["turns_taken"] == 7
-    assert result["messages"][-1]["kind"] == "wrapup"
-    assert len(rig.background.submitted) == 7
-    await finish(rig, exchange, 'Conclusion')
-    assert {i['recipient_id'] for i in (await history(rig, room))['exchange']['reply_intents'] if i['state']=='done'} == {0,*ids,*extra}
+    assert result["exchange"]["state"] == "done" and result["exchange"]["turns_taken"] == 6
+    assert len(rig.background.submitted) == 6
+    assert {i['recipient_id'] for i in result['exchange']['reply_intents'] if i['state']=='done'} == {0,*ids,*extra}
 
 
-async def test_cli_decider_uses_the_shared_api_adapter_and_saved_fallback(rig, exchange):
+async def test_a_cli_brain_reads_the_room_in_a_real_turn_and_others_are_asked(rig, exchange):
     room, ids = await team(rig)
     from raphael_core.protocol import RpcError
     with pytest.raises(RpcError):
@@ -217,9 +216,9 @@ async def test_cli_decider_uses_the_shared_api_adapter_and_saved_fallback(rig, e
     exchange._settings.set("agent_model", "cli:codex:gpt-5.6-terra")
     await send(rig, room, "Status")
     assert rig.background.submitted[-1]["member_id"] == 0
-    assert len(exchange._exchanges.decision.calls) == 1
-    assert not exchange._exchanges.decision.calls[0]['model'].startswith('cli:')
+    decision = exchange._exchanges.decision
+    assert sorted(call["member"]["name"] for call in decision.calls) == ["Alice", "Bob"]
+    assert not any(call["model"].startswith("cli:") for call in decision.calls)
     for responder in ("member:999", "wrong", True):
-        from raphael_core.protocol import RpcError
         with pytest.raises(RpcError):
             await rig.call("rooms.update", {"room_id":room["id"], "default_responder":responder})

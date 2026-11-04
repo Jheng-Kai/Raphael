@@ -5,8 +5,9 @@
 // the person through `esc` first.
 
 import { esc } from "./ui";
-import { dayLabel } from "./format";
+import { dayLabel, formatClock } from "./format";
 import type { AgentTurn } from "./types";
+import { publicEventText } from "./public-event";
 
 /** A question said to the emblem (the key and the overlay): the core's default source. */
 export const VOICE = "voice";
@@ -19,12 +20,22 @@ export const sourceOf = (turn: AgentTurn): string => turn.source || VOICE;
 /** One line of the thread: the heading of a day, a turn, or what one colleague asked in a row. */
 export type ThreadItem =
   | { kind: "day"; key: string; label: string }
-  | { kind: "turn"; key: string; turn: AgentTurn }
-  | { kind: "exchange"; key: string; turns: AgentTurn[] };
+  | { kind: "turn"; key: string; turn: AgentTurn };
 
 /** Whether a turn is a colleague's question or hand-off to this member, not the owner's own words. */
 export const exchangeTurn = (turn: AgentTurn): boolean =>
   turn.scope === "exchange" || turn.route === "exchange" || sourceOf(turn) === "member";
+
+/** Empty historical records have nothing to say, including under their date heading. */
+export function visibleTurn(turn: AgentTurn): boolean {
+  if (turn.scope === "room" || turn.scope === "quarantine") return false;
+  if (exchangeTurn(turn)) return !!(turn.question.trim() ||
+    (turn.status !== "running" && turn.status !== "confirm" && (turn.detail || turn.text).trim()));
+  return !!(turn.question.trim() || turn.text.trim() || turn.detail?.trim() ||
+    turn.messages?.some(message => message.text.trim()) || turn.attachments?.length || turn.handoffs?.length ||
+    turn.connectors?.length || turn.secrets?.length || turn.computers?.length || turn.permissions?.length || turn.drafts?.length || turn.pages?.length ||
+    turn.status === "running" || turn.status === "confirm" || turn.task || turn.steps?.length);
+}
 
 /**
  * The thread: the turns (in any order) oldest first, each day under its heading (「今天」, 「昨天」, the
@@ -34,19 +45,15 @@ export const exchangeTurn = (turn: AgentTurn): boolean =>
 export function threadItems(turns: readonly AgentTurn[], nowMs: number): ThreadItem[] {
   const oldestFirst = [...turns].sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id);
   const items: ThreadItem[] = [];
-  let day: string | null = null;
+  let previous: number | null = null;
   for (const turn of oldestFirst) {
-    const label = dayLabel(turn.created_at_ms, nowMs);
-    const last = items[items.length - 1];
-    if (exchangeTurn(turn) && label === day && last?.kind === "exchange" && last.turns[0].peer_id === turn.peer_id) {
-      last.turns.push(turn);
-      continue;
+    if (!visibleTurn(turn)) continue;
+    if (previous === null || turn.created_at_ms - previous >= 30 * 60 * 1000 || new Date(previous).toDateString() !== new Date(turn.created_at_ms).toDateString()) {
+      const label = `${dayLabel(turn.created_at_ms, nowMs)} ${formatClock(turn.created_at_ms)}`;
+      items.push({ kind: "day", key: `time:${turn.id}`, label });
     }
-    if (label !== day) {
-      day = label;
-      items.push({ kind: "day", key: `day:${label}`, label });
-    }
-    items.push(exchangeTurn(turn) ? { kind: "exchange", key: `exchange:${turn.id}`, turns: [turn] } : { kind: "turn", key: `turn:${turn.id}`, turn });
+    items.push({ kind: "turn", key: `turn:${turn.id}`, turn });
+    previous = turn.created_at_ms;
   }
   return items;
 }
@@ -58,7 +65,7 @@ const fold = (text: string): string => text.normalize("NFKC").toLocaleLowerCase(
 export function turnMatches(turn: AgentTurn, query: string): boolean {
   const q = fold(query.trim());
   if (q === "") return true;
-  return [turn.question, turn.text, turn.detail ?? "", ...(turn.messages ?? []).map((message) => message.text)].some((text) => fold(text).includes(q));
+  return [turn.question, turn.text, turn.detail ?? "", ...(turn.messages ?? []).map((message) => message.kind === "event" ? publicEventText(message.text) : message.text)].some((text) => fold(text).includes(q));
 }
 
 /**
@@ -68,6 +75,7 @@ export function turnMatches(turn: AgentTurn, query: string): boolean {
  * app is used in); otherwise nothing is marked.
  */
 export function highlightHTML(text: string, query: string): string {
+  text = publicEventText(text);
   const q = fold(query.trim());
   if (q === "") return esc(text);
   const folded = fold(text);

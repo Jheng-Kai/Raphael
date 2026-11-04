@@ -18,26 +18,26 @@ describe("real app entry with the shared look fixture", () => {
     await vi.waitFor(() => expect(document.querySelector('.page-home:not([hidden]) .ho-hero')).not.toBeNull());
   });
   it("boots and navigates all primary destinations and settings without unmocked calls", async () => {
-    expect(document.querySelector('#nav .nav')?.dataset.go).toBe("home");
-    document.querySelector('#nav .nav[data-go="agent"]').click();
+    expect(document.querySelector('#nav [data-go="home"]')).not.toBeNull();
+    document.querySelector('.mb-chief').click();
     await vi.waitFor(() => expect(document.querySelector(".page-agent:not([hidden]) .conversation-trigger")).not.toBeNull());
-    expect(document.body.textContent).toContain("這週的研究與安排");
+    await vi.waitFor(() => expect(document.querySelector(".conversation-caption").textContent).toContain("這週的研究與安排"));
     // A reply wait must not select the earlier, collapsed work messages.
     await vi.waitFor(() => {
       const reply = document.querySelector(scenes.find(scene => scene.name === "chat").steps[0].selector);
       expect(reply?.querySelector(".message-text")?.textContent).toContain("這週的研究有三個重點");
       expect(reply?.closest("[hidden]")).toBeNull();
     });
-    for (const destination of ["home", "team", "dictation", "agent"]) {
-      document.querySelector(`#nav .nav[data-go="${destination}"]`).click();
-      await vi.waitFor(() => expect(document.querySelector(`#nav .nav[data-go="${destination}"]`).getAttribute("aria-current"), destination).toBe("page"));
+    for (const destination of ["home", "dictation", "agent"]) {
+      document.querySelector(destination === "agent" ? ".mb-chief" : `#nav [data-go="${destination}"]`).click();
+      await vi.waitFor(() => expect(document.querySelector(destination === "agent" ? ".page.page-agent:not([hidden])" : `#nav [data-go="${destination}"][aria-current="page"]`), destination).not.toBeNull());
     }
-    document.querySelector('#nav .nav[data-go="home"]').click();
-    await vi.waitFor(() => expect(document.querySelector('.ho-today [data-home-go="calendar"]')).not.toBeNull());
+    document.querySelector('#nav [data-go="home"]').click();
+    await vi.waitFor(() => expect(document.querySelector('.ho-calendar [data-home-go="calendar"]')).not.toBeNull());
     expect(document.querySelector('#nav .nav[data-go="automations"]')).toBeNull();
-    document.querySelector('.ho-today [data-home-go="calendar"]').click();
+    document.querySelector('.ho-calendar [data-home-go="calendar"]').click();
     await vi.waitFor(() => expect(document.querySelector('.au-page:not([hidden]) .au-calendar-scroll')).not.toBeNull());
-    expect(document.querySelector('#nav .nav[aria-current="page"]').dataset.go).toBe("home");
+    expect(document.querySelector('#nav [data-go][aria-current="page"]').dataset.go).toBe("home");
     document.querySelector('#nav .nav[data-go="settings"]').click();
     await vi.waitFor(() => expect(document.querySelector('.modal-scrim [data-pane="general"]')).not.toBeNull());
     for (const pane of ["general", "appearance", "dictation", "agent", "connections", "messaging", "models", "data", "about"]) {
@@ -58,7 +58,7 @@ describe("real app entry with the shared look fixture", () => {
   });
   it("deletes a dictionary word through its overflow menu and keeps undo available", async () => {
     document.querySelector('.modal-scrim [data-act="close"]').click();
-    document.querySelector('#nav .nav[data-go="dictation"]').click();
+    document.querySelector('#nav [data-go="dictation"]').click();
     await vi.waitFor(() => expect(document.querySelector('[data-dictation-tab="dictionary"]')).not.toBeNull());
     document.querySelector('[data-dictation-tab="dictionary"]').click();
     await vi.waitFor(() => expect(document.querySelectorAll('.wrow')).toHaveLength(2));
@@ -69,7 +69,7 @@ describe("real app entry with the shared look fixture", () => {
     document.querySelector('#app-popover [data-pick="delete"]').dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
     await vi.waitFor(() => expect(document.querySelector('#app-popover')).toBeNull());
     expect(document.activeElement).toBe(menu);
-    expect(state.calls).toContainEqual({ command: "window_hotkey", kind: "cancel" });
+    expect(state.calls).not.toContainEqual({ command: "window_hotkey", kind: "cancel" });
     expect(state.errors).toEqual([]);
     menu.click();
     const remove = document.querySelector('#app-popover [data-pick="delete"]');

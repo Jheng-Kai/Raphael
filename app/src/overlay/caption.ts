@@ -2,6 +2,7 @@
 // details are read in the app, and never more than about two lines at a time. A long line is told
 // in pages, one after the other, each cut where a sentence or an item of a numbered list ends.
 import type { UiLanguage } from "./overlay";
+import { formsPlainText } from "../shared/answer-forms";
 
 /** About two lines of the corner (380 px of 14 px type): characters of Chinese and Japanese, letters of English. */
 export const PAGE_CHARS: Record<UiLanguage, number> = { "zh-TW": 52, ja: 52, en: 110 };
@@ -15,7 +16,7 @@ const SPACE_BEFORE_MARK = /\s+(?=[，。！？、：；）」』》,.!?:;)])/g;
 
 /** `text` with no address, link syntax or markdown mark left, on one line. */
 export function captionText(text: string): string {
-  return text.replace(LINK, "$1").replace(ADDRESS, " ").replace(MARKS, "").replace(/\s+/g, " ").replace(SPACE_BEFORE_MARK, "").trim();
+  return formsPlainText(text).replace(LINK, "$1").replace(ADDRESS, " ").replace(MARKS, "").replace(/\s+/g, " ").replace(SPACE_BEFORE_MARK, "").trim();
 }
 
 const length = (text: string): number => [...text].length;

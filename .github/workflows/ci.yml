@@ -1,7 +1,7 @@
 name: CI
 
-# Every PR and merge-queue entry checks all layers and renders the real UI. Only
-# changed UI opts into the paid judge. Dependency pushes refresh the Rust cache.
+# Every PR and merge-queue entry checks the repository contracts and the offline suites of all
+# three layers. The rendered UI matrix and the design judge run locally, never here.
 on:
   push:
     branches: [main]
@@ -27,31 +27,22 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      pull-requests: read
     outputs:
       frontend: ${{ steps.pick.outputs.frontend }}
       python: ${{ steps.pick.outputs.python }}
       rust: ${{ steps.pick.outputs.rust }}
-      ui: ${{ steps.pick.outputs.ui }}
     steps:
-      - name: List the changed files
+      - name: Pick the layers for this event
         id: pick
         env:
-          GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
-          PR: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           out() { echo "frontend=$1" >> "$GITHUB_OUTPUT"; echo "python=$2" >> "$GITHUB_OUTPUT"; echo "rust=$3" >> "$GITHUB_OUTPUT"; echo "frontend=$1 python=$2 rust=$3"; }
           case "$EVENT" in
-            workflow_dispatch|merge_group) out true true true; echo 'ui=true' >> "$GITHUB_OUTPUT"; exit 0 ;;
+            workflow_dispatch|merge_group) out true true true; exit 0 ;;
             push) out false false true; exit 0 ;;  # only the Rust dependencies start a push run
           esac
-          files=$(gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename')
-          ui=false
-          if printf '%s\n' "$files" | grep -Eq '^app/(src/|index\.html|overlay\.html|scripts/look/)'; then ui=true; fi
-          echo "ui=$ui" >> "$GITHUB_OUTPUT"
           # Every PR checks repository contracts and all three implementation layers.
           out true true true
 
@@ -60,7 +51,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     runs-on: windows-2025
-    timeout-minutes: 180
+    timeout-minutes: 30
     defaults:
       run:
         shell: pwsh
@@ -87,83 +78,14 @@ jobs:
       - name: Type-check and build frontend
         run: npm run build
 
-      - name: Capture real UI in both themes and all three sizes
-        env:
-          LOOK_BROWSER: C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
-        run: npm run look -- --all --theme both --width 1120,720,1920x1080
-
-      - name: Determine paid design review availability
-        if: always() && needs.changes.outputs.ui == 'true'
-        id: judge
-        env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: |
-          if ($env:OPENROUTER_API_KEY) { 'enabled=true' >> $env:GITHUB_OUTPUT }
-          else {
-            'enabled=false' >> $env:GITHUB_OUTPUT
-            Write-Output '::notice::Design judge SKIP: OPENROUTER_API_KEY is unavailable (including fork PRs). This is not a design PASS.'
-            'Design judge: SKIP (no secret); no visual-model acceptance claimed.' >> $env:GITHUB_STEP_SUMMARY
-          }
-
-      - name: Set up uv for design judge
-        if: steps.judge.outputs.enabled == 'true'
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with:
-          version: "0.12.11"
-          working-directory: core
-
-      - name: Install judge dependencies
-        if: steps.judge.outputs.enabled == 'true'
-        working-directory: core
-        run: uv sync --locked --dev
-
-      - name: Restore image-hash design cache
-        if: steps.judge.outputs.enabled == 'true'
-        uses: actions/cache/restore@v4
-        with:
-          path: app/.look/judge-cache
-          key: design-judge-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: design-judge-${{ runner.os }}-
-
-      - name: Fetch pinned external reference images
-        if: steps.judge.outputs.enabled == 'true'
-        env:
-          RAPHAEL_JUDGE_REFERENCE_MANIFEST: ${{ vars.RAPHAEL_JUDGE_REFERENCE_MANIFEST }}
-        run: node scripts/judge-references.mjs
-
-      - name: Judge changed UI with a bounded budget
-        if: steps.judge.outputs.enabled == 'true'
-        env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          RAPHAEL_JUDGE_MODEL: ${{ vars.RAPHAEL_JUDGE_MODEL || 'anthropic/claude-sonnet-5.5' }}
-        run: |
-          $lookRun = Get-ChildItem .look -Directory -Filter 'run-*' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (-not $lookRun) { throw 'No look run available for judge.' }
-          $refs = Get-Content .look/references/paths.json -Raw | ConvertFrom-Json
-          $env:RAPHAEL_JUDGE_REFERENCES = ConvertTo-Json -InputObject @($refs) -Compress
-          npm run judge -- $lookRun.FullName --max-cost-usd 15 --request-ceiling 0.10 --max-requests 1842
-
-      - name: Preserve valid cached reviews even when later images fail
-        if: always() && steps.judge.outputs.enabled == 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: app/.look/judge-cache
-          key: design-judge-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
-
-      - name: Upload look, judge and verification evidence
+      - name: Upload verification evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: guardian-ui-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            app/.look/run-*/report.json
-            app/.look/run-*/*.png
-            app/.look/run-*/contacts.json
-            app/.look/judge-*/report.json
-            app/.look/judge-*/summary.txt
-            app/.look/verify-*/*
+          name: guardian-verify-${{ github.run_id }}-${{ github.run_attempt }}
+          path: app/.look/verify-*/*
           if-no-files-found: error
-          # The look and verify folders start with a dot, which the action leaves out unless told.
+          # The verify folder starts with a dot, which the action leaves out unless told.
           include-hidden-files: true
           retention-days: 14
 
@@ -172,7 +94,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.python == 'true'
     runs-on: windows-2025
-    timeout-minutes: 15
+    timeout-minutes: 45
     defaults:
       run:
         shell: pwsh
@@ -289,7 +211,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require every implementation and rendered gate
+      - name: Require every implementation gate
         env:
           FRONTEND: ${{ needs.frontend.result }}
           PYTHON: ${{ needs.python.result }}

@@ -1,6 +1,7 @@
 """Subscription CLI tests never discover or launch the machine's real assistants."""
 
 import os
+import subprocess
 import sys
 import asyncio
 import json
@@ -10,17 +11,35 @@ import pytest
 from raphael_core.agent.cli.discovery import CliBrains, cli_available, resolve_command
 
 
-def test_a_cli_brain_is_offered_the_note_fields_an_api_brain_is_given():
-    # Live, Codex wrote a team-wide note as type "fact", which no space takes, and both writes were refused.
+def test_a_cli_brain_edits_the_memory_by_the_fields_an_api_brain_is_given():
     from raphael_core.agent.answers import reply_schema
-    from raphael_core.agent.cli.loop import MEMORY_TOOLS
-    item = reply_schema("en", memory=True, plain=True)["properties"]["memory"]["items"]
-    for tool in MEMORY_TOOLS:
-        offered = tool["function"]["parameters"]
-        assert {key: item["properties"][key] for key in offered["properties"]} == offered["properties"]
-        assert set(offered["required"]) <= set(item["required"])
-    write = next(tool["function"]["parameters"] for tool in MEMORY_TOOLS if tool["function"]["name"] == "memory_write")
-    assert {"type", "space"} <= set(write["required"])
+    from raphael_core.memory.growth import DEFINITIONS
+    item = reply_schema("en", memory=True, plain=True)["properties"]["memory"]["items"]["properties"]
+    tool = DEFINITIONS["memory_update"]["parameters"]["properties"]
+    assert tool["target"]["enum"] == item["target"]["enum"]
+    assert tool["operations"]["items"]["properties"]["action"]["enum"] == item["action"]["enum"]
+    assert {"content", "old_text"} <= set(tool["operations"]["items"]["properties"]) & set(item)
+
+
+async def test_claude_memory_uses_structured_output_without_an_unregistered_permission_tool(tmp_path):
+    from raphael_core.agent.cli.drivers import Driver
+
+    script = tmp_path / "memory_protocol.py"
+    script.write_text('''import json, sys
+schema = json.loads(sys.argv[sys.argv.index("--json-schema") + 1])
+assert schema["required"] == ["actions"]
+assert sys.argv[sys.argv.index("--setting-sources") + 1] == ""
+assert "--disable-slash-commands" in sys.argv
+assert "--permission-prompt-tool" not in sys.argv
+json.loads(sys.stdin.readline())
+print(json.dumps({"type": "result", "subtype": "success", "result": "",
+                  "structured_output": {"actions": []}}), flush=True)
+''', encoding="utf-8")
+    schema = {"type": "object", "required": ["actions"], "properties": {"actions": {"type": "array"}}}
+    driver = Driver("claude", [sys.executable, str(script)])
+    events = [event async for event in driver.run(user="Synthetic owner turns", system="Capture memory",
+        endpoint="http://127.0.0.1:1/mcp", token="ephemeral", permission=None, structured=schema)]
+    assert events[-1].kind == "final" and json.loads(events[-1].text) == {"actions": []}
 
 
 async def test_discovery_uses_fake_process_and_auth_existence_only(tmp_path):
@@ -261,7 +280,7 @@ async def test_codex_malformed_login_fails_without_launching_child_or_logging_co
     events = [event async for event in driver.run(user="Hi", system="Persona", endpoint="http://127.0.0.1:1/mcp",
         token="ephemeral", cwd=str(tmp_path), permission=None)]
     assert driver.child is None
-    assert events[-1].kind == "error" and events[-1].text == "protocol_or_process_error"
+    assert events[-1].kind == "error" and events[-1].text == ("tool_broken" if content == "not-json" else "auth_expired")
     assert "secret" not in caplog.text
     assert auth.read_text(encoding="utf-8") == content
 
@@ -277,6 +296,8 @@ def send(value):
     print(json.dumps(value), flush=True)
 assert all(key not in os.environ for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"))
 if name == "claude":
+    assert sys.argv[sys.argv.index("--setting-sources") + 1] == ""
+    assert "--disable-slash-commands" in sys.argv
     assert "--resume" in sys.argv and "previous" in sys.argv
     assert sys.argv[sys.argv.index("--model")+1] == "chosen-model"
     assert sys.argv[sys.argv.index("--effort")+1] == "high"
@@ -402,15 +423,15 @@ else:
     expected = {"exhausted": False} if state == "recovered" else {"exhausted": True, "reset_at_ms": NOW + 3600000}
     assert recorded == [(name, expected)]
     assert events[-1].kind == ("error" if state == "failed" else "final")
-    assert events[-1].text == ("quota" if state == "failed" else "Public answer.")
+    assert events[-1].text == ("usage_limit" if state == "failed" else "Public answer.")
     assert all("PRIVATE-DIAGNOSTIC" not in event.text for event in events)
 
 
 @pytest.mark.parametrize("shape,expected", [
-    ("notified", ("error", "rate_limited")), ("snake_case", ("error", "rate_limited")),
-    ("retried", ("final", "Public answer.")), ("exhausted", ("error", "quota")), ("other", ("error", "cli_turn_failed")),
+    ("notified", ("error", "rate_limit")), ("snake_case", ("error", "rate_limit")),
+    ("retried", ("final", "Public answer.")), ("exhausted", ("error", "usage_limit")), ("other", ("error", "unknown")),
     # Live: "Selected model is at capacity" passes after a wait, like a 429.
-    ("overloaded", ("error", "rate_limited")), ("overloaded_snake", ("error", "rate_limited")),
+    ("overloaded", ("error", "overloaded")), ("overloaded_snake", ("error", "overloaded")),
 ])
 async def test_codex_too_many_requests_is_a_rate_limit_unless_the_plan_is_exhausted(tmp_path, monkeypatch, shape, expected):
     from raphael_core.agent.cli.drivers import Driver
@@ -454,7 +475,7 @@ for line in sys.stdin:
     assert all("PRIVATE-DIAGNOSTIC" not in event.text and "429" not in event.text for event in events)
 
 
-@pytest.mark.parametrize("shape,expected", [("limited", "rate_limited"), ("exhausted", "quota"), ("other", "cli_failed")])
+@pytest.mark.parametrize("shape,expected", [("limited", "rate_limit"), ("exhausted", "usage_limit"), ("other", "server")])
 async def test_claude_api_429_is_a_rate_limit_unless_the_plan_window_is_rejected(tmp_path, monkeypatch, shape, expected):
     from raphael_core.agent.cli.drivers import Driver
     from .test_quota import NOW
@@ -544,7 +565,10 @@ async def test_cancel_kills_fake_cli_and_descendant_and_deletes_private_files(tm
     script.write_text('''import json, os, subprocess, sys, time
 from pathlib import Path
 child=subprocess.Popen([sys.executable,"-c","import time; time.sleep(300)"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-Path(sys.argv[1]).write_text(json.dumps([os.getpid(),child.pid,sys.argv[sys.argv.index("--mcp-config")+1]]))
+marker=Path(sys.argv[1])
+pending=marker.with_suffix(".tmp")
+pending.write_text(json.dumps([os.getpid(),child.pid,sys.argv[sys.argv.index("--mcp-config")+1]]))
+pending.replace(marker)
 print(json.dumps({"type":"system","subtype":"init","session_id":"one"}),flush=True)
 time.sleep(300)
 ''', encoding="utf-8")
@@ -734,3 +758,17 @@ def test_failed_login_does_not_reconnect_or_launch_an_uninstalled_cli(tmp_path, 
     with pytest.raises(ValueError, match="cli_missing"):
         brains.login("codex")
     assert brains.disconnected("codex")
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows priority classes")
+async def test_a_cli_brain_gives_way_to_the_owners_window(monkeypatch):
+    from raphael_core.agent.cli import process as cli_process
+    seen = {}
+
+    async def stop_here(*args, **kwargs):
+        seen.update(kwargs)
+        raise OSError("Synthetic spawn stop")
+
+    monkeypatch.setattr(cli_process.asyncio, "create_subprocess_exec", stop_here)
+    with pytest.raises(OSError):
+        await cli_process.Child(["sample"]).start()
+    assert seen["creationflags"] & subprocess.BELOW_NORMAL_PRIORITY_CLASS

@@ -89,6 +89,13 @@ pub const OFFLINE: Notice = Notice {
     ja: "《告。OpenRouter に接続できません。整形前のテキストを貼り付けます。》",
 };
 
+/// Cleanup failed for any other reason: the words are not lost, and the owner is told every time.
+pub const NOT_CLEANED: Notice = Notice {
+    zh: "《告。這次沒有整理成功，已貼上原文。》",
+    en: "《Notice. Cleanup did not finish this time. The text is pasted as you said it.》",
+    ja: "《告。今回は整形できませんでした。話した内容をそのまま貼り付けます。》",
+};
+
 /// No OpenRouter key is stored: the raw text is pasted.
 pub const NO_KEY: Notice = Notice {
     zh: "《告。未設定 OpenRouter 金鑰。改為貼上未整理的原文。》",
@@ -98,32 +105,46 @@ pub const NO_KEY: Notice = Notice {
 
 /// The core found no microphone to record from.
 pub const NO_MIC: Notice = Notice {
-    zh: "《否。未偵測到麥克風。》",
-    en: "《Negative. No microphone detected.》",
-    ja: "《否。マイクを検出できません。》",
+    zh: "《否。未偵測到麥克風。請接上裝置，再到「設定 › 聽寫 › 麥克風」選擇。》",
+    en: "《Negative. No microphone is available. Connect one and select it in Settings > Dictation > Microphone.》",
+    ja: "《否。マイクを検出できません。接続し、「設定 › ディクテーション › マイク」で選んでください。》",
 };
 
 /// The microphone is there but delivered no sound (muted, or a wireless headset asleep), and
 /// nothing came of the recording (`silent` in the result of `dictation.stop`).
 pub const NO_SOUND: Notice = Notice {
-    zh: "《否。未收到聲音。請確認麥克風。》",
-    en: "《Negative. No sound was received. Check the microphone.》",
-    ja: "《否。音声を検出できませんでした。マイクを確認してください。》",
+    zh: "《否。未收到聲音。請取消麥克風靜音，並在 Windows 的麥克風隱私設定允許桌面應用程式。》",
+    en: "《Negative. No sound was received. Unmute the microphone and allow desktop apps in Windows microphone privacy settings.》",
+    ja: "《否。音声を受信できません。ミュートを解除し、Windows のマイク設定でデスクトップアプリを許可してください。》",
+};
+
+/// The cloud speech model's credentials are missing.
+pub const CLOUD_STT_MISSING: Notice = Notice {
+    zh: "《否。雲端語音辨識尚未連接。請到「設定 › 模型與用量 › 用量」設定 OpenRouter 金鑰，或到「設定 › 聽寫」下載本機模型。》",
+    en: "《Negative. Cloud recognition is not connected. Set the OpenRouter key in Settings > Models & usage > Usage, or download a local model in Settings > Dictation.》",
+    ja: "《否。クラウド認識は未接続です。「設定 › モデルと使用量 › 使用量」で OpenRouter キーを設定するか、「設定 › ディクテーション」でモデルをダウンロードしてください。》",
+};
+
+/// The selected local speech model has not been downloaded.
+pub const LOCAL_MODEL_MISSING: Notice = Notice {
+    zh: "《否。尚未下載本機語音模型。請到「設定 › 聽寫」下載後再錄音。》",
+    en: "《Negative. The local speech model is not downloaded. Download it in Settings > Dictation before recording.》",
+    ja: "《否。ローカル音声モデルがありません。「設定 › ディクテーション」でダウンロードしてから録音してください。》",
 };
 
 /// The core cannot dictate yet: the speech model is not ready (`NOT_CONFIGURED`).
 pub const NOT_READY: Notice = Notice {
-    zh: "《否。語音模型尚未就緒。》",
-    en: "《Negative. The speech model is not ready.》",
-    ja: "《否。音声モデルの準備が完了していません。》",
+    zh: "《否。語音辨識尚未就緒。請到「設定 › 聽寫」下載本機模型；使用雲端辨識時，請在「設定 › 模型與用量」確認連線。》",
+    en: "《Negative. Speech recognition is not ready. Download a local model in Settings > Dictation; for cloud recognition check the connection in Settings > Models & usage.》",
+    ja: "《否。音声認識の準備ができていません。「設定 › ディクテーション」でモデルをダウンロードし、クラウド認識の場合は「設定 › モデルと使用量」で接続を確認してください。》",
 };
 
 /// The cloud could not transcribe the speech and no local model is left to take over
 /// (`NO_LOCAL_MODEL`).
 pub const NO_LOCAL_MODEL: Notice = Notice {
-    zh: "《否。雲端辨識失敗，且沒有本機模型。》",
-    en: "《Negative. Cloud transcription failed and there is no local model.》",
-    ja: "《否。クラウド認識に失敗しました。ローカルモデルがありません。》",
+    zh: "《否。雲端辨識失敗，且沒有本機模型。請到「設定 › 聽寫」下載後再試。》",
+    en: "《Negative. Cloud transcription failed and there is no local model. Download one in Settings > Dictation, then try again.》",
+    ja: "《否。クラウド認識に失敗し、ローカルモデルもありません。「設定 › ディクテーション」でダウンロードして再試行してください。》",
 };
 
 /// Some segments still failed after the final retry; the pasted text marks each gap.
@@ -138,6 +159,13 @@ pub const CORE_DOWN: Notice = Notice {
     zh: "《否。核心未在運作。請重新啟動拉斐爾。》",
     en: "《Negative. The core is not running. Restart Raphael.》",
     ja: "《否。コアが動作していません。ラファエルを再起動してください。》",
+};
+
+/// The supervisor recovered the core; the interrupted work must be requested again.
+pub const CORE_RECOVERED: Notice = Notice {
+    zh: "《告。服務剛才意外中斷，已重新啟動。請重新提出剛才的請求。》",
+    en: "《Notice. The service stopped unexpectedly and has restarted. Please repeat your last request.》",
+    ja: "《告。サービスが予期せず停止しましたが、再起動しました。直前のリクエストをもう一度送ってください。》",
 };
 
 /// The agent could not answer a question (it did not reply in time, or its reply cannot be shown).
@@ -187,14 +215,15 @@ pub fn learned(words: &[String], language: &str) -> String {
     }
 }
 
-/// The notice for the `fallback_reason` of a `dictation.stop` result, if it gets one. A plain
-/// `"timeout"` (the cleanup took too long) and the other reasons are not worth a notice.
+/// The notice for the `fallback_reason` of a `dictation.stop` result, if it gets one. Nothing was
+/// said (`"empty"`) needs none, and incomplete speech has a notice of its own.
 pub fn notice_for_fallback(reason: Option<&str>) -> Option<Notice> {
     match reason? {
         "budget" => Some(BUDGET),
         "no_key" => Some(NO_KEY),
         "error:network" | "error:timeout" | "error:server" => Some(OFFLINE),
-        _ => None,
+        "empty" | "incomplete_stt" => None,
+        _ => Some(NOT_CLEANED),
     }
 }
 
@@ -202,7 +231,9 @@ pub fn notice_for_fallback(reason: Option<&str>) -> Option<Notice> {
 mod tests {
     use super::*;
 
-    const ALL: [Notice; 13] = [
+    const ALL: [Notice; 15] = [
+        NOT_CLEANED,
+        CORE_RECOVERED,
         ELEVATED,
         FOCUS_CHANGED,
         BUDGET,
@@ -221,7 +252,9 @@ mod tests {
     #[test]
     fn fallback_reasons_map_to_notices() {
         assert_eq!(notice_for_fallback(Some("budget")).unwrap().zh, BUDGET.zh);
-        assert!(notice_for_fallback(Some("suspicious")).is_none());
+        assert_eq!(notice_for_fallback(Some("suspicious")), Some(NOT_CLEANED));
+        assert_eq!(notice_for_fallback(Some("timeout")), Some(NOT_CLEANED));
+        assert!(notice_for_fallback(Some("empty")).is_none());
         assert!(notice_for_fallback(None).is_none());
     }
 
@@ -231,8 +264,12 @@ mod tests {
         for reason in ["error:network", "error:timeout", "error:server"] {
             assert_eq!(notice_for_fallback(Some(reason)), Some(OFFLINE), "{reason}");
         }
-        for reason in ["timeout", "empty", "error:other", ""] {
-            assert_eq!(notice_for_fallback(Some(reason)), None, "{reason}");
+        for reason in ["timeout", "error:other", ""] {
+            assert_eq!(
+                notice_for_fallback(Some(reason)),
+                Some(NOT_CLEANED),
+                "{reason}"
+            );
         }
     }
 

@@ -172,7 +172,7 @@ describe("the list", () => {
 
   test("says which service is in use for each, small and muted", () => {
     const now = [...html.matchAll(/<span class="svc-now">(.*?)<\/span>/g)].map((m) => m[1]);
-    expect(now).toEqual(["Brave", "Jina", "與回答相同", "內建", "Fish Audio"]);
+    expect(now).toEqual(["Brave", "Jina", "與拉斐爾相同", "內建", "Fish Audio"]);
     expect(draw({ status: status({ model: "anthropic/claude-haiku-5.5" }) })).toContain('<span class="svc-now">claude-haiku-5.5</span>');
   });
 
@@ -232,7 +232,7 @@ describe("what a capability stands on", () => {
     expect([voice({}), voice({ fishKey: true }), voice({ voiceSet: true }), voice({ fishKey: true, voiceSet: true })]).toEqual([false, false, false, true]);
   });
 
-  test("the vision has 「與回答相同」 and 「指定模型」, which is usable once a model is chosen and reads images", () => {
+  test("the vision has 「與拉斐爾相同」 and 「指定模型」, which is usable once a model is chosen and reads images", () => {
     expect(serviceRows("vision", status(), BRAIN).map((r) => [r.id, r.chosen, r.usable])).toEqual([["same", true, true], ["model", false, false]]);
     const chosen = serviceRows("vision", status({ model: "anthropic/claude-haiku-5.5" }), BRAIN);
     expect(chosen.map((r) => [r.id, r.chosen, r.usable])).toEqual([["same", false, true], ["model", true, true]]);
@@ -301,8 +301,8 @@ describe("the dialog of a capability", () => {
     expect(names("read")).toEqual(["內建", "Jina", "Firecrawl", "Tavily"]);
     expect(names("pdf")).toEqual(["內建", "OpenRouter"]);
     expect(names("voice")).toEqual(["Fish Audio"]);
-    expect(names("vision")).toEqual(["與回答相同", "指定模型"]);
-    expect(inDialog(dialog("vision"))).toMatch(/與回答相同<\/span><span class="ds">gpt-6-luna<\/span>/);
+    expect(names("vision")).toEqual(["與拉斐爾相同", "指定模型"]);
+    expect(inDialog(dialog("vision"))).toMatch(/與拉斐爾相同<\/span><span class="ds">gpt-6-luna<\/span>/);
   });
 
   test("is in the three languages", () => {
@@ -400,7 +400,7 @@ describe("the page of one service", () => {
     expect(use(dialog("search", "openrouter", { busy: "switch" }))).toContain(" disabled");
   });
 
-  test("看圖片's pages: 「與回答相同」 has 「使用」; 「指定模型」 has the picker and no field", () => {
+  test("看圖片's pages: 「與拉斐爾相同」 has 「使用」; 「指定模型」 has the picker and no field", () => {
     const same = inDialog(dialog("vision", "same", { status: status({ model: "anthropic/claude-haiku-5.5" }) }));
     expect(same).toMatch(/data-svc="use" data-service="same"[^>]*>使用</);
     expect(same).not.toContain("data-model-picker");
@@ -655,7 +655,7 @@ describe("what the section does", () => {
     expect(changeSetting).not.toHaveBeenCalled();
   });
 
-  test("看圖片: 「與回答相同」 is the empty model, and the picker's choice is the vision_model setting", async () => {
+  test("看圖片: 「與拉斐爾相同」 is the empty model, and the picker's choice is the vision_model setting", async () => {
     const { host, panel, changeSetting } = await opened("vision", { model: "anthropic/claude-haiku-5.5" });
     press(host, '[data-k="svc-svc:same"]');
     press(host, '[data-k="svc-use"]');
@@ -806,8 +806,8 @@ describe("what the section does", () => {
     ["not_configured", "先填入聲音模型 ID"],
     ["missing_secret", "先儲存 API 金鑰"],
     ["auth", "Fish Audio 不接受這把金鑰"],
-    ["network", "無法發聲"],
-    [undefined, "無法發聲"],
+    ["network", "Fish Audio 試聽未成功，無法確認原因，請確認音訊輸出後再試，仍失敗時檢查服務狀態。"],
+    [undefined, "Fish Audio 試聽未成功，無法確認原因，請確認音訊輸出後再試，仍失敗時檢查服務狀態。"],
   ])("a voice that could not be played (%s) is said in a few words", async (kind, words) => {
     const { host } = await opened("voice");
     press(host, '[data-k="svc-svc:fish"]');

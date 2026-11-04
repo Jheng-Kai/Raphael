@@ -1,0 +1,23 @@
+/* The character maker stands where the conversation stands: the sidebar stays beside it and the window controls above it. */
+.mb-scrim.cr-scrim { inset: var(--window-controls-height) 0 0 var(--sidebar-width); padding: 0; background: var(--content); animation: none; }
+.mb-dialog.cr-dialog { width: 100%; height: 100%; max-height: 100%; gap: 0; padding: 0; border-radius: 0; background: transparent; box-shadow: none; animation: none; }
+.cr-dialog .mb-dlg-head { padding: 0 var(--sp-4) var(--sp-1); }
+.cr-dialog .mb-dlg-head h2 { font-size: var(--fs-sm); font-weight: 600; }
+.cr-dialog .mb-dlg-act { display: none; }
+.cr-dialog .mb-dlg-body { flex: 1; align-content: start; justify-items: center; padding: var(--sp-5) var(--sp-4); }
+
+.cr-maker { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-3); width: min(460px, 100%); }
+.cr-face { display: flex; align-items: center; justify-content: center; height: 124px; }
+.cr-colors { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-2); }
+.cr-colors .mb-slime-color { width: 28px; height: 28px; min-height: 0; padding: 0; border: 0; border-radius: var(--r-pill); background: var(--slime-color); box-shadow: 0 0 0 2px transparent; cursor: pointer; }
+.cr-colors .mb-slime-color:hover { background: var(--slime-color); box-shadow: 0 0 0 2px var(--hover-edge); }
+.cr-colors .mb-slime-color[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--content), 0 0 0 4px var(--text); }
+.cr-characters { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: var(--sp-1); width: 100%; }
+.cr-characters .mb-preset-slime { aspect-ratio: 1; width: 100%; min-height: 0; padding: var(--sp-1); border: 1px solid transparent; border-radius: var(--r-md); background: transparent; cursor: pointer; }
+.cr-characters .mb-preset-slime:hover { background: var(--hover); }
+.cr-characters .mb-preset-slime[aria-pressed="true"] { border-color: var(--text); background: var(--hover); }
+.cr-characters .mb-preset-slime .slime { width: 100%; height: 100%; }
+
+.cr-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); width: 100%; margin-top: var(--sp-2); }
+.cr-start { display: flex; justify-content: center; margin-top: var(--sp-1); }
+.cr-start .btn { min-width: 120px; }

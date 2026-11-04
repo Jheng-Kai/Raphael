@@ -12,23 +12,28 @@ import struct
 import tempfile
 from pathlib import Path
 
-from ..brain.openrouter import OpenRouterClient
 from . import use_utf8_output
-from .credentials import key_provider
 
 ROOT = Path(__file__).resolve().parents[4]
 # Live, sonnet-4.6 listed rules an image followed and things it does not show (a "tile" behind a bare mark).
 DEFAULT_MODEL = "anthropic/claude-sonnet-5.5"
 VERSION = 1
-# One request per look image: the full matrix must fit the default; dollars stay the real limit.
+# Bound submitted CLI batches; the explicit API provider also enforces dollar admission.
 DEFAULT_MAX_REQUESTS = 1200
 MAX_REQUESTS = 2000
 _FENCE = re.compile(r"```(?:json)?\s*\n(.*?)\n\s*```", re.S)
 
 
+def _staged(root):
+    """RAPHAEL_STAGED_DOCS names a folder that mirrors the tree with edited documents not applied yet."""
+    value = os.environ.get("RAPHAEL_STAGED_DOCS")
+    return root / value if value else None
+
+
 def rules_path(root):
-    staged = root / ".fold/.agents/product/RULES.md"
-    return staged if staged.is_file() else root / ".agents/product/RULES.md"
+    staged = _staged(root)
+    candidate = staged / ".agents/product/RULES.md" if staged else None
+    return candidate if candidate and candidate.is_file() else root / ".agents/product/RULES.md"
 
 
 def judge_rules(text):
@@ -37,7 +42,7 @@ def judge_rules(text):
 
 def feature_for(root, scene):
     folder = root / ".agents/skills/verify-raphael/features"
-    staged = root / ".fold/.agents/skills/verify-raphael/features"
+    staged = (_staged(root) or root) / ".agents/skills/verify-raphael/features"
     for name in sorted({p.name for p in folder.glob("*.md")} | {p.name for p in staged.glob("*.md")}):
         path = staged / name if (staged / name).is_file() else folder / name
         text = path.read_text(encoding="utf-8")
@@ -152,7 +157,10 @@ def candidates(run):
     return report["results"]
 
 
-async def run_judge(run, *, root=ROOT, model=DEFAULT_MODEL, references=(), client=None, max_cost_usd=5.0, request_ceiling=0.10, max_requests=DEFAULT_MAX_REQUESTS):
+async def run_api_judge(run, *, root=ROOT, model=DEFAULT_MODEL, references=(), client=None, max_cost_usd=5.0, request_ceiling=0.10, max_requests=DEFAULT_MAX_REQUESTS):
+    # This provider is available only through an explicit --brain openrouter request.
+    from ..brain.openrouter import OpenRouterClient
+    from .credentials import key_provider
     output = root / "app/.look"
     output.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix="judge-", dir=output))
@@ -217,17 +225,128 @@ async def run_judge(run, *, root=ROOT, model=DEFAULT_MODEL, references=(), clien
     return 0 if report["status"] == "passed" else 1
 
 
+def batch_prompt(rules, contexts, rows):
+    prompt = build_prompt(rules, "\n\n".join(contexts), ", ".join(row["image"] for row in rows))
+    prompt = prompt.replace("The FIRST image is the candidate; the remaining images are references, not Raphael.",
+        f"The FIRST {len(rows)} images are independent candidates in the order below; all remaining images are external references, not Raphael.")
+    prompt = prompt.replace('Return ONLY JSON: {"score":4,"findings":[',
+        'Return ONLY JSON: {"reviews":[{"image":"candidate filename","score":4,"findings":[')
+    prompt = prompt.replace('correction"}]}.', 'correction"}]}]}.')
+    return prompt + "\nReturn exactly one review per candidate, with these exact image identifiers in order:\n" + json.dumps([row["image"] for row in rows])
+
+
+def parse_batch(text, rows, rules):
+    value = json.loads(text)
+    if not isinstance(value, dict) or set(value) != {"reviews"} or not isinstance(value["reviews"], list):
+        raise ValueError("invalid_review")
+    expected = [row["image"] for row in rows]
+    reviews = value["reviews"]
+    if len(reviews) != len(rows) or any(not isinstance(review, dict) or set(review) != {"image", "score", "findings"} for review in reviews):
+        raise ValueError("invalid_review")
+    if [review["image"] for review in reviews] != expected:
+        raise ValueError("invalid_review")
+    return [parse_review(json.dumps({key: review[key] for key in ("score", "findings")}), rules) for review in reviews]
+
+
+async def run_judge(run, *, brain="claude", model=None, root=ROOT, references=(), max_requests=DEFAULT_MAX_REQUESTS,
+                    batch_size=3, reviewer=None, **api_options):
+    if brain == "openrouter":
+        return await run_api_judge(run, root=root, model=model or DEFAULT_MODEL, references=references, max_requests=max_requests, **api_options)
+    if api_options:
+        raise ValueError("API budgets/clients are not accepted by the subscription judge")
+    from .design_cli import CliReviewer
+    output = root / "app/.look"
+    output.mkdir(parents=True, exist_ok=True)
+    directory = Path(tempfile.mkdtemp(prefix="judge-", dir=output))
+    report = {"version": VERSION, "brain": brain, "model": model, "look_run": str(run), "results": [], "errors": [],
+              "status": "failed", "requests": 0, "max_requests": max_requests, "batch_size": batch_size,
+              "transport": "subscription-cli", "openrouter_requests": 0}
+    try:
+        if not 1 <= max_requests <= MAX_REQUESTS or not 1 <= batch_size <= 4:
+            raise ValueError("invalid_budget")
+        rows = candidates(run)
+        if not references:
+            raise ValueError("reference_images_required")
+        refs = [Path(path).read_bytes() for path in references]
+        if len(refs) > 6 or any(len(data) > 10 * 1024 * 1024 or not data.startswith((b"\x89PNG", b"\xff\xd8")) for data in refs):
+            raise ValueError("invalid_reference_images")
+        rules = rules_path(root).read_text(encoding="utf-8")
+        reviewer = reviewer or CliReviewer(brain, model)
+        identity = await reviewer.identify()
+        report.update(model=reviewer.model, cli_version=reviewer.version, executable=reviewer.command)
+        pending = []
+        for row in rows:
+            name, feature = feature_for(root, row["scene"])
+            prompt = build_prompt(rules, feature, f"{row['scene']} {row['theme']} {row['width']}")
+            key = cache_key((run / row["image"]).read_bytes(), identity, prompt, refs)
+            result = {**{key: row[key] for key in ("scene", "theme", "width", "image")}, "feature": name, "hash": key}
+            path = output / "judge-cache" / (key + ".json")
+            try:
+                saved = json.loads(path.read_text(encoding="utf-8"))
+                result.update(parse_review(json.dumps(saved["review"]), rules), cached=True, models=saved.get("models", []))
+            except (OSError, ValueError, KeyError, TypeError):
+                pending.append((row, feature, result, path))
+            report["results"].append(result)
+        for offset in range(0, len(pending), batch_size):
+            batch = pending[offset:offset + batch_size]
+            if report["requests"] >= max_requests:
+                for _, _, result, _ in pending[offset:]:
+                    result.update(failed=True, error="judge_budget_exhausted")
+                report["errors"].append("Incomplete review: request limit stopped the run")
+                break
+            report["requests"] += 1
+            try:
+                text = await reviewer.review(batch_prompt(rules, list(dict.fromkeys(feature for _, feature, _, _ in batch)), [row for row, _, _, _ in batch]),
+                    [(run / row["image"]).read_bytes() for row, _, _, _ in batch] + refs)
+                reviews = parse_batch(text, [row for row, _, _, _ in batch], rules)
+                for (_, _, result, path), review in zip(batch, reviews):
+                    result.update(review, cached=False, models=reviewer.calls[-1].get("models", []))
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(json.dumps({"review": {key: review[key] for key in ("score", "findings")}, "models": result["models"]}, ensure_ascii=False), encoding="utf-8")
+            except Exception as error:
+                safe = {"invalid_review", "invalid_finding", "judge_cli_failed", "judge_cli_output_limit", "judge_images_not_read"}
+                for _, _, result, _ in batch:
+                    result.update(failed=True, error=str(error) if type(error) is ValueError and str(error) in safe else type(error).__name__)
+                # A login/transport/schema failure must not submit the rest of a large matrix.
+                for _, _, result, _ in pending[offset + batch_size:]:
+                    result.update(failed=True, error="judge_cli_stopped")
+                break
+            finally:
+                report["calls"] = reviewer.calls
+                (directory / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        report["status"] = "passed" if all(not row.get("failed", True) for row in report["results"]) else "failed"
+    except Exception as error:
+        report["errors"].append(str(error) if type(error) is ValueError else type(error).__name__)
+    finally:
+        (directory / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        lines = [f"Design judge: {report['status']}", f"Brain: {brain}, model: {report['model']}",
+                 f"Requests: {report['requests']}/{max_requests}; OpenRouter requests: 0", *report["errors"]]
+        for row in report["results"]:
+            lines.append(f"{row['image']}: {row.get('score', 'ERROR')}/5 {row.get('error', '')}")
+            lines.extend(f"  {finding['rule_id']}: {finding['detail']}" for finding in row.get("findings", []))
+        (directory / "summary.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print("\n".join(lines))
+        print(f"Report: {directory / 'report.json'}")
+    return 0 if report["status"] == "passed" else 1
+
+
 def main():
     use_utf8_output()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run", type=Path)
-    parser.add_argument("--model", default=os.environ.get("RAPHAEL_JUDGE_MODEL", DEFAULT_MODEL))
+    parser.add_argument("--brain", choices=("claude", "codex", "openrouter"), default="claude")
+    parser.add_argument("--model", default=None)
+    parser.add_argument("--batch-size", type=int, default=3)
     parser.add_argument("--references", type=Path, nargs="+", default=[])
-    parser.add_argument("--max-cost-usd", type=float, default=5.0)
-    parser.add_argument("--request-ceiling", type=float, default=0.10)
+    parser.add_argument("--max-cost-usd", type=float)
+    parser.add_argument("--request-ceiling", type=float)
     parser.add_argument("--max-requests", type=int, default=DEFAULT_MAX_REQUESTS)
     args = parser.parse_args()
-    return asyncio.run(run_judge(args.run.resolve(), model=args.model, references=args.references, max_cost_usd=args.max_cost_usd, request_ceiling=args.request_ceiling, max_requests=args.max_requests))
+    if args.brain != "openrouter" and (args.max_cost_usd is not None or args.request_ceiling is not None):
+        parser.error("dollar budgets require an explicit --brain openrouter; subscription judges use --max-requests")
+    api = {"max_cost_usd": 5.0 if args.max_cost_usd is None else args.max_cost_usd, "request_ceiling": .10 if args.request_ceiling is None else args.request_ceiling} if args.brain == "openrouter" else {}
+    return asyncio.run(run_judge(args.run.resolve(), brain=args.brain, model=args.model, references=args.references,
+                                max_requests=args.max_requests, batch_size=args.batch_size, **api))
 
 
 if __name__ == "__main__":

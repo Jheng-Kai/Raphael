@@ -2,40 +2,43 @@
 import * as api from "./api";
 import { t } from "./i18n";
 import type { BrainSettings } from "./types";
-import { esc, toaster } from "./ui";
+import { btn, esc, toaster } from "./ui";
 import { describeError } from "./format";
+import { ownerFaceHTML, setOwnerProfile } from "./owner-avatar";
+import { openAvatarPicker, pickPicture, readPicture } from "./member-dialogs";
+import { cropDialog } from "./avatar-settings";
+import { croppedMemberPicture } from "./member-profile-resources";
 import "./owner-settings.css";
 
-export const SKINS = ["default", "paper", "graphite", "lagoon", "dusk", "midnight", "meadow", "ink", "catppuccin"] as const;
-export type Skin = typeof SKINS[number];
-export function skinOf(value: unknown): Skin { return SKINS.includes(value as Skin) ? value as Skin : "default"; }
-export function applySkin(value: unknown, appearance: "system" | "light" | "dark", systemDark: boolean): void {
-  const skin = skinOf(value);
-  document.documentElement.dataset.skin = skin;
+export function applyAppearance(appearance: "system" | "light" | "dark", systemDark: boolean): void {
   document.documentElement.dataset.theme = appearance === "system" ? systemDark ? "dark" : "light" : appearance;
 }
 export function ownerProfileHTML(brain: BrainSettings | null): string {
-  return `<section class="sgroup owner-profile"><h2>${esc(t("owner.profile"))}</h2><div class="slist">` +
-    `<label>${esc(t("owner.name"))}<input class="field" data-owner="owner_name" maxlength="100" value="${esc(brain?.owner_name ?? "")}" ${brain ? "" : "disabled"}></label>` +
-    `<label>${esc(t("owner.about"))}<textarea class="field" rows="4" data-owner="owner_about" maxlength="4000" ${brain ? "" : "disabled"}>${esc(brain?.owner_about ?? "")}</textarea></label></div></section>`;
+  return `<section class="sgroup owner-profile" aria-label="${esc(t("owner.profile"))}"><div class="slist">` +
+    btn(ownerFaceHTML(72, brain?.owner_photo), "owner-photo", ` data-owner-photo aria-label="${esc(t("settings.avatar"))}"${brain ? "" : " disabled"}`) +
+    `<div class="owner-fields"><label>${esc(t("owner.name"))}<input class="field" data-owner="owner_name" maxlength="100" value="${esc(brain?.owner_name ?? "")}" ${brain ? "" : "disabled"}></label>` +
+    `<label>${esc(t("owner.about"))}<textarea class="field" rows="4" data-owner="owner_about" maxlength="4000" ${brain ? "" : "disabled"}>${esc(brain?.owner_about ?? "")}</textarea></label></div></div></section>`;
 }
-export function skinsHTML(brain: BrainSettings | null): string {
-  const selected = skinOf(brain?.skin);
-  return `<section class="sgroup"><h2>${esc(t("skin.styles"))}</h2><div class="skin-grid">` + SKINS.map(skin =>
-    `<button type="button" class="btn skin-card" data-skin-choice="${skin}" aria-pressed="${skin === selected}" ${brain ? "" : "disabled"}>` +
-    `<span class="skin-preview" aria-hidden="true">${["light", "dark"].map(mode => `<span class="skin-sample" data-preview="${skin}" data-mode="${mode}"><i class="skin-sidebar"></i><i class="skin-bubble"></i><i class="skin-reply"></i><i class="skin-composer"></i></span>`).join("")}</span>` +
-    `<strong>${esc(t(`skin.${skin}`))}</strong><small>${esc(t(`skin.${skin}Desc`))}</small></button>`).join("") + `</div></section>`;
-}
-
 export function createOwnerControls(saved: (settings: BrainSettings) => void) {
   let writes = Promise.resolve();
-  const set = (key: "owner_name" | "owner_about" | "skin", value: string): void => {
-    writes = writes.then(async () => { saved((await api.settingsSet(key, value)).settings); }).catch(error => toaster.info(describeError(error)));
+  const set = (key: "owner_name" | "owner_about" | "owner_photo", value: string): void => {
+    writes = writes.then(async () => { const settings = (await api.settingsSet(key, value)).settings; setOwnerProfile(settings); saved(settings); }).catch(error => toaster.info(describeError(error)));
   };
   return {
     click(target: Element): boolean {
-      const skin = target.closest<HTMLElement>("[data-skin-choice]");
-      if (skin) { set("skin", skinOf(skin.dataset.skinChoice)); return true; }
+      const photo = target.closest<HTMLElement>("[data-owner-photo]");
+      if (photo) {
+        openAvatarPicker(photo, {
+          more: [{ label: t("settings.avatarReset"), run: () => set("owner_photo", "") }],
+          onComputer: () => pickPicture(file => { void (async () => {
+            const read = await readPicture(file); if (!read) return;
+            const crop = await cropDialog(`data:${read.mime};base64,${read.data}`); if (!crop) return;
+            const cropped = await croppedMemberPicture(read, crop, 192, "image/webp");
+            set("owner_photo", `data:${cropped.mime};base64,${cropped.data}`);
+          })().catch(error => toaster.info(describeError(error))); }),
+        });
+        return true;
+      }
       return false;
     },
     async change(target: Element): Promise<void> {

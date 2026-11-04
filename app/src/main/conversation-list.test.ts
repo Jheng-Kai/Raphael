@@ -2,12 +2,25 @@
 import { afterEach, expect, test, vi } from "vitest";
 const core = vi.hoisted(() => vi.fn());
 vi.mock("./api", () => ({ core }));
-import { mountConversationList } from "./conversation-list";
+import { mountConversationList, newestConversation, type ConversationInfo } from "./conversation-list";
 import { closeMenu } from "./ui";
 import { installContextMenus } from "./context-menu";
 
 afterEach(() => { closeMenu(); document.body.replaceChildren(); vi.clearAllMocks(); });
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+
+test("window entry uses standard activity, default only for a tie, and quick only as a last resort", () => {
+  const rows = [
+    {id:1,kind:'standard',is_default:1,updated_at_ms:10},
+    {id:2,kind:'standard',is_default:0,updated_at_ms:10},
+    {id:3,kind:'quick',updated_at_ms:100},
+  ] as ConversationInfo[];
+  expect(newestConversation(rows)?.id).toBe(1);
+  expect(newestConversation([{...rows[1],updated_at_ms:20},...rows])?.id).toBe(2);
+  expect(newestConversation([rows[2]])?.id).toBe(3);
+  expect(newestConversation([])).toBeUndefined();
+  expect(rows.map(row=>row.id)).toEqual([1,2,3]);
+});
 
 test("quick questions stay first with their localized title and open the persistent conversation", async () => {
   core.mockResolvedValue({ conversations: [
@@ -20,7 +33,9 @@ test("quick questions stay first with their localized title and open the persist
   const first = host.querySelector<HTMLButtonElement>("[data-conversation-open]")!;
   expect(first.dataset.conversationOpen).toBe("9");
   expect(first.textContent).toContain("快速提問");
-  expect(first.closest(".conversation-row")!.querySelector("[data-conversation-more]")).toBeNull();
+  expect(first.closest(".conversation-row")!.querySelector("[data-conversation-more]")).not.toBeNull();
+  expect([...host.querySelectorAll(".conversation-section > .mb-dh")].map(node => node.textContent)).toEqual(["對話"]);
+  expect(host.querySelector('[data-conversation-section="quick"]')!.textContent!.match(/快速提問/g)).toHaveLength(1);
   first.click(); expect(onOpen).toHaveBeenCalledWith(9);
   list.destroy();
 });
@@ -43,6 +58,26 @@ test("searching and opening a conversation keeps its identity; plus creates for 
   await flush();
   expect(core).toHaveBeenCalledWith("conversations.create", { member_id: 7 });
   expect(onOpen).toHaveBeenLastCalledWith(9);
+  list.destroy();
+});
+
+test("the new-conversation button rests while the open conversation is unwritten, and an unwritten one elsewhere is opened, not doubled", async () => {
+  let current: number | undefined = 3;
+  core.mockImplementation(async () => ({ conversations: [
+    { id: 2, member_id: 7, title: "", created_at_ms: 1, updated_at_ms: 1 },
+    { id: 3, member_id: 7, title: "Cobalt notes", created_at_ms: 2, updated_at_ms: 2, is_default: 1 },
+  ] }));
+  const host = document.createElement("div"); document.body.append(host);
+  const onOpen = vi.fn();
+  const list = mountConversationList(host, { memberId: 7, onOpen, current: () => current }); await flush();
+  const button = host.querySelector<HTMLButtonElement>("[data-conversation-new]")!;
+  expect(button.disabled).toBe(false);
+  button.click();
+  expect(onOpen).toHaveBeenCalledWith(2);
+  expect(core).not.toHaveBeenCalledWith("conversations.create", expect.anything());
+  current = 2;
+  window.dispatchEvent(new CustomEvent("conversation-opened", { detail: 7 }));
+  expect(button.disabled).toBe(true);
   list.destroy();
 });
 
@@ -87,7 +122,7 @@ test("a right click on a conversation row opens the same rename and delete menu 
     expect(items()).toEqual(["rename", "delete"]);
     expect(document.querySelector<HTMLElement>("#app-popover")!.style.left).toBe("120px");
     closeMenu();
-    host.querySelector<HTMLButtonElement>("[data-conversation-more]")!.click();
+    host.querySelector<HTMLButtonElement>('[data-conversation-more="2"]')!.click();
     expect(items()).toEqual(["rename", "delete"]);
     closeMenu();
     rightClick(row.closest(".conversation-row")!, 40, 40);
@@ -95,10 +130,33 @@ test("a right click on a conversation row opens the same rename and delete menu 
     expect(document.querySelector(".conversation-name")).not.toBeNull();
     expect(onOpen).not.toHaveBeenCalled();
     document.querySelector<HTMLButtonElement>('[data-dlg="cancel"]')!.click();
-    // a quick conversation has no ⋯, so nothing opens for it; the left button opens it
+    // The permanent quick row offers clearing rather than deleting its identity.
     rightClick(host.querySelector('[data-conversation-open="9"]')!, 10, 10);
-    expect(document.querySelector("#app-popover")).toBeNull();
+    expect(items()).toEqual(["clear"]);
+    closeMenu();
     row.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(onOpen).toHaveBeenCalledWith(2);
   } finally { stop(); list.destroy(); }
+});
+
+test("quick history clears only after the shared confirmation and keeps its row", async () => {
+  core.mockResolvedValue({ conversations: [{ id: 9, member_id: 0, kind: "quick", title: "", updated_at_ms: 1 }] });
+  const host = document.createElement("div"); document.body.append(host);
+  const list = mountConversationList(host, { memberId: 0, onOpen() {} }); await flush();
+  host.querySelector<HTMLButtonElement>('[data-conversation-more="9"]')!.click();
+  document.querySelector<HTMLButtonElement>('[data-pick="clear"]')!.click();
+  expect(document.querySelector(".mb-confirm h2")?.textContent).toBe("清除「快速提問」的紀錄？");
+  expect(core).not.toHaveBeenCalledWith("conversations.clear", expect.anything());
+  document.querySelector<HTMLButtonElement>('[data-dlg="delete"]')!.click(); await flush();
+  expect(core).toHaveBeenCalledWith("conversations.clear", { id: 9 });
+  expect(host.querySelector('[data-conversation-open="9"]')).not.toBeNull();
+  list.destroy();
+});
+
+test("a member without quick questions has only the ordinary conversation heading", async () => {
+  core.mockResolvedValue({ conversations: [{ id: 2, member_id: 7, title: "Project", updated_at_ms: 1 }] });
+  const host = document.createElement("div"); document.body.append(host);
+  const list = mountConversationList(host, { memberId: 7, onOpen() {} }); await flush();
+  expect([...host.querySelectorAll(".conversation-section > .mb-dh")].map(node => node.textContent)).toEqual(["對話"]);
+  list.destroy();
 });

@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   openLink: vi.fn(),
   openExternalUrl: vi.fn(),
   permissionAnswer: vi.fn(),
+  settingsSet: vi.fn(),
   mailSave: vi.fn(),
   mailSend: vi.fn(),
   mailDiscard: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock("../api", () => api);
 
 import { Cleared } from "../cleared";
 import { createAgent } from "./agent";
+import { setLocale } from "../i18n";
 
 const AT = Date.parse("2026-10-20T10:00:00+08:00");
 
@@ -73,6 +75,7 @@ const flush = async (): Promise<void> => {
 };
 
 beforeEach(() => {
+  setLocale("zh-TW");
   document.body.innerHTML = "";
   for (const fn of Object.values(api)) fn.mockReset();
   api.agentQuestionOpen.mockResolvedValue(null);
@@ -83,6 +86,21 @@ beforeEach(() => {
 
 const asked = { type: "AgentQuestion", id: "q1", prefix: "問", text: "是否讓「Gmail」執行「send_email」？", tier: "T2", timeout_ms: 30_000, yes: "允許一次", no: "拒絕", always: "一律允許" } as const;
 
+test("approval titles name the known action and localized speaker, with an explanatory body", async () => {
+  for (const [locale, heading, title] of [["zh-TW","建立成員","拉斐爾想要建立成員"],["en","Create member","Raphael wants to create a member"],["ja","メンバーを作成","ラファエルがメンバーを作成します"]] as const) {
+    setLocale(locale); document.body.replaceChildren();
+    api.agentHistoryList.mockResolvedValue({turns:[turn(1,{status:"confirm",text:""})]});
+    const agent=mount(); await flush();
+    send({...asked,text:`${heading}\nAlex: Reviewer`,always:undefined}); await flush();
+    expect(document.querySelector(".ask-card .card-title")?.textContent).toBe(title);
+    expect(document.querySelector(".ask-card .card-body.cc-state")?.textContent).not.toBe(heading);
+    expect(document.querySelector(".ask-q")?.textContent).toContain("Alex: Reviewer");
+    if (locale === "zh-TW") expect(document.querySelector(".ask-card")?.textContent).not.toContain("Raphael");
+    agent.hide();
+  }
+  setLocale("zh-TW");
+});
+
 describe("the permission card in the page", () => {
   test("the question is answered by the card, and the gold card stays away", async () => {
     api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { status: "confirm", text: "", permissions: [permission()] })] });
@@ -91,7 +109,7 @@ describe("the permission card in the page", () => {
     send(asked);
     await flush();
     expect(document.querySelector('[data-permission-card="q1"]')).not.toBeNull();
-    expect(document.querySelector<HTMLElement>(".ask-card")!.hidden).toBe(true);
+    expect(document.querySelector<HTMLElement>(".ask-card-host")!.hidden).toBe(true);
     const once = document.querySelector<HTMLButtonElement>('[data-act="perm-once"]')!;
     expect(once.disabled).toBe(false);
     once.click();
@@ -121,7 +139,7 @@ describe("the permission card in the page", () => {
     await flush();
     send({ ...asked, id: "plain", yes: undefined, no: undefined, always: undefined });
     await flush();
-    expect(document.querySelector<HTMLElement>(".ask-card")!.hidden).toBe(false);
+    expect(document.querySelector<HTMLElement>(".ask-card-host")!.hidden).toBe(false);
     document.body.innerHTML = "";
     api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { status: "confirm", text: "", permissions: [permission()] })] });
     mount();
@@ -154,6 +172,20 @@ describe("the permission card in the page", () => {
   });
 });
 
+test("Never on a local consent card saves the shared setting before declining once", async () => {
+  api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { status: "confirm", text: "", permissions: [permission({ kind: "local_access", service: "Alex", tool: "local_exec", summary: "Get-Process" })] })] });
+  api.settingsSet.mockResolvedValue({ settings: { local_commands_mode: "never" } });
+  mount();
+  await flush();
+  send(asked);
+  await flush();
+  document.querySelector<HTMLButtonElement>('[data-act="perm-never"]')!.click();
+  await flush();
+  expect(api.settingsSet).toHaveBeenCalledExactlyOnceWith("local_commands_mode", "never");
+  expect(api.agentQuestionAnswer).toHaveBeenCalledExactlyOnceWith("q1", false);
+  expect(api.settingsSet.mock.invocationCallOrder[0]).toBeLessThan(api.agentQuestionAnswer.mock.invocationCallOrder[0]);
+});
+
 describe("the email card in the page", () => {
   const drafted = (more: Partial<MailDraftCard> = {}): AgentTurn => turn(1, { drafts: [mail(more)] });
   const field = (name: string): HTMLInputElement | HTMLTextAreaElement => document.querySelector(`[data-mail-field="${name}"]`)!;
@@ -163,7 +195,7 @@ describe("the email card in the page", () => {
   };
 
   test("an edit is saved as a new version on the digest the card holds, with every field as the owner sees it", async () => {
-    api.agentHistoryList.mockResolvedValue({ turns: [drafted()] });
+    api.agentHistoryList.mockResolvedValue({ turns: [drafted({ cc: "reviewer@example.com" })] });
     api.mailSave.mockResolvedValue({ draft: mail({ version: 2, digest: "b".repeat(64), cc: "boss@example.com" }), saved: true });
     mount();
     await flush();
@@ -174,7 +206,7 @@ describe("the email card in the page", () => {
   });
 
   test("saves one after the other, each on the digest the one before came back with", async () => {
-    api.agentHistoryList.mockResolvedValue({ turns: [drafted()] });
+    api.agentHistoryList.mockResolvedValue({ turns: [drafted({ cc: "reviewer@example.com" })] });
     api.mailSave
       .mockResolvedValueOnce({ draft: mail({ version: 2, digest: "b".repeat(64) }), saved: true })
       .mockResolvedValueOnce({ draft: mail({ version: 3, digest: "c".repeat(64) }), saved: true });
@@ -199,6 +231,15 @@ describe("the email card in the page", () => {
     expect(api.mailSave).toHaveBeenCalledExactlyOnceWith("dr1", "a".repeat(64), expect.objectContaining({ subject: "週四會議（改）" }));
     expect(api.mailSend).toHaveBeenCalledExactlyOnceWith("dr1", "b".repeat(64));
     expect(api.mailSave.mock.invocationCallOrder[0]).toBeLessThan(api.mailSend.mock.invocationCallOrder[0]);
+  });
+
+  test("editing failed mail sends the new saved revision without replaying the failed attempt", async () => {
+    api.agentHistoryList.mockResolvedValue({ turns: [drafted({state:"failed",error:"interrupted"})] });
+    api.mailSave.mockResolvedValue({draft:mail({version:2,digest:"b".repeat(64),subject:"Updated project note"}),saved:true});
+    api.mailSend.mockResolvedValue({draft:mail({state:"sent"}),sent:true});
+    mount(); await flush(); field("subject").value="Updated project note";
+    document.querySelector<HTMLButtonElement>('[data-act="mail-send"]')!.click(); await flush();
+    expect(api.mailSend).toHaveBeenCalledExactlyOnceWith("dr1","b".repeat(64));
   });
 
   test("an untouched card sends the digest it holds without saving", async () => {

@@ -325,7 +325,10 @@ def test_a_voice_that_can_be_heard_has_a_service_a_key_and_a_voice_id(rig):
     assert rig.speaker.speaks() is False
     rig.settings.set("tts_service", "fish")
     rig.settings.set("tts_enabled", True)
+    events = []
+    rig.speaker._notify = lambda method, params: events.append((method, params))
     assert rig.speaker.speaks() is False  # no voice id, no key
+    assert events == [("setup.missing", {"resource": "fish", "requirement": "setup", "state": "missing", "repair": "voice"})]
     rig.settings.set("tts_fish_voice", VOICE)
     assert rig.speaker.speaks() is False  # no key
     rig.keys.set("fish", KEY)
@@ -627,6 +630,18 @@ def test_the_player_writes_the_stream_in_blocks_then_lets_the_device_drain():
     assert sum(shape[0] for _, shape, _ in writes) == len(tone) // 2  # every sample, once
     assert player.streams[0].kwargs == {"samplerate": 44_100, "channels": 1, "dtype": "int16"}
     assert began == [["start"]]  # started: once, after the device is open, before the first write
+
+
+def test_microphone_device_refresh_never_terminates_portaudio_during_playback(monkeypatch):
+    from raphael_core.device import audio
+    refreshes = []
+    monkeypatch.setattr(audio.sd, "_terminate", lambda: refreshes.append("terminate"))
+    monkeypatch.setattr(audio.sd, "_initialize", lambda: refreshes.append("initialize"))
+    player = a_player([], on_write=lambda: audio._read_devices_again())
+    player.play(a_stream_of(a_tone()), 44_100, threading.Event(), lambda: None)
+    assert refreshes == []
+    assert audio._read_devices_again()
+    assert refreshes == ["terminate", "initialize"]
 
 
 def test_a_sample_split_between_two_chunks_is_kept_whole():

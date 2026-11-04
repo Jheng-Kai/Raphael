@@ -6,8 +6,8 @@
 - `members`: a member, with a name (at most NAME_MAX characters, one no other member has and none
   of Raphael's), a role (ROLE_MAX), its character and speaking style (PERSONALITY_MAX), the owner's
   instructions for its work (INSTRUCTIONS_MAX), a picture
-  (`avatar`: "", "preset:<file stem>" or "file:<stored file name>"), a group or none (未分組), a model
-  ("" for the answer model), a place, when it was made, and the tools and connections it may use
+  (`avatar`: "", "preset:<file stem>", "file:<stored file name>" or "slime:<mascot>"), a group or none (未分組), a model
+  ("" answers on Raphael's; `members.create` gives each its own), a place, when it was made, and the tools and connections it may use
   (`tools`: a list of ids, or None for every one that is on).
 - `routines`: what a member does on a schedule (`schedule`, see `schedule.py`), with a title
   (TITLE_MAX) and the prompt it runs with (PROMPT_MAX), whether it is on, and when it last ran and
@@ -16,8 +16,8 @@
 
 Raphael himself is not a row: he is member 0 everywhere, cannot be renamed or deleted, and has
 every tool. The primary contact is the member whose `primary_contact` is 1 (at most one, by the table's
-own index), or Raphael while none is: choosing another never touches the chief of staff, who is Raphael
-whoever the primary is, and a member that is hidden or deleted stops being it. A name, a role, a personality,
+own index), or Raphael while none is. It also owns the unique chief capability
+and a member that is hidden or deleted hands that role back to Raphael. A name, a role, a personality,
 an instruction, a title and a prompt are what the owner wrote, so
 nothing here logs one; a refusal says which field was wrong, never what was in it.
 
@@ -30,12 +30,21 @@ import sqlite3
 import unicodedata
 from collections.abc import Callable
 from contextlib import contextmanager, nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from ..agent.speaker import Speaker, is_raphael_name
 from ..clock import wall_clock_ms
 from .schedule import Schedule, ScheduleError, parse_schedule
+
+# Shared read projection for routine_runs r and its agent_turns t. Waiting for children alone is not an owner question.
+ROUTINE_RUN_STATUS_SQL = """CASE WHEN r.finished IS NOT NULL THEN r.status
+    WHEN EXISTS (SELECT 1 FROM worker_tasks w WHERE w.turn_id=r.turn_id
+        AND w.state IN ('running','waiting','queued') AND (
+            EXISTS (SELECT 1 FROM owner_questions q WHERE q.task_id=w.id AND q.result IS NULL)
+            OR EXISTS (SELECT 1 FROM worker_questions q WHERE q.task_id=w.id AND q.state='waiting')
+        )) THEN 'confirm'
+    ELSE COALESCE(t.status,r.status) END"""
 
 NAME_MAX = 16
 ROLE_MAX = 24
@@ -54,11 +63,28 @@ MAX_GROUPS = 40
 MAX_ROUTINES = 20  # of one member
 SOURCE_KINDS = ("github", "notion")
 
+
+def run_triggers(conn, turn_ids):
+    if not turn_ids:
+        return {}
+    result = {}
+    for row in conn.execute(
+        f"SELECT runs.turn_id,runs.trigger_json,r.id,r.member_id,r.schedule,r.when_json,r.app_name FROM routine_runs runs"
+        f" LEFT JOIN routines r ON r.id=runs.routine_id WHERE runs.turn_id IN ({','.join('?' for _ in turn_ids)})", turn_ids
+    ):
+        snapshot = json.loads(row["trigger_json"])
+        if not snapshot and row["id"] is not None:
+            snapshot = {"id":row["id"], "member_id":row["member_id"], "schedule":json.loads(row["schedule"]),
+                        "when":json.loads(row["when_json"]) if row["when_json"] else None, "app_name":row["app_name"]}
+        if snapshot:
+            result[row["turn_id"]] = snapshot
+    return result
+
 _GITHUB_REPO = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}")
 _GITHUB_URL = re.compile(r"https://(?:www\.)?github\.com/([^/?#]+/[^/?#]+?)(?:\.git)?(?:[/?#].*)?")
 _NOTION_ID = re.compile(r"[0-9a-fA-F]{32}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 _NOTION_URL = re.compile(r"https://(?:www\.)?(?:notion\.so|[a-z0-9-]+\.notion\.site)/\S*")
-_AVATAR = re.compile(r"(?:preset|file):[A-Za-z0-9._ -]{1,120}")
+_AVATAR = re.compile(r"(?:preset|file):[A-Za-z0-9._ -]{1,120}|slime:[a-z]{1,32}(?::[a-z]{1,32})?")
 
 
 class MemberError(ValueError):
@@ -121,7 +147,7 @@ class Member:
             role=self.role,
             instructions=self.instructions,
             personality=self.personality,
-            model="",
+            model=self.model,
             blurb=self.blurb,
             reply_style=self.reply_style,
             ask_before_members=self.ask_before_members,
@@ -136,11 +162,17 @@ class Routine:
     member_id: int
     title: str
     prompt: str
-    schedule: Schedule
+    schedule: Schedule | None
     enabled: bool
     last_run_ms: int | None
     next_run_ms: int | None
     created_at_ms: int
+    when: dict | None = None
+    last_checked_ms: int | None = None
+    last_error: str = ""
+    poll_initialized: bool = False
+    poll_failures: int = 0
+    app_name: str = ""
 
 
 # --- checking what the owner wrote -----------------------------------------------------------------
@@ -207,7 +239,7 @@ def clean_avatar(value: Any) -> str:
     if value == "":
         return ""
     if not isinstance(value, str) or not _AVATAR.fullmatch(value) or ".." in value:
-        raise MemberError("avatar", 'avatar must be "", "preset:<name>" or "file:<name>"')
+        raise MemberError("avatar", 'avatar must be "", "preset:<name>", "file:<name>" or "slime:<name>"')
     return value
 
 
@@ -323,7 +355,8 @@ _MEMBER_COLUMNS = (
     " blurb, reply_style, voice, read_aloud, notify, ask_before_members, pinned, hidden, draft_first"
 )
 _ROUTINE_COLUMNS = (
-    "id, member_id, title, prompt, schedule, enabled, last_run_ms, next_run_ms, created_at_ms"
+    "id, member_id, title, prompt, schedule, enabled, last_run_ms, next_run_ms, created_at_ms,"
+    "when_json,last_checked_ms,last_error,poll_initialized,poll_failures,app_name"
 )
 # What `update_member` changes, and how each is checked.
 _MEMBER_FIELDS: dict[str, Callable[[Any], Any]] = {
@@ -347,7 +380,9 @@ def _member(row: sqlite3.Row) -> Member:
 def _routine(row: sqlite3.Row) -> Routine | None:
     data = dict(row)
     try:
-        data["schedule"] = parse_schedule(json.loads(data["schedule"]))
+        raw_when = data.pop("when_json")
+        data["when"] = json.loads(raw_when) if raw_when else None
+        data["schedule"] = None if data["when"] else parse_schedule(json.loads(data["schedule"]))
     except (ValueError, ScheduleError):
         return None
     data["enabled"] = bool(data["enabled"])
@@ -588,7 +623,7 @@ class MemberStore:
 
     def set_primary(self, member_id: Any) -> bool:
         """Make `member_id` the primary contact (0 is Raphael), and nobody else: whether that changed
-        anything. Only the flag moves. The chief of staff, the rooms, the tasks, the exchanges and
+        anything. The primary and chief capability move together. The rooms, tasks, exchanges and
         the conversations are not touched, so nothing under way is run again, handed on or ended.
         MemberError when it is not a whole number, nobody, or a member hidden from the sidebar."""
         if type(member_id) is not int or member_id < 0:
@@ -611,6 +646,7 @@ class MemberStore:
         """Delete a member's row, its routines and its unread mark; whether there was one. Its
         conversation, memory and picture are the service's to delete."""
         with self.transaction():
+            self._conn.execute("UPDATE members SET primary_contact = 0 WHERE id = ?", (member_id,))
             self._conn.execute("DELETE FROM routine_runs WHERE routine_id IN (SELECT id FROM routines WHERE member_id = ?)", (member_id,))
             self._conn.execute("DELETE FROM room_members WHERE member_id = ?", (member_id,))
             self._conn.execute("DELETE FROM member_skills WHERE member_id = ?", (member_id,))
@@ -626,10 +662,13 @@ class MemberStore:
 
     def speaker(self, member_id: int) -> Speaker | None:
         """The member `member_id` as the assistant takes it; Raphael for 0; None for nobody."""
-        if member_id == 0:
-            return Speaker()
-        member = self.member(member_id)
-        return None if member is None else member.speaker()
+        member = self.member(member_id) if member_id else None
+        speaker = Speaker() if member_id == 0 else (None if member is None else member.speaker())
+        return None if speaker is None else replace(speaker, capabilities=frozenset({"chief"}) if self.is_chief(member_id) else frozenset())
+
+    def is_chief(self, member_id: int) -> bool:
+        """Exactly one role holder; the existing unique primary-contact state owns it."""
+        return type(member_id) is int and self.exists(member_id) and member_id == self.primary_id()
 
     # --- routines ----------------------------------------------------------------------------------
 
@@ -656,7 +695,9 @@ class MemberStore:
         member_id: int,
         title: Any,
         prompt: Any,
-        schedule: Any,
+        schedule: Any = None,
+        when: Any = None,
+        app_name: str = "",
         enabled: Any = True,
         next_run_ms: int | None,
     ) -> Routine:
@@ -664,21 +705,27 @@ class MemberStore:
             raise MemberError("not_found", "there is no such member")
         if type(enabled) is not bool:
             raise MemberError("enabled", "enabled must be true or false")
-        values = (clean_title(title), clean_prompt(prompt), clean_schedule(schedule))
+        from .events import clean_when
+        if (schedule is None) == (when is None):
+            raise MemberError("when", "Choose either a schedule or when")
+        trigger = clean_when(when) if when is not None else None
+        values = (clean_title(title), clean_prompt(prompt), clean_schedule(schedule) if trigger is None else None)
         if len(self.routines(member_id)) >= MAX_ROUTINES:
             raise MemberError("full", f"a member has at most {MAX_ROUTINES} routines")
         with self._conn:
             cursor = self._conn.execute(
                 "INSERT INTO routines (member_id, title, prompt, schedule, enabled, next_run_ms,"
-                " created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                " created_at_ms,when_json,app_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     member_id,
                     values[0],
                     values[1],
-                    json.dumps(values[2].to_json()),
+                    json.dumps(values[2].to_json() if values[2] else None),
                     int(enabled),
                     next_run_ms if enabled else None,
                     self._now_ms(),
+                    json.dumps(trigger) if trigger else None,
+                    app_name if trigger else "",
                 ),
             )
         routine = self.routine(int(cursor.lastrowid or 0))
@@ -692,6 +739,8 @@ class MemberStore:
         title: Any = None,
         prompt: Any = None,
         schedule: Any = None,
+        when: Any = None,
+        app_name: str | None = None,
         enabled: Any = None,
         next_run: Callable[[Schedule], int | None],
     ) -> Routine:
@@ -705,8 +754,17 @@ class MemberStore:
             changes["title"] = clean_title(title)
         if prompt is not None:
             changes["prompt"] = clean_prompt(prompt)
-        plan = routine.schedule
+        from .events import clean_when
+        if schedule is not None and when is not None:
+            raise MemberError("when", "Choose either a schedule or when")
+        plan, trigger = routine.schedule, routine.when
+        if when is not None:
+            trigger = clean_when(when)
+            plan = None
+            changes.update(when_json=json.dumps(trigger), schedule="null")
         if schedule is not None:
+            trigger = None
+            changes["when_json"] = None
             plan = clean_schedule(schedule)
             changes["schedule"] = json.dumps(plan.to_json())
         on = routine.enabled
@@ -717,11 +775,16 @@ class MemberStore:
             changes["enabled"] = int(on)
         if not on:
             changes["next_run_ms"] = None
-        elif schedule is not None or not routine.enabled or routine.next_run_ms is None:
-            changes["next_run_ms"] = next_run(plan)
+        elif schedule is not None or when is not None or not routine.enabled or routine.next_run_ms is None:
+            changes["next_run_ms"] = next_run(plan) if plan else self._now_ms()
+        if trigger != routine.when:
+            changes.update(poll_initialized=0, poll_failures=0, last_checked_ms=None, last_error="")
+            changes["app_name"] = (app_name or trigger.get("app", "")) if trigger else ""
         if changes:
             assignments = ", ".join(f"{column} = ?" for column in changes)
             with self._conn:
+                if trigger != routine.when:
+                    self._conn.execute("DELETE FROM routine_receipts WHERE routine_id=?", (routine_id,))
                 self._conn.execute(
                     f"UPDATE routines SET {assignments} WHERE id = ?", [*changes.values(), routine_id]
                 )
@@ -739,7 +802,7 @@ class MemberStore:
         """The routines that are on and due at `now_ms` (or were, and have not been dealt with)."""
         rows = self._conn.execute(
             f"SELECT {_ROUTINE_COLUMNS} FROM routines WHERE enabled = 1"
-            " AND next_run_ms IS NOT NULL AND next_run_ms <= ? ORDER BY next_run_ms, id",
+            " AND when_json IS NULL AND next_run_ms IS NOT NULL AND next_run_ms <= ? ORDER BY next_run_ms, id",
             (now_ms,),
         ).fetchall()
         return [routine for routine in map(_routine, rows) if routine is not None]
@@ -765,10 +828,13 @@ class MemberStore:
     def unread(self) -> set[int]:
         return {int(row[0]) for row in self._conn.execute("SELECT member_id FROM member_unread")}
 
-    def mark_unread(self, member_id: int) -> None:
+    def unread_from(self) -> dict[int, int | None]:
+        return {int(row[0]): row[1] for row in self._conn.execute("SELECT member_id, unread_from FROM member_unread")}
+
+    def mark_unread(self, member_id: int, turn_id: int | None = None) -> None:
         with self._conn:
             self._conn.execute(
-                "INSERT OR IGNORE INTO member_unread (member_id) VALUES (?)", (member_id,)
+                "INSERT OR IGNORE INTO member_unread (member_id, unread_from) VALUES (?, ?)", (member_id, turn_id)
             )
 
     def mark_read(self, member_id: int) -> bool:

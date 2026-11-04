@@ -29,6 +29,7 @@ from ..services.attachments import (
     MAX_ATTACHMENTS,
     MAX_IMAGE_BYTES,
     MAX_PDF_BYTES,
+    MAX_FILE_BYTES,
     AttachmentError,
     checked,
 )
@@ -76,6 +77,13 @@ class Ask(Protocol):
 # transcribe(audio, language) -> text.
 Stop = Callable[[str], Awaitable[bool]]
 Transcribe = Callable[[bytes, str], Awaitable[str]]
+
+
+class Answer(str):
+    def __new__(cls, text: str, files: Sequence[File] = ()):
+        value = super().__new__(cls, text)
+        value.text, value.files = text, list(files)
+        return value
 
 
 @dataclass
@@ -148,6 +156,8 @@ class Switchboard:
         self.pairing = pairing if pairing is not None else Pairing()
         self._tasks: set[asyncio.Task[None]] = set()
         self._locks: dict[str, asyncio.Lock] = {}
+        self._pending_chats = {}
+        self._queue_notices = set()
         # (chat, album id) -> the album being received.
         self._albums: dict[tuple[str, str], _Album] = {}
 
@@ -223,7 +233,8 @@ class Switchboard:
     ) -> None:
         """A message (or an album) without text: its images and PDFs are asked about, with the
         caption as the request; one with none of them gets the reply that says what is read."""
-        files = [a for a in attachments if a.kind in FILE_KINDS]
+        files = [a for a in attachments if a.kind in FILE_KINDS or
+                 self._channel.kind in ("slack", "discord") and a.kind == "other"]
         if files:
             await self._converse(
                 chat, language, text=(caption or "")[:MAX_INCOMING_CHARS], files=files
@@ -276,6 +287,27 @@ class Switchboard:
             await self._reply(chat, words(language, "intro"))
 
     async def _converse(
+        self, chat, language, *, text=None, voice=None, files=(),
+    ):
+        if voice is None and not files and not (text or "").strip():
+            return
+        pending = self._pending_chats.get(chat, 0)
+        self._pending_chats[chat] = pending + 1
+        if pending and self._channel.kind == "telegram" and chat not in self._queue_notices:
+            self._queue_notices.add(chat)
+            # Scheduling the notice never delays registration with the per-chat FIFO lock.
+            self._spawn(lambda: self._reply(chat, words(language, "queued")))
+        try:
+            await self._converse_in_order(chat, language, text=text, voice=voice, files=files)
+        finally:
+            remaining = self._pending_chats[chat] - 1
+            if remaining:
+                self._pending_chats[chat] = remaining
+            else:
+                self._pending_chats.pop(chat, None)
+                self._queue_notices.discard(chat)
+
+    async def _converse_in_order(
         self,
         chat: str,
         language: str,
@@ -322,7 +354,10 @@ class Switchboard:
             except Exception as exc:
                 logger.warning("%s: the assistant failed (%s)", self._channel.kind, type(exc).__name__)
                 prefix, answer = "", words(language, "failed")
-            await self._reply(chat, prefix + answer)
+            if isinstance(answer, Answer):
+                await self.tell(chat, prefix + answer.text, files=answer.files)
+            else:
+                await self._reply(chat, prefix + answer)
 
     async def _hear(self, voice: Attachment, language: str) -> str:
         """The words of a voice message, however long it is. Declined before it is downloaded when
@@ -346,7 +381,7 @@ class Switchboard:
         """The images and PDFs of a request, fetched into memory and checked. None is downloaded
         when the app says that any of them is larger than its kind may be; a file that is too
         large or not what its type says ends the request with the reply that says so."""
-        limits = [MAX_PDF_BYTES if f.kind == "pdf" else MAX_IMAGE_BYTES for f in files]
+        limits = [MAX_PDF_BYTES if f.kind == "pdf" else MAX_IMAGE_BYTES if f.kind == "image" else MAX_FILE_BYTES for f in files]
 
         def too_large(limit: int) -> _Say:
             return _Say(words(language, "file_large", mb=str(limit // _MB)))
@@ -379,13 +414,23 @@ class Switchboard:
 
     # --- what the app and the worker ask for ---
 
-    async def tell(self, chat: str, text: str) -> None:
+    async def tell(self, chat: str, text: str, *, files: Sequence[File] = ()) -> None:
         """Send `text` to a chat that is allowed (a background report). A chat that is not
         allowed, or a failure, sends nothing."""
         if not self._chat_allowed(chat):
             return
         try:
-            await self._reply(chat, text)
+            if text.strip():
+                await self._reply(chat, text)
+            for file in files:
+                if not self._chat_allowed(chat):
+                    break
+                if not await self._channel.send_attachment(chat, file):
+                    language = self._language()
+                    note = {"zh-TW": f"「{file.name}」超過 Telegram 的檔案大小限制，請在 Raphael 的原對話中開啟附件。",
+                            "ja": f"「{file.name}」は Telegram のサイズ制限を超えています。Raphael の元の会話で添付ファイルを開いてください。",
+                            "en": f'"{file.name}" exceeds Telegram’s file size limit. Open the attachment in the original conversation in Raphael.'}
+                    await self._reply(chat, note.get(language, note["en"]).replace("Telegram", self._channel.kind.title()))
         except ChannelError as error:
             logger.warning("%s: could not send a report (%s)", self._channel.kind, error.kind)
 

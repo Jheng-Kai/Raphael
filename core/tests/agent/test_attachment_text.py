@@ -10,7 +10,7 @@ from members.test_cli_brains import fake_brain
 from raphael_core.agent.tools import Tools
 from raphael_core.agent.ledger import Ledger
 from raphael_core.brain.spend import SpendTracker
-from raphael_core.services.attachments import checked
+from raphael_core.services.attachments import checked, from_wire
 from raphael_core.services.file_reader import read_file
 from raphael_core.agent.attachment_inputs import text_context
 
@@ -24,6 +24,24 @@ def payload(member_id):
     return {"session_id": "article", "member_id": member_id, "source": "app", "ui_language": "en",
             "text": "Explain the attached article", "attachments": [{"name": "article.html", "mime": "text/html",
             "data": base64.b64encode(HTML).decode()}]}
+
+
+async def test_a_chip_only_pasted_article_reaches_the_member_and_the_real_attachment_reader(setup, client):
+    rig, team = setup
+    reader = member(team, name="Sample reader")
+    text = "Sample pasted article.\n" * 10000
+    request = {"session_id": "pasted-article", "member_id": reader.id, "source": "app", "ui_language": "en",
+               "text": "", "attachments": [{"name": "Pasted text.txt", "mime": "text/plain",
+               "data": base64.b64encode(text.encode()).decode()}]}
+    client.chats = [live_said("Received the pasted article")]
+    result = await rig.call("agent.ask", request)
+    assert result["text"] == "Received the pasted article"
+    prompt = client.chat_calls[0]["messages"][1]["content"]
+    assert "Sample pasted article." in prompt
+    assert '<tool_result untrusted="true"' in prompt
+    attachment = from_wire(request["attachments"])[0]
+    read = await Tools(object()).read_attachment(attachment, "", Ledger(SpendTracker(rig.conn)))
+    assert read.ok and read.untrusted and "Sample pasted article." in read.data["text"]
 
 
 def assert_article(prompt):
@@ -148,14 +166,14 @@ def test_small_files_do_not_reduce_a_normal_articles_budget():
 
 
 async def test_inline_budget_does_not_enlarge_tool_result_or_reader_budgets():
-    from raphael_core.worker.guards import wrap_untrusted
+    from raphael_core.worker.guards import MAX_RESULT_CHARS, wrap_untrusted
 
     article = "A" * 20000
     _, read = await read_file(checked("article.txt", "text/plain", article.encode()))
     assert read["truncated"] and "Cut short" in read["text"]
     for tool in ("read_attachment", "web_read", "web_search"):
-        shown = wrap_untrusted(tool, article, ok=True)
-        assert len(shown) < 6200 and "cut_short=true" in shown
+        shown = wrap_untrusted(tool, "A" * (MAX_RESULT_CHARS * 2), ok=True)
+        assert len(shown) < MAX_RESULT_CHARS + 200 and "cut_short=true" in shown
 
 
 async def test_gemini_cli_receives_image_reader_result(setup, tmp_path, monkeypatch):

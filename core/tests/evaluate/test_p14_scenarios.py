@@ -46,8 +46,7 @@ def honest(system, user):
 
 def remembered(question):
     brand = CODE.search(question).group()
-    return {"name": "user-brand-color", "type": "user", "description": f"品牌主色是金色，識別碼 {brand}",
-            "body": f"品牌主色是金色，識別碼 {brand}。", "expires": "", "space": "shared"}
+    return {"target": "user", "action": "add", "content": f"品牌主色是金色，識別碼 {brand}。", "old_text": ""}
 
 
 def marketing(system):
@@ -81,7 +80,7 @@ class HonestBrain(FakeClient):
         results = [str(message.get("content")) for message in messages if message.get("role") == "tool"]
         calls, text = [], ""
         if "記住" in question and "全團隊" in question:
-            text = json.dumps({"text": "好，我記住了。", "memory": [{"op": "write", **remembered(question)}]}, ensure_ascii=False)
+            text = json.dumps({"text": "好，我記住了。", "memory": [remembered(question)]}, ensure_ascii=False)
         elif consults(question, user) and not results:
             calls = [consultation(self.tool, system, question)]
         elif "群組代碼" in question and not results:
@@ -112,7 +111,8 @@ def cli_brain(monkeypatch, tool):
 
             question = asked(user)
             if "記住" in question and "全團隊" in question:
-                await call("memory_write", remembered(question))
+                edit = remembered(question)
+                await call("memory_update", {"target": edit["target"], "operations": [{"action": edit["action"], "content": edit["content"]}]})
                 answer = "好，我記住了。"
             elif consults(question, user):
                 came = await call(*consultation(tool, system, question))

@@ -8,6 +8,7 @@ import signal
 import subprocess
 import tempfile
 from pathlib import Path
+from .native_diagnostics import enabled as native_diagnostics_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -151,11 +152,13 @@ class Child:
         self._job = None
         self._kill_lock = asyncio.Lock()
         self._closed = False
+        self.stderr_tail = b"" if native_diagnostics_enabled() else None
 
     async def start(self):
         if sum(len(arg) + 3 for arg in self.command) > 30000:
             raise ValueError("command_too_long")
-        flags = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {"start_new_session": True}
+        # Everything the brain starts inherits this class, so its heaviest job gives way to the owner's window.
+        flags = {"creationflags": subprocess.CREATE_NO_WINDOW | subprocess.BELOW_NORMAL_PRIORITY_CLASS} if os.name == "nt" else {"start_new_session": True}
         self.process = await asyncio.create_subprocess_exec(
             *self.command, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE, env=self.environ, cwd=self.cwd, limit=4 * 1024 * 1024,
@@ -167,13 +170,15 @@ class Child:
             except OSError:
                 # Older hosts that disallow nested jobs still have taskkill /T below.
                 pass
-        # Drain without logging or retaining potentially private diagnostics.
+        # Normal runs discard diagnostics; native tests retain only a bounded tail.
         self._stderr = asyncio.create_task(self._drain())
         return self
 
     async def _drain(self):
-        while await self.process.stderr.read(65536):
-            pass
+        while chunk := await self.process.stderr.read(65536):
+            if self.stderr_tail is not None:
+                tail = self.stderr_tail + chunk
+                self.stderr_tail = tail if len(tail) <= 16384 else tail[-16384:].partition(b"\n")[2]
 
     async def send(self, value):
         import json

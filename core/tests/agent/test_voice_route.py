@@ -29,13 +29,16 @@ async def test_router_timeout_hands_voice_to_the_harness_with_conversation(make_
 
 
 @pytest.mark.parametrize("error", [TimeoutError(), OpenRouterError(0, "timeout", "slow")])
-async def test_a_harness_timeout_after_routing_failed_uses_the_timeout_phrase(make_rig, client, error):
+async def test_a_harness_timeout_after_routing_failed_uses_the_timeout_phrase(make_rig, client, error, monkeypatch):
+    async def no_wait(_):
+        pass
+    monkeypatch.setattr("raphael_core.agent.narration.asyncio.sleep", no_wait)
     rig = make_rig()
     client.decisions.append(decision("answer", route_confidence=0.1))
     client.replies.append(TimeoutError())
-    client.chats.append(error)
+    client.chats.extend([error] * 4)
     result = await rig.ask("Read this example", language="en")
-    assert result["text"] == "The request took too long. Please try again."
+    assert result["text"] == "openai/gpt-6-luna took too long to respond. Try again later."
     [turn] = await rig.turns()
     assert turn["status"] == "error" and turn["route"] == "answer"
 
@@ -44,14 +47,17 @@ async def test_a_harness_timeout_after_routing_failed_uses_the_timeout_phrase(ma
     OpenRouterError(0, "network", "unreachable"), ConnectionError("unreachable"),
     httpx.ConnectError("unreachable"),
 ])
-async def test_a_connection_failure_is_offline_only_after_the_harness_also_fails(make_rig, client, connection):
+async def test_a_connection_failure_is_offline_only_after_the_harness_also_fails(make_rig, client, connection, monkeypatch):
+    async def no_wait(_):
+        pass
+    monkeypatch.setattr("raphael_core.agent.narration.asyncio.sleep", no_wait)
     rig = make_rig()
     client.decisions.append(OpenRouterError(0, "network", "unreachable"))
     client.replies.append(OpenRouterError(0, "network", "unreachable"))
-    client.chats.append(connection)
+    client.chats.extend([connection] * 4)
     result = await rig.ask("Read this example", language="en")
-    assert result["text"] == "The network is unreachable."
-    assert len(client.chat_calls) == 1
+    assert result["text"] == "openai/gpt-6-luna cannot connect right now. Check your network and try again."
+    assert len(client.chat_calls) == 4
 
 
 @pytest.mark.parametrize("route", ["unclear", "unsure", "timeout", "broken"])
@@ -74,6 +80,35 @@ async def test_an_indecisive_router_never_dead_ends_even_without_prior_context(m
     assert (await rig.turns())[0]["status"] == "done"
 
 
+async def test_a_turn_said_into_a_conversation_has_the_time_a_typed_one_has(make_rig, client, monkeypatch):
+    """Seen live: a brain at a high depth took more than the overlay's deadline and the owner was told it had timed out."""
+    from raphael_core.agent import service
+
+    monkeypatch.setattr(service, "VOICE_TURN_TIMEOUT_S", 0.05)
+    rig = make_rig()
+
+    async def slowly(**kwargs):
+        await asyncio.sleep(0.2)
+        return chat("Here is an example.")
+
+    client.decisions.append(decision("unclear"))
+    client.chats.append(slowly)
+    conversation = rig.service.conversations.create(0)["id"]
+    result = await rig.call("agent.ask", {"session_id": "s1", "text": "Explain this sentence", "ui_language": "en",
+                                          "target_app": None, "conversation_id": conversation})
+    assert result["text"] == "Here is an example."
+
+
+def test_a_failure_names_a_model_as_the_owner_knows_it(make_rig):
+    rig = make_rig()
+    name = rig.service._model_name
+    rig.service._cli_brains._models["codex"] = [{"id": "cli:codex:gpt-6.1-sol", "name": "GPT-6.1-Sol"}]
+    assert name("cli:codex:gpt-6.1-sol?effort=high") == "GPT-6.1-Sol"
+    assert name("cli:codex:unlisted?effort=high") == "Codex CLI"
+    assert name("@chatgpt:gpt-6-sol?effort=low") == "gpt-6-sol"
+    assert name("openai/gpt-6-luna") == "openai/gpt-6-luna"
+
+
 async def test_voice_harness_has_a_total_deadline_and_cancels_a_hanging_request(make_rig, client, monkeypatch):
     from raphael_core.agent import service
 
@@ -90,6 +125,6 @@ async def test_voice_harness_has_a_total_deadline_and_cancels_a_hanging_request(
     client.decisions.append(decision("unclear"))
     client.chats.append(hang)
     result = await asyncio.wait_for(rig.ask("Read this example", language="en"), 1)
-    assert result["text"] == "The request took too long. Please try again."
+    assert result["text"] == "openai/gpt-6-luna took too long to respond. Try again later."
     assert cancelled.is_set()
     assert (await rig.turns())[0]["status"] == "error"

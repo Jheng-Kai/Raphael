@@ -117,6 +117,7 @@ from .protocol import (
 )
 from .router import Router
 from .home import ConnectedCalendar, HomeOverview
+from .own_calendar import OwnCalendar
 from .services.attachments import Attachment
 from .services.attachment_store import AttachmentStore
 from .services.hub import ServiceHub, offline_transport
@@ -210,6 +211,8 @@ class EchoClient:
         max_tokens: int,
         reasoning_effort: str = "none",
     ) -> Completion:
+        from .native_journeys import record_model_request
+        record_model_request(model, reasoning_effort)
         data: dict
         if schema_name == "raphael_route":  # the assistant's router
             data = {
@@ -227,6 +230,9 @@ class EchoClient:
             data = {"app": ""}
         elif schema_name == "raphael_summary":  # the conversation folded into its summary
             data = {"summary": "(the fake LLM keeps no summary)"}
+        elif schema_name == "raphael_skill_review":
+            from .native_journeys import native_skill_review
+            data = native_skill_review(user)
         elif schema_name == "raphael_memory":  # the reflection pass: nothing to change
             data = {"actions": []}
         else:  # the cleanup
@@ -270,6 +276,11 @@ class EchoClient:
         )  # fmt: skip
 
     async def chat_tools(self, *, messages: list[dict], tools: list[dict], **kwargs: Any) -> ChatTurn:
+        from .native_journeys import record_model_request
+        from .native_journeys import native_think, wait_for_native_cancel
+        await wait_for_native_cancel(messages)
+        await native_think()
+        record_model_request(kwargs.get("model"), kwargs.get("reasoning_effort", "none"))
         # The scripted task of the background worker (see the class).
         offered = {tool["function"]["name"] for tool in tools}
         seen = sum(1 for message in messages if message.get("role") == "tool")
@@ -281,6 +292,21 @@ class EchoClient:
             raw = json.dumps(arguments)
             call = ChatToolCall(id=f"call_{seen}", name=name, arguments=arguments, raw_arguments=raw)
             return ChatTurn("", [call], "fake/echo", 0.0, 0, 0, 0)
+
+        # Native journeys script the provider's choice, then use the real member tool/store.
+        from .native_journeys import native_calendar, native_consult, native_connect, native_diagnosis, native_memory, native_skills, native_computer
+        diagnosis = native_computer(messages, offered, seen) or native_skills(messages, offered, seen) or native_memory(messages, offered, seen) or native_diagnosis(messages, offered, seen) or native_calendar(messages, offered, seen)
+        if diagnosis is not None:
+            name, value = diagnosis
+            if name == "reply":
+                return ChatTurn(json.dumps({"text": value}), [], "fake/echo", 0.0, 0, 0, 0)
+            return calling(name, value)
+        connect = native_connect(messages, offered, seen)
+        if connect is not None:
+            return calling(*connect)
+        consult = native_consult(messages, offered, seen)
+        if consult is not None:
+            return calling("ask_member", consult)
 
         if "routine_create" in offered and seen == 0:
             # Exercise the interactive harness offline, including its explicit input tools.
@@ -753,7 +779,10 @@ class App(Router):
         self._load_kit = _import_kit if load_kit is None else load_kit
         data_dir.mkdir(parents=True, exist_ok=True)
         if manager is None:
-            manager = ModelManager(paths.models_dir(data_dir) if models_dir is None else models_dir)
+            from .native_journeys import OfflineModelManager, native_enabled
+
+            manager_type = OfflineModelManager if native_enabled(fake_llm) else ModelManager
+            manager = manager_type(paths.models_dir(data_dir) if models_dir is None else models_dir)
         self.manager = manager
 
         # The database is opened here, on the thread that runs the loop, and used there only.
@@ -808,7 +837,13 @@ class App(Router):
         # The plugins: servers the user connected, and the hub the assistant reaches their tools by.
         self.integrations = IntegrationsService(self._conn, data_dir, self.vault, notify=self.notify)
         self.integrations.register(self)
-        self.connectors = ConnectorsService(data_dir, self.vault, self.integrations)
+        from .native_journeys import GmailJourneyVault, gmail_enabled, catalog_enabled
+
+        native_gmail = gmail_enabled(fake_llm) or catalog_enabled(fake_llm)
+        self.connectors = ConnectorsService(
+            data_dir, GmailJourneyVault() if native_gmail else self.vault, self.integrations,
+            transport=offline_transport() if fake_llm and not native_gmail else None,
+        )
         self.connectors.register(self)
         # The card a chat shows for an app its task needs, and that task's one resume once connected.
         self.cards = ConnectorCards(self._conn, self, self.connectors, notify=self._agent_notice)
@@ -816,17 +851,49 @@ class App(Router):
         # The card for a key a connection declares and the vault holds none of: the value goes from the
         # window to the vault, and that task's one resume follows.
         self.secret_cards = SecretCards(self._conn, self.integrations, notify=self._agent_notice)
+        from .computer.logins import LoginVault
+        self.login_vault = LoginVault(self.vault, conn=self._conn)
+        self.secret_cards.logins = self.login_vault
         self.secret_cards.register(self)
         # The owner's safety rules (`safety.rules.*`), which the gate asks before every action that
         # changes something, with their judge (Jev).
         self.safety_rules = SafetyRules(self._conn)
         self.safety_rules.register(self)
+        from .computer.vm import LocalVm
+        from .computer.vm_tools import VmTools
+
+        import os
+        from .native_journeys import native_enabled
+        self.vm = LocalVm(data_dir, settings=SettingsStore(self._conn),
+                          enabled=not fake_llm or (native_enabled(fake_llm) and os.environ.get("RAPHAEL_TEST_NATIVE_COMPUTER") == "1"))
+        from .computer.viewer import DesktopViewer
+        self.desktop_viewer = DesktopViewer(self.vm, member_exists=lambda member: member == 0 or self._conn.execute("SELECT 1 FROM members WHERE id=?", (member,)).fetchone() is not None)
+        self.desktop_viewer.register(self)
+        from .computer.checkpoint_service import Checkpoints
+        self.checkpoints = Checkpoints(self.vm, self.desktop_viewer.member_exists)
+        self.checkpoints.register(self)
+        self.tool_hub = VmTools(self.integrations, self.vm, attachments=self.attachment_store, conn=self._conn)
+        self.tool_hub.logins = self.login_vault
+        from .computer.local_tools import LocalTools
+        self.vm_tools = self.tool_hub
+        self.tool_hub = LocalTools(self.tool_hub, self._conn, enabled=not fake_llm or os.environ.get("RAPHAEL_TEST_NATIVE_LOCAL") == "1")
+        from .services.generation import Generation
+        from .services.generation_tools import GenerationTools
+        from .services.fetch import PageFetcher
+        from .services.attachments import MAX_FILE_BYTES
+        self.generation = Generation(self.providers, self.attachment_store,
+            fetcher=PageFetcher(media=True, media_types=("image/png", "image/jpeg", "image/webp", "video/mp4"), max_bytes=MAX_FILE_BYTES, max_seconds=120,
+                                transport=offline_transport() if fake_llm else None))
+        self.tool_hub = GenerationTools(self.tool_hub, self.generation, self._conn)
         # The one gate every tool call goes through, the assistant's and the worker's.
         self.gate = ToolGate(
-            self.integrations,
+            self.tool_hub,
             conn=self._conn,
             safety=SafetyGuard(self.safety_rules, SafetyJudge(self.client)),
         )
+        # The app's own calendar, which the window, every member and every task change.
+        self.calendar = OwnCalendar(self._conn, notify=self.notify)
+        self.calendar.register(self)
         # The background worker: tasks the assistant hands over, carried out in a process of their
         # own that has no key, no database and no plugin (raphael_core.worker).
         self.background = BackgroundService(
@@ -836,6 +903,8 @@ class App(Router):
             Tools(self.client, services=self.services),
             notify=self._worker_notice,
             model_observer=agent_model_observer,
+            known_models=self.brain.known_models,
+            calendar=self.calendar,
         )
         self.background.register(self)
         # The run on the owner's desktop: the core asks the shell, which reaches UI Automation
@@ -869,20 +938,26 @@ class App(Router):
             language=lambda: self.agent.language,
             notify=self.notify,
             connections=self.integrations.connections,
+            vault=self.vault,
         )
+        self.members.use_event_tools(self.gate)
         self.members.register(self)
+        from .computer.teaching import Teaching
+        self.desktop_viewer.teaching = Teaching(self.desktop_viewer, self.members, self.memory)
+        self.desktop_viewer.teaching.register(self)
         self.rooms = RoomsService(self._conn, members=self.members, background=self.background,
-                                  notify=self.notify, transcribe=self._transcribe_from_messaging,
+                                  notify=self.notify, transcribe=self._transcribe_room,
                                   attachment_store=self.attachment_store, decision=DecisionRouter(self.client))
         self.rooms.register(self)
         self.members.use_speech(self.speaker)
         self.memory.member_exists = self.members.member_exists
+        self.memory.language = lambda: self.agent.language
         self.agent = AgentService(
             self._conn,
             self.client,
             self.keys,
             actions=agent_actions,
-            plugins=self.integrations,
+            plugins=self.tool_hub,
             models=self.brain.known_models,
             gate=self.gate,
             background=self.background,
@@ -900,16 +975,46 @@ class App(Router):
             handbacks=self.handbacks,
             permissions=self.permissions,
             drafts=self.drafts,
+            calendar=self.calendar,
         )
         self.agent.register(self)
-        self.home = HomeOverview(self._conn, self, self.members, calendar_events=ConnectedCalendar(self, self.connectors))
+        self.rooms.turn_view = lambda turn: self.agent._turn_views([turn])[0]
+        from .native_journeys import bot_homes_brain, home_timing_brain
+        native_brain = bot_homes_brain(fake_llm, data_dir) or home_timing_brain(fake_llm, data_dir)
+        if native_brain is not None:
+            self.agent._cli_brains = native_brain
+            self.memory._cli_brains = native_brain
+        def computer_scope_busy(scope):
+            if scope[0] == "task":
+                task = self.background.task(scope[1])
+                return task is not None and task.state in ("running", "waiting")
+            if scope[0] == "turn":
+                return self.agent.computer_scope_busy(*scope[1:])
+            return scope[0] == "async" and not scope[1].done()
+        self.vm_tools.scope_busy = computer_scope_busy
+        self.home = HomeOverview(self._conn, self, self.members, calendar_events=ConnectedCalendar(self, self.connectors, notify=self.notify))
         self.home.register()
+        self.calendar.shown, self.calendar.zone, self.calendar.google_state = self.home.between, self.home.zone, self.home.google_state
+        self.vm.timezone = lambda: self.home.timezone_name
+        self.home.timezone_changed = self.vm.refresh_timezone
         self.background.use_team(self.members, self.agent.team_tool)
+        self.background.use_owner_tools(self.agent.background_owner_tool)
+        self.background.use_attachment_store(self.attachment_store)
+        self.background.owner_questions.on_cancel = self.agent.cancel_owner_card
+        self.agent.sync_owner_cards()
         self.background.use_cli(self.agent._cli_brains, self.agent.quotas.record)
         # The questions the background waits on: a thread one waits in is `waiting` in the member
         # column, and the overlay's notice of one names the member whose thread holds it.
         self.members.add_waiting_source(self.background.waiting_members)
         self.background.use_member_names(self.members.name_of)
+        # Work that was to leave a file is judged on the file found in the member's computer; the
+        # shared computer says who holds it by the member's name.
+        self.background.use_workspaces(
+            lambda member: [path for path in (self.vm.target(member).workspace, self.vm.target(member).shared) if path] if self.vm.grants.allowed(member) else None)
+        self.vm_tools.names = self.members.name_of
+        # A member made by one the owner let use a computer has one too: it is a sandbox of its own, and a team
+        # that was just made would otherwise stop at its first step to ask for each of them.
+        self.members.member_made = lambda maker, made: self.vm.grants.set(made, True) if self.vm.grants.state(maker) is True else None
         # Messaging apps (Telegram): messages reach the assistant like a spoken question.
         self.messaging = MessagingService(
             MessagingStore(data_dir),
@@ -1099,6 +1204,7 @@ class App(Router):
             self._conn.close()
 
         steps: list[tuple[str, Callable[[], Awaitable[None]]]] = [
+            ("stop the calendar refresh", self.home.calendar_events.aclose),
             ("end room routing calls", self.rooms.aclose),
             ("cancel the dictation", close_dictation),
             ("close the level meter", close_meter),
@@ -1110,6 +1216,10 @@ class App(Router):
             ("end the secret cards' resumes", self.secret_cards.aclose),
             ("end the computer cards' runs", self.handbacks.aclose),
             ("end the assistant's requests", self.agent.aclose),
+            ("end local command jobs", self.tool_hub.aclose),
+            ("close the computers' driver connections", self.vm_tools.aclose),
+            ("close desktop viewers", self.desktop_viewer.aclose),
+            ("stop the computer idle monitor", self.vm.aclose),
             ("end Raphael's voice", self.speaker.aclose),
             ("end the memory's background pass", self.memory.aclose),
             ("close the services' HTTP client", self.services.aclose),
@@ -1263,9 +1373,16 @@ class App(Router):
             await self.call("agent.confirm", {"id": question["id"], "approved": False})
             asked = compose(question["prefix"], question["text"], None)
             return f"{asked}\n{words(language, 'confirm')}"
-        return compose(reply.get("prefix", ""), reply.get("text", ""), None)
+        from .messaging.core import Answer
+        from .services.artifacts import turn_files
+        from .answer_forms import forms_plain_text
+        return Answer(forms_plain_text(compose(reply.get("prefix", ""), reply.get("text", ""), None)),
+                      list(turn_files(self.agent._history, reply.get("turn_id", 0), self.attachment_store)))
 
-    async def _transcribe_from_messaging(self, audio: bytes, language: str) -> str:
+    async def _transcribe_room(self, audio: bytes, language: str) -> str:
+        return await self._transcribe_from_messaging(audio, language, cleanup=True)
+
+    async def _transcribe_from_messaging(self, audio: bytes, language: str, *, cleanup: bool = False) -> str:
         """The words of a voice message, heard by the engine that dictation uses (the cloud, with
         the local one behind it if there is one, or the local one), with the user's dictionary and
         the same normalising. The audio stays in memory."""
@@ -1286,6 +1403,24 @@ class App(Router):
         heard = await asyncio.to_thread(hear)
         if not heard.strip():
             return ""
+        if cleanup:
+            import io
+            import wave
+
+            try:
+                with wave.open(io.BytesIO(audio)) as clip:
+                    seconds = clip.getnframes() / clip.getframerate()
+            except (wave.Error, EOFError):
+                seconds = 0
+            try:
+                result = await self.call("brain.finalize_dictation", {
+                    "raw_text": heard, "audio_seconds": seconds, "stt_ms": 0,
+                    "purpose": "agent", "target_app": None,
+                })
+                if isinstance(result.get("text"), str):
+                    return result["text"]
+            except Exception as exc:
+                logger.warning("Could not finalize room speech: %s", type(exc).__name__)
         try:
             text = (await self.call("brain.normalize_transcript", {"raw_text": heard}))["text"]
             return text if isinstance(text, str) else heard
@@ -1302,7 +1437,9 @@ class App(Router):
     def _agent_notice(self, method: str, params: dict) -> None:
         """The assistant's notifications go to the app; a turn written or completed is news in its
         thread, unless that thread is on screen (`MembersService.turn_arrived`)."""
-        if method == "agent.turn" and type(params.get("turn_id")) is int:
+        if method == "agent.turn" and type(params.get("turn_id")) is int and not params.get("activity_only"):
+            if hasattr(self, "agent"):
+                asyncio.get_running_loop().call_soon(self.agent.sync_owner_cards)
             self.members.turn_arrived(params["turn_id"])
             self.rooms.turn_arrived(params["turn_id"])
         self.notify(method, params)
@@ -1330,12 +1467,15 @@ class App(Router):
             return
         if task.report_text is None:
             return
-        text = compose(task.report_prefix or "", task.report_text, None)
+        from .answer_forms import forms_plain_text
+        text = forms_plain_text(compose(task.report_prefix or "", task.report_text, None))
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return
-        sent = loop.create_task(self.messaging.report(task.session_id, text))
+        from .services.artifacts import turn_files
+        files = list(turn_files(self.agent._history, task.turn_id or 0, self.attachment_store))
+        sent = loop.create_task(self.messaging.report(task.session_id, text, **({"files": files} if files else {})))
         sent.add_done_callback(lambda t: t.cancelled() or t.exception())
 
     def _tell_chat_to_answer_here(self, task_id: object) -> None:
@@ -1353,7 +1493,9 @@ class App(Router):
         sent.add_done_callback(lambda t: t.cancelled() or t.exception())
 
     async def _hello(self, params: dict) -> dict:
+        self.vm.start_monitor()
         self.messaging.start()  # a Telegram bot that was left on polls again
+        self.agent.start()
         self.agent.prewarm()  # the app is up: read the Start menu now, not at the first "open"
         self.memory.start()  # and look for turns the reflection pass has not read, soon
         self.members.start()  # the routines: one missed while the core was not running runs now

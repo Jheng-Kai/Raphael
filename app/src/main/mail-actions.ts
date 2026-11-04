@@ -6,6 +6,7 @@
 // (`agent.turn`); nothing here keeps the words of a mail beyond the call that carries them.
 
 import * as api from "./api";
+import { cardFailure } from "./card";
 import { t } from "./i18n";
 import { mailDirty, readMail } from "./mail-card";
 import { type Choice, openMenu } from "./ui";
@@ -48,7 +49,7 @@ export function mountMailActions(thread: HTMLElement, fail: (error: unknown) => 
         // Saved, or already what the fields say. A draft that moved on under the card (a colleague revised it) is neither.
         return result.saved || result.draft.digest === base;
       } catch (error) {
-        fail(error);
+        if (!cardFailure(card, () => { void save(id); })) fail(error);
         return false;
       }
     });
@@ -69,9 +70,10 @@ export function mountMailActions(thread: HTMLElement, fail: (error: unknown) => 
       }
       const current = cardOf(id);
       if (!current) return;
-      await api.mailSend(id, digestOf(current));
+      if (current.dataset.mailState === "failed" && (latest.get(id)?.version ?? 0) <= Number(current.dataset.version)) await api.mailSend(id, digestOf(current), Number(current.dataset.version));
+      else await api.mailSend(id, digestOf(current));
     } catch (error) {
-      fail(error);
+      if (!cardFailure(card, () => { void send(button); })) fail(error);
     } finally {
       for (const each of buttons) if (each.isConnected) each.disabled = false;
     }
@@ -87,7 +89,7 @@ export function mountMailActions(thread: HTMLElement, fail: (error: unknown) => 
     try {
       await call(id);
     } catch (error) {
-      fail(error);
+      if (!cardFailure(node, () => { void callOn(button, root, call); })) fail(error);
       for (const each of buttons) if (each.isConnected) each.disabled = false;
     }
   }

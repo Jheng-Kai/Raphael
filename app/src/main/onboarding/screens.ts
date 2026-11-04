@@ -64,7 +64,7 @@ function abilityRow(id: AbilityId, on: boolean): string {
 }
 
 export const abilitiesHTML = (ticked: readonly AbilityId[]): string =>
-  head(t("onboarding.abilitiesTitle"), t("onboarding.abilitiesLine")) +
+  head(t("onboarding.abilitiesTitle")) +
   `<div class="ob-main ob-abilities" role="group" aria-label="${esc(t("onboarding.abilitiesTitle"))}">${ABILITIES.map((a) => abilityRow(a.id, ticked.includes(a.id))).join("")}</div>`;
 
 // ---------- the key ----------

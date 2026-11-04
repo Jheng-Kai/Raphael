@@ -8,7 +8,6 @@ import pytest
 
 from raphael_core.agent.history import AgentHistory
 from raphael_core.brain.openrouter import Completion
-from raphael_core.memory.store import MemoryStore
 
 TZ = timezone(timedelta(hours=8))
 START = datetime(2026, 10, 22, 21, 40, 0, tzinfo=TZ)
@@ -44,11 +43,6 @@ def clock():
 
 
 @pytest.fixture
-def store(tmp_path, clock):
-    return MemoryStore(tmp_path / "memory", now=clock.now)
-
-
-@pytest.fixture
 def history(conn, clock):
     return AgentHistory(conn, clock.ms)
 
@@ -79,6 +73,7 @@ class FakeModel:
                 answer = await answer
         if isinstance(answer, BaseException):
             raise answer
+        # Match the structured response schema required from production brains.
         return answer if isinstance(answer, Completion) else completion(answer)
 
 

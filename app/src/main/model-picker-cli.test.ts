@@ -1,8 +1,14 @@
 // @vitest-environment happy-dom
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { mountModelPicker, modelPickerHTML, type ModelPicker, type PickerRole } from "./model-picker";
 import type { CatalogModel, CliBrain } from "./types";
 import { t } from "./i18n";
+const slideTo = (level: string): void => {
+  const range = document.querySelector<HTMLInputElement>(".mc-range")!;
+  range.value = String(range.dataset.levels!.split(",").indexOf(level));
+  range.dispatchEvent(new Event("input", { bubbles: true }));
+  range.dispatchEvent(new Event("change", { bubbles: true }));
+};
 const clis: CliBrain[] = [
   { id: "claude", name: "Claude Code", disconnected: false, installed: true, logged_in: true, available: true, login_command: "claude auth login", models: [
     { id: "cli:claude:sonnet", name: "Claude Sonnet 5.5", is_default: true, reasoning_efforts: ["low", "high"], default_effort: "high" },
@@ -28,7 +34,7 @@ test("subscriptions are separate; bare refs show the concrete default and source
   expect(document.querySelector('.mc-default')).toBeNull(); expect(document.querySelector(".mc-tools")).toBeNull();
 });
 test("selection is staged and effort is saved with the concrete model only on confirmation", () => {
-  const { choose } = mount(); click('[data-model="cli:claude:opus"]'); click('[data-effort="low"]');
+  const { choose } = mount(); click('[data-model="cli:claude:opus"]'); slideTo("low");
   expect(choose).not.toHaveBeenCalled(); expect(document.querySelector(".mc-selection")?.textContent).toContain("Claude Opus 5.5");
   click('[data-dlg="use"]'); expect(choose).toHaveBeenCalledWith("cli:claude:opus?effort=low");
   expect(document.querySelector('[role="dialog"]')).toBeNull(); expect(document.activeElement).toBe(picker.button);
@@ -40,6 +46,10 @@ test("cancel and Escape discard drafts; install and connection buttons perform r
   click('[data-dlg="sources"]'); expect(sources).toHaveBeenCalledOnce(); picker.open();
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); expect(picker.isOpen).toBe(false);
 });
+test("the chooser's button to connect another source says so", () => {
+  mount();
+  expect(document.querySelector('[data-dlg="sources"]')!.textContent).toBe("連接其他來源");
+});
 test.each(["cleanup", "stt", "vision"] as const)("%s excludes subscription brains", (role) => {
   mount(role); expect(document.querySelector('[data-source^="cli:"]')).toBeNull();
 });
@@ -48,6 +58,59 @@ test("logout removes rows and disables confirmation without saving", () => {
   expect(picker.button.textContent).toContain("Claude Sonnet 5.5");
   expect(document.querySelector(".mc-row")).toBeNull(); expect(document.querySelector<HTMLButtonElement>('[data-dlg="use"]')!.disabled).toBe(true);
   expect(choose).not.toHaveBeenCalled();
+});
+
+describe("ChatGPT in the chooser", () => {
+  const signedOut = { signed_in: false };
+  const open = (chatgpt: object | null, extra: object = {}) => {
+    const slot = document.createElement("div"); document.body.append(slot);
+    const action = vi.fn();
+    picker = mountModelPicker(slot, { role: "answer", catalog: null, clis, current: "cli:claude", label: "Answer", chatgpt: chatgpt as never, onChoose: vi.fn(), onChatgpt: action, ...extra });
+    picker.open(); click('[data-source="chatgpt"]');
+    return action;
+  };
+  test("is a subscription, first, and says what it costs nobody; signing in is right there and is a real action", () => {
+    const action = open(signedOut);
+    const rail = [...document.querySelectorAll<HTMLElement>("[data-source]")].map((row) => row.dataset.source);
+    expect(rail[0]).toBe("chatgpt");
+    const row = document.querySelector('[data-source="chatgpt"]')!;
+    expect(row.closest("section")!.querySelector("h3")!.textContent).toBe(t("chooser.subscriptions"));
+    expect(row.textContent).toContain(t("brains.signedOut"));
+    const pane = document.querySelector(".mc-pane")!.textContent!;
+    expect(pane).not.toContain(t("chooser.apiNote"));
+    expect(pane).toContain(t("brains.chatgptPrivate"));
+    expect(document.querySelector(".mc-row")).toBeNull();
+    click('[data-dlg="chatgpt"]');
+    expect(action).toHaveBeenCalledExactlyOnceWith("sign-in");
+  });
+  test("while the browser is signing in it says so, and can be cancelled", () => {
+    const action = open({ signed_in: false, signing_in: true });
+    expect(document.querySelector(".mc-pane")!.textContent).toContain(t("brains.chatgptSigning"));
+    expect(document.querySelector('[data-dlg="chatgpt"]')).toBeNull();
+    click('[data-dlg="chatgpt-cancel"]');
+    expect(action).toHaveBeenCalledExactlyOnceWith("cancel");
+  });
+  test("a sign-in that stopped says why, with the way to try again", () => {
+    open(signedOut, { chatgptError: "OpenAI could not be reached." });
+    expect(document.querySelector('.mc-pane [role="alert"]')!.textContent).toBe("OpenAI could not be reached.");
+    expect(document.querySelector('[data-dlg="chatgpt"]')).not.toBeNull();
+  });
+  test("an account that did not allow the plan is asked again", () => {
+    open({ signed_in: true, plan_scope_granted: false });
+    expect(document.querySelector(".mc-pane")!.textContent).toContain(t("brains.chatgptNoPlan"));
+    expect(document.querySelector('[data-dlg="chatgpt"]')).not.toBeNull();
+  });
+  test("signed in, its models are read, then listed", () => {
+    open({ signed_in: true, plan_scope_granted: true });
+    expect(document.querySelector(".mc-pane")!.textContent).toContain(t("missing.models"));
+    expect(document.querySelector('[data-dlg="chatgpt"]')).toBeNull();
+  });
+  test("a page that cannot sign in shows no ChatGPT when there are no models", () => {
+    const slot = document.createElement("div"); document.body.append(slot);
+    picker = mountModelPicker(slot, { role: "answer", catalog: null, clis, current: "cli:claude", label: "Answer", onChoose: vi.fn() });
+    picker.open();
+    expect(document.querySelector('[data-source="chatgpt"]')).toBeNull();
+  });
 });
 
 test("Antigravity shows mixed makers and saves the full effort-suffixed model ref", () => {
@@ -60,24 +123,24 @@ test("Antigravity shows mixed makers and saves the full effort-suffixed model re
       { id: "cli:gemini:claude-opus-5-5", name: "Claude Opus 5.5", provider: "Anthropic", reasoning_efforts: ["high"], effort_models: { high: "cli:gemini:claude-opus-5-5-high" } },
     ] }] });
   expect(picker.button.textContent).toContain("Gemini Argon"); expect(picker.button.textContent).toContain("Antigravity");
-  picker.open(); expect(document.querySelector('[data-effort="low"]')?.getAttribute("aria-pressed")).toBe("true");
+  picker.open(); expect(document.querySelector('[data-effort="low"]')?.getAttribute("data-on")).toBe("true");
   expect(document.querySelectorAll(".mc-row")).toHaveLength(2);
-  click('[data-effort="high"]'); expect(choose).not.toHaveBeenCalled();
+  slideTo("high"); expect(choose).not.toHaveBeenCalled();
   click('[data-dlg="use"]'); expect(choose).toHaveBeenCalledWith("cli:gemini:gemini-4-argon-high");
   picker.open(); click('[data-model="cli:gemini:claude-opus-5-5"]');
   click('[data-dlg="use"]'); expect(choose).toHaveBeenLastCalledWith("cli:gemini:claude-opus-5-5-high");
 });
 
 test("switching sources preserves the staged effort and never changes the saved-source dot", () => {
-  const { choose } = mount(); click('[data-model="cli:claude:opus"]'); click('[data-effort="low"]');
+  const { choose } = mount(); click('[data-model="cli:claude:opus"]'); slideTo("low");
   click('[data-source="cli:codex"]'); click('[data-source="cli:claude"]');
-  expect(document.querySelector('[data-effort="low"]')?.getAttribute("aria-pressed")).toBe("true");
+  expect(document.querySelector('[data-effort="low"]')?.getAttribute("data-on")).toBe("true");
   expect(document.querySelector(".mc-current")?.closest("[data-source]")?.getAttribute("data-source")).toBe("cli:claude");
   click('[data-dlg="use"]'); expect(choose).toHaveBeenCalledWith("cli:claude:opus?effort=low");
 });
 
 test("a dialog handed to a replacement settings row keeps its draft and returns focus to the new trigger", () => {
-  const { choose } = mount(); click('[data-model="cli:claude:opus"]'); click('[data-effort="low"]');
+  const { choose } = mount(); click('[data-model="cli:claude:opus"]'); slideTo("low");
   picker.button.parentElement!.remove();
   const slot = document.createElement("div"); document.body.append(slot);
   picker = mountModelPicker(slot, { role: "answer", catalog: null, clis, current: "cli:claude", label: "Answer", onChoose: choose });
@@ -97,7 +160,8 @@ test("local speech selection waits for confirmation, including downloads; delete
   picker.open(); click('[data-act="use"][data-name="qwen3-asr"]');
   expect(use).not.toHaveBeenCalled(); expect(document.querySelector('[data-act="download"]')).toBeNull();
   click('[data-dlg="use"]'); expect(use).toHaveBeenCalledWith("qwen3-asr");
-  click('[data-act="delete"][data-name="sensevoice"]'); expect(remove).not.toHaveBeenCalled();
+  click('[data-act="local-menu"][data-name="sensevoice"]'); expect(document.querySelector('#app-popover [data-pick="delete"]')?.textContent).toContain("SenseVoice");
+  click('#app-popover [data-pick="delete"]'); expect(remove).not.toHaveBeenCalled();
   click('[data-act="confirm"][data-name="sensevoice"]'); expect(remove).toHaveBeenCalledWith("sensevoice");
 });
 
@@ -137,22 +201,22 @@ function mountApi(role: PickerRole, current: string) {
 }
 const displayedEfforts = () => [...document.querySelectorAll<HTMLElement>(".mc-effort [data-effort]")].map(button => button.dataset.effort);
 
-test("a high-first API catalog displays shallow-to-deep efforts and keeps unknown order and the chosen depth", () => {
+test("a high-first API catalog lays its depths on the ruler shallow-to-deep and keeps the chosen depth", () => {
   const before = [...apiModel.reasoning_efforts!];
   const choose = mountApi("answer", "openai/test?effort=xhigh");
-  expect(displayedEfforts()).toEqual(["none", "minimal", "low", "medium", "high", "xhigh", "max", "future-b", "future-a"]);
-  expect(document.querySelector('[data-effort="xhigh"]')?.getAttribute("aria-pressed")).toBe("true");
+  expect(displayedEfforts()).toEqual(["low", "medium", "high", "xhigh", "max"]);
+  expect(document.querySelector('[data-effort="xhigh"]')?.getAttribute("data-on")).toBe("true");
   expect(apiModel.reasoning_efforts).toEqual(before);
-  click('[data-effort="minimal"]'); click('[data-dlg="use"]');
-  expect(choose).toHaveBeenCalledWith("openai/test?effort=minimal");
+  slideTo("medium"); click('[data-dlg="use"]');
+  expect(choose).toHaveBeenCalledWith("openai/test?effort=medium");
 });
 
 test("display order does not replace a model's default effort", () => {
   mountApi("answer", "openai/test");
-  expect(document.querySelector('[data-effort="high"]')?.getAttribute("aria-pressed")).toBe("true");
+  expect(document.querySelector('[data-effort="high"]')?.getAttribute("data-on")).toBe("true");
 });
 
-test("a high-first subscription catalog uses the same display order and keeps its effort model mapping", () => {
+test("a high-first subscription catalog uses the same ruler, dim where it has no depth, and keeps its effort model mapping", () => {
   const slot = document.createElement("div"); document.body.append(slot);
   const choose = vi.fn();
   picker = mountModelPicker(slot, { role: "answer", catalog: null, label: "Answer", current: "cli:gemini:test-high", onChoose: choose,
@@ -160,9 +224,9 @@ test("a high-first subscription catalog uses the same display order and keeps it
       { id: "cli:gemini:test", name: "Test", reasoning_efforts: ["high", "minimal", "low"],
         effort_models: { high: "cli:gemini:test-high", minimal: "cli:gemini:test-minimal", low: "cli:gemini:test-low" } },
     ] }] });
-  picker.open(); expect(displayedEfforts()).toEqual(["minimal", "low", "high"]);
-  expect(document.querySelector('[data-effort="high"]')?.getAttribute("aria-pressed")).toBe("true");
-  click('[data-effort="low"]'); click('[data-dlg="use"]');
+  picker.open(); expect(displayedEfforts()).toEqual(["low", "", "high", "", ""]);
+  expect(document.querySelector('[data-effort="high"]')?.getAttribute("data-on")).toBe("true");
+  slideTo("low"); click('[data-dlg="use"]');
   expect(choose).toHaveBeenCalledWith("cli:gemini:test-low");
 });
 

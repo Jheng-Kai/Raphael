@@ -1,0 +1,5 @@
+.missing-note { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 10px 0; color: var(--text-2); font-size: var(--fs-sm); line-height: 1.6; }
+.missing-note > span { flex: 1 1 200px; overflow-wrap: anywhere; text-wrap: balance; }
+.missing-note > button { flex: 0 0 auto; }
+.step-main > .missing-note { margin: 4px 0; }
+.toast .missing-note { color: inherit; margin: 0; }

@@ -37,9 +37,17 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from ..clock import wall_clock_ms
+from ..agent.conversations import Conversations
+from ..agent.steps import reason_of
+from ..worker.stall_guards import stalled
 
 QUEUED, RUNNING, WAITING = "queued", "running", "waiting"
 FINAL_STATES = ("done", "failed", "limit", "cancelled", "interrupted")
+# File names narrow the scan only after the caller explicitly requires an artifact.
+FILE_NAMES = re.compile(r'(?i)(?<![\w/])([\w.-]+\.(?:html|xlsx|pdf|csv|txt|json))(?!\w)')
+# A design, a plan or a review is work done in the words themselves, on a brain that used no tool for it. So few words
+# are a promise or a line, not that.
+WRITTEN_WORK_CHARS = 200
 
 
 def _asker_key(turn_id: int) -> str:
@@ -48,7 +56,7 @@ def _asker_key(turn_id: int) -> str:
 
 class Refused(Exception):
     """A task cannot be taken. `kind` names the phrase that says why (`persona.Phrases`):
-    "worker_busy" (the queue is full) or "worker_disabled" (the worker crashed too often)."""
+    "worker_disabled" (the worker crashed too often). A long queue is no reason: work waits its turn."""
 
     def __init__(self, kind: str) -> None:
         super().__init__(kind)
@@ -95,6 +103,7 @@ class Task:
     schedule_provenance: str = "{}"
     continuation: str | None = None
     generation: int = 0
+    requires_artifact: bool = False
 
     @property
     def quiet(self) -> bool:
@@ -147,7 +156,7 @@ _TASK_COLUMNS = (
     " report_prefix, report_text, report_detail, reason, model_calls, tool_calls, cost_usd,"
     " announced, rerun_of, member_id, routine_id, scope, room_id, thread_id,"
     " parent_task_id, root_task_id, stage_id, from_member_id, source_turn_id, model_ref, mode,"
-    " done_when, idempotency_key, ready_at_ms, dispatch_policy, schedule_provenance, continuation, generation"
+    " done_when, idempotency_key, ready_at_ms, dispatch_policy, schedule_provenance, continuation, generation, requires_artifact"
 )
 _STEP_COLUMNS = "n, at_ms, kind, tool, server, tier, outcome, cost_usd, ms, reason, detail"
 
@@ -177,6 +186,11 @@ class TaskStore:
                 " rerun_of, member_id, routine_id) VALUES (?, 'queued', ?, ?, ?, ?, ?, ?)",
                 (self._now_ms(), session_id, language, text, rerun_of, member_id, routine_id),
             )
+            if rerun_of is not None:
+                self._conn.execute("UPDATE worker_tasks SET (mode,done_when,requires_artifact)="
+                    "(SELECT mode,done_when,requires_artifact FROM worker_tasks WHERE id=?) "
+                    "WHERE id=? AND EXISTS (SELECT 1 FROM worker_tasks WHERE id=?)",
+                    (rerun_of, cursor.lastrowid, rerun_of))
         assert cursor.lastrowid is not None
         return cursor.lastrowid
 
@@ -200,12 +214,12 @@ class TaskStore:
                 "SELECT id,(SELECT COALESCE(MAX(attempt),0)+1 FROM task_executions WHERE task_id=?),"
                 "'running',model_ref,? FROM worker_tasks WHERE id=?", (task_id,self._now_ms(),task_id))
 
-    def accept_handoff(self, *, source, parent, assignee, model, request, stage, mode, done_when, language):
+    def accept_handoff(self, *, source, parent, assignee, model, request, stage, mode, done_when, language, requires_artifact=False):
         """Commit the receipt, isolated work turn and queued event together; source dates never defer work."""
         key = hashlib.sha256(json.dumps([source.id, stage], ensure_ascii=False).encode()).hexdigest()
-        existing = self._conn.execute("SELECT id,member_id,text,mode,done_when FROM worker_tasks WHERE idempotency_key=?", (key,)).fetchone()
+        existing = self._conn.execute("SELECT id,member_id,text,mode,done_when,requires_artifact FROM worker_tasks WHERE idempotency_key=?", (key,)).fetchone()
         if existing:
-            if (existing['member_id'],existing['text'],existing['mode'],existing['done_when']) != (assignee,request,mode,done_when):
+            if (existing['member_id'],existing['text'],existing['mode'],existing['done_when'],existing['requires_artifact']) != (assignee,request,mode,done_when,requires_artifact):
                 raise Refused('stage_conflict')
             return existing['id'], True
         scope_key = f"root:{parent.root_task_id or parent.id}" if parent else f"turn:{source.id}"
@@ -216,15 +230,16 @@ class TaskStore:
                 raise Refused('stage_conflict')
             if parent and self.get(parent.id).state not in ('running', 'queued'):
                 raise Refused('cancelled')
+        conversation = None if source.scope == 'room' else Conversations(self._conn, self._now_ms).main(assignee)
         now = self._now_ms()
         with self._conn:
             cursor = self._conn.execute("INSERT INTO worker_tasks(created_at_ms,state,session_id,language,text,member_id,"
                 "scope,room_id,thread_id,parent_task_id,root_task_id,stage_id,from_member_id,source_turn_id,model_ref,"
-                "mode,done_when,idempotency_key,ready_at_ms,schedule_provenance) VALUES (?,'queued',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "mode,done_when,idempotency_key,ready_at_ms,schedule_provenance,requires_artifact) VALUES (?,'queued',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (now,source.session_id,language,request,assignee,'room' if source.scope=='room' else 'exchange',
                  source.room_id,source.thread_id,parent.id if parent else None,(parent.root_task_id or parent.id) if parent else None,
                  stage,source.member_id,source.id,model,mode,done_when,key,now,
-                 json.dumps({'kind':'owner_or_discussion_work','source_turn_id':source.id,'authorization':'immediate_only'})))
+                 json.dumps({'kind':'owner_or_discussion_work','source_turn_id':source.id,'authorization':'immediate_only'}),requires_artifact))
             task_id = cursor.lastrowid
             if owner:
                 changed = self._conn.execute("UPDATE task_stage_owners SET owner_task_id=? WHERE scope_key=? AND stage_id=? AND owner_task_id=?",
@@ -236,10 +251,10 @@ class TaskStore:
                 raise Refused('stage_conflict')
             self._conn.execute("UPDATE worker_tasks SET root_task_id=COALESCE(root_task_id,id) WHERE id=?", (task_id,))
             cursor = self._conn.execute("INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status,"
-                "source,member_id,peer_id,scope,room_id,thread_id,source_turn_id,model) "
-                "VALUES (?,?,?,'exchange','','','running','member',?,?,?,?,?,?,?)",
+                "source,member_id,peer_id,scope,room_id,thread_id,source_turn_id,model,conversation_id) "
+                "VALUES (?,?,?,'exchange','','','running','member',?,?,?,?,?,?,?,?)",
                 (now,f'work:{task_id}',request,assignee,source.member_id,'room' if source.scope=='room' else 'exchange',
-                 source.room_id,source.thread_id,source.id,model))
+                 source.room_id,source.thread_id,source.id,model,conversation))
             self._conn.execute("UPDATE worker_tasks SET turn_id=? WHERE id=?", (cursor.lastrowid,task_id))
             self._conn.execute("INSERT INTO task_outbox VALUES (?,?, 'queued',?,?,?,?,NULL,NULL)",
                 (f'{task_id}:queued',task_id,source.id,source.room_id,source.thread_id,now))
@@ -270,6 +285,9 @@ class TaskStore:
             f"SELECT {_TASK_COLUMNS} FROM worker_tasks WHERE source_turn_id=? ORDER BY id", (source_turn_id,))]
 
     def pause_for_children(self, task_id, continuation):
+        from ..worker.loop import without_computer_images
+        if "messages" in continuation:
+            continuation = {**continuation, "messages": without_computer_images(continuation["messages"])}
         with self._conn:
             self._conn.execute("UPDATE worker_tasks SET state='waiting',continuation=? WHERE id=? AND state='running'",
                                (json.dumps(continuation,ensure_ascii=False),task_id))
@@ -278,6 +296,9 @@ class TaskStore:
 
     def resume_from_inbox(self, parent_id):
         """Consume each result once and wake one waiting parent only after every child is terminal."""
+        task = self.get(parent_id)
+        if task and task.continuation and json.loads(task.continuation).get("owner_wait"):
+            return False
         with self._conn:
             pending = self._conn.execute("SELECT 1 FROM worker_tasks WHERE parent_task_id=? AND state IN ('queued','running','waiting')", (parent_id,)).fetchone()
             if pending:
@@ -310,15 +331,15 @@ class TaskStore:
                                (str(root),task_id,call_id,artifact.relative_to(root).as_posix()))
         return digest
 
-    def completion_reason(self, task):
-        """Validate executor receipts and required artifacts; prose alone never proves work."""
+    def completion_reason(self, task, *, verifiable=True, said=""):
+        """Validate receipts and explicit file requirements, even without a member workspace."""
         evidence = self.evidence(task.id)
-        if not evidence:
-            return 'work_without_action'
         artifacts = [item for item in evidence if item['kind'] == 'artifact']
-        requires_artifact = bool(re.search(r'(?i)\b(html|xlsx|pdf|artifact|file)\b|檔案|產物', task.done_when))
+        requires_artifact = task.requires_artifact
         if requires_artifact and not artifacts:
             return 'missing_artifact'
+        if not evidence:
+            return None if not requires_artifact and len(said.strip()) >= WRITTEN_WORK_CHARS and not stalled(said) else 'work_without_action'
         for item in artifacts:
             try:
                 root = Path(item['workspace']).resolve(strict=True)
@@ -327,8 +348,11 @@ class TaskStore:
                     return 'artifact_changed'
             except (OSError, TypeError, ValueError):
                 return 'missing_artifact'
-        expected = re.findall(r'(?i)(?<![\w/])([\w.-]+\.(?:html|xlsx|pdf|csv|txt|json))(?!\w)',task.done_when)
-        if any(not any(Path(item['uri']).name == name for item in artifacts) for name in expected):
+        expected = FILE_NAMES.findall(task.done_when) if requires_artifact else []
+        names = [Path(item['uri']).name.lower() for item in artifacts]
+        # A filename extracted from prose can be the last word of a named path containing spaces.
+        if any(not any(found == name.lower() or (found in task.done_when.lower() and found.endswith(' ' + name.lower()))
+                       for found in names) for name in expected):
             return 'missing_artifact'
         return None
 
@@ -422,11 +446,12 @@ class TaskStore:
                     outcome,
                     cost_usd,
                     ms,
-                    reason,
+                    reason or (reason_of(outcome, None) if outcome == 'blocked' else None),
                     detail,
                 ),
             )
         assert cursor.lastrowid is not None
+        self._sync_routine_steps(task_id, cursor.lastrowid)
         return cursor.lastrowid
 
     def update_step(
@@ -437,13 +462,35 @@ class TaskStore:
         tier: str | None = None,
         ms: int = 0,
         reason: str | None = None,
+        detail: str | None = None,
+        cost_usd: float | None = None,
     ) -> None:
         """End a step that was written as "in_progress"."""
         with self._conn:
             self._conn.execute(
-                "UPDATE worker_steps SET outcome = ?, tier = ?, ms = ?, reason = ? WHERE id = ?",
-                (outcome, tier, ms, reason, step_id),
+                "UPDATE worker_steps SET outcome = ?, tier = ?, ms = ?, reason = ?,"
+                " detail = COALESCE(?, detail), cost_usd = COALESCE(?, cost_usd) WHERE id = ?",
+                (outcome, tier, ms, reason or (reason_of(outcome, None) if outcome == 'blocked' else None), detail, cost_usd, step_id),
             )
+            row = self._conn.execute("SELECT task_id FROM worker_steps WHERE id=?", (step_id,)).fetchone()
+            if row:
+                self._sync_routine_steps(row[0], step_id)
+
+    def _sync_routine_steps(self, task_id: int, step_id: int | None = None) -> None:
+        """Keep routine history auditable even while a run waits or the process is interrupted."""
+        with self._conn:
+            rows = self._conn.execute(
+                "SELECT t.turn_id,s.n,s.at_ms,s.kind,COALESCE(s.tool,''),s.server,s.outcome,s.ms,s.reason,s.detail "
+                "FROM worker_steps s JOIN worker_tasks t ON t.id=s.task_id "
+                "JOIN agent_turns a ON a.id=t.turn_id WHERE t.id=? AND a.route='routine' "
+                "AND (? IS NULL OR s.id=?)", (task_id, step_id, step_id)).fetchall()
+            for row in rows:
+                changed = self._conn.execute(
+                    "UPDATE agent_steps SET outcome=?,ms=?,reason=?,detail=? WHERE turn_id=? AND n=?",
+                    (*row[6:10], *row[:2])).rowcount
+                if not changed:
+                    self._conn.execute("INSERT INTO agent_steps(turn_id,n,at_ms,kind,tool,server,outcome,ms,reason,detail) "
+                                       "VALUES(?,?,?,?,?,?,?,?,?,?)", tuple(row))
 
     def settle_in_progress(self, task_id: int) -> None:
         """A call still "in_progress" when its task is over was cut off: it may have been made."""
@@ -453,6 +500,7 @@ class TaskStore:
                 " WHERE task_id = ? AND outcome = 'in_progress'",
                 (task_id,),
             )
+            self._sync_routine_steps(task_id)
 
     def get(self, task_id: int) -> Task | None:
         row = self._conn.execute(
@@ -518,6 +566,7 @@ class TaskStore:
                     " WHERE task_id = ? AND outcome = 'in_progress'",
                     (row["id"],),
                 )
+                self._sync_routine_steps(row["id"])
                 if report is None:
                     self._conn.execute(
                         "UPDATE worker_tasks SET state = 'interrupted', finished_at_ms = ?,"

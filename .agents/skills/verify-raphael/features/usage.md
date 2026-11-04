@@ -22,7 +22,7 @@ CSV. The subscription exclusion button scrolls and moves focus to allowances bel
 ## Driving it with look
 
 ```powershell
-npm run look -- usage usage-bill-breakdown usage-members usage-period usage-group-day usage-group-provider usage-group-routine usage-empty usage-allowances --theme both --width 1120,720,1920x1080
+npm run look -- usage usage-bill-breakdown usage-members usage-period usage-group-day usage-group-provider usage-group-routine usage-empty usage-allowances usage-allowances-chatgpt --theme both --width 1120,720,1920x1080
 ```
 
 Keep all summary/group/allowance PNGs and the report. Inspect both themes at all
@@ -41,3 +41,11 @@ writes. Retained run periods use the requested IANA display zone; bills always u
 sidebar ledger's zone and full calendar boundaries. A real harmless turn/routine and
 sanitized export remain native acceptance if those paths change. No live provider or
 user database access is required for this presentation change.
+
+## Shared content measures (2026-10-28)
+
+Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
+
+## Owner round 6 contracts
+
+Owner round 6: usage/usage-bill-breakdown display the zh-TW glossary term 權杖數 and remove the breakdown helper paragraph. CSV export uses the shared download icon button with an accessible localized name and tooltip. compact-action asserts the icon-only control and localized heading.

@@ -117,10 +117,14 @@ class ToolRegistry:
         *,
         plugin_tier: Callable[[str], Tier | None] | None = None,
         ask_first: Callable[[str, Tier], bool] | None = None,
+        plugin_action_tier: Callable[[str, Mapping[str, Any]], Tier | None] | None = None,
+        full_permission: Callable[[], bool] | None = None,
     ) -> None:
         self._tiers: dict[str, Tier] = {}
+        self._plugin_action_tier = plugin_action_tier
         self._plugin_tier = plugin_tier
         self._ask_first = ask_first
+        self._full_permission = full_permission
         for name, tier in (tiers or {}).items():
             self.register(name, tier)
 
@@ -133,9 +137,10 @@ class ToolRegistry:
             raise ValueError(f"The name {name!r} is for the tools of plugins")
         self._tiers[name] = Tier(tier)
 
-    def tier(self, name: str) -> Tier:
+    def tier(self, name: str, arguments: Mapping[str, Any] | None = None) -> Tier:
         if name.startswith(PLUGIN_PREFIX):
-            tier = self._plugin_tier(name) if self._plugin_tier is not None else None
+            tier = (self._plugin_action_tier(name, arguments) if arguments is not None and self._plugin_action_tier is not None
+                    else self._plugin_tier(name) if self._plugin_tier is not None else None)
             if tier is None:
                 raise UnknownTool(name)
             return Tier(tier)
@@ -144,8 +149,10 @@ class ToolRegistry:
         except KeyError:
             raise UnknownTool(name) from None
 
-    def needs_confirmation(self, name: str) -> bool:
-        tier = self.tier(name)
+    def needs_confirmation(self, name: str, arguments: Mapping[str, Any] | None = None) -> bool:
+        tier = self.tier(name, arguments)
+        if self._full_permission and self._full_permission():
+            return False
         return tier >= Tier.T2 or bool(self._ask_first and self._ask_first(name, tier))
 
     def check(self, action: Action, approval: Approval | None) -> None:
@@ -153,7 +160,7 @@ class ToolRegistry:
         and `approval` is not a yes for this very action that has not been used, and whose digest
         is still the action's: an action whose inputs changed after the question was asked is not
         the one that was said yes to. The approval is spent by the check."""
-        if not self.needs_confirmation(action.tool):
+        if not self.needs_confirmation(action.tool, action.args):
             return
         if not isinstance(approval, Approval) or approval.action is not action or approval.spent:
             raise NotApproved(f"{action.tool} needs a yes")

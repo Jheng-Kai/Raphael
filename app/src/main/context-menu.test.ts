@@ -65,6 +65,13 @@ function clicked(event: Event): void {
 }
 
 describe("a right click is the ⋯ of its row", () => {
+  test("the takeover bar exposes its shared menu from a right click", () => {
+    const bar = document.createElement('div'); bar.className = 'desktop-takeover-bar';
+    bar.innerHTML = `<span>Sample member</span>${iconButton('more', 'More', ' data-desktop="menu"')}`;
+    document.body.append(bar);
+    expect(overflowAt(bar)?.button).toBe(bar.querySelector('[data-desktop="menu"]'));
+    expect(uncoveredOverflows(bar)).toHaveLength(0);
+  });
   test("a right click anywhere on a row opens the menu of its ⋯, the same one a click on the ⋯ opens", () => {
     for (const target of [document.getElementById("open-a")!, document.querySelector("#a [data-conversation-more]")!, document.getElementById("a")!]) {
       closeMenu();
@@ -124,13 +131,17 @@ describe("a right click is the ⋯ of its row", () => {
     expect(popover()!.style.left).not.toBe("300px");
   });
 
-  test("a menu at the pointer closes when the page scrolls, and one under its button follows it", () => {
+  test("programmatic scroll preserves pointer and anchored menus, but an outside wheel closes either", () => {
     rightClick(document.getElementById("open-a")!);
     document.dispatchEvent(new Event("scroll"));
+    expect(popover()).not.toBeNull();
+    document.dispatchEvent(new Event("wheel"));
     expect(popover()).toBeNull();
     personClick(document.querySelector("#a [data-conversation-more]")!);
     document.dispatchEvent(new Event("scroll"));
     expect(popover()).not.toBeNull();
+    document.dispatchEvent(new Event("wheel"));
+    expect(popover()).toBeNull();
   });
 });
 

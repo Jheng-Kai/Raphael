@@ -1,19 +1,17 @@
-// The open member's panel keeps its avatar and editable identity above the conversation slot,
-// personality/instruction folds and resource rows. Each resource opens a subpage with a back
-// button; fields being typed in survive live member updates. Raphael keeps his special avatar,
-// routines and memory, while every member uses the same global model and tool capabilities.
+// The landing view holds the screen, routines and conversations. Identity and resources live
+// behind the gear; fields being typed in survive live member updates.
 
+import { noticeHTML } from "./missing";
 import { openRoutineDialog } from "./routine-dialog";
 import { mountConversationList } from "./conversation-list";
-import { openActions } from "./member-column";
 import * as api from "./api";
 import { mountMemberResources } from "./member-profile-resources";
 import "./member-panel.css";
 import { changeRaphaelAvatar, resetRaphaelAvatar } from "./avatar-settings";
 import { currentAvatar } from "./avatar";
-import { describeError } from "./format";
-import { t } from "./i18n";
-import { groupChoices, groupFromValue, groupValue, openAvatarPicker, pickPicture, readPicture } from "./member-dialogs";
+import { getLocale, t } from "./i18n";
+import { groupChoices, groupFromValue, groupValue, openAvatarPicker } from "./member-dialogs";
+import { defaultSlimeAvatar } from "./slime";
 import { createMemory } from "./memory-view";
 import { memoryHTML } from "./memory-view";
 import {
@@ -25,53 +23,57 @@ import {
   cleanName,
   faceHTML,
   isMemberNameTaken,
-  memberOf,
-  scheduleText,
+  routineSentenceHTML, routineStatus,
   sourceLabel,
 } from "./members";
-import type { AppContext, AvatarPreset, Member, MemberPatch, MembersList, Routine, WireAttachment } from "./types";
-import { btn, esc, ico, iconButton, openMenu, sel, tg, toaster } from "./ui";
+import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
+import { esc, ico, iconButton, openMenu, patchHTML, sel, toaster } from "./ui";
+import { eventRead } from './event-read';
 
-export type DetailsTab = "details" | "memory" | "routines" | "skills" | "commands" | "voice";
+export type DetailsTab = "details" | "settings" | "memory" | "skills" | "commands" | "voice";
 
 export interface DetailsHost {
   app: AppContext;
   /** The member whose thread is open. */
   member(): Member;
   list(): MembersList | null;
-  presets(): readonly AvatarPreset[];
+  visible?(): boolean;
   /** Changes the member and reads the list again; false (with a toast) when the core refused. */
   update(id: number, patch: MemberPatch): Promise<boolean>;
   /** A picture of this PC for the member; then the list again. */
-  setPicture(id: number, file: WireAttachment): Promise<void>;
   /** The × of the panel. */
   close(): void;
   edit?(member: Member): void;
   hide?(member: Member): void;
   openConversation?(member: number, conversation: number): void;
+  /** The conversation open with this member, undefined for their default. */
+  conversationOf?(member: number): number | undefined;
 }
 
 export interface DetailsPanel {
   readonly el: HTMLElement;
   /** Draws the panel again (the list changed, or the language). */
   draw(): void;
+  overview(): void;
   /** Another member's thread is open: its routines and memory are read, its tab is 詳細資訊. */
   showMember(): void;
   refreshRoutines(): void;
   refreshMemory(memberId: number, space?: "own" | "shared"): void;
+  refreshResources(): void;
 }
 
 export function createDetails(host: DetailsHost): DetailsPanel {
   const el = document.createElement("aside");
   el.className = "mb-det";
   el.innerHTML =
-    `<div class="mb-det-head"><span class="mb-det-fill"></span>${iconButton("pencil", t("members.sideEdit"), ' data-det="edit"', "mb-tool")}${iconButton("x", t("members.close"), ' data-det="close"', "mb-tool")}</div>` +
+    `<div class="mb-det-head">${iconButton("left", t("members.panelBack"), ' data-det="back" hidden', "mb-tool")}<span class="mb-det-fill"></span>${iconButton("gear", t("computer.settings"), ' data-det="gear"', "mb-tool")}${iconButton("x", t("members.close"), ' data-det="close"', "mb-tool")}</div>` +
     `<div class="mb-det-scroll"><div class="mb-who"></div><div class="mb-tabs"></div><div class="mb-tab-body"></div></div>`;
   const who = el.querySelector<HTMLElement>(".mb-who")!;
   const tabBar = el.querySelector<HTMLElement>(".mb-tabs")!;
   const body = el.querySelector<HTMLElement>(".mb-tab-body")!;
   const closeButton = el.querySelector<HTMLElement>('[data-det="close"]')!;
-  const editButton = el.querySelector<HTMLElement>('[data-det="edit"]')!;
+  const backButton = el.querySelector<HTMLElement>('[data-det="back"]')!;
+  let drawn = "";
 
   let tab: DetailsTab = "details";
   let routines: Routine[] | "loading" | "failed" = "loading";
@@ -81,10 +83,9 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   /** The member the panel was last drawn for: its fields are drawn afresh when it changes. */
   let drawnFor: number | null = null;
   let counts = { skills: 0, commands: 0, memory: 0 };
-  let countEpoch = 0;
+  let countEpoch = 0, countsStale = false;
   let resources: ReturnType<typeof mountMemberResources> | null = null;
   let resourceKey = "";
-  let memoryDraft = "";
   const conversationHost = document.createElement("div");
   let conversationMember: number | null = null;
   let conversationList: ReturnType<typeof mountConversationList> | null = null;
@@ -95,26 +96,30 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     }
     const slot = body.querySelector<HTMLElement>('[data-slot="conversations"]');
     if (!slot || !host.openConversation) return;
-    slot.replaceChildren(conversationHost);
+    if (conversationHost.parentElement !== slot) slot.replaceChildren(conversationHost);
     if (!conversationList) conversationList = mountConversationList(conversationHost, {
+      scope: host.app,
+      active: () => host.visible?.() ?? true,
       memberId, collapseWhenEmpty: true,
-      onVisibility(visible) { const current = body.querySelector<HTMLElement>('[data-slot="conversations"]'); if (current) current.hidden = !visible; },
+      onVisibility(visible) { const current = body.querySelector<HTMLElement>('[data-slot="conversations"]'); if (current && current.hidden !== !visible) current.hidden = !visible; },
       onOpen(id) { host.openConversation?.(memberId, id); },
+      current: () => host.conversationOf?.(memberId),
     });
     slot.hidden = conversationHost.hidden;
   }
-  async function loadCounts(): Promise<void> {
+  async function loadCounts(fromEvent = false): Promise<void> {
+    if (el.hidden) { countsStale = true; return; }
     const epoch = ++countEpoch, id = host.member().id;
     const result = await Promise.allSettled([
-      id === RAPHAEL_ID ? Promise.resolve({skills: []}) : api.core<{skills: unknown[]}>("members.skills.list", {member_id: id}),
-      id === RAPHAEL_ID ? Promise.resolve({commands: []}) : api.core<{commands: unknown[]}>("members.commands.list", {member_id: id}),
-      api.core<{ memories: unknown[] }>("memory.list", { member_id: id, space: "own" }),
+      fromEvent ? eventRead(`members.skills.list:${id}`,()=>api.core<{skills: unknown[]}>("members.skills.list", {member_id: id}),host.app) : api.core<{skills: unknown[]}>("members.skills.list", {member_id: id}),
+      id === RAPHAEL_ID ? Promise.resolve({commands: []}) : fromEvent ? eventRead(`members.commands.list:${id}`,()=>api.core<{commands: unknown[]}>("members.commands.list", {member_id: id}),host.app) : api.core<{commands: unknown[]}>("members.commands.list", {member_id: id}),
+      fromEvent ? eventRead(`memory.get:${id}`,()=>api.core<{entries:number}>('memory.get',{member_id:id,space:'own'}),host.app) : api.core<{ entries: number }>("memory.get", { member_id: id, space: "own" }),
     ]);
     if (epoch !== countEpoch || id !== host.member().id) return;
     counts = {
       skills: result[0].status === "fulfilled" ? result[0].value?.skills?.length ?? 0 : 0,
       commands: result[1].status === "fulfilled" ? result[1].value?.commands?.length ?? 0 : 0,
-      memory: result[2].status === "fulfilled" ? result[2].value?.memories?.length ?? 0 : 0,
+      memory: result[2].status === "fulfilled" ? result[2].value?.entries ?? 0 : 0,
     };
     draw();
   }
@@ -122,27 +127,22 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     return `<button type="button" class="btn mb-panel-row" data-det="tab" data-tab="${page}" data-k="det-tab:${page}">${ico(icon)}<span>${esc(label)}</span><small>${esc(detail)}</small>${ico("right")}</button>`;
   }
   function pageRows(member: Member): string {
-    const active = Array.isArray(routines) ? routines.filter(r => r.enabled).length : 0;
     return `<nav class="mb-panel-pages" aria-label="${esc(t("members.details"))}">` +
-      pageRow("routines", t("members.routines"), "clock", t("members.panelActive", {p0: active})) +
       pageRow("memory", t("mem.title"), "memory", t("members.panelNotes", {p0: counts.memory})) +
-      (member.id === RAPHAEL_ID ? "" : pageRow("skills", t("members.panelSkills"), "sparkle", t("members.panelCount", {p0: counts.skills})) +
-      pageRow("commands", t("members.panelCommands"), "steps", t("members.panelCount", {p0: counts.commands})) +
-      pageRow("voice", t("members.panelVoice"), "voice") +
-      `<button type="button" class="btn mb-panel-row" data-det="hide">${ico("eyeOff")}<span class="mb-panel-row-copy"><span>${esc(t("members.panelHide"))}</span><small>${esc(t("members.panelHideHint"))}</small></span>${ico("right")}</button>`) + `</nav>`;
+      pageRow("skills", t("members.panelSkills"), "sparkle", t("members.panelCount", {p0: counts.skills})) +
+      (member.id === RAPHAEL_ID ? "" : pageRow("commands", t("members.panelCommands"), "steps", t("members.panelCount", {p0: counts.commands})) +
+      pageRow("voice", t("members.panelVoice"), "voice")) +
+      (member.id === RAPHAEL_ID ? "" : `<button type="button" class="btn mb-panel-row" data-det="hide">${ico("eyeOff")}<span class="mb-panel-row-copy"><span>${esc(t("members.panelHide"))}</span><small>${esc(t("members.panelHideHint"))}</small></span></button>`) + `</nav>`;
   }
 
   const memoryHost = {
     visible: () => el.isConnected && !el.hidden && tab === "memory",
     redraw: () => draw(),
-    undo: host.app.undo,
     memberId: () => host.member().id,
     ownerName: () => host.member().name,
-    memberName: (id: number) => memberOf(host.list(), id)?.name ?? "",
-    expanded: true,
   };
-  const shared = createMemory({ ...memoryHost, space: "shared", onMoved: () => void own.load() });
-  const own = createMemory({ ...memoryHost, space: "own", onMoved: () => void shared.load() });
+  const shared = createMemory({ ...memoryHost, space: "shared" });
+  const own = createMemory({ ...memoryHost, space: "own" });
   const memories = [shared, own];
 
   // ---------- drawing ----------
@@ -163,12 +163,10 @@ export function createDetails(host: DetailsHost): DetailsPanel {
 
   function routineRowHTML(routine: Routine): string {
     return (
-      `<div class="mb-rt" data-routine="${routine.id}">` +
-      `<span class="mb-rt-main"><b>${esc(routine.title)}</b><span>${esc(scheduleText(routine.schedule))}</span></span>` +
-      `<span class="mb-rt-ctl">` +
-      iconButton("more", t("members.more", { p0: routine.title }), ` data-det="routine-menu" data-id="${routine.id}" data-k="routine-menu:${routine.id}" aria-haspopup="menu" aria-expanded="false"`, "row mb-tool") +
-      tg(routine.enabled, t("members.routineSwitch", { p0: routine.title }), ` data-det="routine-switch" data-id="${routine.id}" data-k="routine-switch:${routine.id}"`) +
-      `</span></div>`
+      `<button type="button" class="btn mb-rt${routine.when ? " is-event" : ""}" data-det="routine-open" data-id="${routine.id}" data-routine="${routine.id}" data-k="routine:${routine.id}">` +
+      `<span class="mb-rt-state${routine.enabled ? " is-on" : ""}" aria-label="${esc(t(routine.enabled ? "computer.routineOn" : "computer.routinePaused"))}">${ico(routine.enabled ? "clock" : "pause")}</span>` +
+      `<span class="mb-rt-main"><b>${esc(routine.title)}</b><span>${routineSentenceHTML(routine)}</span>${routine.when ? `<span>${esc(routineStatus(routine))}</span>` : ""}</span>` +
+      `</button>`
     );
   }
 
@@ -178,7 +176,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       iconButton("plus", t("members.routineAdd"), ` data-det="routine-add" data-k="routine-add"`, "row mb-tool") +
       `</div>`;
     if (routines === "loading") return head + `<span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span>`;
-    if (routines === "failed") return head;
+    if (routines === "failed") return head + noticeHTML("routines");
     const rows = routines.length ? routines.map(routineRowHTML).join("") : `<p class="mp-empty">${esc(t("members.profile.noRoutines"))}</p>`;
     return head + `<div class="mb-rts">${rows}</div>`;
   }
@@ -197,12 +195,12 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   }
 
   function detailsHTML(member: Member): string {
-    if (member.id === RAPHAEL_ID) return `<div data-slot="conversations"></div>` + pageRows(member);
+    if (member.id === RAPHAEL_ID) return pageRows(member);
     const list = host.list();
     const group = list?.groups.find((g) => g.id === member.group_id) ?? null;
     const sources = group?.sources ?? [];
     return (
-      `<div data-slot="conversations"></div>` + foldHTML("mb-det-personality", t("members.personality"), member.personality ?? "",
+      `<button type="button" class="btn mb-panel-row" data-det="edit">${ico("pencil")}<span>${esc(t("members.sideEdit"))}</span></button>` + foldHTML("mb-det-personality", t("members.personality"), member.personality ?? "",
         `<textarea id="mb-det-personality" data-member="${member.id}" class="mb-fin mb-ta" rows="3" maxlength="${PERSONALITY_MAX}" placeholder="${esc(t("members.personalityHint"))}">${esc(member.personality ?? "")}</textarea>`) +
       foldHTML("mb-det-instr", t("members.instructions"), member.instructions ?? "",
         `<textarea id="mb-det-instr" data-member="${member.id}" class="mb-fin mb-ta" rows="4" maxlength="${INSTRUCTIONS_MAX}">${esc(member.instructions ?? "")}</textarea>`) +
@@ -219,15 +217,27 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   }
 
   function draw(): void {
+    if (el.hidden) return;
+    if (countsStale) { countsStale = false; void loadCounts(); }
     const member = host.member();
     const sameMember = drawnFor === member.id;
+    const focused = document.activeElement as HTMLElement | null;
+    if (sameMember) for (const [id, value] of [['mb-det-name', member.name], ['mb-det-role', member.role], ['mb-det-personality', member.personality ?? ''], ['mb-det-instr', member.instructions ?? '']]) {
+      const field = el.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${id}`);
+      if (field && field !== focused && field.value !== value) field.value = value;
+    }
+    const face = faceHTML(member, 64).replace(/--slime-(?:delay|since):[^;"\s]+;?/g, "");
+    const signature = JSON.stringify([member, face, host.list()?.groups, counts, routines, tab, [...openFields], getLocale(), !!host.openConversation, host.conversationOf?.(member.id), tab === "memory" ? memories.map(list => list.view()) : null]);
+    if (drawn === signature) return;
+    drawn = signature;
+    el.dataset.detailsTab = tab;
     closeButton.setAttribute("aria-label", t("members.close"));
     closeButton.title = t("members.close");
-    editButton.hidden = member.id === RAPHAEL_ID;
-    editButton.setAttribute("aria-label", t("members.sideEdit"));
-    editButton.title = t("members.sideEdit");
+    backButton.hidden = tab === "details";
+    backButton.title = t('members.panelBack'); backButton.setAttribute('aria-label', backButton.title);
+    const gear = el.querySelector<HTMLElement>('[data-det="gear"]')!;
+    gear.title = t("computer.settings"); gear.setAttribute("aria-label", gear.title);
     el.setAttribute("aria-label", t("members.panel"));
-    const focused = document.activeElement as HTMLElement | null;
     const typingIn = focused && el.contains(focused) && (focused.matches("input, textarea") ? focused.id : null);
     const scroll = el.querySelector<HTMLElement>(".mb-det-scroll")!;
     const scrollTop = scroll.scrollTop;
@@ -240,24 +250,22 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       if (!sameMember && (typingIn === "mb-det-name" || typingIn === "mb-det-role")) {
         void saveField(focused as HTMLInputElement, true);
       }
-      who.innerHTML = whoHTML(member);
+      patchHTML(who, whoHTML(member));
     } else {
       const av = who.querySelector<HTMLElement>(".mb-avbtn");
-      if (av) av.innerHTML = faceHTML(member, 64);
-      // A focused field keeps its draft; the other field can still change remotely.
-      for (const [id, value] of [["mb-det-name", member.name], ["mb-det-role", member.role]]) {
-        const input = who.querySelector<HTMLInputElement>(`#${id}`);
-        if (input && id !== typingIn) input.value = value;
-      }
+      if (av) patchHTML(av, faceHTML(member, 64));
+    }
+    // A focused field keeps its draft; the other field can still change remotely.
+    for (const [id, value] of [["mb-det-name", member.name], ["mb-det-role", member.role]]) {
+      const input = who.querySelector<HTMLInputElement>(`#${id}`);
+      if (input && (!sameMember || id !== typingIn) && input.value !== value) input.value = value;
     }
     drawnFor = member.id;
-    who.hidden = tab !== "details";
-    tabBar.innerHTML = tab === "details"
-      ? ""
-      : `<button type="button" class="btn mb-panel-back" data-det="tab" data-tab="details" data-k="det-tab:details">${ico("left")}${esc(t("members.panelBack"))}</button>`;
+    who.hidden = tab !== "settings";
+    patchHTML(tabBar, "");
     const typingText = typingIn === "mb-det-instr" || typingIn === "mb-det-personality";
     const kept = typingText ? (focused as HTMLElement).closest<HTMLElement>("section") : null;
-    if (sameMember && kept && kept.parentElement === body && tab === "details") {
+    if (sameMember && kept && kept.parentElement === body && tab === "settings") {
       // Blur saves the box being typed in, so keep its section alive while the other fields update.
       const at = Array.from(body.children).indexOf(kept);
       const next = document.createElement("div");
@@ -267,7 +275,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       kept.before(...fresh.slice(0, at));
       kept.after(...fresh.slice(at + 1));
       drawConversations();
-      scroll.scrollTop = scrollTop;
+      if (scroll.scrollTop !== scrollTop) scroll.scrollTop = scrollTop;
       return;
     }
     if (typingText) void saveField(focused as HTMLTextAreaElement, true);
@@ -277,13 +285,16 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     if (resourceTab) {
       if (!resources) {
         body.replaceChildren();
-        resources = mountMemberResources(body, {memberId: member.id, tab: resourceTab, member, standalone: true, changed: () => void loadCounts()});
+        resources = mountMemberResources(body, {memberId: member.id, scope: host.app, tab: resourceTab, member, standalone: true, changed: () => void loadCounts()});
       }
     } else {
-      const input = body.querySelector<HTMLInputElement>("#mb-memory-new");
-      if (input) memoryDraft = input.value;
-      body.innerHTML = tab === "details" ? detailsHTML(member) : tab === "routines" ? routinesHTML() :
-        `<div class="mb-addrow mb-panel-memory-add"><input id="mb-memory-new" class="mb-fin" maxlength="1200" value="${esc(memoryDraft)}" placeholder="${esc(t("members.panelMemoryHint"))}" aria-label="${esc(t("members.panelMemoryHint"))}">${btn(esc(t("members.panelMemoryAdd")), "", ' data-det="memory-add"')}</div>` + memoryHTML(shared.view()) + memoryHTML(own.view());
+      if (tab === "details") {
+        if (!body.querySelector('.mb-panel-routines')) patchHTML(body, `<section class="mb-panel-routines" data-k="panel-routines"></section><div data-slot="conversations" data-k="panel-conversations"></div>`);
+        patchHTML(body.querySelector('.mb-panel-routines')!, routinesHTML());
+      } else {
+        conversationHost.remove();
+        patchHTML(body, tab === "settings" ? detailsHTML(member) : memoryHTML(shared.view()) + memoryHTML(own.view()));
+      }
     }
     drawConversations();
     if (sameMember && typingIn && typingIn !== "mb-det-name" && typingIn !== "mb-det-role") el.querySelector<HTMLElement>(`#${CSS.escape(typingIn)}`)?.focus({ preventScroll: true });
@@ -292,12 +303,13 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       const field = el.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${CSS.escape(typingIn)}`);
       field?.setSelectionRange(selection[0], selection[1], selection[2] ?? undefined);
     }
-    if (sameMember) scroll.scrollTop = scrollTop;
+    if (sameMember && scroll.scrollTop !== scrollTop) scroll.scrollTop = scrollTop;
   }
 
   // ---------- routines ----------
 
   async function loadRoutines(): Promise<void> {
+    if (el.hidden) return;
     const mine = ++routineLoads;
     const id = host.member().id;
     try {
@@ -311,52 +323,21 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     draw();
   }
 
-  async function switchRoutine(id: number, button: HTMLElement): Promise<void> {
-    if (typeof routines !== "object") return;
-    const routine = routines.find((r) => r.id === id);
-    if (!routine) return;
-    const enabled = !routine.enabled;
-    routines = routines.map((r) => (r.id === id ? { ...r, enabled } : r));
-    button.setAttribute("aria-checked", String(enabled));
-    button.classList.add("flip");
-    try {
-      await api.routinesUpdate(id, { enabled });
-    } catch (err) {
-      toaster.info(describeError(err));
-      await loadRoutines();
-    }
-  }
-
-  async function deleteRoutine(id: number): Promise<void> {
-    try {
-      await api.routinesDelete(id);
-    } catch (err) {
-      toaster.info(describeError(err));
-    }
-    await loadRoutines();
-  }
-
   // ---------- the picture, the name and the role ----------
 
   function avatarMenu(anchor: HTMLElement): void {
     const member = host.member();
     if (member.id === RAPHAEL_ID) {
       openAvatarPicker(anchor, {
-        presets: [],
         onComputer: () => void changeRaphaelAvatar(),
         more: currentAvatar() !== null ? [{ label: t("settings.avatarReset"), run: () => void resetRaphaelAvatar() }] : [],
       });
       return;
     }
     openAvatarPicker(anchor, {
-      presets: host.presets(),
-      onPreset: (avatar) => void host.update(member.id, { avatar }),
-      onComputer: () =>
-        pickPicture((file) =>
-          void readPicture(file).then((read) => {
-            if (read) void host.setPicture(member.id, read);
-          }),
-        ),
+      slimes: true,
+      current: member.avatar || defaultSlimeAvatar(member.id),
+      onSlime: (avatar) => void host.update(member.id, { avatar }),
     });
   }
 
@@ -407,18 +388,9 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         host.close();
         break;
       case "edit": host.edit?.(member); break;
+      case "gear": tab = "settings"; draw(); break;
+      case "back": tab = tab === "settings" ? "details" : "settings"; draw(); break;
       case "hide": host.hide?.(member); break;
-      case "memory-add": {
-        const input = body.querySelector<HTMLInputElement>("#mb-memory-new");
-        const value = input?.value.trim();
-        if (!value) break;
-        (act as HTMLButtonElement).disabled = true;
-        void api.core("memory.create", {member_id: member.id, space: "own", body: value}).then(async () => {
-          memoryDraft = ""; if (input) input.value = "";
-          await own.load(); await loadCounts();
-        }).catch(err => toaster.info(describeError(err))).finally(() => { (act as HTMLButtonElement).disabled = false; });
-        break;
-      }
       case "avatar":
         avatarMenu(act);
         break;
@@ -433,7 +405,6 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       case "tab":
         tab = act.dataset.tab as DetailsTab;
         if (tab === "memory") for (const list of memories) void list.load();
-        if (tab === "routines") void loadRoutines();
         draw();
         break;
       case "group":
@@ -445,21 +416,11 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       case "routine-add":
         openRoutineDialog({ members: host.list()?.members ?? [host.member()], memberId: member.id, onSaved: () => void loadRoutines() });
         break;
-      case "routine-menu": {
-        const routine = typeof routines === "object" ? routines.find(r => r.id === Number(act.dataset.id)) : undefined;
-        if (routine) openActions(act, [
-          { id: "edit", label: t("members.routineEdit", { p0: routine.title }), icon: "pencil" },
-          { id: "delete", label: t("members.routineDelete", { p0: routine.title }), icon: "trash" },
-        ], choice => {
-          if (choice === "delete") void deleteRoutine(routine.id);
-          else openRoutineDialog({ members: host.list()?.members ?? [host.member()], routine, onSaved: () => void loadRoutines(), onDeleted: () => void loadRoutines() });
-        });
+      case "routine-open": {
+        const routine = Array.isArray(routines) ? routines.find(row => row.id === Number(act.dataset.id)) : undefined;
+        if (routine) openRoutineDialog({ members: host.list()?.members ?? [member], routine, onSaved: () => void loadRoutines(), onDeleted: () => void loadRoutines() });
         break;
       }
-      case "routine-switch":
-        void switchRoutine(Number(act.dataset.id), act);
-        break;
-
     }
   });
 
@@ -491,16 +452,22 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   return {
     el,
     draw,
+    overview() { tab = "details"; draw(); },
     refreshRoutines() { void loadRoutines(); },
+    refreshResources() { void loadCounts(true); void resources?.refresh(true); },
     refreshMemory(memberId, space) {
-      if (memberId === host.member().id) { void loadCounts(); void resources?.refresh(); }
+      if (el.hidden) return;
+      if (memberId === host.member().id) {
+        const id=memberId;
+        void eventRead(`memory.get:${id}`,()=>api.core<{entries:number}>('memory.get',{member_id:id,space:'own'}),host.app).then(result=>{if(id===host.member().id){counts.memory=result.entries;draw();}}).catch(()=>{});
+      }
       if (!memoryHost.visible()) return;
       if (space !== "own") void shared.load();
       if (space !== "shared" && memberId === host.member().id) void own.load();
     },
     showMember() {
       tab = "details";
-      memoryDraft = ""; counts = {skills: 0, commands: 0, memory: 0};
+      counts = {skills: 0, commands: 0, memory: 0};
       void loadCounts();
       routines = "loading";
       for (const list of memories) list.reset();

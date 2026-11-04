@@ -4,7 +4,7 @@ import { LOGO_IDS, type ServiceIconId, type LogoIconId } from "./service-icons";
 import { ico } from "./ui";
 
 const MARKS: Record<string, ServiceIconId> = {
-  openrouter: "openrouter", openai: "openai", anthropic: "anthropic", google: "googlegemini",
+  openrouter: "openrouter", openai: "openai", chatgpt: "openai", anthropic: "anthropic", google: "googlegemini",
   azure_openai: "azure", bedrock: "aws", litellm: "litellm", portkey: "portkey", nebius: "nebius",
   bifrost: "bifrost", groq: "groq", ollama: "ollama", vercel: "vercel", lmstudio: "lmstudio",
   deepseek: "deepseek", mistral: "mistral", googlegemini: "googlegemini", googlecloud: "googlecloud",

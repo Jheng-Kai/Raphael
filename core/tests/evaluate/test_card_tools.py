@@ -35,11 +35,25 @@ def rows(driver, table):
     return driver.app._conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
 
 
+@pytest.mark.parametrize("fields", [{"scope": "room"}, {"scope": "exchange"}, {"quick": True},
+                                     {"source": "voice", "quick": True}, {"source": "telegram"}, {"peer": 1}])
+async def test_catalog_cards_keep_private_typed_chat_gates_before_catalog_access(driver, fields, monkeypatch):
+    ask = ask_of(driver)
+    for name, value in fields.items():
+        setattr(ask, name, value)
+    async def unexpected(_):
+        pytest.fail("A refused card read the catalog")
+    monkeypatch.setattr(driver.app.cards, "resolve", unexpected)
+    with pytest.raises(HarnessToolError, match="private_chat_only"):
+        await driver.app.agent._show_card(ask, {"app": "spotify"})
+    assert rows(driver, "connect_cards") == 0
+
+
 @pytest.mark.parametrize("fields", [
     {"scope": "room", "room_id": 1},
     {"scope": "exchange", "peer": 1},
     {"quick": True},
-    {"source": "voice"},
+    {"source": "voice", "quick": True},
     {"source": "telegram"},
     {"source": "member"},
 ])
@@ -52,7 +66,7 @@ async def test_a_secret_card_is_never_shown_outside_a_private_typed_chat(driver,
     assert rows(driver, "secret_cards") == 0 and ask.waiting_secrets == []
 
 
-@pytest.mark.parametrize("source", [TYPED, RESUMED])
+@pytest.mark.parametrize("source", [TYPED, RESUMED, "voice"])
 async def test_a_secret_card_is_shown_in_a_private_typed_chat_and_in_the_chat_a_task_resumed_in(driver, source):
     ask = ask_of(driver)
     ask.source = source
@@ -90,7 +104,8 @@ async def test_a_managed_connection_gets_no_secret_card(driver):
 @pytest.mark.parametrize("fields,expected", [
     ({}, True),
     ({"source": RESUMED}, True),
-    ({"source": "voice"}, False),
+    ({"source": "voice"}, True),
+    ({"source": "voice", "quick": True}, False),
     ({"source": "telegram"}, False),
     ({"quick": True}, False),
     ({"peer": 1, "scope": "exchange"}, False),

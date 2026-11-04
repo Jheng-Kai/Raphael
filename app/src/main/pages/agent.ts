@@ -1,3 +1,8 @@
+import { visibilityGate, windowVisible } from "../window-visibility";
+import { readDraftWords, writeDraftWords } from "../composer-drafts";
+import { cardDisclosureHTML, cardFailure, cardHTML, cardPromptText } from "../card";
+import { mountTaskResults } from "../task-result";
+import { patchThread } from "../thread-diff";
 // 拉斐爾: the one conversation with Raphael (`agent.history.list`), oldest at the top and newest at
 // the bottom, under the days it was had, whether it was said to the emblem, sent from a chat app or
 // typed here. Scrolling up brings the earlier turns; the page follows the newest only while it is
@@ -30,19 +35,29 @@
 // thread is its own: the search looks in it alone, and no turn of another thread shows in it but
 // the closed line of what a colleague asked it (exchange-line.ts).
 
-import { conversationTitle, conversationChange, type ConversationInfo } from "../conversation-list";
+import { noticeHTML } from "../missing";
+import { conversationTitle, conversationChange, newestConversation, type ConversationInfo } from "../conversation-list";
+import { eventRead } from '../event-read';
+import { cancelGesture } from "../../shared/cancel-gesture";
 import { openActions } from "../member-column";
+import { mountConversationFind } from "../conversation-find";
 import { confirmDelete } from "../member-dialogs";
+import { openRoutineDialog } from "../routine-dialog";
 import { createAttachmentMedia } from "../attachment-media";
-import { fileMime, fileKind, fileSize, fileIcon, mountFileDrop } from "../attachments";
+import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
+import { closeMediaLightbox, openMediaLightbox } from "../media-lightbox";
+import { wholeLinks } from "../composer-links";
 import { mountSlashMenu } from "../slash-menu";
 import { getLocale, onLocaleChange, t } from "../i18n";
-import { isTopLayer, registerDismissal } from "../dismissals";
 
 import { plainReplies } from "../../shared/anime";
 import * as api from "../api";
 import { createLinkPreviews, type LinkPreview } from "../link-previews";
 import { messagePlainText } from "../message-content";
+import { mountRichContent, preserveRichScroll } from "../message-rich";
+import { mountConversationScroll } from "../conversation-scroll";
+import { openUnread, unreadLine } from "../unread-divider";
+import { measureMessagePreviews, messagePreviewMeasure } from "../message-preview";
 import { messageTooltip } from "../message-tooltip";
 import { quoteHTML, selectionQuote } from "../message-quote";
 import { ReplyPacing } from "../reply-pacing";
@@ -53,13 +68,17 @@ import { RAPHAEL_ID, faceHTML, memberPlaceholder } from "../members";
 import { createMembers } from "../members-shell";
 import { createDraftPanel, hasDrafts } from "../member-draft";
 import { mountBackgroundQuestions } from "../background-mount";
-import { TYPED, VOICE, exchangeTurn, mergeTurns, oldestId, refreshTurns, sourceOf, threadItems, turnMatches } from "../conversation";
-import { exchangeLineHTML } from "../exchange-line";
+import { TYPED, VOICE, exchangeTurn, mergeTurns, oldestId, refreshTurns, sourceOf, threadItems, visibleTurn } from "../conversation";
 import { carryTyped } from "../secret-card";
+import { carryInlineSetup, mountInlineConnectionSetup } from "../connection-setup";
 import { carryMail } from "../mail-card";
+import { mountPages } from "../page-card";
 import { mountMailActions } from "../mail-actions";
-import { permissionFor } from "../permission-card";
-import { describeError } from "../format";
+import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
+import { approvalCopy, permissionFor } from "../permission-card";
+import { memberAccent, ownerBubble } from "../owner-bubble";
+import { slimeColorOf } from "../slime";
+import { dayLabel, describeError, formatClock } from "../format";
 import { loadingHTML } from "../loading";
 import {
   type TimelineState,
@@ -67,11 +86,14 @@ import {
   dayHTML,
   emptyTimelineState,
   forgetReruns,
-  formatDuration,
+  updateLiveTimes,
+  hasWorkerTask,
   isLive,
   markSeen,
   noteTaskEnds,
   pendingTurnHTML,
+  latestProgress,
+  livePresenceHTML,
   parseMediaPayload,
   requestRerun,
   requestStop,
@@ -81,15 +103,17 @@ import {
   turnHTML,
   wantsRefresh,
 } from "../timeline";
-import type { AgentDraft, AgentQuestion, AgentTurn, AppContext, GroupDraft, MemberDraft, MessageQuote, Page, SettingsPane, TurnAttachment, WireAttachment } from "../types";
-import { createFirstBot } from "../first-bot";
-import { copyText, esc, ico, iconButton, toaster } from "../ui";
+import type { PageArgument, AgentQuestion, AgentTurn, AppContext, GroupDraft, MemberDraft, MessageQuote, Page, TurnAttachment, WireAttachment } from "../types";
+import { copyButton, esc, ico, iconButton, patchHTML, toaster } from "../ui";
 import { createRoomPane } from "../group-chats";
-import { composerHTML, drawTaskSlot, openComposerMenu } from "../chat-composer";
+import { bindActionMode, composerHTML, drawTaskSlot } from "../chat-composer";
+import { mountComposerBrain } from "../composer-brain";
+import { bindComposerHistory } from "../composer-history";
 import { bindComposerLearning, learnComposerCorrections } from "../composer-learning";
 import type { DictationBaseline } from "../composer-learning";
 import { createProblemNotice } from "../problem-notice";
 import { VoiceMode } from "../voice-mode";
+import { mountDesktopViewer } from "../desktop-viewer";
 import "../agent.css";
 import "../members.css";
 
@@ -101,18 +125,10 @@ const BOTTOM_SLACK_PX = 80;
 const TOP_SLACK_PX = 160;
 /** Events that come together (a task's step and its turn) bring the turns once. */
 const REFRESH_DELAY_MS = 150;
-/** The search waits for the typing to pause this long. */
-const SEARCH_DELAY_MS = 200;
-/** The longest words the search takes (the core's and the app's limit for `agent.history.search`). */
-const SEARCH_MAX_CHARS = 200;
 /** The most a typed question may hold (the app's own limit is the same). */
 export const TYPED_MAX_CHARS = 100_000;
-/** The composer grows with its text up to this many lines, then scrolls. */
-const COMPOSER_LINES = 6;
 /** A question said aloud whose turn never comes (the core went away) stops waiting after this long. */
 const HEARING_MAX_MS = 120_000;
-/** The YES of a question that cannot be undone (T3) is held this long, as on the overlay (`HOLD_MS`). */
-const HOLD_MS = 600;
 /** The voice button sent the key, and the app did not start listening within this long: the picture comes back down. */
 const LISTEN_WAIT_MS = 1500;
 
@@ -127,15 +143,15 @@ export function openQuestion(q: AgentQuestion): AgentQuestion {
 
 /**
  * What the card's buttons say: the question's own words for the two plain answers when it brings
- * them (the question about an app says 「允許一次」 and 「不要」), else the page's 是 and 否; `always`
+ * them, else the page's Allow and Deny; `always`
  * is the third button's label, null when the question has two answers.
  */
 export function askLabels(q: AgentQuestion | null): { yes: string; no: string; always: string | null } {
   const always = q?.always ? q.always : null;
   return {
-    // The question's own words are used only with a third answer: the plain questions keep 是 and 否.
-    yes: (always !== null && q?.yes) || t("agent.yes"),
-    no: (always !== null && q?.no) || t("agent.no"),
+    // A third answer keeps the core's explicit choices; ordinary approvals use the shared permission words.
+    yes: (always !== null && q?.yes) || t("local.allow"),
+    no: (always !== null && q?.no) || t("perm.deny"),
     always,
   };
 }
@@ -159,10 +175,7 @@ export function typedQuestion(words: string, withFiles = false): string | null {
 }
 
 // ---------- attachments ----------
-/** Shared with the core: four files, 50 MB each and 100 MB in total. */
-export const ATTACH_MAX = 4;
-export const FILE_MAX_BYTES = 50 * 1024 * 1024;
-export const TOTAL_MAX_BYTES = 100 * 1024 * 1024;
+export { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachRefusal, base64Of };
 export const IMAGE_MAX_BYTES = FILE_MAX_BYTES;
 export const PDF_MAX_BYTES = FILE_MAX_BYTES;
 export const PDF_TYPE = "application/pdf";
@@ -170,22 +183,6 @@ export const PDF_TYPE = "application/pdf";
 export const PICKER_ACCEPT = "";
 export const attachmentType = fileMime;
 export const attachLimit = (_mime: string): number => FILE_MAX_BYTES;
-export function attachRefusal(count: number, _mime: string, size: number, total = 0): "count" | "size" | "total" | "empty" | null {
-  if (count >= ATTACH_MAX) return "count";
-  if (size <= 0) return "empty";
-  if (size > FILE_MAX_BYTES) return "size";
-  if (size + total > TOTAL_MAX_BYTES) return "total";
-  return null;
-}
-
-/** `bytes` in base64, a slice at a time (a whole PDF at once is too long an argument list). */
-export function base64Of(bytes: Uint8Array): string {
-  let binary = "";
-  const SLICE = 0x8000;
-  for (let at = 0; at < bytes.length; at += SLICE) binary += String.fromCharCode(...bytes.subarray(at, at + SLICE));
-  return btoa(binary);
-}
-
 /** A file attached to the next question, with its tray identity and byte count. */
 export interface ComposerFile extends WireAttachment {
   id: number;
@@ -203,7 +200,7 @@ export const sendsOnEnter = (e: Pick<KeyboardEvent, "key" | "shiftKey" | "isComp
  * The words of a draft the page is handed when it opens (`app.go("agent", "draft:" + words)`, from
  * the 「試試看」 of a connected service), cut to what a question may hold; null for none.
  */
-export function draftText(arg: SettingsPane | AgentDraft | undefined): string | null {
+export function draftText(arg: PageArgument | undefined): string | null {
   if (typeof arg !== "string" || !arg.startsWith("draft:")) return null;
   return arg.slice("draft:".length).slice(0, TYPED_MAX_CHARS);
 }
@@ -231,7 +228,7 @@ interface ComposerDraft {
   quote?: MessageQuote;
 }
 
-export function createAgent(app: AppContext): Page {
+export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loadSidebar(): Promise<void> } {
   const el = document.createElement("div");
   el.className = "page page-agent";
   el.dataset.page = "agent";
@@ -241,13 +238,10 @@ export function createAgent(app: AppContext): Page {
     `<div class="page-head mb-head"><h1 class="mb-h1">${esc(t("agent.title"))}</h1><span class="mb-head-l">` +
     iconButton("search", t("agent.search"), ' data-act="search" aria-expanded="false" hidden', "ra-tool") +
     `</span><span class="mb-head-c"></span><div class="ra-tools">` +
+    iconButton("monitor", t("card.pcTitle"), ' data-act="computer"', "ra-tool") +
     iconButton("gear", t("agent.settings"), ' data-act="settings"', "ra-tool") +
     `</div></div>` +
-    `<div class="ra-find" hidden><span class="ra-find-ic">${ico("search")}</span>` +
-    `<input type="search" class="ra-find-input" autocomplete="off" spellcheck="false" maxlength="${SEARCH_MAX_CHARS}">` +
-    `<span class="ra-find-count num" aria-live="polite"></span>` +
-    iconButton("x", t("agent.searchClose"), ' data-act="search-close"', "ra-tool") +
-    `</div>` +
+    `<div class="ra-find" hidden></div>` +
     `<div class="ra-stage">` +
     `<div class="ra-scroll"><div class="ra-col"><div class="ra-older" hidden></div><ol class="thread"></ol><p class="ra-none" hidden></p></div></div>` +
     `<div class="ra-wait" hidden></div>` +
@@ -257,10 +251,10 @@ export function createAgent(app: AppContext): Page {
     `</section>`;
   const heading = el.querySelector<HTMLElement>("h1")!;
   const searchButton = el.querySelector<HTMLElement>('[data-act="search"]')!;
+  const computerButton = el.querySelector<HTMLElement>('[data-act="computer"]')!;
   const settingsButton = el.querySelector<HTMLElement>('[data-act="settings"]')!;
   const find = el.querySelector<HTMLElement>(".ra-find")!;
-  const findInput = el.querySelector<HTMLInputElement>(".ra-find-input")!;
-  const findCount = el.querySelector<HTMLElement>(".ra-find-count")!;
+
   const stage = el.querySelector<HTMLElement>(".ra-stage")!;
   const scroller = el.querySelector<HTMLElement>(".ra-scroll")!;
   const older = el.querySelector<HTMLElement>(".ra-older")!;
@@ -272,12 +266,6 @@ export function createAgent(app: AppContext): Page {
   const hi = el.querySelector<HTMLElement>(".ra-hi")!;
   const slot = el.querySelector<HTMLElement>(".ra-slot")!;
   const dock = el.querySelector<HTMLElement>(".ra-dock")!;
-  const firstBot = createFirstBot(description => {
-    putDraft(description);
-    void send();
-  });
-  empty.insertBefore(firstBot.el, slot);
-  firstBot.el.addEventListener("change", () => drawDock());
   /** The open thread's questions from the background, above the composer wherever it is. */
   let waiting: BackgroundQuestions | null = null;
   const backgroundSlot = document.createElement("div");
@@ -286,14 +274,38 @@ export function createAgent(app: AppContext): Page {
 
   // ---------- the members ----------
 
+  let visible = false;
+  let unreadFrom: number | null = null;
+  let unreadCaptured = false;
+  let openingThread = true;
+  let composerBrain: ReturnType<typeof mountComposerBrain> | undefined;
+  const chosenConversations = new Map<number, number>();
   const members = createMembers({
     app,
     onOpenConversation: (member, conversation, turn) => openConversation(member, conversation, turn),
+    conversationOf: member => chosenConversations.get(member),
     visible: () => visible,
+    onReadThread: member => {
+      if (unreadCaptured) return;
+      unreadCaptured = true;
+      unreadFrom = member.unread_from ?? null;
+      if (loadedThread) {
+        if (unreadFrom !== null) {
+          render();
+          if (needsUnreadHistory()) { void load(true); return; }
+        }
+        finishOpening();
+      }
+    },
     focusHeader: () => conversationButton.focus({ preventScroll: true }),
-    onDetailsChange: open => conversationButton.setAttribute("aria-expanded", String(open)),
-    onSelect: () => switchThread(),
+    onDetailsChange: open => { conversationButton.setAttribute("aria-expanded", String(open)); queueMicrotask(() => open && visible && !roomPane.active ? desktop.show() : desktop.sync()); },
+    onSelect: (_id, sameThread) => {
+      app.go("agent");
+      if (sameThread) { roomPane.close(); void load(false); focusComposer(); }
+      else switchThread();
+    },
     onUpdate: () => {
+      composerBrain?.draw();
       drawComposer();
       drawDock();
       drawFaces();
@@ -305,6 +317,22 @@ export function createAgent(app: AppContext): Page {
   });
   el.prepend(members.column);
   el.append(members.details);
+  const desktop = mountDesktopViewer(members.details, () => members.current(), {
+    timeline: el.querySelector<HTMLElement>(".thread")!, conversation: () => conversationId(),
+    name: () => members.nameOf(members.current()),
+    face: () => members.faceOf(members.current(), 22),
+    closePanel: () => members.setDetails(false),
+    openPanel: () => members.setDetails(true), panelVisible: () => members.detailsOpen(),
+    status: active => el.querySelector('[data-act="computer"]')!.classList.toggle('is-computer-active', active),
+    changed: () => { if (visible && !scroller.hidden) drawThread(); },
+    trySkill: text => sendFromPage(text),
+    stop: turnId => { const turn = turns.find(turn => turn.id === turnId); return turn?.task ? api.workerCancel(turn.task.id) : turn?.session_id ? api.agentStop(turn.session_id, memberId()) : Promise.resolve(); },
+  });
+  const detailsScrim = document.createElement("div");
+  detailsScrim.className = "mb-det-scrim";
+  detailsScrim.setAttribute("aria-hidden", "true");
+  detailsScrim.addEventListener("click", () => members.setDetails(false));
+  el.insertBefore(detailsScrim, members.details);
   if (members.detailsOpen()) el.dataset.det = "open";
   el.querySelector(".mb-head-l")!.append(members.picker);
   const head = document.createElement("div"); head.className = "conversation-head";
@@ -317,7 +345,6 @@ export function createAgent(app: AppContext): Page {
   conversationButton.append(members.pill, caption);
   head.append(conversationButton);
   el.querySelector(".mb-head-c")!.append(head);
-  const chosenConversations = new Map<number, number>();
   const conversationCache = new Map<number, ConversationInfo[]>();
   let targetTurn: number | undefined;
   const quotaHost = document.createElement("div"); quotaHost.className = "quota-chips";
@@ -335,21 +362,49 @@ export function createAgent(app: AppContext): Page {
   function drawConversation(): void {
     const selected = conversationCache.get(memberId())?.find(c => c.id === conversationId());
     const title = conversationTitle(selected);
+    composerBrain?.draw();
     caption.textContent = title;
     conversationButton.setAttribute("aria-label", `${members.member().name}: ${title}`); conversationButton.title = title;
   }
 
-  async function readConversations(member: number): Promise<void> {
+  const conversationsDirty = new Set<number>();
+  async function readConversations(member: number, fromEvent = false): Promise<void> {
+    conversationsDirty.delete(member);
     try {
-      const result = await api.core<{ conversations: ConversationInfo[] }>("conversations.list", { member_id: member });
+      const fetch = () => api.core<{ conversations: ConversationInfo[] }>("conversations.list", { member_id: member });
+      const result = await (fromEvent ? eventRead(`conversations.list:${member}`,fetch,app) : fetch());
       if (!Array.isArray(result?.conversations)) return;
+      const previous = conversationCache.get(member);
+      const same = JSON.stringify(previous) === JSON.stringify(result.conversations);
       conversationCache.set(member, result.conversations);
       const chosen = chosenConversations.get(member);
-      if (!result.conversations.some(c => c.id === chosen)) {
-        const next = result.conversations.find(c => c.is_default) ?? result.conversations[0];
-        if (next) chosenConversations.set(member, next.id);
+      const available = new Set(result.conversations.map(c => c.id));
+      const missing = new Set((previous ?? []).filter(c => !available.has(c.id)).map(c => c.id));
+      if (chosen !== undefined && !available.has(chosen)) missing.add(chosen);
+      for (const id of missing) {
+        const removed = draftKey(member, id);
+        discardComposerDraft(removed);
+        if (composerKey === removed) { composerKey = "deleted"; clearTimeout(draftTimer); }
       }
+      if (!result.conversations.some(c => c.id === chosen)) {
+        const next = newestConversation(result.conversations);
+        if (next) chosenConversations.set(member, next.id);
+        else chosenConversations.delete(member);
+      }
+      if (member === memberId() && composerKey !== draftKey()) {
+        saveComposerDraft();
+        const transient = composerKey === `${member}:main` && chosen === undefined ? restored.get(composerKey) : undefined;
+        if (transient && !restored.has(draftKey()) && !readDraftWords(`member:${draftKey()}`)) {
+          restored.set(draftKey(), transient);
+          discardComposerDraft(composerKey);
+          writeDraftWords(`member:${draftKey()}`, { text: wholeLinks(transient.text), quote: transient.quote });
+        }
+        input.value = ""; files = []; missingFiles = []; replacing = undefined; composerQuote = undefined;
+        loadComposerDraft(); drawQuote(); drawFile(); fit();
+      }
+      if (same && chosen === chosenConversations.get(member)) return;
       if (member === memberId()) drawConversation();
+      window.dispatchEvent(new CustomEvent("conversation-opened", { detail: member }));
     } catch { /* A core that is restarting keeps the last selection until the next refresh. */ }
   }
 
@@ -359,13 +414,32 @@ export function createAgent(app: AppContext): Page {
     chosenConversations.set(member, id); targetTurn = turnId;
     if (changed) members.select(member); else switchThread();
     drawConversation();
+    window.dispatchEvent(new CustomEvent("conversation-opened", { detail: member }));
   }
 
-  conversationButton.addEventListener("click", () => members.setDetails(!members.detailsOpen()));
+  window.addEventListener("conversation-deleted", event => {
+    const {member,id}=(event as CustomEvent<{member:number;id:number}>).detail;
+    discardComposerDraft(draftKey(member, id));
+    const remaining=(conversationCache.get(member)??[]).filter(c=>c.id!==id);
+    conversationCache.set(member,remaining);
+    conversationsDirty.add(member);
+    if(chosenConversations.get(member)!==id)return;
+    if (composerKey === draftKey(member, id)) { composerKey = "deleted"; clearTimeout(draftTimer); }
+    // Read activity again before history; the core's stable default is not the window's selection.
+    chosenConversations.delete(member);
+    if(member===memberId())switchThread();
+  });
+  conversationButton.addEventListener("click", () => {
+    members.setDetails(!members.detailsOpen());
+  });
+  el.querySelector('[data-act="computer"]')!.addEventListener("click", () => {
+    members.setDetails(!members.detailsOpen());
+  });
   window.addEventListener("conversations-changed", (event) => {
     const member = (event as CustomEvent<number>).detail;
+    if (!visible) { conversationsDirty.add(member); return; }
     const old = conversationId();
-    void readConversations(member).then(() => {
+    void readConversations(member,true).then(() => {
       if (visible && member === memberId() && old !== conversationId()) switchThread();
     });
   });
@@ -395,12 +469,19 @@ export function createAgent(app: AppContext): Page {
   const roomPane = createRoomPane(app, () => {
     el.classList.remove("is-room"); memberChat.hidden = false;
     el.querySelector(".mb-head-l")!.append(members.picker);
+    if (visible) { members.show(); desktop.show(); }
   }, () => { if (visible) attachmentMedia.sync(); });
   el.append(roomPane.el);
   window.addEventListener("raphael:open-room", event => {
     if (!el.isConnected) return;
+    unreadFrom = null;
+    unreadCaptured = false;
+    openingThread = true;
+    // A member's private computer does not stay open behind a group.
+    desktop.hide(true);
     el.classList.add("is-room"); memberChat.hidden = true;
     roomPane.el.querySelector(".room-picker")!.append(members.picker);
+    members.show();
     void members.load();
     void roomPane.open((event as CustomEvent<{roomId:number}>).detail.roomId);
   });
@@ -413,8 +494,10 @@ export function createAgent(app: AppContext): Page {
   composer.innerHTML = composerHTML();
   const input = composer.querySelector<HTMLTextAreaElement>(".cmp-input")!;
   const correctionLearning = bindComposerLearning(input);
-  const slashMenu = mountSlashMenu(input, { memberId });
+  const slashMenu = mountSlashMenu(input, { memberId, scope: app });
   const attachButton = composer.querySelector<HTMLElement>(".cmp-attach")!;
+  bindActionMode(composer.querySelector<HTMLElement>(".cmp-mode")!);
+  composerBrain = mountComposerBrain(composer.querySelector<HTMLElement>(".cmp-model")!, () => members.member(), { onEvent: handler => app.onEvent(handler), quick: () => conversationCache.get(memberId())?.find(c => c.id === conversationId())?.kind === "quick" });
   const voiceButton = composer.querySelector<HTMLButtonElement>(".cmp-voice")!;
   const sendButton = composer.querySelector<HTMLButtonElement>(".cmp-send")!;
   const fileChip = composer.querySelector<HTMLElement>(".cmp-file")!;
@@ -427,22 +510,22 @@ export function createAgent(app: AppContext): Page {
   });
 
   const askCard = document.createElement("div");
-  askCard.className = "ask-card";
+  askCard.className = "ask-card-host";
   askCard.hidden = true;
   askCard.setAttribute("role", "group");
-  askCard.innerHTML =
-    `<span class="ask-face"></span><p class="ask-q" tabindex="0"></p>` +
-    `<div class="ask-row"><button type="button" class="btn ask-no" data-act="no"></button>` +
-    `<button type="button" class="btn ask-always" data-act="always" hidden></button>` +
-    `<button type="button" class="btn ask-yes" data-act="yes"><span class="ask-yes-t"></span><i class="ask-fill" aria-hidden="true"></i></button></div>`;
-  const askFace = askCard.querySelector<HTMLElement>(".ask-face")!;
+  askCard.innerHTML = cardHTML({ title: t("cards.permission", { p0: t("agent.title") }), status: "waiting", statusText: cardPromptText("permission"), cls: "ask-card",
+    body: t("perm.title"),
+    content: cardDisclosureHTML("approval", `<p class="ask-q card-body"></p>`),
+    actions: `<button type="button" class="btn sm pri ask-yes" data-act="yes"><span class="ask-yes-t"></span></button>` +
+      `<button type="button" class="btn sm ask-always" data-act="always" hidden></button>` +
+      `<button type="button" class="btn sm ask-no" data-act="no"></button>`,
+  });
   const askText = askCard.querySelector<HTMLElement>(".ask-q")!;
   const noButton = askCard.querySelector<HTMLButtonElement>(".ask-no")!;
   const alwaysButton = askCard.querySelector<HTMLButtonElement>(".ask-always")!;
   const yesButton = askCard.querySelector<HTMLButtonElement>(".ask-yes")!;
   const draftPanel = createDraftPanel({
     groups: () => members.groups(),
-    presets: () => members.presets(),
     onConfirm: (edited, groups) => void answer(true, false, edited, groups),
     onCancel: () => void answer(false),
   });
@@ -456,7 +539,6 @@ export function createAgent(app: AppContext): Page {
   let failure: (() => string) | null = null;
   let pending = false;
   let loads = 0;
-  let visible = false;
   let loadedThread = false;
   const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
   const pacing = new ReplyPacing(() => { if (visible) render(); }, () => reducedMotion?.matches ?? false);
@@ -466,21 +548,23 @@ export function createAgent(app: AppContext): Page {
   const attachmentMedia = createAttachmentMedia(el, id => api.core("attachments.get", { id }));
   const previews = createLinkPreviews(scroller, url => api.core<LinkPreview | null>("links.preview", { url }));
   const regenerating = new Set<number>();
-  const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(() => measureMessages()) : null;
+  const measureAllMessages = messagePreviewMeasure(thread);
+  const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(measureAllMessages) : null;
+  void document.fonts?.ready.then(measureAllMessages);
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let ticker: ReturnType<typeof setInterval> | null = null;
   /** Questions typed here whose turns have not come yet. */
   let outgoing: Outgoing[] = [];
   let sent = 0;
   /** A spoken question's recipient and history boundary stay fixed across thread changes. */
-  let hearing: { since: number; after: number | null; member: number } | null = null;
+  let hearing: { since: number; after: number | null; member: number; conversation?: number } | null = null;
   /** Ends `hearing` at `HEARING_MAX_MS` when neither its turn nor any other word of the core comes. */
   let hearingTimer: ReturnType<typeof setTimeout> | undefined;
   const stoppingComposerTasks = new Set<string>();
   /** The native voice key names quick for Raphael and the main conversation for a member. */
   const voiceConversationId = (member: number): number | undefined =>
     conversationCache.get(member)?.find(c => member === RAPHAEL_ID ? c.kind === "quick" : c.is_default)?.id;
-  const hearingBelongs = (): boolean => hearing !== null && hearing.member === memberId() && conversationId() === voiceConversationId(hearing.member);
+  const hearingBelongs = (): boolean => hearing !== null && hearing.member === memberId() && conversationId() === hearing.conversation;
   /** Draft file bytes, kept in memory until the request is sent. */
   let files: ComposerFile[] = [];
   let fileIds = 0;
@@ -490,27 +574,36 @@ export function createAgent(app: AppContext): Page {
   const drafts = new Map<string, ComposerDraft>();
   const restored = new Map<string, ComposerDraft>();
   const draftKey = (member = memberId(), conversation = conversationId()): string => `${member}:${conversation ?? "main"}`;
+  let composerKey = draftKey();
+  let draftTimer: ReturnType<typeof setTimeout> | undefined;
+  function saveComposerDraft(): void {
+    clearTimeout(draftTimer);
+    if (composerKey === "deleted") return;
+    const draft: ComposerDraft = { text: input.value, files: [...files], missing: [...missingFiles], replacing, quote: composerQuote, dictation: correctionLearning.snapshot() };
+    if (draft.text || draft.files.length || draft.missing.length || draft.quote || draft.replacing !== undefined) restored.set(composerKey, draft);
+    else restored.delete(composerKey);
+    writeDraftWords(`member:${composerKey}`, { text: wholeLinks(draft.text), quote: draft.quote });
+  }
+  function loadComposerDraft(): void {
+    composerKey = draftKey();
+    input.dispatchEvent(new Event("composer-draft-restored"));
+    const saved = restored.get(composerKey) ?? readDraftWords<MessageQuote>(`member:${composerKey}`);
+    if (saved) {
+      restoreDraft({ files: [], missing: [], ...saved }, false);
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
+  }
+  function discardComposerDraft(key: string): void {
+    restored.delete(key); writeDraftWords(`member:${key}`);
+  }
+  window.addEventListener("pagehide", saveComposerDraft);
   const retracting = new Set<string>();
   const retracted = new Set<string>();
   let attachmentEpoch = 0;
   let attaching = 0;
   let attachQueue: Promise<void> = Promise.resolve();
-  const dropOverlay = document.createElement("div");
-  dropOverlay.className = "attachment-drop";
-  dropOverlay.hidden = true;
-  dropOverlay.setAttribute("role", "status");
-  dropOverlay.innerHTML = `${ico("file")}<span></span>`;
-  stage.append(dropOverlay);
-  function measureDrop(): void {
-    const bounds = stage.getBoundingClientRect();
-    const control = composer.hidden ? (draftPanel.el.hidden ? askCard : draftPanel.el) : composer;
-    const top = control.getBoundingClientRect().top;
-    dropOverlay.style.bottom = `${Math.max(12, bounds.bottom - top + 12)}px`;
-  }
+  const { measure: measureDrop, reset: resetDrop } = mountStageDrop(stage, () => composer.hidden ? (draftPanel.el.hidden ? askCard : draftPanel.el) : composer, list => { void attachAll(list); });
   const dropResize = typeof ResizeObserver === "function" ? new ResizeObserver(measureDrop) : null;
-  stage.addEventListener("dragenter", measureDrop, true);
-  stage.addEventListener("dragover", measureDrop, true);
-  const resetDrop = mountFileDrop(stage, dropOverlay, list => { void attachAll(list); });
   /** The chip of each of them, made once (an image's picture is not loaded again at each drawing). */
   const fileChips = new Map<number, HTMLElement>();
   /** The YES/NO question that waits for an answer, and whether an answer is on its way. */
@@ -522,34 +615,33 @@ export function createAgent(app: AppContext): Page {
   let askingMember: number | null = null;
   /** The thread of the question that waits (see `setQuestion`). */
   let questionOwner = RAPHAEL_ID;
-  /** The search: open or not, its words, and what the core found (null: the page looks itself). */
   let searching = false;
-  let query = "";
-  let found: AgentTurn[] | null = null;
-  let searchTimer: ReturnType<typeof setTimeout> | undefined;
-  let searches = 0;
   /** What each line of the thread was drawn from, so that a line whose HTML is the same stays as it is. */
   const drawnHTML = new WeakMap<Element, string>();
+  const pagesHost = mountPages(thread, { send: text => sendFromPage(text), answer: (id, text) => answerOwnerPage(thread, id, text, () => { void load(false); }) });
+  mountOwnerQuestions(thread, () => { void load(false); });
   /** The newest turn drawn: a turn after it comes in from below. */
   let newestDrawn = 0;
   let drewOnce = false;
 
   /** The thread's own turns: what colleagues asked this member is drawn, never stopped or searched here. */
   const own = (): AgentTurn[] => turns.filter((turn) => !exchangeTurn(turn));
+  mountConversationScroll(scroller);
+  mountRichContent(scroller);
   const atBottom = (): boolean => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= BOTTOM_SLACK_PX;
   const newestId = (): number => turns.reduce((max, turn) => Math.max(max, turn.id), 0);
   const isEmpty = (): boolean =>
-    turns.length === 0 && !outgoing.some(belongs) && !hearingBelongs();
+    !turns.some(visibleTurn) && !outgoing.some(belongs) && !hearingBelongs();
 
   const look = (): TurnLook => {
     const latest = turns.filter(turn => turn.question.trim() && sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && turn.route !== "exchange" && (turn.text.trim() || turn.messages?.some(m => m.kind === "reply"))).reduce((id, turn) => Math.max(id, turn.id), 0);
     const busy = pacing.active || regenerating.size > 0 || outgoing.some(belongs) || own().some(turn => turn.status === "running" || isLive(turn.task));
-    const shared = { regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), query: searching ? query : "", memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size),
+    const shared = { regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), waitingForOwner: desktop.waitingForOwner, memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
       // A permission card in the thread can be answered while the window holds its question and is not answering it.
       answerable: (cardId: string) => question?.id === cardId && !answering };
-    if (inRaphael()) return { ...shared, face: (loop) => avatarHTML({ size: 26, loop }) };
+    if (inRaphael()) return { ...shared, face: (loop) => avatarHTML({ size: 26, loop }), liveFace: () => faceHTML(members.member(), 28, {loop: true}), activityLabel: members.member().activity_label };
     const member = members.member();
-    return { ...shared, face: () => faceHTML(member, 26) };
+    return { ...shared, face: () => faceHTML(member, 26), liveFace: () => faceHTML(member, 28), activityLabel: member.activity_label };
   };
   /**
    * The question that waits now (null: none), and whose thread it is in: the member a typed or
@@ -589,12 +681,15 @@ export function createAgent(app: AppContext): Page {
   function drawFaces(): void {
     drawComposerTask();
     if (inRaphael()) {
-      askFace.innerHTML = avatarHTML({ size: 30 });
-      hero.innerHTML = avatarHTML({ size: 132, loop: true });
+      patchHTML(hero, avatarHTML({ size: 132, loop: true }));
+      delete memberChat.dataset.memberBubble;
     } else {
       const member = members.member();
-      askFace.innerHTML = faceHTML(member, 30);
-      hero.innerHTML = faceHTML(member, 96);
+      patchHTML(hero, faceHTML(member, 96));
+      const bubble = ownerBubble(slimeColorOf(member));
+      memberChat.dataset.memberBubble = bubble.words;
+      memberChat.style.setProperty("--member-bubble", bubble.fill);
+      memberChat.style.setProperty("--member-accent", memberAccent(slimeColorOf(member)));
     }
     voice.redraw();
   }
@@ -613,23 +708,20 @@ export function createAgent(app: AppContext): Page {
 
   /** The words of the composer, the card and the search, in the language of the window. */
   function drawWords(): void {
-    dropOverlay.querySelector("span")!.textContent = t("agent.dropFiles");
     heading.textContent = t("agent.title");
     sendButton.setAttribute("aria-label", t("chat.send"));
     sendButton.dataset.tooltip = t("chat.send");
     // The voice slot's tooltip is the custom one drawTaskSlot keeps (voice or Stop); a native title would double it.
     voiceButton.setAttribute("aria-label", t("agent.voice"));
     for (const [button, label] of [
+      [computerButton, t("card.pcTitle")],
       [settingsButton, t("agent.settings")],
       [searchButton, t("agent.search")],
       [attachButton, t("agent.attach")],
-      [find.querySelector<HTMLElement>('[data-act="search-close"]')!, t("agent.searchClose")],
     ] as const) {
       button.setAttribute("aria-label", label);
       button.title = label;
     }
-    findInput.placeholder = t("agent.search");
-    findInput.setAttribute("aria-label", t("agent.search"));
     hi.textContent = emptyLine();
     drawAskLabels();
     drawConversation();
@@ -640,7 +732,11 @@ export function createAgent(app: AppContext): Page {
 
   /** Keep draft cards mounted while their filenames and remove labels stay current. */
   function drawFile(): void {
+    sendButton.disabled = missingFiles.length > 0 || typedQuestion(input.value, files.length > 0) === null;
+    // Most restored drafts have no files; an unchanged empty tray needs no layout read.
+    if (!files.length && !missingFiles.length && fileChip.hidden && !fileChip.childElementCount) return;
     const label = esc(t("agent.unattach"));
+    const beforeHeight = scroller.scrollHeight, beforeClient = scroller.clientHeight;
     const follows = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= BOTTOM_SLACK_PX;
     for (const [id, chip] of fileChips) {
       if (files.some((file) => file.id === id)) continue;
@@ -663,8 +759,7 @@ export function createAgent(app: AppContext): Page {
       `<span class="cmp-chip" data-missing><span class="cmp-chip-t">${esc(file.name)} · ${esc(t("chat.reattach"))}</span>` +
       `<button type="button" class="chip-x" data-act="drop-missing" data-index="${index}" aria-label="${label}">${ico("x")}</button></span>`);
     fileChip.hidden = files.length === 0 && missingFiles.length === 0;
-    sendButton.disabled = missingFiles.length > 0 || typedQuestion(input.value, files.length > 0) === null;
-    if (follows) scroller.scrollTop = scroller.scrollHeight;
+    if (follows && (beforeHeight !== scroller.scrollHeight || beforeClient !== scroller.clientHeight)) scroller.scrollTop = scroller.scrollHeight;
   }
 
   function drawQuote(): void {
@@ -678,17 +773,14 @@ export function createAgent(app: AppContext): Page {
     const chip = document.createElement("span");
     chip.className = "cmp-chip";
     chip.dataset.file = String(file.id);
-    chip.innerHTML =
-      `<span class="cmp-tile">${fileKind(file.mime) === "image" ? `<img class="cmp-thumb" alt="" width="40" height="40">` : fileIcon(file)}</span>` +
-      `<span class="attachment-name"><span class="cmp-chip-t">${esc(file.name)}</span><small>${esc(fileSize(file.size))}</small></span>` +
-      `<button type="button" class="chip-x" data-act="unattach-file" data-file="${file.id}">${ico("x")}</button>`;
+    chip.innerHTML = draftFileHTML(file, `data-act="unattach-file" data-file="${file.id}"`);
     const thumb = chip.querySelector<HTMLImageElement>(".cmp-thumb");
     // A raster thumbnail from the draft's own bytes.
     if (thumb) thumb.src = `data:${file.mime};base64,${file.data}`;
     return chip;
   }
 
-  /** The words of the card's buttons: the page's own 是 and 否, or the question's (and its third button, if it has one). */
+  /** Permission words, or the question's explicit choices when it offers a third answer. */
   function drawAskLabels(): void {
     const labels = askLabels(question);
     noButton.textContent = labels.no;
@@ -701,8 +793,7 @@ export function createAgent(app: AppContext): Page {
   function drawDock(): void {
     selectQuestion();
     drawComposerTask();
-    firstBot.sync(inRaphael() && members.member().profile_ready === false && isEmpty() && !question && !pending);
-    hero.hidden = hi.hidden = !firstBot.el.hidden;
+    hero.hidden = hi.hidden = false;
     const home = empty.hidden ? dock : slot;
     if (backgroundSlot.parentElement !== home) home.prepend(backgroundSlot);
     if (composer.parentElement !== home) home.append(composer);
@@ -726,7 +817,7 @@ export function createAgent(app: AppContext): Page {
     if (asking && permissionFor(turns, question!.id)) {
       askCard.hidden = true;
       delete askCard.dataset.id;
-      composer.hidden = !firstBot.el.hidden;
+      composer.hidden = false;
       if (voice.isUp) voice.drop();
       return;
     }
@@ -734,16 +825,21 @@ export function createAgent(app: AppContext): Page {
     askCard.classList.toggle("is-member", !inRaphael());
     if (asking && !askCard.hidden && askCard.dataset.id === question!.id) return;
     askCard.hidden = !asking;
-    composer.hidden = !firstBot.el.hidden;
+    composer.hidden = false;
     if (!asking) {
       delete askCard.dataset.id;
       return;
     }
     if (voice.isUp) voice.drop();
     const q = question!;
+    if (askCard.dataset.id !== q.id) askCard.querySelector<HTMLButtonElement>("[data-card-dismiss]")?.click();
     askCard.dataset.id = q.id;
     askCard.dataset.tier = q.tier;
     askText.textContent = q.text;
+    const copy = approvalCopy(q.text, inRaphael() ? t("agent.title") : members.nameOf(memberId()));
+    askCard.querySelector(".card-title")!.textContent = copy.title;
+    askCard.querySelector(".card-body.cc-state")!.textContent = copy.body;
+    askCard.querySelector<HTMLElement>(".card-disclosure")!.hidden = q.text.trim() === copy.body || copy.title.includes(q.text.trim());
     drawAskLabels();
     noButton.disabled = alwaysButton.disabled = yesButton.disabled = answering;
     yesButton.dataset.hold = "idle";
@@ -751,19 +847,29 @@ export function createAgent(app: AppContext): Page {
 
   /** One line of the thread as HTML, with the key it keeps across draws. */
   function lines(): { key: string; html: string; turnId?: number }[] {
-    const base = searching && query.trim() !== "" ? (found ?? own().filter((turn) => turnMatches(turn, query))) : turns;
     const shape = look();
-    const out = threadItems(base, state.nowMs).map((item) =>
+    const active = [...turns].reverse().find(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting");
+    const sentHere = outgoing.filter(belongs);
+    const additions = sentHere.length > 1 || active && (sentHere.length > 0 || turns.some(turn => turn.id > active.id && (turn.route === "owner_input" || turn.status === "queued")));
+    const turnLook = additions ? { ...shape, deferPresence: true } : shape;
+    const out = threadItems(turns, state.nowMs).map((item) =>
       item.kind === "day"
         ? { key: item.key, html: dayHTML(item.label) }
-        : item.kind === "exchange"
-          ? { key: item.key, html: exchangeLineHTML(item.turns, shape), turnId: item.turns[item.turns.length - 1].id }
-          : { key: item.key, html: turnHTML(pacing.view(item.turn), state, details.has(item.turn.id), shape), turnId: item.turn.id },
+        // Eligibility belongs to the turn; the menu checks which reply is latest when opened.
+        : { key: item.key, html: turnHTML(pacing.view(item.turn), state, details.has(item.turn.id), { ...turnLook, regenerateTurnId: item.turn.id }), turnId: item.turn.id },
     );
-    if (!(searching && query.trim() !== "")) {
-      for (const sent of outgoing) if (belongs(sent)) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs) });
-      if (hearingBelongs()) out.push({ key: "hearing", html: pendingTurnHTML(null, VOICE, shape, [], { time: hearing!.since }, state.nowMs) });
+    const boundary = unreadFrom;
+    if (boundary !== null) {
+      const at = out.findIndex(line => line.turnId !== undefined && line.turnId >= boundary);
+      if (at >= 0) out.splice(at, 0, unreadLine(boundary));
     }
+    // What is on its way stands under the day its turn will have, so it does not move when the turn comes.
+    const pendingAt = outgoing.find(belongs)?.sentAt ?? (hearingBelongs() ? hearing!.since : undefined);
+    const lastAt = Math.max(0, ...turns.map(turn => turn.created_at_ms));
+    if (pendingAt !== undefined && pendingAt - lastAt >= 30 * 60 * 1000) out.push({ key: `time:pending:${pendingAt}`, html: dayHTML(`${dayLabel(pendingAt, state.nowMs)} ${formatClock(pendingAt)}`) });
+    for (const sent of outgoing) if (belongs(sent)) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs, state.expandedMessages.has(`pending:${sent.requestId}:question`), !additions) });
+    if (hearingBelongs()) out.push({ key: "hearing", html: pendingTurnHTML(null, VOICE, shape, [], { time: hearing!.since }, state.nowMs) });
+    if (additions) out.push({ key: `presence:${memberId()}:${conversationId()}`, html: `<li class="tn tn-presence"><div class="ra"><div class="ra-body">${livePresenceHTML(shape, active ? latestProgress(active) : undefined, !active || active.status === "running" || isLive(active.task))}</div></div></li>` });
     return out;
   }
 
@@ -772,62 +878,73 @@ export function createAgent(app: AppContext): Page {
    * movement is not replayed, its pictures not loaded again), a changed one is replaced where it
    * is, and the lines that are new are put in their places without moving the others.
    */
+  function sendFromPage(text: string): void {
+    const typed = input.value;
+    input.value = text;
+    void send().finally(() => { if (typed && !input.value) { input.value = typed; fit(); } });
+  }
+
   function drawThread(): void {
     hideSelection();
     const wanted = lines();
-    const before = new Map<string, Element>();
-    for (const child of [...thread.children]) before.set((child as HTMLElement).dataset.key ?? "", child);
-    const droppedPending = [...before.keys()].some((key) => (key.startsWith("out:") || key === "hearing") && !wanted.some((line) => line.key === key));
-    const focusKey = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-act][data-focus]")?.dataset.focus;
-    const keep = new Set<Element>();
-    let at = 0;
-    for (const line of wanted) {
-      let node = before.get(line.key);
-      if (!node || drawnHTML.get(node) !== line.html) {
-        const fresh = document.createElement("template");
-        fresh.innerHTML = line.html;
-        const made = fresh.content.firstElementChild as HTMLElement;
-        made.dataset.key = line.key;
-        for (const control of made.querySelectorAll<HTMLElement>("[data-act]")) control.dataset.focus = `${control.dataset.act}:${control.dataset.task ?? line.key}:${control.closest<HTMLElement>("[data-message]")?.dataset.message ?? ""}:${control.dataset.url ?? ""}`;
-        drawnHTML.set(made, line.html);
-        // A turn that came after the newest one drawn, or a question just sent, comes in from below.
-        const arrives = drewOnce && !node && (line.turnId === undefined ? !line.key.startsWith("day:") : line.turnId > newestDrawn && !droppedPending);
-        if (arrives) made.classList.add("is-new");
-        if (node) {
-          // A key being typed into a secret card goes to the same card in the new line.
-          const restore = carryTyped(node, made);
-          const restoreMail = carryMail(node, made);
-          node.replaceWith(made);
-          restore();
-          restoreMail();
-        }
-        node = made;
-      }
-      keep.add(node);
-      const here = thread.children[at];
-      if (here !== node) thread.insertBefore(node, here ?? null);
-      at++;
-    }
-    for (const child of [...thread.children]) if (!keep.has(child)) child.remove();
-    if (focusKey) thread.querySelector<HTMLElement>(`[data-focus="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: true });
+    const droppedPending = [...thread.children].some(node => {
+      const key = (node as HTMLElement).dataset.key ?? "";
+      return (key.startsWith("out:") || key === "hearing") && !wanted.some(line => line.key === key);
+    });
+    const changed = patchThread(thread, wanted, drawnHTML, {
+      arrives: line => drewOnce && (line.turnId === undefined ? !line.key.startsWith("day:") : line.turnId > newestDrawn && !droppedPending),
+      carry(node, made) {
+        const restore = carryTyped(node, made), restoreMail = carryMail(node, made), restorePages = pagesHost.carry(node, made), restoreSetup = carryInlineSetup(node, made);
+        return () => { node.before(made); restorePages(); restoreSetup(); desktop.carry(node); node.remove(); restore(); restoreMail(); };
+      },
+    });
     newestDrawn = Math.max(newestDrawn, ...wanted.map((line) => line.turnId ?? 0));
     drewOnce = true;
+    if (!changed) return;
     if (visible) attachmentMedia.sync();
     if (visible) previews.sync();
     else previews.pause();
+    desktop.sync();
+    taskResults.sync();
+    pagesHost.sync();
     measureMessages();
+    updateLiveTimes(thread);
   }
 
   /** Re-check wrapped lines when the window or the member details panel changes width. */
   function measureMessages(): void {
-    for (const message of thread.querySelectorAll<HTMLElement>("[data-expandable]")) {
-      const text = message.querySelector<HTMLElement>(".message-text")!;
-      const toggle = message.querySelector<HTMLButtonElement>('[data-act="expand-message"]')!;
-      if (text.clientHeight > 0) toggle.hidden = !message.classList.contains("is-expanded") && text.scrollHeight <= text.clientHeight + 1;
-    }
+    measureMessagePreviews(thread);
   }
 
+  const historyRevisions = new WeakMap<AgentTurn, number>();
+  const historyVersions = new Map<number, { turn: AgentTurn; revision: number }>();
+  let historyRevision = 0;
+  function sameValue(a: unknown, b: unknown): boolean {
+    if (a === b) return true;
+    if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+    const left = a as Record<string, unknown>, right = b as Record<string, unknown>;
+    const keys = Object.keys(left);
+    return keys.length === Object.keys(right).length && keys.every(key => Object.prototype.hasOwnProperty.call(right, key) && sameValue(left[key], right[key]));
+  }
+  function historyStamp(items: AgentTurn[]): string {
+    const ids = new Set(items.map(turn => turn.id));
+    for (const id of historyVersions.keys()) if (!ids.has(id)) historyVersions.delete(id);
+    return items.map(turn => {
+      let revision = historyRevisions.get(turn);
+      if (revision === undefined) {
+        const previous = historyVersions.get(turn.id);
+        revision = previous && sameValue(previous.turn, turn) ? previous.revision : ++historyRevision;
+        historyRevisions.set(turn, revision);
+        historyVersions.set(turn.id, { turn, revision });
+      }
+      return `${turn.id}:${revision}:${turn.messages?.length ?? 0}`;
+    }).join(",");
+  }
+  let renderedPage = "";
+  const pageStamp = (): string => JSON.stringify([new Date(Date.now()).toDateString(), memberId(), conversationId(), unreadFrom, pending, historyStamp(turns), outgoing, hearing, question, failure !== null, canLoadEarlier, loadingEarlier,
+    [...state.stopping], [...state.rerunning], answering, searching]);
   function render(follow = false): void {
+    renderedPage = pageStamp();
     stage.setAttribute("aria-busy", String(pending));
     if (pending && isEmpty()) {
       wait.innerHTML = loadingHTML();
@@ -853,38 +970,35 @@ export function createAgent(app: AppContext): Page {
     const wasEmpty = scroller.hidden;
     empty.hidden = true;
     scroller.hidden = dock.hidden = false;
-    const keepUp = follow || wasEmpty || atBottom();
+    const beforeHeight = scroller.scrollHeight;
+    const keepUp = !searching && (follow || wasEmpty || atBottom());
     drawDock();
     state.nowMs = Date.now();
     noteTaskEnds(shown, state);
-    drawThread();
+    preserveRichScroll(scroller, drawThread);
     drawDock();
     markSeen(shown, state);
-    const searchingNow = searching && query.trim() !== "";
-    none.hidden = !(searchingNow && thread.querySelector(".tn") === null);
-    none.textContent = t("agent.noMatch");
-    findCount.textContent = searchingNow ? String(thread.querySelectorAll(".tn:not(.is-pending)").length) : "";
+    none.hidden = true;
+    finder.refresh();
     older.hidden = !loadingEarlier;
     older.innerHTML = loadingEarlier ? loadingHTML() : "";
-    if (keepUp) scroller.scrollTop = scroller.scrollHeight;
+    if (keepUp && (wasEmpty || scroller.scrollHeight !== beforeHeight) && !atBottom()) scroller.scrollTop = scroller.scrollHeight;
     if (thread.querySelector(".work-section.is-live")) startTicker();
     else stopTicker();
     // A first page that does not fill the window has no scrolling to bring the earlier ones.
-    if (canLoadEarlier && !loadingEarlier && !searchingNow && scroller.scrollHeight <= scroller.clientHeight) void load(true);
+    if (canLoadEarlier && !loadingEarlier && !searching && scroller.scrollHeight <= scroller.clientHeight) void load(true);
   }
 
   /** The time since a task began, each second, in the lines that show it. */
+  const clockGate = visibilityGate(tick, () => visible && !roomPane.active, () => { tick(); scheduleRefresh(); });
   function tick(): void {
+    if (!windowVisible()) return;
     const now = Date.now();
     state.nowMs = now;
-    for (const line of thread.querySelectorAll<HTMLElement>(".work-section.is-live[data-work-start]")) {
-      const label = line.querySelector<HTMLElement>(".work-time");
-      if (label) label.textContent = t("chat.workingFor", { p0: Math.max(0, Math.round((now - Number(line.dataset.workStart)) / 1000)) });
-    }
-    for (const line of thread.querySelectorAll<HTMLElement>("[data-since]")) line.textContent = formatDuration(now - Number(line.dataset.since));
+    updateLiveTimes(thread, now);
   }
   function startTicker(): void {
-    if (ticker === null && visible) ticker = setInterval(tick, 1000);
+    if (ticker === null && visible) ticker = setInterval(clockGate.run, 1000);
   }
   function stopTicker(): void {
     if (ticker !== null) clearInterval(ticker);
@@ -897,7 +1011,30 @@ export function createAgent(app: AppContext): Page {
   // ---------- loading ----------
 
   /** Loads the newest turns, or with `earlier` the ones before what is loaded, keeping the reader's place. */
-  async function load(earlier: boolean): Promise<void> {
+  let activeRead: { key: string; promise: Promise<void> } | null = null;
+  let readAgain = false;
+  const needsUnreadHistory = (): boolean => openingThread && unreadFrom !== null && canLoadEarlier && (oldestId(turns) ?? 0) > unreadFrom;
+  function finishOpening(): void {
+    if (!openingThread || !unreadCaptured || pending || needsUnreadHistory() || !visible || scroller.hidden || targetTurn !== undefined) return;
+    openingThread = false;
+    openUnread(scroller);
+  }
+  async function load(earlier: boolean, fromEvent = false): Promise<void> {
+    if (earlier) return readPage(true);
+    const key = `${memberId()}:${conversationId()}:${loads}`;
+    if (activeRead?.key === key) { readAgain = true; return activeRead.promise; }
+    const promise = readPage(false,fromEvent);
+    const active = { key: `${memberId()}:${conversationId()}:${loads}`, promise };
+    activeRead = active;
+    try { await promise; }
+    finally {
+      if (activeRead === active) {
+        activeRead = null;
+        if (readAgain) { readAgain = false; scheduleRefresh(); }
+      }
+    }
+  }
+  async function readPage(earlier: boolean, fromEvent = false): Promise<void> {
     if (earlier && (loadingEarlier || !canLoadEarlier)) return;
     const mine = earlier ? loads : ++loads;
     if (earlier) loadingEarlier = true;
@@ -908,17 +1045,20 @@ export function createAgent(app: AppContext): Page {
     try {
       const before = earlier ? oldestId(turns) : undefined;
       const member = memberId();
-      await readConversations(member);
+      // The event's metadata reader will switch the thread if its selection changes;
+      // its trailing read must not hold up a reply in the current conversation.
+      if (conversationsDirty.has(member) || (!fromEvent && !conversationCache.has(member))) await readConversations(member,fromEvent);
       if (mine !== loads) return;
-      got = (
-        await api.agentHistoryList({
+      const chosen = conversationId();
+      const params = {
           limit: PAGE_SIZE,
-          ...(conversationId() !== undefined ? { conversation_id: conversationId() } : {}),
+          ...(chosen !== undefined ? { conversation_id: chosen } : {}),
           ...(!earlier && targetTurn !== undefined ? { around_id: targetTurn } : {}),
           ...(before === undefined ? {} : { before_id: before }),
           ...(member === RAPHAEL_ID ? {} : { member_id: member }),
-        })
-      ).turns.filter(turn => !turn.session_id || !retracted.has(turn.session_id));
+        };
+      const historyRead = () => api.agentHistoryList(params);
+      got = (await (fromEvent ? eventRead(`agent.history.list:${JSON.stringify(params)}`,historyRead,app) : historyRead())).turns.filter(turn => !turn.session_id || !retracted.has(turn.session_id));
     } catch (err) {
       // A newer load of the newest turns took over: what this one shows does not count, but an
       // earlier page that failed must still let the reader page up again.
@@ -954,7 +1094,7 @@ export function createAgent(app: AppContext): Page {
       }
     }
     if (routinesChanged) members.refreshRoutines(memberId());
-    const fromBottom = scroller.scrollHeight - scroller.scrollTop;
+    const fromBottom = earlier ? scroller.scrollHeight - scroller.scrollTop : 0;
     if (earlier) {
       loadingEarlier = false;
       turns = mergeTurns(turns, got);
@@ -972,10 +1112,17 @@ export function createAgent(app: AppContext): Page {
     forgetReruns(state, turns);
     settlePending();
     failure = null;
-    render();
+    if (earlier || renderedPage !== pageStamp()) render();
+    else { stage.setAttribute("aria-busy", "false"); updateLiveTimes(thread); }
     // The earlier turns come in above the reader, who stays where they were.
     if (earlier) scroller.scrollTop = scroller.scrollHeight - fromBottom;
+    if (needsUnreadHistory()) {
+      await readPage(true);
+    }
+    if (mine !== loads) return;
+    finishOpening();
     if (targetTurn !== undefined) {
+      openingThread = false;
       const target = thread.querySelector<HTMLElement>(`[data-id="${targetTurn}"]`);
       if (target) { target.scrollIntoView?.({ block: "center" }); target.classList.add("is-search-target"); setTimeout(() => target.classList.remove("is-search-target"), 2400); }
       targetTurn = undefined;
@@ -1019,7 +1166,7 @@ export function createAgent(app: AppContext): Page {
    * load would come to settle it.
    */
   function startHearing(member: number): void {
-    hearing = { since: Date.now(), after: listeningKnown ? listeningAfter : null, member };
+    hearing = { since: Date.now(), after: listeningKnown ? listeningAfter : null, member, conversation: voiceConversation };
     clearTimeout(hearingTimer);
     hearingTimer = setTimeout(() => {
       hearingTimer = undefined;
@@ -1034,12 +1181,17 @@ export function createAgent(app: AppContext): Page {
     hearingTimer = undefined;
   }
 
-  function scheduleRefresh(): void {
-    if (!visible || refreshTimer !== null) return;
+  let refreshDue = 0;
+  function scheduleRefresh(delay = REFRESH_DELAY_MS): void {
+    if (!visible || roomPane.active || !windowVisible()) return;
+    const wait = Math.max(REFRESH_DELAY_MS, delay), due = Date.now() + wait;
+    if (refreshTimer !== null && refreshDue <= due) return;
+    if (refreshTimer !== null) clearTimeout(refreshTimer);
+    refreshDue = due;
     refreshTimer = setTimeout(() => {
       refreshTimer = null;
-      void load(false);
-    }, REFRESH_DELAY_MS);
+      if (windowVisible()) void load(false,true);
+    }, wait);
   }
 
   // ---------- asking ----------
@@ -1052,11 +1204,12 @@ export function createAgent(app: AppContext): Page {
       if (epoch !== attachmentEpoch) return;
     }
     if (missingFiles.length > 0) { toaster.info(t("chat.reattach")); return; }
-    const text = typedQuestion(input.value, files.length > 0);
+    const text = typedQuestion(wholeLinks(input.value), files.length > 0);
     if (text === null) {
       if (input.value.trim() !== "") toaster.info(t("agent.tooLong"));
       return;
     }
+    composer.querySelector(".composer-failure")?.remove();
     const sending = files;
     const dictation = correctionLearning.snapshot();
     const corrections = correctionLearning.take(input.value);
@@ -1065,16 +1218,20 @@ export function createAgent(app: AppContext): Page {
     const requestId = crypto.randomUUID();
     const draft: ComposerDraft = { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation };
     rememberDraft(requestId, draft);
+    clearTimeout(draftTimer); discardComposerDraft(composerKey);
     const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" ? `data:${mime};base64,${data}` : undefined })), quote: composerQuote };
     outgoing.push(mine);
-    input.value = "";
     files = [];
     replacing = undefined;
     composerQuote = undefined;
+    // Drawn while the layout is still clean, so reading the thread's scroll position costs nothing.
+    render(true);
+    input.value = "";
+    input.dispatchEvent(new Event("composer-draft-restored"));
     drawQuote();
     drawFile();
     fit();
-    render(true);
+    drawDock();
     askingMember = member;
     try {
       await api.agentAskText(text, wireAttachments(sending), member, { requestId, ...destinationOf(member, sentConversation), ...(draft.replacing !== undefined ? { replaceTurnId: draft.replacing } : {}), ...(draft.quote ? { quote: draft.quote } : {}) });
@@ -1085,7 +1242,12 @@ export function createAgent(app: AppContext): Page {
       outgoing = outgoing.filter((item) => item !== mine);
       if (memberId() === member && conversationId() === sentConversation && input.value === "" && !files.length) restoreDraft(draft);
       else restored.set(draftKey(member, sentConversation), draft);
-      toaster.info(describeError(err));
+      if (memberId() === member && conversationId() === sentConversation) {
+        const failed = document.createElement("div"); failed.className = "composer-failure";
+        failed.innerHTML = cardHTML({ title: t("cards.sendFailed"), status: "failed" });
+        composer.querySelector(".composer-failure")?.remove(); composer.prepend(failed);
+        cardFailure(failed.firstElementChild, () => { failed.remove(); void send(); }, () => failed.remove());
+      }
       render();
       return;
     }
@@ -1098,13 +1260,9 @@ export function createAgent(app: AppContext): Page {
     render();
   }
 
-  /** The field grows with its text, up to `COMPOSER_LINES` lines. */
+  /** Send takes words or files; the field sizes itself to its text (`.cmp-input` in agent.css). */
   function fit(): void {
     sendButton.disabled = missingFiles.length > 0 || typedQuestion(input.value, files.length > 0) === null;
-    input.style.height = "auto";
-    const line = parseFloat(getComputedStyle(input).lineHeight) || 22;
-    input.style.height = `${Math.min(input.scrollHeight, line * COMPOSER_LINES + 2)}px`;
-    input.classList.toggle("is-tall", input.scrollHeight > line * COMPOSER_LINES + 2);
   }
 
   /**
@@ -1125,8 +1283,9 @@ export function createAgent(app: AppContext): Page {
    */
   function focusComposer(): void {
     if (!visible || composer.hidden || !composer.isConnected) return;
-    input.focus({ preventScroll: true });
-    input.setSelectionRange(input.value.length, input.value.length);
+    if (document.activeElement !== input) input.focus({ preventScroll: true });
+    const end = input.value.length;
+    if (input.selectionStart !== end || input.selectionEnd !== end) input.setSelectionRange(end, end);
   }
 
   /**
@@ -1191,17 +1350,23 @@ export function createAgent(app: AppContext): Page {
 
   let listenTimer: ReturnType<typeof setTimeout> | undefined;
   /** Whether the app said it is listening since the voice button last sent the key. */
-  let listening = false;
+  let listening = false, listeningRun = 0;
   let voiceMember = RAPHAEL_ID;
+  let voiceConversation: number | undefined;
+  let voiceDestination: "quick" | undefined;
+  let voiceRequested = false;
   let listeningAfter = 0;
   let listeningKnown = false;
-  function rememberVoiceBoundary(member: number): void {
-    listeningKnown = member === memberId() && conversationId() === voiceConversationId(member);
+  function rememberVoiceBoundary(member: number, conversation = voiceConversationId(member)): void {
+    voiceConversation = conversation;
+    voiceDestination = destinationOf(member, conversation).destination;
+    listeningKnown = member === memberId() && conversationId() === conversation;
     listeningAfter = newestId();
   }
   let pressedMember = RAPHAEL_ID;
   const sendVoice = (edge: "down" | "up", member: number): Promise<void> =>
-    member === RAPHAEL_ID ? api.agentVoice(edge) : api.agentVoice(edge, member);
+    voiceConversation === undefined ? (member === RAPHAEL_ID ? api.agentVoice(edge) : api.agentVoice(edge, member)) :
+      voiceDestination ? api.agentVoice(edge, member, voiceConversation, voiceDestination) : api.agentVoice(edge, member, voiceConversation);
 
   /**
    * The voice button went down: the question key went down (a click is a press and a release).
@@ -1210,13 +1375,15 @@ export function createAgent(app: AppContext): Page {
    */
   let taskStopPressed=false;
   function voiceDown(): void {
-    if(composer.dataset.taskState && composer.dataset.taskState!=="idle"){taskStopPressed=true;void stopComposerTask().catch(error=>toaster.info(describeError(error)));return;}
+    // Recording clicks release/send audio through the native key path; only Escape cancels it.
+    if(!(listening && voiceMember === memberId()) && composer.dataset.taskState && composer.dataset.taskState!=="idle"){taskStopPressed=true;void stopComposerTask().catch(error=>toaster.info(describeError(error)));return;}
     if (question) return;
     pressedMember = memberId();
     const starting = !listening;
     if (starting) {
       voiceMember = pressedMember;
-      rememberVoiceBoundary(pressedMember);
+      rememberVoiceBoundary(pressedMember, conversationId());
+      voiceRequested = true;
     }
     if (voiceMember === memberId()) voice.up();
     if (starting) {
@@ -1227,6 +1394,7 @@ export function createAgent(app: AppContext): Page {
       }, LISTEN_WAIT_MS);
     }
     void sendVoice("down", pressedMember).catch((err) => {
+      voiceRequested = false;
       voice.down();
       toaster.info(describeError(err));
     });
@@ -1270,7 +1438,8 @@ export function createAgent(app: AppContext): Page {
         if (hasDrafts(question)) draftPanel.sync(question, false);
         redrawCards();
       }
-      toaster.info(describeError(err));
+      if (question?.id !== id) return;
+      cardFailure(thread.querySelector(`[data-permission-card="${CSS.escape(id)}"]`) ?? draftPanel.el.querySelector(".conversation-card") ?? askCard.querySelector(".conversation-card"), () => { if (question?.id === id) void answer(approved, always, editedDrafts, groups); });
     }
   }
 
@@ -1279,70 +1448,26 @@ export function createAgent(app: AppContext): Page {
     if (visible && turns.some((turn) => turn.permissions?.length)) drawThread();
   }
 
-  let holdTimer: ReturnType<typeof setTimeout> | undefined;
-  /** The YES of a T3 question: held for `HOLD_MS` it is armed, and let go on it then, it answers. */
-  function holdStart(): void {
-    if (question?.tier !== "T3" || answering) return;
-    yesButton.dataset.hold = "holding";
-    clearTimeout(holdTimer);
-    holdTimer = setTimeout(() => (yesButton.dataset.hold = "armed"), HOLD_MS);
-  }
-  function holdEnd(onButton: boolean): void {
-    if (question?.tier !== "T3") return;
-    clearTimeout(holdTimer);
-    const armed = yesButton.dataset.hold === "armed";
-    yesButton.dataset.hold = "idle";
-    if (armed && onButton) void answer(true);
-  }
-
-  // ---------- the search ----------
-
-  function openSearch(): void {
-    pacing.flush();
-    searching = true;
-    find.hidden = false;
-    searchButton.setAttribute("aria-expanded", "true");
-    findInput.focus();
-    render(true);
-  }
-
-  function closeSearch(draw = true): void {
-    if (!searching) return;
-    searching = false;
-    query = "";
-    found = null;
-    findInput.value = "";
-    find.hidden = true;
-    searchButton.setAttribute("aria-expanded", "false");
-    clearTimeout(searchTimer);
-    if (draw) {
-      render(true);
-      searchButton.focus();
+  const finder = mountConversationFind({ button: searchButton, bar: find, thread, scroll: scroller, changed: open => { searching = open; if (open) { pacing.flush(); render(); } }, load: async current => {
+    const member = memberId(), conversation = conversationId();
+    const gathered: AgentTurn[] = [];
+    let before: number | undefined;
+    for (;;) {
+      const result = await api.agentHistoryList({member_id:member, ...(conversation !== undefined ? {conversation_id:conversation} : {}), limit:200, ...(before !== undefined ? {before_id:before} : {})});
+      if (!current() || member !== memberId() || conversation !== conversationId()) return;
+      gathered.push(...result.turns);
+      const next = Math.min(...result.turns.map(turn => turn.id));
+      if (result.turns.length < 200 || next === before) break;
+      before = next;
     }
-  }
+    const height = scroller.scrollHeight, top = scroller.scrollTop;
+    turns = [...new Map([...gathered, ...turns].map(turn => [turn.id,turn])).values()].sort((a,b) => a.id-b.id);
+    canLoadEarlier = false;
+    render();
+    scroller.scrollTop = top + scroller.scrollHeight - height;
+  }});
 
-  /**
-   * Looks for the words in the whole history (`agent.history.search`): the turns found show in the
-   * thread under their days, however far behind the loaded ones they are. When the core cannot
-   * answer this time (it is starting again, say), the loaded turns are looked through instead, and
-   * the next search asks the core again.
-   */
-  async function runSearch(): Promise<void> {
-    const mine = ++searches;
-    const words = query.trim();
-    found = null;
-    if (words !== "") {
-      try {
-        const member = memberId();
-        const turnsFound = (conversationId() !== undefined ? await api.agentHistorySearch(words, member, conversationId()) : member === RAPHAEL_ID ? await api.agentHistorySearch(words) : await api.agentHistorySearch(words, member)).turns;
-        if (mine !== searches) return;
-        found = turnsFound;
-      } catch {
-        if (mine !== searches) return;
-      }
-    }
-    render(true);
-  }
+  function closeSearch(_draw = true): void { finder.close(false); searching = false; }
 
   /** The conversation is gone in the core: the page drops every turn it loaded and shows the empty page. */
   function forgetTurns(): void {
@@ -1358,6 +1483,7 @@ export function createAgent(app: AppContext): Page {
   // Settings › 資料 emptied the conversation while the page had it loaded (under the panel, or
   // before it was left): a load already under way brings nothing back, and nothing waits to be cleared.
   app.cleared.on("conversation", () => {
+    if (memberId() !== RAPHAEL_ID) return;
     loads++;
     pending = false;
     loadingEarlier = false;
@@ -1370,8 +1496,7 @@ export function createAgent(app: AppContext): Page {
   /** Opens or closes what a turn did, where it is: the box slides, nothing else is drawn again. */
   function toggleSteps(button: HTMLElement): void {
     const id = Number(button.closest<HTMLElement>(".tn")?.dataset.id);
-    // A turn the search found may be one that is not loaded.
-    const turn = turns.find((candidate) => candidate.id === id) ?? found?.find((candidate) => candidate.id === id);
+    const turn = turns.find((candidate) => candidate.id === id);
     const box = button.closest<HTMLElement>(".steps");
     const steps = box?.querySelector<HTMLElement>(".steps-body");
     if (!turn || !box || !steps) return;
@@ -1392,6 +1517,7 @@ export function createAgent(app: AppContext): Page {
   function drawBackgroundQuestions(): void {
     waiting = mountBackgroundQuestions(backgroundSlot, {
       memberId: memberId(),
+      manageLocal: () => openRaphaelSettings(app),
       asker: () => {
         const member = members.member();
         return inRaphael() ? { face: avatarHTML({ size: 22, cls: "bgq-face" }), name: null } : { face: faceHTML(member, 22, { cls: "bgq-face" }), name: member.name };
@@ -1408,6 +1534,11 @@ export function createAgent(app: AppContext): Page {
    * closes, the composer and the card become that thread's, and nothing of the last thread moves in.
    */
   function switchThread(): void {
+    unreadFrom = members.member().unread_from ?? null;
+    unreadCaptured = true;
+    openingThread = true;
+    if (composerKey !== "deleted") saveComposerDraft();
+    desktop.refresh();
     drawConversation();
     if (roomPane.active) roomPane.close();
     void slashMenu.refresh();
@@ -1420,7 +1551,6 @@ export function createAgent(app: AppContext): Page {
     attachmentMedia.reset();
     resetDrop();
     turns = [];
-    found = null;
     canLoadEarlier = false;
     loadingEarlier = false;
     pending = false;
@@ -1438,8 +1568,7 @@ export function createAgent(app: AppContext): Page {
     replacing = undefined;
     composerQuote = undefined;
     drawQuote();
-    const draft = restored.get(draftKey());
-    if (draft) { restored.delete(draftKey()); restoreDraft(draft); }
+    loadComposerDraft();
     drawFile();
     fit();
     drawComposer();
@@ -1449,11 +1578,11 @@ export function createAgent(app: AppContext): Page {
     delete askCard.dataset.id;
     drawBackgroundQuestions();
     render();
-    if (listening && voiceMember === memberId() && !question) voice.up();
+    if (listening && voiceMember === memberId() && !question) drawComposerTask();
     if (visible) {
       const generation = loads + 1;
       void load(false).then(() => {
-        if (generation === loads && visible && !scroller.hidden && !thread.querySelector(".is-search-target")) scroller.scrollTop = scroller.scrollHeight;
+        if (generation === loads && visible && !scroller.hidden && !thread.querySelector(".is-search-target")) finishOpening();
       });
       focusComposer();
     }
@@ -1488,14 +1617,14 @@ export function createAgent(app: AppContext): Page {
   }
 
   function toggleThinking(button: HTMLElement): void {
-    const box = button.closest<HTMLElement>(".think-box");
+    const box = button.closest<HTMLElement>(".tn")?.querySelector<HTMLElement>(".think-box");
     const body = box?.querySelector<HTMLElement>(".think-body");
     if (!box || !body) return;
     const id = Number(box.dataset.thinkingTurn ?? button.closest<HTMLElement>(".tn")?.dataset.id);
     const next = Boolean(body.hidden);
     body.hidden = !next;
     box.classList.toggle("is-open", next);
-    button.setAttribute("aria-expanded", String(next));
+    button.closest(".tn")?.querySelectorAll('[data-act="thinking"]').forEach(control => control.setAttribute("aria-expanded", String(next)));
     if (!Number.isNaN(id)) state.thinkingOpen.set(id, next);
     rememberLine(button);
   }
@@ -1509,46 +1638,9 @@ export function createAgent(app: AppContext): Page {
     rememberLine(button);
   }
 
-  let closeLightbox: (() => void) | null = null;
   function openLightbox(button: HTMLElement, localSrc?: string): void {
     const src = localSrc ?? safeMediaSrc(button.dataset.src, true);
-    if (!src) return;
-    const title = button.dataset.title ?? "";
-    closeLightbox?.();
-    const scrim = document.createElement("div");
-    scrim.className = "mb-scrim media-lightbox";
-    scrim.setAttribute("role", "dialog");
-    scrim.setAttribute("aria-modal", "true");
-    scrim.setAttribute("aria-label", title || t("agent.viewImage"));
-    scrim.innerHTML =
-      `<div class="lb-card">` +
-      `<div class="lb-head"><span class="lb-title">${esc(title)}</span>${iconButton("x", t("common.close"), ' data-lb="close"')}</div>` +
-      `<img class="lb-img" src="${esc(src)}" alt="${esc(title)}">` +
-      `</div>`;
-    let stopOutside = (): void => {};
-    const close = (): void => {
-      stopOutside();
-      closeLightbox = null;
-      scrim.remove();
-      document.removeEventListener("keydown", onKey, true);
-      button.focus({ preventScroll: true });
-    };
-    const onKey = (ev: KeyboardEvent): void => {
-      if (!isTopLayer(scrim.querySelector(".lb-card"))) return;
-      if (ev.key === "Escape") {
-        ev.preventDefault();
-        ev.stopImmediatePropagation();
-        close();
-      }
-    };
-    scrim.addEventListener("click", (ev) => {
-      if ((ev.target as Element).closest('[data-lb="close"]')) close();
-    });
-    document.addEventListener("keydown", onKey, true);
-    document.body.append(scrim);
-    closeLightbox = close;
-    stopOutside = registerDismissal(scrim.querySelector<HTMLElement>(".lb-card")!, close);
-    scrim.querySelector<HTMLElement>('[data-lb="close"]')?.focus();
+    if (src) openMediaLightbox(button, src);
   }
 
   /** A line changed in place by the reader is drawn from new data next time, so it is not kept as it was. */
@@ -1576,7 +1668,7 @@ export function createAgent(app: AppContext): Page {
 
   function messageSource(control: HTMLElement): { turn: AgentTurn; key: string; text: string; markdown: boolean } | null {
     const id = Number(control.closest<HTMLElement>(".tn[data-id]")?.dataset.id);
-    const turn = turns.find(item => item.id === id) ?? found?.find(item => item.id === id);
+    const turn = turns.find(item => item.id === id);
     const key = control.closest<HTMLElement>("[data-message]")?.dataset.message;
     if (!turn || !key) return null;
     if (key === "question") return { turn, key, text: turn.question, markdown: false };
@@ -1597,7 +1689,7 @@ export function createAgent(app: AppContext): Page {
     const source = messageSource(control);
     const pending = outgoing.find(item => item.requestId === control.closest<HTMLElement>("[data-session]")?.dataset.session);
     if (!source && !pending) return;
-    try { await copyText(source ? messagePlainText(source.text, source.markdown) : pending!.text); }
+    try { await copyButton(control, source ? messagePlainText(source.text, source.markdown) : pending!.text); }
     catch (err) { toaster.info(describeError(err)); }
   }
 
@@ -1691,7 +1783,7 @@ export function createAgent(app: AppContext): Page {
     return draft;
   }
 
-  function restoreDraft(draft: ComposerDraft): void {
+  function restoreDraft(draft: ComposerDraft, focus = true): void {
     correctionLearning.restore(draft.dictation);
     input.value = draft.text;
     attachmentEpoch++;
@@ -1700,7 +1792,7 @@ export function createAgent(app: AppContext): Page {
     replacing = draft.replacing;
     composerQuote = draft.quote;
     drawQuote();
-    drawFile(); fit(); focusComposer();
+    drawFile(); fit(); if (focus) focusComposer();
   }
 
   async function editMessage(control: HTMLElement): Promise<void> {
@@ -1714,12 +1806,18 @@ export function createAgent(app: AppContext): Page {
   /** The displayed slot and its action always refer to the same reply in this conversation. */
   function composerTask() {
     const member = memberId();
-    const sent = [...outgoing].reverse().find(belongs);
-    if (sent) return { key: `request:${sent.requestId}`, state: "ack" as const, stop: () => api.agentStop(sent.requestId, member) };
+    // Speaking: the button ends the recording and sends it, so it is not Stop (that comes once something has been sent); Esc cancels.
+    if(listening&&voiceMember===member)return {key:`listening:${listeningRun}`,state:"recording" as const,stop:()=>api.cancelSession()};
     const turn = [...own()].reverse().find(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting");
     const task = turn?.task;
-    if (task && (isLive(task) || task.state === "waiting")) return { key: `task:${task.id}`, state: "running" as const, stop: () => api.workerCancel(task.id) };
+    if (task && (isLive(task) || task.state === "waiting")) return { key: `task:${task.id}`, state: "running" as const, stop: async () => {
+      const result = turn?.session_id ? await api.agentStop(turn.session_id, member) : undefined;
+      await api.workerCancel(task.id);
+      return result;
+    } };
     if (turn?.session_id) return { key: `request:${turn.session_id}`, state: "running" as const, stop: () => api.agentStop(turn.session_id!, member) };
+    const sent = outgoing.find(belongs);
+    if (sent) return { key: `request:${sent.requestId}`, state: "ack" as const, stop: () => api.agentStop(sent.requestId, member) };
     // Before agent.turn exists, the native controller alone owns transcription/routing and its session.
     if (hearingBelongs()) return { key: `voice:${hearing!.since}`, state: "ack" as const, stop: () => api.cancelSession() };
     return null;
@@ -1727,10 +1825,15 @@ export function createAgent(app: AppContext): Page {
 
   function drawComposerTask(): void {
     const task = composerTask();
-    voiceButton.innerHTML = avatarHTML({ size: 32, avatar: null });
+    if (!task) patchHTML(voiceButton, avatarHTML({ size: 32, avatar: null }));
     voiceButton.setAttribute("aria-label", t("agent.voice"));
-    voiceButton.disabled = false;
-    if (task) { voice.drop(); voiceButton.classList.remove("vm-away"); }
+    voiceButton.disabled = !task && conversationId() === undefined;
+    let note = composer.querySelector<HTMLElement>("[data-conversation-missing]");
+    if (voiceButton.disabled && !note) {
+      note = document.createElement("div"); note.dataset.conversationMissing = ""; composer.append(note);
+    }
+    if (note) { note.hidden = !voiceButton.disabled; note.innerHTML = voiceButton.disabled ? noticeHTML("conversation") : ""; }
+    if (task) { if (!listening || voiceMember !== memberId()) voice.drop(); voiceButton.classList.remove("vm-away"); }
     drawTaskSlot(composer, task ? question ? "waiting" : task.state : "idle", task !== null && stoppingComposerTasks.has(task.key));
   }
 
@@ -1739,7 +1842,21 @@ export function createAgent(app: AppContext): Page {
     if (!task || stoppingComposerTasks.has(task.key)) return;
     stoppingComposerTasks.add(task.key);
     drawComposerTask();
-    try { await task.stop(); }
+    const member = memberId(), conversation = conversationId();
+    try {
+      const result = await task.stop() as { returned?: {session_id: string; text: string; attachments?: TurnAttachment[]; quote?: MessageQuote}[] } | undefined;
+      if (result?.returned?.length) {
+        const returned: ComposerDraft[] = [];
+        for (const item of result.returned) returned.push(await draftFor({session_id: item.session_id, question: item.text, attachments: item.attachments, quote: item.quote}));
+        const current = member === memberId() && conversation === conversationId();
+        const before = current ? {text: input.value, files, missing: missingFiles, quote: composerQuote} : restored.get(draftKey(member, conversation)) ?? {text: "", files: [], missing: []};
+        const combined: ComposerDraft = {text: [before.text, ...returned.map(draft => draft.text)].filter(Boolean).join("\n\n"), files: [...before.files, ...returned.flatMap(draft => draft.files)], missing: [...before.missing, ...returned.flatMap(draft => draft.missing)], quote: before.quote ?? returned.find(draft => draft.quote)?.quote};
+        const sessions = new Set(result.returned.map(item => item.session_id));
+        outgoing = outgoing.filter(item => !sessions.has(item.requestId));
+        turns = turns.filter(item => !sessions.has(item.session_id ?? ""));
+        if (current) restoreDraft(combined); else restored.set(draftKey(member, conversation), combined);
+      }
+    }
     finally { stoppingComposerTasks.delete(task.key); drawComposerTask(); }
     if (visible) void load(false);
   }
@@ -1758,7 +1875,6 @@ export function createAgent(app: AppContext): Page {
       retracted.add(session);
       outgoing = outgoing.filter(item => item.requestId !== session);
       turns = turns.filter(item => item.session_id !== session && item.id !== turn?.id);
-      if (found) found = found.filter(item => item.session_id !== session && item.id !== turn?.id);
       if (questionOwner === member && (turn?.status === "confirm" || pending)) setQuestion(null);
       if (askingMember === member) askingMember = null;
       if (memberId() === member && conversationId() === sentConversation) { render(); restoreDraft(draft); }
@@ -1783,10 +1899,20 @@ export function createAgent(app: AppContext): Page {
         }
       }
     } catch (err) {
-      toaster.info(describeError(err));
+      if (!cardFailure(act.closest(".conversation-card"), () => { void cardAction(act); })) toaster.info(describeError(err));
       (act as HTMLButtonElement).disabled = false;
     }
   }
+
+  /** Focus the credential form already mounted in its originating conversation card. */
+  async function cardSetup(act: HTMLElement): Promise<void> {
+    act.closest("[data-connector]")?.querySelector<HTMLInputElement>("[data-setup-field]")?.focus();
+  }
+
+  mountInlineConnectionSetup(thread, async (id, fields) => {
+    const result = await api.cardConnect(id, fields);
+    return { connected: result.started || !["pending", "failed", "cancelled"].includes(result.card.state), error: result.card.error ?? undefined };
+  });
 
   /**
    * Save the key typed into a secret card. It is read from the field here, the field is emptied before the
@@ -1796,14 +1922,16 @@ export function createAgent(app: AppContext): Page {
   async function secretSave(act: HTMLElement): Promise<void> {
     const field = act.closest<HTMLElement>(".secret-card")?.querySelector<HTMLInputElement>("input[data-secret-input]");
     if (!field || !field.value.trim()) return;
-    const value = field.value;
+    const username = act.closest<HTMLElement>(".secret-card")?.querySelector<HTMLInputElement>("[data-login-user]");
+    const value = username ? JSON.stringify({ username: username.value, password: field.value }) : field.value;
+    if (username) username.value = "";
     field.value = "";
     field.disabled = true;
     (act as HTMLButtonElement).disabled = true;
     try {
       await api.cardSave(act.dataset.card ?? "", value);
     } catch (err) {
-      toaster.info(describeError(err));
+      cardFailure(act.closest(".conversation-card"), () => { field.focus(); });
     } finally {
       field.disabled = false;
     }
@@ -1815,11 +1943,12 @@ export function createAgent(app: AppContext): Page {
     const buttons = [...(act.closest(".connector-card")?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
     for (const button of buttons) button.disabled = true;
     try {
+      if (act.dataset.act === "card-takeover") { desktop.takeover(); for (const button of buttons) button.disabled = false; return; }
       if (act.dataset.act === "card-resume") await api.cardResume(id);
       else if (act.dataset.act === "card-done") await api.cardDone(id);
       else await api.cardStop(id);
     } catch (err) {
-      toaster.info(describeError(err));
+      cardFailure(act.closest(".conversation-card"), () => { void taskCardAction(act); });
       for (const button of buttons) button.disabled = false;
     }
   }
@@ -1830,6 +1959,7 @@ export function createAgent(app: AppContext): Page {
    * given back) has its own door in the core, and gives the digest of the action it shows.
    */
   async function permissionAnswer(act: HTMLElement): Promise<void> {
+    if (act.dataset.source === "background") return;
     const id = act.dataset.card ?? "";
     const choice = act.dataset.act === "perm-deny" ? "deny" : act.dataset.act === "perm-always" ? "always" : "allow";
     if (act.dataset.source === "run") {
@@ -1839,21 +1969,28 @@ export function createAgent(app: AppContext): Page {
       try {
         await api.permissionAnswer(choice, id, card?.dataset.digest ?? "");
       } catch (err) {
-        toaster.info(describeError(err));
+        cardFailure(card, () => { void permissionAnswer(act); });
         for (const button of buttons) button.disabled = false;
       }
       return;
     }
     if (question?.id !== id) return;
-    await answer(choice !== "deny", choice === "always");
+    if (act.dataset.act === "perm-never") {
+      try { await api.settingsSet("local_commands_mode", "never"); }
+      catch (err) { toaster.info(describeError(err)); return; }
+      await answer(false);
+    } else await answer(choice !== "deny", choice === "always");
   }
+
+  const taskResults = mountTaskResults(thread, memberId, () => { desktop.files(); });
 
   mountMailActions(thread, (err) => toaster.info(describeError(err)), (words) => toaster.info(words));
 
   thread.addEventListener("input", (e) => {
-    const field = (e.target as Element).closest<HTMLInputElement>("input[data-secret-input]");
+    const field = (e.target as Element).closest<HTMLInputElement>("input[data-secret-input], input[data-login-user]");
     const save = field?.closest(".secret-card")?.querySelector<HTMLButtonElement>('[data-act="card-save"]');
-    if (field && save) save.disabled = field.value.trim() === "";
+    const inputs = field?.closest(".secret-card")?.querySelectorAll<HTMLInputElement>("input");
+    if (inputs && save) save.disabled = [...inputs].some(input => !input.value.trim());
   });
   thread.addEventListener("keydown", (e) => {
     const field = (e.target as Element).closest<HTMLInputElement>("input[data-secret-input]");
@@ -1875,15 +2012,24 @@ export function createAgent(app: AppContext): Page {
     const act = (e.target as Element).closest<HTMLElement>("[data-act]");
     if (!act || (act as HTMLButtonElement).disabled) return;
     switch (act.dataset.act) {
+      case "open-calendar-event":
+        if (/^\d{4}-\d{2}-\d{2}$/.test(act.dataset.date ?? "")) app.go("automations", `calendar:${act.dataset.date}:own%3A${act.dataset.event}` as import("../types").CalendarEventFocus);
+        break;
+      case "open-routine":
+        void Promise.all([api.routinesList(Number(act.dataset.routineMember ?? memberId())), api.membersList()]).then(([routines, team]) => {
+          const routine = routines.routines.find(r => r.id === Number(act.dataset.routine));
+          if (routine) openRoutineDialog({members:team.members, routine});
+          else toaster.info(t("members.profile.noRoutines"));
+        }).catch(error => toaster.info(describeError(error)));
+        break;
+      case "local-settings":
+        openRaphaelSettings(app);
+        break;
       case "settings":
         openRaphaelSettings(app);
         break;
       case "search":
-        if (searching) closeSearch();
-        else openSearch();
-        break;
       case "search-close":
-        closeSearch();
         break;
       case "steps":
         toggleSteps(act);
@@ -1928,7 +2074,7 @@ export function createAgent(app: AppContext): Page {
         break;
       case "copy-code": {
         const code = act.closest(".message-code")?.querySelector("code")?.textContent;
-        if (code !== undefined && code !== null) void copyText(code).catch(err => toaster.info(describeError(err)));
+        if (code !== undefined && code !== null) void copyButton(act, code).catch(err => toaster.info(describeError(err)));
         break;
       }
       case "regenerate":
@@ -1936,8 +2082,9 @@ export function createAgent(app: AppContext): Page {
         break;
       case "expand-message": {
         const source = messageSource(act);
-        if (!source) break;
-        const key = `${source.turn.id}:${source.key}`;
+        const session = act.closest<HTMLElement>('.tn[data-session]')?.dataset.session;
+        if (!source && !session) break;
+        const key = source ? `${source.turn.id}:${source.key}` : `pending:${session}:question`;
         if (state.expandedMessages.has(key)) state.expandedMessages.delete(key);
         else state.expandedMessages.add(key);
         render();
@@ -1950,6 +2097,9 @@ export function createAgent(app: AppContext): Page {
       }
       case "attachment-open":
         void api.openAttachment(act.dataset.id ?? "").catch(() => toaster.info(t("agent.fileUnavailable")));
+        break;
+      case "team-file-open":
+        void api.openTeamFile(act.dataset.path ?? "").catch(() => toaster.info(t("agent.fileUnavailable")));
         break;
       case "lightbox":
         openLightbox(act);
@@ -1964,7 +2114,7 @@ export function createAgent(app: AppContext): Page {
         void rerun(act);
         break;
       case "attach":
-        void openComposerMenu(attachButton, () => { picker.value = ""; picker.click(); });
+        picker.value = ""; picker.click();
         break;
       case "unattach-file": {
         const id = Number(act.dataset.file);
@@ -1977,18 +2127,23 @@ export function createAgent(app: AppContext): Page {
       case "card-cancel":
         void cardAction(act);
         break;
+      case "card-setup":
+        void cardSetup(act);
+        break;
       case "card-settings":
-        app.go("settings", "connections");
+        app.go("settings", "repair:store:composio");
         break;
       case "card-save":
         void secretSave(act);
         break;
       case "card-resume":
+      case "card-takeover":
       case "card-done":
       case "card-stop":
         void taskCardAction(act);
         break;
       case "perm-deny":
+      case "perm-never":
       case "perm-always":
       case "perm-once":
         void permissionAnswer(act);
@@ -2000,7 +2155,7 @@ export function createAgent(app: AppContext): Page {
         void answer(true, true);
         break;
       case "yes":
-        if (question?.tier !== "T3") void answer(true);
+        void answer(true);
         break;
     }
   });
@@ -2010,31 +2165,25 @@ export function createAgent(app: AppContext): Page {
     void send();
   });
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !input.value.trim() && !files.length && !listening) {
-      e.preventDefault(); e.stopPropagation(); void cancelMessage(); return;
-    }
     if (!sendsOnEnter(e)) return;
     e.preventDefault();
     void send();
   });
-  input.addEventListener("input", fit);
-  input.addEventListener("input", () => members.mention(input));
+  cancelGesture().register(() => {
+    const task = composerTask();
+    return visible && !roomPane.active && task ? {
+      key: task.key, immediate: task.key.startsWith("listening:") || task.key.startsWith("voice:"), button: voiceButton, hint: t("common.cancelAgain"),
+      cancel: () => { void (listening ? api.cancelSession() : input.value.trim() || files.length || !task.key.startsWith("request:") ? stopComposerTask() : cancelMessage()).catch(error => toaster.info(describeError(error))); },
+    } : null;
+  });
+  input.addEventListener("input", () => { fit(); clearTimeout(draftTimer); draftTimer = setTimeout(() => { if (el.isConnected) saveComposerDraft(); }, 300); });
+  members.bindMentions(input);
+  bindComposerHistory(input, () => api.agentSent());
   picker.addEventListener("change", () => {
     const chosen = Array.from(picker.files ?? []);
     if (chosen.length > 0) void attachAll(chosen);
   });
-  // Clipboard files are attached; any accompanying plain text stays in the composer.
-  input.addEventListener("paste", (e) => {
-    const pasted = Array.from(e.clipboardData?.files ?? []);
-    if (pasted.length === 0) return;
-    const words = e.clipboardData?.getData("text/plain") ?? "";
-    e.preventDefault();
-    if (words) {
-      input.setRangeText(words, input.selectionStart ?? input.value.length, input.selectionEnd ?? input.value.length, "end");
-      fit();
-    }
-    void attachAll(pasted);
-  });
+  bindFilePaste(input, pasted => { void attachAll(pasted); }, fit, () => files.map(file => file.name));
 
   // The voice button is the question key: down when it is pressed, up when it is let go.
   voiceButton.addEventListener("pointerdown", (e) => {
@@ -2068,84 +2217,61 @@ export function createAgent(app: AppContext): Page {
     if (heldKey !== null) releaseKey();
   });
 
-  yesButton.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0) return;
-    yesButton.setPointerCapture(e.pointerId);
-    holdStart();
-  });
-  yesButton.addEventListener("pointerup", (e) => {
-    const box = yesButton.getBoundingClientRect();
-    holdEnd(e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom);
-  });
-  yesButton.addEventListener("pointercancel", () => holdEnd(false));
-  yesButton.addEventListener("keydown", (e) => {
-    if ((e.key === "Enter" || e.key === " ") && !e.repeat && question?.tier === "T3") {
-      e.preventDefault();
-      holdStart();
-    }
-  });
-  yesButton.addEventListener("keyup", (e) => {
-    if (e.key === "Enter" || e.key === " ") holdEnd(true);
-  });
-
-  findInput.addEventListener("input", () => {
-    query = findInput.value;
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => void runSearch(), SEARCH_DELAY_MS);
-  });
-  findInput.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      closeSearch();
-    }
-  });
-
   scroller.addEventListener("scroll", () => {
-    if (scroller.scrollTop < TOP_SLACK_PX && canLoadEarlier && !loadingEarlier && !(searching && query.trim() !== "")) void load(true);
+    if (scroller.scrollTop < TOP_SLACK_PX && canLoadEarlier && !loadingEarlier && !searching) void load(true);
   });
 
   app.onEvent((event) => {
-    if (event.type === "Hotkey" && event.kind === "cancel" && visible && document.activeElement === input && !input.value.trim() && !files.length && !listening) void cancelMessage();
+    if (event.type === "Hotkey" && event.kind === "cancel_key" && visible ) cancelGesture().press();
+    if (event.type === "Hotkey" && event.kind === "cancel_reset") cancelGesture().clear();
     members.follow(event);
-    if (event.type === "ConversationsChanged") conversationChange(event.member_id);
-    if (event.type === "AgentTurn") conversationChange(event.member_id ?? RAPHAEL_ID);
+    if (event.type === "ConversationsChanged") { conversationsDirty.add(event.member_id); conversationChange(event.member_id); }
+    if (event.type === "AgentTurn") { conversationsDirty.add(event.member_id ?? RAPHAEL_ID); conversationChange(event.member_id ?? RAPHAEL_ID); }
     if (event.type === "QuotaChanged") void readQuotas();
-    if (event.type === "MembersChanged") void slashMenu.refresh();
+    if (event.type === "MembersChanged") void slashMenu.refresh(true);
     if (wantsRefresh(event)) {
       // a turn of another thread changes only that member's row
-      if (event.type !== "AgentTurn" || (event.member_id ?? RAPHAEL_ID) === memberId()) scheduleRefresh();
-      if (visible) members.changed();
+      if (event.type === "WorkerChanged") {
+        const loaded=hasWorkerTask(turns,event.task_id);
+        if (!loaded && visible && !roomPane.active && renderedPage!==pageStamp()) render();
+        scheduleRefresh(loaded ? 0 : 1000+REFRESH_DELAY_MS);
+      }
+      else if (event.type === "AgentTurn" && (event.member_id ?? RAPHAEL_ID) === memberId()) scheduleRefresh();
+      // Loaded running work changes history; activity and turn events own the roster's state and preview.
+      if (event.type !== "WorkerChanged" || event.state !== "running" || !hasWorkerTask(turns, event.task_id)) members.changed(event.type === "WorkerChanged" ? 1000 : undefined);
     }
     waiting?.follow(event);
     if (event.type === "AgentQuestion") {
       setQuestion(openQuestion(event));
       drawDock();
       redrawCards();
-      if (visible) members.changed();
+      members.changed();
     } else if (event.type === "AgentQuestionClosed") {
       questions.delete(event.id);
       answeringQuestions.delete(event.id);
       drawDock();
       redrawCards();
-      if (visible) members.changed();
+      members.changed();
     } else if (event.type === "VoiceLevel") {
       voice.level(event.value);
     } else if (event.type === "Dictation" && event.agent) {
       if (event.phase === "listening") {
         const member = event.member_id ?? RAPHAEL_ID;
-        if (!listening || voiceMember !== member) rememberVoiceBoundary(member);
+        if ((!listening && !voiceRequested) || voiceMember !== member) rememberVoiceBoundary(member);
         voiceMember = member;
+        if(!listening)listeningRun++;
         listening = true;
-        if (visible && !question && voiceMember === memberId()) voice.up();
+        if (visible && !question && voiceMember === memberId()) drawComposerTask();
       } else {
         if (event.phase === "processing") {
           const member = event.member_id ?? RAPHAEL_ID;
-          if (!listening || voiceMember !== member) rememberVoiceBoundary(member);
+          if ((!listening && !voiceRequested) || voiceMember !== member) rememberVoiceBoundary(member);
           voiceMember = member;
         }
         listening = false;
+        voiceRequested = false;
         voice.down();
+        drawComposerTask();
         if (event.phase === "processing") {
           startHearing(voiceMember);
           if (visible) render(true);
@@ -2165,7 +2291,7 @@ export function createAgent(app: AppContext): Page {
   });
 
   onLocaleChange(() => {
-    firstBot.redraw();
+    closeMediaLightbox();
     void slashMenu.refresh();
     drawWords();
     draftPanel.redraw();
@@ -2184,9 +2310,10 @@ export function createAgent(app: AppContext): Page {
     if (!el.isConnected) return;
     if (roomPane.active) roomPane.close();
     const jump = ++memberJump;
-    const { memberId, turnId } = (event as CustomEvent<{ memberId: number; turnId?: number }>).detail;
+    const { memberId, turnId, files } = (event as CustomEvent<{ memberId: number; turnId?: number; files?: boolean }>).detail;
     void members.load().then(async () => {
       members.select(memberId);
+      if (files) { desktop.files(); }
       if (!turnId) return;
       await load(false);
       const generation = loads;
@@ -2206,9 +2333,15 @@ export function createAgent(app: AppContext): Page {
   return {
     id: "agent",
     el,
+    sidebar: members.column,
+    loadSidebar: () => members.load(),
     show(arg) {
       const wasVisible = visible;
+      if (!wasVisible) { unreadFrom = null; unreadCaptured = false; openingThread = true; }
       visible = true;
+      if (!wasVisible) members.show();
+      if (!roomPane.active) desktop.show();
+      else void roomPane.refresh();
       problemNotice.show();
       messageResize?.observe(scroller);
       dropResize?.observe(stage);
@@ -2223,7 +2356,7 @@ export function createAgent(app: AppContext): Page {
       const draft = draftText(arg);
       if (draft !== null) putDraft(draft);
       const refocus = (): void => {
-        if (draft !== null) focusComposer();
+        if (!wasVisible || draft !== null) focusComposer();
       };
       // The page opens at the newest turn, and with the question that waits, if one does.
       void api
@@ -2235,20 +2368,26 @@ export function createAgent(app: AppContext): Page {
         })
         .catch(() => {});
       void load(false).then(() => {
-        if (visible && !scroller.hidden && (!wasVisible || draft !== null)) scroller.scrollTop = scroller.scrollHeight;
-        if (visible && listening && voiceMember === memberId() && !question) voice.up();
+        if (visible && !scroller.hidden && (!wasVisible || draft !== null)) {
+          if (unreadFrom !== null) finishOpening();
+          else scroller.scrollTop = scroller.scrollHeight;
+        }
+        if (visible && listening && voiceMember === memberId() && !question) drawComposerTask();
         refocus();
       });
       drawBackgroundQuestions();
     },
     hide() {
+      saveComposerDraft();
+      desktop.hide();
       hideTooltip();
       hideSelection();
       pacing.flush();
       loadedThread = false;
       visible = false;
+      cancelGesture().sync();
       problemNotice.hide();
-      closeLightbox?.();
+      closeMediaLightbox();
       resetDrop();
       attachmentMedia.reset();
       previews.pause();
@@ -2256,7 +2395,6 @@ export function createAgent(app: AppContext): Page {
       dropResize?.disconnect();
       members.hide();
       input.dispatchEvent(new Event("blur"));
-      clearTimeout(holdTimer);
       clearTimeout(listenTimer);
       loads++;
       loadingEarlier = false;

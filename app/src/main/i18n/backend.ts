@@ -7,7 +7,7 @@ const exact = [
   "backend.micTimeout", "backend.emptyDictation", "backend.emptyPaste", "backend.duplicateDictation",
   "backend.duplicatePaste", "backend.conflictingKeys", "backend.invalidKeys", "backend.emptyAgent",
   "backend.duplicateAgent", "backend.conflictingDictationAgent", "backend.conflictingPasteAgent",
-  "backend.hotkeysOff", "backend.hotkeysOffChange", "backend.memoryBody", "backend.memoryDescription",
+  "backend.hotkeysOff", "backend.hotkeysOffChange", "backend.memoryBody",
   "keys.004", "keys.005", "keys.006",
   "backend.agentBusy", "backend.agentEmpty", "backend.agentTooLong", "backend.agentOff", "backend.questionGone",
   "backend.attachTooMany", "backend.attachBroken",
@@ -18,11 +18,11 @@ const detailed = [
 ] as const;
 
 export function backendMessage(text: string): string {
+  if (text === t("mcp.badPair") || text === zhTW["mcp.badPair"]) return t("mcp.badPair");
   for (const key of exact) if (text === zhTW[key]) return t(key);
   for (const key of detailed) {
     const prefix = zhTW[key].split("{p0}")[0];
     if (text.startsWith(prefix)) return t(key, { p0: text.slice(prefix.length) });
   }
-  // Unknown diagnostic details belong to the backend and remain literal.
-  return text;
+  return t("missing.unknown");
 }

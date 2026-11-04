@@ -1,0 +1,18 @@
+import { scene, check, click, hover, member, room, type, wait } from "./steps.mjs";
+
+const open = [member(1), wait('[data-owner-question="owner-choice"]')];
+export default [
+  ...["connect", "secret", "mail", "page"].map(kind => scene(`owner-card-room-${kind}`, "Room work uses the existing conversation card and controls", [room(1), wait(kind === "connect" ? "[data-connector]" : kind === "secret" ? "[data-secret-card]" : kind === "mail" ? "[data-mail-card]" : ".pg-body[data-state=ready] iframe"),
+    ...(kind === "connect" ? [click('[data-connector] [data-act="card-connect"]'), wait('[data-connector][data-card-state="authorizing"]')] :
+      kind === "secret" ? [type('[data-secret-input]', "synthetic-room-key")] :
+      kind === "mail" ? [type('[data-mail-field="subject"]', "Room report for review"), wait('[data-mail-card][data-version="2"]')] :
+      [{ action: "frame-wait", selector: "#buy" }, { action: "frame-click", selector: "#buy" }, wait('[data-owner-question="room-page-q"][data-card-state="answered"]')]),
+    check(`owner-card-room-${kind}`)], { roomOwnerCard: kind, ...(kind === "page" ? { pageTurn: true } : {}) })),
+  scene("owner-question-room", "The room uses the same durable card and answers through the shared controller", [room(1), wait('[data-owner-question="owner-choice"]'), check("owner-question-room"), click('[data-owner-option="星期二"]'), wait('[data-card-state="answered"]'), check("owner-question-answered")], { ownerQuestion: "room" }),
+  scene("owner-question-asked", "A durable question uses the shared card with four real options, text and cancel", [...open, check("owner-question-asked")], { ownerQuestion: "asked" }),
+  scene("owner-question-typed", "A typed answer enables the visible white primary before any send", [...open, check("owner-question-asked"), type('[data-owner-answer-input]', "請先確認下週的範例排程。"), hover('[data-owner-answer="text"]'), check("owner-question-typed")], { ownerQuestion: "asked" }),
+  scene("owner-question-answered", "An option settles the same question once and removes answer controls", [...open, click('[data-owner-option="星期二"]'), wait('[data-card-state="answered"]'), check("owner-question-answered")], { ownerQuestion: "asked" }),
+  scene("owner-question-cancelled", "Cancel reports the decision on the original card", [...open, click('[data-owner-answer="cancel"]'), wait('[data-card-state="cancelled"]'), check("owner-question-cancelled")], { ownerQuestion: "asked" }),
+  scene("owner-question-background", "A routine's question lives in its member conversation and keeps Stop in the composer", [...open, check("owner-question-background")], { ownerQuestion: "background" }),
+  scene("owner-question-text", "An owner can send a free text answer using the same card", [...open, type('[data-owner-answer-input]', "請改到下週五寄出，先讓我確認內容。"), click('[data-owner-answer="text"]'), wait('[data-card-state="answered"]'), check("owner-question-answered")], { ownerQuestion: "asked" }),
+];

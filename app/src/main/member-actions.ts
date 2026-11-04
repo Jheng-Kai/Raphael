@@ -5,29 +5,31 @@ import { t } from "./i18n";
 import { confirmDelete, groupChoices, groupFromValue, groupValue, openEditMemberDialog, openDialog } from "./member-dialogs";
 import { RAPHAEL_ID, memberOf, orderedMembers, primaryIdOf } from "./members";
 import { openPrimaryPicker } from "./primary-picker";
-import type { AvatarPreset, Member, MemberPatch, MembersList, WireAttachment } from "./types";
+import type { Member, MemberPatch, MembersList } from "./types";
 import { btn, esc, openMenu, toaster } from "./ui";
 
 interface MemberActionHost {
   list(): MembersList | null;
-  presets(): AvatarPreset[];
   current(): number;
   select(id: number): void;
   load(): Promise<void>;
   update(id: number, patch: MemberPatch): Promise<boolean>;
-  setPicture(id: number, file: WireAttachment): Promise<void>;
   cleared(id: number): void;
   deleted(id: number): void;
 }
 
 export function createMemberActions(host: MemberActionHost) {
   function editMember(m: Member): void {
-    openEditMemberDialog({groups: host.list()?.groups ?? [], presets: host.presets(), taken: (host.list()?.members ?? []).filter(other => other.id !== m.id).map(other => other.name), update: host.update, setPicture: host.setPicture, saved: () => void host.load()}, m);
+    openEditMemberDialog({groups: host.list()?.groups ?? [], taken: (host.list()?.members ?? []).filter(other => other.id !== m.id).map(other => other.name), update: host.update, saved: () => void host.load()}, m);
   }
 
   async function memberAction(id: number, action: string): Promise<void> {
     const m = memberOf(host.list(), id);
-    if (!m || id === RAPHAEL_ID) return;
+    if (!m) return;
+    if (id === RAPHAEL_ID) {
+      if (action === "pin") { await api.settingsSet("chief_pinned", !m.pinned).catch(error => toaster.info(describeError(error))); await host.load(); }
+      return;
+    }
     if (action === "edit") return editMember(m);
     if (action === "primary") return choosePrimary(id);
     try {
@@ -81,7 +83,7 @@ export function createMemberActions(host: MemberActionHost) {
     openMenu(anchor, groupChoices([...list.groups].sort((a, b) => a.position - b.position)), groupValue(m.group_id), (value) => {
       const groupId = groupFromValue(value);
       if (groupId !== m.group_id) void host.update(id, { group_id: groupId });
-    });
+    }, undefined, [], { placement: "beside" });
   }
 
   async function deleteMember(id: number): Promise<void> {

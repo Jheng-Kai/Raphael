@@ -5,11 +5,15 @@ The plugins are real ones over in-memory servers and the model is a fake; the ca
 `agent.confirm`. No test spends money or touches the network."""
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
 from raphael_core.agent.gate import ToolGate
 from raphael_core.agent.permissions import PermissionCards, qualifies
+from raphael_core.agent import permissions as permission_module
+from raphael_core.agent.plugins import PluginTool
+from raphael_core.agent.policy import Tier
 from raphael_core.agent.plugins import PlannedCall
 from raphael_core.agent.safety import ASK, DENY, SEEDS, SafetyGuard, SafetyJudge, SafetyRules, narrow_scope
 from raphael_core.brain.openrouter import ChatToolCall, ChatTurn, Decision
@@ -80,6 +84,155 @@ def owner(conn, plugins, make_rig):
 def script(client, text="記下牛奶", tool="Notes__note", arguments=None):
     client.decisions.append(decision("answer"))
     client.chats = [chat("I will do it.", (tool, arguments or {"text": text})), finished()]
+
+
+def test_message_preview_contains_only_typed_delivery_fields():
+    tool = PluginTool("mcp:sample/send_message", "Sample", "send_message", "", {
+        "properties": {key: {"type": "string"} for key in ("workspace", "channel", "thread_ts", "text", "api_key")}
+    }, Tier.T2)
+    preview_message = getattr(permission_module, "message_preview", lambda *_: None)
+    args = {"workspace": "Sample studio", "channel": "#planning", "thread_ts": "123.456", "text": "Review the sample plan.", "api_key": "synthetic-secret"}
+    assert preview_message(tool, args) == {"workspace": "Sample studio", "to": "#planning", "thread": "123.456", "body": "Review the sample plan."}
+    assert preview_message(PluginTool(tool.key, tool.server, "read_message", "", tool.schema, Tier.T2), args) is None
+
+
+@pytest.mark.parametrize("slug,arguments,expected", [
+    ("GMAIL_SEND_EMAIL", {"recipient_email": "reader@example.invalid", "body": "Email body", "subject": "Plan"},
+     {"to": "reader@example.invalid", "body": "Email body", "subject": "Plan"}),
+    ("GMAIL_REPLY_TO_THREAD", {"recipient_email": "reader@example.invalid", "message_body": "Reply body", "thread_id": "thread-1"},
+     {"to": "reader@example.invalid", "body": "Reply body", "thread": "thread-1"}),
+    ("SLACK_SEND_MESSAGE", {"channel": "#planning", "markdown_text": "**Exact** words", "fallback_text": "Fallback", "thread_ts": "1.2"},
+     {"to": "#planning", "body": "**Exact** words", "thread": "1.2"}),
+    ("SLACK_SEND_MESSAGE", {"channel": "#planning", "fallback_text": "Fallback only"}, {"to": "#planning", "body": "Fallback only"}),
+    ("SLACK_CHAT_POST_MESSAGE", {"channel": "#planning", "text": "Plain words"}, {"to": "#planning", "body": "Plain words"}),
+    ("MICROSOFT_TEAMS_TEAMS_POST_CHANNEL_MESSAGE", {"channel_id": "channel-1", "content": "Team words", "subject": "Plan"},
+     {"to": "channel-1", "body": "Team words", "subject": "Plan"}),
+    ("MICROSOFT_TEAMS_TEAMS_POST_CHAT_MESSAGE", {"chat_id": "chat-1", "content": "Chat words"}, {"to": "chat-1", "body": "Chat words"}),
+    ("MICROSOFT_TEAMS_SEND_MESSAGE_TO_SELF", {"content": "Personal words"}, None),
+    ("TELEGRAM_SEND_MESSAGE", {"chat_id": "chat-1", "text": "Telegram words"}, {"to": "chat-1", "body": "Telegram words"}),
+    ("TELEGRAM_SEND_MESSAGE", {"chat_id": 123, "text": "Numeric recipient"}, None),
+    ("WHATSAPP_SEND_MESSAGE", {"to_number": "+12025550123", "text": "WhatsApp words"}, {"to": "+12025550123", "body": "WhatsApp words"}),
+    ("WHATSAPP_SEND_INTERACTIVE_BUTTONS", {"to_number": "+12025550123", "body_text": "Choose a time", "buttons": [{"id": "1"}]},
+     {"to": "+12025550123", "body": "Choose a time"}),
+    ("LINKEDIN_CREATE_LINKED_IN_POST", {"commentary": "Not a mapped field"}, None),
+    ("LINKEDIN_CREATE_COMMENT_ON_POST", {"message": {"text": "Nested content is not a string"}}, None),
+    ("TWITTER_CREATION_OF_A_POST", {"text": "Public words"}, None),
+    ("GITHUB_CREATE_A_REPLY_FOR_A_REVIEW_COMMENT", {"body": "Review reply", "owner": "sample", "repo": "project"}, None),
+    ("GITHUB_CREATE_AN_ISSUE_COMMENT", {"body": "Not a mapped send verb"}, None),
+    ("SLACK_SEND_MESSAGE", {"channel": {"id": "private"}, "markdown_text": ["Not a string"]}, None),
+    ("SLACK_SEND2_MESSAGE", {"channel": "#planning", "text": "Not a whole-word verb"}, None),
+    ("DISCORDBOT_CROSSPOST_MESSAGE", {"channel_id": "channel-1", "text": "Not a whole-word verb"}, None),
+    *[(slug, {"to": "reader", "body": "Never a send preview"}, None) for slug in
+      ("GMAIL_SEND_DRAFT", "GMAIL_LIST_SEND_AS", "GMAIL_PATCH_SEND_AS", "GMAIL_SETTINGS_SEND_AS_GET",
+       "GMAIL_UPDATE_SEND_AS", "LINKEDIN_DELETE_POST", "TWITTER_GET_POST_CONTENT", "TWITTER_LIST_POSTS")],
+    ("NOTION_SEND_FILE_UPLOAD", {"file_upload_id": "file-1", "file_content_base64": "sample"}, None),
+])
+def test_composio_envelope_reaches_the_real_card_spec(owner, monkeypatch, slug, arguments, expected):
+    from raphael_core.connectors.store import Connector
+
+    service = owner.rig.service
+    toolkit = "microsoft_teams" if slug.startswith("MICROSOFT_TEAMS_") else slug.split("_")[0].lower()
+    app_name = {"gmail": "Gmail", "slack": "Slack", "microsoft_teams": "Microsoft Teams"}.get(toolkit, toolkit.title())
+    entry = Connector(f"composio:{toolkit}", "composio", name=app_name, enabled_tools=[slug])
+    monkeypatch.setattr(service._plugins, "managed", SimpleNamespace(store=SimpleNamespace(connectors={entry.id: entry})))
+    specs, actions = [], []
+    def opened(ask, action, route, text, ledger, *, card):
+        specs.append(card)
+        actions.append(action)
+        return {"confirm": {"id": "envelope-question"}}
+    monkeypatch.setattr(service, "_open_question", opened)
+    monkeypatch.setattr(service, "_always_offered", lambda *_: False)
+    envelope = {"tools": [{"tool_slug": slug, "arguments": {**arguments, "api_key": "synthetic-secret", "unrelated": {"raw": "private"}}}]}
+    original = json.loads(json.dumps(envelope))
+    tool = PluginTool("mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL", "Composio", "COMPOSIO_MULTI_EXECUTE_TOOL", "", {"properties": {"tools": {"type": "array"}}}, Tier.T2)
+    service._ask_plugin(SimpleNamespace(language="en", speaker=SimpleNamespace(name="Alex")), PlannedCall(tool, envelope), [], None)
+    [spec] = specs
+    assert spec.message == expected
+    assert (spec.service, spec.tool) == (app_name, slug)
+    assert envelope == original and actions[0].args == original
+
+
+@pytest.mark.parametrize("tools", [[], [{"tool_slug": "SLACK_SEND_MESSAGE", "arguments": {"channel": "a", "text": "one"}}] * 2,
+                                  [{"tool_slug": "SLACK_SEND_MESSAGE", "arguments": "not an object"}]])
+def test_ambiguous_or_malformed_composio_envelopes_have_no_message_preview(tools):
+    tool = PluginTool("mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL", "Composio", "COMPOSIO_MULTI_EXECUTE_TOOL", "", {}, Tier.T2)
+    assert permission_module.message_preview(tool, {"tools": tools}) is None
+    assert permission_module.permission_identity(tool, {"tools": tools}) == ("", "COMPOSIO_MULTI_EXECUTE_TOOL")
+
+
+async def test_message_fields_survive_settlement_and_reopening_without_other_arguments(owner, plugins, client):
+    await plugins.connect(note="T2")
+    script(client)
+    asked = await typed(owner.rig)
+    first = owner.cards_of(asked["turn_id"])[0]
+    message = {"to": "#planning", "body": "Review the sample plan.", "api_key": "synthetic-secret"}
+    card = owner.cards.show(card_id="message-preview", turn_id=first.turn_id, member_id=first.member_id,
+                            conversation_id=first.conversation_id, source="ask", kind="tool", service="Sample",
+                            tool="send_message", summary="Send the sample message?", reason="", digest=first.digest,
+                            always=False, language="en", wait_ms=10000, message=message)
+    assert card.view()["message"] == {"to": "#planning", "body": "Review the sample plan."}
+    owner.cards.answered(card.id, "allowed")
+    reopened = PermissionCards(owner.conn)
+    assert reopened.store.get(card.id).view()["message"] == card.view()["message"]
+    assert reopened.store.get(card.id).state == "allowed"
+
+
+async def test_a_connected_message_keeps_exact_delivery_fields_and_the_original_approval(owner, plugins, client):
+    from mcp.server.mcpserver import MCPServer
+
+    server = MCPServer("sample")
+    delivered = []
+
+    @server.tool()
+    def send_message(channel: str, text: str, workspace: str, thread_ts: str) -> str:
+        delivered.append({"channel": channel, "text": text, "workspace": workspace, "thread_ts": thread_ts})
+        return "Delivered."
+
+    plugins.servers.by_name["Sample"] = server
+    added = await plugins.rpc.call("integrations.add", {"name": "Sample", "transport": "stdio", "command": "unused"})
+    server_id = added["server"]["id"]
+    await plugins.rpc.call("integrations.set_enabled", {"id": server_id, "enabled": True})
+    await plugins.rpc.call("integrations.refresh", {"id": server_id})
+    plugins.hub.strict["send_message"] = Tier.T2
+    args = {"channel": "#planning", "text": "Review the sample plan.", "workspace": "Sample studio", "thread_ts": "123.456"}
+    script(client, tool="Sample__send_message", arguments=args)
+    asked = await typed(owner.rig)
+    assert delivered == []
+    view = await owner.view(asked["turn_id"])
+    [card] = view["permissions"]
+    assert card["message"] == {"workspace": "Sample studio", "to": "#planning", "thread": "123.456", "body": "Review the sample plan."}
+    await owner.confirm(asked, True, digest=card["digest"])
+    assert delivered == [args]
+    assert (await owner.view(asked["turn_id"]))["permissions"][0]["message"] == card["message"]
+
+
+async def test_composio_approval_executes_the_original_envelope_once_and_keeps_the_draft(owner, plugins, client):
+    from mcp.server.mcpserver import MCPServer
+
+    server, delivered = MCPServer("router"), []
+    @server.tool()
+    def COMPOSIO_MULTI_EXECUTE_TOOL(tools: list[dict]) -> str:
+        delivered.append({"tools": tools})
+        return "Delivered."
+    plugins.servers.by_name["Composio"] = server
+    added = await plugins.rpc.call("integrations.add", {"name": "Composio", "transport": "stdio", "command": "unused"})
+    server_id = added["server"]["id"]
+    await plugins.rpc.call("integrations.set_enabled", {"id": server_id, "enabled": True})
+    await plugins.rpc.call("integrations.refresh", {"id": server_id})
+    plugins.hub.strict["COMPOSIO_MULTI_EXECUTE_TOOL"] = Tier.T2
+    envelope = {"tools": [{"tool_slug": "SLACK_SEND_MESSAGE", "arguments": {
+        "channel": "#planning", "markdown_text": "Exact **sample** words\nSecond line", "thread_ts": "1.2", "unrelated": {"flag": True}}}]}
+    script(client, tool="Composio__COMPOSIO_MULTI_EXECUTE_TOOL", arguments=envelope)
+    asked = await typed(owner.rig)
+    [card] = (await owner.view(asked["turn_id"]))["permissions"]
+    assert delivered == []
+    assert (card["service"], card["tool"]) == ("Slack", "SLACK_SEND_MESSAGE")
+    assert card["message"] == {"to": "#planning", "thread": "1.2", "body": "Exact **sample** words\nSecond line"}
+    await owner.confirm(asked, True, digest=card["digest"])
+    assert delivered == [envelope]
+    await owner.confirm(asked, True, digest=card["digest"])
+    assert delivered == [envelope]
+    assert (await owner.view(asked["turn_id"]))["permissions"][0]["message"] == card["message"]
 
 
 # --- the card of a question ----------------------------------------------------------------------------
@@ -280,7 +433,8 @@ async def test_a_no_is_remembered_by_the_request_so_that_no_other_way_to_the_sam
     [
         ("app", False, False, "private", True),
         ("connector", False, False, "private", True),  # a task resumed in the same thread
-        ("voice", False, False, "private", False),  # a spoken request: the overlay asks
+        ("voice", False, False, "private", True),  # said into the chat the owner is at
+        ("voice", True, False, "private", False),  # a question spoken at the key: the overlay asks
         ("telegram", False, False, "private", False),  # a message from a phone
         ("app", True, False, "private", False),  # a quick question
         ("app", False, True, "private", False),  # a request one member handed another
@@ -288,7 +442,7 @@ async def test_a_no_is_remembered_by_the_request_so_that_no_other_way_to_the_sam
         ("member", False, False, "exchange", False),
     ],
 )
-def test_only_a_private_chat_typed_at_this_computer_is_shown_a_card(source, quick, nested, scope, shown):
+def test_only_a_private_chat_the_owner_is_at_is_shown_a_card(source, quick, nested, scope, shown):
     assert qualifies(source=source, quick=quick, nested=nested, scope=scope) is shown
 
 

@@ -59,6 +59,36 @@ async def refused(router, key, model) -> str:
     return raised.value.message
 
 
+@pytest.mark.parametrize("key", ["agent_model", "quick_model"])
+async def test_answer_choices_keep_catalog_effort_across_catalog_reload(router, client, key):
+    import copy
+    model = copy.deepcopy(RECORDED[0])
+    model.update(id="test/reasoner", reasoning={"supported_efforts": ["high", "low", "none"]})
+    model["supported_parameters"] = ["response_format", "structured_outputs", "max_tokens", "reasoning", "tools"]
+    client.reply = [*RECORDED, model]
+    await router.call("models.catalog", {})
+    reference = "test/reasoner?effort=high"
+    assert await choose(router, key, reference) == reference
+    assert (await router.call("models.catalog", {}))["replaced"] == []
+    assert (await router.call("settings.get", {}))["settings"][key] == reference
+
+
+async def test_an_explicit_openrouter_source_keeps_the_catalog_identity(router):
+    await router.call("models.catalog", {})
+    assert await choose(router, "agent_model", "@openrouter:tencent/hunyuan-a13b-instruct") == "tencent/hunyuan-a13b-instruct"
+
+
+@pytest.mark.parametrize("effort", ["high", "unknown", "high&extra=1"])
+async def test_an_effort_the_model_does_not_offer_is_refused(router, client, effort):
+    import copy
+    model = copy.deepcopy(RECORDED[0])
+    model.update(id="test/limited", reasoning={"supported_efforts": ["low"]})
+    model["supported_parameters"] = ["response_format", "structured_outputs", "max_tokens", "reasoning"]
+    client.reply = [*RECORDED, model]
+    await router.call("models.catalog", {})
+    await refused(router, "agent_model", f"test/limited?effort={effort}")
+
+
 # --- the roles ----------------------------------------------------------------------------------
 
 

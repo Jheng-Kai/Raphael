@@ -25,6 +25,10 @@ class Connector:
     gmail: str = "write"
     calendar: str = "write"
     granted_scopes: list[str] = field(default_factory=list)
+    # The auth config Composio keeps for an app the owner added with a key or with a developer app of their
+    # own (an id; the key and the app's secret are Composio's, never here).
+    auth_config_id: str = ""
+    last_used_at: int = 0
 
 
 class ConnectorStore:

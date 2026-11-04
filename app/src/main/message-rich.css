@@ -1,0 +1,67 @@
+/* Rich reply cards share the message column and existing surface/control tokens. */
+.chat-message:has(> .rich-block) { width: 100%; gap: var(--sp-3); }
+.chat-message > .ans { max-width: min(60ch, 100%); }
+.rich-block { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; margin: 0; overflow: hidden; border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--panel); color: var(--text); font: var(--fs-sm)/1.6 var(--ui); white-space: normal; }
+.rich-head { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-2); min-height: 38px; padding: var(--sp-1) var(--sp-3); border-bottom: 1px solid var(--edge); color: var(--text-2); font-size: var(--fs-xs); }
+.rich-head > span { min-width: 0; overflow-wrap: anywhere; }
+.rich-head > div { display: flex; flex-shrink: 0; gap: var(--sp-1); }
+.rich-head .i { width: 16px; height: 16px; }
+.rich-scroll { overflow-x: auto; max-width: 100%; }
+.message-table table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.message-table th, .message-table td { padding: var(--sp-2) var(--sp-3); vertical-align: top; overflow-wrap: anywhere; border-bottom: 1px solid var(--line); }
+.message-table th { background: var(--surface-2); font-weight: var(--weight-semibold); }
+.message-table tr:last-child td { border-bottom: 0; }
+.message-table th:not(:last-child), .message-table td:not(:last-child) { border-inline-end: 1px solid var(--line); }
+.message-table .align-left { text-align: left; }
+.message-table .align-center { text-align: center; }
+.message-table .align-right { text-align: right; }
+.message-table code { font-size: var(--fs-xs); background: var(--surface-2); border-radius: var(--r-sm); }
+.rich-block.message-code { margin: 0; }
+.rich-block.message-code pre { margin: 0; padding: var(--sp-3); border-radius: 0; overflow-x: auto; background: var(--panel); white-space: pre; overflow-wrap: normal; font: var(--fs-xs)/1.7 var(--mono); }
+.rich-block.message-code pre code { padding: 0; background: transparent; font: inherit; }
+.rich-note { margin: 0; padding: var(--sp-2) var(--sp-3); color: var(--text-3); font-size: var(--fs-xs); }
+.diagram-view { padding: var(--sp-4); overflow-x: auto; overflow-y: auto; text-align: center; }
+.diagram-view > .diagram-canvas { display: block; max-width: 100%; height: auto; margin: auto; }
+.rich-image-body { padding: var(--sp-3); }
+.rich-image-open { display: block; padding: 0; width: 100%; border: 0; background: transparent; cursor: zoom-in; }
+.rich-image-open img { display: block; max-width: 100%; max-height: 420px; margin: auto; object-fit: contain; }
+.mb-dialog.rich-view-dialog { width: min(1200px, calc(100vw - 48px)); max-width: calc(100vw - 48px); }
+.rich-view-dialog .mb-dlg-body { max-height: 75vh; overflow-x: auto; overflow-y: auto; }
+.rich-view-dialog .diagram-view > .diagram-canvas { width: 100%; max-width: none; min-width: min(700px, 100%); }
+.rich-view-dialog img { display: block; max-width: 100%; max-height: 70vh; margin: auto; object-fit: contain; }
+.mermaid-staging { position: fixed; inset: 0 auto auto 0; width: 1000px; visibility: hidden; pointer-events: none; }
+.message-text h1, .message-text h2, .message-text h3, .message-text h4, .message-text h5, .message-text h6 { margin: .6em 0 .3em; font-size: var(--fs-md); line-height: 1.5; font-weight: var(--weight-semibold); }
+.message-text h1 { font-size: var(--fs-h1); }
+.message-text h2 { font-size: var(--fs-lg); }
+.message-text :is(h1, h2, h3, h4, h5, h6):first-child { margin-top: 0; }
+.message-text blockquote { margin: .6em 0; padding-inline-start: var(--sp-3); border-inline-start: 3px solid var(--edge); color: var(--text-2); }
+.message-text hr { border: 0; border-top: 1px solid var(--edge); margin: var(--sp-3) 0; }
+.message-task { list-style: none; }
+.message-task input { margin-inline: -1.3em .5em; accent-color: var(--accent-text); }
+.forecast-days { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: var(--sp-2); padding: var(--sp-3); }
+.forecast-day { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-2); border-radius: var(--r-sm); text-align: center; overflow-wrap: anywhere; min-width: 0; }
+.forecast-day[aria-current] { background: var(--surface-2); }
+.forecast-day > .i { width: 20px; height: 20px; }
+.forecast-temperatures { display: flex; gap: var(--sp-2); font-variant-numeric: tabular-nums; }
+.forecast-temperatures > span, .form-units, .board-card > span { color: var(--text-2); }
+.form-units { margin: 0; padding: 0 var(--sp-3) var(--sp-2); font-size: var(--fs-xs); }
+.board-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); align-items: start; gap: var(--sp-3); padding: var(--sp-3); }
+.board-column { min-width: 0; overflow-wrap: anywhere; }
+.board-column h4 { margin: 0 0 var(--sp-2); font: inherit; font-weight: var(--weight-semibold); }
+.board-card { padding: var(--sp-3); margin-bottom: var(--sp-2); background: var(--surface-2); border-radius: var(--r-sm); }
+.board-card p { margin: var(--sp-1) 0; }
+.board-card > span { font-size: var(--fs-xs); }
+.form-chart { display: block; width: 100%; height: auto; overflow: visible; }
+.form-chart text { fill: var(--text-2); font: var(--fs-xs) var(--ui); }
+.chart-axis { fill: none; stroke: var(--edge); stroke-width: 1; }
+.chart-series { fill: var(--text); stroke: var(--text); stroke-width: 2; }
+.chart-series-1 { fill: var(--text-2); stroke: var(--text-2); }
+.form-chart polyline { fill: none; }
+.form-chart polyline.chart-series-1 { stroke-dasharray: 6 4; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3) 0; color: var(--text-2); font-size: var(--fs-xs); overflow-wrap: anywhere; }
+.chart-key::before { content: ""; display: inline-block; width: 14px; margin-inline-end: 6px; border-top: 2px solid var(--text); vertical-align: middle; }
+.chart-key-1::before { border-color: var(--text-2); border-top-style: dashed; }
+.hljs-keyword, .hljs-selector-tag, .hljs-built_in { color: var(--accent-text); font-weight: var(--weight-semibold); }
+.hljs-string, .hljs-attr, .hljs-title { color: var(--ok); }
+.hljs-number, .hljs-literal, .hljs-symbol { color: var(--warn); }
+.hljs-comment, .hljs-meta { color: var(--text-3); }

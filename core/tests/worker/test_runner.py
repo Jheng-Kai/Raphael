@@ -76,6 +76,15 @@ async def test_the_worker_says_hello_with_the_protocol_version_and_its_process_i
     assert hello == {"protocol": 1, "pid": os.getpid()}
 
 
+async def test_host_can_replace_the_worker_catalog_after_discovery(core):
+    replacement = [{"type": "function", "function": {"name": "computer__click", "parameters": {"type": "object"}}}]
+    core.chats = [calling(), final()]
+    core.tools = [{"ok": True, "content": "Discovered controls.", "tools": replacement, "replace_tools": True}]
+    result = await core.a.request("task.run", spec())
+    assert result["status"] == "done"
+    assert core.chat_requests[1]["tools"] == replacement
+
+
 async def test_a_task_is_carried_out_by_asking_the_core_for_every_model_reply_and_tool_result(core):
     core.chats = [calling(), final("Tea is green.")]
     core.tools = [{"ok": True, "kind": None, "content": "green", "truncated": False}]
@@ -96,6 +105,63 @@ async def test_a_task_is_carried_out_by_asking_the_core_for_every_model_reply_an
     }
     sent_back = core.chat_requests[1]["messages"][-1]
     assert sent_back["role"] == "tool" and "green" in sent_back["content"]
+
+
+async def test_responses_continuation_survives_the_worker_ipc_boundary(core):
+    continuation = [{"type": "reasoning", "id": "rs", "encrypted_content": "opaque-reasoning"}]
+    core.chats = [{**calling(), "responses_output": continuation}, final()]
+    core.tools = [{"ok": True, "content": "green"}]
+    result = await core.a.request("task.run", spec())
+    assert result["status"] == "done"
+    assistant = next(message for message in core.chat_requests[1]["messages"] if message["role"] == "assistant")
+    assert assistant["responses_output"] == continuation
+    assert "opaque-reasoning" not in result["final"]
+
+
+async def test_a_background_task_that_repeats_the_same_call_for_ever_still_ends(core):
+    """Nobody is in a background task to read a note, so the worker is the one that ends it."""
+    core.chats = [calling() for _ in range(10)]
+    core.tools = [{"ok": True, "kind": None, "content": "green", "truncated": False} for _ in range(10)]
+    result = await core.a.request("task.run", spec())
+    assert (result["status"], result["kind"], result["detail"]) == ("stopped", "failed", "tool_loop")
+    assert result["tool_calls"] == 5 and len(core.tool_requests) == 5
+
+
+async def test_a_reply_the_core_says_was_cut_off_is_asked_for_again_with_more_room(core):
+    cut = {"content": "", "calls": [{"id": "c1", "name": "Notes__look", "arguments": None, "raw": '{"top'}],
+           "finish_reason": "length"}
+    core.chats = [cut, calling(), final()]
+    core.tools = [{"ok": True, "content": "green"}]
+    result = await core.a.request("task.run", spec())
+    assert result["status"] == "done" and len(core.tool_requests) == 1
+    assert ["room" in request for request in core.chat_requests] == [False, True, False]
+    assert core.chat_requests[1]["room"] == 2
+
+
+async def test_the_window_and_the_real_usage_shrink_the_conversation_across_the_worker_boundary(core):
+    summaries = []
+
+    async def summarize(params):
+        summaries.append(params)
+        return {"text": "## Goal\nGo on.\n## Completed actions\n1. READ tea — green"}
+
+    core.a.register("host.summarize", summarize)
+    answer = {"ok": True, "content": "tea " * 3000}
+    core.tools = [dict(answer) for _ in range(12)]
+    core.chats = [{**calling(id=f"c{n}", arguments={"topic": f"t{n}"}), "prompt_tokens": 2000 + n * 3000} for n in range(12)] + [final()]
+    result = await core.a.request("task.run", spec(context_window=20_000))
+    assert result["status"] == "done"
+    assert summaries and summaries[0]["task_id"] == 7 and summaries[0]["max_tokens"] >= 2000
+    last = core.chat_requests[-1]["messages"]
+    assert last[1]["role"] == "user" and last[1]["content"].startswith("USER") and "READ tea" in last[1]["content"]
+
+
+async def test_an_overflow_told_by_the_core_is_shrunk_and_sent_again(core):
+    core.tools = [{"ok": True, "content": "tea " * 3000}]
+    core.chats = [calling(), RpcError(WORKER_STOPPED, "no", {"stop": "failed", "detail": "context_overflow", "window": 2000}), final()]
+    result = await core.a.request("task.run", spec())
+    assert result["status"] == "done" and len(core.chat_requests) == 3
+    assert len(json.dumps(core.chat_requests[2]["messages"])) < len(json.dumps(core.chat_requests[1]["messages"]))
 
 
 async def test_a_refusal_of_the_core_ends_the_task_with_what_it_said(core):
@@ -141,23 +207,55 @@ async def test_a_task_that_is_not_well_formed_is_refused(core, bad):
     assert error.value.code == INVALID_PARAMS
 
 
-async def test_one_task_at_a_time(core):
-    started = asyncio.Event()
+async def test_tasks_run_side_by_side_and_a_task_runs_once(core):
+    started = []
     release = asyncio.Event()
 
     async def hold():
-        started.set()
+        started.append(1)
         await release.wait()
         return final()
 
-    core.chats = [hold]
-    running = asyncio.ensure_future(core.a.request("task.run", spec()))
-    await asyncio.wait_for(started.wait(), 2)
+    core.chats = [hold, hold]
+    one = asyncio.ensure_future(core.a.request("task.run", spec()))
+    two = asyncio.ensure_future(core.a.request("task.run", spec(task_id=8)))
+    await asyncio.wait_for(_both(started), 2)
     with pytest.raises(RpcError) as error:
         await core.a.request("task.run", spec(task_id=8))
     assert error.value.code == BUSY
     release.set()
-    assert (await running)["status"] == "done"
+    assert [(await one)["status"], (await two)["status"]] == ["done", "done"]
+
+
+async def _both(started):
+    while len(started) < 2:
+        await asyncio.sleep(0.01)
+
+
+async def test_cancelling_one_of_two_tasks_leaves_the_other_running(core):
+    started = []
+    release = asyncio.Event()
+
+    async def hold():
+        started.append(1)
+        await asyncio.sleep(30)
+
+    async def finish():
+        started.append(1)
+        await release.wait()
+        return final()
+
+    core.chats = [hold, finish]
+    one = asyncio.ensure_future(core.a.request("task.run", spec()))
+    while not started:
+        await asyncio.sleep(0.01)
+    two = asyncio.ensure_future(core.a.request("task.run", spec(task_id=8)))
+    await asyncio.wait_for(_both(started), 2)
+    core.a.notify("task.cancel", {"task_id": 7})
+    assert (await asyncio.wait_for(one, 2))["status"] == "cancelled"
+    assert not two.done()
+    release.set()
+    assert (await two)["status"] == "done"
 
 
 async def test_cancel_stops_the_task_that_runs_and_only_that_one(core):

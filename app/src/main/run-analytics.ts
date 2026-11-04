@@ -1,14 +1,15 @@
 /** Aggregate retained usage and subscription allowances, alongside daily analytics. */
+import { noticeHTML } from "./missing";
 import "./run-analytics.css";
 import { getLocale, t, onLocaleChange } from "./i18n";
 import { usageModel } from "./usage-models";
-import { CLIS, cliModels } from "./cli-brains";
+import { CHATGPT_USAGE_URL, CLIS, cliModels } from "./cli-brains";
 import { providerMark } from "./provider-marks";
 import { modelsFor } from "./model-picker";
 import type { CatalogModel } from "./types";
 import { formatUsd, describeError } from "./format";
 import { faceHTML } from "./members";
-import { btn as uiBtn, esc, openMenu, sel, tabs, toaster } from "./ui";
+import { btn as uiBtn, esc, iconButton, openMenu, patchHTML, sel, tabs, toaster } from "./ui";
 import type { MessageKey } from "./i18n/zh-TW";
 import type { CliAllowances, RunAnalyticsApi, RunGrouping, RunPeriod, RunReport, RunSummary } from "./run-analytics-types";
 
@@ -39,9 +40,11 @@ export function mountRunAnalytics(host: HTMLElement, api: RunAnalyticsApi, onMod
   }
   let range: RunPeriod = "month", grouping: RunGrouping = "model", report: RunReport | null = null;
   let allowance: CliAllowances = { brains: [] }, busy = false, exportBusy = false, allowanceBusy = false, error = "", revision = 0, disposed = false;
+  let allowanceFailed = false, chatgpt = false;
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const params = () => ({ range, tz });
   function allowanceHTML(): string {
+    if (allowanceFailed) return noticeHTML("allowance", "models");
     return allowance.brains.map(brain => {
       const cli = CLIS.find(c => c.id === brain.id), name = brain.id === "claude" ? "Claude" : cli?.name ?? brain.name;
       const quota = allowance.quotas?.find(q => q.provider === brain.id);
@@ -50,7 +53,7 @@ export function mountRunAnalytics(host: HTMLElement, api: RunAnalyticsApi, onMod
       return `<article class="run-subscription"><header><h4>${providerMark(cli?.mark ?? brain.id)}${esc(name)}</h4>` +
         (brain.windows.length ? `<span class="run-allowance-source">${t(reported ? "runs.lastReported" : "runs.liveAllowance")}</span>` : "") + `</header>` +
         (quota ? `<p class="run-quota"><strong>${t("runs.exhausted")}</strong><small>${quota.reset_at_ms ? `${t("runs.resets")} ${esc(time(quota.reset_at_ms))}` : t("runs.resetUnknown")}</small></p>` : "") +
-        (!brain.windows.length ? `<p class="run-allowance-unavailable">${t("runs.allowanceUnavailable")}</p>` : brain.windows.map(w => {
+        (!brain.windows.length ? `<p class="run-allowance-unavailable">${t("missing.allowanceUnknown")}</p>` : brain.windows.map(w => {
           const known = typeof w.remaining_percent === "number" && Number.isFinite(w.remaining_percent);
           const remaining = Math.min(100,Math.max(0,w.remaining_percent ?? 0));
           return `<div class="run-window"><span>${t(periods[w.period])}</span>` +
@@ -63,14 +66,20 @@ export function mountRunAnalytics(host: HTMLElement, api: RunAnalyticsApi, onMod
         }).join("")) + `</article>`;
     }).join("");
   }
+  /** The plan's numbers are on ChatGPT's own page: the card has the place to read them. */
+  function chatgptHTML(): string {
+    if (!chatgpt) return "";
+    return `<article class="run-subscription" data-allowance="chatgpt"><header><h4>${providerMark("openai")}ChatGPT</h4>${btn(esc(t("brains.manageUsage")), ' data-run-act="chatgpt-usage"')}</header>` +
+      `<p class="run-allowance-unavailable">${t("runs.chatgptAllowance")}</p></article>`;
+  }
   function bars(group: RunGrouping): string {
     const all = report!.groups[group], values = group === "member" && !allMembers ? all.slice(0,5) : all, peak = Math.max(1, ...all.map(g => g.tokens || g.runs));
-    return values.length ? `<ul class="run-bars">${values.map(g => `<li><div><span class="run-group-label">${group === "model" ? modelHTML(g.label) : group === "member" ? faceHTML({id:g.member_id ?? (g.label === "Raphael" ? 0 : -1),name:g.label,avatar_url:g.avatar_url},24) + esc(memberName(g.member_id,g.label)) : esc(g.label === "unknown" ? t("runs.unknown") : g.label)}</span><strong>${number(g.tokens || g.runs)}</strong></div>` +
+    return values.length ? `<ul class="run-bars">${values.map(g => `<li><div><span class="run-group-label">${group === "model" ? modelHTML(g.label) : group === "member" ? faceHTML({id:g.member_id ?? (g.label === "Raphael" ? 0 : -1),name:g.label,avatar:g.avatar},24) + esc(memberName(g.member_id,g.label)) : esc(g.label === "unknown" ? t("runs.unknown") : g.label)}</span><strong>${number(g.tokens || g.runs)}</strong></div>` +
       `<div class="run-bar-track"><i style="width:${Math.max(1, (g.tokens || g.runs) / peak * 100)}%"></i></div><small>${formatUsd(g.cost_usd)}</small></li>`).join("")}</ul>${group === "member" && all.length > 5 ? btn(t(allMembers ? "runs.showLess" : "runs.showAll"), ' data-run-act="members"') : ""}` : `<p class="ua-empty">${t("runs.empty")}</p>`;
   }
   function billHTML(): string {
     const bill = report!.bill;
-    const purposeKey = { agent: "runs.work", stt: "usage.stt", cleanup: "usage.cleanup", memory: "usage.memory" } as const;
+    const purposeKey = { agent: "runs.work", stt: "usage.stt", cleanup: "usage.cleanup", memory: "usage.memory", image: "media.image", video: "media.video" } as const;
     const exclusions = [
       allowance.brains.length ? btn(t("runs.cliExcluded"), ' data-run-act="show-allowance"') : "",
       report!.fish_voice ? esc(t("runs.fishExcluded")) : "",
@@ -88,29 +97,34 @@ export function mountRunAnalytics(host: HTMLElement, api: RunAnalyticsApi, onMod
     if (disposed) return;
     const focus = root.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.runAct : undefined;
     root.setAttribute("aria-busy", String(busy));
-    let html = `<header class="run-header"><h2>${t("runs.overview")}</h2><div>${sel(Object.entries(periodKey).map(([value, key]) => ({ value, label: t(key) })), range, t("usage.period"), ' data-run-act="period"')}${btn(t("runs.export"), ` data-run-act="export"${busy || exportBusy ? " disabled" : ""}`)}</div></header>`;
-    if (report) html += billHTML() + `<section class="run-work"><h3>${t("runs.workDetail")}</h3><p class="run-retained">${t("runs.retained")}</p>` + tiles(report.summary) + `<h4>${t("runs.where")}</h4><div class="run-groups"><section class="run-members"><h4>${t("runs.member")}</h4>${bars("member")}</section><section><div class="run-segments">` +
+    let html = `<header class="run-header"><h2>${t("runs.overview")}</h2><div>${sel(Object.entries(periodKey).map(([value, key]) => ({ value, label: t(key) })), range, t("usage.period"), ' data-run-act="period"')}${iconButton("download", t("runs.export"), ` data-run-act="export"${busy || exportBusy ? " disabled" : ""}`)}</div></header>`;
+    if (report) html += billHTML() + `<section class="run-work"><h3>${t("runs.workDetail")}</h3>` + tiles(report.summary) + `<h4>${t("runs.where")}</h4><div class="run-groups"><section class="run-members"><h4>${t("runs.member")}</h4>${bars("member")}</section><section><div class="run-segments">` +
       tabs((["model", "day", "provider", "routine"] as RunGrouping[]).map(g => ({id:g,label:t(groupKey[g]),attrs:` data-run-group="${g}" tabindex="${grouping === g ? 0 : -1}"`})),grouping,{label:t("runs.where"),kind:"nav"}) + `</div>${bars(grouping)}</section></div></section>`;
     if (busy) html += `<p role="status" class="ua-status">${t("usage.loading")}</p>`;
     if (error) html += `<p role="alert">${esc(error)}</p>${btn(t("usage.retry"), ' data-run-act="retry"')}`;
     html += `<section class="run-allowance"><header><h3 tabindex="-1">${t("runs.allowance")}</h3>${btn(t("runs.refresh"), ` data-run-act="allowance"${allowanceBusy ? " disabled" : ""}`)}</header>` +
-      allowanceHTML() + `</section>`;
-    root.innerHTML = html;
+      allowanceHTML() + chatgptHTML() + `</section>`;
+    patchHTML(root, html);
     if (focus) root.querySelector<HTMLElement>(`[data-run-act="${focus}"]`)?.focus({ preventScroll: true });
   }
   async function refresh(): Promise<void> {
-    const current = ++revision; busy = true; error = ""; render();
+    const current = ++revision, quiet = report !== null && !error, before = JSON.stringify(report);
+    busy = !quiet; error = ""; if (!quiet) render();
     try {
       const result = await api.usageRuns(params());
       if (disposed || current !== revision) return;
       report = result;
     } catch (e) { if (current === revision) error = describeError(e); }
-    if (current === revision) { busy = false; render(); }
+    if (current === revision) { busy = false; if (!quiet || error || JSON.stringify(report) !== before) render(); }
   }
-  async function allowances(): Promise<void> {
-    allowanceBusy = true; render();
-    try { allowance = await api.usageAllowances(); } catch { allowance = { brains: [] }; }
-    allowanceBusy = false; render();
+  async function allowances(background = false): Promise<void> {
+    const before = JSON.stringify([allowance, allowanceFailed, chatgpt]);
+    const quiet = background && report !== null;
+    allowanceBusy = !quiet; if (!quiet) render();
+    try { allowance = await api.usageAllowances(); allowanceFailed = false; } catch { allowanceFailed = true; }
+    const account = await api.chatgptStatus?.().catch(() => null);
+    chatgpt = !!account?.signed_in && account.plan_scope_granted !== false;
+    allowanceBusy = false; if (!quiet || JSON.stringify([allowance, allowanceFailed, chatgpt]) !== before) render();
   }
   async function click(event: Event): Promise<void> {
     const button = (event.target as Element).closest<HTMLButtonElement>("button"); if (!button || button.disabled) return;
@@ -121,6 +135,7 @@ export function mountRunAnalytics(host: HTMLElement, api: RunAnalyticsApi, onMod
     else if (act === "retry") void refresh();
     else if (act === "members") { allMembers = !allMembers; render(); }
     else if (act === "allowance") void allowances();
+    else if (act === "chatgpt-usage") void api.openExternalUrl?.(CHATGPT_USAGE_URL).catch(e => toaster.info(describeError(e)));
     else if (act === "show-allowance") {
       const heading = root.querySelector<HTMLElement>(".run-allowance h3");
       heading?.scrollIntoView({ block: "start", behavior: "smooth" });
@@ -150,5 +165,5 @@ export function mountRunAnalytics(host: HTMLElement, api: RunAnalyticsApi, onMod
     if (!disposed) { onModels(models); render(); }
   });
   const ready = Promise.all([refresh(), allowances(), metadata]).then(() => {});
-  return { ready, refresh: async () => { await Promise.all([refresh(), allowances()]); }, destroy() { disposed = true; ++revision; stopLocale(); root.removeEventListener("click", click); root.removeEventListener("keydown",key); root.remove(); } };
+  return { ready, refresh: async () => { await Promise.all([refresh(), allowances(true)]); }, destroy() { disposed = true; ++revision; stopLocale(); root.removeEventListener("click", click); root.removeEventListener("keydown",key); root.remove(); } };
 }

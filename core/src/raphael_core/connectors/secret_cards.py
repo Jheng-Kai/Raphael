@@ -25,6 +25,7 @@ is over: the card is saved, with `interrupted`.
 """
 
 import asyncio
+from ..failures import classify
 import json
 import logging
 import re
@@ -78,7 +79,8 @@ class SecretCard:
     def view(self) -> dict:
         """The card as the window draws it: the connection and the secret it declares, never a value."""
         return {"id": self.id, "name": self.name, "secret": self.secret, "state": self.state,
-                "error": self.error or None, "expires_at_ms": self.expires_at_ms, "resumed": self.resumed}
+                "error": self.error or None, "expires_at_ms": self.expires_at_ms, "resumed": self.resumed,
+                **({"login": True} if self.kind == "login" else {})}
 
 
 def _card(row: sqlite3.Row) -> SecretCard:
@@ -206,13 +208,32 @@ class SecretCards:
         self.store = SecretCardStore(conn, now_ms, wait_ms)
         self._conn, self._integrations, self._notify = conn, integrations, notify
         self.resume: Callable[[int, int], Awaitable[object]] | None = None
+        self.defer_resume: Callable[[int], bool] | None = None
+        self.failure = None
+        self._reported_failures = set()
         self._tasks: set[asyncio.Task] = set()
+        self.logins = None
 
     def register(self, router) -> None:
         router.register("integrations.card_save", self._save)
         router.register("integrations.card_resume", self._retry)
 
     # --- what the agent asks ----------------------------------------------------------------------
+
+    def show_login(self, *, turn_id, member_id, conversation_id, site, language, done=()):
+        from ..computer.logins import origin
+        if self.logins is None:
+            raise LookupError("login")
+        site = origin(site)
+        reference = self.logins.reference(member_id, site)
+        try:
+            self.logins.load(member_id, site, reference)
+            return reference, []
+        except ValueError as error:
+            if str(error) != "login_missing":
+                raise
+        return reference, [self.store.open(turn_id=turn_id, member_id=member_id, conversation_id=conversation_id,
+            server_id=reference, kind="login", secret="login", name=site, language=language, done=done)]
 
     def show(self, *, turn_id: int, member_id: int, conversation_id: int | None, connection: str, secret: str | None,
              language: str, done: Iterable[tuple[str, str]] = ()) -> list[SecretCard]:
@@ -269,11 +290,17 @@ class SecretCards:
             error = "invalid"
         else:
             try:
-                self._integrations.fill_secret(card.server_id, card.kind, card.secret, value)
+                if card.kind == "login" and self.logins is not None:
+                    self.logins.save(card.server_id, value, member=card.member_id, site=card.name)
+                    self.logins.load(card.member_id, card.name, card.server_id)
+                else:
+                    self._integrations.fill_secret(card.server_id, card.kind, card.secret, value)
             except SecretTooLong:
                 error = "too_long"
             except NoSuchSecret:
                 error = "gone"
+            except ValueError:
+                error = "invalid"
             except Exception as exc:  # the vault: its message could hold anything
                 logger.warning("A card's secret could not be kept: %s", type(exc).__name__)
                 error = "vault"
@@ -281,9 +308,11 @@ class SecretCards:
         if error:
             failed = self.store.move(card.id, "failed", error=error) or card
             self._changed(failed)
+            self._report_failure(card.turn_id, classify({"kind": "tool_broken" if error == "vault" else "not_found" if error == "gone" else "refused",
+                                                         "message": f"The secret could not be saved ({error})."}))
             return {"card": failed.view(), "saved": False}
         moved = self.store.move(card.id, "saved")
-        started = self.store.claim_resume(card.turn_id)
+        started = not (self.defer_resume and self.defer_resume(card.turn_id)) and self.store.claim_resume(card.turn_id)
         self._changed(moved or card)
         if started:
             self._start(card.turn_id)
@@ -292,7 +321,7 @@ class SecretCards:
     async def _retry(self, params: dict) -> dict:
         """Carry the task on again after a resume that failed, without asking for the key again."""
         card = self._card(params)
-        started = card.state == "saved" and self.store.claim_resume(card.turn_id)
+        started = card.state == "saved" and not (self.defer_resume and self.defer_resume(card.turn_id)) and self.store.claim_resume(card.turn_id)
         if started:
             self._changed(card)
             self._start(card.turn_id)
@@ -307,16 +336,37 @@ class SecretCards:
 
     async def _resume(self, turn_id: int, attempt: int) -> None:
         ok, made = False, ()
+        cancelled = False
         try:
             outcome = await self.resume(turn_id, attempt)
             ok, made = bool(getattr(outcome, "ok", False)), tuple(getattr(outcome, "made", ()))
+        except asyncio.CancelledError:
+            cancelled = True
+            raise
         except Exception as exc:
-            logger.warning("A saved card's task could not resume: %s", type(exc).__name__)
+            # A vault exception may contain the submitted value; retain its class only.
+            self._report_failure(turn_id, classify({"kind": "tool_broken", "message": type(exc).__name__}))
         finally:
             # A resume cut off (the core closing) is one that did not continue, like a failed one.
             self.store.resume_finished(turn_id, ok, made)
+            if not ok and not cancelled:
+                self._report_failure(turn_id, classify("resume_failed"))
             for card in self.cards_of(turn_id)[:1]:
                 self._changed(card)
+
+    def _report_failure(self, turn_id, failure):
+        if self.failure is None or turn_id in self._reported_failures:
+            return
+        self._reported_failures.add(turn_id)
+
+        async def report():
+            try:
+                await self.failure(turn_id, failure)
+            except Exception as exc:
+                classify({"kind": "unknown", "message": type(exc).__name__})
+        task = asyncio.create_task(report())
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
 
     def _changed(self, card: SecretCard) -> None:
         if self._notify is not None:

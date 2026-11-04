@@ -29,12 +29,14 @@ There are two kinds of cards by who delivers the answer:
   more answers nothing, a replay finds the card answered, and a core that started again has no run:
   the card is expired.
 
-Only a private chat typed at this computer is shown a card. A room, an exchange between members, a quick
+Only a private chat the owner is at, typed or spoken into, is shown a card. A room, an exchange between members, a quick
 question, a spoken request and a message from a phone never get one, and never carry its payload.
 Nothing here logs an action, its arguments or the words of a rule.
 """
 
+import json
 import logging
+import re
 import sqlite3
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -46,13 +48,83 @@ from .policy import UNATTENDED_WAIT_MS
 
 if TYPE_CHECKING:
     from ..computer.run import ComputerRuns
+    from .plugins import PluginTool
 
 logger = logging.getLogger(__name__)
 
 # The only moves a card's state makes: from pending, and only once.
 STATES = ("pending", "allowed", "always", "denied", "expired", "cancelled")
 _COLUMNS = ("id, turn_id, member_id, conversation_id, source, kind, service, tool, summary, reason, digest, always,"
-            " language, state, created_at_ms, expires_at_ms")
+            " language, state, created_at_ms, expires_at_ms, message")
+
+_MESSAGE_FIELDS = ("workspace", "to", "cc", "subject", "thread", "body")
+_MESSAGE_ALIASES = {
+    "workspace": ("workspace", "team_id"),
+    "to": ("to", "recipient_email", "channel", "channel_id", "chat_id", "user_id", "to_number"),
+    "cc": ("cc",),
+    "subject": ("subject",),
+    "thread": ("thread_ts", "thread_id", "thread"),
+    "body": ("body", "message_body", "markdown_text", "text", "message", "content", "fallback_text", "body_text"),
+}
+
+
+def single_composio_call(tool: "PluginTool", arguments: dict) -> tuple[str, dict] | None:
+    """Only an unambiguous router call can stand for one app and one draft."""
+    if tool.name != "COMPOSIO_MULTI_EXECUTE_TOOL":
+        return None
+    calls = arguments.get("tools")
+    if not isinstance(calls, list) or len(calls) != 1 or not isinstance(calls[0], dict):
+        return None
+    slug, values = calls[0].get("tool_slug"), calls[0].get("arguments")
+    if not isinstance(slug, str) or not re.fullmatch(r"[A-Z][A-Z0-9_]+", slug) or not isinstance(values, dict):
+        return None
+    return slug, values
+
+
+def permission_identity(tool: "PluginTool", arguments: dict, connectors: Iterable = ()) -> tuple[str, str]:
+    """Keep the app identity in the existing card fields, independently of the approval's router key."""
+    if tool.name != "COMPOSIO_MULTI_EXECUTE_TOOL":
+        return tool.server, tool.name
+    call = single_composio_call(tool, arguments)
+    if call is None:
+        return "", tool.name
+    slug, _ = call
+    entries = [entry for entry in connectors if entry.kind == "composio" and entry.id.startswith("composio:")
+               and slug.startswith(entry.id.removeprefix("composio:").upper() + "_")]
+    if entries:
+        entry = max(entries, key=lambda item: len(item.id))
+        return entry.name or entry.id.removeprefix("composio:").replace("_", " ").title(), slug
+    return slug.split("_")[0].title(), slug
+
+
+def _message_fields(value: object) -> dict[str, str] | None:
+    if not isinstance(value, dict) or not isinstance(value.get("body"), str):
+        return None
+    return {key: value[key] for key in _MESSAGE_FIELDS if isinstance(value.get(key), str) and value[key]}
+
+
+def message_preview(tool: "PluginTool", arguments: dict) -> dict[str, str] | None:
+    """Project only delivery strings; the original envelope remains the action approved and executed."""
+    call = single_composio_call(tool, arguments)
+    if tool.name == "COMPOSIO_MULTI_EXECUTE_TOOL" and call is None:
+        return None
+    name, values = call if call else (tool.name, arguments)
+    words = re.split(r"[^A-Z0-9]+", re.sub(r"([a-z])([A-Z])", r"\1_\2", name).upper())
+    if (not {"SEND", "POST", "REPLY"}.intersection(words) or {"DRAFT", "DELETE", "LIST", "GET", "SETTINGS"}.intersection(words)
+            or re.search(r"(?:^|_)SEND_AS(?:_|$)", name.upper())):
+        return None
+    props = tool.schema.get("properties", {}) if isinstance(tool.schema, dict) else {}
+    if not isinstance(props, dict):
+        return None
+
+    def text(names: tuple[str, ...]) -> str:
+        for key in names:
+            declared = call is not None or (isinstance(props.get(key), dict) and props[key].get("type") == "string")
+            if declared and isinstance(values.get(key), str) and values[key]:
+                return values[key]
+        return ""
+    result = {key: value for key, aliases in _MESSAGE_ALIASES.items() if (value := text(aliases))}
+    return _message_fields(result) if result.get("to") and result.get("body") else None
 
 
 @dataclass(frozen=True)
@@ -73,18 +145,22 @@ class PermissionCard:
     state: str
     created_at_ms: int
     expires_at_ms: int
+    message: dict[str, str] | None = None
 
     def view(self) -> dict:
         """The card as the window draws it."""
-        return {"id": self.id, "source": self.source, "kind": self.kind, "service": self.service, "tool": self.tool,
+        kind = ("local_access" if self.kind == "app" else "local_command") if self.tool == "local_exec" and self.kind in ("app", "step") else self.kind
+        return {"id": self.id, "source": self.source, "kind": kind, "service": self.service, "tool": self.tool,
                 "summary": self.summary, "reason": self.reason or None, "digest": self.digest, "always": self.always,
-                "state": self.state, "expires_at_ms": self.expires_at_ms}
+                "state": self.state, "expires_at_ms": self.expires_at_ms,
+                **({"message": dict(self.message)} if self.message else {})}
 
 
 def _card(row: sqlite3.Row) -> PermissionCard:
     return PermissionCard(row["id"], row["turn_id"], row["member_id"], row["conversation_id"], row["source"],
                           row["kind"], row["service"], row["tool"], row["summary"], row["reason"], row["digest"],
-                          bool(row["always"]), row["language"], row["state"], row["created_at_ms"], row["expires_at_ms"])
+                          bool(row["always"]), row["language"], row["state"], row["created_at_ms"], row["expires_at_ms"],
+                          _message_fields(json.loads(row["message"])))
 
 
 class PermissionCardStore:
@@ -98,15 +174,15 @@ class PermissionCardStore:
 
     def open(self, *, card_id: str, turn_id: int, member_id: int, conversation_id: int | None, source: str, kind: str,
              service: str, tool: str, summary: str, reason: str, digest: str, always: bool, language: str,
-             wait_ms: int) -> PermissionCard:
+             wait_ms: int, message: dict[str, str] | None = None) -> PermissionCard:
         now = self._now_ms()
         with self._conn:
             self._conn.execute(
                 "INSERT OR IGNORE INTO permission_cards (id, turn_id, member_id, conversation_id, source, kind, service,"
-                " tool, summary, reason, digest, always, language, state, created_at_ms, updated_at_ms, expires_at_ms)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)",
+                " tool, summary, reason, digest, always, language, state, created_at_ms, updated_at_ms, expires_at_ms, message)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)",
                 (card_id, turn_id, member_id, conversation_id, source, kind, service, tool, summary, reason, digest,
-                 int(always), language, now, now, now + wait_ms))
+                 int(always), language, now, now, now + wait_ms if wait_ms else 0, json.dumps(_message_fields(message) or {})))
         return self.get(card_id)  # type: ignore[return-value]
 
     def expire_due(self) -> None:
@@ -115,7 +191,7 @@ class PermissionCardStore:
         now = self._now_ms()
         with self._conn:
             self._conn.execute(
-                "UPDATE permission_cards SET state='expired', updated_at_ms=? WHERE state='pending' AND (expires_at_ms<=?"
+                "UPDATE permission_cards SET state='expired', updated_at_ms=? WHERE state='pending' AND (expires_at_ms>0 AND expires_at_ms<=?"
                 " OR turn_id NOT IN (SELECT id FROM agent_turns WHERE status='confirm') AND source='ask')", (now, now))
 
     def get(self, card_id: str) -> PermissionCard | None:
@@ -158,10 +234,14 @@ class PermissionCardStore:
         return [card for card in (self.get(card_id) for card_id in ids) if card is not None]
 
 
+# The owner is at the chat: they typed in it, spoke into it, or it carries on from one of those.
+AT_A_CHAT = ("app", "connector", "voice")
+
+
 def qualifies(*, source: str, quick: bool, nested: bool, scope: str) -> bool:
-    """Whether a request is one whose chat is shown a card: typed in the app at this computer, in a
-    private chat, not a quick question and not a request one member handed another."""
-    return source in ("app", "connector") and not quick and not nested and scope == "private"
+    """Whether a request is one whose chat is shown a card: in a private chat the owner is at, not a
+    quick question and not a request one member handed another."""
+    return source in AT_A_CHAT and not quick and not nested and scope == "private"
 
 
 class PermissionCards:
@@ -181,10 +261,10 @@ class PermissionCards:
 
     def show(self, *, card_id: str, turn_id: int, member_id: int, conversation_id: int | None, source: str, kind: str,
              service: str, tool: str, summary: str, reason: str, digest: str, always: bool, language: str,
-             wait_ms: int) -> PermissionCard:
+             wait_ms: int, message: dict[str, str] | None = None) -> PermissionCard:
         card = self.store.open(card_id=card_id, turn_id=turn_id, member_id=member_id, conversation_id=conversation_id,
                                source=source, kind=kind, service=service, tool=tool, summary=summary, reason=reason,
-                               digest=digest, always=always, language=language, wait_ms=wait_ms)
+                               digest=digest, always=always, language=language, wait_ms=wait_ms, message=message)
         self._changed(card)
         return card
 

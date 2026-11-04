@@ -13,13 +13,13 @@
 // it (`SEARCH_INDEX`, `searchSettings`).
 
 import { catalogs, t } from "../i18n";
-import { ownerProfileHTML, skinsHTML } from "../owner-settings";
+import { ownerProfileHTML } from "../owner-settings";
 import type { MessageKey } from "../i18n/zh-TW";
 
 import { brandIcon } from "../brand";
 import { type ConnectionsView, connectionsAddHTML, connectionsHTML } from "../connections";
 import { DICTATION_MODES } from "../dictation";
-import { KEEP_FOREVER_DAYS, formatClock, formatRetention, formatUsd } from "../format";
+import { KEEP_FOREVER_DAYS, formatClock, formatShortDateTime, formatRetention, formatUsd } from "../format";
 import { type LanguageGroup, languageSelectHTML, normalizeLanguages } from "../languages";
 import { bindingLabels } from "../keys";
 import { type MessagingView, messagingHTML } from "../messaging";
@@ -27,7 +27,7 @@ import { type MemoryView, memoryHTML } from "../memory-view";
 import { type RulesView, rulesHTML } from "../safety-rules";
 import { AUTO_MICROPHONE, microphoneChoices } from "../microphone";
 import type { LocalView } from "../local-models";
-import { type ModelPickerLook, modelPickerHTML, modelsFor, priceDescription } from "../model-picker";
+import { type ModelPickerLook, modelPickerHTML, modelsFor, planRef, priceDescription, splitEffort } from "../model-picker";
 import { type ServicesView, servicesHTML } from "../services";
 import { type ProvidersView, providersHTML, providersAddHTML, emptyProvidersView } from "../providers";
 import { type CliBrainsView, cliBrainsHTML, cliModels, emptyCliBrainsView } from "../cli-brains";
@@ -35,15 +35,20 @@ import { pricingNote } from "../pricing";
 import type { HotkeyField } from "../hotkey-recording";
 import type { AudioDevices, BrainSettings, DeviceSettings, LocalModel, ModelCatalog, ModelRole, SettingsPane, Status } from "../types";
 import { keyEntryRow, micRow } from "../setup-rows";
-import { type Choice, type IconName, actionRow, btn, esc, fieldHTML, ico, iconBtn, keys, note, row, sel, st, tabs, tg } from "../ui";
+import { type Choice, type IconName, actionRow, btn, esc, fieldHTML, ico, iconBtn, iconButton, keys, note, row, sel, st, tabs, tg } from "../ui";
 
 /** The models the core reads when none is chosen (brain/settings.py), shown while it does not answer. */
 const DEFAULT_MODELS = { cleanup: "openai/gpt-6-luna", answer: "openai/gpt-6-luna", stt: "elevenlabs/scribe-v2" } as const;
-/** In this order: light, dark, or as Windows is. */
+/** One shared dropdown for the complete appearance preference. */
 export const APPEARANCES: Choice[] = [
+  { value: "system", get label() { return t("settings.013"); } },
   { value: "light", get label() { return t("settings.015"); } },
   { value: "dark", get label() { return t("settings.016"); } },
-  { value: "system", get label() { return t("settings.013"); } },
+];
+export const LOCAL_COMMAND_MODES: Choice[] = [
+  { value: "ask", get label() { return t("local.ask"); } },
+  { value: "always", get label() { return t("local.always"); } },
+  { value: "never", get label() { return t("local.never"); } },
 ];
 /** What one background task may spend (brain/settings.py, WORKER_COST_CAPS). */
 export const WORKER_COST_CAPS: Choice[] = [
@@ -135,10 +140,9 @@ export interface SearchEntry {
  * entry here (its name's key), or the search does not know it.
  */
 export const SEARCH_INDEX: readonly SearchEntry[] = [
-  { pane: "general", label: "owner.profile" },
-  { pane: "appearance", label: "skin.styles" },
+  { pane: "general", label: "owner.name" },
   ...PANES.map((p) => ({ pane: p.id })),
-  { pane: "general", label: "settings.059" },
+  { pane: "appearance", label: "settings.059" },
   { pane: "appearance", label: "settings.067", words: ["dark", "light"] },
   { pane: "general", label: "settings.069" },
   { pane: "general", label: "settings.071" },
@@ -154,6 +158,7 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "agent", label: "mem.title", also: "settings.searchMemory" },
   { pane: "agent", label: "rules.title" },
   { pane: "agent", label: "settings.computerUse" },
+  { pane: "agent", label: "local.title" },
   { pane: "agent", label: "services.title" },
   { pane: "agent", label: "services.search", words: ["Brave", "Tavily", "Exa", "SearXNG"] },
   { pane: "agent", label: "services.read", words: ["Jina", "Firecrawl"] },
@@ -167,11 +172,12 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "usage", label: "settings.usageMonthly" },
   { pane: "models", label: "settings.031", also: "settings.searchModel" },
   { pane: "models", label: "settings.035", also: "settings.searchModel" },
-  { pane: "models", label: "settings.agentModel", also: "settings.searchModel" },
-  { pane: "models", label: "conversations.quick", words: ["Alt", "Space"] },
+  { pane: "models", label: "settings.quickModel", also: "settings.searchModel", words: ["Alt", "Space"] },
+  { pane: "models", label: "media.image", words: ["image", "drawing"] },
+  { pane: "models", label: "media.video", words: ["video"] },
   { pane: "data", label: "data.retention", also: "settings.searchHistory" },
-  { pane: "data", label: "data.clearDictation", also: "settings.searchHistory" },
-  { pane: "data", label: "data.clearConversation" },
+  { pane: "data", label: "data.groupDictation", also: "data.clearDictation" },
+  { pane: "data", label: "data.groupConversation", also: "data.clearConversation" },
   { pane: "about", label: "settings.078" },
   { pane: "about", label: "nav.help" },
   { pane: "about", label: "settings.079" },
@@ -255,6 +261,12 @@ export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotke
 
 /** Everything a tab is drawn from: what the panel has read, and what is being typed or done. */
 export interface SettingsView {
+  data?: { items: import("../types").HistoryItem[]; total: number; conversations: number; more: boolean; busy?: boolean; error?: string };
+  /** An absent runtime is shown once in the existing computer settings area. */
+  desktopRequired?: boolean;
+  computerRemote?: boolean;
+  computerAliasDraft?: string;
+  computerHostError?: boolean;
   modelsTab?: ModelsTab;
   pane: SettingsPane;
   device: DeviceSettings;
@@ -273,8 +285,6 @@ export interface SettingsView {
   version: string;
   /** The key field is shown although there is a key (「變更」). */
   replacingKey: boolean;
-  /** 「移除金鑰」 was pressed once and waits for the second press. */
-  confirmingKeyRemoval: boolean;
   keyBusy: boolean;
   keyError: (() => string) | null;
   /** What was typed in the limit field while it is not a limit, and what is wrong with it. */
@@ -285,8 +295,6 @@ export interface SettingsView {
   cityError: (() => string) | null;
   /** Telegram, in the 訊息平台 tab. */
   messaging: MessagingView;
-  /** In 資料, the clear that was pressed once and waits for its second press. */
-  confirmingClear: "dictation" | "conversation" | null;
   /** Raphael's own memory, in the 拉斐爾 tab, after its settings (none: not drawn). */
   memory?: MemoryView;
   /** The owner's safety rules, in the 拉斐爾 tab, after the memory (none: not drawn). */
@@ -339,12 +347,12 @@ export const quickModels = (v: SettingsView) => [
  * choice again (`splitEffort`); under 「與回答相同」 the effort row is the answer model's.
  */
 export const quickPickerLook = (v: SettingsView): ModelPickerLook => ({
-  ...modelPickerLook(v, "answer"), key: "quick-model", label: t("conversations.quick"),
+  ...modelPickerLook(v, "answer"), key: "quick-model", label: t("settings.quickModel"),
   current: `${v.brain?.quick_model ?? ""}?effort=${v.brain?.quick_effort ?? "low"}`, inheritFrom: agentModel(v), defaultEffort: "low",
   lead: { id: "", name: t("services.sameAsAnswer") },
 });
 const quickRow = (v: SettingsView): string =>
-  row(t("conversations.quick"), `<span class="models-purpose-note">${esc(t("models.quickNote"))}</span>${priceSpan(v, "quick-model", "price num")}`,
+  row(t("settings.quickModel"), priceSpan(v, "quick-model", "price num"),
     modelPickerHTML(quickPickerLook(v)), { cls: "row-model", attrs: ' data-row="quick-model"' });
 export const agentCity = (v: SettingsView): string => v.brain?.agent_city ?? "";
 /** What one background task may spend, as the value of its dropdown (the core's default is 0.2). */
@@ -362,7 +370,10 @@ const MIC_METER_SEGMENTS = 46;
 
 /** The full price of the model chosen for `role`, from the catalog: 「輸入 $0.10 / 輸出 $0.50 每百萬 token」. */
 function chosenPrice(catalog: ModelCatalog, role: ModelRole, id: string): string {
-  const model = modelsFor(catalog, role).find((m) => m.id === id);
+  const models = modelsFor(catalog, role);
+  const base = splitEffort(id, models).model;
+  if (planRef(base)) return t("brains.subscription");
+  const model = models.find((m) => m.id === base);
   return model ? priceDescription(model, role) : t("pricing.001");
 }
 
@@ -370,14 +381,12 @@ function chosenPrice(catalog: ModelCatalog, role: ModelRole, id: string): string
 export function priceTexts(v: SettingsView): Record<string, string> {
   const catalog = catalogOf(v);
   const local = sttIsLocal(v) ? t("settings.sttLocalPrice") : null;
-  const subscription = agentModel(v).startsWith("cli:") ? t("brains.subscription") : null;
   const quick = v.brain?.quick_model || agentModel(v);
-  const quickSubscription = quick.startsWith("cli:") ? t("brains.subscription") : null;
-  if (v.catalog === "loading") return { model: PRICES_LOADING(), "agent-model": subscription ?? PRICES_LOADING(), "quick-model": quickSubscription ?? PRICES_LOADING(), "stt-model": local ?? PRICES_LOADING(), note: "" };
-  if (!catalog) return { model: "", "agent-model": subscription ?? "", "quick-model": quickSubscription ?? "", "stt-model": local ?? "", note: t("settings.030") };
+  const quickSubscription = planRef(quick) ? t("brains.subscription") : null;
+  if (v.catalog === "loading") return { model: PRICES_LOADING(), "quick-model": quickSubscription ?? PRICES_LOADING(), "stt-model": local ?? PRICES_LOADING(), note: "" };
+  if (!catalog) return { model: "", "quick-model": quickSubscription ?? "", "stt-model": local ?? "", note: t("settings.030") };
   return {
     model: chosenPrice(catalog, "cleanup", cleanupModel(v)),
-    "agent-model": subscription ?? chosenPrice(catalog, "answer", agentModel(v)),
     "quick-model": quickSubscription ?? chosenPrice(catalog, "answer", quick),
     "stt-model": local ?? chosenPrice(catalog, "stt", sttModel(v)),
     note: pricingNote(catalog, v.now),
@@ -387,34 +396,40 @@ export function priceTexts(v: SettingsView): Record<string, string> {
 const priceSpan = (v: SettingsView, k: string, cls = ""): string =>
   `<span${cls ? ` class="${cls}"` : ""} data-price="${k}">${esc(priceTexts(v)[k] ?? "")}</span>`;
 
-// ---------- the three model rows ----------
-// Each row stands alone: its name with the price of what is chosen under it, in full words, and the
+// ---------- the model rows ----------
+// A member's model is chosen in its own conversation, so nothing here says what any member answers on: the rows are
+// Raphael's quick question, dictation and explicit paid media services. Each row stands alone: its name with the price of what is chosen under it, in full words, and the
 // control, the model picker (model-picker.ts) of every OpenRouter model its role can use. The page
 // draws the picker's button here; settings.ts makes it work. `k` names the control and its price.
 
-/** The three model rows, in order: what each is for, the `k` of its control and its price, and its name. */
-export const MODEL_ROWS: readonly { role: ModelRole; k: string; label: () => string; note: () => string }[] = [
-  { role: "answer", k: "agent-model", label: () => t("settings.agentModel"), note: () => t("models.answerNote") },
-  { role: "cleanup", k: "model", label: () => t("settings.035"), note: () => t("models.cleanupNote") },
-  { role: "stt", k: "stt-model", label: () => t("settings.031"), note: () => t("models.sttNote") },
+/** What each picker is for: the `k` of its control and its price, and its name. The answer role has no row of its own: it lends 快速提問 its list. */
+export const MODEL_ROWS: readonly { role: ModelRole | "image" | "video"; k: string; label: () => string }[] = [
+  { role: "answer", k: "quick-model", label: () => t("settings.quickModel") },
+  { role: "cleanup", k: "model", label: () => t("settings.035") },
+  { role: "stt", k: "stt-model", label: () => t("settings.031") },
+  { role: "image", k: "image-model", label: () => t("media.image") },
+  { role: "video", k: "video-model", label: () => t("media.video") },
 ];
 
 /**
  * What the picker of `role` is drawn from. Its button leaves the price out, which the row says
  * under its name, and it cannot be used while the core does not answer.
  */
-export function modelPickerLook(v: SettingsView, role: ModelRole): ModelPickerLook {
+export function modelPickerLook(v: SettingsView, role: ModelRole | "image" | "video"): ModelPickerLook {
   const { k, label } = MODEL_ROWS.find((r) => r.role === role)!;
+  const media = role === "image" || role === "video";
   return {
     role,
     key: k,
     label: label(),
-    current: role === "stt" ? sttModel(v) : role === "cleanup" ? cleanupModel(v) : agentModel(v),
+    current: media ? v.brain?.[role === "image" ? "image_model" : "video_model"] ?? "" : role === "stt" ? sttModel(v) : role === "cleanup" ? cleanupModel(v) : agentModel(v),
     catalog: catalogOf(v),
     providers: v.providers?.providers,
     clis: role === "answer" ? v.cliBrains?.clis : undefined,
+    ...(role === "answer" ? { chatgpt: v.cliBrains?.chatgpt ?? null, chatgptError: v.cliBrains?.chatgptError ?? "" } : {}),
     loading: v.catalog === "loading",
-    favorites: v.brain?.model_favorites?.[role] ?? [],
+    favorites: v.brain?.model_favorites?.[media ? "answer" : role as ModelRole] ?? [],
+    ...(media ? { lead: { id: "", name: t("media.unset"), source: "" } } : {}),
     ...(role === "stt" ? { local: localView(v) } : {}),
     showPrice: false,
     disabled: v.brain === null,
@@ -443,9 +458,17 @@ export function visionPickerLook(v: SettingsView): ModelPickerLook {
   };
 }
 
-/** A model row: the purpose, its note and price, and the primary picker. */
-const modelRow = (v: SettingsView, { role, k, label, note }: (typeof MODEL_ROWS)[number]): string =>
-  row(label(), `<span class="models-purpose-note">${esc(note())}</span>${priceSpan(v, k, "price num")}`, modelPickerHTML(modelPickerLook(v, role)), { cls: "row-model", attrs: ` data-row="${k}"` });
+/** A model row: the purpose, its price and the primary picker. */
+export function mediaRowPrice(v: SettingsView, role: "image" | "video"): string {
+  const chosen = v.brain?.[role === "image" ? "image_model" : "video_model"] ?? "";
+  const models = catalogOf(v) ? modelsFor(catalogOf(v)!, role) : [];
+  const model = models.find(m => m.id === chosen);
+  return `${model ? priceDescription(model, role) : chosen ? t("media.unavailable") : t("media.unset")} · ${t("media.paid")}` +
+    (!chosen && !models.length && v.catalog !== "loading" ? ` · ${t("media.none")}` : "");
+}
+const modelRow = (v: SettingsView, { role, k, label }: (typeof MODEL_ROWS)[number]): string =>
+  row(label(), role === "image" || role === "video" ? `<span data-media-price="${role}">${esc(mediaRowPrice(v, role))}</span>` : priceSpan(v, k, "price num"),
+    modelPickerHTML(modelPickerLook(v, role)), { cls: "row-model", attrs: ` data-row="${k}"` });
 
 // ---------- the OpenRouter rows ----------
 
@@ -475,10 +498,9 @@ function keyRow(v: SettingsView): string {
       t("common.apiKey"),
       keyStatus(v),
       actionRow({
-        destructive: { label: t(v.confirmingKeyRemoval ? "settings.keyRemoveConfirm" : "settings.keyRemove"), attrs: ' data-act="key-remove"' },
         secondary: btn(v.checkingOpenrouter ? t("common.checking") : t("settings.046"), "", ` data-act="or-check"${v.checkingOpenrouter ? " disabled" : ""}`) +
           btn(t("home.018"), "", ' data-act="key-replace" data-k="key"'),
-      }),
+      }) + iconButton("more", t("members.more", { p0: t("common.apiKey") }), ' data-act="key-menu" aria-haspopup="menu" aria-expanded="false"'),
       { attrs, cls: "row-key" },
     );
   }
@@ -575,9 +597,8 @@ function generalHTML(v: SettingsView): string {
     headingHTML(v) +
     coreNote(v) + ownerProfileHTML(v.brain) +
     section(t("settings.groupAppearance"), [
-      row(t("settings.059"), "", sel(UI_LANGUAGES, d.ui_language, t("settings.059"), ' data-k="ui-language"')),
       row(t("settings.069"), "", sel(SIZES, String(d.emblem_size), t("settings.069"), ' data-k="size"')),
-      row(t("settings.071"), t("settings.072"), tg(d.subtitles !== "off", t("settings.071"), ' data-k="subtitles"')),
+      row(t("settings.071"), "", tg(d.subtitles !== "off", t("settings.071"), ' data-k="subtitles"')),
     ]) +
     section(t("settings.groupStartup"), [
       row(t("settings.073"), "", tg(d.autostart, t("settings.073"), ' data-k="autostart"')),
@@ -602,7 +623,7 @@ function dictationHTML(v: SettingsView): string {
     section(t("settings.groupListen"), [
       row(
         t("transcription.title"),
-        esc(t("settings.spokenLanguagesDesc")),
+        "",
         languageSelectHTML(v.languageGroups ?? [], languagesOf(v), ` data-k="languages"${v.brain ? "" : " disabled"}`),
         { cls: "row-lang" },
       ),
@@ -632,10 +653,21 @@ export const computerApps = (device: DeviceSettings): readonly { exe: string; na
  */
 function computerRows(v: SettingsView): string[] {
   const apps = computerApps(v.device);
-  if (apps.length === 0) return [row(`<span class="val">${esc(t("settings.computerNone"))}</span>`)];
-  return apps.map((app) =>
+  const remote = v.computerRemote ?? !!v.brain?.computer_ssh_alias;
+  const desktop = [
+    row(t("desktop.host"), t("desktop.memberLogins"), sel([
+      { value: "local", label: t("desktop.local") }, { value: "remote", label: t("desktop.remote") },
+    ], remote ? "remote" : "local", t("desktop.host"), ` data-k="computer-host"${v.brain ? "" : " disabled"}`)),
+    ...(remote ? [row(t("desktop.sshAlias"), "", fieldHTML("", v.computerAliasDraft ?? v.brain?.computer_ssh_alias ?? "", {
+      id: "computer-ssh-alias", label: t("desktop.sshAlias"), w: 200, disabled: !v.brain, invalid: v.computerHostError,
+    })), ...(v.computerHostError ? [note(st("err", t("desktop.invalidAlias")), ' role="alert" data-computer-host-error')] : [])] : []),
+    ...(!remote && v.desktopRequired ? [row(esc(t("desktop.required")), "", btn(t("desktop.download"), "sm", ' data-act="docker-download"'))] : []),
+    row(t("local.title"), "", sel(LOCAL_COMMAND_MODES, v.brain?.local_commands_mode ?? "ask", t("local.title"), ` data-k="local-commands"${v.brain === null ? " disabled" : ""}`)),
+  ];
+  if (apps.length === 0) return [...desktop, row(`<span class="val">${esc(t("settings.computerNone"))}</span>`)];
+  return [...desktop, ...apps.map((app) =>
     row(esc(app.name), "", iconBtn("more", t("members.more", { p0: app.name }), ` data-act="computer-menu" data-exe="${esc(app.exe)}" aria-haspopup="menu" aria-expanded="false"`)),
-  );
+  )];
 }
 
 /**
@@ -689,35 +721,24 @@ export function retentionChoices(v: SettingsView): Choice[] {
 /** How long the dictation history is kept, as the value of its dropdown (30 days until the core says). */
 export const retentionOf = (v: SettingsView): string => String(v.brain?.history_retention_days ?? 30);
 
-/** A clear button of 資料: 「清除」, and 「確定清除？」 while it waits for the second press. */
-function clearButton(v: SettingsView, what: "dictation" | "conversation"): string {
-  const asking = v.confirmingClear === what;
-  return actionRow({ destructive: { label: esc(asking ? t("data.clearConfirm") : t("data.clear")), attrs: ` data-act="clear-${what}" data-k="clear-${what}"` } });
-}
-
-/**
- * 資料: what is kept on this computer and how to get rid of it, gathered from where it was. How long
- * the dictation history is kept (the row says it is the dictation history's), and a clear for the
- * dictation history and one for the conversation with 拉斐爾, each asking twice and then giving 10
- * seconds of 「復原」. There is no export: the app has no way to save a file where the user chooses yet.
- */
 function dataHTML(v: SettingsView): string {
-  return (
-    headingHTML(v) +
-    coreNote(v) +
-    section(t("data.groupDictation"), [
-      row(t("data.retention"), "", sel(retentionChoices(v), retentionOf(v), t("data.retention"), ` data-k="retention"${v.brain === null ? " disabled" : ""}`)),
-      row(t("data.clearDictation"), "", clearButton(v, "dictation")),
-    ]) +
-    section(t("data.groupConversation"), [row(t("data.clearConversation"), "", clearButton(v, "conversation"))], esc(t("history.019")))
-  );
+  const data = v.data;
+  const clear = (what: string, count: number) => count > 0 ? btn(esc(t("data.deleteAll")), "sm", ` data-act="data-clear" data-what="${what}"${data?.busy ? " disabled" : ""}`) : "";
+  const records = data?.items.map(item => `<div class="data-record" data-record="${item.id}"><time class="num" datetime="${new Date(item.created_at_ms).toISOString()}">${esc(formatShortDateTime(item.created_at_ms, v.now))}</time><div class="data-record-text">${esc(item.text)}</div></div>`).join("");
+  return headingHTML(v) + coreNote(v) +
+    `<section class="sgroup data-section"><div class="data-heading"><h2>${esc(t("data.groupDictation"))}</h2>${clear("dictation", data?.total ?? 0)}</div><div class="slist">` +
+    row(t("data.retention"), "", sel(retentionChoices(v), retentionOf(v), t("data.retention"), ` data-k="retention"${v.brain === null ? " disabled" : ""}`)) +
+    (records || `<p class="note">${esc(t(data ? "data.emptyDictation" : "settings.loading"))}</p>`) +
+    (data?.more ? btn(esc(t("history.009")), "sm", ` data-act="data-more"${data.busy ? " disabled" : ""}`) : "") + `</div></section>` +
+    `<section class="sgroup data-section"><div class="data-heading"><h2>${esc(t("data.groupConversation"))}</h2>${clear("conversation", data?.conversations ?? 0)}</div><p class="note">${esc(data ? t("data.conversationCount", {p0:data.conversations}) : t("settings.loading"))}</p></section>` +
+    (data?.error ? `<p class="note" role="alert">${esc(data.error)}</p>` : "");
 }
 
 /** One page with model connections and usage in separate views. Legacy ids choose their own view. */
 function modelsHTML(v: SettingsView): string {
   const providers = v.providers ?? emptyProvidersView();
   const selected = v.modelsTab ?? (v.pane === "usage" ? "usage" : "models");
-  const content = selected === "models" ? section(t("models.used"), [modelRow(v, MODEL_ROWS[0]), quickRow(v), ...MODEL_ROWS.slice(1).map(r => modelRow(v, r))], priceSpan(v, "note")) +
+  const content = selected === "models" ? section(t("models.used"), [quickRow(v), ...MODEL_ROWS.slice(1).map(r => modelRow(v, r))], v.catalog === "failed" ? priceSpan(v, "note") : "") +
     cliBrainsHTML(v.cliBrains ?? emptyCliBrainsView()) + providersHTML(providers) + providersAddHTML(providers) :
     `<div data-usage-host></div><section class="sgroup" aria-label="${esc(t("models.usage"))}"><div class="slist">` + [
       keyRow(v),
@@ -751,7 +772,10 @@ function aboutHTML(v: SettingsView): string {
 export function paneHTML(v: SettingsView): string {
   switch (v.pane) {
     case "appearance":
-      return headingHTML(v) + coreNote(v) + section("", [row(t("settings.067"), "", sel(APPEARANCES, v.device.appearance, t("settings.067"), ' data-k="appearance"'))]) + skinsHTML(v.brain);
+      return headingHTML(v) + coreNote(v) + `<div class="appearance-settings">` + section("", [
+        row(t("settings.067"), "", sel(APPEARANCES, v.device.appearance, t("settings.067"), ' data-k="appearance"')),
+        row(t("settings.059"), "", sel(UI_LANGUAGES, v.device.ui_language, t("settings.059"), ' data-k="ui-language"')),
+      ]) + `</div>`;
     case "general":
       return generalHTML(v);
     case "dictation":

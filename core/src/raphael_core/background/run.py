@@ -3,10 +3,13 @@
 A `TaskRun` is the gate between a task and the world. The worker asks it for a model reply or for a
 tool call; it decides whether to give them, and gives them itself. In order:
 
-- **Limits.** Before every call it checks that the task was not cancelled, that its time is not up,
-  that it has model calls and tool calls left. A call it refuses is answered with `WORKER_STOPPED` and the
-  kind, and the task ends there with no more spend. The worker counts the limits too; this is the
-  count that counts.
+- **Limits.** Before every call it checks that the task was not cancelled, that it has not stalled
+  (no model reply and no tool came back for `RunLimits.seconds`: a task has no clock, only
+  silence ends it), that it has model calls and tool calls left, and, for a paid model, that it has
+  not spent the money cap (`cost_cap`; a subscription spends nothing and has none). A call it
+  refuses is answered with `WORKER_STOPPED` and the kind, and the task ends there with no more
+  spend, but for one last model call with no tools (`WRAP_UP`) that says where the task stands. The
+  worker counts the limits too; this is the count that counts.
 - **The model.** The key is read here, by the client, and nowhere else. The tools the model is offered
   are the snapshot's, whatever the worker sent; every reply is paid for into the spend (purpose
   "agent") and into the task's own total, with `data_collection: deny` as for every call.
@@ -44,17 +47,21 @@ Nothing here logs an argument, a result or what the task is about.
 """
 
 import asyncio
+from ..computer.local_tools import command_context, run_context, is_local
 import json
 import logging
 import sqlite3
 import time
 from collections.abc import Awaitable, Callable, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any, Protocol, TypeVar
 
 from ..agent.failure import failure_kind
+from ..failures import Failure
 from ..agent.gate import ToolGate
+from ..agent.harness_tools import CALENDAR_LIST, CALENDAR_TOOLS, CALENDAR_WRITES, DEFINITIONS as HARNESS_DEFINITIONS
 from ..agent.ledger import Ledger
 from ..agent.plugins import MAX_ARGUMENT_CHARS, PluginResult
 from ..agent.steps import reason_of
@@ -64,16 +71,23 @@ from ..agent.team import ASK_MEMBER, CREATE_MEMBER, TEAM_TOOLS
 from ..agent.team import description as team_description
 from ..agent.tools import ToolResult, Tools
 from ..brain.catalog import LLM, find
-from ..brain.openrouter import OpenRouterError
+from ..brain.model_ref import short_name
+from ..brain.openrouter import OpenRouterError, TextCompletion
 from ..brain.providers.base import ModelProvider
+from ..brain.providers.registry import for_purpose
 from ..brain.textnorm import public_line
 from ..brain.pricing import builtin_catalog
+from ..computer.vm_catalog import NOTICES
 from ..brain.spend import SpendTracker
 from ..integrations.pool import McpPool
 from ..protocol import WORKER_STOPPED, RpcError, invalid_params
+from ..retry_utils import MODEL_SILENCE_S, Outage
 from ..services.attachments import Attachment
 from ..services.urls import SeenUrls
-from ..worker.loop import WAITING, ToolOutcome, result_text
+from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_window, smaller_output
+from ..worker.loop import MORE_ROOM, REPLY_TOKENS, WAITING, WRAP_UP, ToolOutcome, result_text
+from ..members.activity import current, tool_step
+from ..own_calendar import CalendarError
 from .snapshot import BUILTIN, FIND, MCP, Snapshot, ToolRef
 from .tasks import TaskStore
 
@@ -81,19 +95,17 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
-# One model reply may take this long, and may be this long.
-CHAT_TIMEOUT_S = 60.0
-CHAT_MAX_TOKENS = 2000
-# The conversation the worker sends is bounded: a worker that sent more is not doing a task.
-MAX_MESSAGES = 200
-MAX_CHAT_CHARS = 600_000
-# The most of a tool's result that goes to the worker, in characters (it cuts it further).
-MAX_RESULT_CHARS = 12_000
-# A page read, or a file's text, is longer: the budget of a tool's text, and its footer.
-MAX_TEXT_RESULT_CHARS = 16_000
+# One model reply may be this long. How long it may take is up to the model: the call ends when its connection has been
+# silent for `MODEL_SILENCE_S` (or the task has stalled), not at a clock of its own.
+CHAT_MAX_TOKENS = REPLY_TOKENS
+# A long task's checkpoint: longer than a reply, as it reads a long conversation (`worker.context`).
+SUMMARY_TIMEOUT_S = 120.0
+# The most of a tool's result that goes to the worker, in characters. It cuts it to what the model's
+# window holds, keeping both ends (`worker.guards.result_limit`), so this only bounds the message.
+MAX_RESULT_CHARS = 200_000
 # The tools whose call is paid: the search (by a model, or a service), the reading of a file, and
 # asking another member (who answers with model calls of its own, on this task's ledger).
-_PAID_TOOLS = ("web_search", "read_attachment", ASK_MEMBER)
+_PAID_TOOLS = ("web_search", "read_attachment", "generate_audio", ASK_MEMBER)
 
 
 # A model call whose cost is not known, and whose model has no price we know, is charged this.
@@ -108,6 +120,9 @@ def estimate_cost(model: str, request_chars: int) -> float:
     given up on after a time-out or a cancel, when the provider may still bill it): the request's
     characters as input tokens plus the most the reply may be (`CHAT_MAX_TOKENS`), at the model's
     price; a model whose price is not known costs the floor, US$0.02."""
+    # The owner's plan has no price per call.
+    if model.startswith("@chatgpt:"):
+        return 0.0
     entry = find(builtin_catalog(), LLM, model)
     price = None if entry is None else entry.price
     if price is None or price.input_per_mtok is None or price.output_per_mtok is None:
@@ -119,18 +134,35 @@ def estimate_cost(model: str, request_chars: int) -> float:
 
 @dataclass(frozen=True)
 class RunLimits:
-    """Non-monetary safety bounds; cost_usd is retained for settings compatibility only."""
+    """Safety bounds of one task. They are far from what honest work reaches: a task that keeps
+    working goes on for hours. `seconds` is the stall time, the longest the task may go without a
+    model reply or a tool coming back. The money cap is the owner's setting (`TaskRun.cost_cap`)."""
 
-    model_calls: int = 80
-    tool_calls: int = 200
+    model_calls: int = 1000
+    tool_calls: int = 2000
     seconds: float = 1800.0
-    cost_usd: float = 0.20
 
 
-def stopped(kind: str, detail: str | None = None) -> RpcError:
+def stopped(kind: str, detail: str | None = None, *, window: int | None = None) -> RpcError:
     """The answer to a call the task may not make: it ends the task. `kind` is one of
     `worker.loop.Stop`'s kinds."""
-    return RpcError(WORKER_STOPPED, "The task may not go on", {"stop": kind, "detail": detail})
+    data = {"stop": kind, "detail": detail, **({"window": window} if window is not None else {})}
+    return RpcError(WORKER_STOPPED, "The task may not go on", data)
+
+
+async def summary_reply(client: ModelProvider, model: str, *, system: str, user: str, max_tokens: int) -> TextCompletion:
+    """A model's reply for a long task's checkpoint: on the memory's model, as a conversation's summary
+    is (the task's own, unless the owner chose another). One chosen for it that cannot answer, for want
+    of a key say, gets no more tries than this: the task's own model is asked once."""
+    call = dict(model=model, system=system, user=user, timeout_s=SUMMARY_TIMEOUT_S,
+                max_tokens=max_tokens, reasoning_effort="none")
+    memory = for_purpose(client, "memory")
+    try:
+        return await memory.chat_text(**call)
+    except OpenRouterError:
+        if memory is client or memory.model_for(model) == client.model_for(model):
+            raise
+    return await client.chat_text(**call)
 
 
 def _outcome_of(result: PluginResult) -> str:
@@ -141,7 +173,7 @@ def _outcome_of(result: PluginResult) -> str:
         return "timeout"
     if result.kind == "cancelled":  # sent, and the connection ended: it may have been made
         return "cancelled"
-    if result.kind in ("blocked", "changed", "gone"):
+    if result.kind in ("blocked", "changed", "gone", "approval_required", "secret_store"):
         return "blocked"
     return "error"
 
@@ -183,6 +215,7 @@ class Waiting:
     call_id: str
     tier: Tier
     screening: Screening
+    owner_card: str | None = None
 
 
 class TaskRun:
@@ -219,11 +252,36 @@ class TaskRun:
         team: "TeamCall | None" = None,
         can_wait: bool = False,
         ask_before_members: bool = False,
+        diagnostics: Callable[[], dict] | None = None,
+        cost_cap: Callable[[], float] | None = None,
+        calendar: "Callable[[str, dict], Awaitable[dict]] | None" = None,
+        owner_tool=None,
+        attachment_store=None,
+        artifact=lambda payload: None,
     ) -> None:
+        self._attachment_store, self._artifact = attachment_store, artifact
+        self.activity = current()
+        # The most this task may spend, as the owner's setting says now; None for none.
+        self._cost_cap = cost_cap
+        self._wrapped_up = False
+        # The ceiling a CLI task was told to report at (its own model calls are not ours to refuse).
+        self.ceiling: str | None = None
+        # What a call of a tool is made inside: whose turn at the shared screen it is, and where to say that it
+        # waits. A call comes in on the worker's request, not in the task's own context, so the service gives it.
+        self.scope: Callable[[], AbstractContextManager] = nullcontext
+        # The app's own calendar (`own_calendar.OwnCalendar.tool`), for this task's speaker.
+        self._calendar = calendar
+        self._owner_tool = owner_tool
         self._memory = memory
+        self._memory_untrusted = bool(attachments) or any(
+            step.tool in ("web_search", "web_read", "read_attachment", "ask_member", "computer")
+            or step.server not in (None, "", "Raphael") or step.detail == "external_content"
+            for step in store.steps(task_id))
+        self._diagnostics = diagnostics
         # The team tools (`agent.team`), made for this task's speaker on this task's ledger.
         self._team = team
         self.handoff_receipts = []
+        self.model_failure: Failure | None = None
         # Whether a call that needs the owner's yes pauses the task (the background service's runs)
         # or is refused (any other).
         self.can_wait = can_wait
@@ -242,6 +300,7 @@ class TaskRun:
         self.limits = limits
         self.snapshot = snapshot
         self.ledger = ledger
+        self._max_tokens = CHAT_MAX_TOKENS
         self.model_calls = 0
         self.tool_calls = 0
         self.cancelled = False
@@ -253,12 +312,16 @@ class TaskRun:
         self._tools = tools
         self._store = store
         initial = store.get(task_id)
+        self._memory_owner_text = request if (initial and initial.scope == "private" and
+            initial.routine_id is None and initial.from_member_id is None and initial.parent_task_id is None) else ""
         self.generation = initial.generation if initial else 0
         self._spend = spend
         self._monthly_limit = monthly_limit
         self._city = city
         self._changed = changed
         self._progress = progress
+        self.public_progress = ""
+        self.action = lambda name, arguments: nullcontext()
         self._clock = clock
         self.deadline = clock() + limits.seconds
         self._live: set[asyncio.Task[Any]] = set()
@@ -297,13 +360,18 @@ class TaskRun:
             if not task.done():
                 task.cancel()
 
-    def _check(self, *, model: bool = False, tool: bool = False, paid: bool = False) -> None:
-        """Refuse a call the task may not make: `stopped(kind)`."""
+    def _check(self, *, model: bool = False, tool: bool = False, paid: bool = False, final: bool = False) -> None:
+        """Refuse a call the task may not make: `stopped(kind)`. The `final` call that says where a
+        stopped task stands is held to nothing but the owner's stop."""
         current = self._store.get(self.task_id)
         if self.cancelled or (current and (current.generation != self.generation or current.state in ("cancelled", "interrupted"))):
             raise stopped("cancelled")
+        if final:
+            return
         if self._clock() >= self.deadline:
             raise stopped("limit_time")
+        if (model or paid) and self._cost_cap is not None and self.ledger.total >= self._cost_cap():
+            raise stopped("limit_cost")
         if self.room_budget is not None:
             if self.ledger.total >= self.room_budget():
                 raise stopped("limit_cost")
@@ -318,14 +386,36 @@ class TaskRun:
         return max(self.deadline - self._clock(), 0.0)
 
     def remaining_s(self) -> float:
-        """The task's own time that is left now."""
+        """How long the task may still stay silent before it counts as stalled."""
         return self._remaining_s()
 
-    def reopen(self, remaining_s: float) -> None:
-        """Make the run ready to go on after a pause: the time it waited was not the task's, so it
-        has `remaining_s` from now; it has a new pool of connections (the old one was closed when it
+    def touch(self) -> None:
+        """The task did something (a model replied, a tool came back): the stall time starts again."""
+        self.deadline = self._clock() + self.limits.seconds
+
+    async def watch(self, work: Awaitable[T], *, extra: float = 0.0) -> T:
+        """Await `work` for as long as the task is not stalled: `TimeoutError` once `seconds` (and
+        `extra`, for what `work` does before the task can speak: a worker that is started first) have
+        passed with nothing heard. `work` is given up on then."""
+        task = asyncio.ensure_future(work)
+        try:
+            while True:
+                wait = self.deadline + extra - self._clock()
+                if wait <= 0:
+                    raise TimeoutError
+                done, _ = await asyncio.wait({task}, timeout=wait)
+                if done:
+                    return task.result()
+        finally:
+            if not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
+    def reopen(self) -> None:
+        """Make the run ready to go on after a pause: the time it waited was not the task's, so its
+        stall time starts again; it has a new pool of connections (the old one was closed when it
         paused), and no call waits."""
-        self.deadline = self._clock() + max(remaining_s, 0.0)
+        self.touch()
         self.timed_out = False
         self.waiting = None
         self.pool = McpPool()
@@ -360,6 +450,8 @@ class TaskRun:
                 tier=fields.get("tier"),
                 ms=fields.get("ms", 0),
                 reason=fields.get("reason"),
+                detail=fields.get("detail"),
+                cost_usd=fields.get("cost_usd"),
             )
             self._store.progress(
                 self.task_id,
@@ -381,54 +473,130 @@ class TaskRun:
             raise invalid_params("messages must be a list of messages")
         if not messages:
             raise invalid_params("messages is empty")
-        request_chars = len(json.dumps(messages, ensure_ascii=False))
+        room = params.get("room", 1)
+        if type(room) is not int or not 1 <= room <= MORE_ROOM:
+            raise invalid_params("room must be a small whole number")
+        # Desktop images have a separate byte budget; they must not consume the
+        # text cap or be estimated as millions of text tokens.
+        request_chars = 0
+        image_chars = 0
+        for message in messages:
+            content = message.get("content")
+            if isinstance(content, list):
+                request_chars += len(json.dumps({key: value for key, value in message.items() if key != "content"}, ensure_ascii=False))
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "image_url" and isinstance(part.get("image_url"), dict) and isinstance(url := part["image_url"].get("url"), str) and url.startswith("data:image/"):
+                        image_chars += len(url)
+                    else:
+                        request_chars += len(json.dumps(part, ensure_ascii=False))
+            else:
+                request_chars += len(json.dumps(message, ensure_ascii=False))
         async with self._turn:
-            # A conversation grown past what is sent is a task that has used what it was given.
-            if len(messages) > MAX_MESSAGES or request_chars > MAX_CHAT_CHARS:
+            if messages[-1].get("role") == "user" and messages[-1].get("content") == WRAP_UP:
+                return await self._wrap_up(messages, request_chars)
+            # A conversation's length is the worker's to keep to the window (`worker.context`), and the provider's
+            # to refuse: it is no reason to stop a job. Screenshots have no window to answer to.
+            if image_chars > 14_000_000:
                 raise stopped("limit_model")
-            return await self._chat(messages, request_chars)
+            return await self._chat(messages, request_chars, room)
 
-    async def _chat(self, messages: list[dict], request_chars: int) -> dict:
-        self._check(model=True, paid=True)
+    async def summarize(self, params: dict) -> dict:
+        """A long task's checkpoint, on the task's ledger. It is the run's upkeep: no model call of
+        the limits, and no step. A model that fails is the worker's to deal with (`worker.context`)."""
+        system, user, max_tokens = params.get("system"), params.get("user"), params.get("max_tokens")
+        if not isinstance(system, str) or not isinstance(user, str) or type(max_tokens) is not int or max_tokens <= 0:
+            raise invalid_params("system and user must be strings and max_tokens a positive whole number")
+        async with self._turn:
+            self._check(paid=True)
+            began = time.perf_counter()
+            reply = await self._guarded(summary_reply(self._client, self.model, system=system, user=user, max_tokens=max_tokens))
+            self.touch()
+            self.ledger.add(model=reply.model, cost_usd=reply.cost_usd, prompt_tokens=reply.prompt_tokens,
+                            completion_tokens=reply.completion_tokens, ms=_ms(began))
+            return {"text": reply.text}
+
+    async def _wrap_up(self, messages: list[dict], request_chars: int) -> dict:
+        """The one model call after a ceiling: no tools, held to nothing but the owner's stop. A task
+        that was stalled gets a fresh stall time for it."""
+        self._check(final=True)
+        if self._wrapped_up:
+            raise stopped("limit_model")
+        self._wrapped_up = True
+        self.touch()
+        return await self._chat(messages, request_chars, wrap_up=True)
+
+    async def _chat(self, messages: list[dict], request_chars: int, room: int = 1, *, wrap_up: bool = False) -> dict:
+        self._check(model=True, paid=True, final=wrap_up)
+        previous_tools = list(self.snapshot.definitions)
         self.model_calls += 1
+        self.model_failure = None
         began = time.perf_counter()
-        remaining = self._remaining_s()
-        timeout = min(CHAT_TIMEOUT_S, remaining)
         try:
-            turn = await self._guarded(
-                asyncio.wait_for(
-                    self._client.chat_tools(
+            from ..failures import PATIENT_WAITS, RETRY_WAITS, classify
+            # Asking again repeats nothing, since the tools run only after a reply: a task that has done something rides
+            # a failed call out for as long as its time lasts. Before that it fails in seconds, as a question does.
+            outage = Outage(RETRY_WAITS, PATIENT_WAITS, patient_ok=bool(self.tool_calls))
+            while True:
+                remaining = self._remaining_s()
+                try:
+                    task = self._store.get(self.task_id)
+                    self.snapshot.refresh_plugins(self._gate.plugins, task.member_id if task else 0)
+                    turn = await self._guarded(asyncio.wait_for(self._client.chat_tools(
                         model=self.model,
                         # The task's own model answers with all of its time: live, a fallback model
                         # took over slow replies, each attempt getting a third of the time.
                         fallbacks=[],
                         messages=messages,
-                        # The snapshot's tools, whatever the worker sent.
-                        tools=self.snapshot.definitions,
-                        timeout_s=timeout,
-                        max_tokens=CHAT_MAX_TOKENS,
+                        # The snapshot's tools, whatever the worker sent; none for the last word of a stopped task.
+                        tools=[] if wrap_up else self.snapshot.definitions,
+                        timeout_s=min(MODEL_SILENCE_S, remaining),
+                        max_tokens=self._max_tokens * room,
                         reasoning_effort="none",
-                    ),
-                    timeout,
-                )
-            )
+                    ), remaining))
+                    break
+                except RpcError:
+                    raise
+                except Exception as error:
+                    if (smaller := smaller_output(error, self._max_tokens * room)) is not None:
+                        self._max_tokens, room = smaller, 1
+                        continue
+                    if is_context_overflow(error):
+                        raise
+                    failure = classify(error)
+                    wait = outage.wait(failure.retry_after) if failure.transient else None
+                    if wait is None or wait >= self._remaining_s():
+                        raise
+                    if failure.kind == "timeout":
+                        self._charge_estimate(request_chars)  # the provider may bill what was given up on
+                    if outage.announce(wait):
+                        self._progress(failure.waiting(short_name(self.model), self.language, wait))
+                    await self._guarded(asyncio.sleep(wait))
         except OpenRouterError as error:
+            if is_context_overflow(error):  # refused unread: no cost and no failed step, as the worker sends it again
+                raise stopped("failed", CONTEXT_OVERFLOW, window=provider_window(error)) from None
             logger.warning(
                 "The task's model failed: kind=%s status=%s", error.kind, error.status
             )
             # With every parameter required, "no endpoint found" is a model that takes no tools.
             detail = "tools" if error.status == HTTPStatus.NOT_FOUND else failure_kind(error)
-            self._step(kind="model", outcome="error", ms=_ms(began), reason=reason_of("error", detail))
+            if error.kind == "timeout":
+                self._charge_estimate(request_chars)
+            diagnostic = classify(error, record=False)
+            self.model_failure = diagnostic
+            if diagnostic.missing is not None:
+                missing = diagnostic.missing
+                reason = diagnostic.kind if diagnostic.kind.startswith("chatgpt_") else "provider_" + missing.state
+                self._step(kind="model", tool="provider", outcome="error", ms=_ms(began), reason=reason, detail=missing.resource)
+            else:
+                self._step(kind="model", outcome="error", ms=_ms(began), reason=reason_of("error", detail))
             raise stopped("failed", detail) from None
         except TimeoutError:
             logger.warning("The task's model timed out")
             self._charge_estimate(request_chars)  # the provider may bill what was given up on
             self._step(kind="model", outcome="timeout", ms=_ms(began), reason="timeout")
-            # The wait that ended was the task's time when that was the shorter bound: not the
-            # clock, which a timer that fires a tick early leaves just short of the deadline.
-            if remaining <= CHAT_TIMEOUT_S or self._clock() >= self.deadline:
-                raise stopped("limit_time") from None
-            raise stopped("failed", "timeout") from None
+            # The only clock a call has is the task's time: not the monotonic clock, which a timer that fires a
+            # tick early leaves just short of the deadline.
+            raise stopped("limit_time") from None
         except RpcError:
             self._charge_estimate(request_chars)  # cancelled while the provider was working
             raise
@@ -436,6 +604,7 @@ class TaskRun:
             logger.warning("The task's model failed unexpectedly: %s", type(exc).__name__)
             self._step(kind="model", outcome="error", ms=_ms(began), reason="error")
             raise stopped("failed", "error") from None
+        self.touch()
         cost = turn.cost_usd
         if not turn.usage_known:  # no usage is not a free call
             cost = max(cost, estimate_cost(self.model, request_chars))
@@ -454,6 +623,11 @@ class TaskRun:
                 self._progress(text)
         return {
             "content": turn.content,
+            **({"tools": list(self.snapshot.definitions)} if not wrap_up and previous_tools != self.snapshot.definitions else {}),
+            **({"responses_output": turn.responses_output} if getattr(turn, "responses_output", None) else {}),
+            # Only a reply the output limit cut off is reported as such.
+            **({"finish_reason": "length"} if getattr(turn, "finish_reason", "") == "length" else {}),
+            **({"prompt_tokens": turn.prompt_tokens} if turn.prompt_tokens else {}),
             "calls": [
                 {"id": c.id, "name": c.name, "arguments": c.arguments, "raw": c.raw_arguments}
                 for c in turn.calls
@@ -465,6 +639,8 @@ class TaskRun:
 
     # --- host.tool ------------------------------------------------------------------------------
 
+    @tool_step(lambda self, params: params.get("name", ""), scope=lambda self, params: self.activity)
+    @command_context(lambda self, *args, **kwargs: run_context(self))
     async def tool(self, params: dict) -> dict:
         """The result of a call of a tool of the snapshot."""
         name, arguments = params.get("name"), params.get("arguments")
@@ -472,22 +648,35 @@ class TaskRun:
             raise invalid_params("name must be a string and arguments an object")
         call_id = params.get("call_id")
         async with self._turn:
-            return await self._tool(name, arguments, call_id if isinstance(call_id, str) else "")
+            try:
+                with self.action(name, arguments) as status:
+                    reply = await self._tool(name, arguments, call_id if isinstance(call_id, str) else "")
+                    if status is not None:
+                        status.update(outcome="ok" if reply.get("ok") else "error", reason=reason_of("ok" if reply.get("ok") else "error", reply.get("kind")))
+                    return reply
+            finally:
+                self.touch()
 
     async def _tool(self, name: str, arguments: dict, call_id: str = "") -> dict:
         ref = self.snapshot.refs.get(name)
-        paying = ref is not None and ref.kind == BUILTIN and ref.name in _PAID_TOOLS
+        paying = ref is not None and (ref.kind == BUILTIN and ref.name in _PAID_TOOLS or ref.server == "media")
         self._check(tool=True, paid=paying)
         self.tool_calls += 1
         began = time.perf_counter()
         if ref is None or len(json.dumps(arguments, ensure_ascii=False)) > MAX_ARGUMENT_CHARS:
             # Not a tool the task was given: nothing to call, and nothing to audit.
             self._step(kind="tool", outcome="blocked", ms=_ms(began), reason="blocked")
+            if ref is None and name in self.snapshot._aliases:
+                return {**_refused(), "content": "This tool is no longer enabled or connected. Read connections_list for current access; do not retry its old alias."}
             return _refused()
         sent: int | None = None
         detail: str | None = None
         if ref.kind == MCP:
             reply, outcome, tier, sent = await self._plugin(ref, arguments, name, call_id)
+            if reply.get("billing"):
+                detail = json.dumps(reply["billing"])
+                self.ledger.include_media(reply["billing"])
+            self._memory_untrusted = True
         elif ref.kind == FIND:
             reply, outcome, tier = self._find(arguments)
         else:
@@ -498,7 +687,7 @@ class TaskRun:
         if ref.name == 'handoff' and reply.get('ok'):
             self.handoff_receipts.append(json.loads(reply['content']))
             reply['kind'] = 'handoff'
-        if reply.get('ok'):
+        if reply.get('ok') and reply.get('kind') not in NOTICES:
             import hashlib
             self._store.record_evidence(self.task_id,call_id or str(self.tool_calls),kind='tool_receipt',
                 uri=ref.key,digest=hashlib.sha256(reply.get('content','').encode()).hexdigest(),mime='text/plain')
@@ -513,28 +702,59 @@ class TaskRun:
         }
         if detail is not None:
             fields["detail"] = detail
+        if reply.get("billing"):
+            fields["cost_usd"] = reply["billing"]["cost_usd"] or 0
         if ref.kind == MCP:
             self._end_step(sent, **fields)  # the step written when the call was sent
         else:
             self._step(kind="tool", **fields)
+        if reply.get("ok") and (name == "generate_audio" or ref is not None and (ref.server == "media" or ref.server == "computer" and ref.name in ("attach_file", "dataset"))):
+            from ..services.artifacts import artifact_payload
+            payload = artifact_payload(reply.get("content", ""), self._attachment_store)
+            if payload:
+                self._artifact(payload)
+        if reply.get("kind") == "computer_permission_required":
+            raise stopped("failed", "computer_permission_required")
+        if not reply.get("ok") and ref.server == "media":
+            from ..failures import missing_for
+            missing = missing_for(reply.get("kind"), ref.name)
+            if missing:
+                self._artifact({"missing": missing.wire()})
         return reply
+
+    def continuation_state(self):
+        return {"declined": sorted(self._declined), "seen_urls": self.seen_urls.snapshot(),
+                "untrusted": self._memory_untrusted, "handoff_receipts": self.handoff_receipts,
+                "conversation_cost": getattr(self, "conversation_cost", 0.0)}
+
+    def restore_continuation(self, state):
+        self._declined.update(state.get("declined", []))
+        for url in state.get("seen_urls", []):
+            self.seen_urls.add(url)
+        self._memory_untrusted = self._memory_untrusted or state.get("untrusted", False)
+        self.handoff_receipts = state.get("handoff_receipts", [])
+        self.conversation_cost = state.get("conversation_cost", 0.0)
 
     async def _screen(self, ref: ToolRef, arguments: dict) -> Screening:
         """What the owner's safety rules say of a call: PASS for a tool its server says only reads,
-        and for Raphael's own but `create_member`, which are never judged. The judge is paid, so the
+        and for Raphael's own except `create_member` and calendar writes. The judge is paid, so the
         limits on money are read first."""
+        if self._gate.is_vm_tool(ref.key) or is_local(ref.key):
+            return PASS
         if ref.name == ASK_MEMBER and self.ask_before_members:
             return Screening(ASK)
-        if self._gate.safety is None:
-            return PASS
         if ref.kind == BUILTIN:
-            # Of Raphael's own, only adding a member is judged (`agent.team`), by its own name.
-            if ref.name != CREATE_MEMBER:
+            # Of Raphael's own, only adding a member (`agent.team`) and writing to the calendar are judged, by their own names.
+            if ref.name in CALENDAR_WRITES or ref.name == "manage_connection":
+                self._check(paid=True)
+                proposed = Proposed(ref.name, HARNESS_DEFINITIONS[ref.name]["description"], summarize(arguments), narrow_scope(ref.name))
+            elif ref.name != CREATE_MEMBER:
                 return PASS
-            self._check(paid=True)
-            proposed = Proposed(CREATE_MEMBER, team_description(CREATE_MEMBER), summarize(arguments))
+            else:
+                self._check(paid=True)
+                proposed = Proposed(CREATE_MEMBER, team_description(CREATE_MEMBER), summarize(arguments))
         else:
-            if self._gate.reads_only(ref.server, ref.name):
+            if self._gate.reads_only(ref.server, ref.name, arguments):
                 return PASS
             self._check(paid=True)
             description = ""
@@ -550,8 +770,14 @@ class TaskRun:
     async def _plugin(
         self, ref: ToolRef, arguments: dict, alias: str = "", call_id: str = ""
     ) -> tuple[dict, str, str | None, int | None]:
-        now = self._gate.tier_now(ref.key)
-        if self._declined and (ref.key in self._declined or not self._gate.reads_only(ref.server, ref.name)):
+        if ref.key.startswith("mcp:computer-access-"):
+            self._gate.record_unrun(ref.key, outcome="blocked", task_id=self.task_id)
+            return {"ok": False, "kind": "computer_permission_required", "content": (
+                "This member has no computer grant. This routine cannot start a computer. "
+                "Ask the owner to grant access in the member's private chat or press Start in its panel."),
+                "truncated": False}, "blocked", "T2", None
+        now = self._gate.tier_now(ref.key, arguments)
+        if self._declined and (ref.key in self._declined or not self._gate.reads_only(ref.server, ref.name, arguments)):
             # The owner said no to something in this task: this tool is not tried again, and no other that changes
             # something is, whatever it is called. Nothing is asked and nothing is made.
             self._gate.record_unrun(ref.key, outcome="blocked", task_id=self.task_id)
@@ -568,7 +794,8 @@ class TaskRun:
                 }
                 self._gate.record_unrun(ref.key, outcome="blocked", task_id=self.task_id)
                 return reply, "blocked", now.name, None
-            if needs_yes(now >= Tier.T2, screening, firm=now >= Tier.T3):
+            if needs_yes((now >= Tier.T2 or self._gate.mode_asks(ref.key, arguments)) and not self._gate.full_permission,
+                         screening, firm=now >= Tier.T3):
                 if self.can_wait:
                     # The task pauses here; the service asks the owner (see the module).
                     self.waiting = Waiting(alias or ref.name, ref, dict(arguments), call_id, now, screening)
@@ -590,9 +817,10 @@ class TaskRun:
             ms=0,
         )
         try:
-            result = await self._guarded(
-                self._gate.call_plugin(ref.key, arguments, task_id=self.task_id, pool=self.pool)
-            )
+            with self.scope():
+                result = await self._guarded(
+                    self._gate.call_plugin(ref.key, arguments, task_id=self.task_id, pool=self.pool)
+                )
         except (RpcError, asyncio.CancelledError):
             # The call did not come back: it may or may not have been made. A later attempt is
             # told so.
@@ -609,21 +837,38 @@ class TaskRun:
         finally:
             self._in_plugin_call = False
         text, cut = _cut(result.text)
+        if not result.ok and now is None and result.kind in ("blocked", "gone", "changed"):
+            text = "This tool is no longer enabled or connected. Read connections_list for current access; do not retry its old alias."
         reply = {
             "ok": result.ok,
             "kind": result.kind,
             "content": text,
             "truncated": cut or result.truncated,
+            **({"blocks": result.blocks} if result.blocks else {}),
+            **({"billing": result.billing} if result.billing else {}),
         }
+        if ref.server == "computer":
+            task = self._store.get(self.task_id)
+            if task and self.snapshot.refresh_computer(self._gate.plugins, task.member_id):
+                reply.update(tools=list(self.snapshot.definitions), replace_tools=True)
         return reply, _outcome_of(result), None if now is None else now.name, sent
 
+    @tool_step(lambda self, waiting, approval, action: waiting.alias,
+               scope=lambda self, *args, **kwargs: self.activity)
+    @command_context(lambda self, *args, **kwargs: run_context(self))
     async def answer_call(self, waiting: Waiting, approval: Approval | None, action: Action | None) -> str:
+        with self.action(waiting.alias, waiting.arguments) as status:
+            return await self._answered_call(waiting, approval, action, status)
+
+    async def _answered_call(self, waiting: Waiting, approval: Approval | None, action: Action | None, status) -> str:
         """The call the task paused on, now that the owner answered: made with the yes (`approval`,
         for `action`, the very action the question was asked about), or not made after a no
         (`action` None). Either way it is a step of the task, and the audit says what came of it.
         Returns what the model is shown of it, as the worker shows a result."""
         ref = waiting.ref
         if action is None:
+            if status is not None:
+                status.update(outcome="blocked", reason="denied")
             if ref.kind == MCP:
                 self._declined.add(ref.key)
             self._gate.record_unrun(ref.key, outcome="denied", task_id=self.task_id)
@@ -636,6 +881,10 @@ class TaskRun:
             # Adding a member that a rule asked about (T1: the owner's yes is all it waited for).
             began = time.perf_counter()
             result = await self._lookup(ref.name, waiting.arguments, approval=approval, action=action)
+            if result.ok and isinstance(result.data, dict) and result.data.get("owner_wait"):
+                self.waiting = Waiting(waiting.alias, ref, dict(waiting.arguments), waiting.call_id, waiting.tier, PASS,
+                                       result.data["owner_wait"])
+                raise stopped(WAITING)
             outcome = "ok" if result.ok else ("timeout" if result.error == "timeout" else "error")
             self._gate.record_builtin(ref.name, outcome=outcome, task_id=self.task_id)
             self._step(
@@ -643,8 +892,10 @@ class TaskRun:
                 outcome=outcome, ms=_ms(began), reason=reason_of(outcome, result.error),
             )  # fmt: skip
             content = json.dumps(result.data, ensure_ascii=False) if result.ok else ""
+            if status is not None:
+                status.update(outcome=outcome, reason=reason_of(outcome, result.error))
             return result_text(waiting.alias, ToolOutcome(result.ok, result.error, content))
-        now = self._gate.tier_now(ref.key)
+        now = self._gate.tier_now(ref.key, waiting.arguments)
         # The yes is for the tier the question was asked at: a tool that has none now, or a higher
         # one, is not covered by it.
         if now is None or now > waiting.tier:
@@ -655,13 +906,15 @@ class TaskRun:
             tier=None if now is None else now.name, outcome="in_progress", ms=0,
         )  # fmt: skip
         self._in_plugin_call = True
+        self._memory_untrusted = True
         try:
-            result = await self._guarded(
-                self._gate.call_plugin(
-                    ref.key, waiting.arguments, approval=approval, action=action,
-                    task_id=self.task_id, pool=self.pool,
-                )
-            )  # fmt: skip
+            with self.scope():
+                result = await self._guarded(
+                    self._gate.call_plugin(
+                        ref.key, waiting.arguments, approval=approval, action=action,
+                        task_id=self.task_id, pool=self.pool,
+                    )
+                )  # fmt: skip
         except (RpcError, asyncio.CancelledError):
             self._end_step(
                 sent, tool=ref.name, server=ref.server, tier=None if now is None else now.name,
@@ -672,13 +925,19 @@ class TaskRun:
             self._in_plugin_call = False
         text, cut = _cut(result.text)
         outcome = _outcome_of(result)
+        if result.billing:
+            self.ledger.include_media(result.billing)
         self._end_step(
             sent, tool=ref.name, server=ref.server, tier=None if now is None else now.name,
             outcome=outcome, ms=_ms(began), reason=reason_of(outcome, result.kind),
+            detail=json.dumps(result.billing) if result.billing else None,
+            cost_usd=(result.billing["cost_usd"] or 0) if result.billing else None,
         )  # fmt: skip
         if result.ok:
             self.seen_urls.add_from(text)
         shown = ToolOutcome(result.ok, result.kind, text, cut or result.truncated)
+        if status is not None:
+            status.update(outcome=outcome, reason=reason_of(outcome, result.kind))
         return result_text(waiting.alias, shown)
 
     def _find(self, arguments: dict) -> tuple[dict, str, str | None]:
@@ -700,13 +959,15 @@ class TaskRun:
         """(the reply, how it ended, the tier, the service it used) of one of Raphael's own."""
         gate = self._gate
         tier = gate.tier_now(ref.key)
+        from ..agent.harness_tools import CONNECTION_TOOLS
+        judged = ref.name == CREATE_MEMBER or ref.name in CALENDAR_WRITES or ref.name == "manage_connection"
         try:
-            if ref.name != CREATE_MEMBER:
+            if not judged:
                 gate.check(Action(ref.key, arguments), None, worker=True)
         except (UnknownTool, NotApproved):
             gate.record_builtin(ref.name, outcome="blocked", task_id=self.task_id)
             return _refused(), "blocked", None if tier is None else tier.name, None
-        if (ref.name == CREATE_MEMBER or (ref.name == ASK_MEMBER and self.ask_before_members)) and tier is not None:
+        if (judged or (ref.name == ASK_MEMBER and self.ask_before_members)) and tier is not None:
             screening = await self._screen(ref, arguments)
             if screening.verdict == DENY:
                 gate.record_builtin(ref.name, outcome="blocked", task_id=self.task_id)
@@ -717,32 +978,75 @@ class TaskRun:
                     "truncated": False,
                 }
                 return reply, "blocked", tier.name, None
-            if needs_yes(False, screening):
+            if needs_yes(tier >= Tier.T2, screening) and not gate.full_permission:
                 if self.can_wait:
                     self.waiting = Waiting(alias or ref.name, ref, dict(arguments), call_id, tier, screening)
                     raise stopped(WAITING)
                 gate.record_builtin(ref.name, outcome="blocked", task_id=self.task_id)
                 return _refused(), "blocked", tier.name, None
-        result = await self._lookup(ref.name, arguments)
+        from ..agent.owner_questions import BACKGROUND_TOOLS
+        from ..agent.harness_tools import ROUTINE_TOOLS
+        if ref.name in BACKGROUND_TOOLS or ref.name in ROUTINE_TOOLS or ref.name in CONNECTION_TOOLS:
+            result = (await self._owner_tool(ref.name, arguments) if self._owner_tool else
+                      ToolResult(ref.name, False, None, "unavailable"))
+            if result.ok and isinstance(result.data, dict) and result.data.get("owner_wait"):
+                self.waiting = Waiting(alias or ref.name, ref, dict(arguments), call_id, tier or Tier.T0, PASS,
+                                       result.data["owner_wait"])
+                raise stopped(WAITING)
+        else:
+            result = await self._lookup(ref.name, arguments)
+        self._memory_untrusted = self._memory_untrusted or result.untrusted
         if result.error == "url_not_seen":
             outcome = "blocked"
         else:
             outcome = "ok" if result.ok else ("timeout" if result.error == "timeout" else "error")
         gate.record_builtin(ref.name, outcome=outcome, task_id=self.task_id)
         if result.ok:
-            limit = (2 * 128 * 1024 + 1000 if ref.name == "skill_read" else
-                     MAX_TEXT_RESULT_CHARS if ref.name in ("web_read", "read_attachment") else None)
+            limit = 2 * 128 * 1024 + 1000 if ref.name == "skill_read" else None
             text, cut = _cut(json.dumps(result.data, ensure_ascii=False), limit)
             reply = {"ok": True, "kind": None, "content": text, "truncated": cut}
         else:
             reply = {"ok": False, "kind": result.error or "error", "content": "", "truncated": False}
             if result.instruction:
                 reply["instruction"] = result.instruction
-        return reply, outcome, None if tier is None else tier.name, result.detail
+        return reply, outcome, None if tier is None else tier.name, "external_content" if result.untrusted and ref.name in ("session_search", "session_read", "history_search") else result.detail
 
     async def _lookup(self, name: str, arguments: dict, *, approval: Approval | None = None, action: Action | None = None) -> ToolResult:
         """One of Raphael's own lookups. It never raises for a failure of the world."""
         try:
+            from ..agent.harness_tools import CONNECTION_TOOLS
+            if name in CONNECTION_TOOLS:
+                return await self._owner_tool(name, arguments, approval=approval, action=action) if self._owner_tool else ToolResult(name, False, None, "unavailable")
+            from ..memory.growth import TOOLS as GROWTH_TOOLS
+            if name in GROWTH_TOOLS:
+                if self._memory is None or not hasattr(self._memory, "growth"):
+                    return ToolResult(name, False, None, "blocked")
+                result = self._memory.growth(name, arguments, untrusted=self._memory_untrusted,
+                    **({"owner_text": self._memory_owner_text} if self._memory_owner_text else {}))
+                self._memory_untrusted = self._memory_untrusted or result.untrusted
+                return result
+            if name in ("web_search", "web_read", "read_attachment", "ask_member"):
+                self._memory_untrusted = True
+            if name in ("self_check", "raphael_help"):
+                from ..agent.self_check import ABOUT
+                data = ({"reference": ABOUT} if name == "raphael_help" else
+                        self._diagnostics() if self._diagnostics else {"state": "unknown"})
+                return ToolResult(name, True, data)
+            if name in CALENDAR_TOOLS:
+                if self._calendar is None:
+                    return ToolResult(name, False, None, "unavailable")
+                if approval is not None:
+                    self._gate.check_for(action, name, arguments, approval)
+                try:
+                    data = await self._guarded(self._calendar(name, arguments))
+                except CalendarError as error:
+                    return ToolResult(name, False, None, error.kind, instruction=error.instruction)
+                return ToolResult(name, True, data, untrusted=name == CALENDAR_LIST)
+            if name == "generate_audio":
+                result = await self._guarded(self._tools.generate_audio(arguments, self._attachment_store))
+                if not result.ok and isinstance(result.data, dict) and result.data.get("missing"):
+                    self._artifact({"missing": result.data["missing"]})
+                return result
             if name == "weather":
                 city = arguments.get("city")
                 city = city.strip() if isinstance(city, str) and city.strip() else self._city()
@@ -758,8 +1062,8 @@ class TaskRun:
                 return await self._read_page(arguments)
             if name == "read_attachment":
                 return await self._read_attachment(arguments)
-            if name in ("memory_read", "history_search"):
-                return self._read_memory(name, arguments)
+            if name == "history_search":
+                return self._search_history(arguments)
             if name in TEAM_TOOLS:
                 if self._team is None:
                     return ToolResult(name, False, None, "blocked")
@@ -802,26 +1106,19 @@ class TaskRun:
             )
         )
 
-    def _read_memory(self, name: str, arguments: dict) -> ToolResult:
-        """A note read or the past turns searched; never a write."""
+    def _search_history(self, arguments: dict) -> ToolResult:
+        """The past turns searched."""
         if self._memory is None:
-            return ToolResult(name, False, None, "blocked")
-        if name == "memory_read":
-            names = arguments.get("names")
-            if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
-                return ToolResult(name, False, None, "bad_arguments")
-            return self._memory.read(names)
+            return ToolResult("history_search", False, None, "blocked")
         query = arguments.get("query")
         if not isinstance(query, str) or not query.strip():
-            return ToolResult(name, False, None, "bad_arguments")
+            return ToolResult("history_search", False, None, "bad_arguments")
         return self._memory.search(query.strip())
 
 
 class MemoryReader(Protocol):
     """What a task may do with the memory (`memory.service.MemoryService`, or a member's
-    `MemberMemory`): read and search."""
-
-    def read(self, names: Sequence[str]) -> ToolResult: ...
+    `MemberMemory`): search its past turns; the growth tools, where it has them."""
 
     def search(self, query: str, *, limit: int = 5, exclude: Sequence[int] = ()) -> ToolResult: ...
 

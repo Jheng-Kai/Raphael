@@ -1,83 +1,63 @@
-"""The memory of Raphael and of the members of the owner's team as one service: the files
-(`store`), each conversation's summary (`conversation`), the reflection pass and the weekly
-consolidation (`reflection`), the tools the assistants reach them by, and the RPC methods of the
-settings page and of a member's 記憶 tab.
+"""The memory of Raphael and of the members of the owner's team as one service: the living files
+(`store`), each conversation's summary (`conversation`), the reflection pass and the consolidation
+(`reflection`), the tools the assistants reach them by, and the RPC methods of the settings page and
+of a member's 記憶 tab.
 
-Two spaces. Every assistant (Raphael, and each member of the team) has a memory of its own, and
-they all share one more:
+Every assistant, Raphael (0) too, has its own `bots/<id>/MEMORY.md` and `bots/<id>/SOUL.md`; the owner's
+profile is one file every assistant reads and writes, `shared/USER.md`. In the pane they are 「<name> 的記憶」
+and 「共同記憶」. A turn reads both at its start in a form that does not change while it runs
+(`snapshot`); the tools read and write the live file. A member never reads another's MEMORY.md; `ask_member`
+returns what the asked member chooses to answer. A room's turn, and work a colleague handed over, read
+USER.md alone.
 
-- the shared memory (共同記憶), `memory\\shared\\` with its own `MEMORY.md`: what every assistant
-  should know about the owner, and only that (who they are, their stable preferences, the people in
-  their life, their life and work, how they like to be spoken to). Every assistant reads it and may
-  write to it; never what was decided or discussed with one of them, a task, a plan made in one
-  thread, or what a tool or the web said (`reflection.about_the_owner` holds to it). Each of its
-  notes keeps its provenance: the assistant it was told to (`member`), when, and the turns;
-- each assistant's own: Raphael's is the memory folder itself (`memory\\`), a member's
-  `memory\\members\\<id>\\`. Only that assistant reads and writes it: its role, what its routines
-  found, how the owner wants it to work.
+A model chooses the file (`target`), and the host checks that choice for USER.md. An entry goes there from a
+private turn only when it is about who the owner is, not about a conversation, a plan or a task
+(`reflection.about_the_owner`), and the owner did not ask to keep it from the others (`keeps_private`); any
+other goes to the member's own file, and the model is told so. An owner's request to tell everyone
+(`explicitly_shared`) and a room's turn write there whatever it is about. Every entry that reaches USER.md
+through a member ends with whom the owner told it to and when, stamped here.
 
-The conversations are private to each assistant: its prompt, its summary, its search of the past
-(`history_search`) and its reflection pass read only its own thread. What one of them was told
-reaches another only as the answer to a question it was asked (`ask_member`, or a hand-off in
-`consult` mode), which the asked one words from its own notes and conversation.
+The RPC methods (the main window only; the shell checks their params before they come here). Each takes
+`space` ("own", the default, or "shared") and `member_id` (whose own: 0, Raphael, by default):
 
-The prompt carries both indexes, the shared one first (`store.MemoryIndex`), each within the limits
-of an index. A write chooses its space (`space`); a note read by name is looked for in the
-assistant's own memory first, then in the shared one.
-
-Upgrading: the notes of the type `user` in Raphael's folder were about the owner, so they move to
-the shared memory once (`_share_the_owner`), as their files are, edits by hand included; a note
-whose name the shared memory already has stays where it is. The move is marked as done in the
-database, so it is made once.
-
-The RPC methods (the main window only; the shell checks their params before they come here). Each
-takes `space` ("own", the default, or "shared") and `member_id` (whose own: 0, Raphael, by default):
-
-- `memory.list {space?, member_id?}` -> `{memories: [{name, description, type, origin, updated,
-  expires, member}], summary: {text, updated_at_ms} | null}` (the summary is the member's
-  conversation's; none for the shared space; `member` is a shared note's provenance, or null)
-- `memory.get {name, space?, member_id?}` -> the memory, with its body and the turns it came from
-- `memory.update {name, body, description?, space?, member_id?}` -> the memory as it is now. An edit
-  by the user is a memory the user stated (`origin: said`); it passes the same checks as any other
-  write.
-- `memory.delete {name, space?, member_id?}` -> `{deleted}`, `memory.clear {space?, member_id?}` ->
-  `{deleted}` (every memory of that space)
-- `memory.move {name, to_space, member_id?}` -> `{moved}`: a note moved between the shared memory and
-  an assistant's own, as it is; never over a note of the same name
+- `memory.get {space?, member_id?}` -> the document: `{text, revision, chars, entries, limit, summary:
+  {text, updated_at_ms} | null}` (the summary is the member's conversation's; none for the shared space)
+- `memory.update {text, revision, space?, member_id?}` -> the document as it is now. The owner's edit of the
+  whole file: `revision` is the copy it was made from, and an edit from an old copy is refused ("changed"),
+  since a member may have written meanwhile. What the edit adds passes the scan.
+- `memory.clear {space?, member_id?}` -> `{cleared}`: the file is emptied (its journal keeps what it held)
 - `memory.summary_clear {member_id?}` -> `{cleared}`: the conversation's summary is forgotten
 
-The tools of the assistant (`agent.gate` knows them, and their tiers): `memory_read` and
-`history_search` only read (T0); `memory_write` and `memory_delete` change the memory (T1, which
-runs at once, with no yes asked for). The fast tier writes only from the owner's own turn
-(`apply_said`, see `agent.service`); the background worker may read and search, never write, since
-it reads what services return.
+The tools of the assistant are in `growth`; `history_search` only reads (T0). Outside claims go in
+marked (`store.UNCONFIRMED`), while verified restatements of the current owner's request stay trusted.
 
-The reflection pass runs in the background on the cheap model (the `agent_model` setting), for each
+The reflection pass runs in the background on each member's selected brain (including CLI), for each
 assistant over its own turns (a watermark each): after REFLECT_AFTER_TURNS answered turns it has not
 read, or once the conversation has been quiet for QUIET_S with any such turn, and once soon after
-the app starts when one is waiting. The weekly consolidation runs with it when the last one is a
-week old, for each space by itself. A timer that finds nothing due yet, and every pass when it ends,
-arms the timer again for the next time something will be (the quiet time, the pause of RETRY_S
-after a failure, the week), so nothing waits for the owner's next turn. Both need the key and room
-under the month's limit, and both are written to the spend with the purpose "memory".
+the app starts when one is waiting. The consolidation runs with it for a file past `reflection.FULL_FROM` of
+its limit, once a day. A timer that finds nothing due yet, and every pass when it ends, arms the timer
+again for the next time something will be (the quiet time, an increasing pause after a failure, the
+day), so nothing waits for the owner's next turn. Both need the key and room under the month's limit,
+and both are written to the spend with the purpose "memory".
 
 Nothing here logs a memory, a question or an answer.
 """
 
 import asyncio
-import secrets
 import logging
+import re
 import shutil
 import sqlite3
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, replace
-from datetime import datetime, tzinfo
+from dataclasses import asdict, dataclass
+from datetime import date, datetime, tzinfo
 from pathlib import Path
 
 from ..agent.history import AgentHistory, Turn
 from ..agent.attribution import labelled_lines, turn_speakers
 from ..agent.ledger import Ledger
+from ..agent.speaker import RAPHAEL_NAMES
 from ..agent.tools import ToolResult
 from ..brain.providers.base import ModelProvider
 from ..brain.providers.registry import ProviderRouter, for_purpose
@@ -87,32 +67,45 @@ from ..brain.spend import SpendTracker
 from ..clock import wall_clock_ms
 from ..protocol import invalid_params
 from ..router import Router as RpcRouter
+from . import legacy
 from .conversation import SUMMARY_PURPOSE, Conversation
-from .reflection import MAX_TURNS, SPACES, Action, Applied, Reflector, apply_spaced
-from .store import MemoryIndex, MemoryRefused, MemoryStore, move_note, valid_name
+from .reflection import FULL_FROM, MAX_TURNS, Applied, Edit, Reflector, about_the_owner
+from .store import UNCONFIRMED, MemoryFile, MemorySnapshot, is_unconfirmed, owner_stated, relation, told_stamp
+from .growth import Growth
 
 logger = logging.getLogger(__name__)
 
 PURPOSE = SUMMARY_PURPOSE  # "memory", in the spend
 QUIET_S = 25 * 60.0
-REFLECT_AFTER_TURNS = 10
-CONSOLIDATE_EVERY_MS = 7 * 86_400_000
+REFLECT_AFTER_TURNS = 6
+CONSOLIDATE_EVERY_MS = 86_400_000
 # How long after the app starts the memory looks for turns it has not read.
 START_DELAY_S = 60.0
 # A pass that failed is not tried again for this long.
 RETRY_S = 15 * 60.0
 _REFLECTED = "reflected_through"
 _CONSOLIDATED = "consolidated_at_ms"
-# Set once the notes about the owner moved from Raphael's folder to the shared one.
-_SHARED_MOVED = "shared_moved"
 # What a search gives of a turn, in characters, at most.
 SNIPPET_CHARS = 150
-MAX_READ = 3
-# The folders, in the memory folder: the members' own, and the shared memory.
-MEMBERS_DIR = "members"
-SHARED_DIR = "shared"
-# The type of Raphael's notes that moves to the shared memory at the upgrade: who the owner is.
-_MOVED_TYPE = "user"
+SPACES = ("shared", "own")
+# The longest document the owner's edit may be (the shell's limit too).
+MAX_DOCUMENT_CHARS = 64_000
+
+
+def explicitly_shared(text: str) -> bool:
+    """Sharing is an owner's explicit instruction, never a model-selected space."""
+    if re.search(r"不要|別|不能|不准|不可以|禁止|\b(?:don't|do not|never)\b|共有しない|伝えない", text, re.I):
+        return False
+    return bool(re.search(r"告訴大家|告诉大家|分享給(?:大家|所有)|分享给(?:大家|所有)|全團隊都要知道|全团队都要知道|共同記憶|共同记忆|\b(?:tell|share (?:this |it )?with) (?:everyone|all members|the team)\b|全員に(?:共有|伝え)", text, re.I))
+
+
+def keeps_private(text: str) -> bool:
+    """Whether the owner's words ask to keep something from the others."""
+    return bool(re.search(
+        r"(?:不要|別|不能|不准|不可以|禁止|先不要)[^。！？\n]{0,10}(?:告訴|跟|讓|分享|說給|傳給|透露)[^。！？\n]{0,10}(?:其他|大家|別人|他們|所有人|全部)|"
+        r"(?:只|僅)(?:跟|告訴|讓)你|私下|保密|"
+        r"\b(?:don't|do not|never)\b[^.!?\n]{0,24}\b(?:tell|share|mention)\b|\b(?:between us|keep (?:this|it) (?:private|secret|to yourself))\b|"
+        r"共有しない|伝えない|内緒|秘密にして", text or "", re.I))
 
 
 def _snippet(text: str, words: Sequence[str], *, preserve_label: bool = False) -> str:
@@ -151,7 +144,7 @@ def _watermark(member_id: int) -> str:
     return _REFLECTED if member_id == 0 else f"{_REFLECTED}:{int(member_id)}"
 
 
-class MemoryService:
+class MemoryService(Growth):
     """The memory. `conn` is the open database (used on the event loop only), `root` the memory
     folder, `client` the OpenRouter client, `keys` where the key lives. `now_ms` is the wall clock,
     `tz` the time zone of the spend's months, `clock` a monotonic clock in seconds and `now` the
@@ -172,6 +165,7 @@ class MemoryService:
         start_delay_s: float = START_DELAY_S,
         notify: Callable[[str, dict], None] | None = None,
     ) -> None:
+        self.skill_review = None
         self._notify = notify
         self._conn = conn
         self._keys = keys
@@ -180,19 +174,25 @@ class MemoryService:
         self._quiet_s = quiet_s
         self._start_delay_s = start_delay_s
         self._client = for_purpose(client, "memory")
+        self._base_client = client
+        self._cli_brains = None
         self._now = now
-        self.store = MemoryStore(root, now=now, on_change=lambda: self._changed(0))  # Raphael's own
-        self.shared = MemoryStore(root / SHARED_DIR, now=now, on_change=lambda: self._changed(0, "shared"))
+        # The language of the owner's screen, for what the host writes into a file: the app sets it.
+        self.language: Callable[[], str] = lambda: "zh-TW"
+        from ..bots.homes import BotHomes
+        self.homes = BotHomes(root.parent)
+        self.homes.migrate(root)
+        legacy.migrate(self.homes, told_name=self._told_name)
+        self.shared = MemoryFile(self.homes, None, on_change=lambda: self._changed(0, "shared"))
+        self._files: dict[int, MemoryFile] = {}
         self._history = AgentHistory(conn, now_ms)
         self._settings = SettingsStore(conn)
         self._spend = SpendTracker(conn, now_ms, tz)
-        self._reflector = Reflector(client)
         self.conversation = Conversation(
             conn, client, now_ms=now_ms, clock=clock, reflected_through=self.reflected_through,
             on_change=lambda: self._changed(0),
         )
-        # The members' memories and conversations, made when first needed.
-        self._stores: dict[int, MemoryStore] = {}
+        # The members' conversations, made when first needed.
         self._conversations: dict[int, Conversation] = {}
         # Whether a member is there: the app sets it to the members' own answer, so that the RPC
         # methods make no folder for an id that is nobody's. Until then any id goes.
@@ -200,9 +200,9 @@ class MemoryService:
         self._timer: asyncio.TimerHandle | None = None
         self._running: asyncio.Task[None] | None = None
         self._failed_at: float | None = None
+        self._failure_count = 0
         # How many times the conversation was cleared: a pass that began at another count is stale.
         self._turn_clears = 0
-        self._share_the_owner()
 
     def _changed(self, member_id: int, space: str = "own") -> None:
         """Only the affected space and owner leave the core, never a note's contents."""
@@ -211,13 +211,9 @@ class MemoryService:
 
     def register(self, router: RpcRouter) -> None:
         methods = {
-            "memory.create": self._create,
-            "memory.list": self._list,
             "memory.get": self._get,
             "memory.update": self._update,
-            "memory.delete": self._delete,
             "memory.clear": self._clear,
-            "memory.move": self._move,
             "memory.summary_clear": self._summary_clear,
         }
         for method, handler in methods.items():
@@ -244,41 +240,19 @@ class MemoryService:
         """The last turn of the thread of `member_id` its reflection pass has read (0: none)."""
         return self._state(_watermark(member_id))
 
-    def _share_the_owner(self) -> None:
-        """Once, at the upgrade to the shared memory: Raphael's notes about who the owner is (type
-        `user`) move to the shared memory, as their files are. A note the shared memory already has
-        a note of the same name for stays where it is. A move that fails is tried again at the next
-        start; the mark is set only once every note was dealt with."""
-        if self._state(_SHARED_MOVED):
-            return
-        moved = 0
-        try:
-            for memory in self.store.all():
-                if memory.type == _MOVED_TYPE and move_note(memory.name, self.store, self.shared):
-                    moved += 1
-            self._set_state(_SHARED_MOVED, 1)
-        except (OSError, sqlite3.Error) as exc:
-            logger.warning("Could not move the notes about the owner: %s", type(exc).__name__)
-            return
-        if moved:
-            logger.info("Moved %d notes about the owner to the shared memory", moved)
-
     # --- the spaces --------------------------------------------------------------------------------
 
-    def store_for(self, member_id: int) -> MemoryStore:
-        """The own memory of `member_id`: Raphael's for 0, else the member's folder in his."""
-        if member_id == 0:
-            return self.store
-        store = self._stores.get(member_id)
-        if store is None:
-            store = MemoryStore(self.store.root / MEMBERS_DIR / str(int(member_id)), now=self._now,
-                                on_change=lambda: self._changed(member_id))
-            self._stores[member_id] = store
-        return store
+    def own(self, member_id: int) -> MemoryFile:
+        """The MEMORY.md of `member_id`."""
+        memory = self._files.get(member_id)
+        if memory is None:
+            memory = MemoryFile(self.homes, member_id, on_change=lambda: self._changed(member_id))
+            self._files[member_id] = memory
+        return memory
 
-    def space(self, space: str, member_id: int = 0) -> MemoryStore:
-        """The memory `space` names: the shared one, or the own of `member_id`."""
-        return self.shared if space == "shared" else self.store_for(member_id)
+    def space(self, space: str, member_id: int = 0) -> MemoryFile:
+        """The file `space` names: the shared one, or the own of `member_id`."""
+        return self.shared if space == "shared" else self.own(member_id)
 
     def conversation_for(self, member_id: int) -> Conversation:
         """The conversation of `member_id`: Raphael's for 0."""
@@ -326,6 +300,16 @@ class MemoryService:
             row = None
         return "the assistant" if row is None else str(row[0])
 
+    def _told_name(self, member_id: int) -> str:
+        """Whom a shared entry was told to, as the owner knows them."""
+        return RAPHAEL_NAMES.get(self.language(), RAPHAEL_NAMES["zh-TW"]) if member_id == 0 else self._name_of(member_id)
+
+    def _today(self) -> date:
+        return (self._now() if self._now is not None else datetime.now().astimezone()).date()
+
+    def _mark(self) -> str:
+        return UNCONFIRMED.get(self.language(), UNCONFIRMED["zh-TW"])
+
     async def forget_member(self, member_id: int) -> None:
         """A member was deleted: its own memory folder goes, with its conversation's summary and
         its reflection's watermark. What it wrote to the shared memory stays: it is the owner's."""
@@ -334,7 +318,7 @@ class MemoryService:
         conversation = self._conversations.pop(member_id, None)
         if conversation is not None:
             await conversation.aclose()
-        self._stores.pop(member_id, None)
+        self._files.pop(member_id, None)
         try:
             with self._conn:
                 self._conn.execute(
@@ -345,60 +329,81 @@ class MemoryService:
                 )
         except sqlite3.Error as exc:
             logger.warning("Could not delete a member's summary: %s", type(exc).__name__)
-        folder = self.store.root / MEMBERS_DIR / str(int(member_id))
-        try:
-            await asyncio.to_thread(shutil.rmtree, folder, ignore_errors=False)
-        except FileNotFoundError:
-            pass
-        except OSError as exc:
-            logger.warning("Could not delete a member's memory: %s", type(exc).__name__)
+        for folder in (self.homes.home(member_id), self.homes.state(member_id)):
+            try:
+                self.homes.safe(folder)
+                await asyncio.to_thread(shutil.rmtree, folder, ignore_errors=False)
+            except FileNotFoundError:
+                pass
+            except (OSError, ValueError) as exc:
+                logger.warning("Could not delete a member's memory: %s", type(exc).__name__)
         self._changed(member_id)
 
     # --- for the assistant -------------------------------------------------------------------------
 
-    def index(self, member_id: int | None = 0) -> MemoryIndex:
-        """What `member_id` reads of the memory for the prompt: the index of the shared memory and
-        of its own; the shared one alone without a member (`SharedMemory`). An index that cannot be
-        read is empty."""
-        indexes = []
-        for store in (self.shared, *(() if member_id is None else (self.store_for(member_id),))):
-            try:
-                indexes.append(store.index())
-            except OSError as exc:
-                logger.warning("Could not read the memory: %s", type(exc).__name__)
-                indexes.append("")
-        return MemoryIndex(shared=indexes[0], own=None if member_id is None else indexes[1])
+    def snapshot(self, member_id: int | None = 0) -> MemorySnapshot:
+        """The memory as a turn of `member_id` reads it, at the turn's start: USER.md and its own file;
+        USER.md alone without a member (`SharedMemory`). It is text, so nothing the turn writes changes it,
+        and the next turn reads what the files say then. A new turn may try a failed edit again."""
+        self.shared.reset_failures()
+        if member_id is None:
+            return MemorySnapshot(shared=self.shared.prompt_text(), own=None, shared_usage=self.shared.usage())
+        own = self.own(member_id)
+        own.reset_failures()
+        return MemorySnapshot(shared=self.shared.prompt_text(), own=own.prompt_text(),
+                              shared_usage=self.shared.usage(), own_usage=own.usage())
 
     def shared_reader(self) -> "SharedMemory":
         """What a room's turn or work a colleague handed over may do with the memory."""
         return SharedMemory(self)
 
-    def apply_said(self, actions: Sequence[Action], turn_id: int, member_id: int = 0) -> Applied:
-        """Write what the owner asked to be remembered (or forgotten) in the turn `turn_id`: the
-        memories are ones the owner stated. Each goes to the space it names (the shared memory, or
-        the own of `member_id`) and is checked like any other write; one for the shared memory that
-        is not about the owner at large stays in the own (`reflection.apply_spaced`)."""
-        said = [replace(a, origin="said") for a in actions]
-        try:
-            return apply_spaced(
-                said, self.store_for(member_id), self.shared, turns=[turn_id] if turn_id else [],
-                member=member_id,
-            )
-        except OSError as exc:
-            logger.warning("Could not write to the memory: %s", type(exc).__name__)
-            return Applied(refused=["io"] * len(said))
+    def edit_memory(self, member_id: int, target: str, operations: Sequence, *, untrusted: bool = False, share: bool = False,
+                    private_request: bool = False, unattended: bool = False, owner_text: str = "") -> dict:
+        """Apply a model's edits to the file `target` names, with the checks of the module for USER.md.
+        The result is what the model is told."""
+        mark = self._mark() if untrusted else ""
+        own = self.own(member_id)
+        added = lambda op: isinstance(op, dict) and op.get("action") == "add"  # noqa: E731
+        content = lambda op: str(op.get("content") or "")  # noqa: E731
+        # What came from outside stays with the member that read it, unless the owner asked to tell everyone.
+        if target != "user" or (untrusted and not share):
+            # One fact keeps one line across the two files too.
+            said = self.shared.entries()
+            fresh = [op for op in operations if not (added(op) and any(relation(content(op), entry) in ("same", "inside") for entry in said))]
+            if operations and not fresh:
+                return {"success": True, "done": True, "target": "user", "changed": False, "usage": self.shared.usage(), "entry_count": len(said),
+                        "message": "USER.md already says this, so nothing was added.", "note": "This update is complete: do not repeat it."}
+            return own.apply(fresh, mark=mark, unattended=unattended, owner_text=owner_text)
+        told = told_stamp(self._told_name(member_id), self._today().isoformat())
+        kept = [] if share else [op for op in operations if added(op) and (private_request or not about_the_owner(content(op)))]
+        rest = [op for op in operations if not any(op is item for item in kept)]
+        if kept:
+            result = own.apply(kept, mark=mark, unattended=unattended, owner_text=owner_text)
+            if result["success"]:
+                result["message"] = ("Kept in your own MEMORY.md, not USER.md: it is about this conversation or a plan, or "
+                                     "the owner wants it kept from the others.")
+            if not rest or not result["success"]:
+                return result
+        pending = [entry for entry in own.entries() if is_unconfirmed(entry)]
+        rest = [{**op, "content": self._mark() + content(op)} if added(op) and not owner_stated(content(op), owner_text)
+                and any(relation(content(op), entry) in ("same", "inside", "wider", "near") for entry in pending) else op for op in rest]
+        result = self.shared.apply(rest, mark=mark, told=told, unattended=unattended, owner_text=owner_text)
+        if result["success"]:
+            own.drop_said([content(op) for op in rest if added(op)])
+        return result
 
-    def note_turn(self, names: Sequence[str], turn_id: int, member_id: int = 0) -> None:
-        """Add the turn `turn_id` to the turns the memories `names` came from (it was written
-        after them), in whichever space each is."""
-        if not turn_id:
-            return
-        own = self.store_for(member_id)
-        for name in names:
-            try:
-                (own if own.get(name) is not None else self.shared).add_turn(name, turn_id)
-            except OSError as exc:
-                logger.warning("Could not note a memory's turn: %s", type(exc).__name__)
+    def apply_edits(self, edits: Sequence[Edit], member_id: int = 0, *, untrusted: bool = False, share: bool = False,
+                    private_request: bool = False, unattended: bool = False, owner_text: str = "") -> Applied:
+        """What came of the edits of a reply or a pass, each file by itself."""
+        applied = Applied()
+        for target in ("memory", "user"):
+            batch = [edit for edit in edits if edit.target == target]
+            if not batch:
+                continue
+            result = self.edit_memory(member_id, target, [asdict(edit) for edit in batch], untrusted=untrusted, share=share,
+                                      private_request=private_request, unattended=unattended, owner_text=owner_text)
+            applied.record(result, batch, target)
+        return applied
 
     def forget_member_turns(self, member_id: int) -> None:
         """Invalidate in-flight reflection while preserving every member's notes."""
@@ -416,33 +421,6 @@ class MemoryService:
                 "DELETE FROM memory_state WHERE key = ? OR key LIKE ?",
                 (_REFLECTED, f"{_REFLECTED}:%"),
             )
-
-    def read(self, names: Sequence[str], member_id: int | None = 0) -> ToolResult:
-        """`memory_read`: the memories of `names` (at most MAX_READ), each with its body, when it
-        was last updated and its space, looked for in the own memory of `member_id`, then in the
-        shared one (in the shared one alone without a member); the names that are not memories are
-        listed as missing."""
-        found, missing = [], []
-        own = None if member_id is None else self.store_for(member_id)
-        for name in list(dict.fromkeys(names))[:MAX_READ]:
-            space, memory = "own", own.get(name) if own is not None and valid_name(name) else None
-            if memory is None and valid_name(name):
-                space, memory = "shared", self.shared.get(name)
-            if memory is None:
-                missing.append(name)
-                continue
-            found.append(
-                {
-                    "name": memory.name,
-                    "description": memory.description,
-                    "body": memory.body,
-                    "updated": memory.updated[:10],
-                    "origin": memory.origin,
-                    "space": space,
-                    "member": memory.member,
-                }
-            )
-        return ToolResult("memory_read", True, {"memories": found, "missing": missing})
 
     def search(
         self,
@@ -468,8 +446,10 @@ class MemoryService:
         words = [w.casefold() for w in query.split()]
         found = []
         screen = False
+        from .growth import tainted_turn
+        steps = self._history.steps([turn.id for turn in turns if turn.id is not None])
         for turn in turns:
-            screen = screen or turn.route in ("operate", "exchange", "routine")
+            screen = screen or turn.route in ("operate", "exchange", "routine") or tainted_turn(turn, steps.get(turn.id, ()))
             when = datetime.fromtimestamp(turn.created_at_ms / 1000).strftime("%Y-%m-%d %H:%M")
             answer = turn.detail if turn.detail and len(turn.detail) > len(turn.text) else turn.text
             question_label, answer_label = turn_speakers(turn)
@@ -487,14 +467,23 @@ class MemoryService:
 
     # --- the background ----------------------------------------------------------------------------
 
-    def _model(self) -> str:
-        return api_model(self._settings, self._settings.get("agent_model"))
+    def _model(self, member_id: int = 0) -> str:
+        row = self._conn.execute("SELECT model FROM members WHERE id=?", (member_id,)).fetchone() if member_id else None
+        return (row[0] if row and row[0] else self._settings.get("agent_model"))
 
-    def may_spend(self) -> bool:
+    def _brain(self, member_id):
+        from .brain import MemoryBrain
+        return MemoryBrain(self, member_id)
+
+    def may_spend(self, member_id: int = 0) -> bool:
         """Whether a call of the memory's own may be made: there is a key."""
         try:
+            from ..agent.cli.discovery import brain_ref
+            reference = brain_ref(self._model(member_id))
+            if reference:
+                return self._cli_brains is not None and self._cli_brains.available(reference[0])
             if isinstance(self._client, ProviderRouter):
-                return self._client.available(self._model())
+                return self._client.available(self._model(member_id))
             if not (self._keys.get() or "").strip():
                 return False
             return True
@@ -509,9 +498,12 @@ class MemoryService:
         """A turn was written in the thread of `member_id`: fold its conversation if it is time,
         and run the reflection pass now if enough turns wait for one, or once the conversation has
         been quiet for a while."""
-        if self.may_spend():
-            self.conversation_for(member_id).schedule_fold(self._model(), self.ledger)
-        if self._waiting(limit=REFLECT_AFTER_TURNS, member_id=member_id) >= REFLECT_AFTER_TURNS:
+        if self.may_spend(member_id):
+            conversation = self.conversation_for(member_id)
+            conversation._client = self._brain(member_id)
+            conversation.schedule_fold(self._model(member_id), self.ledger)
+        skill_due = self.skill_review is not None and self.skill_review.due()
+        if skill_due or self._waiting(limit=REFLECT_AFTER_TURNS, member_id=member_id) >= REFLECT_AFTER_TURNS:
             self._spawn()
         else:
             self._arm(self._quiet_s)
@@ -548,13 +540,15 @@ class MemoryService:
     def _next_due_s(self) -> float | None:
         """In how many seconds a pass will next be due: the end of the pause after a failure, else
         the soonest of the reflection passes (now when REFLECT_AFTER_TURNS turns of one assistant
-        wait, or when its conversation will have been quiet for QUIET_S) and the weekly
+        wait, or when its conversation will have been quiet for QUIET_S) and the daily
         consolidation. None when nothing waits: the owner's next turn arms the timer again."""
         if self._failed_at is not None:
-            left = RETRY_S - (self._clock() - self._failed_at)
+            left = self._retry_s() - (self._clock() - self._failed_at)
             if left > 0:
                 return left
         delays: list[float] = []
+        if self.skill_review is not None and self.skill_review.due():
+            delays.append(RETRY_S if self._failed_at is not None else 0.0)
         for member_id in self._agents():
             try:
                 unread = self._unread(member_id=member_id)
@@ -566,9 +560,9 @@ class MemoryService:
                     delays.append(max(0.0, quiet_ms / 1000))
             except sqlite3.Error:
                 pass
-        if self._any_memories():
-            weekly_ms = self._state(_CONSOLIDATED) + CONSOLIDATE_EVERY_MS - self._now_ms()
-            delays.append(max(0.0, weekly_ms / 1000))
+        if self._filling():
+            daily_ms = self._state(_CONSOLIDATED) + CONSOLIDATE_EVERY_MS - self._now_ms()
+            delays.append(max(0.0, daily_ms / 1000))
         return min(delays) if delays else None
 
     def _last_turn_ms(self, unread: Sequence[Turn], member_id: int = 0) -> int:
@@ -584,13 +578,11 @@ class MemoryService:
 
     def _unread(self, limit: int = MAX_TURNS, member_id: int = 0) -> list[Turn]:
         """The answered turns of the thread of `member_id` its reflection pass has not read, the
-        latest `limit` of them. An exchange with another member and a routine's run are not the
+        earliest `limit` of them, so a backlog never skips old facts. An exchange with another member and a routine's run are not the
         owner's own words: the pass never reads them."""
-        turns = self._history.after(
-            self.reflected_through(member_id), limit=limit * 3, member_id=member_id
-        )
+        turns = self._history.after(self.reflected_through(member_id), member_id=member_id)
         own = [t for t in turns if t.status == "done" and t.route not in ("exchange", "routine")]
-        return own[-limit:]
+        return own[:limit]
 
     def _due(self, member_id: int) -> bool:
         try:
@@ -608,17 +600,15 @@ class MemoryService:
         wait, or one does and its last turn is QUIET_S old."""
         return any(self._due(member_id) for member_id in self._agents())
 
-    def _spaces(self) -> list[tuple[MemoryStore, bool]]:
-        """Every space there is to consolidate, with whether it is the shared one."""
-        stores = [(self.store, False), (self.shared, True)]
-        stores += [(self.store_for(member_id), False) for member_id in self._members()]
-        return stores
+    def _spaces(self) -> list[tuple[MemoryFile, int]]:
+        """Every file there is to consolidate, with the assistant whose brain does it."""
+        return [(self.shared, 0), *((self.own(member_id), member_id) for member_id in self._agents())]
 
-    def _any_memories(self) -> bool:
-        return any(store.all() for store, _ in self._spaces())
+    def _filling(self) -> list[tuple[MemoryFile, int]]:
+        return [(memory, member_id) for memory, member_id in self._spaces() if memory.fill() >= FULL_FROM]
 
     def consolidation_due(self) -> bool:
-        if not self._any_memories():
+        if not self._filling():
             return False
         return self._now_ms() - self._state(_CONSOLIDATED) >= CONSOLIDATE_EVERY_MS
 
@@ -627,7 +617,7 @@ class MemoryService:
         it ends) or the pause after a failure is not over (the timer is armed for its end)."""
         if self._running is not None and not self._running.done():
             return
-        if self._failed_at is not None and self._clock() - self._failed_at < RETRY_S:
+        if self._failed_at is not None and self._clock() - self._failed_at < self._retry_s():
             self._arm_next()
             return
         try:
@@ -639,74 +629,103 @@ class MemoryService:
     async def run_due(self) -> None:
         """The reflection passes and the consolidation, whichever are due, one after the other;
         then the timer is armed for whatever is due next (the rest of a long backlog, the pause
-        after a failure, the next quiet time or week). Without a key or room under the limit
+        after a failure, the next quiet time or day). Without a key or room under the limit
         nothing runs, and the timer looks again no sooner than RETRY_S."""
-        if not self.may_spend():
+        if self._failed_at is not None and self._clock() - self._failed_at < self._retry_s():
+            self._arm_next()
+            return
+        if not any(self.may_spend(member_id) for member_id in self._agents()):
             delay = self._next_due_s()
             if delay is not None:
                 self._arm(max(delay, RETRY_S))
             return
         try:
             for member_id in self._agents():
-                if self._due(member_id):
+                if self._due(member_id) and self.may_spend(member_id):
                     applied = await self.reflect(member_id)
                     if applied.failed:
-                        break
+                        self._arm_next()
+                        return
+            if self.skill_review is not None:
+                await self.skill_review.run_due()
             if self.consolidation_due():
                 await self.consolidate()
         except Exception as exc:  # the background must not break the conversation
-            self._failed_at = self._clock()
-            logger.warning("The memory's background pass failed: %s", type(exc).__name__)
+            self._record_failure()
+            logger.warning("The memory's background pass failed: kind=internal reason=Unexpected %s", type(exc).__name__)
         self._arm_next()
 
+    def _retry_s(self) -> float:
+        return min(RETRY_S * 2 ** min(max(0, self._failure_count - 1), 5), 6 * 3600.0)
+
+    def _record_failure(self) -> None:
+        self._failure_count += 1
+        self._failed_at = self._clock()
+        logger.info("Memory retry deferred: failures=%d delay_s=%d", self._failure_count, self._retry_s())
+
+    def _recovered(self) -> None:
+        self._failure_count = 0
+        self._failed_at = None
+
     async def reflect(self, member_id: int = 0) -> Applied:
-        """One reflection pass over the turns of `member_id` it has not read, into its own memory
-        and the shared one. The watermark moves past them when the model answered, whatever it
-        made of them; a model that failed leaves them for the next pass, which waits RETRY_S. When
-        the conversation was cleared while the model thought, nothing is applied and the
-        watermark stays where the clear put it."""
+        """One reflection pass over the turns of `member_id` it has not read. The watermark moves past
+        them when the model answered, whatever it made of them; a model that failed leaves them for the
+        next pass, which waits RETRY_S. When the conversation or the files were cleared while the model
+        thought, nothing is applied and the watermark stays where the clear put it."""
         turns = self._unread(member_id=member_id)
         if not turns:
             return Applied()
         clears = self._turn_clears
+        own = self.own(member_id)
+        file_clears = (own.clears, self.shared.clears)
 
         def current() -> bool:
-            return self._turn_clears == clears
+            return self._turn_clears == clears and file_clears == (own.clears, self.shared.clears)
 
-        applied = await self._reflector.reflect(
-            self.store_for(member_id),
-            turns,
-            model=self._model(),
+        from .growth import tainted_turn
+        steps = self._history.steps([turn.id for turn in turns if turn.id is not None])
+        outside = {turn.id for turn in turns if tainted_turn(turn, steps.get(turn.id, ()))}
+        private_request = any(keeps_private(turn.question) for turn in turns)
+        applied = await Reflector(self._brain(member_id)).reflect(
+            own, self.shared, turns,
+            outside=outside,
+            today=self._today(),
+            model=self._model(member_id),
             ledger=self.ledger(),
             current=current,
-            shared=self.shared,
             agent=self._name_of(member_id),
-            member=member_id,
+            apply=lambda edits: self.apply_edits(edits, member_id, private_request=private_request, unattended=True),
         )
         if applied.failed:
-            self._failed_at = self._clock()
-        elif current():
+            self._record_failure()
+        elif self._turn_clears == clears:
+            self._recovered()
             through = max(turns[-1].id or 0, self.reflected_through(member_id))
             self._set_state(_watermark(member_id), through)
         return applied
 
     async def consolidate(self) -> Applied:
-        """The weekly tidy of every space, each by itself (the shared one never deletes a note);
-        the next one is a week away once the model has answered for each."""
+        """The tidy of every file near or past its limit, each by itself; the next one is a day away
+        once the model has answered for each."""
         total = Applied()
-        for store, shared in self._spaces():
-            if not store.all():
+        for memory, member_id in self._filling():
+            if not self.may_spend(member_id):
                 continue
-            applied = await self._reflector.consolidate(
-                store, model=self._model(), ledger=self.ledger(), shared=shared
-            )
-            total.written += applied.written
-            total.deleted += applied.deleted
-            total.refused += applied.refused
-            total.failed = total.failed or applied.failed
+
+            def apply(edits, memory=memory):
+                # Who was told an entry stays as it was: a tidy is nobody's telling.
+                applied = Applied()
+                applied.record(memory.apply([asdict(edit) for edit in edits], unattended=True), edits, memory.target)
+                return applied
+
+            clears = memory.clears
+            total.merge(await Reflector(self._brain(member_id)).consolidate(
+                memory, today=self._today(), model=self._model(member_id), ledger=self.ledger(), apply=apply,
+                current=lambda memory=memory, clears=clears: memory.clears == clears))
         if total.failed:
-            self._failed_at = self._clock()
+            self._record_failure()
         else:
+            self._recovered()
             self._set_state(_CONSOLIDATED, self._now_ms())
         return total
 
@@ -731,13 +750,6 @@ class MemoryService:
 
     # --- the RPC methods ---------------------------------------------------------------------------
 
-    @staticmethod
-    def _name(params: dict) -> str:
-        name = params.get("name")
-        if not valid_name(name):
-            raise invalid_params("name must be the name of a memory")
-        return name
-
     def _member(self, params: dict) -> int:
         """The assistant whose own memory a method is about: `member_id`, 0 (Raphael) by default.
         One that is not there is refused."""
@@ -759,105 +771,36 @@ class MemoryService:
             raise invalid_params(f"{key} must be shared or own")
         return space
 
-    def _store(self, params: dict) -> MemoryStore:
+    def _file(self, params: dict) -> MemoryFile:
         return self.space(self._space_of(params), self._member(params))
 
-    async def _create(self, params: dict) -> dict:
-        if self._space_of(params) != "own":
-            raise invalid_params("new notes belong to the member's own space")
-        member_id = self._member(params)
-        body = params.get("body")
-        description = params.get("description")
-        if not isinstance(body, str) or not body.strip():
-            raise invalid_params("body must be nonempty text")
-        if description is None:
-            description = " ".join(body.split())[:80]
-        if not isinstance(description, str):
-            raise invalid_params("description must be text")
-        name = "reference-" + secrets.token_hex(8)
-        try:
-            memory = self.store_for(member_id).write(name, type="reference", description=description,
-                                                      body=body, origin="said")
-        except MemoryRefused as refused:
-            raise invalid_params(f"{refused.kind}: {refused}") from None
-        return {"note": memory.view()}
-
-    async def _list(self, params: dict) -> dict:
-        space = self._space_of(params)
-        member_id = self._member(params)
-        memories = [
-            {
-                "name": m.name,
-                "description": m.description,
-                "type": m.type,
-                "origin": m.origin,
-                "updated": m.updated,
-                "expires": m.expires,
-                "member": m.member,
-            }
-            for m in self.space(space, member_id).all()
-        ]
-        shown = None
-        if space == "own":
-            summary = self.conversation_for(member_id).summary()
-            if summary.text:
-                shown = {"text": summary.text, "updated_at_ms": summary.updated_at_ms}
-        return {"memories": memories, "summary": shown}
+    def _view(self, params: dict) -> dict:
+        """The document as the owner reads it."""
+        memory = self._file(params)
+        summary = None
+        if self._space_of(params) == "own":
+            found = self.conversation_for(self._member(params)).summary()
+            if found.text:
+                summary = {"text": found.text, "updated_at_ms": found.updated_at_ms}
+        return {"text": memory.read(), "revision": memory.revision(), "chars": memory.chars(),
+                "entries": len(memory.entries()), "limit": memory.limit, "summary": summary}
 
     async def _get(self, params: dict) -> dict:
-        memory = self._store(params).get(self._name(params))
-        if memory is None:
-            raise invalid_params("no memory has that name")
-        return memory.view()
+        return self._view(params)
 
     async def _update(self, params: dict) -> dict:
-        store = self._store(params)
-        name = self._name(params)
-        body = params.get("body")
-        if not isinstance(body, str):
-            raise invalid_params("body must be a string")
-        description = params.get("description")
-        if description is not None and not isinstance(description, str):
-            raise invalid_params("description must be a string")
-        old = store.get(name)
-        if old is None:
-            raise invalid_params("no memory has that name")
-        try:
-            memory = store.write(
-                name,
-                type=old.type,
-                description=old.description if description is None else description,
-                body=body,
-                expires=old.expires,
-                origin="said",
-            )
-        except MemoryRefused as refused:
-            raise invalid_params(f"{refused.kind}: {refused}") from None
-        return memory.view()
-
-    async def _delete(self, params: dict) -> dict:
-        return {"deleted": self._store(params).delete(self._name(params))}
+        text, revision = params.get("text"), params.get("revision")
+        if not isinstance(text, str) or len(text) > MAX_DOCUMENT_CHARS:
+            raise invalid_params("text must be the document")
+        if revision is not None and not isinstance(revision, str):
+            raise invalid_params("revision must be the one memory.get gave")
+        result = self._file(params).edit_document(text, revision)
+        if not result["success"]:
+            raise invalid_params(f"{result['kind']}: {result['error']}")
+        return self._view(params)
 
     async def _clear(self, params: dict) -> dict:
-        return {"deleted": self._store(params).clear()}
-
-    async def _move(self, params: dict) -> dict:
-        """Move a note between the shared memory and the own of `member_id`, as it is."""
-        name = self._name(params)
-        target = self._space_of(params, "to_space")
-        member_id = self._member(params)
-        source = "own" if target == "shared" else "shared"
-        moving = self.space(source, member_id)
-        if moving.get(name) is None:
-            raise invalid_params("no memory has that name")
-        if self.space(target, member_id).get(name) is not None:
-            raise invalid_params("taken: the other space has a memory of that name")
-        try:
-            moved = move_note(name, moving, self.space(target, member_id))
-        except OSError as exc:
-            logger.warning("Could not move a memory: %s", type(exc).__name__)
-            raise invalid_params("io: the memory could not be moved") from None
-        return {"moved": moved}
+        return {"cleared": self._file(params).clear()}
 
     async def _summary_clear(self, params: dict) -> dict:
         return {"cleared": self.conversation_for(self._member(params)).clear_summary()}
@@ -865,17 +808,17 @@ class MemoryService:
 
 @dataclass(frozen=True)
 class MemberMemory:
-    """The memory as a background task of one assistant sees it (`background.run.MemoryReader`):
-    the shared index and its own, its notes read and its own thread searched; never a write."""
+    """The memory as a background task of one assistant sees it (`background.run.MemoryReader`): USER.md
+    and its own file, its own thread searched, and the growth tools on its own home."""
 
     memory: MemoryService
     member_id: int
 
-    def index(self) -> MemoryIndex:
-        return self.memory.index(self.member_id)
+    def growth(self, name, args, *, untrusted=False, owner_text=""):
+        return self.memory.growth(name, args, untrusted=untrusted, member_id=self.member_id, owner_text=owner_text)
 
-    def read(self, names: Sequence[str]) -> ToolResult:
-        return self.memory.read(names, self.member_id)
+    def snapshot(self) -> MemorySnapshot:
+        return self.memory.snapshot(self.member_id)
 
     def search(self, query: str, *, limit: int = 5, exclude: Sequence[int] = ()) -> ToolResult:
         return self.memory.search(query, limit=limit, exclude=exclude, member_id=self.member_id)
@@ -884,17 +827,14 @@ class MemberMemory:
 @dataclass(frozen=True)
 class SharedMemory:
     """The memory as a room's turn or work a colleague handed over sees it
-    (`background.run.MemoryReader`): the shared notes alone. What the owner told one assistant
-    stays out of a group and out of a colleague's work, so no own note is read and no conversation
-    searched; never a write."""
+    (`background.run.MemoryReader`): USER.md alone. What the owner told one assistant stays out of a
+    group and out of a colleague's work, so no own file is read and no conversation searched; never a
+    write."""
 
     memory: MemoryService
 
-    def index(self) -> MemoryIndex:
-        return self.memory.index(None)
-
-    def read(self, names: Sequence[str]) -> ToolResult:
-        return self.memory.read(names, None)
+    def snapshot(self) -> MemorySnapshot:
+        return self.memory.snapshot(None)
 
     def search(self, query: str, *, limit: int = 5, exclude: Sequence[int] = ()) -> ToolResult:
         return ToolResult("history_search", False, None, "blocked")

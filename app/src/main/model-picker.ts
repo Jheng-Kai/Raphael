@@ -1,4 +1,6 @@
 // A two-phase model chooser shared by settings, services and member details.
+import * as api from "./api";
+import { noticeHTML } from "./missing";
 import "./model-picker.css";
 import { getLocale, t } from "./i18n";
 import {
@@ -10,8 +12,9 @@ import {
 import { formatPerMinute, formatPerMtok } from "./pricing";
 import { modelMark, providerMark } from "./provider-marks";
 import { CLIS, cliModels } from "./cli-brains";
-import type { CatalogModel, CliBrain, CliBrainId, ModelCatalog, ModelRole, ModelProvider } from "./types";
+import type { CatalogModel, ChatGptStatus, CliBrain, CliBrainId, ModelCatalog, ModelRole, ModelProvider } from "./types";
 import { CHECK, btn, esc, ico, openMenu, sel } from "./ui";
+import { openActions } from "./member-column";
 import { openDialog, type Dialog } from "./member-dialogs";
 
 // ---------- what the list shows ----------
@@ -36,14 +39,14 @@ export const DEFAULT_PICKER_STATE: PickerState = { query: "", sort: "price", pro
  * at images (the `vision_model` setting), which the catalog has no role for: it is any language
  * model that reads images.
  */
-export type PickerRole = ModelRole | "vision";
+export type PickerRole = ModelRole | "vision" | "image" | "video";
 
 /** The kind of model each role chooses among. */
-const KIND: Record<PickerRole, "llm" | "stt"> = { cleanup: "llm", answer: "llm", stt: "stt", vision: "llm" };
+const KIND: Record<PickerRole, "llm" | "stt" | "image" | "video"> = { cleanup: "llm", answer: "llm", stt: "stt", vision: "llm", image: "image", video: "video" };
 
 /** The models of the catalog that `role` chooses among: those of its kind. */
 export const modelsFor = (catalog: ModelCatalog, role: PickerRole): CatalogModel[] => {
-  const models = catalog[KIND[role]];
+  const models = catalog[KIND[role]] ?? [];
   return models.some((m) => modelRef(m) !== m.id) ? models.map((m) => ({ ...m, id: modelRef(m) })) : models;
 };
 
@@ -62,10 +65,14 @@ export const acceptsImages = (model: CatalogModel): boolean => model.input_modal
 
 /** Whether `role` can use `model`, and if not why: the core's word for a role of its catalog, ours for `vision`. */
 export function fitFor(model: CatalogModel, role: PickerRole): { usable: boolean; reason: string | null } {
+  if (role === "image" || role === "video") return { usable: true, reason: null };
   if (role === "vision") return acceptsImages(model) ? { usable: true, reason: null } : { usable: false, reason: "no_image_input" };
   const fit = model.roles[role];
   return { usable: fit?.usable === true, reason: fit?.reason ?? null };
 }
+
+/** A model on the owner's own plan, which has no price of its own: a CLI's or ChatGPT's. */
+export const planRef = (ref: string): boolean => ref.startsWith("cli:") || ref.startsWith("@chatgpt:");
 
 /** Whether `role` can use `model`. */
 export const usableFor = (model: CatalogModel, role: PickerRole): boolean => fitFor(model, role).usable;
@@ -83,7 +90,8 @@ const hasTokenPrice = (m: CatalogModel): boolean => m.input_per_mtok !== null ||
  * by the token, `$2.00 / $12 每百萬 token`. Else 免費, 價格不固定 (a router) or 價格未知.
  */
 export function priceText(model: CatalogModel, role: PickerRole): string {
-  if (model.id.startsWith("cli:")) return t("brains.subscription");
+  if (role === "image" || role === "video") return mediaPrice(model);
+  if (planRef(model.id)) return t("brains.subscription");
   if (model.variable_price) return t("picker.varies");
   if (model.free) return t("picker.free");
   if (model.per_minute !== null) return t("pricing.003", { p0: formatPerMinute(model.per_minute) });
@@ -93,10 +101,19 @@ export function priceText(model: CatalogModel, role: PickerRole): string {
 
 /** The price in full words, for a screen reader: 「輸入 $0.10 / 輸出 $0.50 每百萬 token」. */
 export function priceDescription(model: CatalogModel, role: PickerRole): string {
+  if (role === "image" || role === "video") return mediaPrice(model);
   if (KIND[role] === "llm" && !model.variable_price && !model.free && hasTokenPrice(model)) {
     return t("pricing.002", { p0: perMtok(model.input_per_mtok), p1: perMtok(model.output_per_mtok) });
   }
   return priceText(model, role);
+}
+
+function mediaPrice(model: CatalogModel): string {
+  const units = [model.per_image == null ? "" : t("media.perImage", { p0: formatPerMtok(model.per_image) }),
+    model.per_request == null || model.per_request === 0 && (hasTokenPrice(model) || model.image_output_per_mtok != null) ? "" : t("media.perRequest", { p0: formatPerMtok(model.per_request) })];
+  const tokens = hasTokenPrice(model) ? t("pricing.002", { p0: perMtok(model.input_per_mtok), p1: perMtok(model.output_per_mtok) }) : "";
+  const images = model.image_output_per_mtok == null ? "" : t("media.imageTokens", { p0: formatPerMtok(model.image_output_per_mtok) });
+  return [...units, tokens, images].filter(Boolean).join(" · ") || t("pricing.001");
 }
 
 /** A context length in tokens, short: 1050000 -> `1.05M`, 131072 -> `131K`. */
@@ -136,6 +153,7 @@ export interface PickerRow {
 export interface PickerLead {
   id: string;
   name: string;
+  source?: string;
 }
 
 /** The lead as a row of the list: a model with its id and name and nothing else. */
@@ -394,6 +412,10 @@ export interface ModelPickerOptions {
   /** Public connection metadata includes enabled connections with no models for this role. */
   providers?: readonly ModelProvider[];
   clis?: readonly CliBrain[];
+  /** The ChatGPT account, for a picker where the plan can be signed in to; undefined where it cannot. */
+  chatgpt?: ChatGptStatus | null;
+  /** What stopped its last sign-in. */
+  chatgptError?: string;
   loading?: boolean;
   /** What the control is called: the title of its row. It names the button and the list for a screen reader. */
   label: string;
@@ -409,6 +431,7 @@ export interface ModelPickerOptions {
   onChoose: (id: string) => void;
   onSources?: () => void;
   onCliAction?: (id: CliBrainId) => void;
+  onChatgpt?: (action: "sign-in" | "cancel") => void;
   /** The speech models of this computer (a second tab) and what is under way: only the speech-to-text picker has it. */
   local?: LocalView;
   /** The user chose the local model `name`, or pressed 下載 on it. The page downloads it if it is not on disk, saves it and hands the progress back with `update`. */
@@ -448,10 +471,12 @@ export interface ChooserSource {
   group: "subscriptions" | "api" | "local";
   models: CatalogModel[];
   cli?: CliBrain;
+  /** ChatGPT's account: it is a subscription like a CLI's, signed in here rather than in a terminal. */
+  account?: ChatGptStatus | null;
 }
 
 const baseRef = (ref: string): string => ref.split("?effort=")[0];
-const effortOf = (ref: string, models: readonly CatalogModel[]): string => ref.split("?effort=")[1] ??
+export const effortOf = (ref: string, models: readonly CatalogModel[]): string => ref.split("?effort=")[1] ??
   models.flatMap((model) => Object.entries(model.effort_models ?? {})).find(([, value]) => value === ref)?.[0] ?? "";
 
 /** A chosen ref as a model and an effort, for a page that saves them apart (快速提問): an effort's own model id gives its model. */
@@ -466,6 +491,8 @@ const shortName = (id: string): string => {
   return raw.slice(raw.lastIndexOf("/") + 1) || id;
 };
 
+export function pickerModelsFor(o: ModelPickerLook): CatalogModel[] { return pickerModels(o); }
+
 function pickerModels(o: ModelPickerLook): CatalogModel[] {
   const models = o.catalog ? modelsFor(o.catalog, o.role).filter((m) =>
     !m.id.startsWith("cli:") && o.providers?.find((p) => p.id === connectionId(m))?.enabled !== false) : [];
@@ -478,8 +505,10 @@ export function chooserSources(o: ModelPickerLook): ChooserSource[] {
     id: `cli:${known.id}`, name: known.name, kind: known.mark, group: "subscriptions" as const,
     cli: o.clis?.find((c) => c.id === known.id), models: models.filter((m) => connectionId(m) === `cli:${known.id}`),
   })) : [];
+  const planModels = models.filter((m) => connectionId(m) === "chatgpt");
+  if (o.chatgpt !== undefined || planModels.length) sources.unshift({ id: "chatgpt", name: "ChatGPT", kind: "openai", group: "subscriptions", account: o.chatgpt, models: planModels });
   for (const provider of o.providers ?? []) {
-    if (provider.enabled) sources.push({ id: provider.id, name: provider.name, kind: provider.kind,
+    if (provider.enabled && provider.id !== "chatgpt") sources.push({ id: provider.id, name: provider.name, kind: provider.kind,
       group: isLocal(provider.kind) ? "local" : "api", models: models.filter((m) => connectionId(m) === provider.id) });
   }
   for (const model of models) {
@@ -495,7 +524,8 @@ export function chooserSources(o: ModelPickerLook): ChooserSource[] {
 
 /** A fallback is allowed only for an exact maker and model identifier, never a similar name. */
 export function chooserPrice(model: CatalogModel, models: readonly CatalogModel[], role: PickerRole): string {
-  if (model.id.startsWith("cli:")) return "";
+  if (planRef(model.id)) return "";
+  if (role === "image" || role === "video") return priceText(model, role);
   if (model.free || model.variable_price || model.per_minute !== null || hasTokenPrice(model)) return priceText(model, role);
   const raw = model.id.replace(/^@[^:]+:/, "");
   const maker = model.provider.toLowerCase();
@@ -506,6 +536,8 @@ export function chooserPrice(model: CatalogModel, models: readonly CatalogModel[
   return priced ? priceText(priced, role) : "";
 }
 
+export const concreteModel = (o: ModelPickerLook, models: CatalogModel[]): string => concreteCurrent(o, models);
+
 function concreteCurrent(o: ModelPickerLook, models = pickerModels(o)): string {
   const ref = baseRef(o.current);
   return /^cli:[^:]+$/.test(ref) ? models.find((m) => connectionId(m) === ref && m.is_default)?.id ?? ref :
@@ -513,17 +545,21 @@ function concreteCurrent(o: ModelPickerLook, models = pickerModels(o)): string {
 }
 
 /** The same model name and connection source for picker buttons and read-only cards. */
-export function modelPickerSelection(o: ModelPickerLook): { name: string; source: string; model?: CatalogModel } {
+export function modelPickerSelection(o: ModelPickerLook): { name: string; source: string; provider: string; model?: CatalogModel } {
   // Public cached names remain useful after logout; only pickerModels can supply runnable rows.
   const models = [...pickerModels(o).filter((m) => !m.id.startsWith("cli:")), ...cliModels(o.clis ?? [], false)];
   const inherited = baseRef(o.current) === o.lead?.id && o.inheritFrom;
   const ref = concreteCurrent(inherited ? { ...o, current: inherited } : o, models), model = models.find((m) => m.id === ref);
   const local = o.local?.active ? faceTitle(o.local) : null;
   const name = local ? local.split(" · ").slice(1).join(" · ") : o.lead?.id === ref ? o.lead.name : model?.name ?? shortName(ref);
-  const provider = local ? t("picker.tabLocal") : model ? connectionName(model) : ref.startsWith("cli:") ?
-    `${CLIS.find((c) => ref.startsWith(`cli:${c.id}`))?.name ?? ""} ${t("brains.subscription")}` : o.lead?.id === ref ? t("chooser.same") : "";
-  const source = inherited ? `${provider} · ${t("services.sameAsAnswer")}` : provider;
-  return { name, source, model };
+  const cli = CLIS.find((c) => ref.startsWith(`cli:${c.id}`))?.name;
+  const from = local ? t("picker.tabLocal") : model ? connectionName(model) : ref.startsWith("cli:") ?
+    `${cli ?? ""} ${t("brains.subscription")}` : o.lead?.id === ref ? o.lead.source ?? t("chooser.same") : "";
+  const stale = !!ref && !!o.catalog && !o.loading && !model && !local && o.lead?.id !== ref;
+  if (stale) return { name, source: t("missing.retired"), provider: cli ?? from, model };
+  const source = inherited ? `${from} · ${t("services.sameAsAnswer")}` : from;
+  // The plain name of where it runs, the same kind of word for every source.
+  return { name, source, provider: cli ?? (!model && ref.startsWith("@chatgpt:") ? "ChatGPT" : from), model };
 }
 
 function buttonFace(o: ModelPickerLook): { inner: string; label: string } {
@@ -531,6 +567,8 @@ function buttonFace(o: ModelPickerLook): { inner: string; label: string } {
   return { inner: `${model ? modelMark(model) : ""}<span class="mp-ttext"><strong class="mp-tname">${esc(name)}</strong><span class="mp-source">${esc(source)}</span></span>${ico("down")}`,
     label: `${o.label}: ${name}${source ? ` · ${source}` : ""}` };
 }
+
+export const buttonFaceHTML = buttonFace;
 
 function buttonHTML(o: ModelPickerLook): string {
   const face = buttonFace(o);
@@ -550,7 +588,7 @@ export function mountModelPicker(container: HTMLElement, options: ModelPickerOpt
 
 const effortOrder: readonly string[] = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
 /** Display known efforts from shallow to deep, retaining unknown efforts in catalog order. */
-const orderedEfforts = (efforts: readonly string[]): string[] => {
+export const orderedEfforts = (efforts: readonly string[]): string[] => {
   const rank = (effort: string): number => {
     const index = effortOrder.indexOf(effort);
     return index < 0 ? effortOrder.length : index;
@@ -558,20 +596,87 @@ const orderedEfforts = (efforts: readonly string[]): string[] => {
   return [...efforts].sort((a, b) => rank(a) - rank(b));
 };
 
-const effortText = (effort: string): string => {
+export const effortText = (effort: string): string => {
   const keys = { none: "chooser.none", minimal: "chooser.minimal", low: "chooser.low", medium: "chooser.medium", high: "chooser.high", xhigh: "chooser.xhigh", max: "chooser.max" } as const;
   return effort in keys ? t(keys[effort as keyof typeof keys]) : effort;
 };
 
+/** A chosen model at a chosen depth, as the core reads it. */
+export const modelRefWith = (model: CatalogModel, effort: string): string =>
+  model.effort_models?.[effort] ?? (effort ? `${model.id}?effort=${effort}` : model.id);
+
+const stopPercent = (at: number, count: number): number => (count > 1 ? (at / (count - 1)) * 100 : 0);
+
+/** Every model's depth is read off one ruler, so that a stop stands in the same place whoever answers. */
+const RULER: readonly string[] = ["low", "medium", "high", "xhigh", "max"];
+
+/** What each stop of the ruler is for this model, "" where it has no such depth. A depth under 低 takes 低's stop when it is chosen or the model has no 低. */
+function rulerOf(levels: readonly string[], value: string): string[] {
+  const stops = RULER.map((stop) => (levels.includes(stop) ? stop : ""));
+  const under = [value, "minimal"].find((level) => (level === "minimal" || level === "none") && levels.includes(level));
+  if (under && (!stops[0] || under === value)) stops[0] = under;
+  return stops;
+}
+
+/**
+ * The depth of thought as something to drag or press along, or to move with the arrow keys. The ruler is the same for
+ * every model; the stops a model lacks are dim and the thumb does not rest on them, and with nothing to choose it is
+ * still and says so. `known` is false until the model has been read, when there is nothing to say yet.
+ */
+export function effortSliderHTML(levels: readonly string[], value: string, known = true): string {
+  const stops = rulerOf(levels, value), offered = stops.filter(Boolean);
+  const at = Math.max(0, stops.indexOf(value && stops.includes(value) ? value : offered[0] ?? ""));
+  const percent = stopPercent(at, stops.length);
+  const note = known && !offered.length ? t("chooser.noDepth") : "";
+  return `<div class="mc-depth"><span class="mc-depth-title">${esc(t("chooser.effort"))}</span>` +
+    `<div class="mc-track"${offered.length ? "" : " data-empty"} style="--p:${percent / 100}"><input type="range" class="mc-range" min="0" max="${stops.length - 1}" step="1" value="${at}"${offered.length < 2 ? " disabled" : ""} aria-label="${esc(t("chooser.effort"))}" aria-valuetext="${esc(note || effortText(stops[at] ?? ""))}" data-levels="${esc(stops.join(","))}" data-at="${at}" style="--at:${percent}%">` +
+    `<span class="mc-dots" aria-hidden="true">${stops.map((level, index) => `<i class="mc-dot" data-dot="${esc(level)}" data-on="${!!level && index === at}"></i>`).join("")}</span></div>` +
+    `<div class="mc-stops" aria-hidden="true">${offered.length ? stops.map((level, index) => `<span class="mc-stop" data-effort="${esc(level)}" data-on="${!!level && index === at}">${esc(effortText(level || (RULER[index] ?? "")))}</span>`).join("") : note ? `<span class="mc-stop" data-on="true">${esc(note)}</span>` : ""}</div></div>`;
+}
+
+/** Where a stop the model lacks sends the thumb: on the way it was going, else back to the nearest it has. */
+function restingStop(levels: readonly string[], to: number, from: number): number {
+  const offered = levels.flatMap((level, index) => (level ? [index] : []));
+  const up = offered.find((index) => index >= to), down = offered.filter((index) => index <= to).pop();
+  return (to >= from ? up ?? down : down ?? up) ?? from;
+}
+
+/** The slider where the pointer has it, and the level that is. */
+export function moveEffortSlider(range: HTMLInputElement): string {
+  const levels = (range.dataset.levels ?? "").split(",");
+  const at = restingStop(levels, Number(range.value), Number(range.dataset.at ?? 0)), level = levels[at] ?? "";
+  range.value = String(at);
+  range.dataset.at = String(at);
+  range.style.setProperty("--at", `${stopPercent(at, levels.length)}%`);
+  range.parentElement?.style.setProperty("--p", String(stopPercent(at, levels.length) / 100));
+  range.setAttribute("aria-valuetext", effortText(level));
+  for (const stop of range.closest(".mc-depth")?.querySelectorAll<HTMLElement>("[data-effort], [data-dot]") ?? []) stop.dataset.on = String(!!level && (stop.dataset.effort ?? stop.dataset.dot) === level);
+  return level;
+}
+
 /** Radio rows are shared by the dialog and the catalog's pure rendering tests. */
 /** A source's mark: its brand's, or for the models on this PC (and a custom connection) a plain one, so every row lines up. */
+export const sourceMarkHTML = (source: ChooserSource): string => sourceMark(source);
+
 const sourceMark = (source: ChooserSource): string =>
   providerMark(source.kind, true) || `<span class="mono md" aria-hidden="true">${ico(source.id === "local-speech" ? "mic" : "plug")}</span>`;
+
+/** What a source's row says under its name: whether it is ready, or how many models it has. */
+export function sourceStatus(source: ChooserSource, o: ModelPickerLook): string {
+  if (source.id === "chatgpt" && source.account !== undefined) {
+    if (source.account?.signing_in) return t("brains.chatgptWaiting");
+    if (!source.account?.signed_in) return t("brains.signedOut");
+    if (source.account.plan_scope_granted === false) return t("brains.chatgptNoPlanShort");
+    return t("brains.ready");
+  }
+  return source.id.startsWith("cli:") ? !o.clis ? t("common.loading") : t(source.cli?.disconnected ? "brains.disconnected" : !source.cli?.installed ? "brains.missing" : source.cli.available ? "brains.ready" : "brains.signedOut") :
+    t(source.group === "local" ? "chooser.localCount" : "chooser.modelCount", { n: source.id === "local-speech" && Array.isArray(o.local?.models) ? o.local.models.length : source.models.length });
+}
 
 export function listHTML(list: PickerList, selected = list.current, models: readonly CatalogModel[] = [], stars = false): string {
   return list.rows.map(({ model, usable, lead }) => {
     const chosen = model.id === selected;
-    const descriptions = { "cli:claude:sonnet": "chooser.sonnet", "cli:claude:opus": "chooser.opus", "cli:claude:haiku": "chooser.haiku" } as const;
+    const descriptions = { "cli:claude:sonnet": "chooser.sonnet", "cli:claude:opus": "chooser.opus", "cli:claude:fable": "chooser.fable", "cli:claude:haiku": "chooser.haiku" } as const;
     const key = descriptions[model.id as keyof typeof descriptions];
     const description = key ? t(key) : getLocale() === "en" ? model.description : "";
     const sub = [description || [model.provider, model.context_length ? formatContext(model.context_length) : ""].filter(Boolean).join(" · "),
@@ -645,7 +750,10 @@ class MountedPicker implements ModelPicker {
         primary: { label: esc(t("chooser.use")), attrs: ' data-dlg="use"' } },
       onAct: (act) => {
         if (act === "use") this.use();
+        if (act === "reload") void this.reload();
         if (act === "sources") { this.close(); this.o.onSources?.(); }
+        if (act === "chatgpt") this.o.onChatgpt?.("sign-in");
+        if (act === "chatgpt-cancel") this.o.onChatgpt?.("cancel");
         if (act === "login") {
           const id = this.source.slice(4) as CliBrainId;
           if (this.o.onCliAction) this.o.onCliAction(id);
@@ -659,6 +767,8 @@ class MountedPicker implements ModelPicker {
     this.dialog.el.addEventListener("input", (event) => {
       const input = event.target as HTMLInputElement;
       if (input.matches(".mc-search")) { this.query = input.value; this.paintRows(); }
+      // Not a repaint: the slider is under the pointer.
+      if (input.matches(".mc-range")) { this.effort = moveEffortSlider(input); this.paintFooter(); }
     });
     this.dialog.el.addEventListener("keydown", (event) => {
       const row = (event.target as HTMLElement).closest<HTMLButtonElement>(".mc-row, .lm-main");
@@ -685,14 +795,17 @@ class MountedPicker implements ModelPicker {
     const rail = (["subscriptions", "api", "local"] as const).map((group) => {
       const items = sources.filter((source) => source.group === group);
       return !items.length ? "" : `<section><h3>${esc(t(groupKeys[group]))}</h3>` + items.map((source) => {
-        const status = source.id.startsWith("cli:") ? !this.o.clis ? t("common.loading") : t(source.cli?.disconnected ? "brains.disconnected" : !source.cli?.installed ? "brains.missing" : source.cli.available ? "brains.ready" : "brains.signedOut") :
-          t(source.group === "local" ? "chooser.localCount" : "chooser.modelCount", { n: source.id === "local-speech" && Array.isArray(this.o.local?.models) ? this.o.local.models.length : source.models.length });
+        const status = sourceStatus(source, this.o);
         return `<button type="button" class="btn mc-source" data-source="${esc(source.id)}" aria-pressed="${this.source === source.id}">${sourceMark(source)}<span><strong>${esc(source.name)}</strong><small>${esc(status)}</small></span>${source.id === (this.o.local?.active ? "local-speech" : savedSource) ? '<i class="mc-current" aria-hidden="true"></i>' : ""}</button>`;
       }).join("") + `</section>`;
     }).join("");
     const inherit = this.o.lead ? `<button type="button" class="btn mc-inherit" data-model="${esc(this.o.lead.id)}" aria-pressed="${this.draft === this.o.lead.id}">${esc(this.o.lead.name)}</button>` : "";
+    // Drawing again must not scroll the sources under the pointer that just chose one.
+    const sourcesTop = this.dialog.el.querySelector(".mc-source-list")?.scrollTop ?? 0;
     this.dialog.el.querySelector(".mb-dlg-body")!.innerHTML = `<div class="mc-layout"><aside class="mc-rail">${inherit}<div class="mc-source-list">${rail}</div>${btn(`${ico("plus")}${esc(t("chooser.sources"))}`, "", ' data-dlg="sources"')}</aside><div class="mc-pane"></div></div>`;
     this.paintPane();
+    const sourceList = this.dialog.el.querySelector(".mc-source-list");
+    if (sourceList) sourceList.scrollTop = sourcesTop;
     this.dialog.el.querySelector<HTMLElement>('.mc-source[aria-pressed="true"]')?.scrollIntoView?.({ block: "nearest" });
   }
   private paintPane(): void {
@@ -701,7 +814,15 @@ class MountedPicker implements ModelPicker {
     if (!source) { pane.innerHTML = `<p class="mc-empty">${esc(t("chooser.empty"))}</p>`; this.paintFooter(); return; }
     const note = source.group === "subscriptions" ? "chooser.subscriptionNote" : source.group === "local" ? "chooser.localNote" : "chooser.apiNote";
     pane.innerHTML = `<header class="mc-pane-head">${sourceMark(source)}<span><h3>${esc(source.name)}</h3><p>${esc(t(note))}</p></span></header>`;
-    if (source.group === "subscriptions" && !source.cli?.available) {
+    if (source.id === "chatgpt" && source.account !== undefined && (!source.account?.signed_in || source.account.plan_scope_granted === false || source.account.signing_in)) {
+      const account = source.account;
+      pane.innerHTML += account?.signing_in
+        ? `<div class="mc-empty" role="status"><p>${esc(t("brains.chatgptSigning"))}</p>${btn(esc(t("common.cancel")), "", ' data-dlg="chatgpt-cancel"')}</div>`
+        : `<div class="mc-empty mc-signin"><p>${esc(t(account?.signed_in ? "brains.chatgptNoPlan" : "brains.chatgptNote"))}</p><p>${esc(t("brains.chatgptPrivate"))}</p>` +
+          `${this.o.chatgptError ? `<p role="alert">${esc(this.o.chatgptError)}</p>` : ""}${btn(`${providerMark("openai")}${esc(t("brains.chatgptSignIn"))}`, "", ' data-dlg="chatgpt"')}</div>`;
+      this.paintFooter(); return;
+    }
+    if (source.group === "subscriptions" && !source.cli?.available && source.id !== "chatgpt") {
       pane.innerHTML += `<div class="mc-empty"><p>${esc(t(source.cli?.disconnected ? "brains.disconnected" : source.cli?.installed ? "chooser.loginNote" : "chooser.installNote"))}</p>${this.o.clis ? btn(esc(t(source.cli?.installed ? "brains.connect" : "brains.install")), "", ' data-dlg="login"') : esc(t("common.loading"))}</div>`;
       this.paintFooter(); return;
     }
@@ -734,15 +855,27 @@ class MountedPicker implements ModelPicker {
         list.rows = all.filter((row) => !favorites.includes(row));
         listEl.innerHTML = `<h4>${esc(t("chooser.favorites"))}</h4>${first}<h4>${esc(t("chooser.all"))}</h4>${listHTML(list, this.draft, pickerModels(this.o), !!this.o.onFavorite)}`;
       } else listEl.innerHTML = listHTML(list, this.draft, pickerModels(this.o), !!this.o.onFavorite);
-      if (!list.rows.length) listEl.innerHTML = `<p class="mc-empty">${esc(t(this.o.loading ? "common.loading" : "chooser.empty"))}</p>`;
+      if (!list.rows.length) listEl.innerHTML = `<p class="mc-empty">${esc(t((source.cli?.available || source.account?.signed_in) && !source.models.length ? "missing.models" : this.o.loading ? "common.loading" : "chooser.empty"))}</p>`;
+    }
+    if (source.group === "subscriptions" && !source.models.length && (source.cli?.available || source.account?.signed_in)) {
+      listEl.innerHTML += btn(esc(t("page.retry")), "sm", ' data-dlg="reload"') + noticeHTML("noModels", "models");
     }
     const model = this.effortModel();
     const supported = model?.reasoning_efforts ?? [];
     const levels = this.inherits() || source.models.some((m) => m.id === model?.id) ? orderedEfforts(supported) : [];
     if (!supported.includes(this.effort)) this.effort = (this.o.defaultEffort && supported.includes(this.o.defaultEffort) ? this.o.defaultEffort : model?.default_effort) ?? supported[0] ?? "";
     const efforts = this.dialog!.el.querySelector(".mc-effort")!;
-    efforts.innerHTML = levels.length ? `<span>${esc(t("chooser.effort"))}</span><div class="mc-segments" role="group" aria-label="${esc(t("chooser.effort"))}">${levels.map((level) => `<button type="button" class="btn sm" data-effort="${esc(level)}" aria-pressed="${this.effort === level}">${esc(effortText(level))}</button>`).join("")}</div>` : "";
+    efforts.innerHTML = levels.length ? effortSliderHTML(levels, this.effort) : "";
     this.paintFooter();
+  }
+  private async reload(): Promise<void> {
+    if (this.o.loading) return;
+    this.o = { ...this.o, loading: true }; this.paintPane();
+    try {
+      const [catalog, clis] = await Promise.all([api.modelsCatalog(), api.brainsCli()]);
+      this.o = { ...this.o, catalog, clis: clis.clis };
+    } catch { /* The empty state keeps its visible retry and account settings action. */ }
+    finally { this.o = { ...this.o, loading: false }; if (this.dialog) this.paintPane(); }
   }
   private paintFooter(): void {
     if (!this.dialog) return;
@@ -774,7 +907,7 @@ class MountedPicker implements ModelPicker {
       });
       return;
     }
-    const target = (event.target as Element).closest<HTMLElement>("[data-source], [data-model], [data-effort], [data-act], [data-star]");
+    const target = (event.target as Element).closest<HTMLElement>("[data-source], [data-model], [data-act], [data-star]");
     if (!target || (target as HTMLButtonElement).disabled) return;
     if (target.dataset.source !== undefined) {
       this.source = target.dataset.source; this.query = ""; this.maker = ""; this.confirm = null; this.paint();
@@ -786,7 +919,6 @@ class MountedPicker implements ModelPicker {
       this.dialog?.el.querySelector(".mc-inherit")?.setAttribute("aria-pressed", String(this.draft === this.o.lead?.id));
       this.paintRows(); this.paintFooter();
     }
-    if (target.dataset.effort) { this.effort = target.dataset.effort; this.paintRows(); }
     if (target.dataset.star) {
       const id = target.dataset.star, on = !this.o.favorites?.includes(id);
       this.o.favorites = withFavorite(this.o.favorites ?? [], id, on);
@@ -795,7 +927,7 @@ class MountedPicker implements ModelPicker {
     const act = target.dataset.act, name = target.dataset.name;
     if (act === "use" && name) { this.localDraft = name; this.paintRows(); }
     if (act === "cancel") this.o.onCancelLocal?.();
-    if (act === "delete" && name) { this.confirm = { kind: "delete", name }; this.paintRows(); }
+    if (act === "local-menu" && name) openActions(target, [{ id: "delete", label: t("local.deleteLabel", { p0: target.dataset.title ?? name }), icon: "trash" }], () => { this.confirm = { kind: "delete", name }; this.paintRows(); });
     if (act === "dismiss") { this.confirm = null; this.paintRows(); }
     if (act === "confirm" && name) { this.confirm = null; this.o.onDeleteLocal?.(name); }
   }

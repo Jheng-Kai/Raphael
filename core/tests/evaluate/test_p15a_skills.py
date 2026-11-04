@@ -13,6 +13,32 @@ DOCUMENT = f"---\nname: summary-style\ndescription: {WHEN}\n---\nStart with the 
 EDITED = DOCUMENT.replace("SK-4417", "SK-9020")
 
 
+@pytest.mark.parametrize("brain", ["A", "C"])
+async def test_both_brains_create_list_and_reuse_the_same_home_skill(tmp_path, monkeypatch, brain):
+    generated = DOCUMENT + "\n" + "\n".join(f"## {section}\nCheck the result." for section in ("When to use", "Procedure", "Pitfalls", "Verification"))
+    def learn(user, tools, results):
+        if "learn-procedure" in question_of(user):
+            if not results:
+                return "", [("skill_manage", {"text": generated})]
+            return "Skill kept.", []
+        if not results:
+            return "", [("skills_list", {})]
+        if len(results) == 1:
+            return "", [("skill_read", {"name": "summary-style"})]
+        return ("SK-4417" if "SK-4417" in results[-1] else "Missing skill"), []
+    owner = Stage(tmp_path, monkeypatch, brain, learn)
+    try:
+        member = (await owner.app.call("members.create", {"name": "Learner"}))["member"]["id"]
+        first = await owner.driver.ask("learn-procedure", member=member, session="learn")
+        assert first["status"] == "done"
+        assert owner.app.members.capabilities.skills(member)[0]["provenance"] == "learned"
+        second = await owner.driver.ask("reuse-procedure", member=member, session="reuse")
+        assert "SK-4417" in second["text"]
+        assert owner.app.members.capabilities.skills(0) == []
+    finally:
+        await owner.aclose()
+
+
 def act(user, tools, results):
     """It reads the skill by name whenever it is asked for the summary (offered the tool or not, as a brain that remembers
     it would) and says only what the skill said."""
@@ -64,7 +90,7 @@ async def test_a_deleted_skill_is_not_told_of_not_offered_and_not_readable_by_a_
         assert "SK-4417" in (await owner.ask("on"))["text"]
         await owner.delete()
         result = await owner.ask("deleted")
-        assert "skill_read" not in owner.offered[-1] and WHEN not in owner.prompts[-1]
+        assert {"skill_read", "skills_list", "skill_manage"} <= set(owner.offered[-1]) and WHEN not in owner.prompts[-1]
         assert "SK-" not in result["text"] and "沒有可用的技能" in result["text"]
         assert not owner.app.members.capabilities._path(owner.member, owner.skill["id"]).exists()
     finally:

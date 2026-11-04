@@ -12,10 +12,12 @@ import logging
 import pytest
 
 from raphael_core.agent.history import AgentHistory
+from raphael_core.agent.actions import is_action
 from raphael_core.agent.persona import PREFIXES, phrase
+from raphael_core.agent.steps import Step
 from raphael_core.background.host import WorkerHost
 from raphael_core.background.run import RunLimits
-from raphael_core.background.service import MAX_QUEUED, report_from
+from raphael_core.background.service import report_from
 from raphael_core.background.tasks import Refused
 from raphael_core.brain.openrouter import OpenRouterError
 from raphael_core.brain.settings import SettingsStore
@@ -36,14 +38,14 @@ async def look_twice_then_report(rig):
 # --- a task from start to end ---------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("model", ["cli:codex:gpt-5.6-terra?effort=high", "@local:text"])
-async def test_background_tasks_use_auxiliary_api_model(make_rig, model):
+@pytest.mark.parametrize("model", ["@local:text", "@chatgpt:gpt-6.1-terra?effort=high", "@mine:big"])
+async def test_a_background_task_stays_on_the_model_chosen_and_never_on_the_auxiliary_one(make_rig, model):
     rig = make_rig()
     SettingsStore(rig.conn).set("assistant_model", "anthropic/claude-haiku-5.5")
     rig.client.replies = [report("Finished.")]
     rig.submit(model=model)
     await rig.wait_for_reports()
-    assert rig.client.chat_calls[0]["model"] == "anthropic/claude-haiku-5.5"
+    assert rig.client.chat_calls[0]["model"].split("?effort=")[0] == model.split("?effort=")[0]
 
 
 async def test_a_task_is_carried_out_step_by_step_and_reported(make_rig, plugins, calls):
@@ -73,11 +75,14 @@ async def test_the_model_is_given_the_task_the_tools_of_the_snapshot_and_the_res
     first, second = rig.client.chat_calls
     system, user = first["messages"]
     assert system["role"] == "system" and "background worker" in system["content"]
-    assert "80 model calls" in system["content"] and "200 tool calls" in system["content"]
+    limits = RunLimits()
+    assert f"{limits.model_calls} model calls" in system["content"] and f"{limits.tool_calls} tool calls" in system["content"]
+    assert "no deadline" in system["content"]
     assert user["role"] == "user" and f"<task>\n{TASK_TEXT}\n</task>" in user["content"]
     assert "2026-10-21 14:05" in user["content"] and user["content"].rstrip().endswith("English only.")
     assert [t["function"]["name"] for t in first["tools"]] == [
-        "weather", "web_search", "local_time", "web_read", "Notes__look",
+        "weather", "web_search", "local_time", "web_read", "generate_audio", "self_check", "raphael_help",
+        "calendar_list", "calendar_add", "calendar_update", "calendar_delete", "add_mcp_server", "connections_list", "manage_connection", "ask_owner", "connect_app", "email_draft", "find_app", "request_secret", "show_page", "update_page", "routine_create", "routine_delete", "routine_list", "routine_update", "Notes__look",
     ]  # fmt: skip
     result = second["messages"][-1]
     assert result["role"] == "tool" and result["tool_call_id"] == "c1"
@@ -189,8 +194,10 @@ async def test_public_progress_reaches_status_only_before_the_next_model_call(ma
                           text="", status="running")
 
     async def finish(**kwargs):
-        assert not history.messages([turn_id])[turn_id]
+        assert not [m for m in history.messages([turn_id])[turn_id] if not is_action(m["text"])]
+        assert any(is_action(m["text"]) for m in history.messages([turn_id])[turn_id])
         assert any(method == "worker.progress" and data["turn_id"] == turn_id for method, data in rig.notifications)
+        assert rig.service.tasks_for_turns([turn_id])[turn_id][0]["progress"] == "I will check the time."
         assert "I will check the time." in str(kwargs["messages"])
         return report("Done.")
 
@@ -198,7 +205,9 @@ async def test_public_progress_reaches_status_only_before_the_next_model_call(ma
     task_id = rig.submit()
     rig.service.attach_turn(task_id, turn_id)
     await rig.wait_for_reports()
-    assert [m["kind"] for m in history.messages([turn_id])[turn_id]] == ["reply"]
+    assert [m["kind"] for m in history.messages([turn_id])[turn_id] if not is_action(m["text"])] == ["reply"]
+    assert rig.task(task_id).state == "done"
+    assert [json.loads(m["text"])["state"] for m in history.messages([turn_id])[turn_id] if is_action(m["text"])] == ["running", "done"]
 
 
 async def test_the_context_is_the_last_turns_of_the_conversation_without_the_task_itself(
@@ -218,6 +227,26 @@ async def test_the_context_is_the_last_turns_of_the_conversation_without_the_tas
     user = rig.client.chat_calls[0]["messages"][1]["content"]
     assert "question 2" in user and "question 4" in user and "question 1" not in user
     assert "Handed to the background." not in user
+
+
+async def test_the_context_of_a_task_holds_the_request_that_failed_just_before(make_rig, conn):
+    rig = make_rig()
+    history = AgentHistory(conn, rig.wall)
+    history.add(session_id="s", question="question 0", route="chat", prefix="Answer",
+                text="answer 0", status="done")  # fmt: skip
+    history.add(session_id="s", question="Rebuild the index of my notes", route="answer", prefix="Negative",
+                text="The reply took too long.", status="error",
+                steps=[Step("tool", "note", "Notes", "ok", 4)])  # fmt: skip
+    own = history.add(session_id="s", question=TASK_TEXT, route="delegate", prefix="Understood",
+                      text="Handed to the background.", status="done")  # fmt: skip
+    rig.client.replies = [report()]
+    task_id = rig.submit()
+    rig.service.attach_turn(task_id, own)
+    await rig.wait_for_reports()
+    user = rig.client.chat_calls[0]["messages"][1]["content"]
+    assert user.index("question 0") < user.index("Rebuild the index of my notes")
+    assert "did not finish" in user and "note (Notes)" in user
+    assert "Raphael: The reply took too long." not in user
 
 
 # --- the report the model writes ------------------------------------------------------------------
@@ -276,11 +305,12 @@ async def test_at_fifteen_model_calls_the_task_stops_and_says_so_with_a_fixed_li
     task_id = rig.submit()
     [done] = await rig.wait_for_reports()
     assert done["state"] == "limit"
-    assert done["text"] == phrase("en", "worker_limit_model", steps="15")
+    assert done["text"] == phrase("en", "worker_limit_model", steps="15")  # the summary it was asked for said nothing
     assert done["prefix"] == "Notice"
-    assert len(rig.client.chat_calls) == 15  # not one more, so not one more paid
+    assert len(rig.client.chat_calls) == 16  # the fifteenth, then the one call that asks where it stands
+    assert rig.client.chat_calls[-1]["tools"] == []
     assert rig.task(task_id).reason == "limit_model"
-    assert rig.conn.execute("SELECT count(*) FROM spend").fetchone()[0] == 15
+    assert rig.conn.execute("SELECT count(*) FROM spend").fetchone()[0] == 16
 
 
 async def test_at_twenty_five_tool_calls_the_task_stops_before_the_twenty_sixth(make_rig):
@@ -295,13 +325,13 @@ async def test_at_twenty_five_tool_calls_the_task_stops_before_the_twenty_sixth(
     assert rig.task(task_id).tool_calls == 25
 
 
-async def test_spending_does_not_stop_a_task(make_rig):
+async def test_spending_under_the_cap_does_not_stop_a_task(make_rig):
     rig = make_rig()
-    rig.client.replies = [turn("", [call("local_time", {}, "c0")], cost=0.3), report("Done", cost=0.4)]
+    rig.client.replies = [turn("", [call("local_time", {}, "c0")], cost=0.09), report("Done", cost=0.09)]
     task_id = rig.submit()
     [done] = await rig.wait_for_reports()
     assert done["state"] == "done" and done["text"] == "Done"
-    assert rig.task(task_id).cost_usd == pytest.approx(0.7)
+    assert rig.task(task_id).cost_usd == pytest.approx(0.18)
 
 
 async def test_the_month_limit_does_not_stop_a_task_in_the_middle(make_rig, conn):
@@ -400,15 +430,18 @@ async def test_a_worker_that_is_slow_to_start_is_waited_for_as_long_as_its_hello
         (OpenRouterError(0, "network", "x"), "offline"),
         (OpenRouterError(400, "bad_request", "x"), "error"),
         (OpenRouterError(404, "bad_request", "x"), "worker_model"),
-        (RuntimeError("boom"), "error"),
+        (RuntimeError("boom"), "worker_model_error"),
     ],
 )
-async def test_a_model_that_fails_ends_the_task_with_the_reason_in_a_fixed_line(make_rig, error, line):
+async def test_a_model_that_fails_ends_the_task_with_the_reason_in_a_fixed_line(make_rig, error, line, monkeypatch):
+    monkeypatch.setattr("raphael_core.failures.RETRY_WAITS", (0, 0, 0))
     rig = make_rig()
-    rig.client.replies = [error]
+    rig.client.replies = [error] * 4
     task_id = rig.submit()
     [done] = await rig.wait_for_reports()
-    assert (done["state"], done["prefix"], done["text"]) == ("failed", "Negative", phrase("en", line))
+    from raphael_core.failures import classify
+    expected = classify(error, record=False).sentence("Raphael", "en") if isinstance(error, OpenRouterError) and line != "worker_model" else phrase("en", line)
+    assert (done["state"], done["prefix"], done["text"]) == ("failed", "Negative", expected)
     assert rig.task(task_id).state == "failed"
 
 
@@ -519,7 +552,7 @@ async def test_stopping_with_no_task_does_nothing(make_rig):
 # --- the queue ------------------------------------------------------------------------------------
 
 
-async def test_one_task_runs_at_a_time_three_wait_and_a_fifth_is_refused(make_rig):
+async def test_a_members_tasks_wait_in_the_queue_in_order_however_many_there_are(make_rig):
     rig = make_rig()
     release = asyncio.Event()
     running = []
@@ -532,20 +565,14 @@ async def test_one_task_runs_at_a_time_three_wait_and_a_fifth_is_refused(make_ri
         running.pop()
         return report("ok")
 
-    rig.client.replies = [hold, hold, hold, hold]
-    ids = [rig.submit() for _ in range(1 + MAX_QUEUED)]
-    with pytest.raises(Refused) as refused:
-        rig.submit()
-    assert refused.value.kind == "worker_busy"
+    rig.client.replies = [hold] * 8
+    ids = [rig.submit() for _ in range(8)]  # none is refused
     await until(lambda: len(rig.client.chat_calls) == 1)
-    assert [rig.task(i).state for i in ids] == ["running", "queued", "queued", "queued"]
+    assert [rig.task(i).state for i in ids] == ["running"] + ["queued"] * 7
     release.set()
-    reports = await rig.wait_for_reports(4)
+    reports = await rig.wait_for_reports(8)
     assert [r["task_id"] for r in reports] == ids  # in the order they came
-    assert max(most) == 1  # never two at once
-    rig.submit()  # the queue has room again
-    rig.client.replies.append(report("again"))
-    await rig.wait_for_reports(5)
+    assert max(most) == 1  # one member never works on two at once
 
 
 # --- a worker that dies ---------------------------------------------------------------------------
@@ -772,7 +799,8 @@ async def test_a_task_carried_out_by_a_real_worker_process(make_rig, plugins, ca
 # --- what is logged -------------------------------------------------------------------------------
 
 
-async def test_nothing_of_a_task_is_logged_whichever_way_it_ends(make_rig, caplog):
+async def test_nothing_of_a_task_is_logged_whichever_way_it_ends(make_rig, caplog, monkeypatch):
+    monkeypatch.setattr("raphael_core.failures.RETRY_WAITS", (0, 0, 0))
     rig = make_rig()
     await rig.plugins.connect(look="T0", broken="T0", slow="T0")
     secret_text = "PRIVATE-TASK-TEXT window title: Secret Plans - Notepad"
@@ -781,7 +809,7 @@ async def test_nothing_of_a_task_is_logged_whichever_way_it_ends(make_rig, caplo
         [turn("PRIVATE-THOUGHT", [call("Notes__look", {"topic": ARGUMENT}, "c1"), call("Notes__broken", {}, "c2")]),
          report("PRIVATE-REPORT", detail="PRIVATE-DETAIL")],
         # a model that fails
-        [OpenRouterError(500, "server", "PRIVATE-ERROR-MESSAGE")],
+        [OpenRouterError(500, "server", "Service unavailable")] * 4,
         # a limit
         [turn("", [call("local_time", {"n": n}, f"c{n}")]) for n in range(16)],
         # a crash
@@ -858,3 +886,21 @@ async def test_stopping_a_session_stops_the_task_that_runs_when_it_is_the_sessio
     assert await rig.service.cancel_session("telegram:42") is True
     [done] = await rig.wait_for_reports()
     assert (done["task_id"], done["state"]) == (task_id, "cancelled")
+
+
+@pytest.mark.parametrize("resource,kind", [("chatgpt", "auth_expired"), ("anthropic", "auth_expired"), ("chatgpt", "chatgpt_scope")])
+async def test_background_provider_failure_keeps_its_repair_in_report_and_stored_steps(make_rig, resource, kind):
+    from raphael_core.agent.steps import step_view
+    from raphael_core.failures import Failure, Missing
+    rig = make_rig()
+    error = OpenRouterError(401, "auth", "synthetic private provider message")
+    error.diagnostic = Failure(kind, "bounded", missing=Missing(resource, "provider", "broken", "models"))
+    rig.client.replies = [error]
+    task_id = rig.submit()
+    [done] = await rig.wait_for_reports()
+    assert "Settings > Models & usage > Models" in done["text"]
+    assert "OpenRouter" not in done["text"] and "private" not in done["text"]
+    (step,) = rig.steps(task_id)
+    missing = step_view(step)["missing"]
+    assert missing["resource"] == resource and missing["repair"] == "models"
+    assert missing["requirement"] == (kind if kind.startswith("chatgpt_") else "provider")

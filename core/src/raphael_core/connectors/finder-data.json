@@ -1,0 +1,24 @@
+{
+  "popular": ["gmail", "googlecalendar", "googledrive", "slack", "notion", "github", "outlook", "telegram", "discord", "linear", "jira", "spotify"],
+  "aliases": {
+    "gmail": "google mail email 電郵 郵件 メール",
+    "googlecalendar": "google calendar gcal 日曆 行事曆 カレンダー",
+    "googledrive": "google drive gdrive 雲端硬碟 ドライブ",
+    "outlook": "microsoft outlook office365 email 郵件 メール",
+    "github": "git hub 程式庫 リポジトリ",
+    "slack": "messaging chat 訊息 チャット",
+    "notion": "notes wiki 筆記 ノート",
+    "telegram": "messaging chat 訊息 チャット",
+    "discord": "messaging chat 訊息 チャット"
+  },
+  "groups": {
+    "communication": ["communication", "messaging", "email", "chat", "video conferencing"],
+    "productivity": ["productivity", "calendar", "scheduling", "project management", "task management"],
+    "development": ["developer", "development", "devops", "code", "it operations", "database"],
+    "documents": ["file", "docs", "document", "storage", "knowledge", "notes"],
+    "marketing": ["marketing", "social", "advertising", "seo", "analytics"],
+    "sales": ["sales", "crm", "customer", "support", "commerce"],
+    "finance": ["finance", "financial", "accounting", "payment", "banking"],
+    "media": ["design", "media", "music", "image", "audio", "video"]
+  }
+}

@@ -97,7 +97,11 @@ use crate::types::{Key, KeyEvent, Modifiers};
 
 use super::keycode::{is_altgr_phantom_ctrl, map_key, vk_to_modifier};
 
-const HOOK_LOOP_TIMEOUT_MS: u32 = 10;
+const HOOK_LOOP_TIMEOUT_MS: u32 = 100;
+// A quiet hook still proves liveness before the 250 ms heartbeat limit; observations
+// also check their deadline synchronously before returning any edit data.
+const _: () =
+    assert!(HOOK_LOOP_TIMEOUT_MS as u64 * 2 < crate::observation::HOOK_HEARTBEAT_MAX_AGE_MS);
 
 /// Modifiers whose lone press-and-release makes the shell activate a menu:
 /// Win opens the Start menu, Alt focuses the active window's menu bar.
@@ -590,7 +594,7 @@ pub(crate) fn spawn(blocking_hotkeys: Option<BlockingHotkeys>) -> Result<Windows
         let watcher_hwnd = unsafe { create_watcher_window() };
 
         // Message loop - required for low-level hooks to function.
-        // Keep the short timeout so shutdown polling behavior remains unchanged.
+        // The timeout maintains liveness evidence and bounds shutdown; input wakes it immediately.
         let mut msg = MSG::default();
         loop {
             super::observation::tick();
@@ -681,6 +685,12 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: 
             let is_extended = (kb_struct.flags.0 & LLKHF_EXTENDED.0) != 0;
 
             let is_key_down = matches!(wparam.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
+            if is_key_down && vk_code != 0x1B && kb_struct.flags.0 & 0x10 == 0 {
+                crate::observation::note_cancel_interruption();
+            }
+            if vk_code == 0x1B && kb_struct.flags.0 & 0x10 == 0 {
+                crate::observation::note_escape(is_key_down);
+            }
 
             // Raphael patch: the raw Alt events, before any filtering, for tracking down a hotkey
             // that does not fire (which window is in front, and the flags Windows set).
@@ -793,6 +803,13 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPA
     let mut needs_mask = false;
 
     super::observation::mouse(&*(lparam.0 as *const MSLLHOOKSTRUCT));
+    if matches!(
+        wparam.0 as u32,
+        WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN
+    ) && (*(lparam.0 as *const MSLLHOOKSTRUCT)).flags & 1 == 0
+    {
+        crate::observation::note_cancel_interruption();
+    }
 
     // Process the mouse event
     HOOK_CONTEXT.with(|ctx_cell| {

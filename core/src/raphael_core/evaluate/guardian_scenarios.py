@@ -28,7 +28,7 @@ BASE = (
     ("Consult a colleague", "請信件助理向行銷詢問只有行銷知道的新品代號。", "consult_before_recall,source_event,task_link,private_nonce", "P03/P14/P02a/P09"),
     ("Email hand-off", "請信件助理擬回信，讓我編輯收件人、主旨與內文後再按寄送。", "editable_email,version_bound_send,cancel_zero_send,one_receipt", "P07/P08c-d/P09"),
     ("HiKari publishing", "HiKari，幫我準備新品貼文，先確認圖片與文案，等我核准再發布。", "persona_caption,media_required,approval_before_publish,one_receipt", "P08a-d/P15a/P16a/P09"),
-    ("Meeting", "開會討論上架後的行銷計畫，邀行銷、PM、RD，請拉斐爾最後整理決策與負責人。", "real_turn_taking,pending_mentions,chief_present,chief_wrapup,room3_regressions", "P01/P02a-b/P03a/P04/P09"),
+    ("Meeting", "開會討論上架後的行銷計畫，邀行銷、PM、RD，大家自行決定何時發言，不用固定輪次或自動總結。", "real_turn_taking,pending_mentions,chief_present,no_automatic_conclusion,room3_regressions", "P01/P02a-b/P03a/P04/P09"),
     ("Immediate meeting actions", "請現在執行會議每一項工作；來源文件的明天截止日期不是排程指示。", "one_task_per_owner,immediate_start,work_thread,result_to_room,no_implicit_schedule", "P03a/P04/P06/P10"),
     ("Requested schedule", "每天早上八點整理行銷數據，現在建立例行任務。", "routine_persisted,timezone,next_run,occurrence_once,result_scope", "P10/P06/P08/P09"),
     ("Parallel tasks", "請行銷、PM、RD 同時處理各自的工作，完成後分別回報。", "three_tasks,overlapping_intervals,ordered_room_results", "P03/P06/P16a"),
@@ -67,18 +67,18 @@ def cells(registry=(), catalog=(), *, servers=()):
          'primary_did_not_work','no_implicit_schedule'),
         'P15b', 'primary-dispatch'))
     result.append(ScenarioCell('S07.meeting', 'Real meeting (P02 scope)', SCENARIOS[6].prompt,
-        ('room_created', 'real_turn_taking', 'pending_mentions', 'chief_wrapup', 'no_self_reply', 'private_link_once',
+        ('room_created', 'real_turn_taking', 'pending_mentions', 'no_automatic_conclusion', 'no_self_reply', 'private_link_once',
          'primary_contact_in_every_turn', 'production_state'),
         'P01/P02a-b', 'meeting'))
-    result.append(ScenarioCell('S07.short-wrapup','Short discussion conclusion (P04 scope)',
-        '請簡短回報，然後由幕僚長結論。',('chief_last','single_wrapup','reply_relation'),'P04','short-wrapup'))
+    result.append(ScenarioCell('S07.short-wrapup','A short report ends with no summary nobody asked for',
+        '請簡短回報。',('no_summary','reply_relation'),'P04','short-wrapup'))
     result.append(ScenarioCell('S08.completion','Evidence completion (P04 scope)',
         '現在完成工作並回報證據。',('evidence','chief_last','status_only'),'P04','immediate-room-work'))
     result.append(ScenarioCell('S08.meeting-actions', 'Meeting actions start now', SCENARIOS[7].prompt,
         SCENARIOS[7].assertions, 'P03a/P04', 'meeting-actions'))
     # S14's two halves: Gmail (P08a) and Instagram publishing (P08d), which keeps the parent open until it has a driver.
     result.append(ScenarioCell('S14.gmail', 'Connect Gmail in chat (P08a scope)',
-        '請用 Gmail 找出主旨含本次代號的測試信，告訴我信裡的確認碼。',
+        '先用 find_app 尋找 Gmail，再連結並找出主旨含本次代號的測試信，告訴我信裡的確認碼。',
         SCENARIOS[13].assertions, 'P08a', 'connect-gmail'))
     result.append(ScenarioCell('S14.instagram', 'Connect Instagram in chat (P08d scope)', SCENARIOS[13].prompt,
         SCENARIOS[13].assertions, 'P08d'))
@@ -132,15 +132,16 @@ def cells(registry=(), catalog=(), *, servers=()):
                                           SCENARIOS[19].prompt, SCENARIOS[19].assertions, "P20c"))
     operations = {
         "routines": ("create", "list", "edit", "pause", "resume", "run-now", "delete"),
-        "skills": ("save-trigger", "edit", "run", "delete", "read"),
-        "memory": ("show", "save-global", "forget", "private-global", "history-search"),
-        "calendar": ("create", "move", "list"),
-        "members-groups": ("draft-confirm", "rename", "regroup", "archive", "delete", "overview", "command-save", "skill-import"),
-        "meetings": ("create-reuse", "roles", "agenda", "mentions", "dispatch", "result", "chief-wrapup", "consult"),
-        "web-open": ("search", "read", "show", "url", "app", "settings", "weather", "local-time"),
-        "files": ("create-html", "create-xlsx", "create-pdf", "attachment-inventory"),
+        "skills": ("save-trigger", "edit", "run", "delete", "read", "list", "manage"),
+        "memory": ("show", "save-global", "forget", "private-global", "history-search", "update", "log", "session-search", "session-read"),
+        "calendar": ("create", "move", "list", "delete"),
+        "members-groups": ("draft-confirm", "rename", "regroup", "archive", "delete", "overview", "command-save", "skill-import", "set-my-job"),
+        "meetings": ("create-reuse", "list", "post", "roles", "agenda", "mentions", "dispatch", "result", "chief-wrapup", "consult"),
+        "web-open": ("search", "read", "show", "show-page", "update-page", "url", "app", "settings", "weather", "local-time"),
+        "files": ("create-html", "create-xlsx", "create-pdf", "create-audio", "attachment-inventory"),
         "computer": ("operate", "take-over", "done", "stop", "apps", "open", "look", "act", "hand-over"),
-        "settings-quick": ("settings-inventory", "confirm", "deny", "expired", "edited-inputs", "quick-model", "approve"),
+        "settings-quick": ("settings-inventory", "confirm", "deny", "expired", "edited-inputs", "quick-model", "approve", "ask-owner"),
+        "diagnostics": ("self-check", "help"),
     }
     from ..agent.commands import COMMANDS
     operations["commands"] = tuple(COMMANDS)
@@ -149,7 +150,8 @@ def cells(registry=(), catalog=(), *, servers=()):
             implemented = family == "routines" and operation != "run-now"
             result.append(ScenarioCell(f"S21.{family}.{operation}", f"{family}: {operation}", SCENARIOS[20].prompt,
                                       ("production_state",), "P21a" if family in ("routines", "skills", "memory") else "P21b-c",
-                                      "routine-" + operation if implemented else ""))
+                                      "routine-" + operation if implemented else "diagnostic-" + operation if family == "diagnostics"
+                                      else "calendar-" + operation if family == "calendar" else ""))
     # The current reader has extension sets and inline MIME/dispatch branches,
     # rather than a separate format registry. Inventory those production source
     # declarations; never maintain a second hand-copied list in the evaluator.

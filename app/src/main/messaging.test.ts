@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { setLocale } from "./i18n";
+import { setLocale, t } from "./i18n";
 
 const api = vi.hoisted(() => ({
   telegramStatus: vi.fn(),
@@ -28,16 +28,16 @@ const visible = (html: string): string =>
   html.replace(/<span class="sr">.*?<\/span>/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
 describe("the setup", () => {
-  test("two rows like the other settings: Telegram with BotFather, then the token with 連接; one line under them", () => {
+  test("BotFather and the token have visible setup instructions", () => {
     const html = messagingHTML(view());
-    expect(html).toMatch(/^<section class="sgroup msg" data-msg-section aria-label="Telegram"><div class="slist">/);
+    expect(html).toMatch(/^<section class="sgroup msg" data-msg-section data-msg-kind="telegram" aria-label="Telegram"><div class="slist">/);
     expect(html.match(/<div class="row /g)).toHaveLength(2);
-    expect(html).toContain('data-msg="botfather" title="在 Telegram 找 @BotFather，傳 /newbot。"');
+    expect(html).toContain(t("msg.tg.step1"));
     expect(html).toContain('id="msg-token"');
     expect(html).toContain('type="password"');
     expect(html).toContain('data-msg="connect"');
-    expect(html.match(/<p class="foot">/g)).toHaveLength(1);
-    expect(visible(html)).toBe("Telegram BotFather 機器人權杖 連接 在 BotFather 建立機器人，把權杖貼在這裡。");
+    expect(html).not.toContain('<p class="foot">');
+    expect(visible(html)).toBe(`Telegram BotFather ${t("msg.tg.step1")} 機器人權杖 連接`);
   });
 
   test("the first row carries Telegram's mark and a dot that says it is not connected", () => {
@@ -106,10 +106,11 @@ describe("when connected", () => {
     expect(html).toContain('class="msg-badge num"');
   });
 
-  test("the people who may talk to her, each on a row with a remove button named for them", () => {
+  test("the people who may talk to her, each on a row whose ⋯ is named for them and holds the removal (R-UI-56)", () => {
     const html = messagingHTML(view({ status: status({ allowed: [{ user_id: "42", name: "Ann <b>" }] }), expanded: true }));
-    expect(html).toContain('aria-label="移除 Ann &lt;b&gt;"');
-    expect(html).toContain('data-msg="remove" data-user="42"');
+    expect(html).toContain('aria-label="「Ann &lt;b&gt;」的選項"');
+    expect(html).toContain('data-msg="user-menu" data-user="42"');
+    expect(html).not.toContain("移除");
     expect(html).toContain("Ann &lt;b&gt;");
   });
 
@@ -176,18 +177,6 @@ describe("the controller", () => {
     await vi.waitFor(() => expect(c.view().busy).toBe(false));
     expect(api.telegramApprove).toHaveBeenCalledWith("AB3DEF");
     expect((c.view().status as TelegramStatus).allowed).toHaveLength(1);
-    c.reset();
-  });
-
-  test("removing a person sends the id as the text it is, however large", async () => {
-    const big = "1234567890123456789";
-    api.telegramStatus.mockResolvedValue(status({ allowed: [{ user_id: big, name: "Ann" }] }));
-    const c = make();
-    await c.load();
-    api.telegramRemoveUser.mockResolvedValue(status());
-    click(c, "remove", { user: big });
-    await vi.waitFor(() => expect(c.view().busy).toBe(false));
-    expect(api.telegramRemoveUser).toHaveBeenCalledWith(big);
     c.reset();
   });
 

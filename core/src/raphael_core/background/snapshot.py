@@ -7,7 +7,8 @@ tool an alias is stays here in the core. The snapshot holds:
   change something there: the user turned off what a task must not use, and a tool that is on runs
   without asking, for a task as for the assistant, unless one of the owner's safety rules asks
   first. A tool at T2 is offered too: its call pauses the task and asks the owner in the app (the
-  waiting question, `service`), and goes on only after a yes there. A tool at T3 is left out.
+  waiting question, `service`), and goes on only after a yes there. A tool at T3 is left out unless
+  the owner allowed everything (R-AG-35).
 - Raphael's own lookups on the web: the weather, a web search (by the search service the owner
   chose), the time, and the reading of a page (`web_read`, by the reader chosen). A page is read
   only at an address the task has seen: in its request, or in what one of its tools returned
@@ -15,14 +16,16 @@ tool an alias is stays here in the core. The snapshot holds:
   what it knows to an address of someone's making;
 - when the task came with files (an image, a PDF the owner handed over), `read_attachment`, which
   reads one of them by its number: never a path;
-- and, when there is a memory, its two tools that only read (`memory_read`, `history_search`): a
-  task may read a note or look up what was said before. It never writes one: a task reads what
-  services return, and a memory is written only from the owner's own words.
+- and, when there is a memory, `history_search`, which only reads: a task may look up what was said
+  before; what it writes after reading what services return goes in marked (`memory.store`).
 - the team tools (`agent.team`): `ask_member`, when there is someone to ask (for Raphael, a member;
-  for a member, Raphael), and for Raphael `create_member`.
+  for a member, Raphael), and `create_member`.
 
-A task of a member of the owner's team is offered only what the member was given (`Speaker.uses`,
-`Speaker.uses_plugin`): Raphael's own web tools on its list, and the connections on it.
+A task of a member of the owner's team is offered what Raphael's is (`Speaker.uses`,
+`Speaker.uses_plugin` say yes to everything): the same web tools and the same connections.
+
+The three tools of Composio's router are pinned (`PluginTool.pinned`): they are shown to every task
+whatever it says, since the one that executes shares no word with any request.
 
 Not the commands for this computer (open a site, the volume, lock the screen, copy): those stay with
 the fast tier, which the user speaks to; a task in the background must not open a page or lock the
@@ -36,7 +39,7 @@ changed since the snapshot is refused.
 """
 
 from collections.abc import Collection, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from ..agent.gate import ATTACHMENT_TOOLS, MEMORY_READ_TOOLS, WEB_TOOLS
@@ -46,7 +49,10 @@ from ..agent.plugins import MAX_OFFERED, Offer, PluginHub, make_offer
 from ..agent.policy import Tier
 from ..agent.speaker import RAPHAEL, Speaker
 from ..agent.team import TEAM_TIER, TEAM_TOOLS, worker_definition
-from ..agent.harness_tools import DEFINITIONS as HARNESS_DEFINITIONS, definitions_for, tool as harness_tool
+from ..agent.harness_tools import CALENDAR_TOOLS, DEFINITIONS as HARNESS_DEFINITIONS, definitions_for, tool as harness_tool
+from ..memory.growth import DEFINITIONS as MEMORY_DEFINITIONS
+from ..agent.owner_questions import BACKGROUND_TOOLS
+from ..agent.harness_tools import ROUTINE_TOOLS, CONNECTION_TOOLS
 from ..computer.tools import PRESENCE_TOOLS
 from ..agent.toolpick import (
     PICK_MAX,
@@ -58,7 +64,8 @@ from ..agent.toolpick import (
 )
 
 # The highest tier a task is offered: T2, whose calls ask the owner through the waiting question
-# (and so only after a yes in the app). A tool that cannot be undone at all (T3) is never offered.
+# (and so only after a yes in the app). A tool that cannot be undone at all (T3) is offered only
+# when the owner allowed everything (R-AG-35).
 SNAPSHOT_MAX_TIER = Tier.T2
 
 BUILTIN = "builtin"
@@ -67,10 +74,14 @@ FIND = "find"  # the tool that looks for more tools in the snapshot
 BUILTIN_SERVER = "Raphael"
 
 _DEFINITIONS: dict[str, dict[str, Any]] = {
+    "generate_audio": {
+        "description": "Generate a downloadable WAV audio file from the owner's script using the configured voice service. Returns an attachment shown in the conversation. Never claim MP3 output. An optional voice selects a voice on that same service.",
+        "parameters": {"type": "object", "properties": {"text": {"type": "string", "maxLength": 1000}, "voice": {"type": "string"}}, "required": ["text"]},
+    },
     "weather": {
         "description": (
             "[Raphael] The weather now, today and tomorrow in a city. Leave the city out for the "
-            "user's own city."
+            "user's own city. Present the known days in a forecast fenced block using the shared schema."
         ),
         "parameters": {
             "type": "object",
@@ -133,19 +144,6 @@ _DEFINITIONS: dict[str, dict[str, Any]] = {
         "description": "[Raphael] The date and the time on the user's computer.",
         "parameters": {"type": "object", "properties": {}},
     },
-    "memory_read": {
-        "description": (
-            "[Raphael] Read your own notes and shared user facts in full, by their names (the names in "
-            "the index of notes you were given)."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "names": {"type": "array", "items": {"type": "string"}, "description": "Names."}
-            },
-            "required": ["names"],
-        },
-    },
     "history_search": {
         "description": (
             "[Raphael] Search what the user and you said in this speaker's earlier conversations, by a few "
@@ -184,10 +182,62 @@ class Snapshot:
     refs: dict[str, ToolRef]
     definitions: list[dict[str, Any]]
     pool: Offer | None = None
+    max_tier: Tier = Tier.T3
+    _aliases: dict[str, str] = field(default_factory=dict, repr=False)
+
+    def refresh_plugins(self, plugins, member_id):
+        """Replace stale grants before offering tools again; a snapshot grants no lasting access."""
+        if plugins is None:
+            return
+        before = set(self.pool.by_alias) if self.pool else set()
+        for alias, tool in self.pool.by_alias.items() if self.pool else ():
+            self._aliases.setdefault(alias, tool.key)
+        shown = {alias for alias, ref in self.refs.items() if ref.kind == MCP}
+        try:
+            tools = [tool for tool in getattr(plugins, "offered_for", lambda _: plugins.offered())(member_id)
+                     if tool.tier <= self.max_tier or getattr(plugins, "is_computer_tool", lambda _: False)(tool.key)]
+        except Exception:
+            tools = []
+        native = {alias for alias, ref in self.refs.items() if ref.kind != MCP}
+        by_key = {key: alias for alias, key in self._aliases.items()}
+        offered = {}
+        for base, tool in make_offer(tools).by_alias.items():
+            alias, suffix = by_key.get(tool.key, base), 1
+            while alias in native or alias in self._aliases and self._aliases[alias] != tool.key:
+                suffix += 1
+                alias = f"{base[:56]}_{suffix}"
+            self._aliases[alias] = tool.key
+            offered[alias] = tool
+        self.pool = Offer(tools=list(offered.values()), by_alias=offered)
+        for alias in shown:
+            self.refs.pop(alias, None)
+        self.definitions[:] = [item for item in self.definitions if item["function"]["name"] not in shown]
+        new = set(self.pool.by_alias) - before
+        selected = new if len(new) <= MAX_OFFERED else set(self.pool.pinned_aliases)
+        self.show([alias for alias in self.pool.by_alias if alias in shown or alias in selected])
+        if self.hidden() and "find_tools" not in self.refs:
+            self.refs["find_tools"] = ToolRef(FIND, "find_tools", BUILTIN_SERVER, "find_tools", Tier.T0)
+            self.definitions.append({"type": "function", "function": {"name": "find_tools", **_DEFINITIONS["find_tools"]}})
 
     def hidden(self) -> list[str]:
         """The aliases of the pool that the task has not been shown."""
         return [alias for alias in (self.pool.by_alias if self.pool else {}) if alias not in self.refs]
+
+    def refresh_computer(self, plugins, member_id):
+        """Refresh this member's computer offer after a grant or driver discovery."""
+        before = {item["function"]["name"]: item for item in self.definitions
+                  if item["function"]["name"].startswith("computer__")}
+        old = {alias for alias, ref in self.refs.items() if ref.server == "computer"}
+        for alias in old:
+            self.refs.pop(alias)
+        self.definitions[:] = [item for item in self.definitions if item["function"]["name"] not in old]
+        kept = [tool for tool in (self.pool.by_alias.values() if self.pool else []) if tool.server != "computer"]
+        computer = [tool for tool in plugins.offered_for(member_id) if tool.server == "computer"]
+        self.pool = make_offer([*kept, *computer])
+        self.show([alias for alias, tool in self.pool.by_alias.items() if tool.server == "computer"])
+        after = {item["function"]["name"]: item for item in self.definitions
+                 if item["function"]["name"].startswith("computer__")}
+        return after != before
 
     def show(self, aliases: Sequence[str]) -> list[dict[str, Any]]:
         """Show the task these tools of the pool; returns the definitions that are new."""
@@ -206,15 +256,19 @@ class Snapshot:
 
     def find(self, query: str) -> tuple[list[dict[str, Any]], list[str]]:
         """Show the task the tools of the pool that fit `query` best (not the ones it has): returns
-        their definitions and a line about each for the worker to read."""
+        their definitions and a line about each for the worker to read. The calendar is the task's
+        already, but a model that looks for one by the owner's words is told it is there, not sent to
+        connect another."""
+        own = scored([harness_tool(name) for name in CALENDAR_TOOLS if name in self.refs], query)
+        lines = [f"{tool.name} (yours already): {first_sentence(tool.description, 90)}" for score, tool in own if score > 0]
         hidden = self.hidden()
         if self.pool is None or not hidden:
-            return [], []
+            return [], lines
         rows = scored([self.pool.by_alias[a] for a in hidden], query)
         alias_of = {id(tool): alias for alias, tool in self.pool.by_alias.items()}
         chosen = [alias_of[id(tool)] for score, tool in rows[:FIND_MAX] if score > 0]
         added = self.show(chosen)
-        lines = [
+        lines += [
             f"{alias}: {first_sentence(self.pool.by_alias[alias].description)}"
             for alias in chosen
         ]
@@ -255,13 +309,32 @@ def take_snapshot(
     for name in builtin:
         refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, Tier.T0)
         definitions.append({"type": "function", "function": {"name": name, **_DEFINITIONS[name]}})
+    refs["generate_audio"] = ToolRef(BUILTIN, "generate_audio", BUILTIN_SERVER, "generate_audio", Tier.T1)
+    definitions.append({"type": "function", "function": {"name": "generate_audio", **_DEFINITIONS["generate_audio"]}})
     for name in team:
         if name in TEAM_TOOLS:
             refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, TEAM_TIER)
             definitions.append(worker_definition(name))
-    snapshot = Snapshot(refs, definitions)
+    snapshot = Snapshot(refs, definitions, max_tier=max_tier)
+    # What every path has, a task that runs by itself too: the owner's daily routine adds what it finds to today.
+    everywhere = ("self_check", "raphael_help", *CALENDAR_TOOLS, *sorted(CONNECTION_TOOLS),
+                  *((*sorted(BACKGROUND_TOOLS), *sorted(ROUTINE_TOOLS)) if not interactive else ()))
+    for name in everywhere:
+        refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, harness_tool(name).tier)
+        definitions.append({"type": "function", "function": {"name": name, **HARNESS_DEFINITIONS[name]}})
     if interactive:
-        for name, item in definitions_for(speaker.id):
+        for name, item in definitions_for(speaker):
+            if name in everywhere:
+                continue
+            # This tool drives the owner's own desktop. Beside a computer of the speaker's own, two tools
+            # called the computer would leave the choice of machine to the model.
+            if name == "computer" and getattr(plugins, "has_own_computer", lambda member: False)(speaker.id):
+                continue
+            native = harness_tool(name)
+            refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, native.tier)
+            definitions.append({"type": "function", "function": {"name": name, **item}})
+    elif memory and history:
+        for name, item in MEMORY_DEFINITIONS.items():
             native = harness_tool(name)
             refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, native.tier)
             definitions.append({"type": "function", "function": {"name": name, **item}})
@@ -269,8 +342,9 @@ def take_snapshot(
         try:
             tools = [
                 tool
-                for tool in plugins.offered()
-                if tool.tier <= max_tier and speaker.uses_plugin(tool.key)
+                for tool in getattr(plugins, "offered_for", lambda member: plugins.offered())(speaker.id)
+                if (tool.tier <= max_tier or getattr(plugins, "is_computer_tool", lambda key: False)(tool.key))
+                and speaker.uses_plugin(tool.key)
             ]
         except Exception:  # a plugin that breaks leaves its tools out, not the task
             tools = []
@@ -280,7 +354,7 @@ def take_snapshot(
             | set(MEMORY_READ_TOOLS)
             | set(ATTACHMENT_TOOLS)
             | set(TEAM_TOOLS)
-            | {"find_tools"}
+            | {"find_tools", "generate_audio"}
             | PRESENCE_TOOLS
             | set(HARNESS_DEFINITIONS)
         )
@@ -288,10 +362,10 @@ def take_snapshot(
         if clash:  # a plugin's tool never takes the name of one of Raphael's own
             pool = make_offer([tool for alias, tool in pool.by_alias.items() if alias not in clash])
         snapshot.pool = pool
-        everything = list(pool.by_alias)
-        snapshot.show(
-            everything if len(everything) <= MAX_OFFERED else widen(pool, shortlist(pool, question, PICK_MAX))
-        )
+        selectable = pool.unpinned()
+        everything = list(selectable.by_alias)
+        selected = everything if len(everything) <= MAX_OFFERED else widen(selectable, shortlist(selectable, question, PICK_MAX))
+        snapshot.show([*pool.pinned_aliases, *selected])
         if snapshot.hidden():
             refs["find_tools"] = ToolRef(FIND, "find_tools", BUILTIN_SERVER, "find_tools", Tier.T0)
             definitions.append(
@@ -311,12 +385,16 @@ async def refine(
 ) -> None:
     """Replace the tools a task is shown with the ones the model chooses for `question`, when the
     plugins have more tools than fit. The keyword choice `take_snapshot` made stays if the model's
-    fails, and the rest can still be found."""
+    fails, and the rest can still be found. Core-pinned tools bypass both selection steps."""
     pool = snapshot.pool
-    if pool is None or len(pool.by_alias) <= MAX_OFFERED:
+    if pool is None:
         return
-    chosen = await picker.pick(pool, question, context, model=model, ledger=ledger)
-    keep = {alias: ref for alias, ref in snapshot.refs.items() if ref.kind != MCP}
+    selectable = pool.unpinned()
+    if len(selectable.by_alias) <= MAX_OFFERED:
+        return
+    chosen = await picker.pick(selectable, question, context, model=model, ledger=ledger)
+    pinned = set(pool.pinned_aliases)
+    keep = {alias: ref for alias, ref in snapshot.refs.items() if ref.kind != MCP or alias in pinned}
     snapshot.refs.clear()
     snapshot.refs.update(keep)
     snapshot.definitions[:] = [

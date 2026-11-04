@@ -7,7 +7,7 @@ import type { CatalogModel } from "./types";
 import type { RunAnalyticsApi } from "./run-analytics-types";
 import { formatUsd } from "./format";
 import { onLocaleChange, t } from "./i18n";
-import { iconButton, openMenu, sel, type Choice } from "./ui";
+import { iconButton, openMenu, patchHTML, sel, type Choice } from "./ui";
 import type { MessageKey } from "./i18n/zh-TW";
 import type { UsageAnalytics, UsageGroup, UsageRequest, UsageSeries } from "./usage-analytics-types";
 
@@ -29,10 +29,11 @@ const exactUsd = (value: number) => `US$${new Intl.NumberFormat("en-US", { minim
 const compact = (value: number) => value >= 1_000_000 ? `${+(value / 1_000_000).toFixed(1)}M`
   : value >= 1000 ? `${+(value / 1000).toFixed(1)}K` : `${+value.toPrecision(3)}`;
 
-type PlainUsageKey = Exclude<Extract<MessageKey, `usage.${string}`>, "usage.deleted" | "usage.estimates">;
+type PlainUsageKey = Exclude<Extract<MessageKey, `usage.${string}`>, "usage.estimates"> | "media.image" | "media.video";
 const labelKeys: Record<string, PlainUsageKey> = {
   __other__: "usage.other", other: "usage.other", unknown: "usage.unknown",
   agent: "usage.agent", cleanup: "usage.cleanup", stt: "usage.stt", memory: "usage.memory",
+  image: "media.image", video: "media.video",
   web_search: "usage.web_search", web_read: "usage.web_read", computer: "usage.computer",
   routines: "usage.routines", ask_member: "usage.ask_member", files: "usage.files",
   app: "usage.app", voice: "usage.voice", routine: "usage.routine", member: "usage.memberSource",
@@ -124,6 +125,7 @@ export function mountUsageAnalytics(host: HTMLElement, api: UsageAnalyticsApi): 
   let dictationBy: "dictations" | "words" = "dictations";
   const expanded = new Set<number>();
   let more = false, loading = true, failed = false, disposed = false, revision = 0;
+  let requestStamp = "";
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   function render(): void {
@@ -131,34 +133,34 @@ export function mountUsageAnalytics(host: HTMLElement, api: UsageAnalyticsApi): 
     const focused = root.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.control : undefined;
     root.setAttribute("aria-busy", String(loading));
     root.setAttribute("aria-label", t("usage.history"));
-    root.innerHTML = `<header class="ua-header"><h2>${t("usage.history")}</h2><div class="ua-period" role="group" aria-label="${t("usage.period")}">` +
+    let html = `<header class="ua-header"><h2>${t("usage.history")}</h2><div class="ua-period" role="group" aria-label="${t("usage.period")}">` +
       `<div class="ua-segment">${(["7d", "30d"] as const).map(key => `<button type="button" class="btn" data-control="${key}" data-range="${key}" aria-pressed="${range === key}">${t(choiceKeys[key])}</button>`).join("")}</div>` +
       iconButton("left", t("usage.previous"), ` data-control="previous" ${!data || loading ? "disabled" : ""}`) +
       iconButton("right", t("usage.next"), ` data-control="next" ${!data || loading || data.end_day >= data.today_day ? "disabled" : ""}`) +
       `</div></header>`;
-    if (loading) root.innerHTML += `<p role="status" class="ua-status">${t("usage.loading")}</p>`;
-    else if (failed) root.innerHTML += `<p role="alert">${t("usage.error")}</p><button type="button" class="btn" data-control="retry">${t("usage.retry")}</button>`;
+    if (loading) html += `<p role="status" class="ua-status">${t("usage.loading")}</p>`;
+    else if (failed) html += `<p role="alert">${t("usage.error")}</p><button type="button" class="btn" data-control="retry">${t("usage.retry")}</button>`;
     else if (data) {
       const usage = data;
       const costs = usage.cost_by[costBy];
-      root.innerHTML += `<div class="ua-cost-head"><div><p class="ua-dates">${esc(usage.start_day)} — ${esc(usage.end_day)} · ${esc(usage.tz)}</p>` +
+      html += `<div class="ua-cost-head"><div><p class="ua-dates">${esc(usage.start_day)} — ${esc(usage.end_day)} · ${esc(usage.tz)}</p>` +
         `<strong class="ua-total">${formatUsd(costs.total)}</strong></div>` +
         sel(choices("cost"), costBy, t("usage.costGrouping"), ' data-control="cost"') + `</div>` +
         chart(usage.days, costs, t("usage.history"), costBy, "bars", true,modelData) + `<p class="ua-note">${t("usage.recordedCosts")}</p>`;
-      root.innerHTML += `<section class="ua-section"><h3>${t("usage.members")}</h3>`;
-      if (!usage.members.length) root.innerHTML += `<p class="ua-empty">${t("usage.empty")}</p>`;
+      html += `<section class="ua-section"><h3>${t("usage.members")}</h3>`;
+      if (!usage.members.length) html += `<p class="ua-empty">${t("usage.empty")}</p>`;
       else {
-        root.innerHTML += `<div class="ua-table-scroll"><table><thead><tr><th scope="col">${t("usage.member")}</th><th scope="col">${t("usage.count")}</th><th scope="col">${t("usage.cost")}</th><th scope="col">${t("usage.share")}</th></tr></thead><tbody>` +
+        html += `<div class="ua-table-scroll"><table><thead><tr><th scope="col">${t("usage.member")}</th><th scope="col">${t("usage.count")}</th><th scope="col">${t("usage.cost")}</th><th scope="col">${t("usage.share")}</th></tr></thead><tbody>` +
           usage.members.slice(0, more ? undefined : 5).map(m => {
             const open = expanded.has(m.id), detailsId = `${tooltipId}-member-${m.id}`;
             return `<tr><th scope="row"><button type="button" class="btn" data-control="member-${m.id}" data-member="${m.id}" aria-expanded="${open}" aria-controls="${detailsId}">` +
-              `<span aria-hidden="true">${open ? "⌄" : "›"}</span> ${faceHTML(m,24)}${esc(m.deleted ? t("usage.deleted", { id: m.id }) : m.id === 0 ? t("nav.agent") : m.name)}</button>` +
+              `<span aria-hidden="true">${open ? "⌄" : "›"}</span> ${faceHTML(m,24)}${esc(m.id === 0 ? t("nav.agent") : m.name)}</button>` +
               (memberRole(m) ? `<small>${esc(memberRole(m))}</small>` : "") + `</th><td>${count(m.turns)}</td><td>${formatUsd(m.cost_usd)}</td><td>${share(m.share)}</td></tr>` +
               `<tr id="${detailsId}" ${open ? "" : "hidden"}><td colspan="4"><ul class="ua-models">${m.models.map(model => `<li>${usageModel(model.model,modelData).html}<span>${count(model.turns)} · ${formatUsd(model.cost_usd)}</span></li>`).join("")}</ul></td></tr>`;
           }).join("") + `</tbody></table></div>`;
-        if (usage.members.length > 5) root.innerHTML += `<button type="button" class="btn ua-more" data-control="more">${t(more ? "usage.less" : "usage.more")}</button>`;
+        if (usage.members.length > 5) html += `<button type="button" class="btn ua-more" data-control="more">${t(more ? "usage.less" : "usage.more")}</button>`;
       }
-      root.innerHTML += `<p class="ua-note">${t("usage.memberCosts")}</p></section>` +
+      html += `<p class="ua-note">${t("usage.memberCosts")}</p></section>` +
         `<section class="ua-section"><h3>${t("usage.tools")}</h3><strong class="ua-total">${count(usage.tools.total)}</strong>` +
         chart(usage.days, usage.tools, t("usage.tools"), "tools", "lines") + `<p class="ua-note">${t("usage.retained")}</p></section>` +
         `<section class="ua-section"><div class="ua-section-head"><div><h3>${t("usage.messages")}</h3><strong class="ua-total">${count(usage.messages_by[messageBy].total)}</strong></div>` +
@@ -166,21 +168,26 @@ export function mountUsageAnalytics(host: HTMLElement, api: UsageAnalyticsApi): 
         chart(usage.days, usage.messages_by[messageBy], t("usage.messages"), messageBy, "lines",false,modelData) + `</section>`;
       const values = usage.dictation[dictationBy], total = values.reduce((a, b) => a + b, 0);
       const dictation = { total, series: [{ key: dictationBy, label: t(choiceKeys[dictationBy]), values, total, share: 1 }] };
-      root.innerHTML += `<section class="ua-section"><div class="ua-section-head"><div><h3>${t("usage.dictation")}</h3><strong class="ua-total">${count(total)}</strong></div>` +
+      html += `<section class="ua-section"><div class="ua-section-head"><div><h3>${t("usage.dictation")}</h3><strong class="ua-total">${count(total)}</strong></div>` +
         sel(choices("dictation"), dictationBy, t("usage.dictation"), ' data-control="dictation"') + `</div>` +
         chart(usage.days, dictation, t("usage.dictation"), "dictation", "bars") + `<p class="ua-note">${t("usage.captureDays")}</p>` +
         (usage.dictation.estimated.some(Boolean) ? `<p class="ua-note ua-estimates">${t("usage.estimates", { dictations: count(usage.dictation.estimated_dictations), words: count(usage.dictation.estimated_words) })}</p>` : "") + `</section>`;
     }
-    root.innerHTML += `<div id="${tooltipId}" role="tooltip" class="ua-tooltip" hidden></div>`;
+    html += `<div id="${tooltipId}" role="tooltip" class="ua-tooltip" hidden></div>`;
+    patchHTML(root, html);
     if (focused) root.querySelector<HTMLElement>(`[data-control="${focused}"]`)?.focus();
   }
 
   async function refresh(): Promise<void> {
     if (disposed) return;
     const current = ++revision;
-    loading = true;
+    const stamp = JSON.stringify([range, endDay, tz]);
+    const quiet = data !== null && stamp === requestStamp && !failed;
+    requestStamp = stamp;
+    const before = JSON.stringify(data);
+    loading = !quiet;
     failed = false;
-    render();
+    if (!quiet) render();
     try {
       const result = await api.usageAnalytics({ range, ...(endDay ? { end_day: endDay } : {}), ...(tz ? { tz } : {}) });
       if (disposed || current !== revision) return;
@@ -190,7 +197,7 @@ export function mountUsageAnalytics(host: HTMLElement, api: UsageAnalyticsApi): 
       failed = true;
     }
     loading = false;
-    render();
+    if (!quiet || failed || JSON.stringify(data) !== before) render();
   }
 
   function hideTooltip(): void {

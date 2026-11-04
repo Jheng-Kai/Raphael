@@ -2,14 +2,23 @@
 //
 // Rust (overlay.rs) sends events on a channel that this page opens once. The window itself is
 // transparent, click-through and never hidden: "hidden" here means the page draws nothing and
-// the animation loop (see emblem.ts) is stopped. A question (an `ask` event) is the one thing
-// that takes the pointer: while it is up the whole window takes the mouse (overlay.rs), so a
-// click anywhere in the overlay's corner lands on the page, where only its two buttons answer it.
+// the animation loop (see emblem.ts) is stopped. A question shows its confirmation card; stopping the
+// work is done in the app, and two Escapes still cancel it here. Only the measured live controls take the
+// mouse (overlay/mouse.rs).
 //
 // The controller below holds all the logic and takes the emblem and the DOM through small
 // interfaces, so the tests run it in Node.
 
+import { reportMouseRegions } from "./mouse-regions";
+export { reportMouseRegions } from "./mouse-regions";
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { cancelGesture } from "../shared/cancel-gesture";
+import "../shared/cancel-gesture.css";
+import "../shared/task-action.css";
+import { ico } from "../main/ui";
+import { en } from "../main/i18n/en";
+import { ja } from "../main/i18n/ja";
+import { zhTW } from "../main/i18n/zh-TW";
 import { replyLine } from "../shared/anime";
 import { captionLines } from "./caption";
 import { Emblem, canvasSize, loadGlyphTexture, pictureStyle, type Mode, type Phase, type PictureCrop } from "./emblem";
@@ -40,6 +49,8 @@ export type AskTier = "T2" | "T3";
 
 /** The events overlay.rs sends (`OverlayEvent`). */
 export type OverlayEvent =
+  | { type: "mouse"; revision: number }
+  | { type: "cancelkey"; reset: boolean }
   /** `line`: Raphael's greeting to a question, beside the emblem while he listens. A dictation has none. */
   | { type: "show"; mode: Mode; line?: string }
   /**
@@ -103,6 +114,7 @@ export interface AskButtons {
 
 /** What the controller needs from the page. */
 export interface OverlayView {
+  showQuestion?(text: string, language: UiLanguage): void;
   /** The emblem is `px` wide now: move the subtitles to match. */
   layout(px: number): void;
   /** Shows one line of subtitles, in the language it is written in. */
@@ -155,7 +167,9 @@ interface Ask {
   /** The words and the buttons are on screen (the appear animation has played). */
   shown: boolean;
   hold: HoldState;
-  /** The answer that was sent while the app has not yet replaced the question. */
+  /** The question's own words, to show the card again if the answer could not be sent. */
+  text: string;
+  /** The answer that was sent while the app has not yet replaced the question.*/
   chosen: "yes" | "no" | "always" | null;
 }
 
@@ -377,7 +391,7 @@ export class OverlayController {
     }
   }
 
-  /** Sends the answer. The buttons stay (pressed, and dead) until the app replaces the question. */
+  /** Sends the answer, and the card goes at once: waiting for the app to replace it left a pressed card on screen. */
   private choose(ask: Ask, approved: boolean, always = false): void {
     // A hold that was still going (NO was clicked meanwhile) must not arm a button that is dead now.
     clearTimeout(this.holdTimer);
@@ -388,6 +402,8 @@ export class OverlayController {
     }
     ask.chosen = always ? "always" : approved ? "yes" : "no";
     this.view.setChoice(ask.chosen);
+    this.view.hideAsk();
+    this.view.clearLine();
     let sent: Promise<unknown>;
     try {
       sent = Promise.resolve(always ? this.options.confirm?.(ask.id, true, true) : this.options.confirm?.(ask.id, approved));
@@ -400,7 +416,9 @@ export class OverlayController {
       if (this.ask === ask) {
         ask.chosen = null;
         this.resetHold(ask);
-        this.view.setChoice(null);
+        this.view.showLine(ask.line, this.language);
+        this.view.showQuestion?.(ask.text, this.language);
+        this.view.showAsk({ yes: ask.yes, no: ask.no, ...(ask.always !== null ? { always: ask.always } : {}), tier: ask.tier, language: this.language });
       }
     });
   }
@@ -420,6 +438,7 @@ export class OverlayController {
       // answer (letting Raphael operate an app) is never held.
       tier: event.tier === "T2" || always !== null ? "T2" : "T3",
       line: replyLine(words(event.prefix), words(event.text)),
+      text: words(event.text),
       yes: words(event.yes) || "✓",
       no: words(event.no) || "✕",
       always,
@@ -436,6 +455,7 @@ export class OverlayController {
     this.timer = setTimeout(() => {
       ask.shown = true;
       this.view.showLine(ask.line, this.language);
+      this.view.showQuestion?.(words(event.text), this.language);
       this.view.showAsk({
         yes: ask.yes,
         no: ask.no,
@@ -719,6 +739,27 @@ class DomView implements OverlayView {
     this.question.classList.add("on");
   }
 
+  showQuestion(text: string, language: UiLanguage): void {
+    const title = this.question.querySelector<HTMLElement>("#ask-title")!;
+    const details = this.question.querySelector<HTMLElement>("#ask-details")!;
+    const expand = this.question.querySelector<HTMLButtonElement>("#ask-expand")!;
+    const parts = confirmationParts(text);
+    title.textContent = parts.title;
+    details.textContent = parts.details;
+    details.hidden = !parts.details;
+    delete this.question.dataset.expanded;
+    expand.setAttribute("aria-expanded", "false");
+    const labels = questionLabels(language);
+    expand.textContent = labels.more;
+    expand.onclick = () => {
+      const expanded = expand.getAttribute("aria-expanded") !== "true";
+      this.question.dataset.expanded = String(expanded);
+      expand.setAttribute("aria-expanded", String(expanded));
+      expand.textContent = expanded ? labels.less : labels.more;
+    };
+    requestAnimationFrame(() => { expand.hidden = details.scrollHeight <= details.clientHeight + 1; });
+  }
+
   setHold(state: HoldState): void {
     this.yes.dataset.hold = state;
   }
@@ -736,6 +777,22 @@ class DomView implements OverlayView {
     this.setChoice(null);
   }
 }
+
+/** A supplied first line or first sentence names the intent; every remaining word stays available. */
+export function confirmationParts(text: string): { title: string; details: string } {
+  const body = text.trim();
+  const boundary = body.search(/[\n。！？!?]/u);
+  if (boundary >= 0 && boundary < 80) return { title: body.slice(0, boundary + 1).trim(), details: body.slice(boundary + 1).trim() };
+  if (body.length <= 60) return { title: body, details: "" };
+  const word = body.lastIndexOf(" ", 48);
+  const end = word > 0 ? word : 48;
+  return { title: body.slice(0, end).trimEnd() + "…", details: body.slice(end).trimStart() };
+}
+
+const questionLabels = (language: UiLanguage) => {
+  const messages = language === "en" ? en : language === "ja" ? ja : zhTW;
+  return {more:messages["common.showAll"],less:messages["common.showLess"],stop:messages["rooms.stop"],hint:messages["common.cancelAgain"]};
+};
 
 /** The glyph ring texture (app/public/brand/glyph-ring.png). */
 const GLYPH_URL = "/brand/glyph-ring.png";
@@ -830,6 +887,22 @@ async function start(): Promise<void> {
     log: pageLog,
   });
   wireQuestion(controller, yes, no, always);
+  const mouse = reportMouseRegions(document.body, report => invoke("floating_controls", { ...report }));
+  const stop = document.getElementById("overlay-stop") as HTMLButtonElement;
+  stop.innerHTML = ico("stop") + '<span class="task-action-label overlay-stop-label"></span>';
+  const stopLabel = stop.querySelector<HTMLElement>(".overlay-stop-label")!;
+  const labelStop = (language: UiLanguage) => {
+    stopLabel.textContent = questionLabels(language).stop;
+    stop.setAttribute("aria-label", stopLabel.textContent);
+  };
+  labelStop("zh-TW");
+  let taskRun = 0, taskActive = false, language: UiLanguage = "zh-TW";
+  const gesture = cancelGesture();
+  gesture.register(() => taskActive ? {key:`overlay:${taskRun}`,button:stop.hidden ? canvas : stop,hint:questionLabels(language).hint,cancel:()=>stop.click()} : null);
+  stop.onclick = () => { void invoke("overlay_cancel").catch(error => pageLog("warn", describeError(error))); };
+  const scheme = matchMedia("(prefers-color-scheme: dark)");
+  const theme = () => { document.documentElement.dataset.theme = scheme.matches ? "dark" : "light"; };
+  theme(); scheme.addEventListener("change", theme);
   const frames = new FrameWatch(() => emblem.frames, () => document.visibilityState, pageLog, {
     canvas,
     expected: () => controller.expectsPaint,
@@ -852,6 +925,14 @@ async function start(): Promise<void> {
   // Read afresh each time: the controller changes the phase while it handles an event.
   const phase = (): string => emblem.phase;
   const handle = guardHandler((event) => {
+    if (event.type === "mouse") { mouse.reset(event.revision); return; }
+    if (event.type === "cancelkey") { if(event.reset)gesture.clear();else gesture.press();return; }
+    if (event.type === "settings" && isLanguage(event.language)) { language=event.language; document.documentElement.lang=language; labelStop(language); }
+    if (event.type === "show" || event.type === "mode") { taskRun++;taskActive=true;stop.hidden=true; }
+    if (["hide","complete","release","notice","operate"].includes(event.type) || event.type === "say" && !event.hold) { taskActive=false;stop.hidden=true; }
+    // A question answers yes or no here; stopping the work is done in the app.
+    if (event.type === "ask") { taskRun++;taskActive=true;stop.hidden=true; }
+    gesture.sync();
     if (event.type === "avatar") {
       void picture();
       return;

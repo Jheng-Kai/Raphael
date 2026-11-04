@@ -45,6 +45,15 @@ const NEWEST_FIRST = [
 ];
 
 describe("one thread", () => {
+  test("empty exchanges and empty finished turns leave neither event lines nor date separators", () => {
+    const empty = { question: " ", text: "", detail: null, messages: [] };
+    expect(threadItems([
+      turn(1, "2026-10-19T09:00:00+08:00", { ...empty, source: "member", scope: "exchange", peer_id: 3 }),
+      turn(2, "2026-10-20T09:00:00+08:00", empty),
+      turn(4, "2026-10-21T09:00:00+08:00", { ...empty, source: "member", scope: "exchange", peer_id: 3, text: "Unpublished partial answer", status: "running" }),
+    ], now)).toEqual([]);
+    expect(threadItems([turn(3, "2026-10-20T09:00:00+08:00", { ...empty, status: "running" })], now)).toHaveLength(2);
+  });
   test("every turn in one thread, oldest first, whatever its source; each day under its heading", () => {
     const items = threadItems(
       [
@@ -54,12 +63,12 @@ describe("one thread", () => {
       ],
       now,
     );
-    expect(items.map((item) => (item.kind === "day" ? item.label : item.kind === "turn" ? item.turn.id : item.key))).toEqual([
-      "2025 年 12 月 31 日", 1, "10 月 17 日", 2, "昨天", 3, 4, "今天", 5, 6,
+    expect(items.map((item) => (item.kind === "day" ? item.label : item.turn.id))).toEqual([
+      "2025 年 12 月 31 日 12:00", 1, "10 月 17 日 12:00", 2, "昨天 09:00", 3, "昨天 23:58", 4, "今天 09:12", 5, 6,
     ]);
     // the keys say which line is which across draws
     expect(items.filter((item) => item.kind === "turn").map((item) => item.key)).toEqual(["turn:1", "turn:2", "turn:3", "turn:4", "turn:5", "turn:6"]);
-    expect(items[0].key).toBe("day:2025 年 12 月 31 日");
+    expect(items[0].key).toBe("time:1");
   });
 
   test("turns of the same moment keep the order they were written in, and the list given is not changed", () => {
@@ -71,19 +80,10 @@ describe("one thread", () => {
     expect(threadItems([], now)).toEqual([]);
   });
 
-  test("what one colleague asks in a row is one line where it came; another colleague, a turn or a day apart is another", () => {
-    const asked = (id: number, when: string, peer: number) => turn(id, when, { route: "exchange", source: "member", scope: "exchange", peer_id: peer });
-    const items = threadItems([
-      asked(9, "2026-10-20T10:00:00+08:00", 1),
-      turn(8, "2026-10-20T09:30:00+08:00"),
-      asked(7, "2026-10-20T09:20:00+08:00", 3),
-      asked(6, "2026-10-20T09:10:00+08:00", 1),
-      asked(5, "2026-10-20T09:05:00+08:00", 1),
-      asked(4, "2026-10-19T09:05:00+08:00", 1),
-    ], now);
-    const lines = items.flatMap((item): (number | number[])[] => item.kind === "exchange" ? [item.turns.map((x) => x.id)] : item.kind === "turn" ? [item.turn.id] : []);
-    expect(lines).toEqual([[4], [5, 6], [7], 8, [9]]);
-    expect(items.filter((item) => item.kind === "exchange").map((item) => item.key)).toEqual(["exchange:4", "exchange:5", "exchange:7", "exchange:9"]);
+  test("work a colleague handed over is a turn of its own in this member's chat, each piece of it", () => {
+    const handed = (id: number, when: string) => turn(id, when, { route: "exchange", source: "member", scope: "exchange", peer_id: 1 });
+    const items = threadItems([handed(6, "2026-10-20T09:10:00+08:00"), handed(5, "2026-10-20T09:05:00+08:00")], now);
+    expect(items.flatMap((item) => (item.kind === "turn" ? [item.key] : []))).toEqual(["turn:5", "turn:6"]);
   });
 
   test("a turn from a core that keeps no source is a spoken one", () => {

@@ -87,6 +87,10 @@ async def test_a_result_reaches_the_room_after_its_worker_already_replied_there(
     task_id=accepted.data['task_id']
     await until(lambda:rig.task(task_id).state in ('done','failed'))
     assert rig.task(task_id).state=='done'
+    await until(lambda: not rig.service.activity.running)
+    activity = [data['state'] for method, data in rig.notifications
+                if method == 'member.activity' and data['member_id'] == target.id]
+    assert activity == ['waiting', 'thinking', 'done', 'idle']
     assert rig.conn.execute("SELECT disposition FROM task_outbox WHERE event_id=?",(f'{task_id}:result',)).fetchone()[0]=='delivered'
     result=rig.conn.execute('SELECT member_id,reply_to,text FROM room_messages WHERE request_id=?',(f'handoff-{task_id}',)).fetchone()
     assert tuple(result)==(target.id,asked,'Consulted answer')
@@ -100,8 +104,8 @@ async def test_one_undeliverable_result_leaves_the_others_and_is_delivered_once_
     second=rig.service.handoff(RAPHAEL,args(target,mode='consult',stage_id='two'),source_turn_id=source.id,language='en').data['task_id']
     rig.conn.execute(f"CREATE TRIGGER fail_delivery BEFORE INSERT ON room_messages WHEN NEW.request_id='handoff-{first}' "
                      "BEGIN SELECT RAISE(ABORT,'fixture delivery failure'); END")
-    later=rig.submit()
-    await until(lambda:rig.task(later).state=='done')
+    later=rig.submit()  # Raphael's own task runs beside the Writer's two, which follow one another
+    await until(lambda:all(rig.task(task).state=='done' for task in (first,second,later)))
     delivered=lambda task:rig.conn.execute('SELECT delivered_at_ms FROM task_outbox WHERE event_id=?',(f'{task}:result',)).fetchone()[0]
     assert rig.task(first).state==rig.task(second).state=='done'
     assert delivered(first) is None and delivered(second) is not None
@@ -145,8 +149,7 @@ async def test_a_handoff_back_to_a_colleague_waiting_upstream_is_refused(make_ri
     assert (back.ok,back.error)==(False,'handoff_cycle') and back.instruction
 
 
-async def test_a_meeting_turn_gives_the_floor_with_a_mention_instead_of_a_handoff(make_rig):
-    # Live, a moderator handed the next speaker a work task and the meeting became a chain of hand-offs.
+async def test_a_room_role_or_legacy_meeting_flag_does_not_block_assigned_work(make_rig):
     rig=make_rig()
     target,source=setup(rig)
     with rig.conn:
@@ -157,11 +160,6 @@ async def test_a_meeting_turn_gives_the_floor_with_a_mention_instead_of_a_handof
             (origin,source.room_id))
         rig.conn.execute("INSERT INTO room_messages(room_id,thread_id,member_id,text,created,turn_id,origin_message_id,kind) "
             "VALUES (?,?,0,'',2,?,?,'message')",(source.room_id,source.thread_id,source.id,origin))
-    refused=rig.service.handoff(RAPHAEL,args(target),source_turn_id=source.id,language='en')
-    assert (refused.ok,refused.error)==(False,'meeting_in_progress') and '@mention' in refused.instruction
-    # Live, the room kept its moderator after the meeting, so the owner's 「現在執行」 could hand nothing off.
-    with rig.conn:
-        rig.conn.execute("UPDATE room_exchanges SET meeting=0 WHERE origin_message_id=?",(origin,))
     assert rig.service.handoff(RAPHAEL,args(target),source_turn_id=source.id,language='en').ok
 
 
@@ -233,9 +231,10 @@ async def test_parent_releases_slot_real_file_result_and_resume_once(make_rig,tm
     nonce='fixture-'+deadline
     receipt=[]
     async def file_tool(server,name,arguments,**kwargs):
-        assert rig.task(parent).state=='waiting'
+        # The child works beside its parent, which parks as soon as it has handed the work over.
+        await until(lambda:rig.task(parent).state=='waiting')
         output.write_text('<!doctype html><p>'+nonce+'</p>',encoding='utf8')
-        receipt.append(rig.service._store.verify_artifact(rig.service._run.task_id,'file',output,workspace=tmp_path,mime='text/html'))
+        receipt.append(rig.service._store.verify_artifact(next(iter(rig.service._runs)),'file',output,workspace=tmp_path,mime='text/html'))
         return CallOutcome(json.dumps({'file':output.name,'digest':receipt[-1],'nonce':nonce}),False)
     monkeypatch.setattr(rig.plugins.hub._connector,'call_tool',file_tool)
     parent=rig.service.submit(session_id='parent',text='Delegate a file with '+deadline,language='zh-TW',model=model)
@@ -285,8 +284,8 @@ def knowing(rig, tmp_path, target):
     """The asked member knows a code from its own conversation and a date from its own note; every
     member knows the brand colour."""
     memory = MemoryService(rig.conn, tmp_path/'memory', NoMemoryModel(), MemoryKeyStore())
-    memory.store_for(target.id).write('reference-launch', type='reference', description='上市日 PRIVATE-NOTE', body='上市日 PRIVATE-NOTE')
-    memory.shared.write('user-brand', type='user', description='品牌主色是金色', body='品牌主色是金色', member=0)
+    memory.own(target.id).edit_document('上市日 PRIVATE-NOTE\n', None)
+    memory.shared.edit_document('品牌主色是金色 — 拉斐爾 · 2026-10-27\n', None)
     rig.service.use_memory(memory)
     AgentHistory(rig.conn, rig.wall).add(session_id='private', question='只告訴你：新品代號 PRIVATE-CHAT', route='chat',
                                          prefix='', text='好，我記住了。', status='done', member_id=target.id)
@@ -328,8 +327,13 @@ async def test_a_consultation_answers_from_what_the_asked_member_knows_and_the_a
     await until(lambda:rig.task(parent).state in ('done','failed'),timeout=10)
     assert rig.task(parent).state=='done', rig.task(parent)
     [child]=rig.service._store.handoffs(source.id)
-    assert all(known in seen['asked'] for known in ('PRIVATE-CHAT','PRIVATE-NOTE','品牌主色是金色'))
-    assert {'memory_read','history_search'} <= set(seen['tools'])
+    if brain == 'cli':  # this variant works in a room, where only shared notes are readable
+        assert 'PRIVATE-CHAT' not in seen['asked'] and 'PRIVATE-NOTE' not in seen['asked']
+        assert '品牌主色是金色' in seen['asked']
+    else:
+        assert all(known in seen['asked'] for known in ('PRIVATE-CHAT','PRIVATE-NOTE','品牌主色是金色'))
+    assert ('history_search' in seen['tools']) == (brain == 'api')
+    assert 'memory_read' not in seen['tools']
     # Only the answer reaches the asker: never the asked member's conversation or notes.
     assert 'PRIVATE-CHAT' in seen['asker'] and 'PRIVATE-NOTE' not in seen['asker'] and '好，我記住了' not in seen['asker']
     exchange=AgentHistory(rig.conn).get(child.turn_id)
@@ -364,12 +368,94 @@ async def test_a_conversation_turn_that_consults_comes_back_once_with_the_answer
     await until(lambda:rig.task(asker.id).state in ('done','failed'))
     assert rig.task(asker.id).state=='done' and rig.task(asker.id).turn_id==source.id
     assert 'PRIVATE-CHAT' in seen['asker'] and 'PRIVATE-NOTE' not in seen['asker']
+    assert 'do not ask them again' in seen['asker'] and 'hand the next piece' not in seen['asker']
     assert '行銷說新品代號是 PRIVATE-CHAT' in AgentHistory(rig.conn).get(source.id).text
     rig.service._deliver_handoffs()
     rig.service.settle_asker(source.id,answered=True)
     assert not rig.service._store.resume_from_inbox(asker.id)
     assert rig.conn.execute('SELECT COUNT(*) FROM task_executions WHERE task_id=?',(asker.id,)).fetchone()[0]==1
     assert rig.client.replies==[]
+
+
+async def test_a_chat_that_handed_out_work_is_told_how_it_went_and_goes_on(make_rig,tmp_path):
+    rig=make_rig()
+    target,source=setup(rig,room=False)
+    seen={}
+    def resumed(**kwargs):
+        seen['chief']=json.dumps(kwargs['messages'],ensure_ascii=False)
+        return report('設計完成，全部做好了。')
+    design='設計規格：'+'四張桌子圍著中央走道，每張桌子有一隻史萊姆。'*12
+    rig.client.replies.extend([report(design),resumed])
+    receipt=rig.service.handoff(RAPHAEL,args(target,stage_id='design',request='寫設計規格',done_when='A written design.'),
+                                source_turn_id=source.id,language='zh-TW')
+    child=rig.task(receipt.data['task_id'])
+    asker=rig.task(child.parent_task_id)
+    AgentHistory(rig.conn,rig.wall).resolve(source.id,prefix='答',text='設計師接手了。',status='done')
+    rig.service.settle_asker(source.id,answered=True)
+    await until(lambda:rig.task(asker.id).state in ('done','failed'))
+    assert rig.task(child.id).state=='done' and rig.task(asker.id).state=='done'
+    assert '四張桌子' in seen['chief'] and 'handoff_results' in seen['chief']
+    assert '全部做好了' in AgentHistory(rig.conn).get(source.id).text
+
+
+async def test_a_chat_that_handed_out_work_keeps_going_until_the_job_is_done(make_rig):
+    # Live, a chief woken by the first results told the owner "not accepted yet" and stopped, its promised check undone.
+    rig=make_rig()
+    target,source=setup(rig,room=False)
+    other=MemberStore(rig.conn).create_member(name='Checker',role='Checker')
+    checker=Speaker(id=other.id,name=other.name,model=target.model)
+    rig.service.use_team(team_of(target,checker),unused)
+    AgentHistory(rig.conn,rig.wall)
+    seen=[]
+    def chief(reply):
+        def woken(**kwargs):
+            seen.append(json.dumps(kwargs['messages'],ensure_ascii=False))
+            return reply
+        return woken
+    whole='頁面放在 /home/cua/team/office/index.html。\n\nWriter 做了頁面，Checker 打開頁面驗收。'+'每個按鈕都試過了。'*30
+    rig.client.replies.extend([report('頁面做好了，尚未驗收。'),
+        chief(turn(calls=[call('handoff',args(checker,stage_id='check',request='打開頁面驗收',done_when='A written check.'))])),
+        report('驗收通過 CHECK-OK。'),chief(report(whole))])
+    receipt=rig.service.handoff(RAPHAEL,args(target,stage_id='page',request='做頁面',done_when='A written page.'),
+                                source_turn_id=source.id,language='zh-TW')
+    asker=rig.task(rig.task(receipt.data['task_id']).parent_task_id)
+    AgentHistory(rig.conn,rig.wall).resolve(source.id,prefix='答',text='我驗收後再回報。',status='done')
+    rig.service.settle_asker(source.id,answered=True)
+    await until(lambda:rig.task(asker.id).state in ('done','failed'))
+    assert rig.task(asker.id).state=='done' and rig.client.replies==[]
+    assert 'hand the next piece' in seen[0] and 'do not ask them again' not in seen[0]
+    assert '我驗收後再回報' in seen[0]
+    assert 'CHECK-OK' in seen[1]
+    # The reply reads whole in the conversation, paragraphs too; the overlay says one line of it.
+    said=[row[0] for row in rig.conn.execute("SELECT text FROM agent_messages WHERE turn_id=? AND kind='reply'",(source.id,))]
+    assert any('\n\nWriter 做了頁面' in text and text.count('每個按鈕都試過了')==30 for text in said)
+    (spoken,)=[item for item in rig.reports() if item['task_id']==asker.id]
+    assert '\n' not in spoken['text'] and len(spoken['text'])<len(whole)
+
+
+async def test_a_task_hands_out_only_so_many_pieces(make_rig,monkeypatch):
+    rig=make_rig()
+    target,source=setup(rig,room=False)
+    monkeypatch.setattr('raphael_core.background.service.MAX_HANDOFFS',1)
+    first=rig.service.handoff(RAPHAEL,args(target,stage_id='one'),source_turn_id=source.id,language='zh-TW')
+    second=rig.service.handoff(RAPHAEL,args(target,stage_id='two'),source_turn_id=source.id,language='zh-TW')
+    assert first.ok and not second.ok and second.error=='handoff_depth_limit'
+
+
+@pytest.mark.parametrize('chosen',['@chatgpt:gpt-6-luna?effort=high','@my-service:big-model'])
+async def test_work_goes_to_the_brain_the_owner_chose_and_not_to_the_auxiliary_model(make_rig,chosen):
+    # Live, work chosen for a ChatGPT sign-in was quietly sent to OpenRouter's auxiliary model and billed there.
+    rig=make_rig()
+    rig.client.api_providers=lambda:{'openrouter','my-service'}
+    settings=SettingsStore(rig.conn)
+    settings.set('agent_model',chosen)
+    settings.set('assistant_model','openai/gpt-6-luna')
+    target,source=setup(rig,model=chosen,room=False)
+    rig.client.replies.append(report('Done '+'with the report. '*20))
+    receipt=rig.service.handoff(RAPHAEL,args(target,stage_id='work',request='Write it',done_when='A written report.'),
+                                source_turn_id=source.id,language='en')
+    await until(lambda:rig.task(receipt.data['task_id']).state in ('done','failed'))
+    assert rig.client.chat_calls[0]['model']==chosen
 
 
 async def test_a_stopped_conversation_turn_stops_the_questions_it_sent(make_rig,tmp_path):
@@ -400,7 +486,7 @@ async def test_assigned_work_reads_the_shared_notes_but_never_the_assignees_priv
     assert '品牌主色是金色' in shown
     assert 'PRIVATE-CHAT' not in shown and 'PRIVATE-NOTE' not in shown
     tools=[tool['function']['name'] for tool in assigned['tools']]
-    assert 'memory_read' in tools and 'history_search' not in tools
+    assert 'memory_read' not in tools and 'history_search' not in tools
 
 
 @pytest.mark.parametrize('room',[True,False])
@@ -456,6 +542,7 @@ async def test_restart_recovers_queued_child_and_waiting_parent_once(make_rig,mo
     parent=rig.submit(model=model,language='zh-TW')
     rig.service.attach_turn(parent,source.id)
     await asyncio.wait_for(queued.wait(),5)
+    await until(lambda:rig.task(parent).state=='waiting')
     [child]=rig.service._store.handoffs(source.id)
     assert rig.task(parent).state=='waiting' and child.state=='queued'
     await rig.service.aclose()
@@ -504,7 +591,7 @@ async def test_deleted_assignee_keeps_terminal_receipt_and_wakes_parent(make_rig
     child=accepted.data['task_id']
     rig.service._store.pause_for_children(parent,{'spec':{'task_id':parent,'system':'Report the failure.','user':'Work now.','tools':[],
                                                'limits':{'model_calls':5,'tool_calls':5,'seconds':30}},
-                                               'messages':[],'remaining_s':30})
+                                               'messages':[]})
     rig.service.forget_member(target.id)
     assert rig.task(child).state=='failed' and rig.task(child).reason=='member_unknown_or_removed'
     assert rig.task(parent).state=='queued'
@@ -552,11 +639,44 @@ async def test_failed_nested_work_cannot_be_reported_as_success(make_rig):
     assert child['reason']=='work_without_action'
 
 
+async def test_a_written_deliverable_is_work_done_and_says_why_when_it_is_not(make_rig):
+    rig=make_rig()
+    target,source=setup(rig)
+    design='設計規格：' + '辦公室有四張桌子，每張桌子上有成員的史萊姆，鏡頭可以環顧。' * 12
+    rig.client.replies.append(report(design))
+    result=rig.service.handoff(RAPHAEL,args(target),source_turn_id=source.id,language='zh-TW')
+    await until(lambda:rig.task(result.data['task_id']).state in ('done','failed'))
+    task=rig.task(result.data['task_id'])
+    assert (task.state,task.report_text)==('done',design)
+    later=colleague(rig,source,target,'Later')
+    rig.client.replies.append(report('明早我會完成。'))
+    result=rig.service.handoff(RAPHAEL,args(later,stage_id='later'),source_turn_id=source.id,language='zh-TW')
+    await until(lambda:rig.task(result.data['task_id']).state in ('done','failed'))
+    task=rig.task(result.data['task_id'])
+    assert (task.state,task.reason)==('failed','work_without_action')
+    assert '只有回覆' in task.report_text and task.report_detail=='明早我會完成。'
+
+
+async def test_a_file_left_in_the_team_folder_counts_as_the_work_it_was_to_leave(make_rig,tmp_path):
+    rig=make_rig()
+    target,source=setup(rig)
+    own,team=tmp_path/'own',tmp_path/'team'
+    own.mkdir(); team.mkdir()
+    rig.service.use_workspaces(lambda member:[own,team])
+    (team/'office.html').write_text('<html></html>',encoding='utf-8')
+    rig.client.replies.append(report('The page is in the team folder.'))
+    result=rig.service.handoff(RAPHAEL,args(target,done_when='office.html exists',requires_artifact=True),source_turn_id=source.id,language='en')
+    await until(lambda:rig.task(result.data['task_id']).state in ('done','failed'))
+    task=rig.task(result.data['task_id'])
+    assert (task.state,task.reason)==('done',None)
+    assert [item['uri'] for item in rig.service._store.evidence(task.id)]==['office.html']
+
+
 async def test_required_artifact_and_modified_artifact_cannot_complete(make_rig,tmp_path):
     rig=make_rig()
     target,source=setup(rig)
     task_id,_=rig.service._store.accept_handoff(source=source,parent=None,assignee=target.id,model='fake/model',
-        request='Write the report',stage='artifact',mode='work',done_when='A verified HTML file',language='en')
+        request='Write the report',stage='artifact',mode='work',done_when='A verified HTML file',language='en',requires_artifact=True)
     store=rig.service._store
     store.record_evidence(task_id,'read',kind='tool_receipt',uri='read',digest='receipt',mime='text/plain')
     assert store.completion_reason(store.get(task_id))=='missing_artifact'
@@ -574,6 +694,7 @@ async def test_stage_owner_cas_prevents_two_sources_claiming_one_stage(make_rig)
     rig=make_rig()
     target,source=setup(rig)
     store=rig.service._store
+    rig.service._closing=True  # nothing is started: the test plays the task's part itself
     parent=rig.submit()
     rig.service._queue.remove(parent)
     rig.service.attach_turn(parent,source.id)
@@ -616,7 +737,7 @@ async def test_stop_tree_preserves_receipts_and_rejects_late_terminal(make_rig,m
     [child]=rig.service._store.handoffs(source.id)
     evidence=rig.service._store.evidence(child.id)
     assert evidence
-    run=rig.service._run
+    run=rig.service._runs[child.id]
     assert (await rig.service._cancel({'task_id':parent}))['cancelled']
     await until(lambda:rig.task(child.id).state=='cancelled')
     assert rig.task(parent).state=='cancelled'
@@ -649,7 +770,7 @@ async def test_room_progress_is_status_only_and_a_dangling_address_is_never_publ
     rig=make_rig()
     target,source=setup(rig)
     async def response(**kwargs):
-        task=rig.service._store.get(rig.service._run.task_id)
+        task=rig.service._store.get(next(iter(rig.service._runs)))
         for index in range(3):
             rig.service._progress(task,f'Progress chunk {index}')
         return report('Delivered @')

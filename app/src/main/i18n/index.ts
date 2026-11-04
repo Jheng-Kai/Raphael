@@ -18,7 +18,10 @@ export function setLocale(value: unknown): void {
   if (typeof document !== "undefined") document.documentElement.lang = next;
   if (next === locale) return;
   locale = next;
-  for (const listener of listeners) listener();
+  for (const listener of [...listeners]) {
+    try { listener(); }
+    catch (error) { console.warn("A locale listener could not refresh its surface", error); }
+  }
 }
 
 export function onLocaleChange(listener: () => void): () => void {

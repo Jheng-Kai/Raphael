@@ -74,6 +74,12 @@ SEARCH_MAX_TOKENS = 500
 SEARCH_PLUGINS = [{"id": "web", "max_results": 3}]
 # Reading a page: the built-in reader has ten seconds of its own, a service that reads it longer.
 READ_TIMEOUT_S = 30.0
+# A reader fetches a page without a browser, so a page that shows its text only after a consent button or
+# its scripts comes back cut short; a member then said the page could not be read while its browser could.
+READ_WITHOUT_BROWSER = (
+    "This page was fetched without a browser. If its text stops short, asks for a consent or a click, or needs "
+    "scripts, and you have a computer, open the page in its browser and read it there before saying it cannot be read."
+)
 # Reading a file the owner handed over: the vision model, or the PDF service.
 ATTACHMENT_TIMEOUT_S = 70.0
 _SEARCH_SYSTEM = (
@@ -146,6 +152,7 @@ class ToolResult:
     # For a refusal of Raphael's own tool: fixed words telling the model what to do instead, which
     # it is shown in place of `error` (that stays in logs and receipts).
     instruction: str | None = None
+    blocks: list[dict] | None = None
 
 
 def _number(value: Any) -> float | int | None:
@@ -219,7 +226,11 @@ class Tools:
     @staticmethod
     def _failed(name: str, kind: str, detail: str | None = None) -> ToolResult:
         logger.warning("The %s tool failed: %s", name, kind)
-        return ToolResult(name, False, None, kind, detail=detail)
+        from ..failures import missing_for
+        missing = missing_for(kind, name, detail)
+        data = {"error": kind, "missing": missing.wire()} if missing else None
+        return ToolResult(name, False, data, kind, detail=detail,
+                          instruction=missing.sentence("en") if missing else None)
 
     async def _get_json(self, url: str, params: dict[str, Any]) -> Any:
         response = await self._http_client().get(url, params=params, timeout=_HTTP_STAGE_TIMEOUT_S)
@@ -359,7 +370,7 @@ class Tools:
             return self._failed("web_read", "timeout", service)
         except ServiceError as error:
             return self._failed("web_read", error.kind, service)
-        return ToolResult("web_read", True, {"url": url, **page}, untrusted=True, detail=service)
+        return ToolResult("web_read", True, {"url": url, **page, "if_incomplete": READ_WITHOUT_BROWSER}, untrusted=True, detail=service)
 
     async def read_attachment(
         self, attachment: Attachment, question: str, ledger: Ledger, *, number: int = 1
@@ -382,7 +393,24 @@ class Tools:
         except ServiceError as error:
             return self._failed("read_attachment", error.kind, kind)
         data = {"file": number, "kind": kind, **found}
-        return ToolResult("read_attachment", True, data, untrusted=True, detail=kind)
+        return ToolResult("read_attachment", True, data, untrusted=True, detail=found.get("limitation_kind", kind))
+
+    async def generate_audio(self, arguments: dict, store) -> ToolResult:
+        from ..services.tts import MAX_TEXT_CHARS
+        text, voice = arguments.get("text"), arguments.get("voice")
+        if (not isinstance(text, str) or not text.strip() or len(text) > MAX_TEXT_CHARS
+                or (voice is not None and (not isinstance(voice, str) or not voice.strip() or len(voice) > 200))):
+            return self._failed("generate_audio", "bad_arguments")
+        if self.services is None or store is None:
+            return self._failed("generate_audio", "not_configured")
+        try:
+            file = await asyncio.wait_for(self.services.audio_file(text, voice=voice), 120)
+            saved = await asyncio.to_thread(store.save, file)
+        except TimeoutError:
+            return self._failed("generate_audio", "timeout", self.services.tts_service())
+        except ServiceError as error:
+            return self._failed("generate_audio", error.kind, self.services.tts_service())
+        return ToolResult("generate_audio", True, {"attachment": saved.metadata()}, detail=self.services.tts_service())
 
     async def look(
         self,

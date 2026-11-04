@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Member desktop
+Exec=/usr/local/bin/prepare-raphael-desktop
+OnlyShowIn=XFCE;
+Terminal=false

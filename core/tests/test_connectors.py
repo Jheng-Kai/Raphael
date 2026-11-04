@@ -42,7 +42,7 @@ async def test_home_calendar_uses_only_enabled_private_google_tool(tmp_path, con
         assert request.method == "GET"
         assert request.url.params["singleEvents"] == "true"
         assert request.url.params["orderBy"] == "startTime"
-        assert request.url.params["maxResults"] == "24"
+        assert request.url.params["maxResults"] == "2500"
         assert request.url.params["timeMin"] == "2026-10-24T00:00:00+00:00"
         assert request.url.params["timeMax"] == "2026-10-31T00:00:00+00:00"
         if state == "expired":
@@ -69,7 +69,10 @@ async def test_home_calendar_uses_only_enabled_private_google_tool(tmp_path, con
         service.google._access, service.google._expires = "access-private", float("inf")
         await service.sync_google()
     stamp = lambda value: int(datetime.fromisoformat(value).timestamp() * 1000)
-    events = await ConnectedCalendar(router, service)(stamp("2026-10-24T00:00:00+00:00"), stamp("2026-10-31T00:00:00+00:00"))
+    calendar = ConnectedCalendar(router, service)
+    events = await calendar(stamp("2026-10-24T00:00:00+00:00"), stamp("2026-10-31T00:00:00+00:00"))
+    await asyncio.gather(*calendar._tasks.values())
+    events = await calendar(stamp("2026-10-24T00:00:00+00:00"), stamp("2026-10-31T00:00:00+00:00"))
     assert len(requests) == (1 if state in ("active", "expired") else 0)
     if state == "active":
         assert [e["id"] for e in events] == ["event:timed", "event:all-day"]
@@ -92,6 +95,81 @@ def setup_service(tmp_path, conn, responder, **options):
     service = ConnectorsService(tmp_path, vault, hub, transport=httpx.MockTransport(responder), **options)
     service.register(router)
     return router, service, hub, vault
+
+
+async def test_calendar_core_read_works_with_empty_catalog_without_widening_the_model_gate(tmp_path, conn):
+    from types import SimpleNamespace
+    router, service, hub, vault = setup_service(tmp_path, conn, lambda request: pytest.fail("no HTTP"))
+    entry = Connector("composio:googlecalendar", "composio")
+    entry.status, entry.enabled_tools = "ACTIVE", ["GOOGLECALENDAR_EVENTS_LIST", "GOOGLECALENDAR_EVENTS_DELETE", "GOOGLECALENDAR_CALENDARS_LIST"]
+    service.store.connectors[entry.id] = entry
+    vault.set("connectors:composio:key", "fake")
+    service.tool_available = lambda server, name: True
+    assert service._tool_catalog == {}
+    args = {"calendarId": "primary", "timeMin": "2026-10-24T00:00:00Z", "timeMax": "2026-10-31T00:00:00Z",
+            "singleEvents": True, "orderBy": "startTime", "maxResults": 2500}
+    envelope = {"tools": [{"tool_slug": "GOOGLECALENDAR_EVENTS_LIST", "arguments": args}]}
+    assert not service.allow_call("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL", envelope, "auto")
+    async def call(key, received, *, approver):
+        assert service.allow_call("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL", received, approver)
+        write = {"tools": [{"tool_slug": "GOOGLECALENDAR_EVENTS_DELETE", "arguments": {}}]}
+        assert not service.allow_call("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL", write, "auto")
+        sibling = {"tools": [{"tool_slug": "GOOGLECALENDAR_CALENDARS_LIST", "arguments": {}}]}
+        assert not service.allow_call("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL", sibling, "auto")
+        assert not service.allow_call("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL", {"tools": received["tools"] + sibling["tools"]}, "auto")
+        return SimpleNamespace(ok=True, mcp_result=None, text=json.dumps({"successful": True,
+            "data": {"results": [{"response": {"successful": True, "data": {"items": []}}}], "error_count": 0}}))
+    hub.call = call
+    assert await service.call_calendar(args) == {"items": []}
+    assert not service.allow_call("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL", envelope, "auto")
+    entry.enabled = False
+    with pytest.raises(ConnectorFailure):
+        await service.call_calendar(args)
+
+
+async def test_ensure_tools_uses_toolkit_cache_and_ignores_other_connection_kinds(tmp_path, conn):
+    platform = Platform(["ACTIVE"])
+    _, service, _, _ = setup_service(tmp_path, conn, platform)
+    entry = Connector("composio:gmail", "composio", status="ACTIVE")
+    service.store.connectors[entry.id] = entry
+    service.vault.set("connectors:composio:key", "fake")
+    await service.ensure_tools(entry)
+    assert "GMAIL_FETCH_EMAILS" in entry.enabled_tools
+    count = len(platform.requests)
+    assert count == 2
+    await service.ensure_tools(entry)
+    await service.ensure_tools(Connector("google", "google"))
+    assert len(platform.requests) == count
+
+
+async def test_v31_patch_omits_the_rejected_expected_config_version():
+    sent = []
+
+    def respond(request):
+        body = json.loads(request.content)
+        sent.append(body)
+        if "expected_config_version" in body:
+            return httpx.Response(400, json={"error": {"code": 10400, "slug": "HTTP_BadRequest",
+                "message": "Validation error while processing request",
+                "errors": ["Error in payload: Unrecognized key(s) in object: 'expected_config_version'"]}})
+        return httpx.Response(200, json={"config_version": 2})
+
+    client = ComposioClient(lambda: "private", transport=httpx.MockTransport(respond))
+    assert await client.patch("trs_test", {"toolkits": {"enable": ["slack"]}}, 1) == {"config_version": 2}
+    assert sent == [{"toolkits": {"enable": ["slack"]}}]
+
+
+async def test_composio_validation_is_non_transient_and_explains_the_bad_connection_request():
+    from raphael_core.failures import classify
+
+    client = ComposioClient(lambda: "private", transport=httpx.MockTransport(lambda request:
+        httpx.Response(400, json={"error": {"code": 10400, "slug": "HTTP_BadRequest",
+            "message": "Validation error while processing request"}})))
+    with pytest.raises(ConnectorFailure) as caught:
+        await client.patch("trs_test", {}, 1)
+    failure = classify(caught.value)
+    assert failure.kind == "invalid_request" and not failure.transient
+    assert "更新拉斐爾" in failure.sentence("Composio", "zh-TW")
 
 
 class Platform:
@@ -179,7 +257,7 @@ async def test_connect_poll_enable_managed_mcp_and_local_enforcement(tmp_path, c
     assert hub.tier_of(tool_key(record.id, "COMPOSIO_MULTI_EXECUTE_TOOL")) == Tier.T2
     assert not any(x.name == "COMPOSIO_REMOTE_BASH_TOOL" for x in hub.offered())
     args = {"tools": [{"tool_slug": "GMAIL_FETCH_EMAILS", "arguments": {}}]}
-    assert not (await hub.call(tool_key(record.id, "COMPOSIO_MULTI_EXECUTE_TOOL"), args, approver="auto")).ok
+    assert (await hub.call(tool_key(record.id, "COMPOSIO_MULTI_EXECUTE_TOOL"), args, approver="auto")).ok
     assert (await hub.call(tool_key(record.id, "COMPOSIO_MULTI_EXECUTE_TOOL"), args, approver="user")).ok
     await router.call("connectors.set_tools", {"id": "composio:gmail", "disabled_tools": ["GMAIL_FETCH_EMAILS"]})
     before = len(fake.requests)
@@ -374,7 +452,7 @@ async def test_failed_sign_in_restores_prior_session_permissions(tmp_path, conn,
 @pytest.mark.parametrize("status, payload, expected", [
     (400, {"error": {"slug": "ToolRouterV2_ToolkitNotAllowed", "message": "private"}}, "toolkit_not_allowed"),
     (400, {"error": {"code": "ToolRouterV2_ToolkitNotAllowed", "message": "private"}}, "toolkit_not_allowed"),
-    (400, {"error": {"slug": "OtherError", "message": "private"}}, "http_error"),
+    (400, {"error": {"slug": "OtherError", "message": "private"}}, "invalid_request"),
     (403, {"error": {"slug": "ToolRouterV2_ToolkitNotAllowed", "message": "private"}}, "auth"),
 ])
 async def test_toolkit_refusal_has_a_value_free_dedicated_failure(status, payload, expected):
@@ -435,7 +513,7 @@ async def test_conflict_keeps_local_restrictions_and_entire_tools_map(tmp_path, 
         if request.method == "PATCH":
             body = json.loads(request.content)
             assert body["tools"]["slack"] == {"disable": ["SLACK_SEND"]}
-            assert "expected_config_version" in body
+            assert "expected_config_version" not in body
             return httpx.Response(409, json={"error": {"message": "secret"}})
         return fake(request)
 
@@ -724,13 +802,14 @@ async def test_catalog_projection_cache_and_missing_managed_oauth(tmp_path, conn
     await router.call("connectors.set_key", {"key": "ak_private"})
     catalog = await router.call("connectors.catalog")
     assert catalog["stores_tool_payloads"] is True
-    assert catalog["items"][0]["can_connect"] is True
+    assert catalog["items"][0]["needs"] == "sign_in" and "can_connect" not in catalog["items"][0]
     assert catalog["items"][0]["auth_schemes"] == ["oauth2"]
     before = len(fake.requests)
     assert await router.call("connectors.catalog") == catalog
     assert len(fake.requests) == before
     assert (await router.call("connectors.categories"))["items"][0]["id"] == "productivity"
-    assert (await router.call("connectors.connect", {"toolkit": "xero"}))["error"] == "needs_own_oauth_app"
+    # An OAuth service with no shared login is added with the owner's own developer app: asked for, never a dead end.
+    assert (await router.call("connectors.connect", {"toolkit": "xero"}))["error"] == "needs_own_app"
 
 
 async def test_store_catalog_pages_cache_expiry_and_failed_refresh_are_atomic(tmp_path, conn):

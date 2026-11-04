@@ -67,6 +67,16 @@ export interface ProviderKind {
   local_context_hint?: boolean;
 }
 /** Public provider metadata. Secrets never come back from the core. */
+/** The owner's ChatGPT sign-in; tokens never reach the window. */
+export interface ChatGptStatus {
+  signed_in: boolean;
+  email?: string | null;
+  plan_scope_granted?: boolean;
+  signing_in?: boolean;
+  /** This sign-in made the account's registration: nobody has told them what it means yet. */
+  first_sign_in?: boolean;
+}
+
 export interface ModelProvider {
   id: string;
   kind: string;
@@ -141,6 +151,9 @@ export interface CliModel {
 
 /** A model of `models.catalog`. Prices are US$; null is unknown or does not apply. */
 export interface CatalogModel {
+  per_image?: number | null;
+  per_request?: number | null;
+  image_output_per_mtok?: number | null;
   effort_models?: Record<string, string>;
   description?: string;
   is_default?: boolean;
@@ -188,6 +201,8 @@ export interface ReplacedModel {
 
 /** `models.catalog`: models from enabled providers, by kind; legacy catalogs contain OpenRouter alone. */
 export interface ModelCatalog {
+  image?: CatalogModel[];
+  video?: CatalogModel[];
   /** Text in, text out: the cleanup and the answers. */
   llm: CatalogModel[];
   /** Speech to text. */
@@ -273,6 +288,7 @@ export interface MediaPayload {
 
 /** A turn of the conversation with Raphael (`agent.history.list`, newest first). */
 export interface AgentTurn {
+  routine?: Pick<Routine, "id" | "schedule" | "when" | "app_name">;
   handoffs?: HandoffView[];
   conversation_id?: number;
   quote?: MessageQuote | null;
@@ -321,8 +337,12 @@ export interface AgentTurn {
   connectors?: ConnectorCard[];
   /** For a turn that resumed a task once its cards were connected (`source` "connector"): those apps. */
   resumed_apps?: string[];
+  /** Persisted catalog display names, aligned with resumed_apps. */
+  resumed_app_names?: string[];
+  resumed_app_logos?: string[];
   /** The cards of the keys this turn's task waits for (`connectors.secret_cards`). */
   secrets?: SecretCard[];
+  connection_proposals?: ConnectionProposal[];
   /** The cards of the owner's turn at the computer this turn's task is paused on (`computer.handback`). */
   computers?: ComputerCard[];
   /** For a turn that resumed a task once its keys were saved: the connections they are for. */
@@ -333,6 +353,47 @@ export interface AgentTurn {
   permissions?: PermissionCard[];
   /** The email drafts this turn shows: the editable card, or for a draft handed on, its centred line (`agent.drafts`). */
   drafts?: MailDraft[];
+  /** The pages this turn shows in the conversation (`agent.pages`). */
+  pages?: PageCard[];
+  owner_questions?: OwnerQuestion[];
+}
+
+export interface OwnerQuestion {
+  id: string; task_id: number; turn_id: number; member_id: number; kind: string; card_id: string;
+  question: string; options: string[]; free_text: boolean; state: "asked" | "answered" | "cancelled";
+  result: { state: string; answer?: string } | null;
+}
+
+export interface ConnectionProposal {
+  id: string;
+  state: "draft" | "approval" | "testing" | "tested" | "enabled" | "cancelled";
+  revision: number;
+  fields: { name: string; transport: "http" | "stdio"; command: string; args: string[]; url: string; env: string[]; headers: string[] };
+  groups: { kind: "read" | "write"; tools: string[] }[];
+  error: string | null;
+  first_local: boolean;
+}
+
+/** A page a member made or a plugin brought, as a turn carries it; `pages.open` gives its address. */
+export interface PageCard {
+  id: string;
+  title: string;
+  rev: number;
+  height: number;
+  source: "html" | "mcp";
+  server: string | null;
+  fallback: string;
+}
+
+export interface PageOpened {
+  url: string;
+  title: string;
+  rev: number;
+  height: number;
+  source: "html" | "mcp";
+  server: string | null;
+  tool_input?: object;
+  tool_result?: object;
 }
 
 /**
@@ -342,9 +403,9 @@ export interface AgentTurn {
  */
 export interface PermissionCard {
   id: string;
-  source: "ask" | "run";
+  source: "ask" | "run" | "background";
   /** A connection's tool, the first use of an app on the computer, or a step on the computer that sends, deletes or buys. */
-  kind: "tool" | "app" | "step";
+  kind: "tool" | "app" | "step" | "local_access" | "local_command";
   /** The connection's name (empty for the computer). */
   service: string;
   tool: string;
@@ -352,6 +413,8 @@ export interface PermissionCard {
   summary: string;
   /** Which of the owner's rules had it asked, in words; null when the switch or the tier asked. */
   reason: string | null;
+  /** Declared delivery fields of a connected app's message, never its other tool arguments. */
+  message?: { workspace?: string; to?: string; cc?: string; subject?: string; thread?: string; body: string };
   /** The digest of the action: a yes is for this one only. */
   digest: string;
   /** Whether 一律允許 can take effect (never where a rule of the owner's asks first). */
@@ -402,9 +465,11 @@ export type MailDraft = MailDraftCard | MailDraftHanded;
 
 /** A connector card: an app a task needs, and where its sign-in stands. Never a URL or a token. */
 export interface ConnectorCard {
+  missing?: import("./missing").Missing | null;
   id: string;
   app: string;
   name: string;
+  logo?: string;
   state: "pending" | "authorizing" | "connected" | "failed" | "cancelled" | "expired";
   error: string | null;
   /** The app was connected and its sign-in ran out: the card reconnects it. */
@@ -413,10 +478,15 @@ export interface ConnectorCard {
   tool_count: number | null;
   expires_at_ms: number;
   resumed: boolean;
+  /** What connecting it asks of the owner: a sign-in only (the default), their own key, or a developer app of their own. */
+  needs?: AppNeeds;
+  /** The Composio toolkit the form for `needs` is read from. */
+  toolkit?: string;
 }
 
 /** A secret card: a key a connection needs and has none of, and where saving it stands. Never the key itself. */
 export interface SecretCard {
+  login?: boolean;
   id: string;
   /** The connection's name. */
   name: string;
@@ -471,6 +541,8 @@ export interface WireAttachment {
 
 /** One thing Raphael did for a turn. Never what a tool was given or what it returned. */
 export interface AgentStep {
+  missing?: import("./missing").Missing | null;
+  detail?: string | null;
   /**
    * `tool` (a lookup or a connected service's tool), `command` (something done to this PC), `computer`
    * (Raphael operating an app: `tool` is `apps`, `look`, `open`, `focus`, `click`, `type`, `keys` or
@@ -492,6 +564,9 @@ export interface AgentStep {
 
 /** A background task as the conversations show it: how it stands, without what was said. */
 export interface AgentTask {
+  /** Ephemeral public narration, retained only while the task runs. */
+  progress?: string;
+  waiting_owner?: number;
   id: number;
   /** `queued`, `running`, `done`, `failed`, `limit`, `cancelled` or `interrupted`. */
   state: string;
@@ -515,11 +590,15 @@ export interface DictionaryEntry {
 
 /** `settings.get`: the settings of the brain. */
 export interface BrainSettings {
+  image_model?: string;
+  video_model?: string;
+  computer_ssh_alias?: string;
+  chief_pinned?: boolean;
   owner_name?: string;
   owner_about?: string;
   owner_photo?: string;
-  skin?: string;
-  action_mode?: "ask" | "direct";
+  action_mode?: "ask" | "direct" | "plan" | "bypass";
+  local_commands_mode?: "ask" | "always" | "never";
   agent_fallbacks?: string[];
   cleanup_fallbacks?: string[];
   router_fallbacks?: string[];
@@ -687,6 +766,8 @@ export interface DeviceSettings {
 
 /** What commands.rs sends on the `main_events` channel (`MainEvent`). */
 export type MainEvent =
+  | { type: "CoreReady" }
+  | { type: "SetupMissing"; missing: import("./missing").Missing }
   | { type: "DictationPasted"; text: string }
   | { type: "ConversationsChanged"; member_id: number }
   | { type: "QuotaChanged" }
@@ -699,8 +780,11 @@ export type MainEvent =
   | { type: "TrayOpen"; page: TrayPage; action?: TrayAction }
   /** A turn of the conversations was written or completed, in the thread of `member_id` (0: Raphael's; none from an older shell). */
   | { type: "AgentTurn"; turn_id: number; member_id?: number }
+  /** What a member is doing now, whichever conversation is open (`member.activity`). */
+  | { type: "MemberActivity"; member_id: number; state: "idle" | "thinking" | "working" | "searching" | "computer" | "waiting" | "blocked" | "done" | "error"; label?: string }
   | { type: "RoomsChanged"; room_id: number }
   | { type: "RoutinesChanged"; member_id: number }
+  | { type: "CalendarChanged" }
   | { type: "MembersChanged" }
   | { type: "ProvidersChanged" }
   | { type: "SettingsChanged" }
@@ -805,7 +889,9 @@ export interface Member {
   avatar_crop?: { x: number; y: number; zoom: number };
   /** Null: 未分組. */
   group_id: number | null;
-  /** "" is the model that answers for Raphael. */
+  /** The chief capability is independent of the member's identity. */
+  chief?: boolean;
+  /** "" inherits the global answer brain. */
   model: string;
   /** The tool and plugin ids it may use; null is every one that is on (the core's default). */
   tools: string[] | null;
@@ -813,7 +899,10 @@ export interface Member {
   /** When it was made, in ms. */
   created: number;
   unread: boolean;
+  unread_from?: number | null;
   waiting: boolean;
+  activity?: string;
+  activity_label?: string;
   preview: string;
   last_at: number | null;
 }
@@ -853,7 +942,7 @@ export interface TeamContextSnapshot {
 export type AppState = "ready" | "duplicate" | "disabled" | "no_tools" | "needs_sign_in" | "needs_secret" | "error" | "unchecked" | "unknown";
 
 /** One app of the owner's inventory: only its name, its state and how many of its tools can be called now. */
-export interface InventoryApp { id: string; name: string; enabled: boolean; state: AppState; tools: number; connected: boolean }
+export interface InventoryApp { id: string; name: string; enabled: boolean; state: AppState; tools: number; connected: boolean; aliases?: string[]; plugin?: string; last_used_at?: number }
 
 /** `integrations.inventory`: the owner's apps and how many are connected (`count` is null unless `state` is `complete`). */
 export interface AppsInventory { state: "complete" | "partial" | "unknown"; count: number | null; apps: InventoryApp[] }
@@ -861,6 +950,8 @@ export interface AppsInventory { state: "complete" | "partial" | "unknown"; coun
 /** What `members.create` takes (`ui_language` names the language of the routine it may offer). */
 export interface NewMember {
   name: string;
+  /** It speaks first in its own conversation, asking what it is for. */
+  greet?: boolean;
   role?: string;
   instructions?: string;
   personality?: string;
@@ -884,14 +975,6 @@ export interface NewMember {
  */
 export type MemberPatch = Partial<Pick<Member, "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "voice" | "read_aloud" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">>;
 
-/** An image of the presets folder (`members.presets`): its avatar value, its file stem, and the picture as a data URL. */
-export interface AvatarPreset {
-  /** What `members.update`/`members.create` take as the avatar: `preset:<stem>`. */
-  avatar: string;
-  name: string;
-  url: string;
-}
-
 /** The routine the core offers with a new member of a group with places to look (`members.create`, `routines.template`). */
 export interface RoutineOffer {
   title: string;
@@ -905,7 +988,8 @@ export type RoutineSchedule = (
   | { kind: "daily"; time: string }
   | { kind: "weekdays"; time: string }
   | { kind: "weekly"; days: number[]; time: string }
-  | { kind: "every"; hours: number; time?: string }
+  | { kind: "monthly"; day: number; time: string }
+  | { kind: "every"; hours?: number; minutes?: number; time?: string; from?: string; to?: string }
 ) & { start_date?: string; max_runs?: number; until?: string };
 
 export interface RoutineRun {
@@ -913,12 +997,14 @@ export interface RoutineRun {
   status: string; turn_id: number | null; summary: string; cost: number;
 }
 export interface Room {
+  preview?: string; preview_member_id?: number | null; last_at?: number | null; unread?: boolean; waiting?: boolean; pinned?: boolean; hidden?: boolean;
   id: number; name: string; group_id: number | null; created: number;
   is_team: number; member_ids: number[]; default_responder?: string;
   membership_state?: "ready" | "needs_adjustment";
   roles?: Record<string, string>;
 }
 export interface RoomMessage {
+  turn?: AgentTurn;
   id: number; room_id: number; member_id: number | null; text: string; created: number;
   request_id: string | null; reply_to: number | null; turn_id: number | null;
   reply_to_member?: number | null; origin_message_id?: number | null; kind?: "message" | "wrapup";
@@ -928,6 +1014,7 @@ export interface RoomMessage {
 }
 
 export interface HandoffView {
+  waiting_owner?: number;
   /** Null for a quick question (`ask_member`), which has no task: `work_turn_id` is its record. */
   task_id: number | null; source_turn_id: number; work_turn_id: number; member_id: number;
   member_name: string; from_member_id: number; stage_id: string; mode: "work" | "consult";
@@ -948,18 +1035,30 @@ export interface RoomExchange {
 }
 
 /** A routine of `routines.list`. Times are ms; null for never. */
+export type RoutineWhen = RoutineEventWhen | { webhook: true; app?: never; event?: never; filter?: never };
+export interface RoutineEventWhen {
+  webhook?: never;
+  app: string;
+  event: { tool: string; arguments: Record<string, unknown>; items: string; id: string; since?: { arg: string; format: "iso" } };
+  filter: { field: string; equals: string };
+}
+
 export interface Routine {
   id: number;
   member_id: number;
   title: string;
   prompt: string;
-  schedule: RoutineSchedule;
+  schedule: RoutineSchedule | null;
+  when?: RoutineWhen | null;
+  app_name?: string;
+  last_checked?: number | null;
+  last_error?: string;
   enabled: boolean;
   last_run: number | null;
   next_run: number | null;
 }
 
-export type HotkeyKind = "dictation_down" | "dictation_up" | "agent_down" | "agent_up" | "paste_last" | "cancel";
+export type HotkeyKind = "dictation_down" | "dictation_up" | "agent_down" | "agent_up" | "paste_last" | "cancel" | "cancel_key" | "cancel_reset";
 export type DictationPhase = "listening" | "processing" | "pasted" | "cancelled" | "failed";
 
 /** What `mic_access` answers: whether the privacy settings of Windows let desktop apps use the microphone. */
@@ -977,7 +1076,7 @@ export type TrayAction = "add-word";
 
 // ---------- what the pages share with main.ts ----------
 
-export type PageId = "home" | "agent" | "dictation" | "history" | "dictionary" | "settings" | "automations" | "team";
+export type PageId = "home" | "agent" | "dictation" | "history" | "dictionary" | "settings" | "automations";
 export type MainPageId = Exclude<PageId, "settings" | "history" | "dictionary">;
 export type DictationTab = "overview" | "history" | "dictionary";
 
@@ -989,6 +1088,13 @@ export type SettingsPane = "general" | "appearance" | "dictation" | "agent" | "c
  * 「試試看」 of a connected service (Settings › 連接) goes there with one of its example questions.
  */
 export type AgentDraft = `draft:${string}`;
+export type CalendarDate = `${number}-${number}-${number}`;
+export type CalendarEventFocus = `calendar:${CalendarDate}:${string}`;
+/** Calendar on that day, with the form of a new event open. */
+export type CalendarCreate = `calendar-new:${CalendarDate}`;
+/** Calendar on the week of that day, its usual view. */
+export type CalendarWeek = `calendar-week:${CalendarDate}`;
+export type PageArgument = SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}`;
 
 /** One of the five pages of the main window. */
 export interface Page {
@@ -998,7 +1104,7 @@ export interface Page {
    * The page comes on screen (or the window comes back): load what it shows. The settings open at
    * the tab given; the 拉斐爾 page may be given a draft for its composer.
    */
-  show(arg?: SettingsPane | AgentDraft): void | Promise<void>;
+  show(arg?: PageArgument): void | Promise<void>;
   /** The page goes off screen (or the window goes away): stop what runs for it. */
   hide(): void;
 }
@@ -1009,7 +1115,7 @@ export interface AppContext {
    * Goes to a page. The settings panel opens at `arg` if a tab is given (the key and the limit are in
    * "usage"); the 拉斐爾 page takes a draft for its composer (the settings close on the way).
    */
-  go(page: PageId, arg?: SettingsPane | AgentDraft): void;
+  go(page: PageId, arg?: PageArgument): void;
   /** Opens the history at one day, `2026-10-14`: its dictations only, with a way back to all of them. */
   showDay(date: string): void;
   /** The device settings as they are now. */
@@ -1086,11 +1192,15 @@ export interface ConnectionGroup {
 /** The words of the window, in each language the user can choose. */
 export type Words = Record<"zh-TW" | "en" | "ja", string>;
 
+/** What an app of the store asks of the owner before it can be added (`connectors/toolkits.py`). */
+export type AppNeeds = "sign_in" | "key" | "own_app";
+
 /** A service of the store (`integrations.catalog`). */
 export interface StoreService {
   source?: "composio";
   logo?: string;
-  can_connect?: boolean;
+  /** What adding it asks of the owner: only a sign-in (the default), their own API key, or a developer app of their own. */
+  needs?: AppNeeds;
   id: string;
   name: string;
   publisher: string;
@@ -1140,6 +1250,6 @@ export interface McpCandidate {
 export interface McpPreview { candidates: McpCandidate[]; rejected: number }
 export interface McpTest { ok: boolean; tools: string[]; error?: string }
 /** Member-owned resources; command templates expand only in the core. */
-export interface MemberSkill { id: number; name: string; description: string; enabled: boolean; source: string }
+export interface MemberSkill { id: number; name: string; description: string; enabled: boolean; source: string; plugin?: string; slash_name?: string; provenance?: "learned" | "imported" | "owner"; revision?: string; learned_at?: string | null; updated_at?: string | null }
 export interface MemberCommand { id: number; name: string; description: string; template: string }
 export interface MemberVoice { id: string; name: string }

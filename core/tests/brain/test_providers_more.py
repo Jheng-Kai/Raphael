@@ -144,7 +144,7 @@ def test_fallback_settings_roundtrip_and_validation(purpose):
 
 
 @pytest.mark.parametrize("status,explicit,expected", [(429, True, "answer"), (503, True, "answer"),
-    (401, True, "answer"), (401, False, "auth"), (400, True, "error"), (429, False, "rate_limit")])
+    (401, True, "answer"), (401, False, "auth"), (400, True, "unknown"), (429, False, "rate_limit")])
 async def test_router_fallback_policy_and_secret_free_logs(status, explicit, expected, caplog):
     conn, vault, requests = connect(":memory:"), {}, []
     settings = SettingsStore(conn)
@@ -159,8 +159,8 @@ async def test_router_fallback_policy_and_secret_free_logs(status, explicit, exp
         primary = (await registry.add({"kind": "openai", "key": "private-secret"}))["provider"]["id"]
         backup = (await registry.add({"kind": "groq", "key": "private-secret"}))["provider"]["id"]
         if explicit:
-            settings.set("agent_fallbacks", [f"@{backup}:backup"])
-        client = ProviderRouter(registry, registry.openrouter)
+            settings.set("cleanup_fallbacks", [f"@{backup}:backup"])
+        client = ProviderRouter(registry, registry.openrouter).for_purpose("cleanup")
         args = dict(model=f"@{primary}:primary", system="private-prompt", user="private-text", timeout_s=1, max_tokens=10)
         if expected == "answer":
             result = await client.chat_text(**args)
@@ -191,7 +191,7 @@ async def test_fallback_exhaustion_reports_last_error_kind():
         client = ProviderRouter(registry, registry.openrouter).for_purpose("cleanup")
         with pytest.raises(OpenRouterError) as error:
             await client.chat_text(model=f"@{primary}:primary", system="s", user="u", timeout_s=1, max_tokens=10)
-        assert error.value.kind == "error" and error.value.status == 504
+        assert error.value.kind == "server" and error.value.status == 504
         assert len(requests) == 2
         await registry.aclose()
     conn.close()
@@ -278,8 +278,8 @@ async def test_transport_failures_and_per_attempt_deadlines_try_the_configured_f
             credential=lambda pid: vault.setdefault(pid, MemoryKeyStore()), http=http)
         pid = (await registry.add({"kind": "openai", "key": "secret"}))["provider"]["id"]
         backup = (await registry.add({"kind": "groq", "key": "secret"}))["provider"]["id"]
-        SettingsStore(conn).set("agent_fallbacks", [f"@{backup}:backup"])
-        result = await ProviderRouter(registry, registry.openrouter).chat_text(model=f"@{pid}:primary", system="s", user="u", timeout_s=0.05, max_tokens=10)
+        SettingsStore(conn).set("cleanup_fallbacks", [f"@{backup}:backup"])
+        result = await ProviderRouter(registry, registry.openrouter).for_purpose("cleanup").chat_text(model=f"@{pid}:primary", system="s", user="u", timeout_s=0.05, max_tokens=10)
         assert result.text == "answer" and len(seen) == 2
         assert registry.view(pid)["status"] == "offline"
         await registry.aclose()
@@ -371,8 +371,14 @@ async def test_each_purpose_uses_only_its_ordered_chain(purpose):
             settings.set(purpose + "_model", f"@{pid}:override")
         client = ProviderRouter(registry, registry.openrouter).for_purpose(purpose)
         assert client.available(f"@{pid}:primary")
-        await client.chat_text(model=f"@{pid}:primary", system="s", user="u", timeout_s=1, max_tokens=10)
-        assert seen == ["override" if purpose in ("router", "pdf", "memory") else "primary", "backup"]
+        first = "override" if purpose in ("router", "pdf", "memory") else "primary"
+        if purpose in ("agent", "router"):
+            with pytest.raises(OpenRouterError):
+                await client.chat_text(model=f"@{pid}:primary", system="s", user="u", timeout_s=1, max_tokens=10)
+            assert seen == [first]  # Hidden legacy chains do not authorize conversation fallback.
+        else:
+            await client.chat_text(model=f"@{pid}:primary", system="s", user="u", timeout_s=1, max_tokens=10)
+            assert seen == [first, "backup"]
         await registry.aclose()
     conn.close()
 
@@ -460,7 +466,7 @@ async def test_explicitly_empty_fallback_setting_disables_legacy_openrouter_defa
         await registry.aclose()
     conn.close()
 
-async def test_router_purpose_configuration_bypasses_jev_and_reaches_its_fallback():
+async def test_router_purpose_configuration_bypasses_jev_with_its_chosen_model():
     from raphael_core.agent.routing import Router
     from raphael_core.agent.ledger import Ledger
     from raphael_core.brain.spend import SpendTracker
@@ -474,7 +480,7 @@ async def test_router_purpose_configuration_bypasses_jev_and_reaches_its_fallbac
         registry = ProviderRegistry(conn, OpenRouterClient(lambda: None, http=http), MemoryKeyStore(),
             credential=lambda pid: vault.setdefault(pid, MemoryKeyStore()), http=http)
         pid = (await registry.add({"kind": "groq", "key": "secret"}))["provider"]["id"]
-        SettingsStore(conn).set("router_fallbacks", [f"@{pid}:backup"])
+        SettingsStore(conn).set("router_model", f"@{pid}:chosen")
         router = Router(ProviderRouter(registry, registry.openrouter))
         decision = await router.classify("hello", "openai/gpt-6-luna", Ledger(SpendTracker(conn)))
         assert decision.route == "chat" and len(seen) == 1
@@ -548,8 +554,8 @@ async def test_explicit_fallback_can_pass_preflight_when_primary_vault_read_fail
         pid = (await registry.add({"kind": "openai", "key": "secret"}))["provider"]["id"]
         backup = (await registry.add({"kind": "groq", "key": "secret"}))["provider"]["id"]
         vault[pid] = BrokenCredential()
-        SettingsStore(conn).set("agent_fallbacks", [f"@{backup}:backup"])
-        client = ProviderRouter(registry, registry.openrouter)
+        SettingsStore(conn).set("cleanup_fallbacks", [f"@{backup}:backup"])
+        client = ProviderRouter(registry, registry.openrouter).for_purpose("cleanup")
         assert client.available(f"@{pid}:primary")
         result = await client.chat_text(model=f"@{pid}:primary", system="s", user="u", timeout_s=1, max_tokens=10)
         assert result.text == "answer" and result.model == f"@{backup}:backup"

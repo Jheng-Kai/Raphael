@@ -17,6 +17,7 @@ import httpx
 
 from ...protocol import INTERNAL_ERROR, INVALID_PARAMS, RpcError
 from ..catalog import CatalogEntry, ModelPrice
+from ..model_ref import split_api_ref
 from ..openrouter import OpenRouterError
 from ..secrets import KeyStore
 from ..settings import DEFAULTS, SettingsStore, api_model
@@ -26,6 +27,8 @@ from .clients import AnthropicProvider, CompatibleProvider, is_transcription, mo
 from .bedrock import BedrockProvider
 from .vertex import VertexProvider
 from .secrets import ProviderCredentialStore
+from .chatgpt import ChatGPTProvider
+from .chatgpt_auth import ChatGPTAuth
 
 CONFIG_KEY = "providers.config.v1"
 MODELS_KEY = "providers.models.v1"
@@ -65,6 +68,7 @@ class ProviderRegistry:
         self._models = self._load(MODELS_KEY, {})
         self._successful_models = self._load(SUCCESSES_KEY, {})
         self.settings = SettingsStore(conn)
+        self.chatgpt = ChatGPTProvider(ChatGPTAuth(conn, self._credential, http=self._http))
 
     def record_success(self, reference):
         """Remember only models that actually answered, never model-list discoveries."""
@@ -95,6 +99,8 @@ class ProviderRegistry:
                                    (key, json.dumps(value)))
 
     def config(self, pid):
+        if pid == "chatgpt":
+            return {"id": pid, "kind": pid, "name": "ChatGPT", "base_url": "https://api.openai.com/v1", "enabled": True}
         if pid == "openrouter":
             return {"id": pid, "kind": pid, "name": "OpenRouter", "base_url": BY_KIND[pid]["default_base_url"],
                     "enabled": True, **self._configs.get(pid, {})}
@@ -106,7 +112,8 @@ class ProviderRegistry:
         return self.keys if pid == "openrouter" else self._credential(pid)
 
     def ids(self):
-        return ["openrouter", *(pid for pid in self._configs if pid != "openrouter")]
+        chatgpt = ["chatgpt"] if self.chatgpt.auth._state().get("accounts") else []
+        return ["openrouter", *chatgpt, *(pid for pid in self._configs if pid not in ("openrouter", "chatgpt"))]
 
     def configured_fallbacks(self, purpose):
         """None preserves legacy defaults; an explicitly saved empty array disables them."""
@@ -136,6 +143,11 @@ class ProviderRegistry:
             return False
 
     def _has_credential(self, pid, config):
+        if pid == "chatgpt":
+            state = self.chatgpt.auth._state()
+            account_id = state.get("active", "")
+            tokens = self.chatgpt.auth._tokens(account_id) if account_id else {}
+            return bool(tokens.get("refresh_token")) and "chatgpt.tokens.use.direct" in tokens.get("scope", "").split()
         value = self._secret(pid).get()
         if config["kind"] == "bedrock":
             try:
@@ -152,6 +164,8 @@ class ProviderRegistry:
             raise OpenRouterError(0, "error", "Provider is disabled")
         if pid == "openrouter":
             return OpenRouterProvider(self.openrouter)
+        if pid == "chatgpt":
+            return self.chatgpt
         if pid not in self._clients:
             cls = {"anthropic": AnthropicProvider, "vertex": VertexProvider,
                    "bedrock": BedrockProvider}.get(config["kind"], CompatibleProvider)
@@ -174,6 +188,9 @@ class ProviderRegistry:
 
     def register(self, router):
         self._notify = router.notify
+        async def chatgpt_models(params):
+            return {"models": await self.discover("chatgpt")}
+        self.chatgpt.auth.register(router, chatgpt_models)
         handlers = {"kinds": self.kinds, "list": self.list, "add": self.add, "update": self.update,
                     "remove": self.remove, "test": self.test, "models": self.models}
         for name, handler in handlers.items():
@@ -278,6 +295,8 @@ class ProviderRegistry:
 
     async def update(self, params):
         pid = _text(params["id"])
+        if pid == "chatgpt":
+            raise ValueError("Use ChatGPT sign-in RPCs")
         config = self._checked(params, self.config(pid))
         await self._write(pid, config, params)
         return {"provider": self.view(pid)}
@@ -312,6 +331,8 @@ class ProviderRegistry:
 
     async def remove(self, params):
         pid = _text(params["id"])
+        if pid == "chatgpt":
+            raise ValueError("Use ChatGPT sign-out RPC")
         self.config(pid)
         secret, previous, old_models = self._secret(pid), dict(self._configs), dict(self._models)
         old_key = secret.get()
@@ -365,9 +386,28 @@ class ProviderRegistry:
         rows = await self.discover(pid)
         selected = {self.settings.get("agent_model"), *self.settings.get("agent_fallbacks")}
         selected.update(row[0] for row in self._conn.execute("SELECT model FROM members WHERE model != ''"))
-        local = BY_KIND[self.config(pid)["kind"]]["local_context_hint"]
+        local = BY_KIND.get(self.config(pid)["kind"], {}).get("local_context_hint", False)
         return {"models": [{**row, "context_warning": bool(local and row["context"] is not None
-                           and row["context"] < 65_536 and f"@{pid}:{row['id']}" in selected)} for row in rows]}
+                           and row["context"] < 65_536 and f"@{pid}:{row['id']}" in selected)} for row in rows if not row.get("generation_only")]}
+
+    def media_choices(self, kind):
+        choices = []
+        for pid in self.ids():
+            config = self.config(pid)
+            if config["kind"] not in ("openai", "xai", "openrouter", "google"):
+                continue
+            if kind == "video" and config["kind"] not in ("openai", "xai"):
+                continue
+            for row in self._models.get(pid, []):
+                reference = row["id"] if pid == "openrouter" else f"@{pid}:{row['id']}"
+                if kind in row.get("media", []) and self.available(reference):
+                    choices.append({**row, "reference": reference})
+        return choices
+
+    def remember_openrouter_media(self, rows):
+        metadata = [model_info(row, kind="openrouter") for row in rows]
+        self._models["openrouter"] = [row for row in metadata if row["media"]]
+        self._save()
 
     def catalog_entries(self):
         entries = []
@@ -375,7 +415,9 @@ class ProviderRegistry:
             if pid == "openrouter" or not self.config(pid)["enabled"]:
                 continue
             config = self.config(pid)
-            for row in self._models.get(pid, []):
+            for row in (self.chatgpt.auth.model_rows if pid == "chatgpt" else self._models.get(pid, [])):
+                if row.get("generation_only"):
+                    continue
                 caps = {"structured_output", "reasoning", "reasoning_off", "max_tokens"}
                 if row["tools"]:
                     caps.add("tool_calling")
@@ -384,7 +426,9 @@ class ProviderRegistry:
                 audio = is_transcription(config["kind"], row["id"])
                 entries.append(CatalogEntry(f"@{pid}:{row['id']}", "stt" if audio else "llm", row["name"], config["name"],
                     ModelPrice(input_per_mtok=row["price_in"], output_per_mtok=row["price_out"]), False,
-                    row["context"], None, frozenset() if audio else frozenset(caps)))
+                    row["context"], None, frozenset() if audio else frozenset(caps),
+                    reasoning_efforts=tuple(row.get("reasoning_efforts") or ()) or None if not audio else None,
+                    default_effort=row.get("default_effort")))
         return entries
 
     async def refresh_catalog(self):
@@ -394,7 +438,8 @@ class ProviderRegistry:
             except (OpenRouterError, TimeoutError):
                 pass  # A failed refresh keeps the last known metadata and never resets choices.
         await asyncio.gather(*(fetch(pid) for pid in self.ids()
-            if pid != "openrouter" and self.config(pid)["enabled"]))
+            if pid != "openrouter" and self.config(pid)["enabled"] and
+            (pid != "chatgpt" or self.available("@chatgpt:catalog"))))
 
     def record_result(self, pid, error=None):
         kind = getattr(error, "kind", None)
@@ -402,6 +447,7 @@ class ProviderRegistry:
                              "offline" if kind in ("offline", "network", "timeout") else "unknown")
 
     async def aclose(self):
+        await self.chatgpt.aclose()
         clients, self._clients = list(self._clients.values()), {}
         for client in clients:
             await client.aclose()
@@ -441,7 +487,11 @@ class ProviderRouter:
         return api_model(self.registry.settings, reference) if reference.startswith("cli:") else reference
 
     def available(self, model):
-        references = [self.model_for(model), *self.registry.settings.get(self.purpose + "_fallbacks")]
+        if self.model_for(model).startswith("@chatgpt:"):
+            # The provider reports missing sign-in/scope locally with the selected model's
+            # classified failure, rather than the legacy OpenRouter missing-key message.
+            return True
+        references = [self.model_for(model), *self.owner_fallbacks()]
         if self.purpose == "cleanup":
             fallback = self.cleanup_fallback(model)
             if fallback:
@@ -457,10 +507,24 @@ class ProviderRouter:
             raise OpenRouterError(0, "auth", "Could not read provider credential") from None
         return False
 
+    def missing(self, model):
+        from ...failures import Failure, Missing
+        reference = self.model_for(model)
+        pid = reference[1:].partition(":")[0] if reference.startswith("@") else "openrouter"
+        try:
+            config = self.registry.config(pid)
+            state = "off" if not config["enabled"] else "missing"
+        except ValueError:
+            state = "missing"
+        return Failure("auth_expired", "Selected provider unavailable", missing=Missing(pid, "provider", state, "models"))
+
+    def api_providers(self):
+        """The services a model reference may name for API work: all but those on this computer."""
+        return {pid for pid in self.registry.ids() if BY_KIND.get(self.registry.config(pid)["kind"], {}).get("group") != "local"}
+
     def cleanup_fallback(self, primary):
         """The mandatory cleanup retry follows the owner's provider preference order."""
-        api_providers = {pid for pid in self.registry.ids() if BY_KIND[self.registry.config(pid)["kind"]]["group"] != "local"}
-        candidates = [DEFAULTS["cleanup_model"], api_model(self.registry.settings, self.registry.settings.get("agent_model"), api_providers=api_providers),
+        candidates = [DEFAULTS["cleanup_model"], api_model(self.registry.settings, self.registry.settings.get("agent_model"), api_providers=self.api_providers()),
                       *self.registry.settings.get("cleanup_fallbacks")]
         for pid in self.registry.ids():
             models = self.registry._successful_models.get(pid, [])
@@ -482,28 +546,43 @@ class ProviderRouter:
         """Cleanup owns its two-attempt deadline; do not nest the generic fallback chain."""
         return await self._attempt("complete_json", kwargs)
 
+    def owner_fallbacks(self):
+        # Conversation fallback controls were removed. Hidden legacy settings do not
+        # authorize switching the owner's chosen conversation or routing model.
+        if self.purpose in ("agent", "router"):
+            return []
+        return self.registry.configured_fallbacks(self.purpose) or []
+
     async def _call(self, method, kwargs):
         reference = self.model_for(kwargs["model"])
         configured = self.registry.configured_fallbacks(self.purpose)
-        explicit = configured or []
-        # Legacy curated fallbacks stay within OpenRouter. Cross-provider attempts are
-        # possible only through the owner's ordered settings, never an implicit default.
+        explicit = self.owner_fallbacks()
+        # Only dictation cleanup retains its documented legacy retry behavior.
         implicit = [ref for ref in kwargs.get("fallbacks", []) if not ref.startswith("@")]
-        fallbacks = explicit if configured is not None else implicit if not reference.startswith("@") else []
+        fallbacks = explicit
+        if self.purpose == "cleanup" and configured is None and not reference.startswith("@"):
+            fallbacks = implicit
         chain = list(dict.fromkeys([reference, *fallbacks]))
-        timeout = kwargs["timeout_s"] / len(chain)
+        if reference.startswith("@chatgpt:"):
+            chain = [reference]
+        # Each selected model receives the complete caller budget, never a fraction
+        # determined by the number of possible alternatives.
+        timeout = kwargs["timeout_s"]
         for index, target in enumerate(chain):
             attempt = {**kwargs, "model": target, "timeout_s": timeout}
             try:
-                return await asyncio.wait_for(self._attempt(method, attempt), timeout)
+                # A conversation's call has no deadline of its own: its timeout is how long the connection may stay silent.
+                return await asyncio.wait_for(self._attempt(method, attempt), None if method == "chat_tools" else timeout)
             except TimeoutError:
                 error = OpenRouterError(0, "timeout", "Provider request timed out")
                 pid, _ = self.registry.resolve(target)
                 self.registry.record_result(pid, error)
             except OpenRouterError as caught:
                 error = caught
+            # A 429 that says one provider's quota is spent is still a reason to ask the next one.
             retryable = error.kind in ("offline", "network", "timeout", "rate_limit", "server") or (
-                error.kind == "error" and error.status >= 500)
+                error.kind == "error" and error.status >= 500) or (
+                error.kind in ("credits", "usage_limit") and error.status == 429)
             # An auth failure may cross a provider boundary only with an explicitly
             # listed fallback. Content refusals and malformed requests never retry.
             if index + 1 == len(chain) or not (retryable or (error.kind == "auth" and explicit)):
@@ -518,16 +597,23 @@ class ProviderRouter:
     async def _attempt(self, method, kwargs):
         reference = kwargs["model"]
         try:
+            reference, effort = split_api_ref(reference)
             pid, model = self.registry.resolve(reference)
             client = self.registry.client(pid)
         except ValueError:
             raise OpenRouterError(0, "error", "Unknown provider or invalid model reference") from None
         kwargs = {**kwargs, "model": model}
+        if effort is not None and method != "transcribe":
+            kwargs["reasoning_effort"] = effort
         if "fallbacks" in kwargs:
             kwargs["fallbacks"] = []
         try:
             result = await getattr(client, method)(**kwargs)
         except OpenRouterError as error:
+            from ...failures import Missing, classify
+            diagnostic = classify(error, record=False)
+            if diagnostic.kind in ("auth_expired", "chatgpt_scope", "chatgpt_plan_unavailable"):
+                error.diagnostic = replace(diagnostic, missing=Missing(pid, "provider", "broken", "models"))
             self.registry.record_result(pid, error)
             raise
         self.registry.record_result(pid)
@@ -561,7 +647,9 @@ class ProviderRouter:
         return await self.registry.client("openrouter").decide(**kwargs)
 
     async def models(self, timeout_s=5):
-        return await self.openrouter.models(timeout_s=timeout_s)
+        rows = await self.openrouter.models(timeout_s=timeout_s)
+        self.registry.remember_openrouter_media(rows)
+        return rows
 
     async def key_info(self, key=None, timeout_s=5):
         return await self.openrouter.key_info(key=key, timeout_s=timeout_s)

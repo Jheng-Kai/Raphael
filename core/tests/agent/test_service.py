@@ -21,6 +21,7 @@ from raphael_core.agent.history import AgentHistory
 from raphael_core.agent.policy import Tier
 from raphael_core.agent.routing import Router as Decider
 from raphael_core.agent.service import AgentService
+from raphael_core.failures import Failure
 from raphael_core.brain.openrouter import ChatTurn, OpenRouterError, TextCompletion
 from raphael_core.brain.secrets import MemoryKeyStore
 from raphael_core.brain.settings import SettingsStore
@@ -42,17 +43,21 @@ METHODS = [
     "agent.history.list",
     "agent.history.retract",
     "agent.history.search",
+    "agent.history.sent",
     "agent.history.stop",
     "agent.speak",
     "agent.speech.status",
     "brains.cli",
     "brains.cli_disconnect",
     "brains.cli_login",
+    "conversations.clear",
     "conversations.create",
     "conversations.delete",
     "conversations.list",
     "conversations.rename",
     "messages.search",
+    "pages.open",
+    "pages.tool_call",
     "quota.list",
     "usage.allowances",
 ]
@@ -307,6 +312,7 @@ async def test_a_command_is_done_at_once_and_answered_with_the_fixed_reply(rig, 
         ],
         "task": None,
         "messages": [],
+        "pages": [],
     }
 
 
@@ -349,7 +355,7 @@ async def test_a_command_whose_action_fails_is_said_to_have_failed(rig, client, 
     actions.fail["open_url"] = OSError("no browser: 秘密")
     client.decisions.append(decision("command", "open"))
     result = await rig.ask("打開 youtube.com")
-    assert (result["prefix"], result["text"]) == ("否", "執行失敗。")
+    assert (result["prefix"], result["text"]) == ("否", '這次工作缺少可確認的結果，請確認原操作是否已完成，並提供正確目標後再試。')
     assert (await rig.turns())[0]["status"] == "error"
 
 
@@ -425,7 +431,7 @@ async def test_a_page_that_did_not_open_is_not_learned(rig, client, actions):
     client.decisions.append(decision("command", "open"))
     client.replies.append(site("https://www.reddit.com/", "Reddit"))
     result = await rig.ask("open reddit", language="en")
-    assert (result["prefix"], result["text"]) == ("Negative", "Execution failed.")
+    assert (result["prefix"], result["text"]) == ("Negative", 'This task has no confirmed result. Check whether the original action completed and provide the correct target before retrying.')
     assert learned(rig) == []
 
 
@@ -512,7 +518,7 @@ async def test_an_app_the_model_names_that_is_not_in_the_list_is_not_started(rig
     client.decisions.append(decision("command", "open"))
     client.replies.append(completion({"kind": "app", "name": "cmd.exe", "url": ""}))
     result = await rig.ask("open the console", language="en")
-    assert (result["prefix"], result["text"]) == ("Negative", "Nothing to open was found by that name.")
+    assert (result["prefix"], result["text"]) == ("Negative", 'The item to open was not found. Provide the correct file or URL and try again.')
     assert did(actions) == []
 
 
@@ -569,7 +575,7 @@ async def test_a_name_that_is_nothing_is_said_so_and_nothing_is_opened(rig, clie
     client.decisions.append(decision("command", "open"))
     client.replies.append(completion({"kind": "none", "name": "", "url": ""}))
     result = await rig.ask("打開 qwertyuiop")
-    assert (result["prefix"], result["text"]) == ("否", "找不到可以開啟的項目。")
+    assert (result["prefix"], result["text"]) == ("否", '找不到可以開啟的項目，請提供正確的檔案或網址後再試。')
     assert did(actions) == []
     assert (await rig.turns())[0]["status"] == "done"
 
@@ -606,14 +612,14 @@ async def test_a_model_that_fails_to_find_it_is_a_failure_of_its_kind(rig, clien
     client.decisions.append(decision("command", "open"))
     client.replies.append(OpenRouterError(0, "network", "offline"))
     result = await rig.ask("open the thing", language="en")
-    assert (result["prefix"], result["text"]) == ("Negative", "The network is unreachable.")
+    assert (result["prefix"], result["text"]) == ("Negative", Failure("network", "").sentence("openai/gpt-6-luna", "en"))
     assert did(actions) == []
 
 
 async def test_without_a_key_a_name_nobody_knows_is_not_guessed(rig, client, actions):
     rig.keys.clear()
     result = await rig.ask("open lobsters", language="en")
-    assert (result["prefix"], result["text"]) == ("Negative", "Nothing to open was found by that name.")
+    assert (result["prefix"], result["text"]) == ("Negative", 'The item to open was not found. Provide the correct file or URL and try again.')
     assert client.calls == 0 and did(actions) == []
     assert (await rig.ask("open lobste.rs", language="en"))["prefix"] == "Understood"
     assert (await rig.ask("打開藍牙"))["prefix"] == "了"
@@ -833,20 +839,20 @@ async def test_an_answer_is_worded_in_the_ui_language(rig, client):
     assert "Reply ONLY in English" in client.json_calls[0]["system"]
 
 
-async def test_an_answer_is_given_the_last_six_turns_as_context(rig, client):
+async def test_an_answer_keeps_complete_history_below_half_window(rig, client):
     for n in range(8):
         rig.seed(f"question {n}", f"answer {n}")
     client.decisions.append(decision("answer"))
     client.replies.append(spoken())
     await rig.ask("那明天呢")
     user = client.json_calls[0]["user"]
-    assert "question 2" in user and "question 7" in user and "question 1" not in user
+    assert all(f"question {n}" in user for n in range(8))
 
 
 # --- discussion and small talk -----------------------------------------------------------------------
 
 
-async def test_a_quick_discussion_is_given_only_recent_turns_as_context(rig, client):
+async def test_a_quick_discussion_keeps_complete_history_below_half_window(rig, client):
     for n in range(32):
         rig.seed(f"question {n}", f"answer {n}")
     client.decisions.append(decision("discuss"))
@@ -856,9 +862,8 @@ async def test_a_quick_discussion_is_given_only_recent_turns_as_context(rig, cli
     call = client.json_calls[0]
     assert "think something through" in call["system"]
     user = call["user"]
-    # Quick questions keep only the last six turns, even for a discussion.
-    assert "question 26\n" in user and "question 31" in user and "question 25\n" not in user
-    assert user.index("question 26\n") < user.index("question 31")
+    assert all(f"question {n}\n" in user for n in range(32))
+    assert user.index("question 0\n") < user.index("question 31")
     assert client.text_calls == [] and rig.meteo.requests == []
     assert (await rig.turns())[0]["route"] == "discuss"
 
@@ -871,16 +876,20 @@ async def test_small_talk_is_a_short_reply_from_the_model(rig, client):
     assert "small talk" in client.json_calls[0]["system"]
 
 
-async def test_the_context_holds_only_what_was_answered(rig, client):
+async def test_the_context_holds_what_was_answered_and_what_did_not_finish(rig, client):
     rig.seed("kept", "kept answer")
-    rig.seed("refused", "no", status="denied")
-    rig.seed("failed", "no", status="error")
+    rig.seed("refused", "the stored no", status="denied")
+    rig.seed("failed", "the stored apology", status="error")
     rig.seed("waiting", "ask", status="confirm")
     client.decisions.append(decision("discuss"))
     client.replies.append(spoken())
     await rig.ask("continue")
     user = client.json_calls[0]["user"]
-    assert "kept" in user and "refused" not in user and "failed" not in user
+    assert "kept answer" in user
+    # A request that did not finish is part of the conversation, told as one that did not.
+    assert "owner: refused\n" in user and "owner: failed\n" in user
+    assert user.count("did not finish") == 2
+    assert "Raphael: the stored no" not in user and "Raphael: the stored apology" not in user
     assert "waiting" not in user
 
 
@@ -976,16 +985,19 @@ async def test_over_the_monthly_limit_answers_are_still_available(
 
 
 async def test_offline_the_commands_still_work_and_the_rest_is_refused_with_the_reason(
-    rig, client, actions
+    rig, client, actions, monkeypatch
 ):
+    async def no_wait(_):
+        pass
+    monkeypatch.setattr("raphael_core.agent.narration.asyncio.sleep", no_wait)
     network = OpenRouterError(0, "network", "offline")
     client.decisions.extend([network, network])
     client.replies.extend([network, network])
-    client.chats.append(network)
+    client.chats.extend([network] * 4)
     assert (await rig.ask("打開 youtube.com"))["prefix"] == "了"  # by the list of words
     assert did(actions) == [("open_url", "https://youtube.com/")]
     result = await rig.ask("台北天氣如何")
-    assert (result["prefix"], result["text"]) == ("否", "無法連線至網路。")
+    assert (result["prefix"], result["text"]) == ("否", Failure("network", "").sentence("openai/gpt-6-luna", "zh-TW"))
 
 
 async def test_a_request_the_list_of_words_cannot_find_is_not_guessed_at(rig, client, actions):
@@ -1010,7 +1022,7 @@ async def test_a_key_openrouter_refuses_is_still_auth_after_the_harness_attempt(
     client.decisions.append(OpenRouterError(401, "auth", "bad key"))
     client.chats.append(OpenRouterError(401, "auth", "bad key"))
     result = await rig.ask("你好")
-    assert result["text"] == "OpenRouter 金鑰無法使用。" and client.json_calls == []
+    assert result["text"] == Failure("auth_expired", "").sentence("openai/gpt-6-luna", "zh-TW") and client.json_calls == []
 
 
 async def test_a_model_that_fails_after_jev_decided_is_a_failure_but_jev_is_paid_for(
@@ -1019,7 +1031,7 @@ async def test_a_model_that_fails_after_jev_decided_is_a_failure_but_jev_is_paid
     client.decisions.append(decision("answer", cost=0.00004))
     client.replies.append(OpenRouterError(0, "timeout", "slow"))
     result = await rig.ask("什麼是量子糾纏")
-    assert (result["prefix"], result["text"]) == ("否", "回應時間過長，請再試一次。")
+    assert (result["prefix"], result["text"]) == ("否", Failure("timeout", "").sentence("openai/gpt-6-luna", "zh-TW"))
     (turn,) = await rig.turns()
     assert turn["status"] == "error" and turn["route"] == "answer"
     assert rig.spent() == [("agent", "typesafe/jev-1.14", 0.00004)]
@@ -1058,7 +1070,7 @@ async def test_a_copy_that_fails_is_said_to_have_failed(rig, client, actions):
     actions.fail["copy_to_clipboard"] = OSError("the clipboard is busy")
     client.decisions.append(decision("command", "copy_text"))
     result = await rig.ask("copy")
-    assert (result["prefix"], result["text"]) == ("否", "執行失敗。")
+    assert (result["prefix"], result["text"]) == ("否", '這次工作缺少可確認的結果，請確認原操作是否已完成，並提供正確目標後再試。')
     assert (await rig.turns())[0]["status"] == "error"
 
 
@@ -1245,7 +1257,7 @@ async def test_cancelling_the_session_denies_its_question_and_a_late_yes_does_no
     rig.seed("q", "a")
     asked = await ask_to_copy(rig, client)
     assert await rig.call("agent.cancel", {"session_id": "s1"}) == {}
-    assert (await rig.turns())[0]["status"] == "denied"
+    assert (await rig.turns())[0]["status"] == "cancelled"
     late = await rig.confirm(asked["confirm"]["id"], True)
     assert late["prefix"] == "否" and actions.calls == []
 
@@ -1265,7 +1277,7 @@ async def test_a_new_request_replaces_a_question_that_waits(rig, client, actions
     await rig.ask("你好", session="s2")
     late = await rig.confirm(asked["confirm"]["id"], True)
     assert late["prefix"] == "否" and actions.calls == []
-    assert any(t["status"] == "denied" for t in await rig.turns())
+    assert any(t["status"] == "cancelled" for t in await rig.turns())
 
 
 async def test_a_question_that_ran_out_before_a_new_request_is_expired_not_denied(
@@ -1315,7 +1327,7 @@ async def test_a_copy_that_fails_after_the_yes_is_said_to_have_failed(rig, clien
     actions.fail["copy_to_clipboard"] = OSError("the clipboard is busy")
     asked = await ask_to_copy(rig, client)
     done = await rig.confirm(asked["confirm"]["id"], True)
-    assert (done["prefix"], done["text"]) == ("否", "執行失敗。")
+    assert (done["prefix"], done["text"]) == ("否", '這次工作缺少可確認的結果，請確認原操作是否已完成，並提供正確目標後再試。')
     assert (await rig.turns())[0]["status"] == "error"
 
 
@@ -1418,21 +1430,28 @@ async def test_cancelling_the_handler_itself_is_not_mistaken_for_a_cancel_reques
         await asking
 
 
-async def test_a_second_request_of_a_session_replaces_the_first_that_is_still_going(
+async def test_a_request_before_the_loop_exists_waits_without_cancelling_the_first(
     make_rig, client, actions
 ):
     rig = make_rig(decider=Decider(client, jev_total_s=10.0, jev_first_s=10.0))
 
-    async def hang(**kwargs):
-        await asyncio.sleep(30)
+    release = asyncio.Event()
 
-    client.decisions.extend([hang, decision("command", "lock_screen")])
+    async def route(**kwargs):
+        await release.wait()
+        return decision("command", "lock_screen")
+
+    client.decisions.extend([route, decision("command", "lock_screen")])
     first = asyncio.ensure_future(rig.ask("鎖定螢幕"))
     await until(lambda: client.decide_calls)
-    second = await rig.ask("鎖定螢幕")
+    waiting = asyncio.create_task(rig.ask("鎖定螢幕"))
+    await asyncio.sleep(0)
+    assert not first.done() and not waiting.done()
+    release.set()
+    second = await waiting
     assert second["prefix"] == "了"
-    assert (await asyncio.wait_for(first, 2))["turn_id"] == 0
-    assert actions.calls == [("lock_screen",)]  # once
+    assert (await asyncio.wait_for(first, 2))["turn_id"] > 0
+    assert actions.calls == [("lock_screen",), ("lock_screen",)]
 
 
 async def test_a_long_question_is_taken_whole(rig, client):
@@ -1457,8 +1476,42 @@ async def test_the_history_lists_the_newest_turn_first_with_the_fields_the_app_r
     assert set(turns[0]) == {
         "id", "created_at_ms", "question", "route", "prefix", "text", "detail", "status",
         "session_id", "source", "cost_usd", "model", "attachments", "steps", "task", "member_id",
-        "peer_id", "messages", "conversation_id", "scope", "room_id", "thread_id",
+        "peer_id", "messages", "conversation_id", "scope", "room_id", "thread_id", "pages",
     }  # fmt: skip
+
+
+@pytest.mark.parametrize("when", [{"webhook":True}, {"app":"sample","event":{"tool":"mcp:sample/read","arguments":{},"items":"items","id":"id"},"filter":{"field":"label","equals":"review"}}])
+async def test_routine_history_exposes_the_trigger_without_secret_or_prompt(rig, when):
+    import json
+    from raphael_core.members.store import MemberStore
+    routine = MemberStore(rig.conn).create_routine(member_id=0,title="Sample",prompt="Private instructions",schedule={"kind":"daily","time":"09:00"},next_run_ms=1)
+    turn = rig.history.add(session_id="sample-routine",question="Sample",route="routine",prefix="",text="Sample report",status="error",source="routine")
+    snapshot = {"id":routine.id,"schedule":None,"when":when,"app_name":"Sample"}
+    with rig.conn:
+        rig.conn.execute("INSERT INTO routine_runs(routine_id,started,status,turn_id,trigger_json) VALUES(?,1,'error',?,?)", (routine.id,turn,json.dumps(snapshot)))
+    views = await rig.turns()
+    assert views[0]["routine"] == snapshot
+    assert "Private instructions" not in json.dumps(views)
+
+
+@pytest.mark.parametrize("mirrored", [True, False])
+async def test_routine_history_shows_a_mirrored_worker_step_once(rig, monkeypatch, mirrored):
+    from raphael_core.agent.steps import step_view
+    from raphael_core.background.tasks import TaskStore
+    turn = rig.history.add(session_id="sample-routine", question="Sample routine", route="routine",
+                           prefix="", text="Sample report", status="error", source="routine")
+    store = TaskStore(rig.conn)
+    task = store.create(session_id="sample-routine", language="en", text="Check sample")
+    store.attach_turn(task, turn)
+    store.add_step(task, kind="tool", tool="local_exec", outcome="timeout", reason="timeout")
+    if not mirrored:
+        with rig.conn:
+            rig.conn.execute("DELETE FROM agent_steps WHERE turn_id=?", (turn,))
+    monkeypatch.setattr(rig.service._background, "tasks_for_turns", lambda ids: {
+        turn: ({"id": task, "state": "error"}, [step_view(step) for step in store.steps(task)])})
+    [view] = await rig.turns()
+    [step] = view["steps"]
+    assert step["tool"] == "local_exec" and step["reason"] == "timeout"
 
 
 async def test_the_history_pages_by_limit_and_before_id(rig):
@@ -1653,6 +1706,18 @@ async def test_a_message_from_a_messaging_app_leaves_the_question_at_the_compute
     assert not any(t["status"] == "denied" for t in await rig.turns())
 
 
+async def test_a_message_from_a_messaging_app_ends_its_own_chats_waiting_question(rig, client, actions):
+    from raphael_core.agent.policy import Action
+    own = rig.service._confirmations.open("telegram:42", 0, Action("sample_tool"), Tier.T2, "zh-TW")
+    client.decisions.append(decision("chat"))
+    client.replies.append(spoken("答", "好。"))
+    await rig.call(
+        "agent.ask",
+        {"session_id": "telegram:42", "text": "你好", "ui_language": "zh-TW", "source": "telegram"},
+    )
+    assert own.id not in rig.service._confirmations._pending
+
+
 async def test_a_question_typed_in_a_formal_thread_leaves_the_quick_one_waiting(
     rig, client, actions
 ):
@@ -1676,7 +1741,7 @@ async def test_stopping_a_session_ends_its_request_and_denies_its_question_only(
     asked = await ask_to_copy(rig, client)
     assert rig.service.stop_session("telegram:42") is False
     assert rig.service.stop_session("s1") is True
-    assert (await rig.turns())[0]["status"] == "denied"
+    assert (await rig.turns())[0]["status"] == "cancelled"
     assert (await rig.confirm(asked["confirm"]["id"], True))["prefix"] == "否"
     # unlike Esc, it leaves no memory that would cancel the session's next request
     client.decisions.append(decision("chat"))

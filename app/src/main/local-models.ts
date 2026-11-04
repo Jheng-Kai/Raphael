@@ -11,7 +11,7 @@
 import { GB, MB } from "./format";
 import { t } from "./i18n";
 import type { LocalModel } from "./types";
-import { CHECK, actionRow, btn, esc, ico } from "./ui";
+import { CHECK, actionRow, btn, esc, iconButton } from "./ui";
 
 /** What the local tab is drawn from. */
 export interface LocalView {
@@ -150,8 +150,7 @@ function rowHTML(model: LocalModel, view: LocalView, confirm: LocalConfirm | nul
   } else if (!model.ready && !busy && !selectionOnly) {
     action = btn(esc(t("local.download")), "sm", ` data-act="download" data-name="${esc(model.name)}" aria-label="${esc(t("local.downloadLabel", { p0: model.title, p1: size }))}"`);
   } else if (model.ready && state.kind !== "active" && !busy) {
-    const text = t("local.deleteLabel", { p0: model.title });
-    action = `<button type="button" class="lm-del danger" data-act="delete" data-name="${esc(model.name)}" aria-label="${esc(text)}" title="${esc(text)}">${ico("trash")}</button>`;
+    action = iconButton("more", t("members.more", { p0: model.title }), ` data-act="local-menu" data-name="${esc(model.name)}" data-title="${esc(model.title)}" aria-haspopup="menu" aria-expanded="false"`);
   }
   return `${open}${main}${action}</div>`;
 }
@@ -159,6 +158,6 @@ function rowHTML(model: LocalModel, view: LocalView, confirm: LocalConfirm | nul
 /** The rows of the local tab, with the question being asked in one of them. */
 export function localListHTML(view: LocalView, confirm: LocalConfirm | null, selectionOnly = false): string {
   if (view.models === "loading") return `<p class="mp-empty" role="status">${esc(t("common.loading"))}</p>`;
-  if (view.models === "failed") return `<p class="mp-empty" role="status">${esc(t("local.unavailable"))}</p>`;
+  if (view.models === "failed" || Array.isArray(view.models) && !view.models.length) return `<p class="mp-empty" role="status">${esc(t("local.unavailable"))}</p>`;
   return view.models.map((model) => rowHTML(model, view, confirm, selectionOnly)).join("");
 }

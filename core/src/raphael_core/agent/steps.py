@@ -17,7 +17,11 @@ plugins' (`integrations.client.KINDS`), the lookups' (`tools.ToolResult.error`) 
 (`failure.KINDS`) are folded into the few reasons below.
 """
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from ..failures import KINDS, missing_for
+
+SERVICE_REASONS = frozenset(("provider_missing", "provider_broken", "provider_off", "chatgpt_scope", "chatgpt_plan_unavailable", "disabled", "unavailable", "not_configured", "vision_unsupported", "encrypted", "bad_pdf", "no_text", "bad_url", "blocked_address", "redirects", "unsupported_type", "too_large"))
 
 # bad_arguments: the tool was given something it does not take. auth: it needs a new sign-in.
 # missing_secret: a key or token it needs is not set. denied: the sign-in was refused. timeout:
@@ -31,7 +35,7 @@ from dataclasses import dataclass
 # sign-in, a payment, an administrator's prompt); refused_app: an app Raphael never operates;
 # interrupted: the owner's own mouse or keys stopped the run. forbidden: a safety rule of the
 # owner's (`agent.safety`) forbids it, so it was not done. error: anything else.
-REASONS = frozenset(
+REASONS = KINDS | SERVICE_REASONS | frozenset(
     {
         "bad_arguments",
         "auth",
@@ -41,6 +45,10 @@ REASONS = frozenset(
         "network",
         "not_found",
         "blocked",
+        "approval_required",
+        "memory_refused",
+        "secret_store",
+        "url_not_seen",
         "gone",
         "tool_error",
         "protocol",
@@ -62,29 +70,13 @@ REASONS = frozenset(
 _ALIASES = {
     "offline": "network",
     "http_error": "network",
-    "server": "network",
-    "rate_limit": "network",
     "bad_response": "protocol",
     "changed": "blocked",
-    "disabled": "blocked",  # the owner turned the capability off (Settings › 服務)
     "stale": "not_found",
     "elevated": "handoff",
     "own_window": "blocked",
     "keys_not_allowed": "blocked",
-    "unavailable": "network",
     "failed": "error",
-    # The services' kinds (raphael_core.services.common.ServiceError).
-    "blocked_address": "blocked",
-    "url_not_seen": "blocked",
-    "bad_url": "bad_arguments",
-    "redirects": "network",
-    "too_large": "error",
-    "unsupported_type": "error",
-    "not_configured": "missing_secret",
-    "vision_unsupported": "error",
-    "bad_pdf": "error",
-    "encrypted": "error",
-    "no_text": "not_found",
 }
 
 # The reason of a step that failed with no kind, by how it ended.
@@ -96,6 +88,8 @@ def reason_of(outcome: str, kind: str | None) -> str | None:
     "cancelled") because of `kind`; None for a step that went well."""
     if outcome == "ok":
         return None
+    if kind in KINDS or kind in SERVICE_REASONS:
+        return kind
     if kind:
         kind = _ALIASES.get(kind, kind)
         if kind in REASONS:
@@ -119,3 +113,81 @@ class Step:
     reason: str | None = None
     at_ms: int = 0
     detail: str | None = None  # the service the step used (see the module), or None
+
+
+def step_view(step: Step) -> dict:
+    return {
+        "kind": step.kind,
+        "tool": step.tool,
+        "server": step.server,
+        "outcome": step.outcome,
+        "ms": step.ms,
+        "reason": step.reason,
+        "at_ms": step.at_ms,
+        "detail": step.detail,
+        **({"missing": missing.wire()} if (missing := missing_for(step.reason, "computer" if step.server == "computer" else step.tool, step.detail)) else {}),
+    }
+
+
+# A call that failed for one of these reasons was refused before it did anything, or by the tool
+# itself; any other failure came after the call was sent, so it may have been made.
+REFUSED_REASONS = frozenset(
+    {"tool_error", "auth", "bad_arguments", "blocked", "missing_secret", "not_found", "denied",
+     "not_configured", "disabled", "unavailable", "vision_unsupported", "auth_expired", "permission_denied",
+     "provider_missing", "provider_broken", "provider_off", "chatgpt_scope", "chatgpt_plan_unavailable"}
+)
+# The most tools `work_summary` names (the rest are counted), the longest name and server it shows, and
+# the most characters it takes.
+WORK_NAMED = 6
+WORK_NAME_CHARS = 32
+WORK_SERVER_CHARS = 16
+WORK_CHARS = 560
+
+
+def _plain(value: str, limit: int) -> str:
+    """`value` on one line, cut to `limit`: a name a server chose is data, never a line of its own."""
+    return " ".join(value.split())[:limit]
+
+
+def work_summary(steps: Sequence[Step], changes: Callable[[Step], bool]) -> str:
+    """What the steps of a turn that did not finish already did, as a line for the model that is
+    asked to go on or try again: the tools that changed something and ended ok, by name and how many
+    times, the calls that change things and did not end cleanly (they may have taken effect), and how
+    many calls only read. `changes` says whether a step changed something (`ToolGate.step_changes`).
+    Never an argument or a result: the steps keep none. At most WORK_CHARS."""
+    steps = [step for step in steps if step.kind != "model"]
+    if not steps:
+        return "No tool calls were recorded."
+    done: dict[tuple[str, str | None], int] = {}
+    unsure = reads = 0
+    for step in steps:
+        if not changes(step):
+            reads += step.outcome == "ok"
+        elif step.outcome == "ok":
+            key = (step.tool, step.server)
+            done[key] = done.get(key, 0) + 1
+        elif step.outcome != "blocked" and step.reason not in REFUSED_REASONS:
+            unsure += 1
+    named = sorted(done.items(), key=lambda item: -item[1])
+    shown = [
+        _plain(tool, WORK_NAME_CHARS)
+        + (f" ({_plain(server, WORK_SERVER_CHARS)})" if server else "")
+        + (f" x{count}" if count > 1 else "")
+        for (tool, server), count in named[:WORK_NAMED]
+    ]
+    if len(named) > WORK_NAMED:
+        shown.append(f"and {len(named) - WORK_NAMED} more")
+    parts = ["It had changed: " + ", ".join(shown)] if done else [
+        "It changed nothing for certain" if unsure else "It changed nothing"
+    ]
+    if unsure:
+        parts.append(
+            f"{unsure}{' more' if done else ''} {'call that changes' if unsure == 1 else 'calls that change'} "
+            "things did not end cleanly and may have taken effect"
+        )
+    if reads:
+        parts.append(f"{reads} {'call' if reads == 1 else 'calls'} only read")
+    text = "; ".join(parts) + "."
+    if done or unsure:
+        text += " Changes already made should not be made twice."
+    return text if len(text) <= WORK_CHARS else text[: WORK_CHARS - 1].rstrip() + "…"

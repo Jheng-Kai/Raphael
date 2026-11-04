@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { catalogs, getLocale, onLocaleChange, setLocale, t, translatedMessage } from "./index";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -10,6 +10,18 @@ import { languagePanelHTML } from "../languages";
 import { describeError } from "../format";
 
 afterEach(() => setLocale("zh-TW"));
+
+test("one failed locale listener cannot interrupt later surfaces or reject the setting", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const stopBroken = onLocaleChange(() => { throw new Error("broken surface"); });
+  const seen: string[] = [];
+  const stopHealthy = onLocaleChange(() => seen.push(t("nav.settings")));
+  try {
+    expect(() => setLocale("en")).not.toThrow();
+    expect(seen).toEqual([catalogs.en["nav.settings"]]);
+    expect(warn).toHaveBeenCalledOnce();
+  } finally { stopBroken(); stopHealthy(); warn.mockRestore(); }
+});
 
 const CJK = /[\u3400-\u9fff\u3040-\u30ff]/;
 
@@ -32,6 +44,14 @@ function cjkLiterals(files: string[]): string[] {
 }
 
 describe("main window translations", () => {
+  test("catalogues reject replacement characters and repeated question marks from damaged encoding", () => {
+    for (const [locale, messages] of Object.entries(catalogs)) {
+      for (const [key, value] of Object.entries(messages)) {
+        expect(value, `${locale}:${key}`).not.toMatch(/\uFFFD|\?{2,}/);
+      }
+    }
+  });
+
   test("all locales have exactly the same keys and interpolation parameters", () => {
     const keys = Object.keys(catalogs["zh-TW"]).sort();
     for (const messages of Object.values(catalogs)) {
@@ -139,12 +159,12 @@ describe("main window translations", () => {
     }
   });
 
-  test("every key of the catalogue is used by the main window's source", () => {
+  test("every key of the catalogue is used by the main window or overlay source", () => {
     // A key built at run time comes from a table of literal keys (VARIANT_NAMES, the `exact` list of
     // backend.ts, ...), so each key in use is written out as a string somewhere.
     const root = path.resolve(import.meta.dirname, "..");
-    const catalogues = new Set(["zh-TW.ts", "en.ts", "ja.ts"]);
-    const files = [root, path.join(root, "pages"), path.join(root, "onboarding"), path.join(root, "i18n")].flatMap((dir) =>
+    const catalogues = new Set(["zh-TW.ts", "en.ts", "ja.ts", "missing-catalogs.ts"]);
+    const files = [root, path.join(root, "pages"), path.join(root, "onboarding"), path.join(root, "i18n"), path.join(root, "..", "overlay")].flatMap((dir) =>
       readdirSync(dir)
         .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && !(dir.endsWith("i18n") && catalogues.has(f)))
         .map((f) => path.join(dir, f)),

@@ -21,6 +21,31 @@ async def test_the_telegram_methods_are_registered(app):
     assert (await app.call("messaging.telegram.status", {}))["connected"] is False
 
 
+@pytest.mark.parametrize("background", [False, True])
+async def test_telegram_receives_readable_forms_from_conversation_and_background(app, monkeypatch, background):
+    source = '```chart\n{"type":"line","title":"Visitors","units":"people","labels":["Mon"],"series":[{"name":"Visits","values":[3]}]}\n```'
+    if background:
+        sent = []
+
+        async def report(session, text):
+            sent.append(text)
+
+        monkeypatch.setattr(app.messaging, "report", report)
+        task_id = app.background._store.create(session_id="telegram:42", language="en", text="report")
+        app.background._store.finish(task_id, "done", prefix="", text=source, detail=None, reason=None)
+        app._worker_notice("worker.report", {"task_id": task_id})
+        await asyncio.sleep(0)
+        [text] = sent
+    else:
+        async def call(method, params=None):
+            return {"status": "done", "prefix": "", "text": source}
+
+        monkeypatch.setattr(app, "call", call)
+        result = await app._ask_from_messaging("telegram:42", "report", "en", "telegram")
+        text = result.text
+    assert text == "Visitors\nMon: Visits 3 people"
+
+
 async def test_a_message_is_asked_like_a_spoken_question_and_lands_in_the_history(app):
     text = await app._ask_from_messaging("telegram:42", "你好", "zh-TW", "telegram")
     assert text.strip()
@@ -30,7 +55,8 @@ async def test_a_message_is_asked_like_a_spoken_question_and_lands_in_the_histor
     assert turns[0]["source"] == "telegram"
 
 
-async def test_a_question_that_needs_a_yes_is_refused_not_left_open(app, monkeypatch):
+@pytest.mark.parametrize("kind", ["telegram", "slack", "discord"])
+async def test_a_question_that_needs_a_yes_is_refused_not_left_open(app, monkeypatch, kind):
     calls = []
     real = app.call
 
@@ -45,7 +71,7 @@ async def test_a_question_that_needs_a_yes_is_refused_not_left_open(app, monkeyp
         return await real(method, params)
 
     monkeypatch.setattr(app, "call", call)
-    text = await app._ask_from_messaging("telegram:42", "open it", "en", "telegram")
+    text = await app._ask_from_messaging(f"{kind}:42", "open it", "en", kind)
     assert "confirmation" in text.lower()
     assert calls == ["agent.ask", "agent.confirm"]
 
@@ -129,7 +155,8 @@ async def test_stop_from_a_chat_stops_that_chats_tasks_and_turn_only(app, monkey
     assert stopped == [("agent", "telegram:42"), ("worker", "telegram:42")]
 
 
-async def test_a_voice_message_is_heard_with_the_dictation_engine_and_normalized(app, monkeypatch):
+@pytest.mark.parametrize("room", [False, True])
+async def test_a_voice_message_is_heard_with_the_dictation_engine_and_normalized(app, monkeypatch, room):
     import numpy as np
 
     from raphael_core.messaging import voice
@@ -156,6 +183,17 @@ async def test_a_voice_message_is_heard_with_the_dictation_engine_and_normalized
     app._kit = __import__("concurrent.futures").futures.Future()
     app._kit.set_result(SimpleNamespace(Segmenter=Segmenter))
     await app.call("dictionary.add", {"word": "Raphael"})
-    text = await app._transcribe_from_messaging(b"opus", "en")
+    calls = []
+    original = app.call
+
+    async def call(method, params):
+        calls.append((method, params))
+        return await original(method, params)
+
+    monkeypatch.setattr(app, "call", call)
+    text = await (app._transcribe_room(b"opus", "en") if room else app._transcribe_from_messaging(b"opus", "en"))
     assert text == "你好"
     assert heard == [(1600, ["Raphael"])]
+    if room:
+        assert any(method == "brain.finalize_dictation" and params["purpose"] == "agent" for method, params in calls)
+        assert (await app.call("history.list", {}))["items"] == []

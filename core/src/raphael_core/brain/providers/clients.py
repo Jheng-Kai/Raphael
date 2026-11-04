@@ -12,8 +12,16 @@ from urllib.parse import quote, unquote, urlsplit
 
 import httpx
 
-from ..openrouter import OpenRouterClient, OpenRouterError, Transcription, _Reply
+from ..openrouter import OpenRouterClient, OpenRouterError, Transcription, _Reply, exchange, retry_after_of
+from ..streams import MalformedStream
 from .presets import OPTIONAL_KEY_KINDS
+
+# The kinds whose chat completions stream the OpenAI way and take `stream_options`, so that a streamed reply still says
+# what it used. The others are asked for the whole reply: a field a server does not know is refused by some (Mistral's
+# is a 422), and none of them has been tried streaming.
+STREAMING_KINDS = frozenset((
+    "openai", "azure_openai", "groq", "deepseek", "xai", "ollama", "lmstudio", "vllm", "sglang", "llamacpp",
+    "openai_compatible", "litellm", "bifrost"))
 
 
 def validate_base_url(value: str) -> str:
@@ -64,6 +72,14 @@ def _refused_error(data):
         error[field] in markers for field in ("type", "code"))
 
 
+def chosen_efforts(kind, model_id):
+    """The depths a request to this model really carries (`_request` and the Anthropic body); the other kinds drop the field."""
+    reasons = (kind == "anthropic" and model_id.startswith("claude")
+        or kind in ("openai", "azure_openai") and model_id.startswith(("gpt-5", "gpt-6", "o1", "o3", "o4"))
+        or kind == "google" and model_id.startswith(("gemini-2.5-", "gemini-3")))
+    return ["low", "medium", "high"] if reasons else []
+
+
 def is_transcription(kind, model_id):
     return kind in ("openai", "groq") and (model_id.startswith("whisper") or "transcribe" in model_id)
 
@@ -95,15 +111,38 @@ def model_info(raw: dict, *, kind: str) -> dict:
         except (KeyError, TypeError, ValueError, OverflowError):
             return None
     name = raw.get("display_name") or raw.get("displayName") or raw.get("name")
+    outputs = arch.get("output_modalities", raw.get("output_modalities", []))
+    outputs = outputs if isinstance(outputs, list) else []
+    media = [value for value in ("image", "video") if isinstance(outputs, list) and value in outputs]
+    # These endpoint families have a published media contract; discovery still supplies the model id.
+    if kind in ("openai", "xai") and model_id.startswith(("gpt-image-", "dall-e-", "grok-imagine-image")):
+        media = ["image"]
+    if kind in ("openai", "xai") and model_id.startswith(("sora-", "grok-imagine-video")):
+        media = ["video"]
+    if kind == "google" and model_id.startswith("gemini-") and "image" in model_id:
+        media = ["image"]
     return {
         "id": model_id, "name": name if isinstance(name, str) else model_id,
+        "reasoning_efforts": chosen_efforts(kind, model_id),
         "context": next((value for field in ("context_length", "inputTokenLimit", "max_model_len")
                          if (value := token_count(raw.get(field))) and value > 0), None),
         "vision": "image" in inputs or raw.get("vision") is True or vision,
         "tools": "tools" in params or raw.get("tools") is True or official_chat,
         "audio_in": "audio" in inputs or raw.get("audio_in") is True or is_transcription(kind, model_id),
         "price_in": price("prompt"), "price_out": price("completion"),
+        "image_output_per_mtok": price("image_output"),
+        "per_image": _unit_price(pricing.get("per_image")),
+        "per_request": _unit_price(pricing.get("request")),
+        "media": media, "image_input": "image" in inputs or bool(media and model_id.startswith(("gpt-image-", "grok-imagine-image", "gemini-"))),
+        "generation_only": bool(media and "text" not in outputs),
     }
+
+
+def _unit_price(value):
+    try:
+        return amount(float(value)) if not isinstance(value, bool) else None
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
 class CompatibleProvider(OpenRouterClient):
@@ -146,43 +185,53 @@ class CompatibleProvider(OpenRouterClient):
             headers = {"x-goog-api-key": key}
         return headers
 
-    async def _send(self, method, path, timeout_s, *, body=None, data=None, files=None, params=None):
+    async def _send(self, method, path, timeout_s, *, body=None, data=None, files=None, params=None, stream=False):
         headers = self._headers()
         started = time.perf_counter()
         try:
-            response = await self._client().request(method, self.base_url + path,
+            response, decoded = await exchange(self._client(), method, self.base_url + path, timeout_s, stream,
                 headers=headers, json=body, data=data, files=files,
                 params={**(params or {}), **({"api-version": self.api_version} if self.api_version else {})},
-                timeout=timeout_s, follow_redirects=False)
+                follow_redirects=False)
         except httpx.TimeoutException:
             raise OpenRouterError(0, "timeout", "Provider request timed out") from None
         except httpx.TransportError:
             raise OpenRouterError(0, "offline", "Provider is offline") from None
-        except (httpx.DecodingError, httpx.InvalidURL):
+        except (httpx.DecodingError, httpx.InvalidURL, MalformedStream):
             raise OpenRouterError(0, "error", "Invalid provider response or URL") from None
         except (ValueError, TypeError):
             raise OpenRouterError(0, "error", "Invalid provider request") from None
         status = response.status_code
         if not response.is_success:
-            try:
-                refused = _refused_error(response.json())
-            except ValueError:
-                refused = False
-            if refused:
-                raise OpenRouterError(status, "refusal", "Provider declined the request")
-            kind = {401: "auth", 403: "auth", 408: "timeout", 429: "rate_limit"}.get(status, "error")
-            raise OpenRouterError(status, kind, f"Provider request failed ({status})")
-        try:
-            decoded = response.json()
             if _refused_error(decoded):
                 raise OpenRouterError(status, "refusal", "Provider declined the request")
+            from ...failures import classify
+            wait = retry_after_of(response, decoded)
+            body_error = decoded if decoded is not None else {"message": f"Provider request failed ({status})"}
+            failure = classify({"status": status, "retry_after": wait, "error": body_error.get("error", body_error) if isinstance(body_error, dict) else
+                                f"Provider request failed ({status})"},
+                               secrets=[value.removeprefix("Bearer ") for value in headers.values()])
+            kind = {"auth_expired": "auth", "permission_denied": "permission_denied"}.get(failure.kind, failure.kind)
+            error = OpenRouterError(status, kind, failure.reason)
+            error.diagnostic = failure
+            error.retry_after = wait
+            raise error
+        try:
+            if _refused_error(decoded):
+                raise OpenRouterError(status, "refusal", "Provider declined the request")
+            if stream and isinstance(decoded, dict) and decoded.get("error"):
+                # It failed while it was answering: a try later may not.
+                from ...failures import classify
+                error = OpenRouterError(status, "server", "Provider failed while answering")
+                error.diagnostic = classify({"kind": "server", "message": error.message})
+                raise error
             if not isinstance(decoded, dict) or decoded.get("error"):
                 raise ValueError
         except ValueError:
             raise OpenRouterError(status, "error", "Invalid provider response") from None
         return _Reply(status, decoded, round((time.perf_counter() - started) * 1000))
 
-    async def _request(self, method, path, key, timeout_s, body=None, **kwargs):
+    async def _request(self, method, path, key, timeout_s, body=None, *, stream=False, **kwargs):
         if body is not None:
             effort = body.get("reasoning", {}).get("effort", "none")
             body = {k: v for k, v in body.items() if k not in ("provider", "models", "reasoning")}
@@ -211,7 +260,11 @@ class CompatibleProvider(OpenRouterClient):
             if self.kind == "azure_openai" and urlsplit(self.base_url).path in ("", "/openai"):
                 prefix = "/openai" if not urlsplit(self.base_url).path else ""
                 path = f"{prefix}/deployments/{quote(model, safe='')}{path}"
-        reply = await self._send(method, path, timeout_s, body=body)
+            stream = stream and self.kind in STREAMING_KINDS
+            if stream:
+                # The usage of a streamed reply comes only to a client that asks for it.
+                body = {**body, "stream": True, "stream_options": {"include_usage": True}}
+        reply = await self._send(method, path, timeout_s, body=body, stream=stream)
         for choice in reply.body.get("choices", []):
             if isinstance(choice, dict) and (choice.get("finish_reason") == "content_filter" or
                     isinstance(choice.get("message"), dict) and choice["message"].get("refusal")):
@@ -242,6 +295,8 @@ class CompatibleProvider(OpenRouterClient):
         try:
             result = await method(**kwargs)
         except OpenRouterError as error:
+            if getattr(error, "diagnostic", None) is not None:
+                raise
             if error.kind in ("bad_response", "bad_request", "server"):
                 raise OpenRouterError(error.status, "error", "Invalid provider response") from None
             raise
@@ -286,7 +341,8 @@ class CompatibleProvider(OpenRouterClient):
             rows = await self._pages("/models", "data", timeout_s)
         if self.kind == "ollama":
             await self._ollama_capabilities(rows, timeout_s)
-        result = [model_info(row, kind=self.kind) for row in rows if generation_model(row, self.kind)]
+        result = [model_info(row, kind=self.kind) for row in rows
+                  if generation_model(row, self.kind) or model_info(row, kind=self.kind)["media"]]
         self._prices = {row["id"]: (row["price_in"], row["price_out"]) for row in result}
         return result
 

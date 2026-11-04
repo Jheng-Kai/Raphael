@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { setLocale } from "./i18n";
+import { Window } from "happy-dom";
+import { setLocale, t } from "./i18n";
 import type { SkillItem } from "./connection-skills";
 import type { AppsInventory, AuditEntry, ConnectionGroup, InventoryApp, StoreService } from "./types";
 
@@ -107,7 +108,7 @@ describe("the two views", () => {
     expect(bar).toContain('class="tabs plain"');
     expect(bar).toContain('role="tablist"');
     expect(bar).toMatch(/<button[^>]*class="tab"[^>]*role="tab"[^>]*aria-selected="true"[^>]*data-id="installed"[^>]*>已連結<span class="n">2<\/span>/);
-    expect(bar).toMatch(/<button[^>]*class="tab"[^>]*role="tab"[^>]*aria-selected="false"[^>]*data-id="store"[^>]*>商店<span class="n">4<\/span>/);
+    expect(bar).toMatch(/<button[^>]*class="tab"[^>]*role="tab"[^>]*aria-selected="false"[^>]*data-id="store"[^>]*>商店<span class="n">3<\/span>/);
     expect(bar).toContain('id="conn-search"');
     expect(connectionsHTML(view({ tab: "store" }))).toMatch(/aria-selected="true"[^>]*data-id="store"/);
     // nothing connected yet still says so: 0
@@ -190,7 +191,7 @@ describe("已安裝", () => {
   });
 
   test("empty connections and unmatched searches have concise empty states", () => {
-    expect(connectionsHTML(view({ groups: [] }))).toContain("尚無連線");
+    expect(connectionsHTML(view({ groups: [] }))).toContain(t("conn.emptyInstalled"));
     expect(connectionsHTML(view({ search: "zzz" }))).toContain("沒有符合的項目");
     const found = bodyHTML(view({ search: "files" }));
     expect(found).toContain("Files");
@@ -276,7 +277,7 @@ describe("the apps that cannot be called, and the private skills", () => {
     const failed = bodyHTML(view({ skills: "failed" }));
     expect(failed).toContain("無法讀取技能。");
     expect(failed).toContain('data-conn="retry-skills"');
-    expect(bodyHTML(view({ groups: [], skills: [] }))).toContain("尚無連線");
+    expect(bodyHTML(view({ groups: [], skills: [] }))).toContain(t("conn.emptyInstalled"));
   });
 
   test("the page of a skill is the dialog of an app: its name, who has it and when it is used, its instructions and 刪除技能 on the left", () => {
@@ -483,25 +484,40 @@ describe("the dialog of a connected service", () => {
 describe("商店", () => {
   const html = connectionsHTML(view({ tab: "store" }));
 
+  test("the store tab and every pager count the same addable apps, including popular apps but excluding connected ones", () => {
+    const catalog = [...CATALOG, ...Array.from({ length: 38 }, (_, index) => service(`extra-${index}`, `Extra ${String(index).padStart(2, "0")}`))];
+    const seen = new Set<string>();
+    for (let storePage = 0; storePage < 3; storePage++) {
+      const out = connectionsHTML(view({ tab: "store", catalog, storePage }));
+      expect(out).toMatch(/data-id="store"[^>]*>商店<span class="n">41<\/span>/);
+      expect(out).toContain(`${storePage * 18 + 1}–${Math.min((storePage + 1) * 18, 41)} / 41`);
+      const ids = [...out.matchAll(/data-conn="join" data-id="([^"]+)"/g)].map(match => match[1]!);
+      expect(ids).toHaveLength(storePage < 2 ? 18 : 5);
+      for (const id of ids) {
+        expect(seen.has(id)).toBe(false);
+        seen.add(id);
+      }
+    }
+    expect(seen.size).toBe(41);
+    expect(seen.has("linear")).toBe(true);
+    expect(seen.has("notion")).toBe(false);
+  });
+
   test("the rows and their count share one pass over the managed catalog", () => {
     const composioCatalog = [service("slack", "Slack", { source: "composio" })];
     const filter = vi.spyOn(composioCatalog, "filter");
     const out = connectionsHTML(view({ tab: "store", configured: true, composioCatalog }));
     expect(out).toContain('data-k="cs-store:slack"');
-    expect(out).toMatch(/data-id="store"[^>]*>商店<span class="n">5<\/span>/);
+    expect(out).toMatch(/data-id="store"[^>]*>商店<span class="n">4<\/span>/);
     expect(filter).toHaveBeenCalledTimes(1);
   });
 
-  test("has 熱門, then 全部 for the rest, as two columns of cards whose rows come in once", () => {
-    expect(html).toContain("<h2>熱門</h2>");
-    expect(html).toContain("<h2>全部</h2>");
-    const popular = html.slice(html.indexOf("<h2>熱門</h2>"), html.indexOf("<h2>全部</h2>"));
-    expect([...popular.matchAll(/class="nm">([^<]+)</g)].map((m) => m[1])).toEqual(["Notion", "Linear", "Canva"]);
-    const all = html.slice(html.indexOf("<h2>全部</h2>"));
-    expect([...all.matchAll(/class="nm">([^<]+)</g)].map((m) => m[1])).toEqual(["Sentry"]); // the rest, by name, none twice
-    expect(html.match(/class="cs-grid"/g)).toHaveLength(2);
-    expect(html).toContain('class="cs-grid" data-stagger="store:hot"');
-    expect(html).toContain('class="cs-grid" data-stagger="store:all"');
+  test("connected apps lead, followed by available popular apps and the remaining catalog", () => {
+    const titles = [...html.matchAll(/<h2>([^<]+)<\/h2>/g)].map(match => match[1]);
+    expect(titles).toEqual(["已連結", "常用", "全部"]);
+    expect([...html.matchAll(/class="nm">([^<]+)</g)].map(match => match[1])).toEqual(["Notion", "Linear", "Canva", "Sentry"]);
+    expect(html).not.toContain('data-k="conn-category"');
+    expect(html.match(/data-conn="store-group"/g)).toHaveLength(10);
   });
 
   test("a card is a container with the button that opens the page and, inside it, the button that adds, or 已安裝; no button is in a button", () => {
@@ -521,7 +537,7 @@ describe("商店", () => {
     expect(notion).not.toContain('data-conn="join" data-id="notion"');
   });
 
-  test("a service with no bundled mark uses a plug, and known marks keep their brand colour where it reads", () => {
+  test("a service with no bundled mark uses a plug, and known marks keep their brand colour", () => {
     expect(html).toContain(ico("plug"));
     expect(html).not.toContain(">C<");
     expect(html).toMatch(/class="mono md logo-mono" style="--brand:#5E6AD2"/); // Linear
@@ -538,11 +554,27 @@ describe("商店", () => {
   });
 
   test("searches by name, publisher and summary, and then lists the matches once", () => {
-    const found = bodyHTML(view({ tab: "store", search: "lin" }));
+    const found = bodyHTML(view({ tab: "store", search: "linear" }));
     expect(found).not.toContain("<h2>熱門</h2>");
     expect(found).toContain("<h2>全部</h2>");
     expect([...found.matchAll(/class="nm">([^<]+)</g)].map((m) => m[1])).toEqual(["Linear"]);
     expect(bodyHTML(view({ tab: "store", search: "zzz" }))).toContain("沒有符合的項目");
+  });
+
+  test("a large provider catalog stays bounded and late apps remain reachable by page, slug and alias", () => {
+    const composioCatalog = Array.from({ length: 1800 }, (_, index) => service(`catalog-${String(index).padStart(4, "0")}`, `App ${String(index).padStart(4, "0")}`, { source: "composio", category: `category-${index}` }));
+    composioCatalog.push(service("googledrive", "Google Drive", { source: "composio", category: "storage" }));
+    const base = view({ tab: "store", configured: true, catalog: [], composioCatalog });
+    const first = bodyHTML(base);
+    expect(first.match(/class="cs-card"/g)).toHaveLength(18); // Popular apps share the result page.
+    expect(first.match(/data-conn="store-group"/g)).toHaveLength(10);
+    expect(first).not.toContain('data-k="conn-category"');
+    expect(bodyHTML({ ...base, storePage: 100 })).toContain('data-id="catalog-1799"');
+    const late = bodyHTML({ ...base, search: "catalog-1799" });
+    expect(late.match(/class="cs-card"/g)).toHaveLength(1);
+    expect(late).toContain('data-id="catalog-1799"');
+    expect(bodyHTML({ ...base, search: "雲端硬碟" })).toContain('data-id="googledrive"');
+    expect(bodyHTML({ ...base, category: "documents" }).match(/class="cs-card"/g)).toHaveLength(1);
   });
 });
 
@@ -605,7 +637,7 @@ describe("the page of a store service", () => {
     expect(denied).toContain("你在瀏覽器上拒絕了，所以沒有加入。");
     expect(denied).toContain('data-conn="join"');
     expect(storePage("linear", { loginError: { target: "linear", kind: "timeout" } })).toContain("太久沒有登入");
-    expect(storePage("linear", { loginError: { target: "linear", kind: "network" } })).toContain("沒有登入成功：網路連不上");
+    expect(storePage("linear", { loginError: { target: "linear", kind: "network" } })).toContain(t("conn.err.network"));
     expect(storePage("sentry", { loginError: { target: "linear", kind: "denied" } })).not.toContain("拒絕");
   });
 });
@@ -735,7 +767,7 @@ describe("what the tab does", () => {
     vi.mocked(toaster.info).mockReset();
     api.toolsetsList.mockResolvedValue({ groups: GROUPS });
     api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: true, google_configured: false });
-    api.connectorsCatalog.mockResolvedValue({ categories: [], items: CATALOG.map(s => ({ slug: s.id, name: s.name, description: s.summary["zh-TW"], logo: "", categories: [], can_connect: true, no_auth: false })) });
+    api.connectorsCatalog.mockResolvedValue({ categories: [], items: CATALOG.map(s => ({ slug: s.id, name: s.name, description: s.summary["zh-TW"], logo: "", categories: [], needs: "sign_in", no_auth: false })) });
     api.connectorsCategories.mockResolvedValue({ items: [] });
     api.integrationsCatalog.mockResolvedValue({ services: CATALOG });
     api.integrationsAudit.mockResolvedValue({ entries: AUDIT });
@@ -878,6 +910,24 @@ describe("what the tab does", () => {
     expect(host.redraw).toHaveBeenCalledTimes(2);
   });
 
+  test("an unchanged catalog refresh keeps the rendered store while changed rows still redraw", async () => {
+    const c = createConnections(host);
+    await c.load();
+    await settle();
+    const catalog = c.view().composioCatalog;
+    host.redraw.mockClear();
+    c.click(button("tab", { id: "store" }));
+    await settle();
+    expect(api.connectorsCatalog).toHaveBeenCalledTimes(2);
+    expect(c.view().composioCatalog).toEqual(catalog);
+    expect(host.redraw).toHaveBeenCalledTimes(1);
+    api.connectorsCatalog.mockResolvedValueOnce({ categories: [], items: [] });
+    c.click(button("tab", { id: "store" }));
+    await settle();
+    expect(c.view().composioCatalog).toEqual([]);
+    expect(host.redraw).toHaveBeenCalledTimes(3);
+  });
+
   test("a store page opens the dialog of the service it was added as, over 已安裝", async () => {
     const c = createConnections(host);
     await c.load();
@@ -957,8 +1007,10 @@ describe("what the tab does", () => {
   });
 
   test("the search filters what is under the bar without drawing the page again", async () => {
-    const body = { innerHTML: "" };
-    vi.stubGlobal("document", { querySelector: () => body });
+    const browser = new Window();
+    browser.document.body.innerHTML = '<div data-cs-body></div>';
+    const body = browser.document.querySelector("[data-cs-body]")!;
+    vi.stubGlobal("document", browser.document);
     try {
       const c = createConnections(host);
       await c.load();
@@ -972,7 +1024,107 @@ describe("what the tab does", () => {
       expect(c.view().search).toBe(""); // another view starts with no search
     } finally {
       vi.unstubAllGlobals();
+      await browser.happyDOM.abort();
     }
+  });
+
+  test.each([true, false])("selecting an overflow category reveals the whole chip with prior focus %s", async (focused) => {
+    const c = createConnections(host);
+    await c.load();
+    c.click(button("tab", { id: "store" }));
+    const browser = new Window();
+    browser.document.body.innerHTML = connectionsHTML(c.view());
+    const geometry = vi.spyOn(browser.HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("cs-store-groups")) return new browser.DOMRect(0, 0, 100, 28);
+      if (this.dataset.conn === "store-group") return new browser.DOMRect(90 - this.parentElement!.scrollLeft, 0, 40, 28);
+      return new browser.DOMRect();
+    });
+    vi.stubGlobal("document", browser.document);
+    try {
+      const groups = browser.document.querySelector(".cs-store-groups")! as unknown as HTMLElement;
+      groups.scrollLeft = 20;
+      const last = groups.querySelector<HTMLButtonElement>('[data-id="other"]')!;
+      if (focused) last.focus();
+      c.click(last);
+      const replaced = browser.document.querySelector(".cs-store-groups")! as unknown as HTMLElement;
+      const selected = replaced.querySelector<HTMLButtonElement>('[data-id="other"]')!;
+      expect(selected.getAttribute("aria-pressed")).toBe("true");
+      if (focused) expect(browser.document.activeElement).toBe(selected);
+      expect(replaced.scrollLeft).toBe(30);
+      expect(selected.getBoundingClientRect().right).toBe(replaced.getBoundingClientRect().right);
+    } finally {
+      geometry.mockRestore();
+      vi.unstubAllGlobals();
+      await browser.happyDOM.abort();
+    }
+  });
+
+  test("switching store tabs preserves the settings shell and avoids a full settings redraw", async () => {
+    const c = createConnections(host);
+    await c.load();
+    const browser = new Window();
+    browser.document.body.innerHTML = connectionsHTML(c.view());
+    vi.stubGlobal("document", browser.document);
+    try {
+      const shell = browser.document.querySelector('.cs');
+      const storeTab = browser.document.querySelector('[data-conn="tab"][data-id="store"]')! as unknown as HTMLButtonElement;
+      const searchInput = browser.document.querySelector('#conn-search')!;
+      storeTab.focus();
+      const focus = vi.spyOn(browser.HTMLElement.prototype, 'focus');
+      host.redraw.mockClear();
+      c.click(storeTab as unknown as Element);
+      expect(browser.document.querySelector('.cs-store')).toBe(shell);
+      expect(browser.document.activeElement).toBe(storeTab);
+      expect(browser.document.querySelector('#conn-search')).toBe(searchInput);
+      expect(storeTab.getAttribute('aria-selected')).toBe('true');
+      expect(focus).not.toHaveBeenCalled();
+      expect(browser.document.querySelector('.cs-card')).not.toBeNull();
+      expect(host.redraw).not.toHaveBeenCalled();
+      c.click(browser.document.querySelector('[data-conn="tab"][data-id="installed"]')! as unknown as Element);
+      expect(browser.document.querySelector('.cs')).toBe(shell);
+      expect(shell!.classList.contains('cs-store')).toBe(false);
+      expect(browser.document.querySelector('.cs-item')).not.toBeNull();
+    } finally { vi.unstubAllGlobals(); await browser.happyDOM.abort(); }
+  });
+
+  test.each(["finish", "switch", "reset"])("store paints visible rows first and cancels stale fill on %s", async (ending) => {
+    api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false, google_configured: false });
+    api.integrationsCatalog.mockResolvedValue({ services: Array.from({ length: 24 }, (_, i) => service(`app-${i}`, `App ${i}`)) });
+    const c = createConnections(host);
+    await c.load();
+    await settle();
+    const browser = new Window();
+    browser.document.body.innerHTML = connectionsHTML(c.view());
+    const frames: FrameRequestCallback[] = [];
+    vi.useFakeTimers();
+    vi.stubGlobal("document", browser.document);
+    vi.stubGlobal("requestAnimationFrame", (frame: FrameRequestCallback) => { frames.push(frame); return frames.length; });
+    try {
+      c.click(browser.document.querySelector('[data-conn="tab"][data-id="store"]')! as unknown as Element);
+      const first = browser.document.querySelector('.cs-card [data-conn="open-store"]');
+      expect(browser.document.querySelectorAll('.cs-card [data-conn="open-store"]')).toHaveLength(12);
+      expect(browser.document.querySelectorAll('[data-cs-pending]')).toHaveLength(18);
+      c.click(browser.document.querySelector('[data-conn="store-group"][data-id=""]')! as unknown as Element);
+      expect(browser.document.querySelector('.cs-card [data-conn="open-store"]')).toBe(first);
+      expect(browser.document.querySelectorAll('[data-cs-pending]')).toHaveLength(18);
+      frames.shift()!(0);
+      // requestAnimationFrame runs before paint; hydration must wait for the following task.
+      expect(browser.document.querySelectorAll('[data-cs-pending]')).toHaveLength(18);
+      if (ending === "switch") c.click(button("tab", { id: "installed" }));
+      if (ending === "reset") c.reset();
+      await vi.runOnlyPendingTimersAsync();
+      if (ending !== "finish") {
+        expect(frames).toHaveLength(0);
+        expect(browser.document.querySelectorAll('.cs-card [data-conn="open-store"]')).toHaveLength(ending === "reset" ? 12 : 0);
+        return;
+      }
+      expect(browser.document.querySelectorAll('[data-cs-pending]')).toHaveLength(16);
+      while (frames.length) { frames.shift()!(0); await vi.runOnlyPendingTimersAsync(); }
+      expect(browser.document.querySelector('[data-cs-pending]')).toBeNull();
+      expect(browser.document.querySelectorAll('.cs-card [data-conn="open-store"]')).toHaveLength(18);
+      expect(browser.document.querySelector('.cs-card [data-conn="open-store"]')).toBe(first);
+      expect(browser.document.querySelector('.cs-store-pages .num')!.textContent).toContain('/ 24');
+    } finally { vi.useRealTimers(); vi.unstubAllGlobals(); await browser.happyDOM.abort(); }
   });
 
   test("switches a service on or off, a tool on or off, and reads its tools again", async () => {
@@ -1123,7 +1275,7 @@ describe("what the tab does", () => {
       api.membersSkillsUpdate.mockRejectedValueOnce("[-32602] Invalid params: no such member skill");
       c.click(button("skill-enable", { member: "1", id: "7" }));
       await settle();
-      expect(c.view().dialogNotice?.text).toContain("no such member skill");
+      expect(c.view().dialogNotice?.text).toContain(t("missing.unknown"));
       expect(toaster.info).not.toHaveBeenCalled();
     });
 
@@ -1246,7 +1398,7 @@ describe("what the tab does", () => {
       c.click(button("connect"));
       await settle();
       expect(c.view().form!.busy).toBe(false);
-      expect(c.view().form!.error!()).toContain("exists already");
+      expect(c.view().form!.error!()).toContain(t("missing.unknown"));
       c.click(button("form-cancel"));
       expect(c.view().form).toBeNull();
     });

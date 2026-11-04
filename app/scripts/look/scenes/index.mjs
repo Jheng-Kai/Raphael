@@ -1,10 +1,56 @@
+import cards from "./cards.mjs";
+import polish from "./polish.mjs";
+import handoffGroup from "./handoff-group.mjs";
+import menus from "./menus.mjs";
+import presence from "./presence.mjs";
+import sidebar from "./sidebar.mjs";
+import daily from "./daily.mjs";
+import batch from "./batch.mjs";
+import workBatch from "./work-batch.mjs";
+import mediaData from "./media-data.mjs";
+import missing from "./missing.mjs";
+import ownerQuestions from "./owner-questions.mjs";
+import mcpProposals from "./mcp-proposals.mjs";
+import slime from "./slime.mjs";
+import pages from "./pages.mjs";
+import richContent from "./rich-content.mjs";
+import answerForms from "./answer-forms.mjs";
+import unreadDivider from "./unread-divider.mjs";
 import chat from "./chat.mjs";
+import desktop from "./desktop.mjs";
 import automations from "./automations.mjs";
+import mentions from "./mentions.mjs";
+import history from "./history.mjs";
+import composerVoice from "./composer-voice.mjs";
 import settings from "./settings.mjs";
 import overlay from "./overlay.mjs";
 import home from "./home.mjs";
 import apps from "./apps.mjs";
 import contextMenu from "./context-menu.mjs";
+import ownerRound from "./owner-round.mjs";
+import ownerRound3 from "./owner-round3.mjs";
+import ownerRound10 from "./owner-round10.mjs";
+import ownerRound9 from "./owner-round9.mjs";
+import { withOwnerRound4, noNaming } from "./owner-round4.mjs";
 
-export const scenes = [...home, ...chat, ...automations, ...settings, ...apps, ...contextMenu, ...overlay];
+export const scenes = withOwnerRound4([...polish, ...mcpProposals, ...workBatch, ...batch, ...missing, ...ownerQuestions, ...richContent, ...sidebar, ...slime, ...pages, ...home, ...chat, ...desktop, ...automations, ...mentions, ...history, ...composerVoice, ...settings, ...apps, ...contextMenu, ...overlay, ...ownerRound, ...ownerRound3, ...ownerRound9, ...ownerRound10, noNaming]);
+scenes.push(...mediaData);
+scenes.push(...handoffGroup);
+scenes.push(...daily);
+scenes.push(...menus);
+scenes.push(...cards);
+scenes.push(...presence);
+scenes.push(...answerForms);
+scenes.push(...unreadDivider);
+scenes.push({name:'motion-cost-details',description:'Isolated emblem decoder and single large vector cost',fixture:{},motion:true,steps:[{action:'motion-details'}]});
+scenes.push({name:'motion-cost-comparison',description:'Identical mixed-state fixture and sampling window, starting revision versus current cels',fixture:{},motion:true,steps:[{action:'motion-cost',revision:'e2143ec7'},{action:'motion-cost'}]});
+for (const scene of scenes) if (['admin-approval','room-question-card','composer-stop-voice'].includes(scene.name)) {
+  scene.motion=true;
+  scene.steps.push({action:'motion-audit'});
+}
+for (const scene of scenes) if (['slime-states', 'presence-states-sidebar', 'busy-team-thread', 'busy-team-home', 'busy-team-room', 'running'].includes(scene.name)) {
+  scene.motion = true;
+  const freeze = scene.steps.findIndex(step => step.action === 'freeze-motion');
+  scene.steps.splice(freeze < 0 ? scene.steps.length : freeze, 0, { action: 'motion-cost', ...(process.env.LOOK_TRACE==='1'?{measure:{name:'motion-cost',enforce:false}}:{}) });
+}
 if (new Set(scenes.map(scene => scene.name)).size !== scenes.length) throw new Error("Duplicate look scene name");

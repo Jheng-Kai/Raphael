@@ -1,5 +1,7 @@
+// @vitest-environment happy-dom
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale } from "./i18n";
+import type { MentionTarget } from "./mention-text";
 import { ico } from "./ui";
 import {
   type TurnLook,
@@ -26,10 +28,104 @@ import {
   wantsRefresh,
   workMs,
   emptyTimelineState,
+  updateLiveTimes,
 } from "./timeline";
 import type { AgentStep, AgentTask, AgentTurn } from "./types";
 
 afterEach(() => setLocale("zh-TW"));
+
+test.each([
+  ["approval_required", "Waiting for your approval in the app"],
+  ["memory_refused", "This memory edit was refused by the memory rules"],
+  ["secret_store", "Reading credential stores is refused"],
+  ["url_not_seen", "This URL was not supplied or found in a tool result"],
+])("blocked steps explain %s", (reason, explanation) => {
+  setLocale("en");
+  expect(reasonText(step({ outcome: "blocked", reason }))).toBe(explanation);
+});
+
+test("queued owner bubbles show a muted mark and withdraw instead of edit or live presence", () => {
+  setLocale("en");
+  document.body.innerHTML = turnHTML(turn(91, { status: "queued", text: "", messages: [], model: null }), emptyTimelineState(), false, LOOK);
+  expect(document.querySelector(".queued-mark")?.textContent).toBe("Queued");
+  expect(document.querySelector('button[data-act="cancel-message"]')).not.toBeNull();
+  expect(document.querySelector('[data-act="edit-message"],.live-presence,.work-section')).toBeNull();
+});
+
+test("a pending permission card replaces duplicate running and waiting task controls", () => {
+  for (const state of ["running","waiting"] as const) {
+    const item=turn(71,{status:state === "running" ? "running" : "done",task:{id:71,state,waiting_owner:1} as AgentTask,
+      permissions:[{id:"permission",source:"ask",kind:"tool",service:"Sample",tool:"send",summary:"Send a review",reason:null,digest:"digest",always:false,state:"pending",expires_at_ms:0}]});
+    document.body.innerHTML=turnHTML(item,emptyTimelineState(),false,LOOK);
+    expect(document.querySelector(".conversation-card")).not.toBeNull();
+    expect(document.querySelector(".task-actions")).toBeNull();
+    expect(document.querySelector(".work-section.is-live")).toBeNull();
+  }
+});
+
+test("a finished task's reply stands alone, and only an unfinished one says how it ended", () => {
+  const draw = (over: Partial<AgentTurn>) => { document.body.innerHTML = turnHTML(turn(74, over), emptyTimelineState(), false, LOOK); return document.querySelector(".task-actions"); };
+  expect(draw({ text: "The sample report is ready.", task: { id: 74, state: "done" } as AgentTask })).toBeNull();
+  expect(draw({ text: "", messages: [{ seq: 1, kind: "reply", text: "The sample report is ready.", at_ms: 1 }], task: { id: 74, state: "done" } as AgentTask })).toBeNull();
+  expect(draw({ text: "", messages: [], task: { id: 74, state: "done" } as AgentTask })).not.toBeNull();
+  expect(draw({ text: "The sample report is ready.", task: { id: 74, state: "failed" } as AgentTask })?.querySelector('[data-act="rerun"]')).not.toBeNull();
+});
+
+test("a settled permission card also owns its task's completed state", () => {
+  const item=turn(72,{task:{id:72,state:"done"} as AgentTask,permissions:[{id:"settled",source:"ask",kind:"tool",service:"Sample",tool:"send",summary:"Send a review",reason:null,digest:"digest",always:false,state:"allowed",expires_at_ms:0}]});
+  document.body.innerHTML=turnHTML(item,emptyTimelineState(),false,LOOK);
+  expect(document.querySelector(".conversation-card")).not.toBeNull();
+  expect(document.querySelector(".task-actions")).toBeNull();
+});
+
+test("desktop owner handoff keeps the current line and never restores a ticking clock", () => {
+  for (const messages of [[], [{ seq: 1, kind: "thinking", text: "Reviewing the sample plan", at_ms: 200 }]] as AgentTurn["messages"][]) {
+    const item = turn(73, { status: "running", text: "", messages, steps: [], task: { id: 73, state: "running" } as AgentTask });
+    const state = emptyTimelineState();
+    state.workStartedAt.set(73, 100);
+    document.body.innerHTML = turnHTML(item, state, false, { ...LOOK, waitingForOwner: () => true } as TurnLook);
+    expect(document.querySelector(".work-section.is-live,[data-work-start],.task-actions")).toBeNull();
+    expect(document.querySelector("[data-live]")).toBeNull();
+    document.body.innerHTML = turnHTML(item, state, false, { ...LOOK, waitingForOwner: () => false } as TurnLook);
+    expect(document.querySelector(".live-action")).not.toBeNull();
+    expect(document.querySelector("[data-work-start],.work-time")).toBeNull();
+    expect(state.workStartedAt.get(73)).toBe(100);
+  }
+});
+
+test("a paid media step shows its model and exact reported cost without a JSON envelope", () => {
+  setLocale("zh-TW");
+  const paid = step({ server: "media", tool: "image_generate", detail: JSON.stringify({model: "test/image-only", cost_usd: .042}) });
+  const html = stepHTML(paid, false);
+  expect(html).toContain("模型：test/image-only · API 費用：$0.042");
+  expect(html).not.toContain('cost_usd');
+  expect(html).toContain('class="step-detail"');
+  expect(html).not.toContain('class="step-why"');
+  expect(stepTitle(paid)).toBe("畫圖");
+  expect(stepTitle({ ...paid, tool: "video_generate" })).toBe("做影片");
+  expect(stepHTML({...paid, detail: JSON.stringify({model: "test/image-only", cost_usd: null})}, false)).toContain("費用未回報");
+});
+
+test("stored CLI envelopes never render as JSON in a conversation reply", () => {
+  const envelope = JSON.stringify({ text: "Gmail needs a connection.", messages: ["Gmail needs a connection."], say_ja: "接続が必要です。" });
+  for (const messages of [[], [{ seq: 1, kind: "reply" as const, text: envelope, at_ms: T0 }]]) {
+    const html = turnHTML(turn(20, { text: envelope, messages }), emptyTimelineState(), false, LOOK);
+    expect(visible(html)).toContain("Gmail needs a connection.");
+    expect(visible(html)).not.toContain('"messages"');
+    expect(visible(html)).not.toContain('"say_ja"');
+  }
+});
+
+test("a learned skill renders one localized event without exposing its internal payload", () => {
+  const html = turnHTML(turn(20, { messages: [{ seq: 1, kind: "event", text: JSON.stringify({ type: "skill_learned", name: "research-summary" }), at_ms: T0 }] }), emptyTimelineState(), false, LOOK);
+  const lines = html.match(/<div class="conversation-event-line timeline-event"[^>]*>.*?<\/div>/g)!;
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toContain('class="sys event-line"');
+  expect(lines[0]).toContain(ico("check"));
+  expect(visible(lines[0]).replace(/\s/g, "")).toContain("學會了：research-summary");
+  expect(html).not.toContain("skill_learned");
+  expect(html.indexOf('class="conversation-event-line timeline-event"')).toBeGreaterThan(html.indexOf('class="ra"'));
+});
 
 const at = (iso: string): number => Date.parse(iso);
 const T0 = at("2026-10-20T09:00:00+08:00");
@@ -63,9 +159,9 @@ test("a spoken quick answer with public progress shows its answer after the work
   const spoken = turn(7, { text: "下午兩點有專案會議。", messages: [{ seq: 1, kind: "progress", text: "《告。正在查看今天下午的行程。》", at_ms: T0 + 500 }] });
   const html = turnHTML(spoken, emptyTimelineState(), false, { face: () => "" });
   expect(visible(html)).toContain("下午兩點有專案會議。");
-  expect(html.indexOf("work-section")).toBeLessThan(html.indexOf("下午兩點有專案會議。"));
+  expect(html.indexOf("work-section")).toBeGreaterThan(html.indexOf("下午兩點有專案會議。"));
   const stopped = turnHTML({ ...spoken, status: "running", text: "" }, emptyTimelineState(), false, { face: () => "" });
-  expect(stopped).not.toContain("data-expandable");
+  expect(stopped).not.toContain('class="ans"');
 });
 
 test("a live turn renders ordered public bubbles and event chips without raw steps", () => {
@@ -74,14 +170,14 @@ test("a live turn renders ordered public bubbles and event chips without raw ste
     { seq: 2, kind: "event", text: "Example saved", at_ms: T0 },
     { seq: 3, kind: "reply", text: "Your turn?", at_ms: T0 },
   ] }), emptyTimelineState(), false, { face: () => "" });
-  expect(html.indexOf("I will check")).toBeLessThan(html.indexOf("Example saved"));
+  expect(html).toContain('data-tooltip="I will check the examples."');
   expect(html.indexOf("Example saved")).toBeLessThan(html.indexOf("Your turn?"));
-  expect(html).toContain('class="turn-event"');
-  expect(html).toContain('class="work-progress"');
-  expect(html).toContain('class="work-time"');
-  expect(html.match(/<i><\/i>/g)).toHaveLength(3);
+  expect(html).toContain('class="sys event-line"');
+  expect(html).not.toContain('class="work-sentences"');
+  expect(html).not.toContain('class="work-time"');
+  expect(html).toContain('class="live-presence"');
   expect(html).not.toContain("steps-line");
-  expect(html).toContain("Google Calendar");
+  expect(html).not.toContain("Google Calendar");
 });
 
 test("an old turn without messages still renders its answer once", () => {
@@ -97,7 +193,7 @@ test("Raphael's stored replies and progress read plainly in the window", () => {
     { seq: 2, kind: "reply", text: "《答。下午兩點有專案會議，", at_ms: T0 + 1 },
     { seq: 3, kind: "reply", text: "記得帶《三體》。》", at_ms: T0 + 2 },
   ] }), emptyTimelineState(), false, { face: () => "" });
-  const answers = [...html.matchAll(/<div class="message-text">([\s\S]*?)<\/div>/g)].map(([, inner]) => visible(inner));
+  const answers = [...html.matchAll(/<div class="ans"><div class="message-text">([\s\S]*?)<\/div>/g)].map(([, inner]) => visible(inner));
   expect(answers).toEqual(["下午兩點有專案會議，", "記得帶《三體》。"]);
   expect(visible(html)).toContain("正在查看今天下午的行程。");
   expect(visible(html)).not.toMatch(/《[答告]/);
@@ -150,12 +246,45 @@ describe("a step in words", () => {
     // a command or a lookup with no words of its own says so in the window's language, its name in the tooltip
     expect(stepTitle(step({ kind: "command", tool: "something_new", server: null }))).toBe("操作這台電腦");
     expect(stepToolTip(step({ kind: "command", tool: "something_new", server: null }))).toBe("something_new");
-    expect(stepTitle(step({ tool: "get_news" }))).toBe("拉斐爾：讀取");
+    expect(stepTitle(step({ tool: "get_news" }))).toBe("讀取");
     setLocale("en");
     expect(stepTitle(step({ tool: "list_issues", server: "GitHub" }))).toBe("GitHub: read");
     expect(stepTitle(step({ tool: "create_issue", server: "GitHub" }))).toBe("GitHub: change");
     setLocale("ja");
     expect(stepTitle(step({ tool: "list_issues", server: "GitHub" }))).toBe("GitHub：読み取り");
+  });
+
+  test("a tool of the app's own names nobody: every member has them as much as Raphael, so a row never says Raphael did it", () => {
+    const own: [string, string][] = [
+      ["routine_update", "修改"], ["routine_create", "修改"], ["set_my_job", "修改"], ["member_create", "修改"],
+      ["session_search", "讀取"], ["self_check", "讀取"], ["team_overview", "讀取"], ["raphael_help", "讀取"],
+      ["memory_read", "讀取"], ["routine_list", "讀取"], ["read_attachment", "讀取"], ["web_read", "讀取"],
+      ["ask_member", "詢問同事"],
+    ];
+    for (const [tool, title] of own) {
+      const row = step({ tool });
+      expect(stepTitle(row), tool).toBe(title);
+      expect(stepTitle(row), tool).not.toContain("拉斐爾");
+      // the picture has no name either: it would show Raphael on a member's turn
+      const html = stepHTML(row, false);
+      expect(html, tool).not.toContain("拉斐爾");
+      expect(html, tool).toContain('<span class="step-ic" aria-hidden="true">');
+    }
+    expect(stepPlace(step({ tool: "routine_update" }))).toBe("");
+    // and the picture says the same as the words: a change is a pencil, a question a bubble, a reading a lens
+    expect(stepHTML(step({ tool: "routine_update" }), false)).toContain(ico("pencil"));
+    expect(stepHTML(step({ tool: "ask_member" }), false)).toContain(ico("chat"));
+    expect(stepHTML(step({ tool: "session_search" }), false)).toContain(ico("search"));
+    // a connected service keeps its name, in the title and on its picture
+    expect(stepTitle(step({ tool: "search", server: "Notion" }))).toBe("Notion：讀取");
+    expect(stepHTML(step({ tool: "search", server: "Notion" }), false)).toContain('aria-label="Notion"');
+    setLocale("en");
+    expect(stepTitle(step({ tool: "routine_update" }))).toBe("Change");
+    expect(stepTitle(step({ tool: "session_search" }))).toBe("Read");
+    expect(stepTitle(step({ tool: "ask_member" }))).toBe("Ask a colleague");
+    setLocale("ja");
+    expect(stepTitle(step({ tool: "routine_update" }))).toBe("変更");
+    expect(stepTitle(step({ tool: "session_search" }))).toBe("読み取り");
   });
 
   test("a step's line shows the words and keeps the tool's own name only in its tooltip", () => {
@@ -175,10 +304,10 @@ describe("a step in words", () => {
   });
 
   test("a failure says why in a few words, from its kind; an unknown kind is a plain error", () => {
-    expect(reasonText(step({ outcome: "error", reason: "auth" }))).toBe("需要重新登入");
+    expect(reasonText(step({ outcome: "error", reason: "auth" }))).toBe("登入或金鑰尚未就緒，請到「設定 › 連接」開啟對應應用程式並完成登入設定。");
     expect(reasonText(step({ outcome: "error", reason: "bad_arguments" }))).toBe("參數錯誤");
     expect(reasonText(step({ outcome: "timeout", reason: null }))).toBe("服務無回應");
-    expect(reasonText(step({ outcome: "error", reason: "something new" }))).toBe("發生錯誤");
+    expect(reasonText(step({ outcome: "error", reason: "something new" }))).toBe("目前無法確認失敗原因，請保留原對話並重新嘗試一次，若仍失敗請回報問題。");
     expect(reasonText(step())).toBe("");
   });
 
@@ -248,7 +377,7 @@ describe("what a turn did", () => {
     expect(summary).toContain('aria-label="3 個動作 · 2.4 秒 · 1 件失敗"');
     expect(summaryText(t1, T0).time).toBe("2.4 秒"); // the first start (0.48 s) to the last end (2.9 s)
     expect(html.match(/class="step is-ok/g)).toHaveLength(2);
-    expect(html).toContain("需要重新登入"); // a failure is said in words
+    expect(html).toContain("登入或金鑰尚未就緒，請到「設定 › 連接」開啟對應應用程式並完成登入設定。"); // a failure is said in words
     // the service is the picture's name, and its tool is said as the service and what it did
     expect(html).toContain('role="img" aria-label="Google Calendar" title="Google Calendar"');
     expect(visible(html)).toContain("Google Calendar：修改");
@@ -299,12 +428,14 @@ describe("what a turn did", () => {
     const state = { ...emptyTimelineState(), nowMs: T0 + 42_000 };
     const html = stepsHTML(turn(3, { task: running(), steps: [step()] }), state);
     expect(html).toContain('<div class="steps task is-live" data-open="true">');
-    expect(html).toContain('aria-label="進行中 · 42 秒"');
+    expect(html).toContain('aria-label="進行中"');
     expect(html).toContain(`data-since="${T0}"`);
     expect(html).toContain('<span class="step-t shimmer">思考中…</span>'); // the live step, with light passing over it
     expect(html).toContain('class="spin"');
     expect(html).toContain('<button type="button" class="btn sm stop" data-act="stop" data-task="41">停止</button>');
-    expect(visible(html)).toBe("進行中 42 秒 停止 查天氣 0.4 秒 思考中… 42 秒");
+    const host = document.createElement("div"); host.innerHTML = html;
+    updateLiveTimes(host, state.nowMs);
+    expect(visible(host.innerHTML)).toBe("進行中 42 秒 停止 查天氣 0.4 秒 思考中… 42 秒");
   });
 
   test("a task that waits is queued, and one that was stopped says so with what it did", () => {
@@ -322,6 +453,20 @@ describe("what a turn did", () => {
     expect(html).not.toContain('class="spin"');
     expect(html).not.toContain("data-since");
     expect(html).toContain('<button type="button" class="btn sm stop" data-act="stop" data-task="41">停止</button>');
+  });
+
+  test("the visible task controls show how many owner answers are waiting", () => {
+    const html = turnHTML(turn(3, { source: "app", route: "delegate", task: running({ state: "waiting", waiting_owner: 1 }) }), emptyTimelineState(), false, LOOK);
+    expect(html).not.toContain('class="turn-event task-actions"');
+    expect(html).not.toContain('data-act="stop"');
+  });
+
+  test("a background turn that waits for the owner does not keep thinking or ticking", () => {
+    const html = turnHTML(turn(3, { source: "routine", route: "delegate", status: "running", text: "", task: running({ state: "waiting", waiting_owner: 1 }) }), emptyTimelineState(), false, LOOK);
+    expect(html).not.toContain("work-time");
+    expect(html).not.toContain('data-live="true"');
+    expect(html).not.toContain("data-work-start");
+    expect(html).not.toContain('class="think"');
   });
 
   test("a step that arrives is the only one that comes in moving", () => {
@@ -387,14 +532,14 @@ describe("停止", () => {
 const LOOK: TurnLook = { face: (loop) => `<i class="face${loop ? " loop" : ""}"></i>` };
 
 describe("a turn", () => {
-  test("a question asked of a colleague is one 已詢問 line naming the colleague, opening on the question and its answer", () => {
+  test("a question asked of a colleague is one 和 X 討論 line naming the colleague, opening on the question and its answer", () => {
     const asked = { task_id: null, source_turn_id: 5, work_turn_id: 9, member_id: 0, member_name: "", from_member_id: 4,
       stage_id: "", mode: "consult" as const, state: "done", reason: null, created_at_ms: T0, ready_at_ms: T0,
       dispatch_policy: "immediate" as const, result: "新品代號是 NX-1。", request: "新品代號是什麼？", evidence: [] };
     const look: TurnLook = { ...LOOK, memberName: (id) => (id === 4 ? "PM" : "拉斐爾"), memberFace: () => "<i></i>" };
     const html = turnHTML(turn(5, { handoffs: [asked] }), emptyTimelineState(), false, look);
     expect(html).toContain('data-handoff="x9"');
-    expect(visible(html.slice(html.indexOf("<summary>"), html.indexOf("</summary>")))).toContain("已詢問 拉斐爾");
+    expect(visible(html.slice(html.indexOf("<summary>"), html.indexOf("</summary>")))).toContain("和 拉斐爾 討論");
     const detail = visible(html.slice(html.indexOf('class="handoff-detail"')));
     expect(detail).toContain("PM");
     expect(detail).toContain("新品代號是什麼？");
@@ -406,8 +551,10 @@ describe("a turn", () => {
     const html = turnHTML(turn(5), emptyTimelineState(), false, LOOK);
     expect(html).not.toContain('class="me-src"');
     expect(html).toContain('data-act="edit-message"');
-    expect(html).toContain('<div class="bubble">台北天氣如何，順便記到行事曆</div>');
-    expect(html).toContain('<span class="ra-face" title="gpt-6-luna · US$0.0012"><i class="face"></i></span>');
+    expect(html).toContain('<div class="bubble"><div class="message-text">台北天氣如何，順便記到行事曆</div><button');
+    expect(html).not.toContain('class="ra-face"');
+    expect(html).toContain('data-tooltip="查看過程 ·');
+    expect(html).toContain('class="work-meta">gpt-6-luna · US$0.0012');
     expect(html).toContain('<div class="ans"><div class="message-text"><p>台北現在 24 度。</p>');
     expect(html).not.toContain("tn-foot"); // nothing more to open
   });
@@ -421,6 +568,18 @@ describe("a turn", () => {
     expect(new Set(["voice", "telegram", "app"].map(sourceIcon)).size).toBe(3);
     setLocale("en");
     expect(sourceName("app")).toBe("Typed");
+  });
+
+  test("an address in the owner's words is a chip with its mark, in the sent and the pending bubble, and not in Raphael's reply", () => {
+    const mentions: MentionTarget[] = [{ name: "Notion", kind: "app", mark: () => "<svg></svg>" }, { name: "小森", kind: "member", mark: () => "<i></i>" }];
+    const look: TurnLook = { ...LOOK, mentions };
+    const asked = turn(5, { question: "請 @Notion 整理，再問 @小森。 @Nobody 不算", text: "好的 @Notion 已整理" });
+    const html = turnHTML(asked, emptyTimelineState(), false, look), bubble = html.slice(html.indexOf('<div class="bubble">'), html.indexOf('class="ra"'));
+    expect(bubble.match(/class="mention-chip" data-mention="(app|member)"/g)).toEqual(['class="mention-chip" data-mention="app"', 'class="mention-chip" data-mention="member"']);
+    expect(bubble.replace(/<[^>]+>/g, "")).toContain("請 @Notion 整理，再問 @小森。 @Nobody 不算");
+    expect(html.slice(html.indexOf('class="ra"'))).not.toContain("mention-chip");
+    expect(pendingTurnHTML("問 @小森", "app", look).match(/class="mention-chip"/g)).toHaveLength(1);
+    expect(turnHTML(asked, emptyTimelineState(), false, LOOK)).not.toContain("mention-chip");
   });
 
   test("while its task runs Raphael's face moves; a turn not asked aloud has no bubble", () => {
@@ -449,9 +608,9 @@ describe("a turn", () => {
 
   test("a turn that is not in the history yet: the words typed, or a shimmer for words being heard, and Raphael thinking", () => {
     const typed = pendingTurnHTML("明天會下雨嗎？", "app", LOOK);
-    expect(typed).toContain('<div class="bubble">明天會下雨嗎？</div>');
+    expect(typed).toContain('<div class="bubble"><div class="message-text">明天會下雨嗎？</div><button');
     expect(typed).toContain('<i class="face loop">');
-    expect(typed).toContain('class="think" role="img" aria-label="思考中…"');
+    expect(typed).toContain('class="live-presence"');
     expect(pendingTurnHTML(null, "voice", LOOK)).toContain('<span class="shimmer">正在辨識…</span>');
     expect(pendingTurnHTML("<b>", "app", LOOK)).toContain("&lt;b&gt;");
   });
@@ -493,18 +652,18 @@ describe("a turn", () => {
       { seq: 7, kind: "reply" as const, text: "以上是今天 NHK 的頭條新聞與解說影片。", at_ms: T0 + 6_000 },
       { seq: 8, kind: "reply" as const, text: "我也幫你設好每天早上 08:00 的早安新聞例行任務了，想考哪一段單字隨時跟我說！", at_ms: T0 + 6_500 },
     ];
-    // While running: thinking block is open with a live shimmer
+    // While running, only the current public action is exposed beside the avatar.
     const runningHtml = turnHTML(
       turn(20, { model, status: "running", text: "不該重複出現的文字", detail: "不該出現的詳細", messages }),
       emptyTimelineState(),
       false,
       LOOK,
     );
-    expect(runningHtml.match(/class="work-section think-box/g)).toHaveLength(1);
-    expect(runningHtml).toContain('data-act="thinking" aria-expanded="false"');
-    expect(runningHtml).toContain("work-toggle");
-    expect(runningHtml).toContain("主人想看今天的 NHK 新聞與相關影片");
-    expect(runningHtml).toContain("已找到新聞頁面與 YouTube 報導影片");
+    expect(runningHtml).not.toContain('class="work-section think-box');
+    expect(runningHtml).not.toContain('data-act="thinking"');
+    expect(runningHtml).not.toContain("work-toggle");
+    expect(runningHtml).toContain('class="live-action"');
+    expect(runningHtml).toContain("先幫你找今天的 NHK 重點新聞。");
 
     // When done: thinking block auto-collapses to 思考了 N 秒, and turn.text / turn.detail are not duplicated
     const doneHtml = turnHTML(
@@ -515,7 +674,7 @@ describe("a turn", () => {
     );
     expect(doneHtml.match(/class="work-section think-box/g)).toHaveLength(1);
     expect(doneHtml).toContain('data-act="thinking" aria-expanded="false"');
-    expect(doneHtml).toContain("work-toggle");
+    expect(doneHtml).not.toContain("work-toggle");
     expect(doneHtml).toContain('class="work-body think-body" id="work-20" hidden');
     expect(doneHtml).toContain('data-media-type="link"');
     expect(doneHtml).toContain("日銀維持利率不變 關注春季物價走勢");
@@ -643,13 +802,35 @@ describe("Raphael operating an app", () => {
 
   test("the reasons of a refusal have words in each language", () => {
     const why = (reason: string): string => reasonText(computer("click", { outcome: "error", reason }));
-    expect(["password", "handoff", "refused_app", "interrupted", "denied"].map(why)).toEqual(["密碼欄位", "需主人操作", "不允許的 App", "主人中斷", "未允許"]);
+    expect(["password", "handoff", "refused_app", "interrupted", "denied"].map(why)).toEqual(["密碼欄位", "這一步需要你親自完成登入、付款或系統管理員提示；完成後再回到原對話繼續。", "不允許的 App", "主人中斷", "未允許"]);
     setLocale("en");
-    expect(["password", "handoff", "refused_app", "interrupted", "denied"].map(why)).toEqual(["Password field", "Needs you to take over", "App not allowed", "Interrupted by you", "Not allowed"]);
+    expect(["password", "handoff", "refused_app", "interrupted", "denied"].map(why)).toEqual(["Password field", "Complete this sign-in, payment or administrator prompt yourself, then return to the conversation.", "App not allowed", "Interrupted by you", "Not allowed"]);
     setLocale("ja");
     expect(["password", "handoff", "refused_app", "interrupted", "denied"].every((reason) => why(reason) !== "")).toBe(true);
     // a service's refused login keeps its own words
     setLocale("zh-TW");
-    expect(reasonText(step({ outcome: "error", reason: "denied" }))).toBe("登入被拒");
+    expect(reasonText(step({ outcome: "error", reason: "denied" }))).toBe("這項操作未獲允許，請到「設定 › 連接」確認讀寫工具與登入授權；你已拒絕的操作不會自動重試。");
   });
+});
+
+
+test("only owner messages have an expand action, placed inside their bubble", () => {
+  const text = "A long message. ".repeat(100);
+  const html = turnHTML(turn(20, { question: text, text }), emptyTimelineState(), false, LOOK);
+  expect(html.match(/data-expandable="true"/g)).toHaveLength(1);
+  expect(html.match(/data-act="expand-message"/g)).toHaveLength(1);
+  expect(html).toMatch(/class="bubble"><div class="message-text">[\s\S]+?<\/div><button[^>]+data-act="expand-message"/);
+  const reply = html.slice(html.indexOf('<div class="ra"'));
+  expect(reply).not.toContain("data-expandable");
+  expect(reply).not.toContain('data-act="expand-message"');
+  expect(visible(reply)).toContain(text.trim());
+});
+
+
+test("live HTML is independent of the clock for turns, task details and pending lines", () => {
+  const live = turn(71, { task: running(), messages: [{ seq: 1, kind: "reply", text: "Already replied", at_ms: T0 }] });
+  const state = emptyTimelineState(); state.nowMs = T0 + 5000;
+  const before = [turnHTML(live, state, false, LOOK), stepsHTML(live, state), pendingTurnHTML("Draft", "app", LOOK, [], { id: "pending", time: T0 }, state.nowMs)];
+  state.nowMs += 10000;
+  expect([turnHTML(live, state, false, LOOK), stepsHTML(live, state), pendingTurnHTML("Draft", "app", LOOK, [], { id: "pending", time: T0 }, state.nowMs)]).toEqual(before);
 });

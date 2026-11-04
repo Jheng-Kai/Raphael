@@ -11,7 +11,7 @@ import pytest
 from raphael_core.agent.history import AgentHistory
 from raphael_core.agent.team_context import snapshot
 from raphael_core.connectors.apps import APPS
-from raphael_core.connectors.cards import CardStore, ConnectorCards
+from raphael_core.connectors.cards import Card, CardStore, ConnectorCards
 from raphael_core.connectors.service import ConnectorsService
 from raphael_core.evaluate.google_fixture import CLIENT_ID, GoogleFixture
 from raphael_core.integrations.service import IntegrationsService
@@ -153,7 +153,7 @@ async def test_an_expired_card_starts_no_sign_in(tmp_path, conn, fixture):
 async def test_without_a_google_or_composio_setup_the_card_fails_and_no_browser_opens(tmp_path, conn, fixture):
     rig = Rig(tmp_path, conn, fixture)
     _, card = await rig.connect(rig.card())
-    assert (card.state, card.error) == ("failed", "not_configured") and fixture.opened == 0
+    assert (card.state, card.error) == ("failed", "needs_composio_key") and fixture.opened == 0
 
 
 async def test_composio_connects_the_same_card_when_it_is_the_setup(tmp_path, conn):
@@ -185,6 +185,18 @@ async def test_an_expired_sign_in_makes_a_reconnect_card(tmp_path, conn, fixture
     _, card = await rig.connect(card)
     assert (card.state, card.reconnect, card.tool_count) == ("connected", True, 2)
     assert rig.resumed == [rig.turn, turn]
+
+
+async def test_explicit_reconnect_signs_in_even_when_the_current_tools_are_ready(tmp_path, conn, fixture):
+    rig = Rig(tmp_path, conn, fixture)
+    await rig.configure()
+    await rig.connect(rig.card())
+    opened = fixture.opened
+    turn = AgentHistory(conn).add(session_id="reconnect", question="Reconnect Gmail", route="answer", prefix="", text="", status="done", source="app")
+    card = rig.cards.show(turn_id=turn, member_id=0, conversation_id=None, app=APPS["gmail"], language="en", reconnect=True)
+    assert card.reconnect and rig.cards.ready_tools(APPS["gmail"])
+    _, card = await rig.connect(card)
+    assert card.state == "connected" and fixture.opened == opened + 1
 
 
 async def test_the_roster_counts_the_apps_tools_after_the_card_connects(tmp_path, conn, fixture):
@@ -261,3 +273,19 @@ async def test_unknown_cards_are_refused(tmp_path, conn, fixture):
     for params in ({}, {"id": 3}, {"id": "missing"}):
         with pytest.raises(RpcError):
             await rig.router.call("integrations.card_connect", params)
+
+
+def _shown(app, state, error):
+    return Card("c", 1, 1, 1, app, "zh-TW", False, state, error, None, (), 0, 0, False, "", "", "").view()
+
+
+def test_only_a_google_app_is_told_about_the_google_sign_in():
+    other = _shown("twitter", "failed", "not_configured")
+    assert other["error"] == "needs_composio_key" and other["missing"]["requirement"] == "composio_key"
+    google = _shown("gmail", "failed", "not_configured")
+    assert google["error"] == "not_configured" and google["missing"]["requirement"] == "google_client"
+
+
+def test_a_card_that_timed_out_asks_for_no_setup():
+    assert "missing" not in _shown("twitter", "expired", "not_configured")
+    assert "missing" not in _shown("gmail", "expired", "needs_composio_key")

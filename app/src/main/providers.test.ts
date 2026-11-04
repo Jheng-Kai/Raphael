@@ -425,7 +425,7 @@ test("a replacement must be saved before testing so the result describes the new
   key.value = "new-secret"; key.dispatchEvent(new Event("input", { bubbles: true }));
   expect(root.querySelector<HTMLButtonElement>('[data-pv="save"]')?.disabled).toBe(false);
   expect(root.querySelector<HTMLButtonElement>('[data-pv="test"]')?.disabled).toBe(true);
-  expect(root.querySelector('[role="dialog"]')?.textContent).toContain("Save changes before testing");
+  expect(root.querySelector('[role="dialog"]')?.textContent).toContain(t("providers.saveFirst"));
   api.providersUpdate.mockResolvedValue({ provider: connected });
   click('[data-pv="save"]'); await flush();
   expect(api.providersUpdate).toHaveBeenCalledWith({ id: "p3", name: "OpenAI", key: "new-secret" });
@@ -456,7 +456,7 @@ test("failed saves show a safe error and preserve public drafts without retainin
   fill('input[type="password"]', "write-only-secret");
   api.providersAdd.mockRejectedValue(new Error("write-only-secret"));
   click('[data-pv="save"]'); await flush();
-  expect(root.querySelector('[role="alert"]')?.textContent).toBe("Could not complete this. Please try again.");
+  expect(root.querySelector('[role="alert"]')?.textContent).toBe(t("providers.error"));
   expect(root.querySelector<HTMLInputElement>('input[aria-label="Name"]')?.value).toBe("My account");
   expect(root.querySelector<HTMLInputElement>('input[type="password"]')?.value).toBe("");
   expect(root.innerHTML).not.toContain("write-only-secret");
@@ -472,4 +472,13 @@ test("the remove confirmation expires after the existing five-second confirmatio
   click('[data-pv="remove"]');
   expect(api.providersRemove).not.toHaveBeenCalled();
   panel.reset();
+});
+
+
+test("provider repair focuses the credential action through asynchronous discovery", async () => {
+  const panel = mount(); await panel.load();
+  panel.openRepair(connected.id);
+  expect(document.activeElement).toBe(root.querySelector('[data-pv="replace"]'));
+  await flush();
+  expect(document.activeElement).toBe(root.querySelector('[data-pv="replace"]'));
 });

@@ -71,6 +71,20 @@ def tokens(text: str) -> list[str]:
     return found
 
 
+def parts(text: str) -> list[str]:
+    """What `text` is written with, in order: each CJK character and each other word. Room 1 is not
+    part of room 10, as it would be of its characters."""
+    found: list[str] = []
+    for segment in _SEGMENT.findall(normalized(text)):
+        found.extend(segment if _CJK_RUN.fullmatch(segment) else (segment,))
+    return found
+
+
+def marks(text: str) -> set[str]:
+    """`parts`, whatever their order, so that two wordings of one fact come out nearly the same."""
+    return set(parts(text))
+
+
 def index_terms(*texts: str | None) -> Terms:
     """What the search index holds for a turn made of `texts` (the question, the answer...)."""
     pairs: list[str] = []

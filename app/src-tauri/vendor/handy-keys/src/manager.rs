@@ -94,6 +94,8 @@ pub struct HotkeyManager {
     event_receiver: Receiver<HotkeyEvent>,
     _thread_handle: Option<JoinHandle<()>>,
     running: Arc<std::sync::atomic::AtomicBool>,
+    #[cfg(windows)]
+    listener_running: Arc<std::sync::atomic::AtomicBool>,
     /// Shared set of hotkeys to block
     blocking_hotkeys: Option<BlockingHotkeys>,
 }
@@ -104,6 +106,8 @@ impl HotkeyManager {
     /// On macOS, this will check for accessibility permissions and fail if not granted.
     pub fn new() -> Result<Self> {
         let listener = KeyboardListener::new()?;
+        #[cfg(windows)]
+        let listener_running = listener.running_flag();
 
         let (tx, rx) = mpsc::channel();
         let state = Arc::new(Mutex::new(ManagerState::new()));
@@ -121,6 +125,8 @@ impl HotkeyManager {
             event_receiver: rx,
             _thread_handle: Some(handle),
             running,
+            #[cfg(windows)]
+            listener_running,
             blocking_hotkeys: None,
         })
     }
@@ -135,6 +141,8 @@ impl HotkeyManager {
     pub fn new_with_blocking() -> Result<Self> {
         let blocking_hotkeys: BlockingHotkeys = Arc::new(Mutex::new(HashSet::new()));
         let listener = KeyboardListener::new_with_blocking(blocking_hotkeys.clone())?;
+        #[cfg(windows)]
+        let listener_running = listener.running_flag();
 
         let (tx, rx) = mpsc::channel();
         let state = Arc::new(Mutex::new(ManagerState::new()));
@@ -152,6 +160,8 @@ impl HotkeyManager {
             event_receiver: rx,
             _thread_handle: Some(handle),
             running,
+            #[cfg(windows)]
+            listener_running,
             blocking_hotkeys: Some(blocking_hotkeys),
         })
     }
@@ -163,11 +173,13 @@ impl HotkeyManager {
         sender: Sender<HotkeyEvent>,
         running: Arc<std::sync::atomic::AtomicBool>,
     ) {
-        const RECV_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100);
-
         while running.load(std::sync::atomic::Ordering::SeqCst) {
-            // Block until we receive an event or timeout (to check running flag)
-            match listener.recv_timeout(RECV_TIMEOUT) {
+            // On Windows the hook closes its sender when its running flag is cleared on Drop.
+            #[cfg(windows)]
+            let received = listener.recv();
+            #[cfg(not(windows))]
+            let received = listener.recv_timeout(std::time::Duration::from_millis(100));
+            match received {
                 Ok(key_event) => {
                     if let Ok(mut state) = state.lock() {
                         let hotkey_events = state.process_event(&key_event);
@@ -176,6 +188,7 @@ impl HotkeyManager {
                                 // Receiver dropped, exit
                                 return;
                             }
+                            crate::observation::wake_events();
                         }
                     }
                 }
@@ -285,6 +298,9 @@ impl HotkeyManager {
 impl Drop for HotkeyManager {
     fn drop(&mut self) {
         self.running
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        #[cfg(windows)]
+        self.listener_running
             .store(false, std::sync::atomic::Ordering::SeqCst);
         // Join the thread to ensure clean shutdown
         if let Some(handle) = self._thread_handle.take() {

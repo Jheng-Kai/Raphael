@@ -3,19 +3,29 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { AppContext, MainEvent, ModelCatalog, SettingsPane } from "../types";
 import { setLocale, t } from "../i18n";
+import { Cleared } from "../cleared";
 import * as analytics from "../usage-analytics";
 import type { UsageRequest } from "../usage-analytics-types";
 
 const api = vi.hoisted(() => ({
   settingsGet: vi.fn(), settingsSet: vi.fn(), secretsStatus: vi.fn(), statusGet: vi.fn(), audioDevices: vi.fn(),
+  desktopStatus: vi.fn(),
+  historyList: vi.fn(), historyClear: vi.fn(), agentHistoryClear: vi.fn(), core: vi.fn(),
   keyboardHasAltgr: vi.fn(), languagesList: vi.fn(), modelsCatalog: vi.fn(), modelsLocal: vi.fn(), hotkeysPause: vi.fn(), audioMonitor: vi.fn(),
   providersKinds: vi.fn(), providersList: vi.fn(), providersModels: vi.fn(), providersAdd: vi.fn(), servicesStatus: vi.fn(), usageAnalytics: vi.fn(),
   brainsCli: vi.fn(), brainsCliLogin: vi.fn(), brainsCliDisconnect: vi.fn(), openExternalUrl: vi.fn(),
+  chatgptStatus: vi.fn(async () => ({ signed_in: false })), chatgptSignIn: vi.fn(), chatgptCancel: vi.fn(), chatgptSignOut: vi.fn(), chatgptModels: vi.fn(async () => ({ models: [] })),
   usageRuns: vi.fn(), usageExport: vi.fn(), usageAllowances: vi.fn(), saveUsageCsv: vi.fn(),
 }));
 vi.mock("../api", () => api);
 vi.mock("@tauri-apps/api/app", () => ({ getVersion: async () => "test" }));
 import { createSettings } from "./settings";
+const slideTo = (level: string): void => {
+  const range = document.querySelector<HTMLInputElement>(".mc-range")!;
+  range.value = String(range.dataset.levels!.split(",").indexOf(level));
+  range.dispatchEvent(new Event("input", { bubbles: true }));
+  range.dispatchEvent(new Event("change", { bubbles: true }));
+};
 
 const empty: ModelCatalog = { llm: [], stt: [], source: "builtin", fetched_at_ms: null, replaced: [] };
 const direct: ModelCatalog = { ...empty, llm: [{
@@ -34,12 +44,58 @@ async function mount(open: SettingsPane = "models") {
     device: () => ({ dictation_keys: ["AltRight"], agent_keys: ["AltRight+Space"], ui_language: "en", dictation_mode: "hold" }),
     onEvent: (handler: (event: MainEvent) => void) => { listeners.add(handler); return () => { listeners.delete(handler); }; },
     refreshDevice: async () => {}, undo: { begin: vi.fn() },
-    closeSettings,
+    closeSettings, cleared: new Cleared(),
   } as unknown as AppContext);
   document.body.append(page.el); page.el.hidden = false;
   await page.show(open); await flush();
 }
 const click = (selector: string) => { const button = document.querySelector<HTMLButtonElement>(selector); expect(button, selector).not.toBeNull(); button!.click(); };
+
+test("opening Settings and navigating back to Models starts at the top and a redraw preserves its position", async () => {
+  await mount();
+  const body = page.el.querySelector<HTMLElement>('.modal-body')!;
+  body.scrollTop = 210;
+  click('[data-pane="about"]'); click('[data-pane="models"]'); await flush();
+  expect(body.scrollTop).toBe(0);
+  body.scrollTop = 170;
+  send({type:'SettingsChanged'}); await flush();
+  expect(body.scrollTop).toBe(170);
+  page.hide(); await page.show('models'); await flush();
+  expect(body.scrollTop).toBe(0);
+  body.scrollTop = 190;
+  click('[data-models-tab="usage"]'); await flush();
+  expect(body.scrollTop).toBe(0);
+  body.scrollTop = 140;
+  click('[data-models-tab="models"]'); await flush();
+  expect(body.scrollTop).toBe(0);
+});
+
+test("Data deletes the counted records immediately after a real confirmation and retains them on failure", async () => {
+  api.historyList.mockResolvedValue({items:[{id:1,created_at_ms:1000,text:'Synthetic record'}],total:1});
+  api.core.mockResolvedValue({conversations:[{turn_count:2}]});
+  const said = vi.spyOn(Cleared.prototype, 'say');
+  api.historyClear.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({deleted:1});
+  await mount('data'); await flush();
+  expect(page.el.querySelector('.data-record')?.textContent).toContain('Synthetic record');
+  click('[data-act="data-clear"][data-what="dictation"]');
+  expect(document.querySelector('.mb-confirm')?.textContent).toContain('1 dictation records');
+  click('.mb-confirm [data-dlg="delete"]'); await flush();
+  expect(page.el.querySelector('.data-record')).not.toBeNull();
+  expect(page.el.querySelector('[role="alert"]')).not.toBeNull();
+  expect(said).not.toHaveBeenCalled();
+  let emptied!: (result: {deleted:number}) => void;
+  api.historyClear.mockImplementationOnce(() => new Promise(resolve => { emptied = resolve; }));
+  click('[data-act="data-clear"][data-what="dictation"]');click('.mb-confirm [data-dlg="delete"]'); await flush();
+  expect(said).not.toHaveBeenCalled();
+  expect(page.el.querySelector('.data-record')).not.toBeNull();
+  emptied({deleted:1}); await flush();
+  expect(said).toHaveBeenCalledExactlyOnceWith('dictation');
+  expect(api.historyClear).toHaveBeenCalledTimes(2);
+  expect(page.el.querySelector('[role="alert"]')).toBeNull();
+  expect(page.el.querySelector('.data-record')).toBeNull();
+  expect(page.el.querySelector('[data-act="data-clear"][data-what="dictation"]')).toBeNull();
+  expect(page.el.querySelector('[data-act="data-clear"][data-what="conversation"]')).not.toBeNull();
+});
 
 test("快速提問 picks its effort inside the model list, as the answer model does, and saves model and effort apart", async () => {
   api.settingsGet.mockResolvedValue({ settings: { agent_model: "cli:codex", quick_model: "", quick_effort: "low" } });
@@ -47,8 +103,8 @@ test("快速提問 picks its effort inside the model list, as the answer model d
   api.brainsCli.mockResolvedValue({ clis: [{ id: "codex", name: "Codex", available: true, installed: true, logged_in: true,
     models: [{ id: "cli:codex:fast", name: "Fast", is_default: true, reasoning_efforts: ["medium", "low"] }] }] });
   await mount();
-  expect(page.el.querySelector('[data-row="quick-model"]')!.textContent).toContain("Quick questions");
-  expect(page.el.querySelector('[data-row="quick-model"] .models-purpose-note')!.textContent).toContain("Alt+Space");
+  expect(page.el.querySelector('[data-row="quick-model"]')!.textContent).toContain("Raphael's quick question");
+  expect(page.el.querySelector('[data-row="quick-model"] .models-purpose-note')).toBeNull();
   expect(page.el.querySelector('[data-k="quick-model"] .mp-tname')!.textContent).toBe("Fast");
   expect(page.el.querySelector('[data-k="quick-model"] .mp-source')!.textContent).toContain("Codex");
   expect(page.el.querySelector('[data-price="quick-model"]')!.textContent).toBe(t("brains.subscription"));
@@ -56,17 +112,17 @@ test("快速提問 picks its effort inside the model list, as the answer model d
   // 與回答相同: the list shows the answer model's effort row, from the saved effort
   click('[data-k="quick-model"]');
   expect(document.querySelector('.model-chooser .mc-inherit')!.getAttribute("aria-pressed")).toBe("true");
-  expect([...document.querySelectorAll<HTMLElement>('.model-chooser [data-effort]')].map(b => b.dataset.effort)).toEqual(["low", "medium"]);
-  expect(document.querySelector('.model-chooser [data-effort="low"]')!.getAttribute("aria-pressed")).toBe("true");
-  click('.model-chooser [data-effort="medium"]'); click('.model-chooser [data-dlg="use"]'); await flush();
+  expect([...document.querySelectorAll<HTMLElement>('.model-chooser [data-effort]')].map(b => b.dataset.effort)).toEqual(["low", "medium", "", "", ""]);
+  expect(document.querySelector('.model-chooser [data-effort="low"]')!.getAttribute("data-on")).toBe("true");
+  slideTo("medium"); click('.model-chooser [data-dlg="use"]'); await flush();
   expect(api.settingsSet).toHaveBeenCalledWith("quick_model", "");
   expect(api.settingsSet).toHaveBeenLastCalledWith("quick_effort", "medium");
   // a model of its own starts quick (low) and takes its effort in the same list
   click('[data-k="quick-model"]'); click('[data-source="cli:codex"]');
   expect(document.querySelector('.model-chooser [data-dlg="sources"]')!.classList.contains("ghost")).toBe(false);
   click('.model-chooser [data-model="cli:codex:fast"]');
-  expect(document.querySelector('.model-chooser [data-effort="low"]')!.getAttribute("aria-pressed")).toBe("true");
-  click('.model-chooser [data-effort="medium"]'); click('.model-chooser [data-dlg="use"]'); await flush();
+  expect(document.querySelector('.model-chooser [data-effort="low"]')!.getAttribute("data-on")).toBe("true");
+  slideTo("medium"); click('.model-chooser [data-dlg="use"]'); await flush();
   expect(api.settingsSet).toHaveBeenCalledWith("quick_model", "cli:codex:fast");
   expect(api.settingsSet).toHaveBeenLastCalledWith("quick_effort", "medium");
   expect(page.el.querySelector('select')).toBeNull();
@@ -74,10 +130,12 @@ test("快速提問 picks its effort inside the model list, as the answer model d
 
 beforeEach(() => {
   vi.restoreAllMocks(); vi.resetAllMocks(); listeners.clear(); setLocale("en");
+  api.core.mockImplementation(async method => method === "memory.get" ? {text:"",revision:0} : method === "safety.rules.list" ? {rules:[]} : {});
   api.settingsGet.mockResolvedValue({ settings: { stt_engine: "cloud" } });
   api.secretsStatus.mockResolvedValue({ has_key: true });
   api.statusGet.mockResolvedValue({ openrouter: null, spend: null });
   api.audioDevices.mockResolvedValue({ devices: [], default_id: null });
+  api.desktopStatus.mockResolvedValue({ state: "absent", ready: false, control: "member" });
   api.keyboardHasAltgr.mockResolvedValue(false);
   api.languagesList.mockResolvedValue({ groups: [] });
   api.modelsLocal.mockResolvedValue({ models: [] });
@@ -98,6 +156,35 @@ beforeEach(() => {
   api.settingsSet.mockImplementation(async (key: string, value: string) => ({ settings: { stt_engine: "cloud", [key]: value } }));
 });
 afterEach(() => { page?.hide(); document.body.innerHTML = ""; setLocale("zh-TW"); });
+
+test("keeps drawing and video unset until the owner chooses their separate paid models", async () => {
+  await mount();
+  for (const key of ["image-model", "video-model"]) {
+    const row = page.el.querySelector(`[data-row="${key}"]`);
+    expect(row).not.toBeNull();
+    expect(row!.textContent).toContain("Not set");
+    expect(row!.textContent).toContain("paid API");
+    expect(row!.querySelector('.mp-source')!.textContent).toBe("");
+  }
+  expect(api.settingsSet).not.toHaveBeenCalled();
+});
+
+test("media selection uses the image-only catalog and repairs focus the exact row without saving", async () => {
+  const image = { ...direct.llm[0], id: "test/image-only", name: "Image only", provider_id: "openrouter", provider_name: "OpenRouter", roles: {}, per_image: .04 };
+  api.modelsCatalog.mockResolvedValue({ ...empty, image: [image], video: [] });
+  api.providersList.mockResolvedValue({ providers: [{ id: "openrouter", kind: "openrouter", name: "OpenRouter", enabled: true, has_key: true }] });
+  await mount();
+  await page.show("repair:models:image"); await flush();
+  expect(document.activeElement?.getAttribute("data-k")).toBe("image-model");
+  expect(api.settingsSet).not.toHaveBeenCalled();
+  click('[data-k="image-model"]');
+  click('[data-model="test/image-only"]'); click('[data-dlg="use"]'); await flush();
+  expect(api.settingsSet).toHaveBeenLastCalledWith("image_model", "test/image-only");
+  expect(page.el.querySelector('[data-row="image-model"]')!.textContent).toContain("$0.04 per image");
+  await page.show("repair:models:video"); await flush();
+  expect(document.activeElement?.getAttribute("data-k")).toBe("video-model");
+  expect(page.el.querySelector('[data-row="video-model"]')!.textContent).toContain("No models available");
+});
 
 test("profile notifications update idle fields and preserve the field currently being typed", async () => {
   api.settingsGet.mockResolvedValue({ settings: { stt_engine: "cloud", owner_name: "Before", owner_about: "Before" } });
@@ -140,12 +227,12 @@ test("models in use precede subscription accounts and providers, login uses the 
   expect(api.brainsCliLogin).toHaveBeenCalledWith("claude");
   api.brainsCli.mockResolvedValue({ clis: [{ ...claude, logged_in: true, available: true, version: "2.1", models: [{ id: "cli:claude:sonnet", name: "Claude Sonnet", is_default: true }] }] });
   send({ type: "BrainsChanged" }); await flush();
-  expect(page.el.querySelector('.cli-card')!.textContent).toContain("Signed in · v2.1");
+  expect(page.el.querySelector('.cli-card:not([data-chatgpt-card])')!.textContent).toContain("Signed in · v2.1");
   expect(page.el.querySelector('[data-cli="claude"]')).toBeNull();
   click('[data-model-picker="answer"] .mp-trigger');
   expect(document.querySelector('[data-source="cli:claude"]')).not.toBeNull();
   click('[data-source="cli:claude"]'); click('.mp-opt[data-id="cli:claude:sonnet"]'); click('[data-dlg="use"]'); await flush();
-  expect(api.settingsSet).toHaveBeenCalledWith("agent_model", "cli:claude:sonnet");
+  expect(api.settingsSet).toHaveBeenCalledWith("quick_model", "cli:claude:sonnet");
   click('[data-model-picker="cleanup"] .mp-trigger');
   expect(document.querySelector('[data-source="cli:claude"]')).toBeNull();
 });
@@ -157,7 +244,7 @@ test.each(["usage", "models"] as const)("%s opens the single Models pane without
   expect(page.el.querySelectorAll('.set-list [data-pane="models"]')).toHaveLength(1);
   expect(page.el.querySelector('.set-list [data-pane="usage"]')).toBeNull();
   expect(page.el.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-models-tab")).toBe(alias);
-  expect(page.el.querySelectorAll('[data-model-picker]')).toHaveLength(alias === "models" ? 4 : 0);
+  expect(page.el.querySelectorAll('[data-model-picker]')).toHaveLength(alias === "models" ? 5 : 0);
   expect(page.el.querySelector('[data-fallback-purpose]')).toBeNull();
   expect(page.el.textContent).not.toContain("Fallback models");
   expect(api.settingsSet).not.toHaveBeenCalled();
@@ -325,7 +412,7 @@ test("a late catalog response cannot undo a newer provider notification in an op
 });
 
 test.each([
-  ["cleanup", "cleanup_model"], ["answer", "agent_model"], ["stt", "stt_cloud_model"],
+  ["cleanup", "cleanup_model"], ["answer", "quick_model"], ["stt", "stt_cloud_model"],
 ])("the %s purpose stores provider refs and still accepts plain OpenRouter slugs", async (role, setting) => {
   api.modelsCatalog.mockResolvedValue(direct);
   await mount();

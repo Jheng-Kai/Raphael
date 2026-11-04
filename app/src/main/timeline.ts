@@ -1,11 +1,15 @@
+import { missingHTML, missingText } from "./missing";
 import { fileKind, sentFileHTML } from "./attachments";
 import { computerCardsHTML, computerResumedLineHTML } from "./computer-card";
 import { connectorCardsHTML, resumedLineHTML } from "./connector-card";
-import { NAME, eventLineHTML } from "./event-line";
-import { handoffLineHTML } from "./handoff-line";
+import { NAME, eventLineHTML, eventPeopleHTML } from "./event-line";
+import { handoffGroupHTML } from "./handoff-line";
 import { mailCardsHTML, mailHandedLinesHTML } from "./mail-card";
-import { permissionCardsHTML } from "./permission-card";
+import { pageCardsHTML } from "./page-card";
+import { ownerQuestionsHTML, permissionCardsHTML } from "./permission-card";
 import { secretCardsHTML, secretResumedLineHTML } from "./secret-card";
+import { mcpProposalsHTML } from "./mcp-proposal";
+import { liveAction, pastStep, workActions } from "./work-actions";
 // A turn of the conversation as the 拉斐爾 page shows it: the person's words on the right, with a
 // their actions below each bubble; Raphael on the left, with his face and each public message
 // in order. Events are small chips, questions mount inline, and pending work shares the live work line.
@@ -15,16 +19,21 @@ import { secretCardsHTML, secretResumedLineHTML } from "./secret-card";
 // so that the page can draw again at any time and only what changed moves. Every word that came from
 // the core goes through `esc`.
 
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
+import { routineSentenceHTML } from "./members";
 import type { MessageKey } from "./i18n/zh-TW";
 
 import { plainReplies } from "../shared/anime";
-import { TYPED, VOICE, hasDetail, highlightHTML, sourceOf } from "./conversation";
+import { messageExpandHTML } from "./message-preview";
+import { TYPED, VOICE, exchangeTurn, hasDetail, highlightHTML, sourceOf } from "./conversation";
+import { receivedLineHTML } from "./exchange-line";
 import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draft";
-import { messageHTML } from "./message-content";
+import { messageHTML, replyContentHTML } from "./message-content";
+import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
 import { previewCardsHTML } from "./link-previews";
 import { formatClock, formatUsd } from "./format";
+import { formatPerMtok } from "./pricing";
 import { SERVICE_ICONS, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
 import type { AgentStep, AgentTask, AgentTurn, MainEvent, MediaPayload, MessageQuote, TurnAttachment } from "./types";
 import { btn, esc, ico, iconBtn } from "./ui";
@@ -45,6 +54,8 @@ const BUILTIN_TITLES: Record<string, MessageKey> = {
   web_search: "agent.tool.webSearch",
   local_time: "agent.tool.time",
   find_tools: "agent.tool.findTools",
+  ask_member: "agent.tool.askMember",
+  generate_audio: "agent.tool.generateAudio",
 };
 const COMMAND_TITLES: Record<string, MessageKey> = {
   open: "agent.cmd.open",
@@ -75,6 +86,10 @@ const REASONS: Record<string, MessageKey> = {
   interrupted: "agent.reason.interrupted",
   forbidden: "agent.reason.forbidden",
   bad_arguments: "agent.reason.bad_arguments",
+  auth_expired: "agent.reason.auth",
+  permission_denied: "agent.reason.denied",
+  tool_broken: "agent.reason.protocol",
+  unknown: "agent.reason.error",
   auth: "agent.reason.auth",
   missing_secret: "agent.reason.missing_secret",
   denied: "agent.reason.denied",
@@ -82,6 +97,10 @@ const REASONS: Record<string, MessageKey> = {
   network: "agent.reason.network",
   not_found: "agent.reason.not_found",
   blocked: "agent.reason.blocked",
+  approval_required: "agent.reason.approval_required",
+  memory_refused: "agent.reason.memory_refused",
+  secret_store: "agent.reason.secret_store",
+  url_not_seen: "agent.reason.url_not_seen",
   gone: "agent.reason.gone",
   tool_error: "agent.reason.tool_error",
   protocol: "agent.reason.protocol",
@@ -130,20 +149,35 @@ export function toolAccess(name: string, service = ""): "read" | "write" {
   return first !== undefined && READ_WORDS.has(first) ? "read" : "write";
 }
 
+const BUILTIN_READS: ReadonlySet<string> = new Set([...READ_WORDS, "help", "overview"]);
+/**
+ * Whether one of the app's own tools (the server the core calls "Raphael") only reads, by the words of
+ * its name at either end: `session_search` and `self_check` read, `routine_update` changes. A guess for
+ * its words alone, like `toolAccess`.
+ */
+function builtinAccess(name: string): "read" | "write" {
+  const words = (name.match(WORD) ?? []).map((word) => word.toLowerCase());
+  return words.length > 0 && (BUILTIN_READS.has(words[0]) || BUILTIN_READS.has(words[words.length - 1])) ? "read" : "write";
+}
+
 /**
  * What a step did, in the language of the window. Raphael's own lookups and the commands for this PC
  * have words of their own; a service's tool, whose name is the server's and in its language, is
  * 「Notion：讀取」 or 「Notion：修改」 by whether it only reads (`toolAccess`). Its name is the step's
- * tooltip (`stepToolTip`).
+ * tooltip (`stepToolTip`). A tool of the app's own, which every member has as much as Raphael, names
+ * nobody: 「修改」 alone, so that a member's turn never looks like Raphael's doing.
  */
 export function stepTitle(step: AgentStep): string {
   if (step.kind === "model") return t("agent.stepThinking");
   if (!step.tool) return t("agent.stepUnknown");
   if (step.kind === "command") return plain(COMMAND_TITLES[step.tool] ?? "agent.cmd.other");
   if (step.kind === "computer") return plain(COMPUTER_TITLES[step.tool] ?? "agent.computer.other");
-  if (step.server === RAPHAEL && BUILTIN_TITLES[step.tool]) return plain(BUILTIN_TITLES[step.tool]);
-  const service = !step.server || step.server === RAPHAEL ? t("agent.title") : step.server;
-  return t(toolAccess(step.tool, step.server ?? "") === "read" ? "agent.tool.read" : "agent.tool.write", { p0: service });
+  if (step.server === "media" && step.tool === "image_generate") return t("media.image");
+  if (step.server === "media" && step.tool === "video_generate") return t("media.video");
+  if (!step.server || step.server === RAPHAEL) {
+    return plain(BUILTIN_TITLES[step.tool] ?? (builtinAccess(step.tool) === "read" ? "agent.tool.readOnly" : "agent.tool.changeOnly"));
+  }
+  return t(toolAccess(step.tool, step.server) === "read" ? "agent.tool.read" : "agent.tool.write", { p0: step.server });
 }
 
 /** The tool's own name, for the tooltip of a step whose words do not name it (a service's tool); blank for one that has words of its own. */
@@ -155,16 +189,19 @@ export function stepToolTip(step: AgentStep): string {
   return step.server === RAPHAEL && BUILTIN_TITLES[step.tool] ? "" : step.tool;
 }
 
-/** Where a step happened: the service, Raphael, or this PC. */
+/** Where a step happened: the service, or this PC. The app's own tools and model calls happened nowhere named: they are every member's. */
 export function stepPlace(step: AgentStep): string {
   if (step.kind === "command" || step.kind === "computer") return t("agent.thisPc");
-  if (step.kind === "model" || step.server === RAPHAEL || !step.server) return t("agent.title");
+  if (step.kind === "model" || step.server === RAPHAEL || !step.server) return "";
   return step.server;
 }
 
 /** Why a step failed, in a few words; empty for one that went well. */
 export function reasonText(step: AgentStep): string {
+  if (step.missing) return missingText(step.missing);
   if (step.outcome === "ok") return "";
+  if (["encrypted", "bad_pdf", "no_text"].includes(step.reason ?? "")) return (t as (key: MessageKey) => string)(`missing.${step.reason}` as MessageKey);
+  if (["bad_url", "blocked_address", "redirects", "unsupported_type"].includes(step.reason ?? "")) return t("missing.urlRead");
   // On the owner's PC a refusal is Raphael not being allowed to touch an app; `denied` elsewhere is a login that was refused.
   if (step.kind === "computer" && step.reason === "denied") return t("agent.reason.notAllowed");
   const key = REASONS[step.reason ?? ""] ?? (step.outcome === "timeout" ? REASONS.timeout : step.outcome === "blocked" ? REASONS.blocked : REASONS.error);
@@ -268,14 +305,15 @@ export function noteTaskEnds(turns: readonly AgentTurn[], state: TimelineState):
   }
 }
 
-/** The picture of a step: the service's mark, Raphael's own for a lookup, the PC for a command. It names the place in its label and tooltip. */
+/** The picture of a step: the service's mark, a plain one for the app's own tool, the PC for a command. A service or the PC is named in its label and tooltip. */
 function stepIcon(step: AgentStep): string {
   const place = esc(stepPlace(step));
-  const named = `role="img" aria-label="${place}" title="${place}"`;
+  const named = place ? `role="img" aria-label="${place}" title="${place}"` : `aria-hidden="true"`;
   if (step.kind === "command" || step.kind === "computer") return `<span class="step-ic" ${named}>${ico("monitor")}</span>`;
   if (step.kind === "model") return `<span class="step-ic" ${named}>${ico("sparkle")}</span>`;
   if (!step.server || step.server === RAPHAEL) {
-    const own = step.tool === "weather" ? ico("cloud") : step.tool === "web_search" ? ico("globe") : step.tool === "local_time" ? ico("clock") : ico("search");
+    const own = step.tool === "weather" ? ico("cloud") : step.tool === "web_search" ? ico("globe") : step.tool === "local_time" ? ico("clock")
+      : step.tool === "ask_member" ? ico("chat") : builtinAccess(step.tool ?? "") === "write" ? ico("pencil") : ico("search");
     return `<span class="step-ic" ${named}>${own}</span>`;
   }
   const mark = serviceIconOf({ name: step.server });
@@ -294,7 +332,8 @@ export function stepHTML(step: AgentStep, isNew: boolean): string {
     `<li class="step ${ok ? "is-ok" : "is-bad"}${isNew ? " is-new" : ""}">` +
     stepIcon(step) +
     `<span class="step-main"><span class="step-t"${tip ? ` title="${esc(tip)}"` : ""}>${esc(stepTitle(step))}</span>` +
-    (ok ? "" : `<span class="step-why">${esc(why)}</span>`) +
+    mediaBillHTML(step) +
+    (step.missing ? missingHTML(step.missing) : ok ? "" : `<span class="step-why">${esc(why)}</span>`) +
     `</span>` +
     `<span class="step-end"><span class="step-ms num">${esc(formatDuration(step.ms))}</span>` +
     `<span class="step-mark" role="img" aria-label="${esc(ok ? t("agent.ok") : why)}">${ok ? ico("check") : ico("x")}</span></span>` +
@@ -302,21 +341,38 @@ export function stepHTML(step: AgentStep, isNew: boolean): string {
   );
 }
 
+function mediaBillHTML(step: AgentStep): string {
+  if (step.server !== "media" || !step.detail) return "";
+  try {
+    const bill = JSON.parse(step.detail);
+    if (typeof bill.model !== "string" || !bill.model) return "";
+    const cost = typeof bill.cost_usd === "number" && Number.isFinite(bill.cost_usd) && bill.cost_usd >= 0 ? formatPerMtok(bill.cost_usd) : t("media.costUnknown");
+    return `<span class="step-detail">${esc(t("media.bill", { p0: bill.model, p1: cost }))}</span>`;
+  } catch { return ""; }
+}
+
 /** The step a task is at now: its words with light passing over them, the time since it began. */
-function liveStepHTML(task: AgentTask, nowMs: number): string {
+function liveStepHTML(task: AgentTask): string {
   const since = task.started_at_ms;
   const words = task.state === "queued" ? t("agent.queued") : t("agent.thinking");
   return (
     `<li class="step is-live">` +
     `<span class="step-ic">${SPINNER}</span>` +
     `<span class="step-main"><span class="step-t shimmer">${esc(words)}</span></span>` +
-    `<span class="step-end">${since ? `<span class="step-ms num" data-since="${since}">${esc(formatDuration(nowMs - since))}</span>` : ""}</span>` +
+    `<span class="step-end">${since ? `<span class="step-ms num" data-since="${since}"></span>` : ""}</span>` +
     `</li>`
   );
 }
 
 /** How many things a turn did, in words: 「1 個動作」, 「3 個動作」. */
 const actionsText = (count: number): string => (count === 1 ? t("agent.stepsDoneOne") : t("agent.stepsDone", { p0: count }));
+
+/** The same conversation cards and controls are used in private and room replies. */
+export function conversationCardsHTML(turn: AgentTurn, memberName?: string): string {
+  return (turn.task?.state === "done" ? `<div data-task-result-slot="${turn.id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") + connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + permissionCardsHTML(turn, undefined, false, memberName) +
+    mailCardsHTML(turn) + pageCardsHTML(turn) + ownerQuestionsHTML(turn) +
+    (turn.messages ?? []).filter(message => message.kind === "media").map(message => artifactHTML(message.text, message.seq)).join("");
+}
 
 /** The words of a summary: how many things were done, how long it took, how many failed; or that a task is under way. */
 export function summaryText(turn: AgentTurn, nowMs: number): { lead: string; time: string; failed: number } {
@@ -326,7 +382,7 @@ export function summaryText(turn: AgentTurn, nowMs: number): { lead: string; tim
   const done = actionsText(steps.length);
   let lead = done;
   if (isLive(task)) lead = task!.state === "queued" ? t("agent.queued") : t("agent.working");
-  else if (task?.state === "waiting") lead = t("agent.taskWaiting"); // its question is the gold card
+  else if (task?.state === "waiting") lead = task.waiting_owner ? t("ownerQuestion.waiting", { p0: task.waiting_owner }) : t("agent.taskWaiting");
   else if (task && TASK_ENDS[task.state]) lead = `${plain(TASK_ENDS[task.state])} · ${done}`;
   const ms = task?.state === "waiting" ? 0 : workMs(turn, nowMs); // the time it waits is not its own
   return { lead, time: ms > 0 || isLive(task) ? formatDuration(ms) : "", failed };
@@ -335,7 +391,7 @@ export function summaryText(turn: AgentTurn, nowMs: number): { lead: string; tim
 /** The list of steps under a summary, which slides open; with the step a task is at last. */
 function stepsBodyHTML(turn: AgentTurn, state: TimelineState, open: boolean): string {
   const live = isLive(turn.task);
-  const rows = shownSteps(turn).map((step, index) => stepHTML(step, !state.seen.has(stepKey(turn, index)))).join("") + (live ? liveStepHTML(turn.task!, state.nowMs) : "");
+  const rows = shownSteps(turn).map((step, index) => stepHTML(step, !state.seen.has(stepKey(turn, index)))).join("") + (live ? liveStepHTML(turn.task!) : "");
   return (
     `<div class="steps-body" id="steps-${esc(turn.id)}"${open ? "" : " inert"}><div class="steps-clip">` +
     `<ol class="steps-list" aria-label="${esc(t("agent.stepsList"))}">${rows}</ol>` +
@@ -370,7 +426,7 @@ function taskCardHTML(turn: AgentTurn, state: TimelineState): string {
   const open = stepsOpen(turn, state);
   const { lead, time, failed } = summaryText(turn, state.nowMs);
   const bad = failed ? t("agent.stepsFailed", { p0: failed }) : "";
-  const words = [lead, time, bad].filter(Boolean).join(" · ");
+  const words = [lead, live ? "" : time, bad].filter(Boolean).join(" · ");
   const ended = state.ended.has(task.id);
   // A task that waits for the owner's yes is not under way, but not over either: it can be stopped.
   const waiting = task.state === "waiting";
@@ -378,10 +434,10 @@ function taskCardHTML(turn: AgentTurn, state: TimelineState): string {
     ? task.state === "queued" ? ico("clock") : SPINNER
     : waiting ? ico("clock")
     : task.state === "done" ? `<span class="task-check${ended ? " is-pop" : ""}">${ico("check")}</span>` : ico("stop");
-  const since = live && task.started_at_ms ? ` data-since="${task.started_at_ms}"` : "";
+  const since = live ? task.started_at_ms ? ` data-since="${task.started_at_ms}"` : ` data-duration="${workMs(turn, 0)}"` : "";
   const summary = btn(
     `<span class="task-mark">${mark}</span><span class="task-lead">${esc(lead)}</span>` +
-      (time ? `<span class="task-time num"${since}>${esc(time)}</span>` : "") +
+      (time ? `<span class="task-time num"${since}>${live ? "" : esc(time)}</span>` : "") +
       (bad ? `<span class="steps-bad">${esc(bad)}</span>` : "") +
       `<span class="steps-chev">${ico("down")}</span>`,
     "task-sum",
@@ -497,10 +553,14 @@ export function answerMeta(turn: AgentTurn): string {
 
 /** How a turn is drawn besides its data. */
 export interface TurnLook {
+  deferPresence?: boolean;
   revealing?: (turnId: number) => boolean;
+  waitingForOwner?: (turnId: number) => boolean;
   regenerateTurnId?: number;
   /** The face of who answers (Raphael's, avatar.ts, or the member's): `loop` while at work on it. */
   face: (loop: boolean) => string;
+  liveFace?: () => string;
+  activityLabel?: string;
   /** The words being looked for, marked wherever they are; blank for none. */
   query?: string;
   /** The name of member `id` (0 is Raphael), for the lines of colleague events. */
@@ -509,6 +569,8 @@ export interface TurnLook {
   memberFace?: (id: number, size?: number) => string;
   /** Whether the window can answer the question of permission card `id` now (it holds that question and is not answering it). */
   answerable?: (cardId: string) => boolean;
+  /** Whom the owner's words may address: each `@Name` among them is drawn as a chip. */
+  mentions?: readonly MentionTarget[];
 }
 
 /**
@@ -517,6 +579,7 @@ export interface TurnLook {
  */
 export function routineLineHTML(turn: AgentTurn): string {
   const title = turn.question.trim();
+  if (turn.routine) return `<div class="sys">${btn(routineSentenceHTML(turn.routine) + (title ? `<span class="routine-object"> · ${esc(title)}</span>` : ""), "sm routine-run-link", ` data-act="open-routine" data-routine="${turn.routine.id}"`)}</div>`;
   return `<div class="sys">${ico("repeat")}<span>${esc(t("members.routineLine"))}</span>${title ? `<b>${esc(title)}</b>` : ""}</div>`;
 }
 
@@ -530,32 +593,35 @@ export function filesHTML(files: readonly TurnAttachment[] | undefined): string 
   return `<div class="me-files">${visual.length ? `<div class="attachment-grid${visual.length > 1 ? " is-multiple" : ""}">${visual.map(sentFileHTML).join("")}</div>` : ""}${rest.map(sentFileHTML).join("")}</div>`;
 }
 
-/** Pending requests and running turns share the same public work line. */
-const liveWorkHTML = (seconds: number, latest = t("agent.thinking")): string =>
-  `<span class="think" role="img" aria-label="${esc(t("agent.thinking"))}"><i></i><i></i><i></i></span>` +
-  `<span class="work-latest">${esc(latest)}</span><span class="work-time">${esc(t("chat.workingFor", { p0: seconds }))}</span>`;
-
 /** Background task controls without raw tool labels or a collapsed steps box. */
+export function waitsAtCard(turn: AgentTurn): boolean {
+  return !!(turn.permissions?.some(card => card.state === "pending") || turn.secrets?.some(card => card.state === "pending" || card.state === "failed") || turn.connectors?.some(card => card.state === "pending" || card.state === "authorizing") || turn.computers?.some(card => card.state === "control") || turn.owner_questions?.some(question => question.state === "asked"));
+}
+
 function taskActionsHTML(turn: AgentTurn, state: TimelineState): string {
   const task = turn.task;
   if (!task) return "";
+  if (turn.permissions?.length || turn.secrets?.length || turn.connectors?.length || turn.computers?.length || turn.connection_proposals?.length || turn.pages?.length || turn.drafts?.some(draft => draft.mode === "card") || turn.owner_questions?.some(question => question.kind === "ask_owner" || question.kind === "show_page")) return "";
+  if (task.state === "waiting" && turn.owner_questions?.some(question => question.state === "asked")) return "";
+  // A reply already says the work is finished.
+  if (task.state === "done" && (turn.text.trim() || turn.messages?.some(message => message.kind === "reply" && message.text.trim()))) return "";
   const live = isLive(task) || task.state === "waiting";
-  const label = task.state === "waiting" ? t("agent.taskWaiting") : isLive(task) ? t("agent.working") : plain(TASK_ENDS[task.state] ?? "agent.ok");
+  const label = task.state === "waiting" ? task.waiting_owner ? t("ownerQuestion.waiting", { p0: task.waiting_owner }) : t("agent.taskWaiting") : isLive(task) ? t("agent.working") : plain(TASK_ENDS[task.state] ?? "agent.ok");
   return `<div class="turn-event task-actions"><span>${esc(label)}</span>` +
     (live ? btn(esc(t("agent.stop")), "sm stop", ` data-act="stop" data-task="${esc(task.id)}"${state.stopping.has(task.id) ? " disabled" : ""}`) : "") +
     (RERUNNABLE.has(task.state) ? btn(esc(t("agent.rerun")), "sm rerun", ` data-act="rerun" data-task="${esc(task.id)}"${state.rerunning.has(task.id) ? " disabled" : ""}`) : "") + `</div>`;
 }
 
 /** Media stands above the owner's bubble, whose quote precedes the words. */
-function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined, quote?: MessageQuote | null): string {
-  const bubble = words || quote ? `<div class="bubble">${quote ? quoteHTML(quote) : ""}${words}</div>` : "";
+function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined, quote?: MessageQuote | null, expand = ""): string {
+  const bubble = words || quote ? `<div class="bubble">${quote ? quoteHTML(quote) : ""}<div class="message-text">${words}</div>${expand}</div>` : "";
   return files?.length ? `<div class="owner-content">${filesHTML(files)}${bubble}</div>` : bubble;
 }
 
-export function messageActionsHTML(time: number, regenerate = false, owner?: "edit" | "cancel", actionable = true): string {
+export function messageActionsHTML(time: number, regenerate = false, owner?: "edit" | "cancel", actionable = true, work = "", queued = false): string {
   const action = (icon: Parameters<typeof iconBtn>[0], label: string, act: string): string =>
     iconBtn(icon, label, ` data-act="${act}"`).replace(" title=", " data-tooltip=");
-  return `<div class="message-actions"><time tabindex="0" data-tooltip="${esc(new Date(time).toLocaleString())}" datetime="${esc(new Date(time).toISOString())}">${esc(formatClock(time))}</time>` +
+  return `<div class="message-actions">${queued ? `<span class="queued-mark">${esc(t("agent.queued"))}</span>` : ""}<time tabindex="0" data-tooltip="${esc(new Date(time).toLocaleString())}" datetime="${esc(new Date(time).toISOString())}">${esc(formatClock(time))}</time>` + work +
     (actionable ? action("reply", t("chat.reply"), "reply-message") : "") +
     action("copy", t("chat.copy"), "copy-message") +
     (owner ? action(owner === "edit" ? "pencil" : "x", t(owner === "edit" ? "chat.edit" : "common.cancel"), `${owner}-message`) : "") +
@@ -563,11 +629,27 @@ export function messageActionsHTML(time: number, regenerate = false, owner?: "ed
 }
 
 function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: number, query: string, state: TimelineState, reply: boolean, regenerate = false): string {
+  if (reply) text = plainReplies([text])[0];
   const expanded = state.expandedMessages.has(`${turn.id}:${key}`);
-  return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-expandable="true"' : ""}>` +
-    `<div class="ans${reply ? "" : " progress"}"><div class="message-text">${messageHTML(text, query, reply)}</div></div>` +
-    (reply ? btn(esc(t(expanded ? "chat.showLess" : "chat.showAll")), "sm message-expand", ` data-act="expand-message" aria-expanded="${expanded}"${text.split("\n").length > 30 || text.length > 3000 || expanded ? "" : " hidden"}`) : "") +
-    messageActionsHTML(time, regenerate, undefined, reply) + (reply ? previewCardsHTML(text) : "") + `</div>`;
+  return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
+    (reply ? replyContentHTML(text, query, turn.status === "running") : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`) +
+    messageActionsHTML(time, regenerate, undefined, reply, reply ? workActionHTML(turn, state) : "") + (reply ? previewCardsHTML(text) : "") + `</div>`;
+}
+
+function workActionHTML(turn: AgentTurn, state: TimelineState): string {
+  if (turn.status === "running" || isLive(turn.task)) return "";
+  if (!(shownSteps(turn).length || workActions(turn).length || turn.messages?.some(m => m.kind === "progress" || m.kind === "thinking") || turn.model)) return "";
+  const end = turn.task?.finished_at_ms ?? Math.max(turn.created_at_ms, ...(turn.messages ?? []).filter(message => message.kind === "reply").map(message => message.at_ms), ...(turn.steps ?? []).map(step => step.at_ms || turn.created_at_ms));
+  const label = t("work.inspect") + ` · ${formatDuration(Math.max(0, end - turn.created_at_ms))}`;
+  return btn(ico("steps"), "sm icon message-work", ` data-act="thinking" aria-expanded="${state.thinkingOpen.get(turn.id) ?? false}" aria-controls="work-${turn.id}" aria-label="${esc(label)}" data-tooltip="${esc(label)}"`);
+}
+
+export function livePresenceHTML(look: TurnLook, progress?: string, showAction = true): string {
+  const face = look.liveFace?.() ?? look.face(true);
+  const current = face.replace(/\sdata-(?:tooltip|presence-member)="[^"]*"/g, "");
+  if (!showAction) return `<div class="live-presence" role="status">${face}</div>`;
+  const text = progress?.trim() || look.activityLabel?.trim() || t("work.thinking");
+  return `<div class="live-presence" role="status" data-tooltip="${esc(text)}">${current}<span class="live-action">${esc(text)}</span></div>`;
 }
 
 /** Validates an http(s) URL; returns null for any other scheme or invalid URL. */
@@ -624,6 +706,21 @@ export function safeYoutubeEmbedUrl(embed: unknown, fallbackUrl?: unknown): stri
   return null;
 }
 
+function artifactHTML(text: string, seq: number): string {
+  try {
+    const payload = JSON.parse(text);
+    const prerequisite = payload?.missing;
+    if (prerequisite && typeof prerequisite.resource === "string" && typeof prerequisite.requirement === "string" && ["missing", "broken", "unknown", "off"].includes(prerequisite.state) && (prerequisite.repair === null || typeof prerequisite.repair === "string")) {
+      return `<div class="chat-message" data-message="${seq}">${missingHTML(prerequisite)}</div>`;
+    }
+    const file = payload?.attachment as TurnAttachment | undefined;
+    if (file && typeof file.id === "string" && /^[a-f0-9]{32}\.[a-z0-9]{1,12}$/.test(file.id) && typeof file.name === "string" && typeof file.mime === "string") {
+      return `<div class="chat-message" data-message="${seq}">${sentFileHTML({ id: file.id, name: file.name, mime: file.mime, size: typeof file.size === "number" && Number.isFinite(file.size) && file.size >= 0 ? file.size : undefined })}</div>`;
+    }
+  } catch { /* Older media messages use the URL payload below. */ }
+  return "";
+}
+
 /** Parses a `media` message's JSON string; returns null when malformed. */
 export function parseMediaPayload(raw: string): MediaPayload | null {
   try {
@@ -655,24 +752,28 @@ function meetingEvent(text: string): { room_id: number; name: string } | null {
 /** One public line of Raphael's work (《告。…》 on the desktop) as the window shows it: plain. */
 const plainLine = (text: string): string => plainReplies([text])[0];
 
-/** Keep all work behind one closed chip; running turns show their latest public update. */
-function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, revealing = false): string {
-  const messages = (turn.messages ?? []).filter(m => m.kind !== "reply" && m.kind !== "media" && !meetingEvent(m.text) && m.text.trim())
+export function latestProgress(turn: AgentTurn): string | undefined {
+  const action = liveAction(turn);
+  if (action) return action;
+  const text = [...(turn.messages ?? [])].reverse().find(m => m.kind === "progress")?.text;
+  return turn.task?.progress ? plainLine(turn.task.progress) : text && plainLine(text);
+}
+
+/** Work detail opens from the reply action; events stay in the ordered timeline. */
+function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, revealing = false, waitingForOwner = false): string {
+  const messages = (turn.messages ?? []).filter(m => m.kind !== "reply" && m.kind !== "media" && m.kind !== "event" && m.text.trim())
     .map(m => ({ ...m, text: plainLine(m.text) }));
-  if (!messages.length && !(turn.steps?.length) && turn.status !== "running" && !isLive(turn.task) && !revealing) return "";
-  const live = turn.status === "running" || isLive(turn.task);
-  const start = state.workStartedAt.get(turn.id) ?? turn.created_at_ms;
-  const firstReply = (turn.messages ?? []).find(m => m.kind === "reply" && m.at_ms >= turn.created_at_ms)?.at_ms;
-  const end = live ? state.nowMs : turn.task?.finished_at_ms ?? firstReply ?? Math.max(turn.created_at_ms, ...messages.map(m => m.at_ms), ...(turn.steps ?? []).map(step => step.at_ms + step.ms));
-  const seconds = Math.max(0, Math.round((end - start) / 1000));
+  const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
+  if (live) return "";
+  if (!messages.length && !workActions(turn).length && !(turn.steps?.length) && !turn.model && !revealing) return "";
   const open = state.thinkingOpen.get(turn.id) ?? false;
-  const latest = [...messages].reverse().find(m => m.kind === "progress" || m.kind === "thinking");
-  const label = live ? liveWorkHTML(seconds, latest?.text) : `${ico("check")}<span>${esc(t("chat.workedFor", { p0: seconds }))}</span>`;
-  const body = messages.map(m => `<div class="chat-message" data-message="${m.seq}"><div class="${m.kind === "event" ? "turn-event" : "work-progress"}">${messageHTML(m.text, query)}</div></div>`).join("") +
-    ((turn.steps?.length ?? 0) > 0 ? `<ol class="step-list">${shownSteps(turn).map(step => stepHTML(step, false)).join("")}</ol>` : "");
-  if (!body) return `<div class="work-section think-box${live ? " is-live" : ""}" data-thinking-turn="${turn.id}"${live ? ` data-work-start="${start}"` : ""}><div class="btn work-toggle" role="status">${label}</div></div>`;
-  return `<div class="work-section think-box${open ? " is-open" : ""}${live ? " is-live" : ""}" data-thinking-turn="${turn.id}"${live ? ` data-work-start="${start}"` : ""}>` +
-    btn(`${label}<span class="work-chevron">${ico("right")}</span>`, "work-toggle", ` data-act="thinking" aria-expanded="${open}" aria-controls="work-${turn.id}"`) +
+  const actions = workActions(turn).filter(action => action.state === "done");
+  const steps = shownSteps(turn).filter(step => step.kind !== "model");
+  const rows = actions.length ? actions.map(action => `<li>${esc(action.past)}${action.outcome && action.outcome !== "ok" ? ` · ${esc(reasonText({kind:"tool", tool:"", server:null, ms:0, at_ms:0, outcome:action.outcome, reason:action.reason ?? null}))}` : ""}</li>`).join("") : steps.length ? steps.map(step => `<li>${esc(pastStep(step))}${step.outcome !== "ok" ? ` · ${esc(reasonText(step))}` : ""}</li>`).join("") : messages.map(message => `<li class="work-progress">${messageHTML(message.text, query)}</li>`).join("");
+  const meta = [esc(answerMeta(turn)), ...shownSteps(turn).map(mediaBillHTML)].filter(Boolean).join(" · ");
+  const body = (rows ? `<ol class="work-sentences">${rows}</ol>` : "") + (meta ? `<p class="work-meta">${meta}</p>` : "");
+  if (!body) return "";
+  return `<div class="work-section think-box${open ? " is-open" : ""}" data-thinking-turn="${turn.id}">` +
     `<div class="work-body think-body" id="work-${turn.id}"${open ? "" : " hidden"}>${body}</div></div>`;
 }
 
@@ -746,22 +847,26 @@ export function mediaCardHTML(payload: MediaPayload, query: string, seq?: number
 }
 
 /** Renders all ordered items in `turn.messages` (thinking block, progress, media cards, event chips, replies). */
-function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, regenerate: boolean, revealing: boolean): string {
+function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, regenerate: boolean, revealing: boolean, settled = "", fallback = "", waitingForOwner = false): string {
   const ordered = [...(turn.messages ?? [])].sort((a, b) => a.seq - b.seq);
   const replies = ordered.filter(m => m.kind === "reply");
   const said = new Map(plainReplies(replies.map(m => m.text)).map((text, index) => [replies[index].seq, text.trim()]));
   const lastReply = [...replies].reverse().find(m => said.get(m.seq))?.seq;
-  const work = workSectionHTML(turn, state, query, revealing);
+  const work = workSectionHTML(turn, state, query, revealing, waitingForOwner);
+  const events = publicEventsHTML(turn);
   const settledDraft = isSettledDraftTurn(turn);
-  return work + ordered.filter(message => (message.kind === "reply" && !(settledDraft && said.get(message.seq) === turn.text.trim())) || message.kind === "media").map(message => {
+  return settled + ordered.filter(message => (message.kind === "reply" && !(settledDraft && said.get(message.seq) === turn.text.trim())) || message.kind === "media" || message.kind === "event").map(message => {
+    if (message.kind === "event") return events.get(message.seq) ?? "";
     const text = message.kind === "reply" ? said.get(message.seq) ?? "" : message.text.trim();
     if (!text) return "";
     if (message.kind === "media") {
+      const artifact = artifactHTML(text, message.seq);
+      if (artifact) return artifact;
       const media = parseMediaPayload(text);
       return media ? `<div class="chat-message" data-message="${message.seq}">${mediaCardHTML(media, query, message.seq)}</div>` : "";
     }
     return `<div data-seq="${message.seq}">${messageBlockHTML(turn, String(message.seq), text, message.at_ms, query, state, true, regenerate && message.seq === lastReply)}</div>`;
-  }).join("");
+  }).join("") + (replies.length ? "" : fallback) + work;
 }
 
 /**
@@ -769,13 +874,50 @@ function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, 
  * what the owner asked), what it asked colleagues (each opens on the question sent and the answer)
  * and the meetings it opened, whose line opens the room.
  */
+function learnedSkillEvent(text: string): string | null {
+  try { const event = JSON.parse(text); return event?.type === "skill_learned" && typeof event.name === "string" ? event.name : null; }
+  catch { return null; }
+}
+
 function turnEventsHTML(turn: AgentTurn, look: TurnLook, said: boolean): string {
   const owner = said ? { author: t("rooms.owner"), text: turn.question.trim() } : undefined;
-  const meetings = (turn.messages ?? []).filter(m => m.kind === "event").map(m => meetingEvent(m.text)).filter(event => event !== null);
-  return (turn.handoffs ?? []).map(task => handoffLineHTML(task, look.memberFace?.(task.member_id) ?? "",
-    task.mode === "consult" && task.request ? { author: look.memberName?.(task.from_member_id) ?? "", text: task.request } : owner,
-    look.memberName?.(task.member_id) || task.member_name)).join("") +
-    meetings.map(event => `<div class="conversation-event-line">${btn(eventLineHTML(t("rooms.meetingOpened", { p0: NAME }), ico("chat"), event.name), "event-open", ` data-meeting-room="${event.room_id}"`)}</div>`).join("");
+  return handoffGroupHTML((turn.handoffs ?? []).map(task => ({ task, face: look.memberFace?.(task.member_id) ?? "",
+    request: task.mode === "consult" && task.request ? { author: look.memberName?.(task.from_member_id) ?? "", text: task.request } : owner,
+    name: look.memberName?.(task.member_id) || task.member_name })));
+}
+
+function publicEventsHTML(turn: AgentTurn): Map<number, string> {
+  const labels = {
+    "routine.created": "event.routine.created", "routine.updated": "event.routine.updated", "routine.deleted": "event.routine.deleted",
+    "calendar.created": "event.calendar.created", "calendar.updated": "event.calendar.updated", "calendar.deleted": "event.calendar.deleted",
+  } as const satisfies Record<string, MessageKey>;
+  const groups: { kind: string; lines: string[]; names: Map<string, {name: string; face: string}>; seq: number }[] = [];
+  for (const message of [...(turn.messages ?? [])].sort((a,b) => a.seq - b.seq)) {
+    if (message.kind !== "event") { groups.push({kind: "break", lines: [], names: new Map(), seq: message.seq}); continue; }
+    let event: {type?: string; action?: string; id?: number; name?: string; date?: string; member_id?: number} = {};
+    try { event = JSON.parse(message.text); } catch { /* Historical events remain readable without a guessed target. */ }
+    if (event?.type === "action") continue;
+    const known = ["routine", "calendar"].includes(event?.type ?? "") && ["created", "updated", "deleted"].includes(event?.action ?? "") && typeof event.name === "string" && Number.isSafeInteger(event.id) && event.id! > 0;
+    const meeting = meetingEvent(message.text), skill = learnedSkillEvent(message.text);
+    const kind = known ? `${event.type}.${event.action}` : meeting ? "meeting" : skill ? "skill" : `notice:${plainLine(message.text)}`;
+    const words = known ? eventLineHTML(t(labels[`${event.type}.${event.action}` as keyof typeof labels], {p0: NAME}), ico(event.type === "routine" ? "clock" : "calendar"), event.name!) : meeting ? eventLineHTML(t("rooms.meetingOpened", {p0: NAME}), ico("chat"), meeting.name) : skill ? eventLineHTML(t("skills.learnedNotice", {p0: NAME}), ico("check"), skill) : `<span class="sys event-line">${esc(plainLine(message.text.trim().startsWith("{") || message.text.trim().startsWith("[") ? t("event.changed") : message.text))}</span>`;
+    const attrs = meeting ? `data-meeting-room="${meeting.room_id}"` : event?.type === "routine" ? `data-act="open-routine" data-routine="${event.id}"${Number.isSafeInteger(event.member_id) && event.member_id! >= 0 ? ` data-routine-member="${event.member_id}"` : ""}` : `data-act="open-calendar-event" data-event="${event?.id}" data-date="${esc(event?.date ?? "")}"`;
+    const openable = meeting || known && event?.action !== "deleted" && (event.type === "routine" || /^\d{4}-\d{2}-\d{2}$/.test(event.date ?? ""));
+    const line = `<div class="conversation-event-line timeline-event" data-timeline-event="${turn.id}:${message.seq}">${openable ? btn(words, "event-open", ` ${attrs}`) : words}</div>`;
+    const target = known ? {key: `${event.type}:${event.id}`, name: event.name!, face: ico(event.type === "routine" ? "clock" : "calendar")} : meeting ? {key: `meeting:${meeting.room_id}`, name: meeting.name, face: ico("chat")} : {key: kind, name: skill || t("event.changed"), face: ico("check")};
+    let group = groups[groups.length - 1];
+    if (group?.kind !== kind) { group = {kind, lines: [], names: new Map(), seq: message.seq}; groups.push(group); }
+    group.lines.push(line);
+    group.names.set(target.key, {name: target.name, face: target.face});
+  }
+  return new Map(groups.map(group => {
+    if (group.lines.length < 2) return [group.seq, group.lines.join("")];
+    const people = [...group.names.values()].slice(0, 3);
+    const slots = people.map((_, index) => `\u0000${index}\u0000`);
+    if (group.names.size > 3) slots.push(t("event.groupOthers", {p0: group.names.size - 3}));
+    const names = new Intl.ListFormat(getLocale(), {style: "long", type: "conjunction"}).format(slots);
+    return [group.seq, `<details class="handoff-event event-group" data-event-group="${turn.id}:${group.seq}"><summary>${eventPeopleHTML(t("event.group", {p0: group.lines.length, p1: names}), people)}</summary><div class="handoff-detail">${group.lines.join("")}</div></details>`];
+  }));
 }
 
 /** One question and its answer, with what was done in between. */
@@ -789,11 +931,13 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   // resumed once its connector cards were connected
   const routine = sourceOf(turn) === "routine";
   const resumed = sourceOf(turn) === "connector";
-  const said = turn.question.trim() !== "" && !routine && !resumed;
+  // what a colleague handed this member says who from, in place of the owner's words
+  const handed = exchangeTurn(turn);
+  const said = turn.question.trim() !== "" && !routine && !resumed && !handed;
   const asked = said || (turn.attachments?.length ?? 0) > 0;
-  const live = turn.status === "running" || isLive(turn.task);
+  const waitingForOwner = look.waitingForOwner?.(turn.id) ?? false;
+  const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
   const revealing = look.revealing?.(turn.id) ?? false;
-  const meta = esc(answerMeta(turn));
   const more = detail
     ? `<div class="tn-foot">${btn(ico("down"), "sm icon tn-more", ` data-act="detail" aria-expanded="${detailOpen}" aria-controls="tn-detail-${id}" aria-label="${esc(t("agent.detail"))}" title="${esc(t("agent.detail"))}"`)}</div>`
     : "";
@@ -803,29 +947,35 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   const textAnswer = turn.status === "confirm" || settledDraft || turn.route === "draft" || !turn.text.trim()
     ? "" : messageBlockHTML(turn, "reply", turn.text, turn.created_at_ms, query, state, true, regenerate);
   return (
-    `<li class="tn" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}>` +
+    `<li class="tn${turn.status === "queued" || turn.route === "owner_input" || (live && !hasMsgs) ? " is-owner-only" : ""}" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}>` +
     (routine ? routineLineHTML(turn) : "") +
+    (handed ? receivedLineHTML(turn, look) : "") +
     (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) + computerResumedLineHTML(turn) : "") +
     (asked
       ? `<div class="me">` +
-        `<div class="chat-message owner-message" data-message="question">` +
-        bubbleHTML(said ? messageHTML(turn.question.trim(), query) : "", turn.attachments, turn.quote) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit") + `</div>` +
+        `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +
+        bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "queued" || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit", true, "", turn.status === "queued") + `</div>` +
         `</div>`
       : "") +
     turnEventsHTML(turn, look, said) + mailHandedLinesHTML(turn, look) +
-    `<div class="ra${isBotRename(turn) ? " is-system-result" : ""}">` +
-    (isBotRename(turn) ? "" : `<span class="ra-face"${meta ? ` title="${meta}"` : ""}>${look.face(live || revealing)}</span>`) + `<div class="ra-body">` +
+    (turn.route === "owner_input" || turn.status === "queued" ? "" : `<div class="ra${isBotRename(turn) ? " is-system-result" : ""}">` +
+    `<div class="ra-body">` +
+    // A question already answered came before the answer: it reads in that order, under the work and above the reply.
     (hasMsgs
-      ? turnMessagesHTML(turn, state, query, regenerate, revealing) + (turn.messages!.some(m => m.kind === "reply") ? "" : textAnswer)
-      : workSectionHTML(turn, state, query, revealing) + textAnswer) +
+      ? turnMessagesHTML(turn, state, query, regenerate, revealing, permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")), textAnswer, waitingForOwner)
+      : permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + textAnswer + workSectionHTML(turn, state, query, revealing, waitingForOwner)) +
     (settledDraft ? settledDraftHTML(turn, detailOpen, query) : "") +
-    connectorCardsHTML(turn) + secretCardsHTML(turn) + computerCardsHTML(turn) +
-    permissionCardsHTML(turn, look.answerable) + mailCardsHTML(turn, look) +
+    connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + computerCardsHTML(turn) +
+    `<div data-desktop-slot="${id}"></div>` +
+    permissionCardsHTML(turn, look.answerable, false, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + mailCardsHTML(turn, look) + pageCardsHTML(turn) +
+    ownerQuestionsHTML(turn) +
     (turn.status === "confirm" ? `<div class="turn-question" data-question-turn="${id}"></div>` : "") +
     (detail ? `<div class="tn-detail" id="tn-detail-${id}"${detailOpen ? "" : " hidden"}>${messageHTML(turn.detail, query, true)}</div>` : "") +
     more +
-    taskActionsHTML(turn, state) +
-    `</div></div></li>`
+    (turn.task?.state === "done" ? `<div data-task-result-slot="${id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") +
+    (waitingForOwner || live || turn.task?.state === "waiting" ? "" : taskActionsHTML(turn, state)) +
+    (!look.deferPresence && (live || waitingForOwner || waitsAtCard(turn) || revealing || turn.task?.state === "waiting" || turn.status === "confirm") ? livePresenceHTML(look, latestProgress(turn), live || revealing) : "") +
+    `</div></div>`) + `</li>`
   );
 }
 
@@ -837,15 +987,29 @@ export const dayHTML = (label: string): string => `<li class="day"><span>${esc(l
  * a bubble with light passing over it until the words arrive) and Raphael thinking. A typed
  * question shows the chips of the files it was sent with.
  */
-export function pendingTurnHTML(question: string | null, _source: string, look: TurnLook, files: readonly TurnAttachment[] = [], request?: { id?: string; time: number; quote?: MessageQuote }, nowMs = Date.now()): string {
-  const start = request?.time ?? nowMs;
+export function pendingTurnHTML(question: string | null, _source: string, look: TurnLook, files: readonly TurnAttachment[] = [], request?: { id?: string; time: number; quote?: MessageQuote }, nowMs = Date.now(), expanded = false, showPresence = true): string {
+  void nowMs;
   const words =
-    question === null ? `<span class="shimmer">${esc(t("agent.hearing"))}</span>` : question.trim() === "" ? "" : messageHTML(question.trim());
+    question === null ? `<span class="shimmer">${esc(t("agent.hearing"))}</span>` : question.trim() === "" ? "" : messageHTML(question.trim(), "", false, look.mentions);
   return (
-    `<li class="tn is-pending"${request?.id ? ` data-session="${esc(request.id)}"` : ""}>` +
-    `<div class="me"><div class="chat-message owner-message" data-message="question">${bubbleHTML(words, files, request?.quote)}${request?.id ? messageActionsHTML(request.time, false, "cancel") : ""}</div></div>` +
-    `<div class="ra"><span class="ra-face">${look.face(true)}</span><div class="ra-body">` +
-    `<div class="work-section think-box is-live" data-work-start="${start}"><div class="btn work-toggle" role="status">${liveWorkHTML(Math.max(0, Math.round((nowMs - start) / 1000)))}</div></div>` +
-    `</div></div></li>`
+    `<li class="tn is-pending is-owner-only"${request?.id ? ` data-session="${esc(request.id)}"` : ""}>` +
+    `<div class="me"><div class="chat-message owner-message${expanded ? " is-expanded" : ""}" data-message="question" data-expandable="true">${bubbleHTML(words, files, request?.quote, messageExpandHTML(question ?? "", expanded))}${request?.id ? messageActionsHTML(request.time, false, "cancel") : ""}</div></div>` +
+    (showPresence ? `<div class="ra"><div class="ra-body">${livePresenceHTML(look)}</div></div>` : "") + `</li>`
   );
+}
+
+/** Paint clocks in the same task as the markup, without making time part of a line's identity. */
+export function updateLiveTimes(root: ParentNode, nowMs = Date.now()): void {
+  const write = (label: HTMLElement, text: string): void => { if (label.textContent !== text) label.textContent = text; };
+  for (const line of root.querySelectorAll<HTMLElement>(".work-section.is-live[data-work-start]")) {
+    const label = line.querySelector<HTMLElement>(".work-time");
+    if (label) write(label, t("chat.workingFor", { p0: Math.max(0, Math.round((nowMs - Number(line.dataset.workStart)) / 1000)) }));
+  }
+  for (const label of root.querySelectorAll<HTMLElement>("[data-since]")) write(label, formatDuration(nowMs - Number(label.dataset.since)));
+  for (const label of root.querySelectorAll<HTMLElement>("[data-duration]")) write(label, formatDuration(Number(label.dataset.duration)));
+}
+
+/** A loaded task or handoff belongs to this thread; unknown tasks are polled more slowly. */
+export function hasWorkerTask(turns: readonly AgentTurn[], taskId: number): boolean {
+  return turns.some(turn => turn.task?.id === taskId || turn.handoffs?.some(task => task.task_id === taskId));
 }

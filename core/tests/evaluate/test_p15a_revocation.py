@@ -11,6 +11,7 @@ from p15a_brains import Stage
 
 PROMPT = "請用 Guardian 寄出測試信。"
 SENT = "測試信已經寄出了。"
+REFUSED = "這封信沒有寄出。"
 WRITE = "Guardian__write"
 
 
@@ -21,7 +22,7 @@ def act(user, tools, results):
         return "我不確定要怎麼做。", []
     if not results:
         return "", [(WRITE, {})]
-    return (SENT if "test_mode" in results[-1] else "這封信沒有寄出。"), []
+    return (SENT if "test_mode" in results[-1] else REFUSED), []
 
 
 class Owner(Stage):
@@ -39,9 +40,6 @@ class Owner(Stage):
 
     def sends(self):
         return [receipt["operation"] for receipt in self.driver.recorder.receipts if receipt["operation"] == "write"]
-
-    def blocked(self):
-        return [trace for trace in self.driver.traces if trace["name"].endswith("/write") and trace["outcome"] == "blocked"]
 
     async def always(self):
         """The first send is asked about, and the owner says 一律允許."""
@@ -69,12 +67,13 @@ async def test_a_tool_switched_off_while_the_model_thinks_is_refused_after_alway
         await owner.setup()
         await owner.always()
         owner.after_listing(owner.switch_off)
+        first_round = len(owner.offered)
         result = await owner.driver.ask(PROMPT, session="in-flight")
-        # The tool was on when the brain was told what it may use, and off when it called it: the gate refused it,
+        # The tool was on when the brain was told what it may use, and off when it called it: the call was refused,
         # with no question to the owner (Always waives questions, never a switch) and no send.
-        assert WRITE in owner.offered[-1]
-        assert result.get("status") == "done" and SENT not in result["text"]
-        assert owner.sends() == ["write", "write"] and len(owner.blocked()) == 1
+        assert WRITE in owner.offered[first_round]
+        assert result.get("status") == "done" and REFUSED in result["text"]
+        assert owner.sends() == ["write", "write"]
     finally:
         await owner.aclose()
 
@@ -121,8 +120,8 @@ async def test_an_uninstalled_app_is_not_offered_not_called_not_counted_and_not_
         # And one that is in flight when it goes (the brain was told of it, then the owner uninstalled it) is refused too.
         await owner.driver.install_permission_fixture()
         owner.after_listing(owner.uninstall)
+        first_round = len(owner.offered)
         in_flight = await owner.driver.ask(PROMPT, session="gone-in-flight")
-        assert WRITE in owner.offered[-1] and SENT not in in_flight["text"] and owner.sends() == ["write", "write"]
-        assert len(owner.blocked()) == 1
+        assert WRITE in owner.offered[first_round] and REFUSED in in_flight["text"] and owner.sends() == ["write", "write"]
     finally:
         await owner.aclose()

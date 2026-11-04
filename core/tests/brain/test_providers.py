@@ -9,6 +9,42 @@ from raphael_core.brain.openrouter import OpenRouterError
 from raphael_core.brain.providers.clients import CompatibleProvider, validate_base_url
 
 
+@pytest.mark.parametrize("method", ["chat_text", "chat_tools", "plan_tools", "complete_json"])
+async def test_selected_openrouter_effort_is_a_reasoning_parameter_not_a_model_id(method):
+    from raphael_core.brain.db import connect
+    from raphael_core.brain.openrouter import OpenRouterClient
+    from raphael_core.brain.providers.registry import ProviderRegistry, ProviderRouter
+    from raphael_core.brain.secrets import MemoryKeyStore
+
+    conn, keys, requests = connect(":memory:"), MemoryKeyStore(), []
+    keys.set("test-only-key")
+    def handler(request):
+        body = json.loads(request.content)
+        requests.append(body)
+        assert body["model"] == "test/reasoner"
+        assert body["reasoning"] == {"effort": "high"}
+        return reply('{"text":"Selected model."}')
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        legacy = OpenRouterClient(keys.get, http=http)
+        registry = ProviderRegistry(conn, legacy, keys, credential=lambda _: keys, http=http)
+        client = ProviderRouter(registry, legacy)
+        kwargs = {"model": "test/reasoner?effort=high", "timeout_s": 1, "max_tokens": 50}
+        if method == "chat_tools":
+            kwargs.update(messages=[], tools=[], fallbacks=[])
+        else:
+            kwargs.update(system="s", user="u")
+            if method != "chat_text":
+                kwargs["fallbacks"] = []
+            if method == "plan_tools":
+                kwargs["tools"] = []
+            elif method == "complete_json":
+                kwargs.update(schema={"type": "object"}, schema_name="test")
+        await getattr(client, method)(**kwargs)
+        assert len(requests) == 1
+        await registry.aclose()
+    conn.close()
+
+
 async def test_provider_rpc_storage_resolution_and_legacy_migration():
     from raphael_core.brain.db import connect
     from raphael_core.brain.openrouter import OpenRouterClient
@@ -235,7 +271,7 @@ async def test_compatible_tool_roundtrip(kind):
     assert second.content == "done" and second.usage_known
 
 
-@pytest.mark.parametrize("status,kind", [(401, "auth"), (403, "auth"), (429, "rate_limit"), (408, "timeout"), (500, "error")])
+@pytest.mark.parametrize("status,kind", [(401, "auth"), (403, "permission_denied"), (429, "rate_limit"), (408, "timeout"), (500, "server")])
 @pytest.mark.parametrize("native", [False, True])
 async def test_compatible_errors_are_safe(status, kind, native):
     from raphael_core.brain.providers.clients import AnthropicProvider

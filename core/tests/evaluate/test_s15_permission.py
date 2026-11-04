@@ -121,7 +121,8 @@ async def test_a_cli_brain_hears_the_no_was_the_owners_and_has_no_tool_to_ask_fo
         reasons, _ = await driver.execute(PERMISSION)
         assert not reasons, reasons
         assert offered and not any("approve" in tools for tools in offered)
-        refused = [text for text in seen if text.startswith("<tool_result") and "__write" in text and 'status="error"' in text]
+        refused = [text for text in seen if text.startswith("<tool_result") and "__write" in text and 'status="error"' in text
+                   and "逾時" not in text]  # a question that ran out is nobody's no
         assert refused and all("because the owner said no" in text for text in refused), refused
     finally:
         await driver.aclose()

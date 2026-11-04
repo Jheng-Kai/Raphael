@@ -62,14 +62,14 @@ describe("submenu placement", () => {
   const viewport = { width: 720, height: 900, headerBottom: 32 };
   test("a submenu prefers the right of its row and aligns with its top", () => {
     expect(submenuPlacement({ left: 100, right: 350, top: 650 }, { width: 180, height: 120 }, viewport))
-      .toEqual({ left: 354, top: 650, maxHeight: 852 });
+      .toEqual({ left: 350, top: 650, maxHeight: 852 });
   });
   test("it flips left only when the right side has no room", () => {
-    expect(submenuPlacement({ left: 500, right: 700, top: 650 }, { width: 180, height: 120 }, viewport).left).toBe(316);
+    expect(submenuPlacement({ left: 500, right: 700, top: 650 }, { width: 180, height: 120 }, viewport).left).toBe(320);
   });
   test("the viewport and custom header bound a tall submenu", () => {
     expect(submenuPlacement({ left: 100, right: 350, top: 850 }, { width: 320, height: 1000 }, viewport))
-      .toEqual({ left: 354, top: 40, maxHeight: 852 });
+      .toEqual({ left: 350, top: 40, maxHeight: 852 });
   });
 });
 
@@ -132,11 +132,21 @@ describe("the main window's actions", () => {
 
   test("are buttons with a shape: no quiet buttons that read as text, and no links that act", () => {
     for (const file of sources) {
-      const text = read(file);
+      // The shared card exit is a real button with an explicit quiet treatment.
+      const text = read(file).replace(/\bcard-quiet\b/g, "card-exit");
       expect(text, file).not.toMatch(/["'`][^"'`\n]*\bquiet\b[^"'`\n]*["'`]/);
       // `class=\"link\"` in the catalogs, `class="link"` in the pages, `.link` in the styles
       expect(text, file).not.toMatch(/\.btn\.quiet|class=\\?"link\\?"|\.link\b/);
     }
+  });
+
+  test("monospace text has one font stack, with Windows' own faces before the browser's default", () => {
+    // Bare `monospace` resolves to MingLiU on Traditional Chinese Windows, whose Latin letters are ugly.
+    const css = read(path.join(root, "styles.css"));
+    expect(css).toMatch(/--mono: "Cascadia Mono", Consolas, "Microsoft JhengHei UI", "Microsoft JhengHei"[^;]*, monospace;/);
+    expect(css).toMatch(/\bcode, pre, samp \{ font-family: var\(--mono\); \}/);
+    for (const file of sources.filter((f) => f.endsWith(".css")))
+      expect(read(file).replace(/--mono:[^;]*;/, ""), file).not.toMatch(/monospace/);
   });
 
   test("a button has an edge at rest and a fill when it is pressed", () => {

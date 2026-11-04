@@ -1,0 +1,425 @@
+@property --slime-touch { syntax: "<transform-list>"; inherits: false; initial-value: translate(0px); }
+@property --slime-squish { syntax: "<transform-list>"; inherits: false; initial-value: scale(1); }
+/* A slime carries its state in its liquid body and eyes. */
+/* Heavier than the round crop of a picture (`.av.mb-av`), whichever sheet loads last: horns, wings and hats reach past the box.
+   The paint reserve keeps wide landings out of scrollable layout; whole-pixel sizes keep small faces stable. */
+.av.mb-av.mb-av-slime { display: inline-flex; flex: none; width: round(var(--av), 1px); height: round(var(--av), 1px); contain: paint; overflow: clip; overflow-clip-margin: 120px; border-radius: 0; background: transparent; user-select: none; container-type: size; }
+.room-avatar > .av.mb-av.mb-av-slime { width: round(56%, 1px); height: round(56%, 1px); contain: layout; overflow: visible; border-radius: 0; background: transparent; }
+.room-avatar[data-faces="1"] > .av.mb-av.mb-av-slime { width: 100%; height: 100%; }
+.slime { display: block; width: 100%; height: 100%; overflow: visible; }
+.mb-preset-slime { display: inline-flex; align-items: center; justify-content: center; container-type: size; }
+.mb-preset-slime .slime-surface { width: round(84%, 1px); height: round(84%, 1px); }
+
+/* ---- Every moving part turns on its own pivot; the body's is the middle of its base. ---- */
+.slime-press, .slime-settle, .slime-motion, .slime-body { transform-box: view-box; transform-origin: 50px 86px; }
+.slime-look, .slime-gaze { transform-box: view-box; transform-origin: 50px calc(var(--eye-y) + 2px); }
+.slime-mark { transform-box: view-box; transform-origin: var(--mark-x) var(--mark-y); }
+
+@property --slime-dx { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --slime-dy { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --slime-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@property --slime-counterangle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@property --slime-wide { syntax: "<number>"; inherits: false; initial-value: 1; }
+@property --slime-high { syntax: "<number>"; inherits: false; initial-value: 1; }
+.slime-correction { transform-box: view-box; transform-origin: var(--slime-origin-x) var(--slime-origin-y); }
+.slime-counterturn { transform-box: view-box; transform-origin: inherit; }
+.slime-settle, .slime-look, .slime-correction, .slime-counterturn { transition-property: --slime-dx, --slime-dy, --slime-angle, --slime-counterangle, --slime-wide, --slime-high; transition-duration: var(--slime-settle-time, 320ms); transition-timing-function: cubic-bezier(0.25, 0.8, 0.3, 1); }
+.slime-look { --slime-settle-time: 200ms; }
+.slime-in-between { translate: var(--slime-dx) var(--slime-dy); rotate: var(--slime-angle); scale: var(--slime-wide) var(--slime-high); }
+.slime-in-between > .slime-counterturn { rotate: var(--slime-counterangle); }
+
+/* The eyes: one path, so that a change of state turns one face into the next. */
+.slime-eyes { d: var(--eyes); stroke-width: var(--eye-w); transition: d 200ms cubic-bezier(0.3, 0.7, 0.3, 1), stroke-width 200ms cubic-bezier(0.3, 0.7, 0.3, 1); }
+.slime { --eye-y: 48px; --eye-w: 6; --eyes: path("M 42.5 44.5 Q 43 48 43.5 51.5 M 55.5 44.5 Q 56 48 56.5 51.5"); }
+.slime[data-state="working"] { --eye-y: 49px; --eye-w: 4.5; --eyes: path("M 40.8 48.53 Q 43 49 45.2 49.47 M 54.8 49.47 Q 57 49 59.2 48.53"); }
+.slime[data-state="computer"] { --eyes: path("M 42.21 45.24 Q 43 48 43.79 50.76 M 55.21 45.24 Q 56 48 56.79 50.76"); }
+.slime[data-state="waiting"] { --eye-w: 4; --eyes: path("M 40 48 Q 44 48 48 48 M 56 48 Q 60 48 64 48"); }
+.slime[data-state="blocked"] { --eye-w: 9; --eyes: path("M 42 43 Q 42 46 42 49 M 58 43 Q 58 46 58 49"); }
+.slime[data-state="error"] { --eye-w: 3.5; --eyes: path("M 38 52 Q 43 57 48 52 M 52 52 Q 57 57 62 52"); }
+.slime[data-state="done"] { --eye-w: 3.5; --eyes: path("M 38.5 50.25 Q 43 41.25 47.5 50.25 M 52.5 50.25 Q 57 41.25 61.5 50.25"); }
+.slime[data-state="sleeping"] { --eye-y: 50px; --eye-w: 3.5; --eyes: path("M 38.51 50.31 Q 43 50 47.49 49.69 M 52.51 49.69 Q 57 50 61.49 50.31"); }
+
+/* At small sizes, fit the eye spacing, centre and stroke to physical pixels rather than shrinking a large face. */
+.slime-surface { --slime-unit: tan(atan2(min(100cqw, 100cqh), 92px)); }
+.mb-preset-slime .slime-surface { --slime-unit: tan(atan2(round(84cqw, 1px), 92px)); }
+@container (width <= 48px) {
+  .slime-face {
+    --face-scale: tan(atan2(round(calc(16.25px * var(--slime-unit)), 1px), calc(13px * var(--slime-unit))));
+    --slime-face-fit: translate(calc(4px + round(calc(45.5px * var(--slime-unit)), 1px) / var(--slime-unit)), calc(11px + round(calc(37px * var(--slime-unit)), 1px) / var(--slime-unit))) scale(var(--face-scale)) translate(-49.5px, -48px);
+    transform: var(--slime-face-fit);
+  }
+  .slime-eyes, .slime-cel-eye { stroke-width: calc(max(1px, round(calc(var(--eye-w) * 1px * var(--face-scale) * var(--slime-unit)), 1px)) / var(--slime-unit) / var(--face-scale)); }
+  .slime:is([data-state="idle"], [data-state="thinking"], [data-state="searching"], [data-state="arriving"]) { --eyes: path("M 42.5 44.5 Q 43 48 43.5 51.5 M 55.5 44.5 Q 56 48 56.5 51.5"); }
+  .slime[data-state="working"] { --eye-w: 6; }
+}
+
+/* ---- Loops follow the clock (--slime-delay), each a little faster or slower than its neighbours' (--slime-tempo). ---- */
+
+/* Far outside the view the compositor cannot take a loop, and the main thread would advance it every frame (slime-offscreen.ts). */
+.slime-surface[data-offscreen], .slime-surface[data-offscreen] * { animation: none !important; }
+/* A hidden window resumes its visible animations in phase when it returns. */
+html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window-hidden] *::after { animation-play-state: paused !important; }
+
+/* Whole-frame cels move only in active states; idle uses the resting vector. */
+
+.slime-cels { display: block; width: 700%; height: 100%; transform-origin: 0 0; }
+.slime-cels > svg { display: block; width: 100%; height: 100%; }
+/* Group grids can reserve a 20x19 cell. Both strip SVGs and the normal SVG need the same square scale. */
+.slime-surface { position: relative; display: block; flex: none; width: min(100cqw, 100cqh); height: min(100cqw, 100cqh); --eye-w: 6; contain: layout paint; overflow: clip; overflow-clip-margin: 100cqw; }
+.slime-cel-eye { stroke-width: var(--eye-w); }
+
+@keyframes slime-idle-hide { from { visibility: visible; } to { visibility: hidden; } }
+@keyframes slime-idle-show { from { visibility: hidden; } to { visibility: visible; } }
+
+/* Eyes dart and rest; they never drift like a sine wave. */
+/* The lid falls fast, rests, and lifts slower with a small overshoot; every second one comes in a pair. */
+@keyframes slime-blink {
+  0%, 8% { scale: 1 1; animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.4); }
+  9%, 10% { scale: 1.06 0.16; animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1); }
+  12.4% { scale: 0.98 1.06; animation-timing-function: cubic-bezier(0.4, 0, 0.5, 1); }
+  14%, 66% { scale: 1 1; animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.4); }
+  67%, 67.8% { scale: 1.06 0.16; animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1); }
+  69.4% { scale: 1 1; animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.4); }
+  70.4%, 71.2% { scale: 1.06 0.16; animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1); }
+  73.6% { scale: 0.98 1.06; animation-timing-function: cubic-bezier(0.4, 0, 0.5, 1); }
+  75.2%, 100% { scale: 1 1; }
+}
+
+/* thinking: eyes up and aside, resting between darts, while the body leans slowly from one side to the other. */
+@container (width > 72px) {
+  .slime[data-state="thinking"] .slime-motion { animation: slime-thinking-body calc(2.8s * var(--slime-tempo)) cubic-bezier(0.45, 0.05, 0.55, 0.95) var(--slime-delay) infinite both; }
+}
+@container (width <= 72px) {
+  .slime[data-transitioning][data-state="thinking"] .slime-motion { animation: slime-thinking-body calc(2.8s * var(--slime-tempo)) cubic-bezier(0.45, 0.05, 0.55, 0.95) var(--slime-delay) both; }
+}
+@container (width > 72px) {
+  .slime[data-state="thinking"] .slime-gaze { animation: slime-thinking-gaze calc(4.3s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) infinite both, slime-blink calc(5.3s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
+}
+@container (width <= 72px) {
+  .slime[data-transitioning][data-state="thinking"] .slime-gaze { animation: slime-thinking-gaze calc(4.3s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) both, slime-blink calc(5.3s * var(--slime-tempo)) linear var(--slime-delay) both; }
+}
+@container (width > 72px) {
+  .slime[data-state="thinking"] .slime-mark { animation: slime-thinking-mark calc(3.6s * var(--slime-tempo)) cubic-bezier(0.45, 0.05, 0.55, 0.95) calc(var(--slime-delay) + 140ms) infinite both; }
+}
+@container (width <= 72px) {
+  .slime[data-transitioning][data-state="thinking"] .slime-mark { animation: slime-thinking-mark calc(3.6s * var(--slime-tempo)) cubic-bezier(0.45, 0.05, 0.55, 0.95) calc(var(--slime-delay) + 140ms) both; }
+}
+@keyframes slime-thinking-body {
+  0%, 100% { translate: -0.6px 0; rotate: -6deg; scale: 1 1; }
+  28% { translate: -0.6px 0; rotate: -6deg; scale: 0.992 1.016; }
+  50% { translate: 0.6px 0; rotate: 6deg; scale: 1 1; }
+  78% { translate: 0.6px 0; rotate: 6deg; scale: 0.992 1.016; }
+}
+@keyframes slime-thinking-gaze {
+  0%, 28% { translate: -2.5px -5px; }
+  31%, 55% { translate: 2.5px -6px; }
+  58%, 80% { translate: 0.5px -4.5px; }
+  83%, 100% { translate: -2.5px -5px; }
+}
+@keyframes slime-thinking-mark {
+  0%, 100% { rotate: calc(var(--mark-give) * 2deg); }
+  50% { rotate: calc(var(--mark-give) * -2deg); }
+}
+
+/* Working kneads from the base: anticipation, stretch, landing and a soft overshoot. */
+@container (width > 72px) {
+  .slime[data-state="working"] .slime-motion { animation: slime-working-body calc(.9s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
+}
+@container (width <= 72px) {
+  .slime[data-transitioning][data-state="working"] .slime-motion { animation: slime-working-body calc(.9s * var(--slime-tempo)) linear var(--slime-delay) both; }
+}
+@keyframes slime-working-body {
+  0%, 100% { scale: 1.14 .82; animation-timing-function: cubic-bezier(.2,.8,.3,1); }
+  18% { scale: .92 1.10; animation-timing-function: cubic-bezier(.4,0,.6,1); }
+  40% { scale: .96 1.04; animation-timing-function: cubic-bezier(.7,0,.8,.3); }
+  68% { scale: 1.02 .98; animation-timing-function: cubic-bezier(.2,.8,.3,1); }
+  80% { scale: 1.14 .82; animation-timing-function: cubic-bezier(.3,0,.3,1); }
+  90% { scale: 1.08 .91; }
+}
+
+/* searching: the eyes go first, the body follows, and at each side it stretches up to peek. */
+@container (width > 72px) {
+  .slime[data-state="searching"] .slime-motion { animation: slime-searching-body calc(3.2s * var(--slime-tempo)) cubic-bezier(0.4, 0, 0.3, 1) var(--slime-delay) infinite both; }
+}
+@container (width <= 72px) {
+  .slime[data-transitioning][data-state="searching"] .slime-motion { animation: slime-searching-body calc(3.2s * var(--slime-tempo)) cubic-bezier(0.4, 0, 0.3, 1) var(--slime-delay) both; }
+}
+@container (width > 72px) {
+  .slime[data-state="searching"] .slime-gaze { animation: slime-searching-gaze calc(3.2s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) infinite both, slime-blink calc(5.3s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
+}
+@container (width <= 72px) {
+  .slime[data-transitioning][data-state="searching"] .slime-gaze { animation: slime-searching-gaze calc(3.2s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) both, slime-blink calc(5.3s * var(--slime-tempo)) linear var(--slime-delay) both; }
+}
+@container (width > 72px) {
+  .slime[data-state="searching"] .slime-mark { animation: slime-searching-mark calc(3.2s * var(--slime-tempo)) cubic-bezier(0.4, 0, 0.3, 1) calc(var(--slime-delay) + 120ms) infinite both; }
+}
+@container (width <= 72px) {
+  .slime[data-transitioning][data-state="searching"] .slime-mark { animation: slime-searching-mark calc(3.2s * var(--slime-tempo)) cubic-bezier(0.4, 0, 0.3, 1) calc(var(--slime-delay) + 120ms) both; }
+}
+@keyframes slime-searching-body {
+  0%, 100% { translate: -2px 0; rotate: -4deg; scale: 1 1; }
+  12% { translate: -2px 0; rotate: -4deg; scale: 0.985 1.03; }
+  26%, 30% { translate: -2px 0; rotate: -4deg; scale: 1 1; }
+  48% { translate: 3px -4px; rotate: 4.6deg; scale: 1 1; }
+  54% { translate: 2px 0; rotate: 4deg; scale: 1 1; }
+  62% { translate: 2px 0; rotate: 4deg; scale: 0.985 1.03; }
+  76%, 80% { translate: 2px 0; rotate: 4deg; scale: 1 1; }
+  97% { translate: -3px -4px; rotate: -4.6deg; scale: 1 1; }
+}
+@keyframes slime-searching-gaze {
+  0%, 26% { translate: -4px 0; }
+  30%, 76% { translate: 4px 0; }
+  80%, 100% { translate: -4px 0; }
+}
+@keyframes slime-searching-mark {
+  0%, 26%, 100% { rotate: calc(var(--mark-give) * 3deg); }
+  52%, 76% { rotate: calc(var(--mark-give) * -3deg); }
+}
+
+/* computer: looking down and half lidded, a few quick taps, a pause to read, a few more. */
+@container (width > 72px) {
+  .slime[data-state="computer"] .slime-motion { animation: slime-computer-body calc(1.7s * var(--slime-tempo)) cubic-bezier(0.3, 0, 0.3, 1) var(--slime-delay) infinite both; }
+}
+@container (width <= 72px) {
+  .slime[data-transitioning][data-state="computer"] .slime-motion { animation: slime-computer-body calc(1.7s * var(--slime-tempo)) cubic-bezier(0.3, 0, 0.3, 1) var(--slime-delay) both; }
+}
+@container (width > 72px) {
+  .slime[data-state="computer"] .slime-gaze { animation: slime-computer-gaze calc(3.4s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) infinite both; }
+}
+@container (width <= 72px) {
+  .slime[data-transitioning][data-state="computer"] .slime-gaze { animation: slime-computer-gaze calc(3.4s * var(--slime-tempo)) cubic-bezier(0.25, 0.9, 0.3, 1) var(--slime-delay) both; }
+}
+@keyframes slime-computer-body {
+  0%, 100% { translate: 0 0; rotate: -2deg; scale: 1 1; }
+  7% { translate: 0 1.4px; rotate: -2deg; scale: 1.03 0.96; }
+  14% { translate: 0 0; rotate: 0deg; scale: 1 1; }
+  21% { translate: 0 1.4px; rotate: 2deg; scale: 1.03 0.96; }
+  28% { translate: 0 0; rotate: 0deg; scale: 1 1; }
+  35% { translate: 0 1.4px; rotate: -2deg; scale: 1.03 0.96; }
+  42% { translate: 0 0; rotate: 0deg; scale: 1 1; }
+  49% { translate: 0 1.4px; rotate: 2deg; scale: 1.03 0.96; }
+  56%, 86% { translate: 0 0; rotate: 2deg; scale: 1 1; }
+  93% { translate: 0 1.4px; rotate: 0deg; scale: 1.03 0.96; }
+}
+@keyframes slime-computer-gaze {
+  0%, 44% { translate: -1.2px 5px; }
+  50%, 94% { translate: 1.2px 5px; }
+  100% { translate: -1.2px 5px; }
+}
+
+/* Waiting is patient: a flattened body, one slow lean and a glance towards a colleague. */
+@container (width > 72px) {
+  .slime[data-state="waiting"] .slime-motion { animation: slime-waiting-body calc(6s * var(--slime-tempo)) ease-in-out var(--slime-delay) infinite both; }
+}
+@container (width <= 72px) {
+  .slime[data-transitioning][data-state="waiting"] .slime-motion { animation: slime-waiting-body calc(6s * var(--slime-tempo)) ease-in-out var(--slime-delay) both; }
+}
+@container (width > 72px) {
+  .slime[data-state="waiting"] .slime-gaze { animation: slime-waiting-gaze calc(6s * var(--slime-tempo)) ease-in-out var(--slime-delay) infinite both; }
+}
+@container (width <= 72px) {
+  .slime[data-transitioning][data-state="waiting"] .slime-gaze { animation: slime-waiting-gaze calc(6s * var(--slime-tempo)) ease-in-out var(--slime-delay) both; }
+}
+@keyframes slime-waiting-body {
+  0%, 65%, 100% { scale: 1.05 .88; rotate: 0deg; }
+  35% { scale: 1.05 .88; rotate: 3deg; }
+}
+@keyframes slime-waiting-gaze { 0%, 65%, 100% { translate: 0 0; } 25%, 45% { translate: 4px 0; } }
+
+/* Blocked asks for the owner's attention; error holds a quiet melted puddle. */
+@container (width > 72px) {
+  .slime[data-state="blocked"] .slime-motion { animation: slime-blocked-body calc(1.8s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
+}
+@container (width <= 72px) {
+  .slime[data-transitioning][data-state="blocked"] .slime-motion { animation: slime-blocked-body calc(1.8s * var(--slime-tempo)) linear var(--slime-delay) both; }
+}
+.slime[data-state="blocked"] .slime-gaze { translate: 0 -6px; }
+@keyframes slime-blocked-body {
+  0%, 40%, 60%, 100% { scale: 1.08 .76; translate: 0 0; }
+  45%, 55% { scale: 1.08 .76; translate: -1px 0; }
+  50% { scale: 1.08 .76; translate: 1px 0; }
+}
+
+/* Done gathers itself, jumps once with happy eyes, then settles through a soft landing. */
+.slime[data-state="done"] .slime-motion { animation: slime-done-body 1.9s linear var(--slime-since, 0s) both; }
+.slime[data-state="done"] .slime-gaze { animation: slime-done-eyes 1.9s linear var(--slime-since, 0s) both; }
+.slime[data-state="done"] .slime-mark { animation: slime-done-mark 1.9s linear calc(var(--slime-since, 0s) + 60ms) both; }
+@keyframes slime-done-body {
+  0% { translate: 0 0; rotate: 0deg; scale: 1 1; animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1); }
+  11% { translate: 0 0; rotate: 0deg; scale: 1.15 0.82; animation-timing-function: cubic-bezier(0.22, 0.7, 0.4, 1); }
+  21% { translate: 0 -14px; rotate: -5deg; scale: 0.9 1.14; animation-timing-function: cubic-bezier(0.22, 0.7, 0.4, 1); }
+  31% { translate: 0 -19px; rotate: 0deg; scale: 0.99 1.01; animation-timing-function: cubic-bezier(0.6, 0, 0.78, 0.3); }
+  41% { translate: 0 0; rotate: 4deg; scale: 0.93 1.1; animation-timing-function: cubic-bezier(0.2, 0.8, 0.3, 1); }
+  46% { translate: 0 0; rotate: 0deg; scale: 1.2 0.78; animation-timing-function: cubic-bezier(0.22, 0.7, 0.4, 1); }
+  54% { translate: 0 0; rotate: 0deg; scale: 0.95 1.07; animation-timing-function: cubic-bezier(0.22, 0.7, 0.4, 1); }
+  60% { translate: 0 0; rotate: 0deg; scale: 1 1; animation-timing-function: cubic-bezier(0.6, 0, 0.78, 0.3); }
+  66% { translate: 0 0; rotate: 0deg; scale: 0.98 1.03; animation-timing-function: cubic-bezier(0.2, 0.8, 0.3, 1); }
+  71% { translate: 0 0; rotate: 0deg; scale: 1.08 0.92; animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1); }
+  80% { translate: 0 0; rotate: 0deg; scale: 0.985 1.02; animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1); }
+  90%, 100% { translate: 0 0; rotate: 0deg; scale: 1 1; }
+}
+@keyframes slime-done-eyes {
+  0%, 40% { translate: 0 0; scale: 1 1; animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1); }
+  46% { translate: 0 1px; scale: 1.12 0.72; animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1); }
+  56%, 100% { translate: 0 0; scale: 1 1; }
+}
+@keyframes slime-done-mark {
+  0%, 12% { translate: 0 0; rotate: 0deg; scale: 1 1; animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1); }
+  22% { translate: 0 2px; rotate: calc(var(--mark-give) * 4deg); scale: 1 0.94; animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1); }
+  32% { translate: 0 -1px; rotate: 0deg; scale: 1 1.03; animation-timing-function: cubic-bezier(0.6, 0, 0.78, 0.3); }
+  41% { translate: 0 -2.5px; rotate: calc(var(--mark-give) * -5deg); scale: 1 1.08; animation-timing-function: cubic-bezier(0.2, 0.8, 0.3, 1); }
+  48% { translate: 0 2px; rotate: calc(var(--mark-give) * 5deg); scale: 1 0.9; animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1); }
+  56% { translate: 0 -1px; rotate: calc(var(--mark-give) * -3deg); scale: 1 1.04; animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1); }
+  66% { translate: 0 -1px; rotate: 0deg; scale: 1 1.02; animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1); }
+  73% { translate: 0 1px; rotate: calc(var(--mark-give) * 2deg); scale: 1 0.97; animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1); }
+  84%, 100% { translate: 0 0; rotate: 0deg; scale: 1 1; }
+}
+
+/* Error barely moves. Its slow drip is the only continuing action. */
+.slime[data-state="error"] .slime-motion { animation: slime-error-body 1.6s ease-out var(--slime-since, 0s) both; }
+@keyframes slime-error-body { from { scale: 1 1; } to { scale: 1.08 .62; } }
+
+/* Sleeping keeps its closed eyes and resting pose at every size. */
+.slime[data-state="sleeping"] .slime-motion { scale: 1.04 .91; }
+
+/* arriving: it drops in stretched, plops flat with its eyes shut, wobbles up, opens its eyes and looks up at the owner. */
+.slime[data-state="arriving"] .slime-motion { animation: slime-arriving-body 1.2s linear var(--slime-since, 0s) both; }
+.slime[data-state="arriving"] .slime-gaze { animation: slime-arriving-eyes 1.2s linear var(--slime-since, 0s) both; }
+.slime[data-state="arriving"] .slime-mark { animation: slime-arriving-mark 1.2s linear calc(var(--slime-since, 0s) + 50ms) both; }
+@keyframes slime-arriving-body {
+  0% { translate: 0 -30px; rotate: 0deg; scale: 0.74 1.2; animation-timing-function: cubic-bezier(0.6, 0, 0.78, 0.3); }
+  8% { translate: 0 -24px; rotate: 0deg; scale: 0.78 1.18; animation-timing-function: cubic-bezier(0.6, 0, 0.78, 0.3); }
+  24% { translate: 0 0; rotate: 0deg; scale: 0.86 1.14; animation-timing-function: cubic-bezier(0.2, 0.8, 0.3, 1); }
+  31% { translate: 0 0; rotate: 0deg; scale: 1.28 0.68; animation-timing-function: cubic-bezier(0.22, 0.7, 0.4, 1); }
+  44% { translate: 0 -3px; rotate: -2deg; scale: 0.92 1.1; animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1); }
+  55% { translate: 0 0; rotate: 1.4deg; scale: 1.06 0.95; animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1); }
+  66% { translate: 0 0; rotate: -0.6deg; scale: 0.98 1.02; animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1); }
+  76%, 100% { translate: 0 0; rotate: 0deg; scale: 1 1; }
+}
+@keyframes slime-arriving-eyes {
+  0%, 26% { translate: 0 0; scale: 1 1; animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.4); }
+  31%, 46% { translate: 0 1px; scale: 1.1 0.35; animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1); }
+  54% { translate: 0 0; scale: 0.98 1.06; animation-timing-function: cubic-bezier(0.25, 0.9, 0.3, 1); }
+  64%, 80% { translate: 0 -4.5px; scale: 1 1; animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.4); }
+  83%, 85% { translate: 0 -4.5px; scale: 1.06 0.16; animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1); }
+  90%, 100% { translate: 0 -4.5px; scale: 1 1; }
+}
+@keyframes slime-arriving-mark {
+  0%, 24% { translate: 0 -2px; rotate: 0deg; scale: 1 1.08; animation-timing-function: cubic-bezier(0.2, 0.8, 0.3, 1); }
+  33% { translate: 0 2.5px; rotate: calc(var(--mark-give) * 4deg); scale: 1 0.88; animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1); }
+  46% { translate: 0 -1.5px; rotate: calc(var(--mark-give) * -4deg); scale: 1 1.05; animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1); }
+  58% { translate: 0 0.5px; rotate: calc(var(--mark-give) * 2deg); scale: 1 0.98; animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1); }
+  72%, 100% { translate: 0 0; rotate: 0deg; scale: 1 1; }
+}
+
+/* Under the pointer: a small delighted wiggle that finishes even when the pointer has gone, and a squish that follows the press and the release. */
+.slime-surface { transform: var(--slime-touch) var(--slime-squish); transform-origin: 50% 81.52%; transition: --slime-squish 480ms linear(0, 0.3 6%, 0.8 14%, 1.14 24%, 1.2 31%, 1.1 40%, 0.98 50%, 0.96 58%, 1.01 74%, 1); }
+:is(.mb-row, .mb-avbtn, .mb-preset, .mb-av-slime):active .slime-surface { --slime-squish: scale(1.12, 0.84); transition: --slime-squish 90ms cubic-bezier(0.2, 0.8, 0.3, 1); }
+.slime-surface:has(.slime.is-delighted) { animation: slime-delight 620ms linear both; }
+.slime.is-delighted .slime-look > .slime-counterturn { animation: slime-delight-eyes 620ms cubic-bezier(0.3, 0, 0.3, 1) both; }
+@keyframes slime-delight {
+  0% { --slime-touch: translate(0, 0) rotate(0deg); animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1); }
+  18% { --slime-touch: translate(0, -2px) rotate(-6deg); animation-timing-function: cubic-bezier(0.4, 0, 0.5, 1); }
+  42% { --slime-touch: translate(0, -1px) rotate(5deg); animation-timing-function: cubic-bezier(0.4, 0, 0.5, 1); }
+  64% { --slime-touch: translate(0, 0) rotate(-3deg); animation-timing-function: cubic-bezier(0.4, 0, 0.5, 1); }
+  84% { --slime-touch: translate(0, 0) rotate(1.2deg); animation-timing-function: cubic-bezier(0.4, 0, 0.5, 1); }
+  100% { --slime-touch: translate(0, 0) rotate(0deg); }
+}
+@keyframes slime-delight-eyes { 30%, 60% { translate: 0 -1.5px; scale: 1.1; } }
+
+@container (width < 28px) { .slime[data-state] .slime-mark { animation: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .slime *, .slime-surface, .slime-surface * { animation: none !important; transition: none !important; }
+  .slime-surface { transform: none !important; }
+  .slime-press { scale: none !important; }
+  .slime[data-state="thinking"] .slime-motion { rotate: -6deg; }
+  .slime[data-state="thinking"] .slime-gaze { translate: -3px -5px; }
+  .slime[data-state="working"] .slime-motion { scale: 0.92 1.10; }
+  .slime[data-state="searching"] .slime-motion { translate: -3px 0; rotate: -4deg; }
+  .slime[data-state="searching"] .slime-gaze { translate: -6px 0; }
+  .slime[data-state="computer"] .slime-motion { scale: 1.02 .96; }
+  .slime[data-state="computer"] .slime-gaze { translate: 0 5px; }
+  .slime[data-state="waiting"] .slime-motion { scale: 1.05 .88; rotate: 3deg; }
+  .slime[data-state="waiting"] .slime-gaze { translate: 4px 0; }
+  .slime[data-state="blocked"] .slime-motion { scale: 1.08 .76; }
+  .slime[data-state="error"] .slime-motion { scale: 1.08 0.62; }
+  .slime[data-state="sleeping"] .slime-motion { scale: 1.04 .91; }
+  .slime[data-state="done"] .slime-motion { translate: 0 -5px; scale: .96 1.04; }
+  .slime[data-state="arriving"] .slime-motion { scale: 1.12 .82; }
+}
+
+/* The picture menu: shapes, then colours */
+.mb-presets.mb-slime-characters { grid-template-columns: repeat(6, var(--pa-preset)); padding-bottom: 0; }
+.menu.mb-avpop .mb-preset-slime { overflow: visible; border-radius: var(--r-md); }
+.menu.mb-avpop .mb-preset-slime[aria-pressed="true"] { background: var(--hover); box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.mb-slime-colors { display: grid; grid-template-columns: repeat(6, var(--pa-preset)); gap: calc(6px + 4 * var(--pa-u)); padding: calc(4px + 2 * var(--pa-u)) calc(6px + 4 * var(--pa-u)) calc(6px + 4 * var(--pa-u)); justify-items: center; }
+.menu.mb-avpop .mb-slime-color { width: calc(var(--pa-preset) * 0.62); height: calc(var(--pa-preset) * 0.62); min-height: 0; padding: 0; border-radius: var(--r-pill); background: var(--slime-color); box-shadow: 0 0 0 2px transparent; }
+.menu.mb-avpop .mb-slime-color:hover { background: var(--slime-color); box-shadow: 0 0 0 2px var(--hover-edge); }
+.menu.mb-avpop .mb-slime-color[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--text-3); }
+
+/* Sampled SVG poses stay sharp; only whole-frame HTML translations loop at small sizes. */
+.slime-loop { display: none; position: absolute; left: -100%; top: -100%; width: 300%; height: 300%; overflow: hidden; pointer-events: none; }
+.slime-loop .slime-cels { width: 1200%; animation: slime-loop-x calc(var(--loop-body) * var(--slime-tempo)) steps(1, end) var(--slime-delay) infinite both; }
+.slime-eye-cels { display: block; width: 100%; height: calc(100% * var(--loop-rows)); animation: slime-loop-y calc(var(--loop-eyes) * var(--slime-tempo)) steps(1, end) var(--slime-delay) infinite both; }
+.slime-loop-eyes:is([data-state="working"], [data-state="blocked"], [data-state="error"]) .slime-eye-cels { animation: none; }
+.slime-prop-cels { display: block; width: 100%; height: 1200%; animation: slime-loop-y calc(var(--loop-props) * var(--slime-tempo)) steps(1, end) calc(var(--slime-delay) + var(--loop-prop-delay)) infinite both; }
+.slime-prop-cels > svg { display: block; width: 100%; height: 100%; }
+.slime-blink-cels { display: block; width: 100%; height: 100%; }
+.slime-blink-cels > svg { display: block; width: 100%; height: 100%; }
+.slime-loop.has-blink .slime-blink-cels { animation: slime-loop-blink calc(5.3s * var(--slime-tempo)) steps(1, end) var(--slime-delay) infinite both; }
+.slime-loop-eyes .slime-cel-eye { d: var(--eyes); }
+@keyframes slime-loop-blink {
+  0%, 8%, 14%, 66%, 69.4%, 75.2%, 100% { transform: translateY(0%); }
+  8.5%, 11.2%, 66.5%, 68.6%, 69.9%, 72.4% { transform: translateY(-2.083333333333333%); }
+  9%, 10%, 67%, 67.8%, 70.4%, 71.2% { transform: translateY(-4.166666666666666%); }
+  12.4%, 73.6% { transform: translateY(-6.25%); }
+}
+@container (width <= 72px) {
+  .slime-loop { display: block; }
+  .slime-surface:has(> .slime-loop) > .slime { visibility: hidden; }
+  .slime-surface:has(> .slime[data-transitioning]) > .slime-loop { animation: slime-idle-show 320ms steps(1, end) both; }
+  .slime[data-transitioning]:is([data-state="thinking"], [data-state="working"], [data-state="searching"], [data-state="computer"], [data-state="waiting"], [data-state="blocked"]) { animation: slime-idle-hide 320ms steps(1, end) both; }
+  .slime-surface[data-state="error"] > .slime-loop { animation: slime-idle-show 1.6s steps(1, end) both; }
+  .slime[data-state="error"] { animation: slime-idle-hide 1.6s steps(1, end) both; }
+}
+@container (width <= 48px) {
+  .slime-loop-eyes[data-state="working"] { --eye-w: 6; }
+}
+@container (width < 28px) {
+  .slime-loop-body .slime-mark { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slime-loop { display: none !important; }
+  .slime-surface > .slime, .slime .slime-body, .slime .slime-eyes, .slime .slime-back, .slime .slime-marks { visibility: visible !important; }
+}
+@keyframes slime-loop-x {
+  0.00000000% { transform: translateX(0.00000000%); }
+  8.33333333% { transform: translateX(-8.33333333%); }
+  16.66666667% { transform: translateX(-16.66666667%); }
+  25.00000000% { transform: translateX(-25.00000000%); }
+  33.33333333% { transform: translateX(-33.33333333%); }
+  41.66666667% { transform: translateX(-41.66666667%); }
+  50.00000000% { transform: translateX(-50.00000000%); }
+  58.33333333% { transform: translateX(-58.33333333%); }
+  66.66666667% { transform: translateX(-66.66666667%); }
+  75.00000000% { transform: translateX(-75.00000000%); }
+  83.33333333% { transform: translateX(-83.33333333%); }
+  91.66666667% { transform: translateX(-91.66666667%); }
+  100% { transform: translateX(0%); }
+}
+@keyframes slime-loop-y {
+  0.00000000% { transform: translateY(0.00000000%); }
+  8.33333333% { transform: translateY(-8.33333333%); }
+  16.66666667% { transform: translateY(-16.66666667%); }
+  25.00000000% { transform: translateY(-25.00000000%); }
+  33.33333333% { transform: translateY(-33.33333333%); }
+  41.66666667% { transform: translateY(-41.66666667%); }
+  50.00000000% { transform: translateY(-50.00000000%); }
+  58.33333333% { transform: translateY(-58.33333333%); }
+  66.66666667% { transform: translateY(-66.66666667%); }
+  75.00000000% { transform: translateY(-75.00000000%); }
+  83.33333333% { transform: translateY(-83.33333333%); }
+  91.66666667% { transform: translateY(-91.66666667%); }
+  100% { transform: translateY(0%); }
+}

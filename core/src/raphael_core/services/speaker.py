@@ -56,6 +56,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from ..protocol import invalid_params
+from ..answer_forms import forms_plain_text
 from ..router import Notifier, Router
 from .common import ServiceError
 from .hub import ServiceHub
@@ -97,7 +98,7 @@ def speakable(text: str) -> str:
     """`text` as it is read aloud: addresses and markdown marks taken out, whitespace collapsed,
     and cut after the last sentence end within MAX_SPOKEN_CHARS (or at the limit if there is
     none). Empty if nothing is left to say."""
-    plain = _URL.sub(" ", text)
+    plain = _URL.sub(" ", forms_plain_text(text))
     plain = _BULLET.sub("", plain)
     plain = _MARKDOWN.sub(" ", plain)
     plain = " ".join(plain.split())
@@ -175,7 +176,10 @@ class Speaker:
         """Whether Raphael can be heard now: a voice service is chosen and has its key and voice.
         The assistant asks before it shows a line, to know whether to wait for the voice and to
         have the Japanese line made."""
-        return self._hub.tts_ready()
+        ready = self._hub.tts_ready()
+        if not ready and self._hub.enabled("voice"):
+            self._failed("not_configured")
+        return ready
 
     async def say(self, prefix: str, text: str, *, turn_id: int | None = None) -> None:
         """Speak a line of Raphael's (see the module), replacing what was being said. Returns when
@@ -338,6 +342,9 @@ class Speaker:
 
     def _failed(self, kind: str, detail: str | None = None) -> None:
         if kind != self._last_failure:
+            if kind in ("not_configured", "missing_secret") and self._notify:
+                from ..failures import missing_for
+                self._notify("setup.missing", missing_for(kind, "tts", "fish").wire())
             suffix = "" if detail is None else f" ({detail})"
             logger.warning("Raphael could not speak: %s%s", kind, suffix)
         self._last_failure = kind

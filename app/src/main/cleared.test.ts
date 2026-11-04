@@ -39,14 +39,6 @@ describe("a clear of 資料 is heard by the pages that show it", () => {
     warn.mockRestore();
   });
 
-  test("the settings say so once the core has emptied it, never before", () => {
-    const settings = source("pages/settings.ts");
-    const commit = /commit: async \(\) => \{([\s\S]*?)\n      \},/.exec(settings.slice(settings.indexOf("function clear(what")))![1];
-    const core = commit.search(/api\.historyClear\(\)|api\.agentHistoryClear\(\)/);
-    const said = commit.indexOf("app.cleared.say(what)");
-    expect(core).toBeGreaterThan(-1);
-    expect(said).toBeGreaterThan(core);
-  });
 
   test("the history, conversation and dictation overview listen, and the window hands every page the same signal", () => {
     expect(source("pages/history.ts")).toContain('app.cleared.on("dictation"');

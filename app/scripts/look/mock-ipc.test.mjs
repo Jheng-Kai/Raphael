@@ -5,8 +5,148 @@ import { checkRendered } from "./checks.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixture.json", import.meta.url), "utf8"));
 describe("shared look IPC boundary", () => {
-  it("loads the one-member and eight-member team roster without replacing its fixture data with the flag", async () => {
-    const target = {}; installMock(fixture, { fixture: { teamBoardRoster: true } }, target);
+  it("offers connected event choices and returns ordinary detected conditions without creating", async () => {
+    const target = {}, state=installMock(fixture, {}, target);
+    const call=(params={})=>target.__TAURI_INTERNALS__.invoke("core_call",{method:"routines.list",params});
+    const before=state.data.routines.length;
+    expect((await call()).events.some(e=>e.id==='gmail-mail')).toBe(true);
+    const picked=await call({member_id:1,event:'gmail-mail',value:''});
+    expect(picked.when.event.items).toBe('data.results.0.response.data.messages');
+    expect(picked.when.event.arguments.tools[0].arguments).toEqual({max_results:20,include_payload:false,verbose:false});
+    expect(state.data.routines).toHaveLength(before);
+    const created=await target.__TAURI_INTERNALS__.invoke('core_call',{method:'routines.create',params:{member_id:1,title:'Sample',prompt:'Review',when:picked.when}});
+    expect(created.routine.app_name).toBe('Gmail');
+    const empty={}; installMock(fixture,{fixture:{eventUndetectable:true}},empty);
+    expect((await empty.__TAURI_INTERNALS__.invoke('core_call',{method:'routines.list',params:{event:'gmail-mail'}})).event_error).toBeTruthy();
+  });
+  it("keeps Calendar's detected numeric path and moving window through create and reopen", async () => {
+    const target = {}; installMock(fixture, {}, target);
+    const call = (method, params = {}) => target.__TAURI_INTERNALS__.invoke('core_call', {method, params});
+    const picked = await call('routines.list', {member_id:1,event:'calendar-event'});
+    expect(picked.when.event).toMatchObject({items:'data.results.0.response.data.items',id:'id',since:{arg:'updatedMin',format:'iso'},
+      arguments:{tools:[{tool_slug:'GOOGLECALENDAR_EVENTS_LIST',arguments:{calendarId:'primary',maxResults:50,singleEvents:true,orderBy:'updated'}}]}});
+    const {routine} = await call('routines.create', {member_id:1,title:'Sample',prompt:'Review',when:picked.when});
+    expect((await call('routines.list',{member_id:1})).routines.find(r=>r.id===routine.id).when).toEqual(picked.when);
+  });
+  it("keeps both existing-copy and no-copy drafts available to the real mail scenes", () => {
+    for (const copy of ['', 'reviewer@example.com']) {
+      const target = {}, state = installMock(fixture, {fixture:{mailDraft:'draft',mailCopy:copy}}, target);
+      expect(state.data.turns.flatMap(turn => turn.drafts ?? []).find(draft => draft.id === 'mail-1').cc).toBe(copy);
+    }
+  });
+  it("keeps a connected message draft through one failed approval and its original retry", async () => {
+    const target = {}; installMock(fixture, {fixture:{permissionCard:'tool',cardMessagePreview:true,cardPermissionFailure:true}}, target);
+    const invoke = target.__TAURI_INTERNALS__.invoke;
+    const question = await invoke('agent_question_open', {});
+    const read = async () => (await invoke('core_call', {method:'agent.history.list',params:{member_id:0}})).turns.flatMap(turn => turn.permissions ?? []).find(card => card.id === question.id);
+    const before = await read(); expect(before.message).toEqual({workspace:'範例工作室',to:'#規劃',thread:'123.456',body:'請確認範例排程，並回覆方便討論的時間。'});
+    await expect(invoke('agent_question_answer', {id:question.id,approved:true})).rejects.toThrow('Synthetic approval unavailable');
+    expect((await read()).message).toEqual(before.message); expect((await read()).state).toBe('pending');
+    await invoke('agent_question_answer', {id:question.id,approved:true});
+    expect((await read()).message).toEqual(before.message); expect((await read()).state).toBe('allowed');
+  });
+  it("the card sheet exposes the same live desktop work as its conversation turn", async () => {
+    const target = {}, state = installMock(fixture, {fixture: {cardDeck: true}}, target);
+    const desktop = await target.__TAURI_INTERNALS__.invoke("core_call", {method: "computer.viewer_status", params: {member_id: 1}});
+    expect(desktop).toMatchObject({state: "running", works: [{turn_id: 980, state: "waiting_control", request_id: "sheet-request"}]});
+    expect(state.data.turns[0].id).toBe(desktop.works[0].turn_id);
+  });
+  it("records caption calls once without changing the fixture conversation", async () => {
+    const target = {}, state = installMock(fixture, {}, target);
+    for (const action of ['minimize','toggle_maximize','close','start_dragging']) {
+      await expect(target.__TAURI_INTERNALS__.invoke(`plugin:window|${action}`)).resolves.toBeUndefined();
+      expect(state.calls.filter(call=>call.command===`plugin:window|${action}`)).toHaveLength(1);
+    }
+    expect(state.errors).toEqual([]);
+    expect(state.data.turns).toEqual(fixture.turns);
+  });
+  it.each(["http", "stdio", "secret", "room"])("keeps the MCP %s scene card separate from its variant selector", async variant => {
+    const target = {}; installMock(fixture, { fixture: { mcpProposal: variant } }, target);
+    const history = await target.__TAURI_INTERNALS__.invoke("core_call", { method: "agent.history.list", params: { member_id: 1, conversation_id: 11 } });
+    const card = history.turns.find(turn => turn.id === 946).connection_proposals[0];
+    expect(card.fields.name).toBe("Sample");
+    expect(card.fields.transport).toBe(variant === "stdio" ? "stdio" : "http");
+  });
+  it("keeps event routines exclusive of schedules and resets their baseline only when the condition changes", async () => {
+    const target = {}; installMock(fixture, {}, target);
+    const call = (method, params = {}) => target.__TAURI_INTERNALS__.invoke("core_call", { method, params });
+    const when = { app: "gmail", event: { tool: "mcp:gmail/messages", arguments: {}, items: "", id: "id" }, filter: { field: "sender", equals: "client@example.com" } };
+    const { routine } = await call("routines.create", { member_id: 1, title: "Client mail", prompt: "Draft a reply", when });
+    expect(routine).toMatchObject({ when, schedule: null, last_checked: null, last_error: "" });
+    const updated = (await call("routines.update", { id: routine.id, when: { ...when, filter: { ...when.filter, equals: "owner@example.com" } } })).routine;
+    expect(updated).toMatchObject({ schedule: null, last_checked: null, last_error: "", when: { filter: { equals: "owner@example.com" } } });
+    const schedule = { kind: "daily", time: "09:00" };
+    expect((await call("routines.update", { id: routine.id, schedule })).routine).toMatchObject({ when: null, schedule });
+  });
+  it("adds an own calendar event without replacing Google, then updates and deletes only that event", async () => {
+    const target = {}, state = installMock(fixture, {}, target);
+    const call = (method, params = {}) => target.__TAURI_INTERNALS__.invoke("core_call", { method, params });
+    const google = structuredClone((await call("home.overview")).calendar_events.filter(item => item.kind === "event"));
+    expect(google.length).toBeGreaterThan(0);
+    const { event } = await call("calendar.add", { title: "Visit", start: "2026-10-24T11:00:00+08:00", end: "2026-10-24T12:00:00+08:00" });
+    const events = async () => (await call("home.overview")).calendar_events;
+    expect((await events()).filter(item => item.kind === "event")).toEqual(google);
+    expect((await events()).find(item => item.event_id === event.id)).toMatchObject({ kind: "own", title: "Visit", added_by: null });
+    await call("calendar.update", { id: event.id, title: "Updated visit" });
+    expect((await events()).find(item => item.event_id === event.id).title).toBe("Updated visit");
+    await call("calendar.delete", { id: event.id });
+    expect((await events()).some(item => item.event_id === event.id)).toBe(false);
+    expect((await events()).filter(item => item.kind === "event")).toEqual(google);
+    expect(state.errors).toEqual([]);
+  });
+  it("returns offline link metadata without fetching a table cell's URL or thumbnail", async () => {
+    const target = {}, state = installMock(fixture, {}, target);
+    const url = 'https://example.com/research';
+    const preview = await target.__TAURI_INTERNALS__.invoke('core_call', { method: 'links.preview', params: { url } });
+    expect(preview).toEqual({ url, site: 'example.com', title: '', description: '', thumbnail: null });
+    expect(state.errors).toEqual([]);
+  });
+  it("lists what the owner typed as the core does: typed private turns, newest first, a repeat in a row once, or what a scene states", async () => {
+    const target = {}, data = structuredClone(fixture);
+    data.turns.push(...[["one", "app"], ["said aloud", "voice"], ["two", "app"], ["two", "app"]].map(([question, source], index) => ({ ...data.turns[0], id: 900 + index, question, source })));
+    installMock(data, {}, target);
+    const call = (method, params = {}) => target.__TAURI_INTERNALS__.invoke("core_call", { method, params });
+    const { texts } = await call("agent.history.sent");
+    expect(texts.slice(0, 2)).toEqual(["two", "one"]);
+    expect(texts).not.toContain("said aloud");
+    expect((await call("agent.history.sent", { limit: 1 })).texts).toEqual(["two"]);
+    const stated = {}; installMock(fixture, { fixture: { typedHistory: ["b", "a"] } }, stated);
+    expect((await stated.__TAURI_INTERNALS__.invoke("core_call", { method: "agent.history.sent", params: {} })).texts).toEqual(["b", "a"]);
+  });
+  it("accepts only the declared native correction snapshot without duplicating acceptance rules", async () => {
+    const target = {}, edit = { before: "Please use Open Mouse", after: "Please use OpenMausBot" };
+    const state = installMock(fixture, { fixture: { dictationText: edit } }, target);
+    const call = (params) => target.__TAURI_INTERNALS__.invoke("core_call", { method: "dictionary.correct", params });
+    expect(await call({ edits: [edit] })).toEqual({ learned: ["OpenMausBot"], undo: "synthetic-correction-batch" });
+    expect(state.errors).toEqual([]);
+    await expect(call({ edits: [{ ...edit, after: "A different edit" }] })).rejects.toThrow("fixture edit");
+  });
+
+  it("projects room previews, timestamps and unread from messages, preserving summaries after reading", async () => {
+    const target = {}; installMock(fixture, {}, target);
+    const call = (method, params = {}) => target.__TAURI_INTERNALS__.invoke("core_call", {method, params});
+    const latest = fixture.messages.filter(message => message.room_id === 1).at(-1);
+    const before = (await call("rooms.list")).rooms.find(room => room.id === 1);
+    expect(before).toMatchObject({preview:latest.text, last_at:latest.created, unread:true});
+    expect((await call("rooms.list")).rooms.find(room => room.id === 2)).toMatchObject({preview:"", last_at:null, unread:false});
+    await call("rooms.update", {room_id:1, read:true, read_through:latest.id});
+    expect((await call("rooms.list")).rooms.find(room => room.id === 1)).toMatchObject({preview:latest.text, last_at:latest.created, unread:false});
+    await call("rooms.send", {room_id:1, text:"Owner follow-up", request_id:"summary"});
+    expect((await call("rooms.list")).rooms.find(room => room.id === 1)).toMatchObject({preview:"Owner follow-up", last_at:fixture.now, unread:false});
+  });
+  it("does not replace a room summary with empty, pass, running or failed member replies", async () => {
+    const target = {}, data = structuredClone(fixture);
+    const latest = data.messages.filter(message => message.room_id === 1).at(-1);
+    for (const [status, text] of [["done", " （PASS）。 "], ["done", ""], ["running", "Pending"], ["error", "Failure"]]) {
+      data.messages.push({...latest, id:data.messages.at(-1).id + 1, status, text});
+    }
+    data.rooms[0].read_message_id = latest.id;
+    installMock(data, {}, target);
+    const {rooms} = await target.__TAURI_INTERNALS__.invoke("core_call", {method:"rooms.list", params:{}});
+    expect(rooms.find(room => room.id === 1)).toMatchObject({preview:latest.text, last_at:latest.created, unread:false});
+  });
+  it("loads the one-member and eight-member sidebar roster without replacing its fixture data with the flag", async () => {
+    const target = {}; installMock(fixture, { fixture: { sidebarMany: true } }, target);
     const invoke = (method) => target.__TAURI_INTERNALS__.invoke('core_call', { method, params: {} });
     const roster = await invoke('members.list');
     expect(roster.members.filter(member => member.group_id === 1)).toHaveLength(1);
@@ -78,7 +218,7 @@ describe("shared look IPC boundary", () => {
     expect(await history(4)).toEqual(quick);
   });
   it("initializes rendered owner-view helpers before checking a reply and rejects progress in final messages", () => {
-    const answer = { textContent: "需要重新登入並授予讀取權限。", getBoundingClientRect: () => ({ width: 400, height: 40 }) };
+    const answer = { textContent: "需要重新登入並授予讀取權限。", checkVisibility: () => true, getBoundingClientRect: () => ({ width: 400, height: 40 }) };
     vi.stubGlobal("document", { querySelectorAll: () => [answer] });
     vi.stubGlobal("window", { __look: { calls: [{ method: "agent.history.list", params: { member_id: 0 } }] } });
     try {

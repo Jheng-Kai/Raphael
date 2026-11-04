@@ -15,6 +15,7 @@ mod holdtap;
 mod hotkey;
 mod identity;
 mod learn;
+mod learned;
 mod media;
 mod member_notifications;
 mod mic_access;
@@ -24,6 +25,7 @@ mod paste;
 mod rpc;
 mod schedule_awake;
 mod tray;
+mod webview_power;
 
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager, Runtime, WindowEvent, plugin::TauriPlugin};
@@ -35,11 +37,10 @@ const MAIN_WINDOW: &str = "main";
 /// Label of the overlay window. It is created in Rust, never by the config.
 const OVERLAY_WINDOW: &str = "overlay";
 
-/// Remember only whether the window was maximized: it always opens, and un-maximizes, at the default
-/// size from `tauri.conf.json`. Saved state never chooses the frame policy either.
+/// Nothing is restored: every launch opens at the designed 1280x800, centred (owner, 2026-10-30), even
+/// after the window was maximized last time. Launch policy and the native frame stay under app control.
 fn main_window_state_flags() -> StateFlags {
-    StateFlags::all()
-        & !(StateFlags::VISIBLE | StateFlags::DECORATIONS | StateFlags::SIZE | StateFlags::POSITION)
+    StateFlags::empty()
 }
 
 /// Writes a panic to the log. The release build aborts on a panic (`panic = "abort"`) and has no
@@ -82,6 +83,17 @@ fn panic_report(thread: Option<&str>, location: Option<&std::panic::Location<'_>
 
 pub fn run() {
     log_panics();
+    // A restricted runner can terminate its spawn handle without enumerating processes. Keep
+    // every native-test descendant in the same kill-on-close Job before any webview is created.
+    #[cfg(windows)]
+    let _native_job = if native_journey() {
+        let job = core_process::job::Job::new().expect("native journey Job Object");
+        job.add_current()
+            .expect("native journey process containment");
+        Some(job)
+    } else {
+        None
+    };
     let identity = identity::current();
     // Read before `use_own_data` sets it for a development build: only a folder the caller chose
     // keeps the local files (Raphael's picture) away from this build's own local folder.
@@ -91,12 +103,30 @@ pub fn run() {
     let local_dir = identity.local_dir(caller_data_dir, std::env::var_os("LOCALAPPDATA"));
     let mut context = tauri::generate_context!();
     identity.apply(context.config_mut());
+    if native_journey() {
+        let directory = PathBuf::from(
+            std::env::var_os("RAPHAEL_DATA_DIR").expect("native journeys require RAPHAEL_DATA_DIR"),
+        );
+        assert!(
+            directory.is_absolute(),
+            "native journey data must be absolute"
+        );
+        context.config_mut().app.app_directories_override = Some(
+            serde_json::from_value(serde_json::json!({
+                "config": directory, "data": directory, "localData": directory,
+                "cache": directory.join("cache"), "log": directory.join("logs")
+            }))
+            .expect("native journey directories"),
+        );
+    }
 
     let builder = startup_plugins(
         tauri::Builder::default(),
-        |app, _args| {
-            log::info!("another launch handed over: showing the main window");
-            show_main_window(app);
+        |app, args| {
+            if first_run::opens_at_start(&args) {
+                log::info!("manual launch handed over: showing the main window");
+                show_main_window(app);
+            }
         },
         data_layout::migrate_at_start,
     );
@@ -124,21 +154,40 @@ pub fn run() {
             // The app lives in the tray, so closing the main window only hides it.
             // "Quit" in the tray menu is the way out.
             if window.label() == MAIN_WINDOW
+                && (!native_journey()
+                    || std::env::var_os("RAPHAEL_TEST_NATIVE_WINDOW_LIFECYCLE")
+                        .is_some_and(|value| value == "1"))
                 && let WindowEvent::CloseRequested { api, .. } = event
             {
                 api.prevent_close();
                 if let Err(err) = window.hide() {
                     log::warn!("could not hide the main window: {err}");
+                } else if let Some(webview) = window.app_handle().get_webview_window(MAIN_WINDOW) {
+                    webview_power::main_active(&webview, false);
                 }
+            }
+            if window.label() == MAIN_WINDOW
+                && matches!(event, WindowEvent::Resized(_))
+                && let Some(webview) = window.app_handle().get_webview_window(MAIN_WINDOW)
+            {
+                let active =
+                    !window.is_minimized().unwrap_or(false) && window.is_visible().unwrap_or(false);
+                webview_power::main_active(&webview, active);
             }
         })
         // Tauri keeps only the last `invoke_handler` call, so every command of the app goes into
         // this one list.
+        .manage(overlay::mouse::Windows::default())
         .invoke_handler(tauri::generate_handler![
+            commands::floating_controls,
             overlay::overlay_subscribe,
             overlay::overlay_log,
             overlay::overlay_confirm,
+            overlay::overlay_cancel,
             commands::core_call,
+            learned::learned_subscribe,
+            learned::learned_layout,
+            learned::learned_finish,
             commands::save_usage_csv,
             commands::schedule_keep_awake_get,
             commands::schedule_keep_awake_set,
@@ -149,8 +198,10 @@ pub fn run() {
             commands::open_link,
             commands::open_external_url,
             commands::open_attachment,
+            commands::open_team_file,
             commands::hotkeys_pause,
             commands::window_hotkey,
+            commands::main_window_forward,
             commands::hotkeys_practice,
             commands::mic_access,
             commands::main_events,
@@ -205,18 +256,28 @@ pub fn run() {
             // ---- Tray ----
             // Its menu starts in the default language with no microphones: it names the one in
             // use and speaks the interface language, which the device settings (below) know.
-            tray::build(app.handle())?;
+            if !native_journey() {
+                tray::build(app.handle())?;
+            }
 
             // ---- Overlay ----
             // Raphael's emblem in the bottom-right corner, 150 px with subtitles in Traditional
             // Chinese until the settings say otherwise (`Overlay::apply_settings`). The dictation
             // controller takes it from the app state as `Arc<Overlay>`. Without the overlay the
             // app still works, so a failure is only logged.
-            match overlay::Overlay::create(app.handle(), 150, "on", "zh-TW") {
-                Ok(overlay) => {
-                    app.manage(overlay);
+            if !native_journey() {
+                match overlay::Overlay::create(app.handle(), 150, "on", "zh-TW") {
+                    Ok(overlay) => {
+                        app.manage(overlay);
+                    }
+                    Err(err) => log::error!("could not create the overlay window: {err}"),
                 }
-                Err(err) => log::error!("could not create the overlay window: {err}"),
+            }
+
+            // ---- Learned corrections ----
+            // Learned corrections have their own passive window, including isolated native tests.
+            if let Err(err) = learned::start(app.handle()) {
+                log::error!("could not create the learned word window: {err}");
             }
 
             // ---- Python core ----
@@ -254,7 +315,7 @@ pub fn run() {
                 log::warn!("hotkeys: injected key presses count (RAPHAEL_TEST_INJECTED_KEYS=1)");
                 handy_keys::accept_injected_input(true);
             }
-            let hotkey_event_rx =
+            let hotkey_event_rx = {
                 match hotkey::HotkeyService::start(&hotkey::Bindings::default(), hotkey_events) {
                     Ok(service) => {
                         app.manage(std::sync::Arc::new(service));
@@ -264,7 +325,8 @@ pub fn run() {
                         log::error!("global hotkeys are off: {err}");
                         None
                     }
-                };
+                }
+            };
 
             // ---- Dictation controller ----
             // Ties the hotkeys, the core, the overlay and pasting together. It takes whatever of
@@ -282,7 +344,9 @@ pub fn run() {
             // UI Automation, the 「操作中」 overlay, the watch on the owner's own input. It takes
             // the core and the overlay from the app state; without the core there is no run.
             #[cfg(windows)]
-            computer::spawn(app.handle());
+            if !native_journey() {
+                computer::spawn(app.handle());
+            }
 
             // ---- Device settings ----
             // `device.json`: loads it, puts it in force (hotkeys, overlay size and subtitles,
@@ -296,7 +360,11 @@ pub fn run() {
             // ---- First run ----
             // Until the first-run guide has been gone through, the main window opens by itself.
             // It reads the device settings, so it comes after them.
-            first_run::start(app.handle());
+            if native_journey() && !startup_journey() {
+                show_main_window(app.handle());
+            } else {
+                first_run::start(app.handle());
+            }
 
             Ok(())
         })
@@ -306,6 +374,17 @@ pub fn run() {
 
 /// What the data migration did, from its plugin to `setup`, which logs it and starts the copy.
 struct Migration(std::sync::Mutex<Option<data_layout::Outcome>>);
+
+/// Isolated debug instances never claim the owner's single-instance lock or desktop hooks.
+pub(crate) fn native_journey() -> bool {
+    cfg!(debug_assertions)
+        && std::env::var_os("RAPHAEL_TEST_NATIVE").is_some_and(|value| value == "1")
+}
+
+pub(crate) fn startup_journey() -> bool {
+    native_journey()
+        && std::env::var_os("RAPHAEL_TEST_NATIVE_STARTUP").is_some_and(|value| value == "1")
+}
 
 /// The first plugins, which decide whether this launch runs at all and prepare what everything
 /// else opens. Plugins start in the order they are added, all of them before `setup`.
@@ -322,9 +401,13 @@ fn startup_plugins<R: Runtime>(
     migrate: impl FnOnce() -> data_layout::Outcome + Send + 'static,
 ) -> tauri::Builder<R> {
     #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
-    let builder = builder.plugin(tauri_plugin_single_instance::init(
-        move |app, args, _cwd| on_second_launch(app, args),
-    ));
+    let builder = if native_journey() {
+        builder
+    } else {
+        builder.plugin(tauri_plugin_single_instance::init(
+            move |app, args, _cwd| on_second_launch(app, args),
+        ))
+    };
     #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     let _ = on_second_launch;
     builder.plugin(
@@ -378,9 +461,13 @@ fn create_main_window(app: &AppHandle) -> tauri::Result<()> {
         log::error!("the config has no main window");
         return Ok(());
     };
-    tauri::WebviewWindowBuilder::from_config(app, config)?
-        .data_directory(webview_data_dir(app)?)
-        .build()?;
+    let mut builder = tauri::WebviewWindowBuilder::from_config(app, config)?
+        .data_directory(webview_data_dir(app)?);
+    if startup_journey() {
+        builder = builder
+            .initialization_script(include_str!("../../scripts/look/native/startup-probe.js"));
+    }
+    builder.build()?;
     Ok(())
 }
 
@@ -406,10 +493,14 @@ fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
         log::warn!("the main window does not exist");
         return;
     };
+    webview_power::main_active(&window, true);
     let shown = window
         .unminimize()
         .and_then(|()| window.show())
-        .and_then(|()| window.set_focus());
+        .and_then(|()| {
+            webview_power::main_shown();
+            window.set_focus()
+        });
     if let Err(err) = shown {
         log::warn!("could not show the main window: {err}");
     }
@@ -509,18 +600,16 @@ mod window_state_tests {
     use super::*;
 
     #[test]
-    fn restoring_saved_geometry_cannot_restore_a_native_titlebar_or_show_the_window() {
+    fn every_launch_opens_at_the_designed_size_not_the_last_maximized_window() {
+        // A maximized last session reopened full screen; the owner expects the designed small window.
         let flags = main_window_state_flags();
+        assert!(!flags.intersects(
+            StateFlags::SIZE
+                | StateFlags::POSITION
+                | StateFlags::MAXIMIZED
+                | StateFlags::FULLSCREEN
+        ));
         assert!(!flags.intersects(StateFlags::VISIBLE | StateFlags::DECORATIONS));
-        assert!(flags.contains(StateFlags::MAXIMIZED | StateFlags::FULLSCREEN));
-    }
-
-    #[test]
-    fn the_window_always_opens_at_its_default_size() {
-        // The owner wants opening and un-maximizing to land on the default size (2026-10-24),
-        // so a size or place from an earlier session is never restored.
-        let flags = main_window_state_flags();
-        assert!(!flags.intersects(StateFlags::SIZE | StateFlags::POSITION));
     }
 
     #[test]

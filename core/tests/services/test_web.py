@@ -1,7 +1,10 @@
 """The web's services: each search engine and each page reader, as httpx MockTransport fakes of
 their APIs, and the budget a page's text is held to. No test reaches the network."""
 
+import asyncio
 import json
+import time
+from email.utils import formatdate, parsedate_to_datetime
 
 import httpx
 import pytest
@@ -56,6 +59,164 @@ def test_a_longer_text_keeps_three_quarters_of_its_head_a_quarter_of_its_tail_an
 
 
 # --- the search ---------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def fast_search(monkeypatch):
+    monkeypatch.setattr(web, "SEARCH_INTERVAL_S", .03, raising=False)
+
+
+async def test_searches_share_a_provider_queue_across_clients_and_successive_calls(fast_search):
+    starts, active, peak = [], 0, 0
+
+    async def answer(request):
+        nonlocal active, peak
+        starts.append(time.monotonic())
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(.01)
+        active -= 1
+        return httpx.Response(200, json={"web": {"results": []}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as first, httpx.AsyncClient(transport=httpx.MockTransport(answer)) as second:
+        await asyncio.gather(web.search("brave", "one", http=first, key=KEY), web.search("brave", "two", http=second, key=KEY))
+        await web.search("brave", "next turn", http=first, key=KEY)
+    assert peak == 1
+    assert all(b - a >= .025 for a, b in zip(starts, starts[1:]))
+
+
+async def test_a_search_rechecks_the_cooldown_after_an_early_timer_wakeup(fast_search, monkeypatch):
+    starts, early = [], False
+    sleep = asyncio.sleep
+
+    async def wake_early(delay):
+        nonlocal early
+        if delay > 0 and not early:
+            early = True
+            return
+        await sleep(delay)
+
+    def answer(request):
+        starts.append(time.monotonic())
+        return httpx.Response(200, json={"web": {"results": []}})
+
+    monkeypatch.setattr(web.asyncio, "sleep", wake_early)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as http:
+        await web.search("brave", "first", http=http, key=KEY)
+        await web.search("brave", "second", http=http, key=KEY)
+    assert early and len(starts) == 2
+    assert starts[1] - starts[0] >= .025
+
+
+@pytest.mark.parametrize("retry_after", ["0.06", "date", "invalid", None])
+async def test_a_throttled_search_retries_after_the_provider_wait(fast_search, retry_after):
+    starts = []
+    if retry_after == "date":
+        retry_after = formatdate(time.time() + 1.5, usegmt=True)
+    minimum = parsedate_to_datetime(retry_after).timestamp() - time.time() if retry_after and retry_after.endswith("GMT") else .06 if retry_after == "0.06" else .03
+
+    def answer(request):
+        starts.append(time.monotonic())
+        if len(starts) == 1:
+            return httpx.Response(429, headers={"Retry-After": retry_after} if retry_after else {})
+        return httpx.Response(200, json={"web": {"results": []}})
+
+    api = Api({"api.search.brave.com": answer})
+    assert (await web.search("brave", "q", http=api.http, key=KEY))["results"] == []
+    assert len(starts) == 2 and starts[1] - starts[0] >= minimum - .005
+
+
+async def test_a_persistent_throttle_is_reported_after_one_retry(fast_search):
+    api = Api({"api.search.brave.com": httpx.Response(429)})
+    assert await kind_of(web.search("brave", "q", http=api.http, key=KEY)) == "rate_limit"
+    assert len(api.requests) == 2
+
+
+@pytest.mark.parametrize("request_delay,retry_after", [(0, "3600"), (.08, ".25")])
+async def test_a_retry_after_beyond_the_remaining_budget_waits_bounded_without_early_request(fast_search, monkeypatch, request_delay, retry_after):
+    monkeypatch.setattr(web, "SEARCH_TIMEOUT_S", .3)
+    monkeypatch.setattr(web, "SEARCH_RETRY_WAIT_S", .06)
+    requests = []
+
+    async def answer(request):
+        requests.append(request)
+        await asyncio.sleep(request_delay)
+        return httpx.Response(429, headers={"Retry-After": retry_after})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as http:
+        began = time.monotonic()
+        assert await kind_of(web.search("brave", "q", http=http, key=KEY)) == "rate_limit"
+        assert time.monotonic() - began < .2
+        assert time.monotonic() - began >= .055
+        assert len(requests) == 1
+
+
+async def test_a_retained_cooldown_waits_without_more_requests(fast_search, monkeypatch):
+    monkeypatch.setattr(web, "SEARCH_TIMEOUT_S", .3)
+    monkeypatch.setattr(web, "SEARCH_RETRY_WAIT_S", .03)
+    requests = []
+
+    def answer(request):
+        requests.append(request)
+        return httpx.Response(429, headers={"Retry-After": "3600" if len(requests) == 2 else "0"})
+
+    api = Api({"api.search.brave.com": answer})
+    assert await kind_of(web.search("brave", "first", http=api.http, key=KEY)) == "rate_limit"
+    assert len(api.requests) == 2
+    began = time.monotonic()
+    results = await asyncio.gather(*(kind_of(web.search("brave", str(n), http=api.http, key=KEY)) for n in range(3)))
+    assert results == ["rate_limit"] * 3
+    assert time.monotonic() - began < .2
+    assert time.monotonic() - began >= .08
+    assert len(api.requests) == 2
+
+
+async def test_queued_searches_cancel_or_time_out_without_blocking_other_providers(fast_search, monkeypatch):
+    entered, release = asyncio.Event(), asyncio.Event()
+    requests = []
+
+    async def answer(request):
+        requests.append(request.url.params.get("q"))
+        entered.set()
+        await release.wait()
+        return httpx.Response(200, json={})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as http:
+        first = asyncio.create_task(web.search("brave", "first", http=http, key=KEY))
+        try:
+            await entered.wait()
+            queued = asyncio.create_task(web.search("brave", "cancelled", http=http, key=KEY))
+            await asyncio.sleep(.01)
+            queued.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await queued
+            monkeypatch.setattr(web, "SEARCH_TIMEOUT_S", .04, raising=False)
+            assert await kind_of(asyncio.wait_for(web.search("brave", "timed out", http=http, key=KEY), .5)) == "timeout"
+            other = Api({"api.exa.ai": httpx.Response(200, json={"results": []})})
+            assert (await web.search("exa", "independent", http=other.http, key=KEY))["results"] == []
+        finally:
+            release.set()
+            await first
+        assert requests == ["first"]
+        await web.search("brave", "after cancellation", http=http, key=KEY)
+        assert requests == ["first", "after cancellation"]
+
+
+async def test_a_slow_search_has_a_total_deadline_and_releases_its_provider(fast_search, monkeypatch):
+    monkeypatch.setattr(web, "SEARCH_TIMEOUT_S", .06)
+    cancelled = asyncio.Event()
+
+    async def slow(request):
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(slow)) as http:
+        assert await kind_of(web.search("brave", "slow", http=http, key=KEY)) == "timeout"
+    assert cancelled.is_set()
+    api = Api({"api.search.brave.com": httpx.Response(200, json={})})
+    assert (await web.search("brave", "after timeout", http=api.http, key=KEY))["results"] == []
 
 
 async def test_brave_is_asked_with_its_key_in_its_header_and_its_results_are_read():
@@ -183,12 +344,12 @@ async def test_the_builtin_reader_turns_a_page_into_its_title_and_text():
 
 
 async def test_the_builtin_reader_holds_a_long_page_to_the_budget():
-    body = "<p>" + "word " * 10_000 + "</p>"
+    body = "<p>" + "word " * 20_000 + "</p>"
     fetcher = page_fetcher({"/": httpx.Response(200, html=body)})
     found = await web.read(
         "builtin", "https://example.com/", http=Api({}).http, fetcher=fetcher, read_pdf=pdf.read_pdf
     )
-    assert found["truncated"] and len(found["text"]) < TEXT_BUDGET + 200
+    assert found["truncated"] and len(found["text"]) < web.PAGE_BUDGET + 200
     assert found["text"].endswith("were left out.]")
 
 

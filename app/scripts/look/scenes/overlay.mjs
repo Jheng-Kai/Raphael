@@ -15,7 +15,7 @@ export default [{
   ] }), entry: "overlay.html", ready: ".subs.on .sub-line",
 }, {
   ...scene("overlay-step", "Quick question latest public step in the existing subtitle position", [
-    { action: "advance-time", ms: 1200 }, check("overlay-step"),
+    { action: "advance-time", ms: 1200 }, check("overlay-step"), check("overlay-working-no-stop"),
   ], { overlayEvents: [
     { type: "settings", px: 96, subtitles: "on", language: "zh-TW" },
     { type: "show", mode: "listening" },

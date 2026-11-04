@@ -5,10 +5,9 @@
 //!   `agent.cancel`) are the controller's alone. The main window may read and clear the record of
 //!   the conversations (`agent.history.`), and stop one background task it names
 //!   (`worker.cancel {task_id}`) or run one that did not finish again (`worker.rerun {task_id}`), the
-//!   way the tray stops the one that runs. It may list, read, edit and delete Raphael's memories and
-//!   clear the summary of the conversation (`memory.list`, `memory.get`, `memory.update`,
-//!   `memory.delete`, `memory.clear`, `memory.move`, `memory.summary_clear`), each by its name and
-//!   with its params checked here first; and manage the members of the owner's team, their groups
+//!   way the tray stops the one that runs. It may read, edit and clear a memory document and
+//!   clear the summary of the conversation (`memory.get`, `memory.update`, `memory.clear`,
+//!   `memory.summary_clear`), with its params checked here first; and manage the members of the owner's team, their groups
 //!   and their routines (`members.*`, `groups.*`, `routines.*`, each by its name).
 //! - `agent_ask_text`, `agent_question_open` and `agent_question_answer` are the 拉斐爾 page's own
 //!   way to Raphael, through the dictation controller rather than the core
@@ -33,7 +32,7 @@
 //! - `window_hotkey` hands the hotkeys that the main window sees while it has the focus, and the
 //!   keyboard hook may not, to the hotkey service, which treats them as the hook's.
 //!
-//! Every command here belongs to the main window and refuses a call from any other webview
+//! Except for `floating_controls`, commands here belong to the main window and refuse a call from any other webview
 //! (`require_main`); the overlay page only loads its own files, but it is a webview too.
 //!
 //! [`start`] is called once from `setup` in `lib.rs`. Like the other parts of the app it takes
@@ -120,6 +119,8 @@ pub enum HotkeyKind {
     AgentUp,
     PasteLast,
     Cancel,
+    CancelKey,
+    CancelReset,
 }
 
 impl From<HotkeyEvent> for HotkeyKind {
@@ -127,10 +128,12 @@ impl From<HotkeyEvent> for HotkeyKind {
         match event {
             HotkeyEvent::DictationDown => Self::DictationDown,
             HotkeyEvent::DictationUp => Self::DictationUp,
-            HotkeyEvent::AgentDown | HotkeyEvent::MemberDown(_) => Self::AgentDown,
+            HotkeyEvent::AgentDown | HotkeyEvent::ConversationDown { .. } => Self::AgentDown,
             HotkeyEvent::AgentUp => Self::AgentUp,
             HotkeyEvent::PasteLast => Self::PasteLast,
             HotkeyEvent::Cancel => Self::Cancel,
+            HotkeyEvent::CancelKey => Self::CancelKey,
+            HotkeyEvent::CancelReset => Self::CancelReset,
         }
     }
 }
@@ -156,6 +159,18 @@ pub enum DictationPhase {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type")]
 pub enum MainEvent {
+    /// The subscribed core has answered hello; safe to retry startup reads.
+    CoreReady,
+    /// Fixed prerequisite metadata only, never the service's error text or credentials.
+    SetupMissing {
+        missing: Value,
+    },
+    /// Ephemeral member activity, independent of the conversation currently open.
+    MemberActivity {
+        member_id: u64,
+        state: String,
+        label: String,
+    },
     /// A successful dictation delivered to our own process, for in-memory composer learning.
     /// Never logged or replayed to a later subscriber.
     DictationPasted {
@@ -205,6 +220,7 @@ pub enum MainEvent {
     RoutinesChanged {
         member_id: u64,
     },
+    CalendarChanged,
     RoomsChanged {
         room_id: u64,
     },
@@ -361,6 +377,30 @@ fn require_main(webview: &Webview) -> Result<(), String> {
     ensure_caller(webview.label(), crate::MAIN_WINDOW)
 }
 
+// Only these passive pages may report geometry, and only for their own window.
+const FLOATING_CONTROL_WINDOWS: &[&str] = &[crate::OVERLAY_WINDOW, "learned"];
+fn floating_controls_allowed(label: &str) -> bool {
+    FLOATING_CONTROL_WINDOWS.contains(&label)
+}
+
+#[tauri::command]
+pub fn floating_controls(
+    app: AppHandle,
+    webview: Webview,
+    revision: u64,
+    rects: Vec<crate::overlay::mouse::ControlRect>,
+    held: bool,
+) -> Result<(), String> {
+    if !floating_controls_allowed(webview.label()) {
+        return Err("this window cannot report floating controls".into());
+    }
+    let mouse = app
+        .state::<crate::overlay::mouse::Windows>()
+        .get(webview.label())
+        .ok_or("floating window is missing")?;
+    mouse.report(revision, rects, held)
+}
+
 // ---------- calls to the core ----------
 
 const ALLOWED_PREFIXES: [&str; 8] = [
@@ -382,9 +422,23 @@ const ALLOWED_PREFIXES: [&str; 8] = [
 // a messaging app has no way to reach any of them: only this window does.
 // A slice, not a fixed-length array: branches that each add a method merge without a count to fix.
 const ALLOWED_METHODS: &[&str] = &[
+    "integrations.proposal",
+    "computer.viewer_status",
+    "computer.teach",
+    "computer.viewer_open",
+    "computer.viewer_renew",
+    "computer.viewer_control",
+    "computer.viewer_close",
+    "computer.revoke",
+    "computer.wallpaper",
+    "pages.open",
+    "owner_questions.answer",
+    "owner_questions.bring",
+    "pages.tool_call",
     "home.overview",
     "connectors.catalog",
     "connectors.categories",
+    "connectors.toolkit",
     "connectors.connect",
     "connectors.status",
     "connectors.disconnect",
@@ -413,6 +467,11 @@ const ALLOWED_METHODS: &[&str] = &[
     "providers.remove",
     "providers.test",
     "providers.models",
+    "chatgpt.status",
+    "chatgpt.sign_in",
+    "chatgpt.cancel",
+    "chatgpt.sign_out",
+    "chatgpt.models",
     "stats.summary",
     "usage.analytics",
     "usage.runs",
@@ -425,6 +484,21 @@ const ALLOWED_METHODS: &[&str] = &[
     "messaging.telegram.reject",
     "messaging.telegram.remove_user",
     "messaging.telegram.disconnect",
+    "messaging.slack.status",
+    "messaging.slack.connect",
+    "messaging.slack.set_enabled",
+    "messaging.slack.approve",
+    "messaging.slack.reject",
+    "messaging.slack.remove_user",
+    "messaging.slack.disconnect",
+    "messaging.discord.status",
+    "messaging.discord.connect",
+    "messaging.discord.set_enabled",
+    "messaging.discord.approve",
+    "messaging.discord.reject",
+    "messaging.discord.remove_user",
+    "messaging.discord.disconnect",
+    "computer.checkpoints",
     // The conversation view stops the task it shows, by its id (`validate_core_call`). The other
     // methods of the worker stay closed (a task's question is answered by `background.answer`).
     "worker.cancel",
@@ -432,13 +506,9 @@ const ALLOWED_METHODS: &[&str] = &[
     "worker.rerun",
     // Raphael's memory, in the settings (`validate_core_call` checks the name and the text). Named
     // one by one, like the messaging methods: a method added to the memory later stays closed.
-    "memory.list",
-    "memory.create",
     "memory.get",
     "memory.update",
-    "memory.delete",
     "memory.clear",
-    "memory.move",
     "memory.summary_clear",
     // The services of the tools, in the settings: what is chosen and whether each key is stored
     // (never a key), and a key put in or taken out of the vault. Named one by one as well.
@@ -455,6 +525,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "conversations.create",
     "conversations.rename",
     "conversations.delete",
+    "conversations.clear",
     "agent.history.delete",
     "messages.search",
     "quota.list",
@@ -465,7 +536,6 @@ const ALLOWED_METHODS: &[&str] = &[
     "members.delete",
     "members.set_primary",
     "members.set_avatar",
-    "members.presets",
     "members.read",
     "members.viewing",
     "members.tool_choices",
@@ -485,11 +555,15 @@ const ALLOWED_METHODS: &[&str] = &[
     "groups.update",
     "groups.delete",
     "routines.list",
+    "routines.webhook",
     "routines.create",
     "routines.update",
     "routines.delete",
     "routines.template",
     "routines.runs",
+    "calendar.add",
+    "calendar.update",
+    "calendar.delete",
     "rooms.list",
     "rooms.create",
     "rooms.delete",
@@ -507,6 +581,7 @@ const ALLOWED_METHODS: &[&str] = &[
     // owner's answer from that card: the one place such a question is answered
     // (`validate_core_call` checks it names its task and question and says yes or no).
     "background.questions.list",
+    "background.waiting.list",
     "background.answer",
     // Raphael's voice, in the settings: the 「Try it」 line is spoken in the voice that is set up,
     // and stopped by `tts.stop`. His answers are spoken by the core itself and need neither.
@@ -514,32 +589,8 @@ const ALLOWED_METHODS: &[&str] = &[
     "tts.stop",
 ];
 
-/// The types a memory's name starts with (the core's `memory.store.TYPES`).
-const MEMORY_TYPES: [&str; 5] = ["user", "preference", "person", "ongoing", "reference"];
-/// The longest name of a memory, and the most a memory's body and description may hold, in
-/// characters (the core's limits; it checks them again).
-const MEMORY_NAME_MAX: usize = 64;
-const MEMORY_BODY_MAX: usize = 1_200;
-const MEMORY_DESCRIPTION_MAX: usize = 80;
-
-/// Whether `name` is the name of a memory: its type, then an ASCII slug of lower-case letters and
-/// digits in words joined by single hyphens (`preference-answer-length`). Nothing else, so no name
-/// can reach outside the memory's folder.
-pub fn is_memory_name(name: &str) -> bool {
-    if name.len() > MEMORY_NAME_MAX {
-        return false;
-    }
-    let Some((kind, slug)) = name.split_once('-') else {
-        return false;
-    };
-    MEMORY_TYPES.contains(&kind)
-        && slug.split('-').all(|word| {
-            !word.is_empty()
-                && word
-                    .bytes()
-                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
-        })
-}
+/// The most a memory document may hold, in characters (the core's limit; it checks it again).
+const MEMORY_DOCUMENT_MAX: usize = 64_000;
 
 /// The longest words the search of the conversation takes, in characters (the core's limit too).
 const HISTORY_QUERY_MAX: usize = 200;
@@ -561,44 +612,20 @@ fn validate_history_search(params: &Value) -> Result<(), String> {
     }
 }
 
-/// The params of a memory method: `name` a memory's name where one is needed, and for
-/// `memory.update` or `memory.create` a `body` within the limit and an optional short description.
+/// The params of a memory method: for `memory.update`, the `text` of the document within the limit
+/// and the `revision` of the copy it was made from, if given.
 fn validate_memory_call(method: &str, params: &Value) -> Result<(), String> {
-    let needs_name = matches!(
-        method,
-        "memory.get" | "memory.update" | "memory.delete" | "memory.move"
-    );
-    if needs_name
-        && !params
-            .get("name")
-            .and_then(Value::as_str)
-            .is_some_and(is_memory_name)
-    {
-        return Err(format!("{method} needs the name of a memory"));
-    }
-    if !matches!(method, "memory.update" | "memory.create") {
+    if method != "memory.update" {
         return Ok(());
     }
-    let chars = |value: &Value| value.as_str().map(|text| text.chars().count());
-    if method == "memory.create"
-        && params
-            .get("body")
-            .and_then(Value::as_str)
-            .is_some_and(|body| body.trim().is_empty())
-    {
-        return Err("memory.create needs a non-empty body".to_owned());
+    match params.get("text").and_then(Value::as_str) {
+        Some(text) if text.chars().count() <= MEMORY_DOCUMENT_MAX => {}
+        Some(_) => return Err("記憶太長了".to_owned()),
+        None => return Err("memory.update needs the text of the document".to_owned()),
     }
-    match params.get("body").and_then(chars) {
-        Some(count) if count <= MEMORY_BODY_MAX => {}
-        Some(_) => return Err("記憶內容最多 1,200 字".to_owned()),
-        None => return Err(format!("{method} needs the body of the memory")),
-    }
-    match params.get("description") {
-        None | Some(Value::Null) => Ok(()),
-        Some(value) => match chars(value) {
-            Some(count) if (1..=MEMORY_DESCRIPTION_MAX).contains(&count) => Ok(()),
-            _ => Err("記憶的說明最多 80 字".to_owned()),
-        },
+    match params.get("revision") {
+        None | Some(Value::Null) | Some(Value::String(_)) => Ok(()),
+        Some(_) => Err("memory.update takes the revision memory.get gave".to_owned()),
     }
 }
 
@@ -716,16 +743,43 @@ pub async fn core_call(
     app: AppHandle,
     webview: Webview,
     method: String,
-    params: Value,
+    mut params: Value,
 ) -> Result<Value, String> {
     require_main(&webview)?;
     if !is_allowed_method(&method) {
         return Err(format!("the main window may not call {method}"));
     }
     validate_core_call(&method, &params)?;
-    let core = app
-        .try_state::<Arc<CoreProcess>>()
-        .ok_or(CORE_NOT_RUNNING)?;
+    #[cfg(debug_assertions)]
+    if crate::startup_journey() && method == "rooms.list" {
+        static FIRST_READ: AtomicBool = AtomicBool::new(true);
+        let first = FIRST_READ.swap(false, Ordering::SeqCst);
+        if first
+            && std::env::var_os("RAPHAEL_TEST_NATIVE_ROOMS_FAIL_FIRST")
+                .is_some_and(|value| value == "1")
+        {
+            crate::webview_power::startup_trace("rooms_first_read_failed");
+            return Err(CORE_NOT_RUNNING.into());
+        }
+    }
+    // The window can load before the app has started the core; its first calls wait for it.
+    let mut waited = 0;
+    let core = loop {
+        if let Some(core) = app.try_state::<Arc<CoreProcess>>() {
+            break core;
+        }
+        if waited == 50 {
+            return Err(CORE_NOT_RUNNING.into());
+        }
+        waited += 1;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    };
+    let method = if method == "dictionary.correct" {
+        params = crate::learned::composer_params(params)?;
+        "dictionary.learn".to_owned()
+    } else {
+        method
+    };
     let monitor = (method == "audio.monitor")
         .then(|| params.get("on").and_then(Value::as_bool))
         .flatten();
@@ -733,6 +787,29 @@ pub async fn core_call(
         .call(&method, params)
         .await
         .map_err(|err| err.to_string())?;
+    if method == "dictionary.learn" {
+        let words = result
+            .get("learned")
+            .and_then(Value::as_array)
+            .map(|words| {
+                words
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let language = app
+            .try_state::<LanguageCell>()
+            .map(|cell| cell.get())
+            .unwrap_or_else(|| "zh-TW".to_owned());
+        crate::learned::publish(
+            &app,
+            &words,
+            result.get("undo").and_then(Value::as_str),
+            &language,
+        );
+    }
     if let Some(on) = monitor {
         MONITORING.store(on, Ordering::Relaxed);
     }
@@ -1009,6 +1086,7 @@ fn whole(value: &Value) -> Option<u64> {
 pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<MainEvent> {
     let params = &notification.params;
     match notification.method.as_str() {
+        "core.restarted" => Some(MainEvent::CoreReady),
         "audio.level" => {
             if !monitoring || !params.get("session_id").is_none_or(Value::is_null) {
                 return None;
@@ -1023,6 +1101,32 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
             done: whole(params.get("done")?)?,
             total: whole(params.get("total")?)?,
         }),
+        "member.activity" => {
+            let state = params.get("state")?.as_str()?;
+            if !matches!(
+                state,
+                "thinking"
+                    | "working"
+                    | "searching"
+                    | "computer"
+                    | "waiting"
+                    | "blocked"
+                    | "done"
+                    | "error"
+                    | "idle"
+            ) {
+                return None;
+            }
+            Some(MainEvent::MemberActivity {
+                member_id: params.get("member_id")?.as_u64()?,
+                state: state.to_owned(),
+                label: params
+                    .get("label")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_owned(),
+            })
+        }
         "agent.turn" => Some(MainEvent::AgentTurn {
             turn_id: params.get("turn_id")?.as_u64()?,
             member_id: params.get("member_id").and_then(Value::as_u64).unwrap_or(0),
@@ -1030,6 +1134,7 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
         "routines.changed" => Some(MainEvent::RoutinesChanged {
             member_id: params.get("member_id")?.as_u64()?,
         }),
+        "calendar.changed" => Some(MainEvent::CalendarChanged),
         "rooms.changed" => Some(MainEvent::RoomsChanged {
             room_id: params.get("room_id")?.as_u64()?,
         }),
@@ -1038,6 +1143,16 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
             member_id: params.get("member_id").and_then(Value::as_u64).unwrap_or(0),
         }),
         "quota.changed" => Some(MainEvent::QuotaChanged),
+        "setup.missing" => {
+            let resource = params.get("resource")?.as_str()?;
+            let requirement = params.get("requirement")?.as_str()?;
+            if resource != "fish" || !["setup", "key"].contains(&requirement) {
+                return None;
+            }
+            Some(MainEvent::SetupMissing {
+                missing: json!({"resource": "fish", "requirement": requirement, "state": "missing", "repair": "voice"}),
+            })
+        }
         "action_mode.changed" => Some(MainEvent::ActionModeChanged),
         "providers.changed" => Some(MainEvent::ProvidersChanged),
         "settings.changed" => Some(MainEvent::SettingsChanged),
@@ -1078,7 +1193,7 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
 }
 
 /// The page calls this once and receives the events on `channel`. A page that calls it again (it
-/// was reloaded) replaces the one before. Without a core the page still hears the app's own
+/// was reloaded) replaces the one before. Until the core is there the page hears the app's own
 /// events, such as the tray's.
 #[tauri::command]
 pub async fn main_events(
@@ -1094,12 +1209,29 @@ pub async fn main_events(
     PAGE.lock()
         .unwrap_or_else(PoisonError::into_inner)
         .subscribe(channel.clone());
-    let Some(core) = app.try_state::<Arc<CoreProcess>>() else {
-        log::warn!("main events: the core is not running, so the page hears nothing from it");
-        return Ok(());
-    };
-    let mut notifications = core.subscribe();
+    // Autostart begins hidden; wait until the page has loaded before suspending its webview.
+    if let Some(window) = app.get_webview_window(crate::MAIN_WINDOW) {
+        let active =
+            window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false);
+        crate::webview_power::main_active(&window, active);
+    }
     let forwarder = tauri::async_runtime::spawn(async move {
+        // The window can load before the app has started the core. Such a page still has to hear
+        // from it, so wait for the core rather than leave the page deaf until it reloads.
+        let core = loop {
+            if let Some(core) = app.try_state::<Arc<CoreProcess>>() {
+                break core.inner().clone();
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        };
+        let mut notifications = core.subscribe();
+        // Subscribe before the probe, then replay readiness for this page even if initial hello was earlier.
+        if core.call("core.hello", json!({})).await.is_ok() {
+            crate::webview_power::startup_trace("CoreReady_sent");
+            if channel.send(MainEvent::CoreReady).is_err() {
+                return;
+            }
+        }
         loop {
             match notifications.recv().await {
                 Ok(notification) => {
@@ -1381,6 +1513,9 @@ impl Effects for AppEffects {
     }
 
     fn autostart(&self, on: bool) -> Result<(), String> {
+        if crate::native_journey() {
+            return Ok(());
+        }
         let launcher = self.app.autolaunch();
         let result = if on {
             // Always: it writes the path of the exe that is running, which may have moved.
@@ -1416,6 +1551,11 @@ impl Effects for AppEffects {
         };
         if let Err(err) = window.set_theme(theme) {
             log::warn!("could not set the theme of the main window: {err}");
+        }
+        if let Some(overlay) = self.app.get_webview_window(crate::OVERLAY_WINDOW)
+            && let Err(err) = overlay.set_theme(theme)
+        {
+            log::warn!("could not set the theme of the overlay window: {err}");
         }
     }
 
@@ -1480,10 +1620,19 @@ pub fn window_hotkey(
     hotkeys: State<'_, Arc<HotkeyService>>,
     kind: WindowHotkey,
     member_id: Option<u64>,
+    conversation_id: Option<u64>,
+    destination: Option<String>,
 ) -> Result<(), String> {
     require_main(&webview)?;
-    if let (WindowHotkey::AgentDown, Some(member)) = (kind, member_id) {
-        return hotkeys.member_voice(member);
+    if let (WindowHotkey::AgentDown, Some(conversation)) = (kind, conversation_id) {
+        return hotkeys.conversation_voice(
+            member_id.unwrap_or(0),
+            conversation,
+            typed_quick(destination.as_deref())?,
+        );
+    }
+    if matches!(kind, WindowHotkey::AgentDown) && member_id.is_some() {
+        return Err("the composer must name its conversation before recording".into());
     }
     hotkeys.window_hotkey(kind)
 }
@@ -1530,8 +1679,10 @@ pub fn mic_access(webview: Webview) -> Result<MicAccess, String> {
 
 /// The few addresses the main window may open in the browser: the page is not trusted with a
 /// general "open this link". The last is the microphone page of the privacy settings.
-const OPENABLE_LINKS: [&str; 4] = [
+const OPENABLE_LINKS: [&str; 6] = [
     "https://t.me/BotFather",
+    "https://api.slack.com/apps",
+    "https://discord.com/developers/applications",
     "https://github.com/login/device",
     "https://github.com/settings/applications",
     "ms-settings:privacy-microphone",
@@ -1613,7 +1764,64 @@ pub async fn open_attachment(app: AppHandle, webview: Webview, id: String) -> Re
     launch_link(path)
 }
 
+/// Open a file of the team folder at the owner's press. The core says where it is and whether it reads;
+/// anything else is only shown in its folder, so a press never runs a program a member wrote.
+#[tauri::command]
+pub async fn open_team_file(app: AppHandle, webview: Webview, path: String) -> Result<(), String> {
+    require_main(&webview)?;
+    let core = app
+        .try_state::<Arc<CoreProcess>>()
+        .ok_or(CORE_NOT_RUNNING)?;
+    let result = core
+        .call("computer.team_file", json!({"path": path}))
+        .await
+        .map_err(|_| "file unavailable".to_owned())?;
+    let found = result
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or("file unavailable")?;
+    if result.get("reads").and_then(Value::as_bool) == Some(true) {
+        return launch_link(found);
+    }
+    show_in_folder(found)
+}
+
+fn show_in_folder(path: &str) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("explorer")
+            .raw_arg(format!("/select,\"{path}\""))
+            .spawn()
+            .map(|_| ())
+            .map_err(|err| err.to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        Err("showing a file is only available on Windows".to_owned())
+    }
+}
+
+fn native_learned_forward_allowed(label: &str, lifecycle_journey: bool) -> bool {
+    lifecycle_journey && label == "learned"
+}
+
 /// Chat links may open only a web address, and only at the main window's request.
+/// A sign-in in the browser has finished: the owner's way back is this window coming to the front.
+#[tauri::command]
+pub fn main_window_forward(webview: Webview) -> Result<(), String> {
+    // The isolated lifecycle journey must wake the main page from a webview that never suspends.
+    let lifecycle_journey = crate::native_journey()
+        && std::env::var_os("RAPHAEL_TEST_NATIVE_WINDOW_LIFECYCLE")
+            .is_some_and(|value| value == "1");
+    if !native_learned_forward_allowed(webview.label(), lifecycle_journey) {
+        require_main(&webview)?;
+    }
+    crate::show_main_window(webview.app_handle());
+    Ok(())
+}
+
 #[tauri::command]
 pub fn open_external_url(webview: Webview, url: String) -> Result<(), String> {
     require_main(&webview)?;
@@ -1874,6 +2082,26 @@ mod tests {
     // ---- which window may call a command ----
 
     #[test]
+    fn floating_controls_are_allowlisted_only_for_their_own_passive_windows() {
+        for label in ["overlay", "learned"] {
+            assert!(floating_controls_allowed(label));
+        }
+        for label in ["main", "worker", "", "other"] {
+            assert!(!floating_controls_allowed(label));
+        }
+    }
+
+    #[test]
+    fn only_the_isolated_lifecycle_journey_can_forward_from_learned() {
+        assert!(native_learned_forward_allowed("learned", true));
+        assert!(!native_learned_forward_allowed("learned", false));
+        for label in ["overlay", "worker", "", "Learned", "learned ", "main"] {
+            assert!(!native_learned_forward_allowed(label, true), "{label:?}");
+            assert!(!native_learned_forward_allowed(label, false), "{label:?}");
+        }
+    }
+
+    #[test]
     fn a_command_answers_only_to_the_window_it_belongs_to() {
         assert!(ensure_caller("main", "main").is_ok());
         assert!(ensure_caller("overlay", "overlay").is_ok());
@@ -1899,10 +2127,20 @@ mod tests {
                 .nth(1)
                 .and_then(|rest| rest.split('(').next())
                 .unwrap();
-            assert!(
-                body.contains("require_main("),
-                "`{name}` is a command of the main window and does not check its caller"
-            );
+            if name == "floating_controls" {
+                let first = body
+                    .split("-> Result<(), String> {")
+                    .nth(1)
+                    .unwrap()
+                    .trim_start();
+                assert!(first.starts_with("if !floating_controls_allowed(webview.label())"));
+                assert!(body.contains("get(webview.label())"));
+            } else {
+                assert!(
+                    body.contains("require_main("),
+                    "`{name}` does not check its caller"
+                );
+            }
             checked.push(name.to_owned());
         }
         checked.sort();
@@ -1918,14 +2156,17 @@ mod tests {
                 "device_computer_app_remove",
                 "device_settings_get",
                 "device_settings_set",
+                "floating_controls",
                 "hotkeys_pause",
                 "hotkeys_practice",
                 "keyboard_has_altgr",
                 "main_events",
+                "main_window_forward",
                 "mic_access",
                 "open_attachment",
                 "open_external_url",
                 "open_link",
+                "open_team_file",
                 "save_usage_csv",
                 "schedule_keep_awake_get",
                 "schedule_keep_awake_set",
@@ -2087,7 +2328,6 @@ mod tests {
     #[test]
     fn the_main_window_manages_the_members_by_their_names_only() {
         for method in [
-            "memory.create",
             "members.unread",
             "members.skills.list",
             "members.skills.read",
@@ -2106,7 +2346,6 @@ mod tests {
             "members.delete",
             "members.set_primary",
             "members.set_avatar",
-            "members.presets",
             "members.read",
             "members.viewing",
             "members.tool_choices",
@@ -2114,6 +2353,7 @@ mod tests {
             "groups.update",
             "groups.delete",
             "routines.list",
+            "routines.webhook",
             "routines.create",
             "routines.update",
             "routines.delete",
@@ -2134,14 +2374,6 @@ mod tests {
         ] {
             assert!(!is_allowed_method(method), "{method}");
         }
-        assert!(validate_core_call("memory.move", &json!({"to_space": "shared"})).is_err());
-        assert!(
-            validate_core_call(
-                "memory.move",
-                &json!({"name": "user-city", "to_space": "shared", "member_id": 3})
-            )
-            .is_ok()
-        );
     }
 
     #[test]
@@ -2219,6 +2451,26 @@ mod tests {
     }
 
     #[test]
+    fn desktop_viewer_exposes_only_named_main_window_operations() {
+        assert!(is_allowed_method("computer.teach"));
+        assert!(!is_allowed_method("computer.teach_input"));
+        for method in [
+            "computer.viewer_status",
+            "computer.viewer_open",
+            "computer.viewer_renew",
+            "computer.viewer_control",
+            "computer.viewer_close",
+            "computer.revoke",
+            "computer.wallpaper",
+        ] {
+            assert!(is_allowed_method(method));
+        }
+        assert!(!is_allowed_method("computer.viewer_credentials"));
+        assert!(!is_allowed_method("computer.viewer_exec"));
+        assert!(ensure_caller("overlay", crate::MAIN_WINDOW).is_err());
+    }
+
+    #[test]
     fn usage_analytics_is_a_named_read_of_the_main_window_only() {
         assert!(is_allowed_method("home.overview"));
         assert!(validate_core_call("home.overview", &json!({"tz": "Asia/Taipei"})).is_ok());
@@ -2264,11 +2516,23 @@ mod tests {
     }
 
     #[test]
-    fn the_main_window_reaches_the_memory_by_its_six_methods_only() {
+    fn the_main_window_reaches_the_memory_by_its_four_methods_only() {
+        for method in [
+            "memory.get",
+            "memory.update",
+            "memory.clear",
+            "memory.summary_clear",
+        ] {
+            assert!(is_allowed_method(method), "{method}");
+        }
         for method in [
             "memory.",
             "memory",
             "memory.write",
+            "memory.list",
+            "memory.create",
+            "memory.delete",
+            "memory.move",
             "memory.reflect",
             "memory.listx",
             "Memory.list",
@@ -2280,93 +2544,30 @@ mod tests {
     }
 
     #[test]
-    fn a_memory_is_named_by_its_type_and_an_ascii_slug() {
-        for name in [
-            "user-city",
-            "preference-answer-length",
-            "ongoing-trip-2026",
-            "person-amy",
-        ] {
-            assert!(is_memory_name(name), "{name}");
-        }
-        let long = format!("user-{}", "a".repeat(60));
-        for name in [
-            "",
-            "user",
-            "user-",
-            "user--city",
-            "user-city-",
-            "-user-city",
-            "secret-city",
-            "User-city",
-            "user-City",
-            "user-台北",
-            "user-../raphael",
-            "user-a/b",
-            "user-a\\b",
-            "user-a.md",
-            "user-a b",
-            long.as_str(),
-        ] {
-            assert!(!is_memory_name(name), "{name:?}");
-        }
-    }
-
-    #[test]
     fn the_memory_methods_have_their_params_checked() {
         let ok = |method: &str, params: Value| validate_core_call(method, &params).is_ok();
-        assert!(ok("memory.list", json!({})));
-        assert!(ok("memory.clear", json!({})));
+        assert!(ok("memory.get", json!({})));
+        assert!(ok("memory.get", json!({"space": "shared", "member_id": 3})));
+        assert!(ok("memory.clear", json!({"space": "own", "member_id": 3})));
         assert!(ok("memory.summary_clear", json!({})));
-        assert!(ok("memory.get", json!({"name": "user-city"})));
-        assert!(ok("memory.delete", json!({"name": "user-city"})));
-        assert!(ok(
-            "memory.create",
-            json!({"member_id": 3, "space": "own", "body": "Owner note"})
-        ));
         assert!(ok(
             "memory.update",
-            json!({"name": "user-city", "body": "主人住在台北。"})
+            json!({"text": "主人住在台北。", "revision": "abc", "space": "own", "member_id": 3})
         ));
+        assert!(ok("memory.update", json!({"text": ""})));
         assert!(ok(
             "memory.update",
-            json!({"name": "user-city", "body": "", "description": "主人住在台北"})
+            json!({"text": "長".repeat(64_000), "revision": null})
         ));
-        assert!(ok(
-            "memory.update",
-            json!({"name": "user-city", "body": "長".repeat(1200), "description": null})
-        ));
-        for (method, params) in [
-            ("memory.create", json!({"member_id": 3})),
-            ("memory.create", json!({"body": "  "})),
-            ("memory.create", json!({"body": 5})),
-            ("memory.create", json!({"body": "x".repeat(1201)})),
-            (
-                "memory.create",
-                json!({"body": "x", "description": "x".repeat(81)}),
-            ),
-            ("memory.get", json!({})),
-            ("memory.get", json!({"name": "../raphael"})),
-            ("memory.delete", json!({"name": 3})),
-            ("memory.update", json!({"name": "user-city"})),
-            ("memory.update", json!({"name": "user-city", "body": 5})),
-            (
-                "memory.update",
-                json!({"name": "user-city", "body": "長".repeat(1201)}),
-            ),
-            (
-                "memory.update",
-                json!({"name": "user-city", "body": "x", "description": ""}),
-            ),
-            (
-                "memory.update",
-                json!({"name": "user-city", "body": "x", "description": "長".repeat(81)}),
-            ),
-            ("memory.update", json!({"name": "x", "body": "x"})),
+        for params in [
+            json!({}),
+            json!({"text": 5}),
+            json!({"text": "長".repeat(64_001)}),
+            json!({"text": "x", "revision": 5}),
         ] {
             assert!(
-                validate_core_call(method, &params).is_err(),
-                "{method} {params}"
+                validate_core_call("memory.update", &params).is_err(),
+                "{params}"
             );
         }
     }
@@ -2416,12 +2617,42 @@ mod tests {
     }
 
     #[test]
+    fn work_channels_and_checkpoints_have_only_named_main_window_methods() {
+        for kind in ["slack", "discord"] {
+            for action in [
+                "status",
+                "connect",
+                "set_enabled",
+                "approve",
+                "reject",
+                "remove_user",
+                "disconnect",
+            ] {
+                assert!(is_allowed_method(&format!("messaging.{kind}.{action}")));
+            }
+            for action in ["send", "token", "approve_all", "statusx"] {
+                assert!(!is_allowed_method(&format!("messaging.{kind}.{action}")));
+            }
+        }
+        assert!(is_allowed_method("computer.checkpoints"));
+        assert!(!is_allowed_method("computer.checkpoints.restore"));
+        assert!(!is_allowed_method("computer.fill_login"));
+    }
+
+    #[test]
     fn only_the_fixed_links_may_be_opened() {
         assert!(is_openable_link("https://t.me/BotFather"));
+        assert!(is_openable_link("https://api.slack.com/apps"));
+        assert!(is_openable_link(
+            "https://discord.com/developers/applications"
+        ));
         assert!(is_openable_link("https://github.com/login/device"));
         assert!(is_openable_link("https://github.com/settings/applications"));
         assert!(is_openable_link("ms-settings:privacy-microphone"));
         for url in [
+            "https://api.slack.com/apps/",
+            "https://api.slack.com.evil.example/apps",
+            "https://discord.com/developers/applications?redirect=evil",
             "https://github.com/login/device/",
             "https://github.com/login/device?user_code=ABCD",
             "http://github.com/login/device",
@@ -2589,8 +2820,11 @@ mod tests {
     #[test]
     fn the_whole_list_of_allowed_methods() {
         for method in [
+            "owner_questions.answer",
+            "owner_questions.bring",
             "connectors.catalog",
             "connectors.categories",
+            "connectors.toolkit",
             "connectors.connect",
             "connectors.status",
             "connectors.disconnect",
@@ -2628,6 +2862,7 @@ mod tests {
             "agent.history.list",
             "agent.history.clear",
             "integrations.catalog",
+            "integrations.proposal",
             "integrations.connect",
             "integrations.connect_cancel",
             "integrations.add",
@@ -2641,12 +2876,9 @@ mod tests {
             "toolsets.list",
             "worker.cancel",
             "worker.rerun",
-            "memory.list",
             "memory.get",
             "memory.update",
-            "memory.delete",
             "memory.clear",
-            "memory.move",
             "memory.summary_clear",
             "services.status",
             "services.set_key",
@@ -2656,7 +2888,6 @@ mod tests {
             "members.update",
             "members.delete",
             "members.set_avatar",
-            "members.presets",
             "members.read",
             "members.viewing",
             "members.tool_choices",
@@ -2664,6 +2895,7 @@ mod tests {
             "groups.update",
             "groups.delete",
             "routines.list",
+            "routines.webhook",
             "routines.create",
             "routines.update",
             "routines.delete",
@@ -2881,6 +3113,48 @@ mod tests {
     }
 
     #[test]
+    fn missing_setup_forwards_only_fixed_voice_metadata() {
+        for requirement in ["setup", "key"] {
+            let params = json!({"resource": "fish", "requirement": requirement,
+                "state": "broken", "repair": "https://untrusted.invalid", "token": "never-forward"});
+            let event = main_event_from(&notification("setup.missing", params), false);
+            assert_eq!(
+                event,
+                Some(MainEvent::SetupMissing {
+                    missing: json!({
+                        "resource": "fish", "requirement": requirement, "state": "missing", "repair": "voice"
+                    })
+                })
+            );
+            assert!(
+                !serde_json::to_string(&event)
+                    .unwrap()
+                    .contains("never-forward")
+            );
+        }
+        assert_eq!(
+            main_event_from(
+                &notification(
+                    "setup.missing",
+                    json!({"resource": "other", "requirement": "setup"})
+                ),
+                true
+            ),
+            None
+        );
+        assert_eq!(
+            main_event_from(
+                &notification(
+                    "setup.missing",
+                    json!({"resource": "fish", "requirement": "raw-error"})
+                ),
+                true
+            ),
+            None
+        );
+    }
+
+    #[test]
     fn levels_are_kept_between_0_and_1() {
         let level = |v: Value| notification("audio.level", json!({"session_id": null, "level": v}));
         assert_eq!(
@@ -2910,6 +3184,59 @@ mod tests {
         assert_eq!(main_event_from(&progress, true), expected);
         let broken = notification("models.progress", json!({"name": "qwen3-asr"}));
         assert_eq!(main_event_from(&broken, true), None);
+    }
+
+    #[test]
+    fn member_activity_forwards_only_valid_states_and_member_ids() {
+        for state in [
+            "thinking",
+            "working",
+            "searching",
+            "computer",
+            "waiting",
+            "blocked",
+            "done",
+            "error",
+            "idle",
+        ] {
+            for member_id in [0, 7] {
+                let event = main_event_from(
+                    &notification(
+                        "member.activity",
+                        json!({"member_id": member_id, "state": state, "label": "Sample public action"}),
+                    ),
+                    false,
+                );
+                assert_eq!(
+                    event,
+                    Some(MainEvent::MemberActivity {
+                        member_id,
+                        state: state.to_owned(),
+                        label: "Sample public action".to_owned()
+                    })
+                );
+                assert_eq!(
+                    serde_json::to_value(event.unwrap()).unwrap(),
+                    json!({"type": "MemberActivity", "member_id": member_id, "state": state, "label": "Sample public action"})
+                );
+            }
+        }
+        for payload in [
+            json!({}),
+            json!({"member_id": 1}),
+            json!({"state": "idle"}),
+            json!({"member_id": -1, "state": "idle"}),
+            json!({"member_id": "1", "state": "idle"}),
+            json!({"member_id": true, "state": "idle"}),
+            json!({"member_id": 1.5, "state": "idle"}),
+            json!({"member_id": 1, "state": null}),
+            json!({"member_id": 1, "state": "unknown"}),
+        ] {
+            assert_eq!(
+                main_event_from(&notification("member.activity", payload), true),
+                None
+            );
+        }
     }
 
     #[test]
@@ -2971,6 +3298,11 @@ mod tests {
                 json!({"type": "RoutinesChanged", "member_id": 4}),
             ),
             (
+                "calendar.changed",
+                json!({"title": "private"}),
+                json!({"type": "CalendarChanged"}),
+            ),
+            (
                 "members.changed",
                 json!({"name": "private"}),
                 json!({"type": "MembersChanged"}),
@@ -3011,12 +3343,24 @@ mod tests {
 
     #[test]
     fn other_notifications_are_not_forwarded() {
-        for method in ["core.restarted", "core.down", "dictation.partial"] {
+        for method in ["core.down", "dictation.partial"] {
             assert_eq!(
                 main_event_from(&notification(method, json!({})), true),
                 None
             );
         }
+    }
+
+    #[test]
+    fn a_restarted_core_reaches_existing_readiness_consumers() {
+        assert_eq!(
+            main_event_from(&notification("core.restarted", json!({})), false),
+            Some(MainEvent::CoreReady)
+        );
+        assert_eq!(
+            serde_json::to_string(&MainEvent::CoreReady).unwrap(),
+            r#"{"type":"CoreReady"}"#
+        );
     }
 
     #[test]

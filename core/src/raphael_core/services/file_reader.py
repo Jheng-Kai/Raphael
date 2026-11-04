@@ -203,7 +203,7 @@ async def read_file(attachment: Attachment, transcribe: Transcribe | None = None
     if video or audio:
         kind = "video" if video else "audio"
         if transcribe is None:
-            return kind, {**facts, "limitation": "Speech recognition is unavailable; the media was not transcribed."}
+            return kind, {**facts, "limitation_kind": "audio_transcriber", "limitation": "This installation cannot transcribe media attachments. Attach a text transcript and ask an administrator to check the speech recognition component; there is no setting here to add it."}
         try:
             # libsndfile can read these directly; other formats need ffmpeg's WAV conversion.
             direct = not video and extension in (".wav", ".mp3", ".ogg", ".flac")
@@ -221,11 +221,11 @@ async def read_file(attachment: Attachment, transcribe: Transcribe | None = None
             text, cut = fit(text)
             return kind, {**facts, "text": text, "duration": duration, "truncated": cut or truncated}
         except FileNotFoundError:
-            return kind, {**facts, "limitation": "ffmpeg is unavailable; this media's audio could not be read."}
+            return kind, {**facts, "limitation_kind": "audio_ffmpeg", "limitation": "The ffmpeg decoding component is missing. Attach WAV audio or a text transcript and ask an administrator to repair the installation."}
         except asyncio.CancelledError:
             raise
         except Exception:
-            return kind, {**facts, "limitation": "The audio could not be decoded or transcribed."}
+            return kind, {**facts, "limitation_kind": "audio_decode", "limitation": "The media could not be decoded or transcribed. Attach WAV audio or a text transcript; ask an administrator to check the decoding component if it continues."}
     if extension in (".docx", ".xlsx", ".pptx"):
         try:
             text = await asyncio.to_thread(office_text, attachment.data, extension)

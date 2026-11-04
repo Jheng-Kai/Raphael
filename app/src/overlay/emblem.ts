@@ -891,16 +891,20 @@ export class Emblem {
 const emblems = new Set<Emblem>();
 let frameId = 0;
 let lastFrame = 0;
+let nextFrameAt = 0;
 
 /** Starts the loop if it is not running. It stops by itself when every emblem is hidden. */
 function wake(): void {
   if (frameId !== 0 || typeof requestAnimationFrame !== "function") return;
   lastFrame = performance.now();
+  nextFrameAt = 0;
   frameId = requestAnimationFrame(frame);
 }
 
 function frame(ms: number): void {
   frameId = 0;
+  if (ms + 0.0001 < nextFrameAt) { frameId = requestAnimationFrame(frame); return; }
+  nextFrameAt = ms + 1000 / 60;
   const dt = Math.min(0.05, Math.max(0, (ms - lastFrame) / 1000));
   lastFrame = ms;
   let busy = false;

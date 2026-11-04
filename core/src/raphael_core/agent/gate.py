@@ -26,10 +26,9 @@ is unknown and cannot run; and it holds the door to the plugins' tools (`plugins
   for the global 先詢問 switch, and a rule that asks (Ask first) or forbids (Never) still wins over it.
   Without rules (or without a guard, as in most tests) every action passes it, with no call.
 
-The memory's tools are Raphael's own too: reading a note (`memory_read`) and searching the past
-turns (`history_search`) only read, so they are T0; writing and deleting a note (`memory_write`,
-`memory_delete`) change only Raphael's own memory, which the user sees and can undo in the settings,
-so they are T1: they run at once, with no yes asked for. So are the tools that reach the owner's team
+The memory's tools are Raphael's own too: searching the past turns (`history_search`) only reads, so
+it is T0; editing the files (`memory_update`, a harness tool) changes only what the user reads and edits
+in the settings, so it is T1: it runs at once, with no yes asked for. So are the tools that reach the owner's team
 (`team`): `ask_member`, which has another member answer, and `create_member`, which adds one at the
 owner's request (and which the safety rules judge first, like a plugin's tool that changes something).
 
@@ -53,6 +52,7 @@ from .ledger import Ledger
 from .policy import Action, Approval, NotApproved, Tier, ToolRegistry, UnknownTool, action_digest
 from .team import TEAM_TIER, TEAM_TOOLS
 from .safety import ALLOW, PASS, Proposed, SafetyGuard, Screening, narrow_scope
+from .steps import Step
 
 if TYPE_CHECKING:
     from ..integrations.pool import McpPool
@@ -66,9 +66,8 @@ WEB_TOOLS = ("weather", "web_search", "local_time", "web_read")
 # offered it only when it has files, and it reads only those, by their number: never a path.
 ATTACHMENT_TOOLS = ("read_attachment",)
 BUILTIN_SERVER = "Raphael"
-# The memory's tools (raphael_core.memory), by tier: the ones that read, and the ones that change it.
-MEMORY_READ_TOOLS = ("memory_read", "history_search")
-MEMORY_WRITE_TOOLS = ("memory_write", "memory_delete")
+# The memory's tool that only reads (raphael_core.memory). The edits are harness tools.
+MEMORY_READ_TOOLS = ("history_search",)
 
 
 class ToolGate:
@@ -95,20 +94,21 @@ class ToolGate:
         self._registry = ToolRegistry(
             {name: command.tier for name, command in COMMANDS.items()},
             plugin_tier=None if plugins is None else plugins.tier_of,
+            plugin_action_tier=getattr(plugins, "tier_for_call", None),
             ask_first=lambda name, tier: self.ask_first and tier > Tier.T0 and name != "ask_member",
+            full_permission=lambda: self.full_permission,
         )
         for name in (*WEB_TOOLS, *MEMORY_READ_TOOLS, *ATTACHMENT_TOOLS):
             self._registry.register(name, Tier.T0)
         # The steps of a run on the owner's desktop (`raphael_core.computer`).
         for name, tier in COMPUTER_TIERS.items():
             self._registry.register(name, tier)
-        for name in MEMORY_WRITE_TOOLS:
-            self._registry.register(name, Tier.T1)
         # The tools that reach the owner's team (`team`): asking a member, adding one.
         for name in TEAM_TOOLS:
             self._registry.register(name, TEAM_TIER)
         for name, tier in HARNESS_TIERS.items():
             self._registry.register(name, tier)
+        self._registry.register("generate_audio", Tier.T1)
         self._registry.register("cli_permission", Tier.T2)
         self._registry.register("team_admin_batch", Tier.T2)
         self._audit = None if conn is None else AuditLog(conn, now_ms)
@@ -119,24 +119,51 @@ class ToolGate:
 
     @property
     def ask_first(self) -> bool:
-        return self._settings is not None and self._settings.get("action_mode") == "ask"
+        return self._settings is not None and self._settings.get("action_mode") in ("ask", "plan")
+
+    @property
+    def plan_first(self) -> bool:
+        """The owner reads a plan before anything is done. Whatever a model makes of that, the door still asks (`ask_first`)."""
+        return self._settings is not None and self._settings.get("action_mode") == "plan"
+
+    @property
+    def full_permission(self) -> bool:
+        """The owner's 全部允許: nothing waits for a yes, and the work comes back done. What the owner forbade by a rule
+        stays forbidden, and only the owner can sign in or type a secret, so those still reach them."""
+        return self._settings is not None and self._settings.get("action_mode") == "bypass"
 
     # --- the registry ---------------------------------------------------------------------------
 
-    def tier(self, name: str) -> Tier:
-        """The tier of a tool or command now. UnknownTool if it has none."""
-        return self._registry.tier(name)
+    def tier(self, name: str, arguments: Mapping[str, Any] | None = None) -> Tier:
+        """The tier of a tool or command now, for the call with `arguments` when they are given (a
+        plugin may tier a call by what it is given). UnknownTool if it has none."""
+        return self._registry.tier(name, arguments)
 
-    def tier_now(self, name: str) -> Tier | None:
+    def tier_now(self, name: str, arguments: Mapping[str, Any] | None = None) -> Tier | None:
         """The tier a tool has now, or None if it has none (a plugin's tool that was blocked, whose
         plugin was turned off or that the plugin describes differently since)."""
         try:
-            return self._registry.tier(name)
+            return self._registry.tier(name, arguments)
         except UnknownTool:
             return None
 
-    def needs_confirmation(self, name: str) -> bool:
-        return self._registry.needs_confirmation(name)
+    def needs_confirmation(self, name: str, arguments: Mapping[str, Any] | None = None) -> bool:
+        return self._registry.needs_confirmation(name, arguments)
+
+    def mode_asks(self, name: str, arguments: Mapping[str, Any] | None = None) -> bool:
+        """Whether the owner's 先詢問/計畫 switch has this call asked about although no tier and no rule does:
+        the door asks for every call above T0 while the switch is on (`ask_first`), but a plugin's tool that
+        only reads passes the screening (`reads_only`), so a question that waited for the screening to ask
+        would never be opened and the door would refuse the call with nobody asked. The question and the door
+        must say the same: this is the door's own word, less the owner's Always for this very tool (`waived`)."""
+        if not self.ask_first:
+            return False
+        try:
+            if not self._registry.needs_confirmation(name, arguments):
+                return False
+        except UnknownTool:
+            return False
+        return not self.waived(Action(name, dict(arguments or {})))
 
     def check(self, action: Action, approval: Approval | None, *, worker: bool = False) -> None:
         """Let `action` through: UnknownTool if it has no tier, NotApproved if it is at T2 or above
@@ -145,7 +172,7 @@ class ToolGate:
         for this computer (opening anything, the volume, the lock...) or a step of a run on the
         desktop when `worker` is true: those are for the user at the keyboard, never for a task
         that runs while they are away. A tool the owner said Always to (`waived`) needs no yes."""
-        if worker and (action.tool in COMMANDS or action.tool in COMPUTER_TIERS):
+        if worker and not self.full_permission and (action.tool in COMMANDS or action.tool in COMPUTER_TIERS):
             raise NotApproved(action.tool)
         self._door(action, approval)
 
@@ -166,14 +193,17 @@ class ToolGate:
             if approval is None and self.waived(action):
                 return "user"
             raise
-        return "auto" if approval is None else "user"
+        # The owner's standing yes: a tool that takes only the owner's word is given it.
+        return "user" if self.full_permission or approval is not None else "auto"
 
     def waived(self, action: Action) -> bool:
         """Whether the owner said Always to this very tool (a narrow rule, `always_allow`) and it can be
         undone: its questions of the tier T2 and of the global 先詢問 switch are waived. The rules that ask
         and forbid are the screening's (`screen`), which every path asks before it makes a call that
         changes something."""
-        tier = self.tier_now(action.tool)
+        if action.tool.startswith(("mcp:computer-access-", "mcp:local/")):
+            return False
+        tier = self.tier_now(action.tool, action.args)
         if self._safety is None or tier is None or tier >= Tier.T3:
             return False
         try:
@@ -217,6 +247,8 @@ class ToolGate:
         """What the owner's safety rules say of `proposed`, an action that changes something: PASS
         when there is no guard or no rule. Never raises but for a cancellation."""
         result = PASS if self._safety is None else await self._safety.screen(proposed, language=language, ledger=ledger)
+        if self.full_permission and result.verdict != "deny":
+            return PASS
         # Explicit denials win; a stored allow can never waive the owner's global quick switch, but for
         # the narrow rule the owner's own click made for this very tool (a rule that asks has won already).
         if self.ask_first and result.verdict != "deny":
@@ -226,7 +258,7 @@ class ToolGate:
             return Screening("ask", result.rule if asked else None, unchecked=result.unchecked, switch=not asked)
         return result
 
-    def reads_only(self, server: str, tool: str) -> bool:
+    def reads_only(self, server: str, tool: str, arguments: Mapping[str, Any] | None = None) -> bool:
         """Whether the server of a plugin's tool says that the tool only reads (`readOnlyHint` and
         not destructive). Such a tool is never judged by the rules. A hub that cannot say, or a
         tool it does not know, changes things."""
@@ -234,9 +266,28 @@ class ToolGate:
         if kind_of is None:
             return False
         try:
-            return kind_of(server, tool) == "read"
+            kind_for_call = getattr(self._plugins, "kind_for_call", None)
+            return (kind_for_call(server, tool, arguments) if arguments is not None and kind_for_call is not None
+                    else kind_of(server, tool)) == "read"
         except Exception:
             return False
+
+    def step_changes(self, step: Step) -> bool:
+        """Whether a step kept in the history did something that changes the owner's world, by the
+        rule a live call is told by (`reads_only` for a plugin's tool, the tier T0 for the rest). A hub
+        that cannot say, or a command or action nobody knows any more, changes things; a lookup of
+        Raphael's own that has no tier cannot have, since nothing that changes anything passes the door
+        without one."""
+        if step.kind == "tool" and step.server != BUILTIN_SERVER:
+            return not self.reads_only(step.server or "", step.tool)
+        tier = self.tier_now(step.tool)
+        if tier is None:
+            return step.kind != "tool"
+        return tier > Tier.T0
+
+    def is_vm_tool(self, key: str) -> bool:
+        """Sandbox gestures use the lease; using a saved identity or working on a dataset still obeys safety rules."""
+        return bool(getattr(self._plugins, "is_computer_tool", lambda _: False)(key)) and not key.endswith(("/fill_login", "/dataset"))
 
     # --- the plugins' tools ---------------------------------------------------------------------
 
@@ -269,8 +320,9 @@ class ToolGate:
         try:
             return await plugins.call(key, arguments, approver=approver, task_id=task_id, **kept)
         except Exception as exc:  # not the hub's own failures, which it reports in the outcome
-            logger.warning("A plugin call failed unexpectedly: %s", type(exc).__name__)
-            return PluginResult(False, "error")
+            from ..failures import classify
+            failure = classify(exc)
+            return PluginResult(False, failure.kind, failure.reason)
 
     def record_unrun(self, key: str, *, outcome: str, task_id: int | None = None) -> None:
         """The audit of a call that was asked about and not made ("denied" or "expired")."""

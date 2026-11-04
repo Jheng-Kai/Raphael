@@ -9,7 +9,7 @@ Speak anywhere you can type: Raphael turns your voice into clean text and answer
 - **A dictionary that learns.** Names and jargon keep your spelling, and corrections you make after a dictation are remembered.
 - **Cloud or on-device speech recognition.** Use a cloud model through OpenRouter or a free local model.
 - **A voice assistant.** Ask a question, open an app or a website, control volume and media, or hand over a task that takes several steps.
-- **Memory that stays on your PC.** The assistant remembers what you tell it to as plain Markdown files you can read, edit or delete, and it can search past conversations.
+- **Memory that stays on your PC.** Each assistant keeps what it learns in a plain Markdown file it edits as things change, one fact to a line, and the owner's profile is one file they all share; you can read and edit them yourself, and it can search past conversations.
 - **Connected services.** Sign in to services such as Notion, Linear and Todoist so the assistant can work with them.
 - **Multilingual.** Dictation in Chinese, Cantonese, English, Japanese and Korean; the interface in English, Traditional Chinese and Japanese.
 
@@ -28,7 +28,7 @@ Core (Python)          core            audio, speech recognition, cleanup, assis
 Requirements: Windows 10 or 11 (x64), [Node.js](https://nodejs.org) 22.12+, [Rust](https://rustup.rs) 1.98, [uv](https://docs.astral.sh/uv/) and the MSVC C++ build tools. Cleanup, cloud recognition and the assistant need an [OpenRouter](https://openrouter.ai) API key.
 
 ```powershell
-git clone https://github.com/Jack-hehe/Raphael.git
+git clone https://github.com/Jheng-Kai/Raphael.git
 cd Raphael\core
 uv sync --locked --dev
 cd ..\app

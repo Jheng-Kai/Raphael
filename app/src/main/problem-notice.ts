@@ -1,3 +1,4 @@
+import { visibilityGate, windowVisible } from "./window-visibility";
 /** Actionable dictation status, shared by the dictation page and conversation composer. */
 import * as api from "./api";
 import { onLocaleChange } from "./i18n";
@@ -16,10 +17,15 @@ export function createProblemNotice(app: AppContext, changed: () => void = () =>
   let recheck: ReturnType<typeof setTimeout> | undefined;
   let status: Status | null | undefined;
   let report: Report | undefined;
+  let painted = "";
+  const poll = visibilityGate(() => void load(), () => visible);
   function paint(): void {
     report = status === undefined ? undefined : status === null ? coreDownReport() : buildReport(status, Date.now());
     el.hidden = !report?.action;
-    el.innerHTML = report?.action ? `${ico("info")}<span>${esc(report.text)}</span>${btn(report.action.label, "sm", ' data-problem-action')}` : "";
+    const html = report?.action ? `${ico("info")}<span>${esc(report.text)}</span>${btn(report.action.label, "sm", ' data-problem-action')}` : "";
+    if (html === painted) return;
+    painted = html;
+    el.innerHTML = html;
     changed();
   }
   async function check(again = true): Promise<void> {
@@ -30,7 +36,7 @@ export function createProblemNotice(app: AppContext, changed: () => void = () =>
       await load(false);
       if (again && checked.state === "error" && (checked.error === "timeout" || checked.error === "network")) {
         clearTimeout(recheck);
-        recheck = setTimeout(() => { if (visible) void check(false); }, 6000);
+        recheck = setTimeout(() => { if (visible && windowVisible()) void check(false); }, 6000);
       }
     } catch { if (visible && mine === generation) void load(false); }
   }
@@ -56,7 +62,7 @@ export function createProblemNotice(app: AppContext, changed: () => void = () =>
       visible = true;
       void load();
       clearInterval(timer);
-      timer = setInterval(() => { if (!document.hidden) void load(); }, 30_000);
+      timer = setInterval(() => { poll.run(); }, 30_000);
     },
     hide() { visible = false; generation++; clearInterval(timer); clearTimeout(recheck); },
   };

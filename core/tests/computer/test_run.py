@@ -320,14 +320,14 @@ async def test_a_stop_while_a_question_waits_ends_the_run(make_run, shell):
 async def test_a_shell_that_does_not_answer_ends_the_run(make_run, shell, monkeypatch):
     monkeypatch.setattr(run_module, "APPS_TIMEOUT_S", 0.01)
     _, final = await drive(make_run(FakeModel(reply(call("computer_apps")))))
-    assert (final.text, final.kind) == ("目前無法操作電腦。", "unavailable")
+    assert (final.text, final.kind) == ("目前無法操作電腦。請先親自完成這一步，若連其他視窗也無法使用請重新啟動拉斐爾。", "unavailable")
 
 
 async def test_an_app_raphael_never_operates_is_refused(make_run, shell):
     answering(shell, always=True, look="refused_app")
     model = FakeModel(reply(call("computer_apps")), reply(call("computer_look", window=7)))
     _, final = await drive(make_run(model))
-    assert (final.text, final.kind) == ("此 App 不在可操作的範圍內。", "refused_app")
+    assert (final.text, final.kind) == ("此 App 不在可操作的範圍內。請先親自完成這一步，若連其他視窗也無法使用請重新啟動拉斐爾。", "refused_app")
 
 
 async def test_a_model_that_takes_no_tools_or_fails_ends_the_run(make_run, shell):
@@ -629,9 +629,9 @@ async def test_opening_an_app_is_a_step_under_the_runs_limit(make_run, shell):
 
 
 @pytest.mark.parametrize("language, line", [
-    ("zh-TW", "無法監看鍵盤與滑鼠，為安全起見不操作電腦。"),
-    ("en", "The keyboard and the mouse cannot be watched, so the computer is not operated."),
-    ("ja", "キーボードとマウスを監視できないため、コンピューターを操作しません。"),
+    ("zh-TW", "無法監看鍵盤與滑鼠，為安全起見不操作電腦。請先親自完成這一步，若連其他視窗也無法使用請重新啟動拉斐爾。"),
+    ("en", "The keyboard and the mouse cannot be watched, so the computer is not operated. Complete this step yourself; restart Raphael if other windows are unavailable too."),
+    ("ja", "キーボードとマウスを監視できないため、コンピューターを操作しません。 この操作はご自身で行い、他のウィンドウも利用できなければ再起動してください。"),
 ])  # fmt: skip
 async def test_a_run_whose_input_watch_did_not_start_ends_at_once(make_run, shell, language, line):
     answering(shell, always=True)

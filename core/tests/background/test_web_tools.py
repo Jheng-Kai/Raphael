@@ -86,7 +86,7 @@ async def test_an_address_never_seen_is_refused_and_not_fetched(web_rig, caplog)
     assert reply == {"ok": False, "kind": "url_not_seen", "content": "", "truncated": False}
     assert rig.web.requests == []
     (step,) = rig.steps()
-    assert (step.outcome, step.reason) == ("blocked", "blocked")
+    assert (step.outcome, step.reason) == ("blocked", "url_not_seen")
     assert "attacker" not in caplog.text
 
 

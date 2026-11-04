@@ -7,6 +7,8 @@
 // to the Rust side with `device_settings_set`. What is always wanted (pausing the music while
 // Raphael listens, learning from corrections) has no switch: it is simply on.
 
+import { confirmDelete } from "../member-dialogs";
+import { knownCatalog, rememberCatalog } from "../brain-lists";
 import { isUiLocale, onLocaleChange, t } from "../i18n";
 import { createOwnerControls } from "../owner-settings";
 
@@ -44,7 +46,7 @@ import { createCliBrains } from "../cli-brains";
 import { createProviders } from "../providers";
 import { mountUsageAnalytics, type UsageAnalyticsMount } from "../usage-analytics";
 import { MonitorSwitch } from "../monitor";
-import type { AppContext, AudioDevices, BrainSettings, DeviceSettings, LocalModel, MainEvent, ModelCatalog, ModelRole, Page, SettingsPane, Status } from "../types";
+import type { AppContext, AudioDevices, BrainSettings, DeviceSettings, LocalModel, MainEvent, ModelCatalog, ModelRole, Page, PageArgument, SettingsPane, Status } from "../types";
 import {
   type Choice,
   type MenuAction,
@@ -53,6 +55,7 @@ import {
   ico,
   iconBtn,
   menuIsOpenFor,
+  openConfirmMenu,
   openMenu,
   openMenuOnArrow,
   openPopover,
@@ -66,6 +69,7 @@ import {
 import { AUTO_MICROPHONE } from "../microphone";
 import {
   APPEARANCES,
+  LOCAL_COMMAND_MODES,
   HOTKEY_ROWS,
   agentCity,
   quickModels,
@@ -73,6 +77,7 @@ import {
   WORKER_COST_CAPS,
   workerCostCap,
   MODEL_ROWS,
+  mediaRowPrice,
   canonicalPane,
   PANES,
   type SearchHit,
@@ -155,11 +160,9 @@ interface MenuSpec { choices: Choice[]; current: string; pick: (value: string) =
 export interface SettingsPage extends Page {
   /** The tab that is open; while the panel is closed, the one it was left at. */
   pane(): SettingsPane;
+  /** Reads ahead, so that the first opening has nothing to wait for either. */
+  preload(): Promise<void>;
 }
-/** How long 「移除金鑰」 waits for its second press. */
-const KEY_REMOVAL_CONFIRM_MS = 5000;
-/** How long a clear of 資料 waits for its second press. */
-const CLEAR_CONFIRM_MS = 5000;
 /** How long a row the search jumped to stays lit. */
 const FOUND_MS = 1600;
 
@@ -184,7 +187,6 @@ export function createSettings(app: AppContext): SettingsPage {
   const navList = el.querySelector<HTMLElement>(".set-list")!;
   let pane: SettingsPane = "general";
   let modelsTab: ModelsTab = "models";
-  const modelsScroll: Record<ModelsTab, number> = { models: 0, usage: 0 };
   const usageHost = document.createElement("div");
   usageHost.dataset.usageHost = "";
   let usage: UsageAnalyticsMount | null = null;
@@ -195,6 +197,8 @@ export function createSettings(app: AppContext): SettingsPage {
   /** A row the search chose, to be lit once its tab is drawn with its rows (not while it is being read). */
   let pendingJump: SearchHit | null = null;
 
+  let data: SettingsView["data"];
+  let dataEpoch = 0;
   let brain: BrainSettings | null = null;
   const ownerControls = createOwnerControls(settings => { brain = settings; if (visible) render(); });
   let hasKey = false;
@@ -212,12 +216,11 @@ export function createSettings(app: AppContext): SettingsPage {
   let devices: AudioDevices | null = null;
   let altgr = false;
   let version = "";
+  let desktopRequired = false;
+  let computerRemote: boolean | undefined, computerAliasDraft: string | undefined, computerHostError = false;
   /** The key field is shown although there is a key (「變更」). */
   let replacingKey = false;
   let keyBusy = false;
-  /** 「移除金鑰」 was pressed once: pressing it again, within a few seconds, removes the key. */
-  let confirmingKeyRemoval = false;
-  let keyRemovalTimer: ReturnType<typeof setTimeout> | undefined;
   let keyError: (() => string) | null = null;
   /** What was typed in the limit field while it is not a limit, and what is wrong with it. */
   let limitDraft: string | null = null;
@@ -235,12 +238,10 @@ export function createSettings(app: AppContext): SettingsPage {
   /** The search for microphones that 「重新搜尋麥克風」 started is under way. */
   let searchingMicrophones = false;
   let visible = false;
+  let readOnce = false, preloading = false;
   let stopOutside = (): void => {};
   let loading = false;
   let loads = 0;
-  /** In 資料, the clear that was pressed once and waits for its second press. */
-  let confirmingClear: "dictation" | "conversation" | null = null;
-  let clearTimer: ReturnType<typeof setTimeout> | undefined;
   /** The 「連接」 tab: it keeps its own state and asks to be drawn again. 「試試看」 leaves for the 拉斐爾 page with a draft. */
   const connections = createConnections({
     root: el,
@@ -252,12 +253,12 @@ export function createSettings(app: AppContext): SettingsPage {
   /** Telegram, in the 「訊息平台」 tab: it keeps its own state too. */
   const messaging = createMessaging({ visible: () => visible && pane === "messaging", redraw: () => render() });
   /**
-   * The memory, in the 「拉斐爾」 tab: 「共同記憶」, which every agent shares, and Raphael's own (its
-   * notes and the summary of his conversation). Each list reads the other again when a note moves.
+   * The memory, in the 「拉斐爾」 tab: 「共同記憶」, which every agent shares, and Raphael's own (and
+   * the summary of his conversation).
    */
-  const memoryHost = { visible: () => visible && pane === "agent", redraw: () => render(), undo: app.undo };
-  const memoryShared = createMemory({ ...memoryHost, space: "shared", onMoved: () => void memory.load() });
-  const memory = createMemory({ ...memoryHost, space: "own", onMoved: () => void memoryShared.load() });
+  const memoryHost = { visible: () => visible && pane === "agent", redraw: () => render() };
+  const memoryShared = createMemory({ ...memoryHost, space: "shared" });
+  const memory = createMemory({ ...memoryHost, space: "own" });
   const memories = [memoryShared, memory];
   app.onEvent((event) => {
     if (event.type !== "MemoryChanged" || !memoryHost.visible()) return;
@@ -272,7 +273,8 @@ export function createSettings(app: AppContext): SettingsPage {
   const providers = createProviders({ root: el, visible: () => visible && pane === "models" && modelsTab === "models", redraw: () => render() });
   app.onEvent((event) => {
     providers.followEvent(event);
-    if (event.type === "SettingsChanged" && visible) void api.settingsGet().then(result => { brain = result.settings; render(); }, () => {});
+    // Closed too: Settings open at once on what they hold, and a choice made at the composer must already be in it.
+    if (event.type === "SettingsChanged") void api.settingsGet().then(result => { brain = result.settings; if (visible) render(); }, () => {});
     cliBrains.followEvent(event);
     if (event.type === "ProvidersChanged" && visible) void loadCatalog();
     if (event.type === "ProvidersChanged" || event.type === "AgentTurn" || event.type === "QuotaChanged" || event.type === "RoutinesChanged" || event.type === "Dictation" && event.phase === "pasted") refreshUsage();
@@ -282,9 +284,9 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
-    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog, checkingOpenrouter, devices, altgr, version,
-    replacingKey, confirmingKeyRemoval, keyBusy, keyError, limitDraft, limitError, cityDraft, cityError, languageGroups, now: Date.now(),
-    connections: connections.view(), messaging: messaging.view(), memory: memory.view(), memoryShared: memoryShared.view(), rules: rules.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), confirmingClear, localModels, localDownload,
+    data, pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version, desktopRequired, computerRemote, computerAliasDraft, computerHostError,
+    replacingKey, keyBusy, keyError, limitDraft, limitError, cityDraft, cityError, languageGroups, now: Date.now(),
+    connections: connections.view(), messaging: messaging.view(), memory: memory.view(), memoryShared: memoryShared.view(), rules: rules.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
 
   /** The item at the foot of the microphones' menu that looks for them again. */
@@ -304,6 +306,22 @@ export function createSettings(app: AppContext): SettingsPage {
     const v = view();
     const d = v.device;
     switch (k) {
+      case "local-commands":
+        return {
+          choices: LOCAL_COMMAND_MODES,
+          current: brain?.local_commands_mode ?? "ask",
+          pick: (value) => { if (LOCAL_COMMAND_MODES.some(c => c.value === value)) void changeBrain("local_commands_mode", value); },
+        };
+      case "computer-host":
+        return {
+          choices: [{ value: "local", label: t("desktop.local") }, { value: "remote", label: t("desktop.remote") }],
+          current: (computerRemote ?? !!brain?.computer_ssh_alias) ? "remote" : "local",
+          pick: (value) => {
+            computerRemote = value === "remote"; computerHostError = false;
+            if (!computerRemote) { computerAliasDraft = undefined; void changeBrain("computer_ssh_alias", ""); }
+            else { render(); el.querySelector<HTMLInputElement>('#computer-ssh-alias')?.focus(); }
+          },
+        };
       case "mic": {
         const anchor = el.querySelector<HTMLElement>('.sel[data-k="mic"]');
         return {
@@ -340,10 +358,7 @@ export function createSettings(app: AppContext): SettingsPage {
         return {
           choices: APPEARANCES,
           current: d.appearance,
-          pick: (value) => {
-            const appearance = value as DeviceSettings["appearance"];
-            if (APPEARANCES.some((c) => c.value === appearance) && appearance !== app.device().appearance) void changeDevice({ appearance });
-          },
+          pick: (value) => { if (APPEARANCES.some(c => c.value === value)) void changeAppearance(value); },
         };
       case "retention":
         return {
@@ -421,11 +436,11 @@ export function createSettings(app: AppContext): SettingsPage {
     // Only what changed moves: a list drawn again stands still, a switch that was turned slides.
     // Analytics owns its controls and filters; keep that live subtree out of page HTML redraws.
     usageHost.remove();
-    swapHTML(body, pane !== "about" && loading ? loadingHTML(view()) : paneHTML(view()));
+    swapHTML(body, `<div class="set-content">${pane !== "about" && loading ? loadingHTML(view()) : paneHTML(view())}</div>`);
     const slot = body.querySelector<HTMLElement>("[data-usage-host]");
     if (slot) {
       slot.replaceWith(usageHost);
-      usage ??= mountUsageAnalytics(usageHost, { usageAnalytics: api.usageAnalytics, usageRuns: api.usageRuns, usageExport: api.usageExport, usageAllowances: api.usageAllowances, saveUsageCsv: api.saveUsageCsv, modelsCatalog: api.modelsCatalog, brainsCli: api.brainsCli });
+      usage ??= mountUsageAnalytics(usageHost, { usageAnalytics: api.usageAnalytics, usageRuns: api.usageRuns, usageExport: api.usageExport, usageAllowances: api.usageAllowances, saveUsageCsv: api.saveUsageCsv, modelsCatalog: api.modelsCatalog, brainsCli: api.brainsCli, chatgptStatus: api.chatgptStatus, openExternalUrl: api.openExternalUrl });
       if (usageFocus?.isConnected) usageFocus.focus({ preventScroll: true });
     }
     // Before the focus goes back by `data-k`, which the pickers' buttons have too.
@@ -447,8 +462,8 @@ export function createSettings(app: AppContext): SettingsPage {
     body.scrollTop = scroll;
     el.querySelectorAll<HTMLElement>("[data-pane]").forEach((b) => b.setAttribute("aria-current", b.dataset.pane === pane ? "page" : "false"));
 
-    if (focused) el.querySelector<HTMLElement>(`[data-k="${CSS.escape(focused)}"]`)?.focus();
-    else if (focusedId) el.querySelector<HTMLElement>(`#${CSS.escape(focusedId)}`)?.focus();
+    if (focused) el.querySelector<HTMLElement>(`[data-k="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
+    else if (focusedId) el.querySelector<HTMLElement>(`#${CSS.escape(focusedId)}`)?.focus({ preventScroll: true });
     if (openK) {
       const anchor = el.querySelector<HTMLElement>(`.sel[data-k="${openK}"]`);
       const menu = menuFor(openK);
@@ -483,10 +498,10 @@ export function createSettings(app: AppContext): SettingsPage {
     closeMenu();
     const hadUsage = usage !== null;
     const jumping = pendingJump !== null;
-    if (pane === "models") modelsScroll[modelsTab] = body.scrollTop;
     if (next === "usage") modelsTab = "usage";
     else if (tab) modelsTab = tab;
     pane = canonicalPane(next);
+    if (pane === "data") void loadData();
     if (pane === "general") void hiddenMembers.load();
     if (pane !== "models") destroyUsage();
     if (pane === "connections") void connections.load();
@@ -501,12 +516,10 @@ export function createSettings(app: AppContext): SettingsPage {
     providers.reset();
     if (pane === "agent") void services.load();
     if (pane === "models" && modelsTab === "models") void providers.load();
-    clearTimeout(clearTimer);
-    confirmingClear = null;
     syncMonitor();
     body.scrollTop = 0;
     render();
-    if (!jumping && pane === "models") body.scrollTop = modelsScroll[modelsTab];
+    if (!jumping) body.scrollTop = 0;
     if (hadUsage && pane === "models" && modelsTab === "usage") refreshUsage();
     paintNav();
     replay(body, "pane-in");
@@ -516,11 +529,10 @@ export function createSettings(app: AppContext): SettingsPage {
     if (next === modelsTab) return;
     const hadUsage = usage !== null;
     closeMenu();
-    modelsScroll[modelsTab] = body.scrollTop;
     modelsTab = next;
     if (next === "usage") providers.reset();
     render();
-    body.scrollTop = modelsScroll[next];
+    body.scrollTop = 0;
     body.querySelector<HTMLElement>(`[data-models-tab="${next}"]`)?.focus({ preventScroll: true });
     if (next === "models") void providers.load();
     else if (hadUsage) refreshUsage();
@@ -753,6 +765,7 @@ export function createSettings(app: AppContext): SettingsPage {
       // keep a catalog read earlier; else say that the prices cannot be had
       next = typeof catalog === "object" ? catalog : "failed";
     }
+    if (typeof next === "object") rememberCatalog(next);
     if (mine !== loads || request !== catalogLoads || !visible) return;
     catalog = next;
     if (typeof next === "object" && next.replaced.length > 0) {
@@ -762,6 +775,10 @@ export function createSettings(app: AppContext): SettingsPage {
       return;
     }
     paintPrices();
+    for (const role of ["image", "video"] as const) {
+      const price = body.querySelector<HTMLElement>(`[data-media-price="${role}"]`);
+      if (price) price.textContent = mediaRowPrice(view(), role);
+    }
     for (const [role, picker] of pickers) picker.update(lookFor(role));
   }
 
@@ -868,6 +885,10 @@ export function createSettings(app: AppContext): SettingsPage {
         const button = document.createElement("button"); button.dataset.cli = id;
         void cliBrains.click(button);
       },
+      onChatgpt: (action) => {
+        const button = document.createElement("button"); button.dataset.chatgpt = action;
+        void cliBrains.click(button);
+      },
     }));
     const vision = body.querySelector<HTMLElement>('[data-model-picker="vision"]');
     if (vision) {
@@ -893,8 +914,12 @@ export function createSettings(app: AppContext): SettingsPage {
               const button = document.createElement("button"); button.dataset.cli = id;
               void cliBrains.click(button);
             },
+            onChatgpt: (action) => {
+              const button = document.createElement("button"); button.dataset.chatgpt = action;
+              void cliBrains.click(button);
+            },
             onChoose: (id) => void chooseModel(role, id),
-            onFavorite: (id, on) => void changeFavorite(role, id, on),
+            onFavorite: (id, on) => void changeFavorite(role === "image" || role === "video" ? "answer" : role, id, on),
             onUseLocal: (name) => void useLocal(name),
             onCancelLocal: () => void cancelLocal(),
             onDeleteLocal: (name) => void deleteLocal(name),
@@ -931,9 +956,17 @@ export function createSettings(app: AppContext): SettingsPage {
   }
 
   /** A model chosen in a picker (a local speech model is chosen in its own tab: `useLocal`). */
-  function chooseModel(role: ModelRole, id: string): Promise<void> {
+  function chooseModel(role: ModelRole | "image" | "video", id: string): Promise<void> {
+    if (role === "image" || role === "video") return changeBrain(role === "image" ? "image_model" : "video_model", id);
     if (role === "stt") return changeStt(id);
-    return changeBrain(role === "cleanup" ? "cleanup_model" : "agent_model", id);
+    return changeBrain("cleanup_model", id);
+  }
+
+  async function changeAppearance(value: string): Promise<void> {
+    try {
+      await app.setDevice({ appearance: value as DeviceSettings["appearance"] });
+    } catch (error) { toaster.info(describeError(error)); }
+    render();
   }
 
   async function changeDevice(patch: Partial<DeviceSettings>): Promise<void> {
@@ -977,21 +1010,8 @@ export function createSettings(app: AppContext): SettingsPage {
     render();
   }
 
-  /** The first press asks again for a few seconds; the second removes the key. */
   async function removeKey(): Promise<void> {
     if (keyBusy) return;
-    clearTimeout(keyRemovalTimer);
-    if (!confirmingKeyRemoval) {
-      confirmingKeyRemoval = true;
-      keyRemovalTimer = setTimeout(() => {
-        confirmingKeyRemoval = false;
-        if (visible) render();
-      }, KEY_REMOVAL_CONFIRM_MS);
-      render();
-      el.querySelector<HTMLElement>('[data-act="key-remove"]')?.focus();
-      return;
-    }
-    confirmingKeyRemoval = false;
     keyBusy = true;
     render();
     try {
@@ -1043,34 +1063,35 @@ export function createSettings(app: AppContext): SettingsPage {
     void changeBrain("monthly_limit_usd", limit);
   }
 
-  /**
-   * A clear of 資料: the first press asks again for a few seconds; the second empties what it names
-   * once the 10 seconds of 「復原」 have run out (`app.undo`), through the core.
-   */
-  function clear(what: "dictation" | "conversation"): void {
-    clearTimeout(clearTimer);
-    if (confirmingClear !== what) {
-      confirmingClear = what;
-      clearTimer = setTimeout(() => {
-        confirmingClear = null;
-        if (visible) render();
-      }, CLEAR_CONFIRM_MS);
-      render();
-      return;
+  async function loadData(more = false): Promise<void> {
+    const mine = ++dataEpoch;
+    const last = more ? data?.items.slice(-1)[0] : undefined;
+    try {
+      const [history, conversations] = await Promise.all([
+        api.historyList({limit:21, ...(last ? {before_ms:last.created_at_ms, before_id:last.id} : {})}),
+        api.core<{conversations: {turn_count?:number}[]}>("conversations.list", {member_id:0}),
+      ]);
+      if (mine !== dataEpoch) return;
+      data = { items:[...(more ? data?.items ?? [] : []), ...history.items.slice(0,20)], total:history.total ?? history.items.length, conversations:conversations.conversations.filter(c => (c.turn_count ?? 0) > 0).length, more:history.items.length>20 };
+    } catch (error) {
+      if (mine !== dataEpoch) return;
+      data = {...data ?? {items:[],total:0,conversations:0,more:false},busy:false,error:describeError(error)};
     }
-    confirmingClear = null;
-    render();
-    app.undo.begin({
-      message: what === "dictation" ? t("data.dictationCleared") : t("data.conversationCleared"),
-      commit: async () => {
-        if (what === "dictation") await api.historyClear();
-        else await api.agentHistoryClear();
-        // The history or the 拉斐爾 page under the panel loaded what is gone now: they drop it.
-        app.cleared.say(what);
-      },
-      restore: () => {}, // nothing was taken off the screen here
-      failure: (err) => t("undo.001", { p0: () => describeError(err) }),
-    });
+    if (visible && pane === "data") render();
+  }
+
+  async function clear(what: "dictation" | "conversation"): Promise<void> {
+    if (!data || data.busy) return;
+    const count = what === "dictation" ? data.total : data.conversations;
+    if (!await confirmDelete(t(what === "dictation" ? "data.deleteDictations" : "data.deleteConversations", {p0:count}))) return;
+    dataEpoch++; data = {...data,busy:true,error:undefined}; render();
+    try {
+      if (what === "dictation") { await api.historyClear(); data = {...data,items:[],total:0,more:false}; }
+      else { await api.agentHistoryClear(); data = {...data,conversations:0}; }
+      app.cleared.say(what);
+    } catch (error) { data = {...data,error:describeError(error)}; }
+    data = {...data,busy:false};
+    if (visible && pane === "data") render();
   }
 
   function commitCity(input: HTMLInputElement): void {
@@ -1187,7 +1208,7 @@ export function createSettings(app: AppContext): SettingsPage {
       return;
     }
 
-    if (target.closest("[data-cli], [data-cli-menu]")) { void cliBrains.click(target); return; }
+    if (target.closest("[data-cli], [data-cli-menu], [data-chatgpt], [data-chatgpt-menu]")) { void cliBrains.click(target); return; }
     if (providers.click(target)) return;
     // the usage view opens its own dropdowns' menus (usage-analytics.ts)
     const choose = target.closest<HTMLElement>(".sel");
@@ -1245,8 +1266,8 @@ export function createSettings(app: AppContext): SettingsPage {
         render();
         el.querySelector<HTMLElement>('[data-act="key-replace"]')?.focus();
         break;
-      case "key-remove":
-        void removeKey();
+      case "key-menu":
+        openConfirmMenu(target.closest<HTMLElement>('[data-act]')!, { label: t("settings.keyRemove"), ask: t("settings.keyRemoveConfirm"), run: () => void removeKey() });
         break;
       case "key-paste":
         void pasteKey();
@@ -1263,14 +1284,17 @@ export function createSettings(app: AppContext): SettingsPage {
         }
         break;
       }
-      case "clear-dictation":
-        clear("dictation");
+      case "docker-download":
+        void api.openExternalUrl("https://www.docker.com/products/docker-desktop/").catch(error => toaster.info(describeError(error)));
         break;
-      case "clear-conversation":
-        clear("conversation");
+      case "data-clear":
+        void clear(target.closest<HTMLElement>('[data-what]')?.dataset.what === "dictation" ? "dictation" : "conversation");
+        break;
+      case "data-more":
+        if (data && !data.busy) { data = {...data,busy:true}; render(); void loadData(true); }
         break;
       case "help":
-        void api.openExternalUrl("https://github.com/Jack-hehe/Raphael/issues").catch(error => toaster.info(describeError(error)));
+        void api.openExternalUrl("https://github.com/Jheng-Kai/Raphael/issues").catch(error => toaster.info(describeError(error)));
         break;
       case "license":
         e.preventDefault();
@@ -1288,6 +1312,12 @@ export function createSettings(app: AppContext): SettingsPage {
     const input = e.target as HTMLInputElement;
     if (input.id === "limit-input") commitLimit(input);
     else if (input.id === "agent-city") commitCity(input);
+    else if (input.id === "computer-ssh-alias") {
+      computerAliasDraft = input.value;
+      computerHostError = !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(input.value);
+      if (computerHostError) render();
+      else void changeBrain("computer_ssh_alias", input.value);
+    }
   });
   el.addEventListener("input", (e) => {
     const input = e.target as HTMLInputElement;
@@ -1295,6 +1325,7 @@ export function createSettings(app: AppContext): SettingsPage {
     if (connections.input(input) || messaging.input(input) || memories.some((list) => list.input(input)) || rules.input(input)) return;
     if (input.id === "limit-input") limitDraft = input.value;
     else if (input.id === "agent-city") cityDraft = input.value;
+    else if (input.id === "computer-ssh-alias") computerAliasDraft = input.value;
   });
   el.addEventListener("keydown", (e) => {
     const tab = (e.target as Element).closest<HTMLElement>("[data-models-tab]");
@@ -1348,11 +1379,50 @@ export function createSettings(app: AppContext): SettingsPage {
   const onVisibility = (): void => syncMonitor();
   let stopEvents: (() => void) | null = null;
 
+  /** Reads what the settings show; the returned step keeps it and says whether anything changed. */
+  async function readSettings(): Promise<() => boolean> {
+    const [brainResult, keyResult, statusResult, devicesResult, altgrResult, versionResult, languagesResult, desktopResult] = await Promise.allSettled([
+      api.settingsGet(),
+      api.secretsStatus(),
+      api.statusGet(),
+      api.audioDevices(),
+      api.keyboardHasAltgr(),
+      getVersion(),
+      api.languagesList(),
+      api.desktopStatus(0),
+      // Read again: the settings may have changed since the window started. `refreshDevice` puts
+      // the answer in `app.device()` itself, or drops it if a newer read or write overtook it.
+      app.refreshDevice(),
+    ]);
+    return () => {
+      const before = JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, version, desktopRequired, languageGroups]);
+      brain = brainResult.status === "fulfilled" ? brainResult.value.settings : null;
+      hasKey = keyResult.status === "fulfilled" && keyResult.value.has_key;
+      openrouter = statusResult.status === "fulfilled" ? statusResult.value.openrouter : null;
+      spend = statusResult.status === "fulfilled" ? statusResult.value.spend : null;
+      devices = devicesResult.status === "fulfilled" ? devicesResult.value : null;
+      altgr = altgrResult.status === "fulfilled" && altgrResult.value;
+      version = versionResult.status === "fulfilled" ? versionResult.value : "";
+      desktopRequired = desktopResult.status === "fulfilled" && desktopResult.value.state === "absent";
+      if (languagesResult.status === "fulfilled") languageGroups = languagesResult.value.groups;
+      if (brainResult.status === "fulfilled") readOnce = true;
+      return before !== JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, version, desktopRequired, languageGroups]);
+    };
+  }
+
   return {
     id: "settings",
     el,
     pane: () => pane,
-    async show(open?: SettingsPane) {
+    async preload() {
+      if (readOnce || preloading) return;
+      preloading = true;
+      try { const apply = await readSettings(); if (!visible) apply(); }
+      finally { preloading = false; }
+    },
+    async show(open?: PageArgument) {
+      const repair = open?.startsWith("repair:") ? open.split(":").slice(1) : null;
+      if (repair) open = ({ search: "agent", read: "agent", vision: "agent", pdf: "agent", voice: "agent", store: "connections", computer: "agent" } as Record<string, SettingsPane>)[repair[0]] ?? repair[0] as SettingsPane;
       const hadUsage = usage !== null;
       visible = true;
       stopOutside();
@@ -1360,9 +1430,17 @@ export function createSettings(app: AppContext): SettingsPage {
       cliBrains.start();
       document.addEventListener("keydown", settingsKey);
       const mine = ++loads;
-      loading = true;
+      loading = !readOnce;
+      replacingKey = false;
+      keyError = null;
+      limitDraft = null;
+      limitError = null;
+      cityDraft = null;
+      cityError = null;
+      computerRemote = computerAliasDraft = undefined;
+      computerHostError = false;
       // the first tab, unless the way in knows better (the report that says there is no key goes to the key)
-      pane = open && PANES.some((p) => p.id === canonicalPane(open)) ? canonicalPane(open) : "general";
+      pane = open && PANES.some((p) => p.id === canonicalPane(open as SettingsPane)) ? canonicalPane(open as SettingsPane) : "general";
       if (open === "usage" || open === "models") modelsTab = open;
       if (pane !== "models") destroyUsage();
       connections.reset();
@@ -1371,6 +1449,7 @@ export function createSettings(app: AppContext): SettingsPage {
       rules.reset();
       services.reset();
       providers.reset();
+      if (pane === "data") void loadData();
       if (pane === "connections") void connections.load();
       if (pane === "messaging") void messaging.load();
       if (pane === "agent") for (const list of memories) void list.load();
@@ -1380,42 +1459,45 @@ export function createSettings(app: AppContext): SettingsPage {
       searchField.value = "";
       hits = [];
       pendingJump = null;
-      clearTimeout(clearTimer);
-      confirmingClear = null;
       body.scrollTop = 0;
       closeMenu();
       render();
       paintNav();
       el.querySelector<HTMLElement>("#set-title")?.focus();
-      const [brainResult, keyResult, statusResult, devicesResult, altgrResult, versionResult, languagesResult] = await Promise.allSettled([
-        api.settingsGet(),
-        api.secretsStatus(),
-        api.statusGet(),
-        api.audioDevices(),
-        api.keyboardHasAltgr(),
-        getVersion(),
-        api.languagesList(),
-        // Read again: the settings may have changed since the window started. `refreshDevice` puts
-        // the answer in `app.device()` itself, or drops it if a newer read or write overtook it.
-        app.refreshDevice(),
-      ]);
+      const apply = await readSettings();
       if (mine !== loads || !visible) return;
-      brain = brainResult.status === "fulfilled" ? brainResult.value.settings : null;
-      hasKey = keyResult.status === "fulfilled" && keyResult.value.has_key;
-      openrouter = statusResult.status === "fulfilled" ? statusResult.value.openrouter : null;
-      spend = statusResult.status === "fulfilled" ? statusResult.value.spend : null;
-      devices = devicesResult.status === "fulfilled" ? devicesResult.value : null;
-      altgr = altgrResult.status === "fulfilled" && altgrResult.value;
-      version = versionResult.status === "fulfilled" ? versionResult.value : "";
-      if (languagesResult.status === "fulfilled") languageGroups = languagesResult.value.groups;
-      replacingKey = false;
-      keyError = null;
-      limitDraft = null;
-      limitError = null;
-      cityDraft = null;
-      cityError = null;
-      loading = false;
-      render();
+      // Nothing is redrawn under the owner's hands unless the read found something new.
+      if (apply() || loading) { loading = false; render(); }
+      if (repair) {
+        const [target, resource] = repair;
+        if (["search", "read", "vision", "pdf", "voice"].includes(target)) {
+          await services.load();
+          if (mine !== loads || !visible) return;
+          services.openRepair(target as "search" | "read" | "vision" | "pdf" | "voice", ["searxng", "tavily", "brave", "exa", "fish", "jina", "firecrawl"].includes(resource) ? resource : null);
+          el.querySelector<HTMLElement>('#svc-dialog input, #svc-dialog button')?.focus();
+        } else if (target === "models") {
+          await providers.load();
+          if (mine !== loads || !visible) return;
+          if (resource === "image" || resource === "video") {
+            const control = el.querySelector<HTMLElement>(`[data-row="${resource}-model"] [data-k="${resource}-model"]`);
+            control?.scrollIntoView({block: "center"}); control?.focus({preventScroll: true});
+          } else if (resource === "chatgpt") {
+            const card = el.querySelector<HTMLElement>('[data-chatgpt-card]');
+            card?.scrollIntoView({block: "center"}); card?.querySelector<HTMLElement>('button')?.focus();
+          } else providers.openRepair(resource);
+        } else if (target === "store") {
+          await connections.load();
+          if (mine !== loads || !visible) return;
+          el.querySelector<HTMLButtonElement>('[data-k="conn-tab:store"]')?.click();
+          if (resource === "composio" || resource === "google") el.querySelector<HTMLButtonElement>('[data-conn="configure-composio"]')?.click();
+        } else if (target === "general") {
+          const field = el.querySelector<HTMLElement>('[data-act="rerun-guide"]');
+          field?.scrollIntoView({block: "center"}); field?.focus();
+        } else if (target === "computer") {
+          const field = el.querySelector<HTMLElement>('[data-act="docker-download"]');
+          field?.scrollIntoView({block: "center"}); field?.focus();
+        }
+      }
       void hiddenMembers.load();
       if (!el.contains(document.activeElement)) el.querySelector<HTMLElement>("#set-title")?.focus();
       void loadCatalog();

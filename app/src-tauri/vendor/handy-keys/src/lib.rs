@@ -145,7 +145,7 @@ mod types;
 pub use error::{Error, Result};
 pub use listener::{BlockingHotkeys, KeyboardListener};
 pub use manager::HotkeyManager;
-pub use observation::{EditEvent, RAPHAEL_INPUT_MARKER};
+pub use observation::{set_event_waker, take_cancel_input, EditEvent, RAPHAEL_INPUT_MARKER};
 pub use types::{Hotkey, HotkeyEvent, HotkeyId, HotkeyState, Key, KeyEvent, Modifiers};
 
 #[cfg(target_os = "macos")]

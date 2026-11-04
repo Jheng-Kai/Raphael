@@ -1,12 +1,28 @@
 {
   "version": 1,
   "tools": {
+    "raphael/core/self_check": {
+      "scenario_ids": ["S21.diagnostics.self-check"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/raphael_help": {
+      "scenario_ids": ["S21.diagnostics.help"],
+      "expected_assertions": ["production_state"]
+    },
     "raphael/core/handoff": {
       "scenario_ids": ["S03.immediate-start", "S08.immediate-start"],
       "expected_assertions": ["immediate_start"]
     },
     "raphael/core/room_meeting": {
       "scenario_ids": ["S07.meeting", "S21.meetings.create-reuse"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/room_list": {
+      "scenario_ids": ["S21.meetings.list"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/room_post": {
+      "scenario_ids": ["S21.meetings.post"],
       "expected_assertions": ["production_state"]
     },
     "raphael/core/approve": {
@@ -225,29 +241,29 @@
         "production_state"
       ]
     },
-    "raphael/core/memory_delete": {
-      "scenario_ids": [
-        "S21.memory.forget"
-      ],
-      "expected_assertions": [
-        "production_state"
-      ]
+    "raphael/core/memory_update": {
+      "scenario_ids": ["S21.memory.update"],
+      "expected_assertions": ["production_state"]
     },
-    "raphael/core/memory_read": {
-      "scenario_ids": [
-        "S21.memory.show"
-      ],
-      "expected_assertions": [
-        "production_state"
-      ]
+    "raphael/core/ask_owner": {
+      "scenario_ids": ["S21.settings-quick.ask-owner"],
+      "expected_assertions": ["production_state"]
     },
-    "raphael/core/memory_write": {
-      "scenario_ids": [
-        "S21.memory.save-global"
-      ],
-      "expected_assertions": [
-        "production_state"
-      ]
+    "raphael/core/generate_audio": {
+      "scenario_ids": ["S21.files.create-audio"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/memory_log": {
+      "scenario_ids": ["S21.memory.log"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/session_search": {
+      "scenario_ids": ["S21.memory.session-search"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/session_read": {
+      "scenario_ids": ["S21.memory.session-read"],
+      "expected_assertions": ["production_state"]
     },
     "raphael/core/open": {
       "scenario_ids": [
@@ -260,6 +276,38 @@
     "raphael/core/read_attachment": {
       "scenario_ids": [
         "S21.files.attachment-inventory"
+      ],
+      "expected_assertions": [
+        "production_state"
+      ]
+    },
+    "raphael/core/calendar_add": {
+      "scenario_ids": [
+        "S21.calendar.create"
+      ],
+      "expected_assertions": [
+        "production_state"
+      ]
+    },
+    "raphael/core/calendar_delete": {
+      "scenario_ids": [
+        "S21.calendar.delete"
+      ],
+      "expected_assertions": [
+        "production_state"
+      ]
+    },
+    "raphael/core/calendar_list": {
+      "scenario_ids": [
+        "S21.calendar.list"
+      ],
+      "expected_assertions": [
+        "production_state"
+      ]
+    },
+    "raphael/core/calendar_update": {
+      "scenario_ids": [
+        "S21.calendar.move"
       ],
       "expected_assertions": [
         "production_state"
@@ -304,6 +352,26 @@
       "expected_assertions": [
         "production_state"
       ]
+    },
+    "raphael/core/set_my_job": {
+      "scenario_ids": ["S21.members-groups.set-my-job"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/show_page": {
+      "scenario_ids": ["S21.web-open.show-page"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/update_page": {
+      "scenario_ids": ["S21.web-open.update-page"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/skills_list": {
+      "scenario_ids": ["S21.skills.list"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/skill_manage": {
+      "scenario_ids": ["S21.skills.manage"],
+      "expected_assertions": ["production_state"]
     },
     "raphael/core/skill_read": {
       "scenario_ids": [
@@ -368,6 +436,22 @@
       "expected_assertions": [
         "production_state"
       ]
+    },
+    "raphael/core/find_app": {
+      "scenario_ids": ["S14.gmail"],
+      "expected_assertions": ["connector_card"]
+    },
+    "raphael/core/add_mcp_server": {
+      "scenario_ids": ["S19.http.none.accept", "S19.stdio.none.accept", "S19.http.api-key.missing-secret", "S19.http.none.edited-draft"],
+      "expected_assertions": ["editable_config", "test_digest", "tool_groups", "no_early_enable", "secret_vault"]
+    },
+    "raphael/core/connections_list": {
+      "scenario_ids": ["S20.connector-off", "S20.connector-on"],
+      "expected_assertions": ["live_grants"]
+    },
+    "raphael/core/manage_connection": {
+      "scenario_ids": ["S20.connector-off", "S20.connector-on", "S20.tool-off", "S20.tool-on", "S20.login", "S20.disconnect", "S20.revoke-in-flight"],
+      "expected_assertions": ["live_grants", "stale_alias_denied", "no_action_replay", "ui_roster_sync"]
     }
   }
 }

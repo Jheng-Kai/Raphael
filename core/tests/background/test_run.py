@@ -4,6 +4,7 @@ worker asks for, and the limits, the tiers and the audit they are held to."""
 import asyncio
 import json
 import logging
+from dataclasses import asdict
 from datetime import timezone
 
 import pytest
@@ -95,11 +96,21 @@ async def stop_of(awaitable):
 # --- the model ------------------------------------------------------------------------------------
 
 
+async def test_responses_continuation_is_forwarded_without_entering_the_public_steps(rig):
+    answer = turn("Looking.", [call("weather", {"city": "Taipei"}, "c1")])
+    answer.responses_output = [{"type": "reasoning", "encrypted_content": "opaque-reasoning"}]
+    rig.client.replies = [answer]
+    reply = await rig.chat()
+    assert reply["responses_output"] == answer.responses_output
+    assert "opaque-reasoning" not in json.dumps([asdict(step) for step in rig.steps()])
+
+
 async def test_a_model_call_is_made_with_the_tools_of_the_snapshot_and_paid_into_the_spend(rig):
     rig.client.replies = [turn("Looking.", [call("weather", {"city": "Taipei"}, "c1")], cost=0.004)]
     reply = await rig.chat(tools=[{"type": "function", "function": {"name": "format_the_disk"}}])
     assert reply == {
         "content": "Looking.",
+        "prompt_tokens": 100,
         "calls": [{"id": "c1", "name": "weather", "arguments": {"city": "Taipei"}, "raw": '{"city": "Taipei"}'}],
     }
     sent = rig.client.chat_calls[0]
@@ -112,6 +123,24 @@ async def test_a_model_call_is_made_with_the_tools_of_the_snapshot_and_paid_into
     assert [tuple(r) for r in rows] == [("agent", "fake/model", 0.004)]
     assert rig.run.ledger.total == 0.004
     assert rig.run.model_calls == 1
+
+
+async def test_a_reply_cut_off_by_the_output_limit_is_reported_and_more_room_is_given_when_asked_for(rig):
+    cut = turn("Writing.", [call("weather", {"city": "Ta"}, "c1")])
+    cut.finish_reason = "length"
+    rig.client.replies = [cut, turn("Writing.", [call("weather", {"city": "Taipei"}, "c2")])]
+    first = await rig.chat()
+    second = await rig.chat(room=2)
+    assert first["finish_reason"] == "length" and "finish_reason" not in second
+    base, more = (sent["max_tokens"] for sent in rig.client.chat_calls)
+    assert base == 8192 and more == 2 * base
+
+
+@pytest.mark.parametrize("room", [0, 1.5, "2", True, 9])
+async def test_room_for_a_reply_is_a_small_whole_number(rig, room):
+    with pytest.raises(RpcError) as error:
+        await rig.chat(room=room)
+    assert error.value.code == INVALID_PARAMS
 
 
 async def test_each_model_call_leaves_a_step_and_tells_the_app(rig):
@@ -203,25 +232,20 @@ async def test_cancelling_gives_up_the_model_call_under_way(rig):
         (RuntimeError("boom"), "error"),
     ],
 )
-async def test_a_model_that_fails_ends_the_task_with_the_kind_of_failure(rig, error, detail):
-    rig.client.replies = [error]
+async def test_a_model_that_fails_ends_the_task_with_the_kind_of_failure(rig, error, detail, monkeypatch):
+    monkeypatch.setattr("raphael_core.failures.RETRY_WAITS", (0, 0, 0))
+    rig.client.replies = [error] * 4
     assert await stop_of(rig.chat()) == ("failed", detail)
     assert rig.steps()[0].outcome == "error"
     # The reason is the kind folded into the view's few words: "offline" is a network that failed.
     assert rig.steps()[0].reason == {"offline": "network", "tools": "error"}.get(detail, detail)
 
 
-async def test_a_model_that_takes_too_long_is_a_timeout(rig, monkeypatch):
-    import raphael_core.background.run as module
-
-    monkeypatch.setattr(module, "CHAT_TIMEOUT_S", 0.05)
-
-    async def slow(**kwargs):
-        await asyncio.sleep(30)
-
-    rig.client.replies = [slow]
+async def test_a_model_whose_connection_stays_silent_is_a_timeout(rig, monkeypatch):
+    monkeypatch.setattr("raphael_core.failures.RETRY_WAITS", (0, 0, 0))
+    rig.client.replies = [OpenRouterError(0, "timeout", "no answer")] * 4
     assert await stop_of(rig.chat()) == ("failed", "timeout")
-    assert rig.steps()[0].outcome == "timeout"
+    assert rig.steps()[0].outcome == "error"
     assert rig.steps()[0].reason == "timeout"
 
 
@@ -353,7 +377,7 @@ async def test_what_a_tool_returns_is_cut_to_a_size_the_worker_can_take(rig):
     await rig.plugins.connect(big="T0")
     rig.resnap()
     reply = await rig.tool("Notes__big")
-    assert reply["ok"] and reply["truncated"] is True and len(reply["content"]) <= 12_000
+    assert reply["ok"] and reply["truncated"] is True and len(reply["content"]) <= 50_001
 
 
 async def test_a_tool_that_fails_is_told_as_a_failure_with_its_kind(rig):
@@ -438,10 +462,11 @@ async def test_a_lookup_that_cannot_reach_its_service_fails_with_its_kind(rig):
 # --- what is logged -------------------------------------------------------------------------------
 
 
-async def test_nothing_of_the_task_is_logged(rig, caplog):
+async def test_nothing_of_the_task_is_logged(rig, caplog, monkeypatch):
+    monkeypatch.setattr("raphael_core.failures.RETRY_WAITS", (0, 0, 0))
     await rig.plugins.connect(look="T0", broken="T0")
     rig.resnap()
-    rig.client.replies = [OpenRouterError(500, "server", "PRIVATE-DETAIL"), turn("PRIVATE-WORDS")]
+    rig.client.replies = [OpenRouterError(500, "server", "Service unavailable")] * 4 + [turn("PRIVATE-WORDS")]
     with caplog.at_level(logging.DEBUG):
         with pytest.raises(RpcError):
             await rig.chat([{"role": "user", "content": "PRIVATE-PROMPT"}])

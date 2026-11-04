@@ -1,6 +1,8 @@
 """The home RPC aggregates existing records without changing read state or storage."""
 
 import pytest
+import asyncio
+import json
 
 from raphael_core.agent.history import AgentHistory
 from raphael_core.home import HomeOverview
@@ -44,6 +46,62 @@ async def test_empty_overview_preserves_service_numbers_and_has_no_connector(hom
     assert value["dictation"]["daily"] == list(range(11, 25))
     assert value["report"]["openrouter"]["state"] == "no_key"
     assert rig.conn.total_changes == before
+
+
+@pytest.mark.parametrize("kind", ["routine", "calendar", "meeting", "skill_learned"])
+async def test_home_and_sidebar_do_not_read_receipt_transport_as_a_report(home, rig, kind):
+    member = (await rig.call("members.create", {"name": "Sample colleague"}))["member"]["id"]
+    turn_id = add(rig, member)
+    history = rig.service._history
+    raw = json.dumps({"type": kind, "action": "created", "id": 987654321, "name": "Sample orchard"})
+    history.add_message(turn_id, "event", raw)
+    value = await rig.call("home.overview")
+    rows = (await rig.call("members.list"))["members"]
+    assert next(row for row in rows if row["id"] == member)["preview"] == "A report with details"
+    public = json.dumps(value, ensure_ascii=False)
+    assert "987654321" not in public and raw not in public
+
+
+async def test_five_minute_rhythm_marks_every_day_of_the_month_grid(home, rig):
+    await rig.call("routines.create", {"member_id":0,"title":"Sample rhythm","prompt":"Review samples","schedule":{"kind":"every","minutes":5}})
+    value = await rig.call("home.overview")
+    bars = [item for item in value["calendar_items"] if item.get("rhythm")]
+    assert len(bars) == 42
+    assert len({item["at_ms"] for item in bars}) == 42
+
+
+async def test_home_draws_one_rhythm_per_day_with_timed_failure_and_waiting_exceptions(home, rig):
+    from datetime import datetime
+    routine = (await rig.call("routines.create", {"member_id": 0, "title": "Sample review", "prompt": "Review samples",
+        "schedule": {"kind": "every", "hours": 3, "from": "08:00", "to": "23:00"}}))["routine"]
+    day = datetime.fromtimestamp(rig.wall()/1000, rig.service._tz).replace(hour=0, minute=0, second=0, microsecond=0)
+    for hour, status in [(8, "done"), (11, "error"), (14, "confirm")]:
+        at = int(day.replace(hour=hour).timestamp()*1000)
+        rig.conn.execute("INSERT INTO routine_runs(routine_id,scheduled,started,status) VALUES(?,?,?,?)", (routine["id"],at,at,status))
+    rig.conn.commit()
+    value = await rig.call("home.overview")
+    key = day.date().isoformat()
+    items = [item for item in value["calendar_items"] if datetime.fromtimestamp(item["at_ms"]/1000, rig.service._tz).date().isoformat()==key]
+    assert len([item for item in items if item.get("rhythm")]) == 1
+    assert [item.get("run_status") for item in items if not item.get("rhythm")] == ["error", "confirm"]
+    assert value["calendar_counts"][key] == 3
+
+
+async def test_local_home_does_not_wait_for_live_allowances_or_calendar(home, rig, monkeypatch):
+    calls = []
+    async def allowances(params):
+        calls.append(params)
+        if params.get("refresh", True):
+            await asyncio.sleep(2)
+        return {"brains": [{"id": "codex", "name": "Codex", "windows": []}]}
+    async def calendar(start, end):
+        await asyncio.sleep(2)
+        return []
+    monkeypatch.setitem(rig.rpc._handlers, "usage.allowances", allowances)
+    home.calendar_events = calendar
+    value = await asyncio.wait_for(rig.call("home.overview"), .2)
+    assert value["usage"]["allowances"]["brains"][0]["id"] == "codex"
+    assert calls == [{"refresh": False}]
 
 
 async def test_pending_in_different_conversations_and_latest_unread_report(home, rig):
@@ -104,12 +162,23 @@ async def test_today_limits_pending_questions_after_ordering(home, rig):
 
 async def test_calendar_seam_and_invalid_timezone(home, rig):
     async def events(start, end):
-        return [{"id": "private-event", "kind": "event", "title": "Planning", "summary": "", "at_ms": start + 1000, "member_id": 0, "name": "Raphael", "avatar_url": None, "turn_id": None, "conversation_id": None, "routine_id": None}]
+        return [{"id": "private-event", "kind": "event", "title": "Planning", "summary": "", "at_ms": rig.wall.now + 1000, "member_id": 0, "name": "Raphael", "avatar": "", "turn_id": None, "conversation_id": None, "routine_id": None}]
     home.calendar_events = events
-    assert (await rig.call("home.overview"))["calendar"][0]["title"] == "Planning"
+    assert (await rig.call("home.overview", {"refresh": True}))["calendar"][0]["title"] == "Planning"
     with pytest.raises(RpcError) as caught:
         await rig.call("home.overview", {"tz": "invalid/timezone"})
     assert caught.value.code == INVALID_PARAMS
+
+
+async def test_browser_timezone_is_remembered_without_storage_or_default_zone_changes(home, rig):
+    before = rig.conn.total_changes
+    default_zone = home.tz
+    assert home.timezone_name is None
+    await rig.call("home.overview", {"tz": "Asia/Taipei"})
+    await rig.call("home.overview")
+    assert home.timezone_name == "Asia/Taipei"
+    assert home.tz is default_zone
+    assert rig.conn.total_changes == before
 
 
 async def test_occurrences_stop_at_maximum_runs_and_calendar_is_bounded(home, rig):
@@ -120,6 +189,63 @@ async def test_occurrences_stop_at_maximum_runs_and_calendar_is_bounded(home, ri
     await rig.call("routines.create", {"member_id": 0, "title": "Hourly", "prompt": "Report",
                                       "schedule": {"kind": "every", "hours": 1}})
     assert len((await rig.call("home.overview"))["calendar"]) == 24
+
+
+async def test_month_marks_routines_and_events_beyond_the_week_without_changing_records(home, rig):
+    from datetime import datetime
+    zone = rig.service._tz
+    await rig.call("routines.create", {"member_id": 0, "title": "Daily", "prompt": "Report",
+                                      "schedule": {"kind": "daily", "time": "09:00"}})
+    requested = []
+    event_at = int(datetime(2026, 10, 31, 12, tzinfo=zone).timestamp() * 1000)
+
+    async def events(start, end):
+        requested.append((start, end))
+        return [{"kind": "event", "at_ms": event_at, "title": "Month end"}]
+
+    home.calendar_events = events
+    before = rig.conn.total_changes
+    value = await rig.call("home.overview", {"refresh": True})
+    assert len(value["calendar_days"]) == 42
+    assert "2026-10-01" in value["calendar_days"]
+    assert "2026-10-31" in value["calendar_days"]
+    assert all(item["at_ms"] < event_at for item in value["calendar"])
+    assert value["calendar_events"][0]["title"] == "Month end"
+    assert len(value["calendar"]) == 7
+    assert datetime.fromtimestamp(requested[0][0] / 1000, zone).date().isoformat() == "2026-09-28"
+    assert datetime.fromtimestamp(requested[0][1] / 1000, zone).date().isoformat() == "2026-11-09"
+    assert rig.conn.total_changes == before
+
+
+async def test_changing_month_requests_that_grid_and_rejects_invalid_keys(home, rig):
+    from datetime import datetime
+    ranges = []
+    async def events(start, end):
+        ranges.append((start, end))
+        return []
+    home.calendar_events = events
+    await rig.call("home.overview", {"month": "2026-12", "refresh": True})
+    assert datetime.fromtimestamp(ranges[0][0] / 1000, rig.service._tz).date().isoformat() == "2026-11-30"
+    assert datetime.fromtimestamp(ranges[0][1] / 1000, rig.service._tz).date().isoformat() == "2027-01-11"
+    for value in [None, 202612, "2026-13", "2026-2", "bad"]:
+        with pytest.raises(RpcError) as caught:
+            await rig.call("home.overview", {"month": value})
+        assert caught.value.code == INVALID_PARAMS
+
+
+async def test_month_agenda_keeps_three_earliest_items_and_full_daily_counts(home, rig):
+    for hour in range(8, 12):
+        await rig.call("routines.create", {"member_id": 0, "title": "Daily review", "prompt": "Report",
+                                          "schedule": {"kind": "daily", "time": f"{hour:02}:00"}})
+    value = await rig.call("home.overview")
+    assert len(value["calendar_counts"]) == 42
+    assert set(value["calendar_counts"].values()) == {4}
+    assert len(value["calendar_items"]) == 42 * 3
+    for key in value["calendar_counts"]:
+        from datetime import datetime
+        items = [item for item in value["calendar_items"] if datetime.fromtimestamp(item["at_ms"] / 1000, rig.service._tz).date().isoformat() == key]
+        assert len(items) == 3
+        assert [item["at_ms"] for item in items] == sorted(item["at_ms"] for item in items)
 
 
 async def test_worker_question_keeps_its_conversation_and_connector_failure_is_isolated(home, rig):
@@ -133,7 +259,59 @@ async def test_worker_question_keeps_its_conversation_and_connector_failure_is_i
         raise ConnectionError("Calendar unavailable")
 
     home.calendar_events = unavailable
-    value = await rig.call("home.overview")
+    value = await rig.call("home.overview", {"refresh": True})
     assert value["today"][0]["turn_id"] == turn
     assert value["today"][0]["conversation_id"] is not None
     assert value["calendar"] == []
+
+
+async def test_home_refresh_inside_five_minute_ttl_starts_no_cli_process(home, rig, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from raphael_core.agent.cli import allowances
+
+    children = []
+    def child(*args, **kwargs):
+        process = SimpleNamespace(stdout=SimpleNamespace(readline=AsyncMock(side_effect=[
+            b'{"id":1,"result":{}}\n', b'{"id":2,"result":{"rateLimits":{}}}\n',
+        ])))
+        value = SimpleNamespace(start=AsyncMock(), send=AsyncMock(), kill=AsyncMock(), process=process)
+        children.append(value)
+        return value
+    monkeypatch.setattr(allowances, "Child", child)
+    brains = SimpleNamespace(command=lambda name: ["codex"] if name == "codex" else None,
+                             logged_in=lambda name: True, environ={})
+    quotas = SimpleNamespace(allowances=lambda name: [], list=lambda: [])
+    async def read(params):
+        if not params.get("refresh", True):
+            return allowances.cached_allowances(brains, quotas)
+        return await allowances.read_allowances(brains)
+    monkeypatch.setitem(rig.rpc._handlers, "usage.allowances", read)
+    await rig.call("home.overview", {"refresh": True})
+    assert len(children) == 1
+    children[0].start.assert_awaited_once()
+    rig.wall.now += 299_999
+    await rig.call("home.overview", {"refresh": True})
+    assert len(children) == 1
+    rig.wall.now += 1
+    await rig.call("home.overview", {"refresh": True})
+    assert len(children) == 2
+    children[1].start.assert_awaited_once()
+
+
+async def test_concurrent_home_allowance_refreshes_share_the_pending_read(home, rig, monkeypatch):
+    started, release = asyncio.Event(), asyncio.Event()
+    calls = []
+    async def read(params):
+        calls.append(params)
+        started.set()
+        await release.wait()
+        return {"brains": []}
+    monkeypatch.setitem(rig.rpc._handlers, "usage.allowances", read)
+    first = asyncio.create_task(home._allowances(True))
+    await started.wait()
+    second = asyncio.create_task(home._allowances(True))
+    await asyncio.sleep(0)
+    release.set()
+    assert await first == await second == {"brains": []}
+    assert calls == [{}]

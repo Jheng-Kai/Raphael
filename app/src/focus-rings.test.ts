@@ -53,7 +53,12 @@ const GATE = /^(:where\(:root\[data-keys\]\)|:root\[data-keys\])\s/;
  * Focus styles that are not a frame and so stay under the pointer too. The composer's shadow
  * deepens a little while it is typed into; its edge does not change colour.
  */
-const SOFT = new Map([[".composer:focus-within", /^box-shadow: 0 6px 24px color-mix\(/]]);
+const SOFT = new Map([
+  [".composer:focus-within", /^box-shadow: 0 6px 24px color-mix\(/],
+  // Inline mail editing reveals its existing hairline on focus; keyboard outlines remain gated.
+  [".conversation-card .mail-in.mb-fin:focus", /^border-color: var\(--edge\)$/],
+  [".conversation-card .mail-body.mb-fin:focus", /^border-color: var\(--edge\)$/],
+]);
 
 describe("focus rings follow the keyboard only", () => {
   test("the stylesheets were found", () => {

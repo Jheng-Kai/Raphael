@@ -6,6 +6,32 @@ import pytest
 
 from .test_narration import chat, typed
 from .test_service import make_rig  # noqa: F401
+from raphael_core.agent.actions import is_action
+
+
+@pytest.mark.parametrize("model", ["openai/gpt-6-luna", "cli:codex", "cli:claude:sonnet", "cli:gemini"])
+async def test_action_words_reach_api_and_cli_mcp_without_entering_model_history(make_rig, client, monkeypatch, model):
+    from raphael_core.agent.cli.loop import CliLoop
+    from raphael_core.agent.mcp_server import RaphaelMcp
+    from raphael_core.worker.loop import Outcome
+    rig = make_rig()
+    rig.settings.set("agent_model", model)
+
+    async def fake_cli(loop):
+        server = RaphaelMcp(lambda: loop.tools, loop._tool)
+        result = await server._dispatch({"method":"tools/call", "id":"sample", "params":{"name":"local_time", "arguments":{}}})
+        assert "result" in result
+        loop._queue.put_nowait(Outcome("done", final="Sample finished."))
+
+    monkeypatch.setattr(CliLoop, "_work", fake_cli)
+    client.chats = [chat("Checking the sample time.", ("local_time", {})), chat('{"text":"Sample finished."}')]
+    await typed(rig)
+    [turn] = await rig.turns()
+    actions = [json.loads(message["text"]) for message in turn["messages"] if is_action(message["text"])]
+    assert [action["state"] for action in actions] == ["running", "done"]
+    assert all("local" not in action["present"] and "local_time" not in action["past"] for action in actions)
+    assert '"type": "action"' not in str(client.chat_calls)
+    assert '"type": "action"' not in str(rig.service._history.recent(10))
 
 
 @pytest.mark.parametrize("source", ["app", "telegram"])
@@ -24,13 +50,14 @@ async def test_public_thinking_and_progress_are_stored_before_the_tool_result(ma
 
     async def finish(**kwargs):
         [turn] = await rig.turns()
-        assert [m["kind"] for m in turn["messages"]] == ["thinking", "progress"]
+        assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["thinking", "progress"]
+        assert any(is_action(m["text"]) for m in turn["messages"])
         return chat(json.dumps({"prefix": "Answer", "text": "It is Friday.", "detail": ""}))
 
     client.chats = [chat(json.dumps({"thinking": "The local date will help choose today's article.", "progress": "I will check today's date."}), ("local_time", {})), finish]
     await typed(rig)
     [turn] = await rig.turns()
-    assert [m["kind"] for m in turn["messages"]] == ["thinking", "progress", "reply"]
+    assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["thinking", "progress", "reply"]
 
 
 async def test_show_accepts_a_url_seen_in_an_earlier_turn_and_keeps_media_json_plain(make_rig, client, monkeypatch):
@@ -80,9 +107,12 @@ async def test_show_refuses_an_unseen_url_before_any_fetch(make_rig, client, mon
         pytest.fail("Unseen URL reached the fetcher")
 
     monkeypatch.setattr(rig.service._tools, "show", unexpected)
-    client.chats = [chat("Showing a reference.", ("show", {"url": "https://unseen.example/"})), chat('{"text":"Which reference did you mean?","detail":""}')]
+    client.chats = [chat("Showing a reference.", ("show", {"url": "https://unseen.example/"})),
+                    chat('{"text":"Which reference did you mean?","detail":""}'), chat('{"text":"Please provide the reference."}')]
     await typed(rig, "Show it")
-    assert "url_not_seen" in client.chat_calls[-1]["messages"][-1]["content"]
+    [turn] = await rig.turns()
+    assert any(step["outcome"] == "blocked" and step["reason"] == "url_not_seen" for step in turn["steps"])
+    assert any("Use a URL already supplied" in message.get("content", "") for message in client.chat_calls[-1]["messages"] if message["role"] == "tool")
 
 
 async def test_only_explicit_public_fields_are_published_from_structured_narration(make_rig, client):
@@ -90,7 +120,7 @@ async def test_only_explicit_public_fields_are_published_from_structured_narrati
     client.chats = [chat('```json\n{"thinking":"I will use the local date to choose the article.","progress":"Checking the date.","reasoning":"PRIVATE-REASONING"}\n```', ("local_time", {})), chat('{"text":"Done.","detail":""}')]
     await typed(rig)
     [turn] = await rig.turns()
-    assert [m["kind"] for m in turn["messages"]] == ["thinking", "progress", "reply"]
+    assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["thinking", "progress", "reply"]
     assert "PRIVATE-REASONING" not in str(turn)
 
 

@@ -33,8 +33,8 @@ async def test_worker_and_scheduler_use_only_the_selected_persona(make_rig, conn
     history = AgentHistory(conn)
     for person in (teacher, coach):
         history.add(session_id="old", question=f"THREAD-{person.name}", route="answer", prefix="", text="Previous answer.", status="done", member_id=person.id)
-        memory.store_for(person.id).write(f"reference-{person.id}", type="reference", description=f"OWN-{person.name}", body="Private work context.")
-    memory.shared.write("user-city", type="user", description="CITY-TAIPEI", body="The user lives in Taipei.")
+        memory.own(person.id).edit_document(f"OWN-{person.name}: private work context.\n", None)
+    memory.shared.edit_document("CITY-TAIPEI: the user lives in Taipei.\n", None)
     rig.client.replies.append(turn(json.dumps({"prefix": "告", "text": "Ready.", "detail": ""})))
     try:
         if routine:

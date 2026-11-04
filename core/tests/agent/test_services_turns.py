@@ -3,9 +3,11 @@ addresses in the owner's own words, and the files handed with a request (`agent.
 {attachments}`). Fakes for every service (httpx MockTransport) and for OpenRouter: no test reaches
 the network or spends money."""
 
+import asyncio
 import base64
 import json
 import logging
+import time
 
 import httpx
 import pytest
@@ -14,6 +16,8 @@ from raphael_core.brain.catalog import parse_catalog
 from raphael_core.protocol import INVALID_PARAMS, RpcError
 from raphael_core.services.hub import ServiceHub
 from raphael_core.services.keys import memory_keys
+from raphael_core.services import web as web_service
+from raphael_core.agent.tools import Tools
 
 from brain.test_catalog import RECORDED, edited
 
@@ -91,6 +95,27 @@ def steps(turn, tool):
 # --- the search ---------------------------------------------------------------------------------
 
 
+async def test_two_members_search_together_and_the_next_turn_keeps_the_provider_pace(services_rig, client, monkeypatch):
+    rig = services_rig
+    rig.settings.set("web_search_service", "brave")
+    rig.service_keys.set("brave", "brave-key")
+    monkeypatch.setattr(web_service, "SEARCH_INTERVAL_S", .03)
+    starts = []
+    original = web_service._call
+
+    async def observed(*args, **kwargs):
+        starts.append(time.monotonic())
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(web_service, "_call", observed)
+    first, second = Tools(client, services=rig.hub), Tools(client, services=rig.hub)
+    results = await asyncio.gather(first.web_search("one", "fake", None), second.web_search("two", "fake", None))
+    results.append(await first.web_search("next turn", "fake", None))
+    assert all(result.ok and result.untrusted and result.detail == "brave" for result in results)
+    assert all(b - a >= .025 for a, b in zip(starts, starts[1:]))
+    assert client.text_calls == []
+
+
 async def test_a_search_with_brave_gives_the_answer_its_results_as_untrusted_data(
     services_rig, client, web, caplog
 ):
@@ -121,7 +146,7 @@ async def test_a_search_with_a_service_that_has_no_key_fails_and_the_answer_says
     client.decisions.append(decision("answer", search=0.9))
     client.replies.append(spoken("否", "查不到。"))
     await rig.ask("今天的新聞")
-    assert "web_search: unavailable (missing_secret)" in client.json_calls[0]["user"]
+    assert "Settings > Raphael > Services > Search the web" in client.json_calls[0]["user"]
     (turn,) = await rig.turns()
     (step,) = steps(turn, "web_search")
     assert (step["outcome"], step["reason"], step["detail"]) == ("error", "missing_secret", "tavily")
@@ -169,7 +194,7 @@ async def test_an_address_of_this_computer_in_the_request_is_not_fetched(service
     assert web.requests == []
     (turn,) = await rig.turns()
     (step,) = steps(turn, "web_read")
-    assert (step["outcome"], step["reason"]) == ("error", "blocked")
+    assert (step["outcome"], step["reason"]) == ("error", "blocked_address")
 
 
 # --- the files of a request ---------------------------------------------------------------------
@@ -252,7 +277,7 @@ async def test_a_vision_model_that_reads_no_images_is_not_asked(services_rig, cl
     client.replies.append(spoken("否", "我看不到圖。"))
     await ask(services_rig, "這是什麼", [wire("a.png", "image/png", PNG)])
     assert client.text_calls == []
-    assert "read_attachment: unavailable (vision_unsupported)" in client.json_calls[0]["user"]
+    assert "Settings > Raphael > Services > See images" in client.json_calls[0]["user"]
 
 
 async def test_the_files_go_with_a_task_handed_to_the_background(services_rig, client):

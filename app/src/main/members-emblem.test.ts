@@ -4,12 +4,14 @@
 // panel and the thread. (The design page once drew a gold disc behind it by a selector that matched
 // the emblem by accident; the owner does not want it.) These read the style sheets for any rule that
 // could reach the emblem's element or what it is drawn into, and look at the HTML that draws it.
+// Owner review 2026-10-30: only a face inside a composite group avatar has its own
+// round background and a 2px separator matching the surface behind that group.
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { columnHTML } from "./member-column";
 import { faceHTML, raphaelOf } from "./members";
-import { exchangeLineHTML } from "./exchange-line";
+import { receivedLineHTML } from "./exchange-line";
 import type { AgentTurn } from "./types";
 
 const MAIN = __dirname;
@@ -49,6 +51,16 @@ function framing(body: string): string[] {
 }
 
 describe("Raphael's emblem stands bare", () => {
+  test("composite faces stay bare with visible hats and no ring, crop or filter", () => {
+    const composite = rules.find(rule => rule.name === "sidebar.css" && rule.selector === ".room-avatar > .av")!;
+    expect(framing(composite.body)).toEqual([]);
+    expect(composite.body).toContain("overflow: visible");
+    const slime = rules.find(rule => rule.name === "slime.css" && rule.selector === ".room-avatar > .av.mb-av.mb-av-slime")!;
+    expect(slime.body).toContain("width: round(56%, 1px)");
+    expect(slime.body).toContain("height: round(56%, 1px)");
+    expect(slime.body).toContain("contain: layout");
+    expect(slime.body).toContain("overflow: visible");
+  });
   test("no style sheet gives the emblem, or what it is drawn into, a background, an edge, a shadow or a round crop", () => {
     const hits = rules.filter((r) => reachesEmblem(r.selector));
     // the rules that size and place it are found, so the reading works
@@ -62,20 +74,20 @@ describe("Raphael's emblem stands bare", () => {
     const raphael = raphaelOf(null);
     for (const size of [22, 26, 30, 34, 64, 96]) {
       const html = faceHTML(raphael, size, { cls: "mb-pill-face" });
-      expect(html).toMatch(/^<span class="av mb-pill-face" style="--av:\d+px" aria-hidden="true"><img class="em-l"/);
+      expect(html).toMatch(/^<span data-presence-member="0" class="av mb-pill-face" style="--av:\d+px" aria-hidden="true"><img class="em-l"/);
       expect(html).not.toMatch(/mb-av|border|background|radius/);
     }
     const column = document.createElement("div");
     column.innerHTML = columnHTML({ list: null, current: 0, previews: new Map(), query: "", folded: new Set(), fresh: new Set() });
     const face = column.querySelector(".mb-chief > .av")!;
     expect(face.className).toBe("av");
-    expect(face.getAttribute("style")).toBe("--av:64px");
+    expect(face.getAttribute("style")).toBe("--av:40px");
   });
 
   test("on the line of what he asked a member, too", () => {
     const line = document.createElement("ol");
     const turn: AgentTurn = { id: 5, created_at_ms: 0, question: "問", route: "exchange", prefix: "", text: "答", detail: null, status: "done", source: "member", scope: "exchange", member_id: 3, peer_id: 0 };
-    line.innerHTML = exchangeLineHTML([turn], { face: () => "", memberName: (id) => (id ? "小晴" : "拉斐爾"), memberFace: () => faceHTML(raphaelOf(null), 18, { cls: "sys-face" }) });
+    line.innerHTML = receivedLineHTML(turn, { face: () => "", memberName: (id) => (id ? "小晴" : "拉斐爾"), memberFace: () => faceHTML(raphaelOf(null), 18, { cls: "sys-face" }) });
     const face = line.querySelector(".event-line > .av")!;
     expect(face.className).toBe("av sys-face");
     expect(face.querySelector("img.em-l")).not.toBeNull();

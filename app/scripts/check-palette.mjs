@@ -22,22 +22,8 @@ const ratio = (a, b) => {
   return result;
 };
 const surfaces = ["side", "content", "panel", "surface-2", "menu", "btn", "key", "hover", "pressed", "selected", "accent-soft"];
-const skinSource = readFileSync(new URL("../src/main/owner-settings.ts", import.meta.url), "utf8");
-const skinNames = [...skinSource.match(/export const SKINS = \[([^\]]+)\]/)[1].matchAll(/"([^"]+)"/g)].map(([, name]) => name);
-const skins = Object.fromEntries([...css.matchAll(/:root\[data-skin="([^"]+)"\]\[data-theme="(light|dark)"\],\s*\.skin-sample\[data-preview="\1"\]\[data-mode="\2"\]\s*\{([\s\S]*?)\n\}/g)].map(([, name, mode, block]) => [`${name}/${mode}`, tokens(block)]));
-for (const name of skinNames.filter(name => name !== "default")) {
-  for (const mode of ["light", "dark"]) {
-    if (!skins[`${name}/${mode}`]) throw new Error(`Missing skin mode: ${name}/${mode}`);
-  }
-}
-if (Object.keys(skins).length !== (skinNames.length - 1) * 2) throw new Error("Unexpected skin palettes");
-for (const [name, palette] of Object.entries(skins)) {
-  for (const token of Object.keys(tokens(css.match(/:root\[data-theme="dark"\]\s*\{([\s\S]*?)\n\}/)[1]))) {
-    if (!(token in palette)) throw new Error(`Missing skin token: ${name}/${token}`);
-  }
-}
 const report = {};
-for (const [theme, palette] of Object.entries({ "default/light": light, "default/dark": dark, ...skins })) {
+for (const [theme, palette] of Object.entries({ light, dark })) {
   const contrast = {};
   for (const [label, token] of Object.entries({ body: "text", secondary: "text-2", muted: "text-3", links: "accent-text" })) {
     const measured = surfaces.map((surface) => ({ surface, ratio: ratio(palette[token], palette[surface]) }));
@@ -55,8 +41,7 @@ for (const [theme, palette] of Object.entries({ "default/light": light, "default
   if (Math.min(...Object.values(contrast.toast)) < 4.5) process.exitCode = 1;
   contrast.destructive = Object.fromEntries(["panel", "btn", "menu", "danger-hover", "danger-pressed"].map(surface => [surface, +ratio(palette.err, palette[surface]).toFixed(2)]));
   if (Object.values(contrast.destructive).some(value => value < 4.5)) process.exitCode = 1;
-  // Published Catppuccin interaction colors retain the palette's lavender hue.
-  for (const token of theme.startsWith("catppuccin/") ? [] : ["hover", "pressed", "hover-edge", "scroll-hover", "toast-hover"]) {
+  for (const token of ["hover", "pressed", "hover-edge", "scroll-hover", "toast-hover"]) {
     const channels = palette[token].slice(1).match(/../g).map(value => parseInt(value, 16));
     if (Math.max(...channels) - Math.min(...channels) > 12) throw new Error(`Non-neutral interaction token: ${theme}/${token}`);
   }
@@ -65,14 +50,12 @@ for (const [theme, palette] of Object.entries({ "default/light": light, "default
   if (usageColors.some(token => ratio(palette[token], palette.panel) < 3)) process.exitCode = 1;
   contrast.sendIcon = Object.fromEntries(["panel", "hover", "pressed"].map(surface => [surface, +ratio(palette["accent-icon"], palette[surface]).toFixed(2)]));
   if (Object.values(contrast.sendIcon).some(value => value < 3)) process.exitCode = 1;
+  contrast.computerActive = Object.fromEntries(["side", "content", "hover", "pressed"].map(surface => [surface, +ratio(palette["computer-active"], palette[surface]).toFixed(2)]));
+  if (Object.values(contrast.computerActive).some(value => value < 3)) process.exitCode = 1;
   report[theme] = { tokens: palette, contrast };
 }
-// White labels on a translucent neutral overlay fill: a white desktop is the worst case.
-const overlayHover = overlayCss.match(/\.ask-btn:hover:not\(:disabled\)\s*\{\s*background:\s*rgba\(([^)]+)\)/)[1].split(",").map(Number);
-const overlayChannels = overlayHover.slice(0, 3);
-if (Math.max(...overlayChannels) - Math.min(...overlayChannels) > 12) throw new Error("Non-neutral overlay hover");
-const overlayOnWhite = "#" + overlayChannels.map(value => Math.round(value * overlayHover[3] + 255 * (1 - overlayHover[3])).toString(16).padStart(2, "0")).join("");
-const overlayContrast = ratio("#ffffff", overlayOnWhite);
-report.overlay = { hover: overlayHover, whiteTextMinimum: +overlayContrast.toFixed(2) };
-if (overlayContrast < 4.5) process.exitCode = 1;
+// Overlay confirmations reuse the app's opaque panel and button palette in both themes.
+if (!/\.ask-card\s*\{[^}]*background:\s*var\(--panel\)/.test(overlayCss)) throw new Error("Overlay confirmation must use the shared opaque panel");
+report.overlay = { surface:"panel", buttons:"btn / pri", contrast:Object.fromEntries(Object.entries(report).filter(([name])=>name!=="overlay").map(([name,value])=>[name,{title:+ratio(value.tokens.text,value.tokens.panel).toFixed(2),details:+ratio(value.tokens["text-2"],value.tokens.panel).toFixed(2),primary:+ratio(value.tokens["on-accent"],value.tokens.accent).toFixed(2)}])) };
+if (Object.values(report.overlay.contrast).some(values=>Object.values(values).some(value=>value<4.5))) process.exitCode=1;
 console.log(JSON.stringify(report, null, 2));

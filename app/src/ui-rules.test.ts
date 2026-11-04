@@ -23,6 +23,12 @@ const read = (path: string): string => readFileSync(path, "utf8");
 const mainFiles = walk(MAIN);
 /** Application code of the main window: every .ts that is not a test. */
 const sources = mainFiles.filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && !f.includes(`${sep}i18n${sep}`));
+
+test("copy controls use the shared in-place feedback", () => {
+  for (const file of sources.filter(file => rel(file) !== 'ui.ts')) {
+    expect(read(file), rel(file)).not.toMatch(/\bcopyText\s*\(/);
+  }
+});
 const i18nFiles = mainFiles.filter((f) => f.includes(`${sep}i18n${sep}`) && !f.endsWith(".test.ts"));
 
 describe("action rows", () => {
@@ -63,7 +69,7 @@ describe("action rows", () => {
 describe("buttons", () => {
   // Every <button> is one of the shapes of the component inventory (docs/ui.md), or a part of a menu / list / dialog.
   const ALLOWED_CLASS = [
-    "btn", "sel", "tg", "tab", "nav", "usage-box", "menu-action", "lang-item", "lm-main", "lm-del", "mp-star", "mp-opt", "mp-dd", "chip-x", "sess",
+    "btn", "sel", "tg", "tab", "nav", "usage-box", "menu-choice", "menu-action", "lang-item", "lm-main", "mp-star", "mp-opt", "mp-dd", "chip-x", "sess", "mb-preset", "mb-slime-color",
   ];
   const ALLOWED_ROLE = ["option", "menuitem", "menuitemradio", "radio", "checkbox", "switch", "tab"];
   const classOf = (tag: string): string[] => (/\bclass="([^"]*)"/.exec(tag)?.[1] ?? "").split(/\s+/).filter(Boolean);
@@ -93,9 +99,9 @@ describe("buttons", () => {
     const styles = strip(read(join(MAIN, "styles.css")));
     expect(styles).toMatch(/\.btn\.icon\s*\{[^}]*background:\s*transparent/);
     expect(styles).toMatch(/\.btn\.icon:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus\)/);
-    const classes = new Set(["icon", "cmp-attach", "cmp-send", "cmp-voice", "mp-star", "lm-del", "chip-x", "window-button", "window-close"]);
+    const classes = new Set(["icon", "cmp-attach", "cmp-send", "cmp-voice", "mp-star", "chip-x", "window-button", "window-close"]);
     const composer = strip(read(join(MAIN, "agent.css")));
-    expect(composer).toMatch(/\.composer \.cmp-pair \.btn\.cmp-send \{[^}]*background: transparent; color: var\(--accent-icon\)/);
+    expect(composer).toMatch(/\.composer \.cmp-pair \.btn\.cmp-send[^{}]*\{[^}]*background: transparent; color: var\(--accent-icon\)/);
     // Read the optional class argument of every iconButton/iconBtn call, balancing nested calls.
     for (const file of sources) {
       const source = read(file);
@@ -118,8 +124,13 @@ describe("buttons", () => {
     for (const modifier of ["pri", "sm", "row", "danger", "btn"]) classes.delete(modifier);
     // Owner-approved caption hover exception (2026-10-25); ordinary icon controls stay frameless.
     const allowlist: readonly string[] = [
+      // Daily sidebar controls share the owner's requested round soft press surface.
+      'sidebar.css: .side .side-foot .btn.icon[aria-current="page"]:active:not(:disabled)',
+      "sidebar.css: .side .btn.icon:hover:not(:disabled)", "sidebar.css: .side .btn.icon:active:not(:disabled)",
       "styles.css: .window-button:hover", "styles.css: .window-button:active",
       "styles.css: .window-close:hover", "styles.css: .window-close:active",
+      // R-UI-50: the contextual latest action floats over messages and needs an opaque surface.
+      "agent.css: .page-agent .btn.conversation-latest:hover:not(:disabled)",
     ];
     const violations = (css: string): string[] => [...strip(css).matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap(([, selectors, body]) => {
       const surfaces = [...body!.matchAll(/(?:^|;)\s*background(?:-color|-image)?\s*:\s*([^;]+)/g)]
@@ -172,8 +183,8 @@ describe("colours", () => {
     expect(brand).toContain("--brand-telegram");
   });
 
-  test("no colour literals in the main window's code, apart from the service logos", () => {
-    const logoFiles = ["service-icons.ts", "brand.ts"];
+  test("no colour literals in the main window's code, apart from the service logos and the mascots' art", () => {
+    const logoFiles = ["service-icons.ts", "brand.ts", "slime.ts"];
     const bad = sources
       .filter((f) => !logoFiles.includes(rel(f)))
       .filter((f) => /#[0-9a-fA-F]{6}\b|\brgba?\(/.test(read(f)))
@@ -233,7 +244,7 @@ describe("icons", () => {
   // at 16 px, or 20 where a larger one is meant, and keeps its stroke. The window's own minimise,
   // maximise and close are Windows' caption glyphs, drawn for 12 px: not icons of the set.
   const SIZES = new Set(["16px", "20px"]);
-  const NOT_ICONS = new Set([".window-button svg"]);
+  const NOT_ICONS = new Set([".slime-cels > svg", ".slime-prop-cels > svg", ".slime-blink-cels > svg", ".window-button svg"]);
   const strip = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, "");
   const cssFiles = [...mainFiles, ...walk(join(SRC, "overlay"))].filter((f) => f.endsWith(".css"));
   const iconRules = (): { file: string; selector: string; body: string }[] =>
@@ -251,7 +262,7 @@ describe("icons", () => {
     const bad = iconRules().flatMap(({ file, selector, body }) =>
       [...body.matchAll(/(?:^|;)\s*(width|height)\s*:\s*([^;]+)/g)]
         // The owner requested the send glyph match the adjacent voice portrait exactly.
-        .filter(([, , value]) => !SIZES.has(value.trim()) && !(file === "agent.css" && ((selector === ".attachment-drop > .i" && value.trim() === "28px") || (selector === ".composer .cmp-pair .cmp-send .i" && value.trim() === "32px"))))
+        .filter(([, , value]) => !SIZES.has(value.trim()) && !(file === "sidebar.css" && selector === ".room-avatar > .av > svg.i" && value.trim() === "100%") && !(file === "sidebar.css" && selector === ".sidebar-app-marks :is(svg" && value.trim() === "18px") && !(file === "agent.css" && ((selector === ".attachment-drop > .i" && value.trim() === "28px") || (selector === ".composer .cmp-pair .cmp-send .i" && value.trim() === "32px"))))
         .map(([, prop, value]) => `${file}: ${selector} { ${prop}: ${value.trim()} }`),
     );
     expect(iconRules().length).toBeGreaterThan(10);

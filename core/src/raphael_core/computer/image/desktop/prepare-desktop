@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+# Run inside the XFCE session, on its own bus, after the display is ready.
+xfconf-query -c xfce4-session -p /general/SaveOnExit -n -t bool -s false
+exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch

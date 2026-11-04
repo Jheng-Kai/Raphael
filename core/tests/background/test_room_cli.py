@@ -1,5 +1,6 @@
 """Room CLI turns use the same background task, tool gate and approval lifecycle."""
 import asyncio
+import json
 import pytest
 
 from raphael_core.agent.cli.drivers import Event
@@ -21,6 +22,25 @@ def submit_room(rig):
     task = rig.service.submit(session_id="room:1:1:0", text="Plan", language="en", model="cli:codex:gpt-5.6-terra")
     rig.service.attach_turn(task, turn)
     return task, turn
+
+
+@pytest.mark.parametrize("room", [True, False], ids=["room", "background"])
+async def test_cli_envelopes_are_unwrapped_before_room_or_background_storage(make_rig, monkeypatch, room):
+    rig = make_rig()
+    async def work(loop):
+        loop._queue.put_nowait(Outcome("done", final=json.dumps({"text": "The plan is ready.", "messages": ["The plan is ready."]})))
+    monkeypatch.setattr(CliLoop, "_work", work)
+    if room:
+        task, turn = submit_room(rig)
+    else:
+        rig.service.use_cli(object())
+        task = rig.service.submit(session_id="background-envelope", text="Plan", language="en", model="cli:codex:test")
+        turn = None
+    await until(lambda: rig.task(task).state in ("done", "failed"))
+    assert rig.task(task).state == "done"
+    assert rig.task(task).report_text == "The plan is ready."
+    if turn:
+        assert AgentHistory(rig.conn).get(turn).text == "The plan is ready."
 
 
 async def test_cli_room_turn_uses_shared_tools_and_keeps_private_sessions_separate(make_rig, monkeypatch):
@@ -88,6 +108,22 @@ class Brains:
         return True
 
 
+async def test_private_member_task_uses_its_cli_brain_without_api_fallback(make_rig, monkeypatch, tmp_path):
+    from raphael_core.members.service import MembersService
+    rig = make_rig()
+    team = MembersService(rig.conn, tmp_path, background=rig.service)
+    member = team.store.create_member(name="Alice", model="cli:codex")
+    rig.service._team = team
+    rig.service.use_cli(Brains(tmp_path))
+    played = scripted_cli(monkeypatch, [Event("final", "Private task finished on Codex.")])
+    task = rig.service.submit(session_id="private-member", text="Review", language="en", model="api/global", member_id=member.id)
+    await until(lambda: rig.task(task).state in ("done", "failed"))
+    assert rig.task(task).state == "done"
+    assert played and rig.task(task).report_text == "Private task finished on Codex."
+    assert rig.client.chat_calls == []
+    await team.aclose()
+
+
 def scripted_cli(monkeypatch, *runs, waits=(0.0, 0.0)):
     """Each CLI run plays the next list of events (the last one repeats); returns the runs made."""
     played = []
@@ -103,6 +139,7 @@ def scripted_cli(monkeypatch, *runs, waits=(0.0, 0.0)):
     monkeypatch.setattr("raphael_core.agent.cli.loop.Driver", Driver)
     monkeypatch.setattr("raphael_core.agent.cli.loop.RATE_LIMIT_WAITS_S", waits)
     monkeypatch.setattr("raphael_core.agent.cli.loop.ROOM_RATE_LIMIT_WAITS_S", waits)
+    monkeypatch.setattr("raphael_core.agent.cli.loop.PATIENT_WAITS", (0.0, 0.0))
     return played
 
 
@@ -141,9 +178,37 @@ async def test_cli_room_turn_reports_a_rate_limit_it_cannot_wait_out(make_rig, m
     await until(lambda: rig.task(task).state in ("done", "failed"))
     failed = rig.task(task)
     assert (failed.state, failed.reason) == ("failed", "cli_rate_limited")
-    assert failed.report_text == "Codex CLI is rate-limited right now (too many requests). Try again in a little while."
+    assert failed.report_text.startswith("Codex CLI is receiving too many requests right now. Try again shortly.")
+    if first:
+        assert "unconfirmed" in failed.report_text and "not completed" in failed.report_text
     assert AgentHistory(rig.conn).get(turn).status == "error"
-    assert len(played) == (1 if first else 3)
+    assert len(played) == (5 if first else 3)
+
+
+@pytest.mark.parametrize("failure", ["overloaded", "exit"])
+async def test_background_cli_recovers_from_receipt_without_reopening_card(make_rig, monkeypatch, tmp_path, calls, failure):
+    from members.test_cli_brains import recovering_mcp
+    rig = make_rig()
+    await rig.plugins.connect(look="T2")
+    monkeypatch.setattr("raphael_core.agent.cli.loop.ROOM_RATE_LIMIT_WAITS_S", (0.0,))
+    record = recovering_mcp(rig, tmp_path, [("Notes__look", {"topic": "draft"})], failure=failure)
+    task = rig.submit("Review the draft", model="cli:claude")
+    turn = AgentHistory(rig.conn).add(session_id="s1", question="Review the draft", route="answer",
+                                     prefix="", text="", status="running", source="app")
+    rig.service.attach_turn(task, turn)
+    await until(lambda: rig.task(task).state == "waiting")
+    [question] = rig.service.waiting_questions()
+    assert not calls
+    assert rig.service.answer(task, question["id"], True) == "approved"
+    await rig.wait_for_reports()
+    assert rig.task(task).state == "done" and rig.task(task).report_text == "The remaining work is finished."
+    assert calls == ["look"] and not rig.service.waiting_questions()
+    first, resumed = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
+    assert not first["resumed"] and resumed["resumed"]
+    assert "found draft" in resumed["user"]
+    assert any("try again" in line for line in progress(rig, task))
+    assert not rig.client.chat_calls
+    await until(lambda: not rig.service._cli_loops)
 
 
 async def test_stopping_a_room_turn_while_it_waits_out_a_rate_limit_cancels_it(make_rig, monkeypatch, tmp_path):

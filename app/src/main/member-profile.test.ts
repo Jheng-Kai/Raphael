@@ -2,15 +2,34 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import * as api from "./api";
 import { setLocale } from "./i18n";
-import { openEditMemberDialog, openMemberProfile, type MemberProfileHost } from "./member-profile";
-import { emptyProfileDraft, flushMemberProfileDraft, mountMemberResources } from "./member-profile-resources";
+import { openEditMemberDialog, type MemberProfileHost } from "./member-profile";
+import { mountMemberResources } from "./member-profile-resources";
 import { memberPreset, randomMemberName } from "./member-profile-presets";
 import type { Member } from "./types";
 
-vi.mock("./api", () => ({ core: vi.fn(), membersCreate: vi.fn(), membersUpdate: vi.fn(), membersSetAvatar: vi.fn(), membersList: vi.fn(), membersSkillsList: vi.fn(), membersSkillsImport: vi.fn(), membersSkillsUpdate: vi.fn(), membersSkillsDelete: vi.fn(), membersCommandsList: vi.fn(), membersCommandsSave: vi.fn(), membersCommandsDelete: vi.fn(), membersVoices: vi.fn(), routinesList: vi.fn(), routinesCreate: vi.fn(), routinesUpdate: vi.fn(), routinesDelete: vi.fn() }));
+vi.mock("./api", () => ({ core: vi.fn(), membersUpdate: vi.fn(), membersSkillsList: vi.fn(), membersSkillsImport: vi.fn(), membersSkillsUpdate: vi.fn(), membersSkillsDelete: vi.fn(), membersCommandsList: vi.fn(), membersCommandsSave: vi.fn(), membersCommandsDelete: vi.fn(), membersVoices: vi.fn(), routinesList: vi.fn(), routinesCreate: vi.fn(), routinesUpdate: vi.fn(), routinesDelete: vi.fn() }));
 const member: Member = { id: 7, name: "Mia", role: "Research", instructions: "Keep sources", personality: "Careful", avatar: "", group_id: null, model: "", tools: null, position: 0, created: 0, unread: false, waiting: false, preview: "", last_at: null };
 const flush = async (): Promise<void> => { for (let i = 0; i < 25; i++) await Promise.resolve(); };
-const host = (over: Partial<MemberProfileHost> = {}): MemberProfileHost => ({ groups: [], presets: [], taken: [], create: vi.fn(async () => member), ...over });
+
+test('open resource consumers share event reads and retain the trailing skill change', async () => {
+  vi.useFakeTimers();
+  const scope = {}, roots = [document.createElement('div'),document.createElement('div')];
+  roots.forEach(root=>document.body.append(root));
+  const editors=roots.map(root=>mountMemberResources(root,{memberId:7,tab:'skills',scope}));
+  try {
+    await flush(); vi.mocked(api.membersSkillsList).mockClear(); vi.mocked(api.membersCommandsList).mockClear();
+    const refresh=(editor:typeof editors[number])=>editor.refresh(true);
+    await Promise.all(editors.map(refresh));
+    expect(api.membersSkillsList).toHaveBeenCalledTimes(1);
+    expect(api.membersCommandsList).toHaveBeenCalledTimes(1);
+    const pending=editors.map(refresh);
+    vi.mocked(api.membersSkillsList).mockResolvedValue({skills:[{id:1,name:'Fresh sample skill',description:'Changed',enabled:true,source:'owner'}] } as Awaited<ReturnType<typeof api.membersSkillsList>>);
+    await vi.advanceTimersByTimeAsync(300); await Promise.all(pending);
+    roots.forEach(root=>expect(root.textContent).toContain('Fresh sample skill'));
+    expect(api.membersSkillsList).toHaveBeenCalledTimes(2);
+  } finally {editors.forEach(editor=>editor.destroy());vi.useRealTimers();}
+});
+const host = (over: Partial<MemberProfileHost> = {}): MemberProfileHost => ({ groups: [], taken: [], ...over });
 const click = (root: ParentNode, selector: string): void => root.querySelector<HTMLElement>(selector)!.click();
 const fill = (root: ParentNode, selector: string, text: string): void => { const field = root.querySelector<HTMLInputElement>(selector)!; field.value = text; field.dispatchEvent(new Event("input", { bubbles: true })); };
 
@@ -26,7 +45,7 @@ beforeEach(() => {
 });
 
 test("tabs retain fields and keyboard navigation selects a visible panel", () => {
-  const dialog = openMemberProfile(host());
+  const dialog = openEditMemberDialog(host(), member);
   fill(dialog.el, "#mb-new-name", "Ada");
   const tab = dialog.el.querySelector<HTMLElement>('#mp-tab-identity')!;
   tab.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
@@ -38,11 +57,11 @@ test("tabs retain fields and keyboard navigation selects a visible panel", () =>
   dialog.close();
 });
 
-test("a blank member has a default silhouette and every pane groups content in cards", async () => {
-  const dialog = openMemberProfile(host());
-  expect(dialog.el.querySelector('.mb-new-av .mp-person')).not.toBeNull();
+test("a member is a slime and every pane groups content in cards", async () => {
+  const dialog = openEditMemberDialog(host(), member);
+  expect(dialog.el.querySelector('.mb-new-av .mb-av-slime')).not.toBeNull();
   fill(dialog.el, '#mb-new-name', 'Ada');
-  expect(dialog.el.querySelector('.mb-new-av .mp-person')).not.toBeNull();
+  expect(dialog.el.querySelector('.mb-new-av .mb-av-slime')).not.toBeNull();
   for (const tab of ['identity', 'soul', 'skills', 'memory', 'routines', 'permissions', 'voice']) {
     click(dialog.el, `#mp-tab-${tab}`); await flush();
     expect(dialog.el.querySelector(`#mp-page-${tab} .mp-card`)).not.toBeNull();
@@ -53,12 +72,51 @@ test("a blank member has a default silhouette and every pane groups content in c
   dialog.close();
 });
 
+test("記憶 is the member's whole document, and the dialog's one 儲存 writes it from the copy it opened", async () => {
+  const update = vi.fn().mockResolvedValue(true);
+  vi.mocked(api.core).mockImplementation(async (method: string, params?: unknown) => {
+    if (method === "memory.get") return { text: "第一段\n\n第二段\n", revision: "r1", chars: 8, entries: 2, limit: 2200, summary: null };
+    if (method === "memory.update") return { text: (params as { text: string }).text, revision: "r2", chars: 3, entries: 1, limit: 2200, summary: null };
+    return {};
+  });
+  const dialog = openEditMemberDialog(host({ update }), member, "memory"); await flush();
+  const box = dialog.el.querySelector<HTMLTextAreaElement>("#mp-memory")!;
+  expect(box.value).toBe("第一段\n\n第二段");
+  expect(dialog.el.querySelectorAll('[data-dlg="save"]')).toHaveLength(1);
+  fill(dialog.el, "#mp-memory", "第一段");
+  click(dialog.el, '[data-dlg="save"]'); await flush();
+  expect(api.core).toHaveBeenCalledWith("memory.update", { member_id: 7, space: "own", text: "第一段", revision: "r1" });
+  expect(update).toHaveBeenCalled();
+});
+
+test("the dialog writes no memory it did not change, and stays open on one that is refused", async () => {
+  const update = vi.fn().mockResolvedValue(true);
+  const refuse = { refuse: false };
+  vi.mocked(api.core).mockImplementation(async (method: string) => {
+    if (method === "memory.get") return { text: "第一段\n", revision: "r1", chars: 3, entries: 1, limit: 2200, summary: null };
+    if (method === "memory.update" && refuse.refuse) throw "Invalid params: changed: The memory changed while it was being edited.";
+    return {};
+  });
+  const first = openEditMemberDialog(host({ update }), member, "memory"); await flush();
+  click(first.el, '[data-dlg="save"]'); await flush();
+  expect(api.core).not.toHaveBeenCalledWith("memory.update", expect.anything());
+  expect(update).toHaveBeenCalledTimes(1);
+
+  refuse.refuse = true;
+  const second = openEditMemberDialog(host({ update }), member, "memory"); await flush();
+  fill(second.el, "#mp-memory", "我打的字");
+  click(second.el, '[data-dlg="save"]'); await flush();
+  expect(update).toHaveBeenCalledTimes(1);
+  expect(second.el.querySelector<HTMLTextAreaElement>("#mp-memory")!.value).toBe("我打的字");
+  second.close();
+});
+
 test("profile routines use the shared editor with every recurrence and HH:MM validation", async () => {
-  const dialog = openMemberProfile(host());
+  const dialog = openEditMemberDialog(host(), member);
   click(dialog.el, '#mp-tab-routines'); await flush();
   click(dialog.el, '[data-dlg="routine-add"]');
   const form = document.querySelector<HTMLElement>('.au-routine-dialog')!;
-  expect(form.querySelectorAll('[data-dlg="kind"]')).toHaveLength(5);
+  expect(form.querySelectorAll('[data-dlg="kind"]')).toHaveLength(6);
   expect(form.querySelector<HTMLInputElement>('#au-time')!.type).toBe('text');
   fill(form, '#au-title', 'Review'); fill(form, '#au-prompt', 'Review updates');
   fill(form, '#au-time', '25:60'); click(form, '[data-dlg="save"]'); await flush();
@@ -69,15 +127,13 @@ test("profile routines use the shared editor with every recurrence and HH:MM val
   click(form, '[data-dlg="cancel"]'); dialog.close();
 });
 
-test("localized role presets fill all identity and instruction fields with a suggested command", async () => {
-  const dialog = openMemberProfile(host());
+test("localized role presets fill all identity and instruction fields", async () => {
+  const dialog = openEditMemberDialog(host(), member);
   click(dialog.el, '[data-dlg="preset"]');
   click(document, '#app-popover [data-value="research"]');
   expect(dialog.el.querySelector<HTMLInputElement>("#mb-new-role")!.value).toBe("研究夥伴");
   expect(dialog.el.querySelector<HTMLInputElement>("#mp-blurb")!.value).toContain("資料");
   expect(dialog.el.querySelector<HTMLTextAreaElement>("#mb-new-instr")!.value).toContain("第一手");
-  click(dialog.el, '#mp-tab-skills');
-  expect(dialog.el.textContent).toContain("/research");
   dialog.close();
   setLocale("ja"); expect(memberPreset("research").role).toBe("リサーチャー");
   expect(randomMemberName("female", [])).toMatch(/[\u3040-\u9fff]/);
@@ -93,39 +149,6 @@ test("a preset in edit mode suggests a command without writing until its explici
   expect(dialog.el.querySelector<HTMLTextAreaElement>('#mp-command-template')!.value).toContain('{input}');
   expect(api.membersCommandsSave).not.toHaveBeenCalled();
   dialog.close();
-});
-
-test("canceling a new member discards skill, command and memory drafts without any writes", async () => {
-  const dialog = openMemberProfile(host());
-  click(dialog.el, '#mp-tab-skills');
-  fill(dialog.el, '#mp-skill-source', 'owner/repo'); click(dialog.el, '[data-res="import"]'); await flush();
-  fill(dialog.el, '#mp-command-name', 'review'); fill(dialog.el, '#mp-command-template', 'Review {input}');
-  click(dialog.el, '[data-res="command-save"]'); await flush();
-  click(dialog.el, '#mp-tab-memory'); await flush();
-  fill(dialog.el, '#mp-memory', 'Prefer primary sources'); click(dialog.el, '[data-dlg="memory-add"]'); await flush();
-  click(dialog.el, '[data-dlg="cancel"]');
-  expect(api.membersSkillsImport).not.toHaveBeenCalled();
-  expect(api.membersCommandsSave).not.toHaveBeenCalled();
-  expect(api.core).not.toHaveBeenCalled();
-  expect(dialog.el.isConnected).toBe(false);
-});
-
-test("subresources write only after creation, and a failed write retries without creating again", async () => {
-  const create = vi.fn(async () => member);
-  vi.mocked(api.membersCommandsSave).mockRejectedValueOnce(new Error("offline")).mockResolvedValue({});
-  const dialog = openMemberProfile(host({ create }));
-  fill(dialog.el, '#mb-new-name', 'Mia');
-  click(dialog.el, '#mp-tab-skills');
-  fill(dialog.el, '#mp-command-name', 'review'); fill(dialog.el, '#mp-command-template', 'Review {input}');
-  click(dialog.el, '[data-res="command-save"]'); await flush();
-  expect(api.membersCommandsSave).not.toHaveBeenCalled();
-  click(dialog.el, '[data-dlg="create"]'); await flush();
-  expect(create).toHaveBeenCalledTimes(1);
-  expect(dialog.el.isConnected).toBe(true);
-  click(dialog.el, '[data-dlg="create"]'); await flush();
-  expect(create).toHaveBeenCalledTimes(1);
-  expect(api.membersCommandsSave).toHaveBeenLastCalledWith(7, { name: "review", description: "", template: "Review {input}" });
-  expect(dialog.el.isConnected).toBe(false);
 });
 
 test("editing then closing does not save main fields or voice switches", async () => {
@@ -195,57 +218,6 @@ test("resource refresh ignores late responses after destroy", async () => {
   expect(container.innerHTML).toBe(before);
 });
 
-test("the resource flush removes successful entries before a later failure", async () => {
-  const draft = emptyProfileDraft();
-  draft.commands.push({ id: -1, name: 'a', description: '', template: '{input}' }, { id: -2, name: 'b', description: '', template: '{input}' });
-  vi.mocked(api.membersCommandsSave).mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('offline'));
-  await expect(flushMemberProfileDraft(7, draft)).rejects.toThrow('offline');
-  expect(draft.commands.map(c => c.name)).toEqual(['b']);
-});
-
-test("a skill activation failure retries the imported ids without importing duplicate files", async () => {
-  const draft = emptyProfileDraft();
-  draft.skills.push({ id: -1, name: 'Skill', source: 'owner/repo', description: '', enabled: false });
-  vi.mocked(api.membersSkillsImport).mockResolvedValue({ skill: { id: 9, name: 'Skill', source: 'owner/repo', description: '', enabled: true } });
-  vi.mocked(api.membersSkillsUpdate).mockRejectedValueOnce(new Error('offline')).mockResolvedValue({});
-  await expect(flushMemberProfileDraft(7, draft)).rejects.toThrow('offline');
-  await flushMemberProfileDraft(7, draft);
-  expect(api.membersSkillsImport).toHaveBeenCalledTimes(1);
-  expect(api.membersSkillsUpdate).toHaveBeenLastCalledWith(7, 9, false);
-  expect(draft.skills).toHaveLength(0);
-});
-
-test("an accepted legacy creation never creates twice if member lookup initially fails", async () => {
-  const create = vi.fn(async () => true);
-  vi.mocked(api.membersList).mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ members: [member], groups: [] });
-  vi.mocked(api.membersCommandsSave).mockResolvedValue({});
-  const dialog = openMemberProfile(host({ create }));
-  fill(dialog.el, '#mb-new-name', 'Mia');
-  click(dialog.el, '#mp-tab-skills');
-  fill(dialog.el, '#mp-command-name', 'review'); fill(dialog.el, '#mp-command-template', 'Review {input}');
-  click(dialog.el, '[data-res="command-save"]'); await flush();
-  click(dialog.el, '[data-dlg="create"]'); await flush();
-  expect(dialog.el.isConnected).toBe(true);
-  click(dialog.el, '[data-dlg="create"]'); await flush();
-  expect(create).toHaveBeenCalledTimes(1);
-  expect(dialog.el.isConnected).toBe(false);
-});
-
-test("a new member routine remains a draft until the member exists", async () => {
-  const dialog = openMemberProfile(host());
-  fill(dialog.el, '#mb-new-name', 'Mia');
-  click(dialog.el, '#mp-tab-routines'); await flush();
-  click(dialog.el, '[data-dlg="routine-add"]');
-  const form = document.querySelector<HTMLElement>('.au-routine-dialog')!;
-  click(form, '[data-kind="daily"]'); fill(form, '#au-time', '09:00');
-  fill(form, '#au-title', 'Morning review'); fill(form, '#au-prompt', 'Review the project');
-  click(form, '[data-dlg="save"]'); await flush();
-  expect(api.routinesCreate).not.toHaveBeenCalled();
-  expect(dialog.el.textContent).toContain('Morning review');
-  click(dialog.el, '[data-dlg="create"]'); await flush();
-  expect(api.routinesCreate).toHaveBeenCalledWith({ member_id: 7, title: 'Morning review', prompt: 'Review the project', enabled: true, schedule: expect.objectContaining({ kind: 'daily', time: '09:00' }) });
-});
-
 test("the details panel standalone skills page omits the separate command editor", async () => {
   const container = document.createElement('div');
   const editor = mountMemberResources(container, { memberId: 7, tab: 'skills', standalone: true });
@@ -293,18 +265,48 @@ test("editing a saved routine from the profile preserves schedule end conditions
   expect(form.isConnected).toBe(false); dialog.close();
 });
 
-test("a profile routine draft can be edited and deleted without sending a negative member id", async () => {
-  const dialog = openMemberProfile(host());
-  click(dialog.el, '#mp-tab-routines'); await flush(); click(dialog.el, '[data-dlg="routine-add"]');
-  let form = document.querySelector<HTMLElement>(".au-routine-dialog")!;
-  fill(form, "#au-title", "Draft review"); fill(form, "#au-prompt", "Review updates");
-  click(form, '[data-dlg="save"]'); await flush();
-  click(dialog.el, '[data-dlg="routine-menu"]'); click(document, '#app-popover [data-pick="edit"]'); form = document.querySelector<HTMLElement>(".au-routine-dialog")!;
-  fill(form, "#au-title", "Updated draft"); click(form, '[data-dlg="save"]'); await flush();
-  expect(dialog.el.querySelector(".mp-routine-list")!.textContent).toContain("Updated draft");
-  click(dialog.el, '[data-dlg="routine-menu"]'); click(document, '#app-popover [data-pick="edit"]'); form = document.querySelector<HTMLElement>(".au-routine-dialog")!;
-  click(form, '[data-dlg="delete"]'); click(document, '.mb-confirm [data-dlg="delete"]'); await flush();
-  expect(dialog.el.querySelector('[data-dlg="routine-menu"]')).toBeNull();
-  expect(api.routinesCreate).not.toHaveBeenCalled(); expect(api.routinesUpdate).not.toHaveBeenCalled(); expect(api.routinesDelete).not.toHaveBeenCalled();
+
+test.each([["zh-TW", "2026/10/29"], ["ja", "2026/10/29"], ["en", "Oct 29, 2026"]] as const)("learned skills use the %s UI date and reading the editor never writes or notifies", async (locale, date) => {
+  setLocale(locale);
+  const skill = { id: 12, name: "research-summary", description: "Check sources", source: "learned", provenance: "learned" as const, learned_at: "2026-10-29T12:00:00", enabled: true };
+  vi.mocked(api.membersSkillsList).mockResolvedValue({ skills: [skill], undo: "revision-1" });
+  vi.mocked(api.core).mockResolvedValue({ skill: { ...skill, revision: "document-hash" }, text: "Instructions" });
+  const root = document.createElement("div"); document.body.append(root);
+  const changed = vi.fn();
+  const editor = mountMemberResources(root, { memberId: 7, tab: "skills", standalone: true, changed });
+  await flush();
+  expect(root.textContent).toContain(date);
+  click(root, '[data-res="skill-menu"]');
+  document.querySelector<HTMLButtonElement>('#app-popover [data-pick="skill-edit"]')!.click();
+  await flush();
+  expect(root.querySelector<HTMLTextAreaElement>("#mp-skill-text")!.value).toBe("Instructions");
+  expect(api.core).toHaveBeenCalledExactlyOnceWith("members.skills.read", { member_id: 7, id: 12 });
+  expect(changed).not.toHaveBeenCalled();
+  fill(root, "#mp-skill-text", "Unsaved instructions");
+  setLocale(locale === "en" ? "ja" : "en");
+  expect(root.textContent).toContain(locale === "en" ? "2026/10/29" : "Oct 29, 2026");
+  expect(root.querySelector<HTMLTextAreaElement>("#mp-skill-text")!.value).toBe("Unsaved instructions");
+  fill(root, "#mp-skill-text", "Updated instructions");
+  click(root, '[data-res="skill-save"]'); await flush();
+  expect(api.core).toHaveBeenCalledWith("members.skills.update", { member_id: 7, id: 12, text: "Updated instructions", expected_hash: "document-hash" });
+  click(root, '[data-res="skill-undo"]'); await flush();
+  expect(api.core).toHaveBeenCalledWith("members.skills.update", { member_id: 7, undo: "revision-1" });
+  editor.destroy();
+});
+
+
+test("an event routine edits a readable filter without losing its read tool arguments", async () => {
+  const when = { app: "gmail", event: { tool: "mcp:gmail/messages", arguments: { limit: 50 }, items: "messages", id: "id" }, filter: { field: "sender", equals: "client@example.com" } };
+  const routine = { id: 9, member_id: 7, title: "Client mail", prompt: "Prepare a draft", enabled: true, last_run: null, next_run: null, schedule: null, when, last_checked: 1792792800000 };
+  vi.mocked(api.routinesList).mockResolvedValue({ routines: [routine] });
+  vi.mocked(api.routinesUpdate).mockResolvedValue({ routine });
+  const dialog = openEditMemberDialog(host(), member, "routines"); await flush();
+  expect(dialog.el.textContent).toContain("client@example.com");
+  click(dialog.el, '[data-dlg="routine-menu"]'); click(document, '#app-popover [data-pick="edit"]');
+  const form = document.querySelector<HTMLElement>(".au-routine-dialog")!;
+  expect(form.querySelector("#au-time")).toBeNull();
+  expect(form.textContent).not.toContain('"arguments"');
+  fill(form, "#au-filter", "owner@example.com"); click(form, '[data-dlg="save"]'); await flush();
+  expect(api.routinesUpdate).toHaveBeenCalledWith(9, { title: routine.title, prompt: routine.prompt, when: { ...when, filter: { ...when.filter, equals: "owner@example.com" } } });
   dialog.close();
 });

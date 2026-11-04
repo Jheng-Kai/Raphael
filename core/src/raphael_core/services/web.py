@@ -13,7 +13,7 @@ Reading a page (`read`) is the `web_read_service` setting's: "builtin" fetches i
 computer (`fetch.PageFetcher`, which goes only to public addresses) and turns its HTML into text
 here (`html.html_to_text`), at no cost; a PDF it is led to is read as a PDF (`pdf`); Jina, Firecrawl
 and Tavily read it on their own servers. It gives back `{title, text, truncated}`, the text held to
-the budget of a tool's text (`common.fit`).
+PAGE_BUDGET (`common.fit`): a task is shown as much of it as its model's window can hold.
 
 The services' own addresses and the shapes of their answers are theirs (as of 2026-10); a key is
 sent the way each documents, in a header. What comes back is untrusted: it is data for the model,
@@ -21,9 +21,14 @@ which is told never to follow what it says. A failure is a `ServiceError` of a k
 message. Nothing here logs a query, an address, a key or a result.
 """
 
+import asyncio
+import math
 import re
+import time
 from collections.abc import Awaitable, Callable
+from email.utils import parsedate_to_datetime
 from typing import Any
+from weakref import WeakKeyDictionary
 
 import httpx
 
@@ -35,8 +40,15 @@ from .html import html_to_text
 SEARCH_RESULTS = 5
 SNIPPET_CHARS = 400
 TITLE_CHARS = 200
+PAGE_BUDGET = 50_000
 # A service's answer may take this long, each stage of the request.
 SERVICE_TIMEOUT_S = 12.0
+# Include the queue and retries in the existing tool budget. Brave's one request per
+# second needs a little margin; use that conservative pace for each search service.
+SEARCH_TIMEOUT_S = 12.0
+SEARCH_INTERVAL_S = 1.1
+SEARCH_ATTEMPTS = 2
+SEARCH_RETRY_WAIT_S = 8.0
 # The services that read a page for Raphael may take longer: they fetch it first.
 READ_TIMEOUT_S = 25.0
 
@@ -51,6 +63,59 @@ _TAGS = re.compile(r"<[^>]{0,200}>")
 
 # A PDF's bytes -> its `{pages, text, truncated}` (`pdf.read_pdf`, text layer only).
 PdfReader = Callable[[Any], Awaitable[dict]]
+
+
+class _SearchGate:
+    def __init__(self):
+        self.lock = asyncio.Lock()
+        self.next_at = 0.0
+
+
+# The core's event loop shares these across hubs, members and turns. Weak keys keep
+# a closed embedded/test loop's locks from being reused by a different loop.
+_SEARCH_GATES: WeakKeyDictionary = WeakKeyDictionary()
+
+
+def _retry_after(value: str | None) -> float:
+    try:
+        delay = float(value)
+    except (TypeError, ValueError):
+        try:
+            delay = parsedate_to_datetime(value).timestamp() - time.time()
+        except (TypeError, ValueError, OverflowError):
+            return SEARCH_INTERVAL_S
+    return max(0.0, delay) if math.isfinite(delay) else SEARCH_INTERVAL_S
+
+
+class _RateLimited(ServiceError):
+    def __init__(self, retry_after: str | None):
+        super().__init__("rate_limit")
+        self.delay = _retry_after(retry_after)
+
+
+async def _search_call(service: str, http: httpx.AsyncClient, method: str, url: str, *, deadline: float, **kwargs: Any) -> Any:
+    loop = asyncio.get_running_loop()
+    gates = _SEARCH_GATES.setdefault(loop, {})
+    gate = gates.setdefault(service, _SearchGate())
+    async with gate.lock:
+        for attempt in range(SEARCH_ATTEMPTS):
+            now = loop.time()
+            wait_s = max(0.0, gate.next_at - now)
+            budget = min(SEARCH_RETRY_WAIT_S, max(0.0, deadline - now - .01))
+            wait_until = now + min(wait_s, budget)
+            # Event-loop timers can wake early on Windows; keep the provider's deadline.
+            while (remaining := wait_until - loop.time()) > 0:
+                await asyncio.sleep(remaining)
+            if wait_s > budget:
+                # Do not send before the provider's cooldown, even when it exceeds this turn's budget.
+                raise _RateLimited(str(wait_s - budget))
+            gate.next_at = loop.time() + SEARCH_INTERVAL_S
+            try:
+                return await _call(http, method, url, **kwargs)
+            except _RateLimited as error:
+                gate.next_at = max(gate.next_at, loop.time() + error.delay)
+                if attempt == SEARCH_ATTEMPTS - 1:
+                    raise
 
 
 def _plain(value: Any, limit: int) -> str:
@@ -111,6 +176,8 @@ async def _call(
         raise ServiceError("timeout") from None
     except (httpx.TransportError, httpx.DecodingError):
         raise ServiceError("network") from None
+    if response.status_code == 429:
+        raise _RateLimited(response.headers.get("Retry-After"))
     if not response.is_success:
         raise _status_error(response.status_code)
     try:
@@ -137,9 +204,18 @@ async def search(
     searxng_url: str = "",
 ) -> dict:
     """What `service` finds for `query` (see the module). ServiceError of a kind."""
+    deadline = asyncio.get_running_loop().time() + SEARCH_TIMEOUT_S
+    try:
+        async with asyncio.timeout_at(deadline):
+            return await _search(service, query, http=http, key=key, searxng_url=searxng_url, deadline=deadline)
+    except TimeoutError:
+        raise ServiceError("timeout") from None
+
+
+async def _search(service: str, query: str, *, http: httpx.AsyncClient, key: str | None, searxng_url: str, deadline: float) -> dict:
     if service == "brave":
-        body = await _call(
-            http, "GET", BRAVE_URL,
+        body = await _search_call(
+            service, http, "GET", BRAVE_URL, deadline=deadline,
             params={"q": query, "count": SEARCH_RESULTS},
             headers={"X-Subscription-Token": _need(key), "Accept": "application/json"},
         )  # fmt: skip
@@ -148,8 +224,8 @@ async def search(
         results = _results(items, "title", "url", lambda item: item.get("description"))
         answer = None
     elif service == "tavily":
-        body = await _call(
-            http, "POST", TAVILY_SEARCH_URL,
+        body = await _search_call(
+            service, http, "POST", TAVILY_SEARCH_URL, deadline=deadline,
             json={"query": query, "max_results": SEARCH_RESULTS, "include_answer": True},
             headers={"Authorization": f"Bearer {_need(key)}"},
         )  # fmt: skip
@@ -157,8 +233,8 @@ async def search(
         results = _results(items, "title", "url", lambda item: item.get("content"))
         answer = body.get("answer") if isinstance(body, dict) else None
     elif service == "exa":
-        body = await _call(
-            http, "POST", EXA_URL,
+        body = await _search_call(
+            service, http, "POST", EXA_URL, deadline=deadline,
             json={
                 "query": query,
                 "numResults": SEARCH_RESULTS,
@@ -180,7 +256,7 @@ async def search(
         if not searxng_url:
             raise ServiceError("not_configured")
         base = searxng_url.rstrip("/")
-        body = await _call(http, "GET", f"{base}/search", params={"q": query, "format": "json"})
+        body = await _search_call(service, http, "GET", f"{base}/search", deadline=deadline, params={"q": query, "format": "json"})
         items = body.get("results") if isinstance(body, dict) else None
         results = _results(items, "title", "url", lambda item: item.get("content"))
         answer = None
@@ -203,7 +279,7 @@ async def search(
 def _page(title: Any, text: Any) -> dict:
     if not isinstance(text, str) or not text.strip():
         raise ServiceError("bad_response")
-    kept, cut = fit(text.strip())
+    kept, cut = fit(text.strip(), PAGE_BUDGET)
     return {"title": _plain(title, TITLE_CHARS), "text": kept, "truncated": cut}
 
 

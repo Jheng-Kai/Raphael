@@ -16,9 +16,10 @@ def member_rpc(setup):
 
 async def test_api_turn_creates_the_requested_company_roles(setup, client):
     rig, team = setup
+    rig.settings.set("action_mode", "ask")
     client.chats = [
         chat("Creating the team.", *(("member_create", {"name": role, "role": role, "group": "Company"}) for role in ("COO", "PM", "RD"))),
-        live_said("Created COO, PM and RD."),
+        live_said("Draft ready."), live_said("Created COO, PM and RD."),
     ]
     result = await typed(rig, "Create COO, PM, RD", 0, language="en")
     assert result["status"] == "confirm"
@@ -31,7 +32,7 @@ async def test_api_turn_creates_the_requested_company_roles(setup, client):
     assert all(m["group_id"] == roster["groups"][0]["id"] for m in roster["members"][1:])
 
 
-@pytest.mark.parametrize("mode,approved", [("direct", True), ("ask", True), ("ask", False)])
+@pytest.mark.parametrize("mode,approved", [("ask", True), ("ask", False), ("plan", True)])
 @pytest.mark.parametrize("operation", ["member_create", "member_update"])
 async def test_cli_turn_applies_or_denies_the_whole_batch_through_http_mcp(setup, tmp_path, monkeypatch, mode, approved, operation):
     from raphael_core.agent.cli.discovery import CliBrains
@@ -47,9 +48,16 @@ async def test_cli_turn_applies_or_denies_the_whole_batch_through_http_mcp(setup
     roles = ("COO", "PM", "RD", "CEO", "CTO", "Marketing", "Finance", "Design")
     existing = {role: member(team, name=role, role="Original") for role in roles} if operation == "member_update" else {}
 
+    runs = []
+
     async def run(driver, **kwargs):
+        runs.append(kwargs["user"])
+        if len(runs) > 1:  # the turn goes on after the owner's yes, told what exists now
+            assert approved and "team_changes" in kwargs["user"]
+            yield Event("final", "Created COO, PM and RD.")
+            return
         assert "COO, PM, RD" in kwargs["user"]
-        assert "You lead the owner's team" in kwargs["system"]
+        assert "You can change the owner's team yourself" in kwargs["system"]
         async with httpx.AsyncClient(headers={"Authorization": "Bearer " + kwargs["token"]}, trust_env=False) as http:
             async def rpc(method, params):
                 response = await http.post(kwargs["endpoint"], json={"jsonrpc": "2.0", "id": method, "method": method, "params": params})
@@ -72,18 +80,18 @@ async def test_cli_turn_applies_or_denies_the_whole_batch_through_http_mcp(setup
 
     monkeypatch.setattr(Driver, "run", run)
     result = await typed(rig, "Create COO, PM, RD", 0, language="en")
-    if mode in ("ask", "direct"):
-        assert result["status"] == "confirm"
-        text = result["confirm"]["text"]
-        for role in roles:
-            assert f"Name: {role}" in text and f"Role: {role}" in text and f"About: {role} lead" in text
-        assert text.count("Group: Company") == 8
-        before = await rig.call("members.list", {})
-        assert before["groups"] == []
-        assert len(before["members"][1:]) == len(existing)
-        assert all(item["role"] == "Original" for item in before["members"][1:])
-        result = await rig.confirm(result["confirm"]["id"], approved)
+    assert result["status"] == "confirm"
+    text = result["confirm"]["text"]
+    for role in roles:
+        assert f"Name: {role}" in text and f"Role: {role}" in text and f"About: {role} lead" in text
+    assert text.count("Group: Company") == 8
+    before = await rig.call("members.list", {})
+    assert before["groups"] == []
+    assert len(before["members"][1:]) == len(existing)
+    assert all(item["role"] == "Original" for item in before["members"][1:])
+    result = await rig.confirm(result["confirm"]["id"], approved)
     assert result["status"] == "done"
+    assert len(runs) == (2 if approved else 1)
     roster = await rig.call("members.list", {})
     assert [item["role"] for item in roster["members"][1:]] == (list(roles) if approved else ["Original"] * len(existing))
     assert len(roster["groups"]) == int(approved)
@@ -97,13 +105,14 @@ async def test_ask_mode_previews_the_complete_change_and_resumes_the_same_turn(s
     rig, team = setup
     rig.settings.set("action_mode", "ask")
     instructions = "Preserve all details. " * 50
-    client.chats = [chat("Creating COO.", (tool, {"name": "COO", "role": "Operations", "instructions": instructions, "group": "Company"})), live_said("Created COO: Operations.")]
+    client.chats = [chat("Creating COO.", (tool, {"name": "COO", "role": "Operations", "instructions": instructions, "group": "Company"})),
+                    live_said("Draft ready."), live_said("Created COO: Operations.")]
     result = await typed(rig, "Create COO", 0, language="en")
     assert result["status"] == "confirm"
     assert (await rig.call("members.list", {}))["members"][1:] == []
     assert instructions in result["confirm"]["text"]
     done = await rig.confirm(result["confirm"]["id"])
-    assert done["status"] == "done" and done["turn_id"] == result["turn_id"]
+    assert done["status"] == "done" and done["turn_id"] == result["turn_id"] and done["text"] == "Created COO: Operations."
     assert (await rig.call("members.list", {}))["members"][1]["instructions"] == instructions.strip()
 
 
@@ -134,46 +143,55 @@ async def test_member_deletion_always_asks_and_obeys_the_answer(setup, client, a
     assert (team.members.speaker(one.id) is None) == approved
 
 
-async def test_peer_cannot_discover_or_execute_admin_tools_or_select_peer_routines(setup, client):
-    from raphael_core.protocol import RpcError
+async def test_who_made_a_member_is_told_so_it_can_have_what_its_maker_has(setup):
+    rig, team = setup
+    one, made = member(team), []
+    team.members.member_made = lambda maker, new: made.append((maker, new))
+    created = await team.members.admin_tool(one.id, "member_create", {"name": "Added", "role": "COO"})
+    assert made == [(one.id, created["member"]["id"])]
+
+
+async def test_a_member_has_the_same_team_tools_as_raphael_and_the_owner_still_confirms(setup, client):
     from raphael_core.agent.team_admin import DEFINITIONS
 
     rig, team = setup
     one, other = member(team), member(team, name="Other")
-    client.chats = [chat("Trying an unauthorized change.", ("member_create", {"name": "Hidden", "role": "COO"}), ("create_member", {"name": "Legacy hidden", "role": "COO", "instructions": ""})), live_said("No change.")]
-    await typed(rig, "Create Hidden", one.id, language="en")
+    rig.settings.set("action_mode", "ask")
+    client.chats = [chat("Proposing a member.", ("member_create", {"name": "Added", "role": "COO"}), ("create_member", {"name": "Legacy added", "role": "COO", "instructions": ""})), live_said("Proposed."), live_said("Added.")]
+    asked = await typed(rig, "Create Added", one.id, language="en")
     offered = {item["function"]["name"]: item for item in client.chat_calls[0]["tools"]}
-    assert not set(DEFINITIONS) & set(offered)
-    assert "create_member" not in offered
-    assert "member_id" not in offered["routine_create"]["function"]["parameters"]["properties"]
+    assert set(DEFINITIONS) <= set(offered) and {"create_member", "room_meeting"} <= set(offered)
+    assert "member_id" in offered["routine_create"]["function"]["parameters"]["properties"]
+    # when the owner's setting asks first, a change to the team is a proposal they confirm, whoever makes it
+    assert asked["status"] == "confirm"
     assert len((await rig.call("members.list", {}))["members"]) == 3
-    for name in DEFINITIONS:
-        with pytest.raises(RpcError):
-            await team.members.admin_tool(one.id, name, {})
-    with pytest.raises(RpcError):
-        await team.members.routine_tool(one.id, "routine_create", {"member_id": other.id, "title": "Stolen", "prompt": "X", "schedule": {"kind": "daily", "time": "08:00"}})
-
-
-async def test_admin_turn_assigns_distinct_presets_and_enforces_ten_creates(setup, client, tmp_path):
-    rig, team = setup
-    folder = tmp_path / "avatars/presets"
-    folder.mkdir(parents=True)
-    for name in ("alpha", "beta"):
-        (folder / f"{name}.png").write_bytes(b"\x89PNG\r\n\x1a\n")
-    client.chats = [chat("Creating the team.", *(("member_create" if i % 2 else "create_member", {"name": f"Member {i}", "role": "RD"}) for i in range(11))), live_said("Created ten members.")]
-    asked = await typed(rig, "Create eleven members", 0, language="en")
-    assert len(asked["confirm"]["drafts"]) == 10
     await rig.confirm(asked["confirm"]["id"])
+    assert [item["name"] for item in (await rig.call("members.list", {}))["members"][3:]] == ["Added", "Legacy added"]
+    # and any member's routines can be selected by any speaker
+    await team.members.routine_tool(one.id, "routine_create", {"member_id": other.id, "title": "Report", "prompt": "X", "schedule": {"kind": "daily", "time": "08:00"}})
+    assert [item["title"] for item in (await rig.call("routines.list", {"member_id": other.id}))["routines"]] == ["Report"]
+
+
+@pytest.mark.parametrize("mode", ["ask", "direct"])
+async def test_admin_turn_enforces_ten_creates_and_leaves_faces_to_the_app(setup, client, mode):
+    rig, team = setup
+    rig.settings.set("action_mode", mode)
+    calls = chat("Creating the team.", *(("member_create" if i % 2 else "create_member", {"name": f"Member {i}", "role": "RD"}) for i in range(11)))
+    client.chats = [calls, live_said("Draft ready."), live_said("Created ten members.")] if mode == "ask" else [calls, live_said("Created ten members.")]
+    asked = await typed(rig, "Create eleven members", 0, language="en")
+    if mode == "ask":
+        assert len(asked["confirm"]["drafts"]) == 10
+        await rig.confirm(asked["confirm"]["id"])
     roster = (await rig.call("members.list", {}))["members"][1:]
     assert len(roster) == 10
-    assert {roster[0]["avatar"], roster[1]["avatar"]} == {"preset:alpha", "preset:beta"}
-    assert all(item["avatar"] == "" for item in roster[2:])
-    assert "member_create_limit" in client.chat_calls[-1]["messages"][-1]["content"]
+    assert all(item["avatar"] == "" for item in roster)
+    assert "member_create_limit" in client.chat_calls[1]["messages"][-1]["content"]
 
 
 async def test_legacy_create_reports_invalid_fields_without_failing_the_turn(setup, client):
     rig, team = setup
     member(team, name="COO")
+    rig.settings.set("action_mode", "ask")
     client.chats = [chat("Creating COO.", ("create_member", {"name": "COO", "role": "Operations"})), live_said("COO already exists.")]
     result = await typed(rig, "Create COO", 0, language="en")
     assert result["status"] == "confirm"
@@ -181,6 +199,19 @@ async def test_legacy_create_reports_invalid_fields_without_failing_the_turn(set
     assert done["status"] == "done"
     assert len((await rig.call("members.list", {}))["members"]) == 2
     assert (await rig.turns())[0]["status"] == "error"
+
+
+async def test_in_automatic_mode_an_invalid_create_is_told_to_the_model_which_goes_on(setup, client):
+    rig, team = setup
+    member(team, name="COO")
+    rig.settings.set("action_mode", "direct")
+    # The last tool failed, so the loop asks the model once more before it accepts the reply.
+    client.chats = [chat("Creating COO.", ("create_member", {"name": "COO", "role": "Operations"})),
+                    live_said("COO already exists."), live_said("COO already exists.")]
+    result = await typed(rig, "Create COO", 0, language="en")
+    assert result["status"] == "done" and result["text"] == "COO already exists."
+    assert len((await rig.call("members.list", {}))["members"]) == 2
+    assert "bad_arguments" in client.chat_calls[1]["messages"][-1]["content"]
 
 
 async def test_admin_turn_updates_groups_profiles_routines_and_commands_and_emits_changes(setup, client):
@@ -194,8 +225,8 @@ async def test_admin_turn_updates_groups_profiles_routines_and_commands_and_emit
         chat("Scheduling the report.", ("routine_create", {"member_id": one.id, "title": "Report", "prompt": "Prepare report", "schedule": {"kind": "daily", "time": "09:00"}})),
         chat("Reading the team.", ("team_overview", {})), live_said("Updated COO."),
     ]
-    asked = await typed(rig, "Set up COO reports", 0, language="en")
-    await rig.confirm(asked["confirm"]["id"])
+    done = await typed(rig, "Set up COO reports", 0, language="en")  # 自動: made as the model asks, no card
+    assert done["status"] == "done" and done["text"] == "Updated COO."
     roster = await team.members.admin_tool(0, "team_overview", {})
     coo = next(item for item in roster["members"] if item["id"] == one.id)
     assert (coo["group"], coo["blurb"], coo["commands_count"]) == ("Company", "Operations lead", 1)
@@ -264,7 +295,7 @@ async def test_api_one_turn_approves_or_denies_every_member_and_group(setup, cli
     roles = ("COO", "PM", "RD", "CEO", "CTO", "Marketing", "Finance", "Design")
     client.chats = [chat("Planning the group.", ("group_create", {"name": "Company"})),
                     *[chat("Planning a member.", ("member_create", {"name": role, "role": role, "blurb": role + " lead", "group": "Company"})) for role in roles],
-                    live_said("Team changes are ready for approval.")]
+                    live_said("Team changes are ready for approval."), live_said("The team is in place.")]
     asked = await typed(rig, "Create eight company roles", 0, language="en")
     assert asked["status"] == "confirm"
     for role in roles:
@@ -355,7 +386,8 @@ async def test_roster_readers_never_observe_a_partially_applied_batch(setup, cli
     rig, team = setup
     rig.settings.set("action_mode", "ask")
     roles = ("COO", "PM", "RD", "CEO", "CTO", "Marketing", "Finance", "Design")
-    client.chats = [chat("Planning the team.", *(("member_create", {"name": role, "role": role, "group": "Company"}) for role in roles)), live_said("Ready.")]
+    client.chats = [chat("Planning the team.", *(("member_create", {"name": role, "role": role, "group": "Company"}) for role in roles)),
+                    live_said("Ready."), live_said("The team is in place.")]
     asked = await typed(rig, "Create eight roles", 0, language="en")
     assert asked["status"] == "confirm"
     applying = asyncio.create_task(rig.confirm(asked["confirm"]["id"]))
@@ -377,10 +409,6 @@ async def test_roster_readers_never_observe_a_partially_applied_batch(setup, cli
 async def test_batch_confirmation_exposes_structured_member_and_group_drafts(setup, client, tmp_path):
     rig, team = setup
     rig.settings.set("action_mode", "ask")
-    folder = tmp_path / "avatars/presets"
-    folder.mkdir(parents=True)
-    for name in ("alpha", "beta", "gamma"):
-        (folder / f"{name}.png").write_bytes(b"\x89PNG\r\n\x1a\n")
     client.chats = [
         chat(
             "Planning the team.",
@@ -401,17 +429,13 @@ async def test_batch_confirmation_exposes_structured_member_and_group_drafts(set
     assert [d["blurb"] for d in drafts] == ["營運管理", "產品規劃", "系統開發"]
     assert drafts[0]["personality"] == "果斷" and drafts[0]["instructions"] == "追蹤OKR"
     assert [d["group"] for d in drafts] == ["核心團隊", "核心團隊", "工程部"]
-    assert [d["avatar_preset"] for d in drafts] == ["preset:alpha", "preset:beta", "preset:gamma"]
+    assert [d["avatar_preset"] for d in drafts] == ["", "", ""]
     assert [g["name"] for g in groups] == ["核心團隊", "工程部"]
 
 
 async def test_owner_edits_and_removals_in_drafts_apply_to_created_and_updated_members(setup, client, tmp_path):
     rig, team = setup
     rig.settings.set("action_mode", "ask")
-    folder = tmp_path / "avatars/presets"
-    folder.mkdir(parents=True)
-    for name in ("alpha", "beta", "gamma"):
-        (folder / f"{name}.png").write_bytes(b"\x89PNG\r\n\x1a\n")
     client.chats = [
         chat(
             "Planning the team.",
@@ -420,7 +444,7 @@ async def test_owner_edits_and_removals_in_drafts_apply_to_created_and_updated_m
             ("member_create", {"name": "PM", "role": "產品", "blurb": "產品簡介", "group": "OldGroup"}),
             ("member_create", {"name": "RD", "role": "研發", "blurb": "研發簡介", "group": "OldGroup"}),
         ),
-        live_said("Ready."),
+        live_said("Ready."), live_said("完成。"),
     ]
     asked = await typed(rig, "建立三位成員", 0, language="zh-TW")
     assert asked["status"] == "confirm"
@@ -433,29 +457,28 @@ async def test_owner_edits_and_removals_in_drafts_apply_to_created_and_updated_m
             "personality": "務實清晰",
             "instructions": "每週整理營運週報",
             "group": "核心團隊",
-            "avatar_preset": "preset:gamma",
+            "avatar_preset": "slime:shion",
         },
         {
             **asked["confirm"]["drafts"][2],
             "group": "核心團隊",
-            "avatar_preset": "preset:alpha",
+            "avatar_preset": "slime:color:coral",
         },
     ]
     done = await rig.call("agent.confirm", {"id": asked["confirm"]["id"], "approved": True, "drafts": edited})
     assert done["status"] == "done"
-    assert done["text"] == "已建立 營運長、RD"
+    assert done["text"] == "完成。"  # the turn went on after the yes and the model had the last word
     roster = await rig.call("members.list", {})
     created = roster["members"][1:]
     assert [(m["name"], m["role"], m["blurb"], m["personality"], m["instructions"], m["avatar"]) for m in created] == [
-        ("營運長", "跨部門營運", "負責日常營運與跨部門協調", "務實清晰", "每週整理營運週報", "preset:gamma"),
-        ("RD", "研發", "研發簡介", "", "", "preset:alpha"),
+        ("營運長", "跨部門營運", "負責日常營運與跨部門協調", "務實清晰", "每週整理營運週報", "slime:shion"),
+        ("RD", "研發", "研發簡介", "", "", "slime:color:coral"),
     ]
     assert [g["name"] for g in roster["groups"]] == ["核心團隊"]
     assert all(m["group_id"] == roster["groups"][0]["id"] for m in created)
     [turn] = await rig.turns()
-    assert turn["text"] == "已建立 營運長、RD"
-    assert "營運長 · 跨部門營運 · 核心團隊 — 負責日常營運與跨部門協調" in (turn["detail"] or "")
-    assert "RD · 研發 · 核心團隊 — 研發簡介" in (turn["detail"] or "")
+    assert turn["text"] == "完成。"
+    assert "已建立 營運長、RD" in [item["text"] for item in turn["messages"] if item["kind"] == "event"]
 
 
 async def test_removing_all_drafts_creates_nothing_and_finishes_cleanly(setup, client):

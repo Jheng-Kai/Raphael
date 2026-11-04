@@ -1,0 +1,174 @@
+from raphael_core.connectors.composio import KEY
+from raphael_core.integrations.vault import CredentialVault
+import pytest
+
+from raphael_core.device.models import ModelDownloadError, REGISTRY
+from raphael_core.native_journeys import GmailJourneyVault, OfflineModelManager, gmail_enabled
+from raphael_core.app import EchoClient
+from raphael_core.native_journeys import native_codex_model, catalog_enabled, native_connect
+from raphael_core.native_journeys import home_timing_brain
+import json
+
+
+def test_computer_signin_fixture_is_private_to_each_journey_member(tmp_path, monkeypatch):
+    from raphael_core.native_journeys import vm_signin_fixture
+    from raphael_core.computer.vm import LocalVm
+    monkeypatch.delenv("RAPHAEL_TEST_NATIVE", raising=False)
+    with pytest.raises(RuntimeError):
+        vm_signin_fixture(tmp_path, 1)
+    assert not (tmp_path / "vm-homes").exists()
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
+    vm_signin_fixture(tmp_path, 0)
+    vm_signin_fixture(tmp_path, 1)
+    vm = LocalVm(tmp_path)
+    one, two = vm.target(0).workspace, vm.target(1).workspace
+    assert one != two
+    assert (one / "native-signin.py").read_bytes() == (two / "native-signin.py").read_bytes()
+    assert not (vm.target(2).workspace / "native-signin.py").exists()
+
+
+@pytest.mark.asyncio
+async def test_computer_cleanup_removes_every_recovered_journey_container(tmp_path, monkeypatch):
+    from raphael_core.native_journeys import vm_cleanup
+    from raphael_core.computer import vm as vm_module
+    calls = []
+    class FakeVm:
+        def __init__(self, directory):
+            assert directory == tmp_path
+            self.targets = {}
+        async def recover(self):
+            self.targets = {"one": "journey-one", "two": "journey-two"}
+        async def stop(self, target, *, remove):
+            calls.append((target, remove))
+        async def aclose(self):
+            calls.append("closed")
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
+    monkeypatch.setattr(vm_module, "LocalVm", FakeVm)
+    await vm_cleanup(tmp_path)
+    assert calls == [("journey-one", True), ("journey-two", True), "closed"]
+
+
+@pytest.mark.parametrize(("fake", "native", "timing"), [(False, "1", "1"), (True, "", "1"), (True, "1", "")])
+def test_slow_home_cli_cannot_be_enabled_outside_its_isolated_native_journey(tmp_path, monkeypatch, fake, native, timing):
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", native)
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE_HOME", timing)
+    data = tmp_path / "data"
+    assert home_timing_brain(fake, data) is None
+    assert not data.exists()
+
+
+def test_native_model_manager_never_downloads_missing_models(tmp_path, monkeypatch):
+    manager = OfflineModelManager(tmp_path)
+    monkeypatch.setattr(manager, "_http", lambda: (_ for _ in ()).throw(AssertionError("network")))
+    with pytest.raises(ModelDownloadError, match="downloads are disabled"):
+        manager.ensure_spec(REGISTRY["silero-vad"])
+
+
+def test_gmail_requires_fake_llm_and_both_explicit_native_flags(monkeypatch):
+    monkeypatch.delenv("RAPHAEL_TEST_NATIVE", raising=False)
+    monkeypatch.delenv("RAPHAEL_TEST_NATIVE_GMAIL", raising=False)
+    assert not gmail_enabled(True)
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE_GMAIL", "1")
+    assert not gmail_enabled(True)
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
+    assert gmail_enabled(True)
+    assert not gmail_enabled(False)
+
+
+def test_catalog_journeys_require_explicit_native_opt_in_and_script_only_discovery_then_card(monkeypatch):
+    monkeypatch.delenv("RAPHAEL_TEST_NATIVE", raising=False)
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE_CATALOG", "1")
+    assert not catalog_enabled(True)
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
+    assert catalog_enabled(True) and not catalog_enabled(False)
+    messages = [{"role": "user", "content": "Connect Spotify [native-connect:spotify]"}]
+    offered = {"find_app", "connect_app"}
+    assert native_connect(messages, offered, 0) == ("find_app", {"query": "spotify"})
+    assert native_connect(messages, offered, 1) == ("connect_app", {"app": "spotify"})
+    assert native_connect(messages, offered, 2) is None
+    assert native_connect(messages, set(), 0) is None
+    monkeypatch.delenv("RAPHAEL_TEST_NATIVE_CATALOG")
+    assert native_connect(messages, offered, 0) is None
+
+
+def test_gmail_vault_reads_only_composio_and_never_changes_owner_credentials(monkeypatch):
+    reads = []
+    monkeypatch.setattr(CredentialVault, "get", lambda _self, name: reads.append(name) or "test-value")
+    monkeypatch.setattr(CredentialVault, "set", lambda *_: (_ for _ in ()).throw(AssertionError("owner write")))
+    monkeypatch.setattr(CredentialVault, "delete", lambda *_: (_ for _ in ()).throw(AssertionError("owner delete")))
+    vault = GmailJourneyVault()
+    assert vault.get("unrelated") is None
+    assert vault.get(KEY) == "test-value"
+    vault.set("unrelated", "temporary")
+    vault.delete(KEY)
+    assert reads == [KEY]
+
+
+@pytest.mark.asyncio
+async def test_native_consult_uses_real_tool_protocol_only_when_opted_in(monkeypatch):
+    client = EchoClient()
+    tools = [{"type": "function", "function": {"name": "ask_member"}}]
+    messages = [{"role": "user", "content": "Ask NativeTarget [native-consult:NativeTarget]"}]
+    monkeypatch.delenv("RAPHAEL_TEST_NATIVE", raising=False)
+    assert not (await client.chat_tools(messages=messages, tools=tools)).calls
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
+    turn = await client.chat_tools(messages=messages, tools=tools)
+    assert len(turn.calls) == 1
+    call = turn.calls[0]
+    assert call.name == "ask_member"
+    assert call.arguments["member"] == "NativeTarget"
+    assert "native-consult" not in call.arguments["request"]
+    assert turn.cost_usd == 0
+    assert not (await client.chat_tools(messages=messages, tools=[])).calls
+    assert not (await client.chat_tools(messages=[*messages, {"role": "tool", "content": "Report"}], tools=tools)).calls
+    assert not (await client.chat_tools(messages=[*messages, {"role": "user", "content": "Another question"}], tools=tools)).calls
+
+
+def test_native_codex_model_uses_configured_available_model_and_rejects_guessed_alias(tmp_path):
+    home = tmp_path / ".codex"
+    home.mkdir()
+    (home / "config.toml").write_text('model = "gpt-6.1-sol"\n')
+    (home / "models_cache.json").write_text(json.dumps({"models": [{"slug": "gpt-6.1-sol"}]}))
+    environ = {"CODEX_HOME": str(home)}
+    assert native_codex_model(environ) == "cli:codex:gpt-6.1-sol"
+    with pytest.raises(ValueError, match="absent from the CLI model cache"):
+        native_codex_model({**environ, "RAPHAEL_NATIVE_CODEX_MODEL": "gpt-6.1"})
+    with pytest.raises(ValueError, match="installed Codex model id"):
+        native_codex_model({**environ, "RAPHAEL_NATIVE_CODEX_MODEL": "openrouter:paid?key=secret"})
+
+
+def test_native_computer_scripts_only_the_real_takeover_sequence_when_explicitly_enabled(monkeypatch):
+    from raphael_core.native_journeys import native_computer
+    messages = [{"role": "user", "content": "Local sign-in [native-computer:signin]"}]
+    names = {"computer__vm_exec", "computer__request_takeover", "computer__get_desktop_state"}
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
+    monkeypatch.delenv("RAPHAEL_TEST_NATIVE_COMPUTER", raising=False)
+    assert native_computer(messages, names, 0) is None
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE_COMPUTER", "1")
+    assert [native_computer(messages, names, index)[0] for index in range(4)] == [
+        "computer__vm_exec", "computer__request_takeover", "computer__get_desktop_state", "computer__vm_exec"]
+    assert native_computer(messages, names, 1)[1] == {"reason": "sign_in"}
+    assert native_computer(messages, names, 4)[0] == "reply"
+    with_screen = [*messages, {"role": "tool", "content": "Desktop inspected"},
+                   {"role": "user", "content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,test"}}]}]
+    assert native_computer(with_screen, names, 3)[0] == "computer__vm_exec"
+    assert native_computer([*with_screen, {"role": "user", "content": "Another task"}], names, 3) is None
+    assert native_computer([], names, 0) is None
+    monkeypatch.delenv("RAPHAEL_TEST_NATIVE")
+    assert native_computer(messages, names, 0) is None
+
+
+async def test_cancel_wait_is_inert_outside_native_and_cancellable_inside(monkeypatch):
+    import asyncio
+    from raphael_core.native_journeys import wait_for_native_cancel
+    messages = [{"role": "user", "content": "[native-round10:wait]"}]
+    monkeypatch.delenv("RAPHAEL_TEST_NATIVE", raising=False)
+    await asyncio.wait_for(wait_for_native_cancel(messages), 0.1)
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
+    await asyncio.wait_for(wait_for_native_cancel([{"role": "user", "content": "An ordinary turn"}]), 0.1)
+    pending = asyncio.create_task(wait_for_native_cancel(messages))
+    await asyncio.sleep(0)
+    assert not pending.done()
+    pending.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await pending

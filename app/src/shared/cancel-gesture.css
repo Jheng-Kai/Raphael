@@ -1,0 +1,5 @@
+/* The armed key replaces the Stop glyph; its hint sits above the same control. */
+[data-cancel-armed="true"] { position: relative; overflow: visible; }
+[data-cancel-armed="true"] > * { visibility: hidden; }
+[data-cancel-armed="true"]::before { content: "Esc"; position: absolute; inset: 0; display: grid; place-items: center; font: var(--weight-semibold) var(--fs-2xs)/1 var(--ui); }
+[data-cancel-armed="true"]::after { content: attr(data-cancel-hint); position: absolute; right: 0; bottom: calc(100% + 8px); padding: 6px 10px; border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--panel); color: var(--text); white-space: nowrap; font: var(--weight-medium) var(--fs-xs)/1.4 var(--ui); pointer-events: none; }

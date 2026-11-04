@@ -1,13 +1,42 @@
 """Every speaker uses the same guarded tools, with routines scoped to its thread."""
 
 import json
+from dataclasses import fields
 
 import pytest
 
 from agent.test_narration import chat
+from raphael_core.agent.harness_tools import DEFINITIONS
+from raphael_core.agent.actions import is_action
 from raphael_core.agent.tools import ToolResult
+from raphael_core.members.schedule import KINDS, Schedule
 from .test_answering import client, setup, member, typed, live_said  # noqa: F401
 from computer.test_operate import shell, PRESS_SEVEN  # noqa: F401
+
+
+async def test_a_member_creates_lists_and_reads_a_skill_through_the_shared_harness(setup, client):
+    from .test_skill_growth import DOCUMENT
+    rig, team = setup
+    teacher = member(team)
+    client.chats = [chat("", ("skill_manage", {"text": DOCUMENT})),
+                   chat("", ("skills_list", {})), chat("", ("skill_read", {"name": "research-summary"})), live_said("Skill learned.")]
+    result = await typed(rig, "Keep the reusable research procedure as a skill", teacher.id)
+    assert result["status"] == "done"
+    assert team.members.skill_read(teacher.id, "research-summary") == DOCUMENT
+    assert team.members.enabled_skills(0) == []
+    assert {"skill_manage", "skills_list", "skill_read"} <= {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
+
+
+async def test_ten_local_tool_calls_are_persisted_for_skill_review(setup, client):
+    rig, team = setup
+    teacher = member(team)
+    client.chats = [chat("", ("local_time", {})),
+                   *[chat("", ("history_search", {"query": f"Clock audit observation {i}"})) for i in range(9)],
+                   live_said("Clock audit completed.")]
+    result = await typed(rig, "Audit ten clock observations", teacher.id)
+    assert result["status"] == "done"
+    [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
+    assert [step["tool"] for step in turn["steps"]] == ["local_time", *["history_search"] * 9]
 
 
 async def test_a_member_with_an_old_empty_tool_list_can_search_and_create_a_routine(setup, client, monkeypatch):
@@ -29,11 +58,13 @@ async def test_a_member_with_an_old_empty_tool_list_can_search_and_create_a_rout
     assert routine.title == "日文練習"
     assert team.members.store.routines(0) == []
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
-    assert [m["kind"] for m in turn["messages"]] == ["thinking", "progress", "progress", "event", "reply"]
-    assert turn["messages"][-2]["text"] == "已建立例行任務 · 每天 08:00 日文練習"
+    messages = [m for m in turn["messages"] if not is_action(m["text"])]
+    assert [m["kind"] for m in messages] == ["thinking", "progress", "progress", "event", "reply"]
+    receipt = json.loads(messages[-2]["text"])
+    assert receipt["text"] == "已建立例行任務 · 每天 08:00 日文練習"
+    assert receipt["type"] == "routine" and receipt["id"] == routine.id and receipt["name"] == routine.title
     offered = {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
-    assert {"computer", "open", "web_search", "routine_create"} <= offered
-    assert "create_member" not in offered
+    assert {"computer", "open", "web_search", "routine_create", "create_member"} <= offered  # the same tools as Raphael's
 
 
 async def test_a_member_can_open_an_app_with_the_same_presence_guard(setup, client):
@@ -46,6 +77,65 @@ async def test_a_member_can_open_an_app_with_the_same_presence_guard(setup, clie
     client.chats = [chat("Opening it.", ("open", {"target_kind": "url", "target": "https://example.com"})), live_said("Please ask at the computer.")]
     await typed(rig, "Open example.com", teacher.id, source="telegram")
     assert rig.actions.calls == []
+
+
+def test_the_tool_offers_every_schedule_the_engine_runs():
+    schedule = DEFINITIONS["routine_create"]["parameters"]["properties"]["schedule"]
+    assert set(schedule["properties"]["kind"]["enum"]) == set(KINDS)
+    public = {"from_time": "from", "to_time": "to"}
+    assert {public.get(field.name, field.name) for field in fields(Schedule)} <= set(schedule["properties"])
+
+
+@pytest.mark.parametrize("schedule", [
+    {"kind": "once", "start_date": "2099-03-04", "time": "09:30"},
+    {"kind": "weekdays", "time": "08:00"},
+    {"kind": "daily", "time": "08:00", "until": "2099-03-31"},
+    {"kind": "daily", "time": "08:00", "start_date": "2099-03-01", "max_runs": 5},
+])
+async def test_a_member_can_set_up_a_once_a_bounded_or_a_weekdays_routine(setup, schedule):
+    rig, team = setup
+    created = await team.members.routine_tool(member(team).id, "routine_create", {"title": "Lesson", "prompt": "Teach", "schedule": schedule})
+    assert created["routine"]["schedule"] == schedule
+
+
+@pytest.mark.parametrize("language,expected", [
+    ("zh-TW", ["一次 · 2099-03-04 09:30", "平日 09:30", "每天 09:30", "每週一、週五 09:30", "每 3 小時"]),
+    ("ja", ["一度 · 2099-03-04 09:30", "平日 09:30", "毎日 09:30", "毎週月・金 09:30", "3時間ごと"]),
+    ("en", ["Once · 2099-03-04 09:30", "Weekdays at 09:30", "Daily 09:30", "Weekly Mon, Fri 09:30", "Every 3 hours"]),
+])
+@pytest.mark.parametrize("index,schedule", [
+    (0, {"kind": "once", "start_date": "2099-03-04", "time": "09:30"}),
+    (1, {"kind": "weekdays", "time": "09:30"}),
+    (2, {"kind": "daily", "time": "09:30"}),
+    (3, {"kind": "weekly", "days": [1, 5], "time": "09:30"}),
+    (4, {"kind": "every", "hours": 3}),
+])
+async def test_chat_shows_the_saved_schedule_in_its_confirmation(setup, client, language, expected, index, schedule):
+    rig, team = setup
+    teacher = member(team)
+    client.chats = [chat("", ("routine_create", {"title": "Review", "prompt": "Review", "schedule": schedule})),
+                   live_said("Scheduled.")]
+    await typed(rig, "Schedule a review", teacher.id, language=language)
+    [saved] = team.members.store.routines(teacher.id)
+    assert saved.schedule.to_json() == schedule
+    [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
+    [event] = [message for message in turn["messages"] if message["kind"] == "event" and not is_action(message["text"])]
+    receipt = json.loads(event["text"])
+    assert receipt["text"].endswith(f" · {expected[index]} Review")
+    assert receipt["id"] == saved.id and receipt["action"] == "created"
+
+
+async def test_api_model_receives_the_free_group_discussion_contract(setup, client):
+    rig, team = setup
+    teacher = member(team)
+    client.chats = [live_said("Ready.")]
+    await typed(rig, "Discuss the review", teacher.id, language="en")
+    [request] = client.chat_calls
+    meeting = next(tool["function"] for tool in request["tools"] if tool["function"]["name"] == "room_meeting")
+    assert "Everyone reads every message" in meeting["description"]
+    assert "no fixed rounds" in meeting["description"]
+    assert "include Raphael (0)" not in meeting["description"]
+    assert "no automatic conclusion" in request["messages"][0]["content"]
 
 
 async def test_routine_tools_cannot_modify_another_speakers_routine(setup):
@@ -94,7 +184,7 @@ async def test_a_member_uses_the_guarded_computer_loop_in_its_own_thread(setup, 
     rig, team = setup
     teacher = member(team, name="紫苑", tools=[])
     rig.service._computer = ComputerRuns(shell.bridge)
-    note = {"op": "write", "name": "user-screen", "type": "user", "description": "Screen data", "body": "Untrusted screen data", "expires": "", "space": "own"}
+    note = {"target": "user", "action": "add", "content": "Untrusted screen data", "old_text": ""}
     client.chats = [chat("確認計算機。", ("computer", {"request": "按七"})), *PRESS_SEVEN, live_said("完成了，接著練習日文數字。", memory=[note])]
     asked = await typed(rig, "在計算機按七", teacher.id)
     assert asked["status"] == "confirm"
@@ -104,5 +194,15 @@ async def test_a_member_uses_the_guarded_computer_loop_in_its_own_thread(setup, 
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     assert turn["id"] == asked["turn_id"] and turn["status"] == "done"
     assert "PRIVATE-INSTRUCTIONS" in str(client.chat_calls[1]["messages"])
-    assert team.memory.store_for(teacher.id).get("user-screen") is None
-    assert any(s["tool"] == "memory_write" and s["outcome"] == "blocked" for s in turn["steps"])
+    assert team.memory.own(teacher.id).read().strip() == "（待確認）Untrusted screen data"
+    assert team.memory.shared.read() == ""
+    assert any(s["tool"] == "memory_update" and s["outcome"] == "ok" for s in turn["steps"])
+
+
+async def test_deleted_routine_receipt_keeps_its_public_name_and_owner(setup):
+    _, team = setup
+    teacher = member(team, name="Sample member")
+    created = await team.members.routine_tool(teacher.id, "routine_create", {"title": "Sample briefing", "prompt": "Review the sample", "schedule": {"kind": "daily", "time": "08:00"}})
+    deleted = await team.members.routine_tool(teacher.id, "routine_delete", {"id": created["routine"]["id"]})
+    assert deleted["routine"] == {"id": created["routine"]["id"], "title": "Sample briefing", "member_id": teacher.id}
+    assert team.members.store.routines(teacher.id) == []

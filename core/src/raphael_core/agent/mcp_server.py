@@ -21,6 +21,7 @@ class RaphaelMcp:
         self.token = secrets.token_urlsafe(32)
         self.server = None
         self.url = ""
+        self.computer_url = ""
         self.closed = False
         self._tasks = set()
 
@@ -28,6 +29,8 @@ class RaphaelMcp:
         self.server = await asyncio.start_server(self._connection, "127.0.0.1", 0, limit=65536)
         port = self.server.sockets[0].getsockname()[1]
         self.url = f"http://127.0.0.1:{port}/mcp"
+        if any(item["function"]["name"].startswith("computer__") for item in self.definitions()):
+            self.computer_url = f"http://127.0.0.1:{port}/computer"
         return self
 
     async def __aexit__(self, *exc):
@@ -70,7 +73,7 @@ class RaphaelMcp:
                 if headers.get("host") != self.url.split("/")[2] or headers.get("origin"):
                     await self._respond(writer, 403, {})
                     return
-                if path != "/mcp":
+                if path != "/mcp" and not (path == "/computer" and self.computer_url):
                     await self._respond(writer, 404, {})
                     return
                 if method != "POST":
@@ -94,7 +97,7 @@ class RaphaelMcp:
                 await self._respond(writer, 202, None)
                 return
             # A tool may pause at an owner approval card. The run itself bounds its lifetime.
-            result = await self._dispatch(packet)
+            result = await self._dispatch(packet, computer=path == "/computer")
             await self._respond(writer, 200, {"jsonrpc": "2.0", "id": packet["id"], **result})
         except (ValueError, UnicodeError, asyncio.IncompleteReadError, OSError, TimeoutError):
             pass
@@ -107,7 +110,7 @@ class RaphaelMcp:
             finally:
                 self._tasks.discard(task)
 
-    async def _dispatch(self, packet):
+    async def _dispatch(self, packet, *, computer=False):
         method = packet.get("method")
         params = packet.get("params", {})
         if not isinstance(params, dict):
@@ -119,6 +122,8 @@ class RaphaelMcp:
         if method == "ping":
             return {"result": {}}
         tools = {definition["function"]["name"]: definition["function"] for definition in self.definitions()}
+        if self.computer_url:
+            tools = {name: item for name, item in tools.items() if name.startswith("computer__") == computer}
         if method == "tools/list":
             return {"result": {"tools": [{"name": item["name"], "description": item.get("description", ""),
                     "inputSchema": item.get("parameters", {"type": "object"})} for item in tools.values()]}}
@@ -128,9 +133,11 @@ class RaphaelMcp:
                 return {"error": {"code": -32602, "message": "Invalid arguments"}}
             try:
                 result = await self.execute(str(packet["id"]), params["name"], args)
-            except Exception:
-                return {"error": {"code": -32603, "message": "Tool execution failed"}}
-            return {"result": {"content": [{"type": "text", "text": result.content or result.kind or ""}], "isError": not result.ok}}
+            except Exception as exc:
+                from ..failures import classify
+                failure = classify(exc)
+                return {"result": {"content": [{"type": "text", "text": json.dumps(failure.wire())}], "isError": True}}
+            return {"result": {"content": [{"type": "text", "text": result.content or result.kind or ""}, *getattr(result, "blocks", [])], "isError": not result.ok}}
         return {"error": {"code": -32601, "message": "Unknown method or tool"}}
 
     @staticmethod

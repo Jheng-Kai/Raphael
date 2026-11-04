@@ -94,7 +94,7 @@ async def test_video_without_ffmpeg_says_what_cannot_be_read(monkeypatch):
     monkeypatch.setattr("raphael_core.services.file_reader.shutil.which", lambda _: None)
     transcribe = AsyncMock()
     kind, result = await read_file(checked("clip.mp4", "video/mp4", b"video"), transcribe)
-    assert kind == "video" and "ffmpeg is unavailable" in result["limitation"]
+    assert kind == "video" and "ffmpeg decoding component is missing" in result["limitation"]
     transcribe.assert_not_awaited()
 
 

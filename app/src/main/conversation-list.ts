@@ -1,6 +1,7 @@
 // A self-contained conversation list in the member details panel.
 // The caller owns navigation; this component owns loading, searching and its CRUD dialogs.
 import * as api from "./api";
+import { eventRead } from './event-read';
 import { onLocaleChange, t } from "./i18n";
 import { describeError } from "./format";
 import { openDialog, confirmDelete } from "./member-dialogs";
@@ -19,6 +20,10 @@ export interface ConversationInfo {
 }
 
 export const conversationTitle = (conversation?: ConversationInfo): string => conversation?.kind === "quick" ? t("conversations.quick") : conversation?.title || t("conversations.untitled");
+/** Window entry follows activity; unattended core requests keep their stable default. */
+export const newestConversation = (conversations: ConversationInfo[]): ConversationInfo | undefined =>
+  [...conversations].sort((a, b) => Number(a.kind === "quick") - Number(b.kind === "quick") ||
+    (b.updated_at_ms ?? 0) - (a.updated_at_ms ?? 0) || Number(!!b.is_default) - Number(!!a.is_default) || b.id - a.id)[0];
 export const conversationChange = (memberId: number): void => {
   window.dispatchEvent(new CustomEvent("conversations-changed", { detail: memberId }));
 };
@@ -31,9 +36,12 @@ export function relativeTime(ms: number, now = Date.now()): string {
   return t("conversations.days", { p0: Math.floor(minutes / 1440) });
 }
 
-export function mountConversationList(host: HTMLElement, options: { memberId: number; onOpen(id: number): void; collapseWhenEmpty?: boolean; onVisibility?(visible: boolean): void }): { refresh(): Promise<void>; destroy(): void } {
+/** A conversation nobody has written in yet: its title comes from its first question. */
+const isBlank = (conversation: ConversationInfo): boolean => conversation.kind !== "quick" && !conversation.title;
+
+export function mountConversationList(host: HTMLElement, options: { memberId: number; scope?: object; active?(): boolean; onOpen(id: number): void; collapseWhenEmpty?: boolean; onVisibility?(visible: boolean): void; current?(): number | undefined }): { refresh(): Promise<void>; destroy(): void } {
   let conversations: ConversationInfo[] = [];
-  let epoch = 0, destroyed = false;
+  let epoch = 0, destroyed = false, dirty = false;
   host.classList.add("conversation-list");
   host.innerHTML = btn(`${ico("plus")}<span>${esc(t("conversations.new"))}</span>`, "conversation-new", " data-conversation-new") +
     `<div class="conversation-tools"><input type="search" maxlength="200" autocomplete="off"></div><div class="conversation-rows" aria-live="polite"></div>`;
@@ -45,16 +53,28 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
     options.onVisibility?.(!host.hidden);
     input.placeholder = t("conversations.search");
     input.setAttribute("aria-label", t("conversations.search"));
+    host.querySelector("[data-conversation-new] span")!.textContent = t("conversations.new");
+    // The one open is already new: there is nothing another would add.
+    const current = options.current?.();
+    const open = current === undefined ? newestConversation(conversations) : conversations.find(c => c.id === current);
+    host.querySelector<HTMLButtonElement>("[data-conversation-new]")!.disabled = !!open && isBlank(open);
     const found = conversations.filter(c => conversationTitle(c).toLocaleLowerCase().includes(input.value.trim().toLocaleLowerCase()));
-    rows.innerHTML = found.length ? found.map(c => `<div class="conversation-row">` +
+    const section = (kind: "quick" | "standard", label: string): string => {
+      const items = found.filter(c => (c.kind === "quick") === (kind === "quick"));
+      if (kind === "quick" && !items.length) return "";
+      return `<section class="conversation-section" data-conversation-section="${kind}">${kind === "standard" ? `<div class="mb-dh">${esc(label)}</div>` : ""}` + (items.length ? items.map(c => `<div class="conversation-row">` +
       btn(`<span>${esc(conversationTitle(c))}</span><small>${esc(relativeTime(c.updated_at_ms))}</small>`, "conversation-open", ` data-conversation-open="${c.id}"`) +
-      (c.kind === "quick" ? "" : iconButton("more", t("chat.more"), ` data-conversation-more="${c.id}" aria-haspopup="menu"`, "conversation-more")) + `</div>`).join("") : `<p class="conversation-empty">${esc(t("conversations.empty"))}</p>`;
+      iconButton("more", t("chat.more"), ` data-conversation-more="${c.id}" aria-haspopup="menu"`, "conversation-more") + `</div>`).join("") : `<p class="conversation-empty">${esc(t("conversations.empty"))}</p>`) + `</section>`;
+    };
+    rows.innerHTML = section("quick", t("conversations.quick")) + section("standard", t("conversations.heading"));
   }
 
-  async function refresh(): Promise<void> {
+  async function refresh(fromEvent=false): Promise<void> {
+    dirty=false;
     const mine = ++epoch;
     try {
-      const result = await api.core<{ conversations: ConversationInfo[] }>("conversations.list", { member_id: options.memberId });
+      const read=()=>api.core<{ conversations: ConversationInfo[] }>("conversations.list", { member_id: options.memberId });
+      const result = await (fromEvent ? eventRead(`conversations.list:${options.memberId}`,read,options.scope ?? host) : read());
       if (!destroyed && mine === epoch) { conversations = Array.isArray(result?.conversations) ? [...result.conversations].sort((a, b) => Number(b.kind === "quick") - Number(a.kind === "quick")) : []; draw(); }
     } catch (error) {
       if (!destroyed && mine === epoch) rows.textContent = describeError(error);
@@ -88,16 +108,22 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
     if (more) {
       const c = conversations.find(c => c.id === Number(more.dataset.conversationMore));
       if (!c) return;
-      openActions(more, [{ id: "rename", label: t("conversations.rename"), icon: "pencil" }, { id: "delete", label: t("members.delete"), icon: "trash" }], act => {
+      const quick = c.kind === "quick";
+      openActions(more, quick ? [{ id: "clear", label: t("conversations.clear"), icon: "trash" }] : [{ id: "rename", label: t("conversations.rename"), icon: "pencil" }, { id: "delete", label: t("members.delete"), icon: "trash" }], act => {
         if (act === "rename") rename(c);
-        else void confirmDelete(conversationTitle(c)).then(async yes => {
+        else void confirmDelete(conversationTitle(c), { clearHistory: quick }).then(async yes => {
           if (!yes) return;
-          await api.core("conversations.delete", { id: c.id }); conversationChange(options.memberId);
-          toaster.info(t("members.deleted", { p0: conversationTitle(c) }));
+          await api.core(quick ? "conversations.clear" : "conversations.delete", { id: c.id });
+          if (!quick) window.dispatchEvent(new CustomEvent("conversation-deleted", {detail:{member:options.memberId,id:c.id}}));
+          conversationChange(options.memberId);
+          toaster.info(quick ? t("conversations.cleared", { p0: conversationTitle(c) }) : t("members.deleted", { p0: conversationTitle(c) }));
         }).catch(error => toaster.info(describeError(error)));
       });
-      document.querySelector('[data-pick="delete"]')?.classList.add("danger");
+      document.querySelector('[data-pick="delete"], [data-pick="clear"]')?.classList.add("danger");
     } else if (target.closest("[data-conversation-new]")) {
+      // Another conversation still unwritten is the new one; the list does not fill with empty rows.
+      const waiting = conversations.find(isBlank);
+      if (waiting) { closeMenu(); options.onOpen(waiting.id); return; }
       void api.core<{ conversation: ConversationInfo }>("conversations.create", { member_id: options.memberId }).then(result => {
         conversationChange(options.memberId); closeMenu(); options.onOpen(result.conversation.id);
       }).catch(error => toaster.info(describeError(error)));
@@ -105,9 +131,15 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
   };
   host.addEventListener("click", clicked);
   input.addEventListener("input", draw);
-  const changed = (event: Event): void => { if ((event as CustomEvent<number>).detail === options.memberId) void refresh(); };
+  const changed = (event: Event): void => {
+    if ((event as CustomEvent<number>).detail !== options.memberId) return;
+    if(options.active?.()===false){dirty=true;return;}
+    void refresh(true);
+  };
   window.addEventListener("conversations-changed", changed);
+  const opened = (event: Event): void => { if ((event as CustomEvent<number>).detail === options.memberId) { if(dirty && options.active?.()!==false)void refresh(true);else draw(); } };
+  window.addEventListener("conversation-opened", opened);
   const stopLocale = onLocaleChange(draw);
   draw(); void refresh();
-  return { refresh, destroy() { destroyed = true; epoch++; host.removeEventListener("click", clicked); input.removeEventListener("input", draw); stopLocale(); window.removeEventListener("conversations-changed", changed); host.replaceChildren(); } };
+  return { refresh, destroy() { destroyed = true; epoch++; host.removeEventListener("click", clicked); input.removeEventListener("input", draw); stopLocale(); window.removeEventListener("conversations-changed", changed); window.removeEventListener("conversation-opened", opened); host.replaceChildren(); } };
 }

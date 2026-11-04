@@ -1,6 +1,4 @@
 .mb-pinned { padding: var(--sp-1) 0 var(--sp-2); border-bottom: 0; }
-.mb-pin { color: var(--text-3); display: inline-flex; margin-left: var(--sp-1); }
-.mb-pin .i { width: 16px; height: 16px; }
 .mb-det .mb-tabs:empty, .mb-det [data-slot="conversations"]:empty { display: none; }
 .mb-panel-pages { display: grid; grid-template-columns: minmax(0, 1fr); margin: 0; border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; background: var(--panel); }
 .mb-panel-row.btn { width: 100%; display: flex; gap: var(--sp-2); padding: var(--sp-3) var(--sp-3); text-align: left; border: 0; border-radius: 0; background: transparent; }
@@ -12,7 +10,6 @@
 .mb-panel-row-copy { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
 .mb-panel-row-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: var(--fs-2xs); font-weight: 400; }
 .mb-panel-back.btn { display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-1) 0; border: 0; background: transparent; }
-.mb-panel-memory-add { margin: var(--sp-3) 0 var(--sp-5); }
 .mb-chat-picker { max-width: 480px; }
 .mb-chat-choices { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); margin-top: var(--sp-3); max-height: 52vh; overflow-x: hidden; overflow-y: auto; }
 .mb-chat-choice.btn { display: flex; justify-content: flex-start; align-items: center; gap: var(--sp-3); width: 100%; text-align: left; border: 0; background: transparent; padding: var(--sp-2); }
@@ -27,3 +24,10 @@
 
 .mb-det .mb-rsched { display: grid; grid-template-columns: minmax(0, 1fr); }
 .mb-det .mb-time { width: 100%; }
+
+.mb-panel-routines { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.mb-tab-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); }
+.mb-det .mb-rt.btn { display: flex; width: 100%; gap: var(--sp-3); padding: var(--sp-2); text-align: left; background: transparent; border: 1px solid var(--line); border-radius: var(--r-sm); }
+.mb-rt-state { display: flex; color: var(--text-3); flex: none; }
+.mb-rt-state.is-on { color: var(--ok); }
+.mb-rt-main { flex: 1; }

@@ -6,31 +6,28 @@ The RPC methods (the main window only, through the shell's allow-list):
 - `members.list {ui_language?}` -> `{members, groups}`. `members` is Raphael first (`id` 0, his name
   in the language, his picture when the owner chose one: `avatar_url`, a data URL, and
   `avatar_crop`), then every member in its place: `{id, name, role, personality, instructions, avatar,
-  avatar_url?, group_id, model, tools, position, created, unread, waiting, preview, last_at}`.
+  avatar_url?, group_id, model, tools, position, created, unread, unread_from, waiting, preview, last_at}`.
   `preview` is the last line of its thread (one line, cut) and `last_at` when it was said; `unread`
-  says the thread has news the owner has not seen (`members.read` clears it), and `waiting` that a
+  says the thread has news the owner has not seen (`members.read` clears it), `unread_from` names
+  its first unseen turn when known, and `waiting` that a
   question waits for the owner there. `groups` is `[{id, name, position, sources}]`.
 - `members.create {name, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, ui_language?}` ->
   `{member, routine_offer}`. `routine_offer` is the routine offered to a member of a group that
   has places to look (`sources`): `{title, prompt, schedule}` for 「每天早上的進度」 at 09:00, or
   null. It is offered, not made: `routines.create` makes it.
 - `members.update {id, name?, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, position?}`
-  -> `{member}`. `avatar` here is "" or "preset:<stem>"; a picture of the owner's own comes by
-  `members.set_avatar`. Raphael (0) is not changed here: his picture is the app's to change.
+  -> `{member}`. `avatar` here is "" or a slime, "slime:<character>" or "slime:color:<color>". Raphael (0) is not changed here: his picture is the app's to change.
 - `members.delete {id}` -> `{deleted}`: the member, its conversation (and the exchanges of other
   threads with it), its memory folder, its routines, its tasks and its picture. The app asks first.
 - `members.set_primary {id}` -> `{primary_id}`: the owner's primary contact, the Bot that new work is brought
   to and that hands it to the colleague it belongs to. Raphael (0) until the owner chooses another; exactly one
   at a time. The roster says who it is to every model and to the window (`members.list`'s `team_context`,
   `primary_id`), which is the one place it is read from. It is Raphael again when the member is hidden or
-  deleted. Raphael stays the chief of staff, in every room, whoever it is, and only the choice changes: no
-  room, task or conversation is touched.
+  deleted. This unique contact holds the chief capability; changing it transfers team administration
+  and the required room role without rewriting conversations or tasks.
 - `members.set_avatar {id, name, mime, data}` -> `{member}`: a picture of the owner's own, in
   base64, checked as the images of a request are (`services.attachments`), copied into
   `<local>\\avatars\\members\\` under a name of its own: the path it came from is never known here.
-- `members.presets {}` -> `{presets: [{avatar, name, url}]}`: the pictures in
-  `<local>\\avatars\\presets\\` (`.webp` and `.png`), if that folder is there. They are the owner's
-  own files and never part of the app.
 - `members.read {id}` -> `{}`; `members.viewing {id | null}` -> `{}`: which thread is on screen now
   (null for none), so that what arrives there is not news.
 - `members.tool_choices {}` -> `{tools, connections}`: Raphael's own tools a member may be given, by
@@ -92,6 +89,7 @@ from ..services.attachments import IMAGE_TYPES, MAX_IMAGE_BYTES, AttachmentError
 from .capabilities import MemberCapabilities, download_skills
 from .schedule import Schedule, next_run
 from .store import (
+    ROUTINE_RUN_STATUS_SQL,
     PROMPT_MAX,
     PROFILE_FIELDS,
     NAME_MAX,
@@ -112,14 +110,17 @@ CATCH_UP_MS = 12 * 3_600_000
 # What the member column shows of the last line of a thread, at most.
 PREVIEW_CHARS = 80
 # The folders of the pictures, in the app's local folder.
+# What a member made in the maker says first, before anything has run: no model is asked, so it costs nothing and is there at once.
+GREETINGS = {
+    "zh-TW": "你好，我是{name}。你想請我幫你做什麼？",
+    "en": "Hi, I'm {name}. What would you like me to do for you?",
+    "ja": "はじめまして、{name}です。どんなことをお手伝いしましょうか？",
+}
 AVATARS_DIR = "avatars"
-PRESETS_DIR = "presets"
+SLIME = "slime:"
 MEMBERS_DIR = "members"
 # Raphael's own picture, kept by the shell (app/src-tauri/src/avatar.rs): read here, never written.
 RAPHAEL_AVATAR_DIR = "avatar"
-PRESET_SUFFIXES = (".webp", ".png")
-MAX_PRESETS = 60
-_PRESET_STEM = re.compile(r"[A-Za-z0-9._ -]{1,120}")
 _EXTENSIONS = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}
 # The template of the routine offered to a member of a group with places to look.
 TEMPLATE_TIME = "09:00"
@@ -166,7 +167,11 @@ def routine_view(routine: Routine) -> dict[str, Any]:
         "member_id": routine.member_id,
         "title": routine.title,
         "prompt": routine.prompt,
-        "schedule": routine.schedule.to_json(),
+        "schedule": routine.schedule.to_json() if routine.schedule else None,
+        "when": routine.when,
+        "app_name": routine.app_name,
+        "last_checked": routine.last_checked_ms,
+        "last_error": routine.last_error,
         "enabled": routine.enabled,
         "last_run": routine.last_run_ms,
         "next_run": routine.next_run_ms,
@@ -207,6 +212,22 @@ class _Picture:
     url: str
 
 
+def soul_document(speaker: Speaker) -> str:
+    """Who a member is, as a plain document. Only what the owner filled in has a heading. It says where it
+    comes from, since an edit of the file itself is replaced the next time the member changes."""
+    parts = [f"# {speaker.name or 'Raphael'}"]
+    if speaker.role:
+        parts.append(speaker.role)
+    if speaker.blurb:
+        parts.append(speaker.blurb)
+    if speaker.personality:
+        parts.append(f"## Personality\n\n{speaker.personality}")
+    if speaker.instructions:
+        parts.append(f"## Instructions\n\n{speaker.instructions}")
+    parts.append("<!-- Written from this member's details in Raphael. Change them there. -->")
+    return "\n\n".join(part.strip() for part in parts) + "\n"
+
+
 class MembersService:
     """The members (see the module). `conn` is the open database (used on the event loop only),
     `local_dir` the app's local folder (the pictures: `avatars\\`, and Raphael's own in `avatar\\`),
@@ -229,6 +250,7 @@ class MembersService:
         now_ms: Callable[[], int] = wall_clock_ms,
         tz: tzinfo | None = None,
         tick_s: float = TICK_S,
+        vault=None,
     ) -> None:
         self.store = MemberStore(conn, now_ms)
         self.capabilities = MemberCapabilities(conn, local_dir / "member-skills", self.store)
@@ -238,10 +260,16 @@ class MembersService:
         self._conn = conn
         self._history = AgentHistory(conn, now_ms)
         self._settings = SettingsStore(conn)
+        from .activity import Activity
+        self.activity = getattr(background, "activity", None) or Activity(notify)
+        self.activity.owner_waiting = self.waiting_members
+        self.activity.language = lambda: self._ui_language({})
         self._background = background
         self._memory = memory
         self._language = language
         self._notify = notify
+        # Told of each member made through the tools: who made it, and which it is.
+        self.member_made = lambda maker, made: None
         self._connections = connections
         self._now_ms = now_ms
         self._tz = tz
@@ -250,8 +278,30 @@ class MembersService:
         self._raphael_avatar = local_dir / RAPHAEL_AVATAR_DIR
         self._pictures: dict[Path, _Picture] = {}
         self._viewing: int | None = None
+        self.activity.viewing = lambda: self._viewing
         self._waiting_sources: list[Callable[[], Iterable[int]]] = []
+        self._events = None
+        self._event_poll_task: asyncio.Task | None = None
         self._ticking: asyncio.Task[None] | None = None
+        from .webhooks import Webhooks
+        from ..integrations.vault import MemoryVault
+        self.webhooks = Webhooks(self, vault if vault is not None else MemoryVault())
+        self.sync_homes()
+        if memory is not None:
+            from .skill_review import SkillReview
+            memory.skill_review = SkillReview(self, memory)
+
+    def sync_homes(self) -> None:
+        """Keep every member's home as it should be, the built-in member's too: its SOUL.md, written from
+        its details (the details pane is where the owner edits who it is, and the file is how it reads
+        anywhere else), its skills' mirror and a MEMORY.md."""
+        homes = self.capabilities.homes
+        for identifier in [0, *(member.id for member in self.store.members())]:
+            homes.soul(identifier, soul_document(self.speaker(identifier)))
+            self.capabilities._mirror(identifier)
+            if not (homes.home(identifier) / "MEMORY.md").exists():
+                homes.keep(identifier, "MEMORY.md", "")
+            homes.safe(homes.state(identifier) / "SOUL.md").unlink(missing_ok=True)  # the old JSON mirror
 
     def register(self, router: Router) -> None:
         methods = {
@@ -272,7 +322,6 @@ class MembersService:
             "members.delete": self._delete,
             "members.set_primary": self._set_primary,
             "members.set_avatar": self._set_avatar,
-            "members.presets": self._presets,
             "members.read": self._read,
             "members.unread": self._unread,
             "members.viewing": self._viewing_now,
@@ -286,6 +335,7 @@ class MembersService:
             "routines.delete": self._routine_delete,
             "routines.template": self._routine_template,
             "routines.runs": self._routine_runs,
+            "routines.webhook": self._routine_webhook,
         }
         for method, handler in methods.items():
             router.register(method, handler)
@@ -294,8 +344,13 @@ class MembersService:
 
     def speaker(self, member_id: int) -> Speaker | None:
         if member_id == 0:
-            return Speaker(**self.first_bot_profile())
+            return Speaker(**self.first_bot_profile(), capabilities=frozenset({"chief"}) if self.store.is_chief(member_id) else frozenset())
         return self.store.speaker(member_id)
+
+    def _chief_pinned(self) -> bool:
+        from ..brain.settings import SettingsStore
+
+        return bool(SettingsStore(self._conn).get("chief_pinned"))
 
     def first_bot_profile(self) -> dict:
         from ..brain.settings import SettingsStore
@@ -308,7 +363,7 @@ class MembersService:
         if is_raphael_name(name) or name.casefold() == self.first_bot_profile().get("name", "").casefold():
             return self.speaker(0)
         member = self.store.by_name(name)
-        return None if member is None else member.speaker()
+        return None if member is None else self.speaker(member.id)
 
     def named_in(self, text: str) -> list[Speaker]:
         """The members whose names `text` holds: a name in Latin letters as a whole word, any
@@ -324,17 +379,18 @@ class MembersService:
             else:
                 hit = len(name) >= 2 and name in folded
             if hit:
-                found.append(member.speaker())
+                found.append(self.speaker(member.id))
         return found
 
     def has_members(self) -> bool:
         return self._conn.execute("SELECT 1 FROM members LIMIT 1").fetchone() is not None
 
     def roster(self) -> list[Speaker]:
-        return [self.speaker(0)] + [
-            Speaker(id=member.id, name=member.name, role=member.role, blurb=member.blurb)
-            for member in self.store.members()
-        ]
+        """Public inventory never carries another member's private persona or brain."""
+        return [Speaker(id=speaker.id, name=speaker.name, role=speaker.role, blurb=speaker.blurb,
+                        capabilities=speaker.capabilities)
+                for identifier in [0, *(member.id for member in self.store.members())]
+                if (speaker := self.speaker(identifier)) is not None]
 
     def primary_id(self) -> int:
         """The owner's primary contact (0 for Raphael): the one place the roster, the window and the prompts read it from."""
@@ -356,13 +412,20 @@ class MembersService:
             group_id = found.id
         member = self.store.create_member(
             name=name, role=role or "", instructions=instructions or "", group_id=group_id,
-            personality=personality,
+            personality=personality, model=self._starting_model(),
         )
         self._changed()
         return member.speaker()
 
+    def _starting_model(self) -> str:
+        """A new member starts on Raphael's model and holds it as its own, so that his next change moves no one else."""
+        model = self._settings.get("agent_model")
+        return model.strip() if isinstance(model, str) and model.strip() else DEFAULTS["agent_model"]
+
     def _changed(self, method: str = "members.changed", member_id: int | None = None) -> None:
         """Announce committed data changes using identifiers only."""
+        if method == "members.changed":
+            self.sync_homes()
         if self._notify is not None:
             self._notify(method, {} if member_id is None else {"member_id": member_id})
 
@@ -394,7 +457,7 @@ class MembersService:
             if turn is None or (turn.source == "voice" and turn.member_id == 0) or turn.member_id == self._viewing:
                 return
             was_unread = turn.member_id in self.store.unread()
-            self.store.mark_unread(turn.member_id)
+            self.store.mark_unread(turn.member_id, turn_id)
             if not was_unread:
                 self._changed()
         except sqlite3.Error as exc:
@@ -474,30 +537,12 @@ class MembersService:
         self._pictures[path] = _Picture(key, url)
         return url
 
-    def _preset_files(self) -> list[Path]:
-        folder = self._avatars / PRESETS_DIR
-        try:
-            files = sorted(
-                path
-                for path in folder.iterdir()
-                if path.is_file()
-                and path.suffix.lower() in PRESET_SUFFIXES
-                and _PRESET_STEM.fullmatch(path.stem)
-            )
-        except OSError:  # no folder: no presets
-            return []
-        return files[:MAX_PRESETS]
-
     def _avatar_url(self, avatar: str) -> str | None:
         """The picture a member's `avatar` names, as a data URL; None for none, or one that is
         gone (the app shows the default silhouette)."""
         kind, _, name = avatar.partition(":")
         if kind == "file" and name:
             return self._data_url(self._avatars / MEMBERS_DIR / name)
-        if kind == "preset" and name:
-            for path in self._preset_files():
-                if path.stem == name:
-                    return self._data_url(path)
         return None
 
     def _raphael_picture(self) -> tuple[str, dict] | None:
@@ -529,12 +574,14 @@ class MembersService:
     # --- views ---------------------------------------------------------------------------------------
 
     def _member_view(
-        self, member: Member, unread: set[int], waiting: set[int], latest: dict[int, Turn]
+        self, member: Member, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn]
     ) -> dict[str, Any]:
         last = latest.get(member.id)
+        activity, activity_label = self.activity.describe(member.id, waiting)
         view: dict[str, Any] = {
             **{field: getattr(member, field) for field in PROFILE_FIELDS},
             "id": member.id,
+            "chief": self.store.is_chief(member.id),
             "name": member.name,
             "role": member.role,
             "personality": member.personality,
@@ -546,7 +593,10 @@ class MembersService:
             "position": member.position,
             "created": member.created_at_ms,
             "unread": member.id in unread,
+            "unread_from": unread.get(member.id),
             "waiting": member.id in waiting,
+            "activity": activity,
+            "activity_label": activity_label,
             "preview": "" if last is None else _preview(last),
             "last_at": None if last is None else last.created_at_ms,
         }
@@ -556,13 +606,15 @@ class MembersService:
         return view
 
     def _raphael_view(
-        self, language: str, unread: set[int], waiting: set[int], latest: dict[int, Turn]
+        self, language: str, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn]
     ) -> dict[str, Any]:
         last = latest.get(0)
+        activity, activity_label = self.activity.describe(0, waiting)
         view: dict[str, Any] = {
             "blurb": "", "reply_style": "full", "voice": "", "read_aloud": False,
-            "notify": False, "ask_before_members": False, "pinned": False, "hidden": False, "draft_first": True,
+            "notify": False, "ask_before_members": False, "pinned": self._chief_pinned(), "hidden": False, "draft_first": True,
             "id": 0,
+            "chief": self.store.is_chief(0),
             "name": RAPHAEL_NAMES[language],
             "role": "",
             "personality": "",
@@ -574,7 +626,10 @@ class MembersService:
             "position": -1,
             "created": 0,
             "unread": 0 in unread,
+            "unread_from": unread.get(0),
             "waiting": 0 in waiting,
+            "activity": activity,
+            "activity_label": activity_label,
             "preview": "" if last is None else _preview(last),
             "last_at": None if last is None else last.created_at_ms,
         }
@@ -592,7 +647,7 @@ class MembersService:
         last = self._history.list(1, member_id=member.id)
         if last:
             latest[member.id] = last[0]
-        return self._member_view(member, self.store.unread(), self.waiting_members(), latest)
+        return self._member_view(member, self.store.unread_from(), self.waiting_members(), latest)
 
     def _ui_language(self, params: dict) -> str:
         language = params.get("ui_language")
@@ -607,8 +662,21 @@ class MembersService:
     def expand_command(self, member_id: int, text: str) -> str:
         return self.capabilities.expand(member_id, text)
 
+    def resolve_slash(self, member_id: int, text: str) -> tuple[str, bool]:
+        return self.capabilities.resolve_slash(member_id, text)
+
     def enabled_skills(self, member_id: int) -> list[dict]:
-        return [] if member_id == 0 else [skill for skill in self.capabilities.skills(member_id) if skill["enabled"]]
+        return [skill for skill in self.capabilities.skills(member_id) if skill["enabled"]]
+
+    def skill_learned(self, member_id, skill, turn_id=None):
+        self._changed("members.skills.changed", member_id)
+        self._changed()
+        if turn_id and skill["provenance"] == "learned":
+            turn = self._history.get(turn_id)
+            if turn is not None and turn.member_id == member_id:
+                self._history.add_message(turn_id, "event", json.dumps({"type": "skill_learned", "name": skill["name"]}, ensure_ascii=False))
+                if self._notify:
+                    self._notify("agent.turn", {"turn_id": turn_id, "member_id": member_id})
 
     def skill_read(self, member_id: int, name: object) -> str | None:
         try:
@@ -617,18 +685,22 @@ class MembersService:
             return None
 
     def _cap(self, method, *args):
+        from ..bots.homes import HomeError
         try:
             return method(*args)
         except MemberError as error:
             raise _rpc_error(error) from None
+        except HomeError as error:
+            raise invalid_params(str(error)) from None
 
     def _cap_member(self, params: dict) -> int:
-        member_id = _whole(params, "member_id", least=1)
+        member_id = _whole(params, "member_id")
         self._cap(self.capabilities.check, member_id)
         return member_id
 
     async def _skills_list(self, params: dict) -> dict:
-        return {"skills": self._cap(self.capabilities.skills, self._cap_member(params))}
+        member_id = self._cap_member(params)
+        return {"skills": self._cap(self.capabilities.skills, member_id), "undo": self.capabilities.undo_revision(member_id)}
 
     async def _skills_import(self, params: dict) -> dict:
         member_id = self._cap_member(params)
@@ -654,11 +726,20 @@ class MembersService:
         """The skill switched on or off (`enabled`), its document edited (`text`), or both: the switch is
         checked first, so that a refused edit changes nothing."""
         member_id = self._cap_member(params)
+        if "undo" in params:
+            self._cap(self.capabilities.undo_skills, member_id, params["undo"])
+            self._changed("members.skills.changed", member_id)
+            self._changed()
+            return {"skills": self.capabilities.skills(member_id), "undo": self.capabilities.undo_revision(member_id)}
         skill_id = _whole(params, "id", least=1)
         enabled = params.get("enabled")
         if "text" in params:
             if "enabled" in params and type(enabled) is not bool:
                 raise _rpc_error(MemberError("enabled", "enabled must be true or false"))
+            if "expected_hash" in params:
+                current = self._cap(self.capabilities.document, member_id, skill_id)[0]
+                if params["expected_hash"] != current["revision"]:
+                    raise invalid_params("skill changed; read it again before writing")
             skill = self._cap(self.capabilities.rewrite_skill, member_id, skill_id, params["text"])
             if "enabled" in params:
                 skill = self._cap(self.capabilities.update_skill, member_id, skill_id, enabled)
@@ -710,7 +791,7 @@ class MembersService:
             if self.store.by_name(name) is None:
                 break
         fields = {field: getattr(original, field) for field in
-                  ("role", "personality", "instructions", "group_id", "avatar", *PROFILE_FIELDS)}
+                  ("role", "personality", "instructions", "group_id", "avatar", "model", *PROFILE_FIELDS)}
         copy = None
         try:
             copy = self.store.create_member(name=name, **fields)
@@ -739,7 +820,7 @@ class MembersService:
 
     async def _list(self, params: dict) -> dict:
         language = self._ui_language(params)
-        unread = self.store.unread()
+        unread = self.store.unread_from()
         waiting = self.waiting_members()
         latest = self._history.latest_by_member()
         members = [self._raphael_view(language, unread, waiting, latest)]
@@ -774,16 +855,31 @@ class MembersService:
                 group_id=params.get("group_id"),
                 avatar=avatar if avatar is not None else "",
                 tools=params.get("tools"),
-                model=params.get("model", "") or "",
+                model=params.get("model", "") or self._starting_model(),
                 **{field: params[field] for field in PROFILE_FIELDS if field in params},
             )
         except MemberError as error:
             raise _rpc_error(error) from None
         logger.info("A member was added")
         group = None if member.group_id is None else self.store.group(member.group_id)
-        offer = routine_template(group.sources if group else (), self._ui_language(params))
+        language = self._ui_language(params)
+        offer = routine_template(group.sources if group else (), language)
+        if params.get("greet") is True:
+            self._history.add(session_id=f"greeting-{member.id}", question="", route="greeting", prefix="",
+                              text=GREETINGS[language].format(name=member.name), status="done", source="greeting",
+                              member_id=member.id)
         self._changed()
         return {"member": self.view_of(member), "routine_offer": offer}
+
+    async def set_my_job(self, member_id: int, arguments: dict) -> dict:
+        """A new member saves the job its owner has just given it. Once only: after that the job is the owner's to edit."""
+        member = self.store.member(member_id)
+        if member is None or self.store.is_chief(member_id):
+            raise invalid_params("only a member can take a job")
+        if member.role or member.instructions:
+            raise invalid_params("this member has a job already")
+        saved = await self._update({"id": member_id, "role": arguments.get("role"), "instructions": arguments.get("instructions")})
+        return {"role": saved["member"]["role"], "note": "Saved. The owner can see it in your details."}
 
     async def _update(self, params: dict) -> dict:
         member_id = self._member_id(params)
@@ -831,6 +927,7 @@ class MembersService:
         if self._viewing == member_id:
             self._viewing = None
         if deleted:
+            await self.webhooks.sync()
             self._changed()
             self._changed("routines.changed", member_id)
         logger.info("A member was deleted")
@@ -885,14 +982,6 @@ class MembersService:
         self._changed()
         return {"member": self.view_of(member)}
 
-    async def _presets(self, params: dict) -> dict:
-        presets = []
-        for path in await asyncio.to_thread(self._preset_files):
-            url = self._data_url(path)
-            if url is not None:
-                presets.append({"avatar": f"preset:{path.stem}", "name": path.stem, "url": url})
-        return {"presets": presets}
-
     async def _unread(self, params: dict) -> dict:
         member_id = _whole(params, "id")
         if not self.store.exists(member_id):
@@ -905,6 +994,7 @@ class MembersService:
         member_id = _whole(params, "id")
         if not self.store.exists(member_id):
             raise RpcError(INVALID_PARAMS, "Invalid params: no such member", {"kind": "not_found"})
+        self.activity.seen(member_id)
         if self.store.mark_read(member_id):
             self._changed()
         return {}
@@ -917,6 +1007,7 @@ class MembersService:
                 raise RpcError(
                     INVALID_PARAMS, "Invalid params: no such member", {"kind": "not_found"}
                 )
+            self.activity.seen(member_id)
             if self.store.mark_read(member_id):
                 self._changed()
         self._viewing = member_id
@@ -984,20 +1075,22 @@ class MembersService:
         return routine_id
 
     async def routine_tool(self, member_id: int, name: str, arguments: dict) -> dict:
-        """Raphael can select any member; peers stay within their own routines."""
+        """Any speaker can select any member; the routine must belong to the one selected."""
         handlers = {"routine_list": self._routines_list, "routine_create": self._routine_create,
                     "routine_update": self._routine_update, "routine_delete": self._routine_delete}
         if name not in handlers:
             raise invalid_params("unknown routine tool")
         target = _whole(arguments, "member_id") if "member_id" in arguments else member_id
-        if member_id != 0 and target != member_id:
-            raise invalid_params("routine belongs to another speaker")
         params = {**arguments, "member_id": target}
         if name in ("routine_update", "routine_delete"):
             routine_id = self._routine_id(params)
-            if self.store.routine(routine_id).member_id != target:
+            routine = self.store.routine(routine_id)
+            if routine.member_id != target:
                 raise invalid_params("routine belongs to another speaker")
-        return await handlers[name](params)
+        result = await handlers[name](params)
+        if name == "routine_delete":
+            result["routine"] = {"id": routine.id, "title": routine.title, "member_id": routine.member_id}
+        return result
 
     def admin_confirmation(self, name: str, arguments: dict, language: str, *, question: bool = True) -> str:
         from ..agent.team_admin import confirmation
@@ -1025,9 +1118,6 @@ class MembersService:
         """Build structured member and group drafts for a pending team administration batch."""
         from ..agent.team_admin import GroupDraft, MemberDraft
 
-        presets = (await self._presets({}))["presets"]
-        available = [preset["avatar"] for preset in presets]
-        used = {member.avatar for member in self.store.members() if member.avatar}
         existing_groups = {group.name.casefold() for group in self.store.groups()}
         drafts: list[dict[str, Any]] = []
         groups: list[dict[str, Any]] = []
@@ -1048,19 +1138,8 @@ class MembersService:
                 current_group = self.store.group(current.group_id) if current and current.group_id else None
                 group_val = arguments.get("group", current_group.name if current_group else "")
                 group_name = group_val.strip() if isinstance(group_val, str) else ""
-                if "avatar_preset" in arguments:
-                    raw_preset = arguments["avatar_preset"]
-                    avatar_preset = (
-                        ("preset:" + raw_preset if raw_preset and not raw_preset.startswith("preset:") else raw_preset)
-                        if isinstance(raw_preset, str)
-                        else ""
-                    )
-                elif is_update:
-                    avatar_preset = current.avatar if current and current.avatar.startswith("preset:") else ""
-                else:
-                    avatar_preset = next((p for p in available if p not in used), "")
-                if avatar_preset:
-                    used.add(avatar_preset)
+                wanted = arguments.get("avatar_preset", current.avatar if current else "")
+                avatar_preset = wanted if isinstance(wanted, str) and wanted.startswith(SLIME) else ""
                 draft = MemberDraft(
                     id=f"draft-{len(drafts) + 1}",
                     name=str(arguments.get("name", current.name if current else "") or ""),
@@ -1177,7 +1256,7 @@ class MembersService:
         """Apply the approved list atomically and publish only committed roster changes."""
         from ..agent.team_admin import BATCH_TOOLS
 
-        if member_id != 0 or not operations or any(op["name"] not in BATCH_TOOLS for op in operations):
+        if not self.store.exists(member_id) or not operations or any(op["name"] not in BATCH_TOOLS for op in operations):
             raise invalid_params("invalid team administration batch")
         planned = self.plan_admin_batch(operations, drafts=drafts, groups=groups)
         allowed_targets = {op["arguments"].get("id") for op in operations if op["name"] == "member_update"}
@@ -1189,15 +1268,13 @@ class MembersService:
             raise invalid_params("edited drafts exceed the proposed scope")
         if not planned:
             return []
-        # Finish filesystem work before opening the transaction; its handlers must not yield.
-        presets = (await self._presets({}))["presets"]
         notifications, pictures = [], []
         notify, remove_picture = self._notify, self._remove_picture
         self._notify = lambda method, data: notifications.append((method, data))
         self._remove_picture = pictures.append
         try:
             with self.store.transaction():
-                results = [await self.admin_tool(member_id, "member_create" if op["name"] == "create_member" else op["name"], op["arguments"], presets=presets)
+                results = [await self.admin_tool(member_id, "member_create" if op["name"] == "create_member" else op["name"], op["arguments"])
                            for op in planned]
         finally:
             self._notify, self._remove_picture = notify, remove_picture
@@ -1208,30 +1285,37 @@ class MembersService:
                 notify(method, data)
         return results
 
-    async def admin_tool(self, member_id: int, name: str, arguments: dict, *, presets: list[dict] | None = None) -> dict:
-        """Adapt Raphael's registry to the same RPC handlers, defaults and notifications."""
+    async def admin_tool(self, member_id: int, name: str, arguments: dict) -> dict:
+        """Adapt the registry of team administration tools to the same RPC handlers, defaults and notifications."""
         from ..agent.team_admin import DEFINITIONS
 
-        if type(member_id) is not int or member_id != 0 or name not in DEFINITIONS:
-            raise invalid_params("team administration requires Raphael")
+        if not self.store.exists(member_id) or name not in DEFINITIONS:
+            raise invalid_params("unknown team administration tool")
         schema = DEFINITIONS[name]["parameters"]
         if (set(arguments) - set(schema["properties"]) or
                 any(field not in arguments for field in schema["required"])):
             raise invalid_params("invalid team administration fields")
         if name == "team_overview":
+            from ..computer.grants import ComputerGrants
             roster = await self._list({})
             groups = {group["id"]: group["name"] for group in roster["groups"]}
             members = []
             for item in roster["members"]:
                 identifier = item["id"]
+                speaker = self.speaker(identifier)
+                model = speaker.model or self._starting_model()
+                capabilities = getattr(self._background, "capabilities_for", lambda speaker: {"tools": [], "brain": {"model": model}})(speaker)
                 members.append({**{field: item[field] for field in ("id", "name", "role", "blurb")},
+                                **capabilities,
+                                "computer": {"allowed": ComputerGrants(self._conn).allowed(identifier),
+                                             "local_commands": self._settings.get("local_commands_mode")},
                                 "group": groups.get(item["group_id"]),
-                                "skills_count": len(self.capabilities.skills(identifier)) if identifier else 0,
+                                "skills_count": len(self.capabilities.skills(identifier)),
                                 "commands_count": len(self.capabilities.commands(identifier)) if identifier else 0,
                                 "routines": (await self._routines_list({"member_id": identifier}))["routines"]})
+            rooms = getattr(self, "rooms", None)
             return {"members": members, "groups": roster["groups"], "primary_id": roster["team_context"]["primary_id"],
-                    "avatar_presets": [{"avatar": preset["avatar"], "name": preset["name"]}
-                                       for preset in (await self._presets({}))["presets"]]}
+                    "rooms": rooms.member_rooms(member_id)["rooms"] if rooms else []}
         if name in ("member_create", "member_update"):
             params = dict(arguments)
             if name == "member_update" and params.get("id") == 0:
@@ -1252,24 +1336,14 @@ class MembersService:
                     self._conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                                        (key, json.dumps(profile)))
                 self._changed()
-                return {"member": self._raphael_view(self._language(), set(), set(), {})}
+                return {"member": self._raphael_view(self._language(), {}, set(), {})}
             if name == "member_update":
                 self._member_id(params)
-            if presets is None:
-                presets = (await self._presets({}))["presets"]
-            available = {preset["avatar"] for preset in presets}
             if "avatar_preset" in params:
                 avatar = params.pop("avatar_preset")
-                if not isinstance(avatar, str):
-                    raise invalid_params("invalid avatar preset")
-                if avatar and not avatar.startswith("preset:"):
-                    avatar = "preset:" + avatar
-                if avatar and avatar not in available:
-                    raise invalid_params("unavailable avatar preset")
+                if not isinstance(avatar, str) or (avatar and not avatar.startswith(SLIME)):
+                    raise invalid_params("a member's avatar is a slime")
                 params["avatar"] = avatar
-            elif name == "member_create":
-                used = {member.avatar for member in self.store.members()}
-                params["avatar"] = next((preset["avatar"] for preset in presets if preset["avatar"] not in used), "")
             created_group = None
             if "group" in params:
                 group_name = params.pop("group")
@@ -1281,7 +1355,10 @@ class MembersService:
                     created_group = (await self._group_create({"name": group_name}))["group"]
                 params["group_id"] = group.id if group else created_group["id"] if created_group else None
             try:
-                return await (self._create(params) if name == "member_create" else self._update(params))
+                result = await (self._create(params) if name == "member_create" else self._update(params))
+                if name == "member_create":
+                    self.member_made(member_id, result["member"]["id"])
+                return result
             except RpcError:
                 # Failed validation must not leave behind the automatically created group.
                 if created_group:
@@ -1294,7 +1371,22 @@ class MembersService:
 
     async def _routines_list(self, params: dict) -> dict:
         member_id = self._routine_member(params) if "member_id" in params else None
-        return {"routines": [routine_view(r) for r in self.store.routines(member_id)]}
+        from .event_catalog import available_events, connected_apps, pick_event
+        connections = self._connections()
+        result = {"routines": [routine_view(r) for r in self.store.routines(member_id)], "events": available_events(connections, self._language()),
+                  "event_apps": [c.get("name", c["id"]) for c in connected_apps(connections)]}
+        if "event" in params:
+            result.update(await pick_event(self, self._routine_member(params), params["event"], params.get("value", "")))
+        return result
+
+    async def _routine_webhook(self, params: dict) -> dict:
+        from .webhooks import is_webhook
+        routine = self.store.routine(self._routine_id(params))
+        if not is_webhook(routine.when):
+            raise invalid_params("This routine is not a webhook")
+        if type(params.get("reveal", False)) is not bool:
+            raise invalid_params("reveal must be a boolean")
+        return await self.webhooks.details(routine.id, reveal=params.get("reveal", False))
 
     def _finish_run(self, turn_id: int) -> None:
         run = self._conn.execute(
@@ -1324,44 +1416,60 @@ class MembersService:
             if row[0] is not None:
                 self._finish_run(row[0])
         rows = self._conn.execute(
-            "SELECT id, routine_id, scheduled, started, finished, status, turn_id, summary, cost"
-            " FROM routine_runs WHERE routine_id = ? ORDER BY id DESC LIMIT 100", (routine_id,)
+            "SELECT r.id, r.routine_id, r.scheduled, r.started, r.finished,"
+            f" {ROUTINE_RUN_STATUS_SQL} AS status, r.turn_id, r.summary, r.cost"
+            " FROM routine_runs r LEFT JOIN agent_turns t ON t.id=r.turn_id WHERE r.routine_id = ? ORDER BY r.id DESC LIMIT 100", (routine_id,)
         )
         runs = [dict(row) for row in rows]
         total = self._conn.execute("SELECT COUNT(*) FROM routine_runs WHERE routine_id = ?", (routine_id,)).fetchone()[0]
         return {"runs": runs, "total": total}
 
+    def _event_name(self, when) -> str:
+        app = when.get("app") if isinstance(when, dict) else None
+        return next((c.get("name", app) for c in self._connections() if c["id"] == app), app or "")
+
     async def _routine_create(self, params: dict) -> dict:
         member_id = self._routine_member(params)
+        if params.get("schedule") is not None and params.get("when") is not None:
+            raise invalid_params("Choose either a schedule or when")
         try:
-            schedule = clean_schedule(params.get("schedule"))
+            schedule = clean_schedule(params.get("schedule")) if params.get("when") is None else None
             routine = self.store.create_routine(
                 member_id=member_id,
                 title=params.get("title"),
                 prompt=params.get("prompt"),
-                schedule=schedule.to_json(),
+                schedule=params.get("schedule") if schedule else None,
+                when=params.get("when"),
+                app_name=self._event_name(params.get("when")),
                 enabled=params.get("enabled", True),
-                next_run_ms=self._next(schedule),
+                next_run_ms=self._next(schedule) if schedule else self._now_ms(),
             )
         except MemberError as error:
             raise _rpc_error(error) from None
         self._changed("routines.changed", routine.member_id)
+        await self.webhooks.sync()
         return {"routine": routine_view(routine)}
 
     async def _routine_update(self, params: dict) -> dict:
         routine_id = self._routine_id(params)
+        was_webhook = self.store.routine(routine_id).when == {"webhook": True}
         try:
             routine = self.store.update_routine(
                 routine_id,
                 title=params.get("title"),
                 prompt=params.get("prompt"),
                 schedule=params.get("schedule"),
+                when=params.get("when"),
+                app_name=self._event_name(params.get("when")),
                 enabled=params.get("enabled"),
                 next_run=self._next,
             )
         except MemberError as error:
             raise _rpc_error(error) from None
         self._changed("routines.changed", routine.member_id)
+        if was_webhook and routine.when != {"webhook": True}:
+            self.webhooks.vault.delete(self.webhooks.key(routine.id))
+        await self.webhooks.sync()
         return {"routine": routine_view(routine)}
 
     async def _routine_delete(self, params: dict) -> dict:
@@ -1369,6 +1477,10 @@ class MembersService:
         assert routine is not None
         deleted = self.store.delete_routine(routine.id)
         if deleted:
+            if routine.when == {"webhook": True}:
+                self.webhooks.vault.delete(self.webhooks.key(routine.id))
+            self.webhooks.last_fire.pop(routine.id, None)
+            await self.webhooks.sync()
             self._changed("routines.changed", routine.member_id)
         return {"deleted": deleted}
 
@@ -1379,6 +1491,17 @@ class MembersService:
         return {"offer": routine_template(group.sources if group else (), self._ui_language(params))}
 
     # --- the scheduler -------------------------------------------------------------------------------
+
+    def use_event_tools(self, gate) -> None:
+        from .events import EventPoller
+        self._events = EventPoller(self, gate)
+
+    async def poll_events(self) -> None:
+        if self._events is not None:
+            try:
+                await self._events.poll()
+            except Exception as exc:
+                logger.warning("The event routines could not be checked: %s", type(exc).__name__)
 
     def start(self) -> None:
         """Tick from now on, every TICK_S, the first time at once (a routine that was missed while
@@ -1395,6 +1518,9 @@ class MembersService:
         while True:
             try:
                 self.tick()
+                await self.webhooks.sync()
+                if self._event_poll_task is None or self._event_poll_task.done():
+                    self._event_poll_task = asyncio.create_task(self.poll_events())
             except Exception as exc:  # one bad tick must not stop the routines for good
                 logger.warning("The routines could not be run: %s", type(exc).__name__)
             await asyncio.sleep(self._tick_s)
@@ -1407,7 +1533,7 @@ class MembersService:
         for routine in self.store.due(now):
             assert routine.next_run_ms is not None
             missed_ms = now - routine.next_run_ms
-            catch_up = missed_ms <= CATCH_UP_MS
+            catch_up = missed_ms <= CATCH_UP_MS and not self.routine_busy(routine.id)
             following = next_run(routine.schedule, now, tz=self._tz)
             count = self._conn.execute(
                 "SELECT COUNT(*) FROM routine_runs WHERE routine_id = ?", (routine.id,)
@@ -1431,14 +1557,17 @@ class MembersService:
             ran.append(routine.id)
         return ran
 
-    def _run(self, routine: Routine) -> None:
+    def routine_busy(self, routine_id: int) -> bool:
+        return self._conn.execute("SELECT 1 FROM worker_tasks WHERE routine_id=? AND state IN ('queued','running','waiting') LIMIT 1", (routine_id,)).fetchone() is not None
+
+    def _run(self, routine: Routine, *, text: str | None = None, session: str | None = None) -> int | None:
         """A routine's run: a turn of its thread, and a background task of its member that
         completes it."""
         speaker = self.store.speaker(routine.member_id)
         if speaker is None:
             return
         language = normalize_language(self._language())
-        session_id = f"routine:{routine.id}"
+        session_id = session or f"routine:{routine.id}"
         turn_id = self._history.add(
             session_id=session_id,
             question=routine.title,
@@ -1449,17 +1578,18 @@ class MembersService:
             source="routine",
             member_id=routine.member_id,
         )
-        model = self._settings.get("agent_model")
+        model = speaker.model or self._settings.get("agent_model")
         with self._conn:
             self._conn.execute(
-                "INSERT INTO routine_runs (routine_id, scheduled, started, status, turn_id) VALUES (?, ?, ?, 'running', ?)",
-                (routine.id, routine.next_run_ms, self._now_ms(), turn_id),
+                "INSERT INTO routine_runs (routine_id, scheduled, started, status, turn_id, trigger_json) VALUES (?, ?, ?, 'running', ?, ?)",
+                (routine.id, routine.next_run_ms, self._now_ms(), turn_id, json.dumps({key: value for key, value in routine_view(routine).items() if key in ("id", "member_id", "title", "schedule", "when", "app_name")})),
             )
         model = model.strip() if isinstance(model, str) and model.strip() else DEFAULTS["agent_model"]
+        task_id = None
         try:
             task_id = self._background.submit(
                 session_id=session_id,
-                text=routine.prompt,
+                text=routine.prompt if text is None else text,
                 language=language,
                 model=model,
                 member_id=routine.member_id,
@@ -1476,6 +1606,7 @@ class MembersService:
         self.turn_arrived(turn_id)
         if self._notify is not None:
             self._notify("agent.turn", {"turn_id": turn_id, "member_id": routine.member_id})
+        return task_id
 
     async def aclose(self) -> None:
         for task in self._speech_tasks:
@@ -1485,3 +1616,8 @@ class MembersService:
         if ticking is not None and not ticking.done():
             ticking.cancel()
             await asyncio.gather(ticking, return_exceptions=True)
+        polling, self._event_poll_task = self._event_poll_task, None
+        if polling is not None:
+            polling.cancel()
+            await asyncio.gather(polling, return_exceptions=True)
+        await self.webhooks.close()

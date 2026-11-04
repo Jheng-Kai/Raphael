@@ -1,10 +1,13 @@
 export const homeZh = {
+  "overview.allClear": "沒有待辦或新回報",
+  "overview.noSpend": "近期沒有花費紀錄",
+  "overview.noDictation": "聽寫紀錄會顯示在這裡",
   "nav.overview": "首頁",
   "overview.title": "一切，都在這裡。",
   "overview.subtitle": "今天的安排、成員的進度，以及值得你留意的事。",
   "overview.today": "今天", "overview.noSchedule": "今天沒有行程", "overview.nothing": "沒有待處理", "overview.noReports": "沒有新回報", "overview.allowance": "額度", "overview.wordsChart": "近 14 天，每日聽寫字數：{p0}",
   "overview.reports": "成員回報",
-  "overview.calendar": "接下來的行程",
+  "overview.emptyDay": "這天沒有行程", "overview.moreEvents": "還有 {p0} 個", "overview.calendar": "行事曆",
   "overview.usage": "用量與額度",
   "overview.dictation": "聽寫累計",
   "overview.timeline": "今日動態",
@@ -35,10 +38,13 @@ export const homeZh = {
   "overview.reset": "重設：{p0}",
 } as const;
 export const homeEn: Record<keyof typeof homeZh, string> = {
+  "overview.allClear": "No pending work or new reports",
+  "overview.noSpend": "No recent spending",
+  "overview.noDictation": "Your dictation activity will appear here",
   "nav.overview": "Home",
   "overview.title": "Everything, in view.",
   "overview.subtitle": "Today's plans, your team's progress, and what needs your attention.",
-  "overview.today": "Today", "overview.noSchedule": "Nothing scheduled today", "overview.nothing": "All clear", "overview.noReports": "No new reports", "overview.allowance": "Allowances", "overview.wordsChart": "Words dictated each day over 14 days: {p0}", "overview.reports": "Member reports", "overview.calendar": "Coming up",
+  "overview.today": "Today", "overview.noSchedule": "Nothing scheduled today", "overview.nothing": "All clear", "overview.noReports": "No new reports", "overview.allowance": "Allowances", "overview.wordsChart": "Words dictated each day over 14 days: {p0}", "overview.reports": "Member reports", "overview.emptyDay": "No events scheduled", "overview.moreEvents": "{p0} more", "overview.calendar": "Calendar",
   "overview.usage": "Usage & allowances", "overview.dictation": "Dictation totals", "overview.timeline": "Today's timeline",
   "overview.pending": "Needs attention", "overview.emptyToday": "Nothing needs your attention today. Take it at your own pace.",
   "overview.emptyReports": "New member reports will appear here.", "overview.emptyCalendar": "No scheduled events in the next seven days.",
@@ -52,9 +58,12 @@ export const homeEn: Record<keyof typeof homeZh, string> = {
   "overview.reset": "Resets: {p0}",
 };
 export const homeJa: Record<keyof typeof homeZh, string> = {
+  "overview.allClear": "確認事項や新しい報告はありません",
+  "overview.noSpend": "最近の支出記録はありません",
+  "overview.noDictation": "音声入力の記録がここに表示されます",
   "nav.overview": "ホーム", "overview.title": "すべてを、ひと目で。",
   "overview.subtitle": "今日の予定、メンバーの進捗、あなたへのお知らせ。",
-  "overview.today": "今日", "overview.noSchedule": "今日の予定はありません", "overview.nothing": "確認事項なし", "overview.noReports": "新しい報告なし", "overview.allowance": "利用枠", "overview.wordsChart": "過去14日間の日別入力文字数：{p0}", "overview.reports": "メンバーの報告", "overview.calendar": "今後の予定",
+  "overview.today": "今日", "overview.noSchedule": "今日の予定はありません", "overview.nothing": "確認事項なし", "overview.noReports": "新しい報告なし", "overview.allowance": "利用枠", "overview.wordsChart": "過去14日間の日別入力文字数：{p0}", "overview.reports": "メンバーの報告", "overview.emptyDay": "予定はありません", "overview.moreEvents": "他 {p0} 件", "overview.calendar": "カレンダー",
   "overview.usage": "使用量と利用枠", "overview.dictation": "音声入力の累計", "overview.timeline": "今日の動き",
   "overview.pending": "確認が必要", "overview.emptyToday": "今日の確認事項はありません。自分のペースでどうぞ。",
   "overview.emptyReports": "メンバーからの新しい報告がここに届きます。", "overview.emptyCalendar": "今後7日間の予定はありません。",

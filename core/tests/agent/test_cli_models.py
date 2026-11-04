@@ -4,7 +4,7 @@ import json
 import sys
 import asyncio
 
-from raphael_core.agent.cli.models import claude_models, agy_models, codex_models
+from raphael_core.agent.cli.models import claude_cli_models, claude_models, claude_rows, agy_models, codex_models
 from raphael_core.agent.cli.discovery import brain_ref, brain_effort
 
 
@@ -28,10 +28,86 @@ def test_claude_config_resolves_alias_default(tmp_path):
     folder.mkdir()
     (folder / "settings.json").write_text(json.dumps({"model": "opus"}))
     models = claude_models(folder)
-    assert len(models) == 3
+    assert [m["id"] for m in models] == ["cli:claude:opus", "cli:claude:fable", "cli:claude:sonnet", "cli:claude:haiku"]
     assert next(m for m in models if m["is_default"])["id"] == "cli:claude:opus"
     assert all(m["name"].startswith("Claude ") and m["description"] for m in models)
-    assert models[0]["reasoning_efforts"]
+    assert all(m["reasoning_efforts"] == ["low", "medium", "high", "xhigh", "max"] for m in models)
+
+
+# The shape the installed CLI (2.1.316) answers `initialize` with, seen live on 2026-10-31.
+CLAUDE_INITIALIZE = [
+    {"value": "default", "resolvedModel": "claude-opus-5-5", "displayName": "Default (recommended)", "supportedEffortLevels": ["low", "max"]},
+    {"value": "opus", "resolvedModel": "claude-opus-5-5", "displayName": "Opus 5.5", "description": "For complex work", "supportsEffort": True,
+     "supportedEffortLevels": ["low", "medium", "high", "xhigh", "max"]},
+    {"value": "fable", "resolvedModel": "claude-fable-5-1", "displayName": "Fable 5.1", "description": "For your toughest challenges",
+     "supportedEffortLevels": ["low", "medium", "high", "xhigh", "max"]},
+    {"value": "claude-haiku-4-5-20251001", "resolvedModel": "claude-haiku-4-5-20251001", "displayName": "Haiku 4.5", "description": "Fastest"},
+    {"value": "bad value", "displayName": "Refused"},
+]
+
+
+def test_claude_lists_what_the_cli_says_and_each_model_its_own_depths():
+    models = claude_rows(CLAUDE_INITIALIZE, {})
+    assert [m["id"] for m in models] == ["cli:claude:opus", "cli:claude:fable", "cli:claude:claude-haiku-4-5-20251001"]
+    assert models[0]["name"] == "Claude Opus 5.5" and models[0]["is_default"] and not models[1]["is_default"]
+    assert models[1]["reasoning_efforts"] == ["low", "medium", "high", "xhigh", "max"] and models[1]["default_effort"] == "high"
+    assert models[2]["reasoning_efforts"] == [] and models[2]["default_effort"] is None
+
+
+def test_the_owner_default_in_their_settings_wins_over_the_cli_default():
+    assert next(m for m in claude_rows(CLAUDE_INITIALIZE, {"model": "fable"}) if m["is_default"])["id"] == "cli:claude:fable"
+
+
+def _fake_claude(tmp_path, body):
+    script = tmp_path / "claude.py"
+    script.write_text(body, encoding="utf-8")
+    return [sys.executable, str(script)]
+
+
+async def test_claude_is_asked_on_its_control_channel_with_no_settings_and_no_message(tmp_path):
+    command = _fake_claude(tmp_path, '''import json, sys
+assert "--setting-sources" in sys.argv and sys.argv[sys.argv.index("--setting-sources") + 1] == ""
+asked = json.loads(sys.stdin.readline())
+assert asked["type"] == "control_request" and asked["request"]["subtype"] == "initialize"
+print(json.dumps({"type": "system", "subtype": "init"}))
+print(json.dumps({"type": "control_response", "response": {"subtype": "success", "response": {"models": json.loads(%r)}}}), flush=True)
+''' % json.dumps(CLAUDE_INITIALIZE))
+    models = await claude_cli_models(command, {**__import__("os").environ}, tmp_path)
+    assert [m["id"] for m in models][:2] == ["cli:claude:opus", "cli:claude:fable"]
+
+
+async def test_the_claude_models_arrive_in_the_list_and_a_silent_cli_leaves_the_known_ones(tmp_path):
+    from raphael_core.agent.cli.discovery import CliBrains
+    import os
+    folder = tmp_path / ".claude"
+    folder.mkdir()
+    (folder / ".credentials.json").write_text("{}")
+    good = _fake_claude(tmp_path, '''import json, sys
+if "--version" in sys.argv: print("2.1.316"); raise SystemExit
+sys.stdin.readline()
+print(json.dumps({"type": "control_response", "response": {"subtype": "success", "response": {"models": json.loads(%r)}}}), flush=True)
+''' % json.dumps(CLAUDE_INITIALIZE))
+    brains = CliBrains(home=tmp_path, environ=dict(os.environ), commands={"claude": good})
+    try:
+        before = next(c for c in (await brains.list())["clis"] if c["id"] == "claude")
+        assert [m["id"] for m in before["models"]][0] == "cli:claude:opus" and len(before["models"]) == 4
+        await brains._model_refresh
+        after = next(c for c in (await brains.list())["clis"] if c["id"] == "claude")
+        assert [m["id"] for m in after["models"]] == ["cli:claude:opus", "cli:claude:fable", "cli:claude:claude-haiku-4-5-20251001"]
+        assert brains.model_name("cli:claude:fable?effort=max") == "Claude Fable 5.1"
+        assert brains.model_name("cli:claude:unknown") == "Claude Code"
+        assert brains.model_name("openai/gpt") is None
+    finally:
+        await brains.aclose()
+    silent = _fake_claude(tmp_path, 'import sys\nif "--version" in sys.argv: print("2.1.316")\n')
+    brains = CliBrains(home=tmp_path, environ=dict(os.environ), commands={"claude": silent})
+    try:
+        await brains.list()
+        await brains._model_refresh
+        listed = next(c for c in (await brains.list())["clis"] if c["id"] == "claude")
+        assert len(listed["models"]) == 4
+    finally:
+        await brains.aclose()
 
 
 def test_agy_collapses_efforts_and_resolves_display_default(tmp_path):

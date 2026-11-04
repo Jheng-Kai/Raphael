@@ -118,9 +118,9 @@ async def test_relaying_a_lesson_preserves_the_owner_as_the_japanese_quotes_spea
     if source == "voice":
         scope["conversation_id"] = rig.service.conversations.quick()
     assert not any(t["route"] == "exchange" for t in (await rig.call("agent.history.list", scope))["turns"])
-    # The asked member's chat lists the exchange where it came, as its one line.
+    # The asked member's chat stays what the owner said to it: the question is the asker's record.
     taught = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
-    assert [(t["scope"], t["peer_id"], t["question"]) for t in taught if t["route"] == "exchange"] == [("exchange", 0, request)]
+    assert not any(t["route"] == "exchange" for t in taught)
     [exchange] = [AgentHistory(rig.conn).get(r[0]) for r in rig.conn.execute("SELECT id FROM agent_turns WHERE scope='exchange'")]
     # The record keeps the plain words; only the tool data the asker reads carries the speakers.
     assert (exchange.question, exchange.text) == (request, answer)
@@ -203,9 +203,10 @@ async def test_voice_fetches_the_lesson_and_speaks_the_actual_japanese_sentences
 
 async def test_team_creation_keeps_personality_separate_from_work_instructions(setup, client):
     rig, team = setup
+    rig.settings.set("action_mode", "ask")
     client.chats = [
         chat("", ("create_member", {"name": "Teacher", "role": "Japanese", "personality": "Strict, patient.", "instructions": "Teach N1."})),
-        live_said("Added."),
+        live_said("Draft ready."), live_said("Added."),
     ]
     asked = await typed(rig, "Add a strict but patient Japanese teacher.", 0)
     assert team.members.find("Teacher") is None

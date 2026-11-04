@@ -20,6 +20,7 @@ import {
   raphaelOf,
   scheduleText,
   sourceLabel,
+  plainLine,
 } from "./members";
 import type { Member, MembersList } from "./types";
 
@@ -30,6 +31,8 @@ test.each([["zh-TW", "幕僚長"], ["en", "Chief of staff"], ["ja", "参謀長"]
   expect(memberRole({ id: 0, role: "Legacy assistant" })).toBe(expected);
   expect(memberMatches(member(0, { role: "Legacy assistant" }), expected)).toBe(true);
   expect(memberRole({ id: 1, role: "Research" })).toBe("Research");
+  expect(memberRole({ id: 1, role: "Research", chief: true })).toBe(expected);
+  expect(memberRole({ id: 0, role: "Core assistant", chief: false })).toBe("Core assistant");
 });
 
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
@@ -90,11 +93,18 @@ describe("the column's sections", () => {
 });
 
 describe("primary display order", () => {
+  test("a preview says what a message says, without its Markdown", () => {
+    expect(plainLine("### 結論\n先完成 **測試**，再看 [上線清單](https://example.test) 與 `npm run look`。\n\n### 下一步\n- 小晴：檢查")).toBe("結論 先完成 測試，再看 上線清單 與 npm run look。 下一步 小晴：檢查");
+    expect(plainLine("C# 與 issue #5 不變")).toBe("C# 與 issue #5 不變");
+    expect(plainLine("比較如下\n| 方案 | 費用 |\n|---|:--:|\n| A | 10 |\n```mermaid\nflowchart TD\n A-->B\n```\n結束")).toBe("比較如下 方案 費用 A 10 結束");
+  });
+
   test("swaps identities without mutating the source, including group and pinned placement", () => {
     const list = { ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, pinned: true } : m), team_context: { primary_id: 3 } } as MembersList;
     const before = JSON.stringify(list), display = memberDisplayList(list);
     expect(display.members.map(m => m.id)).toEqual([3, 1, 2, 0, 4, 5]);
-    expect(display.members.find(m => m.id === 0)).toMatchObject({ group_id: 20, pinned: true, name: '拉斐爾' });
+    expect(display.members.find(m => m.id === 0)).toMatchObject({ group_id: 20, name: '拉斐爾' });
+    expect(display.members.find(m => m.id === 0)?.pinned).toBeFalsy();
     expect(orderedMembers(list).map(m => m.id)).toEqual([3, 1, 2, 0, 4, 5]);
     expect(JSON.stringify(list)).toBe(before);
   });
@@ -127,11 +137,10 @@ describe("the faces", () => {
     expect(html).not.toMatch(/mb-av|letter|拉/);
   });
 
-  test("a member's picture is a data URL of an image, otherwise a neutral silhouette", () => {
-    expect(faceHTML(member(1, { name: "進度官", avatar_url: PNG }), 34)).toContain(`<img src="${PNG}"`);
-    for (const url of [undefined, "file:///C:/x.png", "https://x/y.png", "data:text/html;base64,AAAA"]) {
+  test("a member is a slime, whatever picture an older build stored for it", () => {
+    for (const url of [undefined, PNG, "file:///C:/x.png", "https://x/y.png", "data:text/html;base64,AAAA"]) {
       const html = faceHTML(member(1, { name: "進度官", avatar_url: url }), 34);
-      expect(html).toContain('class="av mb-av mb-av-placeholder"');
+      expect(html).toContain('class="av mb-av mb-av-slime"');
       expect(html).toContain("<svg");
       expect(html).not.toContain("進");
       expect(html).not.toContain("<img");

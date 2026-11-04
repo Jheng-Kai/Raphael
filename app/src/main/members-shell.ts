@@ -1,7 +1,7 @@
 // The members of the 拉斐爾 page, put together: the list the core keeps (`members.list`), the column
 // on the left (member-column.ts), the details panel on the right (member-details.ts), the dialogs
 // (member-dialogs.ts) and the member identity used by the stacked conversation title.
-// Below 860 px the column gives way to a dropdown at the left of that row.
+// The main window mounts this column globally; below 860 px it opens in the same sidebar drawer.
 //
 // A new member of a group with places to look comes with the routine the core offers
 // (「每天早上的進度」): the owner is asked, and only 「加入」 makes it.
@@ -14,11 +14,13 @@
 // leaves Raphael alone in the column: the page works as it did before.
 
 import * as api from "./api";
+import { eventRead } from './event-read';
 import { describeError } from "./format";
-import { conversationChange } from "./conversation-list";
 import { currentRoomId, openNewGroupChat, openRoomsMenu } from "./group-chats";
 import { getLocale, onLocaleChange, t } from "./i18n";
-import { teamMentions } from "./team-mentions";
+import type { MentionField } from "./mention-field";
+import type { MentionTarget } from "./mention-text";
+import { bindComposerMentions, mentionTargets } from "./team-mentions";
 import { createMemberActions } from "./member-actions";
 import { createMemberColumn } from "./member-column";
 import { createDetails } from "./member-details";
@@ -27,25 +29,28 @@ import {
   confirmDelete,
   editSources,
   offerRoutine,
-  openNewMember,
-  openDialog,
 } from "./member-dialogs";
+import { openMemberCreator } from "./member-creator";
 import { RAPHAEL_ID, faceHTML, memberOf, orderedMembers, memberRole, raphaelOf } from "./members";
-import type { AppContext, AvatarPreset, MainEvent, Member, MemberGroup, MemberPatch, MembersList, WireAttachment } from "./types";
-import { type Choice, btn, closeMenu, esc, ico, leave, openMenu, toaster } from "./ui";
+import { followSlimeRoster, setSlimeState } from "./slime";
+import type { AppContext, MainEvent, Member, MemberGroup, MemberPatch, MembersList } from "./types";
+import { type Choice, closeMenu, esc, ico, leave, openMenu, patchHTML, toaster } from "./ui";
 
-/** Below this window width the details panel lies over the chat instead of taking a column of its own. */
-export const DETAILS_COLUMN_MIN_PX = 1120;
+/** Below this width details start closed to leave a readable conversation column. */
+export const DETAILS_COLUMN_MIN_PX = 1440;
 /** Events that come together (a task's step and its turn) read the list once. */
 const REFRESH_DELAY_MS = 300;
 
 export interface MembersHost {
   onOpenConversation?(member: number, conversation: number, turn?: number): void;
+  /** The conversation open with this member, undefined for their default. */
+  conversationOf?(member: number): number | undefined;
   app: AppContext;
   /** The owner chose another member's thread. */
-  onSelect(id: number): void;
+  onSelect(id: number, sameThread?: boolean): void;
   /** The list of members changed (a name or picture was updated). */
   onUpdate?(): void;
+  onReadThread?(member: Member): void;
   /** Whether the page is on screen now (a thread read only then). */
   visible(): boolean;
   focusHeader?(): void;
@@ -71,15 +76,18 @@ export interface MembersShell {
   member(): Member;
   /** Existing groups sorted by position. */
   groups(): readonly MemberGroup[];
-  /** Loaded avatar presets. */
-  presets(): readonly AvatarPreset[];
-  mention(input: HTMLTextAreaElement): void;
+  /** The mention menu and chips of a composer's field, following the team as the list has it. */
+  bindMentions(input: HTMLTextAreaElement): void;
+  /** What the words of a message may address, for the chips of the owner's bubbles. */
+  mentionTargets(): readonly MentionTarget[];
   /** Opens the thread of member `id`. */
   select(id: number): void;
   /** Reads the list (and what the column and the panel need with it) again. */
   load(): Promise<void>;
+  /** Local navigation changed which destination is selected. */
+  show(): void;
   /** A turn was written or a task moved: the list is read again a moment later. */
-  changed(): void;
+  changed(delay?: number): void;
   follow(event: MainEvent): void;
   refreshRoutines(memberId: number): void;
   /** Whether the details panel is open. */
@@ -91,13 +99,15 @@ export interface MembersShell {
 
 export function createMembers(host: MembersHost): MembersShell {
   let list: MembersList | null = null;
+  const fields = new Set<MentionField>();
   let current = RAPHAEL_ID;
   const previews = new Map<number, string>();
   let known: Set<number> | null = null;
   let fresh = new Set<number>();
-  let presets: AvatarPreset[] = [];
-  let presetsRead = false;
   let loads = 0;
+  let listJSON = "";
+  let viewing: number | null | undefined;
+  let refreshDue = 0;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let open = typeof innerWidth === "number" ? innerWidth >= DETAILS_COLUMN_MIN_PX : true;
   let stopLeaving: (() => void) | null = null;
@@ -109,17 +119,16 @@ export function createMembers(host: MembersHost): MembersShell {
   // ---------- the parts ----------
 
   const { editMember, memberAction, moveMember, deleteMember } = createMemberActions({
-    list: () => list, presets: () => presets, current: () => current, select, load, update, setPicture,
+    list: () => list, current: () => current, select, load, update,
     cleared: id => host.onSelect(id), deleted: id => previews.delete(id),
   });
 
   const column = createMemberColumn({
     openMessage: (member, conversation, turn) => host.onOpenConversation?.(member, conversation, turn),
-    view: () => ({ list, current: currentRoomId() === null ? current : -1, previews, fresh }),
+    view: () => ({ list, active: host.visible(), current: currentRoomId() === null ? current : -1, previews, fresh }),
     select: (id) => select(id),
     newMember: (groupId) => newMember(groupId),
     newGroup: () => void newGroup(),
-    newConversation: () => newConversation(),
     newGroupChat: () => void openNewGroupChat(),
     memberAction: (id, action) => void memberAction(id, action),
     moveMember: (id, _group, anchor) => moveMember(id, anchor),
@@ -127,19 +136,32 @@ export function createMembers(host: MembersHost): MembersShell {
     renameGroup: (id) => void renameGroup(id),
     editSources: (id) => void sources(id),
     deleteGroup: (id) => void deleteGroup(id),
+    async dropMember(id, groupId, beforeId) {
+      const peers = (list?.members ?? []).filter(m => m.id !== id && m.id !== 0 && m.group_id === groupId).sort((a, b) => a.position - b.position);
+      const at = beforeId === undefined ? peers.length : peers.findIndex(m => m.id === beforeId);
+      const moving = list?.members.find(m => m.id === id); if (!moving) return;
+      peers.splice(at < 0 ? peers.length : at, 0, moving);
+      await groupChange(async () => { for (const [position, m] of peers.entries()) await api.membersUpdate(m.id, { group_id: groupId, position }); });
+    },
+    async reorderGroup(id, beforeId) {
+      const groups = [...(list?.groups ?? [])].sort((a, b) => a.position - b.position);
+      const moving = groups.find(g => g.id === id); if (!moving) return;
+      const next = groups.filter(g => g.id !== id); next.splice(next.findIndex(g => g.id === beforeId), 0, moving);
+      await groupChange(async () => { for (const [position, group] of next.entries()) await api.groupsUpdate(group.id, { position }); });
+    },
   });
 
   const details = createDetails({
+    visible: host.visible,
     app: host.app,
     member,
     list: () => list,
-    presets: () => presets,
     update,
-    setPicture,
     close: () => setDetails(false),
     edit: m => editMember(m),
     hide: m => void memberAction(m.id, "hide"),
     openConversation: host.onOpenConversation ? (member, conversation) => host.onOpenConversation!(member, conversation) : undefined,
+    conversationOf: member => host.conversationOf?.(member),
   });
 
   const pill = document.createElement("span");
@@ -154,9 +176,9 @@ export function createMembers(host: MembersHost): MembersShell {
   /** The pill and the narrow dropdown, for the open member. */
   function drawHead(): void {
     const m = member();
-    pill.innerHTML = faceHTML(m, 22, { cls: "mb-pill-face" }) + `<span class="mb-pill-t">${esc(m.name)}</span>`;
+    patchHTML(pill, faceHTML(m, 22, { cls: "mb-pill-face" }) + `<span class="mb-pill-t">${esc(m.name)}</span>`);
     const waiting = list?.members.some((other) => other.id !== current && (other.waiting || other.unread)) ?? false;
-    picker.innerHTML = `<span>${esc(m.name)}</span>${waiting ? `<i class="mb-dot is-wait" aria-hidden="true"></i>` : ""}${ico("down")}`;
+    patchHTML(picker, `<span>${esc(m.name)}</span>${waiting ? `<i class="mb-dot is-wait" aria-hidden="true"></i>` : ""}${ico("down")}`);
     picker.setAttribute("aria-label", `${t("members.pick")}: ${m.name}`);
   }
 
@@ -168,7 +190,7 @@ export function createMembers(host: MembersHost): MembersShell {
 
   // ---------- reading ----------
 
-  async function load(): Promise<void> {
+  async function load(fromEvent = false): Promise<void> {
     const mine = ++loads;
     // the panel reads Raphael's routines the first time the page is on screen, not when the app starts
     if (!panelRead) {
@@ -176,12 +198,12 @@ export function createMembers(host: MembersHost): MembersShell {
       details.showMember();
     } else if (refreshOnShow) {
       details.refreshRoutines();
-      details.refreshMemory(current);
     }
     refreshOnShow = false;
     let read: MembersList;
     try {
-      read = await Promise.resolve().then(() => api.membersList(getLocale()));
+      const fetch = () => api.membersList(getLocale());
+      read = await (fromEvent ? eventRead(`members.list:${getLocale()}`,fetch,host.app) : Promise.resolve().then(fetch));
       if (!read || !Array.isArray(read.members) || !Array.isArray(read.groups)) throw new Error("no members");
     } catch {
       if (mine !== loads) return;
@@ -190,45 +212,42 @@ export function createMembers(host: MembersHost): MembersShell {
       return;
     }
     if (mine !== loads) return;
+    const json = JSON.stringify(read);
+    if (json === listJSON) {
+      void readThread();
+      if (host.visible()) tellViewing(current);
+      return;
+    }
+    listJSON = json;
     const ids = new Set(read.members.map((m) => m.id));
     fresh = known === null ? new Set() : new Set([...ids].filter((id) => !known!.has(id)));
+    followSlimeRoster(read.members);
+    for (const id of fresh) setSlimeState(id, "arriving");
     known = ids;
     list = read;
-    details.refreshMemory(current);
+    previews.clear();
+    for (const m of read.members) previews.set(m.id, m.preview ?? "");
+    for (const field of fields) field.refresh();
     if (current !== RAPHAEL_ID && !ids.has(current)) {
       current = RAPHAEL_ID;
       host.onSelect(current);
+      toaster.info(t("common.deleted"));
       details.showMember();
     }
     drawAll();
     host.onUpdate?.();
     void readThread();
     if (host.visible()) tellViewing(current);
-    previews.clear();
-    for (const m of read.members) previews.set(m.id, m.preview ?? "");
-    column.draw();
-    if (!presetsRead) {
-      void Promise.resolve()
-        .then(() => api.membersPresets())
-        .then(
-          (answer) => {
-            if (Array.isArray(answer?.presets)) {
-              presets = answer.presets;
-              presetsRead = true;
-              host.onUpdate?.();
-            }
-          },
-          () => {},
-        );
-    }
   }
 
   /** The open thread is read: the core forgets that it was unread. */
   async function readThread(): Promise<void> {
     const m = member();
-    if (!host.visible() || !m.unread || m.id === RAPHAEL_ID) return;
-    if (list) list = { ...list, members: list.members.map((other) => (other.id === m.id ? { ...other, unread: false } : other)) };
+    if (host.visible() && currentRoomId() === null) host.onReadThread?.(m);
+    if (!host.visible() || !m.unread) return;
+    if (list) list = { ...list, members: list.members.map((other) => (other.id === m.id ? { ...other, unread: false, unread_from: null } : other)) };
     column.draw();
+    if (m.id === RAPHAEL_ID) return;
     try {
       await api.membersRead(m.id);
     } catch {
@@ -238,26 +257,31 @@ export function createMembers(host: MembersHost): MembersShell {
 
   /** Tells the core which thread is on screen (null: none), so that what arrives there is no news. */
   function tellViewing(id: number | null): void {
+    if (viewing === id) return;
+    viewing = id;
     void Promise.resolve()
       .then(() => api.membersViewing(id))
       .catch(() => {});
   }
 
-  function changed(): void {
-    if (refreshTimer !== null) return;
+  function changed(delay = REFRESH_DELAY_MS): void {
+    const due = Date.now() + delay;
+    if (refreshTimer !== null && refreshDue <= due) return;
+    if (refreshTimer !== null) clearTimeout(refreshTimer);
+    refreshDue = due;
     refreshTimer = setTimeout(() => {
       refreshTimer = null;
-      void load();
-    }, REFRESH_DELAY_MS);
+      void load(true);
+    }, delay);
   }
 
   // ---------- choosing ----------
 
   function select(id: number): void {
+    if (!host.visible()) host.app.go("agent");
     if (id === current) {
-      if (currentRoomId() !== null) { host.onSelect(id); drawAll(); }
-      // Selecting the current member reopens its details without leaving the thread.
-      setDetails(true);
+      if (currentRoomId() !== null) { host.onSelect(id, true); drawAll(); void readThread(); }
+      // Reopening the same conversation preserves its details state.
       return;
     }
     current = id;
@@ -282,10 +306,10 @@ export function createMembers(host: MembersHost): MembersShell {
       details.el.classList.remove("is-in");
       void details.el.offsetWidth;
       details.el.classList.add("is-in");
-      details.draw();
+      details.overview();
       details.refreshRoutines();
       details.refreshMemory(current);
-      details.el.querySelector<HTMLElement>('[data-det="close"]')?.focus({ preventScroll: true });
+      if (document.documentElement.hasAttribute("data-keys")) details.el.querySelector<HTMLElement>('[data-det="close"]')?.focus({ preventScroll: true });
     } else {
       details.el.classList.remove("is-in");
       stopLeaving = leave(details.el, 160, () => {
@@ -309,7 +333,6 @@ export function createMembers(host: MembersHost): MembersShell {
     openMenu(picker, people, String(current), (value) => select(Number(value)), undefined, [
       { label: t("chat.searchAll"), icon: "search", run: () => column.openSearch(picker) },
       { label: t("rooms.title"), icon: "chat", run: () => { closeMenu(); void openRoomsMenu(picker); } },
-      { label: t("members.sideNewConversation"), icon: "chat", run: () => { closeMenu(); newConversation(); } },
       {
         label: t("members.newMember"),
         icon: "plus",
@@ -336,41 +359,24 @@ export function createMembers(host: MembersHost): MembersShell {
     return true;
   }
 
-  async function setPicture(id: number, file: WireAttachment): Promise<void> {
-    try {
-      await api.membersSetAvatar(id, file);
-    } catch (err) {
-      toaster.info(describeError(err));
-    }
-    await load();
-  }
-
   function newMember(groupId: number | null): void {
-    openNewMember({
-      groups: [...(list?.groups ?? [])].sort((a, b) => a.position - b.position),
+    window.dispatchEvent(new Event("raphael:close-sidebar"));
+    openMemberCreator({
       groupId,
-      presets,
       taken: (list?.members ?? []).map((m) => m.name),
-      async create({ member: made, picture }) {
+      async create(made) {
         let answer: Awaited<ReturnType<typeof api.membersCreate>>;
         try {
           answer = await api.membersCreate({ ...made, ui_language: getLocale() });
         } catch (err) {
           toaster.info(describeError(err));
-          return false;
+          return null;
         }
         const id = answer.member.id;
-        if (picture) {
-          try {
-            await api.membersSetAvatar(id, picture);
-          } catch (err) {
-            toaster.info(describeError(err));
-          }
-        }
         toaster.info(t("members.created", { p0: made.name }));
         await load();
         select(id);
-        // the routine the core offers goes in only with the owner's 加入, once the dialog is gone
+        // the routine the core offers goes in only with the owner's 加入, once the maker is gone
         const offer = answer.routine_offer;
         if (offer) {
           setTimeout(async () => {
@@ -388,48 +394,6 @@ export function createMembers(host: MembersHost): MembersShell {
     });
   }
 
-  /** A new conversation with `id`, opened: 新對話 always makes one, even when the open one is still empty. */
-  async function startConversation(id: number): Promise<void> {
-    try {
-      const result = await api.core<{conversation: {id: number}}>("conversations.create", {member_id: id});
-      conversationChange(id);
-      if (host.onOpenConversation) host.onOpenConversation(id, result.conversation.id);
-      else select(id);
-    } catch (err) {
-      toaster.info(describeError(err));
-    }
-  }
-
-  function newConversation(): void {
-    const dialog = openDialog({title: t("members.sideNewConversation"), cls: "mb-chat-picker",
-      body: `<input class="mb-fin" type="search" data-chat-search placeholder="${esc(t("members.sidePickerHint"))}" aria-label="${esc(t("members.sidePickerHint"))}"><div class="mb-chat-choices"></div>`,
-      actions: {secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"')},
-      onAct(action, target, d) {
-        if (action === "describe") {
-          const description = input.value.trim();
-          if (!description) return;
-          d.close();
-          select(RAPHAEL_ID);
-          setDetails(false);
-          host.app.go("agent", `draft:${t("firstBot.newProposal", { description })}`);
-        }
-        else if (action === "member") { d.close(); newMember(null); }
-        else if (action === "conversation") { d.close(); void startConversation(Number(target.dataset.id)); }
-        else d.close();
-      },
-    });
-    const input = dialog.el.querySelector<HTMLInputElement>("[data-chat-search]")!;
-    const choices = dialog.el.querySelector<HTMLElement>(".mb-chat-choices")!;
-    const draw = () => {
-      const q = input.value.trim().toLocaleLowerCase();
-      choices.innerHTML = (q ? btn(`${ico("plus")}<span>${esc(t("firstBot.describe"))}</span>`, "mb-chat-choice", ' data-dlg="describe"') : "") +
-        btn(`${ico("plus")}<span>${esc(t("members.newMember"))}</span>`, "mb-chat-choice", ' data-dlg="member"') +
-        orderedMembers(list)
-          .filter(m => `${m.name} ${memberRole(m)} ${m.blurb ?? ""}`.toLocaleLowerCase().includes(q))
-          .map(m => btn(`${faceHTML(m, 34)}<span><b>${esc(m.name)}</b><small>${esc(m.blurb || memberRole(m))}</small></span>`, "mb-chat-choice", ` data-dlg="conversation" data-id="${m.id}"`)).join("");
-    };
-    input.addEventListener("input", draw); draw();
-  }
   window.addEventListener("keydown", event => {
     if (event.ctrlKey && !event.altKey && !event.metaKey && event.key.toLowerCase() === "n" && host.visible() && !document.querySelector(".mb-scrim")) {
       event.preventDefault(); newMember(null);
@@ -484,8 +448,8 @@ export function createMembers(host: MembersHost): MembersShell {
     current: () => current,
     nameOf: (id) => memberOf(list, id)?.name ?? "",
     groups: () => [...(list?.groups ?? [])].sort((a, b) => a.position - b.position),
-    presets: () => presets,
-    mention: input => { if (list) teamMentions(input, list); },
+    bindMentions: input => { fields.add(bindComposerMentions(input, () => ({ list }))); },
+    mentionTargets: () => (list ? mentionTargets(list) : []),
     faceOf(id, size) {
       const found = memberOf(list, id);
       return found ? faceHTML(found, size, { cls: "sys-face" }) : "";
@@ -493,6 +457,7 @@ export function createMembers(host: MembersHost): MembersShell {
     member,
     select,
     load,
+    show: () => column.draw(),
     changed,
     detailsOpen: () => open,
     setDetails,
@@ -500,22 +465,26 @@ export function createMembers(host: MembersHost): MembersShell {
       if (host.visible() && memberId === current) details.refreshRoutines();
     },
     follow(event) {
-      if (!host.visible()) return;
-      if (event.type === "MembersChanged" || event.type === "ConnectionsChanged") {
+      const restarted = ["CoreReady"].includes(event.type);
+      if (restarted) { listJSON = ""; viewing = undefined; }
+      if (restarted || event.type === "MembersChanged" || event.type === "ConnectionsChanged") {
         if (refreshTimer !== null) clearTimeout(refreshTimer);
         refreshTimer = null;
-        void load();
+        void load(true);
+        details.refreshResources();
       } else if (event.type === "RoutinesChanged" && event.member_id === current) {
         details.refreshRoutines();
       } else if (event.type === "MemoryChanged") {
         details.refreshMemory(event.member_id, event.space);
+      } else if (event.type === "MemberActivity") {
+        setSlimeState(event.member_id, event.state, event.label);
       }
     },
     hide() {
       refreshOnShow = true;
+      column.draw();
       if (refreshTimer !== null) clearTimeout(refreshTimer);
       refreshTimer = null;
-      loads++;
       tellViewing(null);
     },
   };

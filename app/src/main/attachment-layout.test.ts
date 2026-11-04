@@ -16,7 +16,7 @@ test("owner media precedes the separate text bubble, with visual media in a grid
   expect(owner.querySelector(".bubble .me-files")).toBeNull();
   expect([...owner.children].map(node => node.className)).toEqual(["me-files", "bubble"]);
   expect(owner.querySelectorAll(".attachment-grid > .me-file")).toHaveLength(2);
-  expect(owner.querySelector(".bubble")!.textContent).toBe("Caption");
+  expect(owner.querySelector(".bubble .message-text")!.textContent).toBe("Caption");
   expect(parse(pendingTurnHTML("", "app", { face: () => "" }, [image])).querySelector(".bubble")).toBeNull();
 });
 
@@ -36,7 +36,8 @@ test("a quote stays at the top of the text bubble below the owner's media", () =
   const owner = root.querySelector(".owner-content")!;
   expect([...owner.children].map(node => node.className)).toEqual(["me-files", "bubble"]);
   expect(owner.querySelector(".bubble")!.firstElementChild?.className).toBe("message-quote");
-  expect(owner.querySelector(".bubble")!.textContent).toBe("YouSelected passageQuestion");
+  expect(owner.querySelector(".bubble .message-quote")!.textContent).toBe("YouSelected passage");
+  expect(owner.querySelector(".bubble .message-text")!.textContent).toBe("Question");
 });
 
 test("audio has one pill with controls; documents open from their whole card", () => {

@@ -169,7 +169,7 @@ async def test_a_revision_updates_the_draft_in_the_chat_instead_of_writing_anoth
 @pytest.mark.parametrize(
     ("source", "scope", "quick", "peer"),
     [
-        ("voice", "private", False, None),  # a spoken request
+        ("voice", "private", True, None),  # a question spoken at the key
         ("telegram", "private", False, None),  # a message from a phone
         ("app", "private", True, None),  # a quick question
         ("app", "private", False, 1),  # a request one member handed another

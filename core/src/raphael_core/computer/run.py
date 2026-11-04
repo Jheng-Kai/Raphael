@@ -5,8 +5,8 @@ A `ComputerRun` is a request of the owner's ("在小算盤算 12 乘 34") carrie
 (`worker.loop`), for three reasons: it runs in the core and in the foreground, it stops for a
 question in the middle (and the time a question waits is not the run's), and every step must look
 at the latest snapshot of its window. It borrows the worker's guards: every result is wrapped as
-untrusted data (`worker.guards.wrap_untrusted`) and the results of earlier rounds are dropped
-(`elide_old`).
+untrusted data (`worker.guards.wrap_untrusted`) and the results of earlier rounds, whose ids are gone
+by the next look, become a line each (`worker.context.shorten_old_rounds`).
 
 How a run goes:
 
@@ -88,11 +88,12 @@ from ..agent.policy import (
 )
 from ..agent.steps import Step, reason_of
 from ..background.run import estimate_cost
-from ..brain.openrouter import CLEANUP_FALLBACKS, ChatTurn, OpenRouterError
+from ..brain.openrouter import ChatTurn, OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..clock import wall_clock_ms
 from ..memory.conversation import turn_text
-from ..worker.guards import MAX_ARGUMENT_CHARS, canonical, elide_old, neutralize, wrap_untrusted
+from ..worker.context import shorten_old_rounds
+from ..worker.guards import MAX_ARGUMENT_CHARS, canonical, neutralize, wrap_untrusted
 from . import safety, tools, words
 from .bridge import HANDOFF, REVOKED, UNAVAILABLE, BridgeError, ShellBridge
 from .snapshot import (
@@ -112,6 +113,8 @@ logger = logging.getLogger(__name__)
 # One model reply may take this long, and may be this long.
 CHAT_TIMEOUT_S = 45.0
 CHAT_MAX_TOKENS = 1200
+# How many of the latest rounds keep their results in full.
+KEEP_ROUNDS = 3
 # How long the shell is given for each operation.
 APPS_TIMEOUT_S = 6.0
 LOOK_TIMEOUT_S = 10.0
@@ -350,6 +353,8 @@ def conversation_block(summary: str, turns: Sequence[Turn], index: str = "") -> 
 
 def _assistant_message(turn: ChatTurn) -> dict[str, Any]:
     message: dict[str, Any] = {"role": "assistant", "content": turn.content or None}
+    if getattr(turn, "responses_output", None):
+        message["responses_output"] = turn.responses_output
     if turn.calls:
         message["tool_calls"] = [
             {
@@ -409,8 +414,12 @@ class ComputerRun:
         clock: Callable[[], float] = time.monotonic,
         now_ms: Callable[[], int] = wall_clock_ms,
         handback: bool = False,
+        member_id: int = 0,
+        conversation_id: int | None = None,
     ) -> None:
         self.session_id = session_id
+        self.member_id = member_id
+        self.conversation_id = conversation_id
         self.run_id = uuid.uuid4().hex
         self.language = language
         self.request = request
@@ -594,7 +603,7 @@ class ComputerRun:
                         content, made_a_step, handed_back = await self._hand_back(pause), False, True
                 acted = acted or made_a_step
                 messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
-            elide_old(messages)
+            shorten_old_rounds(messages, KEEP_ROUNDS)
 
     def _report(self, content: str) -> Final:
         line, rest = fit_text(content or "", self.language)
@@ -667,7 +676,7 @@ class ComputerRun:
             turn = await self._until(
                 self._client.chat_tools(
                     model=self.model,
-                    fallbacks=CLEANUP_FALLBACKS,
+                    fallbacks=[],
                     messages=messages,
                     tools=definitions,
                     timeout_s=timeout,
@@ -1117,7 +1126,8 @@ class ComputerRun:
             self._step(action, window.app, "blocked", time.perf_counter(), "forbidden")
             told = FORBIDDEN_BY_RULE.format(rule=screening.rule or "")
             return wrap_untrusted(name, told, ok=False)
-        if rules.needs_yes(verdict == safety.CONFIRM, screening, firm=True):  # a step that sends, deletes or buys never waives
+        # A step that sends, deletes or buys never waives, but for the owner's own 全部允許.
+        if not self._gate.full_permission and rules.needs_yes(verdict == safety.CONFIRM, screening, firm=True):
             builtin = verdict == safety.CONFIRM
             asked = Action(ACT_FINAL if builtin else name, dict(request))
             question = self._confirm_text(action, element, chord)
@@ -1245,6 +1255,11 @@ class ComputerRuns:
         run = self.active
         if run is not None and not run.done and not (spare_owner and run.owner_has_control):
             run.stop(reason)
+
+    def stop_scope(self, member_id, conversation_id, reason, *, spare_owner=False):
+        run = self.active
+        if run is not None and (run.member_id, run.conversation_id) == (member_id, conversation_id):
+            self.stop_all(reason, spare_owner=spare_owner)
 
     def find(self, run_id: object) -> ComputerRun | None:
         """The run `run_id` names, if it is the one on the desktop and still going."""

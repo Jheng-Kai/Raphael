@@ -139,17 +139,20 @@ feature entry, and fails scores below 4, hard violations, malformed reviews and
 budget exhaustion. Reports and summaries live in app/.look/judge-*/; cache identity
 includes candidate bytes, model, rules, feature and reference bytes.
 
-Judge uses Windows Credential Manager locally; hosted GitHub Actions alone accepts
-OPENROUTER_API_KEY. No secret is ever logged. Its default vision model is configurable
-with RAPHAEL_JUDGE_MODEL or --model. Costs vary by model and image size; --max-cost-usd,
---request-ceiling and --max-requests bound admission. Unknown/over-ceiling reported
-costs stop the run. The provider controls final billing; the configured per-request
-ceiling is a conservative reservation, not a provider-enforced credit limit.
-Use an account/key spending limit as the billing backstop. Cache hits cost zero.
-Reference images stay outside git; CI downloads public HTTPS images using a pinned
-URL/hash manifest in the repository variable RAPHAEL_JUDGE_REFERENCE_MANIFEST.
-Missing configuration fails when judge is enabled. No maintainer-specific path is
-required. Missing fork secrets produce an explicit SKIP notice, never design PASS.
+Judge defaults to the signed-in Claude Code subscription (`--brain claude`).
+Select `--brain codex` for the signed-in Codex subscription. Both use read-only,
+isolated CLI turns and remove API keys and endpoint overrides. Claude reads the
+attached image paths; Codex receives `-i` images. Three candidates share a request
+by default (`--batch-size 1..4`); `--max-requests` bounds submitted batches. Reports
+record CLI version, requested/actual model, redacted diagnostics and per-image
+scores; cache hits submit no review request. Login and external reference images
+are required. Missing prerequisites are blocked/SKIP, never design PASS.
+
+Testing never spends OpenRouter. Do not run its judge without an explicit owner
+request. The retained API implementation is accessible only through explicit
+`--brain openrouter`, with its existing dollar/request admission checks. The CLI
+paths never construct the OpenRouter client. Reference images stay outside git.
+Enabled reviews fail closed on missing login or references.
 
 For brain/tool-path hand-off, the maintainer runs `npm run verify -- --live` with
 installed/logged-in subscriptions and the OS key. RAPHAEL_LIVE_CONFIG can select a
@@ -166,4 +169,24 @@ The scenario contracts S01–S22, the tool-coverage manifest and the exit codes 
 
 Use the PR template to record rule IDs, commands/exits, look/judge/live artifacts,
 images inspected and all incomplete/native acceptance. Never infer deployed or native
-acceptance from offline gates. See GUARDIAN-NOTES.md for repository settings and costs.
+acceptance from offline gates.
+
+## Native regression gate
+
+Every owner report and every native change must be reproduced in a native journey
+that fails before its fix and passes after. From app/, build the isolated debug
+binary offline with CARGO_BUILD_JOBS=2, then run:
+
+```powershell
+npm run native -- locale-sweep voice-conversation delete-conversation
+```
+
+See the native section of [look README](../../../app/scripts/look/README.md) for
+CARGO_TARGET_DIR, installed Python/models, debug-only RAPHAEL_TEST_NATIVE isolation,
+WebView2 CDP, cost guards and PID cleanup. Every run uses RAPHAEL_FAKE_LLM=1. Never
+include gmail-connect implicitly: the owner runs it explicitly with a signed-in
+Codex CLI brain and Composio access, stopping before Google consent approval.
+Keep report.json, all screenshots/contact sheets, app logs and SQLite evidence in
+app/.native/run-*. A regression's expected failure exits 1, never PASS. Inspect the
+images and name exact app failures separately from launch/dependency blockers.
+Native regression evidence does not replace the selected look/judge design gate.

@@ -83,8 +83,8 @@ async def test_s16_passes_on_both_brains_through_the_suite(tmp_path, monkeypatch
     assert result["actual_model"] == (model if brain == "A" else "owner-model")
     assert result["settings"] == {"quick_model": model.partition("?effort=")[0],
                                   "quick_effort": "high" if brain == "C" else "low", "agent_model": contrast}
-    # The CLI side (quick on C, formal on A) never resumes a session in a quick turn; formal resumes its own.
-    assert sessions[0] is None and (brain == "C" or sessions[-1] is not None)
+    # Quick and formal each resume only their own native session.
+    assert sessions[0] is None and sessions[-1] is not None
 
 
 async def test_s16_passes_on_the_codex_brain_alone_with_a_second_codex_model(tmp_path, monkeypatch):
@@ -99,8 +99,9 @@ async def test_s16_passes_on_the_codex_brain_alone_with_a_second_codex_model(tmp
     assert result["settings"]["agent_model"] == formal
 
 
-async def run_s16(tmp_path, brain="A"):
+async def run_s16(tmp_path, brain="A", *, contrast_override=None):
     model, contrast = brains_for(brain)
+    contrast = contrast_override or contrast
     driver = RpcDriver(tmp_path, model, HonestBrain(), Budget(40), brains=FakeBrains(tmp_path), contrast=contrast)
     try:
         reasons, _ = await driver.execute(S16)
@@ -145,12 +146,13 @@ async def test_a_quick_question_that_reads_the_formal_chat_fails(tmp_path, monke
     assert "concurrent_scope" in await run_s16(tmp_path, brain)
 
 
-async def test_a_quick_cli_turn_that_keeps_a_native_session_fails(tmp_path, monkeypatch):
-    from raphael_core.agent.cli.loop import CliLoop
+async def test_quick_and_formal_reusing_one_native_session_fails(tmp_path, monkeypatch):
+    from raphael_core.agent.cli.loop import Sessions
     honest_cli(monkeypatch)
-    init = CliLoop.__init__
-    monkeypatch.setattr(CliLoop, "__init__", lambda self, **kwargs: init(self, **{**kwargs, "resume_session": True}))
-    reasons = await run_s16(tmp_path, "C")
+    put = Sessions.put
+    monkeypatch.setattr(Sessions, "put", lambda self, member, brain, session, conversation_id=None:
+                        put(self, member, brain, "wrong-shared-native-session", conversation_id))
+    reasons = await run_s16(tmp_path, "C", contrast_override="cli:codex:formal-model?effort=low")
     assert "concurrent_scope" in reasons and "quick_destination" not in reasons
 
 

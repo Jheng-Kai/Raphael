@@ -16,10 +16,10 @@ const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { st
   agentQuestionOpen: vi.fn(),
   agentQuestionAnswer: vi.fn(),
   agentVoice: vi.fn(),
+  cancelSession: vi.fn(),
   workerCancel: vi.fn(),
   workerRerun: vi.fn(),
   membersList: vi.fn(),
-  membersPresets: vi.fn(),
   membersRead: vi.fn(),
   membersViewing: vi.fn(),
   membersToolChoices: vi.fn(),
@@ -36,11 +36,13 @@ const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { st
   core: vi.fn(),
   roomsList: vi.fn(),
   roomMessages: vi.fn(),
+  desktopStatus: vi.fn(), desktopOpen: vi.fn(), desktopRenew: vi.fn(), desktopClose: vi.fn(),
 }));
 vi.mock("../api", () => api);
 
 import { Cleared } from "../cleared";
 import { createAgent } from "./agent";
+import { openGroupChat } from "../group-chats";
 
 const member = (id: number, more: Partial<Member> = {}): Member => ({
   id, name: `成員${id}`, role: "", instructions: "", avatar: "", group_id: null, model: "", tools: null, position: id, created: 0, unread: false, waiting: false, preview: "", last_at: null, ...more,
@@ -81,6 +83,7 @@ function mount(mode: "hold" | "toggle" = "hold") {
   } as unknown as AppContext;
   const agent = createAgent(app);
   document.body.append(agent.el);
+  agent.el.hidden=false;
   agent.show();
   return agent;
 }
@@ -90,6 +93,302 @@ const pick = async (id: number) => {
   await flush();
 };
 
+test.each(["member", "page", "room"])("the first unseen turn has its own stable line until the thread is left (%s)", async leave => {
+  vi.useFakeTimers();
+  const roster = structuredClone(LIST);
+  Object.assign(roster.members.find(m => m.id === 3)!, { unread: true, unread_from: 31 });
+  api.membersList.mockImplementation(async () => structuredClone(roster));
+  api.membersRead.mockImplementation(async (id: number) => {
+    Object.assign(roster.members.find(m => m.id === id)!, { unread: false, unread_from: null });
+    return {};
+  });
+  const agent = mount(); await flush(); await pick(3);
+  const divider = $('.thread-new');
+  expect(divider).not.toBeNull();
+  expect(divider.nextElementSibling).toBe($('.tn[data-id="31"]'));
+  const old = $('.tn[data-id="30"]'), unseen = $('.tn[data-id="31"]');
+  const oldHTML = old.outerHTML, unseenHTML = unseen.outerHTML;
+  api.agentHistoryList.mockResolvedValueOnce({ turns: [turn(32, { member_id: 3 }), ...THREADS[3]] });
+  send({ type: 'AgentTurn', turn_id: 32, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(400); await flush();
+  expect($('.thread-new')).toBe(divider);
+  expect($('.tn[data-id="30"]')).toBe(old); expect(old.outerHTML).toBe(oldHTML);
+  expect($('.tn[data-id="31"]')).toBe(unseen); expect(unseen.outerHTML).toBe(unseenHTML);
+  expect(api.membersRead.mock.calls.filter(([id]) => id === 3)).toHaveLength(1);
+  if (leave === "member") { await pick(0); await pick(3); }
+  if (leave === "page") { agent.hide(); agent.show(); await flush(); }
+  if (leave === "room") { await openGroupChat(1); await flush(); await pick(3); }
+  expect(document.querySelector('.thread-new')).toBeNull();
+  agent.hide();
+});
+
+test("an unread boundary before the newest history page loads its original turn", async () => {
+  const roster = structuredClone(LIST);
+  Object.assign(roster.members.find(m => m.id === 3)!, { unread: true, unread_from: 101 });
+  api.membersList.mockResolvedValue(roster);
+  const history = Array.from({length:61}, (_, i) => turn(100 + i, {member_id:3})).reverse();
+  api.agentHistoryList.mockImplementation(async (q: {member_id?: number; before_id?: number; limit?: number}) => ({turns:
+    q.member_id === 3 ? history.filter(t => q.before_id === undefined || t.id < q.before_id).slice(0,q.limit) : THREADS[0]}));
+  const agent = mount(); await flush();
+  Object.defineProperties($('.mb-chat .ra-scroll'), {scrollHeight:{configurable:true,value:5000},clientHeight:{configurable:true,value:500}});
+  await pick(3);
+  expect($('.thread-new').nextElementSibling).toBe($('.tn[data-id="101"]'));
+  expect(api.agentHistoryList.mock.calls.some(([q]) => q.member_id === 3 && q.before_id === 111)).toBe(true);
+  agent.hide();
+});
+
+test("the initial chief thread snapshots news before viewing clears it", async () => {
+  const roster = structuredClone(LIST);
+  Object.assign(roster.members[0], {unread:true, unread_from:2});
+  api.membersList.mockImplementation(async () => structuredClone(roster));
+  api.membersViewing.mockImplementation(async (id: number) => {
+    if (id === 0) Object.assign(roster.members[0], {unread:false, unread_from:null});
+    return {};
+  });
+  const agent = mount(); await flush();
+  expect($('.thread-new').nextElementSibling).toBe($('.tn[data-id="2"]'));
+  agent.hide(); agent.show(); await flush();
+  expect(document.querySelector('.thread-new')).toBeNull();
+  agent.hide();
+});
+
+test("a delayed initial roster still opens at news before the newest history page", async () => {
+  let deliver!: (list: MembersList) => void;
+  const roster = structuredClone(LIST);
+  Object.assign(roster.members[0], {unread:true, unread_from:101});
+  api.membersList.mockImplementation(() => new Promise(resolve => { deliver = resolve; }));
+  const history = Array.from({length:61}, (_, i) => turn(100 + i)).reverse();
+  api.agentHistoryList.mockImplementation(async (q: {before_id?: number; limit?: number}) => ({turns:
+    history.filter(t => q.before_id === undefined || t.id < q.before_id).slice(0,q.limit)}));
+  const agent = mount();
+  Object.defineProperties($('.mb-chat .ra-scroll'), {scrollHeight:{configurable:true,value:5000},clientHeight:{configurable:true,value:500}});
+  await flush(); deliver(roster); await flush();
+  expect($('.thread-new').nextElementSibling).toBe($('.tn[data-id="101"]'));
+  agent.hide();
+});
+
+test.each([false, true])("opening unread content follows its length (long: %s)", async long => {
+  const roster = structuredClone(LIST);
+  Object.assign(roster.members.find(m => m.id === 3)!, { unread: true, unread_from: 31 });
+  api.membersList.mockResolvedValue(roster);
+  const agent = mount(); await flush();
+  const scroller = $('.mb-chat .ra-scroll');
+  Object.defineProperties(scroller, { scrollHeight: { configurable: true, get: () => 1500 }, clientHeight: { configurable: true, get: () => 500 } });
+  const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function(this: HTMLElement) {
+    return { top: this.classList.contains('thread-new') ? (long ? 200 : 1200) - scroller.scrollTop : 0 } as DOMRect;
+  });
+  await pick(3);
+  expect(scroller.scrollTop).toBe(long ? 176 : 1500);
+  rect.mockRestore(); agent.hide();
+});
+
+test("member drafts follow the composer owner through switching and page return", async () => {
+  const agent = mount(); await flush();
+  const input = agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+  input.value = 'Chief unfinished'; input.dispatchEvent(new Event('input'));
+  await pick(3); expect(input.value).toBe('');
+  input.value = 'Member unfinished'; input.dispatchEvent(new Event('input'));
+  await pick(0); expect(input.value).toBe('Chief unfinished');
+  await pick(3); expect(input.value).toBe('Member unfinished');
+  agent.hide(); agent.show(); await flush();
+  expect(input.value).toBe('Member unfinished');
+  expect(input.selectionStart).toBe(input.value.length);
+  agent.hide();
+});
+
+test("explicit conversation choices and their drafts survive later activity and sending elsewhere", async () => {
+  const conversations = [
+    {id:1,member_id:0,title:'First sample',kind:'standard',is_default:1,updated_at_ms:1},
+    {id:2,member_id:0,title:'Recent sample',kind:'standard',is_default:0,updated_at_ms:20},
+  ];
+  api.core.mockImplementation(async (method:string)=>method==='conversations.list'?{conversations:structuredClone(conversations)}:{questions:[]});
+  const agent=mount();await flush();
+  $('.conversation-trigger').click();await flush();
+  $('[data-conversation-open="1"]').click();await flush();
+  const input=agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+  input.value='First unfinished';input.dispatchEvent(new Event('input'));
+  conversations[1].updated_at_ms=100;
+  window.dispatchEvent(new CustomEvent('conversations-changed',{detail:0}));await flush();
+  expect($('.conversation-caption').textContent).toBe('First sample');
+  if($('.mb-det').hidden)$('.conversation-trigger').click();await flush();
+  $('[data-conversation-open="2"]').click();await flush();
+  expect(input.value).toBe('');input.value='Send second';input.dispatchEvent(new Event('input'));
+  agent.el.querySelector<HTMLFormElement>('.composer')!.requestSubmit();await flush();
+  if($('.mb-det').hidden)$('.conversation-trigger').click();await flush();
+  $('[data-conversation-open="1"]').click();await flush();
+  expect(input.value).toBe('First unfinished');
+  await pick(3);input.value='Other member draft';input.dispatchEvent(new Event('input'));
+  window.dispatchEvent(new CustomEvent('conversation-deleted',{detail:{member:0,id:1}}));await flush();
+  await pick(4);await pick(3);expect(input.value).toBe('Other member draft');agent.hide();
+});
+
+test("typing defers storage work until the pause and a new page restores the saved words", async () => {
+  vi.useFakeTimers();
+  api.core.mockImplementation(async (method:string)=>method==='conversations.list'?{conversations:[{id:1,member_id:0,title:'Sample',kind:'standard',is_default:1,updated_at_ms:1}]}:{questions:[]});
+  const agent=mount();await flush();
+  const input=agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+  const read=vi.spyOn(localStorage,'getItem'),write=vi.spyOn(localStorage,'setItem');
+  input.value='Unfinished long sample '.repeat(5000);input.dispatchEvent(new Event('input'));
+  input.value+='Last word';input.dispatchEvent(new Event('input'));
+  expect(read.mock.calls.filter(([key])=>key==='raphael.composer.drafts')).toHaveLength(0);
+  expect(write.mock.calls.filter(([key])=>key==='raphael.composer.drafts')).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(300);
+  expect(write.mock.calls.filter(([key])=>key==='raphael.composer.drafts')).toHaveLength(1);
+  const text=input.value;agent.hide();agent.el.remove();
+  const next=mount();await flush();
+  expect(next.el.querySelector<HTMLTextAreaElement>('.composer textarea')!.value.length).toBe(text.length);
+  next.hide();
+});
+
+test.each([true, false])("an authoritative missing conversation removes its saved draft (open: %s)", async (open) => {
+  let conversations = [
+    {id:1,member_id:0,title:'First sample',kind:'standard',is_default:1,updated_at_ms:1},
+    {id:2,member_id:0,title:'Recent sample',kind:'standard',is_default:0,updated_at_ms:20},
+  ];
+  api.core.mockImplementation(async (method:string)=>method==='conversations.list'?{conversations:structuredClone(conversations)}:{questions:[]});
+  const agent=mount();await flush();$('.conversation-trigger').click();await flush();$('[data-conversation-open="1"]').click();await flush();
+  const input=agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+  input.value='Removed conversation draft';input.dispatchEvent(new Event('input'));agent.hide();agent.show();await flush();
+  if (!open) { if ($('.mb-det').hidden) $('.conversation-trigger').click(); await flush(); $('[data-conversation-open="2"]').click(); await flush(); }
+  conversations=conversations.filter(item=>item.id!==1);
+  window.dispatchEvent(new CustomEvent('conversations-changed',{detail:0}));await flush();
+  expect($('.conversation-caption').textContent).toBe('Recent sample');expect(input.value).toBe('');
+  expect(JSON.parse(localStorage.getItem('raphael.composer.drafts')??'{}')['member:0:1']).toBeUndefined();agent.hide();
+});
+
+test("a long draft keeps its words without repeated full-text height measurements", async () => {
+ const agent=mount();await flush();
+ const input=agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+ const height=vi.fn(()=>100000);Object.defineProperty(input,'scrollHeight',{get:height,configurable:true});
+ const text='Long sample draft '.repeat(10000);input.value=text;input.dispatchEvent(new Event('input'));
+ expect(input.value).toBe(text);expect(height).not.toHaveBeenCalled();agent.hide();
+});
+
+test('work events refresh the visible preview without rereading skills or commands', async () => {
+  vi.useFakeTimers();
+  const agent=mount(); await flush(); await pick(3);
+  api.core.mockClear();
+  api.membersList.mockResolvedValue({...LIST,members:LIST.members.map(member => member.id===3 ? {...member,preview:'Updated sample progress'} : member)});
+  send({type:'WorkerChanged',task_id:999,state:'done',running:false});
+  await vi.advanceTimersByTimeAsync(1200); await flush();
+  expect(document.querySelector('[data-member="3"] .mb-row-p')?.textContent).toContain('Updated sample progress');
+  expect(api.core.mock.calls.map(call => call[0])).not.toContain('members.skills.list');
+  expect(api.core.mock.calls.map(call => call[0])).not.toContain('members.commands.list');
+  agent.hide();
+});
+
+test('hidden thread metadata waits until the thread is shown and returns with its latest title', async () => {
+  vi.useFakeTimers();
+  let title='Original sample';
+  api.core.mockImplementation(async (method:string)=>method==='conversations.list' ? {conversations:[{id:701,member_id:0,is_default:1,kind:'main',title,created_at_ms:1,updated_at_ms:1}]} : {questions:[]});
+  const agent=mount(); await flush(); agent.hide();
+  api.core.mockClear(); title='Updated sample';
+  send({type:'AgentTurn',turn_id:1,member_id:0});
+  await vi.advanceTimersByTimeAsync(400); await flush();
+  expect(api.core.mock.calls.filter(call=>call[0]==='conversations.list')).toHaveLength(0);
+  agent.show(); await flush();
+  expect(document.querySelector('.conversation-trigger')?.textContent).toContain('Updated sample');
+  agent.hide();
+});
+
+test("returning to an unchanged thread restores viewing once", async () => {
+  const agent = mount(); await flush(); await pick(3);
+  api.membersViewing.mockClear();
+  agent.hide(); await flush();
+  expect(api.membersViewing).toHaveBeenCalledExactlyOnceWith(null);
+  api.membersViewing.mockClear();
+  agent.show(); await flush();
+  expect(api.membersViewing).toHaveBeenCalledExactlyOnceWith(3);
+  agent.show(); await flush();
+  expect(api.membersViewing).toHaveBeenCalledTimes(1);
+  agent.hide();
+});
+
+test("show reads an unread thread already loaded while hidden", async () => {
+  const agent = mount(); await flush(); await pick(3); agent.hide(); await flush();
+  api.membersList.mockResolvedValue({ ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, unread: true } : m) });
+  await agent.loadSidebar(); await flush();
+  expect(document.querySelector('[data-member="3"] .is-unread')).not.toBeNull();
+  api.membersRead.mockClear();
+  agent.show(); await flush();
+  expect(api.membersRead).toHaveBeenCalledExactlyOnceWith(3);
+  expect(document.querySelector('[data-member="3"] .is-unread')).toBeNull();
+  agent.hide();
+});
+
+const openDetails = async (): Promise<void> => { if (document.querySelector<HTMLElement>(".mb-det")?.hidden) $(".conversation-trigger").click(); await flush(); };
+
+test("a closed details panel reads nothing while work runs, and opening it shows the current counts", async () => {
+  const agent = mount(); await flush(); await pick(3);
+  expect(document.querySelector<HTMLElement>(".mb-det")!.hidden).toBe(true);
+  api.core.mockClear();
+  send({ type: "CoreReady" } as unknown as MainEvent); await flush();
+  const read = (): string[] => api.core.mock.calls.map(([method]) => method as string);
+  for (const method of ["memory.get", "members.skills.list", "members.commands.list"]) expect(read()).not.toContain(method);
+  await openDetails();
+  for (const method of ["memory.get", "members.skills.list", "members.commands.list"]) expect(read()).toContain(method);
+  agent.hide();
+});
+
+test("a restarted core receives the current viewing even with an unchanged roster", async () => {
+  const agent = mount(); await flush(); await pick(3); await openDetails();
+  api.membersViewing.mockClear(); api.membersList.mockClear();
+  api.core.mockClear();
+  send({ type: "CoreReady" } as unknown as MainEvent); await flush();
+  expect(api.membersList).toHaveBeenCalledTimes(1);
+  expect(api.membersViewing).toHaveBeenCalledExactlyOnceWith(3);
+  await vi.waitFor(() => expect(api.core.mock.calls.some(([method]) => method === "memory.get")).toBe(true));
+  agent.hide();
+});
+
+test("an unchanged worker storm sends no additional viewing calls", async () => {
+  vi.useFakeTimers();
+  const agent = mount(); await flush(); await pick(3);
+  api.membersViewing.mockClear();
+  for (let i = 0; i < 20; i++) {
+    send({ type: "WorkerChanged", task_id: 999, state: "running", running: true });
+    await vi.advanceTimersByTimeAsync(200); await flush();
+  }
+  expect(api.membersViewing).not.toHaveBeenCalled();
+  agent.hide();
+});
+
+test("returning from a room refreshes the same member without clearing retained turns", async () => {
+  vi.useFakeTimers();
+  const agent = mount(); await flush(); await pick(3);
+  const old = $('.mb-chat .tn[data-id="30"]');
+  await openGroupChat(1); await flush();
+  send({ type: "AgentTurn", turn_id: 32, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(400); await flush();
+  let finish!: (result: { turns: AgentTurn[] }) => void;
+  api.agentHistoryList.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  $('[data-member="3"]').click(); await flush();
+  expect($('.mb-chat').hidden).toBe(false);
+  expect(document.querySelector('.mb-chat .tn[data-id="30"]')).toBe(old);
+  finish({ turns: [turn(32, { member_id: 3, text: "Arrived while the room was open" }), ...THREADS[3]] });
+  await flush();
+  expect($('.mb-chat .thread').textContent).toContain("Arrived while the room was open");
+  expect($('.mb-chat .tn[data-id="30"]')).toBe(old);
+  agent.hide();
+});
+
+test("showing unchanged members restores the current destination without replacing faces", async () => {
+  const agent = mount(); await flush();
+  const row = $('.mb-chief'), face = row.querySelector('.av');
+  agent.hide(); await agent.loadSidebar();
+  expect(row.getAttribute('aria-current')).toBe('false');
+  agent.show(); await flush();
+  expect($('.mb-chief').getAttribute('aria-current')).toBe('true');
+  expect($('.mb-chief .av')).toBe(face);
+  expect(document.querySelector('[data-member="4"] .is-unread')).not.toBeNull();
+  await openGroupChat(1); await flush();
+  expect($('.mb-chief').getAttribute('aria-current')).toBe('false');
+  await pick(3);
+  expect($('[data-member="3"]').getAttribute('aria-current')).toBe('true');
+  expect($('.mb-chief .av')).toBe(face);
+  agent.hide();
+});
+
 test("sidebar pin and hide update only their target and hiding the open member returns to Raphael", async () => {
   const agent = mount(); await flush(); await pick(3);
   api.membersUpdate.mockResolvedValue({});
@@ -98,6 +397,25 @@ test("sidebar pin and hide update only their target and hiding the open member r
   $('[data-member-more="3"]').click(); $('[data-pick="hide"]').click(); await flush();
   expect(api.membersUpdate).toHaveBeenCalledWith(3, {hidden: true});
   expect(document.querySelector('.mb-chief[aria-current="true"]')).not.toBeNull();
+  agent.hide();
+});
+
+test("an unconfigured Raphael is immediately usable before and after history clears", async () => {
+  api.membersList.mockResolvedValue({...LIST,members:LIST.members.map(m=>({...m,profile_ready:false}))});
+  api.agentHistoryList.mockResolvedValue({turns:[]});
+  const agent=mount(); await flush();
+  for (const id of [0,3,0]) {
+    await pick(id);
+    expect(document.querySelector('.first-bot')).toBeNull();
+    expect($('.composer').hidden).toBe(false);
+    expect($('.ra-hi').hidden).toBe(false);
+  }
+  api.core.mockResolvedValue({questions:[]});
+  $('[data-member-more="3"]').click(); $('[data-pick="clear"]').click();
+  $('[data-dlg="clear"]').click(); await flush();
+  expect(api.core).toHaveBeenCalledWith("agent.history.clear", {member_id:3});
+  expect(document.querySelector('.first-bot')).toBeNull();
+  expect($('.composer').hidden).toBe(false);
   agent.hide();
 });
 
@@ -113,6 +431,22 @@ test("clearing conversations requires confirmation and scopes the request to tha
   expect(document.querySelector(".mb-confirm")).toBeNull(); agent.hide();
 });
 
+test("a fresh window opens the newest standard conversation and deletion opens the newest remaining", async () => {
+  let conversations = [
+    {id:4,member_id:0,title:"Quick",kind:"quick",is_default:0,updated_at_ms:100},
+    {id:1,member_id:0,title:"Old default",kind:"standard",is_default:1,updated_at_ms:1},
+    {id:2,member_id:0,title:"Newest",kind:"standard",is_default:0,updated_at_ms:20},
+    {id:3,member_id:0,title:"Remaining newest",kind:"standard",is_default:0,updated_at_ms:10},
+  ];
+  api.core.mockImplementation(async (method:string) => method === "conversations.list" ? {conversations:structuredClone(conversations)} : {questions:[]});
+  const agent=mount();await flush();
+  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({conversation_id:2}));
+  conversations=conversations.filter(c=>c.id!==2);
+  window.dispatchEvent(new CustomEvent("conversation-deleted",{detail:{member:0,id:2}}));await flush();
+  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({conversation_id:3}));
+  expect($(".conversation-caption").textContent).toBe("Remaining newest");agent.hide();
+});
+
 test("a member is deleted from its ⋯ menu only after the confirmation, and its open thread returns to Raphael", async () => {
   api.membersDelete.mockResolvedValue({ deleted: true });
   const agent = mount(); await flush(); await pick(3);
@@ -124,8 +458,8 @@ test("a member is deleted from its ⋯ menu only after the confirmation, and its
   agent.hide();
 });
 
-test("新對話 makes a new conversation with the picked member and opens it, also from that member's empty one", async () => {
-  const conversations = [{ id: 31, member_id: 3, title: "", is_default: 1, created_at_ms: 1, updated_at_ms: 1 }];
+test("the sidebar's plus makes no conversation, and 新對話 in a member's details opens the new one", async () => {
+  const conversations = [{ id: 31, member_id: 3, title: "Cobalt", is_default: 1, created_at_ms: 1, updated_at_ms: 1 }];
   api.core.mockImplementation(async (method: string, params: { member_id?: number }) => {
     if (method === "conversations.list") return { conversations: conversations.filter(c => c.member_id === params.member_id) };
     if (method !== "conversations.create") return undefined;
@@ -133,24 +467,20 @@ test("新對話 makes a new conversation with the picked member and opens it, al
     conversations.push(made);
     return { conversation: made };
   });
-  const agent = mount(); await flush(); await pick(3);
-  const start = async (name: string) => {
-    $('[data-col="add"]').click(); $('[data-pick="conversation"]').click();
-    const search = $<HTMLInputElement>("[data-chat-search]"); search.value = name; search.dispatchEvent(new Event("input"));
-    expect(document.querySelectorAll('[data-dlg="conversation"]')).toHaveLength(1);
-    $('[data-dlg="conversation"]').click(); await flush();
-  };
-  await start("日文老師");
+  const agent = mount(); await flush(); await pick(3); await openDetails();
+  $('[data-col="add"]').click();
+  expect(document.querySelector('#app-popover [data-pick="conversation"]')).toBeNull();
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  const button = $<HTMLButtonElement>(".mb-det [data-conversation-new]");
+  expect(button.disabled).toBe(false);
+  button.click(); await flush();
   expect(api.core).toHaveBeenCalledWith("conversations.create", { member_id: 3 });
   expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({ member_id: 3, conversation_id: 101 }));
-  await start("行程管家");
-  expect(api.core).toHaveBeenCalledWith("conversations.create", { member_id: 4 });
-  expect(document.querySelector('[data-member="4"][aria-current="true"]')).not.toBeNull();
-  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({ member_id: 4, conversation_id: 102 }));
-  expect(document.querySelector(".mb-chat-picker")).toBeNull(); agent.hide();
+  expect($<HTMLButtonElement>(".mb-det [data-conversation-new]").disabled).toBe(true);
+  agent.hide();
 });
 
-test.each([undefined, 0, 4])("primary %s swaps both conversation pickers without changing the open thread", async primary_id => {
+test.each([undefined, 0, 4])("primary %s swaps the member picker without changing the open thread", async primary_id => {
   api.membersList.mockResolvedValue({ ...LIST, team_context: { primary_id } });
   const agent = mount(); await flush();
   const expected = primary_id === 4 ? ['4', '3', '0'] : ['0', '3', '4'];
@@ -158,12 +488,9 @@ test.each([undefined, 0, 4])("primary %s swaps both conversation pickers without
   $('.mb-pick').click();
   expect([...document.querySelectorAll<HTMLElement>('#app-popover [data-value]')].slice(0, 3).map(row => row.dataset.value)).toEqual(expected);
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-  $('[data-col="add"]').click(); $('[data-pick="conversation"]').click();
-  expect([...document.querySelectorAll<HTMLElement>('[data-dlg="conversation"]')].map(row => row.dataset.id)).toEqual(expected);
-  expect(document.querySelector('[data-dlg="conversation"][data-id="0"] .mb-av')).toBeNull();
   expect(api.agentHistoryList).toHaveBeenCalledTimes(historyCalls);
   expect(document.querySelector('.mb-col [data-member="0"][aria-current="true"]')).not.toBeNull();
-  $('[data-dlg="cancel"]').click(); agent.hide();
+  agent.hide();
 });
 
 test("files dropped into a member's thread are sent only to that member", async () => {
@@ -189,7 +516,7 @@ test("a routine run link selects its member and loads the linked older turn", as
   agent.hide();
 });
 
-beforeEach(() => {
+beforeEach(() => { localStorage.clear();
   document.body.innerHTML = "";
   for (const fn of Object.values(api)) fn.mockReset();
   api.roomsList.mockResolvedValue({rooms:[{id:1,name:"Launch",member_ids:[0,3],is_team:0}]});
@@ -198,7 +525,6 @@ beforeEach(() => {
   api.providersList.mockResolvedValue({ providers: [] });
   api.agentQuestionOpen.mockResolvedValue(null);
   api.membersList.mockResolvedValue(structuredClone(LIST));
-  api.membersPresets.mockResolvedValue({ presets: [] });
   api.membersRead.mockResolvedValue({});
   api.membersViewing.mockResolvedValue({});
   api.membersToolChoices.mockResolvedValue({ tools: ["web_search", "weather"], connections: [] });
@@ -208,6 +534,7 @@ beforeEach(() => {
   api.agentAskText.mockResolvedValue(undefined);
   api.agentRetract.mockResolvedValue(undefined);
   api.agentVoice.mockResolvedValue(undefined);
+  api.cancelSession.mockResolvedValue(undefined);
   api.agentHistoryList.mockImplementation(async (q: { member_id?: number; limit?: number }) => ({ turns: THREADS[q.member_id ?? 0].slice(0, q.limit) }));
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -263,6 +590,10 @@ test("Escape cancels only from an empty composer and restores a running turn", a
   input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await flush();
   expect(api.agentRetract).not.toHaveBeenCalled();
   input.value = "";
+  input.dispatchEvent(new Event("input", {bubbles:true}));
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await flush();
+  expect(api.agentRetract).not.toHaveBeenCalled();
+  expect($(".cmp-voice").dataset.cancelArmed).toBe("true");
   input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await flush();
   expect(api.agentRetract).toHaveBeenCalledWith("running", 0, 8);
   expect(input.value).toBe("問題 8");
@@ -337,13 +668,13 @@ test("a stored-file read finishing after a thread switch cannot fill the new com
 test("a selected member reply travels separately, renders on the pending bubble, and returns on cancel", async () => {
   api.agentAskText.mockImplementation(() => new Promise<void>(() => {}));
   const agent = mount(); await flush(); await pick(3);
-  const message = $('[data-id="31"] .message-text');
+  const message = $('[data-id="31"] .ra .message-text');
   const range = document.createRange(); range.selectNodeContents(message);
   range.getClientRects = () => [{ left: 100, right: 200, top: 100, bottom: 120, width: 100, height: 20 }] as unknown as DOMRectList;
   const selection = document.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
   document.dispatchEvent(new Event("selectionchange"));
   $(".quote-pill").click();
-  expect($(".cmp-quote .quote-author").textContent).toBe("日文老師");
+  expect($(".cmp-quote .quote-author").textContent).toContain("日文老師");
   const input = $<HTMLTextAreaElement>(".cmp-input");
   expect(document.activeElement).toBe(input);
   input.value = "Explain"; $(".composer").dispatchEvent(new Event("submit", { cancelable: true })); await flush();
@@ -370,10 +701,10 @@ test.each(["finish", "switch", "search", "reduced"])("a finished member burst re
   const agent = mount(); await flush(); await pick(3);
   running = false; send({ type: "AgentTurn", turn_id: 50, member_id: 3 });
   await vi.advanceTimersByTimeAsync(150); await flush();
-  const replies = () => [...document.querySelectorAll('[data-id="50"] .message-text')].map(element => element.textContent);
+  const replies = () => [...document.querySelectorAll('[data-id="50"] .ra .message-text')].map(element => element.textContent);
   expect(replies()).toEqual(["First"]);
   expect(document.querySelector('[data-id="50"] .ans.thinking, [data-id="50"] .work-section.is-live')).toBeNull();
-  expect($('[data-id="50"] .work-toggle').textContent).toContain("已處理");
+  expect($('[data-id="50"] .work-toggle')).toBeNull();
   if (mode === "finish") await vi.advanceTimersByTimeAsync(2000);
   if (mode === "switch") { await pick(4); await pick(3); }
   if (mode === "search") $('[data-act="search"]').click();
@@ -388,8 +719,10 @@ test.each(["finish", "switch", "search", "reduced"])("a finished member burst re
 
 test("regenerating the latest member reply asks the same question in that member's thread", async () => {
   const agent = mount(); await flush(); await pick(3);
-  expect(document.querySelectorAll('[data-regenerate="true"]')).toHaveLength(1);
-  document.querySelector<HTMLButtonElement>('[data-regenerate="true"]')!.click();
+  document.querySelector<HTMLButtonElement>('.tn[data-id="30"] [data-act="more-message"]')!.click();
+  await flush(); expect(document.querySelector('[data-pick="regenerate"]')).toBeNull();
+  document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
+  document.querySelector<HTMLButtonElement>('.tn[data-id="31"] [data-act="more-message"]')!.click();
   await flush(); document.querySelector<HTMLButtonElement>('[data-pick="regenerate"]')!.click();
   await flush();
   expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("問題 31", [], 3, expect.objectContaining({ requestId: expect.any(String) }));
@@ -400,15 +733,13 @@ test("routine notifications refresh the open panel immediately and keep the rout
   mount();
   await flush();
   await pick(3);
-  $(".mb-col [data-member][aria-current=\"true\"]").click();
-  $('[data-tab="routines"]').click();
+  $(".conversation-trigger").click();
   const routine: Routine = { id: 9, member_id: 3, title: "Daily review", prompt: "Review", schedule: { kind: "daily", time: "09:00" }, enabled: true, next_run: null, last_run: null };
   api.routinesList.mockResolvedValue({ routines: [routine] });
   send({ type: "RoutinesChanged", member_id: 3 });
   await flush();
   expect($(".mb-rts").textContent).toContain("Daily review");
-  $('[data-det="routine-menu"]').click();
-  document.querySelector<HTMLElement>('#app-popover [data-pick="edit"]')!.click();
+  $('[data-det="routine-open"]').click();
   const title = document.querySelector<HTMLInputElement>("#au-title")!;
   title.focus();
   title.value = "My unsaved title";
@@ -430,8 +761,7 @@ test("a chat event refreshes routines even when its explicit change notification
   mount();
   await flush();
   await pick(3);
-  $(".mb-col [data-member][aria-current=\"true\"]").click();
-  $('[data-tab="routines"]').click();
+  $(".conversation-trigger").click();
   const routine = { id: 9, member_id: 3, title: "Created from chat", prompt: "Review", schedule: { kind: "daily", time: "09:00" }, enabled: true, next_run: null, last_run: null };
   api.routinesList.mockResolvedValue({ routines: [routine] });
   api.agentHistoryList.mockResolvedValue({ turns: [turn(99, { member_id: 3, messages: [{ seq: 1, kind: "event", text: "Routine created", at_ms: 1 }] })] });
@@ -445,6 +775,7 @@ test("member notifications refresh names, groups, unread dots and the open heade
   mount();
   await flush();
   await pick(3);
+  await openDetails();
   const next = structuredClone(LIST);
   next.members[1] = { ...next.members[1], name: "Updated name", role: "Updated role", group_id: 5 };
   next.members[2] = { ...next.members[2], waiting: true, unread: true, preview: "New preview" };
@@ -460,26 +791,27 @@ test("member notifications refresh names, groups, unread dots and the open heade
 });
 
 test("memory notifications refresh the visible own and shared lists with correct scope", async () => {
-  api.core.mockImplementation(async (method: string) => method === "memory.list" ? { memories: [], summary: null } : { questions: [] });
+  const document = (text: string) => ({ text, revision: "r", chars: text.length, entries: text ? 1 : 0, limit: 2200, summary: null });
+  api.core.mockImplementation(async (method: string) => method === "memory.get" ? document("") : { questions: [] });
   mount();
   await flush();
   await pick(3);
-  $(".mb-col [data-member][aria-current=\"true\"]").click();
+  $(".conversation-trigger").click();
+  $('[data-det="gear"]').click();
   $('[data-tab="memory"]').click();
   await flush();
   api.core.mockClear();
   send({ type: "MemoryChanged", member_id: 4, space: "own" });
   await flush();
   expect(api.core).not.toHaveBeenCalled();
-  const note = { name: "reference-live", description: "Fresh note", type: "reference", origin: "told", updated: "", expires: null };
-  api.core.mockImplementation(async (method: string) => method === "memory.list" ? { memories: [note], summary: null } : { questions: [] });
+  api.core.mockImplementation(async (method: string) => method === "memory.get" ? document("Fresh note") : { questions: [] });
   send({ type: "MemoryChanged", member_id: 3, space: "own" });
   await flush();
-  expect(api.core).toHaveBeenLastCalledWith("memory.list", { member_id: 3, space: "own" });
+  expect(api.core).toHaveBeenLastCalledWith("memory.get", { member_id: 3, space: "own" });
   expect($('[data-mem-space="own"]').textContent).toContain("Fresh note");
   send({ type: "MemoryChanged", member_id: 0, space: "shared" });
   await flush();
-  expect(api.core).toHaveBeenLastCalledWith("memory.list", { space: "shared" });
+  expect(api.core).toHaveBeenLastCalledWith("memory.get", { space: "shared" });
   expect($('[data-mem-space="shared"]').textContent).toContain("Fresh note");
 });
 
@@ -502,7 +834,7 @@ describe("Raphael's thread", () => {
   test("the member column lists the members, each with the last line of its thread from the list", async () => {
     mount();
     await flush();
-    expect([...document.querySelectorAll(".mb-col .mb-row b")].map((b) => b.textContent)).toEqual(["拉斐爾", "日文老師", "行程管家"]);
+    expect([...document.querySelectorAll(".mb-col .mb-list .mb-row b")].map((b) => b.textContent)).toEqual(["拉斐爾", "日文老師", "行程管家"]);
     expect($('.mb-col [data-member="3"] .mb-row-p').textContent).toBe("今天的單字");
     // no thread but the open one is read
     expect(api.agentHistoryList.mock.calls.every(([q]) => q.member_id === undefined)).toBe(true);
@@ -547,7 +879,7 @@ describe("a member's thread", () => {
     await pick(3);
     expect($<HTMLTextAreaElement>(".cmp-input").placeholder).toBe("傳訊息給 日文老師");
     expect($(".cmp-voice").hidden).toBe(false);
-    expect($(".mb-pill-t").textContent).toBe("日文老師");
+    expect($(".mb-pill-t").textContent).toContain("日文老師");
     // 清除全部 and Raphael's settings are his thread's
     expect(document.querySelector('[data-act="clear"]')).toBeNull();
     expect($('[data-act="settings"]').hidden).toBe(true);
@@ -590,54 +922,51 @@ describe("a member's thread", () => {
     agent.hide();
   });
 
-  test("a restored member voice confirmation stays in its own thread", async () => {
-    api.agentQuestionOpen.mockResolvedValue({ id: "voice-confirm", member_id: 3, prefix: "問", text: "Send it?", tier: "T2", timeout_ms: 60_000 });
-    const agent = mount(); await flush();
-    expect($(".ask-card").hidden).toBe(true);
-    await pick(3);
-    expect($(".ask-card").hidden).toBe(false);
-    expect($(".ask-q").textContent).toBe("Send it?");
-    await pick(4);
-    expect($(".ask-card").hidden).toBe(true);
+  test.each([0,3])("clicking the recording's send button for member %s ends capture and sends it instead of cancelling it", async id => {
+    vi.useFakeTimers();
+    api.agentHistoryList.mockResolvedValue({turns:[]});
+    const agent=mount("toggle");await flush();if(id)await pick(id);
+    const button=$(".cmp-voice");
+    button.setPointerCapture=vi.fn();
+    const click=()=>{button.dispatchEvent(new MouseEvent("pointerdown",{button:0,bubbles:true}));button.dispatchEvent(new MouseEvent("pointerup",{button:0,bubbles:true}));};
+    click();
+    send({type:"Dictation",phase:"listening",agent:true,member_id:id});
+    expect(document.querySelector('.is-voice')).not.toBeNull();
+    api.agentVoice.mockClear();
+    click();
+    await flush();
+    expect(api.agentVoice.mock.calls.map(call=>call[0])).toEqual(["down","up"]);
+    expect(api.cancelSession).not.toHaveBeenCalled();
     agent.hide();
   });
 
-  test.each(["hold", "toggle"] as const)("a member shares the listening emblem in %s mode, while the global key belongs to Raphael", async mode => {
-    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
-    vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([{}] as unknown as DOMRectList);
-    api.agentHistoryList.mockImplementation(async (q: { member_id?: number }) => ({ turns: q.member_id === 3 ? [] : THREADS[q.member_id ?? 0] }));
-    const agent = mount(mode); await flush(); await pick(3);
-    const button = $(".cmp-voice");
-    button.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
-    send({ type: "Dictation", phase: "listening", agent: true, member_id: 3 });
-    expect(document.querySelector(".ra-flyer .av")).not.toBeNull();
-    expect(button.classList.contains("vm-away")).toBe(true);
-    send({ type: "VoiceLevel", value: 0.6 });
-    expect($(".ra-flyer").style.getPropertyValue("--lvl")).toBe("0.60");
+  test("a restored member voice confirmation stays in its own thread", async () => {
+    api.agentQuestionOpen.mockResolvedValue({ id: "voice-confirm", member_id: 3, prefix: "問", text: "Send it?", tier: "T2", timeout_ms: 60_000 });
+    const agent = mount(); await flush();
+    expect($(".ask-card-host").hidden).toBe(true);
+    await pick(3);
+    expect($(".ask-card-host").hidden).toBe(false);
+    expect($(".ask-q").textContent).toBe("Send it?");
     await pick(4);
-    expect(document.querySelector(".ra-flyer")).toBeNull();
-    await pick(3);
-    expect(document.querySelector(".ra-flyer")).not.toBeNull();
-    agent.hide(); agent.show(); await flush();
-    expect(document.querySelector(".ra-flyer")).not.toBeNull();
-    document.body.dispatchEvent(new KeyboardEvent("keyup", { key: " ", bubbles: true }));
-    if (mode === "toggle") { $(".ra-flyer").click(); await flush(); }
-    expect(api.agentVoice.mock.calls).toEqual(mode === "toggle" ? [["down", 3], ["up", 3], ["down", 3], ["up", 3]] : [["down", 3], ["up", 3]]);
-    send({ type: "Dictation", phase: "processing", agent: true, member_id: 3 });
-    expect(document.querySelector(".ra-flyer")).toBeNull();
-    expect(document.querySelector('[data-key="hearing"]')).not.toBeNull();
-    send({ type: "Dictation", phase: "failed", agent: true });
-    expect($(".ra-empty").hidden).toBe(false);
-    // A global press from a member's thread never animates that member's voice button.
-    send({ type: "Dictation", phase: "listening", agent: true });
-    expect(document.querySelector(".ra-flyer")).toBeNull();
-    await pick(0);
-    expect(document.querySelector(".ra-flyer .av")).not.toBeNull();
-    send({ type: "Dictation", phase: "processing", agent: true });
-    expect(document.querySelector('[data-key="hearing"]')).not.toBeNull();
-    await pick(3);
-    expect(document.querySelector('[data-key="hearing"]')).toBeNull();
+    expect($(".ask-card-host").hidden).toBe(true);
     agent.hide();
+  });
+
+  test.each(["hold", "toggle"] as const)("a member has an accessible send button during %s recording, and Stop only once it is sent", async mode => {
+    api.agentHistoryList.mockResolvedValue({turns:[]});
+    const agent=mount(mode);await flush();await pick(3);
+    const button=$(".cmp-voice");
+    send({type:"Dictation",phase:"listening",agent:true,member_id:3});
+    expect(button.classList.contains("vm-away")).toBe(false);
+    // Speaking: the one button is the send glyph, labelled 送出; pressing it sends what was said.
+    expect(button.getAttribute("aria-label")).toBe("送出");expect(button.querySelector(".cmp-plane")).not.toBeNull();expect(button.querySelector(".av")).toBeNull();expect($(".composer").dataset.taskState).toBe("recording");
+    expect(button.tagName).toBe("BUTTON");expect((button as HTMLButtonElement).disabled).toBe(false);
+    send({type:"Hotkey",kind:"cancel_key"});
+    expect(button.dataset.cancelArmed).toBeUndefined();
+    await flush();
+    expect(api.cancelSession).toHaveBeenCalledOnce();
+    send({type:"Dictation",phase:"cancelled",agent:true,member_id:3});
+    expect(button.dataset.cancelArmed).toBeUndefined();agent.hide();
   });
 
   test("processing first seen after reopening does not settle against an older voice turn", async () => {
@@ -650,9 +979,20 @@ describe("a member's thread", () => {
     agent.hide();
   });
 
+  test("one Escape cancels voice transcription before an agent turn exists", async () => {
+    api.agentHistoryList.mockResolvedValue({turns:[]});
+    const agent=mount();await flush();await pick(3);
+    send({type:"Dictation",phase:"processing",agent:true,member_id:3});
+    expect(document.querySelector('[data-key="hearing"]')).not.toBeNull();
+    $(".cmp-input").dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));
+    await flush();
+    expect(api.cancelSession).toHaveBeenCalledOnce();
+    expect($(".cmp-voice").dataset.cancelArmed).toBeUndefined();
+    expect(api.workerCancel).not.toHaveBeenCalled();agent.hide();
+  });
+
   test("the search looks through the open thread alone", async () => {
     vi.useFakeTimers();
-    api.agentHistorySearch.mockResolvedValue({ turns: [] });
     mount();
     await vi.runOnlyPendingTimersAsync();
     $(".mb-col [data-member=\"3\"]").click();
@@ -662,7 +1002,14 @@ describe("a member's thread", () => {
     input.value = "單字";
     input.dispatchEvent(new Event("input"));
     await vi.advanceTimersByTimeAsync(250);
-    expect(api.agentHistorySearch).toHaveBeenCalledWith("單字", 3);
+    expect(api.agentHistoryList).toHaveBeenCalledWith(expect.objectContaining({limit:200,member_id:3}));
+    const count = document.querySelector('.ra-find-count')!.textContent;
+    expect(count).toMatch(/^\d+\/\d+$/);
+    expect(document.querySelectorAll('mark.is-current')).toHaveLength(1);
+    expect(document.querySelector('.thread')!.textContent).not.toContain('回答 2');
+    await pick(4);
+    expect(document.querySelector('mark')).toBeNull();
+    expect(document.querySelector<HTMLElement>('.ra-find')!.hidden).toBe(true);
   });
 
   test("back to Raphael: his own thread again, and his composer", async () => {
@@ -695,15 +1042,15 @@ describe("a member's thread", () => {
     $<HTMLFormElement>(".composer").requestSubmit();
     await flush();
     send({ type: "AgentQuestion", id: "c-1", prefix: "問", text: "寄出這封信？", tier: "T2", timeout_ms: 60_000 });
-    expect($(".ask-card").hidden).toBe(false);
+    expect($(".ask-card-host").hidden).toBe(false);
     // a member asks in plain words
     expect($(".ask-q").textContent).toBe("寄出這封信？");
     await pick(4);
-    expect($(".ask-card").hidden).toBe(true);
+    expect($(".ask-card-host").hidden).toBe(true);
     await pick(0);
-    expect($(".ask-card").hidden).toBe(true);
+    expect($(".ask-card-host").hidden).toBe(true);
     await pick(3);
-    expect($(".ask-card").hidden).toBe(false);
+    expect($(".ask-card-host").hidden).toBe(false);
     answered();
     await flush();
   });
@@ -713,9 +1060,9 @@ describe("a member's thread", () => {
     await flush();
     await pick(3);
     send({ type: "AgentQuestion", id: "c-2", prefix: "問", text: "要關燈嗎", tier: "T2", timeout_ms: 60_000 });
-    expect($(".ask-card").hidden).toBe(true);
+    expect($(".ask-card-host").hidden).toBe(true);
     await pick(0);
-    expect($(".ask-card").hidden).toBe(false);
+    expect($(".ask-card-host").hidden).toBe(false);
     expect($(".ask-q").textContent).toBe("要關燈嗎");
     // what is typed in a member's thread later does not take Raphael's question along
     api.agentAskText.mockImplementation(() => new Promise<void>(() => {}));
@@ -723,9 +1070,9 @@ describe("a member's thread", () => {
     $<HTMLTextAreaElement>(".cmp-input").value = "考我";
     $<HTMLFormElement>(".composer").requestSubmit();
     await flush();
-    expect($(".ask-card").hidden).toBe(true);
+    expect($(".ask-card-host").hidden).toBe(true);
     await pick(0);
-    expect($(".ask-card").hidden).toBe(false);
+    expect($(".ask-card-host").hidden).toBe(false);
   });
 
   test("concurrent members keep their own approval cards and closed questions stay closed", async () => {
@@ -736,15 +1083,15 @@ describe("a member's thread", () => {
     await pick(3);
     expect($(".ask-q").textContent).toBe("開始練習？");
     await pick(4);
-    expect($(".ask-card").hidden).toBe(true);
+    expect($(".ask-card-host").hidden).toBe(true);
     send({ type: "AgentQuestionClosed", id: "teacher" });
     await pick(0);
-    expect($(".ask-card").hidden).toBe(false);
+    expect($(".ask-card-host").hidden).toBe(false);
     expect($(".ask-q").textContent).toContain("儲存摘要？");
     agent.hide(); agent.show(); await flush();
-    expect($(".ask-card").hidden).toBe(false);
+    expect($(".ask-card-host").hidden).toBe(false);
     await pick(3);
-    expect($(".ask-card").hidden).toBe(true);
+    expect($(".ask-card-host").hidden).toBe(true);
     agent.hide();
   });
 
@@ -772,7 +1119,7 @@ describe("a member's thread", () => {
     await pick(3);
     const run = $('.tn[data-id="32"]');
     expect(run.querySelector(".sys")!.textContent).toBe("例行任務每天的單字");
-    expect(run.querySelector(".work-toggle .think")).not.toBeNull();
+    expect(run.querySelector(".live-presence")).not.toBeNull();
     expect(run.querySelector(".me")).toBeNull();
     THREADS[3] = [turn(31, { member_id: 3, text: "今天的單字" })];
   });
@@ -799,13 +1146,13 @@ describe("a member's thread", () => {
     expect(slot().querySelector(".bgq-card")!.textContent).toContain("要付款嗎？");
     expect(slot().querySelector(".bgq-card")!.textContent).not.toContain("《");
     expect(slot().querySelector(".bgq-name")).toBeNull();
-    expect(slot().querySelector(".bgq-card img")!.getAttribute("src")).toContain("/brand/");
+    expect(slot().querySelector(".bgq-card img,.bgq-card .av")).toBeNull();
     await pick(3);
     await flush();
     expect(api.core).toHaveBeenCalledWith("background.questions.list", { member_id: 3 });
     const cards = slot().querySelectorAll(".bgq-card");
     expect(cards).toHaveLength(1);
-    expect(cards[0].querySelector(".bgq-name")!.textContent).toBe("日文老師");
+    expect(cards[0].querySelector(".card-title")!.textContent).toContain("日文老師");
     expect(cards[0].textContent).toContain("要寄出信件嗎？");
     expect(cards[0].textContent).not.toContain("《");
     expect(cards[0].querySelector("img")).toBeNull();
@@ -823,8 +1170,9 @@ describe("a member's thread", () => {
     const line = $<HTMLDetailsElement>('.exchange-event[data-exchange="42"]');
     expect(line.querySelector("summary")!.textContent).toBe("訊息來自 拉斐爾");
     expect(line.open).toBe(false);
-    expect(document.querySelector('.tn[data-id="42"] .bubble')).toBeNull();
-    expect([...line.querySelectorAll(".exchange-message")].map((message) => message.textContent)).toEqual(["拉斐爾主人明天幾點有空？", "行程管家下午兩點以後"]);
+    expect(document.querySelector('.tn[data-id="42"] .me')).toBeNull();
+    expect([...line.querySelectorAll(".exchange-message")].map((message) => message.textContent)).toEqual(["主人明天幾點有空？"]);
+    expect(document.querySelector('.tn[data-id="42"] .ra')!.textContent).toContain("下午兩點以後");
   });
 
   test("the core is told which thread is on screen, and none once the page goes", async () => {
@@ -838,7 +1186,7 @@ describe("a member's thread", () => {
     expect(api.membersViewing).toHaveBeenLastCalledWith(null);
   });
 
-  test("switching threads clears unsent composer text, and an in-flight ask that fails on the previous thread does not overwrite the new thread's composer", async () => {
+  test("switching threads shows their own drafts, and a failed earlier ask does not overwrite the new thread's composer", async () => {
     let failAsk!: (err: Error) => void;
     api.agentAskText.mockImplementationOnce(() => new Promise<void>((_, rej) => (failAsk = rej)));
     mount();
@@ -885,7 +1233,9 @@ describe("a new member", () => {
     api.membersList.mockResolvedValue({ ...structuredClone(LIST), members: [...structuredClone(LIST).members, made] });
     $('[data-col="add"]').click();
     $('#app-popover [data-pick="member"]').click();
-    $<HTMLInputElement>("#mb-new-name").value = "進度官";
+    const name = $<HTMLInputElement>("#mb-new-name");
+    name.value = "進度官";
+    name.dispatchEvent(new Event("input"));
     $('[data-dlg="create"]').click();
     await flush();
   }
@@ -893,7 +1243,7 @@ describe("a new member", () => {
   test("is made in the language of the window and opened; the routine the core offers is asked, 加入 makes it", async () => {
     vi.useFakeTimers();
     await create(OFFER);
-    expect(api.membersCreate).toHaveBeenCalledWith({ name: "進度官", role: "", personality: "", instructions: "", group_id: null, ui_language: "zh-TW", blurb: "", reply_style: "full", voice: "", read_aloud: false, notify: false, ask_before_members: false, draft_first: true });
+    expect(api.membersCreate).toHaveBeenCalledWith(expect.objectContaining({ name: "進度官", group_id: null, ui_language: "zh-TW", greet: true, avatar: expect.stringMatching(/^slime:/) }));
     expect($(".mb-pill-t").textContent).toBe("進度官");
     expect(api.routinesCreate).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(10);
@@ -922,29 +1272,13 @@ describe("a new member", () => {
     const picker = $<HTMLButtonElement>(".mb-pick");
     picker.click();
     expect(document.getElementById("app-popover")).not.toBeNull();
-    $<HTMLElement>('#app-popover [data-action="3"]').click();
+    $<HTMLElement>('#app-popover [data-action="2"]').click();
     expect(document.getElementById("app-popover")).toBeNull();
     expect(document.querySelector(".mb-dialog")).not.toBeNull();
     expect(document.activeElement?.id).toBe("mb-new-name");
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(document.querySelector(".mb-scrim")).toBeNull();
     expect(document.activeElement).toBe(picker);
-  });
-
-  test("retries loading presets after a transient failure on startup", async () => {
-    const url = "data:image/png;base64,iVBORw0KGgo=";
-    api.membersPresets.mockRejectedValueOnce(new Error("offline")).mockResolvedValue({
-      presets: [{ avatar: "preset:a", name: "a", url }],
-    });
-    mount();
-    await flush();
-    send({ type: "AgentTurn", turn_id: 99, member_id: 4 });
-    await new Promise((r) => setTimeout(r, 350));
-    await flush();
-    $('[data-col="add"]').click();
-    $('#app-popover [data-pick="member"]').click();
-    $('[data-dlg="avatar"]').click();
-    expect(document.querySelector('#app-popover [data-preset="preset:a"]')).not.toBeNull();
   });
 });
 
@@ -955,14 +1289,16 @@ describe("the details panel", () => {
     await vi.runOnlyPendingTimersAsync();
     const panel = $(".mb-det");
     const open = panel.hidden === false;
-    if (!open) $(".mb-col [data-member][aria-current=\"true\"]").click();
+    if (!open) $(".conversation-trigger").click();
     expect($(".mb-det").hidden).toBe(false);
     expect($(".page-agent").dataset.det).toBe("open");
     $('[data-det="close"]').click();
     await vi.advanceTimersByTimeAsync(200);
     expect($(".mb-det").hidden).toBe(true);
     expect($(".page-agent").dataset.det).toBeUndefined();
-    $(".mb-col [data-member][aria-current=\"true\"]").click();
+    await pick(0);
+    expect($(".mb-det").hidden).toBe(true);
+    $(".conversation-trigger").click();
     expect($(".mb-det").hidden).toBe(false);
   });
 
@@ -970,7 +1306,7 @@ describe("the details panel", () => {
     mount();
     await flush();
     await pick(3);
-    if ($(".mb-det").hidden) $(".mb-col [data-member][aria-current=\"true\"]").click();
+    if ($(".mb-det").hidden) $(".conversation-trigger").click();
     api.membersUpdate.mockResolvedValue({ member: { ...LIST.members[1], name: "嚴格老師" } });
     api.membersList.mockResolvedValue({
       ...structuredClone(LIST),
@@ -982,7 +1318,8 @@ describe("the details panel", () => {
     name.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
     await flush();
     expect($<HTMLTextAreaElement>(".cmp-input").placeholder).toBe("傳訊息給 嚴格老師");
-    expect($(".thread .mb-av-placeholder svg")).not.toBeNull();
+    expect($(".mb-pill-face svg.slime")).not.toBeNull();
+    expect($(".thread .ra-face")).toBeNull();
   });
 });
 
@@ -990,9 +1327,18 @@ test("a core without the members: Raphael alone, and the page works as before", 
   api.membersList.mockRejectedValue("mock: members.list");
   mount();
   await flush();
-  expect(document.querySelectorAll(".mb-col .mb-row")).toHaveLength(1);
-  expect($(".mb-col .mb-chief").textContent).toBe("拉斐爾");
+  expect(document.querySelectorAll(".mb-col .mb-list .mb-row")).toHaveLength(1);
+  expect($(".mb-col .mb-chief b").textContent).toBe("拉斐爾");
   expect($(".thread").textContent).toContain("回答 2");
+});
+
+test("a changed roster preview retains the prompt and empty-page faces", async () => {
+  mount(); await flush();
+  const prompt = $(".ask-face .av"), hero = $(".ra-hero .av");
+  api.membersList.mockResolvedValue({ ...LIST, members: LIST.members.map(member => member.id === 3 ? { ...member, preview: "A new preview" } : member) });
+  send({ type: "MembersChanged" }); await flush();
+  expect($(".ask-face .av")).toBe(prompt); expect($(".ra-hero .av")).toBe(hero);
+  expect(document.querySelector('[data-member="3"] .mb-row-p')?.textContent).toContain("A new preview");
 });
 
 
@@ -1001,4 +1347,63 @@ test("rooms replace the main conversation pane and member selection returns to i
  window.dispatchEvent(new CustomEvent("raphael:open-room",{detail:{roomId:1}}));await flush();
  expect(original.hidden).toBe(true);expect(agent.el.querySelector<HTMLElement>(".au-room-pane")!.hidden).toBe(false);expect(agent.el.querySelector(".au-room-heading")!.textContent).toContain("Launch");expect(document.querySelector('[role="dialog"]')).toBeNull();
  await pick(3);expect(original.hidden).toBe(false);expect(agent.el.querySelector<HTMLElement>(".au-room-pane")!.hidden).toBe(true);expect(agent.el.querySelector(".thread")!.textContent).toContain("10");
+});
+
+test.each(['room','hidden'])("opening member details in a %s page never polls or opens a computer stream", async scope=>{
+ api.desktopStatus.mockResolvedValue({state:'running',ready:true,control:'member'});
+ api.desktopOpen.mockResolvedValue({session:'sample',url:'http://127.0.0.1:9/sample'});
+ const agent=mount(); await flush();
+ if(scope==='room') window.dispatchEvent(new CustomEvent('raphael:open-room',{detail:{roomId:1}}));
+ else agent.hide();
+ await flush();
+ api.desktopOpen.mockClear(); api.desktopStatus.mockClear();
+ agent.el.querySelector<HTMLButtonElement>('[data-act="computer"]')!.click(); await flush();
+ expect(api.desktopStatus).not.toHaveBeenCalled(); expect(api.desktopOpen).not.toHaveBeenCalled();
+ agent.hide();
+});
+
+
+test("an approval retry never answers a replacement question", async () => {
+ mount(); await flush();
+ const ask=(id:string)=>({type:"AgentQuestion",id,prefix:"",text:"Review the sample note?",tier:"T2",timeout_ms:30000} as const);
+ send(ask("old")); api.agentQuestionAnswer.mockRejectedValueOnce(new Error("synthetic failure"));
+ $(".ask-yes").click(); await flush();
+ const retry=document.querySelector<HTMLButtonElement>('[data-card-retry]')!;expect(retry).not.toBeNull();
+ send({type:"AgentQuestionClosed",id:"old"}); send(ask("replacement"));
+ retry.click(); await flush();
+ expect(api.agentQuestionAnswer).toHaveBeenCalledTimes(1);
+ expect(document.querySelector('.ask-card-host [data-card-retry]')).toBeNull();
+});
+
+
+test("a burst of turn events while typing makes one history request and preserves the draft and nodes", async () => {
+  vi.useFakeTimers();
+  const agent = mount(); await flush(); await pick(3);
+  const input = agent.el.querySelector<HTMLTextAreaElement>(".composer textarea")!;
+  input.value = "Keep typing this draft"; input.dispatchEvent(new Event("input"));
+  const node = $('.tn[data-id="31"]');
+  api.agentHistoryList.mockClear();
+  for (let i = 0; i < 5; i++) {
+    send({ type: "AgentTurn", turn_id: 31, member_id: 3 });
+    await vi.advanceTimersByTimeAsync(20);
+  }
+  expect(api.agentHistoryList).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(500); await flush();
+  expect(api.agentHistoryList).toHaveBeenCalledTimes(1);
+  expect(input.value).toBe("Keep typing this draft");
+  expect($('.tn[data-id="31"]')).toBe(node);
+  agent.hide();
+});
+
+test("a same-length reply edit still refreshes without serializing the full history", async () => {
+  vi.useFakeTimers();
+  const agent = mount(); await flush(); await pick(3);
+  const changed = structuredClone(THREADS[3]!);
+  const edited = "X".repeat(changed[0]!.text.length);
+  changed[0]!.text = edited;
+  api.agentHistoryList.mockResolvedValueOnce({ turns: changed });
+  send({ type: "AgentTurn", turn_id: 31, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(500); await flush();
+  expect($('.tn[data-id="31"]').textContent).toContain(edited);
+  agent.hide();
 });

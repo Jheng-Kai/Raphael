@@ -43,11 +43,14 @@ from ..device.models import LOCAL_STT_MODELS
 from ..languages import DEFAULT_LANGUAGES, checked_languages
 
 DEFAULTS: dict[str, Any] = {
+    # Internal listener state, not an owner preference.
+    "routine_webhook_port": 0,
+    "chatgpt.registrations.v1": {},
     "first_bot_profile": {},
+    "chief_pinned": False,
     "owner_name": "",
     "owner_about": "",
     "owner_photo": "",
-    "skin": "default",
     "monthly_limit_usd": 10.0,
     # Chosen from the cleanup eval of 2026-10-18 for its cost and its speed (~1.25 s on average).
     # The cases and the prompt have changed since, so no pass rate is claimed for it: compare the
@@ -70,6 +73,9 @@ DEFAULTS: dict[str, Any] = {
     # what a request is when Jev (agent/routing.py, not a setting) fails or is unsure.
     "agent_model": "openai/gpt-6-luna",
     "quick_model": "",
+    # Separate paid media calls require an explicit owner choice; empty never inherits a brain.
+    "image_model": "",
+    "video_model": "",
     "quick_effort": "low",
     # API-only work when the conversational brain is a subscription CLI or local model.
     "assistant_model": "",
@@ -88,6 +94,11 @@ DEFAULTS: dict[str, Any] = {
     "agent_city": "台北",
     # Shared by every member and the worker; read at each action, never cached per conversation.
     "action_mode": "direct",
+    "computer_vm_mode": "per-bot",
+    "computer_ssh_alias": "",
+    "local_commands_mode": "ask",
+    "local_commands_seen": False,
+    "computer_vm_idle_minutes": 15,
     # The most one background task may spend, in US$ (one of WORKER_COST_CAPS).
     "worker_cost_cap_usd": 0.20,
     # The models the user starred in the pickers, per role (the page's names for them), in the order
@@ -161,8 +172,9 @@ URL_MAX_CHARS = 300
 # What one background task may cost, as the settings page offers it.
 WORKER_COST_CAPS = (0.10, 0.20, 0.50, 1.00)
 _CHOICES: dict[str, tuple[Any, ...]] = {
-    "skin": ("default", "paper", "graphite", "lagoon", "dusk", "midnight", "meadow", "ink", "catppuccin"),
-    "action_mode": ("ask", "direct"),
+    "computer_vm_mode": ("shared", "per-bot"),
+    "local_commands_mode": ("ask", "always", "never"),
+    "action_mode": ("ask", "direct", "plan", "bypass"),
     "worker_cost_cap_usd": WORKER_COST_CAPS,
     "stt_engine": STT_ENGINES,
     "stt_local_model": tuple(entry.name for entry in LOCAL_STT_MODELS),
@@ -174,7 +186,7 @@ _CHOICES: dict[str, tuple[Any, ...]] = {
 }
 # The settings that hold the id of an OpenRouter model.
 MODEL_SETTINGS = ("cleanup_model", "stt_cloud_model", "agent_model")
-OPTIONAL_MODEL_SETTINGS = ("vision_model", "router_model", "memory_model", "pdf_model", "assistant_model", "quick_model")
+OPTIONAL_MODEL_SETTINGS = ("vision_model", "router_model", "memory_model", "pdf_model", "assistant_model", "quick_model", "image_model", "video_model")
 FALLBACK_SETTINGS = tuple(purpose + "_fallbacks" for purpose in
                           ("agent", "cleanup", "router", "vision", "pdf", "stt", "memory"))
 _TRIMMED = (*MODEL_SETTINGS, "agent_city")
@@ -200,6 +212,8 @@ _NULLABLE = ("stt_local_model",)
 
 def _allowed(key: str, value: Any) -> Any:
     """`value`, or ValueError if the key has a list of choices and `value` is not on it."""
+    if key == "routine_webhook_port" and not 0 <= value <= 65535:
+        raise ValueError("Webhook port must be between 0 and 65535")
     choices = ("none", "minimal", "low", "medium", "high", "xhigh", "max") if key == "quick_effort" else _CHOICES.get(key)
     if choices is not None and value not in choices:
         raise ValueError(f"Setting {key!r} must be one of {', '.join(str(c) for c in choices)}")
@@ -331,6 +345,10 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
     if value is None and key in _NULLABLE:
         return key, None
     value = _allowed(key, _checked(key, value))
+    if key == "computer_ssh_alias" and value and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", value):
+        raise ValueError("Computer host must be a simple SSH config alias")
+    if key == "computer_vm_idle_minutes" and not 5 <= value <= 1440:
+        raise ValueError("Computer idle minutes must be between 5 and 1440")
     if key in ("owner_name", "owner_about"):
         value = value.strip()
         if len(value) > (100 if key == "owner_name" else 4000) or "\x00" in value:
@@ -366,6 +384,12 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
     if key == "tts_fish_model":
         value = _fish_model(key, value)
     return key, value
+
+
+def hosted_providers(client) -> set[str]:
+    """The services a model reference may name for API work, as the provider router knows them. ChatGPT counts
+    signed in or not: its own failure says to sign in again, where any other model would bill someone else."""
+    return {"chatgpt", *getattr(client, "api_providers", lambda: ())()}
 
 
 def api_model(settings, *candidates: object, api_providers=()) -> str:

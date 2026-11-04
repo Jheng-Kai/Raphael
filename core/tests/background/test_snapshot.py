@@ -9,11 +9,13 @@ def names(snapshot):
     return [d["function"]["name"] for d in snapshot.definitions]
 
 
-def test_without_plugins_a_task_has_the_lookups_of_raphael_only():
+def test_without_plugins_a_task_has_raphaels_lookups_and_calendar():
     snapshot = take_snapshot(None)
-    assert names(snapshot) == ["weather", "web_search", "local_time", "web_read"]
+    assert names(snapshot) == ["weather", "web_search", "local_time", "web_read", "generate_audio", "self_check", "raphael_help",
+                               "calendar_list", "calendar_add", "calendar_update", "calendar_delete", "add_mcp_server", "connections_list", "manage_connection", "ask_owner", "connect_app", "email_draft", "find_app", "request_secret", "show_page", "update_page", "routine_create", "routine_delete", "routine_list", "routine_update"]
     assert {ref.kind for ref in snapshot.refs.values()} == {BUILTIN}
-    assert all(ref.tier is Tier.T0 for ref in snapshot.refs.values())
+    writes = {"generate_audio", "calendar_add", "calendar_update", "calendar_delete", "routine_create", "routine_delete", "routine_update"}
+    assert all(ref.tier is (Tier.T2 if ref.name == "manage_connection" else Tier.T1 if ref.name in writes else Tier.T0) for ref in snapshot.refs.values())
 
 
 def test_the_commands_for_this_computer_are_not_in_it():
@@ -78,7 +80,8 @@ def test_a_tool_of_a_plugin_never_takes_the_name_of_one_of_raphaels_own():
             return Tier.T0
 
     snapshot = take_snapshot(Hub())
-    assert names(snapshot) == ["weather", "web_search", "local_time", "web_read"]
+    assert names(snapshot) == ["weather", "web_search", "local_time", "web_read", "generate_audio", "self_check", "raphael_help",
+                               "calendar_list", "calendar_add", "calendar_update", "calendar_delete", "add_mcp_server", "connections_list", "manage_connection", "ask_owner", "connect_app", "email_draft", "find_app", "request_secret", "show_page", "update_page", "routine_create", "routine_delete", "routine_list", "routine_update"]
     assert snapshot.refs["weather"].kind == BUILTIN
 
 
@@ -87,4 +90,5 @@ def test_a_hub_that_breaks_leaves_its_tools_out_and_not_the_task():
         def offered(self):
             raise RuntimeError("down")
 
-    assert names(take_snapshot(Broken())) == ["weather", "web_search", "local_time", "web_read"]
+    assert names(take_snapshot(Broken())) == ["weather", "web_search", "local_time", "web_read", "generate_audio", "self_check", "raphael_help",
+                                            "calendar_list", "calendar_add", "calendar_update", "calendar_delete", "add_mcp_server", "connections_list", "manage_connection", "ask_owner", "connect_app", "email_draft", "find_app", "request_secret", "show_page", "update_page", "routine_create", "routine_delete", "routine_list", "routine_update"]

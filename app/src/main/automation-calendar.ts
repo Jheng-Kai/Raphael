@@ -3,7 +3,7 @@ import type { Routine } from "./types";
 import { dateKey, localDay, shiftDay } from "./schedule-picker";
 export interface Occurrence { routine: Routine; at: number; }
 export function occurrences(routine: Routine, from: Date, to: Date, remaining = Infinity): Occurrence[] {
-  if (!routine.enabled || routine.next_run === null || remaining <= 0) return [];
+  if (!routine.schedule || !routine.enabled || routine.next_run === null || remaining <= 0) return [];
   const s = routine.schedule, result: Occurrence[] = [];
   let used = 0;
   const add = (at: number): void => {
@@ -15,7 +15,19 @@ export function occurrences(routine: Routine, from: Date, to: Date, remaining = 
   };
   if (s.kind === "once") { add(new Date(`${s.start_date}T${s.time}`).getTime()); return result; }
   if (s.kind === "every") {
-    const step = s.hours * 3600000, anchor = routine.next_run;
+    if (s.from && s.to) {
+      const first = Number.isFinite(remaining) ? new Date(routine.next_run) : from;
+      const firstMinute = Number(s.from.slice(0, 2)) * 60 + Number(s.from.slice(3));
+      const lastMinute = Number(s.to.slice(0, 2)) * 60 + Number(s.to.slice(3));
+      for (let day = localDay(dateKey(first)); day < to && used < remaining; day = shiftDay(day, 1)) {
+        for (let minute = firstMinute; minute <= lastMinute && used < remaining; minute += (s.minutes ?? (s.hours ?? 1) * 60)) {
+          const at = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, minute).getTime();
+          if (at >= routine.next_run) add(at);
+        }
+      }
+      return result;
+    }
+    const step = (s.minutes ?? (s.hours ?? 1) * 60) * 60000, anchor = routine.next_run;
     const offset = Math.max(0, Math.ceil((from.getTime() - anchor) / step));
     used = offset;
     for (let at = anchor + offset * step; at < to.getTime() && used < remaining; at += step) add(at);
@@ -25,6 +37,7 @@ export function occurrences(routine: Routine, from: Date, to: Date, remaining = 
   for (let day = localDay(dateKey(first)); day < to && used < remaining; day = shiftDay(day, 1)) {
     if (s.kind === "weekdays" && [0, 6].includes(day.getDay())) continue;
     if (s.kind === "weekly" && !s.days.includes(day.getDay())) continue;
+    if (s.kind === "monthly" && day.getDate() !== Math.min(s.day, new Date(day.getFullYear(), day.getMonth()+1, 0).getDate())) continue;
     const at = new Date(`${dateKey(day)}T${s.time}`).getTime();
     if (at >= routine.next_run) add(at);
   }

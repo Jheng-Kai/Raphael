@@ -36,11 +36,22 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     }
     return right > left && bottom > top;
   };
+  // R-UI-56: what clears, deletes or removes waits in a ⋯ and the right click of its row. Keep the places it may stand explicit:
+  // the menu itself; a dialog about that one thing, which confirms or edits it; a local model's inline question; what is being
+  // composed (a message's attachments and quote, Raphael's member drafts); and a favourite's star, which destroys nothing.
+  const destroyWords = /^(?:確定)?(?:全部)?(?:清除|刪除|移除)|^(?:clear|delete|remove)\b|消去|削除/i;
+  const destroyMayStand = '[role="menu"], .menu, .cs-dialog, .mb-dialog, .lm-confirm, .composer, .draft-panel, .mp-star';
+  const destroysInTheOpen = button => {
+    const name = (button.getAttribute('aria-label') || button.textContent).trim();
+    // R-MP-02 names these two counted, confirmed Settings actions explicitly.
+    const dataHeading = button.matches('.modal-body .data-section > .data-heading > button[data-act="data-clear"]:is([data-what="dictation"], [data-what="conversation"])');
+    return name.length <= 24 && destroyWords.test(name) && !button.closest(destroyMayStand) && !dataHeading;
+  };
   const outsideViewport = [], horizontalOverflow = [], missingI18nKeys = [], nativeControls = [], invalidDurations = [], mixedLanguage = [], rawMarkdown = [], productRules = [];
   const markdownPattern = /(?:^|\r?\n)[\t ]*(?:#{1,6}(?:[\t ]|$)|-\s+\[[ xX]\])|\*\*[^*\r\n]+\*\*|`{3,}/;
   // A textarea holds the document its owner is editing (a private skill's SKILL.md), so Markdown there is data, not unrendered copy.
   const checkMarkdown = element => {
-    if (element.matches("textarea")) return;
+    if (element.closest("textarea, .message-code pre, .checkpoint pre code, .diagram-view")) return;
     for (const node of element.childNodes) if (node.nodeType === 3 && markdownPattern.test(node.textContent))
       rawMarkdown.push({ ...describe(element), text: node.textContent.trim().slice(0, 200) });
   };
@@ -56,33 +67,52 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     const description = describe(element);
     if (!element.matches(".window-resize") && !clipped(element) && (box.left < -1 || box.top < -1 || box.right > viewport.width + 1 || box.bottom > viewport.height + 1))
       outsideViewport.push({ ...description, bounds: { left: box.left, top: box.top, right: box.right, bottom: box.bottom } });
-    if (element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow))
+    // SVG uses viewBox coordinates, so text clientWidth and scrollWidth are not CSS overflow measurements.
+    if (element.namespaceURI !== 'http://www.w3.org/2000/svg' && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow))
       horizontalOverflow.push({ ...description, width: element.clientWidth, scrollWidth: element.scrollWidth });
     if (!onScreen(element)) continue;
+    const floatingLatest = element.matches(".page-agent .ra-stage > button.conversation-latest");
+    const sidebarAction = element.matches(".side .btn.icon");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
+    if (element.matches('button:disabled[title], [aria-disabled="true"][title]')) {
+      const title = element.getAttribute('title')?.trim();
+      const label = element.getAttribute('aria-label')?.trim() || element.textContent.trim();
+      const context = element.parentElement;
+      const visibleText = node => node.nodeType === 3 ? node.textContent : node.nodeType === 1 && visible(node) && onScreen(node) ? [...node.childNodes].map(visibleText).join('') : '';
+      const text = context ? visibleText(context).trim() : '';
+      if (title && title !== label && !text.includes(title)) violation('R-UI-69', 'A disabled control explains its reason only in a hover title');
+    }
     if (element.matches('.page-agent .ans.thinking')) violation('R-UI-38', 'Conversation waiting must use the shared work line');
+    const scrollbar = element.offsetWidth - element.clientWidth - (parseFloat(style.borderLeftWidth) || 0) - (parseFloat(style.borderRightWidth) || 0);
+    if (['auto', 'scroll'].includes(style.overflowY) && scrollbar > 1 && !element.matches('.main, .modal-body, .cs-results, .cs-form .add-grid')) violation('R-UI-62', 'A scrollbar takes room from a narrow part; only a wide page shows one');
+    if (element.matches('.main') && scrollbar > 1 && element.querySelector(':scope > .page-agent:not([hidden])')) violation('R-UI-62', 'A conversation never scrolls the main area, so it keeps no strip for a scrollbar');
+    if (element.matches('.mb-av-slime') && style.overflow !== 'visible') {
+      const reserve = Number(style.overflowClipMargin?.match(/([\d.]+)px/)?.[1] ?? 0);
+      if (style.overflow !== 'clip' || reserve < Math.max(box.width, box.height)) violation('R-UI-54', 'A crop cuts the horns and wings of a slime');
+    }
+    if (element.matches('.mb-av-slime') && (box.width % 1 || box.height % 1)) violation('R-UI-63', `A slime on a fraction of a pixel is drawn soft: ${box.width} x ${box.height}`);
+    if (element.matches('.shimmer')) {
+      const mask=element.querySelector(':scope > .shimmer-mask'), image=mask && win.getComputedStyle(mask).maskImage;
+      const light=image && image!=='none' ? win.getComputedStyle(mask,'::after').backgroundImage : style.backgroundImage;
+      if (new Set(light.match(/rgba?\([^)]*\)|color\([^)]*\)/g) ?? []).size < 2) violation('R-UI-55', 'A light passing over words in the colour of the words shows nothing');
+    }
     if (element.matches('button.btn.icon')) {
-      if (!['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
+      if (!floatingLatest && !sidebarAction && !['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
       const glyph = element.querySelector(':scope > svg.i');
       if (glyph) {
         const rect = glyph.getBoundingClientRect();
         const sizes = element.matches('.cmp-send') ? [32] : [16, 20];
-        // A board the owner zooms scales its glyphs too; the shared size is the unzoomed one.
+        // CSS zoom scales glyphs too; compare their shared size before scaling.
         let zoom = 1;
         for (let parent = element; parent; parent = parent.parentElement) {
           const parentStyle = win.getComputedStyle(parent);
           zoom *= parseFloat(parentStyle.zoom) || 1;
-          if (parent.matches('.team-board')) {
-            const matrix = /^matrix\(\s*([^,]+),\s*([^,]+)/.exec(parentStyle.transform);
-            const scale = /scale\(\s*([\d.]+)/.exec(parentStyle.transform);
-            zoom *= matrix ? Math.hypot(Number(matrix[1]), Number(matrix[2])) : Number(scale?.[1] ?? 1);
-          }
         }
         if (!sizes.some(size => Math.abs(rect.width / zoom - size) <= .5 && Math.abs(rect.height / zoom - size) <= .5)) violation('R-UI-19', 'Action glyph does not use the shared icon sizes');
         if (Math.abs(rect.left + rect.width / 2 - box.left - box.width / 2) > 1 || Math.abs(rect.top + rect.height / 2 - box.top - box.height / 2) > 1) violation('R-UI-19', 'Action glyph is not centered');
       }
     }
-    if (element.matches('.au-month-grid .btn[aria-pressed="true"]')) {
+    if (element.matches('.au-month-grid .btn[aria-pressed="true"], .desktop-screen [data-desktop="retry"]')) {
       const luminance = value => {
         const rgb = value.match(/[\d.]+/g)?.slice(0, 3).map(Number);
         if (rgb?.length !== 3) return null;
@@ -90,7 +120,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       };
       const foreground = luminance(style.color), background = luminance(style.backgroundColor);
       if (foreground !== null && background !== null && (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05) < 4.5)
-        violation('R-UI-22', 'Selected date has insufficient text contrast');
+        violation('R-UI-22', element.matches('[data-desktop="retry"]') ? 'Screen action has insufficient text contrast' : 'Selected date has insufficient text contrast');
     }
     if (element.matches('.mp-add')) {
       const controls = [...element.children].filter(child => visible(child) && child.matches('input, .btn'));
@@ -101,13 +131,6 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const controls = [...element.children].filter(child => visible(child) && child.matches('.sel, .mb-fin, .btn'));
       if (controls.length > 1 && controls.some(child => Math.abs(child.getBoundingClientRect().width - controls[0].getBoundingClientRect().width) > 1))
         violation('R-UI-17', 'Schedule controls in one column have different widths');
-    }
-    if (element.matches('.skin-grid, .wgrid')) {
-      const cards = [...element.children].filter(visible);
-      if (cards.length > 1) {
-        const row = cards.filter(card => Math.abs(card.getBoundingClientRect().top - cards[0].getBoundingClientRect().top) <= 1);
-        if (row.length !== 2) violation('R-UI-30', 'Long choices must form two card columns');
-      }
     }
     if (element.matches('.page-overview .kc-row')) {
       const label = element.querySelector('.kc-name'), keys = element.querySelector('.kc-keys');
@@ -134,10 +157,10 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (footer && visible(footer) && footer.getBoundingClientRect().top - box.bottom < 7)
         violation('R-UI-17', 'Model source action touches the final source row');
     }
-    if (englishUI.length && element.closest('button, label, input, textarea, h1, h2, h3, [role="tab"], [role="menuitem"], .nav') && !element.closest('.message-text, .ans, .txt')) {
+    if (englishUI.length && element.closest('button, label, input, textarea, h1, h2, h3, [role="tab"], [role="menuitem"], .nav') && !element.closest('.message-text, .ans, .txt, .conversation-caption, .conversation-open') && !element.matches('.conversation-trigger')) {
       const copy = [...element.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent.trim());
       for (const attribute of ['aria-label', 'placeholder', 'title']) if (element.hasAttribute(attribute)) copy.push(element.getAttribute(attribute).trim());
-      const productOrKeyName = /^(?:Raphael|OpenRouter|OpenAI|Codex|Claude|Gemini|Antigravity|GitHub|Telegram|Google|Notion|MCP|PDF|CLI|Right Alt|Alt|Ctrl|Esc)$/;
+      const productOrKeyName = /^(?:Raphael|OpenRouter|OpenAI|ChatGPT|Codex|Claude|Gemini|Antigravity|GitHub|Telegram|Google|Notion|MCP|PDF|CLI|Right Alt|Alt|Ctrl|Esc)$/;
       if (copy.some(value => !productOrKeyName.test(value) && englishUI.includes(value))) violation('R-UI-14', 'English interface copy in a zh-TW window');
     }
     if (element.matches('[data-tooltip], [aria-describedby]')) {
@@ -146,13 +169,14 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     }
     if (element.matches('button.danger, button[data-row-action="delete"], button[data-row-action="rename"]') && !element.closest('[role="menu"], .menu, .action-row') && element.closest('.mp-resource, .mb-routine, .mb-tool-row, .au-room-row, .mem-row, .rule-row, .rules-row, .word-row, .wrow, .history-row, .hrow, .mb-rt, .row, [role="listitem"]'))
       violation('R-UI-11', 'Visible list-row delete or rename action');
+    if (element.matches('button') && destroysInTheOpen(element)) violation('R-UI-56', 'A button that clears, deletes or removes stands open on the page');
     if (element.matches('button.btn')) {
       // Navigation cards, list choices and disclosures are not text action buttons; an event line
       // that opens its room navigates like the sidebar's room rows.
       // Keep this inventory explicit: ordinary action buttons never opt out by an attribute.
-      const navigation = element.matches('.brand, .conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .mb-chat-choice, .mc-source, .cs-open, .cs-main, .au-room-row > .btn:first-child, .event-open, .ho-spend, .ho-row, .ho-allowance, .ho-dictation, .au-edit, .steps-sum, .task-sum') || element.closest('.mb-col, .au-month-grid, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded');
+      const navigation = element.matches('.conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .mb-chat-choice, .mc-source, .cs-open, .cs-main, .au-room-row > .btn:first-child, .event-open, .ho-spend, .ho-row, .ho-agenda-row, .ho-agenda-more, .ho-event-chip, .ho-more, .ho-allowance, .ho-dictation, .au-edit, .cal-chip, .cal-more, .au-day-num, .au-date-nav > .au-today, .steps-sum, .task-sum') || element.closest('.mb-col, .au-month-grid, .ho-month, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded') || element.matches('.conversation-card > .card-actions > .card-quiet');
       const hasBorder = ['Top', 'Right', 'Bottom', 'Left'].some(side => parseFloat(style[`border${side}Width`]) > 0 && !['transparent', 'rgba(0, 0, 0, 0)'].includes(style[`border${side}Color`]) && !['none', 'hidden'].includes(style[`border${side}Style`]));
-      if (element.classList.contains('icon') && hasBorder) violation('R-UI-18', 'Icon button has a visible border');
+      if (!floatingLatest && element.classList.contains('icon') && hasBorder) violation('R-UI-18', 'Icon button has a visible border');
       if (!navigation && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder) violation('R-UI-18', 'Text action button has no frame');
     }
     if (element.matches('.action-row')) {
@@ -165,15 +189,16 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     checkMarkdown(element);
     if (element.matches('.work-time, .work-toggle, .step-ms') && /\b(?:NaN|Infinity)\b/.test(element.textContent)) invalidDurations.push(description);
     if (element.matches('select,input[type="time"]')) nativeControls.push(description);
-    // Textarea values are user data, like input.value; their labels and placeholders remain UI copy.
-    const strings = element.matches("textarea") ? [] : [...element.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent);
+    // Owner-authored text is data; labels, titles and placeholders remain UI copy.
+    const authored = element.matches(".modal-body .data-record > .data-record-text, .thread :is(.message-text, .message-code code, .message-table td, .message-table th) mark[data-find-match]") || element.closest("textarea, .checkpoint summary, .checkpoint pre code, .checkpoint-uncovered li");
+    const strings = authored ? [] : [...element.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent);
     for (const attribute of ["aria-label", "title", "placeholder"]) if (element.hasAttribute(attribute)) strings.push(element.getAttribute(attribute));
     for (const value of strings) for (const match of value.matchAll(keyPattern)) {
       if (!namespaces.includes(match[1].split(".")[0]) || seenKeys.has(match[1])) continue;
       seenKeys.add(match[1]); missingI18nKeys.push({ ...description, key: match[1] });
     }
     // The literal command-template token is syntax in every locale, not English copy.
-    if (allowed) for (const value of strings) {
+    if (allowed && !element.closest('.message-link, .url-chip, .local-command, .message-code pre code, .msg .note code, .mb-row-p, .rich-language, .message-diagram .diagram-view svg, .rich-view-dialog .diagram-view svg')) for (const value of strings) {
       const copy = productPattern ? value.replace(productPattern, "") : value;
       for (const [word] of copy.replace(/\{input\}/g, "").replace(keyPattern, "").replace(/https?:\/\/\S+|\S+\.(?:pdf|png|jpe?g|txt|md|csv|exe|com|dev|io)\b/gi, "").matchAll(/[A-Za-z]{2,}/g)) {
         if (allowed.has(word.toLowerCase()) || seenWords.has(word)) continue;
@@ -182,6 +207,124 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     }
   }
   for (const orphan of overflowOrphans) productRules.push({ ...orphan, rule: 'R-UI-44', reason: 'A ⋯ button that a right click on its row does not reach' });
+  // R-UI-52: text and icons stay readable on their surface, at rest and under the pointer.
+  const parsed = value => {
+    const rgb = /^rgba?\(([^)]+)\)$/.exec(value);
+    const srgb = /^color\(srgb ([^)]+)\)$/.exec(value);
+    if (!rgb && !srgb) return null;
+    const parts = (rgb ?? srgb)[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+    if (parts.length < 3 || parts.some(Number.isNaN)) return null;
+    const scale = srgb ? 255 : 1;
+    return { r: parts[0] * scale, g: parts[1] * scale, b: parts[2] * scale, a: parts[3] ?? 1 };
+  };
+  const over = (top, bottom) => ({ r: top.r * top.a + bottom.r * (1 - top.a), g: top.g * top.a + bottom.g * (1 - top.a), b: top.b * top.a + bottom.b * (1 - top.a), a: 1 });
+  const luminance = ({ r, g, b }) => [r, g, b].map(v => v / 255).map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const ratio = (a, b) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+  // The solid colour behind an element, or null when a picture lies under it.
+  const backdrop = element => {
+    const layers = [];
+    for (let node = element; node; node = node.parentElement) {
+      const style = win.getComputedStyle(node);
+      if (style.backgroundImage && style.backgroundImage !== "none") return null;
+      const color = parsed(style.backgroundColor);
+      if (color && color.a > 0) { layers.push(color); if (color.a === 1) break; }
+    }
+    if (!layers.length || layers[layers.length - 1].a < 1) return null;
+    return layers.reduceRight((below, top) => over(top, below));
+  };
+  const hasText = element => [...element.childNodes].some(node => node.nodeType === 3 && node.textContent.trim());
+  const marks = element => [...(hasText(element) ? [element] : []), ...element.querySelectorAll("*")].filter(node => (hasText(node) || node.matches("svg.i")) && visible(node));
+  const quiet = element => element.closest(":disabled, [aria-disabled='true'], [inert], .message-code") ||
+    element.closest('.desktop-screen') && !element.closest('.missing-note');
+  const unreadable = (foreground, background) => foreground && background && foreground.a > 0.1 && ratio(over(foreground, background), background) < 3;
+  const seenContrast = new Set();
+  const reportContrast = (key, element, state) => {
+    if (seenContrast.has(key)) return;
+    seenContrast.add(key);
+    productRules.push({ ...describe(element), rule: "R-UI-52", reason: `Text or icon is unreadable ${state}` });
+  };
+  for (const element of doc.body.querySelectorAll("*")) {
+    if (!hasText(element) || element.matches("script, style, option") || !visible(element) || !onScreen(element) || quiet(element)) continue;
+    const background = backdrop(element);
+    if (unreadable(parsed(win.getComputedStyle(element).color), background)) reportContrast(`rest:${element.className}`, element, "at rest");
+  }
+  const specificity = selector => [(selector.match(/#[\w-]+/g) ?? []).length, (selector.match(/\.[\w-]+|\[[^\]]+\]|:(?!not|is|where)[\w-]+/g) ?? []).length, (selector.replace(/\[[^\]]+\]|\.[\w-]+|#[\w-]+|:[\w-]+/g, " ").match(/[a-z][\w-]*/gi) ?? []).length];
+  const beats = (a, b) => { for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i]; return true; };
+  const hovered = new Map();
+  const collect = rules => {
+    for (const rule of rules) {
+      if (rule.cssRules && !rule.selectorText) {
+        if (!rule.media || win.matchMedia(rule.media.mediaText).matches) collect(rule.cssRules);
+        continue;
+      }
+      if (!rule.selectorText?.includes(":hover")) continue;
+      const fill = rule.style.backgroundColor || rule.style.background, ink = rule.style.color;
+      if (!fill && !ink) continue;
+      for (const selector of rule.selectorText.split(/,(?![^(]*\))/)) {
+        if (!selector.includes(":hover")) continue;
+        let matches;
+        try { matches = doc.querySelectorAll(selector.replace(/:hover/g, "").trim() || "*"); } catch { continue; }
+        const weight = specificity(selector);
+        for (const element of matches) {
+          const entry = hovered.get(element) ?? {};
+          if (fill && (!entry.fill || beats(weight, entry.fill.weight))) entry.fill = { value: fill, weight, selector };
+          if (ink && (!entry.ink || beats(weight, entry.ink.weight))) entry.ink = { value: ink, weight };
+          hovered.set(element, entry);
+        }
+      }
+    }
+  };
+  for (const sheet of doc.styleSheets ?? []) { try { collect(sheet.cssRules); } catch { /* A sheet from elsewhere cannot be read. */ } }
+  const resolved = (element, property, value) => {
+    const probe = doc.createElement("i");
+    probe.style.display = "none";
+    probe.style[property] = value;
+    if (!probe.style[property]) return null;
+    element.append(probe);
+    const color = parsed(win.getComputedStyle(probe)[property]);
+    probe.remove();
+    return color;
+  };
+  for (const [element, { fill, ink }] of hovered) {
+    if (!fill || !visible(element) || !onScreen(element) || quiet(element)) continue;
+    const surface = resolved(element, "backgroundColor", fill.value.split(/\s+(?![^(]*\))/)[0]);
+    const below = element.parentElement && backdrop(element.parentElement);
+    if (!surface || !below) continue;
+    const background = over(surface, below);
+    const forced = ink && resolved(element, "color", ink.value);
+    for (const mark of marks(element)) {
+      const foreground = mark === element && forced ? forced : forced && win.getComputedStyle(mark).color === win.getComputedStyle(element).color ? forced : parsed(win.getComputedStyle(mark).color);
+      // A mark on a surface of its own (a tick in its box) does not sit on the hover fill.
+      let onOwnSurface = false;
+      for (let node = mark; node && node !== element; node = node.parentElement) if (parsed(win.getComputedStyle(node).backgroundColor)?.a > 0.5) onOwnSurface = true;
+      if (onOwnSurface) continue;
+      if (unreadable(foreground, background)) { reportContrast(`hover:${fill.selector}`, element, `under the pointer (${fill.selector.trim()})`); break; }
+    }
+  }
+  // R-UI-53: a hover fill keeps its words off its edges (owner, 2026-10-31). Measured at rest, so every row of every scene counts.
+  const HOVER_TEXT_GAP = 6, HOVER_ROW_MIN = 80;
+  for (const [element, { fill }] of hovered) {
+    if (!fill || /^(?:transparent|none)$/.test(fill.value.trim()) || !visible(element) || !onScreen(element)) continue;
+    const box = element.getBoundingClientRect();
+    if (box.width < HOVER_ROW_MIN || element.matches("input, textarea")) continue;
+    let left = Infinity, right = -Infinity;
+    const range = doc.createRange(), walker = doc.createTreeWalker(element, 4);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent.trim() || !visible(node.parentElement)) continue;
+      range.selectNodeContents(node);
+      for (const rect of range.getClientRects?.() ?? []) {
+        let end = rect.right;
+        // An ellipsis ends where its box ends, not where the whole sentence would.
+        for (let parent = node.parentElement; parent && parent !== element; parent = parent.parentElement)
+          if (/hidden|clip/.test(win.getComputedStyle(parent).overflowX)) end = Math.min(end, parent.getBoundingClientRect().right);
+        left = Math.min(left, rect.left); right = Math.max(right, end);
+      }
+    }
+    if (left === Infinity) continue;
+    const cutOff = element.scrollWidth > element.clientWidth + 1;
+    if (left - box.left < HOVER_TEXT_GAP || (!cutOff && box.right - right < HOVER_TEXT_GAP))
+      productRules.push({ ...describe(element), rule: "R-UI-53", reason: `Words ${Math.round(left - box.left)}px and ${Math.round(box.right - right)}px from the edges of a hover fill (${fill.selector.trim()})` });
+  }
   const documentWidth = Math.max(doc.documentElement.scrollWidth, doc.body.scrollWidth);
   return { horizontalOverflow: { document: documentWidth > viewport.width + 1, documentWidth, viewportWidth: viewport.width, elements: horizontalOverflow }, outsideViewport, missingI18nKeys, nativeControls, invalidDurations, mixedLanguage, rawMarkdown, productRules };
 }

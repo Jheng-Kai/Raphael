@@ -46,7 +46,7 @@ async def test_skills_are_scoped_enabled_metadata_and_lazy_untrusted_document(se
     body = "a" * 5000 + "MIDDLE-SKILL-CONTENT" + "b" * 5000
     skill = team.members.capabilities.keep_skill(one.id, "owner/repo", "---\nname: verbs\ndescription: Practice verbs\n---\nPRIVATE-SKILL-BODY" + body)
     assert "skill_read" in team_tools_for(team.members, one.speaker(), always=True)
-    assert "skill_read" not in team_tools_for(team.members, other.speaker(), always=True)
+    assert "skill_read" in team_tools_for(team.members, other.speaker(), always=True)
     prompt = roster_prompt(team.members, one.speaker(), "en")
     assert "Practice verbs" in prompt and "conversational" in prompt
     assert "Usually use one message" in prompt
@@ -61,7 +61,7 @@ async def test_skills_are_scoped_enabled_metadata_and_lazy_untrusted_document(se
     assert "MIDDLE-SKILL-CONTENT" in str(client.chat_calls[1]["messages"])
     team.members.capabilities.update_skill(one.id, skill["id"], False)
     assert team.members.skill_read(one.id, "verbs") is None
-    assert "skill_read" not in team_tools_for(team.members, one.speaker(), always=True)
+    assert "skill_read" in team_tools_for(team.members, one.speaker(), always=True)
 
 
 async def test_clear_member_history_preserves_other_threads_and_own_notes(setup):
@@ -70,7 +70,7 @@ async def test_clear_member_history_preserves_other_threads_and_own_notes(setup)
     history = AgentHistory(rig.conn)
     for person in (one, other):
         history.add(session_id=f"s{person.id}", question="Question", route="answer", prefix="", text="Answer", status="done", member_id=person.id)
-    team.memory.store_for(one.id).write("reference-topic", type="reference", description="Topic", body="Topic details")
+    team.memory.own(one.id).edit_document("Topic details\n", None)
     rig.service._cli_sessions.put(one.id, "claude", "old-session")
     rig.service._cli_sessions.put(other.id, "claude", "other-session")
     named = rig.service.conversations.create(one.id)
@@ -85,7 +85,7 @@ async def test_clear_member_history_preserves_other_threads_and_own_notes(setup)
     assert cleared["deleted"] == 1
     assert history.list(member_id=one.id) == []
     assert len(history.list(member_id=other.id)) == 1
-    assert team.memory.store_for(one.id).get("reference-topic") is not None
+    assert team.memory.own(one.id).read().strip() == "Topic details"
     assert rig.service._cli_sessions.get(one.id, "claude") is None
     assert rig.service._cli_sessions.get(other.id, "claude") == "other-session"
 

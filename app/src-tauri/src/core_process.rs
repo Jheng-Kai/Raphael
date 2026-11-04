@@ -49,6 +49,9 @@ type ExitHook = Box<dyn Fn() + Send + Sync>;
 /// The protocol version this app speaks (`PROTOCOL_VERSION` in the core's `protocol.py`).
 const PROTOCOL_VERSION: u64 = 1;
 
+/// Thirty days: long enough that no turn ever meets it, while the wait stays a plain deadline like every other call's.
+const TURN_TIMEOUT_S: u64 = 30 * 24 * 3600;
+
 /// How long a call to `method` may take before it fails with `TIMEOUT`.
 pub fn timeout_for(method: &str) -> Duration {
     let seconds = match method {
@@ -59,7 +62,8 @@ pub fn timeout_for(method: &str) -> Duration {
         "dictation.stop" => 150,
         // A narrated conversation may work for thirty minutes before its final reply or next
         // permission question. Leave time for routing and transport; Esc still stops it earlier.
-        "agent.ask" | "agent.confirm" => 1830,
+        // A turn works until the job is done or the owner stops it.
+        "agent.ask" | "agent.confirm" => TURN_TIMEOUT_S,
         // Starts the plugin (a program that may first have to be fetched), reads its tools.
         "integrations.refresh" => 40,
         // Waits for the user to log in in the browser: up to five minutes (the core ends it at
@@ -69,8 +73,12 @@ pub fn timeout_for(method: &str) -> Duration {
         // Managed app OAuth leaves time for a human browser round trip and final tool discovery.
         "connectors.connect" => 780,
         "connectors.google.connect" => 180,
+        // Waits for the owner to sign in in the browser; the core ends it at 180 s by default.
+        "chatgpt.sign_in" => 600,
+        "chatgpt.models" => 30,
         "connectors.catalog"
         | "connectors.categories"
+        | "connectors.toolkit"
         | "connectors.status"
         | "connectors.disconnect"
         | "connectors.tools"
@@ -256,7 +264,7 @@ impl RestartBudget {
 
 /// The Job Object that the core runs in.
 #[cfg(windows)]
-mod job {
+pub(crate) mod job {
     use std::os::windows::io::AsRawHandle;
     use std::process::Child;
 
@@ -314,6 +322,18 @@ mod job {
             // SAFETY: both handles are valid; `child` keeps its process handle open.
             unsafe { AssignProcessToJobObject(self.0, HANDLE(child.as_raw_handle())) }
                 .map_err(|err| err.to_string())
+        }
+
+        /// Contains an isolated debug app and all children it will create, including WebView2.
+        pub fn add_current(&self) -> Result<(), String> {
+            // SAFETY: the job is owned and GetCurrentProcess returns a valid pseudo-handle.
+            unsafe {
+                AssignProcessToJobObject(
+                    self.0,
+                    windows::Win32::System::Threading::GetCurrentProcess(),
+                )
+            }
+            .map_err(|err| err.to_string())
         }
 
         #[cfg(test)]
@@ -559,10 +579,13 @@ async fn say_hello(rpc: &RpcClient) {
         .await
     {
         Ok(hello) => match hello.get("protocol").and_then(Value::as_u64) {
-            Some(PROTOCOL_VERSION) => log::info!(
-                "core.hello: protocol {PROTOCOL_VERSION}, core version {}",
-                hello.get("version").and_then(Value::as_str).unwrap_or("?")
-            ),
+            Some(PROTOCOL_VERSION) => {
+                crate::webview_power::startup_trace("core_hello");
+                log::info!(
+                    "core.hello: protocol {PROTOCOL_VERSION}, core version {}",
+                    hello.get("version").and_then(Value::as_str).unwrap_or("?")
+                );
+            }
             other => log::error!(
                 "the core speaks protocol {other:?}, but this app needs protocol {PROTOCOL_VERSION}"
             ),
@@ -862,8 +885,14 @@ mod tests {
         assert_eq!(timeout_for("dictation.stop"), Duration::from_secs(150));
         assert_eq!(timeout_for("models.ensure"), Duration::from_secs(3600));
         assert_eq!(timeout_for("models.local_use"), Duration::from_secs(3600));
-        assert_eq!(timeout_for("agent.ask"), Duration::from_secs(1830));
-        assert_eq!(timeout_for("agent.confirm"), Duration::from_secs(1830));
+        assert_eq!(
+            timeout_for("agent.ask"),
+            Duration::from_secs(TURN_TIMEOUT_S)
+        );
+        assert_eq!(
+            timeout_for("agent.confirm"),
+            Duration::from_secs(TURN_TIMEOUT_S)
+        );
         assert_eq!(timeout_for("integrations.refresh"), Duration::from_secs(40));
         assert_eq!(
             timeout_for("integrations.connect"),

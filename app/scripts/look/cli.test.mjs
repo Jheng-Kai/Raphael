@@ -8,10 +8,15 @@ const app = resolve(import.meta.dirname, "../..");
 const look = (...args) => spawnSync(process.execPath, ["scripts/look/index.mjs", ...args], { cwd: app, encoding: "utf8" });
 
 describe("look CLI", () => {
-  it("requires the new group dialog before accepting the team journey", () => {
-    const journey = scenes.find(scene => scene.name === "team-new-group");
-    expect(journey.steps.at(-1)).toEqual({ action: "wait", selector: ".mb-dialog" });
-    expect(journey.steps).toContainEqual({ action: "wait", selector: '#app-popover [data-pick="group"]' });
+  it("uses the designed native default window for an unspecified viewport", () => {
+    const options = parseOptions([], scenes);
+    expect(options.widths).toEqual([1280]);
+    expect(options.heights).toEqual({1280:800});
+  });
+  it("keeps the new member and group chat actions in the permanent sidebar", () => {
+    const journey = scenes.find(scene => scene.name === "sidebar-plus");
+    expect(journey.steps).toContainEqual({ action: "click", selector: '[data-col="add"]' });
+    expect(journey.steps).toContainEqual({ action: "wait", selector: '#app-popover [data-pick="group-chat"]' });
   });
   it("accepts explicit full-screen dimensions in the shared width matrix", () => {
     expect(parseOptions(["--all", "--theme", "both", "--width", "1120,720,1920x1080"], scenes).widths).toEqual([1120, 720, 1920]);
@@ -26,7 +31,7 @@ describe("look CLI", () => {
   it("lists scenes without starting Vite or requiring a browser package", () => {
     const result = look("--list");
     expect(result.status, result.stderr).toBe(0);
-    for (const scene of ["chat", "details", "automations-calendar", "connections", "dictation-history", "composer-learn", "member-composer-learn", "room-composer-learn", "team-composer-learn"])
+    for (const scene of ["chat", "details", "automations-calendar", "connections", "dictation-history", "composer-learn", "member-composer-learn", "room-composer-learn"])
       expect(result.stdout).toMatch(new RegExp(`^${scene}\\s`, "m"));
   });
   it.each([["unknown-scene"], ["chat", "--width", "0"], ["chat", "--width", "1920x100"], ["--all", "--theme", "sepia"], ["chat", "--locale", "fr"], ["chat", "--out"], ["chat", "--typo"]])("rejects invalid arguments before browser startup: %j", (...args) => {
@@ -35,4 +40,10 @@ describe("look CLI", () => {
     expect(result.stderr).toMatch(/Invalid|Unknown|Missing/);
     expect(result.stderr).not.toContain("not implemented");
   });
+});
+
+
+it("roster animation continuity scenes opt into real motion", () => {
+  const missing = scenes.filter(scene => scene.steps.some(step => step.action === "event-storm" && step.roster) && !scene.motion);
+  expect(missing.map(scene => scene.name)).toEqual([]);
 });

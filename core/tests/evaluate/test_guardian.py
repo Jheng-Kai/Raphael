@@ -18,7 +18,13 @@ class FakeClient:
 
     async def chat_tools(self, **kwargs):
         self.requests.append(kwargs)
-        content, calls = next(self.turns)
+        from raphael_core.failures import CORRECTIVE_NOTE
+        if kwargs["messages"][-1].get("content") == CORRECTIVE_NOTE:
+            content, calls = self.last_final, []
+        else:
+            content, calls = next(self.turns)
+        if not calls:
+            self.last_final = content
         return ChatTurn(content, [ChatToolCall(str(i), name, args, json.dumps(args)) for i, (name, args) in enumerate(calls)], kwargs["model"], .001, 10, 10, 1)
 
 
@@ -84,7 +90,7 @@ async def test_html_reaches_member_without_tool_selection(conn, tmp_path):
     assert result["status"] == "PASS", result
     assert "守護星光" in client.requests[0]["messages"][1]["content"]
     offered = {tool["function"]["name"] for tool in client.requests[0]["tools"]}
-    assert "member_create" not in offered and "member_delete" not in offered
+    assert {"member_create", "member_delete"} <= offered  # a member has the tools Raphael has
 
 
 async def test_turn_cap_blocks_before_next_api_request(conn, tmp_path):
@@ -107,7 +113,7 @@ async def test_cli_fake_brain_calls_real_authenticated_mcp(conn, tmp_path, monke
                 headers = {"Authorization": "Bearer " + token}
                 listing = await http.post(endpoint, headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
                 names = {tool["name"] for tool in listing.json()["result"]["tools"]}
-                assert "routine_list" in names and "member_create" not in names
+                assert "routine_list" in names and "member_create" in names
                 response = await http.post(endpoint, headers=headers, json={"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "routine_list", "arguments": {}}})
                 assert response.status_code == 200
                 assert "寫作" in response.text
@@ -162,13 +168,13 @@ async def test_provider_error_is_classified_without_secret_text(conn, tmp_path):
         async def chat_tools(self, **kwargs):
             raise RuntimeError("synthetic-secret-never-report")
     result = await cell("fake/model", 0, SCENARIOS[1], brains=FakeBrains(tmp_path), client=BrokenClient(), sessions=Sessions(conn), conn=conn, budget=Budget(5))
-    assert result["status"] == "FAIL" and result["reason"] == "RuntimeError"
+    assert result["status"] == "FAIL" and result["reason"] == "unknown"
     assert "synthetic-secret" not in json.dumps(result)
 
 
 async def test_api_memory_uses_the_production_reply_envelope(conn, tmp_path):
     scenario = next(s for s in SCENARIOS if s.name == "memory")
-    reply = {"text": "已記住你的偏好。", "memory": [{"op": "write", "name": "morning-writing", "type": "user", "description": "寫作時間偏好", "body": "喜歡在早上練習寫作。", "expires": "", "space": "shared"}]}
+    reply = {"text": "已記住你的偏好。", "memory": [{"target": "user", "action": "add", "content": "喜歡在早上練習寫作。", "old_text": ""}]}
     result, _ = await api_cell(conn, tmp_path, scenario, [(json.dumps(reply, ensure_ascii=False), [])])
     assert result["status"] == "PASS", result
     assert "english_sentence_in_zh_TW_reply" in check_reply("已完成。Everything is ready now.", scenario)

@@ -65,6 +65,18 @@ def test_an_unknown_turn_is_none(history):
     assert history.get(99) is None
 
 
+@pytest.mark.parametrize("conversation", [False, True])
+def test_members_recall_only_their_own_exchanges(history, clock, conversation):
+    own = add(history, clock, "Synthetic review", member_id=1, peer_id=2,
+              scope="exchange", route="exchange", source="member")
+    add(history, clock, "Synthetic review private", member_id=2)
+    add(history, clock, "Synthetic review delegated", member_id=2, peer_id=1,
+        scope="exchange", route="exchange", source="member")
+    params = {"conversation_id": history.get(own).conversation_id} if conversation else {}
+    assert [t.id for t in history.search("Synthetic", member_id=1, **params)] == [own]
+    assert [t.id for t in history.recent(10, member_id=1, **params)] == [own]
+
+
 def test_messages_are_immediately_readable_in_order_and_cleared_with_their_thread(history, clock):
     first = add(history, clock, status="running", member_id=1)
     other = add(history, clock, member_id=2)
@@ -136,6 +148,30 @@ def test_recent_is_the_last_answered_turns_oldest_first(history, clock):
     assert [t.question for t in history.recent(4)] == ["q2", "q3", "q4", "q5"]
     assert [t.question for t in history.recent(100)] == [f"q{i}" for i in range(6)]
     assert history.recent(0) == []
+
+
+def test_recent_can_include_the_requests_that_did_not_finish(history, clock):
+    add(history, clock, "q0")
+    add(history, clock, "failed", status="error")
+    add(history, clock, "stopped", status="denied")
+    add(history, clock, "unanswered", status="expired")
+    add(history, clock, "pending", status="confirm")
+    add(history, clock, "now", status="running")
+    add(history, clock, "sweep", status="error", route="routine", source="routine")
+    add(history, clock, "q1")
+    wanted = ["q0", "failed", "stopped", "unanswered", "q1"]
+    assert [t.question for t in history.recent(10, unfinished=True)] == wanted
+    assert [t.question for t in history.recent(3, unfinished=True)] == wanted[-3:]
+    assert [t.question for t in history.recent(10)] == ["q0", "q1"]  # as before, for who wants answers
+
+
+def test_a_request_that_did_not_finish_is_told_what_it_already_did(history, clock):
+    steps = [Step("tool", "update", "Notes", "ok", 3), Step("tool", "look", "Notes", "ok", 3)] * 2
+    add(history, clock, "failed", status="error", steps=steps)
+    add(history, clock, "answered", steps=steps)
+    failed, answered = history.recent(5, unfinished=True, changes=lambda step: step.tool == "update")
+    assert "update (Notes) x2" in failed.work and "2 calls only read" in failed.work
+    assert answered.work == ""
 
 
 def test_clear_deletes_every_turn_and_counts_them(history, clock):

@@ -22,6 +22,7 @@ vi.mock("../api", () => api);
 
 import { Cleared } from "../cleared";
 import { createAgent } from "./agent";
+import { getLocale, setLocale } from "../i18n";
 import * as ui from "../ui";
 
 function turn(id: number, more: Partial<AgentTurn> = {}): AgentTurn {
@@ -81,6 +82,25 @@ beforeEach(() => {
   api.agentVoice.mockResolvedValue(undefined);
 });
 
+test("the header computer button updates its accessible label and title when the locale changes", async () => {
+  const previous = getLocale();
+  setLocale("zh-TW");
+  api.agentHistoryList.mockResolvedValue({ turns: [] });
+  const agent = mount();
+  try {
+    await flush();
+    const button = agent.el.querySelector<HTMLButtonElement>('.mb-head [data-act="computer"]')!;
+    for (const [locale, label] of [["zh-TW", "電腦"], ["en", "Computer"], ["ja", "コンピューター"], ["zh-TW", "電腦"]] as const) {
+      setLocale(locale);
+      expect(button.getAttribute("aria-label"), locale).toBe(label);
+      expect(button.title, locale).toBe(label);
+    }
+  } finally {
+    agent.hide();
+    setLocale(previous);
+  }
+});
+
 test("message links and preview cards use the safe opener with the full target; only replies get previews", async () => {
   const url = "https://www.cwa.gov.tw/V8/C/P/Typhoon/TY_WARN.html?lang=zh-TW&full=1";
   api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { question: `看 ${url}（颱風）`, messages: [
@@ -103,25 +123,45 @@ test("message links and preview cards use the safe opener with the full target; 
   agent.hide();
 });
 
-test("messages copy plain text, code copies exactly, only the latest reply regenerates, and long replies expand", async () => {
+test("each reply control reflects the shared work detail expansion", async () => {
+  api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { messages: [
+    { seq: 1, kind: "progress", text: "Checking the sample.", at_ms: 1 },
+    { seq: 2, kind: "reply", text: "First sample reply.", at_ms: 2 },
+    { seq: 3, kind: "reply", text: "Second sample reply.", at_ms: 3 },
+  ] })] });
+  const agent = mount(); await flush();
+  const buttons = [...document.querySelectorAll<HTMLButtonElement>('.tn[data-id="1"] .message-work')];
+  expect(buttons).toHaveLength(2);
+  buttons[0].click();
+  expect(document.querySelector<HTMLElement>('.tn[data-id="1"] .think-body')!.hidden).toBe(false);
+  expect(buttons.map(button => button.getAttribute("aria-expanded"))).toEqual(["true", "true"]);
+  buttons[1].click();
+  expect(document.querySelector<HTMLElement>('.tn[data-id="1"] .think-body')!.hidden).toBe(true);
+  expect(buttons.map(button => button.getAttribute("aria-expanded"))).toEqual(["false", "false"]);
+  agent.hide();
+});
+
+test("messages copy plain text, code copies exactly, only the latest reply regenerates, and long replies stay full", async () => {
   const body = "**bold**\n\n```js\na < b\n```\n" + Array.from({ length: 35 }, (_, i) => `line ${i}`).join("\n");
   api.agentHistoryList.mockResolvedValue({ turns: [turn(2, { text: body }), turn(1)] });
   api.agentAskText.mockResolvedValue(undefined);
-  const copy = vi.spyOn(ui, "copyText").mockResolvedValue(undefined);
+  const copy = vi.spyOn(ui, "copyButton").mockResolvedValue(true);
   const agent = mount(); await flush();
   const latest = document.querySelector<HTMLElement>('.tn[data-id="2"]')!;
-  expect(document.querySelectorAll('[data-regenerate="true"]')).toHaveLength(1);
+  document.querySelector<HTMLButtonElement>('.tn[data-id="1"] [data-act="more-message"]')!.click();
+  await flush(); expect(document.querySelector('[data-pick="regenerate"]')).toBeNull();
+  document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
   latest.querySelector<HTMLButtonElement>('.owner-message [data-act="copy-message"]')!.click();
-  await flush(); expect(copy).toHaveBeenLastCalledWith("問題 2");
+  await flush(); expect(copy).toHaveBeenLastCalledWith(expect.any(HTMLElement), "問題 2");
   latest.querySelector<HTMLButtonElement>('.ra [data-act="copy-message"]')!.click();
-  await flush(); expect(copy.mock.lastCall?.[0]).toContain("bold\na < b\n");
-  expect(copy.mock.lastCall?.[0]).not.toContain("**");
+  await flush(); expect(copy.mock.lastCall?.[1]).toContain("bold\na < b\n");
+  expect(copy.mock.lastCall?.[1]).not.toContain("**");
   latest.querySelector<HTMLButtonElement>('[data-act="copy-code"]')!.click();
-  await flush(); expect(copy).toHaveBeenLastCalledWith("a < b");
-  const expand = latest.querySelector<HTMLButtonElement>('[data-act="expand-message"]')!;
-  expect(expand.hidden).toBe(false); expand.click();
-  expect(document.querySelector('.tn[data-id="2"] .is-expanded')).not.toBeNull();
-  document.querySelector<HTMLButtonElement>('[data-regenerate="true"]')!.click();
+  await flush(); expect(copy).toHaveBeenLastCalledWith(expect.any(HTMLElement), "a < b");
+  expect(latest.querySelector('.ra [data-act="expand-message"]')).toBeNull();
+  expect([...latest.querySelectorAll('.ra .message-text')].map(node => node.textContent).join("\n")).toContain("line 34");
+  expect(latest.querySelector('.ans .message-code')).toBeNull();
+  latest.querySelector<HTMLButtonElement>('[data-act="more-message"]')!.click();
   await flush(); document.querySelector<HTMLButtonElement>('[data-pick="regenerate"]')!.click();
   await flush(); expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("問題 2", [], 0, expect.objectContaining({ requestId: expect.any(String) }));
   copy.mockRestore(); agent.hide();
@@ -213,22 +253,31 @@ describe("coming back to the page", () => {
 });
 
 describe("the search", () => {
-  test("shows what the core found in the whole history without raw steps", async () => {
+  test("the owner can navigate occurrences with a position and total", async () => {
     vi.useFakeTimers();
-    api.agentHistoryList.mockResolvedValueOnce({ turns: page(200, 50) }).mockResolvedValue({ turns: [] });
-    const step = { kind: "tool", tool: "search", server: "Raphael", outcome: "ok", ms: 800, reason: null, at_ms: 0 };
-    api.agentHistorySearch.mockResolvedValue({ turns: [turn(3, { question: "出差的行程", steps: [step] })] });
-    mount();
-    await flush();
+    api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { question: "needle and needle", text: "needle" })] });
+    mount(); await flush();
     document.querySelector<HTMLElement>('[data-act="search"]')!.click();
     const field = document.querySelector<HTMLInputElement>(".ra-find-input")!;
-    field.value = "出差";
-    field.dispatchEvent(new Event("input"));
+    field.value = "needle"; field.dispatchEvent(new Event("input"));
     await vi.advanceTimersByTimeAsync(250);
-    expect(api.agentHistorySearch).toHaveBeenCalledWith("出差");
-    expect(shownIds()).toEqual([3]); // far behind the loaded page
-    expect(document.querySelector('.tn[data-id="3"] [data-act="steps"]')).toBeNull();
+    expect(document.querySelector('.ra-find-count')?.textContent).toBe('3/3');
+    field.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter'}));
+    expect(document.querySelector('.ra-find-count')?.textContent).toBe('1/3');
   });
+  test("search loads older pages and keeps their words in the complete conversation", async () => {
+    vi.useFakeTimers();
+    api.agentHistoryList.mockImplementation(async (params: {limit:number;before_id?:number}) => params.limit===200 ? {turns:params.before_id ? [turn(3,{question:"needle"})] : page(250,200)} : {turns:params.before_id ? [] : page(250,50)});
+    mount(); await flush();
+    document.querySelector<HTMLElement>('[data-act="search"]')!.click();
+    const field=document.querySelector<HTMLInputElement>('.ra-find-input')!;
+    field.value='needle';field.dispatchEvent(new Event('input'));
+    await vi.advanceTimersByTimeAsync(250);
+    expect(api.agentHistoryList).toHaveBeenCalledWith(expect.objectContaining({before_id:51,limit:200}));
+    expect(document.querySelector('.tn[data-id="3"] mark.is-current')?.textContent).toBe('needle');
+    expect(shownIds()).toHaveLength(201);
+  });
+
 });
 
 describe("a question said aloud", () => {
@@ -273,21 +322,22 @@ describe("a question of the background", () => {
 });
 
 describe("a continuous typed turn", () => {
-  test("new progress replaces the running turn and the final reply removes the typing dots", async () => {
+  test("new progress updates the live avatar hover and the final reply removes it", async () => {
     vi.useFakeTimers();
     let live = turn(1, { source: "app", status: "running", text: "", messages: [] });
     api.agentHistoryList.mockImplementation(async () => ({ turns: [live] }));
     mount();
     await flush();
-    expect(document.querySelectorAll('.tn[data-id="1"] .think i')).toHaveLength(3);
+    expect(document.querySelectorAll('.tn[data-id="1"] .live-presence')).toHaveLength(1);
     live = { ...live, messages: [{ seq: 1, kind: "progress", text: "《告。先確認今天的日期。》", at_ms: 1 }] };
     send({ type: "AgentTurn", turn_id: 1 });
     await vi.advanceTimersByTimeAsync(200);
-    expect(document.querySelector('.tn[data-id="1"] .work-body')?.textContent).toContain("先確認今天的日期。");
-    expect(document.querySelector('.tn[data-id="1"] .work-body')?.textContent).not.toContain("《");
+    expect(document.querySelector<HTMLElement>('.tn[data-id="1"] .live-presence')?.dataset.tooltip).toBe("先確認今天的日期。");
+    expect(document.querySelector('.tn[data-id="1"] .work-latest, .tn[data-id="1"] .think')).toBeNull();
     live = { ...live, status: "done", text: "今天星期五。", messages: [...live.messages!, { seq: 2, kind: "reply", text: "《答。今天星期五。》", at_ms: 2 }] };
     send({ type: "AgentTurn", turn_id: 1 });
-    await vi.advanceTimersByTimeAsync(200);
+    // The trailing refresh also respects the shared event reader's 300ms window.
+    await vi.advanceTimersByTimeAsync(300);
     expect(document.querySelectorAll('.tn[data-id="1"] .ans')).toHaveLength(1);
     expect(document.querySelector('.tn[data-id="1"] .work-body')?.hasAttribute('hidden')).toBe(true);
     expect(document.querySelector('.tn[data-id="1"] .think')).toBeNull();

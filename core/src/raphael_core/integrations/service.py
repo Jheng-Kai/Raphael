@@ -594,6 +594,13 @@ class IntegrationsService:
                         return "read" if said else "write"
         return "write"
 
+    def kind_for_call(self, server_name: str, tool_name: str, arguments: Mapping[str, Any]) -> str:
+        for server in self._config.servers():
+            if server.name == server_name and server.managed_by and self.managed is not None:
+                tier = self.managed.tier(server.id, tool_name, arguments)
+                return "read" if tier is not None and tier < Tier.T2 else "write"
+        return self.kind_of(server_name, tool_name)
+
     def _tool_views(self, server: ServerConfig) -> list[dict[str, Any]]:
         return [self._tool_view(server, tool) for tool in server.tools]
 
@@ -647,6 +654,11 @@ class IntegrationsService:
         entries = [self._server_entry(server) for server in self._config.servers() if not server.managed_by]
         if self.managed is not None:
             entries += [self._managed_entry(entry) for entry in self.managed.store.connectors.values()]
+        recent = self._audit.last_used()
+        for entry in entries:
+            at = entry.get("last_used_at", 0) or recent.get(entry["name"], 0)
+            if at:
+                entry["last_used_at"] = at
         return mark_duplicates(entries)
 
     def _server_entry(self, server: ServerConfig) -> dict[str, Any]:
@@ -655,7 +667,9 @@ class IntegrationsService:
         tools = sum(1 for tool in server.tools if server.tool_on(tool)) if server.enabled else 0
         return {"id": server.id, "name": server.name, "enabled": server.enabled, "status": status, "error": failure,
                 "tools": tools, "state": app_state(enabled=server.enabled, status=status, error=failure, tools=tools),
-                "services": [server.catalog_id] if server.catalog_id else [], "source": None}
+                "services": [server.catalog_id] if server.catalog_id else [], "source": None,
+                **({"last_used_at": server.last_used_at} if server.last_used_at else {}),
+                **({"plugin": entry.name} if server.catalog_id and (entry := catalog.find(server.catalog_id)) else {})}
 
     def _managed_entry(self, entry: Any) -> dict[str, Any]:
         """A Composio toolkit or the owner's own Google, by what the gate would let through now."""
@@ -674,7 +688,8 @@ class IntegrationsService:
         return {"id": entry.id, "name": name, "enabled": entry.enabled, "status": status, "error": error,
                 "tools": len(ready),
                 "state": app_state(enabled=entry.enabled, status=status, error=error, tools=len(ready), waiting=waiting),
-                "services": services, "source": entry.kind}
+                "services": services, "source": entry.kind,
+                **({"last_used_at": entry.last_used_at} if entry.last_used_at else {})}
 
     async def _inventory(self, params: dict) -> dict:
         return read_inventory(self.connections).wire()
@@ -765,6 +780,8 @@ class IntegrationsService:
             if not server.enabled:
                 continue
             for tool in server.tools:
+                if "model" not in tool.ui.get("visibility", ["model", "app"]):
+                    continue
                 if server.tool_on(tool) and (not server.managed_by or (
                     self.managed is not None and self.managed.tool_available(server.id, tool.name)
                 )):
@@ -776,6 +793,10 @@ class IntegrationsService:
                             description=tool.description,
                             schema=tool.input_schema,
                             tier=self.managed.tier(server.id, tool.name) if server.managed_by else self._tier_for(tool),
+                            # Composio's router is one door to every app connected through it: the tool that
+                            # executes what the search found shares no word with any request, so a turn's
+                            # narrowing by its words must never leave the three of them out.
+                            pinned=server.managed_by == "composio",
                         )
                     )
         return tools
@@ -786,6 +807,33 @@ class IntegrationsService:
             return None
         server, tool = usable
         return self.managed.tier(server.id, tool.name) if server.managed_by else self._tier_for(tool)
+
+    def event_tool_belongs(self, app: str, key: str, arguments: dict) -> bool:
+        """A router's read must belong to the named connection, not another linked account."""
+        parsed = _parse_key(key)
+        if parsed is None:
+            return False
+        server, name = parsed
+        if self.managed is not None:
+            from ..connectors.service import COMPOSIO_SERVER, GOOGLE_SERVER, META_EXECUTE
+            entry = self.managed.store.connectors.get(app)
+            if entry is not None:
+                ready = self.managed.ready_tools_of(entry)
+                if entry.kind == "google":
+                    return server == GOOGLE_SERVER and name in ready
+                calls = arguments.get("tools", [])
+                return (server == COMPOSIO_SERVER and name == META_EXECUTE and len(calls) == 1
+                        and isinstance(calls[0], dict) and calls[0].get("tool_slug") in ready)
+        return server == app
+
+    def tier_for_call(self, key: str, arguments: Mapping[str, Any]) -> Tier | None:
+        usable = self._usable(key)
+        if usable is None:
+            return None
+        server, tool = usable
+        if server.managed_by:
+            return self.managed.tier(server.id, tool.name, arguments)
+        return self.tier_of(key)
 
     def _names(self, key: str) -> tuple[str, str]:
         """What the audit calls a tool: its server's name and its own, as far as they are known."""
@@ -817,6 +865,7 @@ class IntegrationsService:
     ) -> PluginResult:
         server_name, tool_name = self._names(key)
         usable = self._usable(key)
+        recovering = False
 
         def end(outcome: str, result: PluginResult) -> PluginResult:
             self._audit.add(
@@ -827,6 +876,17 @@ class IntegrationsService:
                 outcome=outcome,
                 task_id=task_id,
             )
+            if outcome == "ok" and usable is not None:
+                try:
+                    if usable[0].managed_by and self.managed:
+                        self.managed.record_used(usable[0].id, tool_name, arguments, self._now_ms())
+                    elif self._config.get(usable[0].id) is usable[0]:
+                        usable[0].last_used_at = self._now_ms()
+                        self._config.save()
+                except OSError as exc:
+                    logger.warning("Could not keep connection recency: %s", type(exc).__name__)
+            if outcome == "ok" and not recovering:
+                self._changed()
             return result
 
         if usable is None:
@@ -860,13 +920,14 @@ class IntegrationsService:
         except McpFailure as failure:
             if server.managed_by and failure.kind == "auth":
                 await self.managed.auth_failed(server.id)
-            if failure.kind == "gone":
+            if failure.kind in ("gone", "tool_not_visible"):
                 return end("blocked", PluginResult(False, failure.kind))
             if failure.kind == "cancelled":  # sent, and the connection ended: not known to have failed
                 return end("error", PluginResult(False, failure.kind))
             self._fail(server.id, failure.kind)
             result = PluginResult(False, failure.kind)
             return end("timeout" if failure.kind == "timeout" else "error", result)
+        recovering = server.id in self._failure
         self._recover(server.id)
         if self._config.get(server.id) is server:
             # The server describes tools differently now: they are kept as they are (and stay on).
@@ -882,6 +943,23 @@ class IntegrationsService:
                 except OSError as exc:
                     logger.warning("Could not save the plugins: %s", type(exc).__name__)
         if outcome.is_error:
-            result = PluginResult(False, "tool_error", outcome.text, outcome.truncated)
+            result = PluginResult(False, "tool_error", outcome.text, outcome.truncated,
+                                  page=getattr(outcome, "page", None), mcp_result=getattr(outcome, "mcp_result", None))
             return end("error", result)
-        return end("ok", PluginResult(True, None, outcome.text, outcome.truncated))
+        return end("ok", PluginResult(True, None, outcome.text, outcome.truncated,
+                                     page=getattr(outcome, "page", None), mcp_result=getattr(outcome, "mcp_result", None)))
+
+    def page_tool(self, server_id: str, name: str) -> PluginTool:
+        """Resolve an app's exact server/tool using current connection and visibility state."""
+        server = self._config.get(server_id)
+        kind = ("server_removed" if server is None else "server_disabled" if not server.enabled else
+                "server_disconnected" if self._failure.get(server_id) in ("auth", "missing_secret", "denied") else None)
+        if kind:
+            raise RpcError(1005, "The page's plugin server is unavailable", {"kind": kind, "server": server_id})
+        record = server.tool(name)
+        if record is None or "app" not in record.ui.get("visibility", ["model", "app"]):
+            raise RpcError(1005, "This tool is not available to apps on this server", {"kind": "tool_not_visible", "server": server_id})
+        key = tool_key(server_id, name)
+        if self._usable(key) is None:
+            raise RpcError(1005, "This tool is disabled", {"kind": "tool_disabled", "server": server_id})
+        return PluginTool(key, server.name, name, record.description, record.input_schema, self.tier_of(key))

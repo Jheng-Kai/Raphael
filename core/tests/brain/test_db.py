@@ -10,6 +10,40 @@ from raphael_core.brain.settings import SettingsStore
 
 from .conftest import item
 
+
+def test_unread_boundary_migration_preserves_existing_unread_members(monkeypatch, tmp_path):
+    path = tmp_path / "unread-before-boundaries.db"
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 56)
+        conn = db.connect(path)
+    conn.execute("INSERT INTO member_unread(member_id) VALUES (3)")
+    conn.commit()
+    conn.close()
+    conn = db.connect(path)
+    assert tuple(conn.execute("SELECT member_id, unread_from FROM member_unread").fetchone()) == (3, None)
+    conn.execute("UPDATE member_unread SET unread_from=42 WHERE member_id=3")
+    conn.commit()
+    db.migrate(conn)
+    conn.close()
+    conn = db.connect(path)
+    assert tuple(conn.execute("SELECT member_id, unread_from FROM member_unread").fetchone()) == (3, 42)
+    conn.close()
+
+
+def test_message_preview_migration_preserves_existing_permission_rows(monkeypatch):
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 54)
+        conn = db.connect(":memory:")
+    with conn:
+        conn.execute("INSERT INTO permission_cards(id,turn_id,member_id,source,kind,summary,digest,language,state,created_at_ms,updated_at_ms,expires_at_ms) VALUES ('sample',1,0,'ask','tool','Sample action','sample-digest','en','allowed',1,1,0)")
+    db.migrate(conn)
+    row = conn.execute("SELECT summary,digest,state,message FROM permission_cards WHERE id='sample'").fetchone()
+    assert tuple(row) == ("Sample action", "sample-digest", "allowed", "{}")
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.LATEST_VERSION
+    db.migrate(conn)
+    assert conn.execute("SELECT COUNT(*) FROM permission_cards").fetchone()[0] == 1
+    conn.close()
+
 # Schema v1 as it was made: every column with its type, NOT NULL, DEFAULT and primary key.
 SCHEMA_V1 = {
     "history": [
@@ -327,7 +361,43 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 39
+LATEST = 59
+
+
+def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
+    from raphael_core.background.tasks import TaskStore
+    path = tmp_path / "before-artifact-flag.db"
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 58)
+        conn = db.connect(path)
+    task_id = conn.execute("INSERT INTO worker_tasks(created_at_ms,state,session_id,language,text,done_when,report_text) "
+                          "VALUES (1,'done','sample','en','Review','Read the file','Existing review')").lastrowid
+    conn.commit()
+    conn.close()
+    upgraded = db.connect(path)
+    task = TaskStore(upgraded).get(task_id)
+    assert not task.requires_artifact and task.report_text == "Existing review" and task.state == "done"
+    upgraded.close()
+    reopened = db.connect(path)
+    assert not TaskStore(reopened).get(task_id).requires_artifact
+    reopened.close()
+
+
+def test_v41_room_membership_guard_follows_the_unique_chief(conn):
+    from raphael_core.members.store import MemberStore
+    store = MemberStore(conn)
+    chief = store.create_member(name="Alice")
+    with conn:
+        room = conn.execute("INSERT INTO rooms(name,created) VALUES ('Review',1)").lastrowid
+        conn.executemany("INSERT INTO room_members(room_id,member_id) VALUES (?,?)", [(room, 0), (room, chief.id)])
+    store.set_primary(chief.id)
+    with conn:
+        conn.execute("DELETE FROM room_members WHERE room_id=? AND member_id=0", (room,))
+    with pytest.raises(sqlite3.IntegrityError, match="chief cannot leave"):
+        with conn:
+            conn.execute("DELETE FROM room_members WHERE room_id=? AND member_id=?", (room, chief.id))
+    assert store.delete_member(chief.id)
+    assert store.primary_id() == 0
 
 
 def test_v25_preserves_conversations_and_quotas_and_cleans_deleted_run_metrics(tmp_path):
@@ -449,6 +519,154 @@ SCHEMA_V38 = {**SCHEMA_V37,
 
 # Schema v39: the member that is the owner's primary contact carries a flag, and at most one does.
 SCHEMA_V39 = {**SCHEMA_V38, "members": [*SCHEMA_V38["members"], "primary_contact INTEGER NOT NULL DEFAULT 0"]}
+# Schema v40 cleans conversation rows without adding columns; v41 updates the chief guard; v42 persists catalog card metadata.
+SCHEMA_V42 = {**SCHEMA_V39, "connect_cards": [*SCHEMA_V39["connect_cards"],
+    "app_name TEXT NOT NULL DEFAULT ''", "provider TEXT NOT NULL DEFAULT 'google'"]}
+SCHEMA_V43 = {**SCHEMA_V42, "connect_cards": [*SCHEMA_V42["connect_cards"], "app_logo TEXT NOT NULL DEFAULT ''"]}
+SCHEMA_V44 = {**SCHEMA_V43, "rooms": [*SCHEMA_V43["rooms"], "read_message_id INTEGER NOT NULL DEFAULT 0", "pinned INTEGER NOT NULL DEFAULT 0", "hidden INTEGER NOT NULL DEFAULT 0"]}
+# Schema v45 persists the owner's member-specific computer permission and revocation.
+SCHEMA_V45 = {**SCHEMA_V44, "computer_grants": [
+    "member_id INTEGER PK", "granted INTEGER NOT NULL", "updated_at_ms INTEGER NOT NULL"]}
+
+# Schema v46 keeps conversation pages and at most ten revisions of each.
+SCHEMA_V46 = {**SCHEMA_V45, "pages": [
+    "id TEXT PK", "turn_id INTEGER NOT NULL", "member_id INTEGER NOT NULL", "conversation_id INTEGER",
+    "title TEXT NOT NULL", "html TEXT NOT NULL", "fallback TEXT NOT NULL", "height INTEGER NOT NULL",
+    "rev INTEGER NOT NULL", "source TEXT NOT NULL", "server TEXT", "tool TEXT", "tool_input TEXT NOT NULL",
+    "tool_result TEXT NOT NULL", "network TEXT NOT NULL", "created_at_ms INTEGER NOT NULL", "updated_at_ms INTEGER NOT NULL"],
+    "page_revisions": ["page_id TEXT PK NOT NULL", "rev INTEGER PK NOT NULL", "title TEXT NOT NULL",
+                       "html TEXT NOT NULL", "at_ms INTEGER NOT NULL"]}
+
+SCHEMA_V48 = {**SCHEMA_V46, "calendar_events": [
+    "id INTEGER PK", "title TEXT NOT NULL", "all_day INTEGER NOT NULL DEFAULT 0", "start_ms INTEGER", "end_ms INTEGER",
+    "start_date TEXT", "end_date TEXT", "notes TEXT NOT NULL DEFAULT ''", "added_by INTEGER",
+    "created_at_ms INTEGER NOT NULL", "updated_at_ms INTEGER NOT NULL"]}
+
+SCHEMA_V49 = {**SCHEMA_V48, "owner_questions": [
+    "id TEXT PK", "task_id INTEGER NOT NULL", "turn_id INTEGER NOT NULL", "member_id INTEGER NOT NULL",
+    "kind TEXT NOT NULL", "card_id TEXT NOT NULL DEFAULT ''", "payload TEXT NOT NULL", "result TEXT",
+    "created_at_ms INTEGER NOT NULL"]}
+
+SCHEMA_V50 = {**SCHEMA_V49,
+    "routines": [*SCHEMA_V49["routines"], "when_json TEXT", "app_name TEXT NOT NULL DEFAULT ''",
+                 "last_checked_ms INTEGER", "last_error TEXT NOT NULL DEFAULT ''",
+                 "poll_initialized INTEGER NOT NULL DEFAULT 0", "poll_failures INTEGER NOT NULL DEFAULT 0"],
+    "routine_receipts": ["routine_id INTEGER PK NOT NULL", "item_id TEXT PK NOT NULL",
+                         "item TEXT NOT NULL DEFAULT ''", "state TEXT NOT NULL"],
+}
+SCHEMA_V52 = {**SCHEMA_V50, "computer_logins": [
+    "member_id INTEGER PK NOT NULL", "origin TEXT PK NOT NULL", "reference TEXT NOT NULL"]}
+
+SCHEMA_V53 = {**SCHEMA_V52, "connection_proposals": [
+    "id TEXT PK", "turn_id INTEGER NOT NULL", "member_id INTEGER NOT NULL", "conversation_id INTEGER",
+    "language TEXT NOT NULL", "server_id TEXT NOT NULL", "fields TEXT NOT NULL", "external INTEGER NOT NULL DEFAULT 1", "state TEXT NOT NULL",
+    "revision INTEGER NOT NULL DEFAULT 1", "tested_digest TEXT NOT NULL DEFAULT ''", "error TEXT NOT NULL DEFAULT ''",
+    "done TEXT NOT NULL DEFAULT '[]'",
+]}
+
+SCHEMA_V55 = {**SCHEMA_V53, "routine_runs": [*SCHEMA_V53["routine_runs"], "trigger_json TEXT NOT NULL DEFAULT '{}'"]}
+
+
+SCHEMA_V56 = {**SCHEMA_V55, "permission_cards": [*SCHEMA_V55["permission_cards"], "message TEXT NOT NULL DEFAULT '{}'"]}
+SCHEMA_V57 = {**SCHEMA_V56, "member_unread": ["member_id INTEGER PK", "unread_from INTEGER"]}
+SCHEMA_V58 = {**SCHEMA_V57, "agent_inbox": [
+    "turn_id INTEGER PK",
+    "request_id TEXT NOT NULL", "member_id INTEGER NOT NULL", "conversation_id INTEGER NOT NULL",
+    "seq INTEGER NOT NULL", "state TEXT NOT NULL",
+    "outcome TEXT", "payload_json TEXT NOT NULL", "boot_id TEXT", "created_at_ms INTEGER NOT NULL",
+    "claimed_at_ms INTEGER", "settled_at_ms INTEGER"]}
+SCHEMA_V59 = {**SCHEMA_V58, "worker_tasks": [*SCHEMA_V58["worker_tasks"], "requires_artifact INTEGER NOT NULL DEFAULT 0"]}
+
+
+def test_v48_adds_the_calendar_without_changing_existing_members_and_keeps_events_on_reopen(tmp_path):
+    path = tmp_path / "v47.db"
+    raw = sqlite3.connect(path)
+    for version in range(1, 48):
+        step = db._MIGRATIONS[version]
+        step(raw) if callable(step) else raw.executescript(step)
+    raw.execute("INSERT INTO members (id,name,model,position,created_at_ms) VALUES (5,'Kept','kept-model',5,1)")
+    raw.commit()
+    raw.close()
+    migrated = db.connect(path)
+    assert migrated.execute("PRAGMA user_version").fetchone()[0] == LATEST
+    assert tuple(migrated.execute("SELECT name,model FROM members WHERE id=5").fetchone()) == ("Kept", "kept-model")
+    assert describe_columns(migrated, "calendar_events") == SCHEMA_V48["calendar_events"]
+    assert {"calendar_events_timed", "calendar_events_all_day"} <= schema_names(migrated, "index")
+    assert migrated.execute("SELECT COUNT(*) FROM calendar_events").fetchone()[0] == 0
+    migrated.execute("INSERT INTO calendar_events (title,start_ms,end_ms,added_by,created_at_ms,updated_at_ms) VALUES ('Kept event',100,200,5,1,1)")
+    migrated.commit()
+    migrated.close()
+    reopened = db.connect(path)
+    assert tuple(reopened.execute("SELECT title,start_ms,end_ms,added_by FROM calendar_events").fetchone()) == ("Kept event", 100, 200, 5)
+    reopened.close()
+
+
+def test_a_member_47_cleared_gets_a_model_of_its_own_again_at_51(tmp_path):
+    path = tmp_path / "v46.db"
+    raw = sqlite3.connect(path)
+    for version in range(1, 47):
+        step = db._MIGRATIONS[version]
+        step(raw) if callable(step) else raw.executescript(step)
+    raw.execute("INSERT INTO members (id,name,model,position,created_at_ms) VALUES (5,'Kept','cli:codex:luna?effort=high',5,1)")
+    raw.commit()
+    raw.close()
+    migrated = db.connect(path)
+    assert migrated.execute("PRAGMA user_version").fetchone()[0] == LATEST
+    assert tuple(migrated.execute("SELECT name,model FROM members WHERE id=5").fetchone()) == ("Kept", "openai/gpt-6-luna")
+
+
+def test_v44_preserves_rooms_and_persists_sidebar_state(tmp_path):
+    path = tmp_path / "v43.db"
+    raw = sqlite3.connect(path)
+    for version in range(1, 44):
+        step = db._MIGRATIONS[version]
+        step(raw) if callable(step) else raw.executescript(step)
+    raw.execute("INSERT INTO rooms (name,created) VALUES ('Planning',1)")
+    raw.execute("INSERT INTO room_messages (room_id,text,created) VALUES (1,'Keep this message',1)")
+    raw.commit()
+    raw.close()
+    migrated = db.connect(path)
+    assert tuple(migrated.execute("SELECT name,read_message_id,pinned,hidden FROM rooms").fetchone()) == ("Planning", 0, 0, 0)
+    assert migrated.execute("SELECT text FROM room_messages").fetchone()[0] == "Keep this message"
+    with migrated:
+        migrated.execute("UPDATE rooms SET read_message_id=1,pinned=1,hidden=1")
+    migrated.close()
+    reopened = db.connect(path)
+    assert tuple(reopened.execute("SELECT read_message_id,pinned,hidden FROM rooms").fetchone()) == (1, 1, 1)
+    reopened.close()
+
+
+def test_v43_preserves_catalog_card_metadata_and_defaults_older_logos(tmp_path):
+    path = tmp_path / "v42.db"
+    raw = sqlite3.connect(path)
+    for version in range(1, 43):
+        step = db._MIGRATIONS[version]
+        step(raw) if callable(step) else raw.executescript(step)
+    raw.execute("INSERT INTO agent_turns (id,session_id,question,route,prefix,text,status,created_at_ms) VALUES (1,'s','Connect Slack','answer','','','done',1)")
+    raw.execute("INSERT INTO connect_cards (id,turn_id,member_id,app,language,state,created_at_ms,updated_at_ms,expires_at_ms,app_name,provider) VALUES ('kept',1,0,'slack','en','pending',1,1,9999999999999,'Slack','composio')")
+    raw.commit()
+    raw.close()
+    migrated = db.connect(path)
+    card = migrated.execute("SELECT app_name,provider,app_logo,state FROM connect_cards WHERE id='kept'").fetchone()
+    assert tuple(card) == ('Slack', 'composio', '', 'pending')
+    migrated.close()
+
+
+def test_v42_preserves_existing_google_cards_and_adds_compatible_metadata_defaults(tmp_path):
+    path = tmp_path / "v41.db"
+    raw = sqlite3.connect(path)
+    for version in range(1, 42):
+        step = db._MIGRATIONS[version]
+        step(raw) if callable(step) else raw.executescript(step)
+    raw.execute("INSERT INTO agent_turns (id,session_id,question,route,prefix,text,status,created_at_ms) VALUES (1,'s','Connect Gmail','answer','','','done',1)")
+    raw.execute("INSERT INTO connect_cards (id,turn_id,member_id,app,language,state,created_at_ms,updated_at_ms,expires_at_ms) VALUES ('kept',1,0,'gmail','en','pending',1,1,9999999999999)")
+    raw.commit()
+    raw.close()
+    migrated = db.connect(path)
+    card = migrated.execute("SELECT * FROM connect_cards WHERE id='kept'").fetchone()
+    assert (card['app'], card['state'], card['app_name'], card['provider'], card['resumed_at_ms']) == ('gmail', 'pending', '', 'google', None)
+    assert migrated.execute("PRAGMA user_version").fetchone()[0] == LATEST
+    migrated.close()
 
 
 def test_v39_makes_raphael_the_primary_contact_of_every_older_team_and_allows_one_member_at_most(tmp_path):
@@ -514,7 +732,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V39) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V59) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -526,9 +744,15 @@ def test_connect_creates_the_latest_schema(conn):
         "agent_turns_member",
         "routines_member",
         "worker_questions_task",
+        "calendar_events_timed",
+        "calendar_events_all_day",
+        "owner_question_wait",
+        "owner_question_turn",
+        "agent_inbox_scope",
+        "agent_inbox_started",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V39.items():
+    for table, columns in SCHEMA_V59.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [
@@ -1322,6 +1546,7 @@ def test_v24_assigns_each_legacy_member_a_stable_default_conversation(tmp_path, 
     for version in range(1, 24):
         step = db._MIGRATIONS[version]
         step(raw) if callable(step) else raw.executescript(step)
+    raw.execute("INSERT INTO members(id,name,position,created_at_ms) VALUES (7,'Legacy member',0,1)")
     for member, question, stamp in [(0, "First\nquestion", 100), (7, "Member question", 200), (0, "Later", 300)]:
         raw.execute("INSERT INTO agent_turns (session_id, member_id, question, route, prefix, text, status, created_at_ms) VALUES (?, ?, ?, 'chat', '', 'answer', 'done', ?)", (str(stamp), member, question, stamp))
     raw.commit(); raw.close()
@@ -1336,4 +1561,66 @@ def test_v24_assigns_each_legacy_member_a_stable_default_conversation(tmp_path, 
     reopened = db.connect(path)
     assert Conversations(reopened).main(0) == main
     assert len(Conversations(reopened).list(7)) == 1
+    reopened.close()
+
+
+def test_v52_login_cards_preserve_pending_cards_and_the_turn_delete_trigger(tmp_path):
+    from raphael_core.connectors.secret_cards import SecretCardStore
+    from raphael_core.agent.history import AgentHistory
+    path = tmp_path / "v51.db"
+    raw = sqlite3.connect(path)
+    raw.row_factory = sqlite3.Row
+    for version in range(1, 52):
+        step = db._MIGRATIONS[version]
+        step(raw) if callable(step) else raw.executescript(step)
+    turn = AgentHistory(raw).add(session_id="test", question="Test", route="answer", prefix="", text="", status="running", source="app", member_id=0)
+    original = SecretCardStore(raw).open(turn_id=turn, member_id=0, conversation_id=None, server_id="connection",
+        kind="header", secret="Authorization", name="Example", language="en")
+    raw.close()
+    upgraded = db.connect(path)
+    cards = SecretCardStore(upgraded)
+    assert cards.get(original.id) == original
+    login = cards.open(turn_id=turn, member_id=0, conversation_id=None, server_id="reference", kind="login",
+        secret="login", name="https://example.com", language="en")
+    assert login.view()["login"]
+    with upgraded:
+        upgraded.execute("DELETE FROM agent_turns WHERE id=?", (turn,))
+    assert upgraded.execute("SELECT COUNT(*) FROM secret_cards").fetchone()[0] == 0
+    upgraded.close()
+    reopened = db.connect(path)
+    assert reopened.execute("PRAGMA user_version").fetchone()[0] == db.LATEST_VERSION
+    reopened.close()
+
+
+def test_v53_follows_v52_and_keeps_login_references_and_both_card_tables(tmp_path):
+    from raphael_core.agent.history import AgentHistory
+    from raphael_core.connectors.secret_cards import SecretCardStore
+
+    path = tmp_path / "login-before-proposals.db"
+    raw = sqlite3.connect(path)
+    raw.row_factory = sqlite3.Row
+    for version in range(1, 53):
+        step = db._MIGRATIONS[version]
+        step(raw) if callable(step) else raw.executescript(step)
+    assert raw.execute("PRAGMA user_version").fetchone()[0] == 52
+    turn = AgentHistory(raw).add(session_id="sample", question="Connect", route="answer", prefix="", text="", status="running", source="app")
+    login = SecretCardStore(raw).open(turn_id=turn, member_id=0, conversation_id=None, server_id="sample-reference",
+        kind="login", secret="login", name="https://example.invalid", language="en")
+    with raw:
+        raw.execute("INSERT INTO computer_logins VALUES (0,'https://example.invalid','sample-reference')")
+    raw.close()
+
+    upgraded = db.connect(path)
+    assert upgraded.execute("PRAGMA user_version").fetchone()[0] == LATEST
+    assert SecretCardStore(upgraded).get(login.id) == login
+    assert upgraded.execute("SELECT reference FROM computer_logins").fetchone()[0] == "sample-reference"
+    with upgraded:
+        upgraded.execute("INSERT INTO connection_proposals (id,turn_id,member_id,language,server_id,fields,state) VALUES ('sample',?,0,'en','sample','{}','draft')", (turn,))
+        upgraded.execute("DELETE FROM agent_turns WHERE id=?", (turn,))
+    assert upgraded.execute("SELECT COUNT(*) FROM secret_cards").fetchone()[0] == 0
+    assert upgraded.execute("SELECT COUNT(*) FROM connection_proposals").fetchone()[0] == 0
+    upgraded.close()
+    reopened = db.connect(path)
+    assert reopened.execute("SELECT reference FROM computer_logins").fetchone()[0] == "sample-reference"
+    assert {"computer_logins", "connection_proposals"} <= schema_names(reopened, "table")
     reopened.close()

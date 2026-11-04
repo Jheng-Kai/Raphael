@@ -50,12 +50,14 @@ describe("the question card", () => {
     expect(askLabels(openQuestion(question(APP_QUESTION)))).toEqual({ yes: "允許一次", no: "不要", always: "一律允許" });
   });
 
-  test("a plain question keeps the page's 是 and 否 and has no third button", () => {
-    expect(askLabels(question())).toEqual({ yes: "是", no: "否", always: null });
-    expect(askLabels(question({ yes: "Yes", no: "No" }))).toEqual({ yes: "是", no: "否", always: null });
-    expect(askLabels(null)).toEqual({ yes: "是", no: "否", always: null });
+  test("a plain permission question uses allow and deny in the page's language without a third button", () => {
+    expect(askLabels(question())).toEqual({ yes: "允許", no: "拒絕", always: null });
+    expect(askLabels(question({ yes: "Yes", no: "No" }))).toEqual({ yes: "允許", no: "拒絕", always: null });
+    expect(askLabels(null)).toEqual({ yes: "允許", no: "拒絕", always: null });
     setLocale("en");
-    expect(askLabels(question())).toEqual({ yes: "Yes", no: "No", always: null });
+    expect(askLabels(question())).toEqual({ yes: "Allow", no: "Deny", always: null });
+    setLocale("ja");
+    expect(askLabels(question())).toEqual({ yes: "許可", no: "拒否", always: null });
   });
 
   test("a question with the third answer is never held, whatever tier it says", () => {
@@ -64,11 +66,11 @@ describe("the question card", () => {
     expect(openQuestion(question({ always: "" })).always).toBeUndefined();
   });
 
-  test("the buttons stand no, always, yes", () => {
+  test("the primary answer comes first, followed by always and deny", () => {
     const page = readFileSync(path.resolve(import.meta.dirname, "agent.ts"), "utf8");
     const card = /askCard\.innerHTML =([\s\S]*?);\r?\n/.exec(page)![1];
-    expect(card.indexOf("ask-no")).toBeLessThan(card.indexOf("ask-always"));
-    expect(card.indexOf("ask-always")).toBeLessThan(card.indexOf("ask-yes"));
+    expect(card.indexOf("ask-yes")).toBeLessThan(card.indexOf("ask-always"));
+    expect(card.indexOf("ask-always")).toBeLessThan(card.indexOf("ask-no"));
     expect(card).toMatch(/ask-always" data-act="always" hidden/);
   });
 });

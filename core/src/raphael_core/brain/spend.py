@@ -117,7 +117,7 @@ class SpendTracker:
         for purpose, cost in self._conn.execute(
             "SELECT purpose, SUM(cost_usd) FROM spend" + where + " GROUP BY purpose", args
         ):
-            key = purpose if purpose in amounts else "other"
+            key = purpose if purpose in amounts or purpose in ("image", "video") else "other"
             amounts[key] = amounts.get(key, 0.0) + float(cost)
         return {"cost_usd": total, "purposes": [
             {"purpose": purpose, "cost_usd": cost, "share": cost / total if total else 0.0}

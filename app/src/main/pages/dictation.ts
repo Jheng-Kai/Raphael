@@ -19,8 +19,10 @@ export function createDictation(app: AppContext, pages: Record<DictationTab, Pag
     const restoreFocus = head.contains(document.activeElement);
     head.innerHTML = `<div class="page-head"><h1>${esc(t("nav.dictation"))}</h1></div>` +
       `<div class="dictation-nav" role="tablist" aria-orientation="horizontal" aria-label="${esc(t("nav.dictation"))}">` +
-      TAB_IDS.map(id => `<button type="button" class="nav" role="tab" aria-selected="${id === selected}" data-dictation-tab="${id}">` +
-        `<span>${esc(t(id === "overview" ? "dictation.overview" : id === "history" ? "main.002" : "main.003"))}</span></button>`).join("") + `</div>`;
+      TAB_IDS.map(id => {
+        const label = esc(t(id === "overview" ? "dictation.overview" : id === "history" ? "main.002" : "main.003"));
+        return `<button type="button" class="nav" role="tab" aria-selected="${id === selected}" data-dictation-tab="${id}" data-label="${label}"><span>${label}</span></button>`;
+      }).join("") + `</div>`;
     for (const id of TAB_IDS) {
       pages[id].el.hidden = id !== selected;
       const button = head.querySelector<HTMLElement>(`[data-dictation-tab="${id}"]`)!;

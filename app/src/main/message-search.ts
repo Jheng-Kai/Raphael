@@ -2,16 +2,17 @@
 import * as api from "./api";
 import { t } from "./i18n";
 import { conversationTitle, relativeTime } from "./conversation-list";
-import { esc } from "./ui";
+import { esc, patchHTML } from "./ui";
 import { describeError } from "./format";
+import { publicEventText } from "./public-event";
 
 interface Hit {
   id: number; member_id: number; conversation_id: number; conversation_title: string;
-  question: string; text: string; created_at_ms: number;
+  question: string; text: string; created_at_ms: number; messages?: {kind: string; text: string}[];
 }
 
 function snippet(hit: Hit, query: string): string {
-  const text = [hit.question, hit.text].find(text => text.toLocaleLowerCase().includes(query.toLocaleLowerCase())) ?? hit.question;
+  const text = [hit.question, hit.text, ...(hit.messages ?? []).filter(message => message.kind === "reply" || message.kind === "event").map(message => publicEventText(message.text))].find(text => text.toLocaleLowerCase().includes(query.toLocaleLowerCase())) ?? hit.question;
   const index = text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase());
   const start = Math.max(0, index - 24), end = Math.min(text.length, Math.max(index, start) + query.length + 65);
   if (index < 0) return esc(text.slice(0, 100));
@@ -19,10 +20,16 @@ function snippet(hit: Hit, query: string): string {
 }
 
 export function createMessageSearch(host: HTMLElement, options: { face(member: number): string; name(member: number): string; open(member: number, conversation: number, turn: number): void }): { draw(query: string, membersHTML: string): void } {
-  let query = "", members = "", hits: Hit[] = [], error = "", epoch = 0;
+  let query = "", members = "", hits: Hit[] = [], error = "", epoch = 0, drawnRows = "";
   let timer: ReturnType<typeof setTimeout> | undefined;
   function render(): void {
-    if (!query) { host.innerHTML = members; return; }
+    if (!query) {
+      // Every event and page entry lands here, and most change nothing in the column.
+      const rows = members.replace(/--slime-(?:delay|since):-?[\d.]+ms;?/g, "");
+      if (rows !== drawnRows) { drawnRows = rows; patchHTML(host, members); }
+      return;
+    }
+    drawnRows = "";
     host.innerHTML = `<div class="search-group-label">${esc(t("chat.members"))}</div>${members}` +
       `<div class="search-group-label">${esc(t("chat.messages"))}</div>` +
       (error ? `<p class="mb-none">${esc(error)}</p>` : hits.length ? hits.map(hit =>

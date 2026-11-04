@@ -19,11 +19,11 @@ vi.mock("./api", () => api);
 vi.mock("./ui", async (original) => ({
   ...(await original<typeof import("./ui")>()),
   toaster: { info: vi.fn() },
-  copyText: vi.fn(),
+  copyButton: vi.fn(),
 }));
 
 import { connectionsHTML, createConnections, emptyConnectionsView } from "./connections";
-import { copyText, toaster } from "./ui";
+import { copyButton, toaster } from "./ui";
 
 afterEach(() => setLocale("zh-TW"));
 
@@ -51,7 +51,7 @@ const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve,
 beforeEach(() => {
   for (const fn of Object.values(api)) fn.mockReset();
   vi.mocked(toaster.info).mockReset();
-  vi.mocked(copyText).mockReset();
+  vi.mocked(copyButton).mockReset().mockResolvedValue(true);
   host.redraw.mockReset();
   api.toolsetsList.mockResolvedValue({ groups: [] });
   api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false });
@@ -106,7 +106,7 @@ describe("the code of a device login", () => {
     c.followEvent(code);
     c.click(button("device-open"));
     await settle();
-    expect(copyText).toHaveBeenCalledWith("WDJB-MJHT");
+    expect(copyButton).toHaveBeenCalledWith(expect.anything(), "WDJB-MJHT");
     expect(api.openLink).toHaveBeenCalledWith("https://github.com/login/device");
   });
 

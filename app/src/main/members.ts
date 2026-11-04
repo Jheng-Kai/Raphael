@@ -4,23 +4,23 @@
 // preview says, how a routine's schedule is said, what a member's picture is, and what a group's
 // 看的地方 are made of.
 //
-// A member's picture is the image the core hands as a `data:image/...` URL (`avatar_url`, the way
-// Raphael's own picture comes from `avatar_get`), and only that: anything else is the neutral
-// silhouette on `--surface-2`. Raphael's face is the emblem or
-// his picture (avatar.ts), never the placeholder.
+// A member's face is a slime (slime.ts), whatever an older build stored for it. Raphael's face is
+// the emblem or his picture (avatar.ts).
 
+import { presenceAttrs, slimeFaceHTML } from "./slime";
 import { avatarHTML } from "./avatar";
 import { catalogs, t } from "./i18n";
-import type { MessageKey } from "./i18n/zh-TW";
-import type { Member, MemberGroup, MemberSource, MembersList, RoutineSchedule } from "./types";
 import { esc, ico } from "./ui";
+import { formatClock, formatDate } from "./format";
+import type { MessageKey } from "./i18n/zh-TW";
+import type { Member, MemberGroup, MemberSource, MembersList, Routine, RoutineSchedule } from "./types";
 
 /** Raphael's id among the members: member 0 everywhere in the core's API. */
 export const RAPHAEL_ID = 0;
 
-/** Raphael's role is a localized identity label, independent of stored profile text. */
-export const memberRole = (member: { id: number; role?: string }): string =>
-  member.id === RAPHAEL_ID ? t("rooms.chief") : member.role ?? "";
+/** The unique chief has a localized role label; other members retain their profile role. */
+export const memberRole = (member: { id: number; role?: string; chief?: boolean }): string =>
+  (member.chief ?? member.id === RAPHAEL_ID) ? t("rooms.chief") : member.role ?? "";
 
 /** The longest name, role, instructions and group name the core takes (members.* and groups.*). */
 export const NAME_MAX = 16;
@@ -94,7 +94,7 @@ export const memberOf = (list: MembersList | null, id: number): Member | undefin
 /**
  * The member the owner chose as their primary contact: Raphael until another is chosen. It is read from the
  * roster the core gives with the list (`team_context.primary_id`), the one place it is kept, and it is
- * Raphael if the roster names nobody the list has. The chief of staff is Raphael whoever it is.
+ * Raphael if the roster names nobody the list has. This member also holds the unique chief capability.
  */
 export function primaryIdOf(list: MembersList | null): number {
   const id = list?.team_context?.primary_id;
@@ -108,12 +108,12 @@ export function primaryFirst<T extends { id: number }>(members: readonly T[], pr
   return ordered;
 }
 
-/** A view-only roster: the primary takes the top slot and Raphael takes its group/pinned slot. */
+/** A view-only roster: the primary takes the top slot and Raphael takes its group slot; each keeps its own pin. */
 export function memberDisplayList(list: MembersList | null): MembersList {
   const source = list ?? { members: [], groups: [] }, raphael = raphaelOf(list), primary = memberOf(list, primaryIdOf(list))!;
   const members = primaryFirst([raphael, ...source.members.filter(member => member.id !== RAPHAEL_ID)], primary.id)
     .map(member => member.id === RAPHAEL_ID && primary.id !== RAPHAEL_ID
-      ? { ...member, group_id: primary.group_id, position: primary.position, pinned: primary.pinned } : member);
+      ? { ...member, group_id: primary.group_id, position: primary.position } : member);
   return { ...source, members };
 }
 
@@ -128,8 +128,23 @@ export function orderedMembers(list: MembersList | null): Member[] {
  * owner there, that line in gold after 「等你處理：」 (the waiting turn is the thread's last, so its
  * line is what is asked), 「等你處理」 alone when there is none.
  */
+/** One line of a message for a preview: what it says, without the Markdown only a full message renders. */
+export function plainLine(text: string): string {
+  return text
+    .replace(/```[\s\S]*?(?:```|$)/g, " ")
+    .replace(/^[ \t]*\|?[ \t]*:?-{2,}:?[ \t]*(?:\|[ \t]*:?-{2,}:?[ \t]*)*\|?[ \t]*$/gm, "")
+    .replace(/^[ \t]*\|(.*)\|?[ \t]*$/gm, (_, cells: string) => cells.replace(/\|/g, " "))
+    .replace(/(^|\s)#{1,6}\s+/g, "$1")
+    .replace(/^[ \t]*(?:>[ \t]?|[-*+][ \t]+(?:\[[ xX]\][ \t]+)?)/gm, "")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/`([^`\n]+)`/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function previewOf(member: Member, last: string | undefined): { text: string; waiting: boolean } {
-  const line = (last ?? "").replace(/\s+/g, " ").trim();
+  const line = plainLine(last ?? "");
   if (member.waiting) return { text: line ? t("members.waiting", { p0: line }) : t("members.waitingShort"), waiting: true };
   return { text: line, waiting: false };
 }
@@ -150,14 +165,9 @@ export const initialOf = (name: string): string => Array.from(name.trim())[0] ??
  * ours), a member's picture in a circle, or a neutral person silhouette.
  * Decorative: whoever shows it names it.
  */
-export function faceHTML(member: { id: number; name: string; avatar_url?: string | null }, size: number, o: { loop?: boolean; cls?: string } = {}): string {
-  if (member.id === RAPHAEL_ID) return avatarHTML({ size, loop: o.loop, cls: o.cls });
-  const cls = `av mb-av${o.cls ? ` ${o.cls}` : ""}`;
-  const box = `style="--av:${Math.round(size)}px"`;
-  if (isPictureUrl(member.avatar_url)) {
-    return `<span class="${cls} mb-av-pic" ${box} aria-hidden="true"><img src="${esc(member.avatar_url)}" alt="" draggable="false"></span>`;
-  }
-  return `<span class="${cls} mb-av-placeholder" ${box} aria-hidden="true">${ico("person")}</span>`;
+export function faceHTML(member: { id: number; name: string; avatar?: string | null; avatar_url?: string | null }, size: number, o: { loop?: boolean; cls?: string } = {}): string {
+  if (member.id === RAPHAEL_ID) return avatarHTML({ size, loop: o.loop, cls: o.cls }).replace("<span", `<span${presenceAttrs(member.id)}`);
+  return slimeFaceHTML(member, size, o.cls);
 }
 
 // ---------- routines ----------
@@ -172,15 +182,43 @@ export const dayName = (n: number): string => tr(DAY_KEYS[((n % 7) + 7) % 7]);
 export const isTime = (text: string): boolean => /^([01]\d|2[0-3]):[0-5]\d$/.test(text);
 
 /** How a routine's schedule is said in a row: 「每天 09:00」, 「每週日 20:00」, 「每 3 小時」. */
-export function scheduleText(schedule: RoutineSchedule): string {
-  if (schedule.kind === "once") return t("auto.onceAt", { p0: schedule.start_date ?? "", p1: schedule.time });
-  if (schedule.kind === "weekdays") return t("auto.weekdaysAt", { p0: schedule.time });
-  if (schedule.kind === "daily") return t("members.dailyAt", { p0: schedule.time });
-  if (schedule.kind === "weekly") {
-    const days = [...new Set(schedule.days)].sort((a, b) => a - b).map(dayName).join(t("members.daysJoin"));
-    return t("members.weeklyAt", { p0: days, p1: schedule.time });
+export type RoutineTrigger = Pick<Routine, "schedule"> & Partial<Pick<Routine, "when" | "app_name">>;
+
+/** One vocabulary for every trigger surface, without live values in its markup. */
+export function routineSentence(routine: RoutineTrigger, showWindow = true): { icon: "repeat" | "link"; verb: string; object: string } {
+  const s = routine.schedule, when = routine.when;
+  if (when?.webhook) return {icon:"link", verb:t("trigger.postVerb"), object:"POST"};
+  if (when) return {icon:"link", verb:t("trigger.eventVerb"), object:`${routine.app_name || when.app}${when.filter.equals ? ` · ${when.filter.equals}` : ""}`};
+  if (!s) return {icon:"link", verb:t("auto.onEvent"), object:""};
+  if (s.kind === "monthly") return {icon:"repeat", verb:t("trigger.monthVerb"), object:t("trigger.dateObject", {p0:s.day,p1:s.time})};
+  if (s.kind === "every") return {icon:"repeat", verb:!s.minutes && s.hours === 1 ? t("members.everyHour") : t("trigger.every"), object:(!s.minutes && s.hours === 1 ? "" : s.minutes ? t("trigger.minuteObject",{p0:s.minutes}) : t("trigger.hours",{p0:s.hours ?? 1})) + (showWindow && s.from ? ` · ${s.from}–${s.to}` : "")};
+  if (s.kind === "weekly") {
+    const days = [...new Set(s.days)].sort((a,b)=>a-b).map(dayName).join(t("members.daysJoin"));
+    return {icon:"repeat", verb:t("members.weeklyAt", {p0:days,p1:""}).trim(), object:s.time};
   }
-  return schedule.hours === 1 ? t("members.everyHour") : t("members.everyHours", { p0: schedule.hours });
+  if (s.kind === "once") return {icon:"repeat", verb:t("trigger.once"), object:`${s.start_date ?? ""} ${s.time}`.trim()};
+  return {icon:"repeat", verb:t(s.kind === "daily" ? "trigger.daily" : "trigger.weekdays"), object:s.time};
+}
+
+export function routineSentenceHTML(routine: RoutineTrigger): string {
+  const sentence = routineSentence(routine);
+  return `<span class="routine-sentence">${ico(sentence.icon)}<strong>${esc(sentence.verb)}</strong> <span class="routine-object">${esc(sentence.object)}</span></span>`;
+}
+
+export function scheduleText(schedule: RoutineSchedule | null, showWindow = true): string {
+  const sentence = routineSentence({schedule}, showWindow);
+  return `${sentence.verb} ${sentence.object}`.trim();
+}
+
+export function routineText(routine: RoutineTrigger): string {
+  const sentence = routineSentence(routine);
+  return `${sentence.verb} ${sentence.object}`.trim();
+}
+
+export function routineStatus(routine: Routine): string {
+  if (!routine.when || routine.when.webhook) return "";
+  const date = (value: number | null | undefined): string => value ? `${formatDate(value)} ${formatClock(value)}` : t("auto.notYet");
+  return t("auto.triggerStatus", { p0: date(routine.last_checked), p1: date(routine.last_run) }) + (routine.last_error ? `\n${routine.last_error}` : "");
 }
 
 /** The intervals the 每隔幾小時 dropdown offers, in hours. */

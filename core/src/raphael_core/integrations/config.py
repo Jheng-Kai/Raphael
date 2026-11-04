@@ -47,12 +47,22 @@ MAX_DESCRIPTION_CHARS = 1000
 MAX_SCHEMA_CHARS = 16000
 # What is kept of the title a server gives a tool (for the screen only).
 MAX_TITLE_CHARS = 80
+# What a server's tool may return, in characters, unless the owner says otherwise. The task cuts it
+# again to what its model's window holds, so this is what a task may be shown at most (`worker.guards`).
+DEFAULT_RESULT_SIZE = 50_000
+# The default it replaces, which every server added so far, and the form on the screen, wrote down
+# without anybody choosing it: it cut every long page a task read.
+_OLD_DEFAULT_RESULT_SIZE = 8000
 
 _TOOL_NAME = re.compile(r"[A-Za-z0-9_.\-]{1,128}")
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}")
 _HEADER_NAME = re.compile(r"[A-Za-z0-9\-]{1,64}")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _OPEN_SCHEMA: dict[str, Any] = {"type": "object", "additionalProperties": True}
+
+
+def _current_size(limit: int) -> int:
+    return DEFAULT_RESULT_SIZE if limit == _OLD_DEFAULT_RESULT_SIZE else limit
 
 
 @dataclass
@@ -68,6 +78,7 @@ class ToolRecord:
     destructive_hint: bool | None = None
     # The human name the server gives the tool, if it does. For the screen only.
     title: str | None = None
+    ui: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -87,9 +98,10 @@ class ServerConfig:
     auth: str = "none"  # "oauth": a login in the browser, "device": a code typed at the service; tokens are in the vault
     catalog_id: str = ""  # the entry of the store this was added from, if it was
     revocation_url: str = ""  # where the login's token is revoked when the server is disconnected
-    result_size_limit: int = 8000
+    result_size_limit: int = DEFAULT_RESULT_SIZE
     managed_by: str = ""
     header_refs: dict[str, str] = field(default_factory=dict)
+    last_used_at: int = 0
 
     def tool(self, name: str) -> ToolRecord | None:
         return next((tool for tool in self.tools if tool.name == name), None)
@@ -117,6 +129,7 @@ def tool_record(
     read_only_hint: Any = None,
     destructive_hint: Any = None,
     title: Any = None,
+    meta: Any = None,
 ) -> ToolRecord | None:
     """A tool as it is kept, from what a server reported; None for one whose name cannot be kept
     (a name is shown, audited and sent to a model, so it must be plain)."""
@@ -128,14 +141,21 @@ def tool_record(
         schema = dict(_OPEN_SCHEMA)
     elif len(json.dumps(schema, ensure_ascii=False)) > MAX_SCHEMA_CHARS:
         schema = dict(_OPEN_SCHEMA)
+    ui = meta.get("ui", {}) if isinstance(meta, dict) else {}
+    ui = ui if isinstance(ui, dict) and len(json.dumps(ui)) <= 8000 else {}
+    if "visibility" in ui:
+        visibility = ui["visibility"]
+        ui = {**ui, "visibility": [item for item in visibility if item in ("model", "app")]
+              if isinstance(visibility, list) else []}
     return ToolRecord(
         name=name,
         description=text,
         input_schema=schema,
-        fingerprint=fingerprint(name, text, schema),
+        fingerprint=fingerprint(name, text, schema if not ui else {"schema": schema, "ui": ui}),
         read_only_hint=read_only_hint if isinstance(read_only_hint, bool) else None,
         destructive_hint=destructive_hint if isinstance(destructive_hint, bool) else None,
         title=(title.strip()[:MAX_TITLE_CHARS] or None) if isinstance(title, str) else None,
+        ui=ui,
     )
 
 
@@ -226,10 +246,10 @@ def parse_new_server(params: dict, taken_names: list[str]) -> NewServer:
     transport = params.get("transport")
     if transport not in TRANSPORTS:
         raise ValueError("transport must be stdio or http")
-    limit = params.get("result_size_limit", 8000)
+    limit = params.get("result_size_limit", DEFAULT_RESULT_SIZE)
     if type(limit) is not int or not 100 <= limit <= 100000:
         raise ValueError("result_size_limit must be between 100 and 100000")
-    config = ServerConfig(id=secrets.token_hex(6), name=name, transport=transport, enabled=False, result_size_limit=limit)
+    config = ServerConfig(id=secrets.token_hex(6), name=name, transport=transport, enabled=False, result_size_limit=_current_size(limit))
     env: dict[str, str] = {}
     headers: dict[str, str] = {}
     if transport == "stdio":
@@ -262,6 +282,7 @@ def _tool_to_json(tool: ToolRecord) -> dict[str, Any]:
         "read_only_hint": tool.read_only_hint,
         "destructive_hint": tool.destructive_hint,
         "title": tool.title,
+        "ui": tool.ui,
     }
 
 
@@ -285,6 +306,7 @@ def _server_to_json(server: ServerConfig) -> dict[str, Any]:
         "result_size_limit": server.result_size_limit,
         "managed_by": server.managed_by,
         "header_refs": server.header_refs,
+        **({"last_used_at": server.last_used_at} if server.last_used_at else {}),
     }
 
 
@@ -317,10 +339,11 @@ def _server_from_json(raw: Any) -> ServerConfig | None:
         revocation_url=raw["revocation_url"] if isinstance(raw.get("revocation_url"), str) else "",
         managed_by=raw.get("managed_by") if raw.get("managed_by") in ("composio", "google") else "",
         header_refs={"x-api-key": "connectors:composio:key"} if raw.get("managed_by") == "composio" else {},
+        last_used_at=raw["last_used_at"] if type(raw.get("last_used_at")) is int else 0,
     )
     checked = raw.get("tools_checked_at_ms")
-    limit = raw.get("result_size_limit", 8000)
-    server.result_size_limit = limit if type(limit) is int and 100 <= limit <= 100000 else 8000
+    limit = raw.get("result_size_limit", DEFAULT_RESULT_SIZE)
+    server.result_size_limit = _current_size(limit) if type(limit) is int and 100 <= limit <= 100000 else DEFAULT_RESULT_SIZE
     server.tools_checked_at_ms = checked if type(checked) is int else None
     for item in raw.get("tools", []) if isinstance(raw.get("tools"), list) else []:
         if not isinstance(item, dict):
@@ -333,6 +356,7 @@ def _server_from_json(raw: Any) -> ServerConfig | None:
             item.get("read_only_hint"),
             item.get("destructive_hint"),
             item.get("title"),
+            {"ui": item.get("ui", {})},
         )
         if tool is not None:
             server.tools.append(tool)

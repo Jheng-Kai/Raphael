@@ -1,12 +1,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { scene, click, wait, waitGone, type, check } from "./steps.mjs";
+import { scene, click, wait, waitGone, type, check, key } from "./steps.mjs";
 
-// The owner's apps and private skills (P15a): the sidebar's 連結應用程式 opens the settings at the one connections tab, where the apps
-// that can be called now, the ones that cannot and the members' private skills are one connected view. Every scene enters through the
-// real sidebar entry; the IPC double computes the count of connected apps from this data as the core does (mock-ipc.js `inventory`).
+// Settings > Connections owns the app inventory and its connected count.
+// Every scene uses the real account footer and Settings entry.
 const base = JSON.parse(readFileSync(resolve(import.meta.dirname, "../fixture.json"), "utf8"));
-const open = [click("#nav .nav-apps"), wait('.modal-scrim [data-pane="connections"][aria-current="page"]'), check("settings-shell")];
+const open = [click('#nav [data-go="settings"]'), click('.modal-scrim [data-pane="connections"]'), wait('.modal-scrim [data-pane="connections"][aria-current="page"]'), check("settings-shell")];
 
 const tool = (slug, name, kind, description) => ({ slug, name, description, kind, enabled: true });
 const notionTools = [
@@ -42,8 +41,12 @@ const skills = [
 ];
 
 export default [
-  scene("connect-apps-categories", "連結應用程式 opens the store: search, categories as a dropdown and the recommended apps with their add button", [
-    ...open, click('[data-conn="tab"][data-id="store"]'), wait(".cs-card"), click('[data-k="conn-category"]'), wait('#app-popover [data-value="productivity"]'),
+  scene("connect-apps-categories", "Settings opens the store and every category can be focused, revealed and selected", [
+    ...open, click('[data-conn="tab"][data-id="store"]'), wait(".cs-card"),
+    { action: "focus", selector: '[data-conn="store-group"][data-id=""]' }, check("store-group-focus"),
+    ...Array.from({ length: 9 }, () => [key("Tab"), check("store-group-focus")]).flat(),
+    key("Enter"), check("store-group-end"),
+    click('[data-conn="store-group"][data-id="productivity"]'), check("plugins-store-category"), check("plugins-store-rows"),
   ]),
   scene("connected-apps-skills", "The connected view: apps that can be called now, those that cannot with the reason, and the members' private skills; one count", [
     ...open, wait('[data-k="cs-open:composio:notion"]'), wait('[data-k="cs-skill:1:7"]'), wait('[data-stagger="installed-not"] .cs-item'), check("apps-count"),
@@ -56,7 +59,7 @@ export default [
     servers: base.servers.slice(0, 1),
     skills,
   }),
-  scene("connected-apps-unreadable", "A core that cannot list the apps: the sidebar and the tab say 「—」 and give no number, and the apps stay one list", [
+  scene("connected-apps-unreadable", "A core that cannot list the apps: the tab says 「—」 and give no number, and the apps stay one list", [
     ...open, wait('[data-k="cs-open:composio:notion"]'), check("apps-unreadable"),
   ], { inventoryUnreadable: true, managedConnectors: [notion(), google], servers: base.servers.slice(0, 1), skills }),
   scene("connections-app-switch", "The app switch has two states and preserves all 18 tool exclusions when disabled and enabled", [
@@ -83,7 +86,7 @@ export default [
     managedConnectors: [notion({ accounts: [{ id: "ca_work", status: "ACTIVE" }, { id: "ca_old", status: "EXPIRED" }] }), google],
     pluginTools: { ...base.pluginTools, "composio:notion": notionTools },
   }),
-  scene("connector-uninstalled", "Uninstalling an app on the second press: it leaves the list, and the sidebar's count and the tab's go down together", [
+  scene("connector-uninstalled", "Uninstalling an app on the second press: it leaves the list, and the Settings count goes down with the installed list", [
     ...open, click('[data-conn="open"][data-id="composio:notion"]'), click('[data-conn="server-menu"][data-id="composio:notion"]'),
     click('.menu [data-conn="disconnect"]'), click('.menu [data-conn="disconnect"]'), waitGone('[data-k="cs-open:composio:notion"]'), wait(".toast"), check("apps-count"),
   ], {

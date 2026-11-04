@@ -4,46 +4,85 @@ from types import SimpleNamespace
 from ..agent.cli import loop as cli_loop
 from ..agent.cli.loop import CliLoop
 from ..protocol import RpcError
-from ..worker.loop import Stop, ToolOutcome
+from ..worker.loop import WRAP_UP, Stop, ToolOutcome
+from ..computer.local_tools import is_local, BACKGROUND_WAIT_S
+
+# How many calls a task that reached a ceiling may make after being asked to report, before it is ended.
+CEILING_PATIENCE = 3
 
 
 class RoomCliSessions:
-    """Room turns receive their full transcript and never resume a private member conversation."""
+    """Room turns receive their full transcript and never resume a private member conversation.
+    A loop keeps its own native session in memory, only to start the same CLI again while it runs."""
     def __init__(self):
         self.locks = {}
         self.conversations = SimpleNamespace(resolve=lambda member, conversation: conversation)
+        self._sessions = {}
 
-    def get(self, *args):
-        return None
+    def get(self, member, brain, conversation_id=None):
+        return self._sessions.get((member, brain, conversation_id))
 
-    def put(self, *args):
-        pass
+    def put(self, member, brain, session, conversation_id=None):
+        self._sessions[(member, brain, conversation_id)] = session
+
+    def forget(self, member, brain, conversation_id=None):
+        self._sessions.pop((member, brain, conversation_id), None)
 
 
 def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
+    refused = [0]
+
     async def execute(call_id, name, arguments):
         if name == "cli_permission":
-            # Native shell/file permission is not an alternative to Raphael's tool gate.
-            return ToolOutcome(False, "use_mcp_tools")
+            # Native shell/file permission is not an alternative to Raphael's tool gate, unless the owner gave them all.
+            return ToolOutcome(True, None) if getattr(run._gate, "full_permission", False) else ToolOutcome(False, "use_mcp_tools")
         try:
             result = await run.tool({"call_id":call_id, "name":name, "arguments":arguments})
         except RpcError as error:
             data = error.data if isinstance(error.data, dict) else {}
-            if data.get("stop"):
-                raise Stop(data["stop"], data.get("detail")) from None
+            stop = data.get("stop")
+            if isinstance(stop, str) and stop.startswith("limit_") and refused[0] < CEILING_PATIENCE:
+                # A ceiling: the CLI makes its own model calls, so it is told to report in place of the call it
+                # asked for, and its final answer is the task's result (`TaskRun.ceiling`).
+                refused[0] += 1
+                run.ceiling = stop
+                return ToolOutcome(False, "limit", instruction=WRAP_UP)
+            if stop:
+                ref = run.snapshot.refs.get(name)
+                if ref is not None and is_local(ref.key):
+                    loop.approval_wait_s = BACKGROUND_WAIT_S
+                raise Stop(stop, data.get("detail")) from None
             raise
-        return tool_outcome(result)
+        outcome = tool_outcome(result)
+        if outcome.replace_tools:
+            loop.tools[:] = [item for item in loop.tools if not item["function"]["name"].startswith("computer__")]
+            loop.tools.extend(item for item in outcome.tools if item["function"]["name"].startswith("computer__"))
+            outcome.tools = list(loop.tools)
+            loop.reload_note, loop.catalog_changed = cli_loop.COMPUTER_CHANGED, True
+        elif outcome.tools:
+            # Tools find_tools showed: the loop lists them, and the CLI starts again to read its list.
+            loop.tools.extend(outcome.tools)
+            loop.reload_note, loop.catalog_changed = cli_loop.TOOLS_FOUND, True
+        return outcome
 
-    return CliLoop(brains=brains, sessions=RoomCliSessions(), member_id=task.member_id,
+    loop = CliLoop(brains=brains, sessions=RoomCliSessions(), member_id=task.member_id,
         conversation_id=f"room-task-{task.id}", model=run.model, ledger=run.ledger,
         language=task.language, plain=True, system=spec["system"], user=spec["user"],
         tools=spec["tools"], attachments=run.attachments, progress=progress,
         thinking=lambda text: None, event=progress, execute=execute, quota=quota, wait_timeout_s=wait_s,
-        rate_limit_waits=cli_loop.ROOM_RATE_LIMIT_WAITS_S)
+        rate_limit_waits=cli_loop.ROOM_RATE_LIMIT_WAITS_S, alive=run.touch)
+    def refresh_tools():
+        run.snapshot.refresh_plugins(run._gate.plugins, task.member_id)
+        extra = [item for item in loop.tools if item["function"]["name"] in ("cli_permission", "approve")]
+        loop.tools[:] = [*run.snapshot.definitions, *extra]
+        return loop.tools
+    loop.refresh_tools = refresh_tools
+    return loop
 
 
 def tool_outcome(result):
     if isinstance(result, str):
         return ToolOutcome('status="ok"' in result, content=result)
     return ToolOutcome(bool(result.get("ok")), result.get("kind"), result.get("content", ""),
-                       instruction=result.get("instruction") or "")
+                       instruction=result.get("instruction") or "", blocks=result.get("blocks") or [],
+                       tools=result.get("tools") or [], replace_tools=result.get("replace_tools") is True)

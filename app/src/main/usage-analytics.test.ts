@@ -36,11 +36,23 @@ async function setup(answer: (p: UsageRequest) => Promise<UsageAnalytics> = asyn
   return { host, api, mounted };
 }
 
+const charts = (host: Element) => [...host.querySelectorAll("svg:not(.i):not(.slime)")].filter((svg) => !svg.closest(".slime-cels"));
+
+test("unchanged activity refresh retains usage faces and chart hover", async () => {
+  const { host, mounted } = await setup();
+  const face = host.querySelector(".av"), chart = charts(host)[0];
+  const records: MutationRecord[] = [], observer = new MutationObserver(batch => records.push(...batch));
+  observer.observe(host, { childList: true, subtree: true });
+  await mounted.refresh(); await Promise.resolve();
+  expect(host.querySelector(".av")).toBe(face); expect(charts(host)[0]).toBe(chart);
+  expect(records).toHaveLength(0); observer.disconnect();
+});
+
 test("renders all five analytics sections, exact values and estimated dictation notice", async () => {
   const { host, api } = await setup();
   expect(api.usageAnalytics).toHaveBeenCalledWith({ range: "7d", tz: "Asia/Taipei" });
   for (const label of ["用量走勢", "各角色用量", "工具使用", "訊息", "聽寫"]) expect(host.textContent).toContain(label);
-  expect(host.querySelectorAll("svg:not(.i)")).toHaveLength(4);
+  expect(charts(host)).toHaveLength(4);
   expect(host.textContent).toContain("100.0%");
   expect(host.textContent).toContain("US$2.00");
   expect(host.textContent).toContain("估算");
@@ -155,7 +167,7 @@ test("recovers from an RPC error using the retry button", async () => {
   expect(host.querySelector('[role="alert"]')?.textContent).toContain("無法載入");
   expect(host.textContent).not.toContain("private backend detail");
   click(host, "retry");
-  await vi.waitFor(() => expect(host.querySelectorAll("svg:not(.i)")).toHaveLength(4));
+  await vi.waitFor(() => expect(charts(host)).toHaveLength(4));
 });
 
 test("ignores stale responses and pending work after destroy", async () => {
@@ -167,7 +179,7 @@ test("ignores stale responses and pending work after destroy", async () => {
   click(host, "30d");
   expect(resolvers).toHaveLength(2);
   resolvers[1]!(data());
-  await vi.waitFor(() => expect(host.querySelectorAll("svg:not(.i)")).toHaveLength(4));
+  await vi.waitFor(() => expect(charts(host)).toHaveLength(4));
   const stale = data(); stale.cost_by.purpose = group("stale", 999);
   resolvers[0]!(stale);
   await mounted.ready;
@@ -222,5 +234,5 @@ test("remounting one host disposes its previous locale listeners and pending req
   expect(host.querySelectorAll(".usage-analytics")).toHaveLength(1);
   expect(host.textContent).toContain("Usage history");
   await old.refresh();
-  expect(host.querySelectorAll("svg:not(.i)")).toHaveLength(4);
+  expect(charts(host)).toHaveLength(4);
 });
