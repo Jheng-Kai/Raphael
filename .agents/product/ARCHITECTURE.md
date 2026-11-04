@@ -544,3 +544,23 @@ keeps its isolated home and disabled host discovery/native shell, with explicit
 skill input and enabled path configuration. API and background skill scripts use
 the existing local command gate. Import itself never executes code. Offline fake
 protocols and synthetic file tests are not live or installed-CLI acceptance.
+
+## Shared speaker capabilities and private self-work (2026-11-04)
+
+agent/capabilities.py owns the shared capability statement and the reasoned exception
+registry. Persona builders consume it for API, CLI and workers; the real production
+offer tests compare complete tool definitions after excluding only named coordination
+tools. The same speaker profile reaches the quick answer and worker/routine prompts.
+TeamContextSnapshot retains the stored role and adds coordination_duty separately.
+
+A foreground private self-handoff uses BackgroundService.handoff and TaskStore.accept_handoff,
+with the existing asker continuation, stage/outbox/inbox and cancellation tree. The worker
+turn is private in the source conversation rather than Conversations.main; ordinary
+colleague delegation and room report routing retain their existing semantics. A task
+cannot recursively self-handoff. The assignee's selected model still wins. No new loop,
+RPC, provider, permission bypass or migration is introduced (A-01/03/04/06/08).
+
+Raphael's draft preference is raphael_draft_first in the single SettingsStore registry,
+default true; members.update accepts only that preference for identity 0. The details
+panel uses the same switch and words for all members. Worker reports share the member
+text contract; the existing fit_text projection derives the quick overlay caption.

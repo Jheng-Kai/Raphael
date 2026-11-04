@@ -74,7 +74,7 @@ class Speaker:
     @property
     def has_no_job(self) -> bool:
         """A member just made: the owner has not said yet what it is for."""
-        return not self.is_chief and not self.role and not self.instructions
+        return not self.is_raphael and not self.is_chief and not self.role and not self.instructions
 
     @property
     def is_raphael(self) -> bool:

@@ -39,8 +39,7 @@ class TeamContextSnapshot:
 
 def snapshot(team, self_id, language, room_member_ids=None):
     members = [{"id": s.id, "name": RAPHAEL_NAMES[language] if s.id == 0 else s.name,
-                "role": ({'zh-TW':'核心助手／幕僚長','en':'Core assistant / Chief of staff','ja':'コアアシスタント／参謀長'}[language]
-                         if s.is_chief else s.role), "blurb": s.blurb}
+                "role": s.role, "coordination_duty": "primary_contact" if s.is_chief else "", "blurb": s.blurb}
                for s in team.roster()]
     # Only public metadata of each app is copied, never provider configuration or credentials.
     inventory = read_inventory(team._connections)

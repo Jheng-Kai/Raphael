@@ -71,6 +71,18 @@ beforeEach(() => {
 });
 
 describe("a member's panel", () => {
+  test.each([0, 3])("member %s uses the shared draft preference switch", async id => {
+    current = id;
+    const panel = mount(); await flush();
+    const toggle = panel.el.querySelector<HTMLButtonElement>('[data-det="draft"]')!;
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    toggle.click(); await flush();
+    expect(host.update).toHaveBeenCalledWith(id, { draft_first: false });
+    host.member().draft_first = false; panel.draw();
+    panel.el.querySelector<HTMLButtonElement>('[data-det="draft"]')!.click(); await flush();
+    expect(host.update).toHaveBeenLastCalledWith(id, { draft_first: true });
+    delete host.member().draft_first;
+  });
   test("the gear Back button follows a locale change", async () => {
     const panel=mount(); await flush(); setLocale('en'); panel.draw();
     expect(panel.el.querySelector('[data-det="back"]')?.getAttribute('aria-label')).toBe(t('members.panelBack'));

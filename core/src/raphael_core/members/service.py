@@ -344,7 +344,8 @@ class MembersService:
 
     def speaker(self, member_id: int) -> Speaker | None:
         if member_id == 0:
-            return Speaker(**self.first_bot_profile(), capabilities=frozenset({"chief"}) if self.store.is_chief(member_id) else frozenset())
+            return Speaker(**self.first_bot_profile(), draft_first=self._settings.get("raphael_draft_first"),
+                           capabilities=frozenset({"chief"}) if self.store.is_chief(member_id) else frozenset())
         return self.store.speaker(member_id)
 
     def _chief_pinned(self) -> bool:
@@ -612,7 +613,7 @@ class MembersService:
         activity, activity_label = self.activity.describe(0, waiting)
         view: dict[str, Any] = {
             "blurb": "", "reply_style": "full", "voice": "", "read_aloud": False,
-            "notify": False, "ask_before_members": False, "pinned": self._chief_pinned(), "hidden": False, "draft_first": True,
+            "notify": False, "ask_before_members": False, "pinned": self._chief_pinned(), "hidden": False, "draft_first": self._settings.get("raphael_draft_first"),
             "id": 0,
             "chief": self.store.is_chief(0),
             "name": RAPHAEL_NAMES[language],
@@ -900,6 +901,13 @@ class MembersService:
         return {"role": saved["member"]["role"], "note": "Saved. The owner can see it in your details."}
 
     async def _update(self, params: dict) -> dict:
+        if type(params.get("id")) is int and params["id"] == 0 and set(params) == {"id", "draft_first"}:
+            try:
+                self._settings.set("raphael_draft_first", params["draft_first"])
+            except (ValueError, TypeError):
+                raise invalid_params("draft_first must be a boolean") from None
+            self._changed()
+            return {"member": self._raphael_view(self._language(), {}, set(), {})}
         member_id = self._member_id(params)
         fields = {
             name: params[name]

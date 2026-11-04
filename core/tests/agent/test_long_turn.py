@@ -101,7 +101,8 @@ async def test_a_turn_is_kept_inside_the_window_the_catalog_gives_its_model(make
     client.decisions.append(decision("answer"))
     checkpoint = "## Goal\nThe time.\n## Completed actions\n1. READ the time — ten o'clock"
     client.texts.extend(TextCompletion(checkpoint, entry.id, 0.01, 10, 10, 1, []) for _ in range(3))
-    rounds = [ChatTurn("I will go on.", [ChatToolCall(f"c{n}", "local_time", {"step": n}, json.dumps({"step": n}))], entry.id, 0.0, 7_000, 10, 1)
+    # Near-window provider usage keeps this check independent of the persona's estimated size.
+    rounds = [ChatTurn("I will go on.", [ChatToolCall(f"c{n}", "local_time", {"step": n}, json.dumps({"step": n}))], entry.id, 0.0, 7_900, 10, 1)
               for n in range(6)]
     client.chats = [*rounds, chat(FINAL)]
     result = await typed(rig)

@@ -125,6 +125,15 @@ async def test_the_system_prompt_is_the_one_of_the_route(voice, client, ledger, 
     assert client.json_calls[0]["system"] == persona.system_prompt("ja", route)
 
 
+async def test_the_fast_voice_answer_keeps_raphaels_owner_instructions(voice, client, ledger):
+    from dataclasses import replace
+    from raphael_core.agent.speaker import RAPHAEL
+
+    client.replies.append(completion(spoken()))
+    await reply(voice, ledger, speaker=replace(RAPHAEL, instructions="OWNER-FAST-INSTRUCTION"))
+    assert "OWNER-FAST-INSTRUCTION" in client.json_calls[0]["system"]
+
+
 async def test_the_question_goes_in_tags_after_the_time(voice, client, ledger):
     client.replies.append(completion(spoken()))
     await reply(voice, ledger, question="台北天氣如何")

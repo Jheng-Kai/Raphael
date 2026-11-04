@@ -63,7 +63,7 @@ def args(target,**changes):
             'stage_id':'draft','done_when':'A verified source receipt and report.',**changes}
 
 
-@pytest.mark.parametrize('bad,reason', [({'member_id':0},'self_handoff'),({'member_id':9876},'member_unknown_or_removed'),
+@pytest.mark.parametrize('bad,reason', [({'member_id':9876},'member_unknown_or_removed'),
     ({'ready_at_ms':9999999999999},'bad_arguments'),({'dispatch_policy':'scheduled'},'bad_arguments')])
 async def test_refused_handoff_has_named_reason_and_no_receipt(make_rig,bad,reason):
     rig=make_rig()
@@ -135,7 +135,7 @@ async def test_a_refused_handoff_tells_the_model_what_to_do_instead_of_a_code(ma
     await until(lambda:rig.task(accepted.data['task_id']).state in ('done','failed'))
     if brain=='api':
         shown.append(rig.client.chat_calls[-1]['messages'][-1]['content'])
-    assert 'You cannot hand work to yourself; reply in the room or hand it to a colleague.' in shown[0]
+    assert 'You are already doing this background work; finish it here or hand a distinct part to a colleague.' in shown[0]
     assert 'self_handoff' not in shown[0]
     assert 'self_handoff' in caplog.text
 

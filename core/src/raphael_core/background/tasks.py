@@ -244,10 +244,11 @@ class TaskStore:
                 raise Refused('stage_conflict')
             if parent and self.get(parent.id).state not in ('running', 'queued'):
                 raise Refused('cancelled')
-        lane = source.scope == 'room' or bool(parent and parent.report_room_id)
+        own_lane = source.scope == 'private' and assignee == source.member_id
+        lane = source.scope == 'room' or bool(parent and parent.report_room_id) or own_lane
         report_room = source.room_id if source.scope == 'room' else parent.report_room_id if parent else None
         report_thread = source.thread_id if source.scope == 'room' else parent.report_thread_id if parent else None
-        conversation = Conversations(self._conn, self._now_ms).main(assignee)
+        conversation = source.conversation_id if own_lane and source.conversation_id is not None else Conversations(self._conn, self._now_ms).main(assignee)
         now = self._now_ms()
         with self._conn:
             cursor = self._conn.execute("INSERT INTO worker_tasks(created_at_ms,state,session_id,language,text,member_id,"

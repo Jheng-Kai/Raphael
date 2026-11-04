@@ -48,6 +48,7 @@ DEFAULTS: dict[str, Any] = {
     "chatgpt.registrations.v1": {},
     "first_bot_profile": {},
     "chief_pinned": False,
+    "raphael_draft_first": True,
     "owner_name": "",
     "owner_about": "",
     "owner_photo": "",

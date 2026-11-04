@@ -1715,7 +1715,7 @@ class AgentService:
         index = "" if self._memory is None else self._memory.snapshot(speaker.id)
         if isinstance(index, MemorySnapshot):  # USER.md, then the speaker's own file
             index = "\n".join(part for part in (index.shared, index.own) if part)
-        persona = "" if speaker.is_raphael else (
+        persona = "" if speaker.is_raphael and not any((speaker.name, speaker.role, speaker.personality, speaker.instructions)) else (
             f"Speaker: {speaker.name}\nRole: {speaker.role}\n"
             f"Personality: {speaker.personality}\n"
             f"Owner's instructions: {speaker.instructions}\n\n"
@@ -1987,9 +1987,9 @@ class AgentService:
                 system = cli_system_prompt(ask.language,
                     name=None if ask.speaker.is_raphael else ask.speaker.name,
                     role=ask.speaker.role, instructions=ask.speaker.instructions,
-                    personality=ask.speaker.personality, memory=memory is not None)
+                    personality=ask.speaker.personality, memory=memory is not None, speaker=ask.speaker)
             elif ask.speaker.is_raphael:
-                system = system_prompt(ask.language, "answer", memory, say_ja=say_ja, narrated=True)
+                system = system_prompt(ask.language, "answer", memory, say_ja=say_ja, narrated=True, speaker=ask.speaker)
             else:
                 system = member_system_prompt(
                     ask.language, "answer", name=ask.speaker.name, role=ask.speaker.role,
@@ -2006,11 +2006,6 @@ class AgentService:
             if ask.exchange_speakers is not None:
                 system += "\nA colleague, another of the owner's assistants, asks you this for the owner. " + CONSULTED
             system += LEADERSHIP
-            if ask.speaker.is_raphael and ask.speaker.name:
-                system += "\nOwner-confirmed first Bot profile (identity 0):\n" + json.dumps({
-                    "name": ask.speaker.name, "role": ask.speaker.role,
-                    "personality": ask.speaker.personality, "instructions": ask.speaker.instructions,
-                }, ensure_ascii=False)
             user = build_user_message(
                 labelled_lines(ask.exchange_speakers[0], ask.text) if ask.exchange_speakers else ask.text,
                 self._moment(), context.turns, [], ask.language,

@@ -26,7 +26,7 @@ async def test_narrated_prompt_contains_only_its_own_persona_and_thread(setup, c
         if who is None or person.id != who.id:
             assert person.name in system and person.role in system
     if who:
-        assert "拉斐爾" in system and "Core assistant" in system
+        assert "拉斐爾" in system and '"coordination_duty": "primary_contact"' in system
     assert "ask_member" in system and "another member's thread" in system
     assert "zh-TW" in system and "Traditional Chinese" in system
     assert "ask_member" in {t["function"]["name"] for t in client.chat_calls[0]["tools"]}

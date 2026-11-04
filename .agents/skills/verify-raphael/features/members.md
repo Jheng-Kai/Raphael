@@ -775,3 +775,17 @@ changed shared skill reimport and readable source labels. connections.test.ts co
 the real dialog/grant refresh and preserved private rows. member-profile.test.ts
 covers Raphael's existing shared switch with readable source copy. Run those files
 plus i18n/i18n.test.ts, the mapped look command and one final npm run verify.
+
+## Shared abilities and movable coordination (2026-11-04)
+
+[Speaker parity](speaker-parity.md) refines R-AG-01: the primary contact coordinates,
+while every speaker retains the same executable abilities with its own model and grants.
+The details settings pane exposes the shared default-on draft preference for Raphael
+and members; no naming/job setup is introduced for identity 0 after a primary change.
+
+The selected matrix below is deferred in this unit: its brief prohibits look and native.
+Compare the shared draft switch in both details panes with the existing profile Soul row.
+
+```powershell
+npm run look -- speaker-draft-chief speaker-draft-member speaker-draft-profile --theme both --width 1120,720,1920x1080
+```
