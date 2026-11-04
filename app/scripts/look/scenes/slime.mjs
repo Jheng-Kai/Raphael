@@ -27,14 +27,14 @@ const change = (label, state, at, then, slime = SHION) => ({ label, cells: [{ si
 
 const sharp = [20, 40].map(size => ({ icon: true, size, caption: size })).concat(SIZES.map(size => ({ size, slime: SKY, state: "idle" })));
 
-const periods = { idle: 23300, thinking: 2800, working: 1800, searching: 3200, computer: 1700, waiting: 6000, blocked: 1800, done: 1900, error: 6000, sleeping: 5600, arriving: 1200 };
+const periods = { idle: 0, thinking: 2800, working: 1800, searching: 3200, computer: 1700, waiting: 6000, blocked: 1800, done: 1900, error: 6000, sleeping: 0, arriving: 1200 };
 const liquidSheet = TELLING.map(([label, state]) => ({ label, cells: [0, .25, .5, .75].flatMap(phase => [22, 28, 40].map(size => ({ size, slime: phase === .5 ? SHION : SKY, state, at: state === "working" ? [0, 162, 882, 1062][[0, .25, .5, .75].indexOf(phase)] : Math.round(periods[state] * phase), caption: `${size}/${state === "working" ? [0, 9, 49, 59][[0, .25, .5, .75].indexOf(phase)] : phase * 100}%` }))) }));
 const stillSheet = TELLING.map(([label, state]) => ({ label, cells: [22, 28, 40].flatMap(size => [{ size, slime: SKY, state, at: 0, caption: size }, { size, slime: SHION, state, at: 0, caption: size }, { size, slime: SKY, hat: true, state, at: 0, caption: size }]) }));
 
 export default [
   { ...scene('slime-motion-recovery', 'Error and blocked poses hand over from the painted cells without doubling the hidden vector transform', [board([change('↗','error',3000,'working'),change('↻','blocked',700,'thinking')]),check('slime-handover')]),motion:true },
   { ...scene("slime-liquid-sheet", "Our liquid body language at 22, 28 and 40 pixels, sampled across each loop", [board(liquidSheet), { action: "slime-parts" }]), motion: true },
-  scene("slime-liquid-still", "Reduced motion retains a distinct body, eyes and liquid prop in every state", [board(stillSheet), check("slime-liquid-still"), { action: "slime-parts" }]),
+  scene("slime-liquid-still", "Reduced motion retains a distinct body and eyes without detached props in every state", [board(stillSheet), check("slime-liquid-still"), { action: "slime-parts" }]),
   { ...scene("slime-parts", "Eyes and hats stay with the body at every drawn size throughout every state loop", [board(TELLING.map(([label, state]) => ({label, cells: [{size: 20, height: 19, slime: SKY, state, hat: true, at: 0}, ...[19, 22, 26, 28, 30, 40, 48, 72].map(size => ({size, slime: SKY, state, hat: true, at: 0}))]})), 2), {action: "slime-parts"}]), motion: true },
   { ...scene("slime-states", "Each member's slime moves with what that member is doing", [{ action: "member-column", collapsed: false }, doing(1, "thinking"), doing(2, "working"), doing(3, "computer"),
     { action: "event-storm", selector: ".mb-chat:not([hidden]) .ra-scroll", roster: true, wheelBy: 0, measure: { name: "roster-motion", enforce: false }, limits: { replacedFaces: 0, allReads: 24, longTaskMs: 600 } },

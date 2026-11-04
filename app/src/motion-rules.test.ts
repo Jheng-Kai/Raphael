@@ -23,8 +23,8 @@ test('R-PERF-01: endless motion only changes compositable properties with the na
     const frames = new Map([...css.matchAll(/@keyframes\s+([\w-]+)\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g)].map(match => [match[1], match[2]]));
     for (const match of css.matchAll(/([^{}]+)\{([^{}]*\binfinite\b[^{}]*)\}/g)) {
       const [, selector, declaration] = match;
-      if (selector.includes('[data-state="idle"]')) failures.push(`${file}: idle must not loop`);
-      if (/\.slime-(?:drop|thought|left|right|sweat|drip)\b/.test(selector)) failures.push(`${file}: droplets must not exist`);
+      if (/\[data-state="(?:idle|sleeping)"\]/.test(selector)) failures.push(`${file}: idle and sleeping must not loop`);
+      if (/\.slime-(?:drop|thought|left|right|sweat|drip|bubble)\b/.test(selector)) failures.push(`${file}: droplets and bubbles must not exist`);
       const large = file === 'slime.css' && selector.includes('.slime[data-state=') && largeRanges.some(([start,end]) => match.index! >= start! && match.index! < end!);
       if (selector.includes('.slime') && !/\.slime-(?:eye-|blink-|prop-)?cels/.test(selector) && !large) failures.push(`${file}: SVG loop outside large-avatar-vector: ${selector.trim()}`);
       for (const [name, body] of frames) if (new RegExp(`\\b${name}\\b`).test(declaration)) {

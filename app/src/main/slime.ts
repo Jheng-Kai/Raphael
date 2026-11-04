@@ -140,8 +140,6 @@ function strips(state: SlimeState, drawing: {back: string; worn: string}): [stri
   return loopState(state) ? motionStrips(state,BODY,EYES,FACE_SCALE,drawing.back,drawing.worn) : ['',''];
 }
 
-const BUBBLE = `<circle class="slime-bubble" cx="0" cy="0" r="5.5" fill="var(--slime-color)"/>`;
-
 export interface SlimeDrawing { now?: Date; state?: SlimeState; delay?: number; tempo?: number; since?: number; member?: number }
 
 /** The shared vector surface; `slimeFaceHTML` supplies the member's fixed avatar box. */
@@ -158,7 +156,7 @@ export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay
     `<g class="slime-press"><g class="slime-settle"><g class="slime-counterturn"><g class="slime-motion">` +
     (look.back ? `<g class="slime-back">${look.back}</g>` : "") + correction(`<path d="${BODY}" fill="var(--slime-color)" class="slime-body"/>`) + `<g class="slime-marks">${worn}</g>` +
     `<g class="slime-face" transform="${FACE_SCALE}"><g class="slime-look"><g class="slime-counterturn"><g class="slime-gaze" fill="none" stroke="#fff" stroke-linecap="round"><path class="slime-eyes" d="${EYES}"/></g></g></g></g>` +
-    `</g></g></g></g>${BUBBLE}</svg>${eyeStrip}</span>`;
+    `</g></g></g></g></svg>${eyeStrip}</span>`;
 }
 
 // ---------- under the pointer ----------
@@ -311,7 +309,7 @@ export function handOver(svg: SVGElement, state: SlimeState): void {
   if(loopState(state))svg.dataset.transitioning='true';else delete svg.dataset.transitioning;
   svg.style.setProperty("--slime-since", "0ms");
   svg.style.removeProperty('animation-name');
-  for(const part of svg.querySelectorAll<SVGElement>('.slime-motion,.slime-gaze,.slime-mark,.slime-bubble')){
+  for(const part of svg.querySelectorAll<SVGElement>('.slime-motion,.slime-gaze,.slime-mark')){
     const style=getComputedStyle(part), durations=style.animationDuration.split(',').map(parseFloat);
     part.style.animationDelay=style.animationDelay.split(',').map((delay,index)=>`${parseFloat(delay)%(durations[index]??durations[0]??1)}s`).join(',');
   }
