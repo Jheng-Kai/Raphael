@@ -1,5 +1,4 @@
-# Adapted from OpenMausBot server/container-computer.ts (Apache-2.0).
-# See licenses/NOTICES.md and licenses/Apache-2.0.txt.
+# Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
 FROM docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b
 USER root
 COPY desktop/ /opt/raphael-desktop/

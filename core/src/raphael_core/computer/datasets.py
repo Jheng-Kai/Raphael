@@ -1,6 +1,7 @@
-"""Named DuckDB work through vm_exec; informed by OpenMausBot (Apache-2.0).
+"""Named DuckDB work through vm_exec.
 
-See licenses/NOTICES.md. Only the member workspace is used; no host data engine.
+Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
+Only the member workspace is used; no host data engine.
 """
 
 import base64

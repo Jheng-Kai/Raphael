@@ -1,7 +1,7 @@
 """Guest-only file checkpoints, with hash-guarded restore preserving later edits.
 
-Content-addressed snapshots follow Hermes tools/checkpoint_manager.py
-(MIT, c419cf7c); see licenses/NOTICES.md. No guest dependencies are required.
+Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
+No guest dependencies are required.
 """
 
 import difflib

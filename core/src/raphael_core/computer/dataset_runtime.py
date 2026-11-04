@@ -1,6 +1,6 @@
-"""Workspace DuckDB runtime; design informed by OpenMausBot (Apache-2.0).
+"""Workspace DuckDB runtime, serialized to the member computer.
 
-See licenses/NOTICES.md. This module is serialized to the member computer.
+Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
 """
 
 import base64

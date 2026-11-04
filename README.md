@@ -69,4 +69,4 @@ The UI talks to the shell through Tauri commands, and the shell talks to the cor
 
 ## License
 
-Raphael is released under the [MIT License](LICENSE). Third-party licenses are in [licenses](licenses).
+Raphael is released under the [MIT License](LICENSE). Third-party licenses are in [core/packaging/licenses](core/packaging/licenses).

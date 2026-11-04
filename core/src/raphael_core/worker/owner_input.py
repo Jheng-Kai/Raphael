@@ -1,8 +1,6 @@
 """A loop-owned inbox; admission and its final drain share one event-loop boundary.
 
-The user-role message and consumed/leftover tickets follow Hermes agent_runtime_helpers.py
-and agent/interrupt_control.py
-(MIT, c419cf7c); see licenses/NOTICES.md.
+Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """
 
 

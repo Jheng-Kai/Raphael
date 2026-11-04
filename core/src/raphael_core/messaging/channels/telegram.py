@@ -6,8 +6,7 @@ messages (`getUpdates` with a long timeout), so no public address is needed.
 Besides text, a message may hold a voice message, a photo (Raphael takes its largest size) or a
 document; an image or a PDF among them is fetched for the switchboard to hand the assistant.
 
-Outgoing media routing follows Hermes plugins/platforms/telegram/adapter.py
-(MIT, c419cf7c); see licenses/NOTICES.md.
+Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 
 What goes in the log: counts and kinds. Never a message, a caption, a name, a file's name or id, a
 token, or the address of a request (it contains the token): this module silences the log lines of

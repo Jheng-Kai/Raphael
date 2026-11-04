@@ -8,7 +8,7 @@ ordered bounded recording, explicit review before publication, private input
 omission, and reuse through ordinary skills and routines. Raphael implements its
 own noVNC input recording, member-brain draft and existing skill editor.
 Upstream: https://github.com/CopilotKit/OpenBot. Copyright (c) 2026 CopilotKit.
-The upstream MIT permission and copyright are retained in `licenses/OpenBot-MIT.txt`.
+The upstream MIT permission and copyright are retained in `core/packaging/licenses/OpenBot-MIT.txt`.
 The closed Grok Bot product was a visual requirement reference only; no code or
 marks were copied.
 
@@ -26,7 +26,7 @@ from NousResearch/hermes-agent `tools/approval.py` (the pattern definitions are 
 `tools/approval_detection.py` at revision `c419cf7c`), with additional Windows
 forms. Upstream: https://github.com/NousResearch/hermes-agent.
 The upstream copyright and MIT license are reproduced in
-`licenses/hermes-agent-MIT.txt`. Pattern matching is best effort; Raphael's
+`core/packaging/licenses/hermes-agent-MIT.txt`. Pattern matching is best effort; Raphael's
 owner confirmation gate remains authoritative.
 
 Raphael is MIT licensed. The following separately licensed work is used for the
@@ -39,7 +39,7 @@ Copyright 2026 Milind Soni and OpenMausBot contributors
 
 Upstream: https://github.com/milind-soni/OpenMausBot, revision
 `f9191b5384b9900b2371696336439ae5ad6e0117`. The Apache-2.0 license is reproduced in
-`licenses/Apache-2.0.txt`.
+`core/packaging/licenses/Apache-2.0.txt`.
 
 Modified ports and adaptations, with upstream file names:
 
@@ -290,7 +290,7 @@ and Telegram attachment delivery in `core/src/raphael_core/messaging/channels/te
 are adapted from Hermes Agent revision `c419cf7c`, respectively
 `agent/agent_runtime_helpers.py`, `gateway/session_busy_controls.py` and
 `plugins/platforms/telegram/adapter.py`. Copyright (c) Nous Research and contributors.
-The MIT license is retained in `licenses/hermes-agent-MIT.txt`.
+The MIT license is retained in `core/packaging/licenses/hermes-agent-MIT.txt`.
 
 Hermes Agent
 Copyright (c) 2025 Nous Research
@@ -298,7 +298,7 @@ Copyright (c) 2025 Nous Research
 Upstream: https://github.com/NousResearch/hermes-agent, revision `c419cf7c`.
 
 Adapted for the tool loop of the background worker and the in-process API loop, with upstream file names.
-Each adapted file carries a header with its upstream path and revision:
+Each adapted file carries a one-line attribution; upstream paths and revisions are recorded here:
 
 - `core/src/raphael_core/worker/tool_guardrails.py`: from `agent/tool_guardrails.py` (the identical-call
   streak, the repeating-cycle detection, the failure counters, the failure-tolerant tools, the progress
@@ -328,3 +328,47 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Handy (MIT)
+
+The hotkey service layout and clipboard/paste implementation adapt Handy's
+`src-tauri/src/shortcut/handy_keys.rs`, `src-tauri/src/paste_tx/windows.rs`,
+`src-tauri/src/paste_tx/mod.rs` and `src-tauri/src/input.rs`.
+Upstream: https://github.com/cjpais/Handy, revision
+`9e57a0d7929fcc6417ea0d6e54c1b57f62635edd`.
+The pinned release component text is also retained in
+`app/scripts/release-licenses/handy-9e57a0d-LICENSE.txt`.
+The original paste design notes also credit OpenWhispr for releasing held
+modifiers before pasting and selecting a per-program paste chord.
+
+MIT License
+
+Copyright (c) 2025 CJ Pais
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+## Simple Icons (CC0-1.0)
+
+The single-path service marks in `app/src/main/service-icons.ts` use Simple Icons
+16.35.0 (https://simpleicons.org). Slack uses Simple Icons 13.21.0 artwork supplied
+by the maintainer. OpenRouter, Brave and SearXNG paths were checked identical to
+the upstream develop files on 2026-10-23. The pinned source, component usage and
+CC0 text remain in `app/scripts/release-licenses/manifest.json` and
+`app/scripts/release-licenses/simple-icons-16.35.0-LICENSE.txt`.
+The marks are trademarks of their owners, who do not sponsor or endorse Raphael.

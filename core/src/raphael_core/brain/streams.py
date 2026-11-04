@@ -6,8 +6,7 @@ all, a keep-alive comment included, starts that wait again); once the answer flo
 connection that is gone. A stream that goes quiet raises `httpx.ReadTimeout`, one that ends before its answer was
 complete `httpx.RemoteProtocolError`: the errors the callers already turn into a timeout and a network failure.
 
-The numbers (`retry_utils.MODEL_SILENCE_S`, `STREAM_STALL_S`) are chosen against NousResearch/hermes-agent
-agent/chat_completion_helpers.py and agent/reasoning_timeouts.py @ c419cf7c (MIT) and opencode's provider.ts.
+Adapted from NousResearch/hermes-agent and opencode (MIT); see core/packaging/licenses.
 """
 
 import asyncio

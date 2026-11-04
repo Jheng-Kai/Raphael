@@ -2,8 +2,7 @@
 
 Only public text and explicit reasoning summaries are forwarded. Raw diagnostics,
 reasoning blocks, command output and provider credentials never become UI messages.
-Active-turn steering adapts Hermes agent/transports/codex_app_server_session.py
-(MIT, c419cf7c); see licenses/NOTICES.md.
+Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """
 
 import asyncio

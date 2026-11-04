@@ -3,6 +3,7 @@
 import importlib.util
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -29,7 +30,10 @@ def manifest(notices):
 
 def test_every_pinned_license_text_is_listed_and_every_listed_text_matches_its_checksum(notices, manifest):
     listed = {item["file"] for item in manifest["licenses"]}
-    assert listed == {path.name for path in notices.LICENSES.glob("*.txt")}
+    adapted = {name for name in notices.ADAPTED_LICENSE_FILES if name.endswith(".txt")}
+    assert listed.isdisjoint(adapted)
+    assert listed | adapted == {path.name for path in notices.LICENSES.glob("*.txt")}
+    assert all((notices.LICENSES / name).is_file() for name in notices.ADAPTED_LICENSE_FILES)
     for item in manifest["licenses"]:
         assert item["url"].startswith("https://"), item["file"]
         assert not re.search(r"/(?:main|master|HEAD)/", item["url"]), f"{item['file']} is not pinned to a version"
@@ -126,6 +130,38 @@ def test_the_audit_requires_every_pinned_license_text(build, bundle):
 
     with pytest.raises(RuntimeError, match="libffi-3.4.2-LICENSE.txt"):
         build.audit_bundle(bundle)
+
+
+@pytest.mark.parametrize("name", ["NOTICES.md", "Apache-2.0.txt", "hermes-agent-MIT.txt", "OpenBot-MIT.txt"])
+def test_the_audit_requires_every_adapted_code_notice(build, bundle, name):
+    (bundle / "_internal" / "licenses" / name).unlink()
+    with pytest.raises(RuntimeError, match=re.escape(name)):
+        build.audit_bundle(bundle)
+
+
+def test_generated_notices_ship_adapted_code_texts_in_the_bundle_and_release_notice(notices, manifest, monkeypatch, tmp_path):
+    packaging = tmp_path / "packaging"
+    packaging.mkdir()
+    monkeypatch.setattr(notices, "__file__", str(packaging / "notices.py"))
+    monkeypatch.setattr(notices, "installed_versions", lambda: manifest["pinned_versions"])
+    monkeypatch.setattr(notices, "runtime_distributions", lambda: [])
+    monkeypatch.setattr(notices, "distribution", lambda name: SimpleNamespace(
+        version="1", files=[], read_text=lambda filename: "test metadata",
+    ))
+    python = tmp_path / "python"
+    python.mkdir()
+    (python / "LICENSE.txt").write_text("test Python license", encoding="utf-8")
+    monkeypatch.setattr(notices.sys, "base_prefix", str(python))
+    target = tmp_path / "build" / "notices"
+
+    notices.write_notices(target)
+
+    text = (target / "THIRD_PARTY_NOTICES.txt").read_text(encoding="utf-8")
+    for name in notices.ADAPTED_LICENSE_FILES:
+        assert (target / name).read_bytes() == (notices.LICENSES / name).read_bytes()
+        assert (notices.LICENSES / name).read_text(encoding="utf-8") in text
+    assert "Copyright (c) 2025 CJ Pais" in text
+    assert "Copyright (c) 2026 CopilotKit" in text
 
 
 def test_the_audit_requires_the_shared_catalog_search_data(build, bundle):

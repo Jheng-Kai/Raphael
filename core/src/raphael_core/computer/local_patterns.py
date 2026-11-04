@@ -1,5 +1,4 @@
-# Adapted from NousResearch/hermes-agent tools/approval_detection.py @ c419cf7c (MIT)
-# tools/approval.py delegates the pattern definitions at this revision.
+# Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 # Best-effort detection only; the owner approval card remains the execution gate.
 
 DANGEROUS_PATTERNS = [

@@ -1,7 +1,6 @@
 """Shared, bounded failure diagnostics. Raw packets and credentials never leave ingress.
 
-The words that tell a spent quota from a throttle, a context that does not fit and a filtered prompt are adapted from
-NousResearch/hermes-agent agent/error_classifier.py @ c419cf7c (MIT), narrowed to the kinds Raphael tells apart.
+Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """
 
 import json

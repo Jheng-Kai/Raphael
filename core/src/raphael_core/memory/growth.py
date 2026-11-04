@@ -26,7 +26,7 @@ def definition(description, properties, required):
                                                        "required": required, "additionalProperties": False}}
 
 
-# Adapted from NousResearch/hermes-agent tools/memory_tool.py MEMORY_SCHEMA @ c419cf7c (MIT).
+# Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 DEFINITIONS = {
     "memory_update": definition(
         "Edit your persistent memory, two living files you read at the start of every turn. Keep entries compact: "

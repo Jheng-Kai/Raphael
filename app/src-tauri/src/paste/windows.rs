@@ -5,10 +5,9 @@
 //! user still holds, send the paste chord, then wait for the target to read the text and put the
 //! user's clipboard back. If the focus check says not to paste, the text stays on the clipboard.
 //!
-//! The chord is sent as Handy does it in `src-tauri/src/input.rs` (MIT, Copyright (c) 2025
-//! CJ Pais; the notice is in `clipboard.rs`): modifiers down, key click, a 100 ms hold, modifiers
-//! up. Releasing held modifiers first and the per-program chord ([`shortcut_for`]) follow
-//! OpenWhispr.
+//! Adapted from Handy (MIT); see core/packaging/licenses.
+//! The chord sends modifiers down, a key click, a 100 ms hold, then modifiers up.
+//! Held modifiers are released first; [`shortcut_for`] selects the per-program chord.
 //!
 //! [`shortcut_for`]: super::shortcut_for
 
