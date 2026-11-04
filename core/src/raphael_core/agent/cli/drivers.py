@@ -149,6 +149,11 @@ class Driver:
                 for index, skill in enumerate(skills):
                     folder = plugin / "skills" / f"skill-{index}"
                     for relative, data in package(Path(skill["path"]).parent).items():
+                        if relative == "SKILL.md":
+                            # Native expansion must not execute command substitutions outside our approval path.
+                            data = data.replace(b"!`", b"\\!`")
+                            if skill.get("plugin_root"):
+                                data = data.replace(b"${CLAUDE_PLUGIN_ROOT}", skill["plugin_root"].replace("\\", "/").encode())
                         target = folder / relative
                         target.parent.mkdir(parents=True, exist_ok=True)
                         target.write_bytes(data)

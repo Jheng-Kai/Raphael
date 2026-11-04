@@ -6,7 +6,8 @@ import { describeError } from "./format";
 import { t } from "./i18n";
 import { faceHTML } from "./members";
 import type { MemberSkill } from "./types";
-import { skillSourceLabel } from "./skill-source";
+import { skillOriginLabel, skillSourceLabel } from "./skill-source";
+import { type SkillSet, type SkillMarketplace, marketplacesHTML, skillSetHeading } from "./skill-sets";
 import { actionRow, btn, esc, ico, st, tg } from "./ui";
 
 /** A skill with the member whose it is. */
@@ -42,19 +43,20 @@ export interface SkillPage {
   error: string | null;
 }
 
-export interface LocalSkillSource { source: string; name: string; description: string; plugin?: string }
+export interface LocalSkillSource { source: string; name: string; description: string; plugin?: string; kind?: "plugin"; version?: string; skill_count?: number; skills?: LocalSkillSource[] }
 
 /** Local discovery is explicit; source groups live in the existing Connections dialog. */
-export function skillImportsHTML(sources: LocalSkillSource[] | "loading" | "failed", closeButton = "", notice = ""): string {
+export function skillImportsHTML(sources: LocalSkillSource[] | "loading" | "failed", closeButton = "", notice = "", markets: SkillMarketplace[] = [], busy = false): string {
   const head = `<div class="cs-dlg-head"><h2 class="cs-dlg-name" id="cs-dlg-title">${esc(t("skills.discover"))}</h2><span class="sp"></span>${closeButton}</div>`;
   if (sources === "loading") return head + `<p role="status">${esc(t("conn.loading"))}</p>`;
   if (sources === "failed") return head + `<p role="alert">${esc(t("conn.skills.failed"))}</p>` + btn(esc(t("plugins.retry")), "sm", ' data-conn="skill-discover"');
   const groups = ["Claude Code", "Codex", t("skills.plugins")];
   const groupOf = (source: LocalSkillSource): number => source.plugin || /[\\/]plugins[\\/]cache[\\/]/.test(source.source) ? 2 : /[\\/]\.claude[\\/]/.test(source.source) ? 0 : 1;
-  return head + (sources.length ? groups.map((name, group) => {
+  return head + marketplacesHTML(markets, busy) + (sources.length ? groups.map((name, group) => {
     const rows = sources.map((source, index) => ({ source, index })).filter(({ source }) => groupOf(source) === group);
     return rows.length ? `<section class="cs-sec" data-skill-origin="${group}"><h3>${esc(name)}</h3><div class="cs-list">` + rows.map(({ source, index }) =>
-      `<div class="cs-item cs-source"><div class="cs-open"><span class="tx"><span class="nm">${esc(source.name)}</span><span class="ds">${esc(source.description)}</span><span class="ds" title="${esc(skillSourceLabel(source.source, source.plugin))}">${esc(skillSourceLabel(source.source, source.plugin))}</span></span></div>${btn(ico("download") + esc(t("skills.import")), "sm gr", ` data-conn="skill-import-local" data-source="${index}" title="${esc(t("skills.importShared"))}"`)}</div>`).join("") + `</div></section>` : "";
+      `<div class="cs-item cs-source"${source.kind ? ' data-plugin-source' : ""}><div class="cs-open"><span class="tx"><span class="nm">${esc(source.name)}${source.version ? ` · ${esc(source.version)}` : ""}</span><span class="ds">${esc(source.description)}</span><span class="ds" data-skill-provenance title="${esc(skillSourceLabel(source.source, source.plugin))}">${source.kind ? esc(t("skills.pluginCount", { p0: source.skill_count ?? 0 })) : esc(skillSourceLabel(source.source, source.plugin))}</span></span></div>${btn(ico("download") + esc(t("skills.import")), "sm gr", ` data-conn="skill-import-local" data-source="${index}" title="${esc(t("skills.importShared"))}"${busy ? " disabled" : ""}`)}</div>` +
+      (source.skills?.length ? `<details class="cs-plugin-skills"><summary>${esc(t("skills.individualSkills"))}</summary><div class="cs-list">${source.skills.map((child, at) => `<div class="cs-item cs-source"><div class="cs-open"><span class="tx"><span class="nm">${esc(child.name)}</span><span class="ds">${esc(child.description)}</span></span></div>${btn(ico("download") + esc(t("skills.import")), "sm gr", ` data-conn="skill-import-alone" data-source="${index}" data-child="${at}"${busy ? " disabled" : ""}`)}</div>`).join("")}</div></details>` : "")).join("") + `</div></section>` : "";
   }).join("") : `<p class="cs-desc">${esc(t("skills.noLocal"))}</p>`) + notice;
 }
 
@@ -64,11 +66,12 @@ export const skillPage = (memberId: number, id: number): SkillPage =>
 export const sameSkill = (item: SkillItem, memberId: number, id: number): boolean => item.member.id === memberId && item.skill.id === id;
 
 /** Shared packages and every member's effective skills, including Raphael. */
-export async function loadSkillItems(): Promise<SkillItem[]> {
+export async function loadSkillItems(): Promise<{ items: SkillItem[]; sets: SkillSet[] }> {
   const { members } = await api.membersList();
+  let sets: SkillSet[] = [];
   const lists = await Promise.all([...members, { id: -1, name: t("skills.shared"), avatar_url: undefined }].map(async (member) =>
-    (await api.membersSkillsList(member.id)).skills.map((skill): SkillItem => ({ member: { id: member.id, name: member.name, avatar_url: member.avatar_url }, skill }))));
-  return lists.flat();
+    { const result = await api.membersSkillsList(member.id); if (member.id === -1) sets = result.sets ?? []; return result.skills.map((skill): SkillItem => ({ member: { id: member.id, name: member.name, avatar_url: member.avatar_url }, skill })); }));
+  return { items: lists.flat(), sets };
 }
 
 /** A row of the list, drawn like an app's: the member's face, the skill's name, who has it and when it is used, a switch and a chevron. */
@@ -79,7 +82,7 @@ export function skillRowHTML(item: SkillItem): string {
   return (
     `<div class="cs-item cs-skill"${member.id === -1 ? ' data-library-skill' : ""} data-conn="skill-open"${ids}>` +
     btn(
-      `<span class="ic">${skillIcon(item, 28)}</span><span class="tx"><span class="nm">${esc(skill.name)}</span><span class="ds">${esc(skillOwner(item))}${member.id === -1 ? "" : ` · ${esc(skill.description)}`}</span><span class="ds" title="${esc(skillSourceLabel(skill.source, skill.plugin))}">${esc(skillSourceLabel(skill.source, skill.plugin))}${skill.source_changed ? ` · ${esc(t("skills.changed"))}` : ""}</span></span>`,
+      `<span class="ic">${skillIcon(item, 28)}</span><span class="tx"><span class="nm">${esc(skill.name)}</span><span class="ds">${esc(skillOwner(item))}${member.id === -1 ? "" : ` · ${esc(skill.description)}`}</span><span class="ds" data-skill-provenance title="${esc(skillOriginLabel(skill))}">${esc(skillOriginLabel(skill))}${skill.source_changed ? ` · ${esc(t("skills.changed"))}` : ""}</span></span>`,
       "cs-open",
       ` data-conn="skill-open"${ids} data-k="cs-skill:${key}" aria-haspopup="dialog" title="${esc(t("conn.skill.open", { p0: skill.name }))}"`,
     ) +
@@ -90,9 +93,11 @@ export function skillRowHTML(item: SkillItem): string {
 }
 
 /** The list of skills, under its name. */
-export const skillsSectionHTML = (items: SkillItem[], failed = false): string =>
+export const skillsSectionHTML = (items: SkillItem[], failed = false, sets: SkillSet[] = []): string =>
   `<section class="cs-sec" data-skills-section><div class="data-heading"><h2>${esc(t("conn.skills"))}</h2>${btn(ico("download") + esc(t("skills.import")), "sm gr", ' data-conn="skill-discover" aria-haspopup="dialog"')}</div>` +
-  (failed ? `<div class="alert core-note">${st("err", t("conn.skills.failed"))}${btn(esc(t("plugins.retry")), "sm", ' data-conn="retry-skills"')}</div>` : items.length ? `<div class="cs-list" data-stagger="skills">${items.map(skillRowHTML).join("")}</div>` : "") + `</section>`;
+  (failed ? `<div class="alert core-note">${st("err", t("conn.skills.failed"))}${btn(esc(t("plugins.retry")), "sm", ' data-conn="retry-skills"')}</div>` :
+    (items.some(item => !item.skill.set_id) ? `<div class="cs-list" data-stagger="skills">${items.filter(item => !item.skill.set_id).map(skillRowHTML).join("")}</div>` : "") +
+    sets.map(set => `<section class="cs-set">${skillSetHeading(set)}<div class="cs-list">${items.filter(item => item.skill.set_id === set.id).map(skillRowHTML).join("")}</div></section>`).join("")) + `</section>`;
 
 /** Whether the draft is not what was saved: the one reason to enable 「儲存」. */
 export const skillChanged = (page: SkillPage): boolean => page.state === "ready" && page.draft !== page.saved;
@@ -104,23 +109,24 @@ export const skillChanged = (page: SkillPage): boolean => page.state === "ready"
  */
 export function skillDialogHTML(item: SkillItem, page: SkillPage, closeButton: string, retry: string, notice = ""): string {
   const { member, skill } = item;
+  const readOnly = skill.shared || !!skill.set_id;
   const ids = ` data-member="${member.id}" data-id="${skill.id}"`;
   const head =
     `<div class="cs-dlg-head">${skillIcon(item, 40)}<span class="sp"></span>` +
     tg(skill.enabled, t("conn.skill.switch", { p0: skill.name }), ` data-conn="skill-enable"${ids} data-k="cs-skill-dlg-enable"`) +
     closeButton + `</div><h2 class="cs-dlg-name" id="cs-dlg-title">${esc(skill.name)}</h2>` +
-    `<p class="cs-desc">${esc(skillOwner(item))} · ${esc(skill.description)}</p>`;
+    `<p class="cs-desc">${esc(skillOwner(item))} · ${esc(skill.description)}</p><p class="cs-desc" data-skill-provenance>${esc(skillOriginLabel(skill))}</p>`;
   const grants = member.id === -1 ? `<section class="cs-skill-grants"><h3>${esc(t("skills.members"))}</h3><div class="cs-list">` + (item.grants ?? []).map(each =>
     `<div class="mp-resource" data-skill-grant="${each.member.id}"><span>${faceHTML(each.member, 28)} ${esc(each.member.name)}</span>${tg(each.skill.enabled, t("skills.memberAccess", { p0: each.member.name, p1: skill.name }), ` data-conn="skill-enable" data-member="${each.member.id}" data-id="${skill.id}" data-k="cs-skill-enable:${each.member.id}:${skill.id}"`)}</div>`).join("") + `</div></section>` : "";
   const body = page.state === "loading" ? `<p role="status">${esc(t("conn.loading"))}</p>`
     : page.state === "failed" ? `<div class="note" role="alert">${esc(t("conn.skill.loadFailed"))}${retry}</div>`
     : `<label class="cs-field"><span class="flabel">${esc(t("conn.skill.instructions"))}</span>` +
-      `<textarea id="skill-text" class="field cs-skill-text" rows="14" spellcheck="false" data-k="cs-skill-text"${page.busy ? " disabled" : ""}${skill.shared ? " readonly" : ""}>${esc(page.draft)}</textarea></label>` +
+      `<textarea id="skill-text" class="field cs-skill-text" rows="14" spellcheck="false" data-k="cs-skill-text"${page.busy ? " disabled" : ""}${readOnly ? " readonly" : ""}>${esc(page.draft)}</textarea></label>` +
       (page.error ? `<div class="note" role="alert">${st("err", page.error)}</div>` : "");
   const acts = actionRow({
     cls: "cs-acts", sticky: true,
-    ...(skill.shared ? {} : { destructive: { label: esc(t("conn.skill.delete")), attrs: ` data-conn="skill-delete"${ids} data-k="cs-skill-delete"${page.busy ? " disabled" : ""}` } }),
-    primary: { label: esc(t("conn.skill.save")), attrs: ` data-conn="skill-save"${ids} data-k="cs-skill-save"${skillChanged(page) && !page.busy && !skill.shared ? "" : " disabled"}` },
+    ...(readOnly ? {} : { destructive: { label: esc(t("conn.skill.delete")), attrs: ` data-conn="skill-delete"${ids} data-k="cs-skill-delete"${page.busy ? " disabled" : ""}` } }),
+    primary: { label: esc(t("conn.skill.save")), attrs: ` data-conn="skill-save"${ids} data-k="cs-skill-save"${skillChanged(page) && !page.busy && !readOnly ? "" : " disabled"}` },
   });
   return head + grants + (skill.source_changed && !skill.shared ? btn(esc(t("skills.reimport")), "sm", ` data-conn="skill-reimport"${ids}`) : "") + body + notice + acts;
 }

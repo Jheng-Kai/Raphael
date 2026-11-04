@@ -794,10 +794,42 @@ export function installMock(fixture, config = {}, target = window) {
         return { member, routine_offer: variant.routineOffer ? {title:"範例摘要",prompt:"整理範例資料。",schedule:{kind:"daily",time:"09:00"}} : null };
       }
       case "members.delete": data.members = data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
-      case "members.skills.list": return { skills: visibleSkills(p), undo: skillUndo.get(skillMember(p))?.revision ?? null,
-        ...(p.discover ? { sources: data.skillSources ?? [] } : {}) };
+      case "members.skills.list": {
+        if (p.marketplace) {
+          const marketplace = structuredClone(data.skillMarketplaceCatalog);
+          if (!marketplace || p.marketplace !== marketplace.repo) throw new Error("Invalid params: unknown synthetic marketplace");
+          data.skillMarketplaces = [...data.skillMarketplaces.filter(m => m.repo !== marketplace.repo), marketplace];
+          for (const set of data.skillSets) {
+            const latest = marketplace.plugins.find(plugin => plugin.name === set.name);
+            if (set.marketplace === marketplace.repo && latest?.version !== set.version) set.source_changed = true;
+          }
+          return { marketplace, sets: data.skillSets, skills: visibleSkills(p) };
+        }
+        return { skills: visibleSkills(p), sets: data.skillSets, undo: skillUndo.get(skillMember(p))?.revision ?? null,
+          ...(p.discover ? { sources: data.skillSources ?? [], marketplaces: data.skillMarketplaces } : {}) };
+      }
       case "members.skills.import": {
-        const source = (data.skillSources ?? []).find(item => item.source === p.source);
+        if (p.plugin || p.marketplace || p.set_id) {
+          if (!p.shared) throw new Error("Invalid params: plugin sets belong to the shared library");
+          const previous = data.skillSets.find(set => set.id === p.set_id);
+          const market = data.skillMarketplaces.find(m => m.repo === (p.marketplace || previous?.marketplace));
+          const plugin = market?.plugins.find(item => item.name === (p.name || previous?.name));
+          const source = data.skillSources.find(item => item.source === p.source && item.kind === "plugin");
+          if (!previous && !source && !plugin?.installable) throw new Error("Invalid params: unknown plugin");
+          const set = { ...(previous ?? source ?? plugin), id: previous?.id ?? nextId(data.skillSets), source: source?.source ?? previous?.source ?? `github:${p.marketplace}/${p.name}`, version: plugin?.version ?? previous?.version ?? source.version,
+            marketplace: market?.repo ?? "", skill_count: 2, command_count: 1, source_changed: false, mcp_servers: source?.mcp_servers ?? previous?.mcp_servers ?? [] };
+          data.skillSets = [...data.skillSets.filter(item => item.id !== set.id), set];
+          const parts = source ? [...source.skills, ...(source.commands ?? [])] : previous ? data.skills.filter(skill => skill.set_id === set.id) : [{name:"每週摘要",description:"整理本週重點與下一步"},{name:"來源核對",description:"核對引用資料與發布日期"},{name:"review",description:"檢視輸入內容",set_kind:"command"}];
+          for (const item of parts) {
+            const existing = data.skills.find(s => s.set_id === set.id && s.name === item.name);
+            const values = {...item, set_id:set.id, set_kind:item.set_kind ?? "skill", plugin:set.name, plugin_version:set.version, source:`plugin:${set.name}`, member_id:-1};
+            if (existing) Object.assign(existing, values);
+            else data.skills.push({...values,id:nextId(data.skills),enabled:true});
+          }
+          notify("MembersChanged", {member_id:0});
+          return {set,skills:visibleSkills({shared:true})};
+        }
+        const source = (data.skillSources ?? []).flatMap(item => [item, ...(item.skills ?? [])]).find(item => item.source === p.source);
         if (!source) throw new Error("Invalid params: choose an installed skill from the local source list");
         const member_id = skillMember(p);
         let skill = data.skills.find(s => s.member_id === member_id && s.source === p.source);
@@ -842,6 +874,14 @@ export function installMock(fixture, config = {}, target = window) {
         return { skill: skillRow(skill) };
       }
       case "members.skills.delete": {
+        if (p.set_id) {
+          if (!p.shared) throw new Error("Invalid params: plugin sets belong to the shared library");
+          const removed = data.skills.filter(s => s.set_id === p.set_id).map(s => s.id);
+          data.skills = data.skills.filter(s => s.set_id !== p.set_id);
+          data.skillSets = data.skillSets.filter(s => s.id !== p.set_id);
+          for (const key of skillGrants.keys()) if (removed.includes(Number(key.split(":")[1]))) skillGrants.delete(key);
+          notify("MembersChanged",{member_id:0}); return {deleted:true};
+        }
         if (!p.shared && data.skills.some(s => s.id === p.id && s.member_id === -1)) throw new Error("Invalid params: edit shared skills in the shared library");
         p = { ...p, member_id: skillMember(p) };
         saveSkills(p.member_id);

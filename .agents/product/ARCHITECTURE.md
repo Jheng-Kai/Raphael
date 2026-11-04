@@ -524,11 +524,11 @@ Offline tests establish contracts, not container latency or driver compatibility
 MemberCapabilities remains the one skill/command store. skill_library.py adds
 bounded local snapshots and internal shared scope to that same store; SkillHomes
 maps shared packages beside shared USER.md without broadening BotHomes bot-write
-allowlists. Migration 60 stores per-member shared grants. Existing members.skills.*
+allowlists. Migration 61 stores per-member shared grants. Existing members.skills.*
 RPCs carry shared/discover parameters; no RPC, native allowlist, settings registry,
 worker or brain loop is added (A-01/A-03/A-04/A-06/A-08).
 
-Installed-source discovery reads SKILL.md metadata and bounded path/size/mtime
+Installed-source discovery reads SKILL.md and plugin manifest metadata plus bounded path/size/mtime
 fingerprints, never package bodies. It skips dependency/hidden directories and
 prunes discovery below skills. Plugin identity excludes the cache version; SemVer
 then version-folder mtime selects one source. Import validates that source under
@@ -544,3 +544,36 @@ keeps its isolated home and disabled host discovery/native shell, with explicit
 skill input and enabled path configuration. API and background skill scripts use
 the existing local command gate. Import itself never executes code. Offline fake
 protocols and synthetic file tests are not live or installed-CLI acceptance.
+
+
+## Plugin sets and marketplaces (2026-11-04)
+
+Migration 62 adds skill_sets/skill_marketplaces and component ownership columns to
+member_skills; rooms 60 and grants 61 remain unchanged. skill_plugins.py owns
+manifest parsing, bounded HTTPS reads, commit pinning and shared set lifecycle.
+The existing members.skills.list/import/delete RPCs carry these operations through
+api.ts. There is no new native allowlist, model loop, worker or settings registry.
+A fully validated generation is staged under shared/skill-sets before one database
+transaction replaces its pointers. Stable component paths retain IDs and grants;
+removed components trigger the existing grant cleanup. Existing local single-skill
+imports remain available and plugin components are edited through whole-set refresh.
+Commands become documents in that same store, preserving slash discovery, skill_read
+and assigned native skill delivery. Native guidance escapes automatic shell
+substitutions and resolves plugin-root references to the owned set; it never loads
+the source plugin's MCP/hook/agent configuration. Scripts retain ordinary approval.
+
+Marketplace records cache the explicit owner-requested catalog. Refresh checks for
+newer listed versions; normal member reads perform no network. Source strings and
+GitHub/url/git-subdir declarations resolve to an immutable commit before reading
+manifests and downloading the selected regular-file subtree. Redirects, truncated
+trees, path aliases, links, file-count/byte limits and mismatched versions fail closed.
+MCP values are never returned: only public fields and secret names feed one existing
+mcpProposalHTML card per server. Its explicit setup action opens the existing custom
+MCP form and test/save path. Import, listing and card rendering never connect it.
+The UI keeps one Skills section, groups shared rows beneath their set, and adds
+marketplaces to the existing import dialog. Tests use only tmp folders, fake HTTP
+and fake CLI processes; native/live/provider acceptance remains separate.
+Skill source rendering uses skill-source.ts in member resources, Connections rows,
+discovery and document dialogs. skillOriginLabel owns the single localized origin
+and learned date line; skillSourceLabel removes transport prefixes and collapses
+plugin cache paths to name/version. Stored source identifiers remain unchanged.

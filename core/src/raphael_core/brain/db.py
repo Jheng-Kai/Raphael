@@ -1467,6 +1467,31 @@ PRAGMA user_version = 61;
 COMMIT;
 """
 
+_MIGRATIONS[62] = """
+BEGIN;
+CREATE TABLE skill_marketplaces (
+    repo TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    catalog TEXT NOT NULL
+);
+CREATE TABLE skill_sets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    identity TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    version TEXT NOT NULL,
+    source TEXT NOT NULL,
+    description TEXT NOT NULL,
+    folder TEXT NOT NULL,
+    metadata TEXT NOT NULL
+);
+ALTER TABLE member_skills ADD COLUMN set_id INTEGER REFERENCES skill_sets(id) ON DELETE CASCADE;
+ALTER TABLE member_skills ADD COLUMN set_key TEXT;
+ALTER TABLE member_skills ADD COLUMN set_kind TEXT;
+CREATE UNIQUE INDEX skill_set_key ON member_skills(set_id,set_key);
+PRAGMA user_version = 62;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

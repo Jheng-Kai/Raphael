@@ -67,6 +67,18 @@ test("Raphael saves command templates and toggles shared skills through the ordi
   skills.destroy();
 });
 
+test("inherited plugin components show their set name and version with the ordinary grant switch", async () => {
+  const root = document.createElement("div"); document.body.append(root);
+  vi.mocked(api.membersSkillsList).mockResolvedValue({ skills: [{ id: 12, name: "review", description: "Review", source: "plugin:desk", plugin: "desk", plugin_version: "2.0.0", set_id: 1, set_kind: "command", enabled: true, shared: true }] });
+  const resources = mountMemberResources(root, { memberId: 0, tab: "skills", standalone: true }); await flush();
+  expect(root.textContent).toContain(`${t("skills.shared")} · desk · 2.0.0`);
+  expect(root.textContent).not.toContain("plugin:");
+  expect(root.querySelector('[data-res="skill-menu"]')).toBeNull();
+  click(root, '[data-res="skill-toggle"]'); await flush();
+  expect(api.membersSkillsUpdate).toHaveBeenCalledWith(0, 12, false);
+  resources.destroy();
+});
+
 test("tabs retain fields and keyboard navigation selects a visible panel", () => {
   const dialog = openEditMemberDialog(host(), member);
   fill(dialog.el, "#mb-new-name", "Ada");
@@ -299,6 +311,9 @@ test.each([["zh-TW", "2026/10/29"], ["ja", "2026/10/29"], ["en", "Oct 29, 2026"]
   const editor = mountMemberResources(root, { memberId: 7, tab: "skills", standalone: true, changed });
   await flush();
   expect(root.textContent).toContain(date);
+  expect([...root.querySelectorAll('.mp-resource p')].map(line => line.textContent)).not.toContain("learned");
+  expect(root.querySelectorAll('[data-skill-provenance]')).toHaveLength(1);
+  expect(root.querySelector('[data-skill-provenance]')!.textContent).toBe(t("skills.learnedAt", { p0: date }));
   click(root, '[data-res="skill-menu"]');
   document.querySelector<HTMLButtonElement>('#app-popover [data-pick="skill-edit"]')!.click();
   await flush();

@@ -1,5 +1,15 @@
 # Raphael feature map
 
+## Plugin sets and GitHub marketplaces (2026-11-04)
+
+See [Members](members.md#plugin-sets-and-github-marketplaces-2026-11-04) for
+R-SKILL-06/07: one installed plugin entry, bounded whole-set import/update/removal,
+pinned GitHub marketplace sources, inherited member grants, commands, and explicit
+MCP setup cards. Migration 62 follows rooms 60 and shared grants 61. Offline look
+adds skills-plugin-entry, skills-marketplace, skills-plugin-set,
+skills-plugin-update and skills-plugin-details to the existing 15-scene skill scope.
+Synthetic HTTP/CLI tests do not establish GitHub, installed-CLI or live acceptance.
+
 ## Shared installed skills (2026-11-04)
 
 See [Members](members.md#shared-installed-skills-2026-11-04) for R-SKILL-01 through
@@ -680,3 +690,8 @@ See [Conversation](conversation.md#durable-owner-inbox-2026-11-03) for R-QUEUE-0
 through R-QUEUE-06 and refinements to R-BATCH-01/R-UI-08. See
 [Team and rooms](team-and-rooms.md#send-while-rooms-work-2026-11-03) for the shared
 room composer. The send-prompt and send-prompt-slow scenes keep their performance limits.
+
+R-SKILL-08 also covers localized skill origins in member details, Connections,
+discovery and document dialogs; see [Members](members.md#localized-skill-origins-2026-11-05).
+The same selected twenty-scene skill matrix checks raw-source leakage and one learned
+origin/date line.
