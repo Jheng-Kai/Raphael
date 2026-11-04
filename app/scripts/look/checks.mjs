@@ -2,6 +2,60 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === 'desktop-host-repair') {
+    const repair = document.querySelector('[data-computer-host-repair]'), code = repair.querySelector('.message-code'), button = code.querySelector('[data-act="copy-code"]');
+    const bounds = code.getBoundingClientRect(), dialog = repair.closest('[role="dialog"]').getBoundingClientRect();
+    require(bounds.top >= dialog.top && bounds.bottom <= dialog.bottom && bounds.left >= dialog.left && bounds.right <= dialog.right, 'the entire command is readable after scrolling');
+    require(code.querySelector('pre').scrollWidth <= code.clientWidth + 1, 'the command wraps at narrow widths');
+    require(button.getAttribute('aria-label') === '已複製', 'the shared copy action completes inside Settings');
+    return {check:name};
+  }
+  if (name === 'desktop-host-health') {
+    const note = document.querySelector('[data-computer-host-health]');
+    require(visible(note) && note.textContent.includes('正常'), 'each check has its own clear state');
+    const repair = document.querySelector('[data-computer-host-repair]');
+    require(visible(repair) && repair.textContent.includes('終端機') && repair.querySelector('code')?.textContent.includes('~/.zshenv'), 'host health says where to run the exact repair command');
+    require(visible(repair.querySelector('[data-act="copy-code"]')), 'repair command uses the shared copy control');
+    require(window.__look.calls.some(call => call.method === 'computer.viewer_status' && call.params.check_host && call.params.alias === 'studio-mini'), 'checks the selected alias through the existing owner RPC');
+    return {check:name};
+  }
+  if (name === 'delete-member-computer') {
+    const checkbox = document.querySelector('[data-remove-computer]');
+    require(visible(checkbox) && checkbox.matches('.tg[role="switch"][aria-checked="false"]'), 'computer cleanup uses the shared switch and defaults to unchecked');
+    require(checkbox.closest('.row').textContent.includes('小晴的電腦'), 'deletion names the member computer');
+    require(!window.__look.calls.some(call => call.method === 'members.delete'), 'showing the option performs no deletion');
+    return {check:name};
+  }
+  if (name === 'desktop-stream') {
+    const frame = document.querySelector('iframe[data-desktop-stream]');
+    require(visible(frame) && frame.contentDocument?.defaultView.__desktopConnections === 1, 'the existing viewer is connected before enlargement');
+    window.__look.desktopStream = { frame, document: frame.contentDocument, opens: window.__look.calls.filter(call => call.method === 'computer.viewer_open').length, closes: window.__look.calls.filter(call => call.method === 'computer.viewer_close').length };
+    return {check:name};
+  }
+  if (name === 'desktop-watch' || name === 'desktop-watch-collapse') {
+    const panel = document.querySelector('.desktop-panel'), calls = window.__look.calls;
+    require(!calls.some(call => call.method === 'computer.viewer_control'), 'watching never changes owner control');
+    if (name === 'desktop-watch-collapse') {
+      require(!panel.hasAttribute('data-expanded'), 'Esc returns to conversation');
+      const before = window.__look.desktopStream, frame = document.querySelector('iframe[data-desktop-stream]');
+      require(before && calls.filter(call => call.method === 'computer.viewer_open').length === before.opens && calls.filter(call => call.method === 'computer.viewer_close').length === before.closes && frame === before.frame && frame.contentDocument === before.document, 'collapse keeps the same stream without opening, closing or reloading');
+    } else {
+      require(document.documentElement.hasAttribute('data-desktop-watch'), 'watch mode is enlarged');
+      const bounds = panel.getBoundingClientRect();
+      const sidebar = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width'));
+      require(Math.abs(bounds.right - innerWidth) <= 2 && Math.abs(bounds.left - sidebar) <= 2, 'watch fills the area beside the sidebar');
+      require(visible(panel.querySelector('[data-desktop="collapse"]')), 'collapse remains available');
+      require(innerWidth >= 860 || getComputedStyle(document.querySelector('#nav')).visibility === 'hidden', 'off-canvas navigation stays hidden at narrow widths');
+      if (name === 'desktop-watch' && window.__look.data.desktop.works?.some(work => work.state === 'running')) {
+        require(visible(panel.querySelector('.desktop-live')) && panel.querySelector('.desktop-live').textContent.trim(), 'the current action remains visible');
+        const stop = panel.querySelector('[data-desktop="stop"]');
+        require(visible(stop) && stop.title === stop.getAttribute('aria-label') && stop.title.trim(), 'Stop has its translated tooltip');
+      }
+      const frame = panel.querySelector('iframe');
+      if (frame && visible(frame)) require(getComputedStyle(frame).pointerEvents === 'none', 'watch stays view-only');
+    }
+    return {check:name};
+  }
   if (["room-meeting", "room-meeting-board", "room-meeting-report"].includes(name)) {
     const pane = document.querySelector('.au-room-pane:not([hidden])');
     require(pane, "the real group conversation is open");
@@ -1509,7 +1563,12 @@ export function checkRendered(name, context = {}) {
     const events=document.querySelectorAll('[data-desktop-work]');
     if(name.startsWith('computer-'))require(events.length===1&&events[0].matches(name==='computer-panel'?'.conversation-event-line':'.conversation-card')&&events[0].closest('.tn')?.dataset.id==='2','one work presentation belongs to the private turn');
     if(name==='computer-takeover')require(panel.querySelector('.desktop-request').textContent.includes('登入'),'request sits above the live screen');
-    if(name==='computer-takeover-owner')require(panel.querySelector('[data-desktop="return"]').textContent==='我完成了','one explicit done action');
+    if(name==='computer-takeover-owner') {
+      require(visible(document.querySelector('[data-card-desktop="return"]')), 'one explicit done action in the card');
+      require(!panel.hasAttribute('data-expanded') && frame.closest('[data-card-desktop-screen]'), 'owner input stays in the conversation card');
+      require(frame.contentDocument.defaultView.__desktopAcceptedKeys > 0, 'synthetic keyboard input reaches the RFB surface');
+      require(!calls.some(call => JSON.stringify(call.params ?? {}).includes('synthetic-owner-input')), 'owner input never enters an RPC');
+    }
     if(name==='computer-takeover-done')require(calls.filter(call=>call.method==='computer.viewer_control'&&!call.params.held&&call.params.takeover==='private-takeover-request').length===1,'one explicit handback with the current nonce');
     if(name==='computer-takeover-owner'||name==='desktop-owner'){
       require(panel.dataset.interactive==='true'&&getComputedStyle(frame).pointerEvents==='auto','click enables input in place');

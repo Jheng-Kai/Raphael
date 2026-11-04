@@ -1,5 +1,16 @@
 # Raphael product rules
 
+## Smooth computer contracts (2026-11-05)
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-COMP-PERF-07 | 2026-11-05 | Enlarge preserves the same view-only stream beside the sidebar. Collapse/Esc returns without acquiring input; another member starts small. | vitest, selected look | hard | desktop-viewer.test.ts; desktop-watch; desktop-watch-collapse; desktop-watch-boot; desktop-watch-stopped; desktop-watch-owner |
+| R-COMP-PERF-08 | 2026-11-05 | run_steps routes every curated action through the same gate and current owner/grant checks, returns one observation and stops at the first failed step without replay. | pytest | hard | core/tests/computer/test_smooth_computer.py |
+| R-COMP-PERF-09 | 2026-11-05 | A computer change needs a subsequent result read or verify_state expectation before a completion claim; one correction then a failed completion. Thin/consent-wall reads use the granted member browser and reject nonessential cookies by default. | fake-brain pytest | hard | core/tests/computer/test_smooth_computer.py; core/tests/agent/test_web_read_hint.py |
+| R-COMP-PERF-10 | 2026-11-05 | Private sign-in uses the conversation card's RFB screen, never sends owner typing through chat/model/log/storage, and resumes once only after nonce handback and a fresh read. | pytest, vitest, look, authorized native | hard | test_takeover.py; desktop-viewer.test.ts; desktop-takeover-owner; desktop-takeover-done |
+| R-COMP-PERF-11 | 2026-11-05 | Remote health checks are read-only and explain SSH/key/PATH/daemon/image failures. Ten Docker calls share one SSH socket forward; viewer shares that session when available, with reconnect backoff and ssh:// fallback. | fake subprocess pytest, authorized SSH acceptance | hard | core/tests/computer/test_smooth_computer.py |
+| R-COMP-PERF-12 | 2026-11-05 | Shutdown/idle/eviction stop without removing workspace or volumes; recognized image rebuilds announce preservation first. Optional member computer-data deletion is unchecked and host-pinned, never team/shared data. Native speed work owns its random container and exact cleanup and reports five-run median/worst budgets. | pytest, vitest, authorized native | hard | test_smooth_computer.py; member-dialogs.test.ts; computer-speed |
+
 ## Responsive member computer (2026-11-04)
 
 | ID | Date | Rule | Check | Severity | Evidence |

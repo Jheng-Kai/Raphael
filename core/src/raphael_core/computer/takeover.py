@@ -12,7 +12,7 @@ from .vm import VmError
 
 REASONS = ("sign_in", "password", "two_factor", "captcha", "payment", "other")
 TAKEOVER = {
-    "description": "Pause this private computer task for owner-only sign-in, password, 2FA, CAPTCHA, payment or consent. Never request secrets in chat or arguments. The private card opens the viewer. Wait for the owner's explicit I'm done; disconnect, timeout and Stop never resume. Then inspect the intended get_window_state (max_elements 200, include_screenshot false) or get_browser_state before input and continue the same task once without repeating completed work.",
+    "description": "Pause this private computer task for owner-only sign-in, password, 2FA, CAPTCHA, payment or consent. Never request secrets in chat or arguments. The private conversation card contains the live screen; the owner types directly into it, never into chat or model tools. Wait for the owner's explicit I'm done; disconnect, timeout and Stop never resume. Then inspect the intended get_window_state (max_elements 200, include_screenshot false) or get_browser_state before input and continue the same task once without repeating completed work.",
     "parameters": {"type": "object", "properties": {"reason": {"type": "string", "enum": list(REASONS)}},
                    "required": ["reason"], "additionalProperties": False},
 }

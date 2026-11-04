@@ -88,6 +88,9 @@ class ToolGate:
         safety: SafetyGuard | None = None,
     ) -> None:
         self._plugins = plugins
+        bind_computer = getattr(plugins, "bind_computer_gate", None)
+        if bind_computer:
+            bind_computer(self)
         self._safety = safety
         from ..brain.settings import SettingsStore
         self._settings = None if conn is None else SettingsStore(conn)

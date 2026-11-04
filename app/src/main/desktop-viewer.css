@@ -85,3 +85,14 @@
 .desktop-panel[data-expanded] .desktop-recording { grid-row: 4; }
 .desktop-panel[data-expanded] .desktop-actions { grid-row: 5; }
 :root[data-desktop-expanded] :is(.side, [data-sidebar="open"]) { visibility: hidden; }
+
+/* Watching enlarges the same view-only stream and retains the existing sidebar. */
+.desktop-enlarge { position: absolute; z-index: 4; top: var(--sp-2); right: var(--sp-2); }
+.desktop-live { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: var(--fs-sm); }
+:root[data-desktop-watch] .page-agent .mb-det { left: var(--sidebar-width); width: auto; }
+@media (min-width: 860px) {
+  :root[data-desktop-watch] :is(.side, [data-sidebar="open"]) { visibility: visible; }
+}
+:root[data-desktop-watch] .desktop-panel { position: fixed; inset: var(--window-controls-height) 0 0 var(--sidebar-width); width: auto; height: auto; background: var(--content); }
+:root[data-desktop-watch] .desktop-actions { display: none; }
+[data-card-desktop-screen][data-owner-control] { cursor: auto; }

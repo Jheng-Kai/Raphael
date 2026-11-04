@@ -230,7 +230,10 @@ export const membersCreate = (member: NewMember): Promise<{ member: Member; rout
 /** Changes a member (never Raphael: the core refuses id 0 with the kind `raphael`). */
 export const membersUpdate = (id: number, patch: MemberPatch): Promise<{ member: Member }> => core("members.update", { id, ...patch });
 /** Deletes a member with its conversation, its memory and its routines. The page asks the owner first. */
-export const membersDelete = (id: number): Promise<{ deleted: boolean }> => core("members.delete", { id });
+export const membersDelete = (id: number, remove_computer_data = false, computer_host?: string): Promise<{ deleted: boolean }> => core("members.delete", { id, remove_computer_data, ...(remove_computer_data ? { computer_host } : {}) });
+
+export interface ComputerHostHealth { host: string; ok: boolean; checks: { kind: string; ok: boolean; architecture?: string }[] }
+export const desktopHostCheck = (alias: string): Promise<ComputerHostHealth> => core("computer.viewer_status", { check_host: true, alias });
 
 /** Makes member `id` the owner's primary contact (0 is Raphael). Only that choice changes; the roster of `membersList` says who it is. */
 export const membersSetPrimary = (id: number): Promise<{ primary_id: number }> => core("members.set_primary", { id });

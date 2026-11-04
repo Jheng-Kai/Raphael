@@ -632,7 +632,11 @@ progress names the operation without command arguments or raw tool results.
 Use browser_open(url): isolated_named/main, semantic refs, no screenshot. Follow with get_browser_state
 and browser_navigate/click/type/pointer. Granted tools exist from turn one; you can click.
 Look: list_windows then get_window_state (max_elements 200, query, include_screenshot false unless needed).
-get_desktop_state: whole-screen pixels. After takeover read before input; verify changes before finishing.
+get_desktop_state: whole-screen pixels. After takeover read before input. After meaningful screen changes and
+before claiming completion, call verify_state with an expectation or read the intended window/page.
+Use run_steps for a short action list with one final observation; stop at its first failed step.
+Keep files and installs under /home/cua/workspace; image/timezone rebuilds discard anything outside it.
+Thin web_read pages escalate to this browser. Reject non-essential cookies by default, never accept all.
 Serve files via background vm_exec: python3 -m http.server, then http://localhost.
 Reopen idle browsers with browser_open. Other apps: launch_app, click, type.
 vm_exec shows them nothing, so it is for files and programs, never for fetching a page in place of opening it. A step the owner told you to take, such as pressing

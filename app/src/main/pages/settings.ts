@@ -51,6 +51,7 @@ import {
   type Choice,
   type MenuAction,
   closeMenu,
+  copyButton,
   esc,
   ico,
   iconBtn,
@@ -218,6 +219,7 @@ export function createSettings(app: AppContext): SettingsPage {
   let version = "";
   let desktopRequired = false;
   let computerRemote: boolean | undefined, computerAliasDraft: string | undefined, computerHostError = false;
+  let computerHostHealth: api.ComputerHostHealth | undefined, checkingComputerHost = false;
   /** The key field is shown although there is a key (「變更」). */
   let replacingKey = false;
   let keyBusy = false;
@@ -284,7 +286,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
-    data, pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version, desktopRequired, computerRemote, computerAliasDraft, computerHostError,
+    data, pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version, desktopRequired, computerRemote, computerAliasDraft, computerHostError, computerHostHealth, checkingComputerHost,
     replacingKey, keyBusy, keyError, limitDraft, limitError, cityDraft, cityError, languageGroups, now: Date.now(),
     connections: connections.view(), messaging: messaging.view(), memory: memory.view(), memoryShared: memoryShared.view(), rules: rules.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
@@ -1241,6 +1243,9 @@ export function createSettings(app: AppContext): SettingsPage {
 
     const act = target.closest<HTMLElement>("[data-act]")?.dataset.act;
     switch (act) {
+      case 'copy-code':
+        void copyButton(target.closest<HTMLElement>('[data-act="copy-code"]')!, target.closest('.message-code')?.querySelector('code')?.textContent ?? '').catch(error => toaster.info(describeError(error)));
+        break;
       case "close":
         app.closeSettings();
         break;
@@ -1287,6 +1292,16 @@ export function createSettings(app: AppContext): SettingsPage {
       case "docker-download":
         void api.openExternalUrl("https://www.docker.com/products/docker-desktop/").catch(error => toaster.info(describeError(error)));
         break;
+      case "computer-host-check": {
+        if (checkingComputerHost) break;
+        const alias = computerAliasDraft ?? brain?.computer_ssh_alias ?? '';
+        checkingComputerHost = true; computerHostHealth = undefined; render();
+        void api.desktopHostCheck(alias).then(result => {
+          if (alias === (computerAliasDraft ?? brain?.computer_ssh_alias ?? '')) computerHostHealth = result;
+        }).catch(() => { computerHostHealth = { host: alias, ok: false, checks: [{kind:'ssh_unreachable',ok:false}] }; })
+          .finally(() => { checkingComputerHost = false; render(); });
+        break;
+      }
       case "data-clear":
         void clear(target.closest<HTMLElement>('[data-what]')?.dataset.what === "dictation" ? "dictation" : "conversation");
         break;
@@ -1314,6 +1329,7 @@ export function createSettings(app: AppContext): SettingsPage {
     else if (input.id === "agent-city") commitCity(input);
     else if (input.id === "computer-ssh-alias") {
       computerAliasDraft = input.value;
+      computerHostHealth = undefined;
       computerHostError = !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(input.value);
       if (computerHostError) render();
       else void changeBrain("computer_ssh_alias", input.value);

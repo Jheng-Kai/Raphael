@@ -13,6 +13,7 @@
 // it (`SEARCH_INDEX`, `searchSettings`).
 
 import { catalogs, t } from "../i18n";
+import { messageHTML } from "../message-content";
 import { ownerProfileHTML } from "../owner-settings";
 import type { MessageKey } from "../i18n/zh-TW";
 
@@ -267,6 +268,8 @@ export interface SettingsView {
   computerRemote?: boolean;
   computerAliasDraft?: string;
   computerHostError?: boolean;
+  computerHostHealth?: import('../api').ComputerHostHealth;
+  checkingComputerHost?: boolean;
   modelsTab?: ModelsTab;
   pane: SettingsPane;
   device: DeviceSettings;
@@ -661,6 +664,19 @@ function computerRows(v: SettingsView): string[] {
     ...(remote ? [row(t("desktop.sshAlias"), "", fieldHTML("", v.computerAliasDraft ?? v.brain?.computer_ssh_alias ?? "", {
       id: "computer-ssh-alias", label: t("desktop.sshAlias"), w: 200, disabled: !v.brain, invalid: v.computerHostError,
     })), ...(v.computerHostError ? [note(st("err", t("desktop.invalidAlias")), ' role="alert" data-computer-host-error')] : [])] : []),
+    ...(remote ? [row(t('desktop.checkHost'), '', btn(t(v.checkingComputerHost ? 'desktop.checkingHost' : 'desktop.checkHost'), 'sm', ` data-act="computer-host-check"${v.checkingComputerHost || v.computerHostError ? ' disabled' : ''}`)),
+      ...(v.computerHostHealth ? v.computerHostHealth.checks.flatMap(check => {
+        const words = { ssh: 'desktop.health.ssh', docker: 'desktop.health.docker', ssh_unreachable: 'desktop.health.ssh_unreachable', ssh_key: 'desktop.health.ssh_key', docker_path: 'desktop.health.docker_path', docker_missing: 'desktop.health.docker_missing', docker_stopped: 'desktop.health.docker_stopped', architecture: 'desktop.health.architecture', image_missing: 'desktop.health.image_missing' } as const;
+        const label = t(check.kind.startsWith('ssh') ? 'desktop.health.connection' : check.kind === 'architecture' || check.kind === 'image_missing' ? 'desktop.health.image' : 'desktop.health.runtime');
+        const state = check.ok ? t('desktop.health.ok') : t(words[check.kind as keyof typeof words] ?? 'desktop.health.ssh_unreachable');
+        const repair: { where: 'desktop.health.macTerminal' | 'desktop.health.projectTerminal' | 'desktop.health.localTerminal'; command: string } = check.kind === 'docker_path' ? { where: 'desktop.health.macTerminal', command: `echo 'export PATH="/usr/local/bin:/opt/homebrew/bin:$HOME/.docker/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"' >> ~/.zshenv` } :
+          check.kind === 'docker_stopped' ? { where: 'desktop.health.macTerminal', command: 'open -a Docker' } :
+          check.kind === 'docker_missing' ? { where: 'desktop.health.macTerminal', command: 'open https://www.docker.com/products/docker-desktop/' } :
+          check.kind === 'architecture' || check.kind === 'image_missing' ? { where: 'desktop.health.projectTerminal', command: 'docker build --tag raphael/cua-local-vm:driver-0.37.0-v4 core/src/raphael_core/computer/image' } :
+          { where: 'desktop.health.localTerminal', command: `ssh ${v.computerHostHealth!.host}` };
+        return [row(esc(label), '', st(check.ok ? 'ok' : 'err', state), { attrs: ` data-computer-host-health="${esc(check.kind)}" role="status"` }),
+          ...(!check.ok ? [note(`<p>${esc(t(repair.where))}</p>` + messageHTML('```sh\n' + repair.command + '\n```', '', true), ' data-computer-host-repair')] : [])];
+      }) : [])] : []),
     ...(!remote && v.desktopRequired ? [row(esc(t("desktop.required")), "", btn(t("desktop.download"), "sm", ' data-act="docker-download"'))] : []),
     row(t("local.title"), "", sel(LOCAL_COMMAND_MODES, v.brain?.local_commands_mode ?? "ask", t("local.title"), ` data-k="local-commands"${v.brain === null ? " disabled" : ""}`)),
   ];

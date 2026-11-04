@@ -243,6 +243,9 @@ class LocalVm:
         self.engine_lock, self.build_lock = asyncio.Lock(), asyncio.Lock()
         from .takeover import ComputerWork
         self.work = ComputerWork(self)
+        self.remote_sessions = {}
+        self.real_transport = runner is None
+        self.rebuild_notice = lambda target: None
 
     @property
     def remote(self):
@@ -259,9 +262,23 @@ class LocalVm:
     def command(self, target, args):
         return Docker(target.remote).argv(args)
 
+    async def transport(self, target):
+        if not target.remote:
+            return []
+        if self.real_transport:
+            from .remote_host import RemoteSession
+            session = self.remote_sessions.setdefault(target.remote, RemoteSession(target.remote))
+            endpoint = await session.endpoint()
+            if endpoint:
+                return ["--host", endpoint]
+        return ["--host", f"ssh://{target.remote}"]
+
+    async def bridge_command(self, target, args):
+        return [docker_cli(), *await self.transport(target), *args]
+
     async def run_for(self, target, args, **kwargs):
         # Preserve the injected runtime boundary; every Docker path shares this transport.
-        transport = Docker(target.remote).argv([])[1:]
+        transport = await self.transport(target)
         return await self.run([*transport, *args], **kwargs)
 
     async def installed(self):
@@ -421,7 +438,10 @@ class LocalVm:
             from .ssh_tunnel import Tunnel
             networks = raw.get("NetworkSettings", {}).get("Networks", {})
             address = next((network.get("IPAddress") for network in networks.values() if network.get("IPAddress")), "")
-            tunnel = self.tunnels.setdefault((target.remote, target.name), Tunnel())
+            from .remote_host import SharedViewerTunnel
+            shared = self.remote_sessions.get(target.remote)
+            use_shared = shared and await shared.endpoint()
+            tunnel = self.tunnels.setdefault((target.remote, target.name), SharedViewerTunnel(shared) if use_shared else Tunnel())
             try:
                 port = await tunnel.open(target.remote, address)
             except (OSError, ValueError, TimeoutError):
@@ -524,6 +544,8 @@ class LocalVm:
 
     async def _start(self, target):
         state = await self.status(target, probe=False)
+        if state["state"] == "incompatible":
+            state = await self._upgrade_image(target)
         if state["state"] in ("unavailable", "incompatible"):
             raise VmError(state["state"])
         zone = timezone_name(self.timezone())
@@ -551,6 +573,31 @@ class LocalVm:
                 return state
             await asyncio.sleep(1)
         raise VmError("health_timeout")
+
+    async def _upgrade_image(self, target):
+        import copy
+        raw = await self.inspect(target)
+        image_id = await self.image(target)
+        # Only an image-ID change on an otherwise exactly compatible owned computer
+        # may rebuild automatically. Mounts and workspace identities remain untouched.
+        previous = copy.deepcopy(raw) if raw else {}
+        labels = previous.get("Config", {}).get("Labels") or {}
+        host = previous.get("HostConfig", {})
+        known_previous = labels.get(f"{LABEL}.layer") == "3" and host.get("Memory") == host.get("MemorySwap") == 2 * 1024**3
+        if known_previous:
+            labels[f"{LABEL}.layer"] = IMAGE_LABELS[f"{LABEL}.layer"]
+            host.update(Memory=MEMORY_GB * 1024**3, MemorySwap=MEMORY_GB * 1024**3)
+        if not raw or not image_id or raw.get("Image") == image_id or not known_previous or not compatible(previous, target, self.owner, raw.get("Image")):
+            raise VmError("incompatible")
+        if target.key in self.held or self.active.get(target.key, 0) > 1:
+            raise VmError("busy")
+        self.rebuild_notice(target)
+        if raw.get("State", {}).get("Running") and (await self.run_for(target, ["stop", "--time", "10", target.name], timeout=30)).code:
+            raise VmError("stop_failed")
+        if (await self.run_for(target, ["rm", target.name])).code:
+            raise VmError("remove_failed")
+        self.invalidate(target)
+        return {"state": "missing", "image": True}
 
     async def _wallpaper(self, target):
         key = (target.remote, target.name)
@@ -675,6 +722,31 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         tunnel = self.tunnels.pop((target.remote, target.name), None)
         if tunnel:
             await tunnel.close()
+
+    async def delete_member_data(self, member_id, host):
+        from ..protocol import invalid_params
+        target = self.target(member_id)
+        if target.key == "shared" or not member_id or host != target.remote:
+            raise invalid_params("Computer host changed or workspace is shared; review deletion again")
+        if target.remote:
+            if str(target.workspace) != target.name + "-workspace":
+                raise invalid_params("Invalid member workspace")
+        else:
+            root_path = self.root / 'vm-homes'
+            root = root_path.resolve()
+            workspace = Path(target.workspace)
+            if root_path.is_symlink() or not root.is_relative_to(self.root) or workspace.is_symlink() or workspace.resolve() != root / target.key:
+                raise invalid_params("Invalid member workspace")
+        await self.stop(target, remove=True)
+        if target.remote:
+            if (await self.run_for(target, ["volume", "rm", str(target.workspace)])).code:
+                raise VmError("workspace_remove_failed")
+        else:
+            import shutil
+            if workspace.is_symlink() or not workspace.resolve().is_relative_to(self.root / 'vm-homes'):
+                raise invalid_params("Invalid member workspace")
+            if workspace.exists():
+                await asyncio.to_thread(shutil.rmtree, workspace)
 
     def hold(self, target, held):
         if held:
@@ -806,7 +878,7 @@ print(base64.b64encode(data).decode())
         except (OSError, TimeoutError, VmError):
             return
 
-    async def aclose(self):
+    async def aclose(self, *, stop=True):
         for pending in self.preparing.values():
             pending.cancel()
         await asyncio.gather(*self.preparing.values(), return_exceptions=True)
@@ -815,5 +887,14 @@ print(base64.b64encode(data).decode())
             self.task.cancel()
             await asyncio.gather(self.task, return_exceptions=True)
             self.task = None
+        for target in list(self.targets.values()) if stop else []:
+            # App shutdown stops only known, compatible idle computers. Workspaces,
+            # browser profiles and volumes survive; no recovery scan or force removal.
+            try:
+                await self.stop(target)
+            except (VmError, OSError, TimeoutError):
+                pass
         await asyncio.gather(*(tunnel.close() for tunnel in self.tunnels.values()))
         self.tunnels.clear()
+        await asyncio.gather(*(session.close() for session in self.remote_sessions.values()))
+        self.remote_sessions.clear()

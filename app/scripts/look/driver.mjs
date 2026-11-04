@@ -645,6 +645,15 @@ export async function perform(page, step, evidenceDirectory) {
       if (writes.length) throw new Error(`An unchanged desktop refresh wrote to the panel: ${writes.join(', ')}`);
       return { check: 'desktop-refresh-still', mutations: writes.length };
     }
+    case 'desktop-owner-typing': {
+      await page.waitForFunction(() => document.querySelector('.desktop-panel')?.dataset.interactive === 'true');
+      const handle = await page.$('[data-card-desktop-screen] iframe');
+      const frame = await handle.contentFrame();
+      await frame.click('canvas');
+      await page.keyboard.type('synthetic-owner-input');
+      await frame.waitForFunction(() => window.__desktopAcceptedKeys > 0);
+      return {check:'desktop-owner-typing', synthetic:true};
+    }
     case "desktop-boot-connect": {
       const before = await page.evaluate(() => {
         const box = document.querySelector('.desktop-screen').getBoundingClientRect();

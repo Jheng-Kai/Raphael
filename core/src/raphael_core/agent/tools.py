@@ -182,12 +182,14 @@ class Tools:
         http: httpx.AsyncClient | None = None,
         now: Callable[[], datetime] | None = None,
         services: "ServiceHub | None" = None,
+        rendered_read=None,
     ) -> None:
         self._client = client
         self.services = services
         self._http = http
         self._own_http: httpx.AsyncClient | None = None
         self._now = now or (lambda: datetime.now().astimezone())
+        self.rendered_read = rendered_read
 
     def _http_client(self) -> httpx.AsyncClient:
         if self._http is not None:
@@ -369,7 +371,19 @@ class Tools:
         except TimeoutError:
             return self._failed("web_read", "timeout", service)
         except ServiceError as error:
+            if error.kind == 'bad_response' and self.rendered_read:
+                rendered = await self.rendered_read(url)
+                if rendered.ok:
+                    return ToolResult("web_read", True, {"url": url, "text": rendered.text, "rendered": True,
+                        "cookie_policy": "reject_nonessential", "truncated": rendered.truncated}, untrusted=True, detail="member_browser")
             return self._failed("web_read", error.kind, service)
+        from ..services.web import needs_rendered_read
+        if needs_rendered_read(page) and self.rendered_read:
+            rendered = await self.rendered_read(url)
+            if rendered.ok:
+                return ToolResult("web_read", True, {"url": url, "text": rendered.text, "rendered": True,
+                    "cookie_policy": "reject_nonessential", "truncated": rendered.truncated}, untrusted=True, detail="member_browser")
+            page = {**page, "rendered_error": rendered.kind, "cookie_policy": "reject_nonessential"}
         return ToolResult("web_read", True, {"url": url, **page, "if_incomplete": READ_WITHOUT_BROWSER}, untrusted=True, detail=service)
 
     async def read_attachment(

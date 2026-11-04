@@ -68,7 +68,7 @@ async def vm_smoke(directory):
         if not shot:
             raise VmError("Desktop tool discovery failed: " + str(hub.problem or "unavailable"))
         gate, completed = ToolGate(hub, conn=conn), []
-        calls = [(shot, {}), ("computer__click", {"x": 640, "y": 480, "scope": "desktop"}),
+        calls = [(shot, {}), ("computer__click", {"x": 640, "y": 480, "scope": "desktop"}), (shot, {}),
                  ("computer__vm_exec", {"command": "printf 'Raphael VM smoke\\n' > raphael-smoke.txt; cat raphael-smoke.txt"}),
                  ("computer__attach_file", {"path": "/home/cua/workspace/raphael-smoke.txt"})]
 
@@ -125,7 +125,7 @@ async def vm_smoke(directory):
                 "control_gate": "refused while held", "attachment_id": attachment_id(hub.attachments), "page_tools": page_tools,
                 "preparation": preparation}
     finally:
-        await vm.aclose()
+        await vm.aclose(stop=False)
         conn.close()
 
 
@@ -198,6 +198,120 @@ async def vm_cleanup(directory):
             await vm.stop(target, remove=True)
     finally:
         await vm.aclose()
+
+
+def computer_speed_summary(samples):
+    from statistics import median
+    if len(samples) != 5:
+        raise ValueError("Computer speed requires exactly five runs")
+    budgets = {"first_observation": 8, "browser_open": 6, "run_steps": None}
+    return {name: {"median_seconds": median(row[name] for row in samples),
+        "worst_seconds": max(row[name] for row in samples), "budget_seconds": budget,
+        "passed": all(row[name] < budget for row in samples) if budget else None}
+        for name, budget in budgets.items()}
+
+
+async def computer_speed(directory):
+    """Opt-in measurement, never implicit in smoke/verify. Own name, root and exact cleanup."""
+    import base64
+    import secrets
+    import time
+    from .agent.gate import ToolGate
+    from .computer.vm import LocalVm, VmError
+    from .computer.vm_tools import VmTools
+    from .services.attachment_store import AttachmentStore
+
+    if not native_enabled(True):
+        raise RuntimeError("Computer speed requires the isolated native runner")
+    class EmptyHub:
+        def offered(self): return []
+        def tier_of(self, key): return None
+        def kind_of(self, server, name): return None
+        def record_unrun(self, *args, **kwargs): pass
+
+    root = Path(directory) / ("computer-speed-" + secrets.token_hex(12))
+    root.mkdir(parents=True, exist_ok=False)
+    vm = LocalVm(root)
+    # Measurement cannot start Docker Desktop, build/pull an image or recover other containers.
+    vm.desktop = None
+    target = vm.target(0)
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(root))
+    gate = ToolGate(hub)
+    samples, cleanup, owned_target = [], False, False
+
+    async def use(name, args):
+        from .agent.plugins import tool_key
+        result = await gate.call_plugin(tool_key(f"computer-{target.key}", name), args)
+        if not result.ok:
+            raise VmError(f"speed_{name}_{result.kind}")
+        return result
+
+    def page(text):
+        return json.loads(text.splitlines()[-1])
+
+    def fields(value, found):
+        if isinstance(value, dict):
+            name = value.get("name", value.get("label", ""))
+            if value.get("role") == "textbox" and name in [f"Field {i}" for i in range(1, 6)] and isinstance(value.get("ref"), str):
+                found[name] = value["ref"]
+            for child in value.values(): fields(child, found)
+        elif isinstance(value, list):
+            for child in value: fields(child, found)
+
+    try:
+        if not await vm.available(target) or not await vm.image(target):
+            raise VmError("speed_requires_running_docker_and_prepared_image")
+        if await vm.inspect(target) is not None:
+            raise VmError("speed_name_collision")
+        owned_target = True
+        vm.grants.set(0, True)
+        await hub.prepare()
+        await vm.start(target)
+        html = '<!doctype html><title>Computer speed</title>' + ''.join(
+            f'<label>Field {i}<input aria-label="Field {i}"></label>' for i in range(1, 6))
+        encoded = base64.b64encode(html.encode()).decode()
+        await vm.execute(target, f"printf %s {encoded} | base64 -d > form.html")
+        await vm.execute(target, "python3 -m http.server 8765 --bind 127.0.0.1", background=True)
+        for number in range(5):
+            began = time.monotonic()
+            windows = await use("list_windows", {})
+            match = re.search(r"window_id=(\d+) pid=(\d+)", windows.text)
+            if not match:
+                raise VmError("speed_window_missing")
+            window = {"window_id": int(match[1]), "pid": int(match[2])}
+            await use("get_window_state", {**window, "max_elements": 200, "include_screenshot": False})
+            observation_s = time.monotonic() - began
+            began = time.monotonic()
+            opened = await use("browser_open", {"url": "http://127.0.0.1:8765/form.html"})
+            browser_s = time.monotonic() - began
+            state = page(opened.text)
+            tab = {"target_id": state["target_id"], "tab_id": state.get("tab_id") or next(tab["tab_id"] for tab in state["tabs"] if tab.get("active"))}
+            refs = {}
+            fields(state, refs)
+            if len(refs) != 5:
+                raise VmError("speed_form_refs_missing")
+            steps = [{"name": "browser_type", "arguments": {**tab, "ref": refs[f"Field {i}"], "text": f"run{number}-value{i}"}} for i in range(1, 6)]
+            began = time.monotonic()
+            final = await use("run_steps", {"steps": steps, "observation": {"name": "get_browser_state", "arguments": {**tab, "include_screenshot": False}}})
+            steps_s = time.monotonic() - began
+            if not all(f"run{number}-value{i}" in final.text for i in range(1, 6)):
+                raise VmError("speed_form_verification_failed")
+            samples.append({"first_observation": observation_s, "browser_open": browser_s, "run_steps": steps_s})
+    finally:
+        await hub.aclose()
+        # Never enumerate, stop or remove another target; the random name is verified again.
+        try:
+            if owned_target:
+                raw = await vm.inspect(target)
+                from .computer.vm import LABEL
+                if raw and (raw.get("Config", {}).get("Labels") or {}).get(f"{LABEL}.owner") == vm.owner:
+                    await vm.stop(target, remove=True)
+                cleanup = await vm.inspect(target) is None
+        finally:
+            await vm.aclose(stop=False)
+    summary = computer_speed_summary(samples)
+    return {"container": target.name, "samples": samples, "summary": summary, "cleanup": cleanup,
+            "passed": cleanup and all(item["passed"] is not False for item in summary.values()), "paid_requests": 0}
 
 
 def attachment_id(store):

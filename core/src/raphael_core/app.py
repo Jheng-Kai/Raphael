@@ -900,7 +900,7 @@ class App(Router):
             self._conn,
             self.client,
             self.gate,
-            Tools(self.client, services=self.services),
+            Tools(self.client, services=self.services, rendered_read=self.vm_tools.rendered_read),
             notify=self._worker_notice,
             model_observer=agent_model_observer,
             known_models=self.brain.known_models,
@@ -1013,6 +1013,7 @@ class App(Router):
         self.background.use_workspaces(
             lambda member: [path for path in (self.vm.target(member).workspace, self.vm.target(member).shared) if path] if self.vm.grants.allowed(member) else None)
         self.vm_tools.names = self.members.name_of
+        self.members.remove_computer_data = self.vm.delete_member_data
         # A member made by one the owner let use a computer has one too: it is a sandbox of its own, and a team
         # that was just made would otherwise stop at its first step to ask for each of them.
         self.members.member_made = lambda maker, made: self.vm.grants.set(made, True) if self.vm.grants.state(maker) is True else None

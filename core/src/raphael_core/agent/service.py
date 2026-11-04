@@ -806,6 +806,7 @@ class AgentService:
         self._targets = OpenTargets(conn, now_ms)
         self._warming: set[asyncio.Task[None]] = set()
         self._tools = Tools(client, http=http, now=now, services=services)
+        self._tools.rendered_read = getattr(self._gate.plugins, "rendered_read", None)
         self._voice = Voice(client)
         self._decider = decider if decider is not None else Router(client)
         self._inflight: dict[str, asyncio.Task[dict]] = {}
