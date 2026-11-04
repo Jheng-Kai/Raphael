@@ -3,6 +3,14 @@ import { homeZh } from "./home-catalogs";
 import { missingZh } from "./missing-catalogs";
 // Traditional Chinese is the source catalogue. Placeholders are interpolated by t().
 export const zhTW = {
+  "shortcuts.palette": "搜尋命令與成員",
+  "shortcuts.empty": "沒有符合的命令",
+  "shortcuts.sidebar": "切換側欄",
+  "shortcuts.previous": "上一個對話",
+  "shortcuts.next": "下一個對話",
+  "output.folder": "輸出資料夾",
+  "output.help": "成員預設將交付給你的檔案儲存在此。請填寫完整路徑；變更後不會移動既有檔案。",
+  "output.empty": "未指定，沿用任務目的地",
   "rooms.boardCount": "工作 {p0} · 決議 {p1}",
   "rooms.board": "工作與決議",
   "rooms.decisions": "決議",

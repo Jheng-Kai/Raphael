@@ -240,6 +240,7 @@ def test_what_a_routine_cannot_be_is_refused(store, fields, kind):
 
 
 def test_a_member_has_a_limited_number_of_routines(store):
+    assert MAX_ROUTINES == 50
     for n in range(MAX_ROUTINES):
         store.create_routine(
             member_id=0, title=f"t{n}", prompt="p", schedule={"kind": "every", "hours": 1},

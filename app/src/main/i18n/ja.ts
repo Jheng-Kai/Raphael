@@ -4,6 +4,14 @@ import { missingJa } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const ja = {
+  "shortcuts.palette": "コマンドとメンバーを検索",
+  "shortcuts.empty": "一致するコマンドはありません",
+  "shortcuts.sidebar": "サイドバーを切り替え",
+  "shortcuts.previous": "前の会話",
+  "shortcuts.next": "次の会話",
+  "output.folder": "出力フォルダー",
+  "output.help": "納品ファイルの既定の保存先です。絶対パスを指定してください。変更しても既存のファイルは移動しません。",
+  "output.empty": "未設定：タスクの保存先を使用",
   "rooms.boardCount": "作業 {p0} · 決定 {p1}",
   "rooms.board": "作業と決定",
   "rooms.decisions": "決定",

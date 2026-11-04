@@ -430,7 +430,7 @@ export function createSettings(app: AppContext): SettingsPage {
     const activeLimit = focusedId === "limit-input" ? el.querySelector<HTMLInputElement>("#limit-input")?.value : undefined;
     // What is being typed in 服務's fields stays through a drawing (a status that came in, say): it
     // is carried from the old field to the new one here, and kept nowhere else.
-    const serviceDrafts = Array.from(el.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('.svc-line input, .pv-field input:not([type="file"]), .pv-field textarea')).map((input) => [input.id, input.value] as const);
+    const serviceDrafts = Array.from(el.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('.svc-line input, .pv-field input:not([type="file"]), .pv-field textarea, #owner-output-folder')).filter(input => input.id !== "owner-output-folder" || input === active).map((input) => [input.id, input.value] as const);
     // A menu that is open stays open when the page is drawn again (a status that came in, say).
     const openK = openAnchorKey();
     const scroll = body.scrollTop;
@@ -1325,7 +1325,8 @@ export function createSettings(app: AppContext): SettingsPage {
     void ownerControls.change(e.target as Element);
     void providers.change(e.target as Element);
     const input = e.target as HTMLInputElement;
-    if (input.id === "limit-input") commitLimit(input);
+    if (input.id === "owner-output-folder") void changeBrain("owner_output_folder", input.value);
+    else if (input.id === "limit-input") commitLimit(input);
     else if (input.id === "agent-city") commitCity(input);
     else if (input.id === "computer-ssh-alias") {
       computerAliasDraft = input.value;

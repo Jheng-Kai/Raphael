@@ -165,7 +165,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     return (
       `<button type="button" class="btn mb-rt${routine.when ? " is-event" : ""}" data-det="routine-open" data-id="${routine.id}" data-routine="${routine.id}" data-k="routine:${routine.id}">` +
       `<span class="mb-rt-state${routine.enabled ? " is-on" : ""}" aria-label="${esc(t(routine.enabled ? "computer.routineOn" : "computer.routinePaused"))}">${ico(routine.enabled ? "clock" : "pause")}</span>` +
-      `<span class="mb-rt-main"><b>${esc(routine.title)}</b><span>${routineSentenceHTML(routine)}</span>${routine.when ? `<span>${esc(routineStatus(routine))}</span>` : ""}</span>` +
+      `<span class="mb-rt-main"><b>${esc(routine.title)}</b><span>${routineSentenceHTML(routine)}</span>${routine.when || routine.last_error ? `<span>${esc(routineStatus(routine))}</span>` : ""}</span>` +
       `</button>`
     );
   }

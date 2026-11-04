@@ -142,6 +142,7 @@ export interface SearchEntry {
  */
 export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "general", label: "owner.name" },
+  { pane: "general", label: "output.folder" },
   ...PANES.map((p) => ({ pane: p.id })),
   { pane: "appearance", label: "settings.059" },
   { pane: "appearance", label: "settings.067", words: ["dark", "light"] },
@@ -599,6 +600,7 @@ function generalHTML(v: SettingsView): string {
   return (
     headingHTML(v) +
     coreNote(v) + ownerProfileHTML(v.brain) +
+    section(t("output.folder"), [row(t("output.folder"), t("output.help"), fieldHTML(t("output.empty"), v.brain?.owner_output_folder ?? "", { id: "owner-output-folder", label: t("output.folder"), w: 200, disabled: v.brain === null }))]) +
     section(t("settings.groupAppearance"), [
       row(t("settings.069"), "", sel(SIZES, String(d.emblem_size), t("settings.069"), ' data-k="size"')),
       row(t("settings.071"), "", tg(d.subtitles !== "off", t("settings.071"), ' data-k="subtitles"')),

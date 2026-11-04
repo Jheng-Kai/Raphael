@@ -1,5 +1,22 @@
 # Conversation
 
+## Commands and conversation shortcuts (2026-11-05)
+
+R-NAV-01 reuses the shared popover, cross-conversation search and the existing
+chief/member/room finders. Ctrl+K works while typing; other shortcuts leave
+editable fields and IME alone. The palette filters names and shortcut labels,
+restores focus on dismissal and routes selection through the existing shell.
+See [Daily work](daily-work.md) for the full behavior and native limits.
+Follow-up 1 authorizes this selected rendered matrix; native/live remain deferred.
+
+```powershell
+npm run look -- command-palette command-palette-filter command-palette-member shortcut-find-chief shortcut-find-member shortcut-find-room shortcut-search chat sidebar-rail sidebar-drawer --theme both --width 1120,720,1920x1080
+```
+
+Compare palette rows with the existing cross-conversation search popover at
+matching theme/width. Inspect all contact sheets and full-size new scenes,
+including compact focus, filtering, long names and the room finder.
+
 ## Pending conversation questions and readable results (2026-11-04)
 
 R-OWNER-03, R-CARD-09 and R-CARD-10 extend the shared conversation cards.

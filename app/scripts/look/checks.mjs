@@ -56,6 +56,18 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name};
   }
+  if (name === "owner-output-folder") {
+    const input = document.querySelector('#owner-output-folder');
+    const reference = document.querySelector('.owner-profile input.field');
+    require(visible(input) && visible(reference), "General shows the output folder beside the existing owner fields");
+    const control = input.closest('.field') ?? input;
+    const box = control.getBoundingClientRect(), referenceBox = reference.getBoundingClientRect();
+    const inset = input.getBoundingClientRect().left - box.left;
+    require(Math.abs(box.height - referenceBox.height) <= 1, "the folder uses the same control height as the General owner field");
+    require(inset >= 7, "the folder text retains the shared settings field inset");
+    require(input.value === 'C:\\Owner\\Deliveries', "the saved output path remains visible");
+    return { check: name, height: box.height, inset };
+  }
   if (["room-meeting", "room-meeting-board", "room-meeting-report"].includes(name)) {
     const pane = document.querySelector('.au-room-pane:not([hidden])');
     require(pane, "the real group conversation is open");

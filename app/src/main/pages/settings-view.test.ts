@@ -306,7 +306,7 @@ describe("the rules for every tab, in every language", () => {
   });
 
   test("a line under a row's name only where the setting would otherwise be set wrong", () => {
-    expect(described(tab("general"))).toEqual([]);
+    expect(described(tab("general"))).toEqual(["輸出資料夾"]);
     expect(described(tab("dictation"))).toEqual([]);
     // the key's status, the month's forecast, what the limit does, and what each model costs
     expect(described(tab("models"))).toEqual(["拉斐爾的快速提問", "整理文字", "語音轉文字", "畫圖", "做影片"]);
@@ -315,10 +315,17 @@ describe("the rules for every tab, in every language", () => {
 });
 
 describe("一般", () => {
+  test("output folder belongs to General and is discoverable by settings search", () => {
+    const html = paneHTML(view({ brain: { ...brain, owner_output_folder: 'C:\\Owner\\Deliveries' } }));
+    expect(html).toContain('id="owner-output-folder"');
+    expect(html).toContain('C:\\Owner\\Deliveries');
+    expect(SEARCH_INDEX).toContainEqual({ pane: "general", label: "output.folder" });
+    expect(paneHTML(view({ pane: "agent" }))).not.toContain('id="owner-output-folder"');
+  });
   test("has the interface language, the theme and the emblem's size as dropdowns, the subtitles and the start as switches", () => {
     const html = tab("general");
-    expect(groups(html)).toEqual(["介面與桌面", "啟動"]);
-    expect(names(html)).toEqual(["桌面圖案大小", "字幕", "開機時自動啟動", "重新導覽"]);
+    expect(groups(html)).toEqual(["輸出資料夾", "介面與桌面", "啟動"]);
+    expect(names(html)).toEqual(["輸出資料夾", "桌面圖案大小", "字幕", "開機時自動啟動", "重新導覽"]);
     for (const k of ["size"]) expect(html).toMatch(new RegExp(`<button type="button" class="sel"[^>]*data-k="${k}"`));
     for (const k of ["subtitles", "autostart"]) expect(html).toMatch(new RegExp(`class="tg" role="switch"[^>]*data-k="${k}"`));
   });

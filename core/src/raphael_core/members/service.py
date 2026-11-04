@@ -107,6 +107,9 @@ logger = logging.getLogger(__name__)
 TICK_S = 30.0
 # A routine due while the core was not running runs once if it was due within this long.
 CATCH_UP_MS = 12 * 3_600_000
+ROUTINE_HOURLY_TOTAL = 300
+ROUTINE_HOURLY_MEMBER = 200
+OWNER_ABSENCE_MS = 30 * 24 * 3_600_000
 # What the member column shows of the last line of a thread, at most.
 PREVIEW_CHARS = 80
 # The folders of the pictures, in the app's local folder.
@@ -273,6 +276,8 @@ class MembersService:
         self.remove_computer_data = None
         self._connections = connections
         self._now_ms = now_ms
+        if not self._settings.get("routine_owner_seen_ms"):
+            self._settings.set("routine_owner_seen_ms", now_ms())
         self._tz = tz
         self._tick_s = tick_s
         self._avatars = local_dir / AVATARS_DIR
@@ -1033,6 +1038,10 @@ class MembersService:
         return {}
 
     async def _viewing_now(self, params: dict) -> dict:
+        if params.get("activity_only") is True:
+            self.pause_absent_routines()
+            self._settings.set("routine_owner_seen_ms", self._now_ms())
+            return {}
         member_id = params.get("id")
         if member_id is not None:
             member_id = _whole(params, "id")
@@ -1043,6 +1052,8 @@ class MembersService:
             self.activity.seen(member_id)
             if self.store.mark_read(member_id):
                 self._changed()
+        self.pause_absent_routines()
+        self._settings.set("routine_owner_seen_ms", self._now_ms())
         self._viewing = member_id
         return {}
 
@@ -1451,7 +1462,7 @@ class MembersService:
         rows = self._conn.execute(
             "SELECT r.id, r.routine_id, r.scheduled, r.started, r.finished,"
             f" {ROUTINE_RUN_STATUS_SQL} AS status, r.turn_id, r.summary, r.cost"
-            " FROM routine_runs r LEFT JOIN agent_turns t ON t.id=r.turn_id WHERE r.routine_id = ? ORDER BY r.id DESC LIMIT 100", (routine_id,)
+            " FROM routine_runs r LEFT JOIN agent_turns t ON t.id=r.turn_id WHERE r.routine_id = ? ORDER BY r.id DESC LIMIT 20", (routine_id,)
         )
         runs = [dict(row) for row in rows]
         total = self._conn.execute("SELECT COUNT(*) FROM routine_runs WHERE routine_id = ?", (routine_id,)).fetchone()[0]
@@ -1530,6 +1541,7 @@ class MembersService:
         self._events = EventPoller(self, gate)
 
     async def poll_events(self) -> None:
+        self.pause_absent_routines()
         if self._events is not None:
             try:
                 await self._events.poll()
@@ -1562,6 +1574,7 @@ class MembersService:
         """Run the routines that are due now; the ids of those that were run. Each is moved to its
         next time before it runs. One due longer ago than CATCH_UP_MS is not run, only moved."""
         now = self._now_ms() if now_ms is None else now_ms
+        self.pause_absent_routines()
         ran: list[int] = []
         for routine in self.store.due(now):
             assert routine.next_run_ms is not None
@@ -1574,6 +1587,9 @@ class MembersService:
             if routine.schedule.max_runs is not None and count >= routine.schedule.max_runs:
                 self.store.advance(routine.id, next_run_ms=None, ran_at_ms=None)
                 self._changed("routines.changed", routine.member_id)
+                continue
+            if catch_up and not self.admit_routine(routine):
+                self.store.advance(routine.id, next_run_ms=now + 60_000, ran_at_ms=None)
                 continue
             if catch_up and routine.schedule.max_runs is not None and count + 1 >= routine.schedule.max_runs:
                 following = None
@@ -1590,12 +1606,61 @@ class MembersService:
             ran.append(routine.id)
         return ran
 
+    def _guard_reason(self, kind: str) -> str:
+        messages = {
+            "zh-TW": {"absence": "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。", "member": "此成員最近一小時已執行 200 次，稍後自動重試。", "total": "團隊最近一小時已執行 300 次，稍後自動重試。"},
+            "ja": {"absence": "30 日間利用がないため停止しました。確認して再開してください。", "member": "このメンバーは過去 1 時間に 200 回実行しました。後で再試行します。", "total": "チームは過去 1 時間に 300 回実行しました。後で再試行します。"},
+            "en": {"absence": "Paused after 30 days without owner activity. Review and enable to resume.", "member": "This member reached 200 runs in the last hour. Retrying later.", "total": "The team reached 300 runs in the last hour. Retrying later."},
+        }
+        return messages.get(self._language(), messages["en"])[kind]
+
+    def pause_absent_routines(self) -> None:
+        if self._now_ms() - self._settings.get("routine_owner_seen_ms") < OWNER_ABSENCE_MS:
+            return
+        members = {routine.member_id for routine in self.store.routines() if routine.enabled}
+        with self._conn:
+            self._conn.execute("UPDATE routines SET enabled=0,next_run_ms=NULL,last_error=? WHERE enabled=1", (self._guard_reason("absence"),))
+        for member in members:
+            self._changed("routines.changed", member)
+
+    def admit_routine(self, routine: Routine) -> bool:
+        self.pause_absent_routines()
+        current = self.store.routine(routine.id)
+        if current is None or not current.enabled:
+            return False
+        counts = self._conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(r.member_id=?),0) FROM routine_runs rr JOIN routines r ON r.id=rr.routine_id WHERE rr.started>?",
+            (routine.member_id, self._now_ms() - 3_600_000),
+        ).fetchone()
+        window = self._run_window()
+        total = max(counts[0], len(window))
+        member = max(counts[1], sum(entry[0] == routine.member_id for entry in window))
+        kind = "total" if total >= ROUTINE_HOURLY_TOTAL else "member" if member >= ROUTINE_HOURLY_MEMBER else None
+        if kind:
+            with self._conn:
+                self._conn.execute("UPDATE routines SET last_error=? WHERE id=?", (self._guard_reason(kind), routine.id))
+            self._changed("routines.changed", routine.member_id)
+            return False
+        return True
+
+    def _run_window(self) -> list[list[int]]:
+        """Keep admission receipts across restarts and routine deletion; at most 300 per hour."""
+        since = self._now_ms() - 3_600_000
+        return [entry for entry in self._settings.get("routine_run_window")
+                if isinstance(entry, list) and len(entry) == 2
+                and all(type(value) is int for value in entry) and entry[1] > since]
+
     def routine_busy(self, routine_id: int) -> bool:
         return self._conn.execute("SELECT 1 FROM worker_tasks WHERE routine_id=? AND state IN ('queued','running','waiting') LIMIT 1", (routine_id,)).fetchone() is not None
 
     def _run(self, routine: Routine, *, text: str | None = None, session: str | None = None) -> int | None:
         """A routine's run: a turn of its thread, and a background task of its member that
         completes it."""
+        if not self.admit_routine(routine):
+            return None
+        self._settings.set("routine_run_window", [*self._run_window(), [routine.member_id, self._now_ms()]])
+        with self._conn:
+            self._conn.execute("UPDATE routines SET last_error='' WHERE id=?", (routine.id,))
         speaker = self.store.speaker(routine.member_id)
         if speaker is None:
             return

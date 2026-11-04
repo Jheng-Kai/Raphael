@@ -4,6 +4,14 @@ import { missingEn } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const en = {
+  "shortcuts.palette": "Search commands and members",
+  "shortcuts.empty": "No matching commands",
+  "shortcuts.sidebar": "Toggle sidebar",
+  "shortcuts.previous": "Previous conversation",
+  "shortcuts.next": "Next conversation",
+  "output.folder": "Output folder",
+  "output.help": "Members save files intended for you here by default. Enter an absolute path. Changing it never moves existing files.",
+  "output.empty": "Not set; use the task destination",
   "rooms.boardCount": "Work {p0} · Decisions {p1}",
   "rooms.board": "Work and decisions",
   "rooms.decisions": "Decisions",

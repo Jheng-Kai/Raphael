@@ -4,6 +4,7 @@ import handoffGroup from "./handoff-group.mjs";
 import menus from "./menus.mjs";
 import presence from "./presence.mjs";
 import sidebar from "./sidebar.mjs";
+import shortcuts from "./shortcuts.mjs";
 import daily from "./daily.mjs";
 import batch from "./batch.mjs";
 import workBatch from "./work-batch.mjs";
@@ -33,7 +34,7 @@ import ownerRound10 from "./owner-round10.mjs";
 import ownerRound9 from "./owner-round9.mjs";
 import { withOwnerRound4, noNaming } from "./owner-round4.mjs";
 
-export const scenes = withOwnerRound4([...polish, ...mcpProposals, ...workBatch, ...batch, ...missing, ...ownerQuestions, ...richContent, ...sidebar, ...slime, ...pages, ...home, ...chat, ...desktop, ...automations, ...mentions, ...history, ...composerVoice, ...settings, ...apps, ...contextMenu, ...overlay, ...ownerRound, ...ownerRound3, ...ownerRound9, ...ownerRound10, noNaming]);
+export const scenes = withOwnerRound4([...polish, ...mcpProposals, ...workBatch, ...batch, ...missing, ...ownerQuestions, ...richContent, ...sidebar, ...shortcuts, ...slime, ...pages, ...home, ...chat, ...desktop, ...automations, ...mentions, ...history, ...composerVoice, ...settings, ...apps, ...contextMenu, ...overlay, ...ownerRound, ...ownerRound3, ...ownerRound9, ...ownerRound10, noNaming]);
 scenes.push(...mediaData);
 scenes.push(...handoffGroup);
 scenes.push(...daily);

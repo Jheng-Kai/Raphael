@@ -1476,6 +1476,25 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }});
 
   function closeSearch(_draw = true): void { finder.close(false); searching = false; }
+  window.addEventListener("raphael:conversation-shortcut", event => {
+    if (!visible) return;
+    const action = (event as CustomEvent<string>).detail;
+    if (action === "find") {
+      if (roomPane.active) {
+        const input = roomPane.el.querySelector<HTMLInputElement>('.ra-find:not([hidden]) input');
+        if (input) input.focus();
+        else roomPane.el.querySelector<HTMLElement>('[data-room-search]')?.click();
+      }
+      else finder.open();
+      return;
+    }
+    if (roomPane.active) return;
+    const items = conversationCache.get(memberId()) ?? [];
+    const current = conversationId() ?? items.find(item => item.is_default)?.id;
+    const at = items.findIndex(item => item.id === current);
+    const next = items[at + (action === "previous" ? -1 : 1)];
+    if (next) openConversation(memberId(), next.id);
+  });
 
   /** The conversation is gone in the core: the page drops every turn it loaded and shows the empty page. */
   function forgetTurns(): void {
