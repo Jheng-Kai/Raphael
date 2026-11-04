@@ -1,5 +1,12 @@
 # Raphael feature map
 
+## Primary-contact owner management (2026-11-05)
+
+See [Owner management](owner-management.md) for R-AG-MGMT-01 through 03,
+primary-only interactive offers, server authorization, firm destructive cards,
+UI RPC/settings coverage and the selected deferred card scenes. This brief allows
+fake offline core checks only and forbids look, native, network and paid APIs.
+
 ## Shared installed skills (2026-11-04)
 
 See [Members](members.md#shared-installed-skills-2026-11-04) for R-SKILL-01 through

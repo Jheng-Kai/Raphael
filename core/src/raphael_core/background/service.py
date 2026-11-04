@@ -1855,6 +1855,8 @@ class BackgroundService:
         prefix = PREFIXES[language].question
         what = parenthesized(language, preview(waiting.arguments))
         asked = phrase(language, "confirm_plugin", server=ref.server, tool=ref.name, what=what)
+        if ref.name == "routine_delete" and self._team is not None:
+            asked = self._team.admin_confirmation(ref.name, waiting.arguments, language)
         text = asked_with(language, waiting.screening, asked)
         if local:
             text = {"en": "Local commands", "zh-TW": "本機指令", "ja": "ローカルコマンド"}[language]

@@ -995,8 +995,9 @@ PLAN_MODE = (
     "of what you would do, and stop there. Carry it out only after the owner has said yes to it in this conversation.\n</plan_mode>"
 )
 FULL_PERMISSION = (
-    "\n<full_permission>\nThe owner gave you every permission for this work and nothing waits for their yes. Do the whole job and "
-    "come back when it is done, with what came of it. Do not stop to confirm a step or to report progress. Ask the owner only "
+    "\n<full_permission>\nThe owner allowed ordinary steps without extra permission questions. Firm destructive management "
+    "(including deleting your own routines), sign-ins, secrets and owner-only cards still require the owner. A waiting card "
+    "is not success. Do the whole job and come back with what came of it. Do not stop for ordinary confirmations or progress. Ask the owner "
     "when you cannot go on without something only they know or can decide. Mail that is meant to go out, send rather than "
     "draft.\n</full_permission>"
 )

@@ -208,7 +208,7 @@ async def test_team_creation_keeps_personality_separate_from_work_instructions(s
         chat("", ("create_member", {"name": "Teacher", "role": "Japanese", "personality": "Strict, patient.", "instructions": "Teach N1."})),
         live_said("Draft ready."), live_said("Added."),
     ]
-    asked = await typed(rig, "Add a strict but patient Japanese teacher.", 0)
+    asked = await typed(rig, "Add a member who is a strict but patient Japanese teacher.", 0)
     assert team.members.find("Teacher") is None
     await rig.confirm(asked["confirm"]["id"])
     created = team.members.find("Teacher")
