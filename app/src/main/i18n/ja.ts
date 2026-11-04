@@ -4,6 +4,13 @@ import { missingJa } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const ja = {
+  "composio.result": "結果",
+  "composio.fieldSeparator": "：",
+  "composio.resultDone": "完了",
+  "composio.resultDetails": "詳細",
+  "composio.resultFailed": "失敗",
+  "composio.resultUnavailable": "結果の詳細を表示できません",
+  "composio.moreResults": "ほか {p0} 件の結果",
   "chat.newMessages": "新着",
   "work.inspect": "過程を見る",
   "work.thinking": "考えています",

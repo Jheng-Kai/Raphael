@@ -46,6 +46,17 @@ class OwnerQuestions:
             "SELECT q.*, t.room_id AS room_id FROM owner_questions q JOIN worker_tasks t ON t.id=q.task_id "
             "WHERE q.result IS NULL AND t.state IN ('running','waiting','queued') ORDER BY q.created_at_ms")]
 
+    def in_conversation(self, *, conversation_id=None, member_id=None, room_id=None, thread_id=None):
+        return [self.view(row) for row in self.conn.execute(
+            "SELECT q.* FROM owner_questions q JOIN agent_turns a ON a.id=q.turn_id "
+            "JOIN worker_tasks t ON t.id=q.task_id WHERE q.kind='ask_owner' AND q.result IS NULL "
+            "AND t.state IN ('running','waiting','queued') AND "
+            "((? IS NOT NULL AND a.scope='private' AND a.conversation_id=? "
+            "AND (a.member_id IS ? OR (a.member_id IS NULL AND ? IS 0))) OR "
+            "(? IS NOT NULL AND a.scope='room' AND a.room_id=? AND (? IS NULL OR a.thread_id=?))) "
+            "ORDER BY q.created_at_ms, q.rowid",
+            (conversation_id, conversation_id, member_id, member_id, room_id, room_id, thread_id, thread_id))]
+
     def open(self, task, kind, payload, card_id=""):
         with self.conn:
             existing = self.conn.execute("SELECT * FROM owner_questions WHERE task_id=? AND result IS NULL", (task.id,)).fetchone()

@@ -9,6 +9,7 @@
 // "ask"), or the card's own door for a task that went on after the computer was given back (`source` "run").
 
 import { cardDisclosureHTML, cardHTML, cardPromptText } from "./card";
+import { composioText, isComposioTool } from "./composio-result";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { connectionMarkHTML } from "./secret-card";
@@ -33,7 +34,7 @@ export function permissionFor(turns: readonly AgentTurn[], id: string): Permissi
 /** What the card says of where its question stands: the action itself while it waits, else what became of it. */
 export function permissionStateText(card: PermissionCard): string {
   switch (card.state) {
-    case "pending": return card.summary;
+    case "pending": return isComposioTool(card.service, card.tool) ? composioText(card.summary, card.tool, "tool") : composioText(card.summary);
     case "allowed": return plain("perm.allowed");
     case "always": return plain("perm.alwaysDone");
     case "denied": return plain("perm.denied");
@@ -77,6 +78,7 @@ function actionHTML(card: PermissionCard, answerable: boolean): string {
  * question has not come yet, or is being answered): the buttons are there and cannot be pressed.
  */
 export function permissionCardHTML(card: PermissionCard, answerable = true, memberName?: string): string {
+  if (isComposioTool(card.service, card.tool)) card = { ...card, summary: composioText(card.summary, card.tool, "tool") };
   const waiting = waitsForYes(card);
   const actor = memberName || (localCard(card) ? nameOf(card) : t("agent.title"));
   const body = waiting ? localCard(card) ? t(card.kind === "local_access" ? "local.consent" : "cards.localReview") : card.reason || undefined : undefined;
@@ -120,7 +122,7 @@ export function ownerQuestionHTML(question: OwnerQuestion): string {
     hideStatus: waiting && cardPromptText("question") === undefined,
     content: waiting ? form : question.result?.answer ? cardDisclosureHTML(question.id, `<div class="card-well card-body">${esc(question.result.answer)}</div>`) : "",
     close: waiting ? iconBtn("x", t("common.close"), ' data-owner-answer="cancel"') : "", cls: "permission-card owner-question",
-    attrs: ` data-owner-question="${id}" data-owner-page="${esc(question.kind === "show_page" ? question.card_id : "")}" data-card-state="${question.state}" tabindex="0"`,
+    attrs: ` data-owner-question="${id}" data-owner-turn="${question.turn_id}" data-owner-kind="${esc(question.kind)}" data-owner-page="${esc(question.kind === "show_page" ? question.card_id : "")}" data-card-state="${question.state}" tabindex="0"`,
   });
 }
 

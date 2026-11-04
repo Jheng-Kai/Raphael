@@ -4793,7 +4793,9 @@ class AgentService:
                                         conversation_id=conversation_id, exchanges=exchanges)
             after = self._history.after(around_id, member_id=member_id, conversation_id=conversation_id, exchanges=exchanges)
             turns = sorted([*before, *after[:limit]], key=lambda turn: turn.id, reverse=True)
-        return {"turns": self._turn_views(turns)}
+        questions = getattr(self._background, "owner_questions", None)
+        return {"turns": self._turn_views(turns), "pending_questions": questions.in_conversation(
+            conversation_id=conversation_id, member_id=member_id) if questions is not None else []}
 
     async def _history_search(self, params: dict) -> dict:
         """The answered turns of the thread of `member_id` (Raphael's by default) that hold the

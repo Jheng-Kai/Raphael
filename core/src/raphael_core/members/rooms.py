@@ -460,7 +460,9 @@ class RoomsService:
             if len(rows) < 100:
                 break
             cursor = rows[-1]["id"]
+        questions = getattr(self._background, "owner_questions", None)
         return {"messages":list(reversed(messages)), "exchange":self._exchanges.latest(room["id"]),
+                "pending_questions":questions.in_conversation(room_id=room['id'],thread_id=thread_id) if questions is not None else [],
                 "handoffs":self._background.handoff_views(room_id=room['id'],thread_id=thread_id)}
 
     def _targets(self, room, text):

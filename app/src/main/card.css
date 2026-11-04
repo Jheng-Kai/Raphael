@@ -30,7 +30,8 @@
 .card-detail[hidden] { display: none; }
 .card-detail pre { white-space: pre-wrap; overflow: visible; margin: 0; padding: 12px; }
 .card-detail .card-field { display: flex; gap: 12px; padding: 10px 12px; }
-.card-detail .card-field > span:first-child { color: var(--text-3); }
+.card-detail .card-field > span:first-child { color: var(--text-3); flex: 0 0 auto; align-self: flex-start; white-space: nowrap; }
+.card-detail .card-field > span:last-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .card-failure { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .card-failure p { margin: 0; color: var(--text-2); }
 .conversation-card input, .conversation-card textarea { min-width: 0; max-width: 100%; box-sizing: border-box; }

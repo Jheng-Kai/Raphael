@@ -11,6 +11,21 @@ import { LATIN_NAMES, needsDesktopFixture } from "./runner.mjs";
 import { slimeParts } from "./slime-board.mjs";
 
 describe("rendered look checks", () => {
+  it("rejects permission field labels taller than one line", () => {
+    const browser = new Window();
+    browser.document.body.innerHTML = '<div class="permission-card"><div class="card-field"><span>Connected app</span><span>Long action details</span></div></div>';
+    const label = browser.document.querySelector('.card-field > span');
+    label.checkVisibility = () => true;
+    let height = 20;
+    label.getBoundingClientRect = () => ({ width: 100, height });
+    vi.stubGlobal("document", browser.document);
+    vi.stubGlobal("getComputedStyle", () => ({ lineHeight: "20px" }));
+    try {
+      expect(checkRendered("permission-detail-label")).toEqual({ check: "permission-detail-label", labels: 1 });
+      height = 40;
+      expect(() => checkRendered("permission-detail-label")).toThrow("one line");
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
   it.each(["idle", "sleeping"])("rejects detached props and animations on a resting %s slime", state => {
     const browser = new Window();
     browser.document.body.innerHTML = `<div class="look-slime-board"><span><span class="slime-surface"><svg class="slime" data-state="${state}"><path class="slime-body"/><path class="slime-eyes"/></svg></span></span></div>`;
@@ -740,6 +755,10 @@ describe("rendered look checks", () => {
   it("checks text frames and bare icon borders", () => {
     const { audit } = productAudit('<button class="btn" style="border: none">Save</button><button class="btn icon" style="border: 1px solid red">X</button><button class="btn" style="border: 1px solid red">Cancel</button>');
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-18', 'R-UI-18']);
+  });
+  it("allows a soft pending-question row only in its conversation container", () => {
+    const { audit } = productAudit('<div class="pending-questions"><button class="btn sm pending-question" style="border:0">待回答</button></div><button class="btn pending-question" style="border:0">Save</button>');
+    expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-18']);
   });
   it("allows the owner's quiet Today navigation only inside its arrow group", () => {
     const { audit } = productAudit('<div class="au-date-nav"><button class="btn au-today" style="border:0">Today</button></div><button class="btn au-today" style="border:0">Save</button>');

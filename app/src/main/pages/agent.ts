@@ -75,6 +75,7 @@ import { carryMail } from "../mail-card";
 import { mountPages } from "../page-card";
 import { mountMailActions } from "../mail-actions";
 import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
+import { mountPendingQuestions } from "../pending-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
 import { memberAccent, ownerBubble } from "../owner-bubble";
 import { slimeColorOf } from "../slime";
@@ -103,7 +104,7 @@ import {
   turnHTML,
   wantsRefresh,
 } from "../timeline";
-import type { PageArgument, AgentQuestion, AgentTurn, AppContext, GroupDraft, MemberDraft, MessageQuote, Page, TurnAttachment, WireAttachment } from "../types";
+import type { PageArgument, AgentQuestion, AgentTurn, AppContext, GroupDraft, MemberDraft, MessageQuote, OwnerQuestion, Page, TurnAttachment, WireAttachment } from "../types";
 import { copyButton, esc, ico, iconButton, patchHTML, toaster } from "../ui";
 import { createRoomPane } from "../group-chats";
 import { bindActionMode, composerHTML, drawTaskSlot } from "../chat-composer";
@@ -534,6 +535,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   /** What is loaded, newest first. */
   let turns: AgentTurn[] = [];
+  let pendingQuestions: { member: number; conversation?: number; questions: OwnerQuestion[] } | undefined;
   let canLoadEarlier = false;
   let loadingEarlier = false;
   let failure: (() => string) | null = null;
@@ -620,6 +622,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const drawnHTML = new WeakMap<Element, string>();
   const pagesHost = mountPages(thread, { send: text => sendFromPage(text), answer: (id, text) => answerOwnerPage(thread, id, text, () => { void load(false); }) });
   mountOwnerQuestions(thread, () => { void load(false); });
+  const floatingQuestions = mountPendingQuestions(thread, scroller, () => load(false), () => pendingQuestions?.member === memberId() && pendingQuestions.conversation === conversationId() ? pendingQuestions.questions : []);
   /** The newest turn drawn: a turn after it comes in from below. */
   let newestDrawn = 0;
   let drewOnce = false;
@@ -1058,7 +1061,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           ...(member === RAPHAEL_ID ? {} : { member_id: member }),
         };
       const historyRead = () => api.agentHistoryList(params);
-      got = (await (fromEvent ? eventRead(`agent.history.list:${JSON.stringify(params)}`,historyRead,app) : historyRead())).turns.filter(turn => !turn.session_id || !retracted.has(turn.session_id));
+      const history = await (fromEvent ? eventRead(`agent.history.list:${JSON.stringify(params)}`,historyRead,app) : historyRead());
+      if (mine === loads) {
+        pendingQuestions = { member, conversation: chosen, questions: history.pending_questions ?? [] };
+        floatingQuestions.sync();
+      }
+      got = history.turns.filter(turn => !turn.session_id || !retracted.has(turn.session_id));
     } catch (err) {
       // A newer load of the newest turns took over: what this one shows does not count, but an
       // earlier page that failed must still let the reader page up again.

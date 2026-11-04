@@ -1,5 +1,60 @@
 # Conversation
 
+## Pending conversation questions and readable results (2026-11-04)
+
+R-OWNER-03, R-CARD-09 and R-CARD-10 extend the shared conversation cards.
+The existing Other/free-answer field remains in ownerQuestionHTML. A shared
+pending-questions controller mounts above each private/room scrollport and uses
+a soft filled compact button and shared menu (R-UI-98). The button has no input
+outline (R-UI-18 exception), and uses the shared chat icon, truncated title, small
+pending count and downward chevron. It observes scroll,
+resize and changed card nodes without polling. Only off-screen pending ask_owner
+questions float. A page-independent pending_questions projection on the existing
+history/messages reads keeps earlier-page questions reachable without changing
+pagination. One press calls owner_questions.bring; the existing question and task
+move together. The controller waits for the returned turn to render before it
+scrolls/focuses, and avoids pulling another conversation after navigation.
+Chief history writes member_id=0 and resolves a concrete conversation_id. The
+pending projection also accepts NULL chief member rows using IS, while retaining
+the conversation/member boundary. Tests cover both representations outside the
+loaded page; the nullable case shadows the current NOT NULL schema in a fixture.
+
+The same RPC supports room scope, preserving room/thread ownership and adding a
+room receipt with a unique per-move request ID. Repeated bringing at the newest
+turn is idempotent. Answers continue the same task. No approval is granted.
+
+Permission detail labels cannot shrink; values wrap into the remaining width.
+The permission-detail-label scene opens the existing local-permission-card
+disclosure and checks each real label's height against its computed line height.
+
+composio-result.ts projects recognized envelopes into bounded readable
+app-brand/outcome/field text with localized outcomes and field separators. Missing
+app slugs use the localized result label, and operation verbs are never expanded. Member-authored private/room replies, progress, work
+rows and turn details require a tool slug or successful with data/error; an
+action hint alone never replaces ordinary fenced/inline JSON config. Composio
+permission summaries and step details explicitly use trusted tool mode, which
+also projects unmarked JSON objects. isComposioTool shares server/tool detection
+across these consumers and composioAction. Raw model messages, persisted replies and original permission objects stay
+intact. Synthetic tests cover failure, nesting, long/incomplete output, excluded
+fields, ordinary code and owner text. This does not prove live provider behavior.
+
+Selected integration matrix (both themes; 1120,720,1920x1080):
+
+```powershell
+npm run look -- owner-question-pending owner-question-brought owner-question-pending-page owner-question-pending-room owner-question-pending-many owner-question-asked owner-question-typed owner-question-text owner-question-answered owner-question-cancelled owner-question-room permission-detail-label local-permission-card card-message-waiting composio-readable-result member-text room-text --theme both --width 1120,720,1920x1080
+```
+
+New scenes: owner-question-pending, owner-question-brought,
+owner-question-pending-page, owner-question-pending-room,
+owner-question-pending-many, permission-detail-label, composio-readable-result.
+Compare the floating compact button with conversation controls, its list with shared
+menus, and permission details with card-message-waiting at matching sizes/themes.
+Follow-up 2 authorizes the selected look matrix and visual review. Judge requires
+external references and authorized network access; native and live-provider
+acceptance remain deferred. DOM/Vitest and offline core checks alone
+do not establish visual/native/provider/design acceptance.
+
+
 ## Visible work sentences (2026-11-02)
 
 R-UI-75 and R-WORK-01/02 use one 28px avatar and one muted action line in private

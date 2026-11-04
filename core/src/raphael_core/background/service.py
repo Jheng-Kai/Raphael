@@ -566,18 +566,31 @@ class BackgroundService:
         if question is None or question["state"] != "asked" or question["kind"] != ASK_OWNER:
             return None
         origin = self._history.get(question["turn_id"])
-        if origin is None or origin.scope != "private" or origin.conversation_id is None:
+        if origin is None or origin.scope not in ("private", "room"):
             return None
-        latest = self._metrics_conn.execute(
-            "SELECT max(id) FROM agent_turns WHERE conversation_id=? AND scope='private'", (origin.conversation_id,)).fetchone()[0]
-        if latest == origin.id:
-            return origin.id
+        if origin.scope == "room":
+            if origin.room_id is None or origin.thread_id is None:
+                return None
+            latest = self._metrics_conn.execute(
+                "SELECT turn_id FROM room_messages WHERE room_id=? ORDER BY id DESC LIMIT 1", (origin.room_id,)).fetchone()
+            if latest is not None and latest[0] == origin.id:
+                return origin.id
+        else:
+            if origin.conversation_id is None:
+                return None
+            latest = self._metrics_conn.execute(
+                "SELECT max(id) FROM agent_turns WHERE conversation_id=? AND scope='private'", (origin.conversation_id,)).fetchone()[0]
+            if latest == origin.id:
+                return origin.id
         moved = self._history.add(session_id=f"{origin.session_id}:asked-{question['id']}", question="", route=origin.route,
                                   prefix=origin.prefix, text="", status="done", source=origin.source, model=origin.model,
-                                  member_id=origin.member_id, conversation_id=origin.conversation_id)
+                                  member_id=origin.member_id, conversation_id=origin.conversation_id,
+                                  scope=origin.scope, room_id=origin.room_id, thread_id=origin.thread_id)
         with self._metrics_conn:
             self._metrics_conn.execute("UPDATE owner_questions SET turn_id=? WHERE id=?", (moved, question["id"]))
         self.attach_turn(question["task_id"], moved)
+        if origin.scope == "room":
+            self._show_owner_wait(self._store.get(question["task_id"]), request_id=f"owner-question-{question['id']}-{moved}")
         for turn_id in (origin.id, moved):
             self._notify("agent.turn", {"turn_id": turn_id, "member_id": origin.member_id})
         return moved
@@ -598,7 +611,7 @@ class BackgroundService:
         for row in self._metrics_conn.execute("SELECT id FROM worker_tasks WHERE state='waiting' AND continuation IS NOT NULL").fetchall():
             self._owner_answered(row[0])
 
-    def _show_owner_wait(self, task):
+    def _show_owner_wait(self, task, *, request_id=None):
         if task.scope != "room" or not task.room_id or not task.thread_id:
             return
         if self._metrics_conn.execute("SELECT 1 FROM room_messages WHERE turn_id=?", (task.turn_id,)).fetchone():
@@ -606,7 +619,7 @@ class BackgroundService:
         with self._metrics_conn:
             self._metrics_conn.execute(
                 "INSERT INTO room_messages(room_id,thread_id,member_id,text,created,turn_id,request_id) VALUES (?,?,?,'',?,?,?)",
-                (task.room_id, task.thread_id, task.member_id, self._now_ms(), task.turn_id, f"handoff-{task.id}"))
+                (task.room_id, task.thread_id, task.member_id, self._now_ms(), task.turn_id, request_id or f"handoff-{task.id}"))
         self._notify("rooms.changed", {"room_id": task.room_id})
 
     def park_owner_turn(self, ask, model, loop, call_id, arguments, seen_urls=()):

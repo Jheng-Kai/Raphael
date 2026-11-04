@@ -1,5 +1,14 @@
 # Raphael product rules
 
+## Pending conversation questions and readable results (2026-11-04)
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-OWNER-03 | 2026-11-04 | A pending ask_owner question outside the visible private or room timeline has one compact row above the scrollport, including when its turn is outside the loaded page. The row uses a soft filled compact button with the shared chat icon, truncated title, small pending count and downward chevron, without an input outline (R-UI-18 exception). Multiple questions share a count and the existing menu. One press uses owner_questions.bring, moves the same task/card to the newest turn and scrolls there. Visible or settled questions have no floating row. The existing free answer remains. This does not add a waiting pill inside the original card (R-CARD-08). | vitest, pytest, look | hard | app/src/main/pending-questions.test.ts; core/tests/agent/test_owner_questions.py::test_a_room_question_is_brought_to_the_end_and_resumes_in_its_room; owner-question-pending; owner-question-brought; owner-question-pending-page; owner-question-pending-room; owner-question-pending-many |
+| R-CARD-09 | 2026-11-04 | A permission detail label retains its natural one-line width; its value takes the remaining space and wraps. | vitest, look | hard | app/scripts/look/audit.test.mjs::rejects permission field labels taller than one line; permission-detail-label |
+| R-CARD-10 | 2026-11-04 | Composio result envelopes render as bounded app brand names, localized outcome words and selected readable fields with a localized separator. Missing app slugs use the localized result label; operation verbs never become English reply text. Member-authored replies, progress, work rows and turn details project only JSON with a tool slug or successful together with data/error; other JSON keeps its exact source even after a Composio action. Composio step details and permission summaries are trusted tool output and may project any JSON object. Raw objects stay available to the model and are never mutated by display projection. Owner input keeps its source. | vitest, look | hard | app/src/main/composio-result.test.ts::app brands omit operation verbs and results use each locale's separator; composio-readable-result |
+
+
 ## Delegated work and truthful run endings (2026-11-04)
 
 | ID | Date | Rule | Check | Severity | Evidence |

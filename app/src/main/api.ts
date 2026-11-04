@@ -14,6 +14,7 @@ import type { CliAllowances, RunReport, RunRequest } from "./run-analytics-types
 import type {
   AgentQuestion,
   AgentTurn,
+  OwnerQuestion,
   AppsInventory,
   AuditEntry,
   ConnectResult,
@@ -65,6 +66,8 @@ export function core<T>(method: string, params: object = {}): Promise<T> {
 
 export const ownerQuestionAnswer = (id: string, answer: string | null): Promise<{ status: string }> =>
   core("owner_questions.answer", { id, answer });
+export const ownerQuestionBring = (id: string): Promise<{ turn_id: number }> =>
+  core("owner_questions.bring", { id });
 
 // ---------- status ----------
 
@@ -153,7 +156,7 @@ export interface AgentHistoryQuery {
 }
 
 /** The turns of the conversations, newest first. */
-export const agentHistoryList = (q: AgentHistoryQuery = {}): Promise<{ turns: AgentTurn[] }> => core("agent.history.list", q);
+export const agentHistoryList = (q: AgentHistoryQuery = {}): Promise<{ turns: AgentTurn[]; pending_questions?: OwnerQuestion[] }> => core("agent.history.list", q);
 /** What the owner typed into a composer, newest first, whichever conversation or room it went to (the arrow keys of a composer walk it). */
 export const agentSent = async (limit = 50): Promise<string[]> => (await core<{ texts: string[] }>("agent.history.sent", { limit })).texts;
 /** Forgets Raphael conversation turns; says how many there were. */
@@ -513,7 +516,7 @@ export const roomsCreate = (room: { name?: string; member_ids: number[]; group_i
 export const roomsDelete = (roomId: number): Promise<{ deleted: boolean }> => core("rooms.delete", { room_id: roomId });
 export const roomsUpdate = (roomId: number, patch: { name?: string; member_ids?: number[]; default_responder?: string; roles?: Record<string, string>; pinned?: boolean; hidden?: boolean; read?: boolean; read_through?: number }): Promise<{ room: Room }> => core("rooms.update", { room_id: roomId, ...patch });
 export const roomTranscribe = (data: string, uiLanguage: string): Promise<{ text: string }> => core("rooms.transcribe", { data, ui_language: uiLanguage });
-export const roomMessages = (roomId: number, before?: number): Promise<{ messages: RoomMessage[]; exchange?: import("./types").RoomExchange | null; handoffs?: import("./types").HandoffView[] }> => core("rooms.messages", { room_id: roomId, before });
+export const roomMessages = (roomId: number, before?: number): Promise<{ messages: RoomMessage[]; pending_questions?: OwnerQuestion[]; exchange?: import("./types").RoomExchange | null; handoffs?: import("./types").HandoffView[] }> => core("rooms.messages", { room_id: roomId, before });
 export const roomSend = (roomId: number, text: string, requestId: string, uiLanguage: string, attachments: WireAttachment[] = [], replyTo?: number): Promise<{ message_id: number; duplicate: boolean }> => core("rooms.send", { room_id: roomId, text, request_id: requestId, ui_language: uiLanguage, ...(attachments.length ? { attachments } : {}), ...(replyTo !== undefined ? { reply_to: replyTo } : {}) });
 export const roomStop = (roomId: number): Promise<{ stopped: boolean }> => core("rooms.stop", { room_id: roomId });
 export const keepAwakeGet = (): Promise<boolean> => invoke("schedule_keep_awake_get");

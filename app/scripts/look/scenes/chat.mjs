@@ -159,6 +159,8 @@ export default [
     [member(1), wait(pcCard), click(`${pcCard} [data-act="card-done"]`), wait('[data-resumed="141"]'), check("pc-handback")], { computerCard: "signin", signedIn: true }),
   scene("local-permission-card", "A step that needs the owner's yes shows a permission card in the chat: the exact action, 拒絕, 一律允許 and 允許一次, and the gold card stays away",
     [wait(permCard("perm-gmail")), check("local-permission-card")], { permissionCard: "tool" }),
+  scene("permission-detail-label", "Permission detail labels keep one line beside a wrapping value", [wait(permCard("perm-gmail")), click(`${permCard("perm-gmail")} [data-card-disclosure]`), check("permission-detail-label")], { permissionCard: "tool" }),
+  scene("composio-readable-result", "A Composio result names the action and useful fields without a raw object", [member(1), wait('.thread .chat-message'), check("composio-readable-result")], { composioResults: true }),
   scene("local-command-consent", "All-member consent names the member and keeps the exact command only in the shared card",
     [member(1), wait(permCard("perm-local")), click(`${permCard("perm-local")} [data-card-disclosure]`), check("local-command-card")], { localCommand: "first" }),
   scene("local-command-later", "Later command approval has Allow, Skip and settings in the same card",

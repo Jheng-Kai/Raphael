@@ -27,6 +27,8 @@ import { createBackgroundQuestions } from "./background-questions";
 import { conversationCardsHTML, filesHTML, latestProgress, livePresenceHTML, messageActionsHTML, updateLiveTimes, waitsAtCard } from "./timeline";
 import { mountConversationCardActions } from "./conversation-card-actions";
 import { answerOwnerPage, mountOwnerQuestions } from "./owner-questions";
+import { mountPendingQuestions } from "./pending-questions";
+import { composioAction, composioText } from "./composio-result";
 import { mountTaskResults } from "./task-result";
 import { mountPages } from "./page-card";
 import { carryTyped } from "./secret-card";
@@ -219,6 +221,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   let room:Room|undefined,list:MembersList={members:[],groups:[]},messages:RoomMessage[]=[],generation=0,opened=false,canOlder=false,loadingOlder=false;
   // Navigation identity remains available while the complete room is loading.
   let roomId: number | undefined;
+  let pendingQuestions: { room: number; questions: import("./types").OwnerQuestion[] } | undefined;
   const failedRequests = new Map<string, string>();
   const deliveries = new Map<number, Promise<void>>();
   let exchange:RoomExchange|null|undefined,replyTo:RoomMessage|undefined,stopping=false;
@@ -256,6 +259,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   mountConversationScroll(scroll);
   mountRichContent(scroll);
   mountOwnerQuestions(thread, () => { void refresh(); });
+  const floatingQuestions = mountPendingQuestions(thread, scroll, () => refresh(), () => pendingQuestions && pendingQuestions.room === roomId ? pendingQuestions.questions : []);
   const resultCards = new WeakMap<HTMLElement, { sync(): void }>();
   mountConversationCardActions(thread, () => _app.go("settings", "connections"));
   const pagesHost = mountPages(thread, { send: text => {
@@ -376,7 +380,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
         const member=person(m.member_id);
         return `<li class="tn au-room-thinking" data-room-message="${m.id}" role="status"><div class="ra-body"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${livePresenceHTML({face:()=>member?faceHTML(member,28):"",activityLabel:member?.activity_label},m.turn?latestProgress(m.turn):undefined)}</div></li>`;
       }
-      const member=person(m.member_id),owner=m.member_id===null,parts=owner?[m.text]:plainReplies(replyMessages(m.text)),words=parts.join("\n\n")||(owner?"":t(m.status==="error"?"auto.error":"auto.running"));
+      const member=person(m.member_id),owner=m.member_id===null,parts=owner?[m.text]:plainReplies(replyMessages(m.text)).map(text=>composioText(text,composioAction(m.turn))),words=parts.join("\n\n")||(owner?"":t(m.status==="error"?"auto.error":"auto.running"));
       const source=m.reply_reference;
       const reply=source?`<span class="au-room-reply">${esc(source.unavailable?t("rooms.sourceMissing"):t("rooms.replyTo",{p0:source.author_kind==="owner"?t("rooms.owner"):person(source.author_member_id??null)?.name??t("rooms.sourceMissing")}))}</span>`:"";
       const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',(!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
@@ -420,6 +424,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       const found=rooms.rooms.find(r=>r.id===id);if(!found){missing();return;}
       const history=await (fromEvent ? eventRead(`rooms.messages:${id}`,()=>api.roomMessages(id),context) : api.roomMessages(id));if(mine!==generation||!opened)return;
       list=people;rosterDirty=false;room=found;exchange=history.exchange;
+      pendingQuestions={room:id,questions:history.pending_questions??[]};floatingQuestions.sync();
       if (found.unread && !el.closest("[hidden]")) await api.roomsUpdate(id, { read: true, read_through: history.messages[history.messages.length - 1]?.id ?? 0 });
       if (mine!==generation||!opened) return;
       handoffs=history.handoffs??[];

@@ -3,6 +3,13 @@ import { homeZh } from "./home-catalogs";
 import { missingZh } from "./missing-catalogs";
 // Traditional Chinese is the source catalogue. Placeholders are interpolated by t().
 export const zhTW = {
+  "composio.result": "結果",
+  "composio.fieldSeparator": "：",
+  "composio.resultDone": "已完成",
+  "composio.resultDetails": "詳情",
+  "composio.resultFailed": "未完成",
+  "composio.resultUnavailable": "無法顯示結果詳情",
+  "composio.moreResults": "另有 {p0} 項結果",
   "chat.newMessages": "新訊息",
   "work.inspect": "查看過程",
   "work.thinking": "正在思考",
