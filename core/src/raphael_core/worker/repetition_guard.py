@@ -1,6 +1,6 @@
 """Whether a reply of the model is only the same few words again and again.
 
-Adapted from NousResearch/hermes-agent agent/repetition_guard.py @ c419cf7c (MIT); see THIRD_PARTY_NOTICES.md.
+Adapted from NousResearch/hermes-agent agent/repetition_guard.py @ c419cf7c (MIT); see licenses/NOTICES.md.
 Not taken over: `RunawayStreamWatch`, which cuts a stream while it runs. Raphael's calls are not read while
 they stream.
 

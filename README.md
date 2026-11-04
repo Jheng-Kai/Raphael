@@ -1,31 +1,42 @@
-# Raphael
+<p align="center">
+  <img src="app/src-tauri/icons/128x128@2x.png" width="112" alt="Raphael">
+</p>
 
-Speak anywhere you can type: Raphael turns your voice into clean text and answers when you ask.
+<h1 align="center">Raphael</h1>
+
+<p align="center">
+  A team of AI members on your Windows PC, and dictation that works in every app.
+</p>
+
+<p align="center">
+  <a href="https://github.com/Jheng-Kai/Raphael/releases/latest">Download</a> ·
+  <a href="#build-from-source">Build from source</a> ·
+  <a href="LICENSE">MIT License</a>
+</p>
 
 ## Features
 
-- **Dictation in any app.** Press a key, speak, and the text appears where your cursor is.
-- **Clean text.** Filler words and false starts are dropped and punctuation is added, so "let's meet at two… no, three" becomes "Let's meet at three."
-- **A dictionary that learns.** Names and jargon keep your spelling, and corrections you make after a dictation are remembered.
-- **Cloud or on-device speech recognition.** Use a cloud model through OpenRouter or a free local model.
-- **A voice assistant.** Ask a question, open an app or a website, control volume and media, or hand over a task that takes several steps.
-- **Memory that stays on your PC.** Each assistant keeps what it learns in a plain Markdown file it edits as things change, one fact to a line, and the owner's profile is one file they all share; you can read and edit them yourself, and it can search past conversations.
-- **Connected services.** Sign in to services such as Notion, Linear and Todoist so the assistant can work with them.
-- **Multilingual.** Dictation in Chinese, Cantonese, English, Japanese and Korean; the interface in English, Traditional Chinese and Japanese.
+- **Members that work.** Give each member a role, a model and its own memory. Members take on tasks, hand work to each other and report back, and they keep going for hours while you do something else.
+- **Group chats.** Put members in a room. Each one reads the conversation and decides whether to speak.
+- **Computers of their own.** A member can use its own desktop, which starts only when you allow it. You can watch it, take over at a sign-in, and hand it back.
+- **Dictation anywhere.** Press a key, speak, and clean text appears where your cursor is. Filler words are dropped, and your names and terms keep their spelling.
+- **Your models.** Sign in with ChatGPT, use an OpenRouter key, or run members on your Claude Code, Codex or Antigravity subscription. A member never switches to another model on its own.
+- **Routines and messaging.** Members run tasks on a schedule or when something happens, and you can reach them from Telegram, Slack and Discord.
+- **Stays on your PC.** Conversations, memory and settings live in local files you can read and edit.
 
-## Architecture
+## Install
 
-```text
-UI (TypeScript)        app/src         main window, settings, overlay
-  │ Tauri commands and events
-Shell (Rust, Tauri 2)  app/src-tauri   hotkeys, paste, tray
-  │ JSON-RPC over stdio
-Core (Python)          core            audio, speech recognition, cleanup, assistant
-```
+Download `Raphael-<version>-windows-x64-setup.exe` from the [latest release](https://github.com/Jheng-Kai/Raphael/releases/latest) and run it. It installs per user and needs no administrator rights.
 
-## Building from source
+- Windows 10 or 11, x64.
+- At least one model: a ChatGPT account, an [OpenRouter](https://openrouter.ai) key, or a signed-in Claude Code, Codex or Antigravity CLI.
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/), only if members should use computers of their own.
 
-Requirements: Windows 10 or 11 (x64), [Node.js](https://nodejs.org) 22.12+, [Rust](https://rustup.rs) 1.98, [uv](https://docs.astral.sh/uv/) and the MSVC C++ build tools. Cleanup, cloud recognition and the assistant need an [OpenRouter](https://openrouter.ai) API key.
+The installer is not code-signed, so Windows SmartScreen may warn about an unknown publisher.
+
+## Build from source
+
+Requirements: [Node.js](https://nodejs.org) 22.12+, [Rust](https://rustup.rs) 1.98, [uv](https://docs.astral.sh/uv/) and the MSVC C++ build tools.
 
 ```powershell
 git clone https://github.com/Jheng-Kai/Raphael.git
@@ -36,20 +47,26 @@ npm ci
 npm run tauri -- dev
 ```
 
-Development builds run as a separate app next to an installed release: they keep their settings, database, memory, logs and webview data in `Raphael Dev` folders, and they share only the downloaded speech models. Set `RAPHAEL_DATA_DIR` to point a build at another data folder.
+Development builds keep their data in `Raphael Dev` folders, apart from an installed release. Set `RAPHAEL_DATA_DIR` to use another folder.
 
-Run the tests:
+Run the checks from `app/`:
 
 ```powershell
-# app/
-npm test
-# core/
-$env:PYTHON_KEYRING_BACKEND = "keyring.backends.fail.Keyring"
-uv run --locked pytest -q
-# app/src-tauri/
-cargo test --locked
+npm run verify             # TypeScript, unit tests, contrast
+npm run verify -- --core   # plus the Python core
+npm run verify -- --rust   # plus the Rust shell
 ```
+
+## Project layout
+
+```text
+app/src         UI (TypeScript)        windows, settings, overlay
+app/src-tauri   Shell (Rust, Tauri 2)  hotkeys, paste, tray, windows
+core            Core (Python)          members, memory, speech, tools
+```
+
+The UI talks to the shell through Tauri commands, and the shell talks to the core through JSON-RPC over stdio.
 
 ## License
 
-[MIT](LICENSE). Raphael builds on [Tauri](https://tauri.app), [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx), [OpenCC](https://github.com/BYVoid/OpenCC) and [handy-keys](https://github.com/handy-computer/handy-keys), and its paste code is adapted from [Handy](https://github.com/cjpais/Handy).
+Raphael is released under the [MIT License](LICENSE). Third-party licenses are in [licenses](licenses).

@@ -2,7 +2,7 @@
 
 Adapted from NousResearch/hermes-agent agent/context_compressor.py, agent/turn_overflow.py,
 agent/model_metadata.py and agent/usage_anchor.py @ c419cf7c (MIT). The summary's shape also draws
-on opencode packages/core/src/session/compaction.ts @ bf544cd4 (MIT). See THIRD_PARTY_NOTICES.md.
+on opencode packages/core/src/session/compaction.ts @ bf544cd4 (MIT). See licenses/NOTICES.md.
 
 Every result stays as it came while the conversation fits. What counts is what the provider said
 the last prompt came to (`saw`), plus an estimate of what was added since. When that passes the

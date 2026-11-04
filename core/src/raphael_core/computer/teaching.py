@@ -1,6 +1,6 @@
 """Owner-only demonstrations, informed by OpenBot's MIT demonstration lifecycle.
 
-See THIRD_PARTY_NOTICES.md. Recordings are data, never executable instructions.
+See licenses/NOTICES.md. Recordings are data, never executable instructions.
 """
 import asyncio
 import hashlib

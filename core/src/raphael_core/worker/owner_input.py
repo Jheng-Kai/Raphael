@@ -2,7 +2,7 @@
 
 The user-role message and consumed/leftover tickets follow Hermes agent_runtime_helpers.py
 and agent/interrupt_control.py
-(MIT, c419cf7c); see THIRD_PARTY_NOTICES.md.
+(MIT, c419cf7c); see licenses/NOTICES.md.
 """
 
 

@@ -1,7 +1,7 @@
 """Discord DMs, with pairing and approvals owned by the existing switchboard.
 
 Admission and gateway intents follow Hermes tools/discord_tool.py and the Discord
-gateway adapter (MIT, c419cf7c); see THIRD_PARTY_NOTICES.md.
+gateway adapter (MIT, c419cf7c); see licenses/NOTICES.md.
 """
 
 import asyncio

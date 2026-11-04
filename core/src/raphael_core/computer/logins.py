@@ -1,5 +1,5 @@
 """Vault references for private page filling, following OpenMausBot's fill_login
-(Apache-2.0, server/drivers/agents-call.ts); see THIRD_PARTY_NOTICES.md.
+(Apache-2.0, server/drivers/agents-call.ts); see licenses/NOTICES.md.
 """
 
 import hashlib
