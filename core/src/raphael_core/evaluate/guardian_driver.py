@@ -471,6 +471,14 @@ class RpcDriver:
         return [(await self.app.call('members.create', {'name':name, 'role':role}))['member']['id']
                 for name, role in [('行銷','行銷企劃'), ('信件助理','信件管理'), ('HiKari','社群內容'), ('PM','專案規劃'), ('RD','來源研究')]]
 
+    async def seed_meeting(self, arguments):
+        """Seed a real private chief origin for fixture setup; the meeting keeps its author."""
+        chief = self.app.members.primary_id()
+        source = self.app.agent._history.add(session_id='guardian-meeting-' + self.nonce,
+            question=arguments['agenda'], route='talk', prefix='', text='', status='done', source='app',
+            member_id=chief, conversation_id=self.app.agent.conversations.main(chief), model=self.model)
+        return await self.app.rooms.meeting(arguments, 'zh-TW', source)
+
     async def immediate_work_scenario(self,*,room,primary=False):
         """Scoped P03 acceptance; full Gmail/meeting acceptance remains in the parent S03/S08 cells. With `primary` the
         owner has chosen 行銷 as their primary contact and brings the work to it, in its own chat: it dispatches the work
@@ -513,14 +521,14 @@ class RpcDriver:
         for task in tasks:
             if task['state']!='done' or task['ready_at_ms']!=task['created_at_ms'] or task['dispatch_policy']!='immediate' or task['started_at_ms'] is None:
                 reasons.append('immediate_start')
-            if task['scope']!=('room' if room else 'exchange') or task['model_ref']!=self.model:
+            if task['scope']!=('private' if room else 'exchange') or task['model_ref']!=self.model:
                 reasons.append('work_scope_or_model')
-            if task['room_id']!=room_id or self.nonce not in (task['report_text'] or '')+(task['report_detail'] or ''):
+            if task['report_room_id']!=room_id or task['room_id'] is not None or self.nonce not in (task['report_text'] or '')+(task['report_detail'] or ''):
                 reasons.append('result_destination_or_nonce')
             if not self.app._conn.execute("SELECT 1 FROM task_outbox WHERE task_id=? AND type='result' AND disposition='delivered'",(task['id'],)).fetchone():
                 reasons.append('result_not_delivered')
-            if room and not self.app._conn.execute('SELECT 1 FROM room_messages WHERE room_id=? AND thread_id=? AND turn_id=?',
-                (room_id,task['thread_id'],task['turn_id'])).fetchone():
+            if room and not self.app._conn.execute("SELECT 1 FROM room_messages WHERE room_id=? AND thread_id=? AND report_task_id=? AND kind='report'",
+                (room_id,task['report_thread_id'],task['id'])).fetchone():
                 reasons.append('result_not_in_room_thread')
         if not self.recorder.receipts or self.app._conn.execute('SELECT COUNT(*) FROM routines').fetchone()[0]:
             reasons.append('no_action_or_implicit_schedule')
@@ -537,8 +545,8 @@ class RpcDriver:
             result={**result,'viewer':asker}
         if room:
             messages=(await self.app.call('rooms.messages',{'room_id':room_id}))['messages']
-            if not messages or messages[-1]['member_id']!=0 or messages[-1]['kind']!='wrapup':
-                reasons.append('chief_not_last')
+            if any(message['kind']=='wrapup' for message in messages):
+                reasons.append('unasked_conclusion')
             if any(m['kind']=='progress' for m in self.app._conn.execute("SELECT kind FROM agent_messages WHERE turn_id IN (SELECT turn_id FROM room_messages WHERE room_id=?)",(room_id,))):
                 reasons.append('progress_in_messages')
             result['text']=' '.join(m['text'] for m in (await self.app.call('rooms.messages',{'room_id':room_id}))['messages'] if m['member_id'] is not None)
@@ -554,9 +562,8 @@ class RpcDriver:
         agenda = (f'請分工處理今天的 Guardian 測試信件（議題代碼 {self.nonce}）。信件助理負責用 Guardian 讀信，回報信中的 nonce；'
                   'PM 負責用 Guardian 讀同一封信，列出要回覆的重點，並附上信中的 nonce。來源文件寫「明早截止、明天中午提交」。'
                   'PM 協助討論分工；大家閱讀全部訊息，自行決定何時發言，不用固定輪次或自動總結。')
-        room_id = (await self.app.rooms.meeting({'member_ids': [0, mail, pm], 'agenda': agenda,
-                                                 'roles': {str(pm): 'moderator', str(mail): 'participant'}},
-                                                'zh-TW', 2**50 - 1))['room_id']
+        room_id = (await self.seed_meeting({'member_ids': [0, mail, pm], 'agenda': agenda,
+                                          'roles': {str(pm): 'moderator', str(mail): 'participant'}}))['room_id']
 
         async def settled_room():
             while self.app.rooms._exchanges.latest(room_id)['state'] not in ('done', 'stopped'):
@@ -569,7 +576,7 @@ class RpcDriver:
             'text': '@拉斐爾 請現在執行會議的每一項工作，每項交給它唯一的負責人。來源文件寫「明早截止、明天中午提交」，仍現在做；不要建立例行任務。'})
         messages = await settled_room()
         reasons = []
-        tasks = self.app._conn.execute("SELECT * FROM worker_tasks WHERE mode='work' AND room_id=?", (room_id,)).fetchall()
+        tasks = self.app._conn.execute("SELECT * FROM worker_tasks WHERE mode='work' AND report_room_id=?", (room_id,)).fetchall()
         owners = [task['member_id'] for task in tasks]
         if len(owners) != len(set(owners)) or set(owners) != {mail, pm}:
             reasons.append('one_task_per_owner')
@@ -580,13 +587,15 @@ class RpcDriver:
                 reasons.append('work_done_with_evidence')
             if not self.app._conn.execute("SELECT 1 FROM task_outbox WHERE task_id=? AND type='result' AND disposition='delivered'",
                                           (task['id'],)).fetchone() or not self.app._conn.execute(
-                    'SELECT 1 FROM room_messages WHERE room_id=? AND thread_id=? AND turn_id=?',
-                    (room_id, task['thread_id'], task['turn_id'])).fetchone():
+                    "SELECT 1 FROM room_messages WHERE room_id=? AND thread_id=? AND report_task_id=? AND kind='report'",
+                    (room_id, task['report_thread_id'], task['id'])).fetchone():
                 reasons.append('result_to_room')
+            if task['scope'] != 'private' or task['room_id'] is not None:
+                reasons.append('work_not_private')
         if len(self.recorder.receipts) < 2 or self.app._conn.execute('SELECT COUNT(*) FROM routines').fetchone()[0]:
             reasons.append('no_action_or_implicit_schedule')
-        if not messages or messages[-1]['member_id'] != 0 or messages[-1]['kind'] != 'wrapup':
-            reasons.append('chief_not_last')
+        if any(message['kind'] == 'wrapup' for message in messages):
+            reasons.append('unasked_conclusion')
         if self.app._conn.execute("SELECT 1 FROM agent_messages WHERE kind='progress' AND turn_id IN "
                                   "(SELECT turn_id FROM room_messages WHERE room_id=?)", (room_id,)).fetchone():
             reasons.append('progress_in_messages')
@@ -626,21 +635,22 @@ class RpcDriver:
         # One action completes first, so the stop has finished work to keep. One call per request is what
         # models follow: live, 「連續呼叫兩次」 was done once and the cell waited out its timeout.
         await self.app.call('rooms.send',{'room_id':room['id'],'request_id':self.nonce+'-first',
-            'text':'@信件助理 現在呼叫 Guardian read 一次，再回報結果。'})
+            'text':'@信件助理 請 handoff 給自己在私人對話執行，stage_id=first-read：現在呼叫 Guardian read 一次，再向群組回報結果。'})
         while (self.app.rooms._exchanges.latest(room['id'])['state'] not in ('done','stopped') or self.app._conn.execute(
-                "SELECT 1 FROM worker_tasks WHERE room_id=? AND state IN ('queued','running','waiting')",(room['id'],)).fetchone()):
+                "SELECT 1 FROM worker_tasks WHERE COALESCE(report_room_id,room_id)=? AND state IN ('queued','running','waiting')",(room['id'],)).fetchone()):
             await asyncio.sleep(.02)
         if not self.recorder.receipts:
             return ['no_completed_action'],{'status':'done','text':''}
         armed=True
         await self.app.call('rooms.send',{'room_id':room['id'],'request_id':self.nonce,
-            'text':'@信件助理 現在再呼叫 Guardian read 一次，再回報結果。'})
+            'text':'@信件助理 請 handoff 給自己在私人對話執行，stage_id=second-read：現在再呼叫 Guardian read 一次，再向群組回報結果。'})
         while not entered.is_set():
-            if self.app.rooms._exchanges.latest(room['id'])['state'] in ('done','stopped'):
+            if self.app.rooms._exchanges.latest(room['id'])['state'] in ('done','stopped') and not self.app._conn.execute(
+                    "SELECT 1 FROM worker_tasks WHERE report_room_id=? AND state IN ('queued','running','waiting')", (room['id'],)).fetchone():
                 return ['action_not_in_flight'],{'status':'done','text':''}
             await asyncio.sleep(.02)
         before=len(self.recorder.receipts)
-        old=self.app._conn.execute("SELECT id,generation FROM worker_tasks WHERE room_id=? AND state='running'",(room['id'],)).fetchone()
+        old=self.app._conn.execute("SELECT id,generation FROM worker_tasks WHERE report_room_id=? AND state='running'",(room['id'],)).fetchone()
         started=time.perf_counter()
         await self.app.call('rooms.send',{'room_id':room['id'],'request_id':self.nonce+'-redirect',
             'text':'@信件助理 改為停止前只回報目前狀態。'})
@@ -648,7 +658,7 @@ class RpcDriver:
         await self.app.call('rooms.stop',{'room_id':room['id']})
         ack_ms=round((time.perf_counter()-started)*1000)
         release.set()
-        while self.app._conn.execute("SELECT 1 FROM worker_tasks WHERE room_id=? AND state IN ('queued','running','waiting')",(room['id'],)).fetchone():
+        while self.app._conn.execute("SELECT 1 FROM worker_tasks WHERE COALESCE(report_room_id,room_id)=? AND state IN ('queued','running','waiting')",(room['id'],)).fetchone():
             await asyncio.sleep(.02)
         reasons=[]
         current=self.app.background._store.get(old['id']) if old else None
@@ -656,10 +666,14 @@ class RpcDriver:
             reasons.append('generation_priority')
         if len(self.recorder.receipts)<before:
             reasons.append('completed_actions_lost')
-        if self.app._conn.execute("SELECT 1 FROM worker_tasks WHERE room_id=? AND state='done' AND generation>0",(room['id'],)).fetchone():
+        if self.app._conn.execute("SELECT 1 FROM worker_tasks WHERE report_room_id=? AND state='done' AND generation>0",(room['id'],)).fetchone():
             reasons.append('late_completion')
         await self.app.rooms.wait_idle()
         messages=(await self.app.call('rooms.messages',{'room_id':room['id']}))['messages']
+        self.events.append(('guardian.stop_state', {'messages':[
+            {key:message.get(key) for key in ('id','member_id','kind','status','origin_message_id')}
+            for message in messages], 'exchanges':[
+            dict(row) for row in self.app._conn.execute('SELECT origin_message_id,state,stop_requested,wrapup_sent,reason FROM room_exchanges WHERE room_id=?', (room['id'],))]}))
         if not messages or messages[-1]['member_id']!=0 or messages[-1]['kind']!='wrapup':
             reasons.append('chief_not_last_after_stop')
         self.events.append(('guardian.stop_timings',{'redirect_ms':redirect_ms,'stop_ack_ms':ack_ms,
@@ -1423,7 +1437,7 @@ class RpcDriver:
                 reasons.append('meeting_turn_primary_unknown')
                 break
         count = self.app._conn.execute('SELECT COUNT(*) FROM rooms').fetchone()[0]
-        again = await self.app.rooms.meeting({'member_ids':selected, 'agenda':'Reuse ' + self.nonce}, 'zh-TW', 2**50)
+        again = await self.seed_meeting({'member_ids':selected, 'agenda':'Reuse ' + self.nonce})
         if again['room_id'] != room['id'] or self.app._conn.execute('SELECT COUNT(*) FROM rooms').fetchone()[0] != count:
             reasons.append('meeting_did_not_reuse_exact_room')
         # Inspect accepted reuse without executing a second model discussion in this cell.

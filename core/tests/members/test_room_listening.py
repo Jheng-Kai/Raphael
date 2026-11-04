@@ -18,8 +18,9 @@ async def test_room_roles_do_not_dispatch_rounds_or_an_automatic_conclusion(rig,
     room, ids = await team(rig)
     await rig.call("rooms.update", {"room_id": room["id"], "roles": {str(ids[0]): "moderator", str(ids[1]): "con"}})
     exchange._exchanges.decision = Decision("Bob", Bob=.9)
+    source = exchange._history.add(session_id="meeting",question="Meet",route="answer",prefix="",text="",status="running",member_id=rig.service.primary_id())
     await exchange.meeting({"member_ids": [0, *ids], "agenda": "Discuss the release",
-                            "roles": {str(ids[0]): "moderator", str(ids[1]): "con"}}, "en", 47)
+                            "roles": {str(ids[0]): "moderator", str(ids[1]): "con"}}, "en", source)
     assert [row["member_id"] for row in rig.background.submitted] == [ids[1]]
     prompt = rig.background.submitted[-1]["text"].split("TeamContextSnapshot")[0]
     assert "Room-only roles" in prompt and "Everyone reads every message" in prompt
@@ -53,7 +54,8 @@ async def test_meeting_requires_the_current_chief_without_adding_raphael(rig, ex
     room, ids = await team(rig)
     await rig.call("members.set_primary", {"id": ids[1]})
     exchange._exchanges.decision = Decision("Alice")
-    result = await exchange.meeting({"member_ids": ids, "agenda": "Review the release", "roles": {}}, "en", 48)
+    source = exchange._history.add(session_id="meeting",question="Meet",route="answer",prefix="",text="",status="running",member_id=rig.service.primary_id())
+    result = await exchange.meeting({"member_ids": ids, "agenda": "Review the release", "roles": {}}, "en", source)
     assert result["member_ids"] == ids
     assert [row["member_id"] for row in rig.background.submitted] == [ids[0]]
     await finish(rig, exchange, "Ready.")
@@ -66,10 +68,9 @@ async def test_everyone_reads_and_those_who_care_most_speak_first(rig, exchange)
     exchange._exchanges.decision = decision
     await send(rig, room, "What should we do about the launch?")
     assert sorted(call["member"]["name"] for call in decision.calls) == ["Alice", "Bob", "Raphael"]
-    assert rig.background.submitted[-1]["member_id"] == ids[1]
-    await finish(rig, exchange, "Test first")
-    assert rig.background.submitted[-1]["member_id"] == ids[0]
-    assert "Test first" in rig.background.submitted[-1]["text"]
+    assert [row['member_id'] for row in rig.background.submitted] == [ids[1],ids[0]]
+    await finish(rig,exchange,'Test first')
+    assert 'Test first' not in rig.background.submitted[-1]['text']
 
 
 async def test_each_decision_reads_the_whole_room_as_that_member(rig, exchange):
@@ -138,7 +139,7 @@ async def test_a_cli_brain_reads_an_owners_message_in_a_turn_it_may_pass_but_not
     exchange._exchanges.decision = decision
     await send(rig, room, "Thoughts?")
     assert not any(call["member"]["name"] == "Alice" for call in decision.calls)
-    assert [s["member_id"] for s in rig.background.submitted] == [ids[1]]
+    assert [s["member_id"] for s in rig.background.submitted] == [ids[1],ids[0]]
     await finish(rig, exchange, "Mine are these")
     assert rig.background.submitted[-1]["member_id"] == ids[0]
     assert "Say exactly (pass)" in rig.background.submitted[-1]["text"]

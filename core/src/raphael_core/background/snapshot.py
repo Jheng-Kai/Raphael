@@ -184,10 +184,11 @@ class Snapshot:
     pool: Offer | None = None
     max_tier: Tier = Tier.T3
     _aliases: dict[str, str] = field(default_factory=dict, repr=False)
+    sealed: bool = False
 
     def refresh_plugins(self, plugins, member_id):
         """Replace stale grants before offering tools again; a snapshot grants no lasting access."""
-        if plugins is None:
+        if self.sealed or plugins is None:
             return
         before = set(self.pool.by_alias) if self.pool else set()
         for alias, tool in self.pool.by_alias.items() if self.pool else ():
@@ -225,6 +226,8 @@ class Snapshot:
 
     def refresh_computer(self, plugins, member_id):
         """Refresh this member's computer offer after a grant or driver discovery."""
+        if self.sealed:
+            return False
         before = {item["function"]["name"]: item for item in self.definitions
                   if item["function"]["name"].startswith("computer__")}
         old = {alias for alias, ref in self.refs.items() if ref.server == "computer"}

@@ -563,7 +563,7 @@ async def test_the_fast_tier_separates_durable_handoffs_from_bounded_consultatio
     assert team_tools_for(team.members, a, "問小財務") == []  # itself
     assert team_tools_for(team.members, b.asked_by(a), "問小財務") == ["handoff"]  # a work graph has its own durable bound
     assert team_tools_for(team.members, a, "今天天氣") == []
-    assert team_tools_for(team.members, a, always=True) == ["skill_read", "skills_list", "skill_manage", "handoff", "room_list", "room_post", "ask_member", "create_member", "room_meeting"]
+    assert team_tools_for(team.members, a, always=True) == ["skill_read", "skills_list", "skill_manage", "handoff", "room_list", "room_post", "ask_member", "create_member"]
     assert team_tools_for(team.members, b.asked_by(a), always=True) == ["skill_read", "skills_list", "skill_manage", "handoff", "room_list", "room_post", "ask_member"]
 
 

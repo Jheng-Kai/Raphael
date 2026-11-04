@@ -1,5 +1,51 @@
 # Raphael architecture and checked boundaries
 
+## Meeting speech and private work lanes (2026-11-04)
+
+Migration 60 preserves existing room rows and the compatibility active_turn column.
+room_exchange_turns is authoritative for per-round concurrent turns and seen_through;
+room_member_cursor is scoped to room, thread and member and advances after successful speech.
+The background worker remains the sole execution engine. Its ordinary work pool keeps
+three slots and one task per member; short room speech and tool-less CLI speak/pass
+choices share two separate slots. Selected models are never silently replaced.
+A sealed Snapshot prevents tool refresh or discovery from widening the speech offer.
+Speech offers handoff, room_post, ask_member and work_status only, with bounded calls
+and time; tool work and approvals belong to private conversations.
+
+Room handoff, including self-handoff, creates a private worker turn in Conversations.main
+of its assignee. worker_tasks.report_room_id/report_thread_id carry the public destination
+separately from execution scope. Children inherit that destination; private work reads its
+own member's context. Stage ownership, generation cancellation, task evidence, outbox and
+inbox retain their existing authority. Room Stop invalidates every linked tree before any
+transport cancellation. Member questions still return only to the asker.
+Cancelled, interrupted or invalidated lane reports remain visible but never request another digest.
+They wake existing exchanges to settle; owner-stop close-out waits for actual private
+work turns to finish, so its status reflects completed cancellation rather than stale work.
+
+Outbox delivery projects one kind=report message with a bounded public summary, verified
+evidence and a private turn link; no private turn/card object is returned in rooms.messages.
+A durable room_digest_requests key admits at most one digest round per report or post.
+Posts from an existing digest cannot create another digest; a queued follow-up never
+replaces running work on the computed per-member board. Explicit owner retries retain
+their private scope, original stage and room report destination.
+Chief decisions use kind=decision through room_post. Member posts and chief agendas keep
+their real author; only rooms.send creates owner interjections. Meetings target an existing
+room ID or reuse exact membership/name plus superset. Speech has at most three rounds,
+ten replies and two replies per directed mention pair; a cap with unserved intents closes
+from persisted facts. Restart publishes close-out and re-offers restart-blocked speech
+intents once, without replaying uncertain private work.
+
+The room status row shares pending-question styling outside ra-scroll and opens the
+shared popover. Reports share conversation-card and message-content's fileChipHTML.
+A task-artifact:<task>:<evidence> handle crosses the existing main-window-only
+open_team_file command. DesktopViewer resolves it through BackgroundService and
+TaskStore, never a caller-supplied filesystem path. The recorded workspace, containment,
+file size and current digest are checked before returning the native path. Readable
+extensions open; executables retain the existing show-in-folder policy.
+
+This section supersedes older descriptions of sequential speech and room-scope tool work.
+
+
 ## Pending owner questions in conversation cards (2026-11-04)
 
 OwnerQuestions.in_conversation projects only pending ask_owner rows joined to

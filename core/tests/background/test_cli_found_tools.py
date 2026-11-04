@@ -18,7 +18,7 @@ def loop_with(answers):
         return answers[call["name"]]
 
     run = SimpleNamespace(tool=tool, model="cli:codex", ledger=None, attachments=(), touch=lambda: None)
-    task = SimpleNamespace(id=4, member_id=3, language="en")
+    task = SimpleNamespace(id=4, member_id=3, language="en", scope="exchange")
     spec = {"system": "persona", "user": "task", "tools": [FIND]}
     return member_loop(None, None, task, run, spec, wait_s=1, progress=lambda text: None)
 

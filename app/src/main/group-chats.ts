@@ -1,3 +1,5 @@
+import { roomBoardHTML, roomReportHTML } from "./room-meeting";
+import { openMemberThread } from "./team-navigation";
 import { wholeLinks } from "./composer-links";
 import { readDraftWords, writeDraftWords } from "./composer-drafts";
 import { carryInlineSetup } from "./connection-setup";
@@ -38,7 +40,7 @@ import { NAME, eventLineHTML } from "./event-line";
 import { handoffGroupHTML } from "./handoff-line";
 import type { WireAttachment, HandoffView } from "./types";
 import type { AppContext, MembersList, Room, RoomMessage, RoomExchange, MainEvent } from "./types";
-import { btn, closeMenu, copyButton, esc, ico, iconButton, openMenu, patchHTML, sel, toaster } from "./ui";
+import { btn, closeMenu, copyButton, esc, ico, iconButton, openMenu, openPopover, patchHTML, sel, toaster } from "./ui";
 import "./automations.css";
 
 /** Why a member's room reply never came, by the core's reason for its blocked intent. */
@@ -226,6 +228,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const deliveries = new Map<number, Promise<void>>();
   let exchange:RoomExchange|null|undefined,replyTo:RoomMessage|undefined,stopping=false;
   let handoffs: HandoffView[] = [];
+  let decisions: import("./types").RoomDecision[] = [];
   const drawn = new WeakMap<Element, string>();
   let newestMessage = 0, drewOnce = false, refreshTimer: ReturnType<typeof setTimeout> | undefined;
   let rosterDirty = true;
@@ -260,6 +263,17 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   mountRichContent(scroll);
   mountOwnerQuestions(thread, () => { void refresh(); });
   const floatingQuestions = mountPendingQuestions(thread, scroll, () => refresh(), () => pendingQuestions && pendingQuestions.room === roomId ? pendingQuestions.questions : []);
+  const meetingRow = document.createElement("div"); meetingRow.className = "pending-questions room-meeting-row"; meetingRow.hidden = true;
+  scroll.parentElement!.prepend(meetingRow);
+  meetingRow.innerHTML = btn(`${ico("chat")}<span class="pending-question-title"></span>${ico("down")}`, "sm pending-question", ' aria-haspopup="dialog" aria-expanded="false" data-room-board-toggle');
+  let meetingPanel: HTMLElement | undefined;
+  meetingRow.addEventListener("click", () => {
+    if (meetingPanel?.isConnected) { closeMenu(); return; }
+    meetingPanel = openPopover(meetingRow.querySelector("button")!, boardHTML(), {
+      className: "menu room-meeting-board", role: "dialog", label: t("rooms.board"), onClose: () => { meetingPanel = undefined; },
+    });
+    meetingPanel.focus();
+  });
   const resultCards = new WeakMap<HTMLElement, { sync(): void }>();
   mountConversationCardActions(thread, () => _app.go("settings", "connections"));
   const pagesHost = mountPages(thread, { send: text => {
@@ -331,7 +345,8 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   });
   const questionSlot = document.createElement("div"); questionSlot.className = "ra-bgq"; questionSlot.append(questions.element); status.after(questionSlot);
   const person=(id:number|null)=>list.members.find(m=>m.id===id);
-  const roomStamp = (): string => JSON.stringify([list, room, exchange, messages, handoffs, replyTo, sendingRooms.has(roomId!), stopping, loadingOlder]);
+  const boardHTML = (): string => roomBoardHTML(handoffs, decisions, (id, name) => faceHTML(person(id) ?? {id, name}, 28));
+  const roomStamp = (): string => JSON.stringify([list, room, exchange, messages, handoffs, decisions, replyTo, sendingRooms.has(roomId!), stopping, loadingOlder]);
   function draw():void {
     if(!room)return;
     snapshot = roomStamp();
@@ -344,13 +359,18 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     if (exchange?.routing?.fallback) statusHTML += `<span role="status">${esc(t("rooms.routingFallback"))}</span>`;
     patchHTML(status, statusHTML);
     patchHTML(older, canOlder?btn(esc(t("rooms.older")),"sm",` data-room-act="older"${loadingOlder?" disabled":""}`):"");
+    meetingRow.hidden = !handoffs.length && !decisions.length;
+    meetingRow.querySelector('.pending-question-title')!.textContent = t("rooms.boardCount", {p0:handoffs.length,p1:decisions.length});
+    if (meetingPanel?.isConnected) {
+      if (meetingRow.hidden) closeMenu(); else patchHTML(meetingPanel, boardHTML());
+    }
     const faceOf=(id:number,name:string)=>faceHTML(person(id)??{id,name},20);
     // A reply that never came stands where its exchange stopped: after its last message, before its wrap-up.
     const blocked=(exchange?.reply_intents??[]).filter(intent=>intent.state==="blocked").flatMap(intent=>{
       const anchor=messages.filter(m=>(m.origin_message_id??m.id)===intent.origin_message_id&&m.kind!=="wrapup").pop();
       return anchor?[{created:anchor.created,order:1,intent}]:[];
     });
-    const entries=[...messages.map(message=>({created:message.created,order:0,message})),...handoffs.map(task=>({created:task.created_at_ms,order:0,task})),...blocked]
+    const entries=[...messages.map(message=>({created:message.created,order:0,message})),...handoffs.filter(task=>!messages.some(message=>message.report?.task_id===task.task_id)).map(task=>({created:task.created_at_ms,order:0,task})),...blocked]
       .sort((a,b)=>a.created-b.created||a.order-b.order);
     const addressable=mentionTargets(list);
     const grouped = entries.flatMap<{ entry: typeof entries[number]; tasks: HandoffView[] }>((entry, index) => {
@@ -376,6 +396,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
         }))}</li>`;
       }
       const m=entry.message;
+      if (m.kind === "report" && m.report) return `<li class="tn" data-room-message="${m.id}">${roomReportHTML(m)}</li>`;
       if(m.member_id!==null&&m.status==="running"&&!m.text.trim()&&(!m.turn||!waitsAtCard(m.turn))) {
         const member=person(m.member_id);
         return `<li class="tn au-room-thinking" data-room-message="${m.id}" role="status"><div class="ra-body"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${livePresenceHTML({face:()=>member?faceHTML(member,28):"",activityLabel:member?.activity_label},m.turn?latestProgress(m.turn):undefined)}</div></li>`;
@@ -427,7 +448,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       pendingQuestions={room:id,questions:history.pending_questions??[]};floatingQuestions.sync();
       if (found.unread && !el.closest("[hidden]")) await api.roomsUpdate(id, { read: true, read_through: history.messages[history.messages.length - 1]?.id ?? 0 });
       if (mine!==generation||!opened) return;
-      handoffs=history.handoffs??[];
+      handoffs=history.handoffs??[]; decisions=history.decisions??[];
       const first=history.messages[0]?.id??Infinity;messages=[...messages.filter(m=>m.id<first),...history.messages];
       const next = roomStamp();
       if (next !== snapshot) { snapshot = next; draw(); }
@@ -439,10 +460,11 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     }
   }
   async function stopRoom():Promise<void>{if(!room||stopping)return;stopping=true;const id=room.id;if(sendingRooms.has(id))pendingStops.add(id);try{await api.roomStop(id);await refresh();}finally{stopping=false;}}
-  function close():void{if(!opened)return;finder.close(false);saveRoomDraft();composer.stopVoice();drop.reset();attachmentMedia.reset();questions.reset();opened=false;roomId=undefined;generation++;clearTimeout(refreshTimer);refreshTimer=undefined;el.hidden=true;composer.setTaskState("idle");clearRoomSelection();onClose();}
+  function close():void{if(!opened)return;if(meetingPanel?.isConnected)closeMenu();finder.close(false);saveRoomDraft();composer.stopVoice();drop.reset();attachmentMedia.reset();questions.reset();opened=false;roomId=undefined;generation++;clearTimeout(refreshTimer);refreshTimer=undefined;el.hidden=true;composer.setTaskState("idle");clearRoomSelection();onClose();}
   el.querySelector('[data-room-menu]')!.addEventListener('click',e=>{if(room)roomActions(e.currentTarget as HTMLElement,room,()=>void refresh(),close);});
   el.addEventListener('click',e=>{const target=(e.target as Element).closest<HTMLElement>('[data-room-act],[data-act]');if(!target)return;const act=target.dataset.roomAct??target.dataset.act;if(["turn","copy-message","copy-code","attachment-open","attachment-image","older"].includes(act??""))e.stopPropagation();
-    if(act==="members"&&room)void editRoomMembers(room,()=>void refresh());
+    if(act==="private-work") openMemberThread(_app,Number(target.dataset.member),Number(target.dataset.turn));
+    else if(act==="members"&&room)void editRoomMembers(room,()=>void refresh());
     else if(act==="expand-message") {
       e.stopPropagation();
       const id = Number(target.closest<HTMLElement>('[data-room-message]')?.dataset.roomMessage), expanded = !expandedMessages.has(id);
@@ -459,6 +481,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     else if(act==="copy-code")void copyButton(target, target.closest('.message-code')?.querySelector('code')?.textContent??"").catch(error=>toaster.info(describeError(error)));
     else if(act==="attachment-image"){const src=attachmentMedia.source(target);if(src)openMediaLightbox(target,src);}
     else if(act==="attachment-open")void api.openAttachment(target.dataset.id??"").catch(()=>toaster.info(t("agent.fileUnavailable")));
+    else if(act==="artifact-open")void api.openTeamFile(`task-artifact:${target.dataset.task}:${target.dataset.evidence}`).catch(()=>toaster.info(t("agent.fileUnavailable")));
     else if(act==="team-file-open")void api.openTeamFile(target.dataset.path??"").catch(()=>toaster.info(t("agent.fileUnavailable")));
     else if(act==="older"&&!loadingOlder&&room&&messages.length){loadingOlder=true;draw();const id=room.id,mine=generation;void api.roomMessages(id,messages[0].id).then(result=>{if(mine!==generation||!opened)return;canOlder=result.messages.length===100;messages=[...new Map([...result.messages,...messages].map(m=>[m.id,m])).values()].sort((a,b)=>a.id-b.id);}).catch(error=>toaster.info(describeError(error))).finally(()=>{loadingOlder=false;if(opened)draw();});}
   });
@@ -475,6 +498,9 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   };listeners.add(listener);onLocaleChange(()=>{if(opened)draw();});
   onAvatarChange(()=>{if(opened && el.isConnected)draw();});
   return {el,close,refresh,async open(id:number){
+    if (meetingPanel?.isConnected) closeMenu();
+    meetingRow.hidden = true;
+    decisions = [];
     finder.close(false);
     saveRoomDraft();
     attachmentMedia.reset();questions.reset();

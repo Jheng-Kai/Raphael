@@ -12,8 +12,8 @@ CEILING_PATIENCE = 3
 
 
 class RoomCliSessions:
-    """Room turns receive their full transcript and never resume a private member conversation.
-    A loop keeps its own native session in memory, only to start the same CLI again while it runs."""
+    """Each execution receives its scoped prompt without resuming another native conversation.
+    A loop retains its own session only while the same task runs or resumes."""
     def __init__(self):
         self.locks = {}
         self.conversations = SimpleNamespace(resolve=lambda member, conversation: conversation)
@@ -35,6 +35,8 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
     async def execute(call_id, name, arguments):
         if name == "cli_permission":
             # Native shell/file permission is not an alternative to Raphael's tool gate, unless the owner gave them all.
+            if task.scope == "room":
+                return ToolOutcome(False,"room_speech_only",instruction="Start this as private work with handoff.")
             return ToolOutcome(True, None) if getattr(run._gate, "full_permission", False) else ToolOutcome(False, "use_mcp_tools")
         try:
             result = await run.tool({"call_id":call_id, "name":name, "arguments":arguments})
@@ -76,6 +78,9 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
         extra = [item for item in loop.tools if item["function"]["name"] in ("cli_permission", "approve")]
         loop.tools[:] = [*run.snapshot.definitions, *extra]
         return loop.tools
+    if task.scope == 'room':
+        loop.speech_only = True
+        loop.tools[:] = list(spec['tools'])
     loop.refresh_tools = refresh_tools
     return loop
 

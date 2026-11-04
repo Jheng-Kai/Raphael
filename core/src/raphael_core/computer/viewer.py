@@ -142,6 +142,7 @@ class DesktopViewer:
         self.tasks = set()
         self.control_lock = asyncio.Lock()
         self.teaching = None
+        self.task_artifact = lambda task, evidence: None
         self.open_lock = asyncio.Lock()
         self.client = httpx.AsyncClient(trust_env=False, timeout=10)
 
@@ -166,6 +167,12 @@ class DesktopViewer:
     async def team_file(self, params):
         """Where a file of the team folder is on this PC, for the owner's own press. A folder on another computer has no such place."""
         path = params.get("path")
+        artifact = re.fullmatch(r"task-artifact:([1-9][0-9]*):([1-9][0-9]*)", path) if isinstance(path, str) else None
+        if artifact:
+            found = self.task_artifact(*(int(value) for value in artifact.groups()))
+            if found is None:
+                raise invalid_params("artifact unavailable")
+            return {"path": str(found), "reads": found.suffix.lower() in READABLE}
         target = self.vm.target(0)
         if type(path) is not str or not path.startswith(SHARED + "/") or target.remote or target.shared is None:
             raise invalid_params("not a team file on this computer")

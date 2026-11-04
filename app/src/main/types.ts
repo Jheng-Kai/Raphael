@@ -1007,13 +1007,18 @@ export interface RoomMessage {
   turn?: AgentTurn;
   id: number; room_id: number; member_id: number | null; text: string; created: number;
   request_id: string | null; reply_to: number | null; turn_id: number | null;
-  reply_to_member?: number | null; origin_message_id?: number | null; kind?: "message" | "wrapup";
+  reply_to_member?: number | null; origin_message_id?: number | null; kind?: "message" | "wrapup" | "report" | "decision";
+  seen_through?: number | null;
+  report?: HandoffView | null;
   status: string; cost?: number; attachments?: TurnAttachment[];
   scope?: "room"; thread_id?: number;
   reply_reference?: { message_id: number; author_kind?: "owner" | "member"; author_member_id?: number | null; unavailable?: boolean } | null;
 }
 
 export interface HandoffView {
+  started_at_ms?: number | null;
+  finished_at_ms?: number | null;
+  conversation_id?: number | null;
   waiting_owner?: number;
   /** Null for a quick question (`ask_member`), which has no task: `work_turn_id` is its record. */
   task_id: number | null; source_turn_id: number; work_turn_id: number; member_id: number;
@@ -1023,16 +1028,19 @@ export interface HandoffView {
   /** What was sent to the colleague: a consultation's question. */
   request?: string;
   /** An artifact's `uri` is its path inside the task's workspace. */
-  evidence: { kind: string; digest: string; verdict: string; uri?: string; mime?: string }[];
+  evidence: { id?: number; kind: string; digest: string; verdict: string; uri?: string; mime?: string }[];
 }
 
 export interface RoomExchange {
+  active_turns?: { turn_id: number; member_id: number; round: number; seen_through: number; state: string }[];
   origin_message_id: number; room_id: number; state: "queued" | "running" | "done" | "stopped";
   turns_taken: number; hops: number; chime_ins: number; cost: number; stop_requested: number;
   routing?: { fallback?: string; model?: string };
   /** The latest exchange's intents and every blocked one of the room; `origin_message_id` names its exchange. */
   reply_intents?: { id: number; origin_message_id: number; source_message_id: number; recipient_id: number; recipient_name: string; state: string; reason: string }[];
 }
+
+export interface RoomDecision { id: number; member_id: number; text: string }
 
 /** A routine of `routines.list`. Times are ms; null for never. */
 export type RoutineWhen = RoutineEventWhen | { webhook: true; app?: never; event?: never; filter?: never };

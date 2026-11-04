@@ -1,5 +1,13 @@
 # Raphael feature map
 
+## Meetings and private work (2026-11-04)
+
+See [Team and rooms](team-and-rooms.md#meetings-and-private-work-2026-11-04)
+for R-ROOM-01 through R-ROOM-07, concurrent snapshots, private work/report destinations,
+status/decisions/cursors, restart close-out and the selected deferred look scenes.
+The unit brief permits offline verification only and explicitly forbids look/network.
+
+
 ## Responsive member computer (2026-11-04)
 
 See [Member computer](member-computer.md#responsive-computer-tools-2026-11-04)

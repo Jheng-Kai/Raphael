@@ -1,4 +1,4 @@
-"""Room exchanges: everyone reads and decides for themselves, addresses are answered, member turns one at a time."""
+"""Room exchanges: everyone reads and decides for themselves, addresses are answered, concurrent turns on a shared snapshot."""
 import pytest
 from raphael_core.agent.history import AgentHistory
 from raphael_core.members.rooms import RoomsService
@@ -58,11 +58,19 @@ async def send(rig, room, text, key="one", **patch):
 
 
 async def finish(rig, exchange, text, cost=.001):
-    task_id, turn = rig.background.attached[-1]
+    task_id, turn = next((task,turn) for task,turn in rig.background.attached if AgentHistory(rig.conn).get(turn).status == "running")
     AgentHistory(rig.conn).resolve(turn, prefix="", text=text, status="done", cost_usd=cost)
     rig.background.store.finish(task_id,'done',prefix='',text=text,detail=None,reason=None)
     exchange.turn_arrived(turn)
     await exchange.wait_idle()
+
+
+def meeting_source(rig, key, member_id=None):
+    """A real private chief turn, stable across retries of the same tool call."""
+    session = f'meeting-source-{key}'
+    row = rig.conn.execute('SELECT id FROM agent_turns WHERE session_id=?', (session,)).fetchone()
+    return row[0] if row else AgentHistory(rig.conn).add(session_id=session, question='Review the release',
+        route='answer', prefix='', text='', status='running', member_id=rig.service.primary_id() if member_id is None else member_id)
 
 
 async def history(rig, room):
@@ -101,22 +109,20 @@ async def test_decider_and_worker_read_only_the_origin_thread(rig, exchange):
     assert 'Current thread question' in rig.background.submitted[-1]['text']
 
 
-async def test_everyone_is_sequential_a_pass_is_hidden_and_no_one_sums_up(rig, exchange):
+async def test_everyone_speaks_on_one_snapshot_and_a_pass_is_hidden(rig, exchange):
     room, ids = await team(rig)
     await send(rig, room, "@everyone report")
-    assert len(rig.background.submitted) == 1
+    assert [row['member_id'] for row in rig.background.submitted] == [0,*ids]
+    snapshots = [row['seen_through'] for row in (await history(rig,room))['exchange']['active_turns']]
+    assert len(set(snapshots)) == 1
     await finish(rig, exchange, "Alice owns testing")
-    assert rig.background.submitted[-1]["member_id"] == ids[0]
-    assert "Alice owns testing" in rig.background.submitted[-1]["text"]
+    assert all('Alice owns testing' not in row['text'] for row in rig.background.submitted[1:])
     await finish(rig, exchange, "(pass)")
-    assert rig.background.submitted[-1]["member_id"] == ids[1]
     await finish(rig, exchange, "Bob owns release")
     result = await history(rig, room)
-    assert all(m["text"] != "(pass)" for m in result["messages"])
-    assert all(m["kind"] != "wrapup" for m in result["messages"])
-    assert result["exchange"]["state"] == "done"
-    assert result["exchange"]["turns_taken"] == 3
-
+    assert all(m['text'] != '(pass)' for m in result['messages'])
+    assert all(m['kind'] != 'wrapup' for m in result['messages'])
+    assert result['exchange']['state'] == 'done' and result['exchange']['turns_taken'] == 3
 
 async def test_a_removed_default_responder_is_presented_as_auto_for_room_editing(rig, exchange):
     room, ids = await team(rig, default_responder="member:1")
@@ -126,47 +132,45 @@ async def test_a_removed_default_responder_is_presented_as_auto_for_room_editing
     await rig.call("rooms.update", {"room_id":room["id"], "member_ids":view["member_ids"], "default_responder":view["default_responder"]})
 
 
-async def test_explicit_handoffs_survive_the_fourth_hop_and_repeated_speakers(rig, exchange):
+async def test_mentions_are_bounded_and_close_out_instead_of_ping_pong(rig, exchange):
     room, ids = await team(rig)
     await send(rig, room, "@Alice plan")
-    for text in ("@Bob check", "@Alice disagree", "@Bob please revise", "@Alice check again"):
+    for text in ("@Bob check", "@Alice disagree", "@Bob please revise"):
         await finish(rig, exchange, text)
-    assert [s["member_id"] for s in rig.background.submitted] == [ids[0],ids[1],ids[0],ids[1],ids[0]]
-    await finish(rig, exchange, 'Ready')
-    assert (await history(rig, room))["exchange"]["hops"] == 4
-    assert (await history(rig, room))["exchange"]["state"] == "done"
+    result = await history(rig,room)
+    assert [row['member_id'] for row in rig.background.submitted] == [ids[0],ids[1],ids[0]]
+    assert result['exchange']['state'] == 'stopped' and result['exchange']['reason'] == 'reply_budget'
+    assert result['messages'][-1]['kind'] == 'wrapup'
 
-
-async def test_colleagues_read_what_was_said_and_the_talk_stops_when_no_one_has_more(rig, exchange):
+async def test_only_mentions_start_a_following_round(rig, exchange):
     room, ids = await team(rig)
     exchange._exchanges.decision = Decision("Bob", "Alice")
-    await send(rig, room, "@Alice plan")
-    await finish(rig, exchange, "Ship today")
-    assert rig.background.submitted[-1]["member_id"] == ids[1]
-    await finish(rig, exchange, "Test first")
-    assert rig.background.submitted[-1]["member_id"] == ids[0]
-    await finish(rig, exchange, "Fair, test first")
-    result = await history(rig, room)
-    assert result["exchange"]["state"] == "done"
-    assert [m["member_id"] for m in result["messages"]] == [None, ids[0], ids[1], ids[0]]
-
-
-async def test_interjection_preempts_old_queue_stop_and_duplicate_notifications(rig, exchange):
-    room, ids = await team(rig)
-    await send(rig, room, "@everyone report")
-    first = rig.background.attached[-1][1]
-    await send(rig, room, "@Bob only after testing", "two")
+    await send(rig,room,"@Alice plan")
+    await finish(rig,exchange,"Ship today")
+    assert (await history(rig,room))['exchange']['state'] == 'done'
     assert len(rig.background.submitted) == 1
-    await finish(rig, exchange, "Current turn finishes")
-    assert rig.background.submitted[-1]["member_id"] == ids[1]
+    await send(rig,room,"@Alice reconsider",key='second')
+    await finish(rig,exchange,"@Bob test first")
+    assert rig.background.submitted[-1]['member_id'] == ids[1]
+    assert 'test first' in rig.background.submitted[-1]['text']
+
+async def test_interjection_has_its_own_snapshot_and_duplicate_arrivals_do_not_resubmit(rig, exchange):
+    room, ids = await team(rig)
+    await send(rig,room,"@everyone report")
+    first = rig.background.attached[0][1]
+    reply = await send(rig,room,"@Bob only after testing","two")
+    assert len(rig.background.submitted) == 4
+    owner = rig.conn.execute('SELECT member_id,text FROM room_messages WHERE id=?',(reply['message_id'],)).fetchone()
+    assert tuple(owner) == (None,'@Bob only after testing')
+    await finish(rig,exchange,'Current turn finishes')
     exchange.turn_arrived(first)
     await exchange.wait_idle()
-    assert len(rig.background.submitted) == 2
-    await rig.call("rooms.stop", {"room_id":room["id"]})
-    await finish(rig, exchange, "Done")
-    assert (await history(rig, room))["exchange"]["state"] == "stopped"
-    assert len(rig.background.submitted) == 2
-
+    assert len(rig.background.submitted) == 4
+    await rig.call('rooms.stop',{'room_id':room['id']})
+    for _ in range(3):
+        await finish(rig,exchange,'Done')
+    assert (await history(rig,room))['exchange']['state'] == 'stopped'
+    assert len(rig.background.submitted) == 4
 
 async def test_only_stop_cancels_the_replies_and_the_work_assigned_to_members(rig, exchange):
     cancelled = []
@@ -183,17 +187,16 @@ async def test_only_stop_cancels_the_replies_and_the_work_assigned_to_members(ri
     assert cancelled == [True]
 
 
-async def test_cost_and_restart_stop_without_replay(rig, exchange):
+async def test_cost_and_restart_preserve_completed_speech(rig, exchange):
     room, ids = await team(rig)
-    await send(rig, room, "@everyone report")
-    await finish(rig, exchange, "@Alice continue", cost=10)
+    await send(rig,room,'@Alice report')
+    await finish(rig,exchange,'@Bob continue',cost=10)
     assert len(rig.background.submitted) == 1
-    assert (await history(rig, room))["exchange"]["reason"] == "cost"
-    await send(rig, room, "@Alice again", "two")
-    restored = RoomsService(rig.conn, members=rig.service, background=rig.background)
-    assert (await restored._messages({"room_id":room["id"]}))["exchange"]["state"] == "stopped"
+    assert (await history(rig,room))['exchange']['reason'] == 'cost'
+    await send(rig,room,'@Alice again','two')
+    restored = RoomsService(rig.conn,members=rig.service,background=rig.background)
+    assert (await restored._messages({'room_id':room['id']}))['exchange']['state'] == 'stopped'
     assert len(rig.background.submitted) == 2
-
 
 async def test_six_explicit_recipients_all_answer(rig, exchange):
     room, ids = await team(rig)

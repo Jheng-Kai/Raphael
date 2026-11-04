@@ -4,6 +4,10 @@ import { missingJa } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const ja = {
+  "rooms.boardCount": "作業 {p0} · 決定 {p1}",
+  "rooms.board": "作業と決定",
+  "rooms.decisions": "決定",
+  "rooms.privateWork": "個別の作業を開く",
   "composio.result": "結果",
   "composio.fieldSeparator": "：",
   "composio.resultDone": "完了",

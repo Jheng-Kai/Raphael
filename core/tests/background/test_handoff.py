@@ -67,7 +67,7 @@ def args(target,**changes):
     ({'ready_at_ms':9999999999999},'bad_arguments'),({'dispatch_policy':'scheduled'},'bad_arguments')])
 async def test_refused_handoff_has_named_reason_and_no_receipt(make_rig,bad,reason):
     rig=make_rig()
-    target,source=setup(rig)
+    target,source=setup(rig,room=False)
     result=rig.service.handoff(RAPHAEL,args(target,**bad),source_turn_id=source.id,language='zh-TW')
     assert not result.ok and result.error==reason
     assert result.instruction and reason not in result.instruction
@@ -143,7 +143,7 @@ async def test_a_refused_handoff_tells_the_model_what_to_do_instead_of_a_code(ma
 async def test_a_handoff_back_to_a_colleague_waiting_upstream_is_refused(make_rig):
     # Live, members bounced one verification request between them ten times.
     rig=make_rig()
-    target,source=setup(rig)
+    target,source=setup(rig,room=False)
     first=rig.service.handoff(RAPHAEL,args(target,mode='consult'),source_turn_id=source.id,language='en')
     back=rig.service.handoff(target,args(target,member_id=0,stage_id='back'),source_turn_id=first.data['work_turn_id'],language='en')
     assert (back.ok,back.error)==(False,'handoff_cycle') and back.instruction
@@ -171,7 +171,7 @@ async def test_receipt_dedupe_stage_conflict_and_removed_member(make_rig):
     assert first.ok and first.data['task_id']==again.data['task_id'] and again.data['duplicate']
     task=rig.task(first.data['task_id'])
     assert task.state=='queued' and task.ready_at_ms==task.created_at_ms==rig.wall.now
-    assert task.scope=='room' and task.model_ref=='fake/model' and task.root_task_id==task.id
+    assert task.scope=='private' and task.report_room_id==source.room_id and task.model_ref=='fake/model' and task.root_task_id==task.id
     assert json.loads(task.schedule_provenance)['source_turn_id']==source.id
     assert rig.service.handoff(RAPHAEL,args(target,request='Different work'),source_turn_id=source.id,language='zh-TW').error=='stage_conflict'
     with rig.conn:
@@ -190,6 +190,7 @@ async def test_a_turn_hands_off_every_item_at_once_and_resumes_once(make_rig,mon
     SettingsStore(rig.conn).set('agent_model',model)
     target,source=setup(rig,model=model)
     other=colleague(rig,source,target,'Reviewer')
+    source=AgentHistory(rig.conn).get(AgentHistory(rig.conn).add(session_id='private-source',question='Start work',route='answer',prefix='',text='',status='running'))
     items=[args(target),args(other,stage_id='review',request='Review the source now.')]
     parent=rig.service.submit(session_id='parent',text='Start both items now',language='zh-TW',model=model)
     rig.service.attach_turn(parent,source.id)
@@ -226,6 +227,7 @@ async def test_parent_releases_slot_real_file_result_and_resume_once(make_rig,tm
     model='cli:codex:gpt-5.6-terra' if brain=='cli' else 'fake/model'
     SettingsStore(rig.conn).set('agent_model',model)
     target,source=setup(rig,model=model)
+    source=AgentHistory(rig.conn).get(AgentHistory(rig.conn).add(session_id='private-source',question='Start work',route='answer',prefix='',text='',status='running'))
     server=await rig.plugins.connect(look='T1')
     output=tmp_path/'result.html'
     nonce='fixture-'+deadline
@@ -266,12 +268,12 @@ async def test_parent_releases_slot_real_file_result_and_resume_once(make_rig,tm
     assert receipt==[hashlib.sha256(output.read_bytes()).hexdigest()] and nonce in output.read_text(encoding='utf8')
     assert len(rig.service._store.evidence(child.id))==2
     assert rig.conn.execute('SELECT COUNT(*) FROM routines').fetchone()[0]==0
-    assert rig.conn.execute("SELECT COUNT(*) FROM room_messages WHERE turn_id=?",(child.turn_id,)).fetchone()[0]==1
+    assert rig.conn.execute("SELECT COUNT(*) FROM task_inbox WHERE event_id=?",(str(child.id)+":result",)).fetchone()[0]==1
     assert rig.conn.execute('SELECT consumed_at_ms FROM task_inbox WHERE parent_task_id=?',(parent,)).fetchone()[0] is not None
     assert rig.conn.execute('SELECT COUNT(*) FROM task_executions WHERE task_id=?',(parent,)).fetchone()[0]==2
     rig.service._deliver_handoffs()
     assert not rig.service._store.resume_from_inbox(parent)
-    assert AgentHistory(rig.conn).recent(10,member_id=target.id)==[]
+    assert AgentHistory(rig.conn).list(10,member_id=target.id)==[]
     assert '已核對成果' in AgentHistory(rig.conn).get(source.id).text
 
 
@@ -296,7 +298,7 @@ async def test_a_consultation_answers_from_what_the_asked_member_knows_and_the_a
     rig=make_rig()
     model='cli:codex:gpt-5.6-terra' if brain=='cli' else 'fake/model'
     SettingsStore(rig.conn).set('agent_model',model)
-    target,source=setup(rig,model=model,room=brain=='cli')
+    target,source=setup(rig,model=model,room=False)
     knowing(rig,tmp_path,target)
     ask=args(target,mode='consult',stage_id='code',request='新品代號是什麼？',done_when='Answer the question.')
     seen={}
@@ -327,12 +329,8 @@ async def test_a_consultation_answers_from_what_the_asked_member_knows_and_the_a
     await until(lambda:rig.task(parent).state in ('done','failed'),timeout=10)
     assert rig.task(parent).state=='done', rig.task(parent)
     [child]=rig.service._store.handoffs(source.id)
-    if brain == 'cli':  # this variant works in a room, where only shared notes are readable
-        assert 'PRIVATE-CHAT' not in seen['asked'] and 'PRIVATE-NOTE' not in seen['asked']
-        assert '品牌主色是金色' in seen['asked']
-    else:
-        assert all(known in seen['asked'] for known in ('PRIVATE-CHAT','PRIVATE-NOTE','品牌主色是金色'))
-    assert ('history_search' in seen['tools']) == (brain == 'api')
+    assert all(known in seen['asked'] for known in ('PRIVATE-CHAT','PRIVATE-NOTE'))
+    assert 'history_search' in seen['tools']
     assert 'memory_read' not in seen['tools']
     # Only the answer reaches the asker: never the asked member's conversation or notes.
     assert 'PRIVATE-CHAT' in seen['asker'] and 'PRIVATE-NOTE' not in seen['asker'] and '好，我記住了' not in seen['asker']
@@ -484,9 +482,9 @@ async def test_assigned_work_reads_the_shared_notes_but_never_the_assignees_priv
     [assigned]=rig.client.chat_calls
     shown=json.dumps(assigned['messages'],ensure_ascii=False)
     assert '品牌主色是金色' in shown
-    assert 'PRIVATE-CHAT' not in shown and 'PRIVATE-NOTE' not in shown
+    assert ('PRIVATE-CHAT' in shown) is room and ('PRIVATE-NOTE' in shown) is room
     tools=[tool['function']['name'] for tool in assigned['tools']]
-    assert 'memory_read' not in tools and 'history_search' not in tools
+    assert 'memory_read' not in tools and ('history_search' in tools) is room
 
 
 @pytest.mark.parametrize('room',[True,False])
@@ -515,7 +513,7 @@ async def test_restart_recovers_queued_child_and_waiting_parent_once(make_rig,mo
     rig=make_rig()
     model='cli:codex:gpt-5.6-terra' if brain=='cli' else 'fake/model'
     SettingsStore(rig.conn).set('agent_model',model)
-    target,source=setup(rig,model=model)
+    target,source=setup(rig,model=model,room=False)
     team=rig.service._team
     queued=asyncio.Event()
     execute=rig.service._execute
@@ -559,7 +557,7 @@ async def test_restart_recovers_queued_child_and_waiting_parent_once(make_rig,mo
     await until(lambda:resumed.task(parent).state=='done')
     assert resumed.task(child.id).state=='done'
     assert resumed.conn.execute('SELECT COUNT(*) FROM task_executions WHERE task_id=?',(child.id,)).fetchone()[0]==1
-    assert resumed.conn.execute("SELECT COUNT(*) FROM room_messages WHERE request_id=?",('handoff-'+str(child.id),)).fetchone()[0]==1
+    assert resumed.conn.execute("SELECT COUNT(*) FROM task_inbox WHERE event_id=?",(str(child.id)+':result',)).fetchone()[0]==1
     resumed.service._deliver_handoffs()
     assert not resumed.service._store.resume_from_inbox(parent)
 
@@ -580,7 +578,7 @@ async def test_clearing_handoff_erases_receipts_and_allows_new_work(make_rig):
 
 async def test_deleted_assignee_keeps_terminal_receipt_and_wakes_parent(make_rig,monkeypatch):
     rig=make_rig()
-    target,source=setup(rig)
+    target,source=setup(rig,room=False)
     pump=rig.service._ensure_pump
     monkeypatch.setattr(rig.service,'_ensure_pump',lambda:None)
     parent=rig.submit(language='zh-TW')
@@ -596,7 +594,7 @@ async def test_deleted_assignee_keeps_terminal_receipt_and_wakes_parent(make_rig
     assert rig.task(child).state=='failed' and rig.task(child).reason=='member_unknown_or_removed'
     assert rig.task(parent).state=='queued'
     assert rig.service._child_results(parent)[0]['state']=='withheld'
-    assert rig.service.handoff_views(room_id=source.room_id)[0]['result']==''
+    assert rig.service.handoff_views(source_turn_id=source.id)[0]['result']==''
     rig.client.replies.append(report('成員已移除，工作未完成。'))
     monkeypatch.setattr(rig.service,'_ensure_pump',pump)
     pump()
@@ -714,7 +712,7 @@ async def test_stop_tree_preserves_receipts_and_rejects_late_terminal(make_rig,m
     rig=make_rig()
     model='cli:codex:gpt-5.6-terra' if brain=='cli' else 'fake/model'
     SettingsStore(rig.conn).set('agent_model',model)
-    target,source=setup(rig,model=model)
+    target,source=setup(rig,model=model,room=False)
     started=asyncio.Event()
     async def late(**kwargs):
         started.set()

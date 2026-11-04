@@ -45,3 +45,19 @@ async def test_a_team_folder_on_another_computer_has_no_place_here(tmp_path):
             await found.team_file({"path": "/home/cua/team/index.html"})
     finally:
         await found.client.aclose()
+
+
+async def test_a_recorded_task_file_uses_the_same_read_only_opening_policy(tmp_path):
+    found = viewer(None, remote="another-computer")
+    page = (tmp_path / "review.html").resolve()
+    program = (tmp_path / "setup.exe").resolve()
+    files = {(42, 51): page, (42, 52): program}
+    found.task_artifact = lambda task, evidence: files.get((task, evidence))
+    try:
+        assert await found.team_file({"path": "task-artifact:42:51"}) == {"path": str(page), "reads": True}
+        assert (await found.team_file({"path": "task-artifact:42:52"}))["reads"] is False
+        for path in ("task-artifact:42:53", "task-artifact:0:51", "task-artifact:42:../secret"):
+            with pytest.raises(RpcError):
+                await found.team_file({"path": path})
+    finally:
+        await found.client.aclose()
