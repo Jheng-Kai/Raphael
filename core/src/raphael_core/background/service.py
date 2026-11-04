@@ -1439,6 +1439,7 @@ class BackgroundService:
                        'Answer the owner now with what they said, in your own words; do not ask them again.')
         spec = {
             "task_id": task.id,
+            "skills": getattr(self._team, "native_skills", lambda member: [])(task.member_id),
             "system": system,
             "user": user,
             "tools": run.snapshot.definitions,

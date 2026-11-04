@@ -1,20 +1,33 @@
-// The private skills of the owner's members, in the connections tab beside the apps: a row for each, and the page of one
-// (its name, when it is used, its instructions as Markdown to edit, and 「刪除技能」). A skill is a Markdown document a member
-// is told of and reads when its description fits the request; it is on or off, and deleting it stops it at once.
-// Nothing here is a second skills page: the member's own tab (member-profile-resources.ts) still imports and lists the same skills.
+// Shared and member skills use the existing Connections rows and document dialog.
+// Import copies packages; scripts use the ordinary local command approval path.
 
 import * as api from "./api";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { faceHTML } from "./members";
 import type { MemberSkill } from "./types";
+import { skillSourceLabel } from "./skill-source";
 import { actionRow, btn, esc, ico, st, tg } from "./ui";
 
 /** A skill with the member whose it is. */
 export interface SkillItem {
   member: { id: number; name: string; avatar_url?: string };
   skill: MemberSkill;
+  grants?: SkillItem[];
 }
+
+/** Connections shows each library package once; member access remains in its dialog. */
+export function skillListItems(items: SkillItem[]): SkillItem[] {
+  return items.filter(item => item.member.id === -1 || !item.skill.shared).map(item => item.member.id === -1 ? {
+    ...item,
+    grants: items.filter(each => each.member.id >= 0 && each.skill.shared && each.skill.id === item.skill.id)
+      .sort((a, b) => Number(b.member.id === 0) - Number(a.member.id === 0)),
+  } : item);
+}
+
+const skillOwner = (item: SkillItem): string => item.member.id === -1
+  ? `${t("skills.shared")} · ${t("skills.granted", { p0: (item.grants ?? []).filter(each => each.skill.enabled).length })}` : item.member.name;
+const skillIcon = (item: SkillItem, size: number): string => item.member.id === -1 ? `<span class="cs-library-icon">${ico("book")}</span>` : faceHTML(item.member, size);
 
 /** The page of one skill that is open: its document as saved and as it is being edited. */
 export interface SkillPage {
@@ -29,15 +42,31 @@ export interface SkillPage {
   error: string | null;
 }
 
+export interface LocalSkillSource { source: string; name: string; description: string; plugin?: string }
+
+/** Local discovery is explicit; source groups live in the existing Connections dialog. */
+export function skillImportsHTML(sources: LocalSkillSource[] | "loading" | "failed", closeButton = "", notice = ""): string {
+  const head = `<div class="cs-dlg-head"><h2 class="cs-dlg-name" id="cs-dlg-title">${esc(t("skills.discover"))}</h2><span class="sp"></span>${closeButton}</div>`;
+  if (sources === "loading") return head + `<p role="status">${esc(t("conn.loading"))}</p>`;
+  if (sources === "failed") return head + `<p role="alert">${esc(t("conn.skills.failed"))}</p>` + btn(esc(t("plugins.retry")), "sm", ' data-conn="skill-discover"');
+  const groups = ["Claude Code", "Codex", t("skills.plugins")];
+  const groupOf = (source: LocalSkillSource): number => source.plugin || /[\\/]plugins[\\/]cache[\\/]/.test(source.source) ? 2 : /[\\/]\.claude[\\/]/.test(source.source) ? 0 : 1;
+  return head + (sources.length ? groups.map((name, group) => {
+    const rows = sources.map((source, index) => ({ source, index })).filter(({ source }) => groupOf(source) === group);
+    return rows.length ? `<section class="cs-sec" data-skill-origin="${group}"><h3>${esc(name)}</h3><div class="cs-list">` + rows.map(({ source, index }) =>
+      `<div class="cs-item cs-source"><div class="cs-open"><span class="tx"><span class="nm">${esc(source.name)}</span><span class="ds">${esc(source.description)}</span><span class="ds" title="${esc(skillSourceLabel(source.source, source.plugin))}">${esc(skillSourceLabel(source.source, source.plugin))}</span></span></div>${btn(ico("download") + esc(t("skills.import")), "sm gr", ` data-conn="skill-import-local" data-source="${index}" title="${esc(t("skills.importShared"))}"`)}</div>`).join("") + `</div></section>` : "";
+  }).join("") : `<p class="cs-desc">${esc(t("skills.noLocal"))}</p>`) + notice;
+}
+
 export const skillPage = (memberId: number, id: number): SkillPage =>
   ({ memberId, id, saved: null, draft: "", state: "loading", busy: false, error: null });
 
 export const sameSkill = (item: SkillItem, memberId: number, id: number): boolean => item.member.id === memberId && item.skill.id === id;
 
-/** The skills of every member (Raphael has none), in the order of the members, then of the skills. */
+/** Shared packages and every member's effective skills, including Raphael. */
 export async function loadSkillItems(): Promise<SkillItem[]> {
   const { members } = await api.membersList();
-  const lists = await Promise.all(members.filter((member) => member.id !== 0).map(async (member) =>
+  const lists = await Promise.all([...members, { id: -1, name: t("skills.shared"), avatar_url: undefined }].map(async (member) =>
     (await api.membersSkillsList(member.id)).skills.map((skill): SkillItem => ({ member: { id: member.id, name: member.name, avatar_url: member.avatar_url }, skill }))));
   return lists.flat();
 }
@@ -48,20 +77,22 @@ export function skillRowHTML(item: SkillItem): string {
   const ids = ` data-member="${member.id}" data-id="${skill.id}"`;
   const key = `${member.id}:${skill.id}`;
   return (
-    `<div class="cs-item cs-skill" data-conn="skill-open"${ids}>` +
+    `<div class="cs-item cs-skill"${member.id === -1 ? ' data-library-skill' : ""} data-conn="skill-open"${ids}>` +
     btn(
-      `<span class="ic">${faceHTML(member, 28)}</span><span class="tx"><span class="nm">${esc(skill.name)}</span><span class="ds">${esc(member.name)} · ${esc(skill.description)}</span></span>`,
+      `<span class="ic">${skillIcon(item, 28)}</span><span class="tx"><span class="nm">${esc(skill.name)}</span><span class="ds">${esc(skillOwner(item))}${member.id === -1 ? "" : ` · ${esc(skill.description)}`}</span><span class="ds" title="${esc(skillSourceLabel(skill.source, skill.plugin))}">${esc(skillSourceLabel(skill.source, skill.plugin))}${skill.source_changed ? ` · ${esc(t("skills.changed"))}` : ""}</span></span>`,
       "cs-open",
       ` data-conn="skill-open"${ids} data-k="cs-skill:${key}" aria-haspopup="dialog" title="${esc(t("conn.skill.open", { p0: skill.name }))}"`,
     ) +
-    tg(skill.enabled, t("conn.skill.switch", { p0: skill.name }), ` data-conn="skill-enable"${ids} data-k="cs-skill-enable:${key}"`) +
+    (skill.source_changed ? btn(ico("refresh") + esc(t("skills.reimport")), "sm gr", ` data-conn="skill-reimport" data-member="${skill.shared ? -1 : member.id}" data-id="${skill.id}"`) : "") +
+    (member.id === -1 ? "" : tg(skill.enabled, t("conn.skill.switch", { p0: skill.name }), ` data-conn="skill-enable"${ids} data-k="cs-skill-enable:${key}"`)) +
     `<span class="chev" aria-hidden="true">${ico("right")}</span></div>`
   );
 }
 
 /** The list of skills, under its name. */
-export const skillsSectionHTML = (items: SkillItem[]): string =>
-  `<section class="cs-sec"><h2>${esc(t("conn.skills"))}</h2><div class="cs-list" data-stagger="skills">${items.map(skillRowHTML).join("")}</div></section>`;
+export const skillsSectionHTML = (items: SkillItem[], failed = false): string =>
+  `<section class="cs-sec" data-skills-section><div class="data-heading"><h2>${esc(t("conn.skills"))}</h2>${btn(ico("download") + esc(t("skills.import")), "sm gr", ' data-conn="skill-discover" aria-haspopup="dialog"')}</div>` +
+  (failed ? `<div class="alert core-note">${st("err", t("conn.skills.failed"))}${btn(esc(t("plugins.retry")), "sm", ' data-conn="retry-skills"')}</div>` : items.length ? `<div class="cs-list" data-stagger="skills">${items.map(skillRowHTML).join("")}</div>` : "") + `</section>`;
 
 /** Whether the draft is not what was saved: the one reason to enable 「儲存」. */
 export const skillChanged = (page: SkillPage): boolean => page.state === "ready" && page.draft !== page.saved;
@@ -75,21 +106,23 @@ export function skillDialogHTML(item: SkillItem, page: SkillPage, closeButton: s
   const { member, skill } = item;
   const ids = ` data-member="${member.id}" data-id="${skill.id}"`;
   const head =
-    `<div class="cs-dlg-head">${faceHTML(member, 40)}<span class="sp"></span>` +
+    `<div class="cs-dlg-head">${skillIcon(item, 40)}<span class="sp"></span>` +
     tg(skill.enabled, t("conn.skill.switch", { p0: skill.name }), ` data-conn="skill-enable"${ids} data-k="cs-skill-dlg-enable"`) +
     closeButton + `</div><h2 class="cs-dlg-name" id="cs-dlg-title">${esc(skill.name)}</h2>` +
-    `<p class="cs-desc">${esc(member.name)} · ${esc(skill.description)}</p>`;
+    `<p class="cs-desc">${esc(skillOwner(item))} · ${esc(skill.description)}</p>`;
+  const grants = member.id === -1 ? `<section class="cs-skill-grants"><h3>${esc(t("skills.members"))}</h3><div class="cs-list">` + (item.grants ?? []).map(each =>
+    `<div class="mp-resource" data-skill-grant="${each.member.id}"><span>${faceHTML(each.member, 28)} ${esc(each.member.name)}</span>${tg(each.skill.enabled, t("skills.memberAccess", { p0: each.member.name, p1: skill.name }), ` data-conn="skill-enable" data-member="${each.member.id}" data-id="${skill.id}" data-k="cs-skill-enable:${each.member.id}:${skill.id}"`)}</div>`).join("") + `</div></section>` : "";
   const body = page.state === "loading" ? `<p role="status">${esc(t("conn.loading"))}</p>`
     : page.state === "failed" ? `<div class="note" role="alert">${esc(t("conn.skill.loadFailed"))}${retry}</div>`
     : `<label class="cs-field"><span class="flabel">${esc(t("conn.skill.instructions"))}</span>` +
-      `<textarea id="skill-text" class="field cs-skill-text" rows="14" spellcheck="false" data-k="cs-skill-text"${page.busy ? " disabled" : ""}>${esc(page.draft)}</textarea></label>` +
+      `<textarea id="skill-text" class="field cs-skill-text" rows="14" spellcheck="false" data-k="cs-skill-text"${page.busy ? " disabled" : ""}${skill.shared ? " readonly" : ""}>${esc(page.draft)}</textarea></label>` +
       (page.error ? `<div class="note" role="alert">${st("err", page.error)}</div>` : "");
   const acts = actionRow({
     cls: "cs-acts", sticky: true,
-    destructive: { label: esc(t("conn.skill.delete")), attrs: ` data-conn="skill-delete"${ids} data-k="cs-skill-delete"${page.busy ? " disabled" : ""}` },
-    primary: { label: esc(t("conn.skill.save")), attrs: ` data-conn="skill-save"${ids} data-k="cs-skill-save"${skillChanged(page) && !page.busy ? "" : " disabled"}` },
+    ...(skill.shared ? {} : { destructive: { label: esc(t("conn.skill.delete")), attrs: ` data-conn="skill-delete"${ids} data-k="cs-skill-delete"${page.busy ? " disabled" : ""}` } }),
+    primary: { label: esc(t("conn.skill.save")), attrs: ` data-conn="skill-save"${ids} data-k="cs-skill-save"${skillChanged(page) && !page.busy && !skill.shared ? "" : " disabled"}` },
   });
-  return head + body + notice + acts;
+  return head + grants + (skill.source_changed && !skill.shared ? btn(esc(t("skills.reimport")), "sm", ` data-conn="skill-reimport"${ids}`) : "") + body + notice + acts;
 }
 
 /** What a refusal of the core says of a document, in the words of the window; any other failure as it is described elsewhere. */

@@ -112,7 +112,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     const epoch = ++countEpoch, id = host.member().id;
     const result = await Promise.allSettled([
       fromEvent ? eventRead(`members.skills.list:${id}`,()=>api.core<{skills: unknown[]}>("members.skills.list", {member_id: id}),host.app) : api.core<{skills: unknown[]}>("members.skills.list", {member_id: id}),
-      id === RAPHAEL_ID ? Promise.resolve({commands: []}) : fromEvent ? eventRead(`members.commands.list:${id}`,()=>api.core<{commands: unknown[]}>("members.commands.list", {member_id: id}),host.app) : api.core<{commands: unknown[]}>("members.commands.list", {member_id: id}),
+      fromEvent ? eventRead(`members.commands.list:${id}`,()=>api.core<{commands: unknown[]}>("members.commands.list", {member_id: id}),host.app) : api.core<{commands: unknown[]}>("members.commands.list", {member_id: id}),
       fromEvent ? eventRead(`memory.get:${id}`,()=>api.core<{entries:number}>('memory.get',{member_id:id,space:'own'}),host.app) : api.core<{ entries: number }>("memory.get", { member_id: id, space: "own" }),
     ]);
     if (epoch !== countEpoch || id !== host.member().id) return;
@@ -130,8 +130,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     return `<nav class="mb-panel-pages" aria-label="${esc(t("members.details"))}">` +
       pageRow("memory", t("mem.title"), "memory", t("members.panelNotes", {p0: counts.memory})) +
       pageRow("skills", t("members.panelSkills"), "sparkle", t("members.panelCount", {p0: counts.skills})) +
-      (member.id === RAPHAEL_ID ? "" : pageRow("commands", t("members.panelCommands"), "steps", t("members.panelCount", {p0: counts.commands})) +
-      pageRow("voice", t("members.panelVoice"), "voice")) +
+      pageRow("commands", t("members.panelCommands"), "steps", t("members.panelCount", {p0: counts.commands})) +
+      pageRow("voice", t("members.panelVoice"), "voice") +
       (member.id === RAPHAEL_ID ? "" : `<button type="button" class="btn mb-panel-row" data-det="hide">${ico("eyeOff")}<span class="mb-panel-row-copy"><span>${esc(t("members.panelHide"))}</span><small>${esc(t("members.panelHideHint"))}</small></span></button>`) + `</nav>`;
   }
 

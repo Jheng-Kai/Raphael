@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { scene, click, wait, waitGone, type, check, key } from "./steps.mjs";
+import { scene, click, wait, waitGone, type, check, key, scroll } from "./steps.mjs";
 
 // Settings > Connections owns the app inventory and its connected count.
 // Every scene uses the real account footer and Settings entry.
@@ -39,6 +39,15 @@ const skills = [
   { id: 8, member_id: 1, name: "source-check", description: "引用資料前先核對來源與日期", enabled: true, source: "owner/research-skills" },
   { id: 9, member_id: 2, name: "meeting-notes", description: "會議結束後整理決議與負責人", enabled: false, source: "owner/team-skills" },
 ];
+const localSources = [
+  { source: "local:C:/Synthetic/.claude/skills/weekly-summary", name: "每週摘要", description: "整理本週重點與下一步", text: skillDoc("每週摘要", "整理本週重點與下一步", "先核對來源，再寫下三個重點。") },
+  { source: "local:C:/Synthetic/.codex/skills/source-check", name: "來源核對", description: "核對引用資料與發布日期" },
+  { source: "local:C:/Synthetic/.claude/plugins/cache/market/docs/2.0.0/skills/meeting-notes", name: "會議筆記", description: "記錄決議與負責人", plugin: "文件工具" },
+];
+const sharedSkill = { id: 20, member_id: -1, name: "每週摘要", description: "整理本週重點與下一步", enabled: true, source: localSources[0].source, text: localSources[0].text };
+const privateSkill = { id: 21, member_id: 1, name: "來源核對", description: "核對引用資料與發布日期", enabled: true, source: localSources[1].source };
+const skillFixture = { managedConnectors: [notion(), google], servers: [], skills: [], skillSources: localSources };
+const skillsVisible = [wait('[data-conn="skill-discover"]'), scroll('[data-skills-section]')];
 
 export default [
   scene("connect-apps-categories", "Settings opens the store and every category can be focused, revealed and selected", [
@@ -49,7 +58,7 @@ export default [
     click('[data-conn="store-group"][data-id="productivity"]'), check("plugins-store-category"), check("plugins-store-rows"),
   ]),
   scene("connected-apps-skills", "The connected view: apps that can be called now, those that cannot with the reason, and the members' private skills; one count", [
-    ...open, wait('[data-k="cs-open:composio:notion"]'), wait('[data-k="cs-skill:1:7"]'), wait('[data-stagger="installed-not"] .cs-item'), check("apps-count"),
+    ...open, wait('[data-k="cs-open:composio:notion"]'), wait('[data-k="cs-skill:1:7"]'), wait('[data-stagger="installed-not"] .cs-item'), check("apps-count"), scroll('[data-skills-section]'), check("skills-section"),
   ], {
     managedConnectors: [
       notion(), google,
@@ -59,6 +68,24 @@ export default [
     servers: base.servers.slice(0, 1),
     skills,
   }),
+  scene("skills-installed-sources", "Installed synthetic skills grouped by Claude Code, Codex and plugins in the shared Connections dialog", [
+    ...open, ...skillsVisible, click('[data-conn="skill-discover"]'), wait('[data-skill-origin="2"]'), check("skills-installed-sources"),
+  ], skillFixture),
+  scene("skills-import-shared", "Import a discovered package into the shared library through the real Settings action", [
+    ...open, ...skillsVisible, click('[data-conn="skill-discover"]'), wait('[data-skill-origin="0"]'),
+    click('[data-conn="skill-import-local"][data-source="0"]'), waitGone('[data-dialog="skill-import"]'),
+    wait('[data-k="cs-skill:-1:1"]'), scroll('[data-skills-section]'), check("skills-import-shared"),
+  ], skillFixture),
+  scene("skills-member-grants", "One library row opens the existing detail dialog with Raphael first and an independent switch for every member", [
+    ...open, ...skillsVisible, click('[data-k="cs-skill:-1:20"]'), wait('[data-skill-grant="0"]'),
+    click('[data-k="cs-skill-enable:1:20"]'), wait('[data-k="cs-skill-enable:1:20"][aria-checked="false"]'),
+    click('[data-k="cs-skill-enable:2:20"]'), wait('[data-k="cs-skill-enable:2:20"][aria-checked="false"]'),
+    click('[data-k="cs-skill-enable:1:20"]'), wait('[data-k="cs-skill-enable:1:20"][aria-checked="true"]'),
+    check("skills-member-grants"),
+  ], { ...skillFixture, skills: [sharedSkill, privateSkill] }),
+  scene("skills-source-changed", "A changed source offers reimport on the existing skill row beside its member switch", [
+    ...open, ...skillsVisible, wait('[data-conn="skill-reimport"]'), check("skills-source-changed"),
+  ], { ...skillFixture, skills: [{ ...sharedSkill, source: localSources[2].source, plugin: localSources[2].plugin, source_changed: true }, privateSkill] }),
   scene("connected-apps-unreadable", "A core that cannot list the apps: the tab says 「—」 and give no number, and the apps stay one list", [
     ...open, wait('[data-k="cs-open:composio:notion"]'), check("apps-unreadable"),
   ], { inventoryUnreadable: true, managedConnectors: [notion(), google], servers: base.servers.slice(0, 1), skills }),

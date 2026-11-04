@@ -1577,6 +1577,13 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.work-section')?.textContent.includes('skill_learned'), "internal skill payload never enters public work");
     return { check: name };
   }
+  if (name === "member-shared-source") {
+    const control = document.querySelector('[data-res="skill-toggle"][data-id="32"]'), row = control?.closest('.mp-resource');
+    require(visible(control) && control.getAttribute('aria-checked') === 'true', "member details retain the enabled shared skill switch");
+    require(row.textContent.includes('共享 · ~/.codex/skills/source-check') && !row.textContent.includes('local:'), "member details use the same readable source label");
+    require(!row.querySelector('[data-res="skill-menu"]'), "inherited skills remain editable only in the library");
+    return { check: name };
+  }
   if (name === "growing-skills") {
     require(document.querySelector('.mb-det').textContent.includes("2026/10/29"), "skill dates follow the Chinese UI rather than the browser locale");
     const editor = document.querySelector('#mp-skill-text');
@@ -3672,6 +3679,74 @@ export function checkRendered(name, context = {}) {
     const button = list.querySelector("[data-conversation-new]"), box = button.getBoundingClientRect(), parent = list.getBoundingClientRect();
     require(box.left >= parent.left && box.right <= parent.right + 1, "new conversation button fits inside the list");
     return { check: name, width: list.clientWidth, scrollWidth: list.scrollWidth };
+  }
+  if (["skills-section", "skills-installed-sources", "skills-import-shared", "skills-member-grants", "skills-source-changed"].includes(name)) {
+    const sections = [...document.querySelectorAll('.cs-body [data-skills-section]')];
+    require(sections.length === 1 && ![...document.querySelectorAll('.cs-body h2')].some(node => node.textContent === '技能庫'), "one skills section replaces the old split headings");
+    const section = sections[0], heading = section.querySelector('.data-heading'), action = heading.querySelector('[data-conn="skill-discover"]');
+    require(heading.querySelector('h2').textContent === '技能' && action.textContent.trim() === '匯入' && action.querySelector('svg'), "the skills header has one short icon action");
+    const titleBox = heading.querySelector('h2').getBoundingClientRect(), actionBox = action.getBoundingClientRect();
+    require(actionBox.left > titleBox.right && Math.abs((titleBox.top + titleBox.bottom - actionBox.top - actionBox.bottom) / 2) < 2, "import is aligned at the right of the skills heading");
+    const firstApp = document.querySelector('.cs-body [data-stagger="installed"]');
+    if (firstApp) require(Boolean(firstApp.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING), "skills follow the existing app section");
+    const rows = [...section.querySelectorAll('.cs-skill')];
+    const appSwitch = document.querySelector('.cs-item [data-conn="enable"]');
+    for (const row of rows) {
+      const control = row.querySelector('[data-conn="skill-enable"]'), open = row.querySelector('.cs-open');
+      require(open && row.querySelector('.chev') && open.querySelectorAll('.ds').length === 2, "skill rows retain source, owner and document trigger");
+      require(!open.textContent.includes('local:') && !open.textContent.includes('plugins/cache') && !open.textContent.includes('\\'), "skill source copy hides internal prefixes and cache paths");
+      if (row.hasAttribute('data-library-skill')) {
+        require(!control && open.querySelector('.cs-library-icon svg') && !open.querySelector('.slime'), "one neutral library row replaces inherited member rows");
+        const iconBox = open.querySelector('.cs-library-icon svg').getBoundingClientRect();
+        require(iconBox.width === 20 && iconBox.height === 20, "the library icon keeps the app icon size");
+        const iconSlot = open.querySelector('.cs-library-icon').getBoundingClientRect();
+        require(iconSlot.width === 28 && iconSlot.height === 28, "the library icon slot aligns with member faces");
+        const members = window.__look.data.members.length;
+        require(open.textContent.includes(`共享 · 已給 ${name === 'skills-member-grants' ? members - 1 : members} 位成員`), "the library row summarizes enabled member access");
+      } else require(control, "private skill rows retain their member switch");
+      require(!row.querySelector('button button'), "row actions are siblings rather than nested controls");
+      if (appSwitch && control) require(Math.abs(control.getBoundingClientRect().height - appSwitch.getBoundingClientRect().height) < 1, "skill and neighbouring app switches share their size");
+    }
+    const library = rows.filter(row => row.hasAttribute('data-library-skill'));
+    require(library.length === window.__look.data.skills.filter(skill => skill.member_id === -1).length, "each shared skill has exactly one Connections row");
+    if (name === "skills-installed-sources") {
+      const dialog = document.querySelector('[data-dialog="skill-import"] .cs-dialog');
+      require(visible(dialog) && ['Claude Code', 'Codex', '外掛'].every((title, index) => dialog.querySelector(`[data-skill-origin="${index}"] h3`)?.textContent === title), "installed sources are grouped by origin");
+      require(dialog.querySelectorAll('[data-conn="skill-import-local"]').length === 3, "each synthetic installed source offers import");
+      require(dialog.textContent.includes('~/.claude/skills/weekly-summary') && dialog.textContent.includes('~/.codex/skills/source-check') && dialog.textContent.includes('文件工具 · 2.0.0'), "source groups show recognizable folders and plugin versions");
+      require(!dialog.textContent.includes('local:') && !dialog.textContent.includes('plugins/cache'), "discovery hides internal source encodings too");
+      require(window.__look.calls.some(call => call.method === 'members.skills.list' && call.params.discover), "the real discovery action crosses IPC");
+    }
+    if (name === "skills-import-shared") {
+      require(!document.querySelector('[data-dialog="skill-import"]'), "successful import returns to the skills list");
+      const calls = window.__look.calls.filter(call => call.method === 'members.skills.import');
+      require(calls.length === 1 && calls[0].params.shared === true && calls[0].params.member_id === 0, "one package is imported through the shared owner scope");
+      require(rows.length === 1 && library.length === 1 && library[0].textContent.includes('~/.claude/skills/weekly-summary'), "import creates a single attributed library row");
+    }
+    if (name === "skills-member-grants") {
+      const dialog = document.querySelector('[data-dialog="skill:-1:20"]'), grants = [...dialog.querySelectorAll('[data-skill-grant]')];
+      require(visible(dialog) && grants.length === window.__look.data.members.length && grants[0].dataset.skillGrant === '0', "the existing detail dialog lists every member with Raphael first");
+      require(rows.length === 2 && section.querySelector('[data-k="cs-skill:1:21"]'), "the private skill keeps its separate member row");
+      const on = dialog.querySelector('[data-k="cs-skill-enable:1:20"]'), off = dialog.querySelector('[data-k="cs-skill-enable:2:20"]');
+      require(on?.getAttribute('aria-checked') === 'true' && off?.getAttribute('aria-checked') === 'false', "one member has the shared skill while another does not");
+      for (const grant of grants) {
+        const control = grant.querySelector('[role="switch"]'), box = control.getBoundingClientRect(), row = grant.getBoundingClientRect();
+        require(visible(control) && box.right <= row.right + 1 && Math.abs(box.height - appSwitch.getBoundingClientRect().height) < 1, "grant switches use the existing control and fit their member rows");
+      }
+      const calls = window.__look.calls.filter(call => call.method === 'members.skills.update');
+      require(calls.length === 3 && calls.map(call => `${call.params.member_id}:${call.params.enabled}`).join(',') === '1:false,2:false,1:true', "individual grants use ordinary member switches");
+      require(window.__look.data.skills.find(skill => skill.id === 20).enabled, "individual choices never disable the library original");
+    }
+    if (name === "skills-source-changed") {
+      const actions = [...section.querySelectorAll('[data-conn="skill-reimport"]')];
+      require(actions.length === 1 && actions[0].parentElement.hasAttribute('data-library-skill') && actions[0].textContent.trim() === '重新匯入', "a changed shared source has one reimport action on its library row");
+      require(library[0].textContent.includes('文件工具 · 2.0.0'), "imported plugins show their name and version");
+      for (const button of actions) {
+        const box = button.getBoundingClientRect(), chevron = button.parentElement.querySelector('.chev').getBoundingClientRect();
+        require(box.right <= chevron.left && box.width > 0, "the single reimport action fits before the library chevron");
+      }
+    }
+    return { check: name, rows: rows.length };
   }
   if (name === "apps-count") {
     const tab = document.querySelector('.modal-scrim [data-conn="tab"][data-id="installed"] .n');

@@ -1,5 +1,17 @@
 # Raphael feature map
 
+## Shared installed skills (2026-11-04)
+
+See [Members](members.md#shared-installed-skills-2026-11-04) for R-SKILL-01 through
+R-SKILL-05, shared/member scope, whole local package import, source refresh,
+one shared package row with member grants in its dialog, readable source labels,
+Raphael command parity and native CLI skill delivery. Review follow-up 3 authorizes
+the selected offline look matrix, including skills-installed-sources,
+skills-import-shared, skills-member-grants and skills-source-changed. The Members
+entry maps actions, IPC outcomes and visual comparisons. Native and live acceptance
+remain separate; judge requires external references and authorized subscription use.
+
+
 ## Responsive member computer (2026-11-04)
 
 See [Member computer](member-computer.md#responsive-computer-tools-2026-11-04)

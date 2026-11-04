@@ -630,8 +630,12 @@ export function installMock(fixture, config = {}, target = window) {
   const skillUndo = new Map();
   const saveSkills = member => skillUndo.set(member, { revision: `skill-${Date.now()}`, skills: structuredClone(data.skills.filter(s => s.member_id === member)) });
   const skillRow = ({ text, ...skill }) => skill;
+  const skillGrants = new Map();
+  const skillMember = p => p.shared ? -1 : p.member_id;
+  const visibleSkills = p => data.skills.filter(s => s.member_id === skillMember(p) || (!p.shared && s.member_id === -1))
+    .map(s => ({ ...skillRow(s), ...(!p.shared && s.member_id === -1 ? { shared: true, enabled: s.enabled && (skillGrants.get(`${p.member_id}:${s.id}`) ?? true) } : {}) }));
   const skillOf = p => {
-    const skill = data.skills.find(item => item.id === p.id && item.member_id === p.member_id);
+    const skill = data.skills.find(item => item.id === p.id && (item.member_id === skillMember(p) || (!p.shared && item.member_id === -1)));
     if (!skill) throw new Error("Invalid params: no such member skill");
     return skill;
   };
@@ -775,9 +779,30 @@ export function installMock(fixture, config = {}, target = window) {
         return { member, routine_offer: variant.routineOffer ? {title:"範例摘要",prompt:"整理範例資料。",schedule:{kind:"daily",time:"09:00"}} : null };
       }
       case "members.delete": data.members = data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
-      case "members.skills.list": return { skills: byMember(data.skills, p).map(skillRow), undo: skillUndo.get(p.member_id)?.revision ?? null };
+      case "members.skills.list": return { skills: visibleSkills(p), undo: skillUndo.get(skillMember(p))?.revision ?? null,
+        ...(p.discover ? { sources: data.skillSources ?? [] } : {}) };
+      case "members.skills.import": {
+        const source = (data.skillSources ?? []).find(item => item.source === p.source);
+        if (!source) throw new Error("Invalid params: choose an installed skill from the local source list");
+        const member_id = skillMember(p);
+        let skill = data.skills.find(s => s.member_id === member_id && s.source === p.source);
+        const values = { name: source.name, description: source.description, source: source.source,
+          text: source.text ?? `---\nname: ${source.name}\ndescription: ${source.description}\n---\n`, source_changed: false };
+        if (skill) Object.assign(skill, values);
+        else { skill = { ...values, id: nextId(data.skills), member_id, enabled: true }; data.skills.push(skill); }
+        notify("MembersChanged", { member_id: p.member_id });
+        return { skill: skillRow(skill), skills: [skillRow(skill)] };
+      }
       case "members.skills.read": { const skill = skillOf(p); return { skill: skillRow(skill), text: skillText(skill) }; }
       case "members.skills.update": {
+        const inherited = !p.shared && data.skills.find(s => s.id === p.id && s.member_id === -1);
+        if (inherited) {
+          if (p.text !== undefined || typeof p.enabled !== "boolean") throw new Error("Invalid params: edit shared skills in the shared library");
+          skillGrants.set(`${p.member_id}:${p.id}`, p.enabled);
+          notify("MembersChanged", { member_id: p.member_id });
+          return { skill: visibleSkills(p).find(s => s.id === p.id) };
+        }
+        p = { ...p, member_id: skillMember(p) };
         if (p.undo) {
           const previous = skillUndo.get(p.member_id);
           if (!previous || previous.revision !== p.undo) throw new Error("Invalid params: skill revision is no longer current");
@@ -802,6 +827,8 @@ export function installMock(fixture, config = {}, target = window) {
         return { skill: skillRow(skill) };
       }
       case "members.skills.delete": {
+        if (!p.shared && data.skills.some(s => s.id === p.id && s.member_id === -1)) throw new Error("Invalid params: edit shared skills in the shared library");
+        p = { ...p, member_id: skillMember(p) };
         saveSkills(p.member_id);
         const deleted = data.skills.some(item => item.id === p.id && item.member_id === p.member_id);
         data.skills = data.skills.filter(item => !(item.id === p.id && item.member_id === p.member_id));

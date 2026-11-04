@@ -21,7 +21,7 @@ const api = vi.hoisted(() => ({
   integrationsSetToolEnabled: vi.fn(),
   integrationsSetToolsEnabled: vi.fn(),
   integrationsInventory: vi.fn(),
-  membersList: vi.fn(), membersSkillsList: vi.fn(), membersSkillsRead: vi.fn(), membersSkillsEdit: vi.fn(), membersSkillsUpdate: vi.fn(), membersSkillsDelete: vi.fn(),
+  core: vi.fn(), membersSkillsImport: vi.fn(), membersList: vi.fn(), membersSkillsList: vi.fn(), membersSkillsRead: vi.fn(), membersSkillsEdit: vi.fn(), membersSkillsUpdate: vi.fn(), membersSkillsDelete: vi.fn(),
 }));
 vi.mock("./api", () => api);
 vi.mock("./ui", async (original) => ({ ...(await original<typeof import("./ui")>()), toaster: { info: vi.fn() } }));
@@ -232,8 +232,9 @@ describe("the apps that cannot be called, and the private skills", () => {
     expect(later).toContain("npx -y notes");
     expect(later).toMatch(/aria-checked="false" aria-label="開啟 Notes"/);
     expect(later!.match(/data-conn="enable"/g)).toHaveLength(4);
-    // with nothing to separate there is no heading: the list of apps is what it was
-    expect(bodyHTML(view())).not.toContain("<h2>");
+    // The app list keeps its original placement; the skills header always offers import.
+    expect(bodyHTML(view())).not.toContain("<h2>應用程式</h2>");
+    expect(bodyHTML(view())).toContain("<h2>技能</h2>");
   });
 
   test("while the count is not read, or cannot be, the apps are one list as before", () => {
@@ -254,7 +255,7 @@ describe("the apps that cannot be called, and the private skills", () => {
   test("the skills are under their own heading, a row each: the member's face, the name, who and when, a switch and a chevron", () => {
     const html = bodyHTML(view({ skills: SKILLS }));
     expect(html).toContain("<h2>應用程式</h2>"); // the apps need a name once there is another list
-    const skills = html.slice(html.indexOf("<h2>私人技能</h2>"));
+    const skills = html.slice(html.indexOf("<h2>技能</h2>"));
     expect(skills).toContain('data-stagger="skills"');
     const rows = skills.split('<div class="cs-item cs-skill"').slice(1);
     expect(rows).toHaveLength(2);
@@ -734,7 +735,7 @@ describe("the rules for this tab", () => {
       expect(all).toContain("2/3 tools on (2 write, 1 read)");
       expect(all).toContain("Tell Linear one");
       expect(all).toContain(">Try it<");
-      expect(all).toContain("Private skills");
+      expect(all).toContain("Skills");
       expect(all).toContain("Not connected");
       expect(all).toContain("Account 1");
       expect(all).not.toMatch(CJK);
@@ -742,7 +743,7 @@ describe("the rules for this tab", () => {
       expect(all).toContain("接続済み");
       expect(all).toContain("ブラウザでログインしてください…");
       expect(all).toContain("Linearに一");
-      expect(all).toContain("プライベートスキル");
+      expect(all).toContain("スキル");
       expect(all).toContain("未接続");
       expect(all).toContain("アカウント 1");
       expect(all).not.toMatch(/Installed|Popular|Sign in|Contains|Recent actions|Disconnect|Private skills|Not connected|Account/);
@@ -808,12 +809,81 @@ describe("what the tab does", () => {
     expect((c.view().inventory as AppsInventory).count).toBe(1);
   });
 
-  test("reads the private skills of every member but Raphael, and again when a skill changes anywhere", async () => {
+  test("discovers installed packages and imports the selected package into the shared library", async () => {
+    const source = { source: "local:C:/synthetic/.codex/skills/writer", name: "writer", description: "Write notes" };
+    api.core.mockResolvedValue({ sources: [source] });
+    api.membersSkillsImport.mockResolvedValue({ skill: SKILLS[0]!.skill });
+    const c = createConnections(host);
+    await c.load();
+    c.click(button("skill-discover"));
+    expect(c.view().skillSources).toBe("loading");
+    await settle();
+    expect(api.core).toHaveBeenCalledWith("members.skills.list", { member_id: 0, discover: true });
+    expect(connectionsHTML(c.view())).toContain("writer");
+    expect(connectionsHTML(c.view())).toContain('data-dialog="skill-import"');
+    c.click(button("skill-import-local", { source: "0" }));
+    await settle();
+    expect(api.membersSkillsImport).toHaveBeenCalledWith(-1, source.source);
+    expect(c.view().skillSources).toBeUndefined();
+    api.core.mockRejectedValueOnce(new Error("unavailable"));
+    c.click(button("skill-discover")); await settle();
+    expect(c.view().skillSources).toBe("failed");
+  });
+
+  test("one shared library row opens every member grant and refreshes its count without changing private rows", async () => {
+    const shared = { id: 20, name: "writer", description: "Write", enabled: true, source: "local:C:/Synthetic/.claude/skills/writer", source_changed: true };
+    const grants = new Map<number, boolean>();
+    api.membersList.mockResolvedValue({ members: [{ id: 1, name: "Ada" }, { id: 0, name: "Raphael" }, { id: 2, name: "Ben" }] });
+    api.membersSkillsList.mockImplementation(async (id: number) => ({ skills: id === -1 ? [shared] : [
+      { ...shared, shared: true, enabled: grants.get(id) ?? true },
+      ...(id === 1 ? [SKILLS[0]!.skill] : []),
+    ] }));
+    api.membersSkillsRead.mockResolvedValue({ text: "Write notes" });
+    api.membersSkillsUpdate.mockImplementation(async (id: number, _skill: number, enabled: boolean) => { grants.set(id, enabled); });
+    api.membersSkillsImport.mockResolvedValue({ skill: shared });
+    const c = createConnections(host);
+    await c.load(); await settle();
+    let html = connectionsHTML(c.view());
+    expect(html.match(/data-library-skill/g)).toHaveLength(1);
+    expect(html).toContain("共享 · 已給 3 位成員");
+    expect(html).toContain('data-k="cs-skill:1:7"');
+    c.click(button("skill-open", { member: "-1", id: "20" })); await settle();
+    html = connectionsHTML(c.view());
+    expect(html.indexOf('data-skill-grant="0"')).toBeLessThan(html.indexOf('data-skill-grant="1"'));
+    expect(html.match(/data-skill-grant=/g)).toHaveLength(3);
+    expect(api.membersSkillsRead).toHaveBeenCalledWith(-1, 20);
+    c.click(button("skill-enable", { member: "0", id: "20" })); await settle();
+    expect(api.membersSkillsUpdate).toHaveBeenCalledWith(0, 20, false);
+    html = connectionsHTML(c.view());
+    expect(html).toContain("共享 · 已給 2 位成員");
+    expect(html).toContain('data-dialog="skill:-1:20"');
+    expect(html).toMatch(/aria-checked="false"[^>]*data-conn="skill-enable" data-member="0"/);
+    c.click(button("skill-reimport", { member: "-1", id: "20" })); await settle();
+    expect(api.membersSkillsImport).toHaveBeenCalledWith(-1, shared.source);
+    expect(grants.get(0)).toBe(false);
+  });
+
+  test("closing discovery restores the single skills section and late results do not reopen it", async () => {
+    let finish!: (value: { sources: [] }) => void;
+    api.core.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const c = createConnections(host);
+    await c.load();
+    c.click(button("skill-discover"));
+    c.click(button("close"));
+    finish({ sources: [] });
+    await settle();
+    const html = connectionsHTML(c.view());
+    expect(html.match(/data-skills-section/g)).toHaveLength(1);
+    expect(html).not.toContain('data-dialog="skill-import"');
+    expect(html.indexOf("<h2>應用程式</h2>")).toBeLessThan(html.indexOf("data-skills-section"));
+  });
+
+  test("reads shared skills and every member including Raphael, and refreshes changes", async () => {
     const c = createConnections(host);
     expect(c.view().skills).toBe("loading");
     await c.load();
     await settle();
-    expect(api.membersSkillsList.mock.calls.map(([id]) => id)).toEqual([1, 2]); // Raphael has none to ask for
+    expect(api.membersSkillsList.mock.calls.map(([id]) => id)).toEqual([0, 1, 2, -1]);
     expect((c.view().skills as SkillItem[]).map((item) => [item.member.name, item.skill.name])).toEqual([["Ada", "summary-style"], ["Ben", "meeting-notes"]]);
     api.membersSkillsList.mockResolvedValue({ skills: [] });
     c.followEvent({ type: "MembersChanged" });
@@ -1229,7 +1299,7 @@ describe("what the tab does", () => {
       }
       const edited = DOC.replace("verdict", "answer");
       api.membersSkillsEdit.mockResolvedValue({ skill: { ...SKILLS[0]!.skill, name: "answer-style" } });
-      api.membersSkillsList.mockImplementation(async (id: number) => ({ skills: id === 1 ? [{ ...SKILLS[0]!.skill, name: "answer-style" }] : [SKILLS[1]!.skill] }));
+      api.membersSkillsList.mockImplementation(async (id: number) => ({ skills: id === 1 ? [{ ...SKILLS[0]!.skill, name: "answer-style" }] : id === 2 ? [SKILLS[1]!.skill] : [] }));
       c.click(button("skill-save", { member: "1", id: "7" }));
       await settle();
       expect(api.membersSkillsEdit).toHaveBeenCalledWith(1, 7, edited);
@@ -1267,7 +1337,7 @@ describe("what the tab does", () => {
       const c = await open();
       await settle();
       api.membersSkillsUpdate.mockResolvedValue({});
-      api.membersSkillsList.mockImplementation(async (id: number) => ({ skills: id === 1 ? [{ ...SKILLS[0]!.skill, enabled: false }] : [SKILLS[1]!.skill] }));
+      api.membersSkillsList.mockImplementation(async (id: number) => ({ skills: id === 1 ? [{ ...SKILLS[0]!.skill, enabled: false }] : id === 2 ? [SKILLS[1]!.skill] : [] }));
       c.click(button("skill-enable", { member: "1", id: "7" }));
       await settle();
       expect(api.membersSkillsUpdate).toHaveBeenCalledWith(1, 7, false);

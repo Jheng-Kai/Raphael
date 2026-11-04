@@ -464,7 +464,8 @@ describe("Raphael's panel", () => {
     expect(panel.el.querySelector(".mb-avbtn .av")!.innerHTML).toContain("app-emblem");
     expect(panel.el.querySelector("#mb-det-instr")).toBeNull();
     expect(panel.el.querySelector('[data-det="group"]')).toBeNull();
-    expect([...panel.el.querySelectorAll<HTMLElement>(".mb-panel-pages [data-tab]")].map(row => row.dataset.tab)).toEqual(["memory", "skills"]);
+    expect([...panel.el.querySelectorAll<HTMLElement>(".mb-panel-pages [data-tab]")].map(row => row.dataset.tab)).toEqual(["memory", "skills", "commands", "voice"]);
+    expect(api.core).toHaveBeenCalledWith("members.commands.list", { member_id: 0 });
     expect(api.routinesList).toHaveBeenCalledWith(0);
   });
 

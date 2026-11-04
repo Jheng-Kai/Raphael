@@ -668,6 +668,9 @@ class MembersService:
     def enabled_skills(self, member_id: int) -> list[dict]:
         return [skill for skill in self.capabilities.skills(member_id) if skill["enabled"]]
 
+    def native_skills(self, member_id: int) -> list[dict]:
+        return self.capabilities.native_skills(member_id)
+
     def skill_learned(self, member_id, skill, turn_id=None):
         self._changed("members.skills.changed", member_id)
         self._changed()
@@ -698,15 +701,30 @@ class MembersService:
         self._cap(self.capabilities.check, member_id)
         return member_id
 
-    async def _skills_list(self, params: dict) -> dict:
+    def _skill_scope(self, params: dict) -> int:
         member_id = self._cap_member(params)
-        return {"skills": self._cap(self.capabilities.skills, member_id), "undo": self.capabilities.undo_revision(member_id)}
+        if type(params.get("shared", False)) is not bool:
+            raise invalid_params("shared must be true or false")
+        return -1 if params.get("shared") else member_id
+
+    async def _skills_list(self, params: dict) -> dict:
+        member_id = self._skill_scope(params)
+        result = {"skills": self._cap(self.capabilities.skills, member_id), "undo": self.capabilities.undo_revision(member_id)}
+        if params.get("discover") is True:
+            result["sources"] = self._cap(self.capabilities.local_sources)
+        return result
 
     async def _skills_import(self, params: dict) -> dict:
-        member_id = self._cap_member(params)
+        member_id = self._skill_scope(params)
         added = []
         try:
-            documents = await download_skills(params.get("source"))
+            source = params.get("source")
+            if isinstance(source, str) and source.startswith("local:"):
+                skill = self.capabilities.import_local(member_id, source)
+                self._changed("members.skills.changed", 0 if member_id == -1 else member_id)
+                self._changed()
+                return {"skill": skill, "skills": [skill]}
+            documents = await download_skills(source)
             for source, text in documents:
                 added.append(self.capabilities.keep_skill(member_id, source, text))
         except MemberError as error:
@@ -719,13 +737,13 @@ class MembersService:
 
     async def _skills_read(self, params: dict) -> dict:
         """A skill and its whole document, for the owner's page of it (the model reads one by `skill_read`)."""
-        skill, text = self._cap(self.capabilities.document, self._cap_member(params), _whole(params, "id", least=1))
+        skill, text = self._cap(self.capabilities.document, self._skill_scope(params), _whole(params, "id", least=1))
         return {"skill": skill, "text": text}
 
     async def _skills_update(self, params: dict) -> dict:
         """The skill switched on or off (`enabled`), its document edited (`text`), or both: the switch is
         checked first, so that a refused edit changes nothing."""
-        member_id = self._cap_member(params)
+        member_id = self._skill_scope(params)
         if "undo" in params:
             self._cap(self.capabilities.undo_skills, member_id, params["undo"])
             self._changed("members.skills.changed", member_id)
@@ -750,7 +768,7 @@ class MembersService:
         return {"skill": skill}
 
     async def _skills_delete(self, params: dict) -> dict:
-        member_id = self._cap_member(params)
+        member_id = self._skill_scope(params)
         deleted = self._cap(self.capabilities.delete_skill, member_id, _whole(params, "id", least=1))
         self._changed("members.skills.changed", member_id)
         self._changed()

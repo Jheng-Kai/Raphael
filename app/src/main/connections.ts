@@ -9,7 +9,7 @@ import { noticeHTML } from "./missing";
 import * as api from "./api";
 import { type InventoryView, appOf, countText, isConnected, whyNot } from "./apps-inventory";
 import {
-  type SkillItem, type SkillPage, loadSkillItems, sameSkill, skillChanged, skillDialogHTML, skillErrorText, skillPage, skillsSectionHTML,
+  type SkillItem, type SkillPage, type LocalSkillSource, skillImportsHTML, loadSkillItems, skillListItems, sameSkill, skillChanged, skillDialogHTML, skillErrorText, skillPage, skillsSectionHTML,
 } from "./connection-skills";
 import { openConnectionSetup } from "./connection-setup";
 import { confirmDelete } from "./member-dialogs";
@@ -118,6 +118,7 @@ export interface ConnectionsView {
   skills: SkillItem[] | "loading" | "failed";
   /** The page of a skill that is open over the list. */
   skill: SkillPage | null;
+  skillSources?: LocalSkillSource[] | "loading" | "failed";
   audit: AuditEntry[];
   tab: Tab;
   /** What was typed in the search box. */
@@ -311,7 +312,7 @@ function itemHTML(g: ConnectionGroup, v: ConnectionsView): string {
 
 /** The private skills the search leaves: none while they are read, and the failure to read them is told where they would be. */
 function skillItems(v: ConnectionsView): SkillItem[] {
-  return Array.isArray(v.skills) ? v.skills.filter(({ member, skill }) => matches(v.search, skill.name, skill.description, member.name)) : [];
+  return Array.isArray(v.skills) ? skillListItems(v.skills).filter(({ member, skill, grants }) => matches(v.search, skill.name, skill.description, member.name, ...(grants ?? []).map(each => each.member.name))) : [];
 }
 
 function installedHTML(v: ConnectionsView): string {
@@ -320,8 +321,8 @@ function installedHTML(v: ConnectionsView): string {
   const shown = v.groups.filter((g) => matches(v.search, g.name, g.description ?? "", entryOf(g, v) ? words(entryOf(g, v)!.summary) : where(g)));
   const skills = skillItems(v);
   const skillsFailed = v.skills === "failed";
-  if (!v.groups.length && !skillsFailed && !(Array.isArray(v.skills) && v.skills.length)) return noticeHTML("emptyApps", "store", "apps");
-  if (!shown.length && !skills.length && !skillsFailed) return `<p class="cs-none">${esc(t("conn.noMatch"))}</p>`;
+  if (!v.groups.length && !skillsFailed && !(Array.isArray(v.skills) && v.skills.length)) return noticeHTML("emptyApps", "store", "apps") + skillsSectionHTML([]);
+  if (!shown.length && !skills.length && !skillsFailed) return `<p class="cs-none">${esc(t("conn.noMatch"))}</p>` + skillsSectionHTML([]);
   // The apps that can be called now first, then the ones that cannot (waiting for a sign-in, failed, off, a second way to an app already
   // counted): each still has its switch and its dialog. While the inventory is not read, or cannot be, they are one list as before.
   // A row keeps its section for the whole visit: flipping its switch must not move it from under the pointer.
@@ -334,8 +335,7 @@ function installedHTML(v: ConnectionsView): string {
   return (
     (counted.length ? (named ? section(t("conn.apps"), list(counted, "installed")) : list(counted, "installed")) : "") +
     (others.length ? section(t("conn.notConnected"), list(others, "installed-not")) : "") +
-    (skills.length ? skillsSectionHTML(skills) : "") +
-    (skillsFailed ? `<section class="cs-sec"><h2>${esc(t("conn.skills"))}</h2><div class="alert core-note">${st("err", t("conn.skills.failed"))}${btn(esc(t("plugins.retry")), "sm", ' data-conn="retry-skills"')}</div></section>` : "")
+    skillsSectionHTML(skills, skillsFailed)
   );
 }
 
@@ -739,13 +739,13 @@ export function connectionsHTML(v: ConnectionsView): string {
   const device = g && v.login?.target === g.id ? "" : deviceHTML(v);
   const skill = openSkill(v);
   const entries = storeEntries(v);
-  return `<div class="cs${v.tab === "store" ? " cs-store" : ""}">${device}${barHTML(v, entries)}<div class="cs-body" data-cs-body>${bodyHTML(v, entries)}</div></div>` + (v.keyOpen ? keyDialogHTML(v) : g ? dialogHTML(g, v) : skill ? skillScrimHTML(skill.item, skill.page, dialogNoticeHTML(v)) : "");
+  return `<div class="cs${v.tab === "store" ? " cs-store" : ""}">${device}${barHTML(v, entries)}<div class="cs-body" data-cs-body>${bodyHTML(v, entries)}</div></div>` + (v.skillSources !== undefined ? `<div class="cs-scrim" data-conn="scrim" data-dialog="skill-import"><div class="cs-dialog wide cs-skill-import" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>${skillImportsHTML(v.skillSources, closeButton(), dialogNoticeHTML(v))}</div></div>` : v.keyOpen ? keyDialogHTML(v) : g ? dialogHTML(g, v) : skill ? skillScrimHTML(skill.item, skill.page, dialogNoticeHTML(v)) : "");
 }
 
 /** The skill whose page is open, if it is still there. */
 const openSkill = (v: ConnectionsView): { item: SkillItem; page: SkillPage } | undefined => {
   const page = v.skill;
-  const item = page && Array.isArray(v.skills) ? v.skills.find((each) => sameSkill(each, page.memberId, page.id)) : undefined;
+  const item = page && Array.isArray(v.skills) ? skillListItems(v.skills).find((each) => sameSkill(each, page.memberId, page.id)) : undefined;
   return page && item ? { item, page } : undefined;
 };
 
@@ -814,6 +814,7 @@ export function createConnections(host: ConnectionsHost): Connections {
   const placed = new Map<string, boolean | null>();
   let skills: ConnectionsView["skills"] = "loading";
   let skill: SkillPage | null = null;
+  let skillSources: ConnectionsView["skillSources"];
   let skillLoads = 0;
   let audit: AuditEntry[] = [];
   let tab: Tab = "installed";
@@ -840,7 +841,7 @@ export function createConnections(host: ConnectionsHost): Connections {
   let stopOutside: (() => void) | null = null;
 
   /** A dialog is over the list: an app's, or a skill's. */
-  const dialogOpen = (): boolean => keyOpen || open?.tab === "installed" || skill !== null;
+  const dialogOpen = (): boolean => skillSources !== undefined || keyOpen || open?.tab === "installed" || skill !== null;
 
   const redraw = (): void => {
     storePaint++;
@@ -866,7 +867,7 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   const view = (): ConnectionsView => ({
     configured, categories, category, keyOpen, keyBusy, keyError,
-    groups, catalog, composioCatalog, inventory, placed, skills, skill, audit, tab, search, storePage, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, device, loginError, dialogNotice, form, now: Date.now(),
+    groups, catalog, composioCatalog, inventory, placed, skills, skill, skillSources, audit, tab, search, storePage, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, device, loginError, dialogNotice, form, now: Date.now(),
   });
 
   /** Prepare the default first screen while the installed catalog is being read. */
@@ -1055,6 +1056,10 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (closing) return;
     loginError = null;
     dialogNotice = null;
+    if (skillSources !== undefined) {
+      skillSources = undefined;
+      redraw(); focusOn('[data-conn="skill-discover"]'); return;
+    }
     if (keyOpen) {
       keyOpen = false; keyError = ""; keySaves++; keyBusy = false;
       redraw(); focusOn('[data-conn="configure-composio"]'); return;
@@ -1548,6 +1553,20 @@ export function createConnections(host: ConnectionsHost): Connections {
         break;
       case "configure-composio": keyOpen = true; keyError = ""; redraw(); focusOn("#conn-key"); break;
       case "save-key": void saveKey(); break;
+      case "skill-discover":
+        skillSources = "loading"; redraw(); focusOn("#cs-dialog");
+        void api.core<{ sources: LocalSkillSource[] }>("members.skills.list", { member_id: 0, discover: true }).then(result => { if (skillSources === "loading") { skillSources = result.sources; redraw(); } }, () => { if (skillSources === "loading") { skillSources = "failed"; redraw(); } });
+        break;
+      case "skill-import-local": {
+        const source = Array.isArray(skillSources) ? skillSources[Number(button.dataset.source)]?.source : undefined;
+        if (source) void api.membersSkillsImport(-1, source).then(async () => { await loadSkills(); closeDialog(); }).catch(error => notify(skillErrorText(error), "err"));
+        break;
+      }
+      case "skill-reimport": {
+        const item = skillOf(Number(button.dataset.member), Number(id));
+        if (item) void api.membersSkillsImport(item.member.id, item.skill.source).then(() => loadSkills()).catch(error => notify(skillErrorText(error)));
+        break;
+      }
       case "skill-open": openSkillPage(Number(button.dataset.member), Number(id)); break;
       case "skill-enable": void toggleSkill(Number(button.dataset.member), Number(id)); break;
       case "skill-save": void saveSkill(); break;

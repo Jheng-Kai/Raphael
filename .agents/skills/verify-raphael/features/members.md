@@ -641,3 +641,137 @@ R-PERF-02 times what the owner feels when they press Enter, in `app/scripts/look
 ```powershell
 npm run look -- send-prompt send-prompt-slow --theme both --width 1120,720,1920x1080
 ```
+
+
+## Shared installed skills (2026-11-04)
+
+Settings > Connections lists each shared library package once and every member's
+private skills. Member details retain shared skills, including Raphael (id 0).
+Find installed skills reads only skill folders
+under ~/.claude/skills, ~/.codex/skills, ~/.agents/skills and Claude/Codex plugin
+caches. Import to shared library copies SKILL.md, scripts, references and assets;
+no import runs a command, dependency installer, hook or plugin configuration.
+Each package is bounded to 32 MiB/2000 files; linked packages are refused.
+Source paths and plugin attribution remain visible. A changed source offers
+Re-import, retaining skill identity and individual member choices.
+
+Discovery opens only bounded SKILL.md documents. Package fingerprints use relative
+file paths, sizes and nanosecond mtimes, without reading scripts/references/assets.
+Discovery stops below a skill folder, skips node_modules/dot-folders, and shares a
+20,000-entry budget across all roots and metadata walks, with depth at most 12.
+Metadata fingerprints skip those ignored folders too; full import still copies
+the selected whole package under the existing size/file limits. Plugin entries
+collapse by marketplace/plugin/relative skill path, using SemVer precedence then
+version-folder mtime (build metadata does not change SemVer precedence).
+Source-change checks inspect only that skill's sibling versions and file metadata.
+Import validates the chosen folder against installed roots without listing other
+plugins, follows the newest version, and preserves identity/grants across versions.
+Regression coverage is in test_large_cache_listing_opens_only_skill_documents,
+test_import_resolves_only_the_selected_folder,
+test_plugin_versions_select_latest_and_reimport_keeps_grants,
+test_semver_prerelease_and_build_ties_use_version_then_mtime,
+test_source_change_checks_read_no_installed_file_bodies and
+test_discovery_walk_is_bounded in core/tests/members/test_skill_library.py.
+
+The existing member_skills table stores library entries with internal member -1;
+SkillHomes maps them to shared/skills. The existing owner RPCs select that scope
+with shared:true and a real member_id, never a negative public ID. Migration 60
+adds individual member_skill_grants; absence means enabled, subject to the
+library's global switch. A member can toggle shared access; shared documents are
+edited/deleted in the library only. Own skill edits/undo never include inherited
+skills. Name collisions share the existing slash namespace.
+
+Raphael gets the same import, command-template, slash discovery and expansion
+paths as any member; the chief role adds no skill privilege. Local skill_read
+includes the imported folder and directs scripts to local__local_exec. The
+ordinary command consent, setting, dangerous-command and outside-content gates
+remain authoritative; skill guidance never grants execution permission.
+
+Claude receives a generated plugin containing only enabled skill packages, the
+Skill tool plus Raphael MCP, empty setting sources and disabled hooks. Assigned
+skill turns keep the normal config directory and CLI-managed login/refresh, without
+reading Claude credentials or setting CLAUDE_CONFIG_DIR/CLAUDE_CODE_OAUTH_TOKEN.
+Empty setting sources exclude personal skills/plugins. Codex keeps
+its existing private home, host-discovery isolation and disabled native shell;
+assigned paths use explicit native skill input and skills.config. API/CLI/private,
+room and background paths retain their shared production engines.
+
+Offline tests: core/tests/members/test_skill_library.py,
+core/tests/agent/test_cli_skill_packages.py,
+core/tests/agent/test_local_commands.py::test_imported_skill_script_uses_ordinary_local_command_approval,
+app/src/main/connection-skills.test.ts, connections.test.ts, member-profile.test.ts and member-details.test.ts.
+The existing app/scripts/look/mock-ipc boundary also models shared scope, local
+source selection/import and individual grants; mock-ipc.test.mjs covers that contract.
+All package/credential fixtures use temporary synthetic homes. Installed CLIs are
+inspected with --help only; fake protocols do not prove installed native loading,
+login refresh, provider behavior or rendering.
+
+Affected scenes to list now and capture during authorized integration:
+connected-apps-skills, skill-private-detail, raphael-skills, details-skills,
+details-commands, completion-slash, completion-plugin, completion-clash,
+slash-commands, local-command-consent and local-command-background. Capture both
+themes at 1120,720,1920x1080, then judge the same run. Shared rows/buttons/dialogs
+must be compared with the ordinary Connections rows and member resource controls.
+Follow-up 3 authorizes the selected offline look matrix below. Native, network and
+paid API acceptance remain outside this unit's authorization.
+
+### Shared skill import and member choices (review follow-up 3)
+
+Connections has one Skills section in its existing position after apps. Its
+data-heading uses the same layout as Settings > Data, with an icon plus short
+Import action at the right. Shared and private rows retain cs-item, cs-open and
+the document dialog. Private rows retain the member face and ordinary switch.
+Shared rows use the existing book icon and summarize enabled member access;
+changed sources offer one Re-import action before the chevron.
+The import action opens the existing Connections dialog, grouping synthetic
+installed sources under Claude Code, Codex and Plugins.
+
+New scenes: skills-installed-sources (real discovery action and three origin groups),
+skills-import-shared (real shared import IPC and resulting library/member rows),
+skills-member-grants (give one member a shared skill while taking it from another),
+skills-source-changed (row-level reimport with existing switches).
+checks.mjs verifies the single section, header alignment, neighbouring switch
+sizes, row action placement and the real IPC boundary/results. The connected-apps-skills
+scene also checks the consolidated section. All fixture copy is synthetic zh-TW.
+
+```powershell
+npm run look -- connected-apps-skills skill-private-detail raphael-skills details-skills details-commands completion-slash completion-plugin completion-clash slash-commands local-command-consent local-command-background skills-installed-sources skills-import-shared skills-member-grants skills-source-changed --theme both --width 1120,720,1920x1080
+```
+
+Inspect every contact sheet and every full-size image for connected-apps-skills,
+skill-private-detail and the four new scenes. Compare owner/source text, row
+insets and switches with neighbouring Connections apps, and the header action
+with Settings > Data. Vitest: connection-skills.test.ts, connections.test.ts and
+app/scripts/look/mock-ipc.test.mjs (scene fixture source propagation).
+
+### One shared package row and readable sources (review follow-up 4)
+
+Connections keeps one library row per shared skill regardless of member count.
+Its existing document dialog lists every member, Raphael first, with the same tg
+switch as private skill rows and member details. A grant refresh updates the count
+without closing the dialog or changing the library original. The library's global
+switch remains in the document header; individual member controls are in its list.
+Private skill rows retain member faces and member-owned document editing.
+
+skill-source.ts formats provenance for Connections, discovery and the shared member
+resource editor. Known home skill roots become ~ paths with forward slashes;
+plugin cache sources become the plugin name plus version. Internal local: prefixes
+and cache paths never appear as source copy. Source values sent to IPC stay intact.
+
+The four scenes in the command above now assert a single library row, its neutral
+icon and enabled member count, readable Claude/Codex/plugin sources, every member's
+dialog switch and one changed-source reimport action. skills-member-grants keeps
+one private row beside the library and captures the grant dialog after giving one
+member access and taking it from another. Inspect all four scenes at every size and
+theme, comparing private/app switches with grant switches and source import buttons
+with the section action. Member details continue using mountMemberResources.
+raphael-skills and details-skills also include an inherited package and assert its
+existing switch, readable source copy and library-only edit ownership. Inspect
+their full-size images as changed consumers too. Library icons keep the app's 20px
+size inside 28px row and 40px header slots, aligned with the existing member faces.
+
+Named regressions in connection-skills.test.ts cover one shared row with Raphael,
+changed shared skill reimport and readable source labels. connections.test.ts covers
+the real dialog/grant refresh and preserved private rows. member-profile.test.ts
+covers Raphael's existing shared switch with readable source copy. Run those files
+plus i18n/i18n.test.ts, the mapped look command and one final npm run verify.

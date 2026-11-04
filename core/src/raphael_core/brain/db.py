@@ -1369,6 +1369,24 @@ PRAGMA user_version = 59;
 COMMIT;
 """
 
+_MIGRATIONS[60] = """
+BEGIN;
+CREATE TABLE member_skill_grants (
+    member_id INTEGER NOT NULL,
+    skill_id INTEGER NOT NULL REFERENCES member_skills(id) ON DELETE CASCADE,
+    enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
+    PRIMARY KEY(member_id, skill_id)
+);
+CREATE TRIGGER delete_member_skill_grants AFTER DELETE ON members BEGIN
+    DELETE FROM member_skill_grants WHERE member_id=OLD.id;
+END;
+CREATE TRIGGER delete_shared_skill_grants AFTER DELETE ON member_skills BEGIN
+    DELETE FROM member_skill_grants WHERE skill_id=OLD.id;
+END;
+PRAGMA user_version = 60;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

@@ -1707,7 +1707,7 @@ export const zhTW = {
   "nav.appsUnknown": "連結應用程式，無法讀取已連結的數量",
   "conn.apps": "應用程式",
   "conn.notConnected": "尚未連結",
-  "conn.skills": "私人技能",
+  "conn.skills": "技能",
   "conn.state.duplicate": "與另一個連線重複",
   "conn.state.noTools": "工具已全部關閉",
   "conn.state.unknown": "無法讀取",
@@ -1770,6 +1770,17 @@ export const zhTW = {
   "trigger.retry": "再試一次",
   "trigger.eventReady": "事件已就緒。首次檢查會記住現有項目，只有新項目會觸發任務。",
   "trigger.eventHelp": "先讀取一次應用程式來設定事件，儲存後才會建立任務。",
+  "skills.shared": "共享",
+  "skills.granted": "已給 {p0} 位成員",
+  "skills.members": "成員",
+  "skills.memberAccess": "讓{p0}使用{p1}",
+  "skills.import": "匯入",
+  "skills.plugins": "外掛",
+  "skills.discover": "尋找已安裝的技能",
+  "skills.changed": "來源已變更",
+  "skills.importShared": "匯入共享技能庫",
+  "skills.reimport": "重新匯入",
+  "skills.noLocal": "找不到已安裝的技能。",
 } as const;
 export type MessageKey = keyof typeof zhTW;
 export type Messages = Record<MessageKey, string>;

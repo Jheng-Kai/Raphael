@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, test, vi } from "vitest";
 import * as api from "./api";
-import { setLocale } from "./i18n";
+import { setLocale, t } from "./i18n";
 import { openEditMemberDialog, type MemberProfileHost } from "./member-profile";
 import { mountMemberResources } from "./member-profile-resources";
 import { memberPreset, randomMemberName } from "./member-profile-presets";
@@ -42,6 +42,29 @@ beforeEach(() => {
   vi.mocked(api.membersVoices).mockResolvedValue({ voices: [{ id: "fish:1", name: "Voice 1" }], configured: true });
   vi.mocked(api.core).mockResolvedValue({ memories: [] });
   vi.mocked(api.routinesList).mockResolvedValue({ routines: [] });
+});
+
+test("Raphael saves command templates and toggles shared skills through the ordinary resource editor", async () => {
+  const root = document.createElement("div");
+  document.body.append(root);
+  vi.mocked(api.membersCommandsSave).mockResolvedValue({ command: { id: 1, name: "review", description: "", template: "Review {input}" } });
+  const commands = mountMemberResources(root, { memberId: 0, tab: "commands", standalone: true });
+  await flush();
+  fill(root, "#mp-command-name", "review");
+  fill(root, "#mp-command-template", "Review {input}");
+  click(root, '[data-res="command-save"]'); await flush();
+  expect(api.membersCommandsSave).toHaveBeenCalledWith(0, { name: "review", description: "", template: "Review {input}" });
+  commands.destroy();
+  vi.mocked(api.membersSkillsList).mockResolvedValue({ skills: [{ id: 9, name: "writer", description: "Write", source: "local:C:/Synthetic/.claude/skills/writer", enabled: true, shared: true }] });
+  const skills = mountMemberResources(root, { memberId: 0, tab: "skills", standalone: true });
+  await flush();
+  expect(root.querySelector('[data-res="skill-menu"]')).toBeNull();
+  expect(root.textContent).toContain(t("skills.shared"));
+  expect(root.textContent).toContain(`${t("skills.shared")} · ~/.claude/skills/writer`);
+  expect(root.textContent).not.toContain("local:");
+  click(root, '[data-res="skill-toggle"]'); await flush();
+  expect(api.membersSkillsUpdate).toHaveBeenCalledWith(0, 9, false);
+  skills.destroy();
 });
 
 test("tabs retain fields and keyboard navigation selects a visible panel", () => {

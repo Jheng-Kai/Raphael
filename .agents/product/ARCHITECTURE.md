@@ -289,7 +289,7 @@ members/skill_review.py runs on the MemoryService scheduler with the same tool-l
 member-brain adapter as capture. memory_state stores per-conversation watermarks and
 three-failure bounds. This introduces no second conversation loop, settings registry or
 RPC boundary. API harness and RaphaelMcp share agent/team.py definitions and guarded
-execution (A-01/A-03/A-04); native CLI memory/skills remain disabled.
+execution (A-01/A-03/A-04); native CLI memory remains disabled; assigned native skills follow Shared installed skills below.
 
 ## Single sidebar (owner decision 2026-10-30)
 
@@ -471,3 +471,30 @@ action is replayed. New v4 computers use a 3 GiB memory/swap cap (not a reservat
 and two CPUs with two local slots. A third start evicts only the least recently
 used idle computer; active and owner-held computers remain protected.
 Offline tests establish contracts, not container latency or driver compatibility.
+
+
+## Shared installed skills (2026-11-04)
+
+MemberCapabilities remains the one skill/command store. skill_library.py adds
+bounded local snapshots and internal shared scope to that same store; SkillHomes
+maps shared packages beside shared USER.md without broadening BotHomes bot-write
+allowlists. Migration 60 stores per-member shared grants. Existing members.skills.*
+RPCs carry shared/discover parameters; no RPC, native allowlist, settings registry,
+worker or brain loop is added (A-01/A-03/A-04/A-06/A-08).
+
+Installed-source discovery reads SKILL.md metadata and bounded path/size/mtime
+fingerprints, never package bodies. It skips dependency/hidden directories and
+prunes discovery below skills. Plugin identity excludes the cache version; SemVer
+then version-folder mtime selects one source. Import validates that source under
+an installed root and snapshots only its selected package. Source-change checks
+resolve sibling versions without rediscovering unrelated caches; re-import updates
+provenance while preserving the existing skill ID and grants.
+
+Generated native Claude plugins copy only assigned skill folders and use the normal
+configuration directory, empty settings sources, disabled hooks and no native
+command tool. Claude Code manages its own login and refresh; Raphael never reads
+Claude credentials or injects an OAuth token or private configuration directory. Codex
+keeps its isolated home and disabled host discovery/native shell, with explicit
+skill input and enabled path configuration. API and background skill scripts use
+the existing local command gate. Import itself never executes code. Offline fake
+protocols and synthetic file tests are not live or installed-CLI acceptance.

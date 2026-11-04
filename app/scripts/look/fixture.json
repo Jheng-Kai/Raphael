@@ -3509,6 +3509,7 @@
   "usageCsv": "time,member,title,model,provider,duration_ms,tokens,cost_usd,ai_steps,tools,errors\r\n2026-10-24,拉斐爾,研究摘要,openai/gpt-6-sol,OpenRouter,21000,14200,.021,3,6,0\r\n",
   "presets": [],
   "skills": [],
+  "skillSources": [],
   "commands": [],
   "voices": {
     "voices": [],

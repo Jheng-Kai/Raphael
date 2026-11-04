@@ -1,7 +1,7 @@
-"""Member-owned slash templates and Markdown skill documents; never executable packages.
+"""Member slash templates and shared/private skill documents with local package support.
 
-Imports fetch bounded UTF-8 SKILL.md files from GitHub's raw host. No archives, scripts,
-dependencies, redirects, or arbitrary URLs are accepted. Documents remain untrusted tool data.
+Remote imports fetch bounded UTF-8 SKILL.md files from GitHub's raw host. Local imports
+preserve installed packages as data. Only the ordinary command tool may execute scripts.
 """
 
 import asyncio
@@ -14,7 +14,8 @@ from urllib.parse import quote, unquote, urlsplit
 import httpx
 
 from .store import MemberError, MemberStore, _text
-from ..bots.homes import BotHomes, HomeError, digest, redact_secrets
+from ..bots.homes import HomeError, digest, redact_secrets
+from .skill_library import SHARED, SkillHomes, SkillLibrary
 
 MAX_SKILL_BYTES = 128 * 1024
 MAX_SKILLS = 40
@@ -188,30 +189,40 @@ def skill_metadata(text: str) -> tuple[str, str]:
 from .skills import GrowingSkills, skill_plugin, slash_skills, stored_skill_name
 
 
-class MemberCapabilities(GrowingSkills):
+class MemberCapabilities(SkillLibrary, GrowingSkills):
     def __init__(self, conn: sqlite3.Connection, folder: Path, members: MemberStore):
         self.conn = conn
         self.folder = folder
         self.members = members
-        self.homes = BotHomes(folder.parent)
+        self.homes = SkillHomes(folder.parent)
+        self.skill_home = Path.home()
         self.homes.migrate()
 
     def check(self, member_id: int) -> None:
+        if member_id == SHARED and type(member_id) is int:
+            return
         if type(member_id) is not int or member_id < 0 or not self.members.exists(member_id):
             raise MemberError("not_found", "no such member")
 
-    def skills(self, member_id: int) -> list[dict]:
+    def owned_skills(self, member_id: int) -> list[dict]:
         self.check(member_id)
         rows = self.conn.execute("SELECT id, name, description, enabled, source FROM member_skills WHERE member_id = ? ORDER BY id", (member_id,))
-        skills = [self.skill_details(member_id, {**dict(row), "enabled": bool(row["enabled"])}) for row in rows]
+        return [self.skill_details(member_id, {**dict(row), "enabled": bool(row["enabled"])}) for row in rows]
+
+    def skills(self, member_id: int) -> list[dict]:
+        skills = self.owned_skills(member_id)
+        if member_id != SHARED:
+            grants = dict(self.conn.execute("SELECT skill_id, enabled FROM member_skill_grants WHERE member_id=?", (member_id,)))
+            skills += [{**s, "shared": True, "enabled": bool(s["enabled"] and grants.get(s["id"], True))}
+                       for s in self.owned_skills(SHARED)]
         return slash_skills(skills, self.commands(member_id))
 
     def _path(self, member_id: int, skill_id: int) -> Path:
-        return self.homes.path(member_id, f"skills/{skill_id}/SKILL.md")
+        return self.homes.path(self.skill_owner(member_id, skill_id), f"skills/{skill_id}/SKILL.md")
 
     def _mirror(self, member_id: int, overrides=None) -> None:
         skills = []
-        for skill in self.skills(member_id):
+        for skill in self.owned_skills(member_id):
             skills.append({**skill, **(overrides or {}).get(skill["id"], {}), "references": self.reference_hashes(member_id, skill["id"])})
         self.homes.mirror(member_id, "skills.json", json.dumps(skills, ensure_ascii=False, indent=2) + "\n")
 
@@ -221,9 +232,9 @@ class MemberCapabilities(GrowingSkills):
             raise MemberError("size", "skill document is too large")
         text = redact_secrets(text)
         name, description = skill_metadata(text)
-        if len(self.skills(member_id)) >= MAX_SKILLS:
+        if len(self.owned_skills(member_id)) >= MAX_SKILLS:
             raise MemberError("full", "member skill limit reached")
-        if any(skill["name"].casefold() == name.casefold() and skill.get("plugin", "").casefold() == skill_plugin(text, source).casefold() for skill in self.skills(member_id)):
+        if any(skill["name"].casefold() == name.casefold() and skill.get("plugin", "").casefold() == skill_plugin(text, source).casefold() for skill in self.owned_skills(member_id)):
             raise MemberError("taken", "a skill with that name already exists")
         path = None
         try:
@@ -266,6 +277,10 @@ class MemberCapabilities(GrowingSkills):
             raise MemberError("enabled", "enabled must be true or false")
         if not any(skill["id"] == skill_id for skill in self.skills(member_id)):
             raise MemberError("not_found", "no such member skill")
+        if self.skill_owner(member_id, skill_id) == SHARED and member_id != SHARED:
+            with self.conn:
+                self.conn.execute("INSERT INTO member_skill_grants(member_id,skill_id,enabled) VALUES (?,?,?) ON CONFLICT(member_id,skill_id) DO UPDATE SET enabled=excluded.enabled", (member_id, skill_id, enabled))
+            return self._skill(member_id, skill_id)
         with self.conn:
             self.conn.execute("UPDATE member_skills SET enabled = ? WHERE member_id = ? AND id = ?", (enabled, member_id, skill_id))
         self._mirror(member_id)
@@ -297,6 +312,7 @@ class MemberCapabilities(GrowingSkills):
         are what the model is shown of it and say when to use it, are read from the new document, so they
         change with it; the next `read_skill` gives the new text at once. The old document stays when the new
         one cannot be kept."""
+        self.require_owned(member_id, skill_id)
         self._skill(member_id, skill_id)
         if not isinstance(text, str):
             raise MemberError("skill", "skill must be a UTF-8 Markdown document")
@@ -307,7 +323,7 @@ class MemberCapabilities(GrowingSkills):
             raise MemberError("skill", "skill must be a UTF-8 Markdown document")
         name, description = skill_metadata(text)
         source = self._skill(member_id, skill_id)["source"]
-        if any(other["id"] != skill_id and other["name"].casefold() == name.casefold() and other.get("plugin", "").casefold() == skill_plugin(text, source).casefold() for other in self.skills(member_id)):
+        if any(other["id"] != skill_id and other["name"].casefold() == name.casefold() and other.get("plugin", "").casefold() == skill_plugin(text, source).casefold() for other in self.owned_skills(member_id)):
             raise MemberError("taken", "a skill with that name already exists")
         path = self._path(member_id, skill_id)
         try:
@@ -323,6 +339,7 @@ class MemberCapabilities(GrowingSkills):
 
     def delete_skill(self, member_id: int, skill_id: int) -> bool:
         self.check(member_id)
+        self.require_owned(member_id, skill_id)
         if not any(skill["id"] == skill_id for skill in self.skills(member_id)):
             return False
         try:
@@ -349,7 +366,15 @@ class MemberCapabilities(GrowingSkills):
                     return None
                 text = path.read_text(encoding="utf-8")
                 for relative in self.reference_hashes(member_id, skill["id"]):
-                    text += "\n\n<reference name=" + json.dumps(relative) + ">\n" + self.homes.path(member_id, relative).read_text(encoding="utf-8")[:8000] + "\n</reference>"
+                    reference = self.homes.safe(self.homes.home(self.skill_owner(member_id, skill["id"])) / relative)
+                    if reference.stat().st_size <= 8000 and reference.suffix in (".md", ".txt", ".json"):
+                        try:
+                            content = reference.read_text(encoding="utf-8")[:8000]
+                        except UnicodeError:
+                            continue
+                        text += "\n\n<reference name=" + json.dumps(relative) + ">\n" + content + "\n</reference>"
+                if skill["source"].startswith("local:"):
+                    text += "\n\nSkill folder: " + str(path.parent) + "\nRun scripts only through the local command tool and its ordinary approval rules. Import and guidance grant no execution permission."
                 return text
         return None
 

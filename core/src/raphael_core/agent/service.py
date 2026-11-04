@@ -2297,6 +2297,7 @@ class AgentService:
             if brain_ref(settings.model):
                 common["execute"] = cli_execute
                 loop = CliLoop(brains=self._cli_brains, sessions=self._cli_sessions,
+                    skills=getattr(self._team, "native_skills", lambda member: [])(ask.speaker.id),
                     attachments=ask.attachments, resume_session=not ask.nested,
                     rate_limit_waits=() if ask.quick else None,
                     conversation_id=ask.conversation_id, quota=self.quotas.record,

@@ -121,7 +121,7 @@ class Driver:
             await self.child.kill()
         self._close_steers()
 
-    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=(), computer_endpoint=None, structured=None):
+    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=(), computer_endpoint=None, structured=None, skills=()):
         files = PrivateFiles()
         codex_auth = None
         self._diagnostic_secrets = [token]
@@ -138,12 +138,31 @@ class Driver:
             command = list(self.command)
             environ = dict(os.environ if self.environ is None else self.environ)
             child_cwd = cwd or str(files.path)
+            # Only Raphael's enabled packages enter native discovery. No plugin hooks/config are copied.
+            skill_paths = []
+            if skills and structured is None:
+                from ...members.skill_library import package
+                plugin = files.path / "raphael-skills"
+                manifest = plugin / ".claude-plugin/plugin.json"
+                manifest.parent.mkdir(parents=True)
+                manifest.write_text(json.dumps({"name": "raphael-skills", "version": "1.0.0"}), encoding="utf-8")
+                for index, skill in enumerate(skills):
+                    folder = plugin / "skills" / f"skill-{index}"
+                    for relative, data in package(Path(skill["path"]).parent).items():
+                        target = folder / relative
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_bytes(data)
+                    skill_paths.append(str(folder / "SKILL.md"))
             if self.name == "claude":
                 command += ["-p", "--output-format", "stream-json", "--input-format", "stream-json", "--verbose",
-                            "--setting-sources", "", "--disable-slash-commands",
+                            "--setting-sources", "",
                             "--include-partial-messages", "--append-system-prompt-file", prompt_file,
-                            "--mcp-config", config, "--strict-mcp-config", "--tools", "",
-                            "--allowedTools", "mcp__raphael__*,mcp__computer__*" if computer_endpoint else "mcp__raphael__*"]
+                            "--mcp-config", config, "--strict-mcp-config", "--tools", "Skill" if skill_paths else "",
+                            "--allowedTools", ("Skill," if skill_paths else "") + ("mcp__raphael__*,mcp__computer__*" if computer_endpoint else "mcp__raphael__*")]
+                if skill_paths:
+                    command += ["--plugin-dir", str(plugin), "--settings", '{"disableAllHooks":true}']
+                else:
+                    command += ["--disable-slash-commands"]
                 if structured is not None:
                     command += ["--json-schema", json.dumps(structured)]
                 else:
@@ -170,6 +189,9 @@ class Driver:
                 session = session.removeprefix(CODEX_SESSION_PREFIX) if session and session.startswith(CODEX_SESSION_PREFIX) else None
                 overrides = {**CODEX_ISOLATION, "mcp_servers.raphael.url": endpoint,
                              "mcp_servers.raphael.bearer_token_env_var": "RAPHAEL_MCP_TOKEN"}
+                if skill_paths:
+                    overrides["skills.include_instructions"] = True
+                    overrides["skills.config"] = [{"path": path, "enabled": True} for path in skill_paths]
                 if computer_endpoint:
                     overrides.update({"mcp_servers.computer.url": computer_endpoint,
                         "mcp_servers.computer.bearer_token_env_var": "RAPHAEL_MCP_TOKEN",
@@ -192,6 +214,8 @@ class Driver:
             else:
                 raise ValueError("unknown_cli")
             if self.name == "codex":
+                self.native_skills = [{"type": "skill", "name": skill["name"], "path": path}
+                                      for skill, path in zip(skills, skill_paths)]
                 environ["RAPHAEL_MCP_TOKEN"] = token
             elif self.name == "gemini":
                 environ["USERPROFILE"] = environ["HOME"] = str(home)
@@ -405,6 +429,7 @@ class Driver:
                         raise ValueError("missing_session")
                     yield Event("session", self.session)
                     inputs = [{"type": "text", "text": user}] + [{"type": "localImage", "path": path} for path in image_paths]
+                    inputs += getattr(self, "native_skills", [])
                     await request("turn/start", {"threadId": self.session, "input": inputs,
                                   **({"effort": self.effort} if self.effort else {})}, "turn")
                 elif label == "turn":

@@ -5,6 +5,19 @@ import { checkRendered } from "./checks.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixture.json", import.meta.url), "utf8"));
 describe("shared look IPC boundary", () => {
+  it("keeps shared imports distinct from Raphael's own skills and grants each member independently", async () => {
+    const target = {}, state = installMock(fixture, { fixture: { skillSources: [{ source: "local:C:/synthetic/writer", name: "writer", description: "Write" }] } }, target);
+    const call = (method, params) => target.__TAURI_INTERNALS__.invoke("core_call", { method, params });
+    state.data.skills = [{ id: 20, member_id: 0, name: "private", description: "Own", source: "owner", enabled: true }];
+    expect((await call("members.skills.list", {member_id:0,shared:true})).skills).toEqual([]);
+    expect((await call("members.skills.list", {member_id:0,discover:true})).sources).toHaveLength(1);
+    const {skill} = await call("members.skills.import", {member_id:0,shared:true,source:state.data.skillSources[0].source});
+    expect((await call("members.skills.list", {member_id:0})).skills).toHaveLength(2);
+    await call("members.skills.update", {member_id:0,id:skill.id,enabled:false});
+    expect((await call("members.skills.list", {member_id:0})).skills.find(s=>s.id===skill.id).enabled).toBe(false);
+    expect((await call("members.skills.list", {member_id:1})).skills[0]).toMatchObject({id:skill.id,shared:true,enabled:true});
+    await expect(call("members.skills.update", {member_id:0,id:skill.id,text:"Changed"})).rejects.toThrow("shared library");
+  });
   it("keeps room message timestamps renderable before and after bringing a pending question", async () => {
     const target = {}, state = installMock(fixture, {fixture:{ownerQuestion:"pending-room"}}, target);
     const invoke = (method, params) => target.__TAURI_INTERNALS__.invoke("core_call", {method, params});
