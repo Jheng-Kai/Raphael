@@ -1,6 +1,6 @@
 """Durable FIFO admission, adapted from Hermes hermes_state_runtime.py (MIT,
 c419cf7c). Started work is never replayed. Tickets follow agent/interrupt_control.py;
-see THIRD_PARTY_NOTICES.md. Raphael deliberately has no queue limit or epochs.
+see licenses/NOTICES.md. Raphael deliberately has no queue limit or epochs.
 """
 
 import json

@@ -1,6 +1,6 @@
 """Local desktops as a PluginHub adapter, under the existing gate and snapshots.
 
-Lease/file contracts adapted from OpenMausBot (Apache-2.0); see THIRD_PARTY_NOTICES.md.
+Lease/file contracts adapted from OpenMausBot (Apache-2.0); see licenses/NOTICES.md.
 """
 
 import asyncio

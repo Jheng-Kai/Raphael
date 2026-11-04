@@ -1,6 +1,6 @@
 """Notes to a model that repeats itself or keeps failing, and the end of a task nobody is in.
 
-Adapted from NousResearch/hermes-agent agent/tool_guardrails.py @ c419cf7c (MIT); see THIRD_PARTY_NOTICES.md.
+Adapted from NousResearch/hermes-agent agent/tool_guardrails.py @ c419cf7c (MIT); see licenses/NOTICES.md.
 Not taken over: the per-turn caps on searches and delegations, the counter for read-only calls, the stub that
 stands in for a duplicate result, and the settings that tune the thresholds.
 

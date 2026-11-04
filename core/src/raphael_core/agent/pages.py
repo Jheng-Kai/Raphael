@@ -1,7 +1,7 @@
 """Durable conversation pages and their ephemeral, isolated loopback host.
 
 The CSP and document preamble handling adapt OpenMausBot (Apache-2.0);
-see THIRD_PARTY_NOTICES.md. No page is served from the application's origin.
+see licenses/NOTICES.md. No page is served from the application's origin.
 """
 
 import asyncio

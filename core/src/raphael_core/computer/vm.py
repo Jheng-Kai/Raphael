@@ -1,6 +1,6 @@
 """Docker desktops on this computer or an SSH host. Adapted from OpenMausBot.
 
-See THIRD_PARTY_NOTICES.md. The engine owns containers; only the workspace survives
+See licenses/NOTICES.md. The engine owns containers; only the workspace survives
 removal. Remote workspaces are engine volumes, never paths on this PC.
 """
 

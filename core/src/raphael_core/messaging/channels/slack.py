@@ -1,7 +1,7 @@
 """Slack direct messages through the same pairing switchboard as Telegram.
 
 Private-message admission follows Hermes gateway Slack/Discord adapters (MIT,
-c419cf7c); see THIRD_PARTY_NOTICES.md. Bot tokens stay in the shared vault.
+c419cf7c); see licenses/NOTICES.md. Bot tokens stay in the shared vault.
 """
 
 import time
