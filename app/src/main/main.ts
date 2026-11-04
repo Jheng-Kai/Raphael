@@ -337,6 +337,7 @@ watchChipRows(document.body);
   ctx.onEvent((event) => followTray(event, { inGuide: () => !guide.hidden, go, addWord: () => dictionary.addWord() }));
 
   api.subscribeMainEvents((event) => {
+    if (event.type === "CoreReady") console.info("main page: CoreReady");
     if (event.type === "SetupMissing") toaster.notice(() => missingHTML(event.missing));
     if (event.type === "Dictation") followDictation(event.phase, event.agent);
     if (event.type === "DictationPasted" && document.activeElement instanceof HTMLTextAreaElement) {

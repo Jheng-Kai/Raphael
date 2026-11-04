@@ -47,6 +47,22 @@ EchoClient answers normal agent turns. In native mode only, `[native-consult:Nam
 scripts its choice of the real `ask_member` tool. The normal tool gate, shared
 AgentService, room scheduler and SQLite stores create the exchanges/reports.
 
+`npm run native -- startup-rooms` expands to ten normal and ten slow-core launches,
+each with fresh SQLite data containing three named rooms. It uses `first_run::start`
+and the owner's hidden-then-shown window path; it never reloads the main page or
+sets its viewport. The slow variant delays core import by three seconds and rejects
+the first `rooms.list` once, through debug-native-only switches. This separates a
+repeatable first-read failure from the unproven pre-first-show suspension theory.
+An initialization script installed before the real entry records visibility,
+CoreReady delivery, early runtime errors/toasts and room rows, including before CDP
+attaches. Native logs record first successful show, hello, suspension requests and
+actual completions. Each launch must show all persisted room rows within five
+seconds of both first show and core readiness, with no runtime errors.
+`report.json` retains per-launch `startup.probe`, `startup.evidence`,
+`startup.roomsAfterReadyMs` and `startupCounts` for normal/slow pass/fail totals.
+Keep the failing pre-fix control and fixed runs; neither missing instrumentation
+nor zero launches establishes the required before/after native acceptance.
+
 `npm run native -- hidden-window` opts only that isolated debug instance into the
 real CloseRequested hide path (`RAPHAEL_TEST_NATIVE_WINDOW_LIFECYCLE=1`). It also
 minimizes/restores once. The existing Python helper sends Win32 system commands to

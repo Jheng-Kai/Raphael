@@ -51,6 +51,11 @@ def main() -> None:
         stream=sys.stderr, level=logging.INFO, format="%(levelname)s %(name)s: %(message)s"
     )
     protocol = claim_stdout()
+    if all(os.environ.get(key) == "1" for key in ("RAPHAEL_TEST_NATIVE", "RAPHAEL_FAKE_LLM", "RAPHAEL_TEST_NATIVE_STARTUP")):
+        import time
+        delay_ms = min(10000, max(0, int(os.environ.get("RAPHAEL_TEST_NATIVE_CORE_DELAY_MS", "0"))))
+        logging.info("Native startup core delay_ms=%s", delay_ms)
+        time.sleep(delay_ms / 1000)
     from raphael_core import app as app_module  # native libraries: only after the claim
 
     data_dir = os.environ.get("RAPHAEL_DATA_DIR")

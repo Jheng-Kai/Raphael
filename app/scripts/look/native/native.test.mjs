@@ -2,8 +2,46 @@ import { describe, it, expect, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { launch, stopOwned, freePort, connectWebView } from "./process.mjs";
 import { collectErrors, toastError, paidRequests } from "./errors.mjs";
-import { remaining, journeys, assertWindowSlept, forwardMainWindow } from "./journeys.mjs";
+import { remaining, journeys, assertWindowSlept, forwardMainWindow, nativeLaunches, startupEvidence } from "./journeys.mjs";
+import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 import { parseOptions } from "../options.mjs";
+
+describe("startup-rooms journey", () => {
+  it("runs ten fresh normal launches and ten slow launches without duplicating other journeys", () => {
+    const selected = nativeLaunches(parseOptions(["startup-rooms", "hidden-window"], journeys).selected);
+    expect(selected).toHaveLength(21);
+    expect(new Set(selected.map(journey => journey.id ?? journey.name)).size).toBe(21);
+    for (const variant of ["normal", "slow"]) {
+      const launches = selected.filter(journey => journey.startup?.variant === variant);
+      expect(launches.map(journey => journey.startup.attempt)).toEqual([1,2,3,4,5,6,7,8,9,10]);
+      expect(launches.every(journey => journey.startup.delayMs === (variant === "slow" ? 3000 : 0))).toBe(true);
+    }
+    expect(selected.at(-1).name).toBe("hidden-window");
+  });
+  it("distinguishes suspension requests, actual suspension and page delivery before the first show", () => {
+    const line = (event, at) => `INFO native startup: ${JSON.stringify({event,at})}`;
+    const log = [line("inactive_request", 1), line("suspend_requested", 2), line("first_show", 3), line("suspend_completed", 4), line("core_hello", 5)].join("\n");
+    const evidence = startupEvidence(log, { visibility: [{at:1,state:"hidden"},{at:3,state:"visible"}], coreReady: [6] });
+    expect(evidence).toMatchObject({ firstShowAt:3, coreHelloAt:5, suspendRequestedBeforeFirstShow:true, suspendedBeforeFirstShow:false, hiddenBeforeFirstShow:true, coreReadyAt:6 });
+    expect(startupEvidence([line("suspend_completed",2),line("first_show",3)].join("\n")).suspendedBeforeFirstShow).toBe(true);
+    expect(startupEvidence(log).coreReadyAt).toBeNull();
+    expect(startupEvidence(log, {startedAt:4,visibility:[{at:4,state:"visible"}],coreReady:[]}).hiddenBeforeFirstShow).toBeNull();
+  });
+  it("records hidden startup, CoreReady delivery, first visible rows and early errors before CDP attaches", () => {
+    let tick = 1, mutated;
+    const listeners = {};
+    const document = { visibilityState:"hidden", addEventListener:(name,fn)=>{listeners[name]=fn;}, querySelectorAll:()=>[] };
+    const context = { window:{}, document, Date:{now:()=>tick}, console:{info:vi.fn(),error:vi.fn()}, addEventListener:(name,fn)=>{listeners[name]=fn;},
+      MutationObserver:class { constructor(fn) {mutated=fn;} observe() {} } };
+    runInNewContext(readFileSync(new URL("./startup-probe.js", import.meta.url), "utf8"), context);
+    tick=2;document.visibilityState="visible";listeners.visibilitychange();
+    tick=3;context.console.info("main page: CoreReady");
+    tick=4;document.querySelectorAll=selector=>selector.startsWith('.au-rooms-section')?[{dataset:{room:"7"},getBoundingClientRect:()=>({width:100}),checkVisibility:()=>true,querySelector:()=>({textContent:"Startup room 1"})}]:[];mutated();
+    listeners.error({message:"Early startup failure"});
+    expect(context.window.__nativeStartup).toMatchObject({ visibility:[{at:1,state:"hidden"},{at:2,state:"visible"}], coreReady:[3], rows:[{at:4,rows:[{id:7,name:"Startup room 1"}]}], errors:["Early startup failure"] });
+  });
+});
 
 describe("hidden-window journey", () => {
   it("selects the registered journey through the native CLI options", () => {

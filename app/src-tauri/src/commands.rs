@@ -159,6 +159,8 @@ pub enum DictationPhase {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type")]
 pub enum MainEvent {
+    /// The subscribed core has answered hello; safe to retry startup reads.
+    CoreReady,
     /// Fixed prerequisite metadata only, never the service's error text or credentials.
     SetupMissing {
         missing: Value,
@@ -748,6 +750,18 @@ pub async fn core_call(
         return Err(format!("the main window may not call {method}"));
     }
     validate_core_call(&method, &params)?;
+    #[cfg(debug_assertions)]
+    if crate::startup_journey() && method == "rooms.list" {
+        static FIRST_READ: AtomicBool = AtomicBool::new(true);
+        let first = FIRST_READ.swap(false, Ordering::SeqCst);
+        if first
+            && std::env::var_os("RAPHAEL_TEST_NATIVE_ROOMS_FAIL_FIRST")
+                .is_some_and(|value| value == "1")
+        {
+            crate::webview_power::startup_trace("rooms_first_read_failed");
+            return Err(CORE_NOT_RUNNING.into());
+        }
+    }
     // The window can load before the app has started the core; its first calls wait for it.
     let mut waited = 0;
     let core = loop {
@@ -1072,6 +1086,7 @@ fn whole(value: &Value) -> Option<u64> {
 pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<MainEvent> {
     let params = &notification.params;
     match notification.method.as_str() {
+        "core.restarted" => Some(MainEvent::CoreReady),
         "audio.level" => {
             if !monitoring || !params.get("session_id").is_none_or(Value::is_null) {
                 return None;
@@ -1203,12 +1218,20 @@ pub async fn main_events(
     let forwarder = tauri::async_runtime::spawn(async move {
         // The window can load before the app has started the core. Such a page still has to hear
         // from it, so wait for the core rather than leave the page deaf until it reloads.
-        let mut notifications = loop {
+        let core = loop {
             if let Some(core) = app.try_state::<Arc<CoreProcess>>() {
-                break core.subscribe();
+                break core.inner().clone();
             }
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         };
+        let mut notifications = core.subscribe();
+        // Subscribe before the probe, then replay readiness for this page even if initial hello was earlier.
+        if core.call("core.hello", json!({})).await.is_ok() {
+            crate::webview_power::startup_trace("CoreReady_sent");
+            if channel.send(MainEvent::CoreReady).is_err() {
+                return;
+            }
+        }
         loop {
             match notifications.recv().await {
                 Ok(notification) => {
@@ -3320,12 +3343,24 @@ mod tests {
 
     #[test]
     fn other_notifications_are_not_forwarded() {
-        for method in ["core.restarted", "core.down", "dictation.partial"] {
+        for method in ["core.down", "dictation.partial"] {
             assert_eq!(
                 main_event_from(&notification(method, json!({})), true),
                 None
             );
         }
+    }
+
+    #[test]
+    fn a_restarted_core_reaches_existing_readiness_consumers() {
+        assert_eq!(
+            main_event_from(&notification("core.restarted", json!({})), false),
+            Some(MainEvent::CoreReady)
+        );
+        assert_eq!(
+            serde_json::to_string(&MainEvent::CoreReady).unwrap(),
+            r#"{"type":"CoreReady"}"#
+        );
     }
 
     #[test]

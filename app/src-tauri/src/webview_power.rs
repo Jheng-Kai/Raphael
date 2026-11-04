@@ -2,12 +2,45 @@
 
 use tauri::{Runtime, WebviewWindow};
 
-#[cfg(windows)]
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(windows)]
 static MAIN_ACTIVE: AtomicBool = AtomicBool::new(true);
+static MAIN_SHOWN: AtomicBool = AtomicBool::new(false);
+
+fn main_power_allowed(shown: bool, active: bool, manual_launch: bool) -> bool {
+    active || shown || !manual_launch
+}
+
+pub(crate) fn startup_trace(event: &str) {
+    if crate::startup_journey() {
+        let at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        log::info!(
+            "native startup: {}",
+            serde_json::json!({"event": event, "at": at})
+        );
+    }
+}
+
+pub(crate) fn main_shown() {
+    if !MAIN_SHOWN.swap(true, Ordering::SeqCst) {
+        startup_trace("first_show");
+    }
+}
 
 pub(crate) fn main_active<R: Runtime>(window: &WebviewWindow<R>, active: bool) {
+    startup_trace(if active {
+        "active_request"
+    } else {
+        "inactive_request"
+    });
+    let manual_launch = crate::first_run::opens_at_start(&std::env::args().collect::<Vec<_>>());
+    if !main_power_allowed(MAIN_SHOWN.load(Ordering::SeqCst), active, manual_launch) {
+        startup_trace("pre_show_suspend_skipped");
+        return;
+    }
     #[cfg(windows)]
     {
         MAIN_ACTIVE.store(active, Ordering::SeqCst);
@@ -41,6 +74,11 @@ pub(crate) fn main_active<R: Runtime>(window: &WebviewWindow<R>, active: bool) {
                                     return Ok(());
                                 }
                                 // Showing can race asynchronous suspension. A late completion must not freeze a visible page.
+                                startup_trace(if suspended {
+                                    "suspend_completed"
+                                } else {
+                                    "suspend_declined"
+                                });
                                 if suspended && MAIN_ACTIVE.load(Ordering::SeqCst) {
                                     resume.Resume()?;
                                 } else if !suspended && !MAIN_ACTIVE.load(Ordering::SeqCst) {
@@ -49,6 +87,7 @@ pub(crate) fn main_active<R: Runtime>(window: &WebviewWindow<R>, active: bool) {
                                 Ok(())
                             },
                         ));
+                        startup_trace("suspend_requested");
                         suspend.TrySuspend(&done)?;
                     }
                     Ok(())
@@ -93,4 +132,22 @@ pub(crate) fn low_memory<R: Runtime>(window: &WebviewWindow<R>, low: bool) {
     }
     #[cfg(not(windows))]
     let _ = (window, low);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manual_startup_never_suspends_before_the_first_successful_show() {
+        assert!(!main_power_allowed(false, false, true));
+        assert!(main_power_allowed(false, true, true));
+        assert!(main_power_allowed(true, false, true));
+        assert!(main_power_allowed(true, true, true));
+    }
+
+    #[test]
+    fn explicit_autostart_can_sleep_after_the_page_subscribes_without_a_show() {
+        assert!(main_power_allowed(false, false, false));
+    }
 }

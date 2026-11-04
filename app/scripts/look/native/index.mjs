@@ -9,9 +9,9 @@ import { saveReport } from "../report.mjs";
 import { contactSheets } from "../contact-sheet.mjs";
 import { BROWSER_ARGS, browserPath } from "../runner.mjs";
 import { launch, stopOwned, connectWebView, freePort } from "./process.mjs";
-import { collectErrors, paidRequests } from "./errors.mjs";
+import { collectErrors, paidRequests, toastError } from "./errors.mjs";
 import { prepareVoiceSample, requireVoiceModels } from "./audio.mjs";
-import { drive, journeys, pause } from "./journeys.mjs";
+import { drive, journeys, pause, nativeLaunches, startupEvidence } from "./journeys.mjs";
 import { decodeVisibleImages, settleMotion } from "../driver.mjs";
 
 const execute = promisify(execFile);
@@ -29,6 +29,7 @@ try {
 } catch (error) { console.error(error.stack || error.message); process.exitCode = 1; }
 
 async function run(options) {
+  const selected = nativeLaunches(options.selected);
   await mkdir(options.out, { recursive: true });
   const directory = await mkdtemp(join(options.out, "run-"));
   const report = { mode: "native", startedAt: new Date().toISOString(), directory, keep: options.keep, status: "running", errors: [], results: [], captures: [] };
@@ -45,12 +46,13 @@ async function run(options) {
     if (!existsSync(executable)) throw new Error(`Missing debug app: ${executable}; build offline with CARGO_BUILD_JOBS=2`);
     if (!existsSync(python)) throw new Error(`Missing core Python: ${python}; set RAPHAEL_CORE_PYTHON to an installed interpreter`);
     const phrases = await translationPhrases();
-    for (const journey of options.selected) {
+    for (const journey of selected) {
       if (interrupted) break;
-      const journeyDir = join(directory, journey.name), data = join(journeyDir, "data");
+      const scene = journey.id ?? journey.name;
+      const journeyDir = join(directory, scene), data = join(journeyDir, "data");
       await mkdir(data, { recursive: true });
       let log = "";
-      const result = { scene: journey.name, theme: "native", width: 1120, height: 900, failed: true, failures: [], runtimeErrors: [], image: null, data };
+      const result = { scene, theme: "native", width: 1120, height: 900, failed: true, failures: [], runtimeErrors: [], image: null, data, ...(journey.startup ? { startup: { ...journey.startup } } : {}) };
       report.results.push(result);
       let activePage;
       const env = { ...process.env, RAPHAEL_DATA_DIR: data, RAPHAEL_FAKE_LLM: "1", RAPHAEL_TEST_NATIVE: "1", RAPHAEL_CORE_PYTHON: python, PYTHONPATH: join(root, "core/src"), PYTHONIOENCODING: "utf-8", PYTHONDONTWRITEBYTECODE: "1", CARGO_BUILD_JOBS: "2" };
@@ -58,6 +60,14 @@ async function run(options) {
       delete env.RAPHAEL_TEST_NATIVE_HOMES;
       delete env.RAPHAEL_TEST_NATIVE_HOME;
       delete env.RAPHAEL_TEST_NATIVE_WINDOW_LIFECYCLE;
+      delete env.RAPHAEL_TEST_NATIVE_STARTUP;
+      delete env.RAPHAEL_TEST_NATIVE_CORE_DELAY_MS;
+      delete env.RAPHAEL_TEST_NATIVE_ROOMS_FAIL_FIRST;
+      if (journey.startup) {
+        env.RAPHAEL_TEST_NATIVE_STARTUP = "1";
+        env.RAPHAEL_TEST_NATIVE_CORE_DELAY_MS = String(journey.startup.delayMs);
+        if (journey.startup.variant === "slow") env.RAPHAEL_TEST_NATIVE_ROOMS_FAIL_FIRST = "1";
+      }
       if (journey.name === "hidden-window") {
         env.RAPHAEL_TEST_NATIVE_WINDOW_LIFECYCLE = "1";
         env.RAPHAEL_NATIVE_THINK_S = "4";
@@ -125,7 +135,7 @@ async function run(options) {
         if (!page) throw new Error(`CDP has no main application target: ${JSON.stringify(result.targets)}`);
         activePage = page;
         result.url = page.url();
-        await page.setViewport({ width: 1120, height: 900 });
+        if (!journey.startup) await page.setViewport({ width: 1120, height: 900 });
         await collectErrors(page, result.runtimeErrors);
         if (journey.name === "home-timing") await page.evaluateOnNewDocument(() => {
           window.__homeTiming = { firstPaintMs: null, firstAllowance: null };
@@ -140,17 +150,19 @@ async function run(options) {
           });
           observer.observe(document, { childList: true, subtree: true, attributes: true });
         });
-        await page.reload({ waitUntil: "domcontentloaded" });
-        await page.waitForSelector(".page-home:not([hidden]) .ho-hero", { visible: true, timeout: 90000 });
+        if (!journey.startup) {
+          await page.reload({ waitUntil: "domcontentloaded" });
+          await page.waitForSelector(".page-home:not([hidden]) .ho-hero", { visible: true, timeout: 90000 });
+        }
         const capture = async (label, target = page) => {
           try { await settleMotion(target); }
           catch (error) { throw new Error(`${journey.name}/${label}: ${error.message}`, { cause: error }); }
           await target.evaluate(decodeVisibleImages);
-          const image = `${journey.name}-${label}.png`;
+          const image = `${scene}-${label}.png`;
           await target.screenshot({ path: join(directory, image) });
           result.image = image;
           const viewport = await target.evaluate(() => ({ width: innerWidth, height: innerHeight }));
-          report.captures.push({ scene: `${journey.name}/${label}`, theme: "native", ...viewport, image, failed: !!(result.runtimeErrors.length || result.failures.length) });
+          report.captures.push({ scene: `${scene}/${label}`, theme: "native", ...viewport, image, failed: !!(result.runtimeErrors.length || result.failures.length) });
         };
         const rpc = (method, params) => page.evaluate(({ method, params }) => window.__TAURI_INTERNALS__.invoke("core_call", { method, params }), { method, params });
         await drive(journey.name, { page, result, capture, learnedPage: async () => (await browser.pages()).find(page => /\/learned\.html/.test(page.url())), windows: () => database("windows", String(owned.pid)), computerOffset: () => database("vm-offset"), computerSignin: member => database("vm-signin", String(member)), snapshot: () => database("snapshot"), nativeLog: () => readFile(join(data, "logs/raphael.log"), "utf8").catch(() => ""), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases, catalogApp: process.env.RAPHAEL_NATIVE_APP || "slack",
@@ -163,8 +175,8 @@ async function run(options) {
         if (browser) {
           try {
             const page = (await browser.pages()).find(page => !/devtools|about:blank/.test(page.url()));
-            const image = `${journey.name}-failure.png`;
-            if (page) { await page.screenshot({ path: join(directory, image) }); result.image = image; report.captures.push({ scene: journey.name, theme: "native", width: 1120, image, failed: true }); }
+            const image = `${scene}-failure.png`;
+            if (page) { await page.screenshot({ path: join(directory, image) }); result.image = image; report.captures.push({ scene, theme: "native", width: 1120, image, failed: true }); }
           } catch (error) { result.failures.push(`Failure screenshot: ${error.message}`); }
         }
       } finally {
@@ -189,13 +201,19 @@ async function run(options) {
           log += `\n${await readFile(persistedLog, "utf8")}`;
         }
         await writeFile(join(journeyDir, "app.log"), log);
+        if (journey.startup) {
+          result.startup.evidence = startupEvidence(log, result.startup.probe);
+          for (const message of result.startup.probe?.alerts ?? []) {
+            if (toastError(message)) result.runtimeErrors.push({ kind: "toast", message });
+          }
+        }
         result.cliDiagnosticLog = log.split(/\r?\n/).filter(line => line.includes("Native CLI diagnostic "));
         const costs = paidRequests(log, ["gmail-connect", "store-finder", "catalog-connect"].includes(journey.name), journey.name === "openrouter-turn" ? ["openrouter.ai"] : []);
         if (costs.length) result.failures.push(`Undeclared paid/Composio requests: ${JSON.stringify(costs)}`);
         if (journey.name === "gmail-connect") result.connectorLog = log.split(/\r?\n/).flatMap((line, index, lines) => /connect|composio|card/i.test(line) ? lines.slice(Math.max(0, index - 2), index + 3) : []);
         result.failed = !!(result.failures.length || result.runtimeErrors.length);
         result.status = result.blocked ? "blocked" : result.failed ? "failed" : "passed";
-        console.log(`${result.blocked ? "BLOCKED" : result.failed ? "FAIL" : "PASS"} ${journey.name}: ${result.failures[0] || result.runtimeErrors[0]?.message || "assertions passed"}`);
+        console.log(`${result.blocked ? "BLOCKED" : result.failed ? "FAIL" : "PASS"} ${scene}: ${result.failures[0] || result.runtimeErrors[0]?.message || "assertions passed"}`);
         await save();
       }
     }
@@ -212,7 +230,8 @@ async function run(options) {
     if (owned) { try { await stopOwned(owned); } catch (error) { report.errors.push(error.message); } }
     if (browser) { try { await browser.close(); } catch (error) { report.errors.push(error.message); } }
     report.finishedAt = new Date().toISOString();
-    report.status = report.errors.length || report.results.length !== options.selected.length || report.results.some(result => result.failed) ? "failed" : "passed";
+    report.startupCounts = Object.fromEntries(["normal", "slow"].map(variant => [variant, { expected: selected.filter(journey => journey.startup?.variant === variant).length, passed: report.results.filter(result => result.startup?.variant === variant && !result.failed).length, failed: report.results.filter(result => result.startup?.variant === variant && result.failed).length }]));
+    report.status = report.errors.length || report.results.length !== selected.length || report.results.some(result => result.failed) ? "failed" : "passed";
     await save(); console.log(`Report: ${join(directory, "report.json")}`);
   }
   return report.status === "passed" ? 0 : 1;

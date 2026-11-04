@@ -360,7 +360,7 @@ pub fn run() {
             // ---- First run ----
             // Until the first-run guide has been gone through, the main window opens by itself.
             // It reads the device settings, so it comes after them.
-            if native_journey() {
+            if native_journey() && !startup_journey() {
                 show_main_window(app.handle());
             } else {
                 first_run::start(app.handle());
@@ -379,6 +379,11 @@ struct Migration(std::sync::Mutex<Option<data_layout::Outcome>>);
 pub(crate) fn native_journey() -> bool {
     cfg!(debug_assertions)
         && std::env::var_os("RAPHAEL_TEST_NATIVE").is_some_and(|value| value == "1")
+}
+
+pub(crate) fn startup_journey() -> bool {
+    native_journey()
+        && std::env::var_os("RAPHAEL_TEST_NATIVE_STARTUP").is_some_and(|value| value == "1")
 }
 
 /// The first plugins, which decide whether this launch runs at all and prepare what everything
@@ -456,9 +461,13 @@ fn create_main_window(app: &AppHandle) -> tauri::Result<()> {
         log::error!("the config has no main window");
         return Ok(());
     };
-    tauri::WebviewWindowBuilder::from_config(app, config)?
-        .data_directory(webview_data_dir(app)?)
-        .build()?;
+    let mut builder = tauri::WebviewWindowBuilder::from_config(app, config)?
+        .data_directory(webview_data_dir(app)?);
+    if startup_journey() {
+        builder = builder
+            .initialization_script(include_str!("../../scripts/look/native/startup-probe.js"));
+    }
+    builder.build()?;
     Ok(())
 }
 
@@ -488,7 +497,10 @@ fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     let shown = window
         .unminimize()
         .and_then(|()| window.show())
-        .and_then(|()| window.set_focus());
+        .and_then(|()| {
+            webview_power::main_shown();
+            window.set_focus()
+        });
     if let Err(err) = shown {
         log::warn!("could not show the main window: {err}");
     }

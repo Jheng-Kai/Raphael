@@ -23,6 +23,75 @@ let app:AppContext;
 const pane=async()=>{const view=createRoomPane(app,vi.fn());document.body.append(view.el);await view.open(1);return view;};
 const draft=(text:string)=>{const input=document.querySelector<HTMLTextAreaElement>("#room-message")!;input.value=text;input.dispatchEvent(new Event("input"));return input;};
 
+test("startup rooms recover from a failed first read without a CoreReady event", async () => {
+ vi.useFakeTimers();
+ try {
+  api.roomsList.mockRejectedValueOnce(new Error("The core is starting"));
+  const section=createRoomsSection();document.body.append(section);await flush();
+  expect(section.querySelector('[data-room="1"]')).toBeNull();
+  await vi.advanceTimersByTimeAsync(3500);await flush();
+  expect(section.querySelector('[data-room="1"] b')?.textContent).toBe("Launch");
+  const reads=api.roomsList.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(api.roomsList).toHaveBeenCalledTimes(reads);
+  section.remove();
+ } finally { vi.useRealTimers(); }
+});
+
+test("startup rooms retry a failed roster and stop after a successful empty list", async () => {
+ vi.useFakeTimers();
+ try {
+  api.membersList.mockRejectedValueOnce(new Error("The core is starting"));
+  api.roomsList.mockResolvedValue({rooms:[]});
+  const section=createRoomsSection();document.body.append(section);await flush();
+  await vi.advanceTimersByTimeAsync(3500);await flush();
+  expect(api.membersList.mock.calls.length).toBeGreaterThan(1);
+  const reads=api.roomsList.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(api.roomsList).toHaveBeenCalledTimes(reads);
+  section.remove();
+ } finally { vi.useRealTimers(); }
+});
+
+test("a detached sidebar stops startup retries", async () => {
+ vi.useFakeTimers();
+ try {
+  api.roomsList.mockRejectedValue(new Error("The core is starting"));
+  const section=createRoomsSection();document.body.append(section);await flush();section.remove();
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(api.roomsList).toHaveBeenCalledTimes(1);
+  api.roomsList.mockResolvedValue({rooms:[room]});
+ } finally { vi.useRealTimers(); }
+});
+
+test("startup retry delay stays bounded during a longer core outage", async () => {
+ vi.useFakeTimers();
+ try {
+  api.roomsList.mockRejectedValue(new Error("The core is starting"));
+  const section=createRoomsSection();document.body.append(section);await flush();
+  await vi.advanceTimersByTimeAsync(3850);
+  const reads=api.roomsList.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(1999);
+  expect(api.roomsList).toHaveBeenCalledTimes(reads);
+  api.roomsList.mockResolvedValue({rooms:[room]});
+  await vi.advanceTimersByTimeAsync(1);await flush();
+  expect(api.roomsList).toHaveBeenCalledTimes(reads+1);
+  expect(section.querySelector('[data-room="1"] b')?.textContent).toBe("Launch");
+  section.remove();
+ } finally { api.roomsList.mockResolvedValue({rooms:[room]});vi.useRealTimers(); }
+});
+
+test("returning to a visible window refreshes room rows without a core event", async () => {
+ const section=createRoomsSection();document.body.append(section);await flush();
+ const hidden=vi.spyOn(document,"hidden","get").mockReturnValue(true);
+ try {
+  document.dispatchEvent(new Event("visibilitychange"));
+  api.roomsList.mockResolvedValue({rooms:[{...room,name:"Changed while hidden"}]});
+  hidden.mockReturnValue(false);document.dispatchEvent(new Event("visibilitychange"));await flush();
+  expect(section.querySelector('[data-room="1"] b')?.textContent).toBe("Changed while hidden");
+ } finally { hidden.mockRestore();section.remove(); }
+});
+
 test("room drafts retain files and quotes in memory and words across a new pane", async () => {
  const view=await pane(); draft('Unsent room words');
  const file=new File(['Sample file'],'sample.txt',{type:'text/plain'});

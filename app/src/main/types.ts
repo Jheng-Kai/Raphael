@@ -766,6 +766,7 @@ export interface DeviceSettings {
 
 /** What commands.rs sends on the `main_events` channel (`MainEvent`). */
 export type MainEvent =
+  | { type: "CoreReady" }
   | { type: "SetupMissing"; missing: import("./missing").Missing }
   | { type: "DictationPasted"; text: string }
   | { type: "ConversationsChanged"; member_id: number }

@@ -133,6 +133,16 @@ elif operation == "init":
     # then drive all new conversations, turns and deletions from the real UI.
     Conversations(connection).main()
     Conversations(connection).quick()
+    if len(sys.argv) > 3 and sys.argv[3] == "startup-rooms":
+        from raphael_core.members.store import MemberStore
+        store = MemberStore(connection)
+        people = [store.create_member(name=name, role="Startup fixture").id for name in ("Startup Alice", "Startup Bob")]
+        with connection:
+            for index in range(1, 4):
+                room = connection.execute("INSERT INTO rooms(name, created, is_team) VALUES (?, ?, 0)",
+                                          (f"Startup room {index}", index)).lastrowid
+                connection.executemany("INSERT INTO room_members(room_id, member_id) VALUES (?, ?)",
+                                       [(room, member) for member in people])
     voice = len(sys.argv) > 3 and sys.argv[3] in ("voice-conversation", "voice-keys")
     settings = {"stt_engine": "local" if voice else "cloud", "stt_local_model": "qwen3-asr" if voice else None,
                 "tts_enabled": False, "first_bot_profile": {"name": "Raphael", "personality": "Calm", "instructions": "Help with the current request."}}

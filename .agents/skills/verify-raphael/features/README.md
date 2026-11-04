@@ -1,5 +1,12 @@
 # Raphael feature map
 
+## Startup room recovery (2026-11-04)
+
+See [Startup rooms](startup-rooms.md) for R-PERF-13, failed first-read recovery,
+subscriber readiness replay, manual first-show protection and the twenty-launch
+native journey. Offline tests do not establish native before/after acceptance;
+the integrator retains normal/slow counts and pre-first-show suspension evidence.
+
 ## Delegated work and run endings (2026-11-04)
 
 See [Work truth](work-truth.md) for R-WORK-06 through R-WORK-15: private/exchange history, earlier files, local commands, task recovery, existing room posts, search cooldowns, CLI progress, routine steps and capability inventory. This core-only unit uses offline tests; no UI, native or live-provider acceptance is implied.

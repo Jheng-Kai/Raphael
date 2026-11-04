@@ -6,6 +6,7 @@ import { patchThread } from "./thread-diff";
 import { mountConversationFind } from "./conversation-find";
 import * as api from "./api";
 import { eventRead } from './event-read';
+import { visibilityGate } from "./window-visibility";
 import { onAvatarChange } from "./avatar";
 import { ownerFaceHTML } from "./owner-avatar";
 import { describeError, formatClock } from "./format";
@@ -485,6 +486,8 @@ export function createRoomsSection(active: () => boolean = () => true): HTMLElem
   let rooms: Room[] = [], list: MembersList = { members: [], groups: [] }, generation = 0, query = "";
   let drawnQuery = "", drawnSelection: number | null = null, drawnRows = "";
   let rosterDirty = true, timer: ReturnType<typeof setTimeout> | undefined;
+  let loaded = false, retry = 0;
+  const retryDelays = [100, 250, 500, 1000, 2000];
   const draw = (): void => {
     drawnQuery = query; drawnSelection = active() ? selectedRoom : null;
     // Groups are the owner's own; a former team room stays only for the conversation it already holds.
@@ -500,14 +503,22 @@ export function createRoomsSection(active: () => boolean = () => true): HTMLElem
     patchHTML(el, html);
   };
   const load = async (fromEvent=false, readRooms=true): Promise<void> => {
+    clearTimeout(timer); timer = undefined;
+    readRooms ||= !loaded;
     const mine = ++generation;
     try {
       const roomRead=()=>api.roomsList(), peopleRead=()=>api.membersList(getLocale());
       const [result, people] = await Promise.all([readRooms ? (fromEvent ? eventRead('rooms.list',roomRead,context) : roomRead()) : Promise.resolve({rooms}), rosterDirty ? (fromEvent ? eventRead(`members.list:${getLocale()}`,peopleRead,context) : peopleRead()) : Promise.resolve(list)]);
-      if (mine !== generation) return; rooms = result.rooms; list = people; rosterDirty = false; draw();
+      if (mine !== generation) return; rooms = result.rooms; list = people; rosterDirty = false; loaded = true; draw();
     }
-    catch { /* A core starting up can temporarily have no rooms. */ }
+    catch {
+      // Startup cannot depend on one ready event. Stop retrying after the first successful snapshot, even if empty.
+      if (mine !== generation || loaded || !el.isConnected) return;
+      const delay = retryDelays[Math.min(retry++, retryDelays.length - 1)];
+      timer = setTimeout(() => { timer = undefined; if (el.isConnected) void load(); }, delay);
+    }
   };
+  visibilityGate(() => { rosterDirty = true; void load(); }, () => el.isConnected);
   listeners.add(event => {
     if(!el.isConnected)return;
     if(event?.type==='WorkerChanged' || event?.type==='AgentTurn')return;

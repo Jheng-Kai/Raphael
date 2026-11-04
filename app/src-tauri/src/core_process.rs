@@ -579,10 +579,13 @@ async fn say_hello(rpc: &RpcClient) {
         .await
     {
         Ok(hello) => match hello.get("protocol").and_then(Value::as_u64) {
-            Some(PROTOCOL_VERSION) => log::info!(
-                "core.hello: protocol {PROTOCOL_VERSION}, core version {}",
-                hello.get("version").and_then(Value::as_str).unwrap_or("?")
-            ),
+            Some(PROTOCOL_VERSION) => {
+                crate::webview_power::startup_trace("core_hello");
+                log::info!(
+                    "core.hello: protocol {PROTOCOL_VERSION}, core version {}",
+                    hello.get("version").and_then(Value::as_str).unwrap_or("?")
+                );
+            }
             other => log::error!(
                 "the core speaks protocol {other:?}, but this app needs protocol {PROTOCOL_VERSION}"
             ),

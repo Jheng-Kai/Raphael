@@ -13,6 +13,7 @@ export const journeys = [
   { name: "owner-round10", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
   { name: "home-timing", description: "Measure first painted Home against a two-second offline CLI allowance read" },
   { name: "hidden-window", description: "Close to tray and minimize suspend page timers; returning catches up a fake reply completed while hidden" },
+  { name: "startup-rooms", description: "Ten normal and ten slow-core owner-path launches keep seeded group chats in the sidebar, without a page reload" },
   { name: "model-sync", description: "The real core and the real Codex CLI: its models reach the composer, a choice and a depth reach Settings, a change reaches the composer, and a turn runs on it" },
   { name: "owner-words", description: "The real core and the real Codex CLI, on what the owner really asks: an event goes on today's calendar, and a question about this PC's CPU runs read-only commands after the card" },
   { name: "office-mission", description: "The acceptance test, on the real Codex and real computers: the owner asks for a 3D office, Raphael plans roles, makes the team and hands out the work, and they finish it" },
@@ -43,6 +44,29 @@ const click = (page, selector) => perform(page, { action: "click", selector });
 const wait = (page, selector) => perform(page, { action: "wait", selector });
 const type = (page, selector, text) => perform(page, { action: "type", selector, text });
 export const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+export function nativeLaunches(selected) {
+  return selected.flatMap(journey => journey.name !== "startup-rooms" ? [journey] :
+    ["normal", "slow"].flatMap(variant => Array.from({ length: 10 }, (_, i) => ({
+      ...journey, id: `startup-rooms-${variant}-${i + 1}`, startup: { variant, attempt: i + 1, delayMs: variant === "slow" ? 3000 : 0 },
+    }))));
+}
+
+export function startupEvidence(log, probe) {
+  const events = log.split(/\r?\n/).flatMap(line => {
+    const value = line.split("native startup: ")[1];
+    return value ? [JSON.parse(value)] : [];
+  });
+  const firstShowAt = events.find(event => event.event === "first_show")?.at;
+  const firstShow = events.findIndex(event => event.event === "first_show");
+  const beforeShow = index => firstShow < 0 || index < firstShow;
+  return { events, firstShowAt, coreHelloAt: events.find(event => event.event === "core_hello")?.at,
+    suspendRequestedBeforeFirstShow: events.some((event, index) => event.event === "suspend_requested" && beforeShow(index)),
+    suspendedBeforeFirstShow: events.some((event, index) => event.event === "suspend_completed" && beforeShow(index)),
+    hiddenBeforeFirstShow: !probe ? null : probe.visibility.some(event => event.state === "hidden" && (!firstShowAt || event.at < firstShowAt))
+      ? true : firstShowAt && probe.startedAt <= firstShowAt ? false : null,
+    coreReadyAt: probe?.coreReady[0] ?? null };
+}
 
 export function assertWindowSlept({ ticks, hiddenAt, showAt }) {
   // Allow the asynchronous TrySuspend transition, then observe six full seconds.
@@ -141,6 +165,35 @@ export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
 
 export async function drive(name, context) {
   const { page, result, capture, snapshot, phrases } = context;
+  if (name === "startup-rooms") {
+    const expected = (await snapshot()).rooms.filter(room => room.name.startsWith("Startup room "));
+    if (expected.length !== 3 || expected.some(room => room.hidden)) throw new Error("Startup fixture needs three visible persisted rooms");
+    result.startup.expected = expected.map(room => ({ id: room.id, name: room.name }));
+    for (let i = 0; i < 300; i++) {
+      result.startup.evidence = startupEvidence(await context.nativeLog());
+      if (result.startup.evidence.coreHelloAt && result.startup.evidence.firstShowAt) break;
+      await pause(200);
+    }
+    if (!result.startup.evidence.coreHelloAt || !result.startup.evidence.firstShowAt) throw new Error("Startup never reached its normal first show and core hello; inspect native startup trace");
+    const state = await context.windowAction("state");
+    if (!state.visible || state.minimized) throw new Error("Owner-path startup did not show the main window");
+    try {
+      await page.waitForFunction(rooms => rooms.every(room => {
+        const row = document.querySelector(`.au-rooms-section [data-room="${room.id}"]`);
+        return row?.checkVisibility() && row.querySelector('b')?.textContent === room.name;
+      }), { timeout: 5000, polling: 100 }, result.startup.expected);
+    } finally {
+      result.startup.probe = await page.evaluate(() => window.__nativeStartup);
+      result.startup.evidence = startupEvidence(await context.nativeLog(), result.startup.probe);
+    }
+    if (!result.startup.probe) throw new Error("Startup probe is missing; rebuild the instrumented debug shell");
+    const painted = result.startup.probe.rows.find(sample => result.startup.expected.every(room => sample.rows.some(row => row.id === room.id && row.name === room.name)));
+    result.startup.roomsAfterReadyMs = painted?.at - Math.max(result.startup.evidence.firstShowAt, result.startup.evidence.coreHelloAt);
+    if (!painted || result.startup.roomsAfterReadyMs > 5000) throw new Error("Seeded rooms did not paint within five seconds of first show and core readiness");
+    if (result.startup.probe.errors.length) throw new Error(`Startup runtime errors: ${JSON.stringify(result.startup.probe.errors)}`);
+    await capture("rooms-visible");
+    return;
+  }
   if (name === "hidden-window") {
     const { member } = await context.rpc("members.create", { name: "Window sleeper", role: "Offline suspension check" });
     const conversation = await newConversation(context, member.id);
