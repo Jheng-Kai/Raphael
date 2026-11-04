@@ -247,6 +247,13 @@ async def test_a_run_reads_the_conversation_and_the_notes_before_its_task(operat
     assert "<conversation> tags" in client.chat_calls[0]["messages"][0]["content"]
 
 
+def test_a_run_keeps_raphaels_owner_instructions(operating):
+    from raphael_core.agent.speaker import Speaker
+
+    before = operating.service._before_run(Speaker(instructions="OWNER-WORK-CONTRACT"))
+    assert "OWNER-WORK-CONTRACT" in before
+
+
 async def test_a_run_with_nothing_before_it_reads_only_its_task(operating, client):
     client.decisions.append(decision("operate"))
     client.chats.extend(PRESS_SEVEN)

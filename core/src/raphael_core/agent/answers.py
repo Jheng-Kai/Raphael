@@ -498,7 +498,7 @@ class Voice:
                 memory_snapshot=memory_snapshot,
             )
         else:
-            system = system_prompt(language, route, memory_snapshot, say_ja=say_ja)
+            system = system_prompt(language, route, memory_snapshot, say_ja=say_ja, speaker=speaker)
         system += roster
         began = time.perf_counter()
         try:

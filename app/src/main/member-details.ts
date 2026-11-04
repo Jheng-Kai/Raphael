@@ -27,7 +27,7 @@ import {
   sourceLabel,
 } from "./members";
 import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
-import { esc, ico, iconButton, openMenu, patchHTML, sel, toaster } from "./ui";
+import { esc, ico, iconButton, openMenu, patchHTML, sel, tg, toaster } from "./ui";
 import { eventRead } from './event-read';
 
 export type DetailsTab = "details" | "settings" | "memory" | "skills" | "commands" | "voice";
@@ -195,7 +195,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   }
 
   function detailsHTML(member: Member): string {
-    if (member.id === RAPHAEL_ID) return pageRows(member);
+    const draft = `<section class="mp-resource"><div><b>${esc(t("members.profile.draft"))}</b><p>${esc(t("members.profile.draftHint"))}</p></div>${tg(member.draft_first ?? true, t("members.profile.draft"), ' data-det="draft" data-k="det-draft"')}</section>`;
+    if (member.id === RAPHAEL_ID) return draft + pageRows(member);
     const list = host.list();
     const group = list?.groups.find((g) => g.id === member.group_id) ?? null;
     const sources = group?.sources ?? [];
@@ -207,7 +208,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       `<section class="mb-field"><div class="mb-dh">${esc(t("members.group"))}</div>` +
       sel(groupChoices(list?.groups ?? []), groupValue(group ? group.id : null), t("members.group"), ' data-det="group" data-k="det-group"') +
       `</section>` +
-      pageRows(member) +
+      draft + pageRows(member) +
       (sources.length
         ? `<section class="mb-field"><div class="mb-dh">${esc(t("members.sources"))}</div><div class="mb-chips">` +
           sources.map((source) => `<span class="mb-chip">${esc(sourceLabel(source))}</span>`).join("") +
@@ -388,6 +389,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         host.close();
         break;
       case "edit": host.edit?.(member); break;
+      case "draft": void host.update(member.id, { draft_first: !(member.draft_first ?? true) }); break;
       case "gear": tab = "settings"; draw(); break;
       case "back": tab = tab === "settings" ? "details" : "settings"; draw(); break;
       case "hide": host.hide?.(member); break;

@@ -244,6 +244,14 @@ export default [
     click('.mb-dialog [data-dlg="delete"]'), waitGone('.mb-det [data-conversation-open="1"]'), wait(".toast"), check("conversation-deleted")]),
   scene("details", "Title opens member details", [...details, { action: "icon-interactions", selector: '.mb-det [data-det="close"]' }, click('.mb-det-head'), check("details-pointer-focus")]),
   scene("raphael-details", "Title opens Raphael details", [{ action: "open-details" }, check("member-details")]),
+  ...[0, 1].map(id => scene(`speaker-draft-${id ? "member" : "chief"}`, "Every speaker can turn the shared draft preference off in details settings", [
+    member(id), { action: "open-details" }, click('[data-det="gear"]'), wait('[data-det="draft"][aria-checked="true"]'),
+    click('[data-det="draft"]'), wait('[data-det="draft"][aria-checked="false"]'),
+  ])),
+  scene("speaker-draft-profile", "The member profile uses the same draft preference component and words", [
+    ...details, click('[data-det="gear"]'), click('[data-det="edit"]'), wait('#mp-tab-permissions'),
+    click('#mp-tab-permissions'), wait('[data-dlg="draft"][aria-checked="true"]'),
+  ]),
   scene("composer-model-small", "The composer's model menu opens as a small card: the model and its depth, nothing else", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-now .mc-range'), check("composer-model-small"), check("depth-fill-covers-thumb")]),
   scene("composer-model-favorites", "What the owner starred in Settings is right there when choosing a model", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-pick'), click('.cb-pick'), wait('.cb-menu [data-cb-source="favorites"]'), check("composer-model-browse"), click('.cb-menu [data-cb-source="favorites"]'), wait('.cb-menu .cb-list small'), check("composer-model-browse"), check("composer-favorites")]),
   scene("composer-model-sources", "One card on the composer: the model and its depth, then the sources on the left and a source's models on the right under a centred title", [member(1), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-now'), check("composer-model-small"), click('.cb-pick'), wait('.cb-menu .cb-source'), check("composer-model-browse"), click('.cb-menu [data-cb-source="cli:codex"]'), wait('.cb-menu [data-model="cli:codex:gpt-6.1"]'), check("composer-model-browse"), click('.cb-menu [data-cb-source="cli:claude"]'), wait('.cb-menu [data-model="cli:claude:sonnet"]'), check("composer-model-browse"), click('.cb-menu .cb-back'), wait('.cb-now:not([hidden]) .cb-pick'), check("composer-model-small")]),

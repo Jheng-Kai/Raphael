@@ -320,7 +320,7 @@ def _prompts(
     persona, with its own file and its own conversation."""
     if speaker.is_raphael:
         system = worker_system_prompt(
-            language, model_calls=limits.model_calls, tool_calls=limits.tool_calls
+            language, model_calls=limits.model_calls, tool_calls=limits.tool_calls, speaker=speaker
         )
     else:
         system = member_worker_system_prompt(
@@ -817,7 +817,7 @@ class BackgroundService:
                 or type(requires_artifact) is not bool
                 or set(arguments)-{'member_id','request','stage_id','done_when','mode','requires_artifact'}):
             return refused('bad_arguments')
-        if member == speaker.id and source.scope != "room":
+        if member == speaker.id and source.scope != "room" and (source.scope != "private" or source_task is not None):
             return refused('self_handoff')
         target = self._speaker(member)
         if target is None:

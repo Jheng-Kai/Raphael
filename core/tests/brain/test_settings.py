@@ -33,6 +33,7 @@ def test_the_defaults_are_the_documented_ones():
     assert DEFAULTS == {
         "routine_webhook_port": 0,
         "chief_pinned": False,
+        "raphael_draft_first": True,
         "first_bot_profile": {},
         "owner_name": "",
         "owner_about": "",

@@ -80,7 +80,7 @@ _DEFINITIONS: dict[str, dict[str, Any]] = {
     },
     "weather": {
         "description": (
-            "[Raphael] The weather now, today and tomorrow in a city. Leave the city out for the "
+            "The weather now, today and tomorrow in a city. Leave the city out for the "
             "user's own city. Present the known days in a forecast fenced block using the shared schema."
         ),
         "parameters": {
@@ -90,7 +90,7 @@ _DEFINITIONS: dict[str, dict[str, Any]] = {
     },
     "web_search": {
         "description": (
-            "[Raphael] Search the web and get a short answer with the pages it drew on. Use it "
+            "Search the web and get a short answer with the pages it drew on. Use it "
             "for current or specific facts; the weather and the time have tools of their own."
         ),
         "parameters": {
@@ -101,7 +101,7 @@ _DEFINITIONS: dict[str, dict[str, Any]] = {
     },
     "web_read": {
         "description": (
-            "[Raphael] Read a web page as text. Only an address you have seen in the task or in "
+            "Read a web page as text. Only an address you have seen in the task or in "
             "what a tool of this task returned (a search result, a page read) can be read."
         ),
         "parameters": {
@@ -112,7 +112,7 @@ _DEFINITIONS: dict[str, dict[str, Any]] = {
     },
     "read_attachment": {
         "description": (
-            "[Raphael] Read a file the user handed over with the task, by its number (1 for "
+            "Read a file the user handed over with the task, by its number (1 for "
             "the first): images, PDF/text/Office documents, or transcribed audio/video. Unsupported "
             "formats return metadata and a reading limitation. Ask a question about it to "
             "say what to look for."
@@ -128,7 +128,7 @@ _DEFINITIONS: dict[str, dict[str, Any]] = {
     },
     "find_tools": {
         "description": (
-            "[Raphael] Look for more tools of the connected services by what you want to do "
+            "Look for more tools of the connected services by what you want to do "
             "(for example: search pages, update a page). The tools it finds can be called from "
             "then on."
         ),
@@ -141,12 +141,12 @@ _DEFINITIONS: dict[str, dict[str, Any]] = {
         },
     },
     "local_time": {
-        "description": "[Raphael] The date and the time on the user's computer.",
+        "description": "The date and the time on the user's computer.",
         "parameters": {"type": "object", "properties": {}},
     },
     "history_search": {
         "description": (
-            "[Raphael] Search what the user and you said in this speaker's earlier conversations, by a few "
+            "Search what the user and you said in this speaker's earlier conversations, by a few "
             "words. Returns the matching turns with their dates."
         ),
         "parameters": {

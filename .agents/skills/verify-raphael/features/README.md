@@ -680,3 +680,11 @@ See [Conversation](conversation.md#durable-owner-inbox-2026-11-03) for R-QUEUE-0
 through R-QUEUE-06 and refinements to R-BATCH-01/R-UI-08. See
 [Team and rooms](team-and-rooms.md#send-while-rooms-work-2026-11-03) for the shared
 room composer. The send-prompt and send-prompt-slow scenes keep their performance limits.
+
+## Speaker capability parity (2026-11-04)
+
+See [Speaker parity](speaker-parity.md) for R-AG-PARITY-01 through R-AG-PARITY-03,
+actual API/CLI/worker offer guards, private self-work, owner instructions, draft preference
+and role/coordination separation. This unit allows offline tests only: look, judge, native,
+live subscriptions and network are not authorized. The selected deferred UI scenes are
+listed in that entry.

@@ -46,6 +46,34 @@ async def test_raphael_is_first_in_the_list_in_the_language_asked(rig):
     assert (await rig.call("members.list"))["members"][0]["name"] == "ラファエル"
 
 
+async def test_raphael_has_the_same_persistent_draft_preference_as_members(rig):
+    from raphael_core.brain.settings import SettingsStore
+
+    assert rig.service.speaker(0).draft_first
+    saved = await rig.call("members.update", {"id": 0, "draft_first": False})
+    assert saved["member"]["draft_first"] is False
+    assert rig.service.speaker(0).draft_first is False
+    assert SettingsStore(rig.conn).get("raphael_draft_first") is False
+    assert (await rig.call("members.list"))["members"][0]["draft_first"] is False
+    for invalid in (0, "false", None):
+        with pytest.raises(RpcError):
+            await rig.call("members.update", {"id": 0, "draft_first": invalid})
+    with pytest.raises(RpcError):
+        await rig.call("members.update", {"id": False, "draft_first": False})
+    await rig.call("members.update", {"id": 0, "draft_first": True})
+    assert rig.service.speaker(0).draft_first
+
+
+async def test_primary_coordination_keeps_the_real_role(rig):
+    member = rig.service.store.create_member(name="Writer", role="Writer", model="owner/model")
+    await rig.call("members.set_primary", {"id": member.id})
+    snapshot = rig.service.team_context(0, "en")
+    primary = next(item for item in snapshot["members"] if item["id"] == member.id)
+    assert primary["role"] == "Writer" and primary["coordination_duty"] == "primary_contact"
+    assert rig.service.speaker(member.id).model == "owner/model"
+    assert not rig.service.speaker(0).has_no_job
+
+
 async def test_raphaels_own_picture_is_read_from_the_shells_copy(rig):
     folder = rig.local / "avatar"
     folder.mkdir(parents=True)

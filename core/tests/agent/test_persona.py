@@ -468,20 +468,17 @@ def test_the_language_reminder_names_the_japanese_field_only_when_there_is_one()
 
 @pytest.mark.parametrize("language", LANGUAGES)
 @pytest.mark.parametrize("narrated", [False, True])
-def test_only_raphael_knows_his_replies_at_this_computer_are_voiced(language, narrated):
-    prompt = persona.system_prompt(language, "answer", narrated=narrated)
+def test_every_speaker_knows_audio_and_optional_read_aloud_are_available(language, narrated):
+    prompts = [persona.system_prompt(language, "answer", narrated=narrated),
+               persona.member_system_prompt(language, "answer", name="Tutor", role="Teacher",
+                                            instructions="Teach examples.", narrated=narrated)]
     for rule in (
         "You have a voice",
-        "spoken aloud in Japanese",
-        "put it in your reply",
-        "the voice reads your reply",
-        "Never claim that you cannot play audio or speak",
+        "generate_audio",
+        "enabled read-aloud voice",
+        "never claim that you cannot play audio or speak",
     ):
-        assert rule in prompt
-        assert rule not in persona.member_system_prompt(
-            language, "answer", name="Tutor", role="Teacher", instructions="Teach examples.",
-            narrated=narrated,
-        )
+        assert all(rule in prompt for prompt in prompts)
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
