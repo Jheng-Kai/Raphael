@@ -277,3 +277,12 @@
   .au-month-chips .cal-chip.is-rhythm.btn { padding-inline: 2px; }
   .au-month-chips .cal-chip.is-rhythm .cal-chip-copy { gap: 0; }
 }
+.room-meeting-board.menu { width: min(384px, calc(100vw - var(--sp-6))); padding: var(--sp-3); }
+.room-meeting-board [data-room-board] { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
+.room-board-member { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.room-board-member > .card-status { flex: none; }
+.room-board-stage { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); overflow-wrap: anywhere; }
+.room-board-stage > span { color: var(--text-2); font-size: var(--fs-sm); }
+.room-board-decisions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); border-top: 1px solid var(--edge); padding-top: var(--sp-3); overflow-wrap: anywhere; }
+.room-board-decisions > p { margin: 0; }
+.room-report-files { display: flex; flex-wrap: wrap; gap: var(--sp-2); }

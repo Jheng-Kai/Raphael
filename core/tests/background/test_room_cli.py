@@ -50,7 +50,7 @@ async def test_cli_room_turn_uses_shared_tools_and_keeps_private_sessions_separa
         assert loop.conversation_id.startswith("room-task-")
         assert not (await loop._tool("permission", "cli_permission", {"tool_name":"Bash"})).ok
         result = await loop._tool("time", "local_time", {})
-        assert result.ok
+        assert not result.ok and "handoff" in result.content
         loop._queue.put_nowait(Outcome("done", final="The plan is ready."))
     monkeypatch.setattr(CliLoop, "_work", work)
     task, turn = submit_room(rig)
@@ -60,26 +60,18 @@ async def test_cli_room_turn_uses_shared_tools_and_keeps_private_sessions_separa
     assert rig.client.chat_calls == [] and rig.reports() == []
 
 
-@pytest.mark.parametrize("approved", [True, False])
-async def test_cli_room_approval_resumes_same_turn_without_bypassing_gate(make_rig, monkeypatch, calls, approved):
+async def test_cli_speech_never_opens_an_approval_or_calls_a_plugin(make_rig, monkeypatch, calls):
     rig = make_rig()
-    await rig.plugins.connect(look="T2")
-    results = []
+    await rig.plugins.connect(look='T2')
     async def work(loop):
-        results.append(await loop._tool("lookup", "Notes__look", {"topic":"plan"}))
-        loop._queue.put_nowait(Outcome("done", final="Finished after the owner's decision."))
-    monkeypatch.setattr(CliLoop, "_work", work)
-    task, turn = submit_room(rig)
-    await until(lambda: rig.task(task).state == "waiting")
-    assert calls == []
-    [question] = rig.service.waiting_questions()
-    assert rig.service.answer(task, question["id"], approved) == ("approved" if approved else "denied")
-    await until(lambda: rig.task(task).state == "done")
-    assert calls == (["look"] if approved else [])
-    assert results[0].ok is approved
-    assert AgentHistory(rig.conn).get(turn).status == "done"
-    await until(lambda: not rig.service._cli_loops)
-    assert not rig.service.waiting_questions()
+        result = await loop._tool('lookup','Notes__look',{'topic':'plan'})
+        assert not result.ok and 'handoff' in result.content
+        loop._queue.put_nowait(Outcome('done',final='I will start private work.'))
+    monkeypatch.setattr(CliLoop,'_work',work)
+    task,turn = submit_room(rig)
+    await until(lambda:rig.task(task).state=='done')
+    assert not calls and not rig.service.waiting_questions()
+    assert AgentHistory(rig.conn).get(turn).status=='done'
 
 
 async def test_cli_room_timeout_and_cancel_are_worker_terminal_states(make_rig, monkeypatch):
@@ -222,19 +214,15 @@ async def test_stopping_a_room_turn_while_it_waits_out_a_rate_limit_cancels_it(m
     assert len(played) == 1 and not rig.service._cli_loops
 
 
-async def test_cli_room_expired_approval_cancels_the_waiting_loop(make_rig, monkeypatch):
-    from raphael_core.background.service import QUESTION_WAIT_S
-    clock = Clock()
-    rig = make_rig(clock=clock)
-    await rig.plugins.connect(look="T2")
+async def test_cli_speech_rejects_native_permission_even_with_full_permission(make_rig,monkeypatch):
+    rig=make_rig()
+    from raphael_core.brain.settings import SettingsStore
+    SettingsStore(rig.conn).set('action_mode', 'bypass')
     async def work(loop):
-        await loop._tool("lookup", "Notes__look", {"topic":"plan"})
-    monkeypatch.setattr(CliLoop, "_work", work)
-    task, _ = submit_room(rig)
-    await until(lambda: rig.task(task).state == "waiting")
-    loop = rig.service._cli_loops[task]
-    clock.now += QUESTION_WAIT_S + 1
-    rig.service.sweep_questions()
-    await until(lambda: loop.task.done())
-    assert rig.task(task).state == "cancelled"
-    assert not rig.service._cli_loops and not rig.service.waiting_questions()
+        result=await loop._tool('native','cli_permission',{'tool_name':'Bash'})
+        assert not result.ok and result.kind=='room_speech_only'
+        loop._queue.put_nowait(Outcome('done',final='Speech only.'))
+    monkeypatch.setattr(CliLoop,'_work',work)
+    task,_=submit_room(rig)
+    await until(lambda:rig.task(task).state=='done')
+    assert not rig.service.waiting_questions()

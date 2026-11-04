@@ -29,7 +29,7 @@ def asked(user):
     """What a turn was asked: the owner's or a colleague's question, a task's request, or in a room the owner's
     latest message there."""
     task = between(user, "<task>", "</task>")
-    if "Full room transcript" in task:
+    if "Full room transcript" in task or "New room messages" in task:
         said = re.findall(r'"name": "Owner", "role": "Owner", "text": "((?:[^"\\]|\\.)*)"', task)
         return json.loads(f'"{said[-1]}"') if said else ""
     return between(user, "<question>", "</question>") or task
@@ -83,7 +83,7 @@ class HonestBrain(FakeClient):
             text = json.dumps({"text": "好，我記住了。", "memory": [remembered(question)]}, ensure_ascii=False)
         elif consults(question, user) and not results:
             calls = [consultation(self.tool, system, question)]
-        elif "群組代碼" in question and not results:
+        elif "群組代碼" in question and not results and "You are speaking in a meeting" not in system:
             calls = [("history_search", {"query": "群組代碼"})]
         elif results and '"task_id"' in results[-1]:
             text = "我已詢問行銷，等他回覆。"
@@ -100,6 +100,9 @@ def cli_brain(monkeypatch, tool):
 
         async def run(self, *, system, user, endpoint, token, **kwargs):
             yield Event("model", "owner-model")
+            if "Return only your speak choice" in system:
+                yield Event("final", '{"speak":false,"urgency":0}')
+                return
 
             async def call(name, arguments):
                 async with httpx.AsyncClient() as http:
@@ -117,7 +120,7 @@ def cli_brain(monkeypatch, tool):
             elif consults(question, user):
                 came = await call(*consultation(tool, system, question))
                 answer = honest(system, user + came) if tool == "ask_member" else "我已詢問行銷，等他回覆。"
-            elif "群組代碼" in question:
+            elif "群組代碼" in question and "You are speaking in a meeting" not in system:
                 answer = honest(system, user + await call("history_search", {"query": "群組代碼"}))
             else:
                 answer = honest(system, user)

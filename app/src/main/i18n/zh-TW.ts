@@ -3,6 +3,10 @@ import { homeZh } from "./home-catalogs";
 import { missingZh } from "./missing-catalogs";
 // Traditional Chinese is the source catalogue. Placeholders are interpolated by t().
 export const zhTW = {
+  "rooms.boardCount": "工作 {p0} · 決議 {p1}",
+  "rooms.board": "工作與決議",
+  "rooms.decisions": "決議",
+  "rooms.privateWork": "開啟私人工作",
   "composio.result": "結果",
   "composio.fieldSeparator": "：",
   "composio.resultDone": "已完成",

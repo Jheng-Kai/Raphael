@@ -2,6 +2,35 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (["room-meeting", "room-meeting-board", "room-meeting-report"].includes(name)) {
+    const pane = document.querySelector('.au-room-pane:not([hidden])');
+    require(pane, "the real group conversation is open");
+    const reports = [...pane.querySelectorAll('[data-room-report]')];
+    require(reports.length === 1, "the completed task has one public report card");
+    require(pane.querySelector('[data-room-act="private-work"][data-turn]'), "the report links to private work");
+    require(!reports[0].querySelector('[data-owner-question], .permission-card'), "private approvals never enter the report");
+    if (name === "room-meeting") require(pane.querySelectorAll('.au-room-thinking').length === 2, "two members can speak at once");
+    const row = pane.querySelector('.room-meeting-row');
+    require(visible(row) && !pane.querySelector('.ra-scroll').contains(row), "the compact work row is pinned outside the scrolling thread");
+    const scroller = pane.querySelector('.ra-scroll'), beforeTop = scroller.scrollTop, rowTop = row.getBoundingClientRect().top;
+    scroller.scrollTop += 100;
+    require(row.getBoundingClientRect().top === rowTop, "the status row stays in place as the thread scrolls");
+    scroller.scrollTop = beforeTop;
+    require(row.textContent.includes('工作 1 · 決議 1'), "the row names work and decisions in the screen language");
+    require(reports[0].querySelector('.team-file[data-room-act="artifact-open"]:not([disabled])'), "produced files use the shared actionable file chip");
+    require(!reports[0].textContent.includes('fixture-repo') && !reports[0].querySelector('code,ul'), "the report never prints a digest or raw evidence list");
+    if (name === "room-meeting-report") {
+      reports[0].querySelector('[data-room-act="artifact-open"]').click();
+      require(window.__look.openedTeamFile === 'task-artifact:42:501', "the file press reaches the native artifact resolver");
+    }
+    if (name === "room-meeting-board") {
+      const board = document.querySelector('#app-popover [data-room-board]');
+      require(board && board.textContent.includes('成果檢查') && board.textContent.includes('每個階段由一位成員負責'), "the board retains status and pinned decisions");
+      require(board.querySelector('.room-board-member .card-status') && board.querySelector('.room-board-member .av'), "each member has their shared face and state pill");
+      require(!board.querySelector('ul'), "pinned decisions are plain lines");
+    }
+    return {check:name,reports:reports.length};
+  }
   if (name === "composio-readable-result") {
     const reply = [...document.querySelectorAll('.chat-message')].find(element => visible(element) && element.textContent.includes('Gmail'));
     require(reply && reply.textContent.includes('Gmail · 已完成：範例排程'), "the result names its app and localized outcome with useful fields");

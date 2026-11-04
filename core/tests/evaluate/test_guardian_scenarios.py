@@ -57,8 +57,12 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
         async def chat_tools(self,**kwargs):
             messages=kwargs['messages']
             child='Acceptance criteria' in messages[0]['content']
+            from test_p14_scenarios import asked
+            speech = 'You are speaking in a meeting' in messages[0]['content']
             if child:
                 calls=[] if any(m['role']=='tool' for m in messages) else [('Guardian__read',{})]
+            elif speech and 'handoff 立即交給' not in asked(str(messages[-1]['content'])):
+                calls=[]
             else:
                 calls=[] if any(m['role']=='tool' for m in messages) or 'handoff_results' in str(messages) or 'where this has landed' in messages[0]['content'] or 'where this has landed' in str(messages) else [('handoff',arguments())]
             self.turns=iter([('已讀取信件。'+driver.nonce if not calls else '',calls)])
@@ -71,7 +75,14 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
             pass
         async def run(self,*,endpoint,token,system,user,**kwargs):
             yield Event('model','owner-model')
+            if 'Return only your speak choice' in system:
+                yield Event('final','{"speak":false,"urgency":0}')
+                return
+            from test_p14_scenarios import asked
             child='Acceptance criteria' in system
+            if 'You are speaking in a meeting' in system and 'handoff 立即交給' not in asked(user):
+                yield Event('final','已核對目前狀態。')
+                return
             if child or ('Delegated work results' not in user and 'where this has landed' not in user):
                 async with httpx.AsyncClient() as http:
                     response=await http.post(endpoint,headers={'Authorization':'Bearer '+token},json={
@@ -86,7 +97,7 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
     driver.app.background._host=WorkerHost(connect=Links(),grace_s=.3)
     try:
         reasons,turns=await asyncio.wait_for(driver.execute(selected(identifier)),HANG_GUARD_S)
-        assert not reasons,reasons
+        assert not reasons,(reasons,driver.events[-3:])
         # Live, a room cell's owner view held no model, so the Codex brain could never pass it.
         assert {turn.get('model') for turn in turns}=={model},turns
         assert len(driver.recorder.receipts)==1
@@ -609,10 +620,18 @@ async def test_a_stop_cell_without_its_held_call_fails_at_once(tmp_path,calls,re
     made=[]
     class Client(FakeClient):
         async def chat_tools(self,**kwargs):
-            asked=not any(m['role']=='tool' for m in kwargs['messages']) and 'where this has landed' not in str(kwargs['messages'])
-            call=asked and len(made)<calls
-            made.extend([1] if call else [])
-            self.turns=iter([('' if call else '好了。',[('Guardian__read',{})] if call else [])])
+            messages = kwargs['messages']
+            speech = 'You are speaking in a meeting' in messages[0]['content']
+            user = str(messages)
+            if speech:
+                stage = 'second-read' if 'stage_id=second-read' in user else 'first-read'
+                tools = [('handoff', {'member_id':2,'stage_id':stage,'request':'Read Guardian once.',
+                                     'done_when':'Read the test mail.'})] if 'stage_id=' in user and not any(m['role']=='tool' for m in messages) else []
+            else:
+                call = not any(m['role']=='tool' for m in messages) and len(made)<calls
+                made.extend([1] if call else [])
+                tools = [('Guardian__read',{})] if call else []
+            self.turns=iter([('' if tools else '好了。',tools)])
             return await super().chat_tools(**kwargs)
     driver=RpcDriver(tmp_path,'fake/model',Client([]),Budget(40))
     driver.app.background._host=WorkerHost(connect=Links(),grace_s=.1)
@@ -633,20 +652,36 @@ async def test_p04_short_wrapup_and_stop_through_production_paths(tmp_path,monke
     stopping=identifier=="S11"
     class Client(FakeClient):
         async def chat_tools(self,**kwargs):
-            tools=sum(message['role']=='tool' for message in kwargs['messages'])
-            calls=[('Guardian__read',{})] if stopping and tools<2 else []
+            messages = kwargs['messages']
+            tools = sum(message['role']=='tool' for message in messages)
+            speech = 'You are speaking in a meeting' in messages[0]['content']
+            if stopping and speech and 'stage_id=' in str(messages) and not tools:
+                stage = 'second-read' if 'stage_id=second-read' in str(messages) else 'first-read'
+                calls = [('handoff', {'member_id':2,'stage_id':stage,'request':'Read Guardian once.',
+                                     'done_when':'Read the test mail.'})]
+            else:
+                calls = [('Guardian__read',{})] if stopping and not speech and not tools else []
             self.turns=iter([('已核對目前沒有交付成果。' if not calls else '',calls)])
             return await super().chat_tools(**kwargs)
     class Driver:
         def __init__(self,*args,**kwargs):
             pass
-        async def run(self,*,endpoint,token,**kwargs):
+        async def run(self,*,endpoint,token,system,user,**kwargs):
+            if 'Return only your speak choice' in system:
+                yield Event('final','{"speak":false,"urgency":0}')
+                return
             if stopping:
+                speech = 'You are speaking in a meeting' in system
+                if speech and 'stage_id=' not in user:
+                    yield Event('final','收到。')
+                    return
+                stage = 'second-read' if 'stage_id=second-read' in user else 'first-read'
                 async with httpx.AsyncClient() as http:
-                    for index in range(2):
-                        await http.post(endpoint,headers={'Authorization':'Bearer '+token},json={
-                            'jsonrpc':'2.0','id':index,'method':'tools/call',
-                            'params':{'name':'Guardian__read','arguments':{}}})
+                    response = await http.post(endpoint,headers={'Authorization':'Bearer '+token},json={
+                        'jsonrpc':'2.0','id':1,'method':'tools/call',
+                        'params':{'name':'handoff' if speech else 'Guardian__read','arguments':
+                            {'member_id':2,'stage_id':stage,'request':'Read Guardian once.','done_when':'Read the test mail.'} if speech else {}}})
+                    assert not response.json()['result']['isError'], response.text
             yield Event('final','已核對目前沒有交付成果。')
         async def interrupt(self):
             pass
@@ -655,7 +690,7 @@ async def test_p04_short_wrapup_and_stop_through_production_paths(tmp_path,monke
     driver.app.background._host=WorkerHost(connect=Links(),grace_s=.1)
     try:
         reasons,_=await asyncio.wait_for(driver.execute(selected(identifier)),HANG_GUARD_S)
-        assert not reasons,reasons
+        assert not reasons,(reasons,driver.events[-3:])
         if stopping:
             assert any(event[0]=='guardian.stop_timings' for event in driver.events)
     finally:

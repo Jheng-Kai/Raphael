@@ -166,7 +166,7 @@ def test_v33_lets_a_member_reply_twice_and_keeps_rows_triggers_and_ids(tmp_path)
     conn.commit(); conn.close()
     conn = db.connect(path)
     assert conn.execute("PRAGMA user_version").fetchone()[0] == db.LATEST_VERSION
-    assert [tuple(r) for r in conn.execute("SELECT * FROM room_messages ORDER BY id")] == before
+    assert [tuple(r) for r in conn.execute("SELECT * FROM room_messages ORDER BY id")] == [(*row, None, None) for row in before]
     assert conn.execute("SELECT state FROM room_exchanges").fetchone()[0] == 'running'
     assert conn.execute("SELECT recipient_name FROM room_reply_intents").fetchone()[0] == 'Alice'
     thread = before[0][-1]

@@ -196,6 +196,8 @@ class CliLoop:
                scope=lambda self, *args: self.activity_turn)
     async def _tool(self, identifier, name, args):
         async with self._serial:
+            if getattr(self, 'speech_only', False) and name == 'approve':
+                return ToolOutcome(False, 'room_speech_only', content='Start this as private work with handoff.')
             # Every hand-off of a turn starts now; anything else waits for the delegated work.
             if self._handoff_pending and name != "handoff":
                 return ToolOutcome(False, 'waiting_for_handoff')
@@ -573,6 +575,8 @@ class CliLoop:
     async def _stream_attempt(self, name, command, model, server, session, workspace, steps, *, user):
         """Run the CLI once for this turn: None once its answer is queued, else why it failed."""
         self._buffer = self._thought = ""
+        if getattr(self,"speech_only",False) and name == "claude":
+            command = [*command,"--max-turns",str(getattr(self,"speech_max_turns",4))]
         self.driver = Driver(name, command, model=model, effort=brain_effort(self.model), environ=self.brains.environ, quota=self.quota, home=self.brains.home)
         stream_records = {}
         async with aclosing(self.driver.run(user=user, system=self.system, endpoint=server.url,

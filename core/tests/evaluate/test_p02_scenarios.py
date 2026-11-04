@@ -152,6 +152,9 @@ def cli_brain(monkeypatch, client, scenario, limited=()):
 
         async def run(self, *, system, user, endpoint, token, **kwargs):
             yield Event('model','owner-model')
+            if 'Return only your speak choice' in system:
+                yield Event('final','{"speak":false,"urgency":0}')
+                return
             if scenario=='S07.meeting' and 'You are in a group chat' not in user:
                 async with httpx.AsyncClient() as http:
                     response = await http.post(endpoint, headers={'Authorization':'Bearer ' + token}, json={
@@ -205,7 +208,9 @@ async def test_s07_meeting_goes_on_when_one_cli_member_is_rate_limited(tmp_path,
         assert {tuple(i) for i in intents if i['state'] != 'done'} == {(5, 'blocked', 'cli_rate_limited')}
         spoken = conn.execute("SELECT m.member_id FROM room_messages m JOIN agent_turns t ON t.id=m.turn_id "
                               "WHERE m.origin_message_id=? AND m.kind='message' AND t.status='done'", (origin,)).fetchall()
-        assert {row[0] for row in spoken} == {1, 3, 4}
+        assert {row[0] for row in spoken} == {1, 4}
+        # HiKari already authored the agenda; it does not answer its own post.
+        assert conn.execute('SELECT member_id FROM room_messages WHERE id=?', (origin,)).fetchone()[0] == 3
         [notice] = conn.execute("SELECT t.question,t.text,t.model,t.cost_usd FROM room_messages m "
             "JOIN agent_turns t ON t.id=m.turn_id WHERE m.origin_message_id=? AND m.kind='wrapup'", (origin,)).fetchall()
         assert notice['question'] == '' and notice['model'] is None and notice['cost_usd'] == 0

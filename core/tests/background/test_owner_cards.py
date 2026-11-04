@@ -115,7 +115,7 @@ async def test_room_consultation_never_reads_private_turns(make_rig):
     await rig.wait_for_reports()
 
 
-async def test_room_question_is_projected_before_task_finishes(make_rig):
+async def test_private_lane_question_never_projects_into_the_room(make_rig):
     from .test_handoff import setup, args
     from raphael_core.agent.speaker import RAPHAEL
     rig = make_rig()
@@ -126,13 +126,15 @@ async def test_room_question_is_projected_before_task_finishes(make_rig):
     await until(lambda: rig.task(task_id).state == "waiting")
     task = rig.task(task_id)
     row = rig.conn.execute("SELECT * FROM room_messages WHERE turn_id=?", (task.turn_id,)).fetchone()
-    assert row is not None and row["room_id"] == source.room_id and row["member_id"] == target.id
+    assert row is None
+    assert task.scope == "private" and task.report_room_id == source.room_id
     [question] = rig.service.owner_questions.for_turn(task.turn_id)
     rig.client.replies = [report("Tuesday confirmed.")]
     await rig.rpc.call("owner_questions.answer", {"id": question["id"], "answer": "Tuesday"})
     await until(lambda: rig.task(task_id).state == "done")
-    rows = rig.conn.execute("SELECT * FROM room_messages WHERE turn_id=?", (task.turn_id,)).fetchall()
+    rows = rig.conn.execute("SELECT * FROM room_messages WHERE report_task_id=?", (task_id,)).fetchall()
     assert len(rows) == 1 and rows[0]["text"] == "Tuesday confirmed."
+    assert rows[0]["turn_id"] == task.turn_id and rows[0]["kind"] == "report"
 
 
 async def test_only_one_pending_question_and_stop_never_resumes_it(make_rig):

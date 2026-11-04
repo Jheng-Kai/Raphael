@@ -214,6 +214,21 @@ export function installMock(fixture, config = {}, target = window) {
     data.messages=[data.messages[0],{...data.messages[1],text:"目前沒有交付成果，需要先取得來源權限。"},
       {...data.roomWrapupMessage,reply_to:null,reply_to_member:null,text:"目前沒有可驗收的成果。小晴還需要來源的權限，取得後就會處理。"}];
   }
+  if (variant.roomMeeting) {
+    const task = {...data.roomHandoff, state: "done", member_id: 1, member_name: "小晴", stage_id: "成果檢查",
+      evidence: data.roomHandoff.evidence.map((item, index) => ({...item, id: 501 + index})),
+      result: "已完成成果檢查，驗收報告與私人工作紀錄都已保留。", started_at_ms: data.now - 120000};
+    const decision = {...data.messages[1], id: 800, kind: "decision", member_id: 0, text: "每個階段由一位成員負責，完成後再交接。", created: data.now - 60000};
+    data.roomHandoffs = [task];
+    data.messages = [data.messages[0], decision, {...data.messages[1], id: 801, kind: "report", member_id: 1,
+      text: task.result, report: task, turn: undefined, created: data.now - 30000}];
+    if (variant.roomMeeting === "concurrent") {
+      data.messages.push(...[0, 1].map((member, index) => ({...data.roomThinkingMessages[0], id: 802 + index,
+        member_id: member, turn_id: 900 + index, text: "", status: "running", seen_through: 801})));
+      data.roomExchanges.push({...data.roomActiveExchange, active_turns: [0, 1].map((member, index) =>
+        ({turn_id: 900 + index, member_id: member, round: 1, seen_through: 801, state: "running"}))});
+    }
+  }
   if (variant.roomThinking) { data.messages.push(...data.roomThinkingMessages); data.roomExchanges.push(data.roomActiveExchange); }
   if (variant.p03Handoff) {
     const task = { ...data.roomHandoff, state: variant.p03Handoff };
@@ -968,7 +983,7 @@ export function installMock(fixture, config = {}, target = window) {
       }) };
       case "rooms.messages": {
         const messages = data.messages.filter(item => item.room_id === p.room_id);
-        return { messages: messages.filter(item => !p.before || item.id < p.before).sort((a,b)=>a.id-b.id).slice(-100), pending_questions: messages.flatMap(item => item.turn?.owner_questions ?? []).filter(question => question.kind === "ask_owner" && question.state === "asked"), exchange: data.roomExchanges.filter(item => item.room_id === p.room_id).at(-1) ?? null, handoffs: data.roomHandoffs };
+        return { messages: messages.filter(item => !p.before || item.id < p.before).sort((a,b)=>a.id-b.id).slice(-100), decisions: messages.filter(item => item.kind === "decision"), pending_questions: messages.flatMap(item => item.turn?.owner_questions ?? []).filter(question => question.kind === "ask_owner" && question.state === "asked"), exchange: data.roomExchanges.filter(item => item.room_id === p.room_id).at(-1) ?? null, handoffs: data.roomHandoffs };
       }
       case "rooms.create": { const room = { ...p, member_ids: p.is_team ? data.members.map(m => m.id) : p.member_ids, id: nextId(data.rooms), created: data.now, group_id: p.group_id ?? null, is_team: Number(p.is_team ?? false), default_responder: p.default_responder ?? "auto" }; data.rooms.push(room); return { room }; }
       case "rooms.update": {
@@ -1429,6 +1444,7 @@ export function installMock(fixture, config = {}, target = window) {
         if (variant.cardLinkFailure && !variant.cardLinkRetried) { variant.cardLinkRetried = true; throw new Error("Unavailable"); }
         state.urls.push(args.url); return;
       }
+      if (command === "open_team_file") { state.openedTeamFile = args.path; return; }
       if (command === "save_usage_csv") { state.exported = args.csv; return true; }
       if (["agent_page_shown", "hotkeys_pause", "hotkeys_practice", "plugin:event|unlisten", "plugin:window|set_focus", "plugin:window|minimize", "plugin:window|close", "plugin:window|start_dragging", "plugin:webview|set_webview_zoom"].includes(command)) return;
       return unsupported(command);

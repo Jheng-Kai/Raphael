@@ -104,12 +104,14 @@ class Task:
     continuation: str | None = None
     generation: int = 0
     requires_artifact: bool = False
+    report_room_id: int | None = None
+    report_thread_id: int | None = None
 
     @property
     def quiet(self) -> bool:
         """Whether its report stays in its thread: a member's task, or a routine's run, is never
         said on the overlay (the owner reads it in the app)."""
-        return self.member_id != 0 or self.routine_id is not None or self.scope != "private"
+        return self.member_id != 0 or self.routine_id is not None or self.scope != "private" or self.report_room_id is not None
 
 
 @dataclass
@@ -156,7 +158,8 @@ _TASK_COLUMNS = (
     " report_prefix, report_text, report_detail, reason, model_calls, tool_calls, cost_usd,"
     " announced, rerun_of, member_id, routine_id, scope, room_id, thread_id,"
     " parent_task_id, root_task_id, stage_id, from_member_id, source_turn_id, model_ref, mode,"
-    " done_when, idempotency_key, ready_at_ms, dispatch_policy, schedule_provenance, continuation, generation, requires_artifact"
+    " done_when, idempotency_key, ready_at_ms, dispatch_policy, schedule_provenance, continuation, generation, requires_artifact,"
+    " report_room_id, report_thread_id"
 )
 _STEP_COLUMNS = "n, at_ms, kind, tool, server, tier, outcome, cost_usd, ms, reason, detail"
 
@@ -191,6 +194,13 @@ class TaskStore:
                     "(SELECT mode,done_when,requires_artifact FROM worker_tasks WHERE id=?) "
                     "WHERE id=? AND EXISTS (SELECT 1 FROM worker_tasks WHERE id=?)",
                     (rerun_of, cursor.lastrowid, rerun_of))
+                self._conn.execute("UPDATE worker_tasks SET (report_room_id,report_thread_id,source_turn_id,stage_id,from_member_id,model_ref)="
+                    "(SELECT report_room_id,report_thread_id,source_turn_id,stage_id,from_member_id,model_ref FROM worker_tasks WHERE id=?) "
+                    "WHERE id=? AND EXISTS(SELECT 1 FROM worker_tasks WHERE id=? AND report_room_id IS NOT NULL)",
+                    (rerun_of,cursor.lastrowid,rerun_of))
+                self._conn.execute("UPDATE task_stage_owners SET owner_task_id=?,state='queued',reason='' WHERE owner_task_id=? "
+                    "AND EXISTS(SELECT 1 FROM worker_tasks WHERE id=? AND report_room_id IS NOT NULL)",
+                    (cursor.lastrowid,rerun_of,rerun_of))
         assert cursor.lastrowid is not None
         return cursor.lastrowid
 
@@ -223,6 +233,10 @@ class TaskStore:
                 raise Refused('stage_conflict')
             return existing['id'], True
         scope_key = f"root:{parent.root_task_id or parent.id}" if parent else f"turn:{source.id}"
+        if source.scope == 'room' and parent is None:
+            scope_key = f"room:{source.room_id}:{source.thread_id}"
+        elif parent and parent.report_room_id is not None:
+            scope_key = f"room:{parent.report_room_id}:{parent.report_thread_id}"
         with self._conn:
             owner = self._conn.execute("SELECT owner_task_id FROM task_stage_owners WHERE scope_key=? AND stage_id=?",
                                        (scope_key, stage)).fetchone()
@@ -230,17 +244,22 @@ class TaskStore:
                 raise Refused('stage_conflict')
             if parent and self.get(parent.id).state not in ('running', 'queued'):
                 raise Refused('cancelled')
-        conversation = None if source.scope == 'room' else Conversations(self._conn, self._now_ms).main(assignee)
+        lane = source.scope == 'room' or bool(parent and parent.report_room_id)
+        report_room = source.room_id if source.scope == 'room' else parent.report_room_id if parent else None
+        report_thread = source.thread_id if source.scope == 'room' else parent.report_thread_id if parent else None
+        conversation = Conversations(self._conn, self._now_ms).main(assignee)
         now = self._now_ms()
         with self._conn:
             cursor = self._conn.execute("INSERT INTO worker_tasks(created_at_ms,state,session_id,language,text,member_id,"
                 "scope,room_id,thread_id,parent_task_id,root_task_id,stage_id,from_member_id,source_turn_id,model_ref,"
                 "mode,done_when,idempotency_key,ready_at_ms,schedule_provenance,requires_artifact) VALUES (?,'queued',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (now,source.session_id,language,request,assignee,'room' if source.scope=='room' else 'exchange',
-                 source.room_id,source.thread_id,parent.id if parent else None,(parent.root_task_id or parent.id) if parent else None,
+                (now,source.session_id,language,request,assignee,'private' if lane else 'exchange',
+                 None,None,parent.id if parent else None,(parent.root_task_id or parent.id) if parent else None,
                  stage,source.member_id,source.id,model,mode,done_when,key,now,
                  json.dumps({'kind':'owner_or_discussion_work','source_turn_id':source.id,'authorization':'immediate_only'}),requires_artifact))
             task_id = cursor.lastrowid
+            self._conn.execute('UPDATE worker_tasks SET report_room_id=?,report_thread_id=? WHERE id=?',
+                               (report_room,report_thread,task_id))
             if owner:
                 changed = self._conn.execute("UPDATE task_stage_owners SET owner_task_id=? WHERE scope_key=? AND stage_id=? AND owner_task_id=?",
                     (task_id, scope_key, stage, parent.id)).rowcount
@@ -252,9 +271,9 @@ class TaskStore:
             self._conn.execute("UPDATE worker_tasks SET root_task_id=COALESCE(root_task_id,id) WHERE id=?", (task_id,))
             cursor = self._conn.execute("INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status,"
                 "source,member_id,peer_id,scope,room_id,thread_id,source_turn_id,model,conversation_id) "
-                "VALUES (?,?,?,'exchange','','','running','member',?,?,?,?,?,?,?,?)",
-                (now,f'work:{task_id}',request,assignee,source.member_id,'room' if source.scope=='room' else 'exchange',
-                 source.room_id,source.thread_id,source.id,model,conversation))
+                "VALUES (?,?,?,?, '','','running',?,?,?,?,?,?,?,?,?)",
+                (now,f'work:{task_id}',request,'worker' if lane else 'exchange','worker' if lane else 'member',
+                 assignee,source.member_id,'private' if lane else 'exchange',None,None,source.id,model,conversation))
             self._conn.execute("UPDATE worker_tasks SET turn_id=? WHERE id=?", (cursor.lastrowid,task_id))
             self._conn.execute("INSERT INTO task_outbox VALUES (?,?, 'queued',?,?,?,?,NULL,NULL)",
                 (f'{task_id}:queued',task_id,source.id,source.room_id,source.thread_id,now))
@@ -317,6 +336,21 @@ class TaskStore:
             self._conn.execute("INSERT OR IGNORE INTO task_evidence(task_id,tool_call_id,kind,uri,digest,mime,scope,verified_at_ms,verdict) "
                 "SELECT id,?,?,?,?,?,scope,?,'verified' FROM worker_tasks WHERE id=?",
                 (call_id,kind,uri,digest,mime,self._now_ms(),task_id))
+
+    def artifact_path(self, task_id: int, evidence_id: int) -> Path | None:
+        """Resolve only a recorded artifact whose current bytes still match its receipt."""
+        item = next((item for item in self.evidence(task_id) if item['id'] == evidence_id
+                     and item['kind'] == 'artifact' and item['verdict'] == 'verified'), None)
+        if not item or not item.get('workspace') or not item.get('uri'):
+            return None
+        try:
+            root = Path(item['workspace']).resolve(strict=True)
+            found = (root / item['uri']).resolve(strict=True)
+            if not found.is_relative_to(root) or not found.is_file() or found.stat().st_size > 50 * 1024 * 1024:
+                return None
+            return found if hashlib.sha256(found.read_bytes()).hexdigest() == item['digest'] else None
+        except (OSError, ValueError):
+            return None
 
     def verify_artifact(self,task_id,call_id,path,*,workspace,mime):
         """Trusted executors verify actual bytes inside their authorized workspace, never stdout claims."""
@@ -411,7 +445,7 @@ class TaskStore:
             self._conn.execute("UPDATE task_executions SET state=?,ended_at_ms=?,outcome=? WHERE task_id=? AND state='running'",
                                (state,self._now_ms(),reason or state,task_id))
             self._conn.execute("INSERT OR IGNORE INTO task_outbox "
-                "SELECT CAST(id AS TEXT)||':result',id,'result',source_turn_id,room_id,thread_id,?,NULL,NULL "
+                "SELECT CAST(id AS TEXT)||':result',id,'result',source_turn_id,COALESCE(report_room_id,room_id),COALESCE(report_thread_id,thread_id),?,NULL,NULL "
                 "FROM worker_tasks WHERE id=? AND source_turn_id IS NOT NULL", (self._now_ms(),task_id))
 
     def add_step(
@@ -581,7 +615,7 @@ class TaskStore:
                     (self._now_ms(), reason, prefix, text, row["id"]),
                 )
                 self._conn.execute("INSERT OR IGNORE INTO task_outbox "
-                    "SELECT CAST(id AS TEXT)||':result',id,'result',source_turn_id,room_id,thread_id,?,NULL,NULL "
+                    "SELECT CAST(id AS TEXT)||':result',id,'result',source_turn_id,COALESCE(report_room_id,room_id),COALESCE(report_thread_id,thread_id),?,NULL,NULL "
                     "FROM worker_tasks WHERE id=? AND source_turn_id IS NOT NULL", (self._now_ms(),row['id']))
         return [task for task in (self.get(row["id"]) for row in rows) if task is not None]
 

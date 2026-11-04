@@ -668,6 +668,8 @@ class TaskRun:
             self._step(kind="tool", outcome="blocked", ms=_ms(began), reason="blocked")
             if ref is None and name in self.snapshot._aliases:
                 return {**_refused(), "content": "This tool is no longer enabled or connected. Read connections_list for current access; do not retry its old alias."}
+            if getattr(self,'room_speech',False):
+                return {**_refused(),'instruction':'Start this as private work with handoff.','content':'This room is for speech only.'}
             return _refused()
         sent: int | None = None
         detail: str | None = None

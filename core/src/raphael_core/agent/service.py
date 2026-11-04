@@ -247,6 +247,7 @@ from .team import (
     REQUEST_MAX_CHARS,
     TEAM_SERVER,
     TEAM_TOOLS,
+    ROOM_TOOLS,
     SKILL_READ,
     SKILL_TOOLS,
     Team,
@@ -3617,7 +3618,7 @@ class AgentService:
         team = self._team
         if team is None or name not in TEAM_TOOLS:
             return ToolResult(name, False, None, "blocked", instruction="This team tool is unavailable here. Answer with the information already available or tell the owner what is missing.")
-        if name not in (*SKILL_TOOLS, "handoff", "room_list", "room_post") and not speaker.may_ask:
+        if name not in (*SKILL_TOOLS, "handoff", "work_status", *ROOM_TOOLS) and not speaker.may_ask:
             return ToolResult(name, False, None, "blocked", instruction="This consultation chain is at its depth limit. Answer with what you have and name what is missing; do not ask another colleague in this chain.")
         current = self._speaker(speaker.id)
         if name in (CREATE_MEMBER, "room_meeting") and (current is None or speaker.depth):
@@ -3639,11 +3640,20 @@ class AgentService:
             if rooms is None:
                 return ToolResult(name, False, None, "unavailable")
             try:
-                data = rooms.member_rooms(speaker.id) if name == "room_list" else rooms.post(speaker.id, dict(arguments), source_turn_id)
+                data = rooms.member_rooms(speaker.id) if name == "room_list" else rooms.post(speaker.id, dict(arguments), source_turn_id, language)
             except RpcError as error:
                 return ToolResult(name, False, None, "bad_arguments", instruction=error.message)
             return ToolResult(name, True, data)
+        if name == 'work_status':
+            source = self._history.get(source_turn_id) if source_turn_id else None
+            rooms = getattr(team,'rooms',None)
+            if not source or source.scope != 'room' or source.member_id != speaker.id or rooms is None:
+                return ToolResult(name,False,None,'blocked')
+            return ToolResult(name,True,rooms.speech_context(source.room_id,source.thread_id))
         if name == "room_meeting":
+            source = self._history.get(source_turn_id) if source_turn_id else None
+            if not speaker.is_chief or not source or source.scope != 'private' or source.member_id != speaker.id:
+                return ToolResult(name,False,None,'blocked')
             rooms = getattr(team, 'rooms', None)
             if rooms is None or not source_turn_id:
                 return ToolResult(name, False, None, 'blocked')
