@@ -107,6 +107,23 @@ async def test_job_output_and_stop_are_scoped_to_the_conversation(local):
     assert next(row for row in hub.audit.recent() if row.tool == 'local_exec').outcome == 'denied'
 
 
+async def test_background_timeout_keeps_null_exit_code_and_timeout_audit(local):
+    hub, host, gate = local
+    host.execute.return_value = {"exit_code": None, "stdout": "partial", "stderr": "", "timed_out": True, "truncated": False}
+    hub.settings.set("local_commands_mode", "always")
+    result = await gate.call_plugin("mcp:local/local_exec", {"command": "Get-Process", "background": True})
+    job_id = json.loads(result.text)["job_id"]
+    try:
+        await hub.jobs[job_id]["task"]
+        assert hub.audit.recent()[0].outcome == "timeout"
+        result = await gate.call_plugin("mcp:local/local_job", {"job_id": job_id})
+        assert result.ok, result
+        data = json.loads(result.text)
+        assert data["state"] == "done" and data["exit_code"] is None and data["timed_out"] is True, data
+    finally:
+        await hub.aclose()
+
+
 def test_output_retains_head_and_tail_with_bounded_memory():
     output = Output(limit=100)
     output.add(b"first" + b"x" * 1_000_000 + b"last")
@@ -117,13 +134,20 @@ def test_output_retains_head_and_tail_with_bounded_memory():
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell adapter")
 async def test_real_powershell_readonly_output_nonzero_and_closed_stdin():
-    result = await LocalHost().execute("Write-Output 'harmless-readonly-測試'; exit 7", timeout_seconds=5)
-    assert result["exit_code"] == 7 and "harmless-readonly-測試" in result["stdout"]
-    result = await LocalHost().execute("[Console]::ReadLine() -eq $null", timeout_seconds=5)
-    assert result["exit_code"] == 0 and "True" in result["stdout"]
+    # These timeouts are hang guards for slow PowerShell startup on CI.
+    result = await LocalHost().execute("Write-Output 'harmless-readonly-測試'; exit 7", timeout_seconds=30)
+    assert result["exit_code"] == 7 and "harmless-readonly-測試" in result["stdout"], result
+    result = await LocalHost().execute("[Console]::ReadLine() -eq $null", timeout_seconds=30)
+    assert result["exit_code"] == 0 and "True" in result["stdout"], result
 
 
-@pytest.mark.parametrize("data,outcome,ok", [({"timed_out": True}, "timeout", False), ({"error": "OSError"}, "error", False)])
+@pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell adapter")
+async def test_real_powershell_timeout_has_no_exit_code():
+    result = await LocalHost().execute("Start-Sleep -Seconds 5", timeout_seconds=.3)
+    assert result["exit_code"] is None and result["timed_out"] is True, result
+
+
+@pytest.mark.parametrize("data,outcome,ok", [({"timed_out": True, "exit_code": None}, "timeout", False), ({"error": "OSError"}, "error", False)])
 async def test_audit_records_timeout_and_host_errors(local, data, outcome, ok):
     hub, host, _ = local
     host.execute.return_value = data
@@ -132,6 +156,7 @@ async def test_audit_records_timeout_and_host_errors(local, data, outcome, ok):
     assert hub.audit.recent()[0].outcome == outcome
     if data.get("timed_out"):
         assert result.kind == "timeout" and "partial" in result.text and "background:true" in result.text
+        assert json.loads(result.text)["exit_code"] is None
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell adapter")
@@ -141,11 +166,12 @@ async def test_powershell_defaults_read_and_write_utf8(tmp_path):
     source.write_text(content, encoding="utf-8")
     command = f"Get-Content -LiteralPath '{source}'; '" + content + f"' | Set-Content -LiteralPath '{target}'"
     result = await LocalHost().execute(command, timeout_seconds=30)
-    assert result["exit_code"] == 0 and content in result["stdout"]
-    assert target.read_text(encoding="utf-8-sig").strip() == content
+    assert result["exit_code"] == 0 and content in result["stdout"], result
+    assert target.read_text(encoding="utf-8-sig").strip() == content, result
 
 
-async def test_adapter_filters_environment_and_kills_on_timeout_and_cancel(monkeypatch):
+@pytest.mark.parametrize('kill_code', [0, -1])
+async def test_adapter_filters_environment_and_kills_on_timeout_and_cancel(monkeypatch, kill_code):
     from raphael_core.computer import local_host
     from types import SimpleNamespace
     made = []
@@ -162,12 +188,13 @@ async def test_adapter_filters_environment_and_kills_on_timeout_and_cancel(monke
             pass
         async def kill(self):
             self.killed = True
-            self.process.returncode = -1
+            self.process.returncode = kill_code
     monkeypatch.setattr(local_host, 'CommandChild', FakeChild)
     monkeypatch.setenv('LOCAL_TEST_API_KEY', 'synthetic')
     monkeypatch.setenv('LOCAL_TEST_PASSWORD', 'synthetic')
     result = await LocalHost().execute('Get-Process', timeout_seconds=.01)
-    assert result['timed_out'] and made[-1].killed and made[-1].closed
+    assert result['exit_code'] is None and result['timed_out'] is True, result
+    assert made[-1].killed and made[-1].closed
     assert 'LOCAL_TEST_API_KEY' not in made[-1].environ and 'LOCAL_TEST_PASSWORD' not in made[-1].environ
     assert '-NoProfile' in made[-1].command and '-NonInteractive' in made[-1].command
     task = asyncio.create_task(LocalHost().execute('Get-Process'))
@@ -202,11 +229,11 @@ async def test_the_session_is_raphaels_and_never_the_models(desktop, tmp_path):
 async def test_statements_of_different_shapes_each_print_whole():
     # Live: a load figure and then a process list in one command, and the list printed as blank lines.
     from raphael_core.computer.local_host import LocalHost
-    result = await LocalHost().execute("[pscustomobject]@{Load=5}; [pscustomobject]@{Name='proc-測試'; Id=9}; $kept = 7; $kept", timeout_seconds=60)
-    assert result["exit_code"] == 0
-    assert "Load" in result["stdout"] and "proc-測試" in result["stdout"] and "Id" in result["stdout"]
-    assert result["stdout"].rstrip().endswith("7")
-    failed = await LocalHost().execute("Write-Output before; exit 7", timeout_seconds=60)
-    assert failed["exit_code"] == 7 and "before" in failed["stdout"]
-    broken = await LocalHost().execute("Get-Date |", timeout_seconds=60)
-    assert broken["exit_code"] != 0 or broken["stderr"]
+    result = await LocalHost().execute("[pscustomobject]@{Load=5}; [pscustomobject]@{Name='proc-測試'; Id=9}; $kept = 7; $kept", timeout_seconds=30)
+    assert result["exit_code"] == 0, result
+    assert "Load" in result["stdout"] and "proc-測試" in result["stdout"] and "Id" in result["stdout"], result
+    assert result["stdout"].rstrip().endswith("7"), result
+    failed = await LocalHost().execute("Write-Output before; exit 7", timeout_seconds=30)
+    assert failed["exit_code"] == 7 and "before" in failed["stdout"], failed
+    broken = await LocalHost().execute("Get-Date |", timeout_seconds=30)
+    assert broken["exit_code"] is not None and (broken["exit_code"] != 0 or broken["stderr"]), broken

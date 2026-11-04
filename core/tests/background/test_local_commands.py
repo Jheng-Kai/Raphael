@@ -12,7 +12,7 @@ from .conftest import call, turn, report, until
 async def test_routine_timeout_is_a_failed_step_in_task_and_conversation_history(make_rig, plugins, conn):
     from raphael_core.agent.history import AgentHistory
     host = AsyncMock()
-    host.execute.return_value = {"timed_out": True, "stdout": "Partial synthetic output", "exit_code": -1}
+    host.execute.return_value = {"timed_out": True, "stdout": "Partial synthetic output", "exit_code": None}
     plugins.hub = LocalTools(plugins.hub, conn, host=host)
     plugins.hub.settings.set("local_commands_mode", "always")
     plugins.hub.settings.set("local_commands_seen", True)

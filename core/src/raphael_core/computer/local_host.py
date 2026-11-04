@@ -72,5 +72,6 @@ class LocalHost:
             timed_out = True
         finally:
             await child.kill()
-        return {"exit_code": child.process.returncode, "stdout": stdout.text(), "stderr": child.errors.text(),
+        # Closing a Windows job can report 0; a timed-out command did not complete with an exit code.
+        return {"exit_code": None if timed_out else child.process.returncode, "stdout": stdout.text(), "stderr": child.errors.text(),
                 "truncated": stdout.truncated or child.errors.truncated, "timed_out": timed_out}
