@@ -106,7 +106,7 @@ def test_packaging_collects_the_python_watcher_and_nested_wallpapers():
                    and node.args and ast.literal_eval(node.args[0]) == 'raphael_core.computer')
     options = {keyword.arg: ast.literal_eval(keyword.value) for keyword in collect.keywords}
     assert options.get('include_py_files') is True
-    assert options['includes'] == ['image/**/*']
+    assert {'image/**/*', 'driver_schemas.json'} <= set(options['includes'])
 
 
 def test_startup_creates_the_image_style_when_only_last_image_exists(monkeypatch):

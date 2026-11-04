@@ -156,7 +156,9 @@ def test_default_member_computers_share_only_team_files(tmp_path, conn):
     mounts = [next(csv.reader([args])) for args in run_args(one, vm.owner, "private") if args.startswith("type=")]
     assert len(mounts) == 2
     args = run_args(one, vm.owner, "private")
-    assert args[args.index("--memory") + 1] == "2g"
+    assert args[args.index("--memory") + 1] == "3g"
+    assert args[args.index("--memory-swap") + 1] == "3g"
+    assert args[args.index("--cpus") + 1] == "2"
 
 
 def test_remote_uses_engine_volumes_and_publishes_no_ports(tmp_path, conn):
@@ -186,6 +188,31 @@ class Computers(Runtime):
             self.calls.append((args, kwargs))
             return SimpleNamespace(code=0, stdout="\n".join(self.computers))
         return await super().__call__(args, **kwargs)
+
+
+async def test_two_local_members_run_together_before_third_evicts_idle_lru(tmp_path, conn):
+    runtime = Computers()
+    vm = LocalVm(tmp_path, settings=SettingsStore(conn), runner=runtime)
+    one, two, three = [vm.target(i) for i in range(1, 4)]
+    for target in (one, two, three):
+        raw = container(vm, target, runtime)
+        raw["State"]["Running"] = False
+        runtime.computers[target.name] = raw
+    assert one.name != two.name and one.workspace != two.workspace
+    assert (await vm.start(one))["ready"]
+    vm.active[one.key] = 1
+    assert (await vm.start(two))["ready"]
+    vm.active[two.key] = 1
+    assert all(runtime.computers[target.name]["State"]["Running"] for target in (one, two))
+    assert not any(args[0] == "stop" for args, _ in runtime.calls)
+    vm.active.clear()
+    vm.last_activity.update({one.key: 20, two.key: 10})
+    assert (await vm.start(three))["ready"]
+    assert [args[-1] for args, _ in runtime.calls if args[0] == "stop"] == [two.name]
+    assert runtime.computers[one.name]["State"]["Running"]
+    assert not runtime.computers[two.name]["State"]["Running"]
+    assert runtime.computers[three.name]["State"]["Running"]
+    assert not any(args[0] == "rm" for args, _ in runtime.calls)
 
 
 @pytest.mark.parametrize("remote", [False, True])
@@ -229,7 +256,7 @@ async def test_local_bound_counts_old_owned_computers_without_stopping_them(tmp_
     targets = [vm.target(i) for i in range(3)]
     for target in targets[:2]:
         raw = container(vm, target, runtime)
-        raw["HostConfig"]["Memory"] = 4 * 1024**3
+        raw["HostConfig"]["Memory"] = 2 * 1024**3
         runtime.computers[target.name] = raw
     with pytest.raises(VmError, match="local_capacity"):
         await vm.start(targets[2])

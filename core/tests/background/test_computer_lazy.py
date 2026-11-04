@@ -33,7 +33,7 @@ async def test_background_turn_starts_only_for_real_computer_call(make_rig, tmp_
         names = {tool["function"]["name"] for tool in loop.tools}
         assert "computer__get_desktop_state" in names and "computer__request_computer" not in names
         if use_computer and not used:
-            assert "computer__click" not in names
+            assert {"computer__click", "computer__browser_open", "computer__browser_type"} <= names
             result = await loop._tool("screen", "computer__get_desktop_state", {})
             assert result.ok and result.replace_tools and loop.catalog_changed
             assert "computer__click" in {tool["function"]["name"] for tool in loop.tools}

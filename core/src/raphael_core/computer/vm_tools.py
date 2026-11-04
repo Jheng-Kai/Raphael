@@ -24,7 +24,7 @@ from ..integrations.audit import AuditLog
 from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from .vm import VmError
 from .vm_bridge import CuaBridge
-from .vm_catalog import DRIVER_TOOLS, NOTICES, PAGE_TOOLS, READS, without_session
+from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, offline_catalog, without_session
 from .takeover import TAKEOVER
 
 _SCOPE = ContextVar("computer_scope", default=None)
@@ -69,7 +69,9 @@ VM_CONTRACT = (
     "VM sandbox: no per-action approval; owner control blocks all calls. Before sending a message/email, "
     "publishing/posting, deleting outside the workspace, or paying/buying, call approve (CLI) or the API "
     "harness equivalent and wait for the owner's yes for the exact action/target. If unavailable, denied "
-    "or expired, stop. Sandbox success is not approval."
+    "or expired, stop. Sandbox success is not approval. First list_windows then use a bounded get_window_state "
+    "(max_elements 200, query, include_screenshot false unless pixels are needed). Whole-screen pixels use "
+    "get_desktop_state. Verify meaningful changes before finishing."
 )
 
 EXEC = {"description": VM_CONTRACT + " Run a shell command inside the VM workspace, never on the host. Your own files are in /home/cua/workspace; /home/cua/team is the folder the whole team shares, so what a colleague or the owner needs goes there. Nothing it does shows on the screen the owner watches: use it for files and programs, never to fetch a page in place of opening it in the browser. It waits for the command for at most timeout_seconds (60 by default, 1800 at most) and ends it then. For a build or a server that takes longer, or to work on while it runs, set background: it returns at once with a job and the paths of its log and of its .exit file (the exit code, there once the job has ended); read them with another vm_exec. Other members' commands and the screen are not held up by it.",
@@ -80,8 +82,9 @@ ATTACH = {"description": "Copy an existing file from /home/cua/workspace or /hom
           "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}}
 REQUEST = {"description": "Ask for a sandbox desktop when a task must be seen or clicked. Questions about the owner's own PC use local__local_exec first; service work uses its connected app. No sandbox starts before yes. On denial or expiry, say sandbox access was not granted. Routines cannot grant it; ask in private chat.",
            "parameters": {"type": "object", "properties": {"reason": {"type": "string", "minLength": 1, "maxLength": 500}}, "required": ["reason"], "additionalProperties": False}}
-SCREEN = {"description": VM_CONTRACT + " Inspect screen and discover control tools.",
-          "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}
+BROWSER_OPEN = {"description": VM_CONTRACT + " Open an http/https URL in the member's persistent browser and return its semantic page references without a screenshot. Use the typed browser tools for follow-ups.",
+    "parameters": {"type": "object", "properties": {"url": {"type": "string", "pattern": "^https?://", "maxLength": 8192},
+        "query": {"type": "string"}, "scope_ref": {"type": "string"}}, "required": ["url"], "additionalProperties": False}}
 FILL_LOGIN = {"description": VM_CONTRACT + " Fill the username and password saved through request_secret(site) into current page references. The reference belongs to this member and exact HTTPS origin. Values never enter your messages or results. This does not submit; keep request_takeover for owner-only sign-in steps. Private fields hide screenshots while filled; page text remains redacted.",
     "parameters": {"type": "object", "properties": {key: {"type": "string", "minLength": 1, "maxLength": 2048} for key in
         ("reference", "site", "target_id", "username_ref", "password_ref")},
@@ -96,6 +99,9 @@ class VmTools:
     # A holder that has not touched the screen for this long (it is thinking, or busy with commands) has let go
     # of it: another may take it, and the holder looks at it again when it comes back.
     lease_idle_s = 60.0
+    read_progress_s = 10.0
+    browser_window_wait_s = 5.0
+    browser_window_poll_s = 0.2
 
     def __init__(self, delegate, vm, *, attachments, conn=None, bridge=CuaBridge):
         self.delegate, self.vm, self.attachments, self.bridge = delegate, vm, attachments, bridge
@@ -121,6 +127,7 @@ class VmTools:
         self.logins = None
         self.private_pages = {}
         self.checkpointed, self.checkpoint_locks = set(), {}
+        self.refreshes = {}
 
     def __getattr__(self, name):
         return getattr(self.delegate, name)
@@ -144,19 +151,20 @@ class VmTools:
         keys = self.catalogs.get(target.key, [])
         if not keys or self.routes[keys[0]] != target:
             self.listed.discard(target.key)
-            # This offer is entirely offline. Driver schemas are learned only
-            # after an actual screen call, never by probing Docker at turn start.
-            self._catalog(target, {"get_desktop_state": SCREEN})
+            self._catalog(target, offline_catalog())
 
     def _catalog(self, target, definitions):
-        definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER, fill_login=FILL_LOGIN)
+        definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER, fill_login=FILL_LOGIN, browser_open=BROWSER_OPEN)
         if target.key != "shared":
             from .datasets import DEFINITION
             definitions["dataset"] = DEFINITION
         keys = []
         for name, definition in definitions.items():
             key = tool_key(f"computer-{target.key}", name)
-            self.tools[key] = PluginTool(key, "computer", name, definition["description"], definition["parameters"], Tier.T0, pinned=True)
+            description = definition["description"]
+            if name in DRIVER_TOOLS and not description.startswith(VM_CONTRACT):
+                description = VM_CONTRACT + " " + description
+            self.tools[key] = PluginTool(key, "computer", name, description, definition["parameters"], Tier.T0, pinned=True)
             self.routes[key] = target
             self.schemas[key] = definition.get("validation", definition["parameters"])
             keys.append(key)
@@ -188,7 +196,7 @@ class VmTools:
                         raise VmError("invalid_tool")
                     schema = without_session(schema)
                     Draft202012Validator.check_schema(schema)
-                    # Keep the contract first and within Offer's description cap.
+                    # Outward approval must remain visible when descriptions are shortened.
                     definitions[name] = {"description": VM_CONTRACT + " " + item.get("description", ""), "parameters": schema,
                         "validation": without_session(item.get("originalInputSchema", schema))}
                 self._catalog(target, definitions)
@@ -197,6 +205,18 @@ class VmTools:
             except Exception as error:
                 self.problem = str(error) if isinstance(error, VmError) else type(error).__name__
                 raise
+
+    def _refresh(self, target):
+        if target.key in self.listed or target.key in self.refreshes:
+            return
+        async def refresh():
+            try:
+                await self._discover(target)
+            except Exception:
+                self.vm.invalidate(target)
+            finally:
+                self.refreshes.pop(target.key, None)
+        self.refreshes[target.key] = asyncio.create_task(refresh())
 
     def offered_for(self, member_id):
         target = self.vm.target(member_id)
@@ -264,7 +284,32 @@ class VmTools:
     async def call(self, key, arguments, *, approver, task_id=None, pool=None):
         if not self.is_computer_tool(key):
             return await self.delegate.call(key, arguments, approver=approver, task_id=task_id, pool=pool)
-        result = await self._call(key, arguments, approver=approver, task_id=task_id, pool=pool)
+        began = time.monotonic()
+        reading = key in self.tools and self.tools[key].name in SCREEN_READS | {"browser_open"}
+        progress, language = _NOTE.get()
+        async def announce():
+            await asyncio.sleep(self.read_progress_s)
+            if progress:
+                progress({"zh-TW": "仍在讀取電腦畫面", "ja": "画面を読み取り中です"}.get(language, "Still reading the computer screen"))
+        notice = asyncio.create_task(announce()) if reading else None
+        try:
+            result = await self._call(key, arguments, approver=approver, task_id=task_id, pool=pool)
+        finally:
+            if notice:
+                notice.cancel()
+                await asyncio.gather(notice, return_exceptions=True)
+        if reading and result.kind not in NOTICES:
+            elapsed = round(time.monotonic() - began, 2)
+            prefix, _, tail = result.text.rpartition("\n")
+            try:
+                data = json.loads(tail)
+            except ValueError:
+                data = None
+            if isinstance(data, dict):
+                data["elapsed_seconds"] = elapsed
+                result.text = (prefix + "\n" if prefix else "") + json.dumps(data, ensure_ascii=False)
+            else:
+                result.text = (result.text + f"\nElapsed: {elapsed:.2f} seconds.").strip()
         scope = _SCOPE.get()
         member = scope[1] if scope and scope[0] == "turn" else 0
         if task_id and self.conn is not None:
@@ -393,7 +438,7 @@ class VmTools:
                 work.alive = lambda: self.scope_busy(owner)
             if work and work.state in ("stopped", "expired"):
                 return PluginResult(False, "task_stopped")
-            if work and work.check_required and tool.name != "get_desktop_state":
+            if work and work.check_required and tool.name not in FRESH_READS | {"list_windows"}:
                 return PluginResult(False, "desktop_check_required")
             if tool.name == "request_takeover":
                 # Never over input that is already running at the screen (a long command in the workspace is none).
@@ -410,7 +455,7 @@ class VmTools:
                 result = PluginResult(True, "screen_changed", json.dumps({
                     "status": "screen_changed",
                     "note": "Another member used the computer while you waited, so the screen is no longer what you last saw. "
-                            "Nothing was done. Call get_desktop_state, then do this again if it is still needed."}))
+                            "Nothing was done. Read the intended get_window_state, then do this again if it is still needed."}))
                 return result
             lock = self.actions.setdefault(target.key, asyncio.Lock()) if screen else None
             if lock is not None:
@@ -450,7 +495,6 @@ class VmTools:
                 elif tool.name == "fill_login":
                     result = await self._fill_login(target, member, arguments)
                 else:
-                    await self._discover(target)
                     if not self.vm.grants.allowed(member):
                         result = PluginResult(False, "computer_permission_required")
                         return result
@@ -462,13 +506,34 @@ class VmTools:
                     if not Draft202012Validator(self.schemas[key]).is_valid(arguments):
                         result = PluginResult(False, "bad_arguments", "The driver requires different arguments. Read the refreshed computer tool schema before retrying.")
                         return result
-                    client, session = await self._connection(target)
+                    client, session = await self._connection(target, member=member)
+                    self._refresh(target)
+                    await asyncio.sleep(0)
+                    if not self.vm.grants.allowed(member) or target != self.vm.target(member):
+                        return PluginResult(False, "computer_permission_required")
+                    if target.key in self.vm.held:
+                        raise VmError("owner_holds_control")
+                    if self.tier_of(key) is None:
+                        return PluginResult(False, "tool_changed", "Read the refreshed computer tool catalog.")
+                    if not Draft202012Validator(self.schemas[key]).is_valid(arguments):
+                        return PluginResult(False, "bad_arguments", "Read the refreshed computer tool schema.")
                     # The screen is the member's own, and Chromium refuses input addressed to it in the background.
                     foreground = {"delivery_mode": "foreground"} if "delivery_mode" in self.schemas[key].get("properties", {}) else {}
                     sent = {**foreground, **arguments, "session": session}
+                    if tool.name == "get_window_state":
+                        sent.update(max_elements=min(arguments.get("max_elements", 200), 200),
+                                    include_screenshot=arguments.get("include_screenshot", False))
+                    elif tool.name == "get_browser_state":
+                        sent.setdefault("include_screenshot", False)
+                        sent.setdefault("snapshot_format", "semantic_v2")
                     try:
-                        data = await client.request("tools/call", {"name": tool.name, "arguments": sent})
-                    except (VmError, ConnectionError):
+                        if tool.name == "browser_open":
+                            async with asyncio.timeout(CuaBridge.read_timeout_s):
+                                data = await self._browser_open(target, member, client, session, arguments)
+                        else:
+                            data = await client.request("tools/call", {"name": tool.name, "arguments": sent})
+                    except (VmError, ConnectionError, TimeoutError):
+                        self.vm.invalidate(target)
                         await self._disconnect(target.key)
                         raise
                     self._observe_page(target, data.get("structuredContent") or {})
@@ -494,9 +559,9 @@ class VmTools:
                     limit = 60_000 if tool.name.startswith(PAGE_TOOLS) else 20_000
                     result = PluginResult(not data.get("isError", False), "tool_error" if data.get("isError") else None,
                         combined[:limit], len(combined) > limit, blocks=blocks)
-                if work and result.ok and tool.name == "get_desktop_state":
+                if work and result.ok and tool.name in FRESH_READS:
                     work.check_required = False
-                if screen and result.ok and tool.name == "get_desktop_state":
+                if screen and result.ok and tool.name in FRESH_READS:
                     self.stale.discard((target.key, owner))
             finally:
                 self.vm.active[target.key] -= 1
@@ -508,21 +573,83 @@ class VmTools:
                     lock.release()
             return result
         except asyncio.CancelledError:
+            self.vm.invalidate(target)
             result = PluginResult(False, "cancelled")
             raise
         except TimeoutError:
+            self.vm.invalidate(target)
             result = PluginResult(False, "timeout")
             return result
         except VmError as error:
+            self.vm.invalidate(target)
             result = PluginResult(False, str(error))
             return result
+        except ConnectionError:
+            self.vm.invalidate(target)
+            result = PluginResult(False, "connection_error")
+            return result
         except Exception:
+            self.vm.invalidate(target)
             result = PluginResult(False, "error")
             return result
         finally:
             self._audit(key, "blocked" if result.kind in NOTICES else "ok" if result.ok else result.kind or "error", approver, task_id)
 
     # --- the driver connection -------------------------------------------------------------------
+
+    async def _browser_open(self, target, member, client, session, arguments):
+        async def call(name, args):
+            if not self.vm.grants.allowed(member) or target != self.vm.target(member) or target.key in self.vm.held:
+                raise VmError("owner_holds_control")
+            key = tool_key(f"computer-{target.key}", name)
+            if name.startswith("browser_") and "delivery_mode" in self.schemas.get(key, {}).get("properties", {}):
+                args = {"delivery_mode": "foreground", **args}
+            reply = await client.request("tools/call", {"name": name, "arguments": {**args, "session": session}})
+            if reply.get("isError"):
+                raise VmError("browser_open_failed")
+            return reply
+
+        prepared = await call("browser_prepare", {"allow_launch": True, "profile": {"mode": "isolated_named", "name": "main"}})
+        prepared_pid = (prepared.get("structuredContent") or {}).get("pid")
+        until = time.monotonic() + self.browser_window_wait_s
+        while True:
+            windows = await call("list_windows", {})
+            state = windows.get("structuredContent") or {}
+            if not state:
+                for block in windows.get("content", []):
+                    if block.get("type") == "text":
+                        try:
+                            state = json.loads(block["text"])
+                            break
+                        except ValueError:
+                            state = {"windows": [{"window_id": int(match[1]), "pid": int(match[2]), "app_name": match[3]}
+                                for match in re.finditer(r'window_id=(\d+) pid=(\d+) "[^"]*"[^\n]*app=([^\n]+)', block["text"])]}
+            rows = state if isinstance(state, list) else state.get("windows", [])
+            matches = [row for row in rows if "chrom" in str(row.get("app_name", row.get("title", ""))).lower()
+                       and isinstance(row.get("pid"), int) and isinstance(row.get("window_id"), int)
+                       and (not prepared_pid or row["pid"] == prepared_pid)]
+            if len(matches) == 1:
+                break
+            if matches or time.monotonic() >= until:
+                raise VmError("browser_window_ambiguous" if matches else "browser_window_missing")
+            # Preparing the CDP endpoint can finish before the window manager maps its window.
+            await asyncio.sleep(min(self.browser_window_poll_s, max(0, until - time.monotonic())))
+        window = matches[0]
+        bound = await call("get_browser_state", {"pid": window["pid"], "window_id": window["window_id"],
+            "include_screenshot": False, "snapshot_format": "semantic_v2"})
+        page = bound.get("structuredContent") or {}
+        if not page.get("target_id"):
+            raise VmError("browser_target_missing")
+        tabs = page.get("tabs", [])
+        selected = next((tab for tab in tabs if tab.get("active") is True), tabs[0] if tabs else {})
+        if not selected.get("tab_id"):
+            raise VmError("browser_tab_missing")
+        tab = {"target_id": page["target_id"], "tab_id": selected["tab_id"]}
+        await call("browser_navigate", {**tab, "url": arguments["url"]})
+        reply = await call("get_browser_state", {**tab, "include_screenshot": False, "snapshot_format": "semantic_v2",
+            **{key: arguments[key] for key in ("query", "scope_ref") if key in arguments}})
+        reply["content"] = [block for block in reply.get("content", []) if block.get("type") != "image"]
+        return reply
 
     async def _fill_login(self, target, member, args):
         from .logins import origin
@@ -556,10 +683,11 @@ class VmTools:
                     return PluginResult(False, "login_not_filled", '{"filled": false}')
             return PluginResult(True, text='{"filled": true}')
         except Exception:
+            self.vm.invalidate(target)
             # Transport and vault exceptions may echo input; none of their diagnostics leave this boundary.
             return PluginResult(False, "login_not_filled", '{"filled": false}')
 
-    async def _connection(self, target):
+    async def _connection(self, target, *, member=None):
         """A computer's one connection to its driver, and its session label. The driver ends a session with the connection
         that used it, and with it the browser it opened, the tab it bound and the screenshot a gesture needs. A new
         connection takes a new label: the driver refuses one that has ended."""
@@ -569,7 +697,22 @@ class VmTools:
         await self._disconnect(target.key)
         client = self.bridge(self.vm, target)
         await client.__aenter__()
-        self.connections[target.key] = client, f"raphael-{next(self.labels)}"
+        session = f"raphael-{next(self.labels)}"
+        try:
+            for name, arguments in (("set_config", {"max_image_dimension": 1456}),
+                                    ("set_agent_cursor_enabled", {"enabled": False, "cursor_id": session})):
+                if member is not None and (not self.vm.grants.allowed(member) or target != self.vm.target(member)):
+                    raise VmError("computer_permission_required")
+                if target.key in self.vm.held:
+                    raise VmError("owner_holds_control")
+                reply = await client.request("tools/call", {"name": name, "arguments": {**arguments, "session": session}})
+                if reply.get("isError"):
+                    raise VmError("driver_configuration_failed")
+        except BaseException:
+            await client.__aexit__(None, None, None)
+            self.vm.invalidate(target)
+            raise
+        self.connections[target.key] = client, session
         return self.connections[target.key]
 
     async def _disconnect(self, key):
@@ -578,6 +721,9 @@ class VmTools:
             await held[0].__aexit__(None, None, None)
 
     async def aclose(self):
+        for task in list(self.refreshes.values()):
+            task.cancel()
+        await asyncio.gather(*list(self.refreshes.values()), return_exceptions=True)
         for key in list(self.connections):
             await self._disconnect(key)
 

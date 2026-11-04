@@ -63,7 +63,7 @@ def container(vm, target, runtime):
         "Config": {"Labels": {**IMAGE_LABELS, f"{LABEL}.owner": vm.owner, f"{LABEL}.target": target.key}, "Env": ["VNC_PW=private"]},
         "State": {"Running": True}, "HostConfig": {"Privileged": False, "CapDrop": ["ALL"], "CapAdd": ["SETUID", "SETGID"],
             "IpcMode": "private", "CgroupnsMode": "private", "NetworkMode": "bridge", "RestartPolicy": {"Name": "no"},
-            "Memory": 2 * 1024**3, "MemorySwap": 2 * 1024**3, "NanoCpus": 2_000_000_000, "PidsLimit": 4096,
+            "Memory": 3 * 1024**3, "MemorySwap": 3 * 1024**3, "NanoCpus": 2_000_000_000, "PidsLimit": 4096,
             "ShmSize": 512 * 1024**2, "PortBindings": {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": "6080"}]}},
         "Mounts": [{"Type": "bind", "Source": str(target.workspace), "Destination": GUEST, "RW": True}],
         "NetworkSettings": {"Ports": {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": "6080"}]}}}
@@ -588,7 +588,7 @@ class Bridge:
         self.calls.append((method, params))
         if method == "tools/list":
             return {"tools": [{"name": name, "description": name, "inputSchema": {"type": "object"}}
-                              for name in ("get_desktop_state", "click", "type_text", "scroll", "launch_app")]}
+                              for name in ("get_desktop_state", "get_window_state", "list_windows", "click", "type_text", "scroll", "launch_app")]}
         return {"content": [{"type": "image", "data": base64.b64encode(b"\x89PNG\r\n\x1a\nimage").decode(), "mimeType": "image/png"}]}
 
 
@@ -701,7 +701,7 @@ async def test_a_computer_keeps_one_driver_connection_and_session_until_it_break
     assert not (await hub.call(tool("click").key, {"session": "other"}, approver="auto")).ok
     # A connection that broke (the computer stopped) is replaced, and the driver refuses an ended label.
     first = sent["click"]["session"]
-    Recording.opened[-1].alive = False
+    hub.connections[target.key][0].alive = False
     assert (await hub.call(tool("click").key, {"x": 3, "y": 4}, approver="auto")).ok
     assert Recording.calls[-1][1]["arguments"]["session"] != first and len(Recording.opened) == used + 1
     await hub.aclose()
@@ -718,9 +718,9 @@ async def test_real_driver_catalog_offers_only_the_curated_tools(desktop, tmp_pa
     assert DRIVER_CATALOG["reported_count"] == 67
     assert len(DRIVER_CATALOG["names"]) == len(set(DRIVER_CATALOG["names"])) == 68
     assert CURATED <= set(DRIVER_CATALOG["names"])
-    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login"}
+    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login", "browser_open"}
     snapshot = take_snapshot(hub)
-    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover", "fill_login"}
+    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover", "fill_login", "browser_open"}
     assert not snapshot.hidden()
     assert not snapshot.refresh_computer(hub, 0)
     assert all(tool.pinned for tool in hub.offered())
@@ -779,6 +779,9 @@ async def test_a_tool_call_on_a_running_desktop_does_not_report_preparation(desk
         seen.append(vm.preparation.get(checked.key))
         return await real(checked)
     monkeypatch.setattr(vm, "_start", watching)
+    await vm.start(target)
+    assert seen == []
+    vm.invalidate(target)
     await vm.start(target)
     assert seen == [None]
 
@@ -909,7 +912,7 @@ async def test_native_vm_journey_checks_no_approval_and_owner_control(desktop, t
     report = await vm_smoke(directory)
     expected = ["computer__" + name for name in ("get_desktop_state", "click", "vm_exec", "attach_file")]
     assert report["completed"] == report["without_approval"] == report["owner_held_refused"] == expected
-    assert forwarded == [name.removeprefix("computer__") for name in expected]
+    assert forwarded == ["set_config", "set_agent_cursor_enabled", *[name.removeprefix("computer__") for name in expected]]
     assert report["paid_requests"] == 0
     assert report["prepare_docker_commands"] == report["next_turn_docker_commands"] == 0
 

@@ -80,6 +80,12 @@ Modified ports and adaptations, with upstream file names:
   owner-control bridge concepts from `server/container-mcp.ts` and
   `server/mcp-bridge.ts`. Python implementation for Raphael's existing gate.
   Root-schema normalization follows `server/mcp-tool-schema.ts`.
+- `core/src/raphael_core/computer/driver_schemas.json`: compatibility offer adapted from
+  `electron/fixtures/cua-driver-lent-tool-schemas.json` (macOS 0.12.6) and the
+  browser preparation contract in `server/mcp-tool-schema.test.ts` (0.22.1).
+  Additional Linux definitions are reconstructed by Raphael; this is not a captured
+  Linux 0.37.0 catalog. Authorized driver discovery replaces this offer in memory.
+
 - `core/src/raphael_core/computer/vm_tools.py`: Python adaptation of the desktop
   lease and workspace-file tool contracts from `server/local-vm-lease.ts` and
   `server/drivers/agents-catalog.ts`, integrated with Raphael's tool gate.

@@ -1,5 +1,14 @@
 # Raphael feature map
 
+## Responsive member computer (2026-11-04)
+
+See [Member computer](member-computer.md#responsive-computer-tools-2026-11-04)
+for R-COMP-PERF-01 through R-COMP-PERF-06: 45-second preflight confirmation,
+bounded targeted reads, browser_open, resource/image limits, cancellable timed
+reads and the full offline offer. The brief requires fake-only checks and forbids
+Docker, network, look and native. Exact Linux 0.37.0 schema capture and real
+container timing remain unverified; compatibility definitions disclose provenance.
+
 ## Startup room recovery (2026-11-04)
 
 See [Startup rooms](startup-rooms.md) for R-PERF-13, failed first-read recovery,

@@ -165,7 +165,7 @@ async def test_revoke_during_first_listing_prevents_driver_action(tmp_path, conn
     assert (await hub.call(tool.key, {}, approver="auto")).kind == "computer_permission_required"
     assert vm.grants.state(0) is False
     assert [tool.name for tool in hub.offered()] == ["request_computer"]
-    assert calls == ["tools/list"]
+    assert calls == ["tools/call"]
 
 
 async def test_revoke_during_viewer_status_probe_prevents_launch(tmp_path):

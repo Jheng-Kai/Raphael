@@ -91,7 +91,9 @@ RUN printf '%s\n' \
       '  if [ "$attempt" -ge 45 ]; then echo "X display :1 did not become ready within 45 seconds" >&2; exit 1; fi' \
       '  sleep 1' \
       'done' \
-      'exec env CUA_DRIVER_INSTALL_CHANNEL=python_package CUA_DRIVER_RS_TELEMETRY_ENABLED=0 CUA_DRIVER_WINDOW_CHANGE_TIMEOUT_MS=200 CUA_DRIVER_BROWSER_NO_SANDBOX=1 CUA_DRIVER_BROWSER_PROFILE_ROOT=/home/cua/workspace/.browser-profiles/driver NO_COLOR=1 /usr/local/libexec/raphael/cua-driver serve --socket /run/user/1000/raphael-cua.sock --permission-mode standard --cursor-reduced-motion on' \
+      'overlay_flag=' \
+      'if /usr/local/libexec/raphael/cua-driver serve --help 2>&1 | grep -q -- --no-overlay; then overlay_flag=--no-overlay; fi' \
+      'exec env CUA_DRIVER_INSTALL_CHANNEL=python_package CUA_DRIVER_RS_TELEMETRY_ENABLED=0 CUA_DRIVER_WINDOW_CHANGE_TIMEOUT_MS=200 CUA_DRIVER_BROWSER_NO_SANDBOX=1 CUA_DRIVER_BROWSER_PROFILE_ROOT=/home/cua/workspace/.browser-profiles/driver NO_COLOR=1 /usr/local/libexec/raphael/cua-driver serve --socket /run/user/1000/raphael-cua.sock --permission-mode standard --cursor-reduced-motion on $overlay_flag' \
       > /usr/local/bin/start-raphael-cua-driver.sh \
     && chmod 0755 /usr/local/bin/start-raphael-cua-driver.sh
 RUN printf '%s\n' \
@@ -117,4 +119,4 @@ RUN set -eux; \
 LABEL org.raphael.computer="1" \
       org.raphael.computer.driver="0.37.0" \
       org.raphael.computer.base="docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b" \
-      org.raphael.computer.layer="3"
+      org.raphael.computer.layer="4"

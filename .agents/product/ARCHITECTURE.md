@@ -424,3 +424,27 @@ Optional event.since stores only the read argument name and ISO format. EventPol
 Suggested routine cards also consume routineSentenceHTML. Generated webhook credentials reuse the existing masked field/sc-field and lock icon, with read-only Show/Hide/Copy controls. Copy leaves unchanged form nodes intact; rhythm details show the trigger once. Removing a member synchronizes the listener and removes the deleted routines' vault entries immediately.
 
 Review 3 cold-catalogue correction: ConnectorsService.ensure_tools uses the existing _load_tools and _tool_catalog, with a toolkit lock to share concurrent initial loads. EventPoller.read is shared by pick and poll: for a managed Composio entry it ensures the catalogue before the ordinary _tool classification and gated call, all under one wait_for deadline. Non-Composio reads skip catalogue loading. Load exceptions reach the existing transient poll backoff; only a completed preflight refusal returns None and takes the existing stop path. No new read policy, calendar exception, RPC, migration or stored routine field is introduced.
+
+## Responsive computer boundary (2026-11-04)
+
+computer/vm.py owns the 45-second ready-target confirmation and invalidates it
+against lifecycle/host/timezone changes and observed failures. The hot path never
+takes capacity_lock. vm_tools.py keeps the existing gate, per-target action lock,
+grant, screen lease, private-page redaction and takeover boundaries, and adds only
+the browser_open composite to its shared registry. No second worker, RPC, setting
+registry or model loop is introduced (A-01/A-03/A-04/A-08).
+
+The checked-in driver_schemas.json supplies the curated offline compatibility
+offer. Its provenance explicitly distinguishes older-platform schemas and
+reconstructed Linux definitions from an unavailable captured 0.37.0 list. Driver
+discovery runs on an owned background bridge after actual computer use, replacing
+definitions in the same production snapshot. The persistent action connection
+retains its session and receives the image/cursor configuration once.
+
+vm_bridge.py serializes writes only; one reader resolves pending request IDs.
+Screen reads get 120 seconds, actions 60. Cancellation closes only that owned
+stdio process, fails pending requests and invalidates confidence; no uncertain
+action is replayed. New v4 computers use a 3 GiB memory/swap cap (not a reservation)
+and two CPUs with two local slots. A third start evicts only the least recently
+used idle computer; active and owner-held computers remain protected.
+Offline tests establish contracts, not container latency or driver compatibility.

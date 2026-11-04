@@ -1,0 +1,988 @@
+{
+  "driver": "cua-driver 0.37.0 Linux (compatibility offer; live schema refresh is authoritative)",
+  "provenance": "Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.",
+  "source": "electron/fixtures/cua-driver-lent-tool-schemas.json (macOS 0.12.6); browser_prepare documented in server/mcp-tool-schema.test.ts (0.22.1); additional Linux tools reconstructed from the Raphael curated contract.",
+  "verification": "Not a captured Linux 0.37.0 tools/list. The pinned wheel is unavailable offline. Replace with a captured list in authorized test-container acceptance.",
+  "tools": {
+    "get_guide": {
+      "type": "object",
+      "properties": {
+        "topic": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "get_desktop_state": {
+      "properties": {
+        "screenshot_out_file": {
+          "type": "string"
+        },
+        "session": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "get_window_state": {
+      "properties": {
+        "capture_mode": {
+          "enum": [
+            "ax",
+            "vision"
+          ],
+          "type": "string"
+        },
+        "include_screenshot": {
+          "type": "boolean"
+        },
+        "max_depth": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_elements": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "pid": {
+          "type": "integer"
+        },
+        "query": {
+          "type": "string"
+        },
+        "screenshot_out_file": {
+          "type": "string"
+        },
+        "session": {
+          "type": "string"
+        },
+        "window_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "pid",
+        "window_id"
+      ],
+      "type": "object"
+    },
+    "get_cursor_position": {
+      "properties": {
+        "session": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "click": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "button": {
+          "enum": [
+            "left",
+            "right",
+            "middle"
+          ],
+          "type": "string"
+        },
+        "count": {
+          "type": "integer"
+        },
+        "debug_image_out": {
+          "type": "string"
+        },
+        "delivery_mode": {
+          "enum": [
+            "background",
+            "foreground"
+          ],
+          "type": "string"
+        },
+        "element_index": {
+          "type": "integer"
+        },
+        "element_token": {
+          "type": "string"
+        },
+        "from_zoom": {
+          "type": "boolean"
+        },
+        "modifier": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pid": {
+          "type": "integer"
+        },
+        "scope": {
+          "enum": [
+            "window",
+            "desktop"
+          ],
+          "type": "string"
+        },
+        "session": {
+          "type": "string"
+        },
+        "window_id": {
+          "type": "integer"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "double_click": {
+      "properties": {
+        "delivery_mode": {
+          "enum": [
+            "background",
+            "foreground"
+          ],
+          "type": "string"
+        },
+        "element_index": {
+          "type": "integer"
+        },
+        "element_token": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer"
+        },
+        "session": {
+          "type": "string"
+        },
+        "window_id": {
+          "type": "integer"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "pid"
+      ],
+      "type": "object"
+    },
+    "right_click": {
+      "properties": {
+        "delivery_mode": {
+          "enum": [
+            "background",
+            "foreground"
+          ],
+          "type": "string"
+        },
+        "element_index": {
+          "type": "integer"
+        },
+        "element_token": {
+          "type": "string"
+        },
+        "modifier": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pid": {
+          "type": "integer"
+        },
+        "session": {
+          "type": "string"
+        },
+        "window_id": {
+          "type": "integer"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "pid"
+      ],
+      "type": "object"
+    },
+    "type_text": {
+      "properties": {
+        "delay_ms": {
+          "maximum": 200,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "delivery_mode": {
+          "enum": [
+            "background",
+            "foreground"
+          ],
+          "type": "string"
+        },
+        "element_index": {
+          "type": "integer"
+        },
+        "element_token": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer"
+        },
+        "scope": {
+          "default": "window",
+          "enum": [
+            "window",
+            "desktop"
+          ],
+          "type": "string"
+        },
+        "session": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "window_id": {
+          "type": "integer"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "press_key": {
+      "properties": {
+        "delivery_mode": {
+          "enum": [
+            "background",
+            "foreground"
+          ],
+          "type": "string"
+        },
+        "element_index": {
+          "type": "integer"
+        },
+        "element_token": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "modifiers": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pid": {
+          "type": "integer"
+        },
+        "scope": {
+          "default": "window",
+          "enum": [
+            "window",
+            "desktop"
+          ],
+          "type": "string"
+        },
+        "session": {
+          "type": "string"
+        },
+        "window_id": {
+          "type": "integer"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "type": "object"
+    },
+    "hotkey": {
+      "properties": {
+        "delivery_mode": {
+          "enum": [
+            "background",
+            "foreground"
+          ],
+          "type": "string"
+        },
+        "keys": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "type": "array"
+        },
+        "pid": {
+          "type": "integer"
+        },
+        "scope": {
+          "default": "window",
+          "enum": [
+            "window",
+            "desktop"
+          ],
+          "type": "string"
+        },
+        "session": {
+          "type": "string"
+        },
+        "window_id": {
+          "type": "integer"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "keys"
+      ],
+      "type": "object"
+    },
+    "scroll": {
+      "properties": {
+        "amount": {
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "by": {
+          "enum": [
+            "line",
+            "page"
+          ],
+          "type": "string"
+        },
+        "delivery_mode": {
+          "enum": [
+            "background",
+            "foreground"
+          ],
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            "up",
+            "down",
+            "left",
+            "right"
+          ],
+          "type": "string"
+        },
+        "element_index": {
+          "type": "integer"
+        },
+        "element_token": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer"
+        },
+        "scope": {
+          "default": "window",
+          "enum": [
+            "window",
+            "desktop"
+          ],
+          "type": "string"
+        },
+        "session": {
+          "type": "string"
+        },
+        "window_id": {
+          "type": "integer"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "direction"
+      ],
+      "type": "object"
+    },
+    "drag": {
+      "properties": {
+        "button": {
+          "enum": [
+            "left",
+            "right",
+            "middle"
+          ],
+          "type": "string"
+        },
+        "delivery_mode": {
+          "enum": [
+            "background",
+            "foreground"
+          ],
+          "type": "string"
+        },
+        "duration_ms": {
+          "maximum": 10000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "from_x": {
+          "type": "number"
+        },
+        "from_y": {
+          "type": "number"
+        },
+        "from_zoom": {
+          "type": "boolean"
+        },
+        "modifier": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pid": {
+          "type": "integer"
+        },
+        "scope": {
+          "default": "window",
+          "enum": [
+            "window",
+            "desktop"
+          ],
+          "type": "string"
+        },
+        "session": {
+          "type": "string"
+        },
+        "steps": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "to_x": {
+          "type": "number"
+        },
+        "to_y": {
+          "type": "number"
+        },
+        "window_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from_x",
+        "from_y",
+        "to_x",
+        "to_y"
+      ],
+      "type": "object"
+    },
+    "move_cursor": {
+      "properties": {
+        "cursor_id": {
+          "type": "string"
+        },
+        "scope": {
+          "default": "window",
+          "enum": [
+            "window",
+            "desktop"
+          ],
+          "type": "string"
+        },
+        "session": {
+          "type": "string"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "launch_app": {
+      "properties": {
+        "additional_arguments": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "bundle_id": {
+          "type": "string"
+        },
+        "creates_new_application_instance": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "urls": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "webkit_inspector_port": {
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "list_apps": {
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "list_windows": {
+      "properties": {
+        "on_screen_only": {
+          "type": "boolean"
+        },
+        "pid": {
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "bring_to_front": {
+      "properties": {
+        "pid": {
+          "type": "integer"
+        },
+        "window_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "pid"
+      ],
+      "type": "object"
+    },
+    "clipboard_read": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    },
+    "clipboard_write": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ]
+    },
+    "verify_state": {
+      "type": "object",
+      "properties": {
+        "pid": {
+          "type": "integer"
+        },
+        "window_id": {
+          "type": "integer"
+        },
+        "predicates": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "timeout_ms": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "pid",
+        "window_id",
+        "predicates"
+      ]
+    },
+    "get_browser_state": {
+      "properties": {
+        "continuation": {
+          "type": "string"
+        },
+        "include_screenshot": {
+          "default": false,
+          "type": "boolean"
+        },
+        "pid": {
+          "type": "integer"
+        },
+        "query": {
+          "type": "string"
+        },
+        "scope_ref": {
+          "type": "string"
+        },
+        "session": {
+          "type": "string"
+        },
+        "snapshot_format": {
+          "enum": [
+            "dom_refs_v1",
+            "semantic_v2"
+          ],
+          "type": "string"
+        },
+        "tab_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "window_id": {
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "browser_prepare": {
+      "type": "object",
+      "properties": {
+        "allow_launch": {
+          "type": "boolean"
+        },
+        "pid": {
+          "type": "integer"
+        },
+        "window_id": {
+          "type": "integer"
+        },
+        "profile": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "isolated_new",
+                "isolated_named"
+              ]
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode"
+          ]
+        }
+      },
+      "required": []
+    },
+    "browser_navigate": {
+      "properties": {
+        "session": {
+          "type": "string"
+        },
+        "tab_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_id",
+        "tab_id",
+        "url"
+      ],
+      "type": "object"
+    },
+    "browser_click": {
+      "properties": {
+        "input_route": {
+          "enum": [
+            "trusted",
+            "dom_event"
+          ],
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "session": {
+          "type": "string"
+        },
+        "tab_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "target_id",
+        "tab_id"
+      ],
+      "type": "object"
+    },
+    "browser_type": {
+      "properties": {
+        "mode": {
+          "enum": [
+            "insert_text",
+            "keystrokes"
+          ],
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "session": {
+          "type": "string"
+        },
+        "tab_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_id",
+        "tab_id",
+        "ref",
+        "text"
+      ],
+      "type": "object"
+    },
+    "browser_select": {
+      "type": "object",
+      "properties": {
+        "target_id": {
+          "type": "string"
+        },
+        "tab_id": {
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "target_id",
+        "tab_id",
+        "ref",
+        "values"
+      ]
+    },
+    "browser_pointer": {
+      "properties": {
+        "action": {
+          "enum": [
+            "hover",
+            "right_click",
+            "double_click",
+            "scroll",
+            "drag"
+          ],
+          "type": "string"
+        },
+        "delta_x": {
+          "type": "number"
+        },
+        "delta_y": {
+          "type": "number"
+        },
+        "destination_ref": {
+          "type": "string"
+        },
+        "input_route": {
+          "default": "trusted",
+          "enum": [
+            "trusted",
+            "dom_event"
+          ],
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "session": {
+          "type": "string"
+        },
+        "tab_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "to_x": {
+          "type": "number"
+        },
+        "to_y": {
+          "type": "number"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "target_id",
+        "tab_id",
+        "session",
+        "action"
+      ],
+      "type": "object"
+    },
+    "browser_dialog": {
+      "properties": {
+        "action": {
+          "enum": [
+            "inspect",
+            "accept",
+            "dismiss"
+          ],
+          "type": "string"
+        },
+        "delivery_mode": {
+          "default": "background",
+          "enum": [
+            "background",
+            "foreground"
+          ],
+          "type": "string"
+        },
+        "dialog_id": {
+          "type": "string"
+        },
+        "prompt_text": {
+          "type": "string"
+        },
+        "session": {
+          "type": "string"
+        },
+        "tab_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_id",
+        "tab_id",
+        "action"
+      ],
+      "type": "object"
+    },
+    "browser_set_input_files": {
+      "type": "object",
+      "properties": {
+        "target_id": {
+          "type": "string"
+        },
+        "tab_id": {
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "target_id",
+        "tab_id",
+        "ref",
+        "paths"
+      ]
+    },
+    "browser_download": {
+      "type": "object",
+      "properties": {
+        "target_id": {
+          "type": "string"
+        },
+        "tab_id": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "download_id": {
+          "type": "string"
+        },
+        "destination_dir": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_id",
+        "tab_id",
+        "action"
+      ]
+    }
+  }
+}

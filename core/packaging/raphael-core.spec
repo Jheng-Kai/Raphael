@@ -51,7 +51,7 @@ for package in ("opencc", "numpy"):
 datas += collect_data_files("opencc", includes=["clib/share/opencc/*.json", "clib/share/opencc/*.ocd2"])
 datas += collect_data_files("raphael_core.brain.prompts", includes=["*.md"])
 datas += collect_data_files("raphael_core.connectors", includes=["finder-data.json"])
-datas += collect_data_files("raphael_core.computer", include_py_files=True, includes=["image/**/*"])
+datas += collect_data_files("raphael_core.computer", include_py_files=True, includes=["image/**/*", "driver_schemas.json"])
 for name in runtime_distributions():
     datas += copy_metadata(name)
 datas.append((str(core_dir / "build" / "notices"), "licenses"))

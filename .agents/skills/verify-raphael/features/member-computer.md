@@ -1,5 +1,86 @@
 # Member computer (Phases A and B)
 
+## Responsive computer tools (2026-11-04)
+
+R-COMP-PERF-01 through R-COMP-PERF-06 supersede the earlier full-screen bootstrap,
+mandatory desktop re-check, 2 GiB memory cap and on-call discovery notes.
+This unit changes core only; its brief forbids Docker operations, network, paid
+models, look and native runs. All current evidence uses fake Docker/driver
+boundaries. No measured improvement in a real member computer is claimed.
+
+LocalVm remembers a successfully prepared Target for 45 seconds, including its
+transport, lifecycle generation, enable state and timezone signature. Hot calls
+skip capacity_lock and all Docker preflight launches. Bridge/VM failures, observed
+stopped/unavailable/incompatible status and timezone refresh invalidate that
+confidence. The next call performs full preparation; an uncertain action is not
+replayed. Existing grant, screen lease and owner-control checks remain authoritative.
+
+The routine first look is list_windows then a targeted get_window_state, bounded
+to 200 elements and include_screenshot false by default, with query forwarded.
+Screenshots are explicit; get_desktop_state remains available for whole-screen
+pixels. Fresh window/browser reads clear takeover and stale-screen requirements;
+list_windows alone never clears them. The shared member persona prescribes the
+same contract and verification after meaningful changes.
+
+browser_open(url, query?, scope_ref?) performs browser_prepare with the lasting
+isolated_named/main profile, chooses one Chromium window, binds its active tab,
+navigates and returns semantic_v2 page references without screenshot blocks. Its
+subcalls reuse one owned session and check the grant/hold between stages. Window
+mapping may lag browser preparation, so missing windows are polled for at most
+five seconds inside that same tool call. It
+refuses ambiguous windows, missing targets/tabs and non-http/https URLs, and stops
+after any failed stage. Browser follow-up tools remain individually available.
+
+The v4 image passes --no-overlay only when serve --help advertises it; every
+member driver connection also disables its exact session cursor_id and sets
+max_image_dimension 1456. New computers use a 3 GiB
+memory/swap cap (not a reservation) and two CPUs, with two local running computers.
+Two members can work side by side; a third start evicts the least recently used
+idle computer without interrupting active or owner-held computers. Old images/limits fail compatibility;
+offline verification never migrates or touches any existing container.
+
+CuaBridge matches replies by request ID with a single reader and a write-only
+lock. Screen reads allow 120 seconds; actions allow 60 seconds. Cancelling or
+timing out abandons the owned bridge process, fails its pending requests and
+invalidates preflight confidence. Member reads emit one localized progress line
+at ten seconds. Elapsed time is included in page JSON when present, otherwise in
+text; lease notices retain their existing JSON contract.
+
+All 30 curated driver tools and Raphael-owned browser_open, vm_exec, attach_file,
+request_takeover, fill_login and per-bot dataset are offered offline after a grant.
+Permissionless turns still see only request_computer. The first actual driver
+operation schedules a bounded background listing on a separate bridge, retaining
+the action session. Missing driver tools are removed and schemas are replaced in
+the existing API/CLI/worker snapshot. Preparing a turn never starts or probes Docker.
+
+Schema provenance limitation: driver_schemas.json is a compatibility offer,
+adapted from OpenMausBot's macOS 0.12.6 schemas and 0.22.1 browser_prepare example,
+plus reconstructed Linux definitions. Neither the exact Linux 0.37.0 wheel nor
+a captured schema list was available offline. It must not be called a verified
+Linux snapshot. Capture and compare the pinned driver's full tools/list on an
+authorized disposable container before release. Apache attribution and NOTICE
+are retained. Packaging explicitly includes this JSON and audits its presence.
+
+Offline scope: tests/computer, tests/agent/test_persona.py,
+tests/agent/test_computer_grants.py, tests/background/test_computer_lazy.py and
+packaging tests, followed by the whole core suite once after wait-heavy.ps1.
+The task report records exact commands, exits and counts.
+
+Authorized acceptance still needed (audit section 2.5): time cold/warm desktop
+capture with XFCE alone and with Chromium, bounded window reads with/without PNG,
+docker stats with the 3 GiB/no-overlay image, and host docker info/inspect/exec true.
+Also count Docker launches for a warm no-op tool, measure browser_open click-to-page
+and ten-second progress/Stop latency, and compare the static/live Linux schemas.
+Record elapsed distributions, failures, CPU/memory, image dimensions/bytes and
+model steps. Do not claim fake test results as latency or native evidence.
+
+Deferred consumer scenes: desktop-panel, desktop-viewer, desktop-owner,
+desktop-takeover, desktop-takeover-owner, desktop-takeover-done and
+chat-computer-takeover, both themes at 1120,720,1920x1080. Native member-computer
+and vm-smoke should exercise the same tool/lease/browser path on an explicitly
+authorized test container. Look, judge, native and live-provider checks are SKIP
+in this offline-only brief, with no UI consistency comparison implied.
+
 ## Slime town and computer preparation (2026-11-03)
 
 R-UI-92/93/94 replace the monochrome artwork and preparation stage-list assertions
@@ -227,7 +308,7 @@ Offline fakes and rendered fixture success do not prove Docker, cargo, native
 journeys, network, judge or real subscription commands. Rule IDs: R-PC-01/02/03 and R-AG-13.
 
 The optional Docker desktop defaults to `computer_vm_mode=per-bot`: a durable workspace,
-container and browser profile per member (2 GiB and two CPUs each), plus a shared team
+container and browser profile per member (3 GiB and two CPUs each), plus a shared team
 folder at `/home/cua/team`. Existing explicitly saved shared mode remains supported. Host paths use pathlib and Docker CSV bind
 mounts; no host shell or alternate runtime is used. The core starts an installed Docker Desktop through the host adapter on the first actual
 computer operation. A granted turn's tool preparation never invokes Docker. When Docker is absent,
@@ -236,12 +317,12 @@ no computer tools are offered; the existing Settings computer area has one requi
 `computer/vm_catalog.py` curates 30 driver tools plus Raphael's `vm_exec` and
 `attach_file` (32 total). Each selection has a one-line reason. Screenshot/window
 state, input, application/window discovery, clipboard, verification and the Linux
-CDP browser helpers are offered together after the first real driver listing, regardless of the question. Before that listing, an offline
-bootstrap offers `get_desktop_state`, `vm_exec`, `attach_file` and `request_takeover`.
-The screen tool discovers the actual driver schemas on use and refreshes the same
-API/CLI/background turn's catalog; missing tools are removed and changed schemas
-are validated before forwarding an action. The real catalog stays in memory for
-later turns in this process. Core-owned
+CDP browser helpers are offered together offline from the first granted turn.
+The checked-in compatibility schemas and Raphael-owned tools are refreshed on use
+by a background driver listing; exact pinned Linux schema capture remains pending
+as described above. Missing tools are removed, and changed schemas are validated
+before forwarding when the refreshed definition is available. The real catalog
+stays in memory for later turns in this process. Core-owned
 `PluginTool.pinned` metadata excludes them from the 40-plugin budget, keyword
 shortlists, model refinement and the foreground planner's selection. Other plugins
 keep their existing cap and discovery. Driver updates/installs, configuration,
@@ -272,7 +353,7 @@ has the screen waits up to a minute with one progress line (「正在等 <成員
 then gets a result, not a failure, that names who holds it and for how long
 (`computer_busy`, no evidence of work) so it can do other work or ask again. After
 waiting, or after another used the screen, its first action returns `screen_changed`
-until it has called `get_desktop_state` again. Commands (`vm_exec`, `attach_file`) never
+until it has made a fresh targeted window/browser read (or explicit whole-screen read) again. Commands (`vm_exec`, `attach_file`) never
 take or wait for anyone's turn at the screen.
 
 Before sending a message or email, publishing or posting, deleting anything outside

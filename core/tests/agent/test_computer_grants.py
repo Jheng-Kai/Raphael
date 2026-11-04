@@ -78,7 +78,7 @@ async def test_a_pc_without_docker_offers_no_computer_tools(computer_owner, clie
     assert vm.run.calls == []
 
 
-async def test_first_screen_call_discovers_controls_in_same_api_turn(computer_owner, client):
+async def test_first_api_turn_offers_controls_and_refreshes_after_screen(computer_owner, client):
     rig, vm, hub, cards = computer_owner
     vm.grants.set(0, True)
     client.chats = [chat("Look first.", ("computer__get_desktop_state", {})),
@@ -87,9 +87,8 @@ async def test_first_screen_call_discovers_controls_in_same_api_turn(computer_ow
     assert reply["status"] == "done" and reply["text"] == "Done."
     first = {tool["function"]["name"] for tool in client.chat_calls[0]["tools"]}
     second = {tool["function"]["name"] for tool in client.chat_calls[1]["tools"]}
-    assert "computer__click" not in first and "computer__click" in second
-    assert "discover control tools" in next(tool["function"]["description"] for tool in client.chat_calls[0]["tools"]
-                                             if tool["function"]["name"] == "computer__get_desktop_state")
+    assert {"computer__click", "computer__browser_open", "computer__browser_type"} <= first
+    assert "computer__click" in second
     assert vm.start.await_count == 2
     before = vm.start.await_count
     client.decisions.append(decision("answer"))
@@ -118,7 +117,7 @@ async def test_real_catalog_replaces_bootstrap_schema_without_forwarding_bad_cal
         assert "computer__get_desktop_state" not in actual and "computer__click" in actual
     else:
         assert actual["computer__get_desktop_state"]["parameters"]["required"] == ["scope"]
-    assert sent == ["tools/list"]
+    assert sent == ["tools/call", "tools/call", "tools/list"]
 
 
 @pytest.mark.parametrize("use_computer", [False, True])
@@ -146,7 +145,7 @@ async def test_granted_cli_is_lazy_and_reloads_after_first_screen(computer_owner
             catalogs.append(names)
             assert "computer__get_desktop_state" in names and "computer__request_computer" not in names
             if use_computer and len(catalogs) == 1:
-                assert "computer__click" not in names
+                assert {"computer__click", "computer__browser_open", "computer__browser_type"} <= names
                 result = await rpc("tools/call", {"name": "computer__get_desktop_state", "arguments": {}})
                 assert not result["isError"]
                 yield Event("tool_end")

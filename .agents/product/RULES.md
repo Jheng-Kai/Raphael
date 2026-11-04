@@ -1,5 +1,16 @@
 # Raphael product rules
 
+## Responsive member computer (2026-11-04)
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-COMP-PERF-01 | 2026-11-04 | A confirmed ready target skips Docker preflight and the capacity lock for 45 seconds while lifecycle, host, enable and timezone identity remain unchanged. VM/connection/bridge timeout failures and an observed stopped/unavailable/incompatible target invalidate the confirmation; uncertain actions are never replayed. | pytest, authorized container timing | hard | core/tests/computer/test_latency.py::test_confirmed_start_skips_docker_and_capacity_lock_until_expiry; core/tests/computer/test_latency.py::test_bridge_failure_invalidates_start_without_replaying_action; core/tests/computer/test_latency.py::test_observed_external_stop_invalidates_preflight_immediately |
+| R-COMP-PERF-02 | 2026-11-04 | Routine observation lists windows then reads the intended window with at most 200 elements, optional query and no screenshot unless requested. Whole-screen capture remains an explicit pixels lane. A targeted window/browser read clears the takeover/stale-screen check; a window list alone does not. | pytest, authorized container timing | hard | core/tests/computer/test_latency.py::test_window_reads_are_bounded_and_driver_images_and_cursor_are_configured; core/tests/computer/test_takeover.py::test_private_takeover_blocks_every_tool_and_resumes_once_after_explicit_done |
+| R-COMP-PERF-03 | 2026-11-04 | browser_open prepares the persistent main profile, binds an unambiguous Chromium window/tab, navigates an http/https URL and returns semantic_v2 references without a screenshot in one member tool call. Each stage respects current permission and owner control, and a failed stage stops the composite. Typed follow-up tools remain offered. | pytest, authorized browser acceptance | hard | core/tests/computer/test_latency.py::test_browser_open_prepares_binds_navigates_and_returns_semantics_in_one_call; core/tests/computer/test_latency.py::test_browser_open_stops_on_driver_error_or_new_owner_hold |
+| R-COMP-PERF-04 | 2026-11-04 | New v4 computers have a 3 GiB memory/swap cap (not a reservation) and two CPUs, a local limit of two running owned computers, disabled cursor overlay and a 1456-pixel driver image cap. Two members can work side by side; a third start evicts only the least recently used idle computer and never active or owner-held computers. Existing containers require explicit compatibility handling and are never changed by offline verification. | pytest, authorized container acceptance | hard | core/tests/computer/test_hosts.py::test_default_member_computers_share_only_team_files; core/tests/computer/test_hosts.py::test_two_local_members_run_together_before_third_evicts_idle_lru; core/tests/computer/test_hosts.py::test_local_bound_evicts_longest_idle_and_remote_has_no_bound; core/tests/computer/test_latency.py::test_window_reads_are_bounded_and_driver_images_and_cursor_are_configured |
+| R-COMP-PERF-05 | 2026-11-04 | Screen reads allow 120 seconds and actions 60 seconds. A slow member read emits one localized progress line at ten seconds and reports elapsed time without corrupting structured page results or lease notices. Reading never holds the connection write lock; cancellation abandons its owned driver connection and clears preflight confidence. | pytest, authorized cancellation timing | hard | core/tests/computer/test_latency.py::test_slow_read_emits_one_progress_line_and_elapsed_time; core/tests/computer/test_latency.py::test_read_wait_does_not_hold_connection_lock_and_routes_out_of_order_replies; core/tests/computer/test_latency.py::test_timeout_or_cancel_closes_owned_bridge_and_releases_waiters |
+| R-COMP-PERF-06 | 2026-11-04 | Granted API, CLI and worker turns see the entire curated computer catalog before any Docker operation or screen read. An on-use background listing refreshes the same catalog; it never admits uncurated tools or model-selected sessions. The checked-in compatibility offer discloses that exact pinned Linux schema capture is still pending. | pytest, authorized schema capture | hard | core/tests/computer/test_latency.py::test_full_catalog_is_offered_to_worker_before_any_docker_or_screen; core/tests/agent/test_computer_grants.py::test_first_api_turn_offers_controls_and_refreshes_after_screen; core/tests/background/test_computer_lazy.py::test_background_turn_starts_only_for_real_computer_call; features/member-computer.md |
+
 ## Delegated work and truthful run endings (2026-11-04)
 
 | ID | Date | Rule | Check | Severity | Evidence |
@@ -272,9 +283,8 @@ settings explains the missing runtime and offers installation or another host.
 Remote Docker uses a validated `ssh://alias`, no published viewer port, named
 workspace/team volumes on that engine, and a temporary random loopback SSH viewer
 forward. It never starts Docker Desktop on this PC. Local idle-stop remains 15
-minutes; remote desktops have no idle-stop. The cap is 2 GiB and two CPUs per
-container (measured 2026-11-01 on the real image in Firefox: 181 MiB with no browser,
-1.1 GiB on one shop page, 1.4 GiB on three, 1.7 GiB on five tabs). Local starts keep at most two running owned computers, counting
+minutes; remote desktops have no idle-stop. New v4 containers have a 3 GiB memory/swap cap
+(not a reservation) and two CPUs. Local starts keep at most two running owned computers, counting
 old incompatible containers without stopping them. Only a compatible, longest-idle
 computer with no work or owner lease may be evicted; otherwise
 report capacity. Remote hosts have no such limit.

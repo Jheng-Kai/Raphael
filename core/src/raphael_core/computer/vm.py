@@ -21,15 +21,16 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 BASE = "docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b"
 VERSION = "0.37.0"
-IMAGE = "raphael/cua-local-vm:driver-0.37.0-v3"
+IMAGE = "raphael/cua-local-vm:driver-0.37.0-v4"
 GUEST = "/home/cua/workspace"
 SHARED = "/home/cua/team"
-MEMORY_GB = 2
+MEMORY_GB = 3
 LOCAL_LIMIT = 2
+PREFLIGHT_S = 45.0
 DRIVER = "/usr/local/libexec/raphael/cua-driver"
 SOCKET = "/run/user/1000/raphael-cua.sock"
 LABEL = "org.raphael.computer"
-IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "3"}
+IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "4"}
 MAX_OUTPUT = 50_000  # what a task may be shown of a result at most (`worker.guards`)
 # The longest a command may be waited for, and the longest a job started in the background may run.
 FOREGROUND_S = 1800
@@ -237,6 +238,7 @@ class LocalVm:
         # Raised whenever this core starts or stops a computer, so a remembered state is never trusted across it.
         self.changes = 0
         self.status_engines = {}
+        self.running = {}
         self._installed = None
         self.engine_lock, self.build_lock = asyncio.Lock(), asyncio.Lock()
         from .takeover import ComputerWork
@@ -359,12 +361,21 @@ class LocalVm:
             raise VmError("invalid_status") from None
 
     async def status(self, target, *, probe=True):
+        try:
+            return await self._status(target, probe=probe)
+        except (VmError, OSError, TimeoutError):
+            self.invalidate(target)
+            raise
+
+    async def _status(self, target, *, probe=True):
         if not self.enabled:
+            self.invalidate(target)
             return {"state": "unavailable", "ready": False}
         now, changes = self.clock(), self.changes
         kept = self.status_engines.get(target.remote)
         if probe or not kept or kept[2] != changes or not 0 <= now - kept[0] < 60:
             if not await self.available(target):
+                self.invalidate(target)
                 return {"state": "unavailable", "ready": False}
             image_id = await self.image(target)
             self.status_engines[target.remote] = (now, image_id, changes)
@@ -373,14 +384,15 @@ class LocalVm:
         try:
             raw = await self.inspect(target)
         except (VmError, OSError, TimeoutError):
-            self.status_engines.pop(target.remote, None)
+            self.invalidate(target)
             raise
         if raw is None:
             # A failed inspect can mean the engine or image changed outside Raphael.
-            self.status_engines.pop(target.remote, None)
+            self.invalidate(target)
             image_id = await self.image(target)
             return {"state": "missing", "image": bool(image_id), "ready": False}
         if not image_id or not compatible(raw, target, self.owner, image_id):
+            self.invalidate(target)
             return {"state": "incompatible", "ready": False}
         running = raw.get("State", {}).get("Running") is True
         ready = False
@@ -388,6 +400,8 @@ class LocalVm:
             version = await self.run_for(target, exec_args(target, [DRIVER, "--version"]))
             health = await self.run_for(target, exec_args(target, [DRIVER, "call", "health_report", "{}", "--socket", SOCKET]))
             ready = version.code == health.code == 0 and version.stdout.strip() == f"cua-driver {VERSION}" and healthy(health.stdout)
+        if not running or probe and not ready:
+            self.invalidate(target)
         bindings = raw.get("NetworkSettings", {}).get("Ports", {}).get("6901/tcp") or []
         port = next((int(p["HostPort"]) for p in bindings if p.get("HostIp") == "127.0.0.1" and str(p.get("HostPort", "")).isdigit()), None)
         url = f"http://127.0.0.1:{port}/vnc.html#autoconnect=true&resize=scale&view_only=true" if port else ""
@@ -431,11 +445,35 @@ class LocalVm:
             raise VmError("build_failed")
 
     async def start(self, target):
+        if (state := self._recent_start(target)) is not None:
+            return state
         if target.remote:
-            return await self._prepare_start(target)
+            return await self._confirmed_start(target)
         # Capacity always precedes target locks: eviction may need another target's lock.
         async with self.capacity_lock:
-            return await self._prepare_start(target)
+            return await self._confirmed_start(target)
+
+    def invalidate(self, target):
+        self.running.pop(target, None)
+        self.status_engines.pop(target.remote, None)
+
+    def _start_signature(self):
+        return self.changes, self.enabled, self.remote, self.timezone(), self.timezone_pending
+
+    def _recent_start(self, target):
+        kept = self.running.get(target)
+        if kept and kept[1] == self._start_signature() and 0 <= self.clock() - kept[0] < PREFLIGHT_S:
+            return dict(kept[2])
+        return None
+
+    async def _confirmed_start(self, target):
+        if (state := self._recent_start(target)) is not None:
+            return state
+        self.invalidate(target)
+        state = await self._prepare_start(target)
+        if state.get("ready"):
+            self.running[target] = self.clock(), self._start_signature(), dict(state)
+        return state
 
     async def _prepare_start(self, target):
         async with self.locks.setdefault(target.key, asyncio.Lock()):
@@ -590,6 +628,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
     async def refresh_timezone(self):
         """Reconcile desktops created before Home supplied the owner's zone."""
         self.timezone_pending = True
+        self.running.clear()
         if not self.timezone() or not await self.available():
             return
         await self.recover()
