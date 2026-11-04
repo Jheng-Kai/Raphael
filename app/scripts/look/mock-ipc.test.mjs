@@ -5,6 +5,19 @@ import { checkRendered } from "./checks.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixture.json", import.meta.url), "utf8"));
 describe("shared look IPC boundary", () => {
+  it("installs a plugin set once, preserves its member choice on update and removes every set capability", async () => {
+    const source = {kind:"plugin",name:"desk",version:"1.0.0",source:"local:C:/synthetic/plugin",skills:[{name:"write",description:"Write"},{name:"check",description:"Check"}],commands:[{name:"review",description:"Review",set_kind:"command"}]};
+    const target = {}, state = installMock(fixture,{fixture:{skillSources:[source]}},target);
+    const call=(method,params)=>target.__TAURI_INTERNALS__.invoke("core_call",{method,params});
+    const first=await call("members.skills.import",{member_id:0,shared:true,plugin:true,source:source.source});
+    expect(first.skills).toHaveLength(3); expect(state.data.skillSets).toHaveLength(1);
+    await call("members.skills.update",{member_id:0,id:first.skills[0].id,enabled:false});
+    await call("members.skills.import",{member_id:0,shared:true,set_id:first.set.id});
+    expect((await call("members.skills.list",{member_id:0})).skills[0].enabled).toBe(false);
+    await call("members.skills.delete",{member_id:0,shared:true,set_id:first.set.id});
+    expect((await call("members.skills.list",{member_id:0})).skills).toEqual([]);
+    expect(state.data.skillSets).toEqual([]); expect(state.errors).toEqual([]);
+  });
   it("keeps shared imports distinct from Raphael's own skills and grants each member independently", async () => {
     const target = {}, state = installMock(fixture, { fixture: { skillSources: [{ source: "local:C:/synthetic/writer", name: "writer", description: "Write" }] } }, target);
     const call = (method, params) => target.__TAURI_INTERNALS__.invoke("core_call", { method, params });

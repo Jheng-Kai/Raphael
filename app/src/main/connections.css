@@ -157,6 +157,17 @@
 .cs-library-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; color: var(--text-2); }
 .cs-library-icon svg.i { width: 20px; height: 20px; }
 .cs-dlg-head > .cs-library-icon { width: 40px; height: 40px; }
+.cs-set { margin-top: var(--sp-4); }
+.cs-set-heading { gap: var(--sp-2); }
+.cs-set-heading > .cs-open { display: flex; flex: 1; min-width: 0; align-items: center; gap: var(--sp-2); text-align: left; }
+.cs-set-heading .tx { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.cs-set-heading .ds { font-size: var(--fs-xs); color: var(--text-2); font-weight: 400; }
+.cs-plugin-skills { padding: var(--sp-2) var(--sp-3); font-size: var(--fs-sm); }
+.cs-plugin-skills summary { cursor: pointer; color: var(--text-2); }
+.cs-skill-import .row > label { min-width: 0; }
+.cs-dialog [data-set-mcp] { margin-top: var(--sp-4); }
+/* Keep scrolled MCP controls above the sticky set actions. */
+.cs-dialog:has([data-set-mcp]) { scroll-padding-bottom: calc(var(--h-ctl) + 3 * var(--sp-4)); }
 .cs-say { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
 .cs-say li { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-radius: 0; border: 0; background: transparent; font-size: var(--fs-xs); line-height: 1.5; }
 .cs-say .i { color: var(--text-3); }

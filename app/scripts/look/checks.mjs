@@ -68,6 +68,12 @@ export function checkRendered(name, context = {}) {
     require(input.value === 'C:\\Owner\\Deliveries', "the saved output path remains visible");
     return { check: name, height: box.height, inset };
   }
+  if (name.startsWith("skills-") || ["growing-skills", "member-shared-source", "skill-page"].includes(name)) {
+    for (const label of document.querySelectorAll('[data-skill-provenance], .mp-resource p, .cs-item .ds, .cs-dialog > .cs-desc')) {
+      const text = label.textContent.trim(), title = label.getAttribute('title') ?? '';
+      require(!/^(learned|owner|imported)$/i.test(text) && !/(?:local:|github:|plugin:|[/\\]plugins[/\\]cache[/\\])/i.test(text + title), "R-SKILL-08: skill origins never show raw source values or plugin cache paths");
+    }
+  }
   if (["room-meeting", "room-meeting-board", "room-meeting-report"].includes(name)) {
     const pane = document.querySelector('.au-room-pane:not([hidden])');
     require(pane, "the real group conversation is open");
@@ -1689,6 +1695,8 @@ export function checkRendered(name, context = {}) {
     const editor = document.querySelector('#mp-skill-text');
     require(visible(editor) && editor.value.includes("## Verification"), "the actual saved skill opens in the existing member pane");
     require(document.querySelector('.mb-det').textContent.includes("自行學會"), "learned provenance and date are shown");
+    const learned = [...document.querySelectorAll('.mb-det .mp-resource')].find(row => row.querySelector('b')?.textContent === 'research-summary');
+    require(learned?.querySelectorAll('[data-skill-provenance]').length === 1 && learned.querySelector('[data-skill-provenance]').textContent === '自行學會 · 2026/10/29', "a learned skill has exactly one localized origin and date line");
     const calls = window.__look.calls;
     require(calls.some(c => c.method === "members.skills.read"), "opening reads the real skill boundary");
     if (window.__look.data.skills[0].member_id === 1) require(!calls.some(c => c.method === "members.skills.update" || c.method === "members.skills.delete"), "reading the editor never mutates skills");
@@ -3779,6 +3787,54 @@ export function checkRendered(name, context = {}) {
     const button = list.querySelector("[data-conversation-new]"), box = button.getBoundingClientRect(), parent = list.getBoundingClientRect();
     require(box.left >= parent.left && box.right <= parent.right + 1, "new conversation button fits inside the list");
     return { check: name, width: list.clientWidth, scrollWidth: list.scrollWidth };
+  }
+  if (name === "skills-plugin-details-bottom") {
+    const button = document.querySelector('[data-set-mcp="1"] [data-conn="set-mcp"]');
+    require(visible(button), "the second MCP server's setup action can be reached by scrolling");
+    const box = button.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    require(hit && button.contains(hit), "the sticky set footer never covers the reached MCP setup action");
+    return { check: name };
+  }
+  if (["skills-plugin-entry", "skills-marketplace", "skills-plugin-set", "skills-plugin-update", "skills-plugin-details"].includes(name)) {
+    const section = document.querySelector('[data-skills-section]');
+    require(section && document.querySelectorAll('[data-skills-section]').length === 1, "plugin sets stay in the one existing Skills section");
+    if (name === "skills-plugin-entry") {
+      const entries = [...document.querySelectorAll('[data-plugin-source]')];
+      require(entries.length === 1 && entries[0].textContent.includes('research-tools · 1.2.0') && entries[0].textContent.includes('2 個技能'), "one plugin entry shows its name, version and skill count");
+      require(document.querySelectorAll('.cs-dialog [data-conn="skill-import-local"]').length === 1, "one import action installs the entire plugin");
+      require(document.querySelectorAll('.cs-dialog [data-conn="skill-import-alone"]').length === 2, "individual skill imports remain available in the disclosure");
+      require(!document.querySelector('.cs-dialog').textContent.includes('local:'), "plugin entries hide internal source prefixes");
+    }
+    if (name === "skills-marketplace") {
+      const supported = document.querySelector('[data-market-plugin="research-tools"]'), unsupported = document.querySelector('[data-market-plugin="npm-workflows"]');
+      require(supported.textContent.includes('2.0.0') && !supported.querySelector('button').disabled, "a marketplace plugin shows the listed version and install action");
+      require(unsupported.querySelector('button').disabled && unsupported.textContent.includes('僅支援 GitHub 來源'), "unsupported plugin sources explain why they cannot be installed");
+      require(window.__look.calls.some(call => call.method === 'members.skills.list' && call.params.marketplace === 'sample/workflows'), "the owner adds the marketplace through the existing skill boundary");
+    }
+    if (name === "skills-plugin-set" || name === "skills-plugin-update") {
+      const groups = [...section.querySelectorAll('[data-skill-set]')], rows = [...section.querySelectorAll('.cs-set .cs-skill')];
+      require(groups.length === 1 && rows.length === 3 && rows.every(row => row.hasAttribute('data-library-skill')), "the set groups each shared skill and command exactly once");
+      require(groups[0].textContent.includes('2 個技能 · 1 個指令'), "the installed set counts skills and slash commands separately");
+      require(section.querySelectorAll('[data-conn="set-update"]').length === (name === 'skills-plugin-update' ? 1 : 0), "an update offer appears once for the complete set");
+      require(section.querySelectorAll('[data-conn="skill-reimport"]').length === 0, "set members have no duplicate per-skill reimport action");
+      if (name === 'skills-plugin-set') {
+        const calls = window.__look.calls.filter(call => call.method === 'members.skills.import');
+        require(calls.length === 1 && calls[0].params.plugin && calls[0].params.shared, "one owner action installs all plugin capabilities");
+      }
+      for (const button of section.querySelectorAll('[data-conn="set-update"]')) {
+        const box = button.getBoundingClientRect(), parent = button.parentElement.getBoundingClientRect();
+        require(box.left >= parent.left && box.right <= parent.right + 1, "the whole-set update fits its heading at every width");
+      }
+    }
+    if (name === "skills-plugin-details") {
+      const dialog = document.querySelector('[data-dialog="skill-set:1"]');
+      require(visible(dialog) && dialog.querySelectorAll('.conversation-card.mcp-proposal').length === 2, "the set detail reuses one existing MCP card per declared server");
+      require(dialog.querySelectorAll('[data-conn="set-mcp"]').length === 2 && !dialog.querySelector('[data-mcp-operation="enable"]'), "each server needs explicit setup before it can be added");
+      require(dialog.textContent.includes('不執行事件鉤子、代理定義或其他外掛功能'), "the set states which plugin parts Raphael does not run");
+      require(dialog.querySelector('[data-conn="set-delete"]') && dialog.querySelector('[data-conn="set-update"]'), "the set reuses the existing action row for removal and reimport");
+    }
+    require(!window.__look.calls.some(call => ['integrations.add','integrations.import','integrations.test','integrations.proposal'].includes(call.method)), "skill discovery, install and details never add or run MCP servers");
+    return {check:name,sets:window.__look.data.skillSets.length};
   }
   if (["skills-section", "skills-installed-sources", "skills-import-shared", "skills-member-grants", "skills-source-changed"].includes(name)) {
     const sections = [...document.querySelectorAll('.cs-body [data-skills-section]')];

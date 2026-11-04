@@ -717,8 +717,16 @@ class MembersService:
     async def _skills_list(self, params: dict) -> dict:
         member_id = self._skill_scope(params)
         result = {"skills": self._cap(self.capabilities.skills, member_id), "undo": self.capabilities.undo_revision(member_id)}
+        result["sets"] = self._cap(self.capabilities.plugin_sets) if member_id == -1 or params.get("discover") is True else []
         if params.get("discover") is True:
-            result["sources"] = self._cap(self.capabilities.local_sources)
+            result["sources"] = self._cap(self.capabilities.plugin_sources)
+            result["marketplaces"] = [json.loads(row[0]) for row in self._conn.execute("SELECT catalog FROM skill_marketplaces ORDER BY repo")]
+        if "marketplace" in params:
+            try:
+                result["marketplace"] = await self.capabilities.add_marketplace(params["marketplace"])
+                result["sets"] = self.capabilities.plugin_sets()
+            except MemberError as error:
+                raise _rpc_error(error) from None
         return result
 
     async def _skills_import(self, params: dict) -> dict:
@@ -726,6 +734,14 @@ class MembersService:
         added = []
         try:
             source = params.get("source")
+            if params.get("plugin") is True or "set_id" in params or "marketplace" in params:
+                if member_id != -1:
+                    raise MemberError("scope", "plugin sets belong to the shared library")
+                identifier = _whole(params, "set_id", least=1) if "set_id" in params else None
+                installed = await self.capabilities.import_plugin(source, set_id=identifier, marketplace=params.get("marketplace"), name=params.get("name"))
+                self._changed("members.skills.changed", 0)
+                self._changed()
+                return {"set": installed, "skills": self.capabilities.skills(-1)}
             if isinstance(source, str) and source.startswith("local:"):
                 skill = self.capabilities.import_local(member_id, source)
                 self._changed("members.skills.changed", 0 if member_id == -1 else member_id)
@@ -776,6 +792,13 @@ class MembersService:
 
     async def _skills_delete(self, params: dict) -> dict:
         member_id = self._skill_scope(params)
+        if "set_id" in params:
+            if member_id != -1:
+                raise invalid_params("plugin sets belong to the shared library")
+            deleted = self._cap(self.capabilities.delete_set, _whole(params, "set_id", least=1))
+            self._changed("members.skills.changed", 0)
+            self._changed()
+            return {"deleted": deleted}
         deleted = self._cap(self.capabilities.delete_skill, member_id, _whole(params, "id", least=1))
         self._changed("members.skills.changed", member_id)
         self._changed()

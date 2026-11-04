@@ -10,7 +10,7 @@ beforeEach(() => { vi.resetAllMocks(); setLocale("en"); });
 test("one shared row retains Raphael and individual member grants in the detail dialog", async () => {
   api.membersList.mockResolvedValue({ members: [{ id: 0, name: "Raphael" }, { id: 1, name: "Ada" }] });
   api.membersSkillsList.mockImplementation(async (id: number) => ({ skills: [{ id: 7, name: "write", description: "Write notes", source: "local:C:/synthetic/write", enabled: true, shared: id >= 0 }] }));
-  const items = await loadSkillItems();
+  const { items } = await loadSkillItems();
   expect(items.map(item => item.member.id)).toEqual([0, 1, -1]);
   const listed = skillListItems(items);
   expect(listed).toHaveLength(1);
@@ -94,6 +94,9 @@ test("ten shared packages stay ten rows for six members", () => {
 });
 
 test("installed sources use home-relative folders or plugin names and versions without transport prefixes", () => {
+  expect(skillSourceLabel("github:owner/research-skills")).toBe("owner/research-skills");
+  expect(skillSourceLabel("learned")).toBe("Self-taught");
+  expect(skillSourceLabel("owner")).toBe("From owner");
   expect(skillSourceLabel("local:C:\\Users\\Owner\\.claude\\skills\\writer")).toBe("~/.claude/skills/writer");
   expect(skillSourceLabel("local:/home/owner/.codex/skills/writer")).toBe("~/.codex/skills/writer");
   expect(skillSourceLabel("local:C:/Users/Owner/.agents/skills/writer")).toBe("~/.agents/skills/writer");
@@ -104,4 +107,13 @@ test("installed sources use home-relative folders or plugin names and versions w
   expect(html).toContain("&lt;Docs&gt; · 2.0.0");
   expect(html).not.toContain("local:");
   expect(html).not.toContain("plugins/cache");
+});
+
+test("learned skill rows and their detail dialog show one localized origin and date", () => {
+  const item = { member: { id: 1, name: "Ada" }, skill: { id: 7, name: "summary", description: "Summarize", source: "learned", provenance: "learned" as const, learned_at: "2026-10-29T12:00:00", enabled: true } };
+  for (const html of [skillRowHTML(item), skillDialogHTML(item, skillPage(1, 7), "", "")]) {
+    expect(html.match(/data-skill-provenance/g)).toHaveLength(1);
+    expect(html).toContain("Self-taught · Oct 29, 2026");
+    expect(html).not.toMatch(/>learned</);
+  }
 });

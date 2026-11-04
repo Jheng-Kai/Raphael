@@ -3510,6 +3510,9 @@
   "presets": [],
   "skills": [],
   "skillSources": [],
+  "skillSets": [],
+  "skillMarketplaces": [],
+  "skillMarketplaceCatalog": null,
   "commands": [],
   "voices": {
     "voices": [],

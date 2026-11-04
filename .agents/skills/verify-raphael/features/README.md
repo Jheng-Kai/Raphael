@@ -7,6 +7,16 @@ the selected deferred scenes, existing native journeys and remaining native/live
 acceptance. Follow-up 1 authorizes the selected look matrix and image review;
 native/live and network-backed judge remain deferred.
 
+## Plugin sets and GitHub marketplaces (2026-11-04)
+
+See [Members](members.md#plugin-sets-and-github-marketplaces-2026-11-04) for
+R-SKILL-06/07: one installed plugin entry, bounded whole-set import/update/removal,
+pinned GitHub marketplace sources, inherited member grants, commands, and explicit
+MCP setup cards. Migration 62 follows rooms 60 and shared grants 61. Offline look
+adds skills-plugin-entry, skills-marketplace, skills-plugin-set,
+skills-plugin-update and skills-plugin-details to the existing 15-scene skill scope.
+Synthetic HTTP/CLI tests do not establish GitHub, installed-CLI or live acceptance.
+
 ## Shared installed skills (2026-11-04)
 
 See [Members](members.md#shared-installed-skills-2026-11-04) for R-SKILL-01 through
@@ -695,3 +705,8 @@ actual API/CLI/worker offer guards, private self-work, owner instructions, draft
 and role/coordination separation. This unit allows offline tests only: look, judge, native,
 live subscriptions and network are not authorized. The selected deferred UI scenes are
 listed in that entry.
+
+R-SKILL-08 also covers localized skill origins in member details, Connections,
+discovery and document dialogs; see [Members](members.md#localized-skill-origins-2026-11-05).
+The same selected twenty-scene skill matrix checks raw-source leakage and one learned
+origin/date line.
