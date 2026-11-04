@@ -160,7 +160,8 @@ async def test_a_member_has_the_same_team_tools_as_raphael_and_the_owner_still_c
     client.chats = [chat("Proposing a member.", ("member_create", {"name": "Added", "role": "COO"}), ("create_member", {"name": "Legacy added", "role": "COO", "instructions": ""})), live_said("Proposed."), live_said("Added.")]
     asked = await typed(rig, "Create Added", one.id, language="en")
     offered = {item["function"]["name"]: item for item in client.chat_calls[0]["tools"]}
-    assert set(DEFINITIONS) <= set(offered) and {"create_member", "room_meeting"} <= set(offered)
+    assert set(DEFINITIONS) <= set(offered) and {"create_member"} <= set(offered)
+    assert "room_meeting" not in offered  # Only the chief may call a meeting from private chat.
     assert "member_id" in offered["routine_create"]["function"]["parameters"]["properties"]
     # when the owner's setting asks first, a change to the team is a proposal they confirm, whoever makes it
     assert asked["status"] == "confirm"

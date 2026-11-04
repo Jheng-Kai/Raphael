@@ -36,12 +36,13 @@ async def test_background_discovers_app_then_owner_signs_in_and_same_task_resume
         with agent.conn:
             room_id = agent.conn.execute("INSERT INTO rooms(name,created) VALUES ('Review room',0)").lastrowid
     origin = agent.history.add(session_id="discovery", question="Read mail", route="delegate", prefix="", text="",
-        status="running", scope=scope, room_id=room_id, thread_id=room_id,
-        conversation_id=agent.service.conversations.main() if scope == "private" else None)
+        status="running", scope="private", conversation_id=agent.service.conversations.main())
     background.client.replies = [turn("", [call("find_app", {"query": "gmail"}, "discovery")]),
                                  turn("Please sign in.", [call("connect_app", {"app": "gmail"}, "connect")])]
     task_id = background.submit("Read mail", session="discovery")
     background.service.attach_turn(task_id, origin)
+    with agent.conn:
+        agent.conn.execute("UPDATE worker_tasks SET report_room_id=?,report_thread_id=? WHERE id=?", (room_id,room_id,task_id))
     try:
         await until(lambda: background.task(task_id).state in ("waiting", "done", "failed", "limit"))
         first = background.client.chat_calls[0]
@@ -64,7 +65,7 @@ async def test_background_discovers_app_then_owner_signs_in_and_same_task_resume
         assert card.state == "pending" and connector.fixture.opened == 0
         [view] = agent.service._turn_views([agent.history.get(origin)])
         assert view["connectors"][0]["id"] == card.id
-        assert view["scope"] == scope
+        assert view["scope"] == "private"
         def read_mail(**request):
             tools = {item["function"]["name"] for item in request["tools"]}
             alias = next(name for name in tools if name.endswith("gmail_search"))
@@ -74,7 +75,7 @@ async def test_background_discovers_app_then_owner_signs_in_and_same_task_resume
         await until(lambda: background.task(task_id).state in ("done", "failed", "limit"))
         task = background.task(task_id)
         assert task.state == "done" and task.turn_id == origin
-        assert task.scope == scope and task.room_id == room_id
+        assert task.scope == "private" and task.room_id is None and task.report_room_id == room_id
         assert connector.fixture.opened == 1
         read_result = next(message for message in background.client.chat_calls[-1]["messages"]
                            if message.get("tool_call_id") == "read-after-sign-in")
@@ -230,35 +231,21 @@ async def test_a_dismissed_or_latest_question_stays_where_it_is(wired, client):
         await background.rpc.call("owner_questions.bring", {"id": question["id"]})
 
 
-async def test_a_room_question_is_brought_to_the_end_and_resumes_in_its_room(wired):
+async def test_room_speech_cannot_open_an_owner_question(wired):
     agent, background = wired
     with agent.conn:
         room_id = agent.conn.execute("INSERT INTO rooms(name,created) VALUES ('Scheduling',0)").lastrowid
-    origin = agent.history.add(session_id="room-question", question="Arrange a visit", route="delegate", prefix="", text="",
+    origin = agent.history.add(session_id="room-question", question="Arrange a visit", route="room", prefix="", text="",
         status="running", scope="room", room_id=room_id, thread_id=room_id)
-    background.client.replies = [turn("Choose a day.", [call("ask_owner", {"question": "Which day?", "options": ["Tuesday"]}, "ask-day")])]
+    background.client.replies = [turn("", [call("ask_owner", {"question": "Which day?"}, "ask-day")]), report("Discuss the next step privately.")]
     task_id = background.submit()
     background.service.attach_turn(task_id, origin)
-    await until(lambda: background.task(task_id).state == "waiting")
-    [question] = agent.service._turn_views([agent.history.get(origin)])[0]["owner_questions"]
-    assert [item["id"] for item in background.service.owner_questions.in_conversation(room_id=room_id)] == [question["id"]]
-    assert not background.service.owner_questions.in_conversation(room_id=room_id + 1)
-    assert not background.service.owner_questions.in_conversation(conversation_id=agent.service.conversations.main(), member_id=0)
-    assert (await background.rpc.call("owner_questions.bring", {"id": question["id"]}))["turn_id"] == origin
-    with agent.conn:
-        agent.conn.execute("INSERT INTO room_messages(room_id,thread_id,member_id,text,created) VALUES (?,?,0,'Another topic',1)", (room_id, room_id))
-    moved = (await background.rpc.call("owner_questions.bring", {"id": question["id"]}))["turn_id"]
-    assert moved != origin
-    assert (await background.rpc.call("owner_questions.bring", {"id": question["id"]}))["turn_id"] == moved
-    saved = agent.history.get(moved)
-    assert (saved.scope, saved.room_id, saved.thread_id, saved.conversation_id) == ("room", room_id, room_id, None)
-    assert not agent.service._turn_views([agent.history.get(origin)])[0].get("owner_questions")
-    assert agent.conn.execute("SELECT turn_id FROM room_messages WHERE room_id=? ORDER BY id DESC LIMIT 1", (room_id,)).fetchone()[0] == moved
-    background.client.replies = [report("Tuesday confirmed.")]
-    await background.rpc.call("owner_questions.answer", {"id": question["id"], "answer": "Tuesday"})
     await until(lambda: background.task(task_id).state in ("done", "failed", "limit"))
-    task = background.task(task_id)
-    assert task.state == "done" and task.turn_id == moved and task.scope == "room" and task.room_id == room_id
+    assert not background.service.owner_questions.for_turn(origin)
+    assert not background.service.owner_questions.in_conversation(room_id=room_id)
+    offered = {item["function"]["name"] for item in background.client.chat_calls[0]["tools"]}
+    assert "ask_owner" not in offered
+
 
 async def test_background_page_uses_existing_store_and_foreign_routines_stay_closed(wired):
     agent, background = wired
@@ -308,12 +295,14 @@ async def test_real_background_cards_reach_history_and_return_only_the_outcome(w
         with agent.conn:
             room_id = agent.conn.execute("INSERT INTO rooms(name,created) VALUES ('Report room',0)").lastrowid
     origin = agent.history.add(session_id="job", question="Prepare report", route="delegate", prefix="", text="",
-                               status="running", source="routine", scope=scope, room_id=room_id, thread_id=room_id,
-                               conversation_id=agent.service.conversations.main() if scope == "private" else None)
+                               status="running", source="routine", scope="private", conversation_id=agent.service.conversations.main())
     background.client.replies = [turn("Your card is ready.", [call(name, arguments, "actual-card")])]
     task_id = background.submit()
     background.service.attach_turn(task_id, origin)
+    with agent.conn:
+        agent.conn.execute("UPDATE worker_tasks SET report_room_id=?,report_thread_id=? WHERE id=?", (room_id,room_id,task_id))
     await until(lambda: background.task(task_id).state == "waiting")
+    assert not background.service.owner_questions.in_conversation(room_id=room_id) if room_id else True
     [view] = agent.service._turn_views([agent.history.get(origin)])
     assert view[{"connect_app": "connectors", "request_secret": "secrets", "email_draft": "drafts", "show_page": "pages"}[name]]
     [question] = view["owner_questions"]

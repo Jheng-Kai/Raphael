@@ -1,8 +1,7 @@
-"""Room exchanges: everyone reads every message and decides for themselves whether to speak. No one hands out the floor.
+"""Bounded meeting rounds: members choose to speak on one shared snapshot.
 
-Those with something to say speak one at a time, each reading what the one before said; then everyone reads
-again, until no one has more to say. An address is always answered. All member turns use the background worker;
-only this orchestration state is new, and personas, tool approvals and capability checks stay in that worker.
+Speech uses the shared worker with a separate admission pool. Durable private work
+returns through report cards; no member dispatches another member's speech.
 """
 import asyncio
 import json
@@ -14,16 +13,14 @@ from ..brain.spend import SpendTracker
 from ..brain.settings import DEFAULTS
 from ..protocol import RpcError
 
-# What bounds the members talking among themselves unasked: the turns of one slice of discussion, the hand-offs and how many
-# times the room is read after a message (kept in the column `chime_ins`). They never bound an address: a colleague named in a
-# reply (or the owner's message) is owed a reply (`room_reply_intents`), however many turns and hops there have been, and a slice
-# that is full goes on by itself. Grok Bot's documentation has no such numbers; these are only how far chatter goes.
-MAX_TURNS = 6
+# Safety bounds apply to colleague chatter, including repeated mention pairs.
+MAX_TURNS = 10
 MAX_HOPS = 3
 MAX_ROUNDS = 3
+MAX_PAIR_REPLIES = 2
 # How long a member takes to read the room; one who takes longer stays quiet this time.
 LISTEN_TIMEOUT_S = 20.0
-# What a member reads of the room to decide; the turn itself reads all of it.
+# Bound the listener's recent public context; speech itself reads its cursor delta.
 LISTEN_MESSAGES = 40
 
 
@@ -57,12 +54,19 @@ class RoomExchanges:
         self.locks, self.tasks, self.attachments = {}, set(), {}
         self.spend = SpendTracker(self.conn, now_ms=rooms._now)
         self.closed = False
-        # Never replay an uncertain in-flight worker; retain its named intent for reconciliation.
+        # Only short speech is re-offered once; uncertain private tool work is never replayed.
         with self.conn:
+            self.conn.execute("UPDATE room_reply_intents SET state='blocked',reason='source_unavailable' WHERE state='running' "
+                              "AND NOT EXISTS(SELECT 1 FROM agent_turns t WHERE t.id=room_reply_intents.turn_id)")
             self.conn.execute("UPDATE room_reply_intents SET state='blocked', reason='restart' WHERE state='running' "
-                              "AND (turn_id IS NULL OR turn_id IN (SELECT id FROM agent_turns WHERE status!='done'))")
-            self.conn.execute("UPDATE room_exchanges SET state='stopped', reason='restart' WHERE active_turn IN "
-                              "(SELECT id FROM agent_turns WHERE status!='done') AND state IN ('queued','running')")
+                              "AND turn_id IN (SELECT id FROM agent_turns WHERE status!='done')")
+            self.conn.execute("UPDATE room_exchanges SET state='stopped', reason='restart' WHERE state IN ('queued','running') "
+                              "AND ((active_turn IS NOT NULL AND NOT EXISTS (SELECT 1 FROM agent_turns t WHERE t.id=active_turn AND t.status='done')) OR origin_message_id IN "
+                              "(SELECT x.origin_message_id FROM room_exchange_turns x JOIN agent_turns t ON t.id=x.turn_id WHERE x.state='running' AND t.status!='done'))")
+            self.conn.execute("UPDATE room_exchange_turns SET state='interrupted' WHERE state='running' AND "
+                              "turn_id IN (SELECT id FROM agent_turns WHERE status!='done')")
+            self.conn.execute("UPDATE agent_turns SET status='error' WHERE status='running' AND id IN "
+                              "(SELECT turn_id FROM room_exchange_turns WHERE state='interrupted')")
             self.conn.execute("UPDATE room_reply_intents SET state='blocked', reason='restart' WHERE state='queued' "
                               "AND origin_message_id IN (SELECT origin_message_id FROM room_exchanges WHERE reason='restart')")
 
@@ -77,6 +81,9 @@ class RoomExchanges:
             return None
         result = dict(row)
         result['routing'] = json.loads(result['routing'])
+        result['active_turns'] = [dict(r) for r in self.conn.execute(
+            "SELECT turn_id,member_id,round,seen_through,state FROM room_exchange_turns WHERE origin_message_id=? ORDER BY turn_id",
+            (row['origin_message_id'],))]
         result['reply_intents'] = [dict(r) for r in self.conn.execute(
             "SELECT i.* FROM room_reply_intents i JOIN room_exchanges e ON e.origin_message_id=i.origin_message_id "
             "WHERE e.room_id=? AND (i.origin_message_id=? OR i.state='blocked') ORDER BY i.id", (room_id,row['origin_message_id']))]
@@ -128,11 +135,11 @@ class RoomExchanges:
             return [chief]
         return ids[:1]
 
-    def transcript(self, room, thread_id=None):
+    def transcript(self, room, thread_id=None, *, since=0, through=None):
         people = {s.id:s for s in self.rooms._members.roster()}
         result = []
         thread_id = self.rooms._thread(room, thread_id)
-        for row in self.conn.execute("SELECT * FROM room_messages WHERE room_id = ? AND thread_id=? ORDER BY id", (room["id"],thread_id)):
+        for row in self.conn.execute("SELECT * FROM room_messages WHERE room_id=? AND thread_id=? AND id>? AND (? IS NULL OR id<=?) ORDER BY id", (room["id"],thread_id,since,through,through)):
             m = self.rooms._message(row)
             if m["status"] != "done" or (m["member_id"] is not None and is_pass(m["text"])):
                 continue
@@ -151,8 +158,9 @@ class RoomExchanges:
     async def _heard(self, speaker, model, colleagues, transcript, ledger, unanswered):
         """What one member decided: whether it speaks, how much that matters, and why it could not say, if so."""
         try:
-            answer = await asyncio.wait_for(self.decision.room_listener(
-                member={"name":speaker.name or 'Raphael', "role":speaker.role, "personality":speaker.personality},
+            listener = self.rooms._background.room_listener if model.startswith('cli:') else self.decision.room_listener
+            answer = await asyncio.wait_for(listener(
+                member={"id":speaker.id,"name":speaker.name or 'Raphael', "role":speaker.role, "personality":speaker.personality},
                 colleagues=colleagues, transcript=transcript, model=model.split("?effort=")[0],
                 ledger=ledger, unanswered=unanswered), LISTEN_TIMEOUT_S)
         except TimeoutError:
@@ -165,8 +173,8 @@ class RoomExchanges:
 
     async def listen(self, room, exchange, candidates, *, first=False, unanswered=False):
         """Everyone in `candidates` reads the room and decides for themselves, each on their own model. Returns those who will
-        speak, whoever cares most first, and whether anyone could be heard at all. A CLI or local brain takes no small question:
-        it reads an owner's message in a real turn and may pass."""
+        speak, whoever cares most first, and whether anyone could be heard at all.
+        CLI members decide through their own bounded, tool-less listener on the same speech pool."""
         if not self.decision or self.spend.is_over(self.rooms._settings.get("monthly_limit_usd")):
             return [], False
         origin = self.conn.execute("SELECT thread_id FROM room_messages WHERE id=? AND room_id=?",
@@ -181,9 +189,11 @@ class RoomExchanges:
             if speaker.id in candidates:
                 # The roster is only who is who; a member's model is on the member itself.
                 model = self.rooms._members.speaker(speaker.id).model or default
-                if self.decision.can_ask(model):
+                if self.decision.can_ask(model) or model.startswith("cli:") and hasattr(self.rooms._background,"room_listener"):
                     asked.append((speaker, model))
                 elif first:
+                    # No secondary model chooses for a CLI member. It reads the same snapshot
+                    # in its own bounded speech turn and decides to speak or pass.
                     themselves.append(speaker.id)
         ledger = Ledger(self.spend)
         heard = await asyncio.gather(*(self._heard(speaker, model,
@@ -256,185 +266,155 @@ class RoomExchanges:
 
     def stop(self, room_id):
         with self.conn:
-            self.conn.execute("UPDATE room_reply_intents SET state='blocked', reason='owner' WHERE state='queued' "
+            self.conn.execute("UPDATE room_reply_intents SET state='blocked', reason='owner' WHERE state IN ('queued','running') "
                               "AND origin_message_id IN (SELECT origin_message_id FROM room_exchanges WHERE room_id=?)", (room_id,))
             self.conn.execute("UPDATE room_exchanges SET stop_requested = 1, pending = '[]', reason = 'owner' "
                               "WHERE room_id = ? AND state IN ('queued','running')", (room_id,))
 
+    def digest(self, room_id, message_id, language='en'):
+        """One report/post can request one digest round, never an owner interjection."""
+        with self.conn:
+            inserted = self.conn.execute('INSERT OR IGNORE INTO room_digest_requests VALUES (?)', (message_id,)).rowcount
+            if not inserted:
+                return
+            self.conn.execute("INSERT OR IGNORE INTO room_exchanges(origin_message_id,room_id,state,language,meeting) "
+                              "VALUES (?,?,'queued',?,2)", (message_id,room_id,language))
+        message = self.conn.execute('SELECT member_id,text FROM room_messages WHERE id=?', (message_id,)).fetchone()
+        room = self.rooms._view(self.conn.execute('SELECT * FROM rooms WHERE id=?', (room_id,)).fetchone())
+        self.intents(message_id, message_id, [member for member in self.rooms._targets(room, message['text'])
+                                            if member != message['member_id']])
+        self.schedule(room_id)
+
+    def _settle(self, exchange, room):
+        active = False
+        for row in self.conn.execute("SELECT * FROM room_exchange_turns WHERE origin_message_id=? AND state='running'",
+                                     (exchange.origin_message_id,)).fetchall():
+            turn = self.rooms._history.get(row['turn_id'])
+            if turn and turn.status == 'running':
+                active = True
+                continue
+            message = self.conn.execute('SELECT * FROM room_messages WHERE turn_id=?', (row['turn_id'],)).fetchone()
+            failure = 'source_unavailable' if not turn or not message else None
+            projected = self.rooms._message(message) if message else None
+            if turn and turn.status != 'done':
+                failure = 'owner' if exchange.stop_requested else self.failure(turn.id)
+            if row['member_id'] not in self.rooms._ids(room):
+                failure = 'revoked'
+            if projected and projected['status'] == 'incomplete':
+                failure = projected['reason']
+            recipients = []
+            if not failure and message['kind'] != 'wrapup' and not exchange.stop_requested and not is_pass(projected['text']):
+                for recipient in self.rooms._targets(room, projected['text']):
+                    if recipient == row['member_id']:
+                        continue
+                    count = self.conn.execute("SELECT COUNT(*) FROM room_reply_intents i JOIN room_messages m ON m.id=i.source_message_id "
+                        "WHERE i.origin_message_id=? AND m.member_id=? AND i.recipient_id=?",
+                        (exchange.origin_message_id,row['member_id'],recipient)).fetchone()[0]
+                    if count < MAX_PAIR_REPLIES:
+                        recipients.append(recipient)
+            with self.conn:
+                for recipient in recipients:
+                    self.conn.execute('INSERT OR IGNORE INTO room_reply_intents(origin_message_id,source_message_id,recipient_id,recipient_name) VALUES (?,?,?,?)',
+                                      (exchange.origin_message_id,message['id'],recipient,self.name(recipient)))
+                self.conn.execute("UPDATE room_exchange_turns SET state=? WHERE turn_id=?", ('blocked' if failure else 'done',row['turn_id']))
+                self.conn.execute("UPDATE room_reply_intents SET state=?,reason=? WHERE turn_id=? AND state='running'",
+                                  ('blocked' if failure else 'done',failure or '',row['turn_id']))
+                if message:
+                    self.conn.execute('UPDATE room_messages SET exchange_settled=1 WHERE id=?', (message['id'],))
+                if not failure and message:
+                    self.conn.execute("INSERT INTO room_member_cursor VALUES (?,?,?,?) ON CONFLICT(room_id,thread_id,member_id) "
+                        "DO UPDATE SET seen_message_id=MAX(seen_message_id,excluded.seen_message_id)",
+                        (room['id'],message['thread_id'],row['member_id'],row['seen_through']))
+                if failure and message and not self.conn.execute('SELECT 1 FROM room_reply_intents WHERE turn_id=?',(row['turn_id'],)).fetchone():
+                    self.conn.execute("INSERT INTO room_reply_intents(origin_message_id,source_message_id,recipient_id,recipient_name,state,reason,turn_id) "
+                        "VALUES (?,?,?,?,'blocked',?,?)", (exchange.origin_message_id,message['id'],row['member_id'],self.name(row['member_id']),failure,row['turn_id']))
+            if turn:
+                current = self.get(exchange.origin_message_id)
+                self.update(exchange.origin_message_id,cost=current.cost+turn.cost_usd,
+                            spoken=json.dumps(sorted(set(json.loads(current.spoken)) | {row['member_id']})))
+        self.update(exchange.origin_message_id,active_turn=None)
+        return active
+
     async def drive(self, room_id):
         async with self.locks.setdefault(room_id, asyncio.Lock()):
-            while not self.closed:
-                row = self.conn.execute("SELECT * FROM room_exchanges WHERE room_id = ? AND state IN ('queued','running') "
-                                        "ORDER BY (active_turn IS NULL), origin_message_id DESC LIMIT 1", (room_id,)).fetchone()
-                if row is None:
-                    self.rooms._close_stopped(room_id)
+            # Settle all exchanges; a slow snapshot must not hide newer owner input.
+            for row in self.conn.execute("SELECT * FROM room_exchanges WHERE room_id=? AND state IN ('queued','running') "
+                                         "ORDER BY origin_message_id", (room_id,)).fetchall():
+                if self.closed:
                     return
-                exchange = Exchange(**dict(row))
-                room_row = self.conn.execute("SELECT * FROM rooms WHERE id = ?", (room_id,)).fetchone()
-                if room_row is None:
+                exchange = self.get(row['origin_message_id'])
+                room_row = self.conn.execute('SELECT * FROM rooms WHERE id=?',(room_id,)).fetchone()
+                if not room_row:
                     return
-                room = dict(room_row)
-                room = self.rooms._view(room)
-                if room["membership_state"] != "ready":
-                    self.block(exchange.origin_message_id, "revoked")
-                    self.update(exchange.origin_message_id, state="stopped", pending="[]", reason="membership")
+                room = self.rooms._view(room_row)
+                if self._settle(exchange, room):
                     continue
-                if exchange.active_turn:
-                    turn = self.rooms._history.get(exchange.active_turn)
-                    if turn and turn.status == "running":
-                        return
-                    message = self.conn.execute("SELECT * FROM room_messages WHERE turn_id = ?", (exchange.active_turn,)).fetchone()
-                    if not message or not turn:
-                        self.block(exchange.origin_message_id, "source_unavailable")
-                        self.update(exchange.origin_message_id, state="stopped", active_turn=None, reason="missing_turn")
-                        self.attachments.pop(exchange.origin_message_id, None)
-                        continue
-                    pending = json.loads(exchange.pending or "[]")
-                    spoken = set(json.loads(exchange.spoken)) | {message["member_id"]}
-                    projected = self.rooms._message(message)
-                    if projected['status'] == 'incomplete':
-                        self.block(exchange.origin_message_id, projected['reason'])
-                        self.update(exchange.origin_message_id,state='stopped',active_turn=None,reason=projected['reason'])
-                        self.rooms._changed(room_id)
-                        continue
-                    if turn.status == 'done' and message['kind'] != 'wrapup' and not exchange.stop_requested and not is_pass(turn.detail or turn.text):
-                        self.intents(exchange.origin_message_id, message['id'],
-                            [i for i in self.rooms._targets(room, projected['text']) if i != message['member_id']])
-                    failure = None if turn.status == 'done' else 'owner' if exchange.stop_requested else self.failure(turn.id)
-                    with self.conn:
-                        self.conn.execute("UPDATE room_messages SET exchange_settled = 1 WHERE id = ?", (message["id"],))
-                        self.conn.execute("UPDATE room_exchanges SET active_turn=NULL, cost=?, spoken=? WHERE origin_message_id=?",
-                            (exchange.cost + turn.cost_usd, json.dumps(sorted(spoken)), exchange.origin_message_id))
-                        named = self.conn.execute("UPDATE room_reply_intents SET state=?, reason=? WHERE turn_id=? AND state='running'",
-                            ('blocked' if failure else 'done', failure or '', turn.id)).rowcount
-                        if failure and not named and message['kind'] == 'message':
-                            # A planned or chosen reply answered no address; its failure is named by its own message.
-                            self.conn.execute("INSERT INTO room_reply_intents (origin_message_id,source_message_id,"
-                                "recipient_id,recipient_name,state,reason,turn_id) VALUES (?,?,?,?,'blocked',?,?)",
-                                (exchange.origin_message_id, message['id'], message['member_id'], self.name(message['member_id']), failure, turn.id))
-                    exchange = self.get(exchange.origin_message_id)
-                    if failure and message["kind"] == "wrapup":
-                        self.update(exchange.origin_message_id, state="stopped", reason=failure)
-                        self.attachments.pop(exchange.origin_message_id, None)
-                        self.rooms._changed(room_id)
-                        continue
-                    if message["kind"] == "wrapup":
-                        self.update(exchange.origin_message_id, state="stopped" if exchange.stop_requested else "done")
-                        self.attachments.pop(exchange.origin_message_id, None)
-                        self.rooms._changed(room_id)
-                        continue
-                    self.update(exchange.origin_message_id, pending=json.dumps(pending))
-                    if self.conn.execute("SELECT 1 FROM room_exchanges WHERE room_id=? AND origin_message_id>? AND state='queued'",
-                                         (room_id, exchange.origin_message_id)).fetchone():
-                        continue
                 exchange = self.get(exchange.origin_message_id)
-                cap = float(self.rooms._settings.get("worker_cost_cap_usd"))
-                if exchange.stop_requested or exchange.cost >= cap or self.spend.is_over(self.rooms._settings.get("monthly_limit_usd")):
-                    self.block(exchange.origin_message_id, exchange.reason if exchange.stop_requested else "cost")
-                    self.update(exchange.origin_message_id, state="stopped", pending="[]",
-                                reason=exchange.reason if exchange.stop_requested else "cost")
-                    self.attachments.pop(exchange.origin_message_id, None)
-                    self.rooms._changed(room_id)
+                cap = float(self.rooms._settings.get('worker_cost_cap_usd'))
+                reason = ('membership' if room['membership_state'] != 'ready' else exchange.reason if exchange.stop_requested
+                          else 'cost' if exchange.cost >= cap or self.spend.is_over(self.rooms._settings.get('monthly_limit_usd')) else '')
+                if reason:
+                    self.block(exchange.origin_message_id,reason)
+                    self.update(exchange.origin_message_id,state='stopped',pending='[]',reason=reason)
                     continue
                 ids = self.rooms._ids(room)
-                spoken = set(json.loads(exchange.spoken))
-                # Old persisted meeting plans grant no turns; explicit reply intents remain below.
-                pending = [p for p in json.loads(exchange.pending) if not p.get('round')] if exchange.pending is not None else None
-                if pending is None:
-                    owner = self.conn.execute("SELECT text FROM room_messages WHERE id = ?", (exchange.origin_message_id,)).fetchone()[0]
-                    targets = self.rooms._targets(room, owner)
-                    if targets:
-                        pending = [{"member":i,"reply_to_member":None,"reply_to":exchange.origin_message_id,"handoff":False} for i in targets]
-                    else:
-                        # Nobody was addressed, so nobody replies "to" anyone: they are just talking.
-                        chosen, unanswered = await self.first_speakers(room, exchange, ids)
-                        pending = [{"member":i,"reply_to_member":None,"reply_to":None,"handoff":False,"heard":True,
-                                    **({"unanswered":True} if unanswered else {})} for i in chosen]
-                pending = [p for p in pending if p["member"] in ids and
-                           (p.get('heard') or p["member"] not in spoken or p["handoff"])]
-                planned = pending
-                with self.conn:
-                    for intent in self.conn.execute("SELECT * FROM room_reply_intents WHERE origin_message_id=? AND state='queued' ORDER BY id", (exchange.origin_message_id,)).fetchall():
-                        if intent['recipient_id'] not in ids:
-                            self.conn.execute("UPDATE room_reply_intents SET state='blocked', reason='revoked' WHERE id=?", (intent['id'],))
-                intent = self.conn.execute("SELECT * FROM room_reply_intents WHERE origin_message_id=? AND state='queued' ORDER BY id LIMIT 1", (exchange.origin_message_id,)).fetchone()
-                if intent:
-                    source = self.conn.execute("SELECT member_id FROM room_messages WHERE id=?", (intent['source_message_id'],)).fetchone()
-                    pending = [{"member":intent['recipient_id'], "reply_to_member":source[0],
-                                "reply_to":intent['source_message_id'], "handoff":source[0] is not None,
-                                "intent_id":intent['id']}]
-                exchange = self.get(exchange.origin_message_id)
-                if (not pending and exchange.turns_taken and exchange.chime_ins < MAX_ROUNDS
-                        and exchange.turns_taken < MAX_TURNS and exchange.hops < MAX_HOPS):
-                    # What was just said is a new message, and everyone but the one who said it reads it.
-                    last = self.last_reply(exchange.origin_message_id)
-                    speaking = (await self.listen(room, exchange, [i for i in ids if i != last[1]]))[0] if last else []
-                    pending = [{"member":i,"reply_to_member":None,"reply_to":None,"handoff":False,"heard":True} for i in speaking]
-                    self.update(exchange.origin_message_id, chime_ins=exchange.chime_ins + 1 if pending else MAX_ROUNDS)
-                # Any owner interjection/stop received during a routing call wins before submission.
-                exchange = self.get(exchange.origin_message_id)
-                if (not exchange or exchange.stop_requested or exchange.cost >= cap or
-                        self.spend.is_over(self.rooms._settings.get('monthly_limit_usd'))):
+                pending = [p for p in json.loads(exchange.pending or '[]') if not p.get('round')]
+                intents = self.conn.execute("SELECT * FROM room_reply_intents WHERE origin_message_id=? AND state='queued' ORDER BY id",
+                                            (exchange.origin_message_id,)).fetchall()
+                if exchange.pending is None and not intents:
+                    chosen, unanswered = await self.first_speakers(room,exchange,ids)
+                    pending = [{'member':i,'reply_to':None,'reply_to_member':None,'handoff':False,'unanswered':unanswered} for i in chosen]
+                for intent in intents:
+                    if intent['recipient_id'] not in ids:
+                        with self.conn:
+                            self.conn.execute("UPDATE room_reply_intents SET state='blocked',reason='revoked' WHERE id=?",(intent['id'],))
+                        continue
+                    source = self.conn.execute('SELECT member_id FROM room_messages WHERE id=?',(intent['source_message_id'],)).fetchone()
+                    pending.append({'member':intent['recipient_id'],'reply_to':intent['source_message_id'],
+                                    'reply_to_member':source[0] if source else None,'handoff':bool(source and source[0] is not None),'intent_id':intent['id']})
+                pending = list({p['member']:p for p in pending if p['member'] in ids}.values())
+                current = self.get(exchange.origin_message_id)
+                if current.stop_requested or current.cost >= cap or self.spend.is_over(self.rooms._settings.get('monthly_limit_usd')):
+                    self.block(exchange.origin_message_id,'owner' if current.stop_requested else 'cost')
+                    self.update(exchange.origin_message_id,state='stopped',reason='owner' if current.stop_requested else 'cost',pending='[]')
                     continue
-                if exchange.reason == 'interjection' and not intent:
-                    pending, planned = [], []
-                if self.conn.execute("SELECT 1 FROM room_exchanges WHERE room_id=? AND origin_message_id>? AND state='queued'",
-                                     (room_id, exchange.origin_message_id)).fetchone():
-                    self.update(exchange.origin_message_id, pending=json.dumps(planned))
-                    continue
-                work = self.conn.execute("SELECT state FROM worker_tasks WHERE room_id=? AND source_turn_id IN "
-                    "(SELECT turn_id FROM room_messages WHERE origin_message_id=?) AND mode IS NOT NULL",
-                    (room_id,exchange.origin_message_id)).fetchall()
-                chief = self.rooms._members.primary_id()
-                if not pending and any(row['state'] in ('queued','running','waiting') for row in work):
-                    return
-                # Completed assigned work reports back; conversation never creates an automatic conclusion.
-                wrapup = (exchange.turns_taken >= 1 and chief in ids and not exchange.wrapup_sent and
-                          bool(work) and not pending and not self.conn.execute("SELECT 1 FROM room_reply_intents WHERE origin_message_id=? AND state='blocked' "
-                              "AND reason!='worker' AND reason NOT LIKE 'cli!_%' ESCAPE '!'", (exchange.origin_message_id,)).fetchone())
-                if wrapup:
-                    last = self.last_reply(exchange.origin_message_id)
-                    pending = [{"member":chief,"reply_to_member":last[1] if last else None,
-                                "reply_to":last[0] if last else exchange.origin_message_id,"handoff":False}]
-                if not pending or (exchange.turns_taken >= MAX_TURNS and not intent and not wrapup):
-                    blocked = self.conn.execute("SELECT 1 FROM room_reply_intents WHERE origin_message_id=? AND state='blocked'", (exchange.origin_message_id,)).fetchone()
-                    self.update(exchange.origin_message_id, state="stopped" if blocked else "done", pending="[]", reason="blocked_intents" if blocked else "turns" if pending else "")
-                    self.attachments.pop(exchange.origin_message_id, None)
+                if current.reason == 'interjection':
+                    pending = [p for p in pending if p.get('intent_id')]
+                rounds = self.conn.execute('SELECT COALESCE(MAX(round),0) FROM room_exchange_turns WHERE origin_message_id=?',
+                                           (exchange.origin_message_id,)).fetchone()[0]
+                round_cap = 1 if exchange.meeting == 2 else MAX_ROUNDS
+                if not pending or rounds >= round_cap or current.turns_taken >= MAX_TURNS:
+                    capped = bool(pending)
+                    if capped:
+                        self.block(exchange.origin_message_id,'reply_budget')
+                    blocked = self.conn.execute("SELECT 1 FROM room_reply_intents WHERE origin_message_id=? AND state='blocked'",
+                                                (exchange.origin_message_id,)).fetchone()
+                    self.update(exchange.origin_message_id,state='stopped' if blocked else 'done',pending='[]',
+                                reason='reply_budget' if capped else 'blocked_intents' if blocked else current.reason)
+                    self.attachments.pop(exchange.origin_message_id,None)
                     self.rooms._changed(room_id)
                     continue
-                target, remaining = pending[0], pending[1:]
-                if intent and exchange.turns_taken and exchange.turns_taken % MAX_TURNS == 0:
-                    # Yield admission to another scheduled slice without losing accepted addresses.
-                    self.update(exchange.origin_message_id, state='queued')
-                    self.schedule(room_id)
-                    # The next slice sees this marker and admits exactly one turn.
-                    if exchange.reason != f'slice:{exchange.turns_taken}':
-                        self.update(exchange.origin_message_id, reason=f'slice:{exchange.turns_taken}')
-                        return
-                if target["member"] not in self.rooms._ids(room):
-                    self.update(exchange.origin_message_id, state="stopped", pending="[]", reason="membership")
-                    self.attachments.pop(exchange.origin_message_id, None)
-                    self.rooms._changed(room_id)
-                    continue
-                self.update(exchange.origin_message_id, state="running", pending=json.dumps(remaining),
-                            turns_taken=exchange.turns_taken + 1,
-                            hops=exchange.hops + int(target["handoff"]), wrapup_sent=int(wrapup) or exchange.wrapup_sent)
-                if intent:
-                    self.update(exchange.origin_message_id, pending=json.dumps(planned))
-                try:
-                    turn = self.rooms._submit_exchange_turn(room, exchange, target, "wrapup" if wrapup else "message",
-                                                            self.attachments.get(exchange.origin_message_id, ()))
-                except RpcError:
-                    self.block(exchange.origin_message_id, "source_unavailable")
-                    self.update(exchange.origin_message_id, state="stopped", reason="source_unavailable", pending="[]")
-                    self.rooms._changed(room_id)
-                    continue
-                self.update(exchange.origin_message_id, active_turn=turn)
-                if intent and not wrapup:
+                origin = self.conn.execute('SELECT thread_id FROM room_messages WHERE id=?',(exchange.origin_message_id,)).fetchone()
+                seen = self.conn.execute('SELECT COALESCE(MAX(id),0) FROM room_messages WHERE room_id=? AND thread_id=?',
+                                         (room_id,origin[0])).fetchone()[0]
+                # Freeze public board, decisions and the delta before submitting any speaker.
+                public = self.rooms.speech_context(room_id,origin[0],seen)
+                self.update(exchange.origin_message_id,state='running',pending='[]',chime_ins=rounds+1)
+                for target in pending[:MAX_TURNS-current.turns_taken]:
+                    try:
+                        turn = self.rooms._submit_exchange_turn(room,current,{**target,'seen_through':seen,'public':public},'message',
+                                                                self.attachments.get(exchange.origin_message_id,()))
+                    except RpcError:
+                        self.block(exchange.origin_message_id,'source_unavailable')
+                        self.update(exchange.origin_message_id,state='stopped',reason='source_unavailable')
+                        break
                     with self.conn:
-                        self.conn.execute("UPDATE room_reply_intents SET state='running', turn_id=? WHERE id=? AND state='queued'", (turn, intent['id']))
+                        self.conn.execute('INSERT INTO room_exchange_turns(origin_message_id,turn_id,member_id,round,seen_through) VALUES (?,?,?,?,?)',
+                                          (exchange.origin_message_id,turn,target['member'],rounds+1,seen))
+                    self.update(exchange.origin_message_id,turns_taken=self.get(exchange.origin_message_id).turns_taken+1,
+                                hops=self.get(exchange.origin_message_id).hops+int(target.get('handoff',False)))
                 self.rooms._changed(room_id)
-                # Refused submissions resolve immediately and must not leave a stuck exchange.
-                if self.rooms._history.get(turn).status != "running":
-                    continue
-                return
+                if not self.conn.execute("SELECT 1 FROM room_exchange_turns x JOIN agent_turns t ON t.id=x.turn_id "
+                                         "WHERE x.origin_message_id=? AND x.state='running' AND t.status='running'",(exchange.origin_message_id,)).fetchone():
+                    self.schedule(room_id)
+            self.rooms._close_stopped(room_id)

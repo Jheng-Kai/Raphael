@@ -46,9 +46,10 @@ def test_every_speaker_is_offered_the_same_team_administration():
             assert set(ADMIN) <= tools.keys()
             assert "member_id" in tools["routine_create"]["parameters"]["properties"]
             offered[(identifier, chief)] = ({name: item["parameters"] for name, item in tools.items()},
-                                            sorted(team_tools_for(Team(), speaker, always=True)))
+                                            sorted(set(team_tools_for(Team(), speaker, always=True)) - {"room_meeting"}))
+            assert ("room_meeting" in team_tools_for(Team(), speaker, always=True)) == chief
     assert len({repr(value) for value in offered.values()}) == 1
-    assert {"create_member", "room_meeting", "ask_member"} <= set(next(iter(offered.values()))[1])
+    assert {"create_member", "ask_member"} <= set(next(iter(offered.values()))[1])
 
 
 def test_shared_loop_and_definition_sources():

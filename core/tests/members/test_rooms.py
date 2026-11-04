@@ -115,7 +115,7 @@ async def test_mentions_use_whole_names_text_order_and_ignore_email_addresses(ri
     assert rooms._targets(room, "@拉斐爾，請收束") == [0]
     assert rooms._targets(room, "@ラファエル、お願いします") == [0]
     await rig.call("rooms.send", {"room_id":room["id"], "request_id":"ordered", "text":"@Sam then @Ops Lead"})
-    assert rig.background.submitted[-1]["member_id"] == ids[2]
+    assert [s["member_id"] for s in rig.background.submitted] == [ids[2], ids[1]]
     AgentHistory(rig.conn).resolve(rig.background.attached[-1][1], prefix="", text="Ready", status="done")
     rooms.turn_arrived(rig.background.attached[-1][1])
     await rooms.wait_idle()
@@ -210,10 +210,10 @@ async def test_everyone_starts_only_one_cost_limited_worker(rig, rooms, monkeypa
         return submit(**kwargs)
     monkeypatch.setattr(rig.background,"submit",capture)
     await rig.call("rooms.send", {"room_id":room["id"], "request_id":"all", "text":"@所有人 report"})
-    assert len(called) == 1
+    assert len(called) == 6
     assert called[0]["member_id"] == 0
     for c in called:
-        assert c["asked_by"].depth == MAX_DEPTH and not c["asked_by"].may_ask
+        assert c["asked_by"].depth == 0 and c["asked_by"].may_ask
         assert c["model"] == rig.service._settings.get("agent_model")
 
 async def test_group_mentions_stay_inside_room_and_chief_handles_unmentioned(rig, rooms):

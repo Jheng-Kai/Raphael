@@ -73,7 +73,7 @@ def cells(registry=(), catalog=(), *, servers=()):
     result.append(ScenarioCell('S07.short-wrapup','A short report ends with no summary nobody asked for',
         '請簡短回報。',('no_summary','reply_relation'),'P04','short-wrapup'))
     result.append(ScenarioCell('S08.completion','Evidence completion (P04 scope)',
-        '現在完成工作並回報證據。',('evidence','chief_last','status_only'),'P04','immediate-room-work'))
+        '現在完成工作並回報證據。',('evidence','report_card','status_only'),'P04','immediate-room-work'))
     result.append(ScenarioCell('S08.meeting-actions', 'Meeting actions start now', SCENARIOS[7].prompt,
         SCENARIOS[7].assertions, 'P03a/P04', 'meeting-actions'))
     # S14's two halves: Gmail (P08a) and Instagram publishing (P08d), which keeps the parent open until it has a driver.

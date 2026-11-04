@@ -10,9 +10,12 @@ import { composioText } from "./composio-result";
 
 // A file of the team folder is one press from opening; any other path is words the owner can use.
 const TEAM_FILE = /^\/home\/cua\/team\/[^\s<>"'`]+$/;
+export function fileChipHTML(label: string, attrs: string): string {
+  return `<button type="button" class="btn team-file"${attrs} title="${esc(t("agent.openFile"))}">${ico("file")}<span>${label}</span></button>`;
+}
 function pathHTML(path: string, query: string): string {
   if (!TEAM_FILE.test(path)) return `<code>${highlightHTML(path, query)}</code>`;
-  return `<button type="button" class="btn team-file" data-act="team-file-open" data-path="${esc(path)}" title="${esc(t("agent.openFile"))}">${ico("file")}<span>${highlightHTML(path.slice(path.lastIndexOf("/") + 1), query)}</span></button>`;
+  return fileChipHTML(highlightHTML(path.slice(path.lastIndexOf("/") + 1), query), ` data-act="team-file-open" data-path="${esc(path)}"`);
 }
 
 export function messageUrl(raw: unknown): string | null {

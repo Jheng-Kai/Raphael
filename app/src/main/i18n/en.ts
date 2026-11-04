@@ -4,6 +4,10 @@ import { missingEn } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const en = {
+  "rooms.boardCount": "Work {p0} · Decisions {p1}",
+  "rooms.board": "Work and decisions",
+  "rooms.decisions": "Decisions",
+  "rooms.privateWork": "Open private work",
   "composio.result": "Result",
   "composio.fieldSeparator": ": ",
   "composio.resultDone": "Completed",

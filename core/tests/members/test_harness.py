@@ -129,6 +129,7 @@ async def test_api_model_receives_the_free_group_discussion_contract(setup, clie
     rig, team = setup
     teacher = member(team)
     client.chats = [live_said("Ready.")]
+    team.members.store.set_primary(teacher.id)
     await typed(rig, "Discuss the review", teacher.id, language="en")
     [request] = client.chat_calls
     meeting = next(tool["function"] for tool in request["tools"] if tool["function"]["name"] == "room_meeting")

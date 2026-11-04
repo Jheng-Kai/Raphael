@@ -163,7 +163,7 @@ async def test_a_request_handed_over_from_an_exchange_asks_no_further_than_it_co
     assert "ask_member" not in [t["function"]["name"] for t in rig.client.chat_calls[0]["tools"]]
 
 
-async def test_a_room_reply_and_its_rerun_cannot_dispatch_to_other_members(make_rig, conn):
+async def test_room_speech_and_retry_keep_only_coordination_tools(make_rig, conn):
     rig = make_rig()
     team = Team()
     rig.service.use_team(team, team.tool)
@@ -177,10 +177,10 @@ async def test_a_room_reply_and_its_rerun_cannot_dispatch_to_other_members(make_
     rig.service.attach_turn(task_id, turn_id)
     rig.client.replies.append(plain_report())
     await ended(rig, task_id)
-    assert "ask_member" not in [t["function"]["name"] for t in rig.client.chat_calls[0]["tools"]]
+    assert {t["function"]["name"] for t in rig.client.chat_calls[0]["tools"]} == {"handoff", "room_post", "ask_member", "work_status"}
     # A restart or retry must retain the room boundary without an in-memory chain.
     conn.execute("UPDATE worker_tasks SET state = 'failed' WHERE id = ?", (task_id,))
     rig.client.replies.append(plain_report())
     retry = await rig.service._rerun({"task_id": task_id})
     await ended(rig, retry["task_id"])
-    assert "ask_member" not in [t["function"]["name"] for t in rig.client.chat_calls[-1]["tools"]]
+    assert {t["function"]["name"] for t in rig.client.chat_calls[-1]["tools"]} == {"handoff", "room_post", "ask_member", "work_status"}

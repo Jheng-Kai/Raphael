@@ -1369,6 +1369,86 @@ PRAGMA user_version = 59;
 COMMIT;
 """
 
+_ROOM_MEETING_SCHEMA = """
+BEGIN;
+CREATE TABLE room_messages_meeting (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    member_id INTEGER, text TEXT NOT NULL, created INTEGER NOT NULL,
+    request_id TEXT, attachments TEXT, reply_to INTEGER,
+    turn_id INTEGER REFERENCES agent_turns(id) ON DELETE SET NULL,
+    reply_to_member INTEGER,
+    kind TEXT NOT NULL DEFAULT 'message' CHECK(kind IN ('message','wrapup','report','decision')),
+    origin_message_id INTEGER, exchange_settled INTEGER NOT NULL DEFAULT 0,
+    thread_id INTEGER REFERENCES room_threads(id),
+    UNIQUE(room_id,request_id)
+);
+INSERT INTO room_messages_meeting SELECT * FROM room_messages;
+UPDATE sqlite_sequence SET seq=MAX(seq,(SELECT seq FROM sqlite_sequence WHERE name='room_messages'))
+WHERE name='room_messages_meeting' AND EXISTS(SELECT 1 FROM sqlite_sequence WHERE name='room_messages');
+DROP TABLE room_messages;
+ALTER TABLE room_messages_meeting RENAME TO room_messages;
+CREATE INDEX room_messages_room ON room_messages(room_id,id);
+CREATE TRIGGER room_message_thread AFTER INSERT ON room_messages WHEN NEW.thread_id IS NULL BEGIN
+    UPDATE room_messages SET thread_id=(SELECT id FROM room_threads WHERE room_id=NEW.room_id ORDER BY id LIMIT 1) WHERE id=NEW.id;
+END;
+CREATE TRIGGER room_message_scope_insert BEFORE INSERT ON room_messages
+WHEN NEW.thread_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM room_threads WHERE id=NEW.thread_id AND room_id=NEW.room_id)
+BEGIN SELECT RAISE(ABORT,'cross-scope room thread'); END;
+CREATE TRIGGER room_reply_insert BEFORE INSERT ON room_messages WHEN NEW.reply_to IS NOT NULL
+AND NOT EXISTS(SELECT 1 FROM room_messages s WHERE s.id=NEW.reply_to AND s.room_id=NEW.room_id
+    AND (NEW.thread_id IS NULL OR s.thread_id=NEW.thread_id) AND s.member_id IS NOT NEW.member_id)
+BEGIN SELECT RAISE(ABORT,'invalid room reply'); END;
+CREATE TRIGGER room_message_scope_update BEFORE UPDATE OF room_id, thread_id, reply_to, member_id ON room_messages
+WHEN NOT EXISTS(SELECT 1 FROM room_threads WHERE id=NEW.thread_id AND room_id=NEW.room_id)
+OR (NEW.reply_to IS NOT NULL AND NOT EXISTS(SELECT 1 FROM room_messages s WHERE s.id=NEW.reply_to
+    AND s.room_id=NEW.room_id AND s.thread_id=NEW.thread_id AND s.member_id IS NOT NEW.member_id))
+BEGIN SELECT RAISE(ABORT,'invalid room message scope or reply'); END;
+ALTER TABLE worker_tasks ADD COLUMN report_room_id INTEGER;
+ALTER TABLE worker_tasks ADD COLUMN report_thread_id INTEGER;
+ALTER TABLE room_messages ADD COLUMN seen_through INTEGER;
+ALTER TABLE room_messages ADD COLUMN report_task_id INTEGER;
+ALTER TABLE room_reply_intents ADD COLUMN restart_count INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE room_exchange_turns (
+    origin_message_id INTEGER NOT NULL REFERENCES room_exchanges(origin_message_id) ON DELETE CASCADE,
+    turn_id INTEGER PRIMARY KEY REFERENCES agent_turns(id) ON DELETE CASCADE,
+    member_id INTEGER NOT NULL,
+    round INTEGER NOT NULL,
+    seen_through INTEGER NOT NULL,
+    state TEXT NOT NULL DEFAULT 'running'
+);
+INSERT INTO room_exchange_turns(origin_message_id,turn_id,member_id,round,seen_through)
+SELECT e.origin_message_id,e.active_turn,t.member_id,e.chime_ins,e.origin_message_id
+FROM room_exchanges e JOIN agent_turns t ON t.id=e.active_turn;
+CREATE TABLE room_member_cursor (
+    room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    thread_id INTEGER NOT NULL REFERENCES room_threads(id) ON DELETE CASCADE,
+    member_id INTEGER NOT NULL,
+    seen_message_id INTEGER NOT NULL,
+    PRIMARY KEY(room_id,thread_id,member_id)
+);
+CREATE TABLE room_digest_requests (
+    message_id INTEGER PRIMARY KEY REFERENCES room_messages(id) ON DELETE CASCADE
+);
+CREATE INDEX worker_report_room ON worker_tasks(report_room_id,report_thread_id);
+PRAGMA user_version = 60;
+COMMIT;
+"""
+
+def _meeting_migration(conn):
+    # Rebuild the CHECK without cascading legacy messages into exchanges or intents.
+    foreign_keys = conn.execute('PRAGMA foreign_keys').fetchone()[0]
+    conn.execute('PRAGMA foreign_keys=OFF')
+    try:
+        conn.executescript(_ROOM_MEETING_SCHEMA)
+    finally:
+        if conn.in_transaction:
+            conn.rollback()
+        conn.execute(f'PRAGMA foreign_keys={foreign_keys}')
+
+
+_MIGRATIONS[60] = _meeting_migration
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

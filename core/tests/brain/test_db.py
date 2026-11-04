@@ -361,7 +361,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 59
+LATEST = 60
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -578,6 +578,18 @@ SCHEMA_V58 = {**SCHEMA_V57, "agent_inbox": [
 SCHEMA_V59 = {**SCHEMA_V58, "worker_tasks": [*SCHEMA_V58["worker_tasks"], "requires_artifact INTEGER NOT NULL DEFAULT 0"]}
 
 
+SCHEMA_V60 = {
+    **SCHEMA_V59,
+    "worker_tasks": [*SCHEMA_V59["worker_tasks"], "report_room_id INTEGER", "report_thread_id INTEGER"],
+    "room_messages": [*SCHEMA_V59["room_messages"], "seen_through INTEGER", "report_task_id INTEGER"],
+    "room_reply_intents": [*SCHEMA_V59["room_reply_intents"], "restart_count INTEGER NOT NULL DEFAULT 0"],
+    "room_exchange_turns": ["origin_message_id INTEGER NOT NULL", "turn_id INTEGER PK", "member_id INTEGER NOT NULL",
+                            "round INTEGER NOT NULL", "seen_through INTEGER NOT NULL", "state TEXT NOT NULL DEFAULT 'running'"],
+    "room_member_cursor": ["room_id INTEGER PK NOT NULL", "thread_id INTEGER PK NOT NULL", "member_id INTEGER PK NOT NULL", "seen_message_id INTEGER NOT NULL"],
+    "room_digest_requests": ["message_id INTEGER PK"],
+}
+
+
 def test_v48_adds_the_calendar_without_changing_existing_members_and_keeps_events_on_reopen(tmp_path):
     path = tmp_path / "v47.db"
     raw = sqlite3.connect(path)
@@ -732,7 +744,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V59) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V60) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -752,7 +764,7 @@ def test_connect_creates_the_latest_schema(conn):
         "agent_inbox_started",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V59.items():
+    for table, columns in SCHEMA_V60.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [

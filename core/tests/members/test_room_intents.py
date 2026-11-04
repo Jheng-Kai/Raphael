@@ -7,7 +7,7 @@ import pytest
 
 from raphael_core.agent.history import AgentHistory
 from raphael_core.members.rooms import RoomsService
-from .test_exchanges import exchange, team, send, finish, history, Decision  # noqa: F401
+from .test_exchanges import exchange, team, send, finish, history, Decision, meeting_source  # noqa: F401
 
 
 async def test_each_member_decides_on_its_own_model_and_an_address_asks_no_one(rig, exchange):
@@ -90,10 +90,10 @@ async def test_when_no_one_can_be_heard_the_room_says_so_and_its_default_answers
     assert rig.background.submitted[-1]['member_id'] == 0
 
 
-async def test_source_replay_rename_and_cross_slice_seventh_reply(rig, exchange):
+async def test_source_replay_and_rename_cannot_extend_the_reply_budget(rig, exchange):
     room, ids = await team(rig)
     await send(rig, room, '@Alice start')
-    for n in range(7):
+    for n in range(3):
         peer = 'Bob' if n % 2 == 0 else 'Alice'
         previous = rig.background.attached[-1][1]
         await finish(rig, exchange, '@' + peer + ' continue')
@@ -102,14 +102,12 @@ async def test_source_replay_rename_and_cross_slice_seventh_reply(rig, exchange)
         await exchange.wait_idle()
         assert len(rig.background.submitted) == count
     await rig.call('members.update', {'id':ids[0], 'name':'Anna'})
-    await finish(rig, exchange, '@Anna final check')
-    assert rig.background.submitted[-1]['member_id'] == ids[0]
-    await finish(rig, exchange, 'Ready')
+    assert len(rig.background.submitted) == 3
     result = await history(rig, room)
-    assert result['exchange']['state'] == 'done'
+    assert (result['exchange']['state'], result['exchange']['reason']) == ('stopped', 'reply_budget')
     intents = result['exchange']['reply_intents']
     assert len({(i['source_message_id'], i['recipient_id']) for i in intents}) == len(intents)
-    assert all(i['state'] == 'done' for i in intents)
+    assert [i['state'] for i in intents] == ['done', 'done', 'done', 'blocked']
     assert all(m['reply_to_member'] != m['member_id'] for m in result['messages'] if m['reply_to'] is not None and m['member_id'] is not None)
 
 
@@ -122,14 +120,15 @@ async def test_accepted_intents_become_named_blocks(rig, exchange, action, reaso
     elif action == 'remove':
         await rig.call('rooms.update', {'room_id':room['id'], 'member_ids':[0,ids[0]]})
     await finish(rig, exchange, 'Ready', cost=10 if action=='cost' else .001)
+    await finish(rig, exchange, 'Ready')
     result = await history(rig, room)
     blocked = [i for i in result['exchange']['reply_intents'] if i['state']=='blocked']
-    assert [(i['recipient_id'],i['reason']) for i in blocked] == [(ids[1],reason)]
+    assert [(i['recipient_id'],i['reason']) for i in blocked] == ([(member,reason) for member in ids] if action=='stop' else [(ids[1],reason)] if action=='remove' else [])
     assert result['exchange']['state'] == 'stopped'
     summaries=[m for m in result['messages'] if m['kind']=='wrapup']
     assert len(summaries)==1 and summaries[0]['member_id']==0
     assert result['messages'][-1]['kind']=='wrapup'
-    named = {'owner':[], 'cost':['Bob：預算已用完'], 'revoked':['Bob：已不在房間']}[reason]
+    named = {'owner':[], 'cost':[], 'revoked':['Bob：已不在房間']}[reason]
     first = '已停止本次工作，已完成的動作保留。' if reason=='owner' else '本次討論沒有全部完成。'
     assert summaries[0]['text'].split('\n')[:1+len(named)] == [first, *named]
     await exchange._exchanges.drive(room['id'])
@@ -140,7 +139,7 @@ LIMITED = 'Codex CLI 目前請求太頻繁而被限流，請稍後再試。'
 
 
 async def fail(rig, exchange, reason='cli_rate_limited'):
-    task_id, turn = rig.background.attached[-1]
+    task_id, turn = next((task, turn) for task, turn in rig.background.attached if AgentHistory(rig.conn).get(turn).status == "running")
     AgentHistory(rig.conn).resolve(turn, prefix='', text=LIMITED, status='error')
     rig.background.store.finish(task_id, 'failed', prefix='', text=LIMITED, detail=None, reason=reason)
     exchange.turn_arrived(turn)
@@ -175,7 +174,7 @@ async def test_a_failed_meeting_turn_is_named_and_owner_stop_still_stops_everyon
     result = await history(rig, room)
     assert len(rig.background.submitted) == 2
     assert (result['exchange']['state'], result['exchange']['reason']) == ('stopped', 'owner')
-    assert [(i['recipient_id'], i['reason']) for i in result['exchange']['reply_intents']] == [(ids[0], 'cli_rate_limited'), (ids[1], '')]
+    assert [(i['recipient_id'], i['reason']) for i in result['exchange']['reply_intents']] == [(ids[0], 'cli_rate_limited'), (ids[1], 'owner')]
     [text] = wrapups(result)
     assert text.split('\n')[:2] == ['已停止本次工作，已完成的動作保留。', 'Alice：請求太頻繁而被限流']
 
@@ -184,10 +183,10 @@ async def test_a_reply_cut_off_by_the_owners_stop_is_not_called_an_error(rig, ex
     room, ids = await team(rig)
     await send(rig, room, '@Alice and @Bob answer')
     await rig.call('rooms.stop', {'room_id':room['id']})
-    task_id, turn = rig.background.attached[-1]
-    AgentHistory(rig.conn).resolve(turn, prefix='', text='Stopped.', status='denied')
-    rig.background.store.finish(task_id, 'cancelled', prefix='', text='Stopped.', detail=None, reason='cancelled')
-    exchange.turn_arrived(turn)
+    for task_id, turn in rig.background.attached:
+        AgentHistory(rig.conn).resolve(turn, prefix='', text='Stopped.', status='denied')
+        rig.background.store.finish(task_id, 'cancelled', prefix='', text='Stopped.', detail=None, reason='cancelled')
+        exchange.turn_arrived(turn)
     await exchange.wait_idle()
     result = await history(rig, room)
     assert [(i['recipient_id'], i['reason']) for i in result['exchange']['reply_intents']] == [(ids[0], 'owner'), (ids[1], 'owner')]
@@ -261,7 +260,7 @@ async def test_source_settlement_is_atomic_with_its_reply_intent(rig, exchange):
     assert rig.conn.execute("SELECT COUNT(*) FROM room_reply_intents WHERE state='done'").fetchone()[0] == 1
 
 
-async def test_restart_uncertain_work_is_named_and_never_replayed(rig, exchange):
+async def test_restart_names_interrupted_speech_and_reoffers_each_intent_once(rig, exchange):
     room, ids = await team(rig)
     await send(rig, room, '@Alice and @Bob start')
     await exchange.aclose()
@@ -269,8 +268,9 @@ async def test_restart_uncertain_work_is_named_and_never_replayed(rig, exchange)
     restored.start()
     await restored.wait_idle()
     result = await restored._messages({'room_id':room['id']})
-    assert all(i['state']=='blocked' and i['reason']=='restart' for i in result['exchange']['reply_intents'])
-    assert len(rig.background.submitted) == 1
+    assert all(i['state']=='running' and i['restart_count']==1 for i in result['exchange']['reply_intents'])
+    assert len(rig.background.submitted) == 4
+    assert len(wrapups(result)) == 1
     await restored.aclose()
 
 
@@ -309,7 +309,7 @@ async def test_a_named_moderator_has_no_scheduled_turns_or_conclusion(rig, excha
 async def test_a_meeting_answers_explicit_addresses_without_dispatching_rounds(rig, exchange):
     room, (alice, bob, carol) = await three(rig)
     await exchange.meeting({'member_ids':[0,alice,bob,carol], 'agenda':'@Bob review the launch',
-                            'roles':{str(alice):'moderator',str(bob):'pro',str(carol):'con'}}, 'en', 47)
+                            'roles':{str(alice):'moderator',str(bob):'pro',str(carol):'con'}}, 'en', meeting_source(rig, 47))
     assert [s['member_id'] for s in rig.background.submitted] == [bob]
     await finish(rig, exchange, 'Test first. @Carol what do you think?')
     assert rig.background.submitted[-1]['member_id'] == carol
@@ -317,13 +317,13 @@ async def test_a_meeting_answers_explicit_addresses_without_dispatching_rounds(r
     result = await history(rig, room)
     assert result['exchange']['state'] == 'done'
     assert [(m['member_id'],m['kind']) for m in result['messages'] if m['member_id'] is not None] == [
-        (bob,'message'),(carol,'message')]
+        (0,'message'),(bob,'message'),(carol,'message')]
 
 
 async def test_a_meeting_with_no_one_speaking_has_no_automatic_open_or_close(rig, exchange):
     room, ids = await team(rig)
     await exchange.meeting({'member_ids':[0,*ids], 'agenda':'Thanks everyone',
-                            'roles':{str(ids[0]):'moderator',str(ids[1]):'con'}}, 'en', 48)
+                            'roles':{str(ids[0]):'moderator',str(ids[1]):'con'}}, 'en', meeting_source(rig, 48))
     assert not rig.background.submitted
     assert (await history(rig, room))['exchange']['state'] == 'done'
 
@@ -331,7 +331,7 @@ async def test_a_meeting_with_no_one_speaking_has_no_automatic_open_or_close(rig
 async def test_a_reused_meeting_keeps_only_the_roles_the_owner_requested(rig, exchange):
     room, ids = await team(rig)
     await rig.call('rooms.update', {'room_id':room['id'], 'roles':{str(ids[0]):'moderator'}})
-    await exchange.meeting({'member_ids':[0,*ids], 'agenda':'Next release'}, 'en', 49)
+    await exchange.meeting({'member_ids':[0,*ids], 'agenda':'Next release'}, 'en', meeting_source(rig, 49))
     assert (await rig.call('rooms.list'))['rooms'][0]['roles'] == {}
     assert not rig.background.submitted
 
@@ -339,18 +339,18 @@ async def test_a_reused_meeting_keeps_only_the_roles_the_owner_requested(rig, ex
 async def test_meeting_reuses_exact_members_and_has_one_agenda(rig, exchange):
     room, ids = await team(rig)
     args = {'member_ids':[0,*ids], 'agenda':'Review evidence'}
-    first = await exchange.meeting(args, 'en', 42)
-    second = await exchange.meeting(args, 'en', 42)
+    first = await exchange.meeting(args, 'en', meeting_source(rig, 42))
+    second = await exchange.meeting(args, 'en', meeting_source(rig, 42))
     assert first['room_id'] == second['room_id'] == room['id']
     assert second['duplicate']
-    assert len([m for m in (await history(rig, room))['messages'] if m['member_id'] is None]) == 1
+    assert len([m for m in (await history(rig, room))['messages'] if m['member_id'] == 0]) == 1
 
 
 async def test_meeting_roles_accept_names_and_a_supporting_part(rig, exchange):
     # Live, a model keyed roles by name or gave a colleague a part outside the enum, and the meeting never opened.
     room, ids = await team(rig)
     result = await exchange.meeting({'member_ids':[0,*ids], 'agenda':'Plan the launch',
-                                     'roles':{'Alice':'moderator', 'Bob':'social content'}}, 'en', 43)
+                                     'roles':{'Alice':'moderator', 'Bob':'social content'}}, 'en', meeting_source(rig, 43))
     assert result['room_id'] == room['id']
     roles = (await rig.call('rooms.list'))['rooms'][0]['roles']
     assert roles == {str(ids[0]):'moderator', str(ids[1]):'participant'}
@@ -363,7 +363,7 @@ async def test_meeting_roles_accept_names_and_a_supporting_part(rig, exchange):
 async def test_meeting_roles_understand_the_owners_words(rig, exchange, parts, expected):
     # Live, every part the model named fell outside the four words, so the meeting lost its moderator.
     room, ids = await three(rig)
-    await exchange.meeting({'member_ids':[0,*ids], 'agenda':'Plan the launch', 'roles':parts}, 'zh-TW', 44)
+    await exchange.meeting({'member_ids':[0,*ids], 'agenda':'Plan the launch', 'roles':parts}, 'zh-TW', meeting_source(rig, 44))
     roles = next(r for r in (await rig.call('rooms.list'))['rooms'] if r['id'] == room['id'])['roles']
     assert [roles[str(i)] for i in ids] == expected
 
