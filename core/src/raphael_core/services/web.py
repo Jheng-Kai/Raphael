@@ -276,6 +276,14 @@ async def _search(service: str, query: str, *, http: httpx.AsyncClient, key: str
 # --- reading a page -------------------------------------------------------------------------------
 
 
+def needs_rendered_read(page):
+    text = page.get("text", "")
+    lower = text.lower()
+    return len(text.strip()) < 600 or any(marker in lower for marker in (
+        "enable javascript", "javascript is required", "accept all cookies", "reject all cookies",
+        "consent preferences", "before you continue", "同意 cookie", "接受所有 cookie", "すべての cookie"))
+
+
 def _page(title: Any, text: Any) -> dict:
     if not isinstance(text, str) or not text.strip():
         raise ServiceError("bad_response")

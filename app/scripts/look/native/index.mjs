@@ -93,6 +93,7 @@ async function run(options) {
           if (!process.env.RAPHAEL_NATIVE_UPGRADE_FROM) throw new Error("Set RAPHAEL_NATIVE_UPGRADE_FROM to a copy of an older data folder");
           await cp(process.env.RAPHAEL_NATIVE_UPGRADE_FROM, data, { recursive: true });
         } else await database("init", journey.name);
+        if (journey.name === "computer-speed") result.computer = await database("computer-speed");
         if (journey.name === "member-computer") {
           result.computer = await database("vm-smoke");
           const image = "member-computer-tool.png";

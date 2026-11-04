@@ -50,10 +50,10 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   options: { timeline: HTMLElement; conversation: () => number | undefined; name: () => string; face?(): string; closePanel?(): void; openPanel(): void; panelVisible(): boolean; status?(active: boolean): void; changed?(): void; stop?(turnId: number): Promise<unknown>; trySkill?(text: string): void }): { show(): void; hide(close?: boolean): void; refresh(): void; sync(): void; carry(before: Element): void; takeover(): void; files(): void; waitingForOwner(turnId: number): boolean } {
   const panel = document.createElement("section");
   panel.className = "desktop-panel"; panel.hidden = true;
-  panel.innerHTML = `<div class="desktop-takeover-bar" hidden>${iconButton("left", t("members.panelBack"), ' data-desktop="back" hidden')}<span class="desktop-identity"></span>${btn("", "sm", ' data-desktop="return"')}${iconButton("more", t("chat.more"), ' data-desktop="menu" aria-haspopup="menu" aria-expanded="false"')}</div><p class="desktop-request" role="status" hidden></p><div class="desktop-shell">` +
+  panel.innerHTML = `<div class="desktop-takeover-bar" hidden>${iconButton("left", t("members.panelBack"), ' data-desktop="back" hidden')}<span class="desktop-identity"></span><span class="desktop-live" role="status"></span>${iconButton("stop", t("agent.stop"), ' data-desktop="stop" hidden')}${iconButton("left", t("agent.collapsePdf"), ' data-desktop="collapse" hidden')}${btn("", "sm", ' data-desktop="return"')}${iconButton("more", t("chat.more"), ' data-desktop="menu" aria-haspopup="menu" aria-expanded="false"')}</div><p class="desktop-request" role="status" hidden></p><div class="desktop-shell">` +
     `<div class="desktop-screen"><img class="desktop-wallpaper" alt=""><img class="desktop-last" alt="" hidden><div class="desktop-placeholder"></div>${btn("", "sm", ' data-desktop="retry" hidden')}` +
     `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
-    `<button type="button" class="btn desktop-hit" data-desktop="peek" hidden></button><span class="desktop-owner" role="status" hidden></span></div><h2 class="desktop-caption"></h2></div>` +
+    `<button type="button" class="btn desktop-hit" data-desktop="peek" hidden></button>${iconButton("expand", t("desktop.expand"), ' data-desktop="enlarge"', 'desktop-enlarge')}<span class="desktop-owner" role="status" hidden></span></div><h2 class="desktop-caption"></h2></div>` +
     `<p class="desktop-error" role="alert" hidden></p><p class="desktop-recording" role="status" hidden></p><div class="desktop-teach-missing" hidden></div><div class="desktop-actions">${btn("", "sm", ' data-desktop="revoke" hidden')}${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="discard-teach" hidden')}${btn("", "sm", ' data-desktop="teach"')}</div><div class="desktop-review" hidden></div><div class="desktop-try" hidden><input class="mb-fin" data-teach-input maxlength="4000">${btn("", "sm", ' data-desktop="try-teach"')}</div>`;
   const frame = panel.querySelector<HTMLIFrameElement>('iframe')!;
   frame.dataset.desktopStream = "";
@@ -75,7 +75,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   let teachingBusy = false, drafting = false;
   const checkpoints = mountCheckpoints(panel, member);
   const timeline = mountDesktopTimeline(options.timeline, options.name);
-  let visible = false, generation = 0, timer: ReturnType<typeof setTimeout> | undefined;
+  let visible = false, generation = 0, timer: ReturnType<typeof setTimeout> | undefined, watching = false;
   let drawn = "", drawnInline: Element | null = null, suspended = false, returnPanelOpen = false, filesOpen = false, filesOnly = false;
   let returnedRequests: string[] = [];
   let state: DesktopState | undefined, session: DesktopSession | undefined;
@@ -118,6 +118,13 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     options.status?.(state?.state === "running");
     paint(frame, "title", t("desktop.open")); hit.setAttribute('aria-label', t("desktop.expand"));
     const expanded = panel.hasAttribute('data-expanded');
+    const currentWork = state?.works?.find(work => work.state === 'running' || work.state === 'waiting_control');
+    paint(panel.querySelector<HTMLElement>('.desktop-live')!, 'textContent', currentWork ? desktopWorkText(currentWork) : '');
+    const stop = panel.querySelector<HTMLElement>('[data-desktop="stop"]')!;
+    paint(stop, 'hidden', !watching || !currentWork || !options.stop);
+    stop.setAttribute('title', t('agent.stop')); stop.setAttribute('aria-label', t('agent.stop'));
+    paint(panel.querySelector<HTMLElement>('[data-desktop="collapse"]')!, 'hidden', !watching);
+    paint(panel.querySelector<HTMLElement>('[data-desktop="enlarge"]')!, 'hidden', expanded);
     panel.querySelector<HTMLElement>('.desktop-takeover-bar')!.hidden = !expanded;
     panel.querySelector<HTMLElement>('[data-desktop="back"]')!.hidden = !filesOpen && (!skillEditor || review.hidden);
     panel.toggleAttribute('data-files', filesOpen);
@@ -148,11 +155,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(hit, "hidden", !running || !connected && !suspended || owner || panel.hasAttribute('data-expanded'));
     paint(take, "textContent", t("desktop.take")); paint(take, "hidden", !running || !connected || owner || !!demonstration); paint(take, "disabled", changing);
     paint(frame, "hidden", !running || !connected);
-    paint(frame.style, "pointerEvents", interactive ? "auto" : "none");
+    paint(frame.style, "pointerEvents", interactive && !watching ? "auto" : "none");
     const status = panel.querySelector<HTMLElement>('.desktop-owner')!;
     paint(status, "textContent", t("desktop.operating")); paint(status, "hidden", !owner || !connected);
-    paint(action, "textContent", t(pending() ? "desktop.done" : "desktop.release")); paint(action, "hidden", !expanded || !!recording || filesOnly);
-    paint(panel.querySelector<HTMLElement>('[data-desktop="menu"]')!, "hidden", filesOnly); paint(action, "disabled", changing);
+    paint(action, "textContent", t(pending() ? "desktop.done" : "desktop.release")); paint(action, "hidden", watching || !expanded || !!recording || filesOnly);
+    paint(panel.querySelector<HTMLElement>('[data-desktop="menu"]')!, "hidden", watching || filesOnly); paint(action, "disabled", changing);
     const asleep = state?.state === "stopped" || state?.state === "missing";
     paint(retry, "textContent", t(asleep ? "computer.open" : "desktop.retry")); paint(retry, "hidden", !!running || !!preparing || state?.state === "absent"); paint(retry, "disabled", opening);
     paint(revoke, "textContent", t("desktop.revoke")); paint(revoke, "hidden", !state?.granted || owner || !!preparing);
@@ -191,10 +198,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   }
   function closeStream(): void {
     clearTimeout(lingering);
-    generation++; takeOnConnect = false; filesOnly = false; send(false); frame.remove(); frame.removeAttribute('src'); connected = interactive = false;
+    generation++; takeOnConnect = false; watching = false; filesOnly = false; send(false); frame.remove(); frame.removeAttribute('src'); connected = interactive = false;
     const previous = session; session = undefined;
     if (previous) closePending = closePending.then(() => api.desktopClose(previous.session)).catch(() => {});
     panel.removeAttribute('data-expanded'); document.documentElement.removeAttribute('data-desktop-expanded');
+    document.documentElement.removeAttribute('data-desktop-watch');
   }
   /** Out of sight: the stream lingers, unless the owner holds the controls, which end with the view. */
   function leave(): void {
@@ -206,6 +214,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   function message(event: MessageEvent): void {
     if (!session || event.source !== frame.contentWindow || event.origin !== new URL(session.url).origin || event.data?.type !== 'raphael-desktop') return;
     if (event.data.state === 'frame') {
+      if (state?.control === 'owner' || pending()) return;
       if (typeof event.data.image === 'string' && event.data.image.startsWith('data:image/jpeg;base64,') && streamMember !== undefined) lastFrames.set(streamMember, event.data.image);
       return;
     }
@@ -247,6 +256,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const previousWaiting = waitingTurns();
     if (!next.works?.some(work => work.state === "waiting_control")) parkFrame();
     state = next;
+    if (pending()) lastFrames.delete(member());
     if (suspended && waitingRequests().some(request => !returnedRequests.includes(request))) suspended = false;
     if (next.state !== 'running') connected = interactive = false;
     timeline.update(next);
@@ -295,6 +305,27 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     document.documentElement.toggleAttribute('data-desktop-expanded', on);
     draw();
   };
+  function collapseWatch(): void {
+    if (!watching) return;
+    watching = false; document.documentElement.removeAttribute('data-desktop-watch'); expand(false);
+    if (interactive && state?.control === 'owner') send(true);
+    if (!returnPanelOpen) options.closePanel?.();
+    draw();
+  }
+  panel.querySelector('[data-desktop="enlarge"]')!.addEventListener('click', () => {
+    watching = true;
+    send(false);
+    document.documentElement.setAttribute('data-desktop-watch', '');
+    expand(true);
+  });
+  panel.querySelector('[data-desktop="collapse"]')!.addEventListener('click', collapseWatch);
+  panel.querySelector('[data-desktop="stop"]')!.addEventListener('click', () => {
+    const work = state?.works?.find(work => work.state === 'running' || work.state === 'waiting_control');
+    if (work) void options.stop?.(work.turn_id);
+  });
+  window.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && watching) { event.preventDefault(); collapseWatch(); }
+  });
   function clearReview(): void { skillEditor?.destroy(); skillEditor = undefined; review.replaceChildren(); review.hidden = true; }
   async function discardRecording(id = member(), recording = demonstration): Promise<void> {
     if (!recording) return;
@@ -380,7 +411,12 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   options.timeline.addEventListener('click', event => {
     const button = (event.target as Element).closest<HTMLButtonElement>('[data-card-desktop]');
     if (!button || button.disabled) return;
-    if (button.dataset.cardDesktop === 'take') acquire();
+    if (button.dataset.cardDesktop === 'take') {
+      // Owner input stays in the conversation's existing RFB iframe.
+      suspended = false; takeOnConnect = true;
+      if (connected) { takeOnConnect = false; void control(true); }
+      else if (state?.state === 'running') void openStream();
+    }
     else if (button.dataset.cardDesktop === 'return') void handback();
     else {
       const work = pending();

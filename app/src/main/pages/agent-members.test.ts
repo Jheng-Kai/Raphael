@@ -26,6 +26,7 @@ const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { st
   membersUpdate: vi.fn(),
   membersCreate: vi.fn(),
   membersDelete: vi.fn(),
+  settingsGet: vi.fn(async () => ({settings:{computer_ssh_alias:''}})),
   membersSetAvatar: vi.fn(),
   routinesCreate: vi.fn(),
   toolsetsList: vi.fn(),

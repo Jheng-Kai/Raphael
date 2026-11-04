@@ -87,7 +87,7 @@ screen.addEventListener('mousedown', () => {
 // The last picture of the screen: the window shows it at once when it comes back.
 setInterval(() => {
   const canvas = screen.querySelector('canvas');
-  if (!rfb || !canvas?.width) return;
+  if (!rfb || !rfb.viewOnly || !canvas?.width) return;
   const small = document.createElement('canvas'), scale = Math.min(1, 480 / canvas.width);
   small.width = Math.round(canvas.width * scale); small.height = Math.round(canvas.height * scale);
   small.getContext('2d').drawImage(canvas, 0, 0, small.width, small.height);
@@ -194,6 +194,12 @@ class DesktopViewer:
         return self.vm.target(member)
 
     async def status(self, params):
+        if params.get("check_host") is True:
+            from .remote_host import host_health
+            try:
+                return await host_health(params.get("alias", self.vm.remote))
+            except ValueError:
+                raise invalid_params("Invalid SSH config alias") from None
         target = self.target(params)
         if not await self.vm.installed():
             return {"state": "absent", "control": "member", "ready": False, "error": "disabled" if not self.vm.enabled else "docker_missing"}

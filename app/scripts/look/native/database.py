@@ -107,6 +107,13 @@ elif operation == "vm-smoke":
     import asyncio
     from raphael_core.native_journeys import vm_smoke
     print(json.dumps(asyncio.run(vm_smoke(directory))))
+elif operation == "computer-speed":
+    import asyncio
+    from raphael_core.native_journeys import computer_speed
+    result = asyncio.run(computer_speed(directory))
+    print(json.dumps(result))
+    if not result["passed"]:
+        sys.exit(1)
 elif operation == "vm-stop":
     import asyncio
     from raphael_core.native_journeys import vm_cleanup

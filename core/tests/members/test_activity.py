@@ -35,6 +35,8 @@ async def test_real_loop_with_the_core_side_of_a_tool_classifies_and_releases_it
         async def chat(self, messages, tools):
             assert activity.state(4) == "thinking"
             self.calls += 1
+            if name == "computer__click" and self.calls == 2:
+                return Turn("Check", [Call("check", "computer__get_window_state", {})])
             return Turn("Checking", [Call("one", name, {})]) if self.calls == 1 else Turn("Finished")
 
         # The worker is a process of its own with no activity: the core marks a tool where it runs it.
@@ -44,9 +46,10 @@ async def test_real_loop_with_the_core_side_of_a_tool_classifies_and_releases_it
             return ToolOutcome(True)
 
     with activity.turn(4):
-        result = await run_task(FakeModel(), system="", user="", tools=[{"function": {"name": name}}])
+        names = [name, "computer__get_window_state"] if name == "computer__click" else [name]
+        result = await run_task(FakeModel(), system="", user="", tools=[{"function": {"name": tool}} for tool in names])
         assert result.status == "done"
-    assert notes == ["thinking", expected, "thinking", "done", "idle"]
+    assert notes == ["thinking", expected, "thinking", *([expected, "thinking"] if name == "computer__click" else []), "done", "idle"]
 
 
 async def test_concurrent_work_uses_priority_without_duplicate_notifications():

@@ -940,12 +940,16 @@ it("allows only the shared card quiet exit to be frameless while rejecting ordin
  const frames=result.productRules.filter(rule=>rule.rule==='R-UI-18'); expect(frames.map(rule=>rule.text)).toEqual(['Delete']); browser.happyDOM.abort();
 });
 
-it("waits for card takeover on the expanded existing stream", () => {
+it("waits for interactive inline takeover and returns through the private card", () => {
   for (const name of ['desktop-takeover-owner', 'desktop-takeover-done']) {
     const scene = scenes.find(scene => scene.name === name);
-    expect(scene.steps.some(step => step.action === 'wait' && step.selector === '.desktop-panel[data-expanded][data-interactive="true"]')).toBe(true);
+    expect(scene.steps.some(step => step.action === 'wait' && step.selector === '[data-card-desktop-screen][data-owner-control] iframe')).toBe(true);
     expect(scene.steps.some(step => step.selector?.includes('data-desktop="expand"'))).toBe(false);
   }
+  const typing = scenes.find(scene => scene.name === 'desktop-takeover-owner');
+  expect(typing.steps.some(step => step.action === 'desktop-owner-typing')).toBe(true);
+  const done = scenes.find(scene => scene.name === 'desktop-takeover-done');
+  expect(done.steps.some(step => step.selector === '[data-card-desktop="return"]')).toBe(true);
 });
 
 it("dispatches task room, file-view and restore assertions through the shared rendered check", () => {

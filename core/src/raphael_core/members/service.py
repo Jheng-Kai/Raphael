@@ -270,6 +270,7 @@ class MembersService:
         self._notify = notify
         # Told of each member made through the tools: who made it, and which it is.
         self.member_made = lambda maker, made: None
+        self.remove_computer_data = None
         self._connections = connections
         self._now_ms = now_ms
         self._tz = tz
@@ -935,6 +936,12 @@ class MembersService:
 
     async def _delete(self, params: dict) -> dict:
         member_id = self._member_id(params)
+        if type(params.get("remove_computer_data", False)) is not bool:
+            raise invalid_params("remove_computer_data must be a boolean")
+        if params.get("remove_computer_data"):
+            if self.remove_computer_data is None:
+                raise invalid_params("Computer data removal unavailable")
+            await self.remove_computer_data(member_id, params.get("computer_host"))
         member = self.store.member(member_id)
         assert member is not None
         self._background.forget_member(member_id)

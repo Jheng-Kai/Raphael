@@ -71,8 +71,19 @@ VM_CONTRACT = (
     "harness equivalent and wait for the owner's yes for the exact action/target. If unavailable, denied "
     "or expired, stop. Sandbox success is not approval. First list_windows then use a bounded get_window_state "
     "(max_elements 200, query, include_screenshot false unless pixels are needed). Whole-screen pixels use "
-    "get_desktop_state. Verify meaningful changes before finishing."
+    "get_desktop_state. After meaningful changes and before claiming completion, read the intended window/page "
+    "or verify_state with an expectation. Keep files, browser profiles and installed packages under "
+    "/home/cua/workspace: anything outside it is lost on image/timezone rebuilds."
 )
+
+RUN_STEPS = {"description": VM_CONTRACT + " Perform 1–10 short driver actions, then return one window/page observation. Every step uses the ordinary gate and current grant/control checks. Stop on the first failure; failed_step is one-based. Never batch shell commands, secrets, takeover or another composite.",
+    "parameters": {"type": "object", "properties": {
+        "steps": {"type": "array", "minItems": 1, "maxItems": 10, "items": {"type": "object", "properties": {
+            "name": {"type": "string", "enum": [name for name in DRIVER_TOOLS if name not in READS]},
+            "arguments": {"type": "object"}}, "required": ["name", "arguments"], "additionalProperties": False}},
+        "observation": {"type": "object", "properties": {"name": {"type": "string", "enum": ["get_window_state", "get_browser_state", "verify_state"]},
+            "arguments": {"type": "object"}}, "required": ["name", "arguments"], "additionalProperties": False}},
+        "required": ["steps", "observation"], "additionalProperties": False}}
 
 EXEC = {"description": VM_CONTRACT + " Run a shell command inside the VM workspace, never on the host. Your own files are in /home/cua/workspace; /home/cua/team is the folder the whole team shares, so what a colleague or the owner needs goes there. Nothing it does shows on the screen the owner watches: use it for files and programs, never to fetch a page in place of opening it in the browser. It waits for the command for at most timeout_seconds (60 by default, 1800 at most) and ends it then. For a build or a server that takes longer, or to work on while it runs, set background: it returns at once with a job and the paths of its log and of its .exit file (the exit code, there once the job has ended); read them with another vm_exec. Other members' commands and the screen are not held up by it.",
         "parameters": {"type": "object", "properties": {"command": {"type": "string", "minLength": 1},
@@ -128,6 +139,76 @@ class VmTools:
         self.private_pages = {}
         self.checkpointed, self.checkpoint_locks = set(), {}
         self.refreshes = {}
+        self.step_gate = None
+        self.vm.rebuild_notice = self._rebuild_notice
+
+    def _rebuild_notice(self, target):
+        progress, language = _NOTE.get()
+        if progress:
+            progress({"zh-TW": "正在更新電腦映像，工作區與登入資料會保留", "ja": "コンピューターを更新します。ワークスペースとログインは保持されます"}.get(language,
+                "Updating the computer image; workspace and sign-ins will be preserved"))
+
+    def bind_computer_gate(self, gate):
+        self.step_gate = gate.call_plugin
+
+    async def rendered_read(self, url):
+        scope = _SCOPE.get()
+        member, task_id = 0, None
+        if not scope or not self.step_gate:
+            return PluginResult(False, "computer_permission_required")
+        if scope[0] == "turn":
+            member = scope[1]
+        elif scope[0] == "task" and self.conn is not None:
+            task_id = scope[1]
+            row = self.conn.execute("SELECT member_id FROM worker_tasks WHERE id=?", (task_id,)).fetchone()
+            if row is None:
+                return PluginResult(False, "computer_permission_required")
+            member = row[0]
+        else:
+            return PluginResult(False, "computer_permission_required")
+        if not self.vm.grants.allowed(member):
+            return PluginResult(False, "computer_permission_required")
+        await self.prepare(member)
+        target = self.vm.target(member)
+        async def call(name, arguments):
+            return await self.step_gate(tool_key(f"computer-{target.key}", name), arguments, task_id=task_id)
+        opened = await call("browser_open", {"url": url})
+        if not opened.ok:
+            return opened
+        try:
+            page = json.loads(opened.text.splitlines()[-1])
+        except (ValueError, IndexError):
+            return opened
+        # Only exact reject/essential-only buttons may be activated automatically.
+        # Ambiguous/custom consent, sign-in and payment remain for the owner.
+        labels = {"reject all", "reject all cookies", "reject non-essential cookies", "only necessary cookies",
+                  "necessary cookies only", "拒絕全部", "拒絕所有 cookie", "僅必要 cookie", "すべて拒否"}
+        def reject_ref(value):
+            if isinstance(value, dict):
+                label = str(value.get("name", value.get("label", ""))).strip().lower()
+                if value.get("role") == "button" and label in labels and isinstance(value.get("ref"), str):
+                    return value["ref"]
+                for child in value.values():
+                    if found := reject_ref(child):
+                        return found
+            elif isinstance(value, list):
+                for child in value:
+                    if found := reject_ref(child):
+                        return found
+            return None
+        if ref := reject_ref(page):
+            tab = {key: page[key] for key in ("target_id", "tab_id") if key in page}
+            if "tab_id" not in tab:
+                active = next((item for item in page.get("tabs", []) if item.get("active")), {})
+                if active.get("tab_id"):
+                    tab["tab_id"] = active["tab_id"]
+            if not {"target_id", "tab_id"} <= tab.keys():
+                return opened
+            clicked = await call("browser_click", {**tab, "ref": ref})
+            if not clicked.ok:
+                return clicked
+            return await call("get_browser_state", {**tab, "include_screenshot": False})
+        return opened
 
     def __getattr__(self, name):
         return getattr(self.delegate, name)
@@ -154,7 +235,7 @@ class VmTools:
             self._catalog(target, offline_catalog())
 
     def _catalog(self, target, definitions):
-        definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER, fill_login=FILL_LOGIN, browser_open=BROWSER_OPEN)
+        definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER, fill_login=FILL_LOGIN, browser_open=BROWSER_OPEN, run_steps=RUN_STEPS)
         if target.key != "shared":
             from .datasets import DEFINITION
             definitions["dataset"] = DEFINITION
@@ -395,6 +476,8 @@ class VmTools:
         if key not in self.tools:
             return await self.delegate.call(key, arguments, approver=approver, task_id=task_id, pool=pool)
         tool, target = self.tools[key], self.routes[key]
+        if tool.name == "run_steps":
+            return await self._run_steps(key, arguments, approver=approver, task_id=task_id, pool=pool)
         if tool.name == "dataset":
             from .datasets import run_dataset
             async def execute(name, args):
@@ -596,6 +679,32 @@ class VmTools:
             self._audit(key, "blocked" if result.kind in NOTICES else "ok" if result.ok else result.kind or "error", approver, task_id)
 
     # --- the driver connection -------------------------------------------------------------------
+
+    async def _run_steps(self, key, arguments, *, approver, task_id, pool):
+        target = self.routes[key]
+        if target.key in self.vm.held:
+            return PluginResult(False, "owner_holds_control")
+        if approver == "none" or self.step_gate is None:
+            return PluginResult(False, "blocked")
+        if not Draft202012Validator(RUN_STEPS["parameters"]).is_valid(arguments):
+            return PluginResult(False, "bad_arguments")
+        if arguments['observation']['name'] == 'verify_state' and not arguments['observation']['arguments'].get('predicates'):
+            return PluginResult(False, "bad_arguments", "verify_state needs a nonempty expectation before any batch action.")
+        completed = 0
+        # Subcalls retain the ordinary action lock, audit, lease and private-field redaction.
+        # Do not hold that lock across recursive gate calls or replay uncertain actions.
+        for index, step in enumerate([*arguments["steps"], arguments["observation"]], 1):
+            child = tool_key(f"computer-{target.key}", step["name"])
+            if child not in self.catalogs.get(target.key, []):
+                result = PluginResult(False, "tool_changed")
+            else:
+                result = await self.step_gate(child, step["arguments"], task_id=task_id, pool=pool)
+            if not result.ok or result.kind in NOTICES:
+                return PluginResult(False, result.kind or "step_failed", json.dumps({
+                    "failed_step": index, "completed_steps": completed, "observation_failed": index > len(arguments["steps"]),
+                    "error": result.kind or "step_failed"}))
+            completed += 1
+        return PluginResult(True, text=result.text, blocks=result.blocks, truncated=result.truncated)
 
     async def _browser_open(self, target, member, client, session, arguments):
         async def call(name, args):

@@ -1,5 +1,79 @@
 # Member computer (Phases A and B)
 
+## Smooth computer work and private inline sign-in (2026-11-05)
+
+The details screen has a separate Enlarge icon. It carries the existing iframe
+into the window area beside the sidebar, retains no member-specific expansion,
+preserves the guest aspect ratio through noVNC scaleViewport and never acquires
+input. Its thin bar reuses the current public action words, Stop and collapse;
+Esc collapses with the connection intact. Explicit takeover/teaching/files keep
+their earlier behavior. The private request_takeover card now acquires input
+inside its own iframe instead of opening full-window takeover. Its Done action
+returns the current nonce once; Stop/cancel/disconnect never count as Done.
+Owner input travels over RFB only. Held-control screenshots are not forwarded
+to the parent thumbnail cache. Existing private work scope and post-handback
+fresh-read requirements remain authoritative.
+
+run_steps is a Raphael composite, not a forwarded driver batch. It accepts up
+to ten curated driver actions and one targeted observation. Each subcall passes
+ToolGate.call_plugin and the existing current tool/schema, grant, action-lock,
+owner hold and audit boundary. Stop on the first error/lease notice; identify the
+one-based failed step and count completed steps without returning intermediate
+screen contents. Never reuse the outer approval for another action. Shell,
+takeover, secrets and nested composites are excluded. Shared API/worker and CLI
+completion guards require a post-action window/page read or nonempty verify_state
+predicates before completion; one correction is allowed, then completion fails.
+
+Thin/empty/consent-wall web_read results escalate through the current member's
+granted browser. Exact Reject all / necessary-only semantic buttons may be
+clicked; ambiguous controls never imply consent. Every browser subcall retains
+the normal gate and owner-hold checks. No fallback reader/provider is purchased.
+
+Settings checks remote SSH key access, noninteractive Docker PATH, daemon and
+installed image architecture through read-only SSH commands. Fixed localized
+repair words replace raw diagnostics. Docker operations share an owned SSH
+session forwarding the remote Unix socket to loopback; the viewer uses SOCKS on
+that same session. Forwarding failure falls back to ssh:// with bounded backoff.
+No Windows ControlMaster or remote install/start is required.
+
+Idle/eviction and app shutdown only stop compatible owned computers; workspace
+mounts and browser profiles survive. A recognized v3-to-v4 rebuild announces its
+workspace/sign-in preservation before removal, never removes a volume and refuses
+foreign or weakened containers. Files/installs outside workspace are explicitly
+ephemeral in tool/persona text. Member deletion retains computer data by default;
+its unchecked option names the host, pins that host for the operation and excludes
+shared/team storage. No deletion/host operation was executed in this brief.
+
+Selected future look matrix (both themes, 1120,720,1920x1080): desktop-panel,
+desktop-watch, desktop-watch-collapse, desktop-watch-boot, desktop-watch-stopped,
+desktop-watch-owner, desktop-takeover, desktop-takeover-owner,
+desktop-takeover-done, desktop-owner, desktop-host-remote, desktop-host-invalid,
+desktop-host-health, delete-member-computer. Compare Enlarge/collapse/Stop with
+the existing icon buttons and card Done/Skip with computer-card controls at the
+same theme/size. The owner-typing scene uses synthetic RFB input only.
+
+```powershell
+npm run look -- desktop-panel desktop-watch desktop-watch-collapse desktop-watch-boot desktop-watch-stopped desktop-watch-owner desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-owner desktop-host-remote desktop-host-invalid desktop-host-health delete-member-computer --theme both --width 1120,720,1920x1080
+```
+
+Native journeys: member-computer; computer-speed (explicit opt-in, never --all or
+verify). computer-speed creates its own random-root/name container, uses an
+already running Docker engine and prepared image, serves its own form inside
+that computer, measures five warm first observations, browser_open and five
+browser_type actions via run_steps, and removes only that exact owned container.
+It reports median/worst; every first observation must be <8s and page open <6s.
+No unrequested batch budget is invented. Missing refs/results fail measurement.
+
+```powershell
+npm.cmd run native -- computer-speed
+```
+
+Offline evidence: test_smooth_computer.py, test_web_read_hint.py, existing VM,
+takeover and persona tests, desktop-viewer.test.ts and member-dialogs.test.ts.
+This brief prohibits look, native, judge, live, network/provider and real Docker
+acceptance. These remain SKIP; fake connection counts establish sharing, not real
+SSH/macOS/driver compatibility or latency. Check the task report for exact exits.
+
 ## Responsive computer tools (2026-11-04)
 
 R-COMP-PERF-01 through R-COMP-PERF-06 supersede the earlier full-screen bootstrap,

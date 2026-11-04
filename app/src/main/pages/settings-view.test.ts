@@ -816,6 +816,18 @@ describe("電腦操作", () => {
     expect(remote).toContain("帳號需各自登入");expect(remote).toContain("團隊資料夾");
   });
 
+  test('host health separates states and offers an exact copyable repair where it must be run', () => {
+    const html = tab('agent', {brain:{...brain,computer_ssh_alias:'studio-mini'}, computerHostHealth:{host:'studio-mini',ok:false,checks:[{kind:'docker_path',ok:false}]}});
+    expect(html).toContain('data-act="computer-host-check"');
+    expect(html).toContain('data-computer-host-health');
+    expect(html).not.toContain('非互動 SSH PATH');
+    expect(html).toContain('遠端登入時找不到 Docker');
+    expect(html).toContain('那台 Mac 的終端機');
+    expect(html).toContain('data-act="copy-code"');
+    expect(html).toContain('~/.zshenv');
+    expect(html).toContain('/Applications/Docker.app/Contents/Resources/bin');
+  });
+
   test("the search finds the section by its name in any language", () => {
     expect(searchSettings("電腦操作").map((hit) => `${hit.pane}:${hit.text}`)).toEqual(["agent:電腦操作"]);
     expect(searchSettings("computer use").map((hit) => hit.pane)).toEqual(["agent"]);

@@ -1,5 +1,27 @@
 # Raphael architecture and checked boundaries
 
+## Smooth member computers (2026-11-05)
+
+VmTools owns run_steps in the existing curated catalog; each subcall re-enters
+the same ToolGate.call_plugin, lease, grant, action and audit boundary. The shared
+worker completion guard is used by API/worker and the existing CLI loop. Tools'
+web_read receives the same VmTools rendered-read callback, with current member
+scope; no new worker, model loop, service registry or provider fallback is added.
+
+LocalVm owns one RemoteSession per SSH alias. Docker stdio and normal calls use
+its forwarded Unix socket; noVNC reuses its SOCKS forward through an owned local
+relay. Failed forwarding uses the existing ssh:// transport with reconnect backoff.
+The existing main-window computer.viewer_status RPC accepts check_host for the
+read-only diagnostic; no new RPC or Rust allowlist entry is needed (A-01/03/04/08).
+
+DesktopViewer still owns one stream and server-side input lease. Enlarge is an
+independent view-only presentation. A private owner request keeps its interactive
+screen in the conversation card. Only explicit nonce handback resumes the same
+task; owner typing never enters chat/tool results, logs or thumbnail storage.
+Member deletion's optional computer cleanup pins host identity and excludes team
+storage. Lifecycle/image changes preserve workspace mounts; native speed work
+uses a random isolated root and exact target cleanup, never a recovery scan.
+
 ## Meeting speech and private work lanes (2026-11-04)
 
 Migration 60 preserves existing room rows and the compatibility active_turn column.

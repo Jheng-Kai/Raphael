@@ -16,6 +16,29 @@ beforeEach(() => {
   document.body.innerHTML = "";
 });
 
+test('computer data removal names the host and remains unchecked until the owner chooses it', async () => {
+  const remove = vi.fn();
+  const answer = confirmDelete('Sample', {computerHost:'studio-mini', removeComputer:remove});
+  const checkbox = document.querySelector<HTMLButtonElement>('[data-remove-computer]')!;
+  expect(checkbox.matches('.tg[role="switch"][aria-checked="false"]')).toBe(true);
+  expect(checkbox.closest('.row')?.textContent).toContain('studio-mini');
+  expect(checkbox.getAttribute('aria-label')).toContain('Sample');
+  document.querySelector<HTMLButtonElement>('[data-dlg="delete"]')!.click();
+  expect(await answer).toBe(true); expect(remove).toHaveBeenCalledWith(false);
+});
+
+test('computer removal is chosen through the shared switch without closing the dialog', async () => {
+  const remove = vi.fn();
+  const answer = confirmDelete('小晴', {computerHost:'mac-mini', removeComputer:remove});
+  const control = document.querySelector<HTMLButtonElement>('[data-remove-computer]')!;
+  control.click();
+  expect(control.getAttribute('aria-checked')).toBe('true');
+  expect(document.querySelector('.mb-dialog')?.textContent).toContain('在 mac-mini 上');
+  expect(remove).not.toHaveBeenCalled();
+  document.querySelector<HTMLButtonElement>('[data-dlg="delete"]')!.click();
+  expect(await answer).toBe(true); expect(remove).toHaveBeenCalledWith(true);
+});
+
 test("a language change dismisses a translated confirmation before it can show stale actions", async () => {
   const result = confirmDelete("Project");
   expect(document.querySelector(".mb-confirm")).not.toBeNull();

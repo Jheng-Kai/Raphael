@@ -289,6 +289,9 @@ async def _run_task(
     )
     messages = conversation
     guardrails = guardrails or ToolGuardrails()
+    from .computer_verification import ComputerVerification
+    computer_check = ComputerVerification()
+    computer_check.restore(messages)
     corrective = any(message.get("role") == "user" and message.get("content") == CORRECTIVE_NOTE
                      for message in messages)
     # Counted in the conversation, so that a pause for the owner's yes does not start the count again.
@@ -356,6 +359,11 @@ async def _run_task(
                     messages.append({"role": "user", "content": CONTINUE_TEXT})
                     continue
                 said = "".join([*pieces, turn.content])
+                if check := computer_check.finishing():
+                    if check == "stop":
+                        raise Stop("computer_verification_required")
+                    messages.append({"role": "user", "content": check})
+                    continue
                 if tools and nudged < MAX_NUDGES and stalled(said):
                     nudged += 1
                     messages.append({"role": "user", "content": CONTINUE_NOW})
@@ -393,6 +401,7 @@ async def _run_task(
                             messages=list(messages), waiting_call=call.id,
                         )  # fmt: skip
                     content = result_text(call.name, outcome, keeper.window)
+                    computer_check.after(call.name, call.arguments, outcome.ok, outcome.kind)
                     images.extend(image_parts(outcome))
                     if not outcome.ok:
                         last_failed = True

@@ -82,14 +82,15 @@ async def test_first_api_turn_offers_controls_and_refreshes_after_screen(compute
     rig, vm, hub, cards = computer_owner
     vm.grants.set(0, True)
     client.chats = [chat("Look first.", ("computer__get_desktop_state", {})),
-                    chat("Click.", ("computer__click", {})), finished("Done.")]
+                    chat("Click.", ("computer__click", {})),
+                    chat("Check the result.", ("computer__get_window_state", {"pid": 7, "window_id": 9})), finished("Done.")]
     reply = await typed(rig, "Use the computer")
     assert reply["status"] == "done" and reply["text"] == "Done."
     first = {tool["function"]["name"] for tool in client.chat_calls[0]["tools"]}
     second = {tool["function"]["name"] for tool in client.chat_calls[1]["tools"]}
     assert {"computer__click", "computer__browser_open", "computer__browser_type"} <= first
     assert "computer__click" in second
-    assert vm.start.await_count == 2
+    assert vm.start.await_count == 3
     before = vm.start.await_count
     client.decisions.append(decision("answer"))
     client.chats = [finished("Hello again.")]
@@ -154,13 +155,15 @@ async def test_granted_cli_is_lazy_and_reloads_after_first_screen(computer_owner
                 assert "computer__click" in names
                 result = await rpc("tools/call", {"name": "computer__click", "arguments": {}})
                 assert not result["isError"]
+                result = await rpc("tools/call", {"name": "computer__get_window_state", "arguments": {"pid": 7, "window_id": 9}})
+                assert not result["isError"]
             yield Event("final", "Finished.")
 
     monkeypatch.setattr("raphael_core.agent.cli.loop.Driver.run", run)
     assert (await typed(rig, "Help me"))["text"] == "Finished."
     if use_computer:
         assert sessions == [None, "screen-thread"]
-        assert vm.start.await_count == 2
+        assert vm.start.await_count == 3
     else:
         assert sessions == [None]
         vm.start.assert_not_awaited()
