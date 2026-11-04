@@ -123,6 +123,7 @@ pub fn run() {
     let builder = startup_plugins(
         tauri::Builder::default(),
         |app, args| {
+            log::info!("another launch handed over");
             if first_run::opens_at_start(&args) {
                 log::info!("manual launch handed over: showing the main window");
                 show_main_window(app);
