@@ -135,6 +135,8 @@ class Webhooks:
         now = self.service._now_ms()
         if now - self.last_fire.get(identifier, -RATE_MS) < RATE_MS:
             return 429
+        if not self.service.admit_routine(routine):
+            return 429
         self.last_fire[identifier] = now
         # A skipped slot is consumed; other routines still use the member's queue.
         if self.service.routine_busy(routine.id):

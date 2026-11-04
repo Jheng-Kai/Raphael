@@ -596,6 +596,7 @@ export interface BrainSettings {
   chief_pinned?: boolean;
   owner_name?: string;
   owner_about?: string;
+  owner_output_folder?: string;
   owner_photo?: string;
   action_mode?: "ask" | "direct" | "plan" | "bypass";
   local_commands_mode?: "ask" | "always" | "never";

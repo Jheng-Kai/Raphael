@@ -1,5 +1,12 @@
 # Raphael feature map
 
+## Commands, routine limits and owner output (2026-11-05)
+
+See [Daily work](daily-work.md) for R-NAV-01, R-ROUTINE-01/02 and R-OUTPUT-01,
+the selected deferred scenes, existing native journeys and remaining native/live
+acceptance. Follow-up 1 authorizes the selected look matrix and image review;
+native/live and network-backed judge remain deferred.
+
 ## Shared installed skills (2026-11-04)
 
 See [Members](members.md#shared-installed-skills-2026-11-04) for R-SKILL-01 through

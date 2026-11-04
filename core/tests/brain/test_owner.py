@@ -29,3 +29,27 @@ def test_owner_profile_is_saved_and_prompted_as_data(conn):
 def test_profile_rejects_invalid_data(conn, key, value):
     with pytest.raises(ValueError):
         SettingsStore(conn).set(key, value)
+
+
+def test_output_folder_is_shared_escaped_data_and_changes_never_move_files(conn, tmp_path):
+    settings = SettingsStore(conn)
+    first = tmp_path / "first"
+    first.mkdir()
+    original = first / "report.txt"
+    original.write_text("keep", encoding="utf-8")
+    second = tmp_path / "second"
+    settings.set("owner_output_folder", str(first))
+    assert str(first).replace("\\", "\\\\") in owner_context(settings)
+    settings.set("owner_output_folder", str(second))
+    prompt = owner_context(SettingsStore(conn))
+    assert "by default" in prompt and "grants no additional permission" in prompt
+    assert original.read_text(encoding="utf-8") == "keep"
+    assert not second.exists()
+    settings.set("owner_output_folder", "")
+    assert owner_context(settings) == ""
+
+
+@pytest.mark.parametrize("path", ["relative/path", "C:relative", "/bad\npath", "x" * 1001])
+def test_output_folder_requires_an_absolute_path(conn, path):
+    with pytest.raises(ValueError, match="absolute path"):
+        SettingsStore(conn).set("owner_output_folder", path)

@@ -216,7 +216,7 @@ export function routineText(routine: RoutineTrigger): string {
 }
 
 export function routineStatus(routine: Routine): string {
-  if (!routine.when || routine.when.webhook) return "";
+  if (!routine.when || routine.when.webhook) return routine.last_error ?? "";
   const date = (value: number | null | undefined): string => value ? `${formatDate(value)} ${formatClock(value)}` : t("auto.notYet");
   return t("auto.triggerStatus", { p0: date(routine.last_checked), p1: date(routine.last_run) }) + (routine.last_error ? `\n${routine.last_error}` : "");
 }

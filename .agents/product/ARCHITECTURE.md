@@ -1,5 +1,22 @@
 # Raphael architecture and checked boundaries
 
+## Commands, routine admission and owner delivery (2026-11-05)
+
+shortcuts.ts resolves guarded keyboard intent and renders the existing ui.ts
+popover; members-shell, sidebar and the conversation page keep routing ownership.
+No native global hotkey or new RPC is added (A-06). MembersService owns admission
+before the existing _run for schedules, event receipts and webhooks. Recent
+history stays in routine_runs; its projection is limited to 20, not pruned.
+The single SettingsStore registry adds internal owner activity/admission state
+and owner_output_folder (A-08). Bounded rolling-hour receipts retain member and
+time only, surviving routine deletion. Owner activity is accepted only through
+the existing owner-window viewing boundary, never from model tools.
+The existing shared brain.owner.owner_context carries the escaped output path
+and delivery instruction to foreground API/CLI and background prompts. It does
+not add a writer, model loop, worker, grant, migration or filesystem side effect
+(A-01/03/04). Host and member-computer destinations stay distinct. Actual native
+keyboard and model delivery acceptance are deferred by the unit brief.
+
 ## Meeting speech and private work lanes (2026-11-04)
 
 Migration 60 preserves existing room rows and the compatibility active_turn column.

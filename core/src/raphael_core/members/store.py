@@ -60,7 +60,7 @@ MAX_TOOLS = 200
 TOOL_ID_MAX = 200
 MAX_MEMBERS = 100
 MAX_GROUPS = 40
-MAX_ROUTINES = 20  # of one member
+MAX_ROUTINES = 50  # of one member
 SOURCE_KINDS = ("github", "notion")
 
 
@@ -773,6 +773,8 @@ class MemberStore:
                 raise MemberError("enabled", "enabled must be true or false")
             on = enabled
             changes["enabled"] = int(on)
+            if on:
+                changes["last_error"] = ""
         if not on:
             changes["next_run_ms"] = None
         elif schedule is not None or when is not None or not routine.enabled or routine.next_run_ms is None:

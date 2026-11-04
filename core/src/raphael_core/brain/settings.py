@@ -51,6 +51,9 @@ DEFAULTS: dict[str, Any] = {
     "raphael_draft_first": True,
     "owner_name": "",
     "owner_about": "",
+    "owner_output_folder": "",
+    "routine_owner_seen_ms": 0,
+    "routine_run_window": [],
     "owner_photo": "",
     "monthly_limit_usd": 10.0,
     # Chosen from the cleanup eval of 2026-10-18 for its cost and its speed (~1.25 s on average).
@@ -350,6 +353,14 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
         raise ValueError("Computer host must be a simple SSH config alias")
     if key == "computer_vm_idle_minutes" and not 5 <= value <= 1440:
         raise ValueError("Computer idle minutes must be between 5 and 1440")
+    if key == "owner_output_folder":
+        from pathlib import PureWindowsPath, PurePosixPath
+        value = value.strip()
+        if value and (len(value) > 1000 or any(ord(char) < 32 for char in value)
+                      or not (PureWindowsPath(value).is_absolute() or PurePosixPath(value).is_absolute())):
+            raise ValueError("Output folder must be an absolute path without control characters")
+    if key == "routine_owner_seen_ms" and value < 0:
+        raise ValueError("Owner activity time cannot be negative")
     if key in ("owner_name", "owner_about"):
         value = value.strip()
         if len(value) > (100 if key == "owner_name" else 4000) or "\x00" in value:
