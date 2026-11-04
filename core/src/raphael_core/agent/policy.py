@@ -119,12 +119,14 @@ class ToolRegistry:
         ask_first: Callable[[str, Tier], bool] | None = None,
         plugin_action_tier: Callable[[str, Mapping[str, Any]], Tier | None] | None = None,
         full_permission: Callable[[], bool] | None = None,
+        firm_confirmation: Callable[[str, Mapping[str, Any]], bool] | None = None,
     ) -> None:
         self._tiers: dict[str, Tier] = {}
         self._plugin_action_tier = plugin_action_tier
         self._plugin_tier = plugin_tier
         self._ask_first = ask_first
         self._full_permission = full_permission
+        self._firm_confirmation = firm_confirmation
         for name, tier in (tiers or {}).items():
             self.register(name, tier)
 
@@ -138,6 +140,8 @@ class ToolRegistry:
         self._tiers[name] = Tier(tier)
 
     def tier(self, name: str, arguments: Mapping[str, Any] | None = None) -> Tier:
+        if name in self._tiers and self._firm_confirmation and self._firm_confirmation(name, arguments or {}):
+            return Tier.T3
         if name.startswith(PLUGIN_PREFIX):
             tier = (self._plugin_action_tier(name, arguments) if arguments is not None and self._plugin_action_tier is not None
                     else self._plugin_tier(name) if self._plugin_tier is not None else None)
@@ -151,6 +155,8 @@ class ToolRegistry:
 
     def needs_confirmation(self, name: str, arguments: Mapping[str, Any] | None = None) -> bool:
         tier = self.tier(name, arguments)
+        if self._firm_confirmation and self._firm_confirmation(name, arguments or {}):
+            return True
         if self._full_permission and self._full_permission():
             return False
         return tier >= Tier.T2 or bool(self._ask_first and self._ask_first(name, tier))

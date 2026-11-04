@@ -18,8 +18,9 @@ tool an alias is stays here in the core. The snapshot holds:
   reads one of them by its number: never a path;
 - and, when there is a memory, `history_search`, which only reads: a task may look up what was said
   before; what it writes after reading what services return goes in marked (`memory.store`).
-- the team tools (`agent.team`): `ask_member`, when there is someone to ask (for Raphael, a member;
-  for a member, Raphael), and `create_member`.
+- shared team work tools (`agent.team`), including `ask_member` when there is someone to ask.
+  Owner management, including `create_member`, is reserved for the primary contact's interactive
+  owner chat. A background task never receives it, including a task owned by the primary.
 
 A task of a member of the owner's team is offered what Raphael's is (`Speaker.uses`,
 `Speaker.uses_plugin` say yes to everything): the same web tools and the same connections.
@@ -128,9 +129,9 @@ _DEFINITIONS: dict[str, dict[str, Any]] = {
     },
     "find_tools": {
         "description": (
-            "Look for more tools of the connected services by what you want to do "
-            "(for example: search pages, update a page). The tools it finds can be called from "
-            "then on."
+            "Find available tools by task or name (for example: search pages, delete a folder). "
+            "Owner management is available only to the primary contact in the owner's chat. "
+            "Found tools can then be called."
         ),
         "parameters": {
             "type": "object",
@@ -177,7 +178,8 @@ FIND_MAX = 6
 class Snapshot:
     """The tools of a task. `refs` and `definitions` are what the worker may call now. `pool` is
     every tool of the plugins that could be offered, by alias: when it holds more than the task was
-    shown, the rest can be found (`find`) and shown from then on."""
+    shown, the rest can be found (`find`) and shown from then on. `management` holds the primary's
+    eligible native actions, discovered through the same finder without plugin execution."""
 
     refs: dict[str, ToolRef]
     definitions: list[dict[str, Any]]
@@ -185,6 +187,20 @@ class Snapshot:
     max_tier: Tier = Tier.T3
     _aliases: dict[str, str] = field(default_factory=dict, repr=False)
     sealed: bool = False
+    management: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
+
+    def show_management(self, names):
+        """Discover native tools without treating them as external plugin calls."""
+        added = []
+        for name in names:
+            if name in self.refs or name not in self.management:
+                continue
+            native = harness_tool(name)
+            self.refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, native.tier)
+            definition = {"type": "function", "function": {"name": name, **self.management[name]}}
+            self.definitions.append(definition)
+            added.append(definition)
+        return added
 
     def refresh_plugins(self, plugins, member_id):
         """Replace stale grants before offering tools again; a snapshot grants no lasting access."""
@@ -258,24 +274,31 @@ class Snapshot:
         return added
 
     def find(self, query: str) -> tuple[list[dict[str, Any]], list[str]]:
-        """Show the task the tools of the pool that fit `query` best (not the ones it has): returns
+        """Show hidden native management and pool tools that fit `query` best: returns
         their definitions and a line about each for the worker to read. The calendar is the task's
         already, but a model that looks for one by the owner's words is told it is there, not sent to
         connect another."""
         own = scored([harness_tool(name) for name in CALENDAR_TOOLS if name in self.refs], query)
         lines = [f"{tool.name} (yours already): {first_sentence(tool.description, 90)}" for score, tool in own if score > 0]
+        from ..management import tools_for_request
+        matching = tools_for_request(query)
+        candidates = [name for name in self.management if name not in self.refs and (not matching or name in matching)]
+        ranked = scored([harness_tool(name) for name in candidates], query)
+        chosen_native = [tool.name for score, tool in ranked if score > 0 or matching][:FIND_MAX]
+        added_native = self.show_management(chosen_native)
+        lines += [f"{name}: {first_sentence(self.management[name]['description'])}" for name in chosen_native]
         hidden = self.hidden()
         if self.pool is None or not hidden:
-            return [], lines
+            return added_native, lines
         rows = scored([self.pool.by_alias[a] for a in hidden], query)
         alias_of = {id(tool): alias for alias, tool in self.pool.by_alias.items()}
-        chosen = [alias_of[id(tool)] for score, tool in rows[:FIND_MAX] if score > 0]
+        chosen = [alias_of[id(tool)] for score, tool in rows[:FIND_MAX - len(added_native)] if score > 0]
         added = self.show(chosen)
         lines += [
             f"{alias}: {first_sentence(self.pool.by_alias[alias].description)}"
             for alias in chosen
         ]
-        return added, lines
+        return added_native + added, lines
 
 
 def take_snapshot(
@@ -290,6 +313,8 @@ def take_snapshot(
     max_tier: Tier = SNAPSHOT_MAX_TIER,
     interactive: bool = False,
     turned_off: Collection[str] = (),
+    owner_management: bool = True,
+    management_tools: Collection[str] | None = None,
 ) -> Snapshot:
     """The tools a task starting now may use: with `memory`, the memory's tools that read too (the
     conversation search only with `history`: a room's turn has no conversation of its own), and
@@ -304,6 +329,8 @@ def take_snapshot(
     refs: dict[str, ToolRef] = {}
     definitions: list[dict[str, Any]] = []
     pool: Offer | None = None
+    from ..management import tools_for_request
+    wanted_management = tools_for_request(question) if management_tools is None else management_tools
     builtin = (
         *(name for name in WEB_TOOLS if speaker.uses(name) and name not in turned_off),
         *(name for name in MEMORY_READ_TOOLS if memory and (history or name != "history_search")),
@@ -315,19 +342,29 @@ def take_snapshot(
     refs["generate_audio"] = ToolRef(BUILTIN, "generate_audio", BUILTIN_SERVER, "generate_audio", Tier.T1)
     definitions.append({"type": "function", "function": {"name": "generate_audio", **_DEFINITIONS["generate_audio"]}})
     for name in team:
+        if name == "create_member" and (not interactive or not owner_management or not speaker.is_chief or speaker.depth):
+            continue
+        if name == "create_member":
+            if "member_create" not in wanted_management:
+                continue
         if name in TEAM_TOOLS:
             refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, TEAM_TIER)
             definitions.append(worker_definition(name))
     snapshot = Snapshot(refs, definitions, max_tier=max_tier)
     # What every path has, a task that runs by itself too: the owner's daily routine adds what it finds to today.
-    everywhere = ("self_check", "raphael_help", *CALENDAR_TOOLS, *sorted(CONNECTION_TOOLS),
+    everywhere = ("self_check", "raphael_help", *CALENDAR_TOOLS, "connections_list",
                   *((*sorted(BACKGROUND_TOOLS), *sorted(ROUTINE_TOOLS)) if not interactive else ()))
     for name in everywhere:
         refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, harness_tool(name).tier)
         definitions.append({"type": "function", "function": {"name": name, **HARNESS_DEFINITIONS[name]}})
     if interactive:
+        from ..management import MANAGEMENT_TOOLS
         for name, item in definitions_for(speaker):
             if name in everywhere:
+                continue
+            if name in MANAGEMENT_TOOLS:
+                if owner_management:
+                    snapshot.management[name] = item
                 continue
             # This tool drives the owner's own desktop. Beside a computer of the speaker's own, two tools
             # called the computer would leave the choice of machine to the model.
@@ -336,6 +373,7 @@ def take_snapshot(
             native = harness_tool(name)
             refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, native.tier)
             definitions.append({"type": "function", "function": {"name": name, **item}})
+        snapshot.show_management(wanted_management)
     elif memory and history:
         for name, item in MEMORY_DEFINITIONS.items():
             native = harness_tool(name)
@@ -369,11 +407,11 @@ def take_snapshot(
         everything = list(selectable.by_alias)
         selected = everything if len(everything) <= MAX_OFFERED else widen(selectable, shortlist(selectable, question, PICK_MAX))
         snapshot.show([*pool.pinned_aliases, *selected])
-        if snapshot.hidden():
-            refs["find_tools"] = ToolRef(FIND, "find_tools", BUILTIN_SERVER, "find_tools", Tier.T0)
-            definitions.append(
-                {"type": "function", "function": {"name": "find_tools", **_DEFINITIONS["find_tools"]}}
-            )
+    if snapshot.hidden() or snapshot.management:
+        refs["find_tools"] = ToolRef(FIND, "find_tools", BUILTIN_SERVER, "find_tools", Tier.T0)
+        definitions.append(
+            {"type": "function", "function": {"name": "find_tools", **_DEFINITIONS["find_tools"]}}
+        )
     return snapshot
 
 

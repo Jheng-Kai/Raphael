@@ -39,6 +39,23 @@ not add a writer, model loop, worker, grant, migration or filesystem side effect
 (A-01/03/04). Host and member-computer destinations stay distinct. Actual native
 keyboard and model delivery acceptance are deferred by the unit brief.
 
+## Owner management registry (2026-11-05)
+
+core/src/raphael_core/management.py holds owner UI actions, exact RPC/service names, schemas,
+destructiveness and tiers, plus owner-only reasons and explicit read/interaction
+classification. agent/team_admin.py generates contracts from those rows and keeps
+team_overview as shared work context. MembersService executes the same Router
+handlers as the UI, with the existing member profile adapter for named folders.
+The live store primary_id is checked at execution, not inferred from identity 0.
+Interactive private API/CLI offers include management only for that primary;
+noninteractive snapshots exclude it. Own routines, memory, skill tools,
+connect_app/request_secret cards, room_post, ask_member and handoff remain shared.
+Firm destructive confirmation is evaluated by ToolGate/ToolRegistry even under
+bypass and cannot be waived by Always. MembersService also requires the exact
+consumed Approval and refuses replay. Existing T3 hold-to-confirm cards carry the
+full scope. A trusted origin-turn context prevents a requested history deletion
+from cancelling its own executing tool; completion writes a fresh receipt.
+
 ## Meeting speech and private work lanes (2026-11-04)
 
 Migration 60 preserves existing room rows and the compatibility active_turn column.
@@ -282,7 +299,7 @@ mechanical boundaries below.
 | ID | Invariant | Check | Evidence |
 | --- | --- | --- | --- |
 | A-01 | Member turns use AgentService rather than a second model loop in members or rooms. | pytest | core/tests/architecture/test_boundaries.py::test_members_and_rooms_do_not_create_brain_loops |
-| A-02 | Team administration definitions are offered to every speaker alike, Raphael and each member; the chief capability (the unique primary contact, Raphael by default) reserves no tool. | pytest | core/tests/architecture/test_boundaries.py::test_every_speaker_is_offered_the_same_team_administration |
+| A-02 | Work tools are offered to every speaker alike, Raphael and each member; app management tools are offered only to the current primary contact, found through `find_tools` or the request intent, and checked again where they run. | pytest | core/tests/architecture/test_boundaries.py::test_only_primary_is_offered_management_and_everyone_keeps_work_tools |
 | A-03 | API and CLI conversation paths consume the shared production snapshot; live evaluation uses those loops and definitions. | pytest | core/tests/architecture/test_boundaries.py::test_shared_loop_and_definition_sources |
 | A-04 | CLI conversations use one authenticated RaphaelMcp implementation; no alternate MCP server in agent CLI or evaluation. | pytest | core/tests/architecture/test_boundaries.py::test_one_mcp_server |
 | A-05 | Secrets use the OS credential store; only hosted evaluator CI can read its ephemeral Actions key, and failures never report credential values. | pytest | core/tests/architecture/test_boundaries.py::test_evaluator_credentials_are_ci_scoped; core/tests/brain/test_openrouter.py::test_a_key_provider_failure_is_logged_by_exception_type_only; core/tests/evaluate/test_guardian.py::test_provider_error_is_classified_without_secret_text |

@@ -20,6 +20,17 @@
 | R-ROUTINE-02 | 2026-11-05 | After 30 days without owner app interaction, pause all enabled routines with a readable reason before processing return activity. Resume only after explicit enable. Background polling never renews owner presence. | pytest, deferred native | hard | core/tests/members/test_routine_guards.py::test_absence_pauses_before_returning_owner_refresh_and_requires_explicit_resume; core/tests/members/test_routine_guards.py::test_activity_report_does_not_change_viewed_member_or_mark_private_work_read |
 | R-OUTPUT-01 | 2026-11-05 | General stores an optional absolute owner output folder, delivered through shared escaped owner context to every speaker. Use it by default within existing permissions; distinguish owner-PC and VM paths and require a successful result before claiming delivery. Preference changes never move existing files. | pytest, vitest, look, deferred native/live | hard | core/tests/brain/test_owner.py::test_output_folder_is_shared_escaped_data_and_changes_never_move_files; core/tests/brain/test_owner.py::test_output_folder_requires_an_absolute_path; app/src/main/pages/settings-view.test.ts::output folder belongs to General and is discoverable by settings search; features/daily-work.md |
 
+## Primary-contact owner management (2026-11-05)
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-AG-MGMT-01 | 2026-11-05 | Only the store's current primary contact receives management tools in the owner's interactive private chat (API and CLI). Execution rechecks primary_id; identity 0 itself grants no authority; rooms, exchanges and workers cannot manage. Work tools retain speaker parity. | pytest | hard | core/tests/members/test_management.py; core/tests/architecture/test_boundaries.py; core/tests/agent/test_speaker_parity.py |
+| R-AG-MGMT-02 | 2026-11-05 | Every destructive management action requires one exact-action owner approval in every permission mode, including bypass. Delete, clear, disconnect, membership removal, primary transfer and retention shortening are firm T3; cards name targets and removal scope. Credentials, sign-in, safety, permission, spending, access approvals, takeover and device settings remain owner-only. Models change only on an explicit owner request. | pytest | hard | core/src/raphael_core/management.py; core/tests/members/test_management.py |
+| R-AG-MGMT-03 | 2026-11-05 | Every UI core RPC is classified by the management registry, explicit owner-only/interaction reason or reviewed read list; settings writes are classified by key. A new unclassified RPC or setting fails the architecture guard. | pytest | hard | core/tests/architecture/test_management_coverage.py |
+
+This refines R-AG-PARITY-01: owner_management is the one management exception;
+coordination duties and quick voice entry remain the existing listed exceptions.
+
 ## Responsive member computer (2026-11-04)
 
 | ID | Date | Rule | Check | Severity | Evidence |
@@ -543,7 +554,7 @@ This owner decision supersedes the sequential room speech and room-scope tool-wo
 
 | ID | Date | Rule | Check | Severity | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| R-AG-PARITY-01 | 2026-11-04 | Raphael, ordinary members and the current primary contact share neutral tool definitions and one capability statement on API, CLI and worker paths. Roles describe work/output, never rank or a hidden tool list. Only the coordination duties and Raphael quick voice entry listed in agent/capabilities.py may differ. Own models, grants and approvals remain authoritative. | pytest | hard | core/tests/agent/test_speaker_parity.py; core/tests/members/test_capability_parity.py; core/tests/background/test_private_self_lane.py |
+| R-AG-PARITY-01 | 2026-11-04 | Raphael, ordinary members and the current primary contact share neutral work-tool definitions and one capability statement on API, CLI and worker paths. Roles describe work/output, never rank or a hidden tool list. Only owner management in the primary contact's interactive private chat, coordination duties and Raphael quick voice entry listed in agent/capabilities.py may differ. Own models, grants and approvals remain authoritative. | pytest | hard | core/tests/agent/test_speaker_parity.py; core/tests/members/test_capability_parity.py; core/tests/background/test_private_self_lane.py |
 | R-AG-PARITY-02 | 2026-11-04 | Any private foreground speaker can hand long work to itself through the existing durable lane, retaining the source conversation, chosen model, stage idempotency and cancellation tree. Workers cannot recursively self-handoff. | pytest | hard | core/tests/background/test_private_self_lane.py |
 | R-AG-PARITY-03 | 2026-11-04 | Raphael retains owner instructions in quick/API/CLI/worker/routine prompts, has the same default-on draft preference as members, and receives member-length background reports with a derived short overlay caption. Identity 0 never enters new-member setup when the primary moves. Snapshots retain real roles beside coordination duty. | pytest, vitest, deferred look | hard | core/tests/agent/test_answers.py; core/tests/members/test_service.py; app/src/main/member-details.test.ts; features/speaker-parity.md |
 

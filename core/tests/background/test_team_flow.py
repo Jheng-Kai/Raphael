@@ -1,5 +1,5 @@
 """A team does a job from start to end, on the production app with a scripted model and a fake Docker:
-the chief creates two members and hands each a task, both work at the same time, one waits for the
+the owner creates two members and the chief hands each a task, both work at the same time, one waits for the
 other to finish with the computer, both finish with evidence, and the chief gets the results and answers.
 
 The real app runs: the chief's tools, the member service, the background service with its worker (in
@@ -10,7 +10,6 @@ import asyncio
 import base64
 import hashlib
 import json
-import re
 import time
 
 from raphael_core.agent.history import AgentHistory
@@ -83,23 +82,19 @@ class Crew:
     async def chat_tools(self, **kwargs):
         messages, system = kwargs["messages"], kwargs["messages"][0]["content"]
         me = json.loads(system.split("<team_roster>")[-1].split("</team_roster>")[0])["self_id"]
-        results = " ".join(str(message.get("content")) for message in messages if message.get("role") == "tool")
         told = " ".join(str(message.get("content")) for message in messages if message.get("role") == "user")
         if me == 0 and "handoff_results" in told:
             self.seen["chief"] = messages[-1]["content"]
             reply = json.dumps({"prefix": "告", "text": "Builder and Tester are both done.", "detail": ""})
             return self.turn(reply, [], kwargs)
-        if me == 0 and '"created"' in results:
-            self.ids = {name: int(number) for name, number in re.findall(r'"created": "(\w+)", "id": (\d+)', results)}
+        if me == 0:
+            offered = {tool["function"]["name"] for tool in kwargs["tools"]}
+            assert not {"create_member", "member_create", "member_delete"} & offered
             work = [("Builder", "build", "Build office.html in the workspace", "office.html exists in the workspace"),
                     ("Tester", "test", "Look at the screen and test the page", "Report what the test run showed")]
             calls = [self.call("handoff", member_id=self.ids[name], stage_id=stage, request=request, done_when=done, requires_artifact=name == "Builder")
                      for name, stage, request, done in work]
             return self.turn("I hand the work over.", calls, kwargs)
-        if me == 0:
-            calls = [self.call("create_member", name=name, role=name, instructions=f"You are the {name}.")
-                     for name in ("Builder", "Tester")]
-            return self.turn("I create the team.", calls, kwargs)
         name = next(name for name, number in self.ids.items() if number == me)
         step = sum(bool(message.get("tool_calls")) for message in messages)
         if step == 0:
@@ -121,13 +116,18 @@ class Crew:
         return ChatTurn(content, calls, kwargs["model"], 0.001, 100, 10, 50, True)
 
 
-async def test_a_chief_makes_a_team_and_they_work_at_once_and_wait_for_the_computer(tmp_path):
+async def test_an_existing_team_works_at_once_and_waits_for_the_computer(tmp_path):
     crew = Crew()
     driver = RpcDriver(tmp_path, "fake/model", crew, Budget(200))
     app = driver.app
     try:
         app.background._host = WorkerHost(connect=Links(), grace_s=0.3)
         app.gate._safety = None  # no rule of the owner's is in play here
+        for name in ("Builder", "Tester"):
+            result = await app.members.admin_tool(0, "member_create",
+                                                  {"name": name, "role": name, "instructions": f"You are the {name}."},
+                                                  interactive=True)
+            crew.ids[name] = result["member"]["id"]
         Desktop.release, Desktop.log = asyncio.Event(), []
         # The shared computer, on a container engine that is a fake.
         hub = app.vm_tools
