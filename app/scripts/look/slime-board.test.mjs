@@ -8,9 +8,9 @@ test("the loop bounds check rejects detached eyes and hats", () => {
   const body = {getBoundingClientRect: () => box(10, 10, 17, 12)};
   const eyes = {getBoundingClientRect: () => box(16, 14, 4, 2)};
   const hat = {getBoundingClientRect: () => box(11, 4, 14, 8)};
-  const surface = {parentElement: {getBoundingClientRect: () => box(8, 6, 20, 19)}, getAnimations: () => []};
-  const drop = {getBoundingClientRect: () => box(9, 7, 2, 3)};
-  const svg = {dataset: {state: "searching"}, closest: () => surface, getBoundingClientRect: () => box(8, 6, 19, 19), querySelector: selector => selector === '.slime-body' ? body : eyes, querySelectorAll: selector => selector === '.slime-mark' ? [hat] : [drop]};
+  let detachedProp = null;
+  const surface = {parentElement: {getBoundingClientRect: () => box(8, 6, 20, 19)}, getAnimations: () => [], querySelector: selector => detachedProp && selector.includes(`.${detachedProp.className}`) ? detachedProp : null};
+  const svg = {dataset: {state: "searching"}, closest: () => surface, getBoundingClientRect: () => box(8, 6, 19, 19), querySelector: selector => selector === '.slime-body' ? body : eyes, querySelectorAll: selector => selector === '.slime-mark' ? [hat] : []};
   vi.stubGlobal('document', {querySelectorAll: () => [svg]});
   vi.stubGlobal('getComputedStyle', () => ({visibility: 'visible'}));
   expect(slimeParts()).toEqual({check: 'slime-parts', samples: 1});
@@ -21,8 +21,10 @@ test("the loop bounds check rejects detached eyes and hats", () => {
   hat.getBoundingClientRect = () => box(3, 4, 14, 8);
   expect(slimeParts).toThrow('Slime parts separate');
   hat.getBoundingClientRect = () => box(11, 4, 14, 8);
-  drop.getBoundingClientRect = () => box(7, 7, 2, 3);
-  expect(slimeParts).toThrow('Slime parts separate');
+  for (const className of ['slime-drop', 'slime-bubble', 'slime-cel-prop']) {
+    detachedProp = {className};
+    expect(slimeParts).toThrow('detached droplet or bubble');
+  }
 });
 
 test("the static comparison retains resolved SVG alpha when animation variables disappear", () => {
