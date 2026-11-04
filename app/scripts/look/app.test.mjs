@@ -9,6 +9,8 @@ const fixture = JSON.parse(readFileSync(resolve(import.meta.dirname, "fixture.js
 describe("real app entry with the shared look fixture", () => {
   let state;
   afterAll(() => window.happyDOM.abort());
+  // Cold TypeScript transforms share this setup hang guard. The UI readiness
+  // assertion keeps its own deadline after the entry has been imported.
   beforeAll(async () => {
     document.documentElement.innerHTML = readFileSync(resolve(import.meta.dirname, "../../index.html"), "utf8").replace(/<script[\s\S]*?<\/script>/g, "");
     HTMLElement.prototype.scrollTo = () => {};
@@ -16,7 +18,7 @@ describe("real app entry with the shared look fixture", () => {
     state = installMock(fixture);
     await import("../../src/main/main.ts");
     await vi.waitFor(() => expect(document.querySelector('.page-home:not([hidden]) .ho-hero')).not.toBeNull());
-  });
+  }, 30000);
   it("boots and navigates all primary destinations and settings without unmocked calls", async () => {
     expect(document.querySelector('#nav [data-go="home"]')).not.toBeNull();
     document.querySelector('.mb-chief').click();

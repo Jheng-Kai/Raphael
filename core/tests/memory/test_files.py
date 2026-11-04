@@ -315,6 +315,42 @@ def test_two_processes_writing_at_once_lose_nothing(tmp_path):
             assert f"{name} wrote fact number {n} of them" in shared
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows realpath retries a non-prefixed handle")
+@pytest.mark.parametrize("member", [None, 1])
+@pytest.mark.parametrize("probe", [2, 4])
+def test_a_contended_windows_path_keeps_its_memory_inside_the_home(tmp_path, monkeypatch, member, probe):
+    import ntpath
+
+    from raphael_core.bots.homes import BotHomes
+    from raphael_core.memory.store import MemoryFile
+
+    homes = BotHomes(tmp_path)
+    memory = MemoryFile(homes, member)
+    memory._persist(["The owner likes tea."])
+    path = memory._path()
+    original = ntpath._getfinalpathname
+    calls = 0
+
+    def contended(value):
+        nonlocal calls
+        if str(value).casefold() == str(path).casefold():
+            calls += 1
+            if calls == probe:
+                # realpath opened the file, but a concurrent replace/reader now denies
+                # its prefix-removal probe. It returns the same path with \\?\ intact.
+                error = PermissionError("synthetic sharing violation")
+                error.winerror = 32
+                raise error
+        return original(value)
+
+    monkeypatch.setattr(ntpath, "_getfinalpathname", contended)
+    result = memory.apply([{"action": "add", "content": "The owner rides a bicycle."}])
+    assert result["success"], result
+    assert calls >= probe
+    assert "The owner likes tea." in path.read_text(encoding="utf-8")
+    assert "The owner rides a bicycle." in path.read_text(encoding="utf-8")
+
+
 # --- what is refused, and what comes from outside --------------------------------------------------
 
 

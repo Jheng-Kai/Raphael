@@ -48,6 +48,18 @@ class HomeError(ValueError):
     """A path, revision or bounded document was refused, without its contents."""
 
 
+def _unprefixed(path: Path) -> Path:
+    """Compare Windows handle paths and ordinary paths in the same namespace.
+
+    realpath may keep the extended prefix when a concurrent reader/rename denies
+    its second handle probe. This changes spelling, not the resolved destination.
+    """
+    text = str(path)
+    if os.name == "nt" and text.startswith("\\\\?\\"):
+        return Path("\\\\" + text[8:] if text.startswith("\\\\?\\UNC\\") else text[4:])
+    return path
+
+
 def digest(data: bytes | None) -> str | None:
     return None if data is None else hashlib.sha256(data).hexdigest()
 
@@ -105,7 +117,7 @@ def _file_lock(path: Path) -> Iterator[None]:
 
 class BotHomes:
     def __init__(self, root: Path):
-        self.root = root.resolve()
+        self.root = _unprefixed(root.resolve())
 
     def home(self, member_id: int) -> Path:
         if type(member_id) is not int or member_id < 0:
@@ -116,10 +128,10 @@ class BotHomes:
         return self.root / "bot-state" / self.home(member_id).name
 
     def safe(self, path: Path) -> Path:
-        if not path.resolve().is_relative_to(self.root):
+        if not _unprefixed(path.resolve()).is_relative_to(self.root):
             raise HomeError("path escapes data directory")
         for parent in (path, *path.parents):
-            if parent == self.root:
+            if _unprefixed(parent) == self.root:
                 break
             if parent.is_symlink() or (hasattr(parent, "is_junction") and parent.is_junction()):
                 raise HomeError("linked paths are not writable")

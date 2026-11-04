@@ -282,6 +282,14 @@ Look needs an installed Edge/Chrome and the pinned **puppeteer-core@25.13.0** de
 It never downloads a browser or installs packages. Preserve the package/lockfile pin.
 `LOOK_BROWSER` optionally selects an executable. Node 22 or later is required.
 
+Before opening the browser, look transforms each selected HTML entry and waits for
+Vite's static import crawl. Navigation waits for DOM content, then the scene's real
+readiness selector; unrelated network activity does not gate that readiness.
+Request failures still fail the scene. Only `net::ERR_ABORTED` requests from a
+document superseded by a committed main-frame navigation are retained separately
+as `navigationAborts`; current-document aborts, other network failures and HTTP
+errors remain failures. Closing the captured page is outside the capture window.
+
 `--width` accepts widths (900px height) and explicit `WIDTHxHEIGHT` viewports.
 Each run creates `.look/run-*/` with viewport PNGs, paginated PNG contact sheets,
 `contacts.json` and `report.json`. `--out` changes the parent directory. A nonzero exit

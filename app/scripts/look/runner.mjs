@@ -12,6 +12,7 @@ import { checkRendered } from "./checks.mjs";
 import { contactSheets } from "./contact-sheet.mjs";
 import { requestDisposition } from "./requests.mjs";
 import { saveReport } from "./report.mjs";
+import { navigationRequests, warmupEntries } from "./navigation.mjs";
 
 /** Product, model, unit, key names and external menu paths that stay in Latin letters in every language. */
 // Docker is an installed product name, including its unavailable-engine state.
@@ -87,6 +88,7 @@ export async function run(options) {
     const namespaces = [...new Set([...translations.matchAll(/"([a-z][A-Za-z0-9]*)\.[^"\n]+"\s*:/g)].map(match => match[1]))];
     server = await createServer({ configFile: false, root: app, cacheDir: join(directory, "vite-cache"), server: { host: "127.0.0.1", port: 0, hmr: false, watch: null, fs: { allow: [app] } } });
     await server.listen();
+    await warmupEntries(server, options.selected.map(scene => scene.entry || "index.html"), entry => readFile(join(app, entry), "utf8"));
     const address = server.httpServer.address();
     const origin = `http://127.0.0.1:${address.port}`;
     browser = await puppeteer.launch({ executablePath, headless: true, userDataDir: join(directory, "browser-profile"), args: BROWSER_ARGS, timeout: 60000 });
@@ -101,7 +103,7 @@ export async function run(options) {
       page.on("pageerror", value => error("exception", value.message));
       const favicon = url => url && requestDisposition(url, origin) === "empty";
       page.on("console", message => { if ((message.type() === "error" || (message.type() === "warn" && message.text().includes("A locale listener could not refresh"))) && !favicon(message.location().url)) error("console", message.text()); });
-      page.on("requestfailed", request => { if (!favicon(request.url())) error("request", `${request.url()}: ${request.failure()?.errorText}`); });
+      const requestFailures = navigationRequests(page);
       page.on("response", response => { if (response.status() >= 400 && !favicon(response.url())) error("http", `${response.status()} ${response.url()}`); });
       try {
         await page.setViewport({ width, height: options.heights[width] ?? 900, deviceScaleFactor: 1 });
@@ -156,7 +158,9 @@ export async function run(options) {
             await profiler.send("Profiler.start");
           }
         }
-        await page.goto(`${origin}/${scene.entry ?? ""}`, { waitUntil: "networkidle0", timeout: 20000 });
+        // App readiness and decoded images gate capture. Network-idle also waits
+        // for unrelated polling and reloads, which do not establish readiness.
+        await page.goto(`${origin}/${scene.entry ?? ""}`, { waitUntil: "domcontentloaded", timeout: 20000 });
         await page.waitForSelector(scene.ready ?? (scene.entry === "overlay.html" ? "#progress:not([hidden])" : scene.fixture.onboarding ? '#ob:not([hidden]) [data-ob="next"]' : '.page-home:not([hidden]) .ho-hero'), { visible: true, timeout: 10000 });
         // Existing conversation journeys enter through the real rail after the home is ready.
         if (!scene.entry && !scene.fixture.onboarding && !scene.name.startsWith("home")) {
@@ -238,6 +242,9 @@ export async function run(options) {
           await page.screenshot({path: join(directory, columnImage), type: "png"});
           result.columnImage = columnImage;
         }
+        const failures = requestFailures();
+        result.navigationAborts = failures.filter(failure => failure.superseded);
+        for (const failure of failures) if (!failure.superseded && !favicon(failure.url)) error("request", failure.message);
         result.failed = failedChecks(result);
       } catch (value) { error("capture", value.message); }
       finally { await page.close(); }
