@@ -18,6 +18,7 @@ from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
 LICENSES = Path(__file__).resolve().parent / "licenses"
+ADAPTED_LICENSE_FILES = ("NOTICES.md", "Apache-2.0.txt", "hermes-agent-MIT.txt", "OpenBot-MIT.txt")
 
 
 def load_source_manifest() -> dict:
@@ -168,10 +169,13 @@ def write_notices(target: Path) -> None:
     ])
     lines.extend(component_sections(source_manifest))
     shutil.copytree(LICENSES, target / "upstream", dirs_exist_ok=True)
+    for name in ADAPTED_LICENSE_FILES:
+        shutil.copyfile(LICENSES / name, target / name)
     # Provide one self-contained text file for release assets and the installer notice.
     license_paths = [target / item for dist in inventory for item in dist["license_files"]]
     license_paths += [python_folder / "LICENSE.txt"]
     license_paths += [target / "upstream" / item["file"] for item in source_manifest["licenses"]]
+    license_paths += [target / name for name in ADAPTED_LICENSE_FILES]
     for path in license_paths:
         lines.extend(["", "=" * 72, path.relative_to(target).as_posix(), "=" * 72,
                       path.read_text(encoding="utf-8", errors="replace")])

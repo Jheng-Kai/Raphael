@@ -1,15 +1,14 @@
 """A member's memory: living Markdown files that keep being edited, never a pile of notes.
 
-Adapted from NousResearch/hermes-agent tools/memory_tool_store.py @ c419cf7c (MIT)
+Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 
     bots/<id>/SOUL.md     who the member is, written by the core from its details (`bots.homes.soul`)
     bots/<id>/MEMORY.md   what the member has learned; no other member reads it (`<name> 的記憶`)
     shared/USER.md        who the owner is, one file every member reads and writes (`共同記憶`)
 
 A file is a list of entries, a blank line between them, so that it reads as a document in any editor
-and the owner can edit it whole. An entry may run over several lines. Hermes separates its entries
-with a `§` line and needs a guard against free text written without one; here any paragraph is an
-entry, and a rewrite keeps every word whoever wrote the file.
+and the owner can edit it whole. An entry may run over several lines. Any paragraph is an entry,
+and a rewrite keeps every word whoever wrote the file.
 
 The model edits by `add`, `replace` and `remove`, in one atomic batch (`MemoryFile.apply`):
 
@@ -17,8 +16,7 @@ The model edits by `add`, `replace` and `remove`, in one atomic batch (`MemoryFi
   are not added again, a fact that says more takes the place of the shorter one, and another wording of
   an entry is refused with the entry, for the model to `replace` it.
 - `replace` changes the span `old_text` inside the one entry that holds it; the rest of the entry stays.
-  It is Hermes's `patch`: the whole-entry overwrite that was once called replace wiped the other facts
-  of an entry there, so to rewrite an entry its whole text is the span.
+  To rewrite an entry, its whole text is the span.
 - `remove` deletes the entry `old_text` is part of.
 
 A file has a limit, in characters, and a batch that would pass it is refused with a note that says by

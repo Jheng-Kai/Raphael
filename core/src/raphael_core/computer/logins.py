@@ -1,5 +1,6 @@
-"""Vault references for private page filling, following OpenMausBot's fill_login
-(Apache-2.0, server/drivers/agents-call.ts); see licenses/NOTICES.md.
+"""Vault references for private page filling.
+
+Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
 """
 
 import hashlib

@@ -1,6 +1,7 @@
-"""Docker desktops on this computer or an SSH host. Adapted from OpenMausBot.
+"""Docker desktops on this computer or an SSH host.
 
-See licenses/NOTICES.md. The engine owns containers; only the workspace survives
+Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
+The engine owns containers; only the workspace survives
 removal. Remote workspaces are engine volumes, never paths on this PC.
 """
 

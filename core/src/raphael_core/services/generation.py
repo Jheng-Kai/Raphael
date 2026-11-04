@@ -1,6 +1,6 @@
 """Configured media capabilities, bounded delivery and cancellable provider jobs.
 
-Capability dispatch was informed by Hermes' MIT image/video tools; see licenses/NOTICES.md.
+Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """
 
 import asyncio

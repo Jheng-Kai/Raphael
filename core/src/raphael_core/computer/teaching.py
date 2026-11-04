@@ -1,6 +1,7 @@
-"""Owner-only demonstrations, informed by OpenBot's MIT demonstration lifecycle.
+"""Owner-only demonstrations.
 
-See licenses/NOTICES.md. Recordings are data, never executable instructions.
+Adapted from OpenBot (MIT); see core/packaging/licenses.
+Recordings are data, never executable instructions.
 """
 import asyncio
 import hashlib

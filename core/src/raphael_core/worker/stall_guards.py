@@ -1,9 +1,7 @@
 """A model that stops short: it says what it will do and makes no call, or the output limit cuts its reply off.
 
-Adapted from NousResearch/hermes-agent agent/agent_runtime_helpers.py @ c419cf7c (MIT): how the end of a reply
-is read for an announced next step. The notes follow agent/conversation_loop.py @ c419cf7c (MIT). Hermes reads
-English only; the Chinese and Japanese endings are Raphael's own. Not taken over: the checks for a reply that
-is a mere fragment and for Codex acknowledgements.
+Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
+The continuation checks recognize English, Chinese and Japanese endings.
 
 A false alarm costs one more model call that sends the same answer again, so the nudges are few and bounded.
 """

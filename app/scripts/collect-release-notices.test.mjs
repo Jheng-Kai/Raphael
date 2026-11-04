@@ -445,11 +445,12 @@ describe("pinned binary and ported components", () => {
         expect(file.sourceUrl).toMatch(/^https:\/\//);
       }
     }
-    // The ported code is pinned to the commit named in the headers of the files that contain it.
+    // The adapted code has a short attribution; the release manifest retains the pinned revision.
     const handy = manifest.components[0];
     expect(handy.files[0].sourceUrl).toContain("/9e57a0d7929fcc6417ea0d6e54c1b57f62635edd/");
     for (const source of ["clipboard.rs", "windows.rs"]) {
-      expect(readFileSync(join(scripts, "..", "src-tauri", "src", "paste", source), "utf8")).toContain("Handy");
+      expect(readFileSync(join(scripts, "..", "src-tauri", "src", "paste", source), "utf8"))
+        .toContain("Adapted from Handy (MIT); see core/packaging/licenses.");
     }
     // webview2-com-sys ships the static loader; the pinned SDK is the one its library file comes from.
     const webview = manifest.components[1];
@@ -462,7 +463,8 @@ describe("pinned binary and ported components", () => {
     expect(icons.usage).toContain("trademarks of their owners");
     expect(icons.files[0].sourceUrl).toContain("/955f17f35634cd58de1748204059bce380d379af/");
     expect(readFileSync(join(directory, icons.files[0].file), "utf8")).toContain("CC0 1.0 Universal");
-    expect(readFileSync(join(scripts, "..", "src", "main", "service-icons.ts"), "utf8")).toContain("Simple Icons 16.35.0");
+    expect(readFileSync(join(scripts, "..", "src", "main", "service-icons.ts"), "utf8"))
+      .toContain("Adapted from Simple Icons (CC0-1.0); see core/packaging/licenses.");
   });
 
   it("ships the full Inter OFL notice even without a linked Rust crate", () => {

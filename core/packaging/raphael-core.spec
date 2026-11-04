@@ -55,8 +55,6 @@ datas += collect_data_files("raphael_core.computer", include_py_files=True, incl
 for name in runtime_distributions():
     datas += copy_metadata(name)
 datas.append((str(core_dir / "build" / "notices"), "licenses"))
-datas.append((str(core_dir.parent / "licenses" / "NOTICES.md"), "licenses"))
-datas.append((str(core_dir.parent / "licenses" / "Apache-2.0.txt"), "licenses"))
 
 analysis = Analysis(
     [str(packaging_dir / "entrypoint.py")],

@@ -1,15 +1,10 @@
+// Adapted from Simple Icons (CC0-1.0); see core/packaging/licenses.
 // The marks of the well-known programs a connection can be, to tell them apart in the lists. Two kinds,
 // and nothing is fetched at run time:
-// - one drawn path (the existing marks are from Simple Icons 16.35.0, https://simpleicons.org, CC0-1.0;
-//   its text is in the release notices), bare, in the owner's official colour (`BRAND_COLORS`) on every
+// - one drawn path, bare, in the owner's official colour (`BRAND_COLORS`) on every
 //   surface; a mark that is black in its official form takes the colour of the text, which is its own white
 //   version on the dark theme. A many-coloured logo is drawn in the parts and colours of the official one
 //   (`COLOURED_MARKS`);
-//   OpenRouter, Brave and SearXNG are Simple Icons paths too, checked identical to the upstream files
-//   (develop branch) on 2026-10-23; the existing marks are from 16.35.0.
-//   Upstream reference: https://github.com/simple-icons/simple-icons (icons/openrouter.svg,
-//   icons/brave.svg and icons/searxng.svg).
-//   Slack's path is from Simple Icons 13.21.0 (CC0), supplied by the maintainer.
 // - the brand's own full-colour logo, a file in `service-logos/` (with where each came from in
 //   `sources.json`), for the brands Simple Icons does not have: the Microsoft marks are not in
 //   it, removed at their owners' request. A logo that is dark in its official form has a light twin

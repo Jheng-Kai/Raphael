@@ -145,8 +145,8 @@ _INJECTION = (
     re.compile(r"!\[[^\]]*\]\("),  # a Markdown image: a way to send what it is given away
     re.compile(r"(?i)\bhttps?://\S+\?\S*="),  # an address with a query string
     *(re.compile(pattern, re.I) for pattern in (
-        # Adapted from NousResearch/hermes-agent tools/threat_patterns.py @ c419cf7c (MIT). Its names of
-        # offensive tools are left out: they are ordinary words too, and a fact here is about a person.
+        # Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
+        # Offensive tool names are excluded: they are ordinary words too, and a fact here is about a person.
         rf"disregard\s+{_FILLER}(your|all|any)\s+{_FILLER}(instructions|rules|guidelines)",
         rf"act\s+as\s+(if|though)\s+{_FILLER}you\s+{_FILLER}(have\s+no|don't\s+have)\s+{_FILLER}(restrictions|limits|rules)",
         r"<!--[^>]{0,512}(?:ignore|override|system|secret|hidden)[^>]{0,512}-->",

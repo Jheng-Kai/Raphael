@@ -10,7 +10,7 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
-from notices import load_source_manifest, write_notices
+from notices import ADAPTED_LICENSE_FILES, load_source_manifest, write_notices
 
 
 CORE = Path(__file__).resolve().parent.parent
@@ -34,6 +34,7 @@ def required_files() -> list[str]:
         "_internal/raphael_core/connectors/finder-data.json",
         "_internal/licenses/python/LICENSE.txt",
         "_internal/licenses/pyinstaller/pyinstaller-6.22.3.dist-info/licenses/COPYING.txt",
+        *(f"_internal/licenses/{name}" for name in ADAPTED_LICENSE_FILES),
         "_internal/opencc/clib/share/opencc/s2twp.json",
         *(f"_internal/licenses/upstream/{item['file']}" for item in load_source_manifest()["licenses"]),
     ]

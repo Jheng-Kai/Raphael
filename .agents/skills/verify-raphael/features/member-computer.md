@@ -324,7 +324,7 @@ contact sheets; a missing engine/image is a blocker, never native acceptance.
 Phase A adds no application UI. Phase B extends the existing member details side panel with the live desktop. The own-PC cua driver remains Phase C.
 
 Tests: `core/tests/computer/test_vm.py`, existing agent CLI/MCP, background and
-worker suites. Attribution: `licenses/NOTICES.md` and `licenses/Apache-2.0.txt`.
+worker suites. Attribution: `core/packaging/licenses/NOTICES.md` and `core/packaging/licenses/Apache-2.0.txt`.
 
 
 ## Live desktop (Phase B, 2026-10-30)
