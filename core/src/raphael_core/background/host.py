@@ -305,6 +305,7 @@ class WorkerHost:
         self._disabled = False
         self._closing = False
         self._starting = asyncio.Lock()
+        self._ending = asyncio.Lock()
         self._idle_timer: asyncio.TimerHandle | None = None
         self.pid: int | None = None
 
@@ -528,10 +529,13 @@ class WorkerHost:
             await self._end()
 
     async def _end(self) -> None:
-        link, self._link = self._link, None
-        if link is not None:
-            with contextlib.suppress(Exception):
-                await link.stop()
+        # An idle stop relinquishes _link before draining its pipes. Shutdown must
+        # join that stop even when there is no longer a worker available for work.
+        async with self._ending:
+            link, self._link = self._link, None
+            if link is not None:
+                with contextlib.suppress(Exception):
+                    await link.stop()
 
     async def aclose(self) -> None:
         """End the worker for good."""

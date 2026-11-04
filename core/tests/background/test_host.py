@@ -456,6 +456,40 @@ async def test_stopping_a_process_waits_for_its_stdin_pipe_to_finish_closing():
         await stop
 
 
+async def test_shutdown_joins_an_idle_workers_delayed_pipe_cleanup(hosts, rig, monkeypatch):
+    host = hosts("ok")
+    await run_once(host, rig)
+    link = host._link
+    entered, release = asyncio.Event(), asyncio.Event()
+    finish = link._finish
+
+    async def delayed_finish():
+        entered.set()
+        await release.wait()
+        await finish()
+
+    monkeypatch.setattr(link, "_finish", delayed_finish)
+    idle = asyncio.create_task(host._idle_out())
+    shutdown = None
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        shutdown = asyncio.create_task(host.aclose())
+        for _ in range(10):
+            await asyncio.sleep(0)
+        assert not shutdown.done(), "shutdown left the idle worker's pipes owned by a closing loop"
+        release.set()
+        await asyncio.wait_for(shutdown, 5)
+        assert link.process._transport.is_closing()
+        for fd in (0, 1, 2):
+            pipe = link.process._transport.get_pipe_transport(fd)
+            assert pipe is None or pipe.is_closing()
+    finally:
+        release.set()
+        await idle
+        if shutdown is not None:
+            await shutdown
+
+
 async def test_a_log_line_longer_than_the_limit_is_dropped_and_the_pipe_keeps_draining(
     hosts, rig, monkeypatch, caplog
 ):
