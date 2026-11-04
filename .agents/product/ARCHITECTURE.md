@@ -1,5 +1,28 @@
 # Raphael architecture and checked boundaries
 
+## Pending owner questions in conversation cards (2026-11-04)
+
+OwnerQuestions.in_conversation projects only pending ask_owner rows joined to
+their current private conversation/member or room/thread and live task. Existing
+agent.history.list and rooms.messages return this as pending_questions alongside
+their unchanged page. Chief turns currently store member_id=0; the lookup uses
+IS and also matches NULL chief rows within that same conversation. No new RPC or
+migration is introduced. The shared frontend
+controller combines that projection with mounted cards and waits for the turn ID
+returned by owner_questions.bring before scrolling/focusing. Room bring reuses
+BackgroundService's move and room-wait receipt path, preserving scope, room,
+thread and task identity; a per-move request ID keeps receipts retry-idempotent.
+
+Composio presentation is a frontend-only projection shared by conversation,
+permission and step-detail consumers. It does not rewrite raw history, tool data,
+model messages, execution arguments or permission digests.
+Member-authored content requires a recognized tool slug or successful/data-or-error
+envelope; Composio step details and permission summaries explicitly trust their
+tool origin. One exported detector identifies Composio server/tool names. Display
+lines name only the app brand plus localized outcome and fields, with a localized
+result label when no app slug is present.
+
+
 ## Shared calendar reading and rhythm projection (2026-11-01)
 
 ConnectedCalendar owns the most recent 24 in-memory range readings and attempts, one-minute refresh admission and

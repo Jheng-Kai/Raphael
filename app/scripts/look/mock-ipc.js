@@ -300,9 +300,26 @@ export function installMock(fixture, config = {}, target = window) {
       Object.assign(turn, {routine:structuredClone(routine),route:"routine",question:routine.title,session_id:`routine:${routine.id}`});
     }
     data.turns = [turn];
-    if (variant.ownerQuestion === "room") data.messages.push({ ...structuredClone(data.messages.find(message => message.member_id === 1)), id: 940, room_id: 1, text: turn.text, status: "done", turn_id: turn.id, turn });
+    if (["room", "pending-room"].includes(variant.ownerQuestion)) data.messages.push({ ...structuredClone(data.messages.find(message => message.member_id === 1)), id: 940, room_id: 1, text: turn.text, status: "done", turn_id: turn.id, turn });
+    if (variant.ownerQuestion.startsWith("pending")) {
+      if (variant.ownerQuestion === "pending-many") turn.owner_questions.push({ ...question, id: "owner-place", question: "範例會議要在哪裡舉行？" });
+      for (let index = 1; index <= (variant.ownerQuestion === "pending-page" ? 65 : 12); index++) {
+        const later = { ...structuredClone(turn), id: turn.id + index, session_id: `later-${index}`, owner_questions: [], task: null,
+          question: `範例話題 ${index}`, text: "這是另一個範例話題。\n\n排程可以等你準備好後再決定。", status: "done" };
+        data.turns.push(later);
+        if (variant.ownerQuestion === "pending-room") data.messages.push({ id: 940 + index, room_id: 1, thread_id: 1, member_id: 1, text: later.text, status: "done", created: data.now + index, turn_id: later.id, turn: later });
+      }
+    }
   }
   if (variant.computerCard) data.turns.push(structuredClone(data.computerTurns[variant.computerCard]));
+  if (variant.composioResults) {
+    const turn = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
+    const raw = JSON.stringify({data:{results:[{tool_slug:"GMAIL_FETCH_EMAILS",response:{successful:true,data:{subject:"範例排程",snippet:"下週有兩場範例會議",access_token:"synthetic-hidden-value"}}}]}});
+    Object.assign(turn, {id:980,question:"請整理範例排程。",text:raw,detail:raw,status:"done",task:null,
+      messages:[{seq:1,kind:"reply",text:`\`\`\`json\n${raw}\n\`\`\``,at_ms:data.now}],
+      steps:[{kind:"tool",server:"Composio",tool:"COMPOSIO_MULTI_EXECUTE_TOOL",outcome:"ok",ms:100,at_ms:data.now,detail:raw}]});
+    data.turns = [turn];
+  }
   // A step that needs the owner's yes shows its permission card, and the question it follows is the one the window holds
   // (`agent_question_open`), answered with `agent_question_answer`; the card follows the answer as the core reports it.
   // `memberDraftFirst` sets whether 小晴 writes mail as a draft first.
@@ -802,7 +819,8 @@ export function installMock(fixture, config = {}, target = window) {
       case "conversations.clear": { const member = data.conversations.find(item => item.id === p.id).member_id; data.turns = data.turns.filter(item => item.conversation_id !== p.id); notify("ConversationsChanged", { member_id: member }); notify("AgentTurn", { turn_id: 0, member_id: member }); return { cleared: 1 }; }
       case "conversations.delete": { const gone = data.conversations.find(item => item.id === p.id); data.turns = data.turns.filter(item => item.conversation_id !== p.id); data.conversations = data.conversations.filter(item => item.id !== p.id); if (gone) mainConversation(gone.member_id); return { deleted: 1 }; }
       case "agent.history.list": {
-        return { turns: byMember(data.turns, p).filter(turn => p.conversation_id === undefined || turn.conversation_id === p.conversation_id).filter(turn=>!p.before_id||turn.id<p.before_id).sort((a,b)=>b.id-a.id).slice(0,p.limit??50) };
+        const turns = byMember(data.turns, p).filter(turn => p.conversation_id === undefined || turn.conversation_id === p.conversation_id);
+        return { turns: turns.filter(turn=>!p.before_id||turn.id<p.before_id).sort((a,b)=>b.id-a.id).slice(0,p.limit??50), pending_questions: turns.flatMap(turn => turn.owner_questions ?? []).filter(question => question.kind === "ask_owner" && question.state === "asked") };
       }
       // What the owner typed, newest first (the core's rule: typed turns of the private conversations, repeats in a row once); a scene may state it.
       case "agent.history.sent": {
@@ -836,6 +854,23 @@ export function installMock(fixture, config = {}, target = window) {
         if (variant.roomQuestion && p.room_id === 1) return { questions: [{ id: "room-q", task_id: 950, member_id: 1, prefix: "問", text: "本機指令", tier: "T2", created_at_ms: data.now, expires_at_ms: data.now + 1800000, room_id: 1,
           permission: { id: "room-q", source: "background", kind: "local_command", service: "小晴", tool: "local_exec", summary: "Get-ChildItem -LiteralPath app -Force", reason: "D:\\專案", digest: "room-digest", always: false, state: "pending", expires_at_ms: data.now + 1800000 } }] };
         return { questions: localQuestion && p.member_id === 1 ? [localQuestion] : [] };
+      }
+      case "owner_questions.bring": {
+        const turn = data.turns.find(turn => turn.owner_questions?.some(question => question.id === p.id));
+        const question = turn?.owner_questions.find(question => question.id === p.id);
+        if (!question || question.state !== "asked") throw new Error("Unknown owner question");
+        const latest = data.turns.filter(item => item.conversation_id === turn.conversation_id && item.member_id === turn.member_id).sort((a,b) => b.id-a.id)[0];
+        if (latest.id === turn.id && variant.ownerQuestion !== "pending-room") return { turn_id: turn.id };
+        const moved = { ...structuredClone(turn), id: Math.max(...data.turns.map(item => item.id)) + 1, question: "", text: "", messages: [], owner_questions: [question] };
+        question.turn_id = moved.id;
+        turn.owner_questions = turn.owner_questions.filter(item => item.id !== p.id);
+        turn.task = null;
+        data.turns.push(moved);
+        if (variant.ownerQuestion === "pending-room") data.messages.push({ id: Math.max(...data.messages.map(item => item.id)) + 1, room_id: 1, thread_id: 1, member_id: 1, text: "", status: "done", created: data.now, turn_id: moved.id, turn: moved });
+        notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+        notify("AgentTurn", { turn_id: moved.id, member_id: turn.member_id });
+        notify("RoomsChanged", { room_id: 1 });
+        return { turn_id: moved.id };
       }
       case "owner_questions.answer": {
         const turn = data.turns.find(turn => turn.owner_questions?.some(question => question.id === p.id));
@@ -904,7 +939,10 @@ export function installMock(fixture, config = {}, target = window) {
         return { ...room, preview: latest?.text.slice(0, 300) ?? "", last_at: latest?.created ?? null, waiting: !!variant.roomQuestion && room.id === 1,
           unread: messages.some(message => message.member_id != null && message.id > (room.read_message_id ?? 0)) };
       }) };
-      case "rooms.messages": return { messages: data.messages.filter(item => item.room_id === p.room_id && (!p.before || item.id < p.before)).sort((a,b)=>a.id-b.id).slice(-100), exchange: data.roomExchanges.filter(item => item.room_id === p.room_id).at(-1) ?? null, handoffs: data.roomHandoffs };
+      case "rooms.messages": {
+        const messages = data.messages.filter(item => item.room_id === p.room_id);
+        return { messages: messages.filter(item => !p.before || item.id < p.before).sort((a,b)=>a.id-b.id).slice(-100), pending_questions: messages.flatMap(item => item.turn?.owner_questions ?? []).filter(question => question.kind === "ask_owner" && question.state === "asked"), exchange: data.roomExchanges.filter(item => item.room_id === p.room_id).at(-1) ?? null, handoffs: data.roomHandoffs };
+      }
       case "rooms.create": { const room = { ...p, member_ids: p.is_team ? data.members.map(m => m.id) : p.member_ids, id: nextId(data.rooms), created: data.now, group_id: p.group_id ?? null, is_team: Number(p.is_team ?? false), default_responder: p.default_responder ?? "auto" }; data.rooms.push(room); return { room }; }
       case "rooms.update": {
         const room = data.rooms.find(room => room.id === p.room_id), previous = room.read_message_id ?? 0;

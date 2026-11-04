@@ -9,6 +9,17 @@ reads and the full offline offer. The brief requires fake-only checks and forbid
 Docker, network, look and native. Exact Linux 0.37.0 schema capture and real
 container timing remain unverified; compatibility definitions disclose provenance.
 
+## Pending questions and readable Composio results (2026-11-04)
+
+See [Conversation](conversation.md#pending-conversation-questions-and-readable-results-2026-11-04)
+for R-OWNER-03, R-CARD-09/10, page-independent pending questions, the existing
+bring RPC in private/room scope, one-line permission labels and readable result
+projection. The selected seven new scenes and representative shared consumers
+are listed there. Follow-up 2 authorizes the selected look matrix and visual review; native and
+live-provider acceptance remain deferred. Judge requires external references and
+authorized network access.
+
+
 ## Startup room recovery (2026-11-04)
 
 See [Startup rooms](startup-rooms.md) for R-PERF-13, failed first-read recovery,

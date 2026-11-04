@@ -170,6 +170,10 @@ async def test_a_question_answered_after_the_owner_said_more_continues_at_the_en
     [asked] = await agent.turns()
     [question] = asked["owner_questions"]
     await typed(agent, "When is lunch?")
+    page = await agent.rpc.call("agent.history.list", {"limit": 1})
+    assert len(page["turns"]) == 1 and page["turns"][0]["id"] != asked["id"]
+    assert [item["id"] for item in page["pending_questions"]] == [question["id"]]
+    assert not background.service.owner_questions.in_conversation(conversation_id=99999, member_id=0)
     if how == "bring":
         moved = (await background.rpc.call("owner_questions.bring", {"id": question["id"]}))["turn_id"]
         assert moved != asked["id"]
@@ -187,6 +191,30 @@ async def test_a_question_answered_after_the_owner_said_more_continues_at_the_en
     assert "Scheduled for Tuesday" in background.task(question["task_id"]).report_text
 
 
+@pytest.mark.parametrize("stored_member", [0, None])
+async def test_the_chiefs_pending_question_is_available_outside_the_loaded_page(wired, client, stored_member):
+    agent, background = wired
+    client.chats = [chat("Choose a day.", ("ask_owner", {"question": "Which day?", "options": ["Tuesday"]})),
+                    chat("Lunch is at noon.")]
+    await typed(agent, "Arrange a visit")
+    [asked] = await agent.turns()
+    [question] = asked["owner_questions"]
+    conversation_id = agent.service.conversations.main(0)
+    saved = agent.conn.execute("SELECT member_id, conversation_id FROM agent_turns WHERE id=?", (asked["id"],)).fetchone()
+    assert tuple(saved) == (0, conversation_id)
+    await typed(agent, "When is lunch?")
+    if stored_member is None:
+        # The current schema writes chief turns as 0; shadow it to exercise nullable compatibility rows.
+        agent.conn.execute("CREATE TEMP TABLE agent_turns AS SELECT * FROM main.agent_turns")
+        agent.conn.execute("UPDATE agent_turns SET member_id=NULL WHERE id=?", (asked["id"],))
+    page = await agent.rpc.call("agent.history.list", {"limit": 1, "member_id": 0, "conversation_id": conversation_id})
+    assert [item["id"] for item in page["turns"]] != [asked["id"]]
+    assert len(page["turns"]) == 1
+    assert [item["id"] for item in page["pending_questions"]] == [question["id"]]
+    assert not background.service.owner_questions.in_conversation(conversation_id=conversation_id + 1, member_id=0)
+    assert not background.service.owner_questions.in_conversation(conversation_id=conversation_id, member_id=1)
+
+
 async def test_a_dismissed_or_latest_question_stays_where_it_is(wired, client):
     agent, background = wired
     client.chats = [chat("I need your date.", ("ask_owner", {"question": "Which day?", "options": ["Monday"]}))]
@@ -200,6 +228,37 @@ async def test_a_dismissed_or_latest_question_stays_where_it_is(wired, client):
     assert [item["id"] for item in await agent.turns()] == [asked["id"]]
     with pytest.raises(Exception):
         await background.rpc.call("owner_questions.bring", {"id": question["id"]})
+
+
+async def test_a_room_question_is_brought_to_the_end_and_resumes_in_its_room(wired):
+    agent, background = wired
+    with agent.conn:
+        room_id = agent.conn.execute("INSERT INTO rooms(name,created) VALUES ('Scheduling',0)").lastrowid
+    origin = agent.history.add(session_id="room-question", question="Arrange a visit", route="delegate", prefix="", text="",
+        status="running", scope="room", room_id=room_id, thread_id=room_id)
+    background.client.replies = [turn("Choose a day.", [call("ask_owner", {"question": "Which day?", "options": ["Tuesday"]}, "ask-day")])]
+    task_id = background.submit()
+    background.service.attach_turn(task_id, origin)
+    await until(lambda: background.task(task_id).state == "waiting")
+    [question] = agent.service._turn_views([agent.history.get(origin)])[0]["owner_questions"]
+    assert [item["id"] for item in background.service.owner_questions.in_conversation(room_id=room_id)] == [question["id"]]
+    assert not background.service.owner_questions.in_conversation(room_id=room_id + 1)
+    assert not background.service.owner_questions.in_conversation(conversation_id=agent.service.conversations.main(), member_id=0)
+    assert (await background.rpc.call("owner_questions.bring", {"id": question["id"]}))["turn_id"] == origin
+    with agent.conn:
+        agent.conn.execute("INSERT INTO room_messages(room_id,thread_id,member_id,text,created) VALUES (?,?,0,'Another topic',1)", (room_id, room_id))
+    moved = (await background.rpc.call("owner_questions.bring", {"id": question["id"]}))["turn_id"]
+    assert moved != origin
+    assert (await background.rpc.call("owner_questions.bring", {"id": question["id"]}))["turn_id"] == moved
+    saved = agent.history.get(moved)
+    assert (saved.scope, saved.room_id, saved.thread_id, saved.conversation_id) == ("room", room_id, room_id, None)
+    assert not agent.service._turn_views([agent.history.get(origin)])[0].get("owner_questions")
+    assert agent.conn.execute("SELECT turn_id FROM room_messages WHERE room_id=? ORDER BY id DESC LIMIT 1", (room_id,)).fetchone()[0] == moved
+    background.client.replies = [report("Tuesday confirmed.")]
+    await background.rpc.call("owner_questions.answer", {"id": question["id"], "answer": "Tuesday"})
+    await until(lambda: background.task(task_id).state in ("done", "failed", "limit"))
+    task = background.task(task_id)
+    assert task.state == "done" and task.turn_id == moved and task.scope == "room" and task.room_id == room_id
 
 async def test_background_page_uses_existing_store_and_foreign_routines_stay_closed(wired):
     agent, background = wired

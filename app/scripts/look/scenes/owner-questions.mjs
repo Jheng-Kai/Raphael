@@ -1,7 +1,12 @@
-import { scene, check, click, hover, member, room, type, wait } from "./steps.mjs";
+import { scene, check, click, hover, member, room, type, wait, waitGone } from "./steps.mjs";
 
 const open = [member(1), wait('[data-owner-question="owner-choice"]')];
 export default [
+  scene("owner-question-pending", "An off-screen member question floats above the conversation", [member(1), wait('.pending-questions:not([hidden])'), check("owner-question-pending")], { ownerQuestion: "pending" }),
+  scene("owner-question-brought", "One press brings the original question to the newest turn", [member(1), wait('.pending-questions:not([hidden])'), click('.pending-question'), waitGone('.pending-questions:not([hidden])'), check("owner-question-brought")], { ownerQuestion: "pending" }),
+  scene("owner-question-pending-page", "A question outside the newest history page can still be brought back", [member(1), wait('.pending-questions:not([hidden])'), check("owner-question-pending"), click('.pending-question'), waitGone('.pending-questions:not([hidden])'), check("owner-question-brought")], { ownerQuestion: "pending-page" }),
+  scene("owner-question-pending-room", "Room questions share the floating row and bring RPC", [room(1), wait('.au-room-pane .pending-questions:not([hidden])'), check("owner-question-pending"), click('.au-room-pane .pending-question'), waitGone('.au-room-pane .pending-questions:not([hidden])'), check("owner-question-brought")], { ownerQuestion: "pending-room" }),
+  scene("owner-question-pending-many", "Several pending questions share a counted row and menu", [member(1), wait('.pending-questions:not([hidden])'), click('.pending-question'), wait('[role="menu"]'), check("owner-question-pending-many")], { ownerQuestion: "pending-many" }),
   ...["connect", "secret", "mail", "page"].map(kind => scene(`owner-card-room-${kind}`, "Room work uses the existing conversation card and controls", [room(1), wait(kind === "connect" ? "[data-connector]" : kind === "secret" ? "[data-secret-card]" : kind === "mail" ? "[data-mail-card]" : ".pg-body[data-state=ready] iframe"),
     ...(kind === "connect" ? [click('[data-connector] [data-act="card-connect"]'), wait('[data-connector][data-card-state="authorizing"]')] :
       kind === "secret" ? [type('[data-secret-input]', "synthetic-room-key")] :

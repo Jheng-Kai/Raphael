@@ -2,6 +2,36 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "composio-readable-result") {
+    const reply = [...document.querySelectorAll('.chat-message')].find(element => visible(element) && element.textContent.includes('Gmail'));
+    require(reply && reply.textContent.includes('Gmail · 已完成：範例排程'), "the result names its app and localized outcome with useful fields");
+    require(!reply.querySelector('.message-code') && !/tool_slug|successful|synthetic-hidden-value/.test(reply.textContent), "raw envelopes and hidden fields never enter the reply");
+    return { check: name };
+  }
+  if (name === "permission-detail-label") {
+    const labels = [...document.querySelectorAll('.permission-card .card-field > span:first-child')].filter(visible);
+    require(labels.length > 0, "permission details expose real field labels");
+    for (const label of labels) require(label.getBoundingClientRect().height <= parseFloat(getComputedStyle(label).lineHeight) + 1, "a detail label stays on one line at every viewport width");
+    return { check: name, labels: labels.length };
+  }
+  if (["owner-question-pending", "owner-question-brought", "owner-question-pending-many"].includes(name)) {
+    const host = [...document.querySelectorAll('.mb-chat')].find(element => visible(element.querySelector('.ra-scroll')) && element.querySelector('.pending-questions'));
+    const row = host?.querySelector('.pending-questions'), scroll = host?.querySelector('.ra-scroll');
+    require(host && scroll && row, "the open conversation owns the floating row");
+    const cards = [...host.querySelectorAll('[data-owner-kind="ask_owner"][data-card-state="asked"]')];
+    if (name === "owner-question-brought") {
+      const call = window.__look.calls.find(call => call.method === 'owner_questions.bring');
+      require(call, "one press calls the existing bring RPC");
+      require(cards.some(card => visible(card) && card.getBoundingClientRect().bottom <= scroll.getBoundingClientRect().bottom + 2 && card.getBoundingClientRect().bottom > scroll.getBoundingClientRect().top), "the moved card is at the newest visible turn");
+      require(!visible(row), "the floating row disappears when its question is visible");
+    } else {
+      require(visible(row) && row.querySelectorAll('button').length === 1, "one compact row holds pending questions");
+      require(row.getBoundingClientRect().bottom <= scroll.getBoundingClientRect().top + 1, "the row sits above the scrollport");
+      require(row.getBoundingClientRect().bottom < host.querySelector('.composer').getBoundingClientRect().top, "the floating row never covers the composer");
+      if (name === "owner-question-pending-many") require(visible(document.querySelector('[role="menu"]')) && row.textContent.includes('2'), "a counted row opens the shared question list");
+    }
+    return { check: name, cards: cards.length };
+  }
   if (name.startsWith("thread-new-divider")) {
     const scroller = document.querySelector('.mb-chat .ra-scroll');
     const divider = scroller.querySelector('.thread-new');

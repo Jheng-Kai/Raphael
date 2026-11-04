@@ -4,6 +4,13 @@ import { missingEn } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const en = {
+  "composio.result": "Result",
+  "composio.fieldSeparator": ": ",
+  "composio.resultDone": "Completed",
+  "composio.resultDetails": "Details",
+  "composio.resultFailed": "Failed",
+  "composio.resultUnavailable": "Result details unavailable",
+  "composio.moreResults": "{p0} more results",
   "chat.newMessages": "New",
   "work.inspect": "View process",
   "work.thinking": "Thinking",

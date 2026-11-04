@@ -20,6 +20,7 @@ import { liveAction, pastStep, workActions } from "./work-actions";
 // the core goes through `esc`.
 
 import { getLocale, t } from "./i18n";
+import { composioAction, composioText, isComposioTool } from "./composio-result";
 import { routineSentenceHTML } from "./members";
 import type { MessageKey } from "./i18n/zh-TW";
 
@@ -333,6 +334,7 @@ export function stepHTML(step: AgentStep, isNew: boolean): string {
     stepIcon(step) +
     `<span class="step-main"><span class="step-t"${tip ? ` title="${esc(tip)}"` : ""}>${esc(stepTitle(step))}</span>` +
     mediaBillHTML(step) +
+    (step.detail && isComposioTool(step.server, step.tool) ? `<span class="step-detail">${esc(composioText(step.detail, step.tool ?? "Composio", "tool"))}</span>` : "") +
     (step.missing ? missingHTML(step.missing) : ok ? "" : `<span class="step-why">${esc(why)}</span>`) +
     `</span>` +
     `<span class="step-end"><span class="step-ms num">${esc(formatDuration(step.ms))}</span>` +
@@ -630,6 +632,7 @@ export function messageActionsHTML(time: number, regenerate = false, owner?: "ed
 
 function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: number, query: string, state: TimelineState, reply: boolean, regenerate = false): string {
   if (reply) text = plainReplies([text])[0];
+  text = composioText(text, composioAction(turn));
   const expanded = state.expandedMessages.has(`${turn.id}:${key}`);
   return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
     (reply ? replyContentHTML(text, query, turn.status === "running") : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`) +
@@ -754,20 +757,21 @@ const plainLine = (text: string): string => plainReplies([text])[0];
 
 export function latestProgress(turn: AgentTurn): string | undefined {
   const action = liveAction(turn);
-  if (action) return action;
+  if (action) return composioText(action, composioAction(turn));
   const text = [...(turn.messages ?? [])].reverse().find(m => m.kind === "progress")?.text;
-  return turn.task?.progress ? plainLine(turn.task.progress) : text && plainLine(text);
+  const progress = turn.task?.progress ? plainLine(turn.task.progress) : text && plainLine(text);
+  return progress && composioText(progress, composioAction(turn));
 }
 
 /** Work detail opens from the reply action; events stay in the ordered timeline. */
 function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, revealing = false, waitingForOwner = false): string {
   const messages = (turn.messages ?? []).filter(m => m.kind !== "reply" && m.kind !== "media" && m.kind !== "event" && m.text.trim())
-    .map(m => ({ ...m, text: plainLine(m.text) }));
+    .map(m => ({ ...m, text: composioText(plainLine(m.text), composioAction(turn)) }));
   const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
   if (live) return "";
   if (!messages.length && !workActions(turn).length && !(turn.steps?.length) && !turn.model && !revealing) return "";
   const open = state.thinkingOpen.get(turn.id) ?? false;
-  const actions = workActions(turn).filter(action => action.state === "done");
+  const actions = workActions(turn).filter(action => action.state === "done").map(action => ({ ...action, past: composioText(action.past, composioAction(turn)) }));
   const steps = shownSteps(turn).filter(step => step.kind !== "model");
   const rows = actions.length ? actions.map(action => `<li>${esc(action.past)}${action.outcome && action.outcome !== "ok" ? ` · ${esc(reasonText({kind:"tool", tool:"", server:null, ms:0, at_ms:0, outcome:action.outcome, reason:action.reason ?? null}))}` : ""}</li>`).join("") : steps.length ? steps.map(step => `<li>${esc(pastStep(step))}${step.outcome !== "ok" ? ` · ${esc(reasonText(step))}` : ""}</li>`).join("") : messages.map(message => `<li class="work-progress">${messageHTML(message.text, query)}</li>`).join("");
   const meta = [esc(answerMeta(turn)), ...shownSteps(turn).map(mediaBillHTML)].filter(Boolean).join(" · ");
@@ -970,7 +974,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     permissionCardsHTML(turn, look.answerable, false, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + mailCardsHTML(turn, look) + pageCardsHTML(turn) +
     ownerQuestionsHTML(turn) +
     (turn.status === "confirm" ? `<div class="turn-question" data-question-turn="${id}"></div>` : "") +
-    (detail ? `<div class="tn-detail" id="tn-detail-${id}"${detailOpen ? "" : " hidden"}>${messageHTML(turn.detail, query, true)}</div>` : "") +
+    (detail ? `<div class="tn-detail" id="tn-detail-${id}"${detailOpen ? "" : " hidden"}>${messageHTML(composioText(turn.detail!, composioAction(turn)), query, true)}</div>` : "") +
     more +
     (turn.task?.state === "done" ? `<div data-task-result-slot="${id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") +
     (waitingForOwner || live || turn.task?.state === "waiting" ? "" : taskActionsHTML(turn, state)) +

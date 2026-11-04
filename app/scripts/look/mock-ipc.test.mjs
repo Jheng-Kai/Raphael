@@ -5,6 +5,21 @@ import { checkRendered } from "./checks.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixture.json", import.meta.url), "utf8"));
 describe("shared look IPC boundary", () => {
+  it("keeps room message timestamps renderable before and after bringing a pending question", async () => {
+    const target = {}, state = installMock(fixture, {fixture:{ownerQuestion:"pending-room"}}, target);
+    const invoke = (method, params) => target.__TAURI_INTERNALS__.invoke("core_call", {method, params});
+    const checkTimes = async () => {
+      const { messages } = await invoke("rooms.messages", {room_id:1});
+      expect(messages.length).toBeGreaterThan(12);
+      for (const message of messages) expect(Number.isFinite(new Date(message.created).getTime())).toBe(true);
+      return messages;
+    };
+    const before = await checkTimes();
+    const question = before.flatMap(message => message.turn?.owner_questions ?? [])[0];
+    const moved = await invoke("owner_questions.bring", {id:question.id});
+    expect((await checkTimes()).at(-1).turn_id).toBe(moved.turn_id);
+    expect(state.errors).toEqual([]);
+  });
   it("offers connected event choices and returns ordinary detected conditions without creating", async () => {
     const target = {}, state=installMock(fixture, {}, target);
     const call=(params={})=>target.__TAURI_INTERNALS__.invoke("core_call",{method:"routines.list",params});
