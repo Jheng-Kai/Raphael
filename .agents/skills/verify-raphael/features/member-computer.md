@@ -53,7 +53,7 @@ the existing icon buttons and card Done/Skip with computer-card controls at the
 same theme/size. The owner-typing scene uses synthetic RFB input only.
 
 ```powershell
-npm run look -- desktop-panel desktop-watch desktop-watch-collapse desktop-watch-boot desktop-watch-stopped desktop-watch-owner desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-owner desktop-host-remote desktop-host-invalid desktop-host-health delete-member-computer --theme both --width 1120,720,1920x1080
+npm run look -- desktop-panel desktop-watch desktop-watch-collapse desktop-watch-boot desktop-watch-stopped desktop-watch-owner desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-owner desktop-host-remote desktop-host-invalid desktop-host-health desktop-host-repair delete-member-computer --theme both --width 1120,720,1920x1080
 ```
 
 Native journeys: member-computer; computer-speed (explicit opt-in, never --all or
