@@ -29,6 +29,127 @@ from raphael_core.protocol import RpcError
 from raphael_core.home import ConnectedCalendar
 
 
+@pytest.mark.parametrize("encoding", [None, "gzip"])
+async def test_managed_mcp_stops_oversized_responses_before_reading_the_tail(encoding):
+    import zlib
+    from raphael_core.integrations.client import McpFailure
+
+    class Stream(httpx.AsyncByteStream):
+        read_tail = False
+        closed = False
+
+        async def __aiter__(self):
+            data = b"x" * 2_000_001
+            if encoding:
+                compressor = zlib.compressobj(wbits=31)
+                data = compressor.compress(data) + compressor.flush()
+            yield data
+            self.read_tail = True
+            yield b"unbounded remote tail"
+
+        async def aclose(self):
+            self.closed = True
+
+    stream = Stream()
+    headers = {"Content-Encoding": encoding} if encoding else {}
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, stream=stream, headers=headers))
+    client = ManagedMcp("https://mcp.composio.dev/synthetic", {}, transport=transport)
+    with pytest.raises(McpFailure, match="protocol"):
+        await client.call_tool("READ_SAMPLE", {})
+    assert not stream.read_tail
+    assert stream.closed
+
+
+async def test_managed_mcp_bounds_gzip_inflation_before_allocating_the_decoded_body(monkeypatch):
+    import zlib
+    from raphael_core.integrations.client import McpFailure
+
+    data = zlib.compress(b"x" * 2_000_001, wbits=31)
+    original = zlib.decompressobj
+    limits = []
+
+    class Decoder:
+        def __init__(self, *args, **kwargs):
+            self.decoder = original(*args, **kwargs)
+
+        def decompress(self, data, max_length=0):
+            limits.append(max_length)
+            return self.decoder.decompress(data, max_length)
+
+        def __getattr__(self, name):
+            return getattr(self.decoder, name)
+
+    class Stream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield data
+
+    monkeypatch.setattr(zlib, "decompressobj", Decoder)
+    transport = httpx.MockTransport(lambda request: httpx.Response(
+        200, headers={"Content-Encoding": "gzip"}, stream=Stream()))
+    client = ManagedMcp("https://mcp.composio.dev/synthetic", {}, transport=transport)
+    with pytest.raises(McpFailure, match="protocol"):
+        await client.call_tool("READ_SAMPLE", {})
+    assert limits and all(0 < limit <= 2_000_001 for limit in limits)
+
+
+@pytest.mark.parametrize("encoding", [None, "gzip"])
+async def test_managed_mcp_accepts_bounded_plain_and_compressed_results(encoding):
+    import zlib
+
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"content": []}}).encode()
+    if encoding:
+        body = zlib.compress(body, wbits=31)
+
+    class Stream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield body[:8]
+            yield body[8:]
+
+    transport = httpx.MockTransport(lambda request: httpx.Response(
+        200, headers={"Content-Encoding": encoding} if encoding else {}, stream=Stream()))
+    client = ManagedMcp("https://mcp.composio.dev/synthetic", {}, transport=transport)
+    result = await client.call_tool("READ_SAMPLE", {})
+    assert result.content == [] and not result.is_error
+
+
+@pytest.mark.parametrize("target,host", [
+    ("/callback?code=sample&state=wrong", "127.0.0.1:43210"),
+    ("/callback?code=sample&state=correct", "attacker.example"),
+])
+async def test_google_callback_without_authority_cannot_consume_the_login(target, host):
+    from unittest.mock import Mock
+
+    class Writer:
+        def write(self, data): pass
+        async def drain(self): pass
+        def close(self): pass
+        async def wait_closed(self): pass
+
+    listener = Loopback("correct")
+    listener.server = Mock()
+    listener.redirect_uri = "http://127.0.0.1:43210/callback"
+
+    async def deliver(target, host):
+        reader = asyncio.StreamReader()
+        reader.feed_data(f"GET {target} HTTP/1.1\r\nHost: {host}\r\n\r\n".encode())
+        reader.feed_eof()
+        await listener._serve(reader, Writer())
+
+    try:
+        await deliver(target, host)
+        assert not listener.claimed
+        assert not listener.done.done()
+        listener.server.close.assert_not_called()
+        await deliver("/callback?code=sample&state=correct", "127.0.0.1:43210")
+        assert await listener.wait() == "sample"
+        listener.server.close.assert_called_once()
+    finally:
+        if listener.done.done() and not listener.done.cancelled():
+            listener.done.exception()
+        else:
+            listener.done.cancel()
+
+
 async def test_account_labels_survive_refresh_and_reach_members(tmp_path, conn):
     def respond(request):
         if request.url.path.endswith("/connected_accounts"):
@@ -655,7 +776,7 @@ async def test_loopback_state_mismatch_and_timeout_close_listener():
         async with httpx.AsyncClient(trust_env=False) as browser:
             with contextlib.suppress(httpx.RemoteProtocolError):
                 await browser.get(listener.redirect_uri, params={"code": "private", "state": "wrong"})
-        with pytest.raises(ConnectorFailure, match="state"):
+        with pytest.raises(ConnectorFailure, match="timeout"):
             await listener.wait()
     async with Loopback("correct", timeout=0.01) as listener:
         with pytest.raises(ConnectorFailure, match="timeout"):

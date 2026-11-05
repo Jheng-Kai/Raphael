@@ -3,6 +3,8 @@
 import asyncio
 import contextlib
 
+import pytest
+
 from raphael_core.messaging.channels.base import Incoming
 from raphael_core.messaging.core import Switchboard, session_id, split_session
 from raphael_core.messaging.service import MessagingService
@@ -130,6 +132,72 @@ async def test_a_message_outside_a_private_chat_is_ignored():
     await channel.inbox.put(Incoming(chat="D1", user="U1", text="direct"))
     await run(board, lambda: channel.sent)
     assert [a[1] for a in board.asked] == ["direct"]
+
+
+@pytest.mark.parametrize("kind", ["telegram", "slack", "discord"])
+async def test_revoked_chat_cannot_run_queued_messages_or_receive_inflight_answers(kind):
+    channel = FakeChannel()
+    channel.kind = kind
+    board = make(channel)
+    allowed = True
+    board._chat_allowed = lambda chat: allowed
+    entered, release = asyncio.Event(), asyncio.Event()
+    asked = []
+
+    async def ask(session, text, language, source):
+        asked.append(text)
+        entered.set()
+        await release.wait()
+        return "private answer"
+
+    board._ask = ask
+    first = asyncio.create_task(board._route(Incoming(chat="D1", user="U1", text="First")))
+    await entered.wait()
+    second = asyncio.create_task(board._route(Incoming(chat="D1", user="U1", text="Queued")))
+    try:
+        await settle(lambda: board._pending_chats.get("D1") == 2)
+        channel.sent.clear()
+        allowed = False
+        release.set()
+        await asyncio.gather(first, second)
+        assert asked == ["First"]
+        assert channel.sent == []
+    finally:
+        release.set()
+        await asyncio.gather(first, second, return_exceptions=True)
+        await board.aclose()
+
+
+async def test_revocation_during_attachment_download_prevents_the_model_request():
+    from raphael_core.messaging.channels.base import Attachment
+
+    channel = FakeChannel()
+    board = make(channel)
+    allowed = True
+    board._chat_allowed = lambda chat: allowed
+
+    async def fetch(attachment, limit):
+        nonlocal allowed
+        allowed = False
+        return b"synthetic document"
+
+    channel.fetch = fetch
+    await board._route(Incoming(chat="D1", user="U1", caption="Read this",
+                                attachments=[Attachment("other", "file", "text/plain", 18, "sample.txt")]))
+    assert board.asked == []
+    assert channel.sent == []
+
+
+@pytest.mark.parametrize("user", ["U1", "stranger"])
+async def test_incoming_flood_has_a_bounded_number_of_pending_tasks(user):
+    channel = FakeChannel()
+    board = make(channel)
+    try:
+        for index in range(100):
+            board._deliver(Incoming(chat="D1", user=user, text=f"Message {index}"))
+        assert len(board._tasks) <= 64
+    finally:
+        await board.aclose()
 
 
 async def test_stop_names_the_session_of_the_chat_that_asked():
