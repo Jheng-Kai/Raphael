@@ -2,7 +2,7 @@ import { visibilityGate, windowVisible } from "../window-visibility";
 import { readDraftWords, writeDraftWords } from "../composer-drafts";
 import { cardDisclosureHTML, cardFailure, cardHTML, cardPromptText } from "../card";
 import { mountTaskResults } from "../task-result";
-import { patchThread } from "../thread-diff";
+import { patchThread, threadLineIdentity } from "../thread-diff";
 import { sameWire, ThreadRenderCache } from "../thread-render";
 import { mountTranscriptWindow, TranscriptWindow } from "../transcript-window";
 import { composioAction } from "../composio-result";
@@ -82,7 +82,7 @@ import { mountPendingQuestions } from "../pending-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
 import { memberAccent, ownerBubble } from "../owner-bubble";
 import { slimeColorOf } from "../slime";
-import { dayLabel, describeError, formatClock } from "../format";
+import { dayLabel, describeError } from "../format";
 import { loadingHTML } from "../loading";
 import {
   type TimelineState,
@@ -869,6 +869,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       turnWindow.focus(String(openingTarget), chronological.map(turn => String(turn.id))); openingWindowTarget = openingTarget;
     }
     const mounted = turnWindow.select(chronological, turn => String(turn.id), drawingFollows && !searching);
+    const latestFailedTurnId = [...chronological].reverse().find(turn => turn.status === "error" || turn.task && ["failed", "interrupted", "cancelled", "limit"].includes(turn.task.state))?.id;
     windowMount.sync();
     const out = threadItems(mounted, state.nowMs).map((item) =>
       item.kind === "day"
@@ -881,8 +882,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), shape.mentions, turnLook.query ?? "", details.has(turn.id),
             state.open.get(turn.id), state.thinkingOpen.get(turn.id), expanded, task !== undefined && state.stopping.has(task), task !== undefined && state.rerunning.has(task),
             state.workStartedAt.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
-            live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", turn.permissions?.some(card => shape.answerable?.(card.id))],
-            () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id }));
+            live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId],
+            () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId }));
         })(), turnId: item.turn.id },
     );
     renderedTurns.retain(new Set(out.map(line => line.key)));
@@ -895,7 +896,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     // What is on its way stands under the day its turn will have, so it does not move when the turn comes.
     const pendingAt = outgoing.find(belongs)?.sentAt ?? (hearingBelongs() ? hearing!.since : undefined);
     const lastAt = Math.max(0, ...turns.map(turn => turn.created_at_ms));
-    if (pendingAt !== undefined && pendingAt - lastAt >= 30 * 60 * 1000) out.push({ key: `time:pending:${pendingAt}`, html: dayHTML(`${dayLabel(pendingAt, state.nowMs)} ${formatClock(pendingAt)}`) });
+    if (pendingAt !== undefined && (!lastAt || new Date(pendingAt).toDateString() !== new Date(lastAt).toDateString())) out.push({ key: `time:pending:${pendingAt}`, html: dayHTML(dayLabel(pendingAt, state.nowMs)) });
     for (const sent of outgoing) if (belongs(sent)) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs, state.expandedMessages.has(`pending:${sent.requestId}:question`), !additions) });
     if (hearingBelongs()) out.push({ key: "hearing", html: pendingTurnHTML(null, VOICE, shape, [], { time: hearing!.since }, state.nowMs) });
     if (additions) out.push({ key: `presence:${memberId()}:${conversationId()}`, html: `<li class="tn tn-presence"><div class="ra"><div class="ra-body">${livePresenceHTML(shape, active ? latestProgress(active) : undefined, !active || active.status === "running" || isLive(active.task))}</div></div></li>` });
@@ -1505,6 +1506,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     records: () => turnWindow.before || turnWindow.after ? [...turns].sort((a,b) => a.created_at_ms-b.created_at_ms || a.id-b.id).map(turn => ({ key: `turn:${turn.id}`,
       texts: [turn.question, ...(turn.messages?.length ? turn.messages.filter(message => ["reply", "event"].includes(message.kind)).map(message => messagePlainText(message.text, true, composioAction(turn))) : [messagePlainText(turn.text, true, composioAction(turn))])] })) : undefined,
     reveal: key => { if (turnWindow.focus(key.replace(/^turn:/, ""))) render(); },
+    revealWork: id => {
+      state.thinkingOpen.set(id, true);
+      // Search opens this body in place; acknowledge that state without replacing its marks or face.
+      const line = lines().find(line => line.turnId === id), node = thread.querySelector(`.tn[data-id="${id}"]`);
+      if (line && node) drawnHTML.set(node, threadLineIdentity(line.html));
+    },
     changed: open => { searching = open; if (open) { pacing.flush(); render(); } }, load: async current => {
     const member = memberId(), conversation = conversationId();
     const gathered: AgentTurn[] = [];
@@ -1807,7 +1814,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   async function regenerate(control: HTMLElement): Promise<void> {
     const source = messageSource(control);
-    if (!source || look().regenerateTurnId !== source.turn.id) return;
+    const latest = look().regenerateTurnId;
+    if (!source || latest === undefined || latest !== source.turn.id && !(source.turn.status === "error" && control.classList.contains("rerun"))) return;
     const member = memberId(), turn = source.turn;
     const sentConversation = conversationId();
     const requestId = crypto.randomUUID();

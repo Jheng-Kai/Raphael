@@ -1059,6 +1059,7 @@ export const ja = {
   "agent.reason.denied": "操作が許可されていません。「設定 › 接続」で読み書きツールと認証を確認してください。拒否した操作は自動再試行しません。",
   "agent.reason.timeout": "応答がありません",
   "agent.reason.network": "サービスに接続できません",
+  "agent.reason.cliStopped": "CLI は回答を完了する前に停止しました",
   "agent.reason.not_found": "必要な項目がありません。ファイル、リンク、モデルを選び直し、接続ツールなら再読み込みしてください。",
   "agent.reason.blocked": "許可されていません",
   "agent.reason.approval_required": "アプリ内での承認を待っています",

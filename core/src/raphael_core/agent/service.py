@@ -2370,7 +2370,7 @@ class AgentService:
             return self._finish(ask, "delegate", "question", arguments["question"], ledger)
         reply = loop.reply(outcome)
         if isinstance(loop, CliLoop) and loop.failure:
-            return self._finish(ask, "answer", "negative", reply.text, ledger, status="error")
+            return self._finish(ask, "answer", "negative", reply.text, ledger, status="error", detail=outcome.detail)
         if ask.admin_pending:
             asked = await self._propose_admin(ask, ledger, loop.seen)
             self._followups[asked["confirm"]["id"]].carry = loop

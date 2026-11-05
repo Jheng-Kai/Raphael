@@ -722,3 +722,7 @@ R-SKILL-08 also covers localized skill origins in member details, Connections,
 discovery and document dialogs; see [Members](members.md#localized-skill-origins-2026-11-05).
 The same selected twenty-scene skill matrix checks raw-source leakage and one learned
 origin/date line.
+
+## Calm conversations (owner, 2026-11-05)
+
+See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) for R-UI-101 and R-CLI-01, the selected eleven-scene matrix and offline/native boundaries.

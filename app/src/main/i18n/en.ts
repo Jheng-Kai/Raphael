@@ -1059,6 +1059,7 @@ export const en = {
   "agent.reason.denied": "This action was not authorized. Check read/write tools and sign-in in Settings > Connections. An owner denial is never retried automatically.",
   "agent.reason.timeout": "No response",
   "agent.reason.network": "Can't reach the service",
+  "agent.reason.cliStopped": "The CLI stopped before finishing its answer",
   "agent.reason.not_found": "An item this task needs was not found. Reselect the file, link or model; reload tools for a connected app.",
   "agent.reason.blocked": "Not allowed",
   "agent.reason.approval_required": "Waiting for your approval in the app",

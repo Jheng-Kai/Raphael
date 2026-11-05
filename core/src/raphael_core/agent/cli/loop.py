@@ -348,8 +348,7 @@ class CliLoop:
             failure = self.failure_reason or Failure(reason, reason)
             message = failure.sentence(name, self.language)
             message += self._unfinished()
-            self.event(message)
-            self._queue.put_nowait(Outcome("done", final=message))
+            self._queue.put_nowait(Outcome("done", final=message, detail=failure.detail))
             return
         messages = {
             "missing": f"請先安裝 {name}，再到設定 › 模型與用量登入。",
@@ -376,7 +375,6 @@ class CliLoop:
                         "quota": f"{name} has used up its subscription quota for now. Try again later or pick another model.",
                         "rate_limited": f"{name} is rate-limited right now (too many requests). Try again in a little while."}
         message = messages[reason] + self._unfinished()
-        self.event(message)
         self._queue.put_nowait(Outcome("done", final=message))
 
     def _unfinished(self):
@@ -526,6 +524,7 @@ class CliLoop:
                         elif not told:
                             told = True
                             self.progress(self._rate_limit_wait(NAMES[name], wait) if failure == "rate_limit" else
+                                          self.failure_reason.waiting(NAMES[name], self.language, wait) if failure == "cli_stopped" and self.failure_reason else
                                           Failure(failure, self.failure_reason.reason if self.failure_reason else failure).sentence(NAMES[name], self.language))
                         await asyncio.sleep(wait)
                         self.alive()
@@ -572,8 +571,9 @@ class CliLoop:
         except (EOFError, ConnectionError, asyncio.IncompleteReadError) as error:
             if self._handed_off():
                 return None
-            self.failure_reason = Failure("network", type(error).__name__)
-            return "network"
+            kind = "network" if isinstance(error, ConnectionError) else "cli_stopped"
+            self.failure_reason = Failure(kind, type(error).__name__)
+            return kind
 
     async def _stream_attempt(self, name, command, model, server, session, workspace, steps, *, user):
         """Run the CLI once for this turn: None once its answer is queued, else why it failed."""
@@ -633,7 +633,7 @@ class CliLoop:
                     if self._handed_off():
                         return None
                     self.failure_reason = classify({"kind": event.text, "message": event.data.get("reason", event.text),
-                                                    "resets_at": event.data.get("resets_at")})
+                                                    "resets_at": event.data.get("resets_at"), "detail": event.data.get("detail")})
                     return self.failure_reason.kind
                 elif event.kind == "final":
                     if self._handed_off():
@@ -652,13 +652,13 @@ class CliLoop:
                         return None
                     self._progress()
                     self.failure_reason = classify("CLI ended without an answer")
-                    return "unknown"
+                    return self.failure_reason.kind
         if self._handed_off():
             return None
         if self.catalog_changed:
             return "tools_changed"
-        self.failure_reason = Failure("network", "CLI stream ended before completion")
-        return "network"
+        self.failure_reason = Failure("cli_stopped", "CLI stream ended before completion")
+        return "cli_stopped"
 
     async def _native_permission(self, args):
         async with self._serial:

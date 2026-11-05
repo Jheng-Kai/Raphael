@@ -80,6 +80,12 @@
 .work-body .message-actions { display: none; }
 .work-progress { color: var(--text-3); font-size: var(--fs-2xs); }
 .message-actions [data-act="more-message"] { margin-left: 0; }
+.tn.is-latest-failure .message-actions:has(.rerun) { opacity: 1; }
+.routine-origin { display: flex; align-items: center; gap: var(--sp-1); color: var(--text-3); font-size: var(--fs-2xs); }
+.routine-origin > .i { width: 14px; height: 14px; }
+.routine-origin .routine-run-link { color: inherit; font-size: inherit; min-height: 0; max-width: 100%; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.routine-origin .routine-run-link > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.failure-detail { white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-2xs); color: var(--text-3); }
 .search-group-label { padding: var(--sp-3) var(--sp-3) var(--sp-1); color: var(--text-3); font-size: var(--fs-2xs); }
 .nav.message-search-result { display: flex; align-items: center; gap: var(--pa-row-gap); padding: calc(7px + 4 * var(--pa-u)) 8px; width: 100%; text-align: left; border-radius: var(--pa-row-r); }
 .message-search-result > .av { flex-shrink: 0; }

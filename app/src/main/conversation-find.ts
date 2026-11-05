@@ -3,7 +3,7 @@ import { describeError } from "./format";
 import { esc, ico, iconButton } from "./ui";
 
 export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement; thread: HTMLElement; scroll: HTMLElement; load(current: () => boolean): Promise<void>; changed?(open: boolean): void;
-  records?(): { key: string; texts: string[] }[] | undefined; reveal?(key: string): void;
+  records?(): { key: string; texts: string[] }[] | undefined; reveal?(key: string): void; revealWork?(id: number): void;
 }) {
   let opened = false, query = "", index = -1, epoch = 0, complete = false, positioned = false;
   let marks: HTMLElement[] = [], timer: ReturnType<typeof setTimeout> | undefined;
@@ -43,6 +43,13 @@ export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement
     for (const button of o.bar.querySelectorAll<HTMLButtonElement>('[data-find="next"], [data-find="previous"]')) button.disabled = !complete || !total;
     if (scroll && marks[index]) {
       const mark = marks[index], message = mark.closest<HTMLElement>('.chat-message, .timeline-event, .event-group');
+      const work = mark.closest<HTMLElement>('.work-body');
+      if (work?.hidden) {
+        const section = work.closest<HTMLElement>('[data-thinking-turn]')!;
+        o.revealWork?.(Number(section.dataset.thinkingTurn));
+        work.hidden = false; section.classList.add('is-open');
+        section.closest('.tn')?.querySelectorAll('[data-act="thinking"]').forEach(button => button.setAttribute('aria-expanded', 'true'));
+      }
       for (let group = mark.closest('details'); group; group = group.parentElement?.closest('details') ?? null) {
         if (!group.open && !group.querySelector(':scope > summary')?.contains(mark)) group.open = true;
       }
@@ -63,7 +70,7 @@ export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement
       const node = walker.currentNode as Text, parent = node.parentElement;
       const hidden = parent?.closest('[hidden]');
       const event = parent?.closest('.event-line');
-      if (parent?.closest('.message-text, .message-code code, .message-table td, .message-table th, .event-line') && (!parent.closest('button, .work-section') || event) && (!hidden || !o.thread.contains(hidden))) nodes.push(node);
+      if (parent?.closest('.message-text, .message-code code, .message-table td, .message-table th, .event-line') && (!parent.closest('button, .work-section') || event) && (!hidden || !o.thread.contains(hidden) || event && hidden.classList.contains('work-body'))) nodes.push(node);
     }
     for (const node of nodes) {
       const text = node.data, lower = text.toLocaleLowerCase(), fragment = document.createDocumentFragment();

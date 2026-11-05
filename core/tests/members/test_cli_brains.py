@@ -78,9 +78,10 @@ else:
 
 
 @pytest.mark.parametrize("answer", ["", "The final answer."])
-async def test_progress_only_turn_fails_and_terminal_answer_is_authoritative(setup, tmp_path, answer):
+async def test_progress_only_turn_fails_and_terminal_answer_is_authoritative(setup, tmp_path, monkeypatch, answer):
     rig, team = setup
     teacher = member(team, model="cli:claude")
+    monkeypatch.setattr("raphael_core.agent.cli.loop.RATE_LIMIT_WAITS_S", ())
     fake_brain(rig, tmp_path, '''import json, sys
 json.loads(sys.stdin.readline())
 print(json.dumps({"type":"assistant", "message":{"content":[{"type":"text", "text":"Still checking."}]}}),flush=True)
@@ -93,9 +94,29 @@ print(json.dumps({"type":"result", "subtype":"success", "result":ANSWER}),flush=
         assert result["text"] == answer and replies == [answer]
     else:
         assert turn["status"] == "error"
-        assert result["text"] == "The cause of this failure in Claude Code is unknown. Keep this conversation and try once more. Report the problem if it continues."
+        assert result["text"] == "Claude Code stopped before finishing its answer."
         assert [message["text"] for message in turn["messages"] if message["kind"] == "progress"] == ["Still checking."]
         assert "Still checking." not in replies
+
+
+async def test_cli_failure_detail_is_saved_without_a_duplicate_public_event(setup, tmp_path, monkeypatch):
+    rig, team = setup
+    teacher = member(team, model="cli:claude")
+    monkeypatch.setattr("raphael_core.agent.cli.loop.RATE_LIMIT_WAITS_S", ())
+    fake_brain(rig, tmp_path, '''import json, sys
+json.loads(sys.stdin.readline())
+sys.stderr.write("Authorization: Bearer synthetic-private-token\\nlast saved diagnostic\\n")
+sys.stderr.flush()
+print(json.dumps({"type":"result", "subtype":"error_during_execution", "is_error":True, "errors":["required MCP servers failed to initialize: raphael"]}), flush=True)
+''')
+    result = await typed(rig, "Synthetic question", teacher.id, language="en")
+    [saved] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
+    assert saved["status"] == "error" and "raphael" in result["text"]
+    assert "required MCP servers failed to initialize: raphael" in saved["detail"]
+    assert "last saved diagnostic" in saved["detail"]
+    assert "synthetic-private-token" not in saved["detail"]
+    assert not [message for message in saved["messages"] if message["kind"] == "event"]
+    assert [message["text"] for message in saved["messages"] if message["kind"] == "reply"] == [result["text"]]
 
 
 @pytest.mark.parametrize("language,prefix", [("zh-TW", "答。"), ("en", "Answer. "), ("ja", "解。")])
@@ -219,7 +240,7 @@ print(json.dumps({"type":"result","subtype":"success","session_id":"t","result":
     turn = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"][0]
     assert [m["text"] for m in turn["messages"] if m["kind"] == "reply"] == ["One.\n\nTwo.\n\nThree."]
 
-async def test_missing_cli_is_a_clear_reply_and_event_without_api_key(setup, tmp_path):
+async def test_missing_cli_is_one_clear_reply_without_api_key(setup, tmp_path):
     rig, team = setup
     teacher = member(team, model="cli:codex")
     rig.keys.set("")
@@ -228,7 +249,7 @@ async def test_missing_cli_is_a_clear_reply_and_event_without_api_key(setup, tmp
     assert "Codex CLI" in result["text"] and "安裝" in result["text"]
     turn = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"][0]
     assert turn["status"] == "error"
-    assert [message["kind"] for message in turn["messages"]] == ["event", "reply"]
+    assert [message["kind"] for message in turn["messages"]] == ["reply"]
 
 
 @pytest.mark.parametrize("decision", ["yes", "no", "always"])
@@ -375,7 +396,7 @@ async def test_not_logged_in_never_starts_the_fake_cli(setup, tmp_path):
     assert result["text"] == "請先到設定 › 模型與用量 › 訂閱帳號，為 Antigravity 按下「連線」。"
 
 
-async def test_crash_does_not_publish_diagnostics_or_private_reasoning(setup, tmp_path, caplog, monkeypatch):
+async def test_crash_keeps_diagnostics_in_detail_and_does_not_publish_private_reasoning(setup, tmp_path, caplog, monkeypatch):
     rig, team = setup
     teacher = member(team, model="cli:claude")
     monkeypatch.setattr("raphael_core.agent.cli.loop.RATE_LIMIT_WAITS_S", (0.0,))
@@ -386,9 +407,12 @@ print(json.dumps({"type":"assistant","message":{"content":[{"type":"thinking","t
 sys.exit(1)
 ''')
     result = await typed(rig, "Hello", teacher.id)
-    assert result["text"] == "Claude Code 目前無法連線，請確認網路後再試。"
+    assert result["text"] == "Claude Code 在回答完成前停止了。"
     history = await rig.call("agent.history.list", {"member_id": teacher.id})
-    assert "PRIVATE-DIAGNOSTIC-SECRET" not in json.dumps(history) + caplog.text
+    [saved] = history["turns"]
+    assert "PRIVATE-DIAGNOSTIC-SECRET" in saved["detail"]
+    assert "PRIVATE-DIAGNOSTIC-SECRET" not in json.dumps(saved["messages"]) + result["text"] + caplog.text
+    assert not any(message["text"] == result["text"] for message in saved["messages"] if message["kind"] != "reply")
     assert "PRIVATE-REASONING" not in json.dumps(history) + caplog.text
 
 

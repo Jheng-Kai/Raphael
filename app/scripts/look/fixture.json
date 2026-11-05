@@ -1,4 +1,5 @@
 {
+  "calmSample": {"question":"請再檢查一次範例新聞摘要。", "routine":"NHK Easy News 每日摘要", "failure":"Codex CLI 在回答完成前停止了。"},
   "unreadSample": {"question": "Check the sample notes.", "answer": "The sample notes are ready for review.", "paragraph": "The sample comparison includes the observations, remaining questions and a suggested next step."},
   "windowSample": {"needle": "視窗搜尋標記", "question": "請檢查這份範例筆記。", "answer": "範例筆記已整理完成，可以開始檢閱。", "paragraph": "這份比較記錄了觀察結果、待釐清的問題，以及建議的下一步。"},
   "presenceSample": {"question": "Check the sample report.", "answer": "The sample report is ready.", "secondAnswer": "The sample comparison is complete.", "progress": "Checking sample sources", "nextAction": "Comparing sample sources", "routine": "Sample briefing", "calendar": "Sample review", "source": "https://example.test/sample"},

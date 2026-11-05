@@ -344,11 +344,11 @@ test("an unchanged history refresh updates the day heading across local midnight
   turns = [live({ status: "done", text: "A settled reply" })];
   mount(); await flush();
   const line = $('.tn[data-id="11"]');
-  expect($('.thread .day').textContent).toBe("今天 23:59");
+  expect($('.thread .day').textContent).toBe("今天");
   vi.setSystemTime(new Date(2026, 9, 21, 0, 1));
   emit({ type: "WorkerChanged", task_id: 999, state: "running", running: true });
   await vi.advanceTimersByTimeAsync(1100); await flush();
-  expect($('.thread .day').textContent).toBe("昨天 23:59");
+  expect($('.thread .day').textContent).toBe("昨天");
   expect($('.tn[data-id="11"]')).toBe(line);
 });
 

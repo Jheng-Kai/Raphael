@@ -63,12 +63,13 @@ test("a pending permission card replaces duplicate running and waiting task cont
   }
 });
 
-test("a finished task's reply stands alone, and only an unfinished one says how it ended", () => {
+test("terminal tasks add no centred status row, and failed replies own their rerun", () => {
   const draw = (over: Partial<AgentTurn>) => { document.body.innerHTML = turnHTML(turn(74, over), emptyTimelineState(), false, LOOK); return document.querySelector(".task-actions"); };
   expect(draw({ text: "The sample report is ready.", task: { id: 74, state: "done" } as AgentTask })).toBeNull();
   expect(draw({ text: "", messages: [{ seq: 1, kind: "reply", text: "The sample report is ready.", at_ms: 1 }], task: { id: 74, state: "done" } as AgentTask })).toBeNull();
-  expect(draw({ text: "", messages: [], task: { id: 74, state: "done" } as AgentTask })).not.toBeNull();
-  expect(draw({ text: "The sample report is ready.", task: { id: 74, state: "failed" } as AgentTask })?.querySelector('[data-act="rerun"]')).not.toBeNull();
+  expect(draw({ text: "", messages: [], task: { id: 74, state: "done" } as AgentTask })).toBeNull();
+  expect(draw({ text: "The sample report is ready.", task: { id: 74, state: "failed" } as AgentTask })).toBeNull();
+  expect(document.querySelector('.chat-message .message-actions [data-act="rerun"]')).not.toBeNull();
 });
 
 test("a settled permission card also owns its task's completed state", () => {
@@ -164,15 +165,15 @@ test("a spoken quick answer with public progress shows its answer after the work
   expect(stopped).not.toContain('class="ans"');
 });
 
-test("a live turn renders ordered public bubbles and event chips without raw steps", () => {
+test("a live turn renders public replies while unfinished work receipts stay out of the thread", () => {
   const html = turnHTML(turn(1, { status: "running", text: "", steps: THREE, messages: [
     { seq: 1, kind: "progress", text: "I will check the examples.", at_ms: T0 },
     { seq: 2, kind: "event", text: "Example saved", at_ms: T0 },
     { seq: 3, kind: "reply", text: "Your turn?", at_ms: T0 },
   ] }), emptyTimelineState(), false, { face: () => "" });
   expect(html).toContain('data-tooltip="I will check the examples."');
-  expect(html.indexOf("Example saved")).toBeLessThan(html.indexOf("Your turn?"));
-  expect(html).toContain('class="sys event-line"');
+  expect(html).not.toContain("Example saved");
+  expect(html).not.toContain('class="sys event-line"');
   expect(html).not.toContain('class="work-sentences"');
   expect(html).not.toContain('class="work-time"');
   expect(html).toContain('class="live-presence"');
@@ -587,11 +588,13 @@ describe("a turn", () => {
     expect(turnHTML(turn(5, { question: " " }), emptyTimelineState(), false, LOOK)).not.toContain("bubble");
   });
 
-  test("a detail is closed behind a button that says whether it is open", () => {
+  test("a detail shares the reply's collapsed work action", () => {
     const closed = turnHTML(turn(5, { detail: "更多" }), emptyTimelineState(), false, LOOK);
-    expect(closed).toContain('class="btn sm icon tn-more" data-act="detail" aria-expanded="false" aria-controls="tn-detail-5" aria-label="詳細" title="詳細"');
-    expect(closed).toContain('<div class="tn-detail" id="tn-detail-5" hidden><p>更多</p></div>');
-    expect(turnHTML(turn(5, { detail: "更多" }), emptyTimelineState(), true, LOOK)).toContain('<div class="tn-detail" id="tn-detail-5"><p>更多</p></div>');
+    expect(closed).toContain('data-act="thinking" aria-expanded="false" aria-controls="work-5"');
+    expect(closed).toContain('id="work-5" hidden');
+    expect(closed).toContain('<pre class="failure-detail">更多</pre>');
+    const state = emptyTimelineState(); state.thinkingOpen.set(5, true);
+    expect(turnHTML(turn(5, {detail:"更多"}), state, false, LOOK)).toContain('id="work-5"><');
   });
 
   test("the words looked for are marked in the question, the answer and the detail", () => {

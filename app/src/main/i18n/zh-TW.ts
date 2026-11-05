@@ -1058,6 +1058,7 @@ export const zhTW = {
   "agent.reason.denied": "這項操作未獲允許，請到「設定 › 連接」確認讀寫工具與登入授權；你已拒絕的操作不會自動重試。",
   "agent.reason.timeout": "服務無回應",
   "agent.reason.network": "連不上服務",
+  "agent.reason.cliStopped": "CLI 在回答完成前停止了",
   "agent.reason.not_found": "找不到工作需要的項目，請重新選擇原檔、連結或模型；連接工具請先重新讀取工具。",
   "agent.reason.blocked": "未獲允許",
   "agent.reason.approval_required": "等待你在程式內核准",

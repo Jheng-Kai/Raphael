@@ -144,7 +144,7 @@ async def test_recovery_is_bounded_and_final_failure_accounts_for_work(monkeypat
     assert len(rig.lines) == 3 and all("try again" in line.lower() for line in rig.lines)
     assert "1" in result.final and "not completed" in result.final
     assert "private-command-text" not in result.final
-    assert rig.events == [result.final] and rig.loop.failure == "overloaded"
+    assert rig.events == [] and rig.loop.failure == "overloaded"
 
 
 @pytest.mark.parametrize("failure", ["auth_expired", "usage_limit", "credits", "context_overflow"])
@@ -225,7 +225,7 @@ async def test_driver_classifies_a_dead_fake_cli_as_a_passing_transport_failure(
     script.write_text('import sys\nsys.stdin.readline()\n', encoding="utf-8")
     events = [event async for event in Driver("claude", [sys.executable, str(script)], environ={}).run(
         user="Save the draft", system="Test", endpoint="http://127.0.0.1:1/mcp", token="fake", permission=None)]
-    assert events[-1].kind == "error" and events[-1].text == "network"
+    assert events[-1].kind == "error" and events[-1].text == "cli_stopped"
 
 
 async def test_recovery_uses_api_waits_and_preserves_provider_delay(monkeypatch, tmp_path):

@@ -2,6 +2,18 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  if (variant.calmThread) {
+    const sample = data.calmSample, base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
+    const start = new Date(data.now); start.setHours(7, 0, 0, 0);
+    data.members.forEach(member => Object.assign(member, {unread:false, unread_from:null, activity:"idle", waiting:false}));
+    const make = (id, time) => ({...base, id, created_at_ms:time, session_id:`calm-${id}`, status:"error", route:"answer", source:"app", question:sample.question, text:sample.failure,
+      prefix:"", detail:null, model:"cli:codex", steps:[], messages:[{seq:1,kind:"event",text:sample.failure,at_ms:time}], attachments:[], handoffs:[], permissions:[], drafts:[], computers:[], connectors:[], secrets:[], pages:[], owner_questions:[],
+      task:{id,state:"failed",started_at_ms:time,finished_at_ms:time+1000}});
+    const first = make(8101, start.getTime()), last = make(8102, start.getTime() + (variant.calmThread === "days" ? 86400000 : 3600000));
+    first.source = "routine"; first.question = sample.routine; first.messages = []; first.routine = {...data.routines.find(routine => routine.member_id === 1),title:sample.routine};
+    last.task = null;
+    data.turns = data.turns.filter(turn => turn.member_id !== 1).concat(first, last);
+  }
   if (variant.ownerOutputFolder) data.settings.owner_output_folder = "C:\\Owner\\Deliveries";
   if (variant.routineGuard) for (const routine of data.routines.filter(item => item.member_id === 1)) {
     Object.assign(routine, { enabled: false, next_run: null, last_error: "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。" });
