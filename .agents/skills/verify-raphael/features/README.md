@@ -1,5 +1,9 @@
 # Raphael feature map
 
+## External-input security boundaries (2026-11-05)
+
+See [Agent and external-input security boundaries](security-boundaries.md) for current allowlist checks, bounded messaging/webhook/MCP ingress, nonce-bound tunnel probes, OAuth callback admission and the offline verification limits.
+
 ## Member panel tabs (2026-11-05)
 
 The owner request of 2026-11-05 introduces R-PANEL-01 through R-PANEL-04. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for Details / Library / Computer navigation, shared file/work controls, truthful local Docker recovery, the selected scene matrix and native/judge limits. [Conversation](conversation.md#member-panel-destinations-2026-11-05) and [Daily work](daily-work.md#work-and-files-in-the-member-panel-2026-11-05) map the affected consumers.
@@ -763,3 +767,12 @@ See [Members](members.md#colleague-recipes-and-goal-first-greeting-2026-11-05), 
 attachment associations, release path validation, publication commit binding and
 the reviewed shell/webview/IPC/update surfaces. Follow-up 1 adds composer-only page text
 placement; see conversation.md for the selected scene matrix.
+
+
+## Offline storage and diagnostic security (2026-11-05)
+
+R-SEC-FILES-01..03 and R-SEC-LOG-01 are core-only boundaries. See the appended
+security sections in member-computer.md, settings-appearance.md and conversation.md.
+Use the normal pytest suites for computer, services, memory, CLI diagnostics, vault,
+member homes/panel, database and architecture. No rendered UI changed, so look/judge
+are outside this local scope. Live/provider/SSH/native checks remain unverified.

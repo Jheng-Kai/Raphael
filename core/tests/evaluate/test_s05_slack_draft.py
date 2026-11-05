@@ -27,9 +27,13 @@ def act(user, tools, results, *, claims=False):
 @pytest.mark.parametrize("claims", [False, True])
 async def test_slack_cell_requires_an_editable_draft_and_one_version_bound_send(tmp_path, monkeypatch, brain, claims):
     cli_brain(monkeypatch, [], act, claims=claims)
+    registry = await inventory()
+    slack = next(tool for tool in registry if tool.tool_key == "raphael/core/slack_draft")
+    assert slack.api_names == slack.mcp_names == ["slack_draft"]
+    assert set(slack.roles) == {"chief", "member"}
     result = await run_cell(CELL, brain, API if brain == "A" else CLI, tmp_path, client=Brain(act, claims=claims),
                             brains=FakeBrains(tmp_path), budget=Budget(40), seconds=60,
-                            run_id="offline-slack", head="test-head", registry=await inventory())
+                            run_id="offline-slack", head="test-head", registry=registry)
     assert result["status"] == ("FAIL" if claims else "PASS"), result["reason"]
     if claims:
         assert "editable_slack" in result["reason"]

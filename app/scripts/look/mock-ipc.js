@@ -2,6 +2,11 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  if (variant.voiceCall) {
+    data.members.forEach(member => Object.assign(member, {unread:false,unread_from:null,activity:"idle",waiting:false}));
+    data.voiceCallBase = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
+    data.turns = data.turns.filter(turn => turn.member_id !== 1);
+  }
   if (variant.chatMetadata) {
     const sample = data.chatMetadataSample, base = structuredClone(data.mailTurns.draft);
     data.members.forEach(member => Object.assign(member, {unread:false,unread_from:null,activity:"idle",waiting:false}));
@@ -740,9 +745,44 @@ export function installMock(fixture, config = {}, target = window) {
     const head = text.startsWith("---") ? text.split("---")[1] ?? "" : "";
     return head.split("\n").map(line => line.trim()).find(line => line.startsWith(`${key}:`))?.slice(key.length + 1).trim() ?? "";
   };
+  let voiceCall = null, endedCall = null;
+  const makeCall = (member, state = "listening") => {
+    const profile = data.members.find(row => row.id === member);
+    return {id:`fixture-call-${member}`,member_id:member,conversation_id:member === 1 ? 11 : 12,name:profile.name,avatar:profile.avatar,
+      started_at_ms:data.now-83000,state,muted:false,voice:profile.voice ?? "",member_voice:profile.voice ?? "",speed:1,language:"auto",
+      transcript:[{id:8701,question:data.voiceCallSample.question,text:data.voiceCallSample.reply,status:"done"}]};
+  };
+  if (variant.voiceCall === "busy") voiceCall = makeCall(2);
+  const finishVoiceCall = (failure = null) => {
+    if (!voiceCall) return;
+    endedCall = {...voiceCall,ended_at_ms:data.now,state:"ended",summary_id:8702,failure};
+    const base = data.voiceCallBase;
+    if (voiceCall.transcript.length) data.turns.push({...base,id:8701,session_id:"fixture-call-turn",voice_call_id:voiceCall.id,question:data.voiceCallSample.question,text:data.voiceCallSample.reply,created_at_ms:data.now-30000,status:"done",messages:[],steps:[],task:null});
+    data.turns.push({...base,id:8702,session_id:"fixture-call-summary",route:"voice_call",voice_call:endedCall,question:"",text:"",created_at_ms:data.now,status:"done",messages:[],steps:[],task:null});
+    voiceCall = null;
+    notify("AgentTurn",{turn_id:8702,member_id:1});
+  };
   async function core(method, p = {}) {
     if (variant.missingHidden && method === "members.list" && target.document.querySelector('[data-hidden-members]')) throw new Error("Synthetic hidden member read failure");
     switch (method) {
+      case "voice_chat.status": return {call:voiceCall,ended:endedCall};
+      case "voice_chat.start": {
+        if (voiceCall) return {busy:voiceCall};
+        voiceCall = makeCall(p.member_id, ["connecting","speaking"].includes(variant.voiceCall) ? variant.voiceCall : "listening");
+        if (variant.voiceCall === "no-mic") {
+          voiceCall.state = "connecting"; voiceCall.transcript = []; voiceCall.started_at_ms = data.now;
+          setTimeout(() => finishVoiceCall("microphone"), 100);
+        }
+        return {call:voiceCall};
+      }
+      case "voice_chat.mute": voiceCall.muted = p.muted; return {call:voiceCall};
+      case "voice_chat.settings": Object.assign(voiceCall,p); return {call:voiceCall};
+      case "voice_chat.end": {
+        if (!voiceCall) return {summary_id:8702};
+        finishVoiceCall();
+        return {summary_id:8702};
+      }
+      case "voice_chat.feedback": endedCall.rating = p.rating; return {ok:true};
       case "vault.list": return { entries: data.vaultEntries };
       case "vault.preview": return data.vaultImportPreview;
       case "vault.cancel": return { cancelled: true };

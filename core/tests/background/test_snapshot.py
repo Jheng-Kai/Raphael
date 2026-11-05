@@ -2,7 +2,7 @@
 
 from raphael_core.agent.plugins import PluginTool
 from raphael_core.agent.policy import Tier
-from raphael_core.background.snapshot import BUILTIN, MCP, SNAPSHOT_MAX_TIER, take_snapshot
+from raphael_core.background.snapshot import BUILTIN, FIND, MCP, SNAPSHOT_MAX_TIER, take_snapshot
 
 
 def names(snapshot):
@@ -12,8 +12,8 @@ def names(snapshot):
 def test_without_plugins_a_task_has_raphaels_lookups_and_calendar():
     snapshot = take_snapshot(None)
     assert names(snapshot) == ["weather", "web_search", "local_time", "web_read", "generate_audio", "self_check", "raphael_help",
-                               "calendar_list", "calendar_add", "calendar_update", "calendar_delete", "connections_list", "ask_owner", "connect_app", "email_draft", "find_app", "request_secret", "show_page", "slack_draft", "update_page", "routine_create", "routine_delete", "routine_list", "routine_update"]
-    assert {ref.kind for ref in snapshot.refs.values()} == {BUILTIN}
+                               "calendar_list", "calendar_add", "calendar_update", "calendar_delete", "connections_list", "ask_owner", "connect_app", "email_draft", "find_app", "request_secret", "show_page", "update_page", "routine_create", "routine_delete", "routine_list", "routine_update", "find_tools"]
+    assert {ref.kind for ref in snapshot.refs.values()} == {BUILTIN, FIND}
     writes = {"generate_audio", "calendar_add", "calendar_update", "calendar_delete", "routine_create", "routine_delete", "routine_update"}
     assert all(ref.tier is (Tier.T2 if ref.name == "manage_connection" else Tier.T1 if ref.name in writes else Tier.T0) for ref in snapshot.refs.values())
 
@@ -56,7 +56,7 @@ async def test_a_tool_that_asks_is_in_it_and_one_that_cannot_be_undone_is_not(pl
 async def test_a_plugin_that_is_off_has_no_tool_in_it(plugins):
     server = await plugins.connect(look="T0")
     await plugins.rpc.call("integrations.set_enabled", {"id": server, "enabled": False})
-    assert all(ref.kind == BUILTIN for ref in take_snapshot(plugins.hub).refs.values())
+    assert all(ref.kind in (BUILTIN, FIND) for ref in take_snapshot(plugins.hub).refs.values())
 
 
 async def test_the_aliases_are_what_the_model_sees_and_stand_for_one_tool_each(plugins):
@@ -81,7 +81,7 @@ def test_a_tool_of_a_plugin_never_takes_the_name_of_one_of_raphaels_own():
 
     snapshot = take_snapshot(Hub())
     assert names(snapshot) == ["weather", "web_search", "local_time", "web_read", "generate_audio", "self_check", "raphael_help",
-                               "calendar_list", "calendar_add", "calendar_update", "calendar_delete", "connections_list", "ask_owner", "connect_app", "email_draft", "find_app", "request_secret", "show_page", "slack_draft", "update_page", "routine_create", "routine_delete", "routine_list", "routine_update"]
+                               "calendar_list", "calendar_add", "calendar_update", "calendar_delete", "connections_list", "ask_owner", "connect_app", "email_draft", "find_app", "request_secret", "show_page", "update_page", "routine_create", "routine_delete", "routine_list", "routine_update", "find_tools"]
     assert snapshot.refs["weather"].kind == BUILTIN
 
 
@@ -91,4 +91,4 @@ def test_a_hub_that_breaks_leaves_its_tools_out_and_not_the_task():
             raise RuntimeError("down")
 
     assert names(take_snapshot(Broken())) == ["weather", "web_search", "local_time", "web_read", "generate_audio", "self_check", "raphael_help",
-                                            "calendar_list", "calendar_add", "calendar_update", "calendar_delete", "connections_list", "ask_owner", "connect_app", "email_draft", "find_app", "request_secret", "show_page", "slack_draft", "update_page", "routine_create", "routine_delete", "routine_list", "routine_update"]
+                                            "calendar_list", "calendar_add", "calendar_update", "calendar_delete", "connections_list", "ask_owner", "connect_app", "email_draft", "find_app", "request_secret", "show_page", "update_page", "routine_create", "routine_delete", "routine_list", "routine_update", "find_tools"]

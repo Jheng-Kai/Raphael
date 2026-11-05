@@ -76,7 +76,8 @@ async def test_contact_values_never_reach_model_history_notifications_or_logs(de
     SettingsStore(conn).set("action_mode", "bypass")
     gate = ToolGate(hub, conn=conn)
     rig = make_rig(plugins=hub, gate=gate, notify=lambda *event: events.append(event))
-    client.chats = [chat("", ("computer__vault_entries", {})), chat("", ("computer__fill_contact", {"site": "https://example.com", "reference": identifier,
+    client.chats = [chat("", ("find_tools", {"query": "vault_entries fill_contact"})),
+        chat("", ("computer__vault_entries", {})), chat("", ("computer__fill_contact", {"site": "https://example.com", "reference": identifier,
         "label": "Company", "target_id": "tab", "fields": {key: key + "-ref" for key in private}})),
         chat("", ("computer__get_browser_state", {"target_id": "tab"})), chat('{"text":"Finished."}')]
     try:
@@ -108,7 +109,8 @@ async def test_card_in_the_real_loop_asks_even_with_allow_all(desktop, conn, tmp
     from raphael_core.agent.permissions import PermissionCards
     permissions = PermissionCards(conn)
     rig = make_rig(plugins=hub, gate=gate, permissions=permissions)
-    client.chats = [chat("", ("computer__fill_card", {"reference": identifier, "label": "Company travel", "site": "https://shop.example",
+    client.chats = [chat("", ("find_tools", {"query": "fill_card"})),
+        chat("", ("computer__fill_card", {"reference": identifier, "label": "Company travel", "site": "https://shop.example",
         "amount": "NT$ 1,280", "target_id": "tab", "fields": {"number": "n"}}))]
     try:
         result = await typed(rig, "Fill the card for my hotel")

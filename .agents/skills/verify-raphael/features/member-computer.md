@@ -128,8 +128,8 @@ the normal gate and owner-hold checks. No fallback reader/provider is purchased.
 Settings checks remote SSH key access, noninteractive Docker PATH, daemon and
 installed image architecture through read-only SSH commands. Fixed localized
 repair words replace raw diagnostics. Docker operations share an owned SSH
-session forwarding the remote Unix socket to loopback; the viewer uses SOCKS on
-that same session. Forwarding failure falls back to ssh:// with bounded backoff.
+session forwarding the remote Unix socket to an owner-only local socket; the viewer
+uses SSH -W pipes. Unsupported forwarding falls back to ssh:// with bounded backoff.
 No Windows ControlMaster or remote install/start is required.
 
 Idle/eviction and app shutdown only stop compatible owned computers; workspace
@@ -765,8 +765,9 @@ origin and current grant before each field through the computer's lasting browse
 connection. It never submits. Takeover remains available. Driver results and all
 fill exceptions yield only filled true/false. Later page text/errors redact plain
 and JSON-escaped values on computer results before model/history/events. Delegate
-results pass through untouched. Pictures are withheld only for a just-filled page
-until its URL changes or two minutes pass; saving a login alone hides nothing.
+results pass through untouched. Filled-page pictures stay hidden until a different
+origin and a complete tree prove the filled refs absent; no timer or other-tab
+read lifts suppression. Saving a login alone hides nothing.
 Vault read failures log only the exception type and never fail prepare. Login fields
 are full-width labelled rows, with Save below. Explicit safety denials still win over
 full permission on the API and shared CLI/background gate. Slack uses the supplied
@@ -797,3 +798,37 @@ The former Settings > Raphael location and Docker installation area is supersede
 by [Settings by purpose](settings-appearance.md#settings-by-purpose-2026-11-05).
 The compact header/empty-state location popover is shared by all members. See that
 entry for scenes, existing setting/RPC contracts and offline acceptance limits.
+
+
+## Offline root and dispatch security (2026-11-05)
+
+R-SEC-FILES-01/02: core/tests/computer/test_security_boundaries.py uses real temporary
+Windows junctions (symlinks on other systems) and a fake Docker runner. It verifies
+workspace/shared/parent redirection, both team-file handle forms, library root rejection,
+and grant revocation, target change or owner hold during preparation/checkpointing.
+The same checks apply to cached starts. Existing test_vm.py/test_takeover.py assertions
+include vault_entries/fill_contact and the firm T3 fill_card exception, without weakening
+owner-hold or single-use approval tests. No UI markup, scene or navigation changes.
+Follow-up 1 resolves the Docker forwarding and screenshot-lifetime decisions;
+see the approved hardening entry below and .fold/report.md. Do not call offline fake tests authorized SSH or native acceptance.
+
+R-SEC-FILES-04 additionally checks artifact receipt roots and bounds bytes before
+hashing. Include background/test_tasks.py, test_handoff.py and test_team_flow.py
+alongside the security regressions and architecture suite for that consumer boundary.
+
+## Private SSH and filled-page lifetime (2026-11-05 follow-up 1)
+
+R-SEC-SSH-01 and R-SEC-PRIVATE-01 supersede the pending D01/D02 decision above.
+Run tests/computer/test_followup_security.py, test_smooth_computer.py,
+test_login_visibility.py and test_vault_entries.py with tests/computer,
+tests/services and tests/architecture. Fake SSH covers socket success, unsupported
+transport fallback, directory protection/cleanup and absence of TCP/SOCKS forwarding.
+Fake browser states cover time, same-origin URL changes, other tabs, filled refs,
+complete cross-origin clearance and incomplete/unknown/error observations. Only a
+complete safe observation restores screenshots; payment holds remain independent.
+No UI markup/navigation changes; real Windows OpenSSH/Docker AF_UNIX compatibility
+and live browser behavior require separate native acceptance.
+
+The private-picture capture race also requires test_navigation_after_capture_cannot_release_the_captured_private_picture:
+a safe observation authorizes the next read, never earlier captured pixels. Recheck
+grant/target before and after the final observation; revoked reads return no tree.

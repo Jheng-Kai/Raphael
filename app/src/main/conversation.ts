@@ -28,6 +28,7 @@ export const exchangeTurn = (turn: AgentTurn): boolean =>
 
 /** Empty historical records have nothing to say, including under their date heading. */
 export function visibleTurn(turn: AgentTurn): boolean {
+  if (turn.voice_call) return true;
   if (turn.scope === "room" || turn.scope === "quarantine") return false;
   if (exchangeTurn(turn)) return !!(turn.question.trim() ||
     (turn.status !== "running" && turn.status !== "confirm" && (turn.detail || turn.text).trim()));

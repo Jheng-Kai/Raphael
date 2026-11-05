@@ -1,5 +1,19 @@
 # Raphael architecture and checked boundaries
 
+## Member voice-call boundary (2026-11-05)
+
+VoiceChat orchestrates existing DictationService, AgentService and Speaker; it owns
+one call across the owner window. Dictation's call-only VAD callback signals speech
+and pause on the loop; ordinary hotkey recording semantics are unchanged. Speaker's
+existing PCM stop event handles barge-in before its next block. Calls never enter
+room routing or add a model/provider loop (A-01/03/04). Frontend RPCs stay in api.ts
+and six literal voice_chat methods have explicit shell allowlist entries (A-06/10).
+Migration 67 adds call metadata and links to ordinary history turns; the history
+projection folds them under one receipt, with local feedback (A-11, R-UI-101).
+Settings reuse shared dropdowns and the existing repair navigation, without another
+settings registry (A-07/08). Fake audio tests do not prove native/live acceptance.
+
+
 ## Conversation metadata boundary (2026-11-05)
 
 Migration 64 adds bounded owner reaction tables with message/turn ownership, side
@@ -75,8 +89,9 @@ web_read receives the same VmTools rendered-read callback, with current member
 scope; no new worker, model loop, service registry or provider fallback is added.
 
 LocalVm owns one RemoteSession per SSH alias. Docker stdio and normal calls use
-its forwarded Unix socket; noVNC reuses its SOCKS forward through an owned local
-relay. Failed forwarding uses the existing ssh:// transport with reconnect backoff.
+its owner-only local Unix socket; noVNC uses SSH -W pipes through an owned local
+relay, without a general SOCKS listener. Unsupported socket forwarding uses the
+existing per-command ssh:// transport with reconnect backoff.
 The existing main-window computer.viewer_status RPC accepts check_host for the
 read-only diagnostic; no new RPC or Rust allowlist entry is needed (A-01/03/04/08).
 
@@ -831,7 +846,7 @@ See ../skills/verify-raphael/features/security-boundary.md in the verification m
 remaining consent decisions and offline/native boundaries.
 
 The shell drains oversized child-process lines without retaining their content:
-stdout admits at most 64 MiB per JSON-RPC line and stderr at most 64 KiB per log
+stdout admits at most 64 MiB per JSON-RPC line and stderr at most 16 KiB per log
 line, including the delimiter. Discarding a line preserves framing and emits only
 a fixed diagnostic. The RPC waits for its existing timeout if its reply was dropped.
 This bounds shell buffering; it does not bound all Python/provider allocations.
@@ -845,3 +860,49 @@ draft store retains the page ID alongside words and quotes. Owner submission use
 the existing delivery or waiting-question controller. No new RPC, transport or
 provider loop is introduced (A-01/03/04/06). Voice transcription leaves page drafts
 unsent, and an expanded page closes back to the focused composer on placement.
+
+
+## Offline storage security review (2026-11-05)
+
+paths.local_storage_root keeps the lexical identity of local roots instead of accepting a
+new trust root after resolve. LocalVm validates mounts on cached and fresh starts and again
+before creation; DesktopViewer, member library scans and AttachmentStore use the same check.
+Guest file reads retain their descriptor walk and no-follow checks. This is defense against
+persistent redirection, not a cross-process handle-pinned TOCTOU guarantee.
+
+VmTools rechecks grants, captured targets and owner holds after preparation and checkpoint
+awaits. file_reader bounds emitted Office text before joining repeated XLSX shared strings.
+native_diagnostics reuses failures.scrub for complete quoted and Basic/Bearer credentials;
+known secrets also cover JSON escaping and longest-first replacement. Existing state,
+RPCs, OS vault keys and approval surfaces remain authoritative (A-03/A-04/A-05/A-08/A-11/A-12).
+The offline review's owner decisions and evidence are in .fold/report.md; no network,
+real credentials, native desktop or release acceptance is implied.
+
+TaskStore also uses paths.local_storage_root for artifact receipt admission, completion
+and opening. MAX_ARTIFACT_BYTES shares the existing 50 MiB opening budget across
+all three paths before hashing bytes; no additional evidence store is introduced.
+
+## Approved native and persistent security boundaries (2026-11-05 follow-up 1)
+
+RemoteSession owns one SSH local Unix socket and its private temporary directory. The
+owner-only ACL is applied before SSH starts; Docker CLI probes endpoint support, and
+failure uses the existing per-command ssh:// adapter without a privileged TCP listener.
+Viewer streams use SSH -W pipes rather than a general local SOCKS proxy; the existing
+capability-protected viewer surface remains the only local viewer listener.
+
+VmTools retains filled origins/refs without a timer. Only a different HTTP(S) origin
+with an explicitly complete semantic tree and no filled refs can remove protection;
+missing, truncated or failed observations fail closed. While any private page remains,
+computer screen reads return value-free semantic nodes and a reason, without pixels.
+Payment action holds remain independent and require explicit owner completion.
+
+core_process feeds stderr through core_stderr before log::info. Bounded BufRead chunks
+discard an overlong line completely, and a linear scanner ports failures.scrub patterns
+without new dependencies or native-library imports into the core startup path.
+
+storage.owner_only_directory applies a protected owner-SID DACL using existing Windows
+APIs (0700 elsewhere). Both explicit/default app data and memory roots use it before
+opening stores. Legacy migration's existing backup path records created-file identity,
+mtime and digest in a local ledger; only unchanged tracked versions beyond five per
+source are removed. Existing untracked copies and revision/undo journals are retained.
+Shell/browser privilege separation remains a separate hardening unit (D03 in report).

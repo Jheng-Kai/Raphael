@@ -124,6 +124,13 @@ def office_text(data: bytes | Path, extension: str) -> str:
     """Read only known document parts, without extraction, relationships or external entities."""
     parts = []
     used = 0
+    emitted = 0
+    def append(parts, value):
+        nonlocal emitted
+        emitted += len(value) + 1
+        if emitted > MAX_EXTRACT_BYTES:
+            raise ValueError("extraction_limit")
+        parts.append(value)
     with zipfile.ZipFile(data if isinstance(data, Path) else io.BytesIO(data)) as archive:
         infos = sorted(archive.infolist(), key=lambda i: i.filename)
         strings: list[str] = []
@@ -157,15 +164,15 @@ def office_text(data: bytes | Path, extension: str) -> str:
                         value = "".join(n.text or "" for n in cell.iter() if n.tag.rsplit("}", 1)[-1] in ("v", "t"))
                         if cell.get("t") == "s" and value.isdigit():
                             value = strings[int(value)] if int(value) < len(strings) else ""
-                        cells.append(value)
+                        append(cells, value)
                     parts.append("\t".join(cells))
             else:
                 for node in root.iter():
                     local = node.tag.rsplit("}", 1)[-1]
                     if local == "t" and node.text:
-                        parts.append(node.text)
+                        append(parts, node.text)
                     elif local in ("p", "br", "tab"):
-                        parts.append("\n")
+                        append(parts, "\n")
     return "\n".join(parts)
 
 

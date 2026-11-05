@@ -71,6 +71,7 @@ import { RAPHAEL_ID, faceHTML, memberPlaceholder } from "../members";
 import { createMembers } from "../members-shell";
 import { createDraftPanel, hasDrafts } from "../member-draft";
 import { mountBackgroundQuestions } from "../background-mount";
+import { mountVoiceChat, voiceCallCardHTML, foldCallTurns } from "../voice-chat";
 import { TYPED, VOICE, exchangeTurn, mergeTurns, oldestId, refreshTurns, sourceOf, threadItems, visibleTurn } from "../conversation";
 import { carryTyped } from "../secret-card";
 import { carryInlineSetup, mountInlineConnectionSetup } from "../connection-setup";
@@ -508,6 +509,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   composerBrain = mountComposerBrain(composer.querySelector<HTMLElement>(".cmp-model")!, () => members.member(), { onEvent: handler => app.onEvent(handler), quick: () => conversationCache.get(memberId())?.find(c => c.id === conversationId())?.kind === "quick" });
   const voiceButton = composer.querySelector<HTMLButtonElement>(".cmp-voice")!;
   const sendButton = composer.querySelector<HTMLButtonElement>(".cmp-send")!;
+  input.addEventListener("input", () => voiceChat.draw());
+  const callEligible = (): boolean => !roomPane.active && memberId() > 0 && conversationId() !== undefined &&
+    !input.value.trim() && !files.length && !missingFiles.length && !composerQuote && replacing === undefined && !composerTask();
+  const voiceChat = mountVoiceChat({ composer, button: voiceButton, root: el,
+    target: () => ({ member: roomPane.active ? -1 : memberId(), conversation: conversationId(), name: members.member().name }),
+    eligible: callEligible, changed: () => {}, refresh: () => { if (visible) void load(false); },
+  });
   const fileChip = composer.querySelector<HTMLElement>(".cmp-file")!;
   const picker = composer.querySelector<HTMLInputElement>(".cmp-picker")!;
   const hideTooltip = messageTooltip(el);
@@ -815,6 +823,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const home = empty.hidden ? dock : slot;
     if (backgroundSlot.parentElement !== home) home.prepend(backgroundSlot);
     if (composer.parentElement !== home) home.append(composer);
+    voiceChat.draw();
     if (!quotaHost.hidden && quotaHost.nextElementSibling !== composer) home.insertBefore(quotaHost, composer);
     if (!problemNotice.el.hidden) home.insertBefore(problemNotice.el, composer);
     const asking = question !== null;
@@ -872,7 +881,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const sentHere = outgoing.filter(belongs);
     const additions = sentHere.length > 1 || active && (sentHere.length > 0 || turns.some(turn => turn.id > active.id && (turn.route === "owner_input" || turn.status === "queued")));
     const turnLook = additions ? { ...shape, deferPresence: true } : shape;
-    const chronological = [...turns].sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id);
+    const chronological = foldCallTurns(turns).sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id);
     const openingTarget = targetTurn ?? (openingThread && unreadFrom !== null ? chronological.find(turn => turn.id >= unreadFrom!)?.id : undefined);
     if (openingTarget !== undefined && openingTarget !== openingWindowTarget && chronological.some(turn => turn.id === openingTarget)) {
       turnWindow.focus(String(openingTarget), chronological.map(turn => String(turn.id))); openingWindowTarget = openingTarget;
@@ -885,6 +894,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         ? { key: item.key, html: dayHTML(item.label) }
         // Eligibility belongs to the turn; the menu checks which reply is latest when opened.
         : { key: item.key, html: (() => {
+          if (item.turn.voice_call) return voiceCallCardHTML(item.turn.voice_call, members.nameOf(memberId()));
           const turn = item.turn, view = pacing.view(turn), task = turn.task?.id;
           const expanded = [...state.expandedMessages].filter(key => key.startsWith(`${turn.id}:`)).join("\0");
           const live = turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting" || pacing.waiting(turn.id);
@@ -1448,6 +1458,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    */
   let taskStopPressed=false;
   function voiceDown(): void {
+    if (callEligible()) return;
     // Recording clicks release/send audio through the native key path; only Escape cancels it.
     if(!(listening && voiceMember === memberId()) && composer.dataset.taskState && composer.dataset.taskState!=="idle"){taskStopPressed=true;void stopComposerTask().catch(error=>toaster.info(describeError(error)));return;}
     if (question) return;
@@ -1472,7 +1483,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       toaster.info(describeError(err));
     });
   }
-  const voiceUp = (): void => {if(taskStopPressed){taskStopPressed=false;return;}void sendVoice("up", pressedMember).catch(() => {});};
+  const voiceUp = (): void => {if(callEligible())return;if(taskStopPressed){taskStopPressed=false;return;}void sendVoice("up", pressedMember).catch(() => {});};
 
   /** A click on the flyer: in toggle mode, a second press of the key ends the recording. */
   async function endVoice(): Promise<void> {
@@ -1522,8 +1533,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
 
   const finder = mountConversationFind({ button: searchButton, bar: find, thread, scroll: scroller,
-    records: () => turnWindow.before || turnWindow.after ? [...turns].sort((a,b) => a.created_at_ms-b.created_at_ms || a.id-b.id).map(turn => ({ key: `turn:${turn.id}`,
-      texts: [turn.question, ...(turn.messages?.length ? turn.messages.filter(message => ["reply", "event"].includes(message.kind)).map(message => messagePlainText(message.text, true, composioAction(turn))) : [messagePlainText(turn.text, true, composioAction(turn))])] })) : undefined,
+    records: () => turnWindow.before || turnWindow.after ? foldCallTurns(turns).sort((a,b) => a.created_at_ms-b.created_at_ms || a.id-b.id).map(turn => ({ key: `turn:${turn.id}`,
+      texts: turn.voice_call ? turn.voice_call.transcript.flatMap(item => [item.question, item.text]) : [turn.question, ...(turn.messages?.length ? turn.messages.filter(message => ["reply", "event"].includes(message.kind)).map(message => messagePlainText(message.text, true, composioAction(turn))) : [messagePlainText(turn.text, true, composioAction(turn))])] })) : undefined,
     reveal: key => { if (turnWindow.focus(key.replace(/^turn:/, ""))) render(); },
     revealWork: id => {
       state.thinkingOpen.set(id, true);
@@ -1947,6 +1958,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (note) { note.hidden = !voiceButton.disabled; note.innerHTML = voiceButton.disabled ? noticeHTML("conversation") : ""; }
     if (task) { if (!listening || voiceMember !== memberId()) voice.drop(); voiceButton.classList.remove("vm-away"); }
     drawTaskSlot(composer, task ? question ? "waiting" : task.state : "idle", task !== null && stoppingComposerTasks.has(task.key));
+    voiceChat.draw();
   }
 
   async function stopComposerTask(): Promise<void> {
@@ -2331,7 +2343,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       e.preventDefault();
       if (heldKey !== null) return;
       heldKey = e.key;
-      voiceDown();
+      if (callEligible()) voiceButton.click(); else voiceDown();
     }
   });
   document.addEventListener("keyup", (e) => {
@@ -2348,6 +2360,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       const page = await api.agentHistoryList({ member_id: member, conversation_id: conversation, around_id: id, limit: PAGE_SIZE });
       if (member !== memberId() || conversation !== conversationId()) return;
       turns = mergeTurns(turns, page.turns);
+    }
+    const receipt = turns.find(turn => turn.id === id)?.voice_call_summary_id;
+    if (receipt) {
+      await revealTurn(receipt);
+      const card = thread.querySelector<HTMLDetailsElement>(`[data-id="${receipt}"] details`);
+      if (card) card.open = true;
+      thread.querySelector(`[data-call-turn="${id}"]`)?.scrollIntoView({block: "center"});
+      return;
     }
     const keys = [...turns].sort((a,b) => a.created_at_ms-b.created_at_ms || a.id-b.id).map(turn => String(turn.id));
     if (turnWindow.focus(String(id), keys)) { drawingFollows = false; render(); }

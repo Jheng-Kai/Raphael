@@ -161,6 +161,13 @@ export interface AgentHistoryQuery {
 }
 
 /** The turns of the conversations, newest first. */
+export const voiceCallStart = (member_id: number, conversation_id: number, ui_language: string): Promise<{call?: import("./voice-chat").VoiceCall; busy?: import("./voice-chat").VoiceCall; failure?: string}> => core("voice_chat.start", {member_id, conversation_id, ui_language});
+export const voiceCallStatus = (): Promise<{call: import("./voice-chat").VoiceCall | null; ended?: import("./voice-chat").VoiceCall | null}> => core("voice_chat.status");
+export const voiceCallEnd = (call_id: string): Promise<{summary_id?: number}> => core("voice_chat.end", {call_id});
+export const voiceCallMute = (call_id: string, muted: boolean): Promise<{call: import("./voice-chat").VoiceCall}> => core("voice_chat.mute", {call_id, muted});
+export const voiceCallSettings = (call_id: string, settings: {voice?: string; speed?: number; language?: string}): Promise<{call: import("./voice-chat").VoiceCall}> => core("voice_chat.settings", {call_id, ...settings});
+export const voiceCallFeedback = (call_id: string, rating: "good" | "bad"): Promise<{ok: boolean}> => core("voice_chat.feedback", {call_id, rating});
+
 export const agentHistoryList = (q: AgentHistoryQuery = {}): Promise<{ turns: AgentTurn[]; pending_questions?: OwnerQuestion[]; delta?: boolean; removed_ids?: number[]; has_more?: boolean; next_after_id?: number }> => core("agent.history.list", q);
 /** What the owner typed into a composer, newest first, whichever conversation or room it went to (the arrow keys of a composer walk it). */
 export const agentSent = async (limit = 50): Promise<string[]> => (await core<{ texts: string[] }>("agent.history.sent", { limit })).texts;

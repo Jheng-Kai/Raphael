@@ -30,6 +30,9 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 use tokio::sync::broadcast;
 
+#[path = "core_stderr.rs"]
+mod stderr;
+
 pub use crate::rpc::CoreApi;
 use crate::rpc::{CORE_EXITED, Notification, RpcClient, RpcError, lock};
 
@@ -522,7 +525,6 @@ fn spawn_core(shared: &Arc<Shared>, exits: &mpsc::Sender<()>) -> Result<(), Stri
 }
 
 const MAX_RPC_LINE: usize = 64 * 1024 * 1024;
-const MAX_LOG_LINE: usize = 64 * 1024;
 
 #[derive(Debug, PartialEq)]
 enum PipeLine {
@@ -598,21 +600,11 @@ fn read_stdout(shared: &Shared, stdout: ChildStdout, exits: &mpsc::Sender<()>) {
 
 /// Passes the core's stderr, which is where it logs, on to our log.
 fn log_stderr(stderr: ChildStderr) {
-    let mut lines = BufReader::new(stderr);
-    let mut line = Vec::new();
-    loop {
-        match read_pipe_line(&mut lines, &mut line, MAX_LOG_LINE) {
-            Ok(PipeLine::End) | Err(_) => break,
-            Ok(PipeLine::Oversized) => log::warn!("discarded an oversized core log line"),
-            Ok(PipeLine::Complete) => {
-                let text = String::from_utf8_lossy(&line);
-                let text = text.trim_end();
-                if !text.is_empty() {
-                    log::info!("core: {text}");
-                }
-            }
+    let _ = stderr::read_lines(BufReader::new(stderr), |text| {
+        if !text.is_empty() {
+            log::info!("core: {text}");
         }
-    }
+    });
 }
 
 /// Asks the core for its protocol version and logs the answer.

@@ -18,6 +18,24 @@ import os
 import sys
 from pathlib import Path
 
+from .storage import owner_only_directory
+
+
+def local_storage_root(path) -> Path:
+    """A local storage root must retain its lexical directory identity."""
+    root = Path(path).absolute()
+    resolved = root.resolve()
+    # Match ordinary and extended Windows paths without trusting a redirected root.
+    def ordinary(value):
+        text = str(value)
+        if text.startswith("\\\\?\\UNC\\"):
+            return Path("\\\\" + text[8:])
+        return Path(text[4:]) if text.startswith("\\\\?\\") else value
+    if (root.is_symlink() or root.is_junction()
+            or ordinary(resolved) != ordinary(root)):
+        raise ValueError("outside_workspace")
+    return resolved
+
 
 def data_dir() -> Path:
     """The data directory, created on first use."""
@@ -30,7 +48,7 @@ def data_dir() -> Path:
         path = Path.home() / "Library" / "Application Support" / "Raphael"
     else:
         raise RuntimeError(f"No default data directory on {sys.platform}: set RAPHAEL_DATA_DIR")
-    path.mkdir(parents=True, exist_ok=True)
+    owner_only_directory(path)
     return path
 
 

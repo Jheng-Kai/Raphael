@@ -121,7 +121,7 @@ async def test_remote_health_has_classified_fixes_and_no_lifecycle_commands(code
     assert all(word not in calls[0][-1] for word in ("docker start", "docker run", "docker pull", "docker stop"))
 
 
-async def test_ten_remote_docker_calls_share_one_ssh_connection(desktop, monkeypatch):
+async def test_ten_remote_docker_calls_share_one_ssh_connection(desktop, monkeypatch, tmp_path):
     vm, target, runtime = desktop
     from dataclasses import replace
     from raphael_core.computer import remote_host
@@ -144,6 +144,9 @@ async def test_ten_remote_docker_calls_share_one_ssh_connection(desktop, monkeyp
     monkeypatch.setattr(remote_host.asyncio, "open_connection", connect)
     now = [0]
     session = RemoteSession("studio-mini", launch=launch, clock=lambda: now[0])
+    session._socket_path = lambda: tmp_path / "docker.sock"
+    async def probe(endpoint): return True
+    session._probe = probe
     vm.remote_sessions["studio-mini"] = session
     vm.real_transport = True
     target = replace(target, remote="studio-mini")
@@ -151,7 +154,8 @@ async def test_ten_remote_docker_calls_share_one_ssh_connection(desktop, monkeyp
         for _ in range(10):
             await vm.run_for(target, ["info"])
         assert len(launched) == 1 and len(runtime.calls) == 10
-        assert "-L" in launched[0] and "-D" in launched[0]
+        assert "-L" in launched[0] and "-D" not in launched[0]
+        assert all("tcp://" not in arg and "127.0.0.1:" not in arg for arg in launched[0])
         session.process.returncode = 1
         await vm.run_for(target, ["info"])
         assert len(launched) == 1

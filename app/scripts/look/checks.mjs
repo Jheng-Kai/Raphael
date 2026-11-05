@@ -2,6 +2,25 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "template-content" || name === "template-content-expanded") {
+    const dialog = document.querySelector('.template-preview');
+    const skills = [...dialog.querySelectorAll('.template-skill')];
+    require(skills.length > 0, "skills have named rows and full-text disclosures");
+    for (const skill of skills) {
+      require(skill.querySelector('.row .t')?.textContent.trim() && skill.querySelector('.row .val')?.textContent.trim(), "skill name and description remain on the shared row");
+      const detail = skill.querySelector('.card-detail'), toggle = skill.querySelector('[data-card-disclosure]');
+      require(!/^\s*---\s*\n(?:name|description):/m.test(detail.textContent) && !/^description:/m.test(detail.textContent), "skill full text omits frontmatter");
+      const expanded = name.endsWith('-expanded');
+      require(detail.hidden !== expanded && toggle.getAttribute('aria-expanded') === String(expanded), "skill body follows the disclosure state");
+      if (expanded) require(visible(detail) && detail.innerText.includes('先查證來源，再完成報告。'), "expanding reveals the complete skill body");
+    }
+    const brands = {gmail:'Gmail',github:'GitHub',googlecalendar:'Google Calendar'};
+    for (const card of dialog.querySelectorAll('[data-template-connection]')) {
+      const id = card.dataset.templateConnection;
+      require(card.querySelector('.card-title').textContent === (brands[id] || id), "connection cards use catalogue display names");
+    }
+    return {check:name};
+  }
   if (name === "creator-tabs") {
     const maker = document.querySelector(".cr-dialog"), heading = maker.querySelector(".mb-dlg-head h2");
     const box = heading.getBoundingClientRect();
@@ -34,7 +53,7 @@ export function checkRendered(name, context = {}) {
         require(text.top - heading.bottom <= 8, "full text follows its heading with compact spacing");
       }
       const template = window.__look.data.colleagueSample.template;
-      require(dialog.textContent.includes(template.personality) && dialog.textContent.includes(template.skills[0].text) && dialog.textContent.includes(template.routines[0].prompt), "full personality, skill and routine text");
+      require(dialog.textContent.includes(template.personality) && dialog.querySelector('.template-skill .card-detail').textContent.includes('先查證來源，再完成報告。') && dialog.textContent.includes(template.routines[0].prompt), "full personality, skill body and routine text");
       if (name === "store-export") {
         require(!window.__look.exportedTemplate && visible(dialog.querySelector('[data-dlg="export"]')), "review precedes file save");
       } else {
@@ -51,6 +70,35 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name};
   }
+  if (name.startsWith("voice-call-")) {
+    require(["voice-call-idle", "voice-call-panel", "voice-call-transcript", "voice-call-settings", "voice-call-ended", "voice-call-no-mic", "voice-call-busy"].includes(name), "known voice call check");
+    const calls = window.__look.calls;
+    if (name === "voice-call-idle") require(visible(document.querySelector('.cmp-voice[data-voice-call-start="true"]')), "empty member composer offers voice chat");
+    if (["voice-call-panel", "voice-call-transcript", "voice-call-settings"].includes(name)) {
+      require(visible(document.querySelector('.voice-call')), "one call panel is visible");
+      require(!visible(document.querySelector('.page-agent .composer')), "call replaces the composer");
+      require(document.querySelectorAll('.voice-call svg.slime').length === 1, "one existing member slime");
+      require(![...document.querySelectorAll('.ra-empty > .ra-hero')].some(visible), "the call does not duplicate the empty-thread character");
+      require(calls.filter(call => call.method === "voice_chat.start").length === 1, "one call admission");
+    }
+    if (name === "voice-call-transcript") require(document.querySelectorAll('.voice-call [data-call-turn]').length === 1, "transcript contains the owner and member turn");
+    if (name === "voice-call-settings") require(document.querySelectorAll('.vc-settings .sel').length === 3, "three shared dropdowns");
+    if (name === "voice-call-ended") {
+      require(document.querySelectorAll('[data-call-card]').length === 1, "one receipt after hang-up");
+      require(!document.querySelector('.tn[data-id="8701"]'), "normal call turns fold under the card");
+      require(document.querySelector('[data-call-rating="good"]').getAttribute('aria-pressed') === 'true', "local rating persists");
+      require(calls.some(call => call.method === "voice_chat.end") && calls.some(call => call.method === "voice_chat.feedback"), "hang-up and feedback cross the real IPC boundary");
+    }
+    if (name === "voice-call-no-mic") {
+      require(visible(document.querySelector('.vc-card [data-missing-repair="dictation"]')), "one actionable shared repair entry");
+      require(!visible(document.querySelector('.vc-failure')), "no duplicate failure sentence by the composer");
+    }
+    if (name === "voice-call-busy") {
+      require(visible(document.querySelector('.vc-confirm [data-dlg="replace"]')), "explicit end and start confirmation");
+      require(!calls.some(call => call.method === "voice_chat.end"), "opening confirmation does not hang up");
+    }
+    return { check: name };
+  }
   if (name.startsWith("colleague-")) {
     const calls = window.__look.calls;
     if (name === "colleague-gallery") require(document.querySelectorAll('.template-gallery svg.slime').length === 8, "eight existing slime characters");
@@ -63,7 +111,7 @@ export function checkRendered(name, context = {}) {
       const noticeBox = notice.getBoundingClientRect(), footerBox = preview.querySelector('.mb-dlg-act').getBoundingClientRect();
       require(noticeBox.top >= footerBox.top && noticeBox.bottom <= preview.querySelector('[data-dlg="import"]').getBoundingClientRect().top, "the entire import notice stays visible above the buttons");
       require(!preview.querySelector('.card-status, .card-well'), "no invented template or connection status and no padded list boxes");
-      require(preview.querySelectorAll('.list > .row').length === 2 && [...preview.querySelectorAll('.list > .row')].every(row => row.querySelector('.t') && row.querySelector('.ctl .val')), "skills and paused routines reuse compact named list rows with muted detail");
+      require(preview.querySelectorAll('.list .row').length === 2 && [...preview.querySelectorAll('.list .row')].every(row => row.querySelector('.t') && row.querySelector('.ctl .val')), "skills and paused routines reuse compact named list rows with muted detail");
     }
     if (name === "colleague-imported") {
       require(calls.some(call => call.method === "members.template" && call.params.action === "import"), "import follows explicit action");
@@ -130,6 +178,14 @@ export function checkRendered(name, context = {}) {
     else if (name === 'vault-sharing') require(vault.querySelectorAll('[data-vault-member]').length >= 2 && vault.querySelector('#vault-label').value === '出差聯絡資料', 'sharing preserves form input');
     else {
       require(vault.querySelectorAll('.vault-row').length === 3 && vault.textContent.includes('出差用公司卡'), 'all kinds and hints appear');
+      const about = vault.querySelector(':scope > p.dim'), lines = new Map();
+      for (let offset = 0; offset < about.firstChild.textContent.length; offset++) {
+        if (!about.firstChild.textContent[offset].trim()) continue;
+        const range = document.createRange(); range.setStart(about.firstChild, offset); range.setEnd(about.firstChild, offset + 1);
+        const top = Math.round(range.getBoundingClientRect().top);
+        lines.set(top, (lines.get(top) || 0) + 1);
+      }
+      require(lines.size <= 1 || [...lines.values()].at(-1) > 1, 'vault description has no single-character last line');
       require(vault.querySelector('.tabs.plain[role="tablist"]') && !vault.querySelector('.tabs.seg'), 'kind navigation shares plain tabs with Connections');
       for (const tab of vault.querySelectorAll('.tabs .tab')) {
         const count = tab.querySelector('.n');
@@ -323,6 +379,15 @@ export function checkRendered(name, context = {}) {
   if (name === 'routine-trigger-slack') {
     require(window.__look.calls.some(call=>call.method==='routines.list' && call.params.contains==='<@U012345>' && call.params.value==='C012345'), 'the phrase and selected channel reach the existing event boundary');
     require(document.querySelector('#au-event-contains').value==='<@U012345>', 'the mention is retained in the editor');
+    const fields = [...document.querySelectorAll('.au-event-fields .mb-fin')];
+    const button = document.querySelector('[data-dlg="event-check"]').getBoundingClientRect();
+    for (const input of fields) {
+      const box = input.getBoundingClientRect(), label = document.createRange();
+      label.selectNodeContents(input.parentElement); label.setEndBefore(input);
+      require(label.getBoundingClientRect().bottom <= box.top, 'event labels sit above their fields');
+      require(Math.abs(box.height - button.height) <= 1, 'event fields and confirm action share the control height');
+      require(Math.abs(box.bottom - button.bottom) <= 1, 'confirm action aligns with the fields it checks');
+    }
     return {check:name};
   }
   if (name === 'routine-zone' || name === 'routine-zone-search') {
@@ -964,9 +1029,12 @@ export function checkRendered(name, context = {}) {
       else if (name==='moving-event-undetectable') require(form.querySelector('[data-dlg="save"]')?.disabled && visible(form.querySelector('[role="alert"]')) && visible(form.querySelector('[data-dlg="event-check"]')), 'failed detection retains choice and retry');
       else if (name==='moving-event-input') {
         require(visible(form.querySelector('#au-event-value')) && !form.querySelector('#au-event-value').hasAttribute('pattern'), 'repository or channel uses plain input');
-        const input=form.querySelector('#au-event-value'), height=input.getBoundingClientRect().height;
-        require(form.querySelector('[data-dlg="event-check"]')?.getBoundingClientRect().height<=height+2, 'event scope retains the ordinary small button height');
-        require(input.closest('label')?.getBoundingClientRect().height<=height+2, 'event scope label stays on one line');
+        const input=form.querySelector('#au-event-value'), box=input.getBoundingClientRect();
+        const button=form.querySelector('[data-dlg="event-check"]').getBoundingClientRect();
+        const label=document.createRange(); label.selectNodeContents(input.parentElement); label.setEndBefore(input);
+        require(Math.abs(box.height-button.height)<=1, 'event scope and check share the control height');
+        require(label.getBoundingClientRect().bottom<=box.top, 'event scope label stays above its input');
+        require(Math.abs(box.bottom-button.bottom)<=1, 'event scope and check share a baseline');
       }
       else require(!form.querySelector('[data-dlg="save"]')?.disabled, 'a detected event can be saved');
       require(!form.textContent.includes('data.results') && !form.textContent.includes('tool_slug'), 'the owner sees no tool paths');

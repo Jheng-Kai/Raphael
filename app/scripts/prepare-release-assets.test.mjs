@@ -38,7 +38,8 @@ function inputs() {
 
 const sha256 = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
-describe("release assets", () => {
+// These tests start Windows PowerShell and the Tauri signer; a cold CI runner needs more than 5 s.
+describe("release assets", { timeout: 30_000 }, () => {
   it("publishes from the built commit and refuses an existing tag pointing elsewhere", () => {
     const step = workflowStep("Publish verified release assets");
     const run = workflowRun("Publish verified release assets");

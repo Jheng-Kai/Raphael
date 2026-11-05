@@ -4997,6 +4997,8 @@ class AgentService:
         permitted = self._permissions.views(ids) if self._permissions is not None else {}
         drafted = self._drafts.views(ids) if self._drafts is not None else {}
         pages = self.pages.store.shown_in(ids)
+        from ..voice_chat import call_views
+        call_links, call_summaries = call_views(self._conn, ids)
         views = []
         for turn in turns:
             task, task_steps = tasks.get(turn.id or 0, (None, []))
@@ -5016,6 +5018,8 @@ class AgentService:
             views.append(
                 {
                     "id": turn.id,
+                    **({"voice_call_id": call_links[turn.id]["id"], "voice_call_summary_id": call_links[turn.id]["summary_id"]} if turn.id in call_links else {}),
+                    **({"voice_call": call_summaries[turn.id]} if turn.id in call_summaries else {}),
                     "created_at_ms": turn.created_at_ms,
                     "session_id": turn.session_id,
                     "source": turn.source,

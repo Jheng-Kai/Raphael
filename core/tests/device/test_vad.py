@@ -85,6 +85,16 @@ def model_file(tmp_path):
     return path
 
 
+def test_current_speech_is_exposed_before_a_segment_finishes(fake_detector, model_file):
+    FakeDetector.speaking = {1}
+    segmenter = Segmenter(model_file)
+    assert segmenter.accept(np.ones(WINDOW, dtype=np.float32)) == []
+    assert segmenter.speech_seconds == 0
+    assert segmenter.speech_active
+    segmenter.accept(np.zeros(WINDOW, dtype=np.float32))
+    assert not segmenter.speech_active
+
+
 def test_missing_model_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
         Segmenter(tmp_path / "nope.onnx")

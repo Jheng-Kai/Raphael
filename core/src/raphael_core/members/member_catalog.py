@@ -4,8 +4,10 @@ import asyncio
 import base64
 import hashlib
 import json
+import math
 import os
 import re
+import time
 from urllib.parse import urlencode, urlsplit
 
 import httpx
@@ -13,7 +15,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from ..bots.homes import atomic
-from ..protocol import invalid_params
+from ..protocol import INVALID_PARAMS, RpcError, invalid_params
 from .templates import MAX_BYTES, checked, findings
 
 DEFAULT_URL = "https://raw.githubusercontent.com/Jheng-Kai/raphael-catalog/main"
@@ -21,6 +23,12 @@ DEFAULT_URL = "https://raw.githubusercontent.com/Jheng-Kai/raphael-catalog/main"
 PUBLIC_KEYS = ("cc1a2f06ea541dc3d558b78ef3d29363ec806e9c42d76340bf08e20c3a563139",
                "9b91d6bdba80a8f774ed816aa3f0ddbbf4adb22e20db66e8473c9b8fc5262dc1c")
 INDEX_CAP = 256 * 1024
+MAX_INDEX_AGE = 7 * 24 * 60 * 60
+STALE_INDEX = {
+    "zh-TW": "請連上網路後再加入，以確認範本沒有被撤銷",
+    "en": "Connect to the internet before adding this template to check that it has not been revoked",
+    "ja": "テンプレートが取り消されていないことを確認するため、インターネットに接続してから追加してください",
+}
 CATEGORIES = ("engineering", "sales", "marketing", "design", "personal", "hr", "product", "operations")
 AVATARS = ("rimuru", "souei", "shuna", "diablo", "benimaru", "hakurou", "shion", "gobta")
 
@@ -60,7 +68,7 @@ def schema(value):
 
 
 class Catalog:
-    def __init__(self, folder, *, url=DEFAULT_URL, keys=PUBLIC_KEYS, transport=None):
+    def __init__(self, folder, *, url=DEFAULT_URL, keys=PUBLIC_KEYS, transport=None, now=time.time, language=lambda: "en"):
         parsed = urlsplit(url)
         if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError("Catalogue requires an HTTPS root")
@@ -70,6 +78,7 @@ class Catalog:
         self.folder = folder / hashlib.sha256(self.url.encode()).hexdigest()[:16]
         self.lock = asyncio.Lock()
         self.cached = None
+        self.now, self.language = now, language
         try:
             saved = json.loads((self.folder / "index-cache.json").read_bytes())
             index = self.verify(base64.b64decode(saved["raw"], validate=True), saved["signature"])
@@ -115,6 +124,13 @@ class Catalog:
                     if raw is None:
                         if not self.cached:
                             raise ValueError("Unexpected unmodified catalogue")
+                        # HTTPS conditional revalidation confirms the cached
+                        # signed bytes are still the server's current index.
+                        self.verify(base64.b64decode(self.cached["raw"], validate=True), self.cached["signature"])
+                        saved = {key: value for key, value in self.cached.items() if key != "index"}
+                        saved["verified_at"] = self.now()
+                        atomic(self.folder / "index-cache.json", json.dumps(saved).encode())
+                        self.cached = {**saved, "index": self.cached["index"]}
                         return self.view(False)
                     sig, _ = await self.read(http, "index.json.sig", 1024)
                     index = self.verify(raw, sig.decode("ascii"))
@@ -124,7 +140,8 @@ class Catalog:
                             raise ValueError("Catalogue rollback refused")
                         if not set(previous["revoked"]) <= set(index["revoked"]):
                             raise ValueError("Revocations cannot be removed")
-                    saved = {"raw": base64.b64encode(raw).decode(), "signature": sig.decode("ascii"), "etag": etag}
+                    saved = {"raw": base64.b64encode(raw).decode(), "signature": sig.decode("ascii"), "etag": etag,
+                             "verified_at": self.now()}
                     atomic(self.folder / "index-cache.json", json.dumps(saved).encode())
                     self.cached = {**saved, "index": index}
                     return self.view(False)
@@ -135,8 +152,16 @@ class Catalog:
         index = self.cached["index"] if self.cached else {"entries": [], "revoked": []}
         return {"entries": [e for e in index["entries"] if e["id"] not in index["revoked"]], "offline": offline}
 
-    async def package(self, identifier):
+    def require_fresh(self):
+        verified = self.cached.get("verified_at") if self.cached else None
+        if (type(verified) not in (int, float) or not math.isfinite(verified)
+                or not 0 <= self.now() - verified <= MAX_INDEX_AGE):
+            raise RpcError(INVALID_PARAMS, STALE_INDEX.get(self.language(), STALE_INDEX["en"]))
+
+    async def package(self, identifier, *, require_fresh=False):
         await self.fetch()
+        if require_fresh:
+            self.require_fresh()
         index = self.cached["index"] if self.cached else {"entries": [], "revoked": []}
         entry = next((e for e in index["entries"] if e["id"] == identifier), None)
         if not entry or identifier in index["revoked"]:
@@ -158,13 +183,16 @@ class Catalog:
         current = self.cached["index"]
         if identifier in current["revoked"] or not any(e["id"] == identifier and e["sha256"] == entry["sha256"] for e in current["entries"]):
             raise invalid_params("Template changed or revoked during download")
+        if require_fresh:
+            self.require_fresh()
         atomic(path, raw)
         return value
 
 
 def client(service):
     if not hasattr(service, "_member_catalog"):
-        service._member_catalog = Catalog(service._avatars.parent / "member-catalog", url=os.environ.get("RAPHAEL_CATALOG_URL", DEFAULT_URL))
+        service._member_catalog = Catalog(service._avatars.parent / "member-catalog", url=os.environ.get("RAPHAEL_CATALOG_URL", DEFAULT_URL),
+                                          now=lambda: service._now_ms() / 1000, language=lambda: service._ui_language({}))
     return service._member_catalog
 
 

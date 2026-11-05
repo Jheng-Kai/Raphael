@@ -18,7 +18,8 @@
 .template-section h3, .template-section h4, .template-section p { margin: 0; }
 .template-section h4 { font-size: var(--fs-sm); font-weight: 500; }
 .template-section .list { margin: 0; }
-.template-section .list > .template-text { padding: var(--sp-1) 0 var(--sp-2); }
+.template-skill .card-detail { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.template-skill .card-detail[hidden] { display: none; }
 .template-warnings { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
 .template-warnings p { margin: 0; }
 .cr-tabs { width: min(460px, 100%); }

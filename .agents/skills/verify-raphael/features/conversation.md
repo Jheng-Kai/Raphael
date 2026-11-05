@@ -1,5 +1,58 @@
 # Conversation
 
+## Private member voice chat (2026-11-05)
+
+An empty member composer offers Start voice chat in its existing right-hand slot;
+typed words/files retain Send, Raphael retains dictation, and rooms never offer calls.
+One call owns the microphone across navigation. Another start opens the shared
+confirmation dialog; only End and start ends the previous call. The panel replaces
+the composer and exposes Mute, Hang up, a transcript disclosure and shared Voice /
+Speed / Language dropdowns (Auto-detect by default). The existing character's
+working and waiting motion projects speaking and listening without a second mascot.
+During a call the empty-thread hero yields to that single panel character.
+
+The same dictation recorder, device, selected engine and VAD cut a call turn after
+0.8 seconds of pause. Ordinary dictation still waits for its key. VAD speech onset
+sets the existing speaker stop event synchronously; PCM playback checks it before
+each audio block. AgentService keeps the owner question and member reply as ordinary
+private turns. The call uses the member voice and existing streamed PCM service;
+speed changes its playback sample rate. No new speech vendor/model loop is added.
+
+Hang-up writes one durable voice-call receipt, with duration, expandable literal
+transcript and local Good/Bad feedback. Call message rows fold under that receipt
+to preserve R-UI-101. Owner questions and pending permission/setup/draft cards remain
+actionable through the ordinary turn renderer until settled; folding never removes
+a required decision. Microphone/model/voice failures use the existing Settings repair
+entry; network failure ends the call and retains its already admitted turns.
+Migration 67 stores call metadata and links to existing turns, with scoped cascading
+deletion. Restart closes interrupted calls and retains their transcript.
+
+```powershell
+npm run look -- voice-call-idle-button voice-call-connecting voice-call-listening voice-call-speaking voice-call-transcript voice-call-settings voice-call-ended-card voice-call-no-mic voice-call-busy-confirm --theme both --width 1120,720,1920x1080
+```
+
+Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
+the busy dialog with dialog-caption-confirm, the settings controls with details-voice, the
+receipt shell with card-mcp-done, transcript disclosure with voice-memo, and the
+repair note with the existing missing-service note. A call receipt is a standalone
+history card; an ordinary voice memo stays attached to its existing answer.
+The call confirmation uses the shared compact `mb-confirm` shell because it has one
+decision, rather than the member chooser's list. Settings put the existing `sel`
+controls in shared menu rows because these choices apply only to the current call;
+the member's persistent voice remains in Details. The receipt's disclosure includes
+the duration and both speakers, so its summary adds a time and uses a trailing
+chevron. A failed call keeps its shared missing-service note inside the durable
+receipt instead of the transient read-aloud toast; there is only one repair action.
+Fake recognizer / streamed TTS / player tests are in tests/services/test_voice_chat.py;
+the VAD test uses the real DictationService with fake recorder/segmenter/engine.
+The existing native runner's `npm run native -- voice-call` journey checks the real
+shell admission, empty-member/draft guard and missing-voice Settings repair with an
+isolated profile and no paid speech. It does not exercise a successful audio call.
+Rendered fixtures establish UI/IPC behavior only. Native microphone permissions,
+headset echo isolation, installed STT/model/device, actual audio-chunk interruption,
+live model/provider/network and native restart persistence require separate acceptance.
+
+
 ## Message metadata and side threads (2026-11-05)
 
 Reactions are owner-authored message metadata: one hover control opens 👍, ❤, ✓ and ?;
@@ -1715,3 +1768,13 @@ npm run look -- page-product page-buy page-send page-expand page-expand-place pa
 
 Use judge on this same run when its prerequisites and network are authorized.
 Offline fixture/browser evidence does not prove native MCP/provider transport.
+
+
+## Diagnostic credential security (2026-11-05)
+
+R-SEC-LOG-01: core/tests/test_security_redaction.py covers complete quoted passwords,
+escaped quotes/backslashes, Basic auth, JSON-escaped known secrets and overlapping
+secret values. Select the existing agent/cli, test_cli_failure_detail.py,
+test_failure.py and test_failure_kinds.py consumers. native_diagnostics shares
+failures.scrub, retaining bounded readable causes without copying private fragments.
+This core-only change does not alter calm-thread presentation or require look/judge.
