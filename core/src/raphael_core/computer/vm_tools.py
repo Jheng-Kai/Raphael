@@ -423,6 +423,15 @@ class VmTools:
     async def call(self, key, arguments, *, approver, task_id=None, pool=None):
         if not self.is_computer_tool(key):
             return await self.delegate.call(key, arguments, approver=approver, task_id=task_id, pool=pool)
+        scope = _SCOPE.get()
+        member = scope[1] if scope and scope[0] == "turn" else 0
+        if task_id and self.conn is not None:
+            row = self.conn.execute("SELECT member_id FROM worker_tasks WHERE id=?", (task_id,)).fetchone()
+            if row:
+                member = row[0]
+        picture_target = self.routes.get(key, self.vm.target(member))
+        private_before = picture_target.key in self.payment_holds or any(
+            page[0] == picture_target.key for page in self.private_pages)
         began = time.monotonic()
         repair_budget = _REPAIRS.set(set())
         reading = key in self.tools and self.tools[key].name in SCREEN_READS | {"browser_open"}
@@ -451,21 +460,31 @@ class VmTools:
                 result.text = (prefix + "\n" if prefix else "") + json.dumps(data, ensure_ascii=False)
             else:
                 result.text = (result.text + f"\nElapsed: {elapsed:.2f} seconds.").strip()
-        scope = _SCOPE.get()
-        member = scope[1] if scope and scope[0] == "turn" else 0
-        if task_id and self.conn is not None:
-            row = self.conn.execute("SELECT member_id FROM worker_tasks WHERE id=?", (task_id,)).fetchone()
-            if row:
-                member = row[0]
-        private_members = list(self.logins.values) if self.logins and self.vm.target(member).key == "shared" else [member]
+        private_members = list(self.logins.values) if self.logins and picture_target.key == "shared" else [member]
         if self.logins and any(self.logins.values.get(identifier) for identifier in private_members):
             for identifier in private_members:
                 result.text = self.logins.redact(identifier, result.text)
                 if result.kind:
                     result.kind = self.logins.redact(identifier, result.kind)
-        if result.blocks and await self._private_picture(self.vm.target(member), arguments):
-            result.text = (result.text + "\nPrivate fields are hidden. Use page references or request_takeover; no screenshot was returned.").strip()
-            result.blocks = []
+        if (reading and result.ok) or result.blocks:
+            if not self.vm.grants.allowed(member) or picture_target != self.vm.target(member):
+                return PluginResult(False, "computer_permission_required")
+            private_after = await self._private_picture(picture_target, arguments)
+            if not self.vm.grants.allowed(member) or picture_target != self.vm.target(member):
+                return PluginResult(False, "computer_permission_required")
+            if private_before or private_after:
+                # A safe observation after capture cannot authorize pixels from before that observation.
+                tree = getattr(self, "private_tree", {}).get(picture_target.key, {})
+                if not tree:
+                    try:
+                        tree = json.loads(result.text.rsplit("\n", 1)[-1])
+                    except ValueError:
+                        tree = {}
+                result.text = json.dumps(self._without_values(tree), ensure_ascii=False) + "\nPrivate fields are hidden until the filled page leaves its origin and its fields are absent. Use page references or request_takeover; no screenshot was returned."
+                if self.logins:
+                    for identifier in private_members:
+                        result.text = self.logins.redact(identifier, result.text)
+                result.blocks = []
         return result
 
     async def _checkpoint(self, target, member, turn, owner, command):
@@ -487,30 +506,63 @@ class VmTools:
                 logger.warning("File checkpoint skipped: %s", type(error).__name__)
 
     def _observe_page(self, target, page):
+        from urllib.parse import urlsplit
         identifier = page.get("target_id")
         url = page.get("url") or next((tab.get("url") for tab in page.get("tabs", []) if tab.get("active") is True), None)
         key = (target.key, identifier)
         protected = self.private_pages.get(key)
-        if protected and url and protected[0] != url:
-            self.private_pages.pop(key, None)
+        if protected and url:
+            try:
+                parsed = urlsplit(url)
+                if parsed.scheme not in ("https", "http") or not parsed.hostname:
+                    return
+                current = (parsed.scheme.lower(), parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80))
+            except (ValueError, TypeError):
+                return
+            nodes = page.get("nodes")
+            if (current not in protected["origins"] and isinstance(nodes, list) and page.get("truncated") is False
+                    and not page.get("has_more") and not self._has_private_refs(nodes, protected["refs"])):
+                self.private_pages.pop(key, None)
+
+    @staticmethod
+    def _has_private_refs(value, refs):
+        if isinstance(value, dict):
+            return value.get("ref") in refs or any(VmTools._has_private_refs(item, refs) for item in value.values())
+        return isinstance(value, list) and any(VmTools._has_private_refs(item, refs) for item in value)
+
+    @staticmethod
+    def _without_values(value):
+        if isinstance(value, dict):
+            return {key: VmTools._without_values(item) for key, item in value.items()
+                    if "value" not in key.lower() and key.lower() not in (
+                        "text", "textcontent", "innertext", "screenshot", "images", "image", "html")}
+        if isinstance(value, list):
+            return [VmTools._without_values(item) for item in value]
+        return value
+
+    def _protect_page(self, target, identifier, url, refs):
+        from urllib.parse import urlsplit
+        parsed = urlsplit(url)
+        protected = self.private_pages.setdefault((target.key, identifier), {"origins": set(), "refs": set()})
+        protected["origins"].add((parsed.scheme.lower(), parsed.hostname, parsed.port or 443))
+        protected["refs"].update(refs)
 
     async def _private_picture(self, target, arguments):
-        if target.key in self.payment_holds:
-            return True
-        now = self.vm.clock()
-        for key, (_, until) in list(self.private_pages.items()):
-            if now >= until:
-                self.private_pages.pop(key, None)
-        keys = [key for key in self.private_pages if key[0] == target.key and
-                (not arguments.get("target_id") or key[1] == arguments["target_id"])]
+        keys = [key for key in self.private_pages if key[0] == target.key]
+        self.private_tree = getattr(self, "private_tree", {})
+        self.private_tree.pop(target.key, None)
         for key in keys:
             try:
                 client, session = await self._connection(target)
-                state = await client.request("tools/call", {"name": "get_browser_state", "arguments": {"target_id": key[1], "session": session}})
-                self._observe_page(target, state.get("structuredContent") or {})
+                state = await client.request("tools/call", {"name": "get_browser_state", "arguments": {
+                    "target_id": key[1], "session": session, "include_screenshot": False, "snapshot_format": "semantic_v2"}})
+                page = state.get("structuredContent") or {}
+                if not state.get("isError"):
+                    self._observe_page(target, page)
+                    self.private_tree[target.key] = page
             except Exception:
                 pass
-        return any(key in self.private_pages for key in keys)
+        return target.key in self.payment_holds or any(key in self.private_pages for key in keys)
 
     async def _call(self, key, arguments, *, approver, task_id=None, pool=None):
         if key in self.requests:
@@ -629,6 +681,8 @@ class VmTools:
             try:
                 await self.vm.start(target)
                 await self._disk_notice(target)
+                if not self.vm.grants.allowed(member) or target != self.vm.target(member):
+                    return PluginResult(False, "computer_permission_required")
                 # A hold may have arrived while the desktop was starting. Never queue actions.
                 if target.key in self.vm.held:
                     raise VmError("owner_holds_control")
@@ -636,6 +690,10 @@ class VmTools:
                     background = arguments.get("background", False)
                     wait = arguments.get("timeout_seconds", 3600 if background else 60)
                     await self._checkpoint(target, member, turn[0], owner, arguments["command"])
+                    if not self.vm.grants.allowed(member) or target != self.vm.target(member):
+                        return PluginResult(False, "computer_permission_required")
+                    if target.key in self.vm.held:
+                        raise VmError("owner_holds_control")
                     if background:
                         data = await self.vm.execute(target, arguments["command"], wait, background=True)
                     else:
@@ -719,7 +777,8 @@ class VmTools:
                             result = PluginResult(False, "connection_repaired", "Computer connection repaired. The previous action was not replayed because its outcome is unknown. Read the current window or page before deciding the next action.")
                             return result
                         raise
-                    self._observe_page(target, data.get("structuredContent") or {})
+                    if not data.get("isError"):
+                        self._observe_page(target, data.get("structuredContent") or {})
                     blocks, text = [], []
                     for block in data.get("content", []):
                         if block.get("type") == "text":
@@ -890,7 +949,7 @@ class VmTools:
                     raise ValueError()
                 self.logins.load(member, args["site"], args["reference"])
                 # Driver echoes and pictures are deliberately discarded, including errors.
-                self.private_pages[(target.key, args["target_id"])] = (url, self.vm.clock() + 120)
+                self._protect_page(target, args["target_id"], url, (call["ref"],))
                 reply = await client.request("tools/call", {"name": "browser_type", "arguments": {**call, "session": session}})
                 if reply.get("isError"):
                     return PluginResult(False, "login_not_filled", '{"filled": false}')
@@ -942,7 +1001,7 @@ class VmTools:
                     if self.conn is not None:
                         with self.conn:
                             self.conn.execute("INSERT OR IGNORE INTO computer_payment_holds VALUES (?)", (target.key,))
-                self.private_pages[(target.key, args["target_id"])] = (url, float("inf"))
+                self._protect_page(target, args["target_id"], url, (call["ref"],))
                 reply = await client.request("tools/call", {"name": "browser_type", "arguments": {**call, "session": session}})
                 if reply.get("isError"):
                     raise ValueError()

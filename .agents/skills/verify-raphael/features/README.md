@@ -756,3 +756,12 @@ See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) 
 ## Colleagues (2026-11-05)
 
 See [Members](members.md#colleague-recipes-and-goal-first-greeting-2026-11-05), [Connections](connections-mcp.md#named-connected-accounts-2026-11-05), [Automations](automations.md#owner-provided-external-webhook-tunnels-2026-11-05) and [Daily work](daily-work.md#native-output-folder-choice-2026-11-05) for R-COLLEAGUE-01..06 and the selected scene matrix. Recipe preview, imports, account labels and probes reuse existing owner UI/store boundaries; native/OAuth/SSH/live outcomes stay separate from fakes.
+
+
+## Offline storage and diagnostic security (2026-11-05)
+
+R-SEC-FILES-01..03 and R-SEC-LOG-01 are core-only boundaries. See the appended
+security sections in member-computer.md, settings-appearance.md and conversation.md.
+Use the normal pytest suites for computer, services, memory, CLI diagnostics, vault,
+member homes/panel, database and architecture. No rendered UI changed, so look/judge
+are outside this local scope. Live/provider/SSH/native checks remain unverified.

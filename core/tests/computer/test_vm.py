@@ -722,9 +722,10 @@ async def test_real_driver_catalog_offers_only_the_curated_tools(desktop, tmp_pa
     assert DRIVER_CATALOG["reported_count"] == 67
     assert len(DRIVER_CATALOG["names"]) == len(set(DRIVER_CATALOG["names"])) == 68
     assert CURATED <= set(DRIVER_CATALOG["names"])
-    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps"}
+    expected = CURATED | {"request_takeover", "fill_login", "vault_entries", "fill_contact", "fill_card", "browser_open", "run_steps"}
+    assert {tool.name for tool in hub.offered()} == expected
     snapshot = take_snapshot(hub)
-    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps"}
+    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == expected
     assert not snapshot.hidden()
     assert not snapshot.refresh_computer(hub, 0)
     assert all(tool.pinned for tool in hub.offered())
@@ -844,11 +845,11 @@ async def test_sandbox_steps_do_not_reenter_per_action_safety_screening(desktop,
                              _check=lambda **kwargs: None, _guarded=guarded)
     for tool in hub.offered():
         call = SimpleNamespace(tool=tool, arguments={})
-        expected = Screening(DENY) if tool.name == "fill_login" else PASS
+        expected = Screening(DENY) if tool.name in ("fill_login", "fill_contact", "fill_card") else PASS
         assert await AgentService._screen_call(caller, SimpleNamespace(language="en"), call, None) == expected
         ref = snapshot.refs["computer__" + tool.name]
         assert await TaskRun._screen(caller, ref, {}) == expected
-    assert screened == ["computer / fill_login", "computer / fill_login"]
+    assert screened == ["computer / " + name for name in ("fill_login", "fill_contact", "fill_card") for _ in range(2)]
     assert not gate.is_vm_tool("mcp:unrelated/click")
 
 
@@ -860,7 +861,7 @@ async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(des
     await hub.prepare()
     definitions = {item["function"]["name"]: item["function"] for item in take_snapshot(hub).definitions}
     for tool in hub.offered():
-        assert tool.tier == Tier.T0
+        assert tool.tier == (Tier.T3 if tool.name == "fill_card" else Tier.T0)
         if tool.name == "attach_file":
             assert tool.description == ATTACH["description"]
             continue
@@ -868,6 +869,15 @@ async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(des
             assert "Never request secrets in chat" in definitions["computer__request_takeover"]["description"]
             continue
         description = definitions["computer__" + tool.name]["description"]
+        if tool.name == "vault_entries":
+            assert "opaque IDs" in description and "Never ask for private values" in description
+            continue
+        if tool.name in ("fill_login", "fill_contact", "fill_card"):
+            for clause in ("HTTPS", "ask_owner", "submit", "request_takeover" if tool.name != "fill_contact" else "private values"):
+                assert clause in description
+            if tool.name == "fill_card":
+                assert "Every use needs owner approval" in description
+            continue
         for clause in ("no per-action approval", "owner control blocks all calls",
                        "sending a message/email", "publishing/posting", "outside the workspace",
                        "paying/buying", "call approve", "API harness", "owner's yes",

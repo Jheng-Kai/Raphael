@@ -3,6 +3,8 @@
 import os
 from pathlib import Path
 
+from ..paths import local_storage_root
+
 
 def snapshot(conn, member, workspaces=(), limit=12):
     limit = min(max(limit, 1), 100)
@@ -21,7 +23,10 @@ def snapshot(conn, member, workspaces=(), limit=12):
     # A fixed entry/depth budget includes directories, so sparse trees cannot grow the scan.
     budget = 500
     for area, root in workspaces:
-        root = Path(root).resolve()
+        try:
+            root = local_storage_root(root)
+        except (OSError, ValueError):
+            continue
         pending = [(root, 0)]
         while pending and budget > 0:
             directory, depth = pending.pop()

@@ -1680,3 +1680,13 @@ Eye atlases inherit typed pixel-fit scale, offsets and stroke from their shared
 parent. The 576 thinking poses must not each carry the vector face's fitting
 class. Keep the same pixel formulas, all poses and periods; cover the gallery,
 parts, presence hovers and handovers when changing this shared style boundary.
+
+
+## Diagnostic credential security (2026-11-05)
+
+R-SEC-LOG-01: core/tests/test_security_redaction.py covers complete quoted passwords,
+escaped quotes/backslashes, Basic auth, JSON-escaped known secrets and overlapping
+secret values. Select the existing agent/cli, test_cli_failure_detail.py,
+test_failure.py and test_failure_kinds.py consumers. native_diagnostics shares
+failures.scrub, retaining bounded readable causes without copying private fragments.
+This core-only change does not alter calm-thread presentation or require look/judge.

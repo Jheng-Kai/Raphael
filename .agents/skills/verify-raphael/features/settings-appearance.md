@@ -389,3 +389,23 @@ Payment permission cards deliberately show their merchant, amount and label in t
 shared card body without disclosure, and omit Always. Other permission cards keep
 their existing disclosure and policy. Vault kind filters use the same plain
 navigation tabs and inline counts as Connections; segmented filters remain exclusive to History and Dictionary.
+
+
+## Attachment root and Office expansion security (2026-11-05)
+
+R-SEC-FILES-01/03: core/tests/services/test_reader_security.py verifies attachment read,
+save and chunk-upload admission against a redirected storage root and limits repeated
+XLSX shared-string output before allocation/join. Keep the existing upload, text/Office,
+PDF/media, vault and memory suites in the affected core scope. Existing size limits,
+opaque IDs, owner CSV preview and private-fill consent semantics are retained. No UI
+change means no local look/judge run; OS vault and native file opening are unverified.
+
+## Owner-only persistence and bounded native logs (2026-11-05 follow-up 1)
+
+R-SEC-DATA-01 and R-SEC-LOG-02: tests/test_storage_security.py uses temporary folders
+for owner-only DACL verification, fail-closed ACL errors and five-version migration
+backup retention. Include tests/test_paths.py, memory/test_files.py and app startup
+consumers. Never infer a real owner data migration from these isolated tests.
+Rust core_stderr tests cover credential forms, overlong lines, UTF-8/EOF and benign
+diagnostics; run cargo test --locked offline with a worktree-local target directory.
+This changes no Settings markup or navigation and adds no look scope.

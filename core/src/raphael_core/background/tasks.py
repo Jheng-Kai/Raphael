@@ -37,6 +37,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from ..clock import wall_clock_ms
+from ..paths import local_storage_root
 from ..agent.conversations import Conversations
 from ..agent.steps import reason_of
 from ..worker.stall_guards import stalled
@@ -48,6 +49,18 @@ FILE_NAMES = re.compile(r'(?i)(?<![\w/])([\w.-]+\.(?:html|xlsx|pdf|csv|txt|json)
 # A design, a plan or a review is work done in the words themselves, on a brain that used no tool for it. So few words
 # are a promise or a line, not that.
 WRITTEN_WORK_CHARS = 200
+MAX_ARTIFACT_BYTES = 50 * 1024 * 1024
+
+
+def _artifact_digest(path):
+    digest, size = hashlib.sha256(), 0
+    with path.open("rb") as stream:
+        while chunk := stream.read(min(1024 * 1024, MAX_ARTIFACT_BYTES + 1 - size)):
+            size += len(chunk)
+            if size > MAX_ARTIFACT_BYTES:
+                raise ValueError("artifact_size")
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _asker_key(turn_id: int) -> str:
@@ -345,21 +358,21 @@ class TaskStore:
         if not item or not item.get('workspace') or not item.get('uri'):
             return None
         try:
-            root = Path(item['workspace']).resolve(strict=True)
+            root = local_storage_root(item['workspace'])
             found = (root / item['uri']).resolve(strict=True)
-            if not found.is_relative_to(root) or not found.is_file() or found.stat().st_size > 50 * 1024 * 1024:
+            if not found.is_relative_to(root) or not found.is_file() or found.stat().st_size > MAX_ARTIFACT_BYTES:
                 return None
-            return found if hashlib.sha256(found.read_bytes()).hexdigest() == item['digest'] else None
+            return found if _artifact_digest(found) == item['digest'] else None
         except (OSError, ValueError):
             return None
 
     def verify_artifact(self,task_id,call_id,path,*,workspace,mime):
         """Trusted executors verify actual bytes inside their authorized workspace, never stdout claims."""
-        root = Path(workspace).resolve(strict=True)
+        root = local_storage_root(workspace)
         artifact = Path(path).resolve(strict=True)
-        if not artifact.is_file() or not artifact.is_relative_to(root):
+        if not artifact.is_file() or not artifact.is_relative_to(root) or artifact.stat().st_size > MAX_ARTIFACT_BYTES:
             raise ValueError('artifact_outside_workspace')
-        digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+        digest = _artifact_digest(artifact)
         self.record_evidence(task_id,call_id,kind='artifact',uri=artifact.relative_to(root).as_posix(),digest=digest,mime=mime)
         with self._conn:
             self._conn.execute("UPDATE task_evidence SET workspace=? WHERE task_id=? AND tool_call_id=? AND uri=?",
@@ -377,9 +390,10 @@ class TaskStore:
             return None if not requires_artifact and len(said.strip()) >= WRITTEN_WORK_CHARS and not stalled(said) else 'work_without_action'
         for item in artifacts:
             try:
-                root = Path(item['workspace']).resolve(strict=True)
+                root = local_storage_root(item['workspace'])
                 path = (root / item['uri']).resolve(strict=True)
-                if not path.is_relative_to(root) or hashlib.sha256(path.read_bytes()).hexdigest() != item['digest']:
+                if (not path.is_relative_to(root) or not path.is_file() or path.stat().st_size > MAX_ARTIFACT_BYTES
+                        or _artifact_digest(path) != item['digest']):
                     return 'artifact_changed'
             except (OSError, TypeError, ValueError):
                 return 'missing_artifact'
