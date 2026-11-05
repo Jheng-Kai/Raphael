@@ -3082,10 +3082,12 @@ export function checkRendered(name, context = {}) {
     return { check: name, words: plainWords() };
   }
   if (name === "centred-system-events") {
-    const nodes = eventLines(1), lines = nodes.map(line => line.textContent);
+    // Colleague exchanges and a meeting the chief opened stay one centred line each, as Grok Bot shows
+    // "Created routines" (R-UI-101, 2026-11-06); other public notices fold into the reply's work.
+    const nodes = eventLines(2), lines = nodes.map(line => line.textContent);
     const historic = window.__look.data.turns.find(turn => turn.id === 1).messages.find(message => message.kind === 'event' && message.seq !== 99);
     const body = document.querySelector('.tn[data-id="1"] .work-body[hidden]');
-    require(lines[0].includes("2 則訊息") && body?.textContent.includes(historic.text) && body.textContent.includes("已開啟會議 產品方向討論"), 'only colleague exchanges stay outside collapsed work');
+    require(lines[0].includes("2 則訊息") && lines[1].includes("已開啟會議 產品方向討論") && body?.textContent.includes(historic.text), 'colleague exchanges and the meeting stay outside collapsed work, other notices fold');
     const receipts = [...document.querySelectorAll('[data-handoff-group] [data-handoff] > summary')].map(line => line.textContent);
     require(receipts.join("|") === "已轉交給 小晴已完成|和 小森 討論執行中", "folded receipts retain their individual words and states");
     return { check: name, lines };
