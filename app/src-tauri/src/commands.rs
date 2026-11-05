@@ -561,6 +561,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "routines.delete",
     "routines.template",
     "routines.runs",
+    "routines.run",
     "calendar.add",
     "calendar.update",
     "calendar.delete",
@@ -2358,6 +2359,7 @@ mod tests {
             "routines.update",
             "routines.delete",
             "routines.template",
+            "routines.run",
         ] {
             assert!(is_allowed_method(method), "{method}");
         }
@@ -2369,7 +2371,7 @@ mod tests {
             "member.notice",
             "members.ask",
             "groups.",
-            "routines.run",
+            "routines.execute",
             "Members.list",
         ] {
             assert!(!is_allowed_method(method), "{method}");

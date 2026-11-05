@@ -278,7 +278,7 @@ test("routine editing preserves an until date and never changes the member",asyn
   openRoutineDialog({members,routine:{...plan,schedule:{kind:"weekdays",time:"08:30",start_date:"2030-01-01",until:"2030-12-31"}}});
   expect(document.querySelector<HTMLButtonElement>('[data-dlg="member"]')!.disabled).toBe(true);
   click('[data-dlg="save"]');await flush();
-  expect(api.routinesUpdate).toHaveBeenCalledWith(1,expect.objectContaining({schedule:{kind:"weekdays",time:"08:30",start_date:"2030-01-01",until:"2030-12-31"}}));
+  expect(api.routinesUpdate).toHaveBeenCalledWith(1,expect.objectContaining({schedule:{kind:"weekdays",time:"08:30",start_date:"2030-01-01",until:"2030-12-31",timezone:Intl.DateTimeFormat().resolvedOptions().timeZone}}));
 });
 
 test.each(["25:00","09:61","oops"])("routine editor refuses invalid time %s",async time=>{

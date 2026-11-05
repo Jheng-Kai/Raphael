@@ -520,6 +520,7 @@ test("a routine run link selects its member and loads the linked older turn", as
 beforeEach(() => { localStorage.clear();
   document.body.innerHTML = "";
   for (const fn of Object.values(api)) fn.mockReset();
+  api.core.mockResolvedValue({ questions: [] });
   api.roomsList.mockResolvedValue({rooms:[{id:1,name:"Launch",member_ids:[0,3],is_team:0}]});
   api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:3,text:"Ready",created:1,status:"done",turn_id:31}]});
   api.brainsCli.mockResolvedValue({ clis: [] });

@@ -247,3 +247,51 @@ npm run look -- automation-event-pick automation-event-calendar automation-event
 R-RT-06: event discovery and polling ensure the connected Composio toolkit's cached catalogue before classifying its read. The fake HTTP integration uses GOOGLECALENDAR_EVENTS_LIST with readOnlyHint from a cold cache and after clearing process caches to model restart. Startup catalogue failures back off without disabling or adding error turns, then recover. Loaded createHint and missing tools still stop with the existing localized message. A shared deadline includes catalogue loading and reading; other connection kinds never fetch a toolkit catalogue. The separate fixed Calendar reader's exception remains limited to its own slug and async context.
 
 Rerun the six automation-event-* scenes in the Real-account review fixes matrix above. These UI fixtures prove the shared pick/create/reopen and retry presentation; only the production-gate core tests prove cold-catalogue ordering.
+
+
+## Manual tests, saved zones and trigger recipes (2026-11-05)
+
+The shared routine editor and both existing member row menus offer Test once.
+`routines.run` sends the saved instruction through the existing worker and history
+of the owning member. It shares R-ROUTINE-01 admission and normal worker spend.
+An explicit test can run a paused routine without enabling it or advancing its
+next scheduled occurrence. Pending state survives closing/reopening the editor;
+confirmation remains running until the history row has a finished timestamp.
+Readable refusal and recent running/success/failure rows stay in the editor.
+The empty list asks the owner to create a routine in the conversation, retaining
+its existing add button.
+
+Schedule JSON stores an IANA `timezone`. New editor schedules use General's
+preference or browser detection. Member owner-viewing reports pin legacy unzoned
+schedules before following a changed PC zone. Existing saved zones survive
+preference changes, edits and restart. Calendar occurrences and the scheduler
+both use that saved zone. Nonexistent DST wall times are skipped; ambiguous wall
+times use the earlier occurrence once. Test spring/fall, sparse weekly/monthly
+DST gaps, preference changes and later owner zone reports.
+
+Sentry and PagerDuty recipes show their respective JSON paths and URL/key setup.
+The existing loopback listener also accepts Authorization: Bearer with its vault
+key, retaining HMAC compatibility and existing admission/untrusted-data gates.
+A user-managed HTTPS forwarder is required for external delivery. Sentry signature
+verification belongs at that forwarder; no tunnel or cloud endpoint is provisioned.
+Slack's existing selected-channel read optionally adds a literal text substring
+(including a raw <@USER_ID> mention); it retains baseline, deduplication and gates.
+
+Selected rendered matrix (synthetic fixtures and IPC, real app entry):
+
+```powershell
+npm run look -- routine-test-running routine-test-done routine-test-refused routine-test-row-menu routine-test-conversation routine-when-words routine-when-editor routine-empty-words routine-run-history routine-trigger-recipes routine-trigger-pagerduty routine-trigger-slack routine-zone routine-zone-search routine-zone-saved automation-edit details-routines --theme both --width 1120,720,1920x1080
+```
+
+Inspect every contact sheet and relevant full-size editor, row menu, conversation,
+settings/search, history and recipe image. Compare editor controls with automation-edit,
+member rows with details-routines, and General's timezone control with its existing
+size control at matching theme/width. Run judge on the same selected run, or record
+missing external references as blocked/SKIP. The brief skips full verify/core suites;
+fake acceptance does not prove native, live brain or provider delivery.
+
+Targeted contracts: test_routine_test_run.py, test_schedule.py, test_routine_guards.py,
+test_events.py, test_event_catalog.py, test_event_harness.py, test_webhooks.py,
+test_settings.py; routine-run.test.ts, timezones.test.ts, automations.test.ts,
+member-profile.test.ts, member-details.test.ts, routine-sentence.test.ts,
+settings-view.test.ts, agent-members.test.ts and look audit/app tests.

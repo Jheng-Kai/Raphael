@@ -72,7 +72,7 @@ import json
 import secrets
 import sqlite3
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import tzinfo
 from pathlib import Path
 from typing import Any
@@ -341,6 +341,7 @@ class MembersService:
             "routines.delete": self._routine_delete,
             "routines.template": self._routine_template,
             "routines.runs": self._routine_runs,
+            "routines.run": self._routine_run,
             "routines.webhook": self._routine_webhook,
         }
         for method, handler in methods.items():
@@ -1038,8 +1039,19 @@ class MembersService:
         return {}
 
     async def _viewing_now(self, params: dict) -> dict:
+        if "tz" in params:
+            from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+            try:
+                name = params["tz"]
+                if not isinstance(name, str) or len(name) > 100:
+                    raise ValueError
+                ZoneInfo(name)
+            except (ValueError, ZoneInfoNotFoundError):
+                raise invalid_params("tz must be an IANA time zone") from None
         if params.get("activity_only") is True:
             self.pause_absent_routines()
+            if "tz" in params:
+                self.observe_timezone(name)
             self._settings.set("routine_owner_seen_ms", self._now_ms())
             return {}
         member_id = params.get("id")
@@ -1053,6 +1065,8 @@ class MembersService:
             if self.store.mark_read(member_id):
                 self._changed()
         self.pause_absent_routines()
+        if "tz" in params:
+            self.observe_timezone(name)
         self._settings.set("routine_owner_seen_ms", self._now_ms())
         self._viewing = member_id
         return {}
@@ -1102,6 +1116,24 @@ class MembersService:
         return {"deleted": deleted}
 
     # --- routines.* ----------------------------------------------------------------------------------
+
+    def observe_timezone(self, name: str) -> None:
+        """Pin legacy schedules before following a changed computer zone for new routines."""
+        previous = self._settings.get("routine_detected_timezone") or name
+        if self._settings.get("routine_detected_timezone") == name:
+            return
+        with self._conn:
+            for routine in self.store.routines():
+                if routine.schedule and not routine.schedule.timezone:
+                    plan = replace(routine.schedule, timezone=self._settings.get("routine_timezone") or previous)
+                    self._conn.execute("UPDATE routines SET schedule=? WHERE id=?", (json.dumps(plan.to_json()), routine.id))
+        self._settings.set("routine_detected_timezone", name)
+
+    def _saved_schedule(self, value, existing=None):
+        if not isinstance(value, dict):
+            return value
+        zone = (existing.schedule.timezone if existing and existing.schedule else "") or value.get("timezone") or self._settings.get("routine_timezone") or self._settings.get("routine_detected_timezone") or getattr(self._tz, "key", "")
+        return {**value, **({"timezone": zone} if zone else {})}
 
     def _next(self, schedule: Schedule) -> int | None:
         return next_run(schedule, self._now_ms(), tz=self._tz)
@@ -1420,7 +1452,7 @@ class MembersService:
         result = {"routines": [routine_view(r) for r in self.store.routines(member_id)], "events": available_events(connections, self._language()),
                   "event_apps": [c.get("name", c["id"]) for c in connected_apps(connections)]}
         if "event" in params:
-            result.update(await pick_event(self, self._routine_member(params), params["event"], params.get("value", "")))
+            result.update(await pick_event(self, self._routine_member(params), params["event"], params.get("value", ""), params.get("contains", "")))
         return result
 
     async def _routine_webhook(self, params: dict) -> dict:
@@ -1450,6 +1482,21 @@ class MembersService:
         if routine is not None:
             self._changed("routines.changed", routine.member_id)
 
+    async def _routine_run(self, params: dict) -> dict:
+        routine = self.store.routine(self._routine_id(params))
+        if self.routine_busy(routine.id):
+            words = {"zh-TW": "這個例行任務仍在執行，請等候完成。", "ja": "このルーティンは実行中です。完了をお待ちください。", "en": "This routine is still running. Wait for it to finish."}
+            return {"status": "refused", "reason": words.get(self._language(), words["en"])}
+        before = self._conn.execute("SELECT COALESCE(MAX(id),0) FROM routine_runs").fetchone()[0]
+        self._run(routine, test_run=True)
+        row = self._conn.execute("SELECT id,turn_id FROM routine_runs WHERE id>? AND routine_id=?", (before, routine.id)).fetchone()
+        if row is None:
+            reason = self.store.routine(routine.id).last_error or self._guard_reason("member")
+            return {"status": "refused", "reason": reason}
+        self._finish_run(row["turn_id"])
+        self._changed("routines.changed", routine.member_id)
+        return {"run_id": row["id"], "turn_id": row["turn_id"]}
+
     async def _routine_runs(self, params: dict) -> dict:
         routine_id = _whole(params, "routine_id", least=1)
         if self.store.routine(routine_id) is None:
@@ -1476,6 +1523,7 @@ class MembersService:
         member_id = self._routine_member(params)
         if params.get("schedule") is not None and params.get("when") is not None:
             raise invalid_params("Choose either a schedule or when")
+        params = {**params, "schedule": self._saved_schedule(params.get("schedule"))}
         try:
             schedule = clean_schedule(params.get("schedule")) if params.get("when") is None else None
             routine = self.store.create_routine(
@@ -1496,7 +1544,9 @@ class MembersService:
 
     async def _routine_update(self, params: dict) -> dict:
         routine_id = self._routine_id(params)
-        was_webhook = self.store.routine(routine_id).when == {"webhook": True}
+        existing = self.store.routine(routine_id)
+        params = {**params, "schedule": self._saved_schedule(params.get("schedule"), existing)}
+        was_webhook = existing.when == {"webhook": True}
         try:
             routine = self.store.update_routine(
                 routine_id,
@@ -1623,10 +1673,10 @@ class MembersService:
         for member in members:
             self._changed("routines.changed", member)
 
-    def admit_routine(self, routine: Routine) -> bool:
+    def admit_routine(self, routine: Routine, *, allow_paused: bool = False) -> bool:
         self.pause_absent_routines()
         current = self.store.routine(routine.id)
-        if current is None or not current.enabled:
+        if current is None or (not current.enabled and not allow_paused):
             return False
         counts = self._conn.execute(
             "SELECT COUNT(*), COALESCE(SUM(r.member_id=?),0) FROM routine_runs rr JOIN routines r ON r.id=rr.routine_id WHERE rr.started>?",
@@ -1653,10 +1703,10 @@ class MembersService:
     def routine_busy(self, routine_id: int) -> bool:
         return self._conn.execute("SELECT 1 FROM worker_tasks WHERE routine_id=? AND state IN ('queued','running','waiting') LIMIT 1", (routine_id,)).fetchone() is not None
 
-    def _run(self, routine: Routine, *, text: str | None = None, session: str | None = None) -> int | None:
+    def _run(self, routine: Routine, *, text: str | None = None, session: str | None = None, test_run: bool = False) -> int | None:
         """A routine's run: a turn of its thread, and a background task of its member that
         completes it."""
-        if not self.admit_routine(routine):
+        if not self.admit_routine(routine, allow_paused=test_run):
             return None
         self._settings.set("routine_run_window", [*self._run_window(), [routine.member_id, self._now_ms()]])
         with self._conn:

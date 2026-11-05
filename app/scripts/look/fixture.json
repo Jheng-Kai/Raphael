@@ -1,4 +1,10 @@
 {
+  "routineWorkflowSample": {"title":"早晨摘要", "prompt":"整理範例筆記，只在對話中回報。", "done":"已整理三則範例筆記。", "refused":"這位成員每小時已執行 200 次，請稍後再試。", "failed":"範例來源無法讀取，未使用舊資料。"},
+  "routineTimezoneSample": {"timezone":"America/New_York"},
+  "routineWebhookRecipes": [
+    {"provider":"Sentry","setup":"Custom Integrations > Webhook URL","fields":["action","data.issue.id","data.issue.title","data.issue.permalink","data.event.event_id","data.event.message"],"payload":{"action":"created","data":{"issue":{"id":"S001","title":"範例錯誤","permalink":"https://example.test/issues/S001"}}}},
+    {"provider":"PagerDuty","setup":"Generic Webhooks v3 > URL > Custom Headers","fields":["event.id","event.event_type","event.occurred_at","event.data.id","event.data.title","event.data.html_url","event.data.urgency"],"payload":{"event":{"id":"PD001","event_type":"incident.triggered","data":{"id":"I001","title":"範例事故","urgency":"high"}}}}
+  ],
   "unreadSample": {"question": "Check the sample notes.", "answer": "The sample notes are ready for review.", "paragraph": "The sample comparison includes the observations, remaining questions and a suggested next step."},
   "presenceSample": {"question": "Check the sample report.", "answer": "The sample report is ready.", "secondAnswer": "The sample comparison is complete.", "progress": "Checking sample sources", "nextAction": "Comparing sample sources", "routine": "Sample briefing", "calendar": "Sample review", "source": "https://example.test/sample"},
   "handoffGroupSample": {
