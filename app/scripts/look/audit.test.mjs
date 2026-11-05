@@ -556,24 +556,26 @@ describe("rendered look checks", () => {
     vi.stubGlobal("document", window.document);
     vi.stubGlobal("Element", window.Element);
     try {
-      for (const colour of colours) {
-        const chat = window.document.createElement("div");
-        chat.className = "page-agent mb-chat";
-        chat.dataset.memberBubble = theme;
-        chat.style.setProperty("--member-accent", memberAccent(colour));
-        chat.innerHTML = '<div data-desktop-slot="2"></div>';
-        window.document.body.append(chat);
-        mountDesktopTimeline(chat, () => "Member").update({ state: "running", ready: true, control: "member", works: [{ id: "private-computer-task", turn_id: 2, state: "waiting_control", tool: "get_desktop_state", reason: "sign_in" }] });
-        chat.replaceChildren(chat.querySelector("[data-card-desktop-screen]"));
-        chat.firstElementChild.style.backgroundImage = "none";
-        const button = chat.querySelector('[data-card-desktop-screen] > button[data-card-desktop="take"]');
-        expect(button.className).toBe("btn");
-        expect(button.textContent).toBe("");
-        expect(window.getComputedStyle(button.querySelector("svg.i")).color, colour).toBe("rgb(240, 240, 240)");
-      }
+      // Reuse one real preview: accumulating every colour in the document makes
+      // each style invalidation and hover-selector audit revisit all earlier previews.
+      const chat = window.document.createElement("div");
+      chat.className = "page-agent mb-chat";
+      chat.dataset.memberBubble = theme;
+      chat.innerHTML = '<div data-desktop-slot="2"></div>';
+      window.document.body.append(chat);
+      mountDesktopTimeline(chat, () => "Member").update({ state: "running", ready: true, control: "member", works: [{ id: "private-computer-task", turn_id: 2, state: "waiting_control", tool: "get_desktop_state", reason: "sign_in" }] });
+      chat.replaceChildren(chat.querySelector("[data-card-desktop-screen]"));
+      chat.firstElementChild.style.backgroundImage = "none";
       for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 110, bottom: 40, width: 100, height: 30 });
-      const failures = auditDocument(window.document, { width: 1120, height: 900 }, []).productRules.filter(item => item.rule === "R-UI-52" && item.class === "btn");
-      expect(failures).toEqual([]);
+      const button = chat.querySelector('[data-card-desktop-screen] > button[data-card-desktop="take"]');
+      expect(button.className).toBe("btn");
+      expect(button.textContent).toBe("");
+      for (const colour of colours) {
+        chat.style.setProperty("--member-accent", memberAccent(colour));
+        expect(window.getComputedStyle(button.querySelector("svg.i")).color, colour).toBe("rgb(240, 240, 240)");
+        const failures = auditDocument(window.document, { width: 1120, height: 900 }, []).productRules.filter(item => item.rule === "R-UI-52" && item.class === "btn");
+        expect(failures, colour).toEqual([]);
+      }
     } finally { vi.unstubAllGlobals(); window.happyDOM.abort(); }
   });
   it("rejects a disabled control whose reason exists only in a title (R-UI-69)", () => {
