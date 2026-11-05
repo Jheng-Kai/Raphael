@@ -862,13 +862,10 @@ export function checkRendered(name, context = {}) {
       require(!monitor.textContent.trim() && getComputedStyle(monitor).animationName === 'none', 'the monitor remains one still icon');
       if (active) require(getComputedStyle(monitor).color !== getComputedStyle(document.querySelector('.conversation-trigger')).color, 'active status uses the purple token');
     } else if (name === 'level-panel' || name === 'level-off' || name === 'level-no-computer') {
-      require(visible(panel.querySelector('.mb-panel-routines')) && !visible(panel.querySelector('.mb-who')), 'routines live on the landing view, identity lives behind the gear');
+      // Since the panel tabs the computer has its own tab, headed by its state and shared location control.
+      require(panel.dataset.detailsTab === 'computer' && visible(panel.querySelector('[data-computer-location]')), 'the computer tab keeps its state header and shared location control');
       require(!panel.querySelector('[data-tab="routines"], .mb-rt [role="switch"], [data-desktop="expand"]') && !visible(panel.querySelector('[data-desktop="collapse"]')), 'there is no routines page, row switch or visible collapse control');
-      if (name === 'level-no-computer') require(visible(desktop) && visible(panel.querySelector('[data-computer-location]')), 'an empty computer panel retains its shared location control');
-      else {
-        require(visible(desktop) && visible(desktop.querySelector('.desktop-caption')), 'the screen has its centered member caption');
-        require(desktop.getBoundingClientRect().bottom <= panel.querySelector('.mb-panel-routines').getBoundingClientRect().top, 'the screen precedes routines');
-      }
+      if (name !== 'level-no-computer') require(visible(desktop) && visible(desktop.querySelector('.desktop-screen')), 'the computer tab shows the screen');
       if (name === 'level-off') require(visible(desktop.querySelector('.desktop-wallpaper')) && visible(desktop.querySelector('.desktop-screen [data-desktop="retry"]')) && !desktop.querySelector('iframe'), 'wallpaper and Start share the quiet screen');
     } else if (name === 'level-gear') {
       require(visible(panel.querySelector('.mb-who')) && visible(panel.querySelector('#mb-det-name')) && visible(panel.querySelector('[data-det="back"]')), 'identity and Back are available through the gear');
