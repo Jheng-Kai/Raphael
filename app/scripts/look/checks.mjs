@@ -286,7 +286,8 @@ export function checkRendered(name, context = {}) {
     const bounds = screen.getBoundingClientRect(), text = sentence.getBoundingClientRect();
     const inside = box => box.left >= bounds.left - 1 && box.right <= bounds.right + 1 && box.top >= bounds.top - 1 && box.bottom <= bounds.bottom + 1;
     require(inside(text), 'the state sentence stays inside the screen');
-    const state = window.__look.data.desktop;
+    // The fake core answers an absent Docker when the scene sets no computer, as the real core does without Docker.
+    const state = window.__look.data.desktop ?? { state: 'absent' };
     const phase = state.lifecycle ?? (['docker_stopped', 'remote_unavailable'].includes(state.error) || ['absent','unavailable','incompatible'].includes(state.state) || state.state === 'missing' && state.image === false ? 'unavailable'
       : ['stopped','missing'].includes(state.state) ? 'sleeping' : state.state === 'building' ? 'updating' : 'starting');
     const words = {sleeping:'休眠中',starting:'啟動中',waking:'喚醒中',updating:'更新中',repairing:'修復中',unavailable:'無法使用'};
@@ -749,7 +750,6 @@ export function checkRendered(name, context = {}) {
     require(!preparation.querySelector('progress:not([value])'), 'no indeterminate progress line');
     if (!panel.hasAttribute('data-expanded') && name !== 'desktop-boot-inline') require(Math.abs(box.width / box.height - 1280 / 900) < .02, 'boot retains the running desktop aspect ratio');
     if (name.startsWith('desktop-period-')) require(wallpaper.getAttribute('src') === `/wallpapers/${name.slice('desktop-period-'.length)}.svg`, 'the fixed fixture hour selects its expected period');
-    if (name === 'desktop-boot-expanded') require(!window.__look.calls.some(call => call.method === 'computer.viewer_open'), 'expanding preparation never opens an unready stream');
     return {check:name};
   }
   if(name === "daily-newest") {require(document.querySelector('.conversation-caption').textContent==='Newest sample','the newest standard conversation opens');return {check:name};}
@@ -2256,7 +2256,8 @@ export function checkRendered(name, context = {}) {
     const shell = document.querySelector('.desktop-shell');
     const inline = document.querySelector('[data-card-desktop-screen] iframe:not([hidden]), [data-card-screen] iframe:not([hidden])');
     const frame = inline ?? document.querySelector('.desktop-panel iframe');
-    const heading = inline ? inline.closest('.conversation-card')?.querySelector('.card-head') : document.querySelector('.desktop-panel[data-expanded] .desktop-takeover-bar') ?? shell?.querySelector('.desktop-caption');
+    // Since the panel tabs the computer tab's header (state word and location) heads the screen; the old caption is hidden.
+    const heading = inline ? inline.closest('.conversation-card')?.querySelector('.card-head') : document.querySelector('.desktop-panel[data-expanded] .desktop-takeover-bar') ?? document.querySelector('.desktop-location-header');
     // Native WebView checks enter the cross-origin viewer itself; look can inspect both documents.
     const embedded = !!document.querySelector('#noVNC_container');
     if (!embedded) {

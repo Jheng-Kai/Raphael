@@ -411,6 +411,7 @@ export const en = {
   "desktop.need.other": "This step needs you at the computer before I can continue.",
   "desktop.starting": "Starting the computer…",
   "desktop.building": "Building the desktop…",
+  "desktop.firstBuild": "First build can take 5–15 minutes.",
   "desktop.preparing": "Preparing the desktop…",
   "desktop.retry": "Retry",
   "desktop.buildFailed": "The desktop image could not be created. Check Docker Desktop, network and disk space, then press Retry.",

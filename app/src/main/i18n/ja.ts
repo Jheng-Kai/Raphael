@@ -411,6 +411,7 @@ export const ja = {
   "desktop.need.other": "続けるには、この操作をコンピューターで行ってください。",
   "desktop.starting": "コンピュータを起動中…",
   "desktop.building": "デスクトップを構築中…",
+  "desktop.firstBuild": "初回の構築には5〜15分かかることがあります。",
   "desktop.preparing": "デスクトップを準備中…",
   "desktop.retry": "再試行",
   "desktop.buildFailed": "デスクトップイメージを作成できません。Docker Desktop、ネットワーク、空き容量を確認して再試行してください。",

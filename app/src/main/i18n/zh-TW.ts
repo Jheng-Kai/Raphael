@@ -410,6 +410,7 @@ export const zhTW = {
   "desktop.need.other": "這一步需要你親自操作電腦，才能繼續。",
   "desktop.starting": "正在啟動電腦…",
   "desktop.building": "正在建立桌面…",
+  "desktop.firstBuild": "首次建立約需 5–15 分鐘。",
   "desktop.preparing": "正在準備桌面…",
   "desktop.retry": "重試",
   "desktop.buildFailed": "桌面映像建立失敗，請確認 Docker Desktop、網路與磁碟空間正常後按「重試」。",

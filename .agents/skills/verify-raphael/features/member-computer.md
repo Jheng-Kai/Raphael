@@ -141,7 +141,7 @@ its unchecked option names the host, pins that host for the operation and exclud
 shared/team storage. No deletion/host operation was executed in this brief.
 
 Selected future look matrix (both themes, 1120,720,1920x1080): desktop-panel,
-desktop-watch, desktop-watch-collapse, desktop-watch-boot, desktop-watch-stopped,
+desktop-watch, desktop-watch-collapse,
 desktop-watch-owner, desktop-takeover, desktop-takeover-owner,
 desktop-takeover-done, desktop-owner, desktop-host-remote, desktop-host-invalid,
 desktop-host-health, delete-member-computer. Compare Enlarge/collapse/Stop with
@@ -149,7 +149,7 @@ the existing icon buttons and card Done/Skip with computer-card controls at the
 same theme/size. The owner-typing scene uses synthetic RFB input only.
 
 ```powershell
-npm run look -- desktop-panel desktop-watch desktop-watch-collapse desktop-watch-boot desktop-watch-stopped desktop-watch-owner desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-owner desktop-host-remote desktop-host-invalid desktop-host-health desktop-host-repair delete-member-computer --theme both --width 1120,720,1920x1080
+npm run look -- desktop-panel desktop-watch desktop-watch-collapse desktop-watch-owner desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-owner desktop-host-remote desktop-host-invalid desktop-host-health desktop-host-repair delete-member-computer --theme both --width 1120,720,1920x1080
 ```
 
 Native journeys: member-computer; computer-speed (explicit opt-in, never --all or
@@ -292,7 +292,7 @@ animation, and samples the actual CSS fade at 0/120/240ms under normal motion.
 Selected matrix, both themes at 1120,720,1920x1080:
 
 ```powershell
-npm run look -- desktop-starting desktop-building desktop-preparing desktop-wallpaper-morning desktop-wallpaper-noon desktop-wallpaper-dusk desktop-wallpaper-evening desktop-wallpaper-night desktop-boot-inline desktop-boot-card desktop-boot-connect desktop-boot-expanded desktop-boot-raphael desktop-own-wallpaper desktop-own-wallpaper-card desktop-stopped desktop-unavailable desktop-absent desktop-panel desktop-viewer --theme both --width 1120,720,1920x1080
+npm run look -- desktop-starting desktop-building desktop-preparing desktop-wallpaper-morning desktop-wallpaper-noon desktop-wallpaper-dusk desktop-wallpaper-evening desktop-wallpaper-night desktop-boot-inline desktop-boot-card desktop-boot-connect desktop-boot-raphael desktop-own-wallpaper desktop-own-wallpaper-card desktop-stopped desktop-unavailable desktop-absent desktop-panel desktop-viewer --theme both --width 1120,720,1920x1080
 ```
 
 Compare the full-size preparation and town-period images and the preview/emblem

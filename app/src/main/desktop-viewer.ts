@@ -53,6 +53,8 @@ export function preparationHTML(state: DesktopState, face = ""): string {
   return `<div class="desktop-preparation" role="status"><div class="desktop-boot-face" data-k="desktop-face-${esc(identity)}" aria-hidden="true">${character.innerHTML}</div>` +
     `<p class="desktop-stage">${esc(computerStateText(state))}</p>` +
     (value === undefined ? "" : `<progress aria-label="${label}" max="100" value="${value}"></progress>`) +
+    // R-UI-93: only a first build says how long it can take.
+    (state.state === "building" ? `<p class="desktop-first-build">${esc(t("desktop.firstBuild"))}</p>` : "") +
     `</div>`;
 }
 
