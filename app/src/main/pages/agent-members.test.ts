@@ -1445,6 +1445,34 @@ test("a cleared conversation reads its history whole, so its old turns leave the
   agent.hide();
 });
 
+test("a finished turn reads its colleagues' receipts again while they work and when one ends", async () => {
+  vi.useFakeTimers();
+  const handoff = { task_id: 77, source_turn_id: 31, work_turn_id: 90, member_id: 4, member_name: "Sample colleague", from_member_id: 3, stage_id: "check",
+    mode: "work" as const, state: "running", reason: null, created_at_ms: 1, ready_at_ms: 1, dispatch_policy: "immediate" as const, result: "", evidence: [] };
+  const history = structuredClone(THREADS[3]!); history[0]!.handoffs = [handoff];
+  api.agentHistoryList.mockImplementation(async (q: { member_id?: number }) => ({ turns: q.member_id === 3 ? structuredClone(history) : THREADS[0] }));
+  const agent = mount(); await flush(); await pick(3);
+  const asked = () => api.agentHistoryList.mock.calls.filter(([q]) => "after_id" in q).map(([q]) => q.turn_ids);
+  const read = async (q: { after_id?: number; turn_ids?: number[] }) => q.after_id === undefined ? { turns: structuredClone(history) }
+    : { turns: structuredClone(history).filter(item => q.turn_ids?.includes(item.id)), delta: true, removed_ids: [] };
+  api.agentHistoryList.mockClear();
+  api.agentHistoryList.mockImplementation(read);
+  send({ type: "WorkerChanged", task_id: 88, state: "running", running: true });
+  await vi.advanceTimersByTimeAsync(3000); await flush();
+  expect(asked().at(-1)).toContain(31);
+  history[0]!.handoffs = [{ ...handoff, state: "done" }];
+  send({ type: "AgentTurn", turn_id: 0, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(3000); await flush();
+  expect(asked().at(-1)).toContain(31);
+  send({ type: "AgentTurn", turn_id: 0, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(3000); await flush();
+  expect(asked().at(-1)).not.toContain(31);
+  send({ type: "WorkerChanged", task_id: 77, state: "failed", running: false });
+  await vi.advanceTimersByTimeAsync(3000); await flush();
+  expect(asked().at(-1)).toContain(31);
+  agent.hide();
+});
+
 test("finding a folded work receipt preserves the reply and its match through a roster refresh", async () => {
   vi.useFakeTimers();
   const history = structuredClone(THREADS[3]!);

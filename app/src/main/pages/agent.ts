@@ -1058,6 +1058,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** Loads the newest turns, or with `earlier` the ones before what is loaded, keeping the reader's place. */
   let activeRead: { key: string; promise: Promise<void> } | null = null;
   const dirtyTurnIds = new Set<number>();
+  const OPEN_HANDOFF = new Set(["queued", "running", "waiting"]);
   // A delta read never names turns a clear or delete removed; after a conversation change the
   // next read is whole. The version keeps a read started before the change from settling it.
   const staleHistory = new Map<number, number>();
@@ -1094,7 +1095,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     let got: AgentTurn[];
     const staleVersion = staleHistory.get(memberId());
     const deltaRead = fromEvent && loadedThread && turns.length > 0 && targetTurn === undefined && staleVersion === undefined;
-    const requestedIds = deltaRead ? [...new Set([...dirtyTurnIds, ...turns.filter(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting").map(turn => turn.id)])].slice(0, 50) : [];
+    // A turn whose colleagues still work can gain a receipt or change one after the turn itself ended.
+    const requestedIds = deltaRead ? [...new Set([...dirtyTurnIds, ...turns.filter(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting" || turn.handoffs?.some(handoff => OPEN_HANDOFF.has(handoff.state))).map(turn => turn.id)])].slice(0, 50) : [];
     requestedIds.forEach(id => dirtyTurnIds.delete(id));
     let delta = false, more = false, removed: number[] = [];
     try {
@@ -2419,7 +2421,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (wantsRefresh(event)) {
       // a turn of another thread changes only that member's row
       if (event.type === "WorkerChanged") {
-        for (const turn of turns) if (turn.task?.id === event.task_id) dirtyTurnIds.add(turn.id);
+        for (const turn of turns) if (turn.task?.id === event.task_id || turn.handoffs?.some(handoff => handoff.task_id === event.task_id)) dirtyTurnIds.add(turn.id);
         const loaded=hasWorkerTask(turns,event.task_id);
         if (!loaded && visible && !roomPane.active && renderedPage!==pageStamp()) render();
         scheduleRefresh(loaded ? 0 : 1000+REFRESH_DELAY_MS);
