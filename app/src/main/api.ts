@@ -89,6 +89,8 @@ export const desktopRenew = (session: string): Promise<DesktopState> => core("co
 export const desktopControl = (session: string, held: boolean, takeover?: string): Promise<DesktopState> => core("computer.viewer_control", { session, held, takeover });
 export const desktopClose = (session: string): Promise<unknown> => core("computer.viewer_close", { session });
 export const desktopRevoke = (member_id: number): Promise<{ granted: boolean }> => core("computer.revoke", { member_id });
+export const desktopMaintain = (member_id: number, action: import('./computer-lifecycle').ComputerMaintenance, captured: DesktopState, confirmed = false): Promise<DesktopState> =>
+  core('computer.lifecycle', { member_id, action, host: captured.host, target: captured.target, confirmed });
 export interface TeachingDraft { id: string; state: string; text: string; conversation_id?: number }
 export const desktopTeach = (params: { action: string; session?: string; member_id?: number; id?: string; text?: string }): Promise<TeachingDraft & { skill?: import("./types").MemberSkill }> => core("computer.teach", params);
 
@@ -146,6 +148,9 @@ export const historyClear = (): Promise<{ deleted: number }> => core("history.cl
 // ---------- conversations with Raphael ----------
 
 export interface AgentHistoryQuery {
+  /** Bounded new arrivals and only the loaded records invalidated by events. */
+  after_id?: number;
+  turn_ids?: number[];
   conversation_id?: number;
   around_id?: number;
   limit?: number;
@@ -156,7 +161,7 @@ export interface AgentHistoryQuery {
 }
 
 /** The turns of the conversations, newest first. */
-export const agentHistoryList = (q: AgentHistoryQuery = {}): Promise<{ turns: AgentTurn[]; pending_questions?: OwnerQuestion[] }> => core("agent.history.list", q);
+export const agentHistoryList = (q: AgentHistoryQuery = {}): Promise<{ turns: AgentTurn[]; pending_questions?: OwnerQuestion[]; delta?: boolean; removed_ids?: number[]; has_more?: boolean; next_after_id?: number }> => core("agent.history.list", q);
 /** What the owner typed into a composer, newest first, whichever conversation or room it went to (the arrow keys of a composer walk it). */
 export const agentSent = async (limit = 50): Promise<string[]> => (await core<{ texts: string[] }>("agent.history.sent", { limit })).texts;
 /** Forgets Raphael conversation turns; says how many there were. */
@@ -242,7 +247,7 @@ export const membersSetAvatar = (id: number, file: WireAttachment): Promise<{ me
 /** The owner read the thread of member `id`: it is no longer unread. */
 export const membersRead = (id: number): Promise<unknown> => core("members.read", { id });
 /** The thread on screen now (null for none): what arrives there is no news. */
-export const membersViewing = (id: number | null): Promise<unknown> => core("members.viewing", { id });
+export const membersViewing = (id: number | null): Promise<unknown> => core("members.viewing", { id, tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
 /** Raphael's own tools a member may be given, by id, and the connections. */
 export const membersToolChoices = (): Promise<{ tools: string[]; connections: { id: string; name: string; enabled: boolean }[] }> =>
   core("members.tool_choices");
@@ -256,7 +261,7 @@ export const groupsDelete = (id: number): Promise<{ deleted: boolean }> => core(
 export interface RoutineEventChoice {
   id: string; toolkit: string; slug: string; input: "" | "repository" | "channel"; label: string; app: string; app_name: string;
 }
-export const routinesList = (memberId?: number, pick?: {event:string;value:string}): Promise<{ routines: Routine[]; events?: RoutineEventChoice[]; event_apps?: string[]; when?: Routine["when"]; event_error?: string }> => core("routines.list", { ...(memberId === undefined ? {} : {member_id:memberId}), ...pick });
+export const routinesList = (memberId?: number, pick?: {event:string;value:string;contains?:string}): Promise<{ routines: Routine[]; events?: RoutineEventChoice[]; event_apps?: string[]; when?: Routine["when"]; event_error?: string }> => core("routines.list", { ...(memberId === undefined ? {} : {member_id:memberId}), ...pick });
 export const routinesCreate = (
   routine: Pick<Routine, "member_id" | "title" | "prompt" | "schedule" | "when"> & { enabled?: boolean },
 ): Promise<{ routine: Routine }> => core("routines.create", routine);
@@ -265,6 +270,7 @@ export const routinesUpdate = (
   patch: Partial<Pick<Routine, "title" | "prompt" | "schedule" | "when" | "enabled">>,
 ): Promise<{ routine: Routine }> => core("routines.update", { id, ...patch });
 export const routineWebhook = (id: number, reveal = false): Promise<{address:string;secret?:string;address_changed?:boolean}> => core("routines.webhook", {id,reveal});
+export const routinesRun = (id: number): Promise<{run_id?:number;turn_id?:number;status?:string;reason?:string}> => core("routines.run", {id});
 export const routinesDelete = (id: number): Promise<{ deleted: boolean }> => core("routines.delete", { id });
 /** The routine the core would offer member `memberId` now (its group's places), in `uiLanguage`; null for none. */
 export const routinesTemplate = (memberId: number, uiLanguage?: string): Promise<{ offer: RoutineOffer | null }> =>

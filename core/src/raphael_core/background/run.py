@@ -960,9 +960,10 @@ class TaskRun:
     ) -> tuple[dict, str, str | None, str | None]:
         """(the reply, how it ended, the tier, the service it used) of one of Raphael's own."""
         gate = self._gate
-        tier = gate.tier_now(ref.key)
+        tier = gate.tier_now(ref.key, arguments)
+        firm = gate.firm_confirmation(ref.key, arguments)
         from ..agent.harness_tools import CONNECTION_TOOLS
-        judged = ref.name == CREATE_MEMBER or ref.name in CALENDAR_WRITES or ref.name == "manage_connection"
+        judged = firm or ref.name == CREATE_MEMBER or ref.name in CALENDAR_WRITES or ref.name == "manage_connection"
         try:
             if not judged:
                 gate.check(Action(ref.key, arguments), None, worker=True)
@@ -980,7 +981,7 @@ class TaskRun:
                     "truncated": False,
                 }
                 return reply, "blocked", tier.name, None
-            if needs_yes(tier >= Tier.T2, screening) and not gate.full_permission:
+            if needs_yes(tier >= Tier.T2, screening, firm=firm) and (firm or not gate.full_permission):
                 if self.can_wait:
                     self.waiting = Waiting(alias or ref.name, ref, dict(arguments), call_id, tier, screening)
                     raise stopped(WAITING)
@@ -1016,8 +1017,8 @@ class TaskRun:
     async def _lookup(self, name: str, arguments: dict, *, approval: Approval | None = None, action: Action | None = None) -> ToolResult:
         """One of Raphael's own lookups. It never raises for a failure of the world."""
         try:
-            from ..agent.harness_tools import CONNECTION_TOOLS
-            if name in CONNECTION_TOOLS:
+            from ..agent.harness_tools import CONNECTION_TOOLS, ROUTINE_TOOLS
+            if name in CONNECTION_TOOLS or name in ROUTINE_TOOLS:
                 return await self._owner_tool(name, arguments, approval=approval, action=action) if self._owner_tool else ToolResult(name, False, None, "unavailable")
             from ..memory.growth import TOOLS as GROWTH_TOOLS
             if name in GROWTH_TOOLS:

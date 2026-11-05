@@ -520,6 +520,7 @@ test("a routine run link selects its member and loads the linked older turn", as
 beforeEach(() => { localStorage.clear();
   document.body.innerHTML = "";
   for (const fn of Object.values(api)) fn.mockReset();
+  api.core.mockResolvedValue({ questions: [] });
   api.roomsList.mockResolvedValue({rooms:[{id:1,name:"Launch",member_ids:[0,3],is_team:0}]});
   api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:3,text:"Ready",created:1,status:"done",turn_id:31}]});
   api.brainsCli.mockResolvedValue({ clis: [] });
@@ -536,6 +537,7 @@ beforeEach(() => { localStorage.clear();
   api.agentRetract.mockResolvedValue(undefined);
   api.agentVoice.mockResolvedValue(undefined);
   api.cancelSession.mockResolvedValue(undefined);
+  api.core.mockResolvedValue({});
   api.agentHistoryList.mockImplementation(async (q: { member_id?: number; limit?: number }) => ({ turns: THREADS[q.member_id ?? 0].slice(0, q.limit) }));
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -1391,6 +1393,7 @@ test("a burst of turn events while typing makes one history request and preserve
   expect(api.agentHistoryList).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(500); await flush();
   expect(api.agentHistoryList).toHaveBeenCalledTimes(1);
+  expect(api.agentHistoryList.mock.calls[0]![0]).toMatchObject({after_id:expect.any(Number),turn_ids:[31]});
   expect(input.value).toBe("Keep typing this draft");
   expect($('.tn[data-id="31"]')).toBe(node);
   agent.hide();
@@ -1406,5 +1409,38 @@ test("a same-length reply edit still refreshes without serializing the full hist
   send({ type: "AgentTurn", turn_id: 31, member_id: 3 });
   await vi.advanceTimersByTimeAsync(500); await flush();
   expect($('.tn[data-id="31"]').textContent).toContain(edited);
+  agent.hide();
+});
+
+
+test("computer search navigation leaves a room and restores the computer landing panel", async () => {
+  api.settingsGet.mockResolvedValue({settings:{computer_ssh_alias:""}});
+  const agent = mount(); await flush();
+  window.dispatchEvent(new CustomEvent("raphael:open-room", {detail:{roomId:1}})); await flush();
+  agent.show("computer"); await flush();
+  expect(agent.el.querySelector<HTMLElement>(".au-room-pane")!.hidden).toBe(true);
+  expect(agent.el.querySelector<HTMLElement>(".mb-det")!.hidden).toBe(false);
+  expect(agent.el.querySelector<HTMLElement>(".mb-det")!.dataset.detailsTab).toBe("details");
+  expect(agent.el.querySelector(".mb-det [data-computer-location]")).not.toBeNull();
+  agent.el.querySelector<HTMLButtonElement>('[data-det="gear"]')!.click();
+  agent.show("computer"); await flush();
+  expect(agent.el.querySelector<HTMLElement>(".mb-det")!.dataset.detailsTab).toBe("details");
+  agent.hide();
+});
+
+test("a metadata-only reply update does not force latest again", async () => {
+  vi.useFakeTimers();
+  const agent = mount(); await flush(); await pick(3);
+  await vi.advanceTimersByTimeAsync(100); await flush();
+  const scroll = $('.mb-chat .ra-scroll'), write = vi.fn();
+  Object.defineProperty(scroll, 'scrollTop', { get: () => 0, set: write });
+  const node = $('.tn[data-id="31"]');
+  const changed = structuredClone(THREADS[3]!);
+  changed[0]!.session_id = 'updated-session';
+  api.agentHistoryList.mockResolvedValueOnce({ turns: changed });
+  send({ type: "AgentTurn", turn_id: 31, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(500); await flush();
+  expect($('.tn[data-id="31"]')).toBe(node);
+  expect(write).not.toHaveBeenCalled();
   agent.hide();
 });

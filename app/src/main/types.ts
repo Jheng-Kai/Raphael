@@ -595,10 +595,13 @@ export interface BrainSettings {
   image_model?: string;
   video_model?: string;
   computer_ssh_alias?: string;
+  computer_vm_idle_minutes?: number;
   chief_pinned?: boolean;
   owner_name?: string;
   owner_about?: string;
   owner_output_folder?: string;
+  routine_timezone?: string;
+  routine_detected_timezone?: string;
   owner_photo?: string;
   action_mode?: "ask" | "direct" | "plan" | "bypass";
   local_commands_mode?: "ask" | "always" | "never";
@@ -994,7 +997,7 @@ export type RoutineSchedule = (
   | { kind: "weekly"; days: number[]; time: string }
   | { kind: "monthly"; day: number; time: string }
   | { kind: "every"; hours?: number; minutes?: number; time?: string; from?: string; to?: string }
-) & { start_date?: string; max_runs?: number; until?: string };
+) & { start_date?: string; max_runs?: number; until?: string; timezone?: string };
 
 export interface RoutineRun {
   id: number; routine_id: number; scheduled?: number; started: number; finished: number | null;
@@ -1052,7 +1055,7 @@ export interface RoutineEventWhen {
   webhook?: never;
   app: string;
   event: { tool: string; arguments: Record<string, unknown>; items: string; id: string; since?: { arg: string; format: "iso" } };
-  filter: { field: string; equals: string };
+  filter: { field: string; equals: string; operator?: "equals" | "contains" };
 }
 
 export interface Routine {
@@ -1093,7 +1096,7 @@ export type MainPageId = Exclude<PageId, "settings" | "history" | "dictionary">;
 export type DictationTab = "overview" | "history" | "dictionary";
 
 /** The tabs of the settings panel. */
-export type SettingsPane = "general" | "appearance" | "dictation" | "agent" | "connections" | "messaging" | "models" | "usage" | "data" | "about";
+export type SettingsPane = "general" | "appearance" | "dictation" | "agent" | "tools" | "safety" | "connections" | "messaging" | "models" | "usage" | "data" | "about";
 
 /**
  * What the 拉斐爾 page is to put in its composer when it opens, ready to be sent or changed: the
@@ -1106,7 +1109,7 @@ export type CalendarEventFocus = `calendar:${CalendarDate}:${string}`;
 export type CalendarCreate = `calendar-new:${CalendarDate}`;
 /** Calendar on the week of that day, its usual view. */
 export type CalendarWeek = `calendar-week:${CalendarDate}`;
-export type PageArgument = SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}`;
+export type PageArgument = "computer" | SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}`;
 
 /** One of the five pages of the main window. */
 export interface Page {

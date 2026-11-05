@@ -296,7 +296,7 @@ test("editing a saved routine from the profile preserves schedule end conditions
   const form = document.querySelector<HTMLElement>(".au-routine-dialog")!;
   expect(form.querySelector<HTMLInputElement>("#au-count")!.value).toBe("12");
   fill(form, "#au-title", "Updated review"); click(form, '[data-dlg="save"]'); await flush();
-  expect(api.routinesUpdate).toHaveBeenCalledWith(4, { title: "Updated review", prompt: "Review updates", schedule: routine.schedule });
+  expect(api.routinesUpdate).toHaveBeenCalledWith(4, { title: "Updated review", prompt: "Review updates", schedule: {...routine.schedule,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone} });
   expect(form.isConnected).toBe(false); dialog.close();
 });
 

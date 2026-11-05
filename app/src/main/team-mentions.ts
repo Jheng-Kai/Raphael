@@ -1,6 +1,6 @@
 import { iconHTML } from "./connections";
 import { RECALL } from "./composer-history";
-import { catalogs, t } from "./i18n";
+import { catalogs, getLocale, t } from "./i18n";
 import { faceHTML, primaryFirst, primaryIdOf, RAPHAEL_ID } from "./members";
 import { bindMentionField, type MentionField } from "./mention-field";
 import type { MentionTarget } from "./mention-text";
@@ -13,6 +13,8 @@ import { textPositionRect } from "./text-position";
 const inEveryLanguage = (key: "team.everyone" | "agent.title"): string[] => Object.values(catalogs).map(catalog => catalog[key]);
 const EVERYONE = inEveryLanguage("team.everyone");
 const RAPHAEL = inEveryLanguage("agent.title");
+type TargetRoster = (MentionTarget & { tag?: string; source?: string })[];
+const targetRosters = new Map<string, TargetRoster>();
 
 /**
  * Prompts, menus and chips consume the same public inventory; apps never become bot recipients. Each leads with who or what
@@ -20,8 +22,13 @@ const RAPHAEL = inEveryLanguage("agent.title");
  */
 export function mentionTargets(list: MembersList, allowed?: number[]): (MentionTarget & { tag?: string; source?: string })[] {
   const people = primaryFirst<{ id: number; name: string }>(list.team_context?.members ?? list.members, primaryIdOf(list));
+  // Presence ticks do not change an address. Keep the roster identity shared by composer and finished messages.
+  const version = JSON.stringify([getLocale(), people.map(person => [person.id, person.name, list.members.find(member => member.id === person.id)?.avatar]),
+    list.groups.map(group => [group.id, group.name]), list.team_context?.apps, allowed]);
+  const known = targetRosters.get(version);
+  if (known) return known;
   const team = (): string => ico("grid");
-  return [
+  const targets: TargetRoster = [
     { name: t("team.everyone"), kind: "everyone", aliases: EVERYONE, mark: team },
     ...people.filter(m => !allowed || allowed.includes(m.id)).map(m => ({ name: m.name, kind: "member" as const, aliases: m.id === RAPHAEL_ID ? RAPHAEL : [],
       mark: (size: number) => faceHTML(list.members.find(other => other.id === m.id) ?? m, size) })),
@@ -29,6 +36,9 @@ export function mentionTargets(list: MembersList, allowed?: number[]): (MentionT
     ...[...(list.team_context?.apps ?? [])].sort((a, b) => Number(b.state === "ready") - Number(a.state === "ready") || (b.last_used_at ?? 0) - (a.last_used_at ?? 0)).map(app => ({ name: app.name, kind: "app" as const, aliases: app.aliases, source: app.plugin, mark: () => iconHTML(app.name, serviceIconOf({ name: app.name }), "md"),
       tag: app.state === "needs_sign_in" ? t("rooms.appSignIn") : app.state === "needs_secret" ? t("rooms.appKey") : undefined })),
   ];
+  if (targetRosters.size >= 8) targetRosters.delete(targetRosters.keys().next().value!);
+  targetRosters.set(version, targets);
+  return targets;
 }
 
 /** Completion always keeps the focus in the field, including during input-method composition. */

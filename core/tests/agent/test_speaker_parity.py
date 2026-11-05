@@ -12,6 +12,7 @@ from raphael_core.agent.team import team_tools_for
 from raphael_core.background.service import _prompts
 from raphael_core.background.run import RunLimits
 from raphael_core.background.snapshot import take_snapshot
+from raphael_core.management import MANAGEMENT_TOOLS
 
 
 def speakers(primary):
@@ -32,7 +33,10 @@ def test_every_speaker_gets_the_same_tools_and_capabilities(path, primary):
         offered = take_snapshot(None, speaker=speaker, team=tools, memory=True,
                                 attachments=True, interactive=path != "worker")
         offers.append({item["function"]["name"]: item["function"] for item in offered.definitions
-                       if item["function"]["name"] not in COORDINATION_TOOLS})
+                       if item["function"]["name"] not in COORDINATION_TOOLS and item["function"]["name"] not in MANAGEMENT_TOOLS | {"find_tools"}})
+        assert "owner_management" in PARITY_EXCEPTIONS
+        assert not set(offered.refs) & MANAGEMENT_TOOLS
+        assert bool(offered.management) == (speaker.is_chief and path != "worker")
         for tool, duty in COORDINATION_TOOLS.items():
             assert duty in PARITY_EXCEPTIONS
             assert (tool in offered.refs) == speaker.is_chief

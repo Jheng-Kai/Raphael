@@ -10,6 +10,26 @@ from raphael_core.native_journeys import home_timing_brain
 import json
 
 
+@pytest.mark.asyncio
+async def test_typing_reply_and_timing_are_inert_outside_isolated_native_mode(monkeypatch):
+    from unittest.mock import AsyncMock
+    from raphael_core import native_journeys
+    sleep = AsyncMock()
+    monkeypatch.setattr(native_journeys.asyncio, "sleep", sleep)
+    monkeypatch.setenv("RAPHAEL_NATIVE_THINK_S", "35")
+    messages = [{"role": "user", "content": "[native-typing:stream]"}]
+    monkeypatch.delenv("RAPHAEL_TEST_NATIVE", raising=False)
+    await native_journeys.native_think(messages)
+    sleep.assert_not_awaited()
+    ordinary = await EchoClient().chat_tools(messages=messages, tools=[])
+    assert "Offline reply" not in ordinary.content
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
+    await native_journeys.native_think(messages)
+    sleep.assert_awaited_once_with(1.0)
+    scripted = await EchoClient().chat_tools(messages=messages, tools=[])
+    assert len(json.loads(scripted.content)["messages"]) == 4
+
+
 def test_computer_signin_fixture_is_private_to_each_journey_member(tmp_path, monkeypatch):
     from raphael_core.native_journeys import vm_signin_fixture
     from raphael_core.computer.vm import LocalVm

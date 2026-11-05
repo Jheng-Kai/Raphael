@@ -18,6 +18,14 @@ import { navigationRequests, warmupEntries } from "./navigation.mjs";
 // Docker is an installed product name, including its unavailable-engine state.
 export const LATIN_NAMES = ["Raphael", "Docker", "Docker Desktop", "Rimuru", "Google", "Gmail", "Calendar", "Composio", "OpenRouter", "OpenAI", "ChatGPT", "Anthropic", "Claude", "Codex", "Gemini", "GPT", "Grok", "Telegram", "Slack", "Discord", "Notion", "GitHub", "MCP", "API", "URL", "CLI", "STT", "PDF", "WAV", "CSV", "JSON", "US", "KB", "MB", "GB", "GMT", "AM", "PM", "Alt", "AltGr", "Ctrl", "Shift", "Space", "Esc", "Enter", "Tab", "Win", "Windows", "Fn", "Edge", "Chrome", "macOS", "Whisper", "Typeless", "Webhook", "HMAC", "SHA", "Signature", "Hermes", "Simple", "Icons", "Bearer", "mcpServers", "Ollama", "Linear", "BotFather", "newbot", "English", "MIT", "JPG", "WebP", "GIF", "UTF", "Big", "txt", "px", "token", "Claude Code", "Antigravity", "KEY=value", "Settings → Project Settings → API Keys"];
 
+/** Typed owner values are synthetic data, just like the initial fixture's values. */
+export function sceneLatinNames(scene, locale, fixture) {
+  if (locale !== "zh-TW") return null;
+  const words = value => typeof value === "string" ? value.match(/[A-Za-z]{2,}/g) ?? [] : Array.isArray(value) ? value.flatMap(words) : value && typeof value === "object" ? Object.values(value).flatMap(words) : [];
+  const typed = scene.steps.filter(step => step.action === "type").map(step => step.text);
+  return [...new Set([...words(fixture), ...words(scene.fixture), ...words(typed), ...LATIN_NAMES].map(word => word.toLowerCase()))];
+}
+
 // Agents run inside their own sandbox, where the browser cannot start a second one; the page is our
 // own app on loopback only.
 export const BROWSER_ARGS = ["--no-sandbox", "--disable-gpu", "--disable-crash-reporter", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--disable-component-update"];
@@ -83,8 +91,7 @@ export async function run(options) {
       [url, await readFile(join(import.meta.dirname, file))])));
     const translations = await readFile(join(app, "src/main/i18n/zh-TW.ts"), "utf8");
     // Words a Chinese window may show in Latin letters: the synthetic data's own, and names of products and keys.
-    const dataWords = value => typeof value === "string" ? value.match(/[A-Za-z]{2,}/g) ?? [] : Array.isArray(value) ? value.flatMap(dataWords) : value && typeof value === "object" ? Object.values(value).flatMap(dataWords) : [];
-    const latinFor = (scene, locale) => locale === "zh-TW" ? [...new Set([...dataWords(fixture), ...dataWords(scene.fixture), ...LATIN_NAMES].map(word => word.toLowerCase()))] : null;
+    const latinFor = (scene, locale) => sceneLatinNames(scene, locale, fixture);
     const namespaces = [...new Set([...translations.matchAll(/"([a-z][A-Za-z0-9]*)\.[^"\n]+"\s*:/g)].map(match => match[1]))];
     server = await createServer({ configFile: false, root: app, cacheDir: join(directory, "vite-cache"), server: { host: "127.0.0.1", port: 0, hmr: false, watch: null, fs: { allow: [app] } } });
     await server.listen();

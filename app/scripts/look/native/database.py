@@ -195,6 +195,20 @@ elif operation == "init":
         path.write_text(skill, encoding="utf-8")
         for name in ("memory", "member-skills"):
             shutil.copytree(seed / name, directory / name)
+    if len(sys.argv) > 3 and sys.argv[3] == "typing":
+        from raphael_core.agent.history import AgentHistory
+        from raphael_core.agent.steps import Step
+        from raphael_core.members.store import MemberStore
+
+        people = [MemberStore(connection).create_member(name=f"Typing {index}", role="離線檢閱員") for index in range(8)]
+        history = AgentHistory(connection)
+        for index in range(150):
+            text = f"檢閱紀錄 {index}：量測結果已保留，可隨時回頭查閱。\n\n| 項目 | 結果 |\n| --- | --- |\n| 草稿 | 已保留 |\n\n```python\nresult = {index}\nprint(result)\n```"
+            turn_id = history.add(session_id=f"native-typing-{index}", member_id=people[0].id,
+                                  question=f"{'@Typing 1 ' if index % 3 == 0 else ''}請檢閱第 {index} 筆紀錄。", route="answer", prefix="", text=text,
+                                  status="done", source="app", model="fake/echo",
+                                  steps=[Step("tool", "local_time", "builtin", "ok", 5)])
+            history.add_message(turn_id, "reply", text)
     if len(sys.argv) > 3 and sys.argv[3] == "rich-content":
         from raphael_core.agent.history import AgentHistory
 

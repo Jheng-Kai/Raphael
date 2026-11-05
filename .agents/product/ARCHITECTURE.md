@@ -64,6 +64,42 @@ not add a writer, model loop, worker, grant, migration or filesystem side effect
 (A-01/03/04). Host and member-computer destinations stay distinct. Actual native
 keyboard and model delivery acceptance are deferred by the unit brief.
 
+## Owner management registry (2026-11-05)
+
+core/src/raphael_core/management.py holds owner UI actions, exact RPC/service names, schemas,
+destructiveness and tiers, plus owner-only reasons and explicit read/interaction
+classification. agent/team_admin.py generates contracts from those rows and keeps
+team_overview as shared work context. MembersService executes the same Router
+handlers as the UI, with the existing member profile adapter for named folders.
+The live store primary_id is checked at execution, not inferred from identity 0.
+Interactive private API/CLI offers include management only for that primary;
+noninteractive snapshots exclude it. Own routines, memory, skill tools,
+connect_app/request_secret cards, room_post, ask_member and handoff remain shared.
+Firm destructive confirmation is evaluated by ToolGate/ToolRegistry even under
+bypass and cannot be waived by Always. MembersService also requires the exact
+consumed Approval and refuses replay. Existing T3 hold-to-confirm cards carry the
+full scope. A trusted origin-turn context prevents a requested history deletion
+from cancelling its own executing tool; completion writes a fresh receipt.
+
+## Bounded transcript rendering and incremental history (2026-11-05)
+
+TranscriptWindow owns the shared private/room mount range: newest 25 turns,
+20-turn expansion within 300px of a sentinel, and at most 100 mounted turns.
+Search, quote, bring and unread navigation restore the target range before
+scrolling. This frontend range does not replace core before/around pagination.
+agent.history.list additionally accepts bounded after_id and explicit turn_ids
+reads, scoped to the same member and conversation; dirty IDs never advance the
+forward-page cursor. Persisted history remains authoritative.
+
+Finished turn HTML is cached by its data and display version. Composio and
+mention projections are bounded presentation caches, never changes to raw tool
+results. The shared reading controller retains one anchor and invalidates queued
+corrections on explicit navigation. End/sentinel observers own following and
+paging admission; ordinary content mutations do not measure the entire thread.
+Slime transitions retain JS pose clocks, avoid computed-style reads and defer
+invisible strips. Parsed cel templates use a bounded 16-entry LRU; mounted clones
+keep independent phase and colour. Mount timestamps are not content identity.
+
 ## Meeting speech and private work lanes (2026-11-04)
 
 Migration 60 preserves existing room rows and the compatibility active_turn column.
@@ -307,7 +343,7 @@ mechanical boundaries below.
 | ID | Invariant | Check | Evidence |
 | --- | --- | --- | --- |
 | A-01 | Member turns use AgentService rather than a second model loop in members or rooms. | pytest | core/tests/architecture/test_boundaries.py::test_members_and_rooms_do_not_create_brain_loops |
-| A-02 | Team administration definitions are offered to every speaker alike, Raphael and each member; the chief capability (the unique primary contact, Raphael by default) reserves no tool. | pytest | core/tests/architecture/test_boundaries.py::test_every_speaker_is_offered_the_same_team_administration |
+| A-02 | Work tools are offered to every speaker alike, Raphael and each member; app management tools are offered only to the current primary contact, found through `find_tools` or the request intent, and checked again where they run. | pytest | core/tests/architecture/test_boundaries.py::test_only_primary_is_offered_management_and_everyone_keeps_work_tools |
 | A-03 | API and CLI conversation paths consume the shared production snapshot; live evaluation uses those loops and definitions. | pytest | core/tests/architecture/test_boundaries.py::test_shared_loop_and_definition_sources |
 | A-04 | CLI conversations use one authenticated RaphaelMcp implementation; no alternate MCP server in agent CLI or evaluation. | pytest | core/tests/architecture/test_boundaries.py::test_one_mcp_server |
 | A-05 | Secrets use the OS credential store; only hosted evaluator CI can read its ephemeral Actions key, and failures never report credential values. | pytest | core/tests/architecture/test_boundaries.py::test_evaluator_credentials_are_ci_scoped; core/tests/brain/test_openrouter.py::test_a_key_provider_failure_is_logged_by_exception_type_only; core/tests/evaluate/test_guardian.py::test_provider_error_is_classified_without_secret_text |
@@ -629,6 +665,28 @@ default true; members.update accepts only that preference for identity 0. The de
 panel uses the same switch and words for all members. Worker reports share the member
 text contract; the existing fit_text projection derives the quick overlay caption.
 
+
+## Routine test and saved timezone boundary (2026-11-05)
+
+The explicit main-window `routines.run` allowlist entry calls MembersService._run
+with manual admission; it shares the existing background worker, routine_runs,
+agent history/conversation routing and spend. It neither enables paused schedules
+nor advances next_run. Frontend routine-run.ts keeps pending state and observes
+the existing routines.runs projection until finished, including confirmations.
+
+Schedule JSON gains validated optional IANA timezone metadata; the shared registry
+adds routine_timezone and internal routine_detected_timezone. Owner-window
+members.viewing reports the detected zone and pins legacy schedules before future
+zone changes. Home remains read-only. Existing schedule parsing/next_run and the
+calendar occurrence engine own saved-zone/DST behavior, with no separate scheduler.
+The shared timezones.ts selector uses ui.ts popovers and the existing settings.set.
+
+Event filters add an optional literal contains operator for Slack text after the
+existing selected-channel read; shared routine tool schemas retain the production
+gate and baseline receipts. The loopback webhook listener accepts its existing
+vault key via constant-time Bearer comparison as well as HMAC. Recipes describe
+user-managed HTTPS forwarding and provider payload fields without provisioning
+cloud infrastructure or storing a second provider credential.
 
 ## Plugin sets and marketplaces (2026-11-04)
 

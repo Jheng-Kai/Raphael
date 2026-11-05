@@ -2,7 +2,7 @@ import { esc } from './ui';
 
 /** Rasterize the glyph mask once; the moving light is an ordinary composited HTML gradient. */
 export function mountShimmers(root: HTMLElement): void {
-  for (const span of root.querySelectorAll<HTMLElement>('.shimmer')) {
+  for (const span of [...(root.matches('.shimmer') ? [root] : []), ...root.querySelectorAll<HTMLElement>('.shimmer')]) {
     const style=getComputedStyle(span), box=span.getBoundingClientRect(), words=span.textContent ?? '';
     if(!box.width || !box.height)continue;
     const key=`${style.font}|${style.letterSpacing}|${box.width}|${box.height}|${words}`;

@@ -6,6 +6,12 @@ See [Settings and appearance](settings-appearance.md#signed-updates-and-owner-me
 and [Conversation](conversation.md#streaming-composer-files-2026-11-05) for the selected
 matrix, signed-version requirement and native/dependency acceptance boundaries.
 
+## Settings by purpose (2026-11-05)
+
+See [Settings and appearance](settings-appearance.md#settings-by-purpose-2026-11-05)
+for moved shared settings, member-owned voice/memory, grouped draft preferences,
+legacy agent links, computer location search and the selected offline UI matrix.
+
 ## Commands, routine limits and owner output (2026-11-05)
 
 See [Daily work](daily-work.md) for R-NAV-01, R-ROUTINE-01/02 and R-OUTPUT-01,
@@ -22,6 +28,18 @@ MCP setup cards. Migration 62 follows rooms 60 and shared grants 61. Offline loo
 adds skills-plugin-entry, skills-marketplace, skills-plugin-set,
 skills-plugin-update and skills-plugin-details to the existing 15-scene skill scope.
 Synthetic HTTP/CLI tests do not establish GitHub, installed-CLI or live acceptance.
+
+## Primary-contact owner management (2026-11-05)
+
+See [Owner management](owner-management.md) for R-AG-MGMT-01 through 03,
+primary-only interactive offers, server authorization, firm destructive cards,
+UI RPC/settings coverage and the selected deferred card scenes. This brief allows
+fake offline core checks only and forbids look, native, network and paid APIs.
+
+## Long busy conversations (2026-11-05)
+
+See [Conversation](conversation.md#long-busy-conversations-and-bounded-mounting-2026-11-05) for R-PERF-14 through R-PERF-21, shared private/room window scenes, bounded event reads and the isolated native typing journey. Native latency, selected look and judge evidence remain separate.
+
 
 ## Shared installed skills (2026-11-04)
 

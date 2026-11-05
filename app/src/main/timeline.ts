@@ -616,7 +616,7 @@ function taskActionsHTML(turn: AgentTurn, state: TimelineState): string {
 
 /** Media stands above the owner's bubble, whose quote precedes the words. */
 function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined, quote?: MessageQuote | null, expand = ""): string {
-  const bubble = words || quote ? `<div class="bubble">${quote ? quoteHTML(quote) : ""}<div class="message-text">${words}</div>${expand}</div>` : "";
+  const bubble = words || quote ? `<div class="bubble">${quote ? quoteHTML(quote, true) : ""}<div class="message-text">${words}</div>${expand}</div>` : "";
   return files?.length ? `<div class="owner-content">${filesHTML(files)}${bubble}</div>` : bubble;
 }
 
@@ -773,9 +773,10 @@ function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, r
   const open = state.thinkingOpen.get(turn.id) ?? false;
   const actions = workActions(turn).filter(action => action.state === "done").map(action => ({ ...action, past: composioText(action.past, composioAction(turn)) }));
   const steps = shownSteps(turn).filter(step => step.kind !== "model");
-  const rows = actions.length ? actions.map(action => `<li>${esc(action.past)}${action.outcome && action.outcome !== "ok" ? ` · ${esc(reasonText({kind:"tool", tool:"", server:null, ms:0, at_ms:0, outcome:action.outcome, reason:action.reason ?? null}))}` : ""}</li>`).join("") : steps.length ? steps.map(step => `<li>${esc(pastStep(step))}${step.outcome !== "ok" ? ` · ${esc(reasonText(step))}` : ""}</li>`).join("") : messages.map(message => `<li class="work-progress">${messageHTML(message.text, query)}</li>`).join("");
+  const rows = actions.length ? actions.map(action => `<li>${esc(action.past)}${action.outcome && action.outcome !== "ok" ? ` · ${esc(reasonText({kind:"tool", tool:"", server:null, ms:0, at_ms:0, outcome:action.outcome, reason:action.reason ?? null}))}` : ""}</li>`).join("") : steps.length ? steps.map(step => `<li>${esc(pastStep(step))}${!step.missing && step.outcome !== "ok" ? ` · ${esc(reasonText(step))}` : ""}</li>`).join("") : messages.map(message => `<li class="work-progress">${messageHTML(message.text, query)}</li>`).join("");
+  const prerequisites = shownSteps(turn).map(step => step.missing ? missingHTML(step.missing) : "").join("");
   const meta = [esc(answerMeta(turn)), ...shownSteps(turn).map(mediaBillHTML)].filter(Boolean).join(" · ");
-  const body = (rows ? `<ol class="work-sentences">${rows}</ol>` : "") + (meta ? `<p class="work-meta">${meta}</p>` : "");
+  const body = (rows ? `<ol class="work-sentences">${rows}</ol>` : "") + prerequisites + (meta ? `<p class="work-meta">${meta}</p>` : "");
   if (!body) return "";
   return `<div class="work-section think-box${open ? " is-open" : ""}" data-thinking-turn="${turn.id}">` +
     `<div class="work-body think-body" id="work-${turn.id}"${open ? "" : " hidden"}>${body}</div></div>`;

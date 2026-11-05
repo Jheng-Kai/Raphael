@@ -256,7 +256,7 @@ watchChipRows(document.body);
   function go(id: PageId, arg?: PageArgument): void {
     navigation.visit(() => {
       if (id === "settings") openSettings(arg?.startsWith("draft:") ? undefined : (arg as SettingsPane | undefined));
-      else showPage(id, id === "automations" || arg?.startsWith("draft:") ? arg : undefined);
+      else showPage(id, id === "automations" || arg?.startsWith("draft:") || id === "agent" && arg === "computer" ? arg : undefined);
     });
   }
 

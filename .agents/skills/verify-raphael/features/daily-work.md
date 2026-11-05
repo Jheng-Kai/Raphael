@@ -78,3 +78,21 @@ Rate limits count accepted attempts, including later refused/failed execution;
 uncertain work is never replayed. Polling checks are not routine runs. Scheduled
 work retries the limited slot without advancing max_runs accounting. The current
 member's Alt navigation does not switch between group rooms.
+
+
+## Routine tests and timezone preference (2026-11-05)
+
+General adds a searchable IANA timezone preference; blank means auto-detect.
+Changing it affects new schedules. Each saved routine keeps its original zone.
+The setting uses the existing settings.set boundary; owner activity reports the
+browser-detected zone through members.viewing, never through Home reads or model tools.
+See automations.md for the selected routine-zone, routine-zone-search and
+routine-zone-saved journeys, fake-only evidence, DST policy and full matrix.
+
+Explicit Test once in the shared editor/row menu uses the same 300 team/200 member
+rolling-hour admission receipts, worker cost limits and member conversation history.
+A paused test never resumes scheduled work. R-ROUTINE-02 owner-presence pausing and
+explicit re-enable remain authoritative. Rate or worker refusal has readable words.
+All provider payloads and Slack messages in this brief are synthetic; external
+HTTPS forwarding, real authentication and native subscription delivery remain
+separate acceptance.

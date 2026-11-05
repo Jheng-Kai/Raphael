@@ -246,6 +246,18 @@ class LocalVm:
         self.remote_sessions = {}
         self.real_transport = runner is None
         self.rebuild_notice = lambda target: None
+        self.maintenance, self.lifecycle = {}, {}
+        self.disk_checked, self.disk_warned = {}, set()
+        async def disconnect_driver(key):
+            pass
+        self.disconnect_driver = disconnect_driver
+        self.repair_notice = lambda target: None
+        self.repair_admit = lambda target: True
+        self.repair_revisions = {}
+
+    def record_repair(self, target):
+        self.repair_revisions[target.key] = self.repair_revisions.get(target.key, 0) + 1
+        self.repair_notice(target)
 
     @property
     def remote(self):
@@ -425,6 +437,19 @@ class LocalVm:
         return {"state": "running" if running else "stopped", "ready": ready, "viewer_url": url}
 
     async def viewer_connection(self, target):
+        try:
+            return await self._viewer_connection(target)
+        except VmError as error:
+            if str(error) != "viewer_tunnel_failed":
+                raise
+            if not self.repair_admit(target):
+                raise VmError("repair_failed")
+            await self.close_viewer(target)
+            result = await self._viewer_connection(target)
+            self.record_repair(target)
+            return result
+
+    async def _viewer_connection(self, target):
         """Core-only credentials, never a public status, URL or diagnostic."""
         if not await self.available(target):
             raise VmError("unavailable")
@@ -465,6 +490,8 @@ class LocalVm:
             raise VmError("build_failed")
 
     async def start(self, target):
+        if target.key in self.maintenance and self.maintenance[target.key] is not asyncio.current_task():
+            raise VmError("busy")
         if (state := self._recent_start(target)) is not None:
             return state
         if target.remote:
@@ -534,6 +561,8 @@ class LocalVm:
                     running.append(other)
                     protected.add(other.key)
         while len(running) >= LOCAL_LIMIT:
+            if target.key in self.maintenance:
+                raise VmError("local_capacity")  # Owner maintenance never evicts another computer.
             candidates = [other for other in running if other.key not in protected and not self.active.get(other.key)
                           and other.key not in self.held and not self.busy(other.key)]
             if not candidates:
@@ -550,6 +579,7 @@ class LocalVm:
             raise VmError(state["state"])
         zone = timezone_name(self.timezone())
         state = await self._reconcile_timezone(target, state, zone)
+        already_running = state["state"] == "running"
         if state["state"] != "running":
             self.wallpaper_attempted.discard((target.remote, target.name))
         if state["state"] == "missing":
@@ -561,16 +591,24 @@ class LocalVm:
             result = await self.run_for(target, run_args(target, self.owner, secrets.token_urlsafe(24), tz=zone), timeout=60)
         elif state["state"] == "stopped":
             result = await self.run_for(target, ["start", target.name], timeout=60)
+            if not result.code and self.active.get(target.key) and target.key not in self.maintenance:
+                self.record_repair(target)
         else:
             result = Result(0)
         if result.code:
             raise VmError("start_failed")
         self.last_activity[target.key] = self.clock()
-        for _ in range(45):
+        for attempt in range(45):
             state = await self.status(target)
             if state["ready"]:
                 await self._wallpaper(target)
                 return state
+            if attempt == 0 and already_running and state["state"] == "running" and target.key not in self.held and self.active.get(target.key, 0) <= 1:
+                socket = await self.run_for(target, exec_args(target, ["test", "-S", SOCKET]), timeout=5)
+                if socket.code and self.repair_admit(target):
+                    if (await self.run_for(target, ["restart", "--time", "10", target.name], timeout=60)).code:
+                        raise VmError("start_failed")
+                    self.record_repair(target)
             await asyncio.sleep(1)
         raise VmError("health_timeout")
 
@@ -696,11 +734,15 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
                         self.timezone_pending = True
                         continue  # Home remains usable while Docker is unavailable.
 
-    async def stop(self, target, *, remove=False):
+    async def stop(self, target, *, remove=False, captured_image=None):
         async with self.locks.setdefault(target.key, asyncio.Lock()):
             if self.active.get(target.key, 0) or target.key in self.held:
                 raise VmError("busy")
             state = await self.status(target, probe=False)
+            if state["state"] == "incompatible" and captured_image:
+                raw = await self.inspect(target)
+                if raw and raw.get("Image") == captured_image and compatible(raw, target, self.owner, captured_image):
+                    state = {"state": "running" if raw.get("State", {}).get("Running") else "stopped"}
             if state["state"] == "missing":
                 self.wallpaper_attempted.discard((target.remote, target.name))
                 return
@@ -835,8 +877,10 @@ print(base64.b64encode(data).decode())
 
     async def sweep(self):
         minutes = 15 if self.settings is None else self.settings.get("computer_vm_idle_minutes")
+        if minutes == 0:
+            return
         for key, last in list(self.last_activity.items()):
-            if self.targets[key].remote:
+            if key in self.maintenance:
                 continue
             if self.clock() - last >= minutes * 60 and not self.active.get(key) and key not in self.held and not self.busy(key):
                 try:

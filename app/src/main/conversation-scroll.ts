@@ -7,25 +7,44 @@ export function mountConversationScroll(scroller: HTMLElement): void {
   stage.insertAdjacentHTML("beforeend", iconButton("down", t("chat.latest"), ' hidden', "conversation-latest"));
   const button = stage.lastElementChild as HTMLButtonElement;
   scroller.tabIndex = 0;
+  let nearBottom = true;
+  const observed = typeof IntersectionObserver === 'function';
   const sync = (): void => {
-    button.hidden = scroller.hidden || scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 80;
+    if (!observed) nearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 80;
+    button.hidden = scroller.hidden || (!Number(scroller.dataset.windowLater) && nearBottom);
+    if (observed) scroller.dispatchEvent(new CustomEvent("conversation-near-bottom", { detail: nearBottom && !Number(scroller.dataset.windowLater) }));
+  };
+  const position = (): void => {
     button.style.bottom = `${Math.max(12, stage.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom + 12)}px`;
   };
-  button.addEventListener("click", () => scroller.scrollTo({ top: scroller.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" }));
-  // A draw waits for the next frame: reading the heights right after it would force its layout into the same task.
+  if (observed) {
+    const end = document.createElement('span');
+    end.className = 'conversation-end'; end.setAttribute('aria-hidden', 'true');
+    end.style.cssText = 'display:block;height:1px;pointer-events:none';
+    scroller.append(end);
+    new IntersectionObserver(entries => {
+      nearBottom = entries[0]?.isIntersecting ?? true; sync();
+    }, { root: scroller, rootMargin: '0px 0px 80px 0px' }).observe(end);
+  }
+  button.addEventListener("click", () => {
+    scroller.dispatchEvent(new CustomEvent("conversation-latest"));
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+  });
   let queued = false;
   const schedule = (): void => {
     if (queued) return;
     queued = true;
     requestAnimationFrame(() => { queued = false; sync(); });
   };
-  scroller.addEventListener("scroll", schedule, { passive: true });
-  new MutationObserver(schedule).observe(scroller, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+  if (!observed) scroller.addEventListener("scroll", schedule, { passive: true });
+  // Visibility and window range are the only attributes relevant to this affordance.
+  // Rich content/animated descendants cannot request a container-height measurement.
+  new MutationObserver(schedule).observe(scroller, { attributes: true, attributeFilter: ["hidden", "data-window-later"] });
   if (typeof ResizeObserver === "function") {
-    const resize = new ResizeObserver(schedule);
-    resize.observe(scroller);
-    if (scroller.firstElementChild) resize.observe(scroller.firstElementChild);
+    const resize = new ResizeObserver(position);
+    resize.observe(scroller); resize.observe(stage);
   }
+  position();
   onLocaleChange(() => { button.setAttribute("aria-label", t("chat.latest")); button.title = t("chat.latest"); });
   sync();
 }

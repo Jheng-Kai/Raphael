@@ -1,9 +1,21 @@
 // @vitest-environment happy-dom
 import { expect, test, vi } from "vitest";
 import { missingHTML, bindMissing, type Missing } from "./missing";
-import { setLocale } from "./i18n";
+import { setLocale, t } from "./i18n";
 
 const missing: Missing = { resource: "searxng", requirement: "url", state: "missing", repair: "search" };
+test("moved recovery copy names Tools, Safety and the member computer panel in every language", () => {
+  for (const [locale, panel] of [["zh-TW", "成員電腦面板"], ["en", "member computer panel"], ["ja", "メンバーの PC パネル"]] as const) {
+    setLocale(locale);
+    for (const key of ["missing.url", "missing.search", "missing.read", "missing.vision", "missing.pdf", "missing.voice", "missing.no_text", "services.loadFailed"] as const) {
+      expect(t(key)).toContain(t("settings.paneTools"));
+      expect(t(key)).not.toMatch(/設定 › 拉斐爾|Settings > Raphael|設定 › ラファエル/);
+    }
+    expect(t("mcp.localDisabled")).toContain(t("settings.paneSafety"));
+    expect(t("missing.docker")).toContain(panel);
+  }
+  setLocale("zh-TW");
+});
 test.each([['image_generation', '畫圖'], ['video_generation', '影片']])("media prerequisite %s names the missing capability and opens Models", (requirement, word) => {
   setLocale("zh-TW");
   const root = document.createElement("div");
@@ -29,7 +41,7 @@ test("a missing address is visible beside its one real repair button, never a ho
   setLocale("zh-TW");
   const root = document.createElement("div"); root.innerHTML = missingHTML(missing);
   expect(root.textContent).toContain("尚未設定 SearXNG 網址");
-  expect(root.textContent).toContain("設定 › 拉斐爾 › 服務 › 搜尋網路 › SearXNG");
+  expect(root.textContent).toContain("設定 › 工具 › 服務 › 搜尋網路 › SearXNG");
   expect(root.querySelectorAll("button")).toHaveLength(1);
   expect(root.querySelector("[title]")).toBeNull();
   const go = vi.fn(); bindMissing(root, go);

@@ -1,35 +1,8 @@
-// 服務, in the 拉斐爾 tab of Settings: what Raphael's tools stand on, drawn like the 「連接」 tab
-// (connections.ts, connections.css), which it shares its dialog, rows, switch and chevron with.
-//
-// At the tab's level, one clean list, a row for each capability: 搜尋網路, 讀網頁, 看圖片, 讀 PDF and
-// 拉斐爾的聲音. A row is its icon, its name and a line about it, the name of the service in use in
-// small muted words, a switch and a chevron; nothing else (no dropdown, no field). The switch turns
-// the capability on or off (`web_search_enabled`, `web_read_enabled`, `vision_enabled`, `pdf_enabled`,
-// `tts_enabled`): off, Raphael does not use it at all. A capability whose service cannot be used yet
-// (it lacks a key, an address or a voice model) is not turned on by the switch: the switch opens the
-// dialog on that service's settings instead.
-//
-// A click on the row, or on its chevron, opens the capability's dialog over the settings, with the
-// same switch and a close button at its head and, under 「已安裝」, a list of the services it can use:
-// each row is the service's mark (an app icon where there is no brand), its name, a muted note (本機,
-// 需要金鑰, 已設定 ...), a check on the one in use and a chevron.
-//   - 搜尋網路: OpenRouter, Brave, Tavily, Exa, SearXNG.   - 讀網頁: 內建, Jina, Firecrawl, Tavily.
-//   - 讀 PDF: 內建, OpenRouter.   - 拉斐爾的聲音: Fish Audio.
-//   - 看圖片: 「與回答相同」 and 「指定模型」, which opens the model picker (model-picker.ts, whose
-//     models are those that read images; settings.ts mounts it).
-// A click on a service opens its own settings in the same dialog, the list sliding out and the page
-// in, with a back chevron at its head: its key (paste and 「儲存」, or 「已設定」 and 「移除」), SearXNG's
-// address, the id of the Fish Audio voice model with a bordered 「Try it」 (English in every language,
-// text only), and a bordered 「使用」, which makes the service the one in use and turns the capability
-// on; it is disabled while the service is in use already or cannot be used.
-//
-// The choices, the switches and whether each key is stored come from the core (`services.status`),
-// which never says a key; choosing and switching are `settings.set`. A key goes once to
-// `services.set_key`: the field is emptied the moment it is sent, the key is in no state of this
-// page, and nothing here logs it.
-//
-// `servicesHTML` draws the section and the open dialog from a snapshot (pure, so its rules can be
-// tested without a browser); `createServices` holds the state and does what the buttons say.
+// Shared search, reading, vision, PDF and speech services are configured in Settings > Tools.
+// Each capability uses the existing connection rows and service dialog. Keys are sent once to
+// services.set_key and never retained in view state. The core returns configuration status only.
+// Raphael's voice model and preview live in his member details, using the same controller and
+// existing tts_fish_voice setting. servicesHTML draws snapshots; createServices owns actions.
 
 import { noticeHTML } from "./missing";
 import * as api from "./api";
@@ -39,7 +12,7 @@ import { describeError } from "./format";
 import { t } from "./i18n";
 import type { ServiceIconId } from "./service-icons";
 import type { BrainSettings, ServiceOption, ServicesStatus } from "./types";
-import { type IconName, actionRow, btn, esc, fieldHTML, ico, iconButton, leave, st, tg, toaster } from "./ui";
+import { type IconName, actionRow, btn, esc, fieldHTML, ico, iconButton, leave, note, st, tg, toaster } from "./ui";
 
 /** The capabilities, in the order of the list. */
 export const CAPABILITIES = [
@@ -288,12 +261,12 @@ function urlLineHTML(option: ServiceOption, v: ServicesView, url: string): strin
 }
 
 /** The id of the voice model (the setting, no secret), saved with its own 「儲存」. */
-function voiceLineHTML(v: ServicesView, voice: string): string {
+export function voiceLineHTML(v: ServicesView, voice: string): string {
   const off = v.busy === "voice" ? " disabled" : "";
   return (
     `<div class="svc-line" data-svc-line="voice">` +
     fieldHTML(t("services.voiceId"), voice, { id: VOICE_INPUT_ID, label: t("services.voiceId"), disabled: v.busy === "voice" }) +
-    actionRow({ primary: { label: esc(t("services.save")), attrs: ` data-svc="voice" data-service="fish"${off}` } }) +
+    actionRow({ secondary: btn(esc(t("conn.tryIt")), "", ` data-svc="try" data-service="fish"${off}`), primary: { label: esc(t("services.save")), attrs: ` data-svc="voice" data-service="fish"${off}` } }) +
     `</div>`
   );
 }
@@ -330,7 +303,7 @@ function listViewHTML(entry: (typeof CAPABILITIES)[number], v: ServicesView, bra
   return head + `<h3 class="svc-h">${esc(t("services.installed"))}</h3><div class="cs-list" data-stagger="svc:${entry.kind}">${rows}</div>`;
 }
 
-/** The dialog's second view: one service's own settings (its key, its address, its voice model) and 「使用」. */
+/** The service setup page owns its shared key/address and Use action. */
 function subViewHTML(entry: (typeof CAPABILITIES)[number], service: string, v: ServicesView, visionPicker: string, brain: BrainSettings | null): string {
   const status = loaded(v);
   const row = serviceRows(entry.kind, status, brain).find((r) => r.id === service);
@@ -349,13 +322,12 @@ function subViewHTML(entry: (typeof CAPABILITIES)[number], service: string, v: S
   } else if (option) {
     if (option.id === "searxng") fields = urlLineHTML(option, v, brain?.searxng_url ?? "");
     else if (option.needs_key || option.key_optional) fields = keyLineHTML(option, v);
-    if (entry.kind === "voice" && option.id === "fish") fields += voiceLineHTML(v, brain?.tts_fish_voice ?? "");
+    if (entry.kind === "voice") fields += note(esc(t("services.voiceDetails")));
   }
   const inUse = !!row?.chosen && on;
   const idle = v.busy !== null;
   const acts = actionRow({
     cls: "svc-acts", sticky: true,
-    secondary: entry.kind === "voice" ? btn(esc(t("conn.tryIt")), "", ` data-svc="try" data-service="fish" data-k="svc-try"${idle ? " disabled" : ""}`) : "",
     primary: { label: esc(t("services.use")), attrs: ` data-svc="use" data-service="${esc(service)}" data-k="svc-use"${inUse || !row?.usable || idle ? " disabled" : ""}` },
   });
   return head + fields + (entry.kind === "vision" && service === VISION_SAME && !row?.usable ? noticeHTML("sameVision") : "") + acts;
@@ -616,10 +588,16 @@ export function createServices(host: ServicesHost): ServicesPanel {
     }
     busy = "voice";
     redraw();
-    await host.changeSetting("tts_fish_voice", id);
-    busy = null;
-    await load();
-    return true;
+    try {
+      await host.changeSetting("tts_fish_voice", id);
+      return true;
+    } catch (error) {
+      toaster.info(describeError(error));
+      return false;
+    } finally {
+      busy = null;
+      await load();
+    }
   }
 
   /** 「Try it」: saves the id as typed, then has Raphael say the sample line; a refusal is told in a few words. */

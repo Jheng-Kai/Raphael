@@ -74,6 +74,7 @@
 .au-room-row:hover > .au-room-more, .au-room-row > .au-room-more:focus-visible, .au-room-row > .au-room-more[aria-expanded="true"] { opacity: 1; }
 .au-room-row:hover > .btn:first-child, .au-room-row:has(.au-room-more[aria-expanded="true"]) > .btn:first-child { padding-right: calc(var(--pa-more, var(--h-ctl-sm)) + 8px); }
 .au-room-reply { display: inline-flex; max-width: 100%; margin-left: var(--sp-2); padding: 2px var(--sp-2); border-radius: var(--r-sm); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-2xs); overflow-wrap: anywhere; }
+button.au-room-reply { border: 0; font-family: inherit; cursor: pointer; }
 .au-room-thread .au-room-thinking { display: flex; flex-direction: row; align-items: center; gap: var(--sp-3); color: var(--text-2); font-size: var(--fs-xs); padding-block: var(--sp-2); }
 .au-room-participant { position: relative; display: inline-flex; }
 .au-room-participant + .au-room-participant { margin-left: -6px; }
@@ -286,3 +287,5 @@
 .room-board-decisions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); border-top: 1px solid var(--edge); padding-top: var(--sp-3); overflow-wrap: anywhere; }
 .room-board-decisions > p { margin: 0; }
 .room-report-files { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.au-recipe-fields, .au-hook-address { white-space: normal; overflow-wrap: anywhere; }
+.au-run-history p { white-space: pre-wrap; overflow-wrap: anywhere; }

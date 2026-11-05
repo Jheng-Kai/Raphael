@@ -106,7 +106,7 @@ async def test_a_safety_rule_that_asks_still_gets_the_owners_yes_in_automatic_mo
 
     rig.service._gate._safety = SimpleNamespace(screen=asking)
     brain(("member_create", {"name": "Research", "role": "Research"}))
-    asked = await typed(rig, "Create Research", 0)
+    asked = await typed(rig, "Create member Research", 0)
     assert asked["status"] == "confirm" and len((await rig.call("members.list", {}))["members"]) == 1
 
 
@@ -134,7 +134,7 @@ async def test_every_brain_collects_edits_and_applies_once(setup, brain):
 async def test_cancel_expiry_and_resend_never_revive_a_proposal(setup, brain, ending):
     rig, team = setup
     brain(("member_create", {"name": "Research", "role": "Research"}))
-    asked = await typed(rig, "Create Research", 0)
+    asked = await typed(rig, "Create member Research", 0)
     old = asked["confirm"]["id"]
     if ending == "expiry":
         rig.clock.now += 31
@@ -142,7 +142,7 @@ async def test_cancel_expiry_and_resend_never_revive_a_proposal(setup, brain, en
         await rig.confirm(old, False)
     else:
         brain(("member_create", {"name": "Research", "role": "Research"}))
-        newer = await typed(rig, "Create Research", 0)
+        newer = await typed(rig, "Create member Research", 0)
         await rig.confirm(newer["confirm"]["id"], False)
     await rig.confirm(old, True)
     assert (await rig.call("members.list", {}))["members"][1:] == []
@@ -155,7 +155,7 @@ async def test_once_the_owner_answers_a_proposal_a_cli_brain_starts_a_new_thread
     # at "the drafts are ready", so it said so and showed none. The next request starts from the history instead.
     rig, team = setup
     brain(("member_create", {"name": "Research", "role": "Research"}))
-    asked = await typed(rig, "Create Research", 0)
+    asked = await typed(rig, "Create member Research", 0)
     main = rig.service.conversations.main(0)
     if brain.cli:
         assert rig.service._cli_sessions.get(0, "cli:codex:test", main) == "codex-thread-1"
@@ -241,7 +241,7 @@ async def test_first_bot_cancel_and_invalid_batch_leave_profile_unset(setup, bra
     assert not team.members.first_bot_profile()
     brain(("member_update", {"id": 0, "name": "Morning"}),
           ("member_create", {"name": "X" * 17, "role": "Invalid"}))
-    asked = await typed(rig, "Set up both", 0)
+    asked = await typed(rig, "Set up both members", 0)
     await rig.confirm(asked["confirm"]["id"])
     assert not team.members.first_bot_profile()
     assert not team.members.store.members()
@@ -253,7 +253,7 @@ async def test_owner_edits_are_checked_against_current_safety_rules(setup, brain
 
     rig, team = setup
     brain(("member_create", {"name": "Research", "role": "Research"}))
-    asked = await typed(rig, "Create Research", 0)
+    asked = await typed(rig, "Create member Research", 0)
     seen = []
     async def blocked(proposed, **kwargs):
         seen.append(proposed)

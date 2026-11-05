@@ -25,7 +25,7 @@ export function createMessageSearch(host: HTMLElement, options: { face(member: n
   function render(): void {
     if (!query) {
       // Every event and page entry lands here, and most change nothing in the column.
-      const rows = members.replace(/--slime-(?:delay|since):-?[\d.]+ms;?/g, "");
+      const rows = members.replace(/--slime-(?:delay|since):-?[\d.]+ms;?| data-slime-mounted="[\d.]+"/g, "");
       if (rows !== drawnRows) { drawnRows = rows; patchHTML(host, members); }
       return;
     }

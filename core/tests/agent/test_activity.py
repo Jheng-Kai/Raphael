@@ -179,7 +179,8 @@ async def test_confirmed_admin_batch_tracks_the_actual_tool(make_rig, monkeypatc
     monkeypatch.setattr(rig.service, "_outcome", lambda *args, **kwargs: {"status": "done"})
     pending = SimpleNamespace(language="en", action=SimpleNamespace(args={"operations": []}))
     ask = SimpleNamespace(speaker=SimpleNamespace(id=0), ledger=SimpleNamespace(total=0),
-        admin_pending=[], waiting_apps=[], waiting_secrets=[], waiting_computer=False)
+        admin_pending=[], waiting_apps=[], waiting_secrets=[], waiting_computer=False,
+        scope="private", nested=False, quick=False, exchange_speakers=None, source="app", background_owner=False)
     followup = SimpleNamespace(ask=ask, admin_batch=True)
     await rig.service._confirm_plugin(pending, None, followup)
     assert states(notes) == ["thinking", "working", "thinking", "done", "idle"]

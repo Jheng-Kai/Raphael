@@ -93,7 +93,7 @@ export interface MembersShell {
   refreshRoutines(memberId: number): void;
   /** Whether the details panel is open. */
   detailsOpen(): boolean;
-  setDetails(open: boolean): void;
+  setDetails(open: boolean, overview?: boolean): void;
   /** The page went off screen. */
   hide(): void;
 }
@@ -294,8 +294,8 @@ export function createMembers(host: MembersHost): MembersShell {
     void readThread();
   }
 
-  function setDetails(next: boolean): void {
-    if (next === open) return;
+  function setDetails(next: boolean, overview = false): void {
+    if (next === open) { if (next && overview) details.overview(); return; }
     open = next;
     host.onDetailsChange?.(open);
     const page = details.el.parentElement;
@@ -428,7 +428,7 @@ export function createMembers(host: MembersHost): MembersShell {
   const ownerActivity = (): void => {
     if (document.hidden || Date.now() - lastActivity < 60_000) return;
     lastActivity = Date.now();
-    void api.core("members.viewing", { activity_only: true }).catch(() => {});
+    void api.core("members.viewing", { activity_only: true, tz: Intl.DateTimeFormat().resolvedOptions().timeZone }).catch(() => {});
   };
   window.addEventListener("pointerdown", ownerActivity);
   window.addEventListener("keydown", ownerActivity);

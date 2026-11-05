@@ -194,6 +194,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     const strings = authored ? [] : [...element.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent);
     for (const attribute of ["aria-label", "title", "placeholder"]) if (element.hasAttribute(attribute)) strings.push(element.getAttribute(attribute));
     for (const value of strings) for (const match of value.matchAll(keyPattern)) {
+      // Explicit JSON path examples are provider field names, not untranslated catalogue keys.
+      if (element.matches('code[data-json-paths]') && /^(?:data|event)\./.test(match[1])) continue;
       if (!namespaces.includes(match[1].split(".")[0]) || seenKeys.has(match[1])) continue;
       seenKeys.add(match[1]); missingI18nKeys.push({ ...description, key: match[1] });
     }

@@ -13,8 +13,8 @@ A schedule is one of six, as JSON (the routine's `schedule`, and the RPC's):
   when the routine was made or switched on, for the first time).
 
 `next_run` is the first moment strictly after a given one at which the schedule is due, in
-milliseconds since the epoch. The time of day is this PC's local time (or `tz`, for the tests), so a
-routine at 09:00 runs at nine in the morning wherever the PC is, summer time included.
+milliseconds since the epoch. Saved IANA zones keep wall times stable when the owner travels.
+Legacy schedules use the PC's local time until the window reports its zone.
 """
 
 import re
@@ -22,6 +22,7 @@ from calendar import monthrange
 from dataclasses import dataclass
 from datetime import datetime, timedelta, tzinfo
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 KINDS = ("once", "daily", "weekdays", "weekly", "monthly", "every")
 _TIME = re.compile(r"([01][0-9]|2[0-3]):([0-5][0-9])")
@@ -46,6 +47,7 @@ class Schedule:
     to_time: str = ""
     day: int = 0
     minutes: int = 0
+    timezone: str = ""
 
     @property
     def interval_minutes(self) -> int:
@@ -53,6 +55,8 @@ class Schedule:
 
     def to_json(self) -> dict[str, Any]:
         value: dict[str, Any] = {"kind": self.kind}
+        if self.timezone:
+            value["timezone"] = self.timezone
         if self.time:
             value["time"] = self.time
         if self.kind == "weekly":
@@ -90,6 +94,14 @@ def _date(value: Any, field: str) -> str:
 
 def parse_schedule(value: Any) -> Schedule:
     schedule = _parse_kind(value)
+    zone = value.get("timezone", "")
+    try:
+        if not isinstance(zone, str) or len(zone) > 100:
+            raise ValueError
+        if zone:
+            ZoneInfo(zone)
+    except (ValueError, ZoneInfoNotFoundError):
+        raise ScheduleError("timezone must be an IANA time zone") from None
     start = _date(value.get("start_date"), "start_date")
     until = _date(value.get("until"), "until")
     if start and until and until < start:
@@ -104,7 +116,7 @@ def parse_schedule(value: Any) -> Schedule:
         raise ScheduleError("once needs start_date")
     return Schedule(schedule.kind, time=time, days=schedule.days, hours=schedule.hours,
                     start_date=start, max_runs=count, until=until, from_time=schedule.from_time, to_time=schedule.to_time,
-                    day=schedule.day, minutes=schedule.minutes)
+                    day=schedule.day, minutes=schedule.minutes, timezone=zone)
 
 
 def _parse_kind(value: Any) -> Schedule:
@@ -157,6 +169,11 @@ def _ms(moment: datetime) -> int:
     return int(moment.timestamp() * 1000)
 
 
+def _exists(moment: datetime) -> bool:
+    """Skip DST gaps; ambiguous wall times use fold=0 once, consistently with the calendar."""
+    return moment.tzinfo is None or datetime.fromtimestamp(moment.timestamp(), moment.tzinfo).replace(tzinfo=None) == moment.replace(tzinfo=None)
+
+
 def _js_day(moment: datetime) -> int:
     """The day of the week as `Date.getDay` counts it: 0 Sunday ... 6 Saturday."""
     return (moment.weekday() + 1) % 7
@@ -164,6 +181,8 @@ def _js_day(moment: datetime) -> int:
 
 def next_run(schedule: Schedule, after_ms: int, *, tz: tzinfo | None = None) -> int | None:
     """The next occurrence, including the end date's whole local day; None after the end."""
+    if schedule.timezone:
+        tz = ZoneInfo(schedule.timezone)
     due = _next(schedule, after_ms, tz=tz)
     if due is not None and schedule.until and _local(due, tz).date().isoformat() > schedule.until:
         return None
@@ -178,10 +197,13 @@ def _next(schedule: Schedule, after_ms: int, *, tz: tzinfo | None = None) -> int
             first = datetime.fromisoformat(schedule.start_date).replace(tzinfo=tz)
             start = max(start, first)
         first_minute, last_minute = [int(time[:2]) * 60 + int(time[3:]) for time in (schedule.from_time, schedule.to_time)]
-        for offset in range(2):
+        for offset in range(3):
             day = (start + timedelta(days=offset)).replace(hour=0, minute=0, second=0, microsecond=0)
             for minute in range(first_minute, last_minute + 1, schedule.interval_minutes):
-                due = _ms(day + timedelta(minutes=minute))
+                moment = day + timedelta(minutes=minute)
+                if not _exists(moment):
+                    continue
+                due = _ms(moment)
                 if due > after_ms:
                     return due
         raise AssertionError("a window is due by the next local day")
@@ -192,7 +214,7 @@ def _next(schedule: Schedule, after_ms: int, *, tz: tzinfo | None = None) -> int
             anchor = anchor.replace(tzinfo=tz)
     if schedule.kind == "once":
         assert anchor is not None
-        return _ms(anchor) if _ms(anchor) > after_ms else None
+        return _ms(anchor) if _exists(anchor) and _ms(anchor) > after_ms else None
     if schedule.kind == "every":
         step = schedule.interval_minutes * 60_000
         return after_ms + step if anchor is None else (
@@ -203,15 +225,15 @@ def _next(schedule: Schedule, after_ms: int, *, tz: tzinfo | None = None) -> int
     if anchor is not None:
         start = max(start, anchor)
     if schedule.kind == "monthly":
-        for offset in range(2):
+        for offset in range(3):
             month_index = start.year * 12 + start.month - 1 + offset
             year, month = divmod(month_index, 12)
             day = start.replace(year=year, month=month + 1, day=1, hour=hour, minute=minute, second=0, microsecond=0)
             day = day.replace(day=min(schedule.day, monthrange(year, month + 1)[1]))
-            if _ms(day) > after_ms and (anchor is None or day >= anchor):
+            if _exists(day) and _ms(day) > after_ms and (anchor is None or day >= anchor):
                 return _ms(day)
-        raise AssertionError("a monthly schedule is due by next month")
-    for offset in range(8):  # today and the seven days after it cover every weekly schedule
+        raise AssertionError("a monthly schedule is due within two months")
+    for offset in range(15):  # A DST gap can skip one weekly occurrence.
         day = (start + timedelta(days=offset)).replace(
             hour=hour, minute=minute, second=0, microsecond=0
         )
@@ -220,6 +242,6 @@ def _next(schedule: Schedule, after_ms: int, *, tz: tzinfo | None = None) -> int
         if schedule.kind == "weekdays" and _js_day(day) not in (1, 2, 3, 4, 5):
             continue
         due = _ms(day)
-        if due > after_ms:
+        if _exists(day) and due > after_ms:
             return due
-    raise AssertionError("a daily or weekly schedule is due within eight days")  # pragma: no cover
+    raise AssertionError("a daily or weekly schedule is due within fifteen days")  # pragma: no cover

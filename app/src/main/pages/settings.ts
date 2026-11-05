@@ -1,4 +1,4 @@
-// Settings: eight tabs in three groups: basics, integrations and account. Search jumps to a row
+// Settings: panes in four groups: basics, team, integrations and account. Search jumps to a row
 // of any tab. Models & usage has two views, with legacy links selecting the matching view.
 // This file holds what the panel knows and what it does; settings-view.ts draws each tab
 // from a snapshot of it. A change takes effect at once; there is no save button. The settings of
@@ -7,6 +7,7 @@
 // to the Rust side with `device_settings_set`. What is always wanted (pausing the music while
 // Raphael listens, learning from corrections) has no switch: it is simply on.
 
+import { openTimezoneMenu } from "../timezones";
 import { confirmDelete } from "../member-dialogs";
 import { knownCatalog, rememberCatalog } from "../brain-lists";
 import { isUiLocale, onLocaleChange, t } from "../i18n";
@@ -230,9 +231,6 @@ export function createSettings(app: AppContext): SettingsPage {
   let devices: AudioDevices | null = null;
   let altgr = false;
   let version = "";
-  let desktopRequired = false;
-  let computerRemote: boolean | undefined, computerAliasDraft: string | undefined, computerHostError = false;
-  let computerHostHealth: api.ComputerHostHealth | undefined, checkingComputerHost = false;
   /** The key field is shown although there is a key (「變更」). */
   let replacingKey = false;
   let keyBusy = false;
@@ -267,23 +265,14 @@ export function createSettings(app: AppContext): SettingsPage {
   app.onEvent((event) => connections.followEvent(event));
   /** Telegram, in the 「訊息平台」 tab: it keeps its own state too. */
   const messaging = createMessaging({ visible: () => visible && pane === "messaging", redraw: () => render() });
-  /**
-   * The memory, in the 「拉斐爾」 tab: 「共同記憶」, which every agent shares, and Raphael's own (and
-   * the summary of his conversation).
-   */
-  const memoryHost = { visible: () => visible && pane === "agent", redraw: () => render() };
+  const memoryHost = { visible: () => visible && pane === "general", redraw: () => render() };
   const memoryShared = createMemory({ ...memoryHost, space: "shared" });
-  const memory = createMemory({ ...memoryHost, space: "own" });
-  const memories = [memoryShared, memory];
-  app.onEvent((event) => {
-    if (event.type !== "MemoryChanged" || !memoryHost.visible()) return;
-    if (event.space !== "own") void memoryShared.load();
-    if (event.space !== "shared" && event.member_id === 0) void memory.load();
+  const memories = [memoryShared];
+  app.onEvent(event => {
+    if (event.type === "MemoryChanged" && event.space !== "own" && memoryHost.visible()) void memoryShared.load();
   });
-  /** The owner's safety rules, in the 「拉斐爾」 tab: what Raphael asks about first, does at once, or never does. */
-  const rules = createRules({ visible: () => visible && pane === "agent", redraw: () => render(), undo: app.undo });
-  /** 服務, in the 「拉斐爾」 tab: who does the work of Raphael's tools. Choosing is a change of the brain's settings. */
-  const services = createServices({ root: el, visible: () => visible && pane === "agent", redraw: () => render(), brain: () => brain, changeSetting: (key, value) => changeBrain(key, value) });
+  const rules = createRules({ visible: () => visible && pane === "safety", redraw: () => render(), undo: app.undo });
+  const services = createServices({ root: el, visible: () => visible && pane === "tools", redraw: () => render(), brain: () => brain, changeSetting: (key, value) => changeBrain(key, value) });
   const cliBrains = createCliBrains({ visible: () => visible, redraw: () => render() });
   const providers = createProviders({ root: el, visible: () => visible && pane === "models" && modelsTab === "models", redraw: () => render() });
   app.onEvent((event) => {
@@ -300,9 +289,9 @@ export function createSettings(app: AppContext): SettingsPage {
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
     update, memoryImportHTML: memoryImport.html(),
-    data, pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version, desktopRequired, computerRemote, computerAliasDraft, computerHostError, computerHostHealth, checkingComputerHost,
+    data, pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
     replacingKey, keyBusy, keyError, limitDraft, limitError, cityDraft, cityError, languageGroups, now: Date.now(),
-    connections: connections.view(), messaging: messaging.view(), memory: memory.view(), memoryShared: memoryShared.view(), rules: rules.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
+    connections: connections.view(), messaging: messaging.view(), memoryShared: memoryShared.view(), rules: rules.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
 
   /** The item at the foot of the microphones' menu that looks for them again. */
@@ -327,16 +316,6 @@ export function createSettings(app: AppContext): SettingsPage {
           choices: LOCAL_COMMAND_MODES,
           current: brain?.local_commands_mode ?? "ask",
           pick: (value) => { if (LOCAL_COMMAND_MODES.some(c => c.value === value)) void changeBrain("local_commands_mode", value); },
-        };
-      case "computer-host":
-        return {
-          choices: [{ value: "local", label: t("desktop.local") }, { value: "remote", label: t("desktop.remote") }],
-          current: (computerRemote ?? !!brain?.computer_ssh_alias) ? "remote" : "local",
-          pick: (value) => {
-            computerRemote = value === "remote"; computerHostError = false;
-            if (!computerRemote) { computerAliasDraft = undefined; void changeBrain("computer_ssh_alias", ""); }
-            else { render(); el.querySelector<HTMLInputElement>('#computer-ssh-alias')?.focus(); }
-          },
         };
       case "mic": {
         const anchor = el.querySelector<HTMLElement>('.sel[data-k="mic"]');
@@ -525,13 +504,13 @@ export function createSettings(app: AppContext): SettingsPage {
     else connections.reset();
     if (pane === "messaging") void messaging.load();
     else messaging.reset();
-    if (pane === "agent") for (const list of memories) void list.load();
+    if (pane === "general") for (const list of memories) void list.load();
     else for (const list of memories) list.reset();
-    if (pane === "agent") void rules.load();
+    if (pane === "safety") void rules.load();
     else rules.reset();
     services.reset();
     providers.reset();
-    if (pane === "agent") void services.load();
+    if (pane === "tools") void services.load();
     if (pane === "models" && modelsTab === "models") void providers.load();
     syncMonitor();
     body.scrollTop = 0;
@@ -557,6 +536,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** Goes where a hit of the search is: its tab, then its row, which is lit for a moment and gets the focus. */
   function jump(hit: SearchHit): void {
+    if (hit.target === "computer") { app.closeSettings(); app.go("agent", "computer"); return; }
     searchField.value = "";
     hits = [];
     pendingJump = hit.label ? hit : null;
@@ -1234,6 +1214,7 @@ export function createSettings(app: AppContext): SettingsPage {
     if (providers.click(target)) return;
     // the usage view opens its own dropdowns' menus (usage-analytics.ts)
     const choose = target.closest<HTMLElement>(".sel");
+    if (choose?.dataset.k === "routine-timezone") { openTimezoneMenu(choose, brain?.routine_timezone ?? "", value => void changeBrain("routine_timezone", value)); return; }
     if (choose && !choose.closest(".usage-analytics, .run-analytics")) {
       if (menuIsOpenFor(choose)) {
         closeMenu();
@@ -1311,19 +1292,6 @@ export function createSettings(app: AppContext): SettingsPage {
         }
         break;
       }
-      case "docker-download":
-        void api.openExternalUrl("https://www.docker.com/products/docker-desktop/").catch(error => toaster.info(describeError(error)));
-        break;
-      case "computer-host-check": {
-        if (checkingComputerHost) break;
-        const alias = computerAliasDraft ?? brain?.computer_ssh_alias ?? '';
-        checkingComputerHost = true; computerHostHealth = undefined; render();
-        void api.desktopHostCheck(alias).then(result => {
-          if (alias === (computerAliasDraft ?? brain?.computer_ssh_alias ?? '')) computerHostHealth = result;
-        }).catch(() => { computerHostHealth = { host: alias, ok: false, checks: [{kind:'ssh_unreachable',ok:false}] }; })
-          .finally(() => { checkingComputerHost = false; render(); });
-        break;
-      }
       case "data-clear":
         void clear(target.closest<HTMLElement>('[data-what]')?.dataset.what === "dictation" ? "dictation" : "conversation");
         break;
@@ -1350,13 +1318,6 @@ export function createSettings(app: AppContext): SettingsPage {
     if (input.id === "owner-output-folder") void changeBrain("owner_output_folder", input.value);
     else if (input.id === "limit-input") commitLimit(input);
     else if (input.id === "agent-city") commitCity(input);
-    else if (input.id === "computer-ssh-alias") {
-      computerAliasDraft = input.value;
-      computerHostHealth = undefined;
-      computerHostError = !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(input.value);
-      if (computerHostError) render();
-      else void changeBrain("computer_ssh_alias", input.value);
-    }
   });
   el.addEventListener("input", (e) => {
     const input = e.target as HTMLInputElement;
@@ -1364,7 +1325,6 @@ export function createSettings(app: AppContext): SettingsPage {
     if (connections.input(input) || messaging.input(input) || memories.some((list) => list.input(input)) || rules.input(input)) return;
     if (input.id === "limit-input") limitDraft = input.value;
     else if (input.id === "agent-city") cityDraft = input.value;
-    else if (input.id === "computer-ssh-alias") computerAliasDraft = input.value;
   });
   el.addEventListener("keydown", (e) => {
     const tab = (e.target as Element).closest<HTMLElement>("[data-models-tab]");
@@ -1420,7 +1380,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** Reads what the settings show; the returned step keeps it and says whether anything changed. */
   async function readSettings(): Promise<() => boolean> {
-    const [brainResult, keyResult, statusResult, devicesResult, altgrResult, versionResult, languagesResult, desktopResult] = await Promise.allSettled([
+    const [brainResult, keyResult, statusResult, devicesResult, altgrResult, versionResult, languagesResult] = await Promise.allSettled([
       api.settingsGet(),
       api.secretsStatus(),
       api.statusGet(),
@@ -1428,13 +1388,12 @@ export function createSettings(app: AppContext): SettingsPage {
       api.keyboardHasAltgr(),
       getVersion(),
       api.languagesList(),
-      api.desktopStatus(0),
       // Read again: the settings may have changed since the window started. `refreshDevice` puts
       // the answer in `app.device()` itself, or drops it if a newer read or write overtook it.
       app.refreshDevice(),
     ]);
     return () => {
-      const before = JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, version, desktopRequired, languageGroups]);
+      const before = JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, version, languageGroups]);
       brain = brainResult.status === "fulfilled" ? brainResult.value.settings : null;
       hasKey = keyResult.status === "fulfilled" && keyResult.value.has_key;
       openrouter = statusResult.status === "fulfilled" ? statusResult.value.openrouter : null;
@@ -1442,10 +1401,9 @@ export function createSettings(app: AppContext): SettingsPage {
       devices = devicesResult.status === "fulfilled" ? devicesResult.value : null;
       altgr = altgrResult.status === "fulfilled" && altgrResult.value;
       version = versionResult.status === "fulfilled" ? versionResult.value : "";
-      desktopRequired = desktopResult.status === "fulfilled" && desktopResult.value.state === "absent";
       if (languagesResult.status === "fulfilled") languageGroups = languagesResult.value.groups;
       if (brainResult.status === "fulfilled") readOnce = true;
-      return before !== JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, version, desktopRequired, languageGroups]);
+      return before !== JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, version, languageGroups]);
     };
   }
 
@@ -1461,7 +1419,8 @@ export function createSettings(app: AppContext): SettingsPage {
     },
     async show(open?: PageArgument) {
       const repair = open?.startsWith("repair:") ? open.split(":").slice(1) : null;
-      if (repair) open = ({ search: "agent", read: "agent", vision: "agent", pdf: "agent", voice: "agent", store: "connections", computer: "agent" } as Record<string, SettingsPane>)[repair[0]] ?? repair[0] as SettingsPane;
+      if (repair?.[0] === "computer") { app.closeSettings(); app.go("agent", "computer"); return; }
+      if (repair) open = ({ search: "tools", read: "tools", vision: "tools", pdf: "tools", voice: "tools", store: "connections" } as Record<string, SettingsPane>)[repair[0]] ?? repair[0] as SettingsPane;
       const hadUsage = usage !== null;
       visible = true;
       stopOutside();
@@ -1476,8 +1435,6 @@ export function createSettings(app: AppContext): SettingsPage {
       limitError = null;
       cityDraft = null;
       cityError = null;
-      computerRemote = computerAliasDraft = undefined;
-      computerHostError = false;
       // the first tab, unless the way in knows better (the report that says there is no key goes to the key)
       pane = open && PANES.some((p) => p.id === canonicalPane(open as SettingsPane)) ? canonicalPane(open as SettingsPane) : "general";
       if (open === "usage" || open === "models") modelsTab = open;
@@ -1492,9 +1449,9 @@ export function createSettings(app: AppContext): SettingsPage {
       if (pane === "data") void loadData();
       if (pane === "connections") void connections.load();
       if (pane === "messaging") void messaging.load();
-      if (pane === "agent") for (const list of memories) void list.load();
-      if (pane === "agent") void rules.load();
-      if (pane === "agent") void services.load();
+      if (pane === "general") for (const list of memories) void list.load();
+      if (pane === "safety") void rules.load();
+      if (pane === "tools") void services.load();
       if (pane === "models" && modelsTab === "models") void providers.load();
       searchField.value = "";
       hits = [];
@@ -1532,9 +1489,6 @@ export function createSettings(app: AppContext): SettingsPage {
           if (resource === "composio" || resource === "google") el.querySelector<HTMLButtonElement>('[data-conn="configure-composio"]')?.click();
         } else if (target === "general") {
           const field = el.querySelector<HTMLElement>('[data-act="rerun-guide"]');
-          field?.scrollIntoView({block: "center"}); field?.focus();
-        } else if (target === "computer") {
-          const field = el.querySelector<HTMLElement>('[data-act="docker-download"]');
           field?.scrollIntoView({block: "center"}); field?.focus();
         }
       }

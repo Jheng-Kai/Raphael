@@ -2,9 +2,29 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  if (variant.raphaelVoice) data.settings.tts_fish_voice = "0123456789abcdef0123456789abcdef";
+  if (variant.computerHost) data.settings.computer_ssh_alias = variant.computerHost;
+
   if (variant.ownerOutputFolder) data.settings.owner_output_folder = "C:\\Owner\\Deliveries";
   if (variant.routineGuard) for (const routine of data.routines.filter(item => item.member_id === 1)) {
     Object.assign(routine, { enabled: false, next_run: null, last_error: "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。" });
+  }
+  if (variant.threadWindow) {
+    const sample = data.windowSample, base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
+    const words = index => index === 5 && variant.windowComposio ? JSON.stringify({tool_slug:"GMAIL_FETCH_EMAILS",successful:true,data:{subject:data.windowSample.needle}})
+      : `${sample.answer}\n\n${sample.paragraph}\n\n${index === 5 ? data.windowSample.needle : ""}\n\n\`\`\`python\nresult = ${index}\n\`\`\``;
+    data.members.forEach(member => { member.unread = false; member.unread_from = null; member.activity = "idle"; });
+    data.turns = data.turns.filter(turn => turn.member_id !== 1);
+    for (let index = 0; index < 150; index++) data.turns.push({ ...base, id:9000+index, session_id:`window-${index}`,
+      created_at_ms:data.now-(150-index)*1000, source:"app", route:"answer", question:`${sample.question} ${index}`, text:words(index), detail:null,
+      status:"done", task:null, steps:[], messages:[], attachments:[], handoffs:[], permissions:[], drafts:[], computers:[], connectors:[], secrets:[], pages:[] });
+    data.turns.find(turn => turn.id === 9149).quote = {text:data.windowSample.needle,author:data.members.find(member=>member.id===1).name};
+    if (variant.threadWindow === "room") {
+      const base = structuredClone(data.messages.find(message => message.room_id === 1));
+      data.messages = Array.from({length:150}, (_,index) => ({...base,id:9000+index,room_id:1,member_id:1,text:words(index),created:data.now-(150-index)*1000,status:"done",kind:"reply",turn:null,turn_id:null}));
+      data.messages[149].reply_reference = {message_id:9005,author_kind:"member",author_member_id:1};
+      data.roomHandoffs = []; data.roomExchanges = [];
+    }
   }
   if (variant.unreadDivider) {
     const base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
@@ -94,6 +114,15 @@ export function installMock(fixture, config = {}, target = window) {
   let desktopSequence = 0;
   let teaching;
   for (const [key, value] of Object.entries(variant)) if (key in data) data[key] = structuredClone(value);
+  if (variant.routineWorkflow) {
+    const sample = data.routineWorkflowSample;
+    data.routines = [{id:91,member_id:1,title:sample.title,prompt:sample.prompt,enabled:true,last_run:null,next_run:data.now+86400000,schedule:{kind:"weekdays",time:"08:00",timezone:"Asia/Taipei"}}];
+    data.routineRuns = variant.routineWorkflow === "history" ? [
+      {id:93,routine_id:91,started:data.now,finished:null,status:"running",summary:"",cost:0},
+      {id:92,routine_id:91,started:data.now-3600000,finished:data.now-3500000,status:"error",summary:sample.failed,cost:0},
+      {id:91,routine_id:91,started:data.now-7200000,finished:data.now-7100000,status:"done",summary:sample.done,cost:0.001},
+    ] : [];
+  }
   if (variant.routineSentence && variant.routineSentence !== "waiting") {
     const routine = data.routines.find(r => r.member_id === 1);
     const template = data.turns.find(t => t.member_id === 1);
@@ -179,6 +208,9 @@ export function installMock(fixture, config = {}, target = window) {
     runningTurn.messages = variant.running === "fresh" ? [] : runningTurn.messages.filter(message => message.kind !== "reply");
     if (variant.running === "fresh") runningTurn.steps = [];
     runningTurn.text = "";
+    if (variant.lowDisk) {
+      runningTurn.messages = [{seq:1,kind:'reply',text:data.lowDiskSample,at_ms:data.now-1000}];
+    }
     if (variant.generatedProgress) {
       runningTurn.question = "請製作辦公室宣傳影片。";
       runningTurn.messages = [{seq:1,kind:"progress",text:"正在製作影片 · 40%",at_ms:data.now - 1000}];
@@ -671,6 +703,11 @@ export function installMock(fixture, config = {}, target = window) {
         // Not a file of the dev server, which would write its own client into the page.
         return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml)}`, title: "輕量後背包", rev: 1, height: 320, source: "html", server: null };
       case "computer.wallpaper": return variant.ownWallpaper ? { image: variant.ownWallpaper } : {};
+      case "computer.lifecycle": {
+        if (p.target !== data.desktop.target || p.host !== data.desktop.host || p.action === 'reset' && p.confirmed !== true) throw new Error('Maintenance confirmation or target missing');
+        data.desktop = { ...data.desktop, state:'running', ready:true, lifecycle:null };
+        return copy(data.desktop);
+      }
       case "computer.viewer_status": return p.check_host ? {host:p.alias,ok:false,checks:[{kind:'ssh',ok:true},{kind:'docker_path',ok:false}]} : data.desktop ?? { state: "absent", ready: false, control: "member" };
       case "computer.viewer_open": {
         if (variant.desktopStarts) data.desktop = { ...data.desktop, state: "running", ready: true };
@@ -713,6 +750,7 @@ export function installMock(fixture, config = {}, target = window) {
         if (desktopSessions.get(p.session)?.held && data.desktop) data.desktop.control = "member";
         desktopSessions.delete(p.session); return {};
       }
+      case "tts.preview": return {ok:true};
       case "settings.get": return { settings: data.settings };
       // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
       case "background.waiting.list": { data.waitingReads = (data.waitingReads ?? 0) + 1; return { waiting: variant.roomQuestion && (!variant.roomQuestionLate || data.waitingReads > 1) ? [{ id: "room-q", member_id: 1, member_name: "小晴", room_id: 1 }] : [] }; }
@@ -907,6 +945,13 @@ export function installMock(fixture, config = {}, target = window) {
       case "conversations.delete": { const gone = data.conversations.find(item => item.id === p.id); data.turns = data.turns.filter(item => item.conversation_id !== p.id); data.conversations = data.conversations.filter(item => item.id !== p.id); if (gone) mainConversation(gone.member_id); return { deleted: 1 }; }
       case "agent.history.list": {
         const turns = byMember(data.turns, p).filter(turn => p.conversation_id === undefined || turn.conversation_id === p.conversation_id);
+          if (p.after_id !== undefined) {
+            const fresh = turns.filter(turn => turn.id > p.after_id).sort((a,b) => a.id-b.id), limit = Math.min(p.limit ?? 50, 50);
+            const ids = p.turn_ids ?? [], changed = turns.filter(turn => ids.includes(turn.id));
+            return { turns: [...new Map([...fresh.slice(0,limit), ...changed].map(turn => [turn.id,turn])).values()].sort((a,b) => b.id-a.id), delta: true,
+              has_more: fresh.length > limit, next_after_id: fresh.slice(0,limit).at(-1)?.id ?? p.after_id, removed_ids: ids.filter(id => !turns.some(turn => turn.id === id)),
+              pending_questions: turns.flatMap(turn => turn.owner_questions ?? []).filter(question => question.kind === "ask_owner" && question.state === "asked") };
+          }
         return { turns: turns.filter(turn=>!p.before_id||turn.id<p.before_id).sort((a,b)=>b.id-a.id).slice(0,p.limit??50), pending_questions: turns.flatMap(turn => turn.owner_questions ?? []).filter(question => question.kind === "ask_owner" && question.state === "asked") };
       }
       // What the owner typed, newest first (the core's rule: typed turns of the private conversations, repeats in a row once); a scene may state it.
@@ -992,10 +1037,20 @@ export function installMock(fixture, config = {}, target = window) {
         const calendar=choice?.id==='calendar-event';
         const args=calendar ? {calendarId:'primary',maxResults:50,singleEvents:true,orderBy:'updated'} : choice?.input==='repository' ? {owner,repo,per_page:20,status:'failure'} : choice?.input==='channel' ? {channel:value,limit:20} : {max_results:20,include_payload:false,verbose:false};
         const path=calendar ? 'items' : choice?.input==='repository' ? 'workflow_runs' : 'messages';
-        const detected=!p.event ? {} : variant.eventUndetectable || !choice ? {event_error:'目前沒有可用的 Gmail 項目。出現新項目後，請再試一次。'} : {when:{app:choice.app,event:{tool:'mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL',arguments:{tools:[{tool_slug:choice.slug,arguments:args}]},items:`data.results.0.response.data.${path}`,id:choice.id==='gmail-mail' ? 'messageId' : choice.input==='channel' ? 'ts' : 'id',...(calendar ? {since:{arg:'updatedMin',format:'iso'}} : {})},filter:{field:'',equals:''}}};
+        const detected=!p.event ? {} : variant.eventUndetectable || !choice ? {event_error:'目前沒有可用的 Gmail 項目。出現新項目後，請再試一次。'} : {when:{app:choice.app,event:{tool:'mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL',arguments:{tools:[{tool_slug:choice.slug,arguments:args}]},items:`data.results.0.response.data.${path}`,id:choice.id==='gmail-mail' ? 'messageId' : choice.input==='channel' ? 'ts' : 'id',...(calendar ? {since:{arg:'updatedMin',format:'iso'}} : {})},filter:p.contains ? {field:'text',equals:p.contains,operator:'contains'} : {field:'',equals:''}}};
         return {routines:p.member_id===undefined ? data.routines : byMember(data.routines,p),events,event_apps:variant.noEventApps ? [] : ['Gmail','Google 日曆','GitHub','Slack'],...detected};
       }
       case "routines.webhook": return {address:`http://127.0.0.1:43210/routines/${p.id}`, address_changed:!!variant.hookAddressChanged, ...(p.reveal ? {secret:'sample-fake-secret-for-visual-checks'} : {})};
+      case "routines.run": {
+        const sample = data.routineWorkflowSample;
+        if (variant.routineWorkflow === "refused") return {status:"refused",reason:sample.refused};
+        const routine = data.routines.find(item=>item.id===p.id), done=variant.routineWorkflow === "done", runId=nextId(data.routineRuns);
+        const turn = {...structuredClone(data.turns.find(item=>item.member_id===routine.member_id)),id:nextId(data.turns),source:"routine",route:"routine",routine:structuredClone(routine),question:routine.title,text:done?sample.done:"",status:done?"done":"running",messages:[],steps:[],task:null};
+        data.turns.push(turn);
+        data.routineRuns.unshift({id:runId,routine_id:p.id,started:data.now,finished:done?data.now+1000:null,status:done?"done":"running",summary:done?sample.done:"",turn_id:turn.id,cost:0});
+        notify("AgentTurn",{turn_id:turn.id,member_id:routine.member_id});
+        return {run_id:runId,turn_id:turn.id};
+      }
       case "routines.runs": return { runs: data.routineRuns.filter(run => run.routine_id === p.routine_id), total: data.routineRuns.filter(run => run.routine_id === p.routine_id).length };
       case "routines.create": { const routine = { ...p, ...(p.when ? { schedule: null, last_checked: null, last_error: "", app_name:routineEventChoices.find(e=>e.app===p.when.app)?.app_name ?? p.when.app ?? "" } : {}), id: nextId(data.routines), enabled: p.enabled ?? true, last_run: null, next_run: p.when ? data.now : data.now + 86400000 }; data.routines.push(routine); notify("RoutinesChanged", { member_id: routine.member_id }); return { routine }; }
       case "routines.update": {

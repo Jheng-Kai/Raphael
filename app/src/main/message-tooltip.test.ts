@@ -2,6 +2,46 @@
 import { expect, test, vi } from "vitest";
 import { messageTooltip } from "./message-tooltip";
 
+test("typing outside the sidebar hides its tooltip until an intentional hover or focus", async () => {
+  document.body.innerHTML = '<section><span data-tooltip="Working">Face</span></section><textarea></textarea>';
+  const host = document.querySelector("section")!, face = host.querySelector("span")!;
+  messageTooltip(host);
+  const tip = host.querySelector<HTMLElement>('[role="tooltip"]')!;
+  const measure = vi.spyOn(face, "getBoundingClientRect");
+  face.dispatchEvent(new Event("pointerover", {bubbles:true}));
+  expect(tip.hidden).toBe(false);
+  measure.mockClear();
+  document.querySelector("textarea")!.dispatchEvent(new KeyboardEvent("keydown", {key:"a", bubbles:true}));
+  face.dataset.tooltip = "Waiting";
+  face.dispatchEvent(new Event("pointerover", {bubbles:true}));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(tip.hidden).toBe(true);
+  expect(measure).not.toHaveBeenCalled();
+  face.dispatchEvent(new MouseEvent("pointermove", {bubbles:true, movementX:1}));
+  expect(tip.hidden).toBe(false);
+  expect(measure).toHaveBeenCalledTimes(1);
+  document.querySelector("textarea")!.dispatchEvent(new KeyboardEvent("keydown", {key:"b", bubbles:true}));
+  face.dispatchEvent(new Event("focusin", {bubbles:true}));
+  expect(tip.hidden).toBe(false);
+  measure.mockRestore();
+});
+
+test("moving within an animated tooltip target does not measure it again", () => {
+  document.body.innerHTML = '<section><span data-tooltip="Working"><i>One</i><b>Two</b></span></section>';
+  const host = document.querySelector("section")!, face = host.querySelector("span")!;
+  messageTooltip(host);
+  const measure = vi.spyOn(face, "getBoundingClientRect");
+  face.firstElementChild!.dispatchEvent(new Event("pointerover", {bubbles:true}));
+  expect(measure).toHaveBeenCalledTimes(1);
+  face.firstElementChild!.dispatchEvent(new MouseEvent("pointerout", {bubbles:true, relatedTarget:face.lastElementChild}));
+  face.lastElementChild!.dispatchEvent(new Event("pointerover", {bubbles:true}));
+  expect(host.querySelector<HTMLElement>('[role="tooltip"]')!.hidden).toBe(false);
+  expect(measure).toHaveBeenCalledTimes(1);
+  face.dispatchEvent(new MouseEvent("pointerout", {bubbles:true, relatedTarget:host}));
+  expect(host.querySelector<HTMLElement>('[role="tooltip"]')!.hidden).toBe(true);
+  measure.mockRestore();
+});
+
 test("the armed Escape hint replaces the hovered or focused Stop tooltip", () => {
   document.body.innerHTML = '<section><button data-tooltip="Stop">Stop</button></section>';
   const host = document.querySelector("section")!, button = host.querySelector("button")!;

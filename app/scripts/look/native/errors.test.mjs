@@ -56,6 +56,17 @@ describe("native document error capture", () => {
     await vi.waitFor(() => expect(errors).toHaveLength(2));
     expect(errors.map(error => error.kind)).toEqual(["unhandledrejection", "toast"]);
     expect(errors[1].message).toContain("Cannot set");
+    const animated = document.createElement('div'); document.body.append(animated);
+    await new Promise(resolve=>setTimeout(resolve,25));
+    geometry.mockClear();
+    const scan = vi.spyOn(document,'querySelectorAll');
+    for (let i=0;i<30;i++) animated.style.setProperty('--pose',String(i));
+    await new Promise(resolve=>setTimeout(resolve,25));
+    expect(scan).not.toHaveBeenCalled();
+    expect(geometry).not.toHaveBeenCalled();
+    scan.mockRestore();
+    document.querySelector('.toast').textContent = 'A changed native failure';
+    await vi.waitFor(()=>expect(errors).toHaveLength(3));
     geometry.mockRestore();
   });
   it("counts orphan date and exchange chrome even without a turn id, and excludes room rows", () => {

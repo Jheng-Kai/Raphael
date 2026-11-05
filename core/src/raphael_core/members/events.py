@@ -55,7 +55,7 @@ def clean_when(value):
         if not isinstance(path, str) or len(path) > 200 or (not path and key == "id") or (path and not _PATH.fullmatch(path)):
             refuse()
     unfiltered = match == {"field": "", "equals": ""}
-    if not unfiltered and (not isinstance(match, dict) or set(match) != {"field", "equals"}
+    if not unfiltered and (not isinstance(match, dict) or set(match) not in ({"field", "equals"}, {"field", "equals", "operator"}) or match.get("operator", "equals") not in ("equals", "contains")
             or not isinstance(match["field"], str) or not _PATH.fullmatch(match["field"])
             or not isinstance(match["equals"], str) or not match["equals"].strip()
             or len(match["equals"]) > 300 or match["equals"].strip() in ("*", "all")):
@@ -183,7 +183,9 @@ class EventPoller:
             content = json.dumps(item, ensure_ascii=False)
             if len(content) > MAX_ITEM_CHARS:
                 raise ValueError("poll_item_size")
-            matches = not when["filter"]["field"] or field(item, when["filter"]["field"]) == when["filter"]["equals"]
+            match = when["filter"]
+            actual = field(item, match["field"])
+            matches = not match["field"] or (isinstance(actual, str) and match["equals"] in actual if match.get("operator") == "contains" else actual == match["equals"])
             checked.append((str(identifier), content, matches))
         current = service.store.routine(routine.id)
         if current is None or not current.enabled or current.when != when:

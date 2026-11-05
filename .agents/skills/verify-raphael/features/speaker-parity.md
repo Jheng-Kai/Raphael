@@ -35,3 +35,11 @@ npm run look -- speaker-draft-chief speaker-draft-member speaker-draft-profile -
 The brief explicitly forbids look and native. Judge requires those same selected
 look artifacts and authorized network, so it is SKIP here. Real provider/CLI behavior,
 video generation, native persistence, audio and OS hotkeys remain unverified.
+
+
+## Grouped details preference (2026-11-05)
+
+The draft preference is now inside the shared grouped resource card. The same
+speaker-draft-chief/member/profile scenes remain; the first two additionally assert
+that the switch shares the Memory/Skills/Commands/Voice list. See the
+[Settings by purpose](settings-appearance.md#settings-by-purpose-2026-11-05) matrix.
