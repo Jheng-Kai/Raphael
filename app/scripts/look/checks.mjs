@@ -2618,8 +2618,9 @@ export function checkRendered(name, context = {}) {
   if (name === "details-alignment") {
     const panel=document.querySelector('.mb-det:not([hidden])');
     if (!visible(panel)) return {check:name,open:false};
-    const blocks=[...panel.querySelectorAll('.conversation-new, .conversation-tools, .mb-panel-pages, .mb-field > .sel, [data-member-brain] .mp-trigger')].filter(visible);
-    const reference=panel.querySelector('.conversation-new').getBoundingClientRect();
+    const blocks=[...panel.querySelectorAll('.conversation-tools, .mb-panel-pages, .mb-field > .sel, [data-member-brain] .mp-trigger')].filter(visible);
+    // New conversation is a + beside the 對話 heading (2026-11-05); the search field sets the inset now.
+    const reference=panel.querySelector('.conversation-tools input').getBoundingClientRect();
     for (const block of blocks) {
       const box=block.getBoundingClientRect();
       const field=block.matches('.conversation-tools') ? block.querySelector('input').getBoundingClientRect() : box;

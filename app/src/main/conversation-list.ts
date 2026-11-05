@@ -39,11 +39,15 @@ export function relativeTime(ms: number, now = Date.now()): string {
 /** A conversation nobody has written in yet: its title comes from its first question. */
 const isBlank = (conversation: ConversationInfo): boolean => conversation.kind !== "quick" && !conversation.title;
 
-export function mountConversationList(host: HTMLElement, options: { memberId: number; scope?: object; active?(): boolean; onOpen(id: number): void; collapseWhenEmpty?: boolean; showHeading?: boolean; onVisibility?(visible: boolean): void; current?(): number | undefined }): { refresh(): Promise<void>; destroy(): void } {
+/**
+ * `externalNew`: the host draws New conversation itself (the member panel's + beside its heading) and calls
+ * `create`; `onCreatable` says whether a new one would add anything, as the list's own button would rest.
+ */
+export function mountConversationList(host: HTMLElement, options: { memberId: number; scope?: object; active?(): boolean; onOpen(id: number): void; collapseWhenEmpty?: boolean; showHeading?: boolean; onVisibility?(visible: boolean): void; current?(): number | undefined; externalNew?: boolean; onCreatable?(can: boolean): void }): { refresh(): Promise<void>; destroy(): void; create(): void } {
   let conversations: ConversationInfo[] = [];
   let epoch = 0, destroyed = false, dirty = false;
   host.classList.add("conversation-list");
-  host.innerHTML = btn(`${ico("plus")}<span>${esc(t("conversations.new"))}</span>`, "conversation-new", " data-conversation-new") +
+  host.innerHTML = (options.externalNew ? "" : btn(`${ico("plus")}<span>${esc(t("conversations.new"))}</span>`, "conversation-new", " data-conversation-new")) +
     `<div class="conversation-tools"><input type="search" maxlength="200" autocomplete="off"></div><div class="conversation-rows" aria-live="polite"></div>`;
   const input = host.querySelector<HTMLInputElement>("input")!;
   const rows = host.querySelector<HTMLElement>(".conversation-rows")!;
@@ -53,11 +57,12 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
     options.onVisibility?.(!host.hidden);
     input.placeholder = t("conversations.search");
     input.setAttribute("aria-label", t("conversations.search"));
-    host.querySelector("[data-conversation-new] span")!.textContent = t("conversations.new");
     // The one open is already new: there is nothing another would add.
     const current = options.current?.();
     const open = current === undefined ? newestConversation(conversations) : conversations.find(c => c.id === current);
-    host.querySelector<HTMLButtonElement>("[data-conversation-new]")!.disabled = !!open && isBlank(open);
+    const own = host.querySelector<HTMLButtonElement>("[data-conversation-new]");
+    if (own) { own.querySelector("span")!.textContent = t("conversations.new"); own.disabled = !!open && isBlank(open); }
+    options.onCreatable?.(!(open && isBlank(open)));
     const found = conversations.filter(c => conversationTitle(c).toLocaleLowerCase().includes(input.value.trim().toLocaleLowerCase()));
     const section = (kind: "quick" | "standard", label: string): string => {
       const items = found.filter(c => (c.kind === "quick") === (kind === "quick"));
@@ -121,14 +126,17 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
       });
       document.querySelector('[data-pick="delete"], [data-pick="clear"]')?.classList.add("danger");
     } else if (target.closest("[data-conversation-new]")) {
-      // Another conversation still unwritten is the new one; the list does not fill with empty rows.
-      const waiting = conversations.find(isBlank);
-      if (waiting) { closeMenu(); options.onOpen(waiting.id); return; }
-      void api.core<{ conversation: ConversationInfo }>("conversations.create", { member_id: options.memberId }).then(result => {
-        conversationChange(options.memberId); closeMenu(); options.onOpen(result.conversation.id);
-      }).catch(error => toaster.info(describeError(error)));
+      create();
     }
   };
+  function create(): void {
+    // Another conversation still unwritten is the new one; the list does not fill with empty rows.
+    const waiting = conversations.find(isBlank);
+    if (waiting) { closeMenu(); options.onOpen(waiting.id); return; }
+    void api.core<{ conversation: ConversationInfo }>("conversations.create", { member_id: options.memberId }).then(result => {
+      conversationChange(options.memberId); closeMenu(); options.onOpen(result.conversation.id);
+    }).catch(error => toaster.info(describeError(error)));
+  }
   host.addEventListener("click", clicked);
   input.addEventListener("input", draw);
   const changed = (event: Event): void => {
@@ -141,5 +149,5 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
   window.addEventListener("conversation-opened", opened);
   const stopLocale = onLocaleChange(draw);
   draw(); void refresh();
-  return { refresh, destroy() { destroyed = true; epoch++; host.removeEventListener("click", clicked); input.removeEventListener("input", draw); stopLocale(); window.removeEventListener("conversations-changed", changed); window.removeEventListener("conversation-opened", opened); host.replaceChildren(); } };
+  return { refresh, create, destroy() { destroyed = true; epoch++; host.removeEventListener("click", clicked); input.removeEventListener("input", draw); stopLocale(); window.removeEventListener("conversations-changed", changed); window.removeEventListener("conversation-opened", opened); host.replaceChildren(); } };
 }
