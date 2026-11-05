@@ -31,6 +31,8 @@ _SCOPE = ContextVar("computer_scope", default=None)
 _TURN = ContextVar("computer_turn", default=(0, False, None))
 # Where a call that has to wait for the desktop says so: the line for the owner, and the language of the work.
 _NOTE = ContextVar("computer_note", default=(None, "en"))
+_REPAIRS = ContextVar("computer_repairs", default=None)
+_NOTICE = ContextVar("computer_notice", default=None)
 logger = logging.getLogger(__name__)
 
 
@@ -53,16 +55,18 @@ WAITING_FOR = {
 
 
 @contextmanager
-def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, language="en"):
+def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, notice=None, language="en"):
     token = _SCOPE.set(owner)
     turn = _TURN.set((turn_id, private, task))
     note = _NOTE.set((progress, language))
+    public_notice = _NOTICE.set(notice)
     try:
         yield
     finally:
         _SCOPE.reset(token)
         _TURN.reset(turn)
         _NOTE.reset(note)
+        _NOTICE.reset(public_notice)
 
 
 VM_CONTRACT = (
@@ -141,6 +145,40 @@ class VmTools:
         self.refreshes = {}
         self.step_gate = None
         self.vm.rebuild_notice = self._rebuild_notice
+        self.vm.disconnect_driver = self._disconnect
+        self.vm.repair_notice = self._repair_notice
+        self.vm.repair_admit = self._repair_admit
+
+    def _repair_admit(self, target):
+        attempts = _REPAIRS.get()
+        if attempts is None:
+            return True  # The viewer has its own single retry outside a member call.
+        if target in attempts:
+            return False
+        attempts.add(target)
+        return True
+
+    def _repair_notice(self, target):
+        progress, language = _NOTE.get()
+        if progress:
+            progress({"zh-TW": "已自動修復電腦連線，工作區與登入資料已保留", "ja": "接続を自動修復しました。ワークスペースとログインは保持されています"}.get(language,
+                "Repaired the computer connection; workspace and sign-ins were kept"))
+
+    async def _disk_notice(self, target):
+        from .lifecycle import disk_pressure
+        progress, language = _NOTE.get()
+        publish = _NOTICE.get() or progress
+        if not publish:
+            return
+        try:
+            folders = await disk_pressure(self.vm, target)
+        except (VmError, OSError, TimeoutError):
+            return  # Disk diagnostics never block the owner's work.
+        if folders:
+            names = ", ".join(f"{path} ({size / 1024:.0f} MiB)" for size, path in folders)
+            publish({"zh-TW": f"電腦磁碟快滿了。最大的資料夾：{names}。要我清理哪些？刪除前會先徵求你的同意。",
+                "ja": f"ディスクの空き容量が少なくなっています。大きいフォルダー：{names}。削除する前に確認します。どれを整理しますか？"}.get(language,
+                f"The computer disk is nearly full. Largest folders: {names}. Which should I clean up? I will ask before deleting anything."))
 
     def _rebuild_notice(self, target):
         progress, language = _NOTE.get()
@@ -366,6 +404,7 @@ class VmTools:
         if not self.is_computer_tool(key):
             return await self.delegate.call(key, arguments, approver=approver, task_id=task_id, pool=pool)
         began = time.monotonic()
+        repair_budget = _REPAIRS.set(set())
         reading = key in self.tools and self.tools[key].name in SCREEN_READS | {"browser_open"}
         progress, language = _NOTE.get()
         async def announce():
@@ -376,6 +415,7 @@ class VmTools:
         try:
             result = await self._call(key, arguments, approver=approver, task_id=task_id, pool=pool)
         finally:
+            _REPAIRS.reset(repair_budget)
             if notice:
                 notice.cancel()
                 await asyncio.gather(notice, return_exceptions=True)
@@ -556,6 +596,7 @@ class VmTools:
                 self.commands[target.key] = self.commands.get(target.key, 0) + 1
             try:
                 await self.vm.start(target)
+                await self._disk_notice(target)
                 # A hold may have arrived while the desktop was starting. Never queue actions.
                 if target.key in self.vm.held:
                     raise VmError("owner_holds_control")
@@ -589,7 +630,19 @@ class VmTools:
                     if not Draft202012Validator(self.schemas[key]).is_valid(arguments):
                         result = PluginResult(False, "bad_arguments", "The driver requires different arguments. Read the refreshed computer tool schema before retrying.")
                         return result
-                    client, session = await self._connection(target, member=member)
+                    try:
+                        client, session = await self._connection(target, member=member)
+                    except (ConnectionError, VmError, OSError) as error:
+                        if isinstance(error, VmError) and str(error) not in ("unavailable", "driver_configuration_failed"):
+                            raise
+                        from .lifecycle import repair_connection
+                        self.vm.invalidate(target)
+                        await self._disconnect(target.key)
+                        if not self.vm.grants.allowed(member) or target != self.vm.target(member):
+                            return PluginResult(False, "computer_permission_required")
+                        await repair_connection(self.vm, target)
+                        # No owner action has been sent. Re-enter the same grant and hold checks.
+                        client, session = await self._connection(target, member=member)
                     self._refresh(target)
                     await asyncio.sleep(0)
                     if not self.vm.grants.allowed(member) or target != self.vm.target(member):
@@ -615,9 +668,22 @@ class VmTools:
                                 data = await self._browser_open(target, member, client, session, arguments)
                         else:
                             data = await client.request("tools/call", {"name": tool.name, "arguments": sent})
-                    except (VmError, ConnectionError, TimeoutError):
+                    except (VmError, ConnectionError, TimeoutError) as error:
                         self.vm.invalidate(target)
                         await self._disconnect(target.key)
+                        if isinstance(error, ConnectionError) or isinstance(error, VmError) and str(error) in ("transport_closed", "unavailable", "viewer_tunnel_failed"):
+                            if not self.vm.grants.allowed(member) or target != self.vm.target(member):
+                                return PluginResult(False, "computer_permission_required")
+                            from .lifecycle import repair_connection
+                            try:
+                                await repair_connection(self.vm, target)
+                            finally:
+                                self.vm.invalidate(target)
+                            self.stale.add((target.key, owner))
+                            if work:
+                                work.check_required = True
+                            result = PluginResult(False, "connection_repaired", "Computer connection repaired. The previous action was not replayed because its outcome is unknown. Read the current window or page before deciding the next action.")
+                            return result
                         raise
                     self._observe_page(target, data.get("structuredContent") or {})
                     blocks, text = [], []

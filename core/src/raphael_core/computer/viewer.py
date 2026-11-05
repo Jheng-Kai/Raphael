@@ -151,6 +151,7 @@ class DesktopViewer:
                               ("control", self.control), ("close", self.close)):
             router.register(f"computer.viewer_{name}", handler)
         router.register("computer.revoke", self.revoke)
+        router.register("computer.lifecycle", self.lifecycle)
         router.register("computer.team_file", self.team_file)
         router.register("computer.wallpaper", self.wallpaper)
 
@@ -187,6 +188,16 @@ class DesktopViewer:
         self.vm.grants.set(params.get("member_id", 0), False)
         return {"granted": False}
 
+    async def lifecycle(self, params):
+        from .lifecycle import maintain
+        target = self.target(params)
+        if params.get("host") != target.remote or params.get("target") != target.key:
+            raise invalid_params("Computer changed; review maintenance again")
+        if not self.vm.grants.allowed(params.get("member_id", 0)):
+            raise invalid_params("Computer access is not granted")
+        await maintain(self.vm, target, params.get("action"), confirmed=params.get("confirmed", False))
+        return await self.status(params)
+
     def target(self, params):
         member = params.get("member_id", 0)
         if type(member) is not int or member < 0 or not self.member_exists(member):
@@ -205,7 +216,12 @@ class DesktopViewer:
             return {"state": "absent", "control": "member", "ready": False, "error": "disabled" if not self.vm.enabled else "docker_missing"}
         state = await self.unwatched_status(target)
         works = self.vm.work.views(params.get("member_id", 0), params.get("conversation_id"))
-        return {**state, "granted": self.vm.grants.allowed(params.get("member_id", 0)), **({"works": works} if works else {}),
+        return {**state, "host": target.remote, "target": target.key,
+                "mode": "shared" if target.key == "shared" else "per-bot",
+                "idle_minutes": self.vm.settings.get("computer_vm_idle_minutes") if self.vm.settings else 15,
+                "lifecycle": self.vm.lifecycle.get(target.key),
+                **({"repair_revision": self.vm.repair_revisions[target.key]} if target.key in self.vm.repair_revisions else {}),
+                "granted": self.vm.grants.allowed(params.get("member_id", 0)), **({"works": works} if works else {}),
                 **(self.teaching.status(params.get("member_id", 0), params.get("conversation_id"), target) if self.teaching else {})}
 
     async def open(self, params):
@@ -252,7 +268,12 @@ class DesktopViewer:
         state = await self.status_for(session.target) if read else {"state": "running", "ready": True}
         works = self.vm.work.views(session.member_id, session.conversation_id)
         token = self.owners.get(session.target.key)
-        return {**state, "control": "owner" if self.sessions.get(token) is session else "member",
+        return {**state, "host": session.target.remote, "target": session.target.key,
+                "mode": "shared" if session.target.key == "shared" else "per-bot",
+                "idle_minutes": self.vm.settings.get("computer_vm_idle_minutes") if self.vm.settings else 15,
+                "lifecycle": self.vm.lifecycle.get(session.target.key),
+                **({"repair_revision": self.vm.repair_revisions[session.target.key]} if session.target.key in self.vm.repair_revisions else {}),
+                "control": "owner" if self.sessions.get(token) is session else "member",
                 "preview_allowed": session.target.key not in self.vm.held, "granted": self.vm.grants.allowed(session.member_id),
                 **({"works": works} if works else {}),
                 **(self.teaching.status(session.member_id, session.conversation_id, session.target) if self.teaching else {})}

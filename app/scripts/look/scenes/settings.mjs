@@ -18,9 +18,16 @@ const downloaded = [
 ];
 const dictation = tab => [page("dictation"), click(`[data-dictation-tab="${tab}"]`), check("dictation-navigation"), ...(tab === "overview" ? [wait('.page-overview .icard'), check("dictation-overview")] : [])];
 export default [
-  scene("settings-memory", "Raphael's tab of Settings shows the same two documents", [...settings("agent"), wait('[data-mem-space="own"] .mem-entry'), scroll('[data-mem-space="shared"]'), check("settings-memory")]),
-  scene("local-command-settings", "One shared local command dropdown beside computer use", [...settings("agent"), scroll('[data-k="local-commands"]'), check("local-command-setting"), click('[data-k="local-commands"]'), wait('.menu [data-value="never"]'), check("local-command-menu")]),
-  ...["always", "never"].map(mode => scene(`local-command-setting-${mode}`, `Save the shared ${mode} command permission`, [...settings("agent"), scroll('[data-k="local-commands"]'), click('[data-k="local-commands"]'), click(`.menu [data-value="${mode}"]`), check("local-command-setting-saved") ])),
+  scene("settings-speech-service", "Shared speech setup owns its key while the voice and preview belong to member details", [...settings("tools"),click('[data-svc="open"][data-id="voice"]'),wait('#svc-dialog'),click('[data-k="svc-svc:fish"]'),wait('#svc-dialog [type="password"]'),check('settings-speech-service')]),
+
+  scene("settings-agent-legacy", "The existing Raphael settings link opens shared Tools", [page("agent"),click('.page-agent:not([hidden]) [data-act="settings"]'),wait('[data-pane="tools"][aria-current="page"]'),check('settings-tools')]),
+
+  scene("settings-computer-search", "Computer location search opens the member computer panel", [...settings("general"), type('#set-search', '遠端'), wait('.set-hit'), check('settings-computer-result'), key('Enter'), wait('.mb-det:not([hidden]) [data-computer-location]'), check('settings-computer-open')]),
+  scene("settings-owner", "Owner identity, weather and shared memory share General", [...settings("general"), wait('[data-mem-space="shared"] .mem-entry'), check('settings-owner')]),
+
+  scene("settings-memory", "Shared owner memory belongs in General", [...settings("general"), wait('[data-mem-space="shared"] .mem-entry'), scroll('[data-mem-space="shared"]'), check("settings-memory")]),
+  scene("local-command-settings", "One shared local command dropdown beside computer use", [...settings("safety"), scroll('[data-k="local-commands"]'), check("local-command-setting"), click('[data-k="local-commands"]'), wait('.menu [data-value="never"]'), check("local-command-menu")]),
+  ...["always", "never"].map(mode => scene(`local-command-setting-${mode}`, `Save the shared ${mode} command permission`, [...settings("safety"), scroll('[data-k="local-commands"]'), click('[data-k="local-commands"]'), click(`.menu [data-value="${mode}"]`), check("local-command-setting-saved") ])),
   scene("theme-clarity", "Computed real-entry surfaces have no fogging veil or tinted conversation gradient", [member(1), check("theme-clarity")]),
   scene("model-sync", "Raphael's model is chosen on his own page; Settings hold only his quick question", [
     click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-now:not([hidden]) .cb-pick'), check("model-sync-composer"),
@@ -55,7 +62,7 @@ export default [
   ...["minimize", "maximize", "close"].map(control => scene(`window-hover-${control}`, `Transparent ${control} caption hover`, [{ action: "window-control", control }])),
   scene("window-hover-restore", "Restore caption keeps its centered glyph and transparent hover", [{ action: "window-control", control: "maximize", restore: true }]),
   scene("window-hover-modal", "Caption hover stays usable while settings dim the window", [...settings("models"), { action: "window-control", control: "close", hoverOnly: true }]),
-  ...["general", "appearance", "connections", "models", "dictation", "agent", "messaging", "data", "about"].map(pane => scene(pane === "general" ? "profile" : pane, `${pane} settings pane`, [...settings(pane), ...(pane === "appearance" ? [check("appearance-settings")] : [])])),
+  ...["general", "appearance", "connections", "models", "dictation", "tools", "safety", "messaging", "data", "about"].map(pane => scene(pane === "general" ? "profile" : pane, `${pane} settings pane`, [...settings(pane), ...(pane === "appearance" ? [check("appearance-settings")] : [])])),
   scene("appearance-menu", "One shared theme dropdown without a preview gallery", [...settings("appearance"), click('[data-k="appearance"]'), wait('.menu [data-value="dark"]'), check("appearance-settings")]),
   scene("appearance-keyboard", "Theme choices retain visible keyboard focus in every palette", [...settings("appearance"), click('[data-k="appearance"]'), key('Tab'), {...key('Tab'),shift:true}, key('ArrowDown'), check('appearance-settings'), check('appearance-focus')]),
   scene("plugins-installed", "Unified managed, private Google and custom MCP plugins", [...connections, wait('[data-conn="open"][data-id="composio:notion"]')]),

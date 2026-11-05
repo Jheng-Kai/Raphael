@@ -128,6 +128,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   }
   function pageRows(member: Member): string {
     return `<nav class="mb-panel-pages" aria-label="${esc(t("members.details"))}">` +
+      `<div class="mb-panel-row mb-panel-preference"><span class="mb-panel-row-copy"><span>${esc(t("members.profile.draft"))}</span><small>${esc(t("members.profile.draftHint"))}</small></span>${tg(member.draft_first ?? true, t("members.profile.draft"), ' data-det="draft" data-k="det-draft"')}</div>` +
       pageRow("memory", t("mem.title"), "memory", t("members.panelNotes", {p0: counts.memory})) +
       pageRow("skills", t("members.panelSkills"), "sparkle", t("members.panelCount", {p0: counts.skills})) +
       pageRow("commands", t("members.panelCommands"), "steps", t("members.panelCount", {p0: counts.commands})) +
@@ -195,8 +196,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   }
 
   function detailsHTML(member: Member): string {
-    const draft = `<section class="mp-resource"><div><b>${esc(t("members.profile.draft"))}</b><p>${esc(t("members.profile.draftHint"))}</p></div>${tg(member.draft_first ?? true, t("members.profile.draft"), ' data-det="draft" data-k="det-draft"')}</section>`;
-    if (member.id === RAPHAEL_ID) return draft + pageRows(member);
+    if (member.id === RAPHAEL_ID) return pageRows(member);
     const list = host.list();
     const group = list?.groups.find((g) => g.id === member.group_id) ?? null;
     const sources = group?.sources ?? [];
@@ -208,7 +208,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       `<section class="mb-field"><div class="mb-dh">${esc(t("members.group"))}</div>` +
       sel(groupChoices(list?.groups ?? []), groupValue(group ? group.id : null), t("members.group"), ' data-det="group" data-k="det-group"') +
       `</section>` +
-      draft + pageRows(member) +
+      pageRows(member) +
       (sources.length
         ? `<section class="mb-field"><div class="mb-dh">${esc(t("members.sources"))}</div><div class="mb-chips">` +
           sources.map((source) => `<span class="mb-chip">${esc(sourceLabel(source))}</span>`).join("") +

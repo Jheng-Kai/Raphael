@@ -1,5 +1,11 @@
 # Raphael feature map
 
+## Settings by purpose (2026-11-05)
+
+See [Settings and appearance](settings-appearance.md#settings-by-purpose-2026-11-05)
+for moved shared settings, member-owned voice/memory, grouped draft preferences,
+legacy agent links, computer location search and the selected offline UI matrix.
+
 ## Commands, routine limits and owner output (2026-11-05)
 
 See [Daily work](daily-work.md) for R-NAV-01, R-ROUTINE-01/02 and R-OUTPUT-01,
@@ -725,4 +731,4 @@ origin/date line.
 
 ## Calm conversations (owner, 2026-11-05)
 
-See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) for R-UI-101 and R-CLI-01, the selected eleven-scene matrix and offline/native boundaries.
+See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) for R-UI-101 and R-CLI-07, the selected eleven-scene matrix and offline/native boundaries.

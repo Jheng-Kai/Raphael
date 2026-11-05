@@ -2,7 +2,7 @@
 
 ## Calm conversation projection (owner, 2026-11-05)
 
-conversation.ts owns calendar-day dividers; timeline.ts owns inline routine origins, reply actions and collapsed work receipts. The page retains latest-failure visibility as a render dependency. Find opens existing work detail and preserves its state. CliLoop emits one terminal reply, while Driver and Failure carry bounded, redacted stderr diagnostics into the existing foreground/background turn detail. Premature completion uses cli_stopped with the existing retry policy; real connection errors retain network guidance. No RPC, schema, worker, provider or model-loop boundary is added (A-01/03/04/06/08). See R-UI-101 and R-CLI-01.
+conversation.ts owns calendar-day dividers; timeline.ts owns inline routine origins, reply actions and collapsed work receipts. The page retains latest-failure visibility as a render dependency. Find opens existing work detail and preserves its state. CliLoop emits one terminal reply, while Driver and Failure carry bounded, redacted stderr diagnostics into the existing foreground/background turn detail. Premature completion uses cli_stopped with the existing retry policy; real connection errors retain network guidance. No RPC, schema, worker, provider or model-loop boundary is added (A-01/03/04/06/08). See R-UI-101 and R-CLI-07.
 
 
 ## Smooth member computers (2026-11-05)

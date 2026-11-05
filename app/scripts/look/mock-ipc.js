@@ -14,6 +14,9 @@ export function installMock(fixture, config = {}, target = window) {
     last.task = null;
     data.turns = data.turns.filter(turn => turn.member_id !== 1).concat(first, last);
   }
+  if (variant.raphaelVoice) data.settings.tts_fish_voice = "0123456789abcdef0123456789abcdef";
+  if (variant.computerHost) data.settings.computer_ssh_alias = variant.computerHost;
+
   if (variant.ownerOutputFolder) data.settings.owner_output_folder = "C:\\Owner\\Deliveries";
   if (variant.routineGuard) for (const routine of data.routines.filter(item => item.member_id === 1)) {
     Object.assign(routine, { enabled: false, next_run: null, last_error: "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。" });
@@ -208,6 +211,9 @@ export function installMock(fixture, config = {}, target = window) {
     runningTurn.messages = variant.running === "fresh" ? [] : runningTurn.messages.filter(message => message.kind !== "reply");
     if (variant.running === "fresh") runningTurn.steps = [];
     runningTurn.text = "";
+    if (variant.lowDisk) {
+      runningTurn.messages = [{seq:1,kind:'reply',text:data.lowDiskSample,at_ms:data.now-1000}];
+    }
     if (variant.generatedProgress) {
       runningTurn.question = "請製作辦公室宣傳影片。";
       runningTurn.messages = [{seq:1,kind:"progress",text:"正在製作影片 · 40%",at_ms:data.now - 1000}];
@@ -700,6 +706,11 @@ export function installMock(fixture, config = {}, target = window) {
         // Not a file of the dev server, which would write its own client into the page.
         return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml)}`, title: "輕量後背包", rev: 1, height: 320, source: "html", server: null };
       case "computer.wallpaper": return variant.ownWallpaper ? { image: variant.ownWallpaper } : {};
+      case "computer.lifecycle": {
+        if (p.target !== data.desktop.target || p.host !== data.desktop.host || p.action === 'reset' && p.confirmed !== true) throw new Error('Maintenance confirmation or target missing');
+        data.desktop = { ...data.desktop, state:'running', ready:true, lifecycle:null };
+        return copy(data.desktop);
+      }
       case "computer.viewer_status": return p.check_host ? {host:p.alias,ok:false,checks:[{kind:'ssh',ok:true},{kind:'docker_path',ok:false}]} : data.desktop ?? { state: "absent", ready: false, control: "member" };
       case "computer.viewer_open": {
         if (variant.desktopStarts) data.desktop = { ...data.desktop, state: "running", ready: true };
@@ -742,6 +753,7 @@ export function installMock(fixture, config = {}, target = window) {
         if (desktopSessions.get(p.session)?.held && data.desktop) data.desktop.control = "member";
         desktopSessions.delete(p.session); return {};
       }
+      case "tts.preview": return {ok:true};
       case "settings.get": return { settings: data.settings };
       // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
       case "background.waiting.list": { data.waitingReads = (data.waitingReads ?? 0) + 1; return { waiting: variant.roomQuestion && (!variant.roomQuestionLate || data.waitingReads > 1) ? [{ id: "room-q", member_id: 1, member_name: "小晴", room_id: 1 }] : [] }; }

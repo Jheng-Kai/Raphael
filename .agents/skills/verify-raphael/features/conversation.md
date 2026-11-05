@@ -18,7 +18,7 @@ and handoffs retain one closed line (R-UI-72); unread navigation and cards needi
 owner remain. Groups retain their existing handoff/report/card projection, with
 message time in the shared hover actions. No additional room work engine is added.
 
-R-CLI-01 gives premature CLI completion its own cli_stopped kind, preserving
+R-CLI-07 gives premature CLI completion its own cli_stopped kind, preserving
 the bounded retry contract. Only real connection errors use network guidance.
 The same foreground/background loop carries a bounded, secret-redacted original
 CLI error and last stderr lines into the persisted turn detail. A required MCP
