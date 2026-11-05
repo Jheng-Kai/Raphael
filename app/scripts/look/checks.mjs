@@ -281,6 +281,11 @@ export function checkRendered(name, context = {}) {
       require(panel.querySelector('.desktop-error').textContent === 'Docker Desktop 已準備好', 'engine readiness is reported beside its screen');
     } else if (name === 'member-panel-remote-location') {
       require(visible(document.querySelector('.computer-location-popover')), 'recovery opens the existing location control');
+    } else if (name === 'member-panel-location-hover') {
+      const button = panel.querySelector('.desktop-location-header [data-computer-location]'), style = getComputedStyle(button);
+      require(button.matches(':hover') && button.textContent.includes('mac-mini'), 'the pointer is on the location button');
+      const clear = value => value === 'transparent' || /rgba\(\d+, \d+, \d+, 0\)/.test(value);
+      require(clear(style.backgroundColor) && clear(style.borderTopColor), `the location shows no fill or frame under the pointer (${style.backgroundColor}, ${style.borderTopColor})`);
     }
     return {check:name, tab};
   }

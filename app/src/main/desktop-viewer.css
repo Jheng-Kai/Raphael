@@ -113,10 +113,9 @@
 .desktop-location-header { display: flex; justify-content: flex-end; min-width: 0; }
 .computer-location { min-width: 0; }
 .computer-location .btn { max-width: 100%; }
-/* Beside the state word and the ⋯ the location is a quiet button: words and a chevron, a fill only under the pointer. */
-.desktop-location-header .computer-location .btn { border-color: transparent; background: transparent; }
-.desktop-location-header .computer-location .btn:hover:not(:disabled) { background: var(--hover); }
-.desktop-location-header .computer-location .btn:active:not(:disabled) { background: var(--pressed); }
+/* Beside the state word and the ⋯ the location is a quiet button: words and a chevron, with no frame and no
+   fill, not even under the pointer (owner, 2026-11-06). Keyboard focus keeps its ring. */
+.desktop-location-header .computer-location .btn, .desktop-location-header .computer-location .btn:is(:hover, :active, [aria-expanded="true"]):not(:disabled) { border-color: transparent; background: transparent; }
 .computer-location .btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .desktop-takeover-bar .computer-location { flex: 0 1 auto; }
 .menu.computer-location-popover { width: min(380px, calc(100vw - var(--sp-4))); padding: var(--sp-3); }

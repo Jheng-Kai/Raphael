@@ -1,4 +1,4 @@
-import { scene, member, click, wait, check, key } from './steps.mjs';
+import { scene, member, click, wait, check, key, hover } from './steps.mjs';
 
 const details = [member(1), {action:'open-details'}, wait('.mb-det[data-details-tab="details"] .mb-panel-tasks')];
 const computer = [...details, click('.mb-tabs [data-tab="computer"]'), wait('.desktop-panel:not([hidden]) .desktop-message')];
@@ -18,5 +18,6 @@ export default [
     ? [...details,click('.mb-tabs [data-tab="computer"]'),wait('.desktop-stage'),check('member-panel-computer-state'),check('panel-state-layout')]
     : [...computer,check(`member-panel-computer-${name}`),check('panel-state-layout')], fixture)),
   scene('member-panel-docker-start', 'Only an owner press starts this PC and the ready result stays contextual', [...computer,click('[data-desktop="retry"]'),wait('.desktop-error:not([hidden])'),check('member-panel-docker-start')], state('unavailable',{error:'docker_stopped'})),
+  scene('member-panel-location-hover', 'The computer location is words and a chevron with no frame or fill, even under the pointer', [...computer,hover('.desktop-location-header [data-computer-location]'),check('member-panel-location-hover')], {...state('unavailable',{error:'remote_unavailable',host:'mac-mini'}),computerHost:'mac-mini'}),
   scene('member-panel-remote-location', 'Remote recovery opens the existing location control', [...computer,click('[data-desktop-location]'),wait('.computer-location-popover'),check('member-panel-remote-location')], state('unavailable',{error:'docker_stopped'})),
 ];
