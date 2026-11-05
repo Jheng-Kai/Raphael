@@ -51,7 +51,6 @@ class Ledger:
         if not (math.isfinite(cost_usd) and cost_usd >= 0):
             logger.warning("A cost the spend cannot take was counted as nothing: ValueError")
             return
-        model = model.partition("?effort=")[0] if model else model
         self.total += cost_usd
         self.calls.append({"model": model or "", "at_ms": self._spend._now_ms(), "ms": max(0, int(ms)),
                            "tokens": max(0, prompt_tokens) + max(0, completion_tokens),
