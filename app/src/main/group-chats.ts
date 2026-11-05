@@ -1,3 +1,5 @@
+import { openRoomThread } from "./room-thread";
+import { carryMessageMetadata, mountMessageMetadata, reactionControlHTML, reactionRowHTML, memoActionHTML, memoTranscriptHTML } from "./message-metadata";
 import { roomBoardHTML, roomReportHTML } from "./room-meeting";
 import { openMemberThread } from "./team-navigation";
 import { wholeLinks } from "./composer-links";
@@ -225,6 +227,8 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   let room:Room|undefined,list:MembersList={members:[],groups:[]},messages:RoomMessage[]=[],generation=0,opened=false,canOlder=false,loadingOlder=false;
   // Navigation identity remains available while the complete room is loading.
   let roomId: number | undefined;
+  let closeSideThread: (() => void) | undefined;
+  let sideOpening = false;
   let pendingQuestions: { room: number; questions: import("./types").OwnerQuestion[] } | undefined;
   const failedRequests = new Map<string, string>();
   const deliveries = new Map<number, Promise<void>>();
@@ -266,6 +270,11 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const windowMount = mountTranscriptWindow(scroll, thread, roomWindow, { draw, older: loadRoomEarlier, canOlder: () => canOlder && !loadingOlder });
   mountConversationScroll(scroll);
   mountRichContent(scroll);
+  mountMessageMetadata(thread, control => {
+    const message = messages.find(item => item.id === Number(control.closest<HTMLElement>("[data-room-message]")?.dataset.roomMessage));
+    return message && roomId ? { reactions: message.reactions ?? [], react: (emoji, active) => api.core("rooms.react", { room_id: roomId, message_id: message.id, emoji, active }),
+      memo: message.turn?.voice_memo ? memo_action => api.core("agent.speak", { room_id: roomId, thread_id: message.thread_id, turn_id: message.turn_id, member_id: message.member_id, memo_action }) : undefined } : null;
+  }, () => { void refresh(); }, error => toaster.info(describeError(error)));
   mountOwnerQuestions(thread, () => { void refresh(); });
   const floatingQuestions = mountPendingQuestions(thread, scroll, () => refresh(), () => pendingQuestions && pendingQuestions.room === roomId ? pendingQuestions.questions : [], async turn => {
     let message = messages.find(message => message.turn_id === turn || message.turn?.id === turn);
@@ -431,14 +440,17 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       const member=person(m.member_id),owner=m.member_id===null,parts=owner?[m.text]:plainReplies(replyMessages(m.text)).map(text=>composioText(text,composioAction(m.turn))),words=parts.join("\n\n")||(owner?"":t(m.status==="error"?"auto.error":"auto.running"));
       const source=m.reply_reference;
       const reply=source?`<${source.unavailable ? 'span' : `button type="button" data-room-act="jump-reply" data-message="${source.message_id}"`} class="au-room-reply">${esc(source.unavailable?t("rooms.sourceMissing"):t("rooms.replyTo",{p0:source.author_kind==="owner"?t("rooms.owner"):person(source.author_member_id??null)?.name??t("rooms.sourceMissing")}))}</${source.unavailable ? 'span' : 'button'}>`:"";
-      const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',(!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
+      const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',reactionControlHTML() + (m.turn?.voice_memo ? memoActionHTML(m.turn.voice_memo_state === "playing") : "") + iconButton("chat", t("rooms.thread"), ` data-room-act="thread" data-message="${m.id}"`).replace(" title=", " data-tooltip=") + (!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
+      const reactions = reactionRowHTML(m.reactions);
+      const metadata = (m.turn?.voice_memo ? memoTranscriptHTML(m.text) : "") + (m.reply_count ? `<button type="button" class="btn sm room-thread-chip" data-room-act="thread" data-message="${m.id}">${esc(t("rooms.threadCount", { p0: m.reply_count }))}</button>` : "");
       const preview = ` data-expandable="true"`, expanded = expandedMessages.has(m.id) ? " is-expanded" : "";
-      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${actions}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?actions:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn, m.member_id ? member?.name : t("agent.title")) : ""}</div></div>`}</li>`;
+      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${reactions}${actions}${metadata}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?reactions+actions+metadata:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn, m.member_id ? member?.name : t("agent.title")) : ""}</div></div>`}</li>`;
     }), })).filter(line => line.html) : [{ key: "empty", html: `<li class="au-empty">${esc(t("rooms.empty"))}</li>`, turnId: undefined }];
     renderedMessages.retain(new Set(grouped.map(({entry}) => entryKey(entry))));
     const changed = patchThread(thread, wanted, drawn, {
       arrives: line => drewOnce && line.turnId !== undefined && line.turnId > newestMessage,
       carry(node, made) {
+        carryMessageMetadata(node, made);
         const restorePages = pagesHost.carry(node, made), restoreTyped = carryTyped(node, made), restoreMail = carryMail(node, made), restoreSetup = carryInlineSetup(node, made);
         return () => { node.before(made); restorePages(); restoreSetup(); node.remove(); restoreTyped(); restoreMail(); };
       },
@@ -501,7 +513,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     } catch (error) { toaster.info(describeError(error)); }
     finally { loadingOlder = false; if (opened) draw(); }
   }
-  function close():void{if(!opened)return;if(meetingPanel?.isConnected)closeMenu();finder.close(false);saveRoomDraft();composer.stopVoice();drop.reset();attachmentMedia.reset();questions.reset();opened=false;roomId=undefined;generation++;clearTimeout(refreshTimer);refreshTimer=undefined;el.hidden=true;composer.setTaskState("idle");clearRoomSelection();onClose();}
+  function close():void{if(!opened)return;closeSideThread?.();closeSideThread=undefined;if(meetingPanel?.isConnected)closeMenu();finder.close(false);saveRoomDraft();composer.stopVoice();drop.reset();attachmentMedia.reset();questions.reset();opened=false;roomId=undefined;generation++;clearTimeout(refreshTimer);refreshTimer=undefined;el.hidden=true;composer.setTaskState("idle");clearRoomSelection();onClose();}
   el.querySelector('[data-room-menu]')!.addEventListener('click',e=>{if(room)roomActions(e.currentTarget as HTMLElement,room,()=>void refresh(),close);});
   el.addEventListener('click',e=>{const target=(e.target as Element).closest<HTMLElement>('[data-room-act],[data-act]');if(!target)return;const act=target.dataset.roomAct??target.dataset.act;if(["turn","copy-message","copy-code","attachment-open","attachment-image","older"].includes(act??""))e.stopPropagation();
     if(act==="private-work") openMemberThread(_app,Number(target.dataset.member),Number(target.dataset.turn));
@@ -516,6 +528,14 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       measureAllMessages();
     }
     else if(act==="stop"&&room&&!stopping){stopping=true;const id=room.id;draw();void api.roomStop(id).then(()=>refresh()).catch(error=>toaster.info(describeError(error))).finally(()=>{stopping=false;if(opened)draw();});}
+    else if(act==="thread" && roomId && !sideOpening){
+      sideOpening = true;
+      const current = roomId, message = Number(target.dataset.message);
+      closeSideThread?.(); closeSideThread = undefined;
+      void openRoomThread(el, _app, current, message, list, () => { if (opened) void refresh(); }).then(close => {
+        if (!opened || current !== roomId) close(); else closeSideThread = close;
+      }).catch(error => toaster.info(describeError(error))).finally(() => { sideOpening = false; });
+    }
     else if(act==="reply"){replyTo=messages.find(m=>m.id===Number(target.dataset.message));draw();composer.input.focus();}
     else if(act==="jump-reply") void (async () => {
       const id = Number(target.dataset.message), current = roomId;
@@ -549,6 +569,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   };listeners.add(listener);onLocaleChange(()=>{if(opened)draw();});
   onAvatarChange(()=>{if(opened && el.isConnected)draw();});
   return {el,close,refresh,async open(id:number){
+    closeSideThread?.(); closeSideThread = undefined;
     if (meetingPanel?.isConnected) closeMenu();
     meetingRow.hidden = true;
     decisions = [];

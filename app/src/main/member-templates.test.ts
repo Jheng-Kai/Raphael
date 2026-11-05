@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, test, vi } from "vitest";
 import { exportMemberTemplate, previewTemplate, starterTemplate } from "./member-templates";
-import { openMemberStore } from "./member-store";
 import { openMemberCreator } from "./member-creator";
 import type { Member } from "./types";
+import { t } from "./i18n";
 
 const api = vi.hoisted(() => ({core: vi.fn(), memberTemplateFile: vi.fn(), connectorsConnect: vi.fn(), membersUpdate: vi.fn(), toolsetsList: vi.fn(), integrationsCatalog: vi.fn(), openExternalUrl: vi.fn()}));
 vi.mock("./api", () => api);
@@ -23,6 +23,13 @@ test("preview shows skills, paused routines and a disabled card per requested co
   await previewTemplate(starterTemplate(3), "slime:diablo", create, null, vi.fn());
   expect(api.core).toHaveBeenCalledWith("members.template", expect.objectContaining({action: "preview"}));
   expect(document.querySelector<HTMLButtonElement>('[data-dlg="connect"]')!.disabled).toBe(true);
+  const dialog = document.querySelector(".template-preview")!;
+  expect(dialog.textContent!.split(t("template.noGrants"))).toHaveLength(2);
+  expect(dialog.querySelector(".mb-dlg-act")!.firstElementChild!.matches("[data-template-notice]")).toBe(true);
+  expect(dialog.querySelectorAll(".card-status, .card-well")).toHaveLength(0);
+  expect(dialog.querySelectorAll(".list > .row")).toHaveLength(2);
+  expect(dialog.querySelector(".list .ctl")!.textContent).toBe(t("template.developerGoal"));
+  expect(dialog.querySelectorAll(".list")[1].textContent).toContain(t("computer.routinePaused"));
   expect(create).not.toHaveBeenCalled(); expect(api.connectorsConnect).not.toHaveBeenCalled();
   document.querySelector<HTMLButtonElement>('[data-dlg="import"]')!.click();
   for (let i=0;i<12;i++) await Promise.resolve();
@@ -34,6 +41,8 @@ test("preview shows skills, paused routines and a disabled card per requested co
   document.querySelector<HTMLButtonElement>('[data-dlg="connect"]')!.click();
   for (let i=0;i<12;i++) await Promise.resolve();
   expect(api.membersUpdate).toHaveBeenCalledWith(9,{tools:["composio:github"]});
+  expect(dialog.querySelectorAll(".card-status")).toHaveLength(1);
+  expect(dialog.querySelector(".card-status")!.textContent).toBe(t("conn.signedIn"));
   expect(api.connectorsConnect).not.toHaveBeenCalled();
 });
 
@@ -43,11 +52,23 @@ test("store filtering stays local and install carries catalogue identity", async
     {id:"research",name:"Research",creator:"Example",summary:"Check sources",category:"engineering",avatar:"souei",featured:true},
     {id:"writer",name:"Writer",creator:"Example",summary:"Clear articles",category:"marketing",avatar:"shuna",featured:false},
   ],offline:false} : {template:starterTemplate(3),findings:[]});
-  openMemberStore(create, null, vi.fn());
+  const maker = openMemberCreator({groupId:null, taken:[], create, store:true});
   for (let i=0;i<6;i++) await Promise.resolve();
   const input = document.querySelector<HTMLInputElement>("[data-store-search]")!;
   input.value = "Writer"; input.dispatchEvent(new Event("input"));
   expect(document.querySelectorAll(".store-entry")).toHaveLength(1);
+  expect(api.core).toHaveBeenCalledTimes(1);
+  const heading = maker.el.querySelector(".mb-dlg-head h2");
+  const tabs = maker.el.querySelector(".cr-tabs .tabs.plain.fill")!;
+  expect(tabs.querySelectorAll(".tab")).toHaveLength(2);
+  expect(tabs.querySelector('[data-tab="store"]')!.getAttribute("aria-selected")).toBe("true");
+  maker.el.querySelector<HTMLButtonElement>('[data-tab="maker"]')!.click();
+  maker.el.querySelector<HTMLInputElement>("#mb-new-name")!.value = "Draft member";
+  maker.el.querySelector<HTMLButtonElement>('[data-tab="store"]')!.click();
+  expect(maker.el.querySelector(".mb-dlg-head h2")).toBe(heading);
+  expect(document.querySelectorAll(".cr-dialog")).toHaveLength(1);
+  expect(maker.el.querySelector<HTMLInputElement>("#mb-new-name")!.value).toBe("Draft member");
+  expect(input.value).toBe("Writer");
   expect(api.core).toHaveBeenCalledTimes(1);
   input.value = ""; input.dispatchEvent(new Event("input"));
   document.querySelector<HTMLButtonElement>('[data-category="engineering"]')!.click();
@@ -78,6 +99,10 @@ test("scan warnings name the visible section without exposing internal translati
   const warning = document.querySelector('.template-preview .note[role="status"]')!;
   expect(warning).not.toBeNull();
   expect(warning.textContent).not.toContain("template.");
+  expect(warning.textContent).not.toMatch(/[。.]\s*·/);
+  expect(warning.textContent).toContain(t("store.injection", {p0:t("members.instructions")}));
+  expect(warning.querySelectorAll("p")).toHaveLength(2);
+  expect(warning.compareDocumentPosition(document.querySelector(".template-field")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test("export rechecks the reviewed generation before file save", async () => {

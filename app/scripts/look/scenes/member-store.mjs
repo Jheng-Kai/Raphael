@@ -3,7 +3,7 @@ const store = [{action:"member-column",collapsed:false},click('[data-col="add"]'
 const empty = [{action:"member-column",collapsed:false},click('[data-col="add"]'),click('#app-popover [data-pick="member-store"]'),wait(".member-store"),{action:"wait-text",selector:".store-results",text:"商店目前沒有內容"}];
 const preview = [...store,click('.store-entry [data-id="research"]'),wait(".template-preview")];
 export default [
-  scene("store-home", "Featured signed catalogue recipes and eight categories", [...store,check("store-home")]),
+  scene("store-home", "Featured catalogue and shared tabs preserve the creation title", [...store,check("creator-tabs"),click('.cr-tabs [data-tab="maker"]'),check("creator-tabs"),click('.cr-tabs [data-tab="store"]'),check("creator-tabs"),check("store-home")]),
   scene("store-category", "Category chips filter locally", [...store,click('[data-category="engineering"]'),check("store-category")]),
   scene("store-search", "Search filters names and summaries locally", [...store,type('[data-store-search]',"文字"),check("store-search")]),
   scene("store-empty", "A catalogue without entries has a calm empty state", [...empty,check("store-empty")], {storeEmpty:true}),

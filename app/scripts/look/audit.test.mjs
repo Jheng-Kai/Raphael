@@ -34,7 +34,7 @@ describe("rendered look checks", () => {
   });
   it("rejects a low-contrast Docker download on the desktop wallpaper", () => {
     const browser = new Window();
-    browser.document.body.innerHTML = '<section class="desktop-panel"><div class="missing-note">Docker Desktop</div><button data-act="docker-download">Download Docker Desktop</button></section>';
+    browser.document.body.innerHTML = '<section class="desktop-panel"><div class="desktop-message">Docker Desktop</div><button data-act="docker-download">Download Docker Desktop</button></section>';
     browser.__look = { calls: [] };
     for (const element of browser.document.querySelectorAll("*")) { element.checkVisibility = () => true; element.getBoundingClientRect = () => ({ width: 120, height: 32 }); }
     let backgroundColor = "rgb(255, 255, 255)";
@@ -53,6 +53,13 @@ describe("rendered look checks", () => {
     const scene = { fixture: {}, steps: [{ action: "type", selector: "#computer-ssh-alias", text: "studio-mini" }] };
     const result = auditDocument(window.document, { width: 1120, height: 900 }, [], sceneLatinNames(scene, "zh-TW", {}));
     expect(result.mixedLanguage.map(item => item.word)).toEqual(["Save"]);
+  });
+  it("accepts the complete 1Password brand while still rejecting an untranslated Password label", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<p>從 1Password 匯入</p><label>Password</label>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 120, bottom: 32, width: 120, height: 32 });
+    const result = auditDocument(window.document, { width: 1120, height: 900 }, [], sceneLatinNames({ fixture: {}, steps: [] }, "zh-TW", {}));
+    expect(result.mixedLanguage.map(item => [item.tag, item.word])).toEqual([["label", "Password"]]);
   });
   it("rejects permission field labels taller than one line", () => {
     const browser = new Window();

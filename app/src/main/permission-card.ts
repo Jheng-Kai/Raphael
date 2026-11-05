@@ -81,7 +81,8 @@ export function permissionCardHTML(card: PermissionCard, answerable = true, memb
   if (isComposioTool(card.service, card.tool)) card = { ...card, summary: composioText(card.summary, card.tool, "tool") };
   const waiting = waitsForYes(card);
   const actor = memberName || (localCard(card) ? nameOf(card) : t("agent.title"));
-  const body = waiting ? localCard(card) ? t(card.kind === "local_access" ? "local.consent" : "cards.localReview") : card.reason || undefined : undefined;
+  const payment = card.kind === "tool" && card.tool === "fill_card";
+  const body = waiting ? payment ? card.summary : localCard(card) ? t(card.kind === "local_access" ? "local.consent" : "cards.localReview") : card.reason || undefined : undefined;
   let title = t("cards.useApp", { p0: actor, p1: nameOf(card) });
   if (localCard(card)) title = t("cards.localCommand", { p0: actor });
   else if (card.message) title = /^GMAIL_/i.test(card.tool) || /gmail/i.test(card.service)

@@ -1,5 +1,9 @@
 # Raphael feature map
 
+## Member panel tabs (2026-11-05)
+
+The owner request of 2026-11-05 introduces R-PANEL-01 through R-PANEL-04. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for Details / Library / Computer navigation, shared file/work controls, truthful local Docker recovery, the selected scene matrix and native/judge limits. [Conversation](conversation.md#member-panel-destinations-2026-11-05) and [Daily work](daily-work.md#work-and-files-in-the-member-panel-2026-11-05) map the affected consumers.
+
 ## App updates, memory import and attachment limits (2026-11-05)
 
 See [Settings and appearance](settings-appearance.md#signed-updates-and-owner-memory-import-2026-11-05)
@@ -734,6 +738,15 @@ R-SKILL-08 also covers localized skill origins in member details, Connections,
 discovery and document dialogs; see [Members](members.md#localized-skill-origins-2026-11-05).
 The same selected twenty-scene skill matrix checks raw-source leakage and one learned
 origin/date line.
+
+
+## Shared owner vault (2026-11-05)
+
+See [Settings and appearance](settings-appearance.md#shared-owner-vault-2026-11-05)
+for R-VAULT-01..05, Safety navigation, shared Credential Manager entries, transient
+CSV import and mandatory payment consent. The merge follow-up maps all nine vault
+scenes plus calm-thread in the ten-scene selected look matrix; the feature entry
+contains the executable look command used by judge context discovery.
 
 ## Calm conversations (owner, 2026-11-05)
 

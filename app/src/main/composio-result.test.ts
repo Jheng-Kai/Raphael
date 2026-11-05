@@ -93,7 +93,8 @@ test("a Composio turn preserves the member's fenced and inline JSON config", () 
   document.body.innerHTML = turnHTML(turn, emptyTimelineState(), true, { face: () => "" });
   expect(document.querySelector('[data-message="reply"] code')?.textContent).toBe(config);
   expect(document.querySelector('[data-message="reply"]')?.textContent).toContain(`Inline: ${config}`);
-  expect(document.querySelector(".tn-detail code")?.textContent).toBe(config);
+  expect(document.querySelector<HTMLElement>(".work-body")?.hidden).toBe(true);
+  expect(document.querySelector(".work-body .failure-detail")?.textContent).toBe(turn.detail);
   expect(latestProgress({ ...turn, messages: [{seq:1,kind:"progress",text:config,at_ms:1}] })).toBe(config);
   expect(turn.text).toBe(source);
 });
@@ -111,6 +112,7 @@ test("a member's pasted Composio envelope is projected with or without a precedi
     steps: [{kind:"tool",server:"Composio",tool:"GMAIL_FETCH_EMAILS",outcome:"ok",reason:null,ms:100,at_ms:1}] };
   document.body.innerHTML = turnHTML(turn, emptyTimelineState(), true, { face: () => "" });
   expect(document.body.textContent).toContain("Gmail · Completed: Synthetic schedule");
+  expect(document.querySelector(".work-body .work-sentences")?.textContent).toContain("Gmail");
   expect(document.body.textContent).not.toContain("successful");
   expect(turn.text).toBe(envelope);
 });

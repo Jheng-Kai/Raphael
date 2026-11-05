@@ -77,6 +77,10 @@
         "editable_email"
       ]
     },
+    "raphael/core/slack_draft": {
+      "scenario_ids": ["S05.slack-draft"],
+      "expected_assertions": ["editable_slack", "version_bound_send", "cancel_zero_send", "one_receipt"]
+    },
     "raphael/core/computer_act": {
       "scenario_ids": [
         "S21.computer.act"

@@ -1,0 +1,4 @@
+name,url,username,password
+Synthetic travel,https://travel.example.invalid,synthetic-user,synthetic-password
+Synthetic docs,https://docs.example.invalid,synthetic-user-two,synthetic-password-two
+Unsupported,http://insecure.example.invalid,synthetic-user-three,synthetic-password-three

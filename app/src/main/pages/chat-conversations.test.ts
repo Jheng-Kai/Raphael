@@ -151,6 +151,7 @@ test("rooms close the private desktop lease, hide the member picker and keep rep
   document.body.append(page.el); page.show(); await flush();
   if (page.el.querySelector('.conversation-trigger')!.getAttribute('aria-expanded') !== 'true') page.el.querySelector<HTMLButtonElement>('.conversation-trigger')!.click();
   await flush();
+  page.el.querySelector<HTMLButtonElement>('[data-act="computer"]')!.click(); await flush();
   expect(page.el.querySelector('.desktop-panel iframe')).not.toBeNull();
   window.dispatchEvent(new CustomEvent("raphael:open-room", { detail: { roomId: 7 } })); await flush();
   expect(page.el.querySelector('.desktop-panel iframe')).toBeNull();

@@ -8,7 +8,7 @@ NOTE = ("Before finishing computer work, check the result with verify_state and 
 READS = {"get_window_state", "get_browser_state", "get_desktop_state", "verify_state"}
 CHANGES = {"click", "double_click", "right_click", "type_text", "press_key", "hotkey", "scroll", "drag",
            "launch_app", "bring_to_front", "clipboard_write", "browser_open", "browser_navigate", "browser_click",
-           "browser_type", "browser_select", "browser_pointer", "browser_dialog", "browser_set_input_files", "fill_login"}
+           "browser_type", "browser_select", "browser_pointer", "browser_dialog", "browser_set_input_files", "fill_login", "fill_contact", "fill_card"}
 
 
 class ComputerVerification:

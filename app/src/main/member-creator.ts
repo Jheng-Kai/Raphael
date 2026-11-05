@@ -3,13 +3,13 @@
 // greeting), and the owner's answer becomes its job: nothing else is asked here.
 import "./member-creator.css";
 import { openTemplateGallery } from "./member-templates";
-import { openMemberStore } from "./member-store";
+import { mountMemberStore } from "./member-store";
 import { t } from "./i18n";
 import { type Dialog, openDialog } from "./member-dialogs";
 import { NAME_MAX, cleanName, isMemberNameTaken } from "./members";
 import { defaultSlimeAvatar, pickSlime, slimeCharactersHTML, slimeColorsHTML, slimeFaceHTML } from "./slime";
 import type { Member, NewMember } from "./types";
-import { btn, esc, toaster } from "./ui";
+import { btn, esc, tabs, toaster } from "./ui";
 
 const FACE_SIZE = 120, ARRIVING_MS = 700;
 
@@ -27,29 +27,44 @@ export function openMemberCreator(o: MemberCreatorOptions): Dialog {
   let avatar = defaultSlimeAvatar(o.taken.length);
   let busy = false;
   let hop: ReturnType<typeof setTimeout> | undefined;
+  let storeMounted = false;
+  const tabItems = [{id:"maker", label:t("members.newMember")}, {id:"store", label:t("store.title")}];
+  const tabHTML = (selected: string): string => tabs(tabItems.map(item => ({...item, attrs:` data-dlg="creator-tab" data-tab="${item.id}" aria-controls="creator-${item.id}"`})), selected, {kind:"nav", plain:true, fill:true, label:t("members.newMember")});
 
   const dialog = openDialog({
     title: t("members.newMember"),
     cls: "cr-dialog",
-    body: `<div class="cr-tabs" role="tablist" aria-label="${esc(t("members.newMember"))}">${btn(esc(t("members.newMember")), "sm", ' role="tab" aria-selected="true"')}${btn(esc(t("store.title")), "sm", ' data-dlg="store" role="tab" aria-selected="false"')}</div><div class="cr-maker"><div class="cr-face"></div>` +
+    body: `<div class="cr-tabs mb-tabs">${tabHTML("maker")}</div><div class="cr-maker" id="creator-maker" role="tabpanel"><div class="cr-face"></div>` +
       `<div class="cr-colors" role="group" aria-label="${esc(t("members.creator.colors"))}">${slimeColorsHTML(avatar, esc)}</div>` +
       `<div class="cr-characters" role="group" aria-label="${esc(t("members.creator.characters"))}">${slimeCharactersHTML(avatar, esc)}</div>` +
       `<div class="cr-fields"><label class="mp-label" for="mb-new-name"><span>${esc(t("members.name"))}</span><input id="mb-new-name" class="mb-fin" maxlength="${NAME_MAX}" autocomplete="off"></label></div>` +
-      `<div class="cr-start">${btn(esc(t("template.gallery")), "", ' data-dlg="templates"')}${btn(esc(t("members.create")), "pri", ' data-dlg="create" disabled')}</div></div>`,
+      `<div class="cr-start">${btn(esc(t("template.gallery")), "", ' data-dlg="templates"')}${btn(esc(t("members.create")), "pri", ' data-dlg="create" disabled')}</div></div><section class="member-store" id="creator-store" role="tabpanel" hidden></section>`,
     actions: {},
     canClose: () => !busy,
-    onAct(act) {
+    onAct(act, button) {
       if (!busy && act === "create") void create();
       if (!busy && act === "templates") openTemplateGallery(o.create, o.groupId, () => dialog.close());
-      if (!busy && act === "store") openMemberStore(o.create, o.groupId, () => dialog.close());
+      if (!busy && act === "creator-tab") selectTab(button.dataset.tab!);
     },
-    onEnter() { void create(); },
+    onEnter() { if (!name.closest("[hidden]")) void create(); },
     onClose() { clearTimeout(hop); },
   });
   dialog.el.closest(".mb-scrim")!.classList.add("cr-scrim");
 
   const name = dialog.el.querySelector<HTMLInputElement>("#mb-new-name")!;
   const start = dialog.el.querySelector<HTMLButtonElement>('[data-dlg="create"]')!;
+
+  function selectTab(tab: string): void {
+    const store = dialog.el.querySelector<HTMLElement>(".member-store")!;
+    dialog.el.querySelector<HTMLElement>(".cr-maker")!.hidden = tab !== "maker";
+    store.hidden = tab !== "store";
+    dialog.el.querySelector(".cr-tabs")!.innerHTML = tabHTML(tab);
+    if (tab === "store" && !storeMounted) {
+      storeMounted = true;
+      mountMemberStore(store, o.create, o.groupId, () => dialog.close());
+    }
+    dialog.el.querySelector<HTMLInputElement>(tab === "store" ? "[data-store-search]" : "#mb-new-name")!.focus();
+  }
 
   function drawFace(arriving: boolean): void {
     const face = dialog.el.querySelector<HTMLElement>(".cr-face")!;
@@ -100,6 +115,6 @@ export function openMemberCreator(o: MemberCreatorOptions): Dialog {
   name.addEventListener("input", nameChanged);
   drawFace(false);
   name.focus();
-  if (o.store) openMemberStore(o.create, o.groupId, () => dialog.close());
+  if (o.store) selectTab("store");
   return dialog;
 }

@@ -1,4 +1,5 @@
-.member-store { width: min(960px, calc(100vw - 32px)); height: min(900px, calc(100dvh - 80px)); }
+.member-store { width: min(960px, 100%); min-width: 0; }
+.member-store[hidden], .cr-maker[hidden] { display: none; }
 .store-categories { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 24px; }
 .store-categories [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .store-grid, .store-featured { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -9,10 +10,16 @@
 .store-entry h3, .store-entry p { margin: 0 0 6px; overflow-wrap: anywhere; }
 .store-entry .store-summary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .store-entry > button { align-self: center; }
-.template-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12px 0 20px; }
+.template-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 0; }
 .template-preview { width: min(calc(480px + 2 * var(--pa-dlg-pad)), calc(100vw - 32px)); }
-.template-preview h3 { margin-top: 24px; }
-.template-preview .card-well { margin-bottom: 12px; }
-.cr-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-.cr-tabs [aria-selected="true"] { background: var(--accent-soft); color: var(--accent-text); }
+.template-preview .mb-dlg-body { align-content: start; }
+.template-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.template-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+.template-section h3, .template-section h4, .template-section p { margin: 0; }
+.template-section h4 { font-size: var(--fs-sm); font-weight: 500; }
+.template-section .list { margin: 0; }
+.template-section .list > .template-text { padding: var(--sp-1) 0 var(--sp-2); }
+.template-warnings { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+.template-warnings p { margin: 0; }
+.cr-tabs { width: min(460px, 100%); }
 @media (max-width: 760px) { .store-grid, .store-featured { grid-template-columns: minmax(0, 1fr); } }

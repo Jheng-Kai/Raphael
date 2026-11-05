@@ -76,6 +76,7 @@ import { carryTyped } from "../secret-card";
 import { carryInlineSetup, mountInlineConnectionSetup } from "../connection-setup";
 import { carryMail } from "../mail-card";
 import { mountPages } from "../page-card";
+import { carryMessageMetadata, mountMessageMetadata } from "../message-metadata";
 import { mountMailActions } from "../mail-actions";
 import { mountGreeting } from "../member-greeting";
 import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
@@ -326,12 +327,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     name: () => members.nameOf(members.current()),
     face: () => members.faceOf(members.current(), 22),
     closePanel: () => members.setDetails(false),
-    openPanel: () => members.setDetails(true), panelVisible: () => members.detailsOpen(),
+    openPanel: () => members.computer(), panelVisible: () => members.detailsOpen() && members.details.dataset.detailsTab === 'computer',
     status: active => el.querySelector('[data-act="computer"]')!.classList.toggle('is-computer-active', active),
     changed: () => { if (visible && !scroller.hidden) drawThread(); },
     trySkill: text => sendFromPage(text),
     stop: turnId => { const turn = turns.find(turn => turn.id === turnId); return turn?.task ? api.workerCancel(turn.task.id) : turn?.session_id ? api.agentStop(turn.session_id, memberId()) : Promise.resolve(); },
   });
+  members.details.addEventListener('member-panel-tab', () => { if (visible && !roomPane.active) desktop.show(); desktop.sync(); });
   const detailsScrim = document.createElement("div");
   detailsScrim.className = "mb-det-scrim";
   detailsScrim.setAttribute("aria-hidden", "true");
@@ -437,7 +439,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     members.setDetails(!members.detailsOpen());
   });
   el.querySelector('[data-act="computer"]')!.addEventListener("click", () => {
-    members.setDetails(!members.detailsOpen());
+    members.computer();
   });
   window.addEventListener("conversations-changed", (event) => {
     const member = (event as CustomEvent<number>).detail;
@@ -929,6 +931,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const changed = patchThread(thread, wanted, drawnHTML, {
       arrives: line => drewOnce && (line.turnId === undefined ? !line.key.startsWith("day:") : line.turnId > newestDrawn && !droppedPending),
       carry(node, made) {
+        carryMessageMetadata(node, made);
         const restore = carryTyped(node, made), restoreMail = carryMail(node, made), restorePages = pagesHost.carry(node, made), restoreSetup = carryInlineSetup(node, made);
         return () => { node.before(made); restorePages(); restoreSetup(); desktop.carry(node); node.remove(); restore(); restoreMail(); };
       },
@@ -2081,6 +2084,15 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   const taskResults = mountTaskResults(thread, memberId, () => { desktop.files(); });
 
+  mountMessageMetadata(thread, control => {
+    const source = messageSource(control);
+    if (!source) return null;
+    const { turn, key } = source, messageKey = key === "question" ? "owner" : key;
+    const scope = { member_id: turn.member_id ?? 0, conversation_id: turn.conversation_id, turn_id: turn.id };
+    return { reactions: turn.reactions?.[messageKey] ?? [],
+      react: (emoji, active) => api.core("agent.react", { ...scope, message_key: messageKey, emoji, active }),
+      memo: turn.voice_memo ? action => api.core("agent.speak", { ...scope, memo_action: action, ...(key === "reply" ? {} : { message_seq: Number(key) }) }) : undefined };
+  }, () => { if (visible) void load(false); }, error => toaster.info(describeError(error)));
   mountMailActions(thread, (err) => toaster.info(describeError(err)), (words) => toaster.info(words));
 
   thread.addEventListener("input", (e) => {
@@ -2466,7 +2478,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       const wasVisible = visible;
       if (!wasVisible) { unreadFrom = null; unreadCaptured = false; openingThread = true; }
       visible = true;
-      if (arg === "computer") { if (roomPane.active) roomPane.close(); members.setDetails(true, true); }
+      if (arg === "computer") { if (roomPane.active) roomPane.close(); members.computer(); }
       if (!wasVisible) members.show();
       if (!roomPane.active) desktop.show();
       else void roomPane.refresh();

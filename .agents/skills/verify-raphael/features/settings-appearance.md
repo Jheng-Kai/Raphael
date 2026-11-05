@@ -11,11 +11,24 @@ Import memory stays inside General's About you section, immediately after shared
 Time zone and output folder keep their regrouped owner rows; updates stay in About.
 
 ```powershell
-npm run look -- update-found update-ready update-auto import-memory import-memory-result settings-owner about --theme both --width 1120,720,1920x1080
+npm run look -- about-no-updater-key update-found update-ready update-auto import-memory import-memory-result settings-owner about --theme both --width 1120,720,1920x1080
 ```
 
-About checks https://github.com/Jheng-Kai/Raphael/releases/latest/download/latest.json on opening.
+With a compiled public key, About checks https://github.com/Jheng-Kai/Raphael/releases/latest/download/latest.json on opening.
 The release-assets test rejects the former owner in updater configurations and publication.
+Release verification also covers both owner updater keys, neither key and either key alone.
+Only both keys enable version-bound signing and latest.json; otherwise one warning accompanies
+the verified installer, notices, BUILD-INFO and checksums, with no .sig or feed. The disabled
+mode uses a small config override and records its reason in BUILD-INFO. Publication reads the
+checked version job output in both modes. Signed mode refuses missing or malformed signatures
+and a mismatched trusted-comment version. These offline contracts do not prove a CI build or
+GitHub publication. Without a compiled public key, the existing native not_configured result
+maps to a quiet About row with the current app version, localized release-page guidance and
+one shared button. It opens https://github.com/Jheng-Kai/Raphael/releases through the existing
+open_external_url boundary. No unavailable check/install/automatic controls or error notice
+appear. The native check returns before contacting the feed; the release-page action makes
+no update request. The configured-key UI remains unchanged. about-no-updater-key checks the
+real settings entry, native opener boundary and absence of another update check.
 A newer version shows escaped notes
 and Download and restart. Auto update is off by default; opt-in downloads in the background,
 then installs only after ten minutes of native idle and a complete idle roster. The signed
@@ -23,7 +36,13 @@ artifact must include the manifest's version. One startup receipt reports the in
 version when the main page is visible; hidden startup retains the receipt. Unknown state,
 missing core, active or waiting members prevent installation.
 
-Selected look: update-found, update-ready, update-auto, import-memory,
+Selected look for the release-page fallback: about, about-no-updater-key, update-found,
+update-ready and update-auto; zh-TW, both themes, 1120,720,1920x1080. Inspect every contact
+sheet and the fallback at light 720 and dark 1120. Compare its button and row with About
+Help/License at the same theme and width. This fixture does not prove the default OS browser
+or installed-app behavior. No Rust changed for this mapping.
+
+Selected look for the original updater/import work: update-found, update-ready, update-auto, import-memory,
 import-memory-result, profile, chat, attachment-limits and attachment-too-large;
 zh-TW, both themes, 1120,720,1920x1080. Compare About's update actions and switch with
 General's existing controls, and import fields/buttons with the owner profile and settings.
@@ -319,3 +338,54 @@ within 1px, matching select/field widths, and left-aligned trigger text. Keep th
 same standard field/select padding inside those controls. No status note repeats
 the host, and host errors remain contextual. The follow-up matrix is the four host
 scenes plus desktop-panel, both themes at 1120,720,1920x1080.
+
+
+## Shared owner vault (2026-11-05)
+
+R-VAULT-01..05: Settings > Safety contains Vault. Entries have login, contact or
+card kinds, counted list filters, a label, one-line owner hint and all/chosen-member
+access. The counted filters browse records; they are not setting-value controls.
+Use the shared fieldHTML, sel/openMenu, row action menu and confirm menu.
+
+```powershell
+npm run look -- vault-list vault-filter vault-entry-menu vault-new-login vault-new-contact vault-new-card vault-sharing vault-import-preview vault-card-permission calm-thread --theme both --width 1120,720,1920x1080
+```
+
+Selected scenes: vault-list, vault-filter, vault-entry-menu, vault-new-login, vault-new-contact,
+vault-new-card, vault-sharing, vault-import-preview, vault-card-permission,
+calm-thread on the merged thread layout. Run both themes at
+1120,720,1920x1080. Inspect all contact sheets and each new scene at light 720
+and dark 1120. Compare fields, dropdowns, list filters, row menus and permission
+cards with existing consumers at the same dimensions.
+
+VaultEntries keeps only metadata in SQLite. Values stay in Windows Credential
+Manager. Migration 63 preserves every legacy computer_logins reference and its
+member grant without reading or rewriting a credential. CSV file input sends
+selected owner file bytes to an in-memory, ten-minute preview; previews return
+labels/origins only. Confirmation imports only checked entries, once; cancellation
+discards the preview. Chrome and 1Password login column variants are supported;
+non-HTTPS, malformed or non-login records are counted as skipped. The source is
+never copied. Partial credential-store failures report counts and require a fresh
+preview; inspect the list before retrying.
+
+The curated computer catalog adds vault_entries, fill_contact and fill_card.
+Members see opaque IDs, kinds, labels and hints, choose by hint and ask the owner
+if two fit. Value reads recheck member access and HTTPS origin before each input;
+driver echoes, exception details and screenshots stay private. Card use is firm
+T3 in every mode with no Always option, names merchant/amount/label, and persists
+a computer action hold before the first field. Only explicit owner completion of
+a payment takeover clears it; navigation, scripts, batched actions and restart
+do not. An interrupted payment may therefore require a fresh private payment
+takeover, even after restarting the core.
+
+Offline checks: tests/computer/test_vault_entries.py, test_login_vault.py,
+test_login_visibility.py, tests/agent/test_private_login.py, background question
+and snapshot consumers, frontend vault.test.ts and settings-view.test.ts. Tests
+use only fake keyrings and browsers. Real OS persistence, native file selection,
+real merchant pages, subscription judgment and live model choice remain separate
+acceptance. This unit explicitly skips full verify/core suites and forbids network.
+
+Payment permission cards deliberately show their merchant, amount and label in the
+shared card body without disclosure, and omit Always. Other permission cards keep
+their existing disclosure and policy. Vault kind filters use the same plain
+navigation tabs and inline counts as Connections; segmented filters remain exclusive to History and Dictionary.

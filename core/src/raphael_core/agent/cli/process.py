@@ -169,7 +169,7 @@ class Child:
             except OSError:
                 # Older hosts that disallow nested jobs still have taskkill /T below.
                 pass
-        # Normal runs discard diagnostics; native tests retain only a bounded tail.
+        # Keep a bounded tail for failure details; native diagnostic logging remains opt-in.
         self._stderr = asyncio.create_task(self._drain())
         return self
 

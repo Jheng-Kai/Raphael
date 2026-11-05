@@ -1,0 +1,46 @@
+// @vitest-environment happy-dom
+import { beforeEach, expect, test, vi } from "vitest";
+import { setLocale } from "./i18n";
+import { carryMessageMetadata, mountMessageMetadata, reactionControlHTML, reactionRowHTML, memoActionHTML, memoTranscriptHTML } from "./message-metadata";
+import { closeMenu } from "./ui";
+
+beforeEach(() => { closeMenu(); document.body.innerHTML = ""; setLocale("en"); });
+const flush = async (): Promise<void> => { for (let i=0;i<8;i++) await Promise.resolve(); };
+
+test("check reactions only update their message while decision cards remain untouched", async () => {
+  const host = document.createElement("section"); document.body.append(host);
+  host.innerHTML = `<div class="chat-message"><div class="message-actions">${reactionControlHTML()}</div>${reactionRowHTML(["👍"])}</div><button data-permission>Approve</button><input data-question value="Unanswered"><textarea data-draft>Unsent</textarea>`;
+  const react = vi.fn().mockResolvedValue({ok:true}), refresh = vi.fn(), fail = vi.fn();
+  const unmount = mountMessageMetadata(host, () => ({reactions:["👍"],react}), refresh, fail);
+  host.querySelector<HTMLButtonElement>('[data-act="react-message"]')!.click();
+  document.querySelector<HTMLButtonElement>('[data-value="✓"]')!.click(); await flush();
+  expect(react).toHaveBeenCalledExactlyOnceWith("✓",true);
+  expect(refresh).toHaveBeenCalledOnce(); expect(fail).not.toHaveBeenCalled();
+  expect(host.querySelector<HTMLInputElement>('[data-question]')!.value).toBe("Unanswered");
+  expect(host.querySelector<HTMLTextAreaElement>('[data-draft]')!.value).toBe("Unsent");
+  host.querySelector<HTMLButtonElement>('[data-reaction="👍"]')!.click(); await flush();
+  expect(host.querySelector('[data-reaction="👍"]')?.getAttribute("aria-pressed")).toBe("true");
+  expect(host.querySelector('[data-reaction="👍"]')?.getAttribute("aria-label")).toBe("Reaction 👍");
+  expect(react).toHaveBeenLastCalledWith("👍",false);
+  unmount();
+});
+
+test("playback refresh preserves an expanded transcript", () => {
+  const before = document.createElement("div"), after = document.createElement("div");
+  before.innerHTML = memoTranscriptHTML("Reply"); after.innerHTML = memoTranscriptHTML("Reply");
+  before.querySelector("details")!.open = true;
+  carryMessageMetadata(before, after);
+  expect(after.querySelector("details")!.open).toBe(true);
+});
+
+test("memo controls play and pause through one service and expose the literal transcript", async () => {
+  const host = document.createElement("section"); document.body.append(host);
+  host.innerHTML = memoActionHTML() + memoTranscriptHTML("Reply <script>unsafe()</script>");
+  const memo=vi.fn().mockResolvedValue({ok:true}), react=vi.fn();
+  const unmount=mountMessageMetadata(host,()=>({reactions:[],react,memo}),vi.fn(),vi.fn());
+  const button=host.querySelector<HTMLButtonElement>('[data-act="memo-play"]')!;
+  button.click(); await flush(); expect(memo).toHaveBeenLastCalledWith("play"); expect(button.getAttribute("aria-label")).toBe("Pause voice memo");
+  button.click(); await flush(); expect(memo).toHaveBeenLastCalledWith("pause"); expect(react).not.toHaveBeenCalled();
+  expect(host.querySelector("script")).toBeNull(); expect(host.textContent).toContain("Reply <script>unsafe()</script>");
+  unmount();
+});

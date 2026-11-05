@@ -856,8 +856,9 @@ class App(Router):
         # The card for a key a connection declares and the vault holds none of: the value goes from the
         # window to the vault, and that task's one resume follows.
         self.secret_cards = SecretCards(self._conn, self.integrations, notify=self._agent_notice)
-        from .computer.logins import LoginVault
-        self.login_vault = LoginVault(self.vault, conn=self._conn)
+        from .computer.vault_entries import VaultEntries
+        self.login_vault = VaultEntries(self.vault, conn=self._conn)
+        self.login_vault.register(self)
         self.secret_cards.logins = self.login_vault
         self.secret_cards.register(self)
         # The owner's safety rules (`safety.rules.*`), which the gate asks before every action that
@@ -1015,6 +1016,8 @@ class App(Router):
         # Work that was to leave a file is judged on the file found in the member's computer; the
         # shared computer says who holds it by the member's name.
         self.desktop_viewer.task_artifact = self.background.artifact_path
+        self.members.panel_workspaces = lambda member: [] if self.vm.remote else [
+            ("workspace", self.vm.target(member).workspace), ("team", self.vm.target(member).shared)]
         self.background.use_workspaces(
             lambda member: [path for path in (self.vm.target(member).workspace, self.vm.target(member).shared) if path] if self.vm.grants.allowed(member) else None)
         self.vm_tools.names = self.members.name_of

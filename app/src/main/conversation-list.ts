@@ -39,7 +39,7 @@ export function relativeTime(ms: number, now = Date.now()): string {
 /** A conversation nobody has written in yet: its title comes from its first question. */
 const isBlank = (conversation: ConversationInfo): boolean => conversation.kind !== "quick" && !conversation.title;
 
-export function mountConversationList(host: HTMLElement, options: { memberId: number; scope?: object; active?(): boolean; onOpen(id: number): void; collapseWhenEmpty?: boolean; onVisibility?(visible: boolean): void; current?(): number | undefined }): { refresh(): Promise<void>; destroy(): void } {
+export function mountConversationList(host: HTMLElement, options: { memberId: number; scope?: object; active?(): boolean; onOpen(id: number): void; collapseWhenEmpty?: boolean; showHeading?: boolean; onVisibility?(visible: boolean): void; current?(): number | undefined }): { refresh(): Promise<void>; destroy(): void } {
   let conversations: ConversationInfo[] = [];
   let epoch = 0, destroyed = false, dirty = false;
   host.classList.add("conversation-list");
@@ -62,7 +62,7 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
     const section = (kind: "quick" | "standard", label: string): string => {
       const items = found.filter(c => (c.kind === "quick") === (kind === "quick"));
       if (kind === "quick" && !items.length) return "";
-      return `<section class="conversation-section" data-conversation-section="${kind}">${kind === "standard" ? `<div class="mb-dh">${esc(label)}</div>` : ""}` + (items.length ? items.map(c => `<div class="conversation-row">` +
+      return `<section class="conversation-section" data-conversation-section="${kind}">${kind === "standard" && options.showHeading !== false ? `<div class="mb-dh">${esc(label)}</div>` : ""}` + (items.length ? items.map(c => `<div class="conversation-row">` +
       btn(`<span>${esc(conversationTitle(c))}</span><small>${esc(relativeTime(c.updated_at_ms))}</small>`, "conversation-open", ` data-conversation-open="${c.id}"`) +
       iconButton("more", t("chat.more"), ` data-conversation-more="${c.id}" aria-haspopup="menu"`, "conversation-more") + `</div>`).join("") : `<p class="conversation-empty">${esc(t("conversations.empty"))}</p>`) + `</section>`;
     };

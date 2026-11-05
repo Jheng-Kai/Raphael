@@ -89,6 +89,9 @@ def cells(registry=(), catalog=(), *, servers=()):
         ('editable_email', 'version_bound_send', 'cancel_zero_send', 'one_receipt', 'handoff_never_sends'), 'P08c', 'draft-handoff'))
     result.append(ScenarioCell('S05.gmail', 'Gmail draft and send (P08d scope)', SCENARIOS[4].prompt,
         SCENARIOS[4].assertions, 'P08d'))
+    result.append(ScenarioCell('S05.slack-draft', 'Slack draft edited and sent once',
+        'Prepare a Slack reply for my review before sending it.',
+        ('editable_slack', 'version_bound_send', 'cancel_zero_send', 'one_receipt'), 'P08c', 'slack-draft'))
     # S15's halves: a key saved in a card and the owner's turn at the computer (P08b), and the permission card of an
     # action that needs the owner's yes (P08c).
     result.append(ScenarioCell('S15.secret', 'Secret saved in chat (P08b scope)',

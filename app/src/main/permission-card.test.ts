@@ -8,6 +8,14 @@ import type { AgentTurn, PermissionCard } from "./types";
 
 afterEach(() => setLocale("zh-TW"));
 
+test("payment approval shows merchant, amount and card label without expanding details", () => {
+  const summary = "Company travel · https://shop.example · NT$ 1,280 · You complete payment.";
+  const html = permissionCardHTML(card({ tool: "fill_card", service: "Computer", summary, always: false }));
+  expect(html).toContain(`<p class="card-body cc-state">${summary}</p>`);
+  expect(actions(html)).toEqual(["perm-once", "perm-deny"]);
+  expect(html).not.toContain('class="card-detail"');
+});
+
 test("real app permissions name their member and action in all window languages", () => {
   const words = {
     "zh-TW": ["Alex想要傳送 Slack 訊息", "Alex想要寄信", "Alex想要使用 Slack"],

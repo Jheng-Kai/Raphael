@@ -688,3 +688,19 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .thread mark[data-find-match] { padding: 0; background: var(--hover); color: var(--text); text-decoration: underline dotted; text-underline-offset: 2px; }
 .thread mark.is-current { outline: 2px solid var(--text); outline-offset: 1px; text-decoration: underline; text-decoration-thickness: 2px; background: var(--text); color: var(--content); }
 .chat-message.is-search-expanded .message-text { max-height: none; -webkit-line-clamp: unset; mask-image: none; }
+.message-reactions { display: flex; gap: var(--sp-1); margin-block: var(--sp-1); }
+.message-reactions .reaction { min-width: 28px; min-height: 24px; padding: 0 var(--sp-2); background: var(--surface-2); color: var(--text); border-radius: var(--r-sm); }
+.memo-transcript { margin-block: var(--sp-2); font-size: var(--fs-sm); color: var(--text-2); }
+.memo-transcript summary { cursor: pointer; width: fit-content; }
+.memo-transcript p { white-space: pre-wrap; color: var(--text); margin-block: var(--sp-2); }
+.room-thread-chip { color: var(--text-2); margin-top: var(--sp-1); }
+.au-room-pane.has-side-thread { position: relative; }
+.room-side-thread { position: absolute; z-index: 12; inset: 0 0 0 auto; width: min(440px, 100%); display: flex; flex-direction: column; background: var(--content); border-left: 1px solid var(--edge); padding-top: var(--sp-3); }
+.room-side-thread > header { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-3) var(--sp-5); }
+.room-side-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: var(--sp-4) var(--sp-5); }
+.room-thread-origin { border-bottom: 1px solid var(--edge); margin-bottom: var(--sp-4); padding-bottom: var(--sp-3); }
+.room-side-thread .thread { list-style: none; padding: 0; margin: 0; }
+.room-side-thread .tn { margin-block: var(--sp-3); }
+.room-thread-dock { padding: var(--sp-3); }
+.room-side-thread .chat-message { max-width: 100%; }
+@media (min-width: 1100px) { .au-room-pane.has-side-thread > .ra-stage, .au-room-pane.has-side-thread > .page-head { margin-right: 440px; } }
