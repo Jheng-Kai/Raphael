@@ -328,7 +328,10 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       }
     } else {
       if (tab === "details") {
-        if (!body.querySelector('.mb-panel-routines')) patchHTML(body, `<section class="mb-panel-tasks" data-k="panel-tasks"></section><section class="mb-panel-routines" data-k="panel-routines"></section><section><div class="mb-dh">${esc(t('members.panelConversations'))}</div><div data-slot="conversations" data-k="panel-conversations"></div></section>`);
+        if (!body.querySelector('.mb-panel-routines')) patchHTML(body, `<section class="mb-panel-tasks" data-k="panel-tasks"></section><section class="mb-panel-routines" data-k="panel-routines"></section><section><div class="mb-dh" data-panel-conversations-heading>${esc(t('members.panelConversations'))}</div><div data-slot="conversations" data-k="panel-conversations"></div></section>`);
+        // The skeleton is kept across draws, so its heading follows a language change here.
+        const heading = body.querySelector<HTMLElement>('[data-panel-conversations-heading]');
+        if (heading && heading.textContent !== t('members.panelConversations')) heading.textContent = t('members.panelConversations');
         patchHTML(body.querySelector('.mb-panel-tasks')!, panelTasksHTML(work, workFailed));
         patchHTML(body.querySelector('.mb-panel-routines')!, routinesHTML());
       } else if (tab === 'library') {
