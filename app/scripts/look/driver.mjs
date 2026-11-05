@@ -593,7 +593,8 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case "stable-click":
     case "click": {
-      const enabled = step.action === "stable-click" || await page.evaluate(({ selector, selectors }) => [...document.querySelectorAll(selector)].some(node => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0 && node.matches(selectors) && !node.closest('#nav, .page-home')), { selector: step.selector, selectors: stableControls });
+      // A choice in a shared popover (the narrow calendar tools' dates) closes it once made; tabs there stay checked.
+      const enabled = step.action === "stable-click" || await page.evaluate(({ selector, selectors }) => [...document.querySelectorAll(selector)].some(node => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0 && node.matches(selectors) && !node.closest('#nav, .page-home') && !(node.closest('#app-popover') && node.matches('button[aria-pressed]'))), { selector: step.selector, selectors: stableControls });
       if (!enabled) { await click(step.selector); break; }
       const target = await visible(step.selector);
       await target.evaluate(node => node.scrollIntoView({ block: "nearest", inline: "nearest" }));
