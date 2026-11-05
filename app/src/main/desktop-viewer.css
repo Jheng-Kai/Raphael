@@ -114,6 +114,8 @@
 .desktop-takeover-bar .computer-location { flex: 0 1 auto; }
 .menu.computer-location-popover { width: min(380px, calc(100vw - var(--sp-4))); padding: var(--sp-3); }
 .menu.computer-location-popover .slist { --slist-pad: 0px; padding-inline: 0; }
+/* The repair command's copy button is a code block control, not a menu row. */
+.menu .message-code .btn.icon { flex-direction: row; align-items: center; justify-content: center; width: auto; min-height: 0; gap: 0; padding: 0; }
 .menu.computer-location-popover .row { flex-direction: column; align-items: stretch; min-height: 0; gap: var(--sp-2); padding-block: var(--sp-2); }
 .menu.computer-location-popover .row > .lbl { flex: none; min-width: 0; }
 .menu.computer-location-popover .row > .ctl { width: 100%; margin-left: 0; justify-content: flex-start; }
