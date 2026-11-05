@@ -1538,6 +1538,37 @@ PRAGMA user_version = 64;
 COMMIT;
 """
 
+_MIGRATIONS[67] = """
+BEGIN;
+CREATE TABLE voice_calls (
+    id TEXT PRIMARY KEY,
+    member_id INTEGER NOT NULL,
+    conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    started_at_ms INTEGER NOT NULL,
+    ended_at_ms INTEGER,
+    summary_id INTEGER REFERENCES agent_turns(id) ON DELETE CASCADE,
+    failure TEXT,
+    rating TEXT CHECK(rating IN ('good','bad'))
+);
+CREATE TABLE voice_call_turns (
+    call_id TEXT NOT NULL REFERENCES voice_calls(id) ON DELETE CASCADE,
+    turn_id INTEGER NOT NULL UNIQUE REFERENCES agent_turns(id) ON DELETE CASCADE,
+    PRIMARY KEY(call_id,turn_id)
+);
+CREATE TRIGGER clear_conversation_voice_calls AFTER DELETE ON conversations BEGIN
+    DELETE FROM voice_calls WHERE conversation_id=OLD.id;
+END;
+CREATE TRIGGER clear_voice_call_turns AFTER DELETE ON voice_calls BEGIN
+    DELETE FROM voice_call_turns WHERE call_id=OLD.id;
+END;
+CREATE TRIGGER clear_turn_voice_calls AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM voice_call_turns WHERE turn_id=OLD.id;
+    DELETE FROM voice_calls WHERE summary_id=OLD.id;
+END;
+PRAGMA user_version = 67;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

@@ -1,3 +1,4 @@
+import voiceCall from "./voice-call.mjs";
 import colleagues from "./colleagues.mjs";
 import memberStore from "./member-store.mjs";
 import cards from "./cards.mjs";
@@ -44,6 +45,7 @@ import ownerRound9 from "./owner-round9.mjs";
 import { withOwnerRound4, noNaming } from "./owner-round4.mjs";
 
 export const scenes = withOwnerRound4([...polish, ...mcpProposals, ...workBatch, ...batch, ...missing, ...ownerQuestions, ...richContent, ...sidebar, ...shortcuts, ...slime, ...pages, ...home, ...chat, ...desktop, ...automations, ...mentions, ...history, ...composerVoice, ...settings, ...apps, ...contextMenu, ...overlay, ...ownerRound, ...ownerRound3, ...ownerRound9, ...ownerRound10, noNaming]);
+scenes.push(...voiceCall);
 scenes.push(...colleagues);
 scenes.push(...memberStore);
 scenes.push(...mediaData);

@@ -361,7 +361,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 64
+LATEST = 67
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -609,17 +609,25 @@ SCHEMA_V64 = {
 }
 
 
-@pytest.mark.parametrize("start_version, expected_steps", [(62, [63, 64]), (63, [64])])
-def test_v64_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(monkeypatch, tmp_path, start_version, expected_steps):
-    path = tmp_path / f"v{start_version}-to-v64.db"
+SCHEMA_V67 = {
+    **SCHEMA_V64,
+    "voice_calls": ["id TEXT PK", "member_id INTEGER NOT NULL", "conversation_id INTEGER NOT NULL",
+                    "started_at_ms INTEGER NOT NULL", "ended_at_ms INTEGER", "summary_id INTEGER", "failure TEXT", "rating TEXT"],
+    "voice_call_turns": ["call_id TEXT PK NOT NULL", "turn_id INTEGER PK NOT NULL"],
+}
+
+
+@pytest.mark.parametrize("start_version, expected_steps", [(62, [63, 64, 67]), (63, [64, 67]), (64, [67])])
+def test_v67_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(monkeypatch, tmp_path, start_version, expected_steps):
+    path = tmp_path / f"v{start_version}-to-v67.db"
     with monkeypatch.context() as old:
         old.setattr(db, "LATEST_VERSION", 62)
         conn = db.connect(path)
     with conn:
         conn.execute("INSERT INTO computer_logins(member_id,origin,reference) VALUES (7,'https://login.example.invalid','legacy-login')")
-    if start_version == 63:
+    if start_version >= 63:
         with monkeypatch.context() as old:
-            old.setattr(db, "LATEST_VERSION", 63)
+            old.setattr(db, "LATEST_VERSION", start_version)
             db.migrate(conn)
         with conn:
             conn.execute("UPDATE vault_entries SET label='Owner label',hint='Owner hint' WHERE id='legacy-login'")
@@ -630,19 +638,19 @@ def test_v64_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(mo
                             if sql.strip().startswith('PRAGMA user_version =') else None)
     db.migrate(conn)
     assert steps == expected_steps
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 64
-    for table, columns in SCHEMA_V64.items():
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 67
+    for table, columns in SCHEMA_V67.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     entry = conn.execute("SELECT kind,label,hint,origin,members,credential FROM vault_entries WHERE id='legacy-login'").fetchone()
-    assert tuple(entry) == ("login", "Owner label" if start_version == 63 else "https://login.example.invalid",
-                            "Owner hint" if start_version == 63 else "", "https://login.example.invalid", "[7]", "computer-login:legacy-login")
-    assert conn.execute("SELECT COUNT(*) FROM computer_payment_holds").fetchone()[0] == (start_version == 63)
+    assert tuple(entry) == ("login", "Owner label" if start_version >= 63 else "https://login.example.invalid",
+                            "Owner hint" if start_version >= 63 else "", "https://login.example.invalid", "[7]", "computer-login:legacy-login")
+    assert conn.execute("SELECT COUNT(*) FROM computer_payment_holds").fetchone()[0] == (start_version >= 63)
     db.migrate(conn)
     assert steps == expected_steps
     conn.close()
     reopened = db.connect(path)
-    assert reopened.execute("PRAGMA user_version").fetchone()[0] == 64
+    assert reopened.execute("PRAGMA user_version").fetchone()[0] == 67
     assert reopened.execute("SELECT COUNT(*) FROM vault_entries").fetchone()[0] == 1
     reopened.close()
 
@@ -801,7 +809,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V64) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V67) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -821,7 +829,7 @@ def test_connect_creates_the_latest_schema(conn):
         "agent_inbox_started",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V64.items():
+    for table, columns in SCHEMA_V67.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [

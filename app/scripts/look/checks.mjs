@@ -70,6 +70,35 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name};
   }
+  if (name.startsWith("voice-call-")) {
+    require(["voice-call-idle", "voice-call-panel", "voice-call-transcript", "voice-call-settings", "voice-call-ended", "voice-call-no-mic", "voice-call-busy"].includes(name), "known voice call check");
+    const calls = window.__look.calls;
+    if (name === "voice-call-idle") require(visible(document.querySelector('.cmp-voice[data-voice-call-start="true"]')), "empty member composer offers voice chat");
+    if (["voice-call-panel", "voice-call-transcript", "voice-call-settings"].includes(name)) {
+      require(visible(document.querySelector('.voice-call')), "one call panel is visible");
+      require(!visible(document.querySelector('.page-agent .composer')), "call replaces the composer");
+      require(document.querySelectorAll('.voice-call svg.slime').length === 1, "one existing member slime");
+      require(![...document.querySelectorAll('.ra-empty > .ra-hero')].some(visible), "the call does not duplicate the empty-thread character");
+      require(calls.filter(call => call.method === "voice_chat.start").length === 1, "one call admission");
+    }
+    if (name === "voice-call-transcript") require(document.querySelectorAll('.voice-call [data-call-turn]').length === 1, "transcript contains the owner and member turn");
+    if (name === "voice-call-settings") require(document.querySelectorAll('.vc-settings .sel').length === 3, "three shared dropdowns");
+    if (name === "voice-call-ended") {
+      require(document.querySelectorAll('[data-call-card]').length === 1, "one receipt after hang-up");
+      require(!document.querySelector('.tn[data-id="8701"]'), "normal call turns fold under the card");
+      require(document.querySelector('[data-call-rating="good"]').getAttribute('aria-pressed') === 'true', "local rating persists");
+      require(calls.some(call => call.method === "voice_chat.end") && calls.some(call => call.method === "voice_chat.feedback"), "hang-up and feedback cross the real IPC boundary");
+    }
+    if (name === "voice-call-no-mic") {
+      require(visible(document.querySelector('.vc-card [data-missing-repair="dictation"]')), "one actionable shared repair entry");
+      require(!visible(document.querySelector('.vc-failure')), "no duplicate failure sentence by the composer");
+    }
+    if (name === "voice-call-busy") {
+      require(visible(document.querySelector('.vc-confirm [data-dlg="replace"]')), "explicit end and start confirmation");
+      require(!calls.some(call => call.method === "voice_chat.end"), "opening confirmation does not hang up");
+    }
+    return { check: name };
+  }
   if (name.startsWith("colleague-")) {
     const calls = window.__look.calls;
     if (name === "colleague-gallery") require(document.querySelectorAll('.template-gallery svg.slime').length === 8, "eight existing slime characters");

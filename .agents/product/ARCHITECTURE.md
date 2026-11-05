@@ -1,5 +1,19 @@
 # Raphael architecture and checked boundaries
 
+## Member voice-call boundary (2026-11-05)
+
+VoiceChat orchestrates existing DictationService, AgentService and Speaker; it owns
+one call across the owner window. Dictation's call-only VAD callback signals speech
+and pause on the loop; ordinary hotkey recording semantics are unchanged. Speaker's
+existing PCM stop event handles barge-in before its next block. Calls never enter
+room routing or add a model/provider loop (A-01/03/04). Frontend RPCs stay in api.ts
+and six literal voice_chat methods have explicit shell allowlist entries (A-06/10).
+Migration 67 adds call metadata and links to ordinary history turns; the history
+projection folds them under one receipt, with local feedback (A-11, R-UI-101).
+Settings reuse shared dropdowns and the existing repair navigation, without another
+settings registry (A-07/08). Fake audio tests do not prove native/live acceptance.
+
+
 ## Conversation metadata boundary (2026-11-05)
 
 Migration 64 adds bounded owner reaction tables with message/turn ownership, side

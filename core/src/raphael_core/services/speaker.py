@@ -134,6 +134,7 @@ class _Utterance:
     finished: bool = False
     playing: bool = False
     voice: str | None = None
+    speed: float = 1.0
 
 
 class Speaker:
@@ -214,6 +215,18 @@ class Speaker:
         except TimeoutError:
             pass
 
+    async def say_call(self, text: str, *, voice: str, speed: float, turn_id: int) -> str | None:
+        """Stream a call reply through the same player and wait for its actual end."""
+        self.stop()
+        utterance = self._start(line("", text), turn_id, voice=voice or None, speed=speed)
+        try:
+            await asyncio.shield(utterance.task)
+        except asyncio.CancelledError:
+            # A failed player cancels its producer; owner cancellation must still propagate.
+            if not utterance.failure or asyncio.current_task().cancelling():
+                raise
+        return utterance.failure
+
     def memo_control(self, turn_id, *, pause):
         current = self._current
         if current is None or current.turn_id != turn_id or current.finished:
@@ -239,8 +252,8 @@ class Speaker:
         if task is not None and not task.done():
             task.cancel()
 
-    def _start(self, spoken: str, turn_id: int | None = None, *, voice: str | None = None) -> _Utterance:
-        utterance = _Utterance(turn_id=turn_id, voice=voice)
+    def _start(self, spoken: str, turn_id: int | None = None, *, voice: str | None = None, speed: float = 1.0) -> _Utterance:
+        utterance = _Utterance(turn_id=turn_id, voice=voice, speed=speed)
         self._current = utterance
         task = asyncio.get_running_loop().create_task(self._speak(spoken, utterance))
         utterance.task = task
@@ -303,7 +316,7 @@ class Speaker:
                 source.put(first)
                 playing = asyncio.ensure_future(
                     asyncio.to_thread(
-                        self._player_now().play, source, PCM_RATE, utterance.stopped, started
+                        self._player_now().play, source, round(PCM_RATE * utterance.speed), utterance.stopped, started
                     )
                 )
                 playing.add_done_callback(lambda done: self._played(utterance, done))
@@ -313,6 +326,7 @@ class Speaker:
                             break
                         source.put(chunk)
                 except ServiceError as error:  # the stream broke: what came is played
+                    utterance.failure = error.kind
                     self._failed(error.kind)
                 source.put(None)
             try:

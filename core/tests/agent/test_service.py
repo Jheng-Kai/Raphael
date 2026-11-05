@@ -1764,6 +1764,23 @@ async def test_a_question_typed_in_a_formal_thread_leaves_the_quick_one_waiting(
     assert not any(t["status"] == "denied" for t in await rig.turns())
 
 
+async def test_voice_call_source_uses_the_ordinary_private_member_answer(make_rig, conn, client, tmp_path):
+    from raphael_core.members.service import MembersService
+    from raphael_core.voice_chat import CALL_SOURCE
+    from .test_narration import chat
+    team = MembersService(conn, tmp_path, background=FakeBackground())
+    member = team.store.create_member(name="Voice member")
+    rig = make_rig(team=team)
+    conversation = rig.service.conversations.main(member.id)
+    client.chats.append(chat('{"text":"Member reply"}'))
+    result = await rig.call("agent.ask", {"session_id":"call-contract", "text":"Owner question", "ui_language":"en",
+                                        "source":CALL_SOURCE, "member_id":member.id, "conversation_id":conversation})
+    turn = conn.execute("SELECT * FROM agent_turns WHERE id=?", (result["turn_id"],)).fetchone()
+    assert turn["status"] == "done" and turn["source"] == CALL_SOURCE
+    assert turn["member_id"] == member.id and turn["conversation_id"] == conversation
+    assert turn["text"] == "Member reply"
+
+
 async def test_stopping_a_session_ends_its_request_and_denies_its_question_only(rig, client, actions):
     rig.seed("q", "a")
     asked = await ask_to_copy(rig, client)

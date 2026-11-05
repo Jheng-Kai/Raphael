@@ -43,6 +43,20 @@ describe("rendered look checks", () => {
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });
 
+  it("returns the voice call check result without falling through and rejects unknown call checks", () => {
+    const browser = new Window();
+    browser.document.body.innerHTML = '<button class="cmp-voice" data-voice-call-start="true"></button>';
+    const entry = browser.document.querySelector("button");
+    entry.checkVisibility = () => true;
+    entry.getBoundingClientRect = () => ({width:32,height:32});
+    browser.__look = {calls:[]};
+    vi.stubGlobal("window", browser);
+    vi.stubGlobal("document", browser.document);
+    try {
+      expect(checkRendered("voice-call-idle")).toEqual({check:"voice-call-idle"});
+      expect(() => checkRendered("voice-call-unknown")).toThrow("known voice call check");
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
   it("rejects split text edges, mismatched controls and centered location values", () => {
     const browser = new Window();
     browser.document.body.innerHTML = '<div class="computer-location-popover"><p class="computer-location-purpose">Shared scope</p><div class="lbl"><div class="t">Computer location</div></div><button class="sel"><span>Local</span></button><label class="field"><input></label></div>';

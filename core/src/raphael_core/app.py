@@ -1057,6 +1057,10 @@ class App(Router):
         self._closed = False
         self._shutdown_requested = asyncio.Event()
 
+        from .voice_chat import VoiceChat
+        self.voice_chat = VoiceChat(self._conn, self, self.agent, self.members.store, self.speaker, self.services)
+        self.voice_chat.register()
+
         methods = {
             "core.hello": self._hello,
             "core.shutdown": self._shutdown,
@@ -1165,6 +1169,7 @@ class App(Router):
             segmenter_factory=self._dictation_segmenter,
             engine_provider=self._dictation_engine,
             on_idle=self._on_dictation_idle,
+            on_voice_activity=self.voice_chat.activity,
         )
         service.register(self._inner)
         self._service.set_result(service)
@@ -1216,6 +1221,7 @@ class App(Router):
         steps: list[tuple[str, Callable[[], Awaitable[None]]]] = [
             ("stop the calendar refresh", self.home.calendar_events.aclose),
             ("end room routing calls", self.rooms.aclose),
+            ("end the voice call", self.voice_chat.aclose),
             ("cancel the dictation", close_dictation),
             ("close the level meter", close_meter),
             ("stop the account usage refresh", self.brain.aclose),
@@ -1450,6 +1456,10 @@ class App(Router):
         if method == "agent.turn" and type(params.get("turn_id")) is int and not params.get("activity_only"):
             if hasattr(self, "agent"):
                 asyncio.get_running_loop().call_soon(self.agent.sync_owner_cards)
+                call = getattr(self, "voice_chat", None)
+                if call and call.current and call.current.request:
+                    call._link(call.current, call.current.request)
+                    call.turn_changed()
             self.members.turn_arrived(params["turn_id"])
             self.rooms.turn_arrived(params["turn_id"])
         self.notify(method, params)
@@ -1793,7 +1803,9 @@ class App(Router):
         way the meter stays suspended, so a stop that ends meanwhile cannot reopen it beside the
         new dictation.
         """
-        if method == "dictation.start":
+        if method == "dictation.start" and params.get("purpose") != "voice_chat":
+            if self.voice_chat.current:
+                raise RpcError(BUSY, "A voice call owns the microphone")
             self.speaker.stop()  # a new recording ends what Raphael was saying
         service = await self._wait_for(self._service)
         if method != "dictation.start":
