@@ -78,6 +78,7 @@ class RoomsService:
     def register(self, router):
         for method, handler in {"rooms.list":self._list, "rooms.create":self._create,
                                 "rooms.delete":self._delete, "rooms.messages":self._messages,
+                                "rooms.react":self._react, "rooms.thread_open":self._thread_open,
                                 "rooms.send":self._send, "rooms.stop":self._stop, "rooms.update":self._update, "rooms.transcribe":self._transcribe}.items():
             router.register(method, handler)
 
@@ -337,9 +338,10 @@ class RoomsService:
 
     async def _stop(self, params):
         room = self._room(params)
-        self._exchanges.stop(room["id"])
+        thread = self._thread(room, params['thread_id']) if 'thread_id' in params else None
+        self._exchanges.stop(room["id"], thread)
         if hasattr(self._background, 'cancel_room'):
-            await self._background.cancel_room(room['id'])
+            await self._background.cancel_room(room['id'], **({'thread_id':thread} if thread is not None else {}))
         await self._exchanges.drive(room["id"])
         self._changed(room["id"])
         return {"stopped":True}
@@ -454,6 +456,11 @@ class RoomsService:
         turn = self._history.get(message["turn_id"]) if message["turn_id"] else None
         message["status"] = "done" if message["member_id"] is None else (turn.status if turn else "error")
         message["scope"] = "room"
+        message['reactions'] = [r[0] for r in self._conn.execute('SELECT emoji FROM room_reactions WHERE message_id=? ORDER BY emoji', (row['id'],))]
+        side = self._conn.execute('SELECT id FROM room_threads WHERE room_id=? AND parent_message_id=?', (row['room_id'], row['id'])).fetchone()
+        if side:
+            message['reply_thread_id'] = side[0]
+            message['reply_count'] = self._conn.execute("SELECT COUNT(*) FROM room_messages m LEFT JOIN agent_turns t ON t.id=m.turn_id WHERE m.thread_id=? AND (m.member_id IS NULL OR (t.status='done' AND trim(COALESCE(t.detail,t.text,m.text)) NOT IN ('','(pass)')))", (side[0],)).fetchone()[0]
         message["author_kind"] = "owner" if message["member_id"] is None else "member"
         message["author_member_id"] = message["member_id"]
         message["reply_reference"] = None
@@ -494,9 +501,35 @@ class RoomsService:
             message["text"] = ""
         return message
 
+    async def _react(self, params):
+        from ..agent.reactions import set_reaction
+        room = self._room(params)
+        message_id = params.get("message_id")
+        if type(message_id) is not int or not self._conn.execute(
+                "SELECT 1 FROM room_messages WHERE room_id=? AND id=?", (room['id'], message_id)).fetchone():
+            raise invalid_params("there is no such room message")
+        set_reaction(self._conn, params, message_id=message_id)
+        self._changed(room['id'])
+        return {'ok': True}
+
+    async def _thread_open(self, params):
+        room = self._room(params)
+        message_id = params.get('message_id')
+        parent = self._conn.execute('SELECT * FROM room_messages WHERE room_id=? AND id=?', (room['id'], message_id)).fetchone() if type(message_id) is int else None
+        if parent is None:
+            raise invalid_params('there is no such room message')
+        # A side thread always points to one main-room message, never a nested thread.
+        if self._conn.execute('SELECT parent_message_id FROM room_threads WHERE id=?', (parent['thread_id'],)).fetchone()[0] is not None:
+            raise invalid_params('nested room threads are unavailable')
+        with self._conn:
+            self._conn.execute('INSERT OR IGNORE INTO room_threads(room_id,created,parent_message_id) VALUES(?,?,?)', (room['id'], self._now(), message_id))
+        thread = self._conn.execute('SELECT id FROM room_threads WHERE room_id=? AND parent_message_id=?', (room['id'], message_id)).fetchone()[0]
+        self._changed(room['id'])
+        return {'thread_id': thread}
+
     async def _messages(self, params):
         room = self._room(params)
-        thread_id = self._thread(room, params["thread_id"]) if "thread_id" in params else None
+        thread_id = self._thread(room, params.get("thread_id"))
         before = params.get("before")
         if before is not None and (type(before) is not int or before < 1):
             raise invalid_params("before must be a positive message id")
@@ -516,7 +549,8 @@ class RoomsService:
                 break
             cursor = rows[-1]["id"]
         questions = getattr(self._background, "owner_questions", None)
-        return {"messages":list(reversed(messages)), "exchange":self._exchanges.latest(room["id"]),
+        parent = self._conn.execute('SELECT m.* FROM room_threads t JOIN room_messages m ON m.id=t.parent_message_id AND m.room_id=t.room_id WHERE t.id=? AND t.room_id=?', (thread_id, room['id'])).fetchone()
+        return {"parent": self._message(parent) if parent else None, "messages":list(reversed(messages)), "exchange":self._exchanges.latest(room["id"],thread_id),
                 "pending_questions":questions.in_conversation(room_id=room['id'],thread_id=thread_id) if questions is not None else [],
                 "handoffs":self._background.handoff_views(room_id=room['id'],thread_id=thread_id),
                 **self.speech_context(room['id'],thread_id or self._thread(room))}

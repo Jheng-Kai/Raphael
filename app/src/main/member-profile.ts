@@ -37,7 +37,7 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
   let groupId = member.group_id ?? null;
   let avatar = member.avatar ?? "";
   let preset: ProfilePreset = "custom";
-  const voice = { voice: member.voice ?? "", read_aloud: member.read_aloud ?? false, notify: member.notify ?? false };
+  const voice = { voice: member.voice ?? "", voice_memo: member.voice_memo ?? false, read_aloud: member.read_aloud ?? false, notify: member.notify ?? false };
   let ask = member.ask_before_members ?? false;
   let draftFirst = member.draft_first ?? true;
   let reply = member.reply_style ?? "full";

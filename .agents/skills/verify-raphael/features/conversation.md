@@ -1,5 +1,47 @@
 # Conversation
 
+## Message metadata and side threads (2026-11-05)
+
+Reactions are owner-authored message metadata: one hover control opens 👍, ❤, ✓ and ?;
+selected reactions sit under that message. Repeating a selection removes it. Private
+model context and room transcripts label reactions as metadata, never approval or
+instructions. No reaction answers a permission, owner question or draft.
+
+Room action rows open a side thread. The main room keeps only an N-reply chip under
+the root; rooms.messages defaults to the main thread. The existing room worker and
+thread_id carry the replies, with only the root plus that thread in member context.
+No sibling or main-room discussion joins the side context.
+Side-thread Stop cancels only its exchange and worker trees. Room permission queries
+default to the main thread, with explicit thread_id for a side thread; legacy null
+thread tasks belong to the main thread. Side replies use the shared conversation cards.
+
+Slack drafts reuse the email store, digests, owner edits, conditional send claim,
+safety screening and existing permission modes. The slack_draft tool is private-chat
+only, including resumed/background calls. Channels/people and body are editable;
+only Send sends, while Discard changes no external state. The member's draft_first
+preference applies to discovered Slack send tools as well as email.
+Guardian S05.slack-draft exercises the production model/tool loops and draft RPCs
+with a recording Slack connector: editable card, discard without sending, old
+digest refusal and one version-bound send. It maps slack_draft in the tool registry;
+offline API/CLI fakes prove the driver, separately from authorized live acceptance.
+
+Voice memos reuse agent.speak and the configured read-aloud service. A member's voice
+settings enable them separately from automatic read-aloud, off by default. Play/Pause
+stays in the message action row and the expandable transcript is the reply text.
+The existing PCM player retains unplayed samples while paused; this adds no live call.
+
+```powershell
+npm run look -- reaction-picker reaction-row reaction-not-approval room-thread-open room-thread-chip slack-draft voice-memo calm-thread --theme both --width 1120,720,1920x1080
+```
+
+Synthetic zh-TW fixtures replace only native IPC. Inspect all contact sheets and every
+new scene at light 720 and dark 1120, then judge this same selected run. Compare the
+Slack card with email, reaction/thread chips with shared compact controls and memo
+actions with adjacent reply/copy controls. Tests use fake Slack and TTS only. Native
+persistence/playback, live Slack/provider behavior and design judge remain separate.
+
+Attribution: Interaction reference: Grok Bot, Message and collaborate, local research snapshot 2026-11-05; no external code or assets copied.
+
 ## Calm conversations (owner request, 2026-11-05)
 
 R-UI-101 supersedes the older centred routine/event and thirty-minute separator

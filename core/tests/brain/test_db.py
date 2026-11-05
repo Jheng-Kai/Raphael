@@ -361,7 +361,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 62
+LATEST = 64
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -593,6 +593,14 @@ SCHEMA_V62 = {
     "skill_sets": ["id INTEGER PK", "identity TEXT NOT NULL", "name TEXT NOT NULL", "version TEXT NOT NULL", "source TEXT NOT NULL", "description TEXT NOT NULL", "folder TEXT NOT NULL", "metadata TEXT NOT NULL"],
     "member_skills": [*SCHEMA_V61["member_skills"], "set_id INTEGER", "set_key TEXT", "set_kind TEXT"],
 }
+SCHEMA_V64 = {
+    **SCHEMA_V62,
+    "room_threads": [*SCHEMA_V62["room_threads"], "parent_message_id INTEGER"],
+    "message_reactions": ["turn_id INTEGER PK NOT NULL", "message_key TEXT PK NOT NULL", "emoji TEXT PK NOT NULL"],
+    "room_reactions": ["message_id INTEGER PK NOT NULL", "emoji TEXT PK NOT NULL"],
+    "email_drafts": [*SCHEMA_V62["email_drafts"], "kind TEXT NOT NULL DEFAULT 'email'"],
+    "members": [*SCHEMA_V62["members"], "voice_memo INTEGER NOT NULL DEFAULT 0"],
+}
 
 
 def test_v48_adds_the_calendar_without_changing_existing_members_and_keeps_events_on_reopen(tmp_path):
@@ -749,7 +757,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V62) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V64) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -769,7 +777,7 @@ def test_connect_creates_the_latest_schema(conn):
         "agent_inbox_started",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V62.items():
+    for table, columns in SCHEMA_V64.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [

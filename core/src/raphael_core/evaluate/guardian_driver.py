@@ -322,6 +322,8 @@ class RpcDriver:
             reasons, result = await self.permission_scenario()
         elif cell.driver == 'draft-handoff':
             reasons, result = await self.draft_handoff_scenario()
+        elif cell.driver == 'slack-draft':
+            reasons, result = await self.slack_draft_scenario()
         elif cell.driver == "team-setup":
             reasons = []
             # Where the owner asks first a team is a draft for them to edit; in 自動 it is made at once.
@@ -1383,6 +1385,52 @@ class RpcDriver:
         if not sent["sent"] or again["sent"] or len(sends()) != 1 or sends()[0]["argument_digest"] != digest(edited):
             reasons.append("one_receipt")
         return reasons, {**asked, "viewer": mail}
+
+    async def slack_draft_scenario(self):
+        """Exercise the shared draft RPCs with a recorded Slack transport, never a real send."""
+        member = (await self.seed_team())[1]
+        schema = {"type": "object", "properties": {key: {"type": "string"} for key in ("channel", "text")},
+                  "required": ["channel", "text"], "additionalProperties": False}
+        tool = ToolRecord("post_message", "Post a synthetic Slack reply", schema,
+                          fingerprint("post_message", "Guardian Slack fixture", schema), read_only_hint=False)
+        self.app.integrations._config.add(checked(ServerConfig("guardian-slack", "Slack", "http",
+                                                               url="https://example.invalid/mcp", tools=[tool])))
+        reasons = []
+
+        async def prepare(tag):
+            asked = await self.ask(f"Prepare a Slack reply to #guardian-{self.nonce}-{tag}: Thursday at 3pm works. "
+                                   "Let me review it before anything is sent.", member=member, session=tag)
+            shown = (await self.turn_of(member, asked.get("turn_id"))).get("drafts") or []
+            valid = (asked.get("status") == "done" and len(shown) == 1 and shown[0].get("kind") == "slack"
+                     and shown[0]["state"] == "draft" and shown[0]["version"] == 1 and shown[0]["digest"]
+                     and self.nonce in shown[0]["to"] and not self.recorder.receipts)
+            return asked, shown[0] if valid else None
+
+        asked, first = await prepare("discard")
+        if first is None:
+            return ["editable_slack"], {**asked, "viewer": member}
+        discarded = await self.app.call("integrations.draft_discard", {"id": first["id"]})
+        late = await self.app.call("integrations.draft_send", {"id": first["id"], "digest": first["digest"]})
+        if late["sent"] or self.recorder.receipts or discarded["draft"]["state"] != "discarded":
+            reasons.append("cancel_zero_send")
+        asked, draft = await prepare("send")
+        if draft is None:
+            return reasons + ["editable_slack"], {**asked, "viewer": member}
+        edited = {"to": f"#guardian-{self.nonce}-edited", "body": f"Thursday at 3pm confirmed ({self.nonce})."}
+        saved = await self.app.call("integrations.draft_save", {"id": draft["id"], "digest": draft["digest"], **edited})
+        new = saved["draft"]
+        if not saved["saved"] or new["version"] != 2 or new["digest"] == draft["digest"] or self.recorder.receipts:
+            reasons.append("version_bound_send")
+        old = await self.app.call("integrations.draft_send", {"id": draft["id"], "digest": draft["digest"]})
+        if old["sent"] or self.recorder.receipts:
+            reasons.append("version_bound_send")
+        sent = await self.app.call("integrations.draft_send", {"id": draft["id"], "digest": new["digest"]})
+        again = await self.app.call("integrations.draft_send", {"id": draft["id"], "digest": new["digest"]})
+        receipts = self.recorder.receipts
+        if (not sent["sent"] or again["sent"] or len(receipts) != 1 or receipts[0]["operation"] != "post_message"
+                or not receipts[0]["test_mode"] or receipts[0]["argument_digest"] != digest({"channel": edited["to"], "text": edited["body"]})):
+            reasons.append("one_receipt")
+        return reasons, {**asked, "viewer": member}
 
     async def meeting_scenario(self):
         ids = await self.seed_team()

@@ -4,6 +4,7 @@ import { computerCardsHTML, computerResumedLineHTML } from "./computer-card";
 import { connectorCardsHTML, resumedLineHTML } from "./connector-card";
 import { NAME, eventLineHTML, eventPeopleHTML } from "./event-line";
 import { handoffGroupHTML } from "./handoff-line";
+import { memoActionHTML, memoTranscriptHTML, reactionControlHTML, reactionRowHTML } from "./message-metadata";
 import { mailCardsHTML, mailHandedLinesHTML } from "./mail-card";
 import { pageCardsHTML } from "./page-card";
 import { ownerQuestionsHTML, permissionCardsHTML } from "./permission-card";
@@ -612,6 +613,7 @@ export function messageActionsHTML(time: number, regenerate = false, owner?: "ed
   const action = (icon: Parameters<typeof iconBtn>[0], label: string, act: string): string =>
     iconBtn(icon, label, ` data-act="${act}"`).replace(" title=", " data-tooltip=");
   return `<div class="message-actions">${queued ? `<span class="queued-mark">${esc(t("agent.queued"))}</span>` : ""}<time tabindex="0" data-tooltip="${esc(new Date(time).toLocaleString())}" datetime="${esc(new Date(time).toISOString())}">${esc(formatClock(time))}</time>` + work +
+    (actionable ? reactionControlHTML() : "") +
     (actionable ? action("reply", t("chat.reply"), "reply-message") : "") +
     action("copy", t("chat.copy"), "copy-message") +
     (owner ? action(owner === "edit" ? "pencil" : "x", t(owner === "edit" ? "chat.edit" : "common.cancel"), `${owner}-message`) : "") +
@@ -626,7 +628,7 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
   return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
     (reply && origin && sourceOf(turn) === "routine" ? routineLineHTML(turn) : "") +
     (reply ? replyContentHTML(text, query, turn.status === "running") : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`) +
-    messageActionsHTML(time, regenerate, undefined, reply, reply ? workActionHTML(turn, state) + retry : "") + (reply ? previewCardsHTML(text) : "") + `</div>`;
+    messageActionsHTML(time, regenerate, undefined, reply, reply ? workActionHTML(turn, state) + retry + (turn.voice_memo ? memoActionHTML(turn.voice_memo_state === "playing") : "") : "") + reactionRowHTML(turn.reactions?.[key]) + (reply && turn.voice_memo ? memoTranscriptHTML(text) : "") + (reply ? previewCardsHTML(text) : "") + `</div>`;
 }
 
 function rerunActionHTML(turn: AgentTurn, state: TimelineState, regenerate: boolean): string {
@@ -951,7 +953,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     (asked
       ? `<div class="me">` +
         `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +
-        bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "queued" || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit", true, "", turn.status === "queued") + `</div>` +
+        bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "queued" || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit", true, "", turn.status === "queued") + reactionRowHTML(turn.reactions?.owner) + `</div>` +
         `</div>`
       : "") +
     turnEventsHTML(turn, look, said) + mailHandedLinesHTML(turn, look) +

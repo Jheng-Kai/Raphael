@@ -186,7 +186,8 @@ def turn_text(turn: Turn, *, detail: bool) -> str:
     if detail and longer and longer != said and not unfinished:
         cut = longer if len(longer) <= DETAIL_CHARS else longer[:DETAIL_CHARS].rstrip() + "…"
         lines += "\n" + labelled_lines(f"{speaker} (detail)", cut)
-    return lines
+    from ..agent.reactions import reaction_context
+    return lines + reaction_context(turn.reactions)
 
 
 def _turn_tokens(turn: Turn) -> int:

@@ -185,11 +185,12 @@ from .conversations import QUICK, Conversations
 from .quota import Quotas
 from .quotes import quote_from_wire
 from .ledger import Ledger
-from .drafts import DraftError, clean_field, is_mail_sender
+from .reactions import private_reactions
+from .drafts import DraftError, clean_field, is_mail_sender, is_slack_sender
 from .pages import Pages, PageError
 from .public_events import event_record
 from .harness_tools import (
-    CALENDAR_LIST, CALENDAR_TOOLS, CONNECTION_TOOLS, CONNECT_APP, FIND_APP, DEFINITIONS as HARNESS_TOOLS, EMAIL_DRAFT, REQUEST_SECRET, ROUTINE_TOOLS, SET_MY_JOB, HarnessToolError,
+    CALENDAR_LIST, CALENDAR_TOOLS, CONNECTION_TOOLS, CONNECT_APP, FIND_APP, DEFINITIONS as HARNESS_TOOLS, EMAIL_DRAFT, SLACK_DRAFT, REQUEST_SECRET, ROUTINE_TOOLS, SET_MY_JOB, HarnessToolError,
     tool as harness_tool,
 )
 from ..own_calendar import CalendarError, OwnCalendar, means_own_calendar
@@ -563,7 +564,7 @@ DECLINED_NOTE = (
 )
 # What the model is told when it calls a tool that sends mail and it writes drafts first (the owner sends them).
 DRAFT_FIRST_NOTE = (
-    "Do not send this mail yourself. Write it with email_draft: the owner reviews it in this chat, edits it and sends it "
+    "Do not send this mail yourself. Write it with email_draft (mail) or slack_draft (Slack): the owner reviews it in this chat, edits it and sends it "
     "from the card. Then end your turn with one short sentence, and never say it was sent."
 )
 OWN_CALENDAR_NOTE = (
@@ -870,6 +871,7 @@ class AgentService:
             "quota.list": self._quota_list,
             "agent.speech.status": self._speech_status,
             "agent.speak": self._speak_turn,
+            "agent.react": self._react,
             "messages.search": self._messages_search,
             "conversations.create": self._conversations_create,
             "conversations.rename": self._conversations_rename,
@@ -1937,6 +1939,10 @@ class AgentService:
                 logger.info("Quick latency ms: %s", json.dumps(ask.latency, sort_keys=True))
         if state == "done":
             self._speech_traces.pop(turn_id, None)
+        turn = self._history.get(turn_id) if turn_id is not None else None
+        member = self._team.store.member(turn.member_id) if self._team and turn and turn.member_id else None
+        if turn and member and member.voice_memo and self._notify:
+            self._notify('agent.turn', {'turn_id':turn.id, 'member_id':turn.member_id, 'activity_only':True})
 
     def _message(self, ask: _Ask, kind: str, text: str, prefix: str = "", *, first: bool = True, last: bool = True) -> None:
         """Publish only public words; each commit is visible before the next model/tool call."""
@@ -2647,7 +2653,7 @@ class AgentService:
             # This speaker writes mail as a draft for the owner to send (`email_draft`); a call of a tool that
             # sends it is not made, whatever the owner's rules say of sending (they still have the last word
             # over the speakers that may send).
-            sends = [call for call in calls if call.tool.key.startswith(PLUGIN_PREFIX) and is_mail_sender(call.tool)]
+            sends = [call for call in calls if call.tool.key.startswith(PLUGIN_PREFIX) and (is_mail_sender(call.tool) or is_slack_sender(call.tool))]
             if sends:
                 for call in sends:
                     ask.steps.append(self._step("tool", call.tool.name, call.tool.server, "blocked", time.perf_counter(), "draft_required"))
@@ -2755,7 +2761,7 @@ class AgentService:
             return PASS
         if tool.key in HARNESS_TOOLS:
             # A card only shows a card: the owner's own sign-in, or the key they type, is the consent.
-            if tool.key in ("ask_owner", "routine_list", CALENDAR_LIST, "team_overview", "show", "computer", "show_page", "update_page", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SET_MY_JOB, "connections_list", "add_mcp_server"):
+            if tool.key in ("ask_owner", "routine_list", CALENDAR_LIST, "team_overview", "show", "computer", "show_page", "update_page", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SLACK_DRAFT, SET_MY_JOB, "connections_list", "add_mcp_server"):
                 return PASS
             return await self._gate.screen(Proposed(tool.key, tool.description, summarize(call.arguments), narrow_scope(tool.key)), language=ask.language, ledger=ledger)
         if tool.key in TEAM_TOOLS:
@@ -2946,8 +2952,8 @@ class AgentService:
                 if ask.resumption and ask.resumption.failure:
                     raise HarnessToolError("owner_action_required")
                 data = self._show_secret(ask, args)
-            elif name == EMAIL_DRAFT:
-                data = self._show_draft(ask, args)
+            elif name in (EMAIL_DRAFT, SLACK_DRAFT):
+                data = self._show_draft(ask, args, kind="slack" if name == SLACK_DRAFT else "email")
             elif name in ("show_page", "update_page"):
                 data = self._show_page(ask, name, args)
             elif name == SET_MY_JOB:
@@ -3241,20 +3247,20 @@ class AgentService:
             "sentence. The key goes straight to the secure vault and you never see it; this request resumes by itself, once, "
             "after the owner saves it; never claim the connection's data now.")}
 
-    def _show_draft(self, ask: _Ask, args: Mapping[str, Any]) -> dict:
+    def _show_draft(self, ask: _Ask, args: Mapping[str, Any], *, kind="email") -> dict:
         """`email_draft`: the mail a member wrote for the owner, as an editable card in this private chat. The
         member cannot send it: the owner edits it and presses 傳送, and only that sends it (`agent.drafts`). A
         draft offered to a colleague (`hand_to`) also asks the owner whether that colleague may send it. Never in
         a room, an exchange between members, a quick question or a phone request."""
         if self._drafts is None or not ask.turn_id:
             raise HarnessToolError("unavailable")
-        if not ask.background_owner and (ask.nested or ask.quick or ask.scope != "private" or ask.source not in AT_A_CHAT):
+        if (kind == "slack" and ask.scope != "private") or (not ask.background_owner and (ask.nested or ask.quick or ask.scope != "private" or ask.source not in AT_A_CHAT)):
             raise HarnessToolError("private_chat_only")
         try:
             fields = {name: clean_field(name, args.get(name) or "") for name in ("to", "cc", "subject", "body")}
         except RpcError:
             raise ValueError("bad draft") from None
-        if not fields["to"] or not fields["subject"] or not fields["body"]:
+        if not fields["to"] or (kind == "email" and not fields["subject"]) or not fields["body"]:
             raise ValueError("bad draft")
 
         def text(name: str) -> str | None:
@@ -3263,7 +3269,7 @@ class AgentService:
         try:
             draft, offered = self._drafts.write(
                 author_id=ask.speaker.id, turn_id=ask.turn_id, conversation_id=ask.conversation_id, language=ask.language,
-                via=text("via"), hand_to=None if ask.scope == "room" else text("hand_to"), revise=args.get("revise") is True, **fields)
+                kind=kind, via=text("via"), hand_to=None if ask.scope == "room" or kind == "slack" else text("hand_to"), revise=args.get("revise") is True, **fields)
         except DraftError:
             raise HarnessToolError("unknown_member") from None
         self._turn_changed(ask.turn_id, ask.speaker.id)
@@ -3316,7 +3322,7 @@ class AgentService:
         card = None
         if name in (CONNECT_APP, REQUEST_SECRET) and ask.owner_card_ids:
             card = {"kind": name, "id": ask.owner_card_ids[0], "ids": ask.owner_card_ids}
-        elif name == EMAIL_DRAFT:
+        elif name in (EMAIL_DRAFT, SLACK_DRAFT):
             drafts = self._drafts.store.shown_in([task.turn_id]).get(task.turn_id, [])
             card = {"kind": name, "id": drafts[-1].id}
         elif name == "show_page":
@@ -3340,7 +3346,7 @@ class AgentService:
         elif kind == REQUEST_SECRET and self._secret_cards:
             for card_id in question.get("card_ids", [identifier]):
                 self._secret_cards.store.move(card_id, "cancelled")
-        elif kind == EMAIL_DRAFT and self._drafts:
+        elif kind in (EMAIL_DRAFT, SLACK_DRAFT) and self._drafts:
             self._drafts.store.discard(identifier)
         elif kind == "add_mcp_server" and self._connection_proposals:
             row = self._connection_proposals._row(identifier)
@@ -3371,7 +3377,7 @@ class AgentService:
                     state = "saved"
                 else:
                     continue
-            elif kind == EMAIL_DRAFT and self._drafts:
+            elif kind in (EMAIL_DRAFT, SLACK_DRAFT) and self._drafts:
                 draft = self._drafts.store.get(identifier)
                 state = draft.state if draft else "cancelled"
                 if state not in ("sent", "discarded", "cancelled"):
@@ -4700,14 +4706,33 @@ class AgentService:
     async def _quota_list(self, params: dict) -> dict:
         return {"quotas": self.quotas.list()}
 
+    async def _react(self, params):
+        from .reactions import set_reaction
+        member = self._member_param(params)
+        conversation = self.conversations.resolve(member, _opt_int(params, "conversation_id"))
+        turn = self._history.get(_opt_int(params, "turn_id"))
+        if turn is None or turn.scope != "private" or turn.member_id != member or turn.conversation_id != conversation:
+            raise invalid_params("there is no such message in this conversation")
+        set_reaction(self._conn, params, turn_id=turn.id)
+        self._turn_changed(turn.id, member)
+        return {"ok": True}
+
     async def _speech_status(self, params: dict) -> dict:
         return {"ready": bool(self._speaking and self._speaking.speaks())}
 
     async def _speak_turn(self, params: dict) -> dict:
         member = self._member_param(params)
-        conversation_id = self.conversations.resolve(member, _opt_int(params, "conversation_id"))
         turn = self._history.get(_opt_int(params, "turn_id"))
-        if turn is None or turn.member_id != member or turn.conversation_id != conversation_id:
+        room_id = _opt_int(params, 'room_id')
+        if room_id is not None:
+            thread_id = _opt_int(params, 'thread_id')
+            valid = turn and turn.scope == 'room' and turn.room_id == room_id and turn.thread_id == thread_id and self._conn.execute(
+                'SELECT 1 FROM room_messages WHERE room_id=? AND thread_id=? AND turn_id=? AND member_id=?',
+                (room_id,thread_id,turn.id,member)).fetchone()
+        else:
+            conversation_id = self.conversations.resolve(member, _opt_int(params, "conversation_id"))
+            valid = turn and turn.scope == 'private' and turn.conversation_id == conversation_id
+        if not valid or turn.member_id != member:
             raise invalid_params("there is no such turn in this conversation")
         if not self._speaking or not self._speaking.speaks():
             return {"ok": False, "kind": "not_configured"}
@@ -4718,7 +4743,18 @@ class AgentService:
             if message is None:
                 raise invalid_params("message_seq must name an answer")
             text = message["text"]
-        await self._speaking.say("", text, turn_id=turn.id)
+        mode = params.get('memo_action')
+        if mode is not None:
+            member_profile = self._team.store.member(member) if self._team and member else None
+            if mode not in ('play', 'pause') or not member_profile or not member_profile.voice_memo or turn.status != 'done':
+                raise invalid_params('voice memo is unavailable')
+            if self._speaking.memo_control(turn.id, pause=mode == 'pause'):
+                return {'ok': True}
+            if mode == 'pause':
+                return {'ok': True}
+            await self._speaking.say_member(text, voice=member_profile.voice, turn_id=turn.id)
+        else:
+            await self._speaking.say("", text, turn_id=turn.id)
         return {"ok": True}
 
     async def _messages_search(self, params: dict) -> dict:
@@ -4992,6 +5028,9 @@ class AgentService:
                     "scope": turn.scope,
                     "room_id": turn.room_id,
                     "thread_id": turn.thread_id,
+                    "reactions": private_reactions(self._conn, turn.id),
+                    "voice_memo": bool(turn.member_id and self._team and (member := self._team.store.member(turn.member_id)) and member.voice_memo and turn.status == "done"),
+                    "voice_memo_state": self._speaking.memo_state(turn.id) if self._speaking and hasattr(self._speaking, 'memo_state') else 'done',
                     "peer_id": turn.peer_id,
                     # The files handed with the request: their names and types, never more.
                     "attachments": list(turn.attachments or []),

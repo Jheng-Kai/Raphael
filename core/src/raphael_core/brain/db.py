@@ -1492,6 +1492,35 @@ PRAGMA user_version = 62;
 COMMIT;
 """
 
+# Migration 63 belongs to the vault unit; chat metadata follows it at integration.
+_MIGRATIONS[64] = """
+BEGIN;
+ALTER TABLE room_threads ADD COLUMN parent_message_id INTEGER REFERENCES room_messages(id) ON DELETE SET NULL;
+CREATE UNIQUE INDEX room_thread_parent ON room_threads(parent_message_id) WHERE parent_message_id IS NOT NULL;
+CREATE TABLE message_reactions (
+    turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE,
+    message_key TEXT NOT NULL,
+    emoji TEXT NOT NULL CHECK(emoji IN ('👍','❤','✓','?')),
+    PRIMARY KEY(turn_id, message_key, emoji)
+);
+CREATE TABLE room_reactions (
+    message_id INTEGER NOT NULL REFERENCES room_messages(id) ON DELETE CASCADE,
+    emoji TEXT NOT NULL CHECK(emoji IN ('👍','❤','✓','?')),
+    PRIMARY KEY(message_id, emoji)
+);
+CREATE TRIGGER clear_message_reactions AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM message_reactions WHERE turn_id=OLD.id;
+END;
+CREATE TRIGGER clear_room_reactions AFTER DELETE ON room_messages BEGIN
+    DELETE FROM room_reactions WHERE message_id=OLD.id;
+    UPDATE room_threads SET parent_message_id=NULL WHERE parent_message_id=OLD.id;
+END;
+ALTER TABLE email_drafts ADD COLUMN kind TEXT NOT NULL DEFAULT 'email' CHECK(kind IN ('email','slack'));
+ALTER TABLE members ADD COLUMN voice_memo INTEGER NOT NULL DEFAULT 0;
+PRAGMA user_version = 64;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

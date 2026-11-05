@@ -1938,7 +1938,7 @@ class BackgroundService:
             "expires_at_ms": question.expires_at_ms,
         }
 
-    def waiting_questions(self, member_id: int | None = None, room_id: int | None = None) -> list[dict[str, Any]]:
+    def waiting_questions(self, member_id: int | None = None, room_id: int | None = None, thread_id: int | None = None) -> list[dict[str, Any]]:
         """The questions that wait for the owner now, the oldest first (in one member's thread, in one
         room, or all), as `background.questions.list` gives them."""
         self.sweep_questions()
@@ -1956,6 +1956,12 @@ class BackgroundService:
             paused = self._paused[q.task_id]
             task = self._store.get(q.task_id)
             view["room_id"] = task.room_id if task else None
+            view['thread_id'] = task.thread_id if task else None
+            if view['room_id'] is not None and view['thread_id'] is None:
+                main = self._metrics_conn.execute('SELECT id FROM room_threads WHERE room_id=? ORDER BY id LIMIT 1', (view['room_id'],)).fetchone()
+                view['thread_id'] = main[0] if main else None
+            if thread_id is not None and view['thread_id'] != thread_id:
+                continue
             # A question waits where it was asked: a room's turn in the room, never also in the member's thread.
             if (room_id is not None and view["room_id"] != room_id) or (member_id is not None and view["room_id"] is not None):
                 continue
@@ -1993,7 +1999,17 @@ class BackgroundService:
             raise invalid_params("member_id must be a whole number or null")
         if room_id is not None and type(room_id) is not int:
             raise invalid_params("room_id must be a whole number or null")
-        return {"questions": self.waiting_questions(member_id, room_id)}
+        thread_id = params.get('thread_id')
+        if thread_id is not None and type(thread_id) is not int:
+            raise invalid_params('thread_id must be a whole number or null')
+        if room_id is not None:
+            row = self._metrics_conn.execute('SELECT id FROM room_threads WHERE room_id=? AND (? IS NULL OR id=?) ORDER BY id LIMIT 1', (room_id,thread_id,thread_id)).fetchone()
+            if row is None:
+                return {'questions': []}
+            thread_id = row[0]
+        elif thread_id is not None:
+            raise invalid_params('thread_id requires room_id')
+        return {"questions": self.waiting_questions(member_id, room_id, thread_id)}
 
     async def _answer(self, params: dict) -> dict:
         task_id, question_id = params.get("task_id"), params.get("question_id")
@@ -2651,12 +2667,12 @@ class BackgroundService:
             )
         return True
 
-    async def cancel_room(self, room_id, *, work=True):
+    async def cancel_room(self, room_id, *, work=True, thread_id=None):
         """Stop the tasks of a room. The owner speaking again stops what its members were saying but not
         the work they were assigned (`work` false): that goes on until it is done or the owner stops it."""
         rows = self._metrics_conn.execute(
             "SELECT id FROM worker_tasks WHERE COALESCE(report_room_id,room_id)=? AND state IN ('queued','running','waiting')"
-            " AND (? OR mode IS NULL)", (room_id, work)).fetchall()
+            " AND (? OR mode IS NULL) AND (? IS NULL OR COALESCE(report_thread_id,thread_id)=?)", (room_id, work, thread_id, thread_id)).fetchall()
         identifiers = set()
         for row in rows:
             identifiers.update(self._store.invalidate_tree(row[0]))

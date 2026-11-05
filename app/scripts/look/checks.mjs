@@ -96,6 +96,43 @@ export function checkRendered(name, context = {}) {
     require(window.__look.calls.some(call=>call.method==='settings.set' && call.params.key==='routine_timezone' && call.params.value===expected), 'the existing settings boundary owns persistence');
     return {check:name};
   }
+  if (['reaction-picker','reaction-row','reaction-not-approval','room-thread-open','room-thread-chip','slack-draft','voice-memo'].includes(name)) {
+    const calls = window.__look.calls, data = window.__look.data;
+    require(!document.querySelector('.conversation-event-line[data-reaction]'), 'metadata adds no centered event line');
+    require([...document.querySelectorAll('[data-reaction]')].every(button => button.getAttribute('aria-pressed') === 'true' && button.getAttribute('aria-label')?.includes(button.dataset.reaction)), 'selected reactions are named pressed toggles');
+    if (name === 'reaction-picker') {
+      const menu = document.querySelector('#app-popover');
+      require(visible(menu) && ['👍','❤','✓','?'].every(emoji=>menu.textContent.includes(emoji)), 'one compact four-reaction menu');
+    }
+    if (name === 'reaction-row') require(document.querySelector('.tn[data-id="8201"] [data-reaction="👍"]') && document.querySelector('.tn[data-id="8201"] [data-reaction="❤"]'), 'saved reactions appear below their message');
+    if (name === 'reaction-not-approval') {
+      require(calls.some(call=>call.method==='agent.react' && call.params.emoji==='✓'), 'the actual reaction action reached core');
+      require(!calls.some(call=>['agent.confirm','owner_questions.answer','integrations.draft_send'].includes(call.method)), 'a reaction never approves, answers or sends');
+      const turn=data.turns.find(turn=>turn.id===8201);
+      require(turn.drafts[0].state==='draft' && turn.owner_questions[0].state==='asked', 'draft and owner question remain pending');
+      require(turn.permissions[0].state==='pending', 'permission remains pending');
+    }
+    if (name === 'room-thread-chip') require(document.querySelector('.room-thread-chip')?.textContent.includes('2 則回覆'), 'only a compact reply count under the root');
+    if (name === 'room-thread-open') {
+      require(visible(document.querySelector('.room-side-thread')), 'the side thread opens beside the room');
+      require(document.querySelectorAll('.room-side-thread [data-side-message]').length===3, 'root and two replies are in the side thread');
+      require(document.querySelector('.room-side-thread [data-side-message="8203"] .me .owner-message .bubble'), 'side replies retain the shared owner bubble');
+      require(document.querySelectorAll('.au-room-thread [data-room-message]').length===1, 'side replies are absent from the main room');
+      require(calls.some(call=>call.method==='rooms.messages' && call.params.thread_id===900), 'the side thread uses the core thread boundary');
+    }
+    if (name === 'slack-draft') {
+      const card=document.querySelector('[data-draft-kind="slack"]');
+      require(visible(card) && card.textContent.includes('需要你確認'), 'Slack uses the shared approval draft card');
+      require(card.querySelector('[data-mail-field="to"]')?.value==='#研究討論' && !card.querySelector('[data-mail-field="subject"]'), 'channel and body replace email-only fields');
+      require(calls.some(call=>call.method==='integrations.draft_save' && call.params.body.includes('週五')), 'owner edits persist through the existing versioned draft boundary');
+      require(!calls.some(call=>call.method==='integrations.draft_send'), 'editing never sends');
+    }
+    if (name === 'voice-memo') {
+      require(calls.some(call=>call.method==='agent.speak' && call.params.memo_action==='play') && calls.some(call=>call.method==='agent.speak' && call.params.memo_action==='pause'), 'Play and Pause use the existing read-aloud boundary');
+      require(document.querySelector('.memo-transcript[open]')?.textContent.includes(data.chatMetadataSample.reply), 'expanded transcript is the member reply');
+    }
+    return {check:name};
+  }
   if (name === 'calm-thread' || name === 'calm-thread-days') {
     const thread = document.querySelector('.tn[data-id="8101"]').parentElement;
     const days = thread.querySelectorAll('.day');

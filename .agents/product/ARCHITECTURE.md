@@ -1,5 +1,23 @@
 # Raphael architecture and checked boundaries
 
+## Conversation metadata boundary (2026-11-05)
+
+Migration 64 adds bounded owner reaction tables with message/turn ownership, side
+thread root links, the existing draft store's transport kind and member voice_memo.
+agent.react and rooms.react only change metadata and notify their existing timeline;
+they never enter confirmation, owner-question or draft completion paths. Private
+context reads metadata through AgentHistory; room transcripts include the same
+explicit non-instruction label. rooms.thread_open validates a main-room root and
+reuses room_threads/thread_id, the existing worker and its isolated transcript.
+
+slack_draft shares EmailDrafts, its version digest, send claim and ToolGate. It refuses
+room origins at both tool and service boundaries. Discovered Slack sends obey the
+same draft-first/full-permission policy as mail. No second draft engine is added.
+Member voice_memo is a profile boolean; agent.speak uses Speaker.say_member and the
+existing PCM player with a pause event. All frontend IPC stays in api.ts and the
+literal owner-window RPCs use explicit Rust allowlist entries. No worker, provider,
+model loop or settings registry is added (A-01/03/04/06/08).
+
 ## Calm conversation projection (owner, 2026-11-05)
 
 conversation.ts owns calendar-day dividers; timeline.ts owns inline routine origins, reply actions and collapsed work receipts. The page retains latest-failure visibility as a render dependency. Find opens existing work detail and preserves its state. CliLoop emits one terminal reply, while Driver and Failure carry bounded, redacted stderr diagnostics into the existing foreground/background turn detail. Premature completion uses cli_stopped with the existing retry policy; real connection errors retain network guidance. No RPC, schema, worker, provider or model-loop boundary is added (A-01/03/04/06/08). See R-UI-101 and R-CLI-07.
