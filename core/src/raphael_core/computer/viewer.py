@@ -18,6 +18,7 @@ import httpx
 from ..protocol import invalid_params
 from .vm import SHARED, VmError
 from .rfb_input import RfbInputGate
+from ..paths import local_storage_root
 
 LEASE_SECONDS = 15
 # An open page polls every two seconds and each answer starts several Docker processes.
@@ -174,7 +175,7 @@ class DesktopViewer:
             target = self.target({"member_id": int(member)})
             if target.remote or Path(relative).is_absolute() or "\\" in relative:
                 raise invalid_params("not a member file on this computer")
-            root = Path(target.workspace if area == "workspace" else target.shared).resolve()
+            root = self.file_root(target.workspace if area == "workspace" else target.shared)
             found = (root / relative).resolve()
             if not found.is_relative_to(root) or not found.is_file():
                 raise invalid_params("no such member file")
@@ -188,11 +189,18 @@ class DesktopViewer:
         target = self.vm.target(0)
         if type(path) is not str or not path.startswith(SHARED + "/") or target.remote or target.shared is None:
             raise invalid_params("not a team file on this computer")
-        root = Path(target.shared).resolve()
+        root = self.file_root(target.shared)
         found = (root / path[len(SHARED) + 1:]).resolve()
         if not found.is_relative_to(root) or not found.is_file():
             raise invalid_params("no such team file")
         return {"path": str(found), "reads": found.suffix.lower() in READABLE}
+
+    @staticmethod
+    def file_root(path):
+        try:
+            return local_storage_root(path)
+        except (OSError, ValueError):
+            raise invalid_params("no such member file") from None
 
     async def revoke(self, params):
         self.target(params)

@@ -782,7 +782,7 @@ class App(Router):
         super().__init__()
         self._fake_audio = fake_audio
         self._load_kit = _import_kit if load_kit is None else load_kit
-        data_dir.mkdir(parents=True, exist_ok=True)
+        paths.owner_only_directory(data_dir)
         if manager is None:
             from .native_journeys import OfflineModelManager, native_enabled
 
@@ -931,6 +931,7 @@ class App(Router):
         self.handbacks.register(self)
         # Raphael's memory: the notes on this PC, the summary of the conversation, the reflection.
         memory_root = paths.memory_dir(data_dir) if memory_dir is None else memory_dir
+        paths.owner_only_directory(memory_root)
         self.memory = MemoryService(self._conn, memory_root, self.client, self.keys, notify=self.notify)
         self.memory.register(self)
         self.background.use_memory(self.memory)

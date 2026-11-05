@@ -493,6 +493,7 @@ class LocalVm:
             raise VmError("build_failed")
 
     async def start(self, target):
+        self.validate_storage(target)
         if target.key in self.maintenance and self.maintenance[target.key] is not asyncio.current_task():
             raise VmError("busy")
         if (state := self._recent_start(target)) is not None:
@@ -506,6 +507,17 @@ class LocalVm:
     def invalidate(self, target):
         self.running.pop(target, None)
         self.status_engines.pop(target.remote, None)
+
+    def validate_storage(self, target):
+        if target.remote:
+            return
+        from ..paths import local_storage_root
+        try:
+            for path in (target.workspace, target.shared):
+                if path is not None and not local_storage_root(path).is_relative_to(self.root):
+                    raise ValueError("outside_workspace")
+        except (ValueError, OSError):
+            raise VmError("outside_workspace") from None
 
     def _start_signature(self):
         return self.changes, self.enabled, self.remote, self.timezone(), self.timezone_pending
@@ -575,6 +587,7 @@ class LocalVm:
             running.remove(victim)
 
     async def _start(self, target):
+        self.validate_storage(target)
         state = await self.status(target, probe=False)
         if state["state"] == "incompatible":
             state = await self._upgrade_image(target)
@@ -591,6 +604,7 @@ class LocalVm:
             if not target.remote:
                 target.workspace.mkdir(parents=True, exist_ok=True, mode=0o700)
                 target.shared.mkdir(parents=True, exist_ok=True, mode=0o700)
+            self.validate_storage(target)
             result = await self.run_for(target, run_args(target, self.owner, secrets.token_urlsafe(24), tz=zone), timeout=60)
         elif state["state"] == "stopped":
             result = await self.run_for(target, ["start", target.name], timeout=60)
