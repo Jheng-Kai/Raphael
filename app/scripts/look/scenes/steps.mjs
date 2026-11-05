@@ -1,6 +1,7 @@
 export const stableClick = (selector, then = []) => ({ action: "stable-click", selector, then });
 export const click = selector => ({ action: "click", selector });
 export const hover = selector => ({ action: "hover", selector });
+export const hold = (selector, ms = 500) => ({ action: "hold", selector, ms });
 export const type = (selector, text) => ({ action: "type", selector, text });
 export const wait = selector => ({ action: "wait", selector });
 export const waitGone = selector => ({ action: "wait-gone", selector });

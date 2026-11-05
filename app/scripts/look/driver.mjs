@@ -636,6 +636,13 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case "type": await fill(step.selector, step.text); break;
     case "hover": { const element = await visible(step.selector); await element.hover(); await element.dispose(); break; }
+    // A press held past a control's long-press threshold, then let go there (the member voice button records on hold).
+    case "hold": {
+      const element = await visible(step.selector), box = await element.boundingBox(); await element.dispose();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down();
+      try { await new Promise(resolve => setTimeout(resolve, step.ms ?? 500)); } finally { await page.mouse.up(); }
+      break;
+    }
     case "desktop-refresh-still": {
       const before = await page.evaluate(() => {
         const panel = document.querySelector('.mb-det');

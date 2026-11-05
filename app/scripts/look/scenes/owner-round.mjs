@@ -1,8 +1,9 @@
-import { check, click, key, member, page, scene, settings, wait, waitGone } from "./steps.mjs";
+import { check, click, hold, key, member, page, scene, settings, wait, waitGone } from "./steps.mjs";
 
 const details = [{ action: "open-details" }, wait('.mb-det:not([hidden])')];
 const open = id => [...details, click(`[data-conversation-open="${id}"]`)];
-const voice = [click('.mb-det [data-det="close"]'), wait('.conversation-trigger[aria-expanded="false"]'), click('.cmp-voice')];
+// A member's empty composer starts voice chat on a click and records a voice message on a hold (v1.2).
+const voice = id => [click('.mb-det [data-det="close"]'), wait('.conversation-trigger[aria-expanded="false"]'), id ? hold('.cmp-voice') : click('.cmp-voice')];
 const language = locale => [click('[data-k="ui-language"]'), click(`#app-popover [data-value="${locale}"]`), wait(`html[lang="${locale}"]`), check(`locale-${locale}`)];
 const panes = ["general", "appearance", "connections", "models", "dictation", "tools", "safety", "messaging", "about"];
 
@@ -25,10 +26,10 @@ export default [
   scene("new-conversation-empty", "A new conversation contains no stale exchanges or dates", [...details, click('[data-conversation-new]'), check("conversation-empty")], { ownerEmptyRecords: true }),
   ...[0, 1].flatMap(id => [
     scene(`composer-voice-pending-${id}`, "Composer voice waits in the chosen non-default conversation", [
-      member(id), ...open(id ? 12 : 2), ...voice, wait('[data-key="hearing"]'), check("composer-voice-destination"),
+      member(id), ...open(id ? 12 : 2), ...voice(id), wait('[data-key="hearing"]'), check("composer-voice-destination"),
     ], { ownerVoice: "pending" }),
     scene(`composer-voice-answer-${id}`, "Composer voice answers in the chosen non-default conversation", [
-      member(id), ...open(id ? 12 : 2), ...voice, wait('.tn[data-id="301"]'), check("composer-voice-answer"),
+      member(id), ...open(id ? 12 : 2), ...voice(id), wait('.tn[data-id="301"]'), check("composer-voice-answer"),
     ], { ownerVoice: "answer" }),
   ]),
 ];
