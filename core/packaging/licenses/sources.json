@@ -12,6 +12,11 @@
   },
   "licenses": [
     {
+      "file": "OpenMausBot-Apache-2.0.txt",
+      "url": "https://raw.githubusercontent.com/milind-soni/OpenMausBot/f9191b5384b9900b2371696336439ae5ad6e0117/LICENSE",
+      "sha256": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5"
+    },
+    {
       "file": "onnxruntime-1.28.2-LICENSE.txt",
       "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.28.2/LICENSE",
       "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
