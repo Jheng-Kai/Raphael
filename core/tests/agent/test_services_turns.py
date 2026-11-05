@@ -258,7 +258,7 @@ async def test_no_words_and_no_files_is_still_unclear(services_rig, client):
     ("files", "kind"),
     [
         ("not a list", "data"),
-        ([wire("a.png", "image/png", PNG)] * 5, "count"),
+        ([wire("a.png", "image/png", PNG)] * 21, "count"),
         ([wire("fake.png", "image/png", b"MZ\x90\x00")], "type"),
         ([{"name": "a.png", "mime": "image/png", "data": "!!!"}], "data"),
     ],
@@ -268,6 +268,18 @@ async def test_a_list_of_files_that_cannot_be_taken_is_a_bad_request(services_ri
         await ask(services_rig, "看", files)
     assert caught.value.code == INVALID_PARAMS and caught.value.data == {"kind": kind}
     assert client.calls == 0 and await services_rig.turns() == []
+
+
+async def test_twenty_composer_files_are_accepted_together(services_rig, client):
+    client.decisions.append(decision("chat"))
+    client.texts.append(found("Twenty images."))
+    client.replies.append(spoken("", "Twenty images received."))
+    result = await ask(services_rig, "Describe these images", [wire("a.png", "image/png", PNG)] * 20)
+    assert result["status"] == "done"
+    (look,) = client.text_calls
+    assert sum(part["type"] == "image_url" for part in look["user"]) == 20
+    (turn,) = await services_rig.turns()
+    assert len(turn["attachments"]) == 20
 
 
 async def test_a_vision_model_that_reads_no_images_is_not_asked(services_rig, client, conn):

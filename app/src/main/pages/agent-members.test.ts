@@ -787,6 +787,7 @@ test("member notifications refresh names, groups, unread dots and the open heade
   await flush();
   await pick(3);
   await openDetails();
+  $('[data-det="gear"]').click();
   const next = structuredClone(LIST);
   next.members[1] = { ...next.members[1], name: "Updated name", role: "Updated role", group_id: 5 };
   next.members[2] = { ...next.members[2], waiting: true, unread: true, preview: "New preview" };
@@ -1318,6 +1319,7 @@ describe("the details panel", () => {
     await flush();
     await pick(3);
     if ($(".mb-det").hidden) $(".conversation-trigger").click();
+    $('[data-det="gear"]').click();
     api.membersUpdate.mockResolvedValue({ member: { ...LIST.members[1], name: "嚴格老師" } });
     api.membersList.mockResolvedValue({
       ...structuredClone(LIST),
@@ -1448,11 +1450,11 @@ test("computer search navigation leaves a room and restores the computer landing
   agent.show("computer"); await flush();
   expect(agent.el.querySelector<HTMLElement>(".au-room-pane")!.hidden).toBe(true);
   expect(agent.el.querySelector<HTMLElement>(".mb-det")!.hidden).toBe(false);
-  expect(agent.el.querySelector<HTMLElement>(".mb-det")!.dataset.detailsTab).toBe("details");
+  expect(agent.el.querySelector<HTMLElement>(".mb-det")!.dataset.detailsTab).toBe("computer");
   expect(agent.el.querySelector(".mb-det [data-computer-location]")).not.toBeNull();
   agent.el.querySelector<HTMLButtonElement>('[data-det="gear"]')!.click();
   agent.show("computer"); await flush();
-  expect(agent.el.querySelector<HTMLElement>(".mb-det")!.dataset.detailsTab).toBe("details");
+  expect(agent.el.querySelector<HTMLElement>(".mb-det")!.dataset.detailsTab).toBe("computer");
   agent.hide();
 });
 

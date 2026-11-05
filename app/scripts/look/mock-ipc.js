@@ -37,6 +37,7 @@ export function installMock(fixture, config = {}, target = window) {
   }
   if (variant.raphaelVoice) data.settings.tts_fish_voice = "0123456789abcdef0123456789abcdef";
   if (variant.computerHost) data.settings.computer_ssh_alias = variant.computerHost;
+  if (variant.routineEmpty) data.routines = [];
 
   if (variant.ownerOutputFolder) data.settings.owner_output_folder = "C:\\Owner\\Deliveries";
   if (variant.routineGuard) for (const routine of data.routines.filter(item => item.member_id === 1)) {
@@ -754,7 +755,10 @@ export function installMock(fixture, config = {}, target = window) {
         data.desktop = { ...data.desktop, state:'running', ready:true, lifecycle:null };
         return copy(data.desktop);
       }
-      case "computer.viewer_status": return p.check_host ? {host:p.alias,ok:false,checks:[{kind:'ssh',ok:true},{kind:'docker_path',ok:false}]} : data.desktop ?? { state: "absent", ready: false, control: "member" };
+      case "computer.viewer_status": {
+        if (p.start_docker) data.desktop = {state:'stopped',ready:false,control:'member',host:'',target:'synthetic-member'};
+        return p.check_host ? {host:p.alias,ok:false,checks:[{kind:'ssh',ok:true},{kind:'docker_path',ok:false}]} : data.desktop ?? { state: "absent", ready: false, control: "member" };
+      }
       case "computer.viewer_open": {
         if (variant.desktopStarts) data.desktop = { ...data.desktop, state: "running", ready: true };
         const session = `look-desktop-${++desktopSequence}`;
@@ -848,6 +852,12 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "dictionary.delete": data.dictionary = data.dictionary.filter(item => item.id !== p.id); return { deleted: true };
       case "members.list": {
+        if ('panel_member_id' in p) {
+          const sample = data.memberPanelSample, now = Date.now();
+          const tasks = variant.memberPanelWork ? sample.tasks.map((title, index) => ({id:701+index, turn_id:2, conversation_id:11, title, state:['running','waiting_owner','done','failed'][index],created_at_ms:now-index*3600000,started_at_ms:now-index*3600000,finished_at_ms:index>1?now-index*3600000:null})) : [];
+          const files = variant.memberPanelFiles ? Array.from({length:15}, (_,index) => ({id:`sample-${index}`,name:index===1?sample.page:sample.files[index%3],path:`/home/cua/team/sample-${index}.md`,kind:index===1?'page':'file',turn_id:2,conversation_id:11,at_ms:index<7?now:now-10*86400000})) : [];
+          return {tasks, files:files.slice(0,p.panel_limit??12), has_more:files.length>(p.panel_limit??12)};
+        }
         // the roster of every model carries the same inventory and the same count as the sidebar and the connections page
         const counted = inventory();
         return { members: data.members.map(m => ({ ...m, chief: m.id === data.primaryId, pinned: m.id === 0 ? !!data.settings.chief_pinned : m.pinned })), groups: data.groups, team_context: {
@@ -1523,6 +1533,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       if (command === "core_call") return copy(await core(args.method, args.params));
       if (command === "update_control") {
+        if (variant.appUpdate === "not_configured") return { state: "error", version: "", notes: "", error: "not_configured" };
         const sample = data.appUpdateSample;
         return { state: variant.appUpdate === "ready" || data.device.auto_update ? "ready" : variant.appUpdate ? "found" : "idle", version: variant.appUpdate ? sample.version : "", notes: variant.appUpdate ? sample.notes : "", error: "" };
       }

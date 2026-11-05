@@ -20,6 +20,10 @@ class DockerDesktop:
             path = Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "Docker/Docker/resources/bin/docker.exe"
             if path.is_file():
                 return path
+        if sys.platform == "darwin":
+            path = Path("/Applications/Docker.app/Contents/Resources/bin/docker")
+            if path.is_file():
+                return path
         return None
 
     def executable(self):
@@ -31,9 +35,26 @@ class DockerDesktop:
         return None
 
     def installed(self):
-        return self.cli() is not None or self.executable() is not None
+        return self.cli() is not None or self.executable() is not None or sys.platform == "darwin" and Path("/Applications/Docker.app").is_dir()
 
     async def start(self):
+        executable = self.executable() if sys.platform == "win32" else None
+        if executable is not None:
+            process = await asyncio.create_subprocess_exec(
+                str(executable), stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+                creationflags=NO_WINDOW,
+            )
+            asyncio.create_task(process.wait())
+            return
+        if sys.platform == "darwin" and Path("/Applications/Docker.app").is_dir():
+            process = await asyncio.create_subprocess_exec(
+                "/usr/bin/open", "-a", "/Applications/Docker.app",
+                stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            asyncio.create_task(process.wait())
+            return
         cli = self.cli()
         if cli is not None:
             # Probe capabilities without waking the engine. Only an explicitly

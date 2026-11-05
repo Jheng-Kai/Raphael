@@ -24,6 +24,7 @@ def process(code=0, stderr=b""):
 
 
 async def test_start_prefers_detached_cli_without_a_window(host, monkeypatch):
+    monkeypatch.setattr('raphael_core.computer.desktop_host.sys.platform', 'linux')
     spawn = AsyncMock(side_effect=[process(), process()])
     monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
     await host.start()
@@ -40,6 +41,7 @@ async def test_start_prefers_detached_cli_without_a_window(host, monkeypatch):
     b"docker: unknown command: docker desktop\nRun 'docker --help' for more information",
 ])
 async def test_old_cli_falls_back_only_for_missing_desktop_command(host, monkeypatch, diagnostic):
+    monkeypatch.setattr('raphael_core.computer.desktop_host.sys.platform', 'linux')
     spawn = AsyncMock(side_effect=[process(1, diagnostic), process()])
     monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
     await host.start()
@@ -50,6 +52,7 @@ async def test_old_cli_falls_back_only_for_missing_desktop_command(host, monkeyp
 
 
 async def test_general_cli_error_does_not_open_gui(host, monkeypatch):
+    monkeypatch.setattr('raphael_core.computer.desktop_host.sys.platform', 'linux')
     spawn = AsyncMock(return_value=process(1, b"permission denied"))
     monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
     with pytest.raises(OSError, match="docker_start_failed"):
@@ -77,3 +80,24 @@ def test_cli_installation_is_found_outside_path(host, monkeypatch, tmp_path):
     monkeypatch.setattr(host, "executable", lambda: None)
     assert host.installed()
     assert host.cli() == cli
+
+
+async def test_windows_owner_launch_uses_installed_executable_without_shell(host, monkeypatch):
+    spawn = AsyncMock(return_value=process())
+    monkeypatch.setattr('raphael_core.computer.desktop_host.sys.platform', 'win32')
+    monkeypatch.setattr(asyncio, 'create_subprocess_exec', spawn)
+    await host.start()
+    assert spawn.call_args.args == ('Docker Desktop.exe',)
+    assert 'shell' not in spawn.call_args.kwargs
+    await asyncio.sleep(0)
+
+
+async def test_macos_owner_launch_uses_installed_docker_app(host, monkeypatch):
+    spawn = AsyncMock(return_value=process())
+    monkeypatch.setattr('raphael_core.computer.desktop_host.sys.platform', 'darwin')
+    monkeypatch.setattr(Path, 'is_dir', lambda path: path.as_posix() == '/Applications/Docker.app')
+    monkeypatch.setattr(asyncio, 'create_subprocess_exec', spawn)
+    await host.start()
+    assert spawn.call_args.args == ('/usr/bin/open', '-a', '/Applications/Docker.app')
+    assert 'creationflags' not in spawn.call_args.kwargs
+    await asyncio.sleep(0)

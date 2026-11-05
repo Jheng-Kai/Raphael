@@ -61,6 +61,27 @@ def test_vault_rpcs_are_owner_only_without_model_or_private_read_settings():
     assert not any(item.rpc.startswith("vault.") or (item.setting or "").startswith("vault") for item in ACTIONS)
 
 
+def test_owner_import_upload_and_routine_test_do_not_add_model_authority():
+    assert "memory.import" in OWNER_ONLY
+    assert {"attachments.info", "attachments.upload", "routines.run"} <= INTERACTION_RPCS.keys()
+    assert {"routine_timezone", "routine_detected_timezone"} <= OWNER_ONLY_SETTINGS.keys()
+    assert not {"memory.import", "attachments.info", "attachments.upload", "routines.run"} & {item.rpc for item in ACTIONS}
+    from raphael_core.management import resolve
+    from raphael_core.protocol import RpcError
+    import pytest
+
+    for key in ("routine_timezone", "routine_detected_timezone", "auto_update"):
+        with pytest.raises(RpcError):
+            resolve("settings_update", {"key": key, "value": "UTC"})
+
+
+def test_chat_metadata_rpcs_remain_owner_interactions_without_model_authority():
+    methods = {"agent.react", "rooms.react", "rooms.thread_open"}
+    assert methods <= INTERACTION_RPCS.keys()
+    assert not unclassified(methods)
+    assert not methods & ({item.rpc for item in ACTIONS} | READ_ONLY_RPCS | OWNER_ONLY.keys())
+
+
 def test_primary_native_offer_stays_bounded_with_all_management_areas():
     from raphael_core.agent.speaker import Speaker
     from raphael_core.agent.team import TEAM_TOOLS
@@ -69,4 +90,7 @@ def test_primary_native_offer_stays_bounded_with_all_management_areas():
     snapshot = take_snapshot(None, "members folders group chats conversations connections models settings", speaker=Speaker(capabilities=frozenset({"chief"})), team=TEAM_TOOLS,
                              memory=True, attachments=True, interactive=True)
     from raphael_core.agent.plugins import MAX_OFFERED
+    assert "member_create" in snapshot.refs
+    assert "create_member" not in snapshot.refs
+    assert "slack_draft" in snapshot.refs
     assert len(snapshot.definitions) + MAX_OFFERED + 1 <= 128  # Reserve plugins and Claude's approval tool.

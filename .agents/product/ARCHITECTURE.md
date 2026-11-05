@@ -18,6 +18,16 @@ existing PCM player with a pause event. All frontend IPC stays in api.ts and the
 literal owner-window RPCs use explicit Rust allowlist entries. No worker, provider,
 model loop or settings registry is added (A-01/03/04/06/08).
 
+## Member panel and host preflight projection (2026-11-05)
+
+Owner request of 2026-11-05: use Grok Bot's clear Details / Library / Computer hierarchy and explain the actual unavailable-computer reason. This section supersedes earlier landing-panel and first-build-caption guidance for this panel.
+
+member-details.ts reuses ui.tabs and keeps the existing settings/resource pages behind the gear. member-panel-work.ts projects existing worker rows, pages and artifacts; members.list accepts panel_member_id/panel_limit through the existing owner-window allowlist. members/panel.py caps task/page/artifact queries, filesystem entries, depth and visible files; remote volumes are not treated as local folders. No database, migration, model loop or RPC is introduced (A-01/A-03/A-04/A-06/A-08/A-10/A-11).
+
+computer-state.ts owns the full localized screen sentence and the semantically matching short header word, following the owner's 2026-11-05 request to say each thing once. The existing viewer owns its persistent noVNC frame, watch/takeover boundary and screen actions; Enlarge/Take control require a live screen. Location and lifecycle controls live only in the Computer tab; context-menu.ts maps both its header and work-row overflow to the same existing menu path. The member panel owns its one conversation heading and asks the existing conversation list to omit its internal heading. Library file handles resolve through computer.team_file with member/root containment and the shell's existing read-or-reveal behavior; pages return to their existing conversation result.
+
+LocalVm.status preserves fixed preflight reasons and the missing-image flag. ensure_engine defaults to refusing a stopped host engine. An explicit start_docker request on computer.viewer_status pins the current local host, reuses DockerDesktop and the 120-second wait, clears temporary engine progress and returns normal status. Windows launches the installed Docker Desktop.exe, macOS opens the installed Docker.app; no shell/elevation, remote launch, install or image maintenance occurs during a status read. Fake tests do not prove native launch or container operation.
+
 ## Calm conversation projection (owner, 2026-11-05)
 
 conversation.ts owns calendar-day dividers; timeline.ts owns inline routine origins, reply actions and collapsed work receipts. The page retains latest-failure visibility as a render dependency. Find opens existing work detail and preserves its state. CliLoop emits one terminal reply, while Driver and Failure carry bounded, redacted stderr diagnostics into the existing foreground/background turn detail. Premature completion uses cli_stopped with the existing retry policy; real connection errors retain network guidance. No RPC, schema, worker, provider or model-loop boundary is added (A-01/03/04/06/08). See R-UI-101 and R-CLI-07.
@@ -29,9 +39,17 @@ The updater feed is https://github.com/Jheng-Kai/Raphael/releases/latest/downloa
 Release builds require GITHUB_REPOSITORY=Jheng-Kai/Raphael and publication pins GH_REPO to
 that repository; a stale local git remote never selects an updater endpoint.
 updates.rs alone uses the official Tauri updater plugin. The public key is a compile-time
-RAPHAEL_UPDATER_PUBLIC_KEY, with no fallback key. requireSignedVersion binds bytes to
-manifest versions; the release workflow signs with the owner's secret, generates latest.json,
-and publishes only through an explicit workflow input. DeviceStore owns opt-in and a one-shot
+RAPHAEL_UPDATER_PUBLIC_KEY, with no fallback key. A missing key returns not_configured before
+any feed request. updates.ts maps only that result to the current-version releases-page row;
+Settings uses its existing open_external_url plumbing. Configured-key behavior is unchanged. requireSignedVersion binds bytes to
+manifest versions. With both owner signing keys, the release workflow retains version-bound
+signing, latest.json and its published feed. If either key is absent, it warns once and layers
+tauri.release-no-updater.conf.json over the release config to disable updater artifacts; the
+installer, notices, BUILD-INFO and SHA256SUMS still build, verify and publish without .sig or
+latest.json. prepare-release-assets defaults to signed mode and requires a signature; explicit
+--updater disabled omits the feed and records the missing-key reason in BUILD-INFO. Publication
+uses the checked version job output rather than reading latest.json, and still requires the
+explicit workflow input. DeviceStore owns opt-in and a one-shot
 installed-version receipt. A native timer contacts releases only while opted in; a fail-closed
 roster read and Windows idle time gate installation. Native installation/rollback acceptance
 remains separate from fake-feed tests.

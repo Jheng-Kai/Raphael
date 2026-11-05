@@ -869,6 +869,13 @@ class MembersService:
         return {"voices": [{"id": voice, "name": "Fish Audio"}] if voice else [], "configured": configured}
 
     async def _list(self, params: dict) -> dict:
+        if "panel_member_id" in params:
+            member = _whole(params, "panel_member_id")
+            if not self.member_exists(member):
+                raise invalid_params("no such member")
+            from .panel import snapshot
+            workspaces = getattr(self, "panel_workspaces", lambda member: [])(member)
+            return snapshot(self._conn, member, workspaces, _whole({"panel_limit": 12, **params}, "panel_limit", least=1))
         language = self._ui_language(params)
         unread = self.store.unread_from()
         waiting = self.waiting_members()

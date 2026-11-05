@@ -11,7 +11,7 @@ from raphael_core.messaging.channels.base import Attachment, Incoming
 from raphael_core.messaging.channels.telegram import TelegramApi, TelegramChannel
 from raphael_core.messaging.core import Switchboard
 from raphael_core.messaging.words import words
-from raphael_core.services.attachments import MAX_ATTACHMENTS, MAX_IMAGE_BYTES, MAX_PDF_BYTES
+from raphael_core.services.attachments import MAX_IMAGE_BYTES, MAX_PDF_BYTES
 
 from .test_switchboard import FakeChannel
 from .test_telegram import OWNER, TOKEN
@@ -221,9 +221,9 @@ async def test_an_album_of_more_than_four_files_asks_about_the_first_four(files,
     gateway = gateway_for(files, files_http)
     await run_until(gateway, lambda: files.sent)
     [request] = gateway.asked
-    assert len(request["files"]) == MAX_ATTACHMENTS
-    assert files.downloads == [f"{n}-large" for n in range(MAX_ATTACHMENTS)]
-    note = words("en", "files_first", count=str(MAX_ATTACHMENTS))
+    assert len(request["files"]) == 4
+    assert files.downloads == [f"{n}-large" for n in range(4)]
+    note = words("en", "files_first", count="4")
     assert files.sent == [(OWNER, f"{note}\n\n《答》好")]
 
 

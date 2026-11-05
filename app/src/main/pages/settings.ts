@@ -1248,6 +1248,9 @@ export function createSettings(app: AppContext): SettingsPage {
     switch (act) {
       case "update-check": void checkUpdate(); break;
       case "update-install": void checkUpdate("install"); break;
+      case "update-releases":
+        void api.openExternalUrl("https://github.com/Jheng-Kai/Raphael/releases").catch(error => toaster.info(describeError(error)));
+        break;
       case 'copy-code':
         void copyButton(target.closest<HTMLElement>('[data-act="copy-code"]')!, target.closest('.message-code')?.querySelector('code')?.textContent ?? '').catch(error => toaster.info(describeError(error)));
         break;

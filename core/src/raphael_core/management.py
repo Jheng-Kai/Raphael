@@ -305,6 +305,7 @@ def destructive(name, arguments, retention=None):
 OWNER_ONLY = {
     **dict.fromkeys(("vault.list", "vault.add", "vault.update", "vault.remove", "vault.preview", "vault.cancel", "vault.import"),
                    "Owner-only vault metadata, private value writes, sharing and transient CSV import; no private value read or export RPC exists."),
+    "memory.import": "Only the owner explicitly imports outside memory through the checked shared-memory writer.",
     **dict.fromkeys(("owner_questions.answer", "owner_questions.bring", "background.answer", "pages.tool_call",
                      "integrations.card_connect", "integrations.card_cancel", "integrations.card_save", "integrations.card_resume",
                      "integrations.card_done", "integrations.card_stop", "integrations.card_allow", "integrations.card_always", "integrations.card_deny",
@@ -328,13 +329,22 @@ OWNER_ONLY = {
                    "Device and downloaded speech-model settings belong to the owner."),
 }
 INTERACTION_RPCS = {
+    **dict.fromkeys(("agent.react", "rooms.react", "rooms.thread_open"),
+                   "Owner-authored message metadata and room thread navigation; never approval or model administration."),
+    **dict.fromkeys(("attachments.info", "attachments.upload"),
+                   "Owner composer file selection and bounded upload; not model management tools."),
+    "routines.run": "Only the owner's explicit routine test starts a manual run through the existing worker.",
     **dict.fromkeys(("members.viewing", "rooms.send", "rooms.transcribe", "agent.history.stop", "agent.history.retract",
                      "worker.cancel", "worker.rerun", "agent.speak", "tts.preview", "tts.stop", "pages.open"),
                    "Existing owner conversation, work or presentation entry; not team administration."),
     **dict.fromkeys(("calendar.add", "calendar.update", "calendar.delete"), "Shared calendar work tools retain their existing gate for every member."),
 }
 # Settings are classified per key, never by the broad settings.set RPC.
+# Native device settings such as auto_update stay owner-only in DeviceStore;
+# they are not core settings or accepted by the model's settings_update tool.
 OWNER_ONLY_SETTINGS = {
+    "routine_timezone": "The owner's routine time zone preference is never model-editable.",
+    "routine_detected_timezone": "Internal detected device time zone, never model-editable.",
     "chatgpt.registrations.v1": "Internal provider registration state, never model-editable.",
     **dict.fromkeys(("action_mode", "local_commands_mode", "local_commands_seen", "worker_cost_cap_usd", "monthly_limit_usd"),
                    "Permission, local command authority and spending limits are owner-only."),

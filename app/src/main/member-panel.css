@@ -39,3 +39,16 @@
 .mb-panel-preference { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-3); font-size: var(--fs-sm); line-height: 1.4; }
 .mb-panel-preference + .mb-panel-row.btn { border-top: 1px solid var(--line); }
 .mb-panel-preference .mb-panel-row-copy small { white-space: normal; }
+.mb-panel-identity { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; width: 100%; }
+.mb-panel-identity > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sm); }
+.mb-panel-identity > b > span { color: var(--text-3); font-weight: 400; }
+.mb-det .mb-who:has(.mb-panel-identity) { display: block; }
+.mb-panel-tasks { min-width: 0; }
+.mb-task-row { display: flex; align-items: center; min-width: 0; gap: var(--sp-1); }
+.mb-task-open.btn { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; flex: 1; text-align: left; padding: var(--sp-2); border: 1px solid var(--line); background: transparent; }
+.mb-task-open > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-task-open > small, .mb-task-open > time { flex: none; color: var(--text-3); font-size: var(--fs-2xs); }
+.mb-task-open > .i { flex: none; }
+.mb-library-files { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
+.mb-library-files .team-file { max-width: 100%; }
+.mb-library-files .team-file > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

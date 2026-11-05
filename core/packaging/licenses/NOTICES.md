@@ -1,5 +1,7 @@
 # Third-party notices
 
+The member panel's Details / Library / Computer layout and sleeping-screen presentation were informed by Grok Bot's public product video (https://www.youtube.com/watch?v=nnTqbMhKr3E, 04:35-05:00 and 10:00-11:00) and documentation reviewed on 2026-11-05; this is a visual reference only, and no Grok Bot code, artwork or marks are copied or bundled.
+
 `app/src/main/transcript-window.ts` adapts the centered focus range from OpenMausBot `src/lib/transcript-window.ts` (Apache-2.0; license retained in `Apache-2.0.txt`).
 
 ## OpenBot demonstrations (MIT)

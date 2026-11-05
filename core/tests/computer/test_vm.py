@@ -310,6 +310,7 @@ async def test_start_launches_installed_docker_and_builds_missing_image_once(des
         return await original(args, **kwargs)
 
     vm.desktop, vm.run = Desktop(), run
+    await vm.ensure_engine(target, start_desktop=True)
     assert (await vm.start(target))["ready"]
     assert (await vm.start(target))["ready"]
     assert launches == ["start"]
@@ -610,7 +611,7 @@ class CatalogBridge(Bridge):
         return await super().request(method, params)
 
 
-async def test_first_screen_starts_engine_once_and_later_turn_reuses_catalog(desktop, tmp_path):
+async def test_first_screen_requires_owner_engine_start_then_reuses_catalog(desktop, tmp_path):
     from unittest.mock import AsyncMock
     vm, target, runtime = desktop
     runtime.up = False
@@ -624,6 +625,9 @@ async def test_first_screen_starts_engine_once_and_later_turn_reuses_catalog(des
     await hub.prepare()
     assert runtime.calls == []
     shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
+    assert (await hub.call(shot.key, {}, approver="auto")).kind == 'docker_stopped'
+    vm.desktop.start.assert_not_awaited()
+    await vm.ensure_engine(target, start_desktop=True)
     result = await hub.call(shot.key, {}, approver="auto")
     assert result.ok and result.blocks
     vm.desktop.start.assert_awaited_once()
