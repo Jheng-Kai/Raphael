@@ -231,7 +231,7 @@ export const membersList = (uiLanguage?: string): Promise<MembersList> => core("
  * page offers it to the owner.
  */
 export const membersCreate = (member: NewMember): Promise<{ member: Member; routine_offer: RoutineOffer | null }> =>
-  core("members.create", member);
+  member.template ? core("members.template", { action: "import", ...member }) : core("members.create", member);
 /** Changes a member (never Raphael: the core refuses id 0 with the kind `raphael`). */
 export const membersUpdate = (id: number, patch: MemberPatch): Promise<{ member: Member }> => core("members.update", { id, ...patch });
 /** Deletes a member with its conversation, its memory and its routines. The page asks the owner first. */
@@ -350,9 +350,9 @@ export const connectorsToolkit = (toolkit: string): Promise<import("./plugins-da
  * Adds an app of the store. `fields` are what its form asked for (the owner's own key, or a developer app's id and secret):
  * they go to the core in this call, which hands them to Composio, and to nothing else.
  */
-export const connectorsConnect = (toolkit: string, fields?: Record<string, string>): Promise<{ connected: boolean; error?: string }> =>
+export const connectorsConnect = (toolkit: string, fields?: Record<string, string>): Promise<{ connected: boolean; error?: string; connector?: import("./plugins-data").ManagedConnector }> =>
   connectorCall("connectors.connect", fields ? { toolkit, fields } : { toolkit });
-export const connectorsGoogleConnect = (): Promise<{ connected: boolean; error?: string }> => connectorCall("connectors.google.connect");
+export const connectorsGoogleConnect = (): Promise<{ connected: boolean; error?: string; connector?: import("./plugins-data").ManagedConnector }> => connectorCall("connectors.google.connect");
 export const connectorsDisconnect = (id: string): Promise<unknown> => connectorCall("connectors.disconnect", { id });
 export const connectorsSetKey = (key: string): Promise<{ configured: boolean }> => connectorCall("connectors.set_key", { key });
 
@@ -523,6 +523,8 @@ export async function usageRuns(params: RunRequest): Promise<RunReport> {
 }
 export const usageExport = (params: RunRequest): Promise<{ csv: string }> => core("usage.export", params);
 export const usageAllowances = (): Promise<CliAllowances> => core("usage.allowances");
+export const pickOutputFolder = (): Promise<string | null> => invoke("pick_output_folder");
+export const memberTemplateFile = (action: "open" | "save", text = ""): Promise<string | null> => invoke("member_template_file", { action, text });
 export const saveUsageCsv = (csv: string): Promise<boolean> => invoke("save_usage_csv", { csv });
 // Group threads reuse the same worker and safety gate as individual conversations.
 export const routineRuns = (routineId: number): Promise<{ runs: RoutineRun[]; total?: number }> => core("routines.runs", { routine_id: routineId });

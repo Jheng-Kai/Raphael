@@ -29,6 +29,27 @@ from raphael_core.protocol import RpcError
 from raphael_core.home import ConnectedCalendar
 
 
+async def test_account_labels_survive_refresh_and_reach_members(tmp_path, conn):
+    def respond(request):
+        if request.url.path.endswith("/connected_accounts"):
+            return httpx.Response(200, json={"items": [{"id": "work", "status": "ACTIVE", "email": "work@example.com", "toolkit": {"slug": "gmail"}}, {"id": "personal", "status": "ACTIVE", "email": "me@example.com", "toolkit": {"slug": "gmail"}}]})
+        raise AssertionError(str(request.url))
+    router, service, hub, vault = setup_service(tmp_path, conn, respond)
+    entry = Connector("composio:gmail", "composio", status="ACTIVE", name="Gmail", accounts=[{"id": "work", "status": "ACTIVE", "label": "Work"}, {"id": "personal", "status": "ACTIVE", "label": "Personal"}])
+    service.store.connectors[entry.id] = entry
+    saved = await router.call("connectors.label", {"id": entry.id, "account_id": "work", "label": "工作信箱"})
+    assert saved["connector"]["accounts"][0]["label"] == "工作信箱"
+    reopened = ConnectorStore(service.store.path.parent)
+    assert reopened.connectors[entry.id].accounts[0]["label"] == "工作信箱"
+    assert hub.connections()[0]["accounts"][0]["label"] == "工作信箱"
+    refreshed = service.account_view({"id": "work", "status": "ACTIVE", "email": "changed@example.com", "token": "private"}, entry.accounts)
+    assert refreshed == {"id": "work", "status": "ACTIVE", "label": "工作信箱"}
+    assert service.account_view({"id": "new", "status": "ACTIVE", "data": {"email": "new@example.com"}})["label"] == "new@example.com"
+    for label in ("", "x" * 101, "line\nbreak"):
+        with pytest.raises(RpcError):
+            await router.call("connectors.label", {"id": entry.id, "account_id": "work", "label": label})
+
+
 @pytest.mark.parametrize("state", ["missing", "inactive", "disabled", "scope", "active", "expired"])
 async def test_home_calendar_uses_only_enabled_private_google_tool(tmp_path, conn, state, caplog):
     from datetime import datetime
@@ -888,7 +909,7 @@ async def test_notifications_and_status_projection_never_return_account_credenti
     router.set_notifier(lambda name, params: notifications.append((name, params)))
     result = await router.call("connectors.status")
     assert result["connectors"][0]["status"] == "ACTIVE"
-    assert result["connectors"][0]["accounts"] == [{"id": "ca_test", "status": "ACTIVE"}]
+    assert result["connectors"][0]["accounts"] == [{"id": "ca_test", "status": "ACTIVE", "label": ""}]
     assert "refresh_token" not in json.dumps(result)
     assert ("connectors.changed", {}) in notifications
     assert all(params == {} for name, params in notifications if name == "connectors.changed")

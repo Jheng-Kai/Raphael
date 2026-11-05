@@ -1,3 +1,4 @@
+import { greetingHTML } from "./member-greeting";
 import { missingHTML, missingText } from "./missing";
 import { fileKind, sentFileHTML } from "./attachments";
 import { computerCardsHTML, computerResumedLineHTML } from "./computer-card";
@@ -557,6 +558,7 @@ export function answerMeta(turn: AgentTurn): string {
 
 /** How a turn is drawn besides its data. */
 export interface TurnLook {
+  greetingOpen?: boolean;
   deferPresence?: boolean;
   revealing?: (turnId: number) => boolean;
   waitingForOwner?: (turnId: number) => boolean;
@@ -944,7 +946,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   const regenerate = !live && said && turn.id === look.regenerateTurnId;
   // A turn without reply messages answers in its text: a question spoken to Raphael with public progress has no other.
   // A draft handed to this chat (`route` "draft") is a card, and what it is told is for the model, not for the page.
-  const textAnswer = turn.status === "confirm" || settledDraft || turn.route === "draft" || !turn.text.trim()
+  const textAnswer = turn.status === "confirm" || settledDraft || turn.route === "draft" || (turn.route === "greeting" && !!greetingHTML(turn, look.greetingOpen ?? true)) || !turn.text.trim()
     ? "" : messageBlockHTML(turn, "reply", turn.text, turn.created_at_ms, query, state, true, regenerate);
   return (
     `<li class="tn${turn.id === look.latestFailedTurnId ? " is-latest-failure" : ""}${turn.status === "queued" || turn.route === "owner_input" || (live && !hasMsgs) ? " is-owner-only" : ""}" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}>` +
@@ -967,7 +969,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + computerCardsHTML(turn) +
     `<div data-desktop-slot="${id}"></div>` +
     permissionCardsHTML(turn, look.answerable, false, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + mailCardsHTML(turn, look) + pageCardsHTML(turn) +
-    ownerQuestionsHTML(turn) +
+    ownerQuestionsHTML(turn) + greetingHTML(turn, look.greetingOpen ?? true) +
     (turn.status === "confirm" ? `<div class="turn-question" data-question-turn="${id}"></div>` : "") +
     (turn.task?.state === "done" ? `<div data-task-result-slot="${id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") +
     (!look.deferPresence && (live || waitingForOwner || waitsAtCard(turn) || revealing || turn.task?.state === "waiting" || turn.status === "confirm") ? livePresenceHTML(look, latestProgress(turn), live || revealing) : "") +

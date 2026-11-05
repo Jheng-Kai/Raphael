@@ -604,6 +604,13 @@ class LocalVm:
         for attempt in range(45):
             state = await self.status(target)
             if state["ready"]:
+                if target.remote:
+                    layout = await self.run_for(target, exec_args(target, ["mkdir", "-p", "--", *[SHARED + "/" + name for name in ("context", "meetings", "projects")]]))
+                    if layout.code:
+                        raise VmError("team_layout_failed")
+                else:
+                    for name in ("context", "meetings", "projects"):
+                        (target.shared / name).mkdir(parents=True, exist_ok=True, mode=0o700)
                 await self._wallpaper(target)
                 return state
             if attempt == 0 and already_running and state["state"] == "running" and target.key not in self.held and self.active.get(target.key, 0) <= 1:

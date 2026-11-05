@@ -12,7 +12,7 @@ import {
   type SkillItem, type SkillPage, type LocalSkillSource, skillImportsHTML, loadSkillItems, skillListItems, sameSkill, skillChanged, skillDialogHTML, skillErrorText, skillPage, skillsSectionHTML,
 } from "./connection-skills";
 import { openConnectionSetup } from "./connection-setup";
-import { confirmDelete } from "./member-dialogs";
+import { confirmDelete, openDialog as openMemberDialog } from "./member-dialogs";
 import { managedGroup, pluginTool, storePlugin, type ManagedConnector } from "./plugins-data";
 import { openMcpImport } from "./mcp-import";
 import { type SkillSet, type SkillMarketplace, skillSetDialogHTML } from "./skill-sets";
@@ -425,18 +425,18 @@ const accountStatus = (status: string): { kind: "ok" | "warn" | "err" | "idle"; 
 };
 
 /**
- * The account(s) a service is signed in with, by status only (the core keeps no name or address of an account in what it lists):
+ * The account(s) a service is signed in with, using public owner labels and status:
  * a row for each account of a managed service (two when one was signed in again and the first has not gone), the owner's own Google as
  * one, and a signed-in server as one. A server that needs no sign-in has none.
  */
 function accountsHTML(g: ConnectionGroup): string {
   const rows: { label: string; kind: "ok" | "warn" | "err" | "idle"; text: string }[] =
-    g.source === "composio" ? (g.accounts ?? []).map((account, n) => ({ label: t("conn.accountN", { p0: n + 1 }), ...accountStatus(account.status) }))
-    : g.source === "google" ? [{ label: t("conn.googleAccount"), ...accountStatus(g.accounts?.[0]?.status ?? (g.status === "ready" ? "ACTIVE" : "INACTIVE")) }]
+    g.source === "composio" ? (g.accounts ?? []).map((account, n) => ({ label: account.label || t("conn.accountN", { p0: n + 1 }), ...accountStatus(account.status) }))
+    : g.source === "google" ? [{ label: g.accounts?.[0]?.label || t("conn.googleAccount"), ...accountStatus(g.accounts?.[0]?.status ?? (g.status === "ready" ? "ACTIVE" : "INACTIVE")) }]
     : g.auth !== "none" ? [{ label: t("conn.account"), ...(needsLogin(g) ? { kind: "err" as const, text: t("conn.status.relogin") } : { kind: "ok" as const, text: t("conn.signedIn") }) }]
     : [];
   if (!rows.length) return "";
-  return `<div class="cs-accts">${rows.map((r) => `<div class="cs-acct">${ico("person")}<span class="nm">${esc(r.label)}</span>${st(r.kind, r.text)}</div>`).join("")}</div>`;
+  return `<div class="cs-accts">${rows.map((r, n) => `<div class="cs-acct">${ico("person")}<span class="nm">${esc(r.label)}</span>${st(r.kind, r.text)}${g.accounts?.[n]?.id ? btn(esc(t("account.label")), "sm", ` data-conn="account-label" data-id="${esc(g.id)}" data-account="${esc(g.accounts[n].id!)}"`) : ""}</div>`).join("")}${g.source === "composio" ? btn(esc(t("account.add")), "sm", ` data-conn="add-account" data-id="${esc(g.id)}"`) : ""}</div>`;
 }
 
 /** The dialog's first view: what the service is and holds, what to try, and the rarer actions. */
@@ -1238,16 +1238,33 @@ export function createConnections(host: ConnectionsHost): Connections {
     });
   }
 
+  function nameAccount(id: string, account: { id?: string; label?: string }): void {
+    if (!account.id) return;
+    const dialog = openMemberDialog({title: t("account.label"), body: `<label class="mp-label">${esc(t("account.labelHelp"))}<input class="mb-fin" data-account-name maxlength="100" value="${esc(account.label || "")}" autocomplete="off"></label><p role="alert" hidden></p>`,
+      actions: {secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: {label: esc(t("members.save")), attrs: ' data-dlg="save"'}},
+      onAct(action, button) {
+        if (action === "cancel") return dialog.close();
+        const label = dialog.el.querySelector<HTMLInputElement>("[data-account-name]")!.value.trim();
+        if (!label) return;
+        button.setAttribute("disabled", "");
+        void api.core("connectors.label", {id, account_id: account.id, label}).then(() => {dialog.close(); return load(false);}).catch(error => {
+          const notice = dialog.el.querySelector<HTMLElement>('[role="alert"]')!; notice.textContent = describeError(error); notice.hidden = false; button.removeAttribute("disabled");
+        });
+      }});
+    dialog.el.querySelector<HTMLInputElement>("[data-account-name]")?.focus();
+  }
+
   /** Opens the browser login for a store entry (`catalog_id`) or for a service that must sign in again (`id`). */
   async function signIn(target: { catalog_id: string } | { id: string }, name: string, again: boolean): Promise<void> {
     if (login) return;
     const key = "catalog_id" in target ? target.catalog_id : target.id;
+    const previousAccounts = new Set((Array.isArray(groups) ? groups : []).flatMap(group => (group.accounts ?? []).map(account => account.id)));
     const fromDialog = open?.tab === "installed" && open.id === key ? open : null;
     dialogNotice = null;
     login = { target: key, name };
     loginError = null;
     redraw();
-    let result: { connected: boolean; error?: string };
+    let result: { connected: boolean; error?: string; connector?: ManagedConnector };
     try {
       result = ("catalog_id" in target ? !entryById(target.catalog_id)?.source : !groupById(target.id)?.source) ? await api.integrationsConnect(target)
         : "id" in target && groupById(target.id)?.source === "google"
@@ -1271,6 +1288,11 @@ export function createConnections(host: ConnectionsHost): Connections {
       if (!fromDialog) notify(result.error === "toolkit_not_allowed" ? failureText(result.error) : t("plugins.connectFailed"), "err");
     }
     await load(false);
+    if (result.connected) {
+      const group = groupById(result.connector?.id || (key.startsWith("composio:") || key === "google" ? key : "composio:" + key));
+      const account = result.connector?.accounts?.find(account => !previousAccounts.has(account.id)) || group?.accounts?.find(account => !previousAccounts.has(account.id));
+      if (group && account) nameAccount(group.id, account);
+    }
   }
 
   /**
@@ -1609,6 +1631,12 @@ export function createConnections(host: ConnectionsHost): Connections {
         if (market && plugin?.installable) void importSet({ marketplace: market.repo, name: plugin.name });
         break;
       }
+      case "account-label": {
+        const account = groupById(id)?.accounts?.find(a => a.id === button.dataset.account);
+        if (account) nameAccount(id, account);
+        break;
+      }
+      case "add-account": { const group = groupById(id); if (group) void signIn({id}, group.name, true); break; }
       case "set-open": skillSet = Number(id); skill = null; skillSources = undefined; skillRequest++; dialogNotice = null; redraw(); focusOn("#cs-dialog"); break;
       case "set-update": void importSet({ set_id: Number(id) }); break;
       case "set-delete": {

@@ -55,7 +55,7 @@ export default [
     ...settingsScenes.find(item=>item.name==='plugins-setup-own-app').steps.filter(step=>step.action!=='check'),
     stableClick('.cn-setup-dialog [data-dlg="copy"]'),check('daily-copy'),
   ]),
-  (()=>{const source=automationScenes.find(item=>item.name==='automation-webhook-address-changed');return {...source,name:'daily-copy-webhook',description:'A masked webhook secret copies on its existing button and retains its address notice',steps:[...source.steps,stableClick('[data-dlg="hook-copy"]'),check('daily-copy'),check('moving-webhook-changed')]};})(),
+  (()=>{const source=automationScenes.find(item=>item.name==='automation-webhook-address-changed');return {...source,name:'daily-copy-webhook',description:'A masked webhook secret copies on its existing button and retains its address notice',steps:[...source.steps,click('[data-dlg="hook-show"]'),wait('.au-hook-secret[type="text"]'),stableClick('[data-dlg="hook-copy"]'),check('daily-copy')]};})(),
   scene('daily-draft-member','A member draft waits through other conversations and Home',[
     member(1),type(input,'Unfinished sample draft'),member(2),type(input,'Another sample draft'),member(1),page('home'),member(1),check('daily-draft-member'),
   ]),

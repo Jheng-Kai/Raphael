@@ -144,6 +144,25 @@ class PageFetcher:
             raise ServiceError("timeout") from None
         return str(parsed)
 
+    async def post_probe(self, url: str, body: bytes, headers: dict[str, str]) -> int:
+        """One bounded owner-requested webhook probe, pinned to a public address; no redirects."""
+        parsed = checked_url(url)
+        if parsed.scheme != "https" or len(body) > 1024:
+            raise ServiceError("blocked_address")
+        try:
+            async with asyncio.timeout(self._max_seconds):
+                address = await self._address(parsed)
+                async with httpx.AsyncClient(transport=self._transport, follow_redirects=False, trust_env=False,
+                                             timeout=self._max_seconds) as client:
+                    async with client.stream("POST", parsed.copy_with(host=address), content=body,
+                                             headers={**headers, "Host": parsed.host},
+                                             extensions={"sni_hostname": parsed.host}) as reply:
+                        return reply.status_code
+        except (TimeoutError, httpx.TimeoutException):
+            raise ServiceError("timeout") from None
+        except httpx.TransportError:
+            raise ServiceError("network") from None
+
     async def _fetch(self, url: httpx.URL) -> Fetched:
         async with httpx.AsyncClient(
             transport=self._transport,

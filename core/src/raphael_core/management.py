@@ -303,6 +303,8 @@ def destructive(name, arguments, retention=None):
 # These are UI-controlled boundaries, never direct management tools. Work tools may
 # propose a card, but may not answer it or handle its credentials.
 OWNER_ONLY = {
+    "members.template": "The owner previews, imports and exports portable member recipes.",
+    "connectors.label": "The owner names a connected account after sign-in.",
     **dict.fromkeys(("vault.list", "vault.add", "vault.update", "vault.remove", "vault.preview", "vault.cancel", "vault.import"),
                    "Owner-only vault metadata, private value writes, sharing and transient CSV import; no private value read or export RPC exists."),
     "memory.import": "Only the owner explicitly imports outside memory through the checked shared-memory writer.",

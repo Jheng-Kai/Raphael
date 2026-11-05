@@ -33,6 +33,7 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
   let history: RoutineRun[] = [], historyError = "", recipe = "sentry", eventContains = "";
   let stopWatching = (): void => {};
   let address = "", secret = "", hookError = "";
+  let tunnel = false, tunnelTool = "tailscale", tunnelUrl = "", tunnelResult = "", tunnelBusy = false, hookAuth = "bearer";
   let addressChanged = false;
   let choices: api.RoutineEventChoice[] = [], eventId = "", eventValue = "", eventError = "", checking = false, generation = 0;
   const selectedEvent = () => choices.find(choice => choice.id === eventId);
@@ -67,6 +68,7 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
     { value: "never", label: t("auto.never") }, { value: "after", label: t("auto.after") }, { value: "until", label: t("auto.until") },
   ];
   function read(): void {
+    tunnelUrl = dialog.el.querySelector<HTMLInputElement>("[data-tunnel-url]")?.value ?? tunnelUrl;
     eventContains = dialog.el.querySelector<HTMLInputElement>("#au-event-contains")?.value ?? eventContains;
     eventValue = dialog.el.querySelector<HTMLInputElement>("#au-event-value")?.value ?? eventValue;
     if (when && !when.webhook) when.filter.equals = dialog.el.querySelector<HTMLInputElement>("#au-filter")?.value ?? when.filter.equals;
@@ -101,7 +103,7 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
     return `<input class="mb-fin au-title" id="au-title" maxlength="${ROUTINE_TITLE_MAX}" placeholder="${esc(t("auto.what"))}" aria-label="${esc(t("auto.what"))}" value="${esc(title)}">` +
       (routine ? `<div class="mp-resource"><span>${esc(t(enabled ? "computer.routineOn" : "computer.routinePaused"))}</span>${tg(enabled, t("members.routineSwitch", {p0: routine.title}), ' data-dlg="enabled"')}</div>` : "") +
       `<section class="au-field"><h3>${esc(t("auto.when"))}</h3>${sel(triggerChoices(),trigger,t("trigger.trigger"),' data-dlg="trigger"')}</section>` +
-      (trigger === "webhook" ? `<section class="au-field au-webhook"><p>${routineSentenceHTML({schedule:null,when:{webhook:true}})}</p><p class="note">${esc(t("trigger.hookHelp"))}</p><p class="note">${esc(t("recipe.public"))}</p>${recipeBody()}${routine && routine.when?.webhook ? `<code class="au-hook-address">${esc(address)}</code><label class="field sc-field">${ico("lock")}<input class="au-hook-secret" readonly type="${secret ? "text" : "password"}" value="${esc(secret || "********")}" aria-label="${esc(t("trigger.secret"))}" autocomplete="off" spellcheck="false"></label><div class="au-chips">${btn(esc(t(secret ? "trigger.hideSecret" : "trigger.showSecret")),"sm",' data-dlg="hook-show"')}${btn(copyLabel(t("trigger.copySecret")),"sm",' data-dlg="hook-copy"')}${btn(copyLabel(t("recipe.copyUrl")),"sm",' data-dlg="hook-url"')}${btn(copyLabel(t("recipe.copyHeader")),"sm",' data-dlg="hook-header"')}</div>${addressChanged ? `<p role="status">${esc(t("trigger.addressChanged"))}</p>` : ""}${hookError ? `<p role="alert">${esc(hookError)}</p>` : ""}` : `<p class="note">${esc(t("trigger.hookSaved"))}</p>`}</section>` :
+      (trigger === "webhook" ? `<section class="au-field au-webhook"><p>${routineSentenceHTML({schedule:null,when:{webhook:true}})}</p><p class="note">${esc(t("trigger.hookHelp"))}</p><p class="note">${esc(t("recipe.public"))}</p>${recipeBody()}${routine && routine.when?.webhook ? `<code class="au-hook-address">${esc(address)}</code><label class="field sc-field">${ico("lock")}<input class="au-hook-secret" readonly type="${secret ? "text" : "password"}" value="${esc(secret || "********")}" aria-label="${esc(t("trigger.secret"))}" autocomplete="off" spellcheck="false"></label><div class="au-chips">${btn(esc(t(secret ? "trigger.hideSecret" : "tunnel.key")),"sm",' data-dlg="hook-show"')}${btn(copyLabel(t("trigger.copySecret")),"sm",` data-dlg="hook-copy"${secret ? "" : " disabled"}`)}${btn(copyLabel(t("recipe.copyUrl")),"sm",' data-dlg="hook-url"')}${btn(copyLabel(t("recipe.copyHeader")),"sm",` data-dlg="hook-header"${secret ? "" : " disabled"}`)}</div>${tunnelBody()}${secret ? `<p class="note">${esc(t("tunnel.once"))}</p>` : ""}${addressChanged ? `<p role="status">${esc(t("trigger.addressChanged"))}</p>` : ""}${hookError ? `<p role="alert">${esc(hookError)}</p>` : ""}` : `<p class="note">${esc(t("trigger.hookSaved"))}</p>`}</section>` :
       trigger === "event" && (!when || eventId) ? eventBody() :
       when && !when.webhook ? `<section class="au-field au-event"><h3>${esc(t("auto.onEvent"))}</h3><p>${routineSentenceHTML({ schedule:null, app_name:routine?.app_name, when })}</p>${when.filter.field ? `<label>${esc(t("auto.triggerFilter"))}<input class="mb-fin" id="au-filter" maxlength="300" value="${esc(when.filter.equals)}"></label>` : ""}<p class="note">${esc(t("auto.triggerHelp"))}</p><p class="note">${esc(routine ? routineStatus(routine) : "")}</p>${routine?.last_error ? btn(esc(t("auto.connections")), "sm", ' data-dlg="connections" data-missing-repair="connections"') : ""}</section>` : `<section class="au-field"><p class="au-trigger-preview">${routineSentenceHTML({schedule:currentSchedule()})}</p><div class="au-start"><span>${esc(t("auto.starts"))}</span>${btn(esc(date), "", ' data-dlg="date" aria-label="' + esc(t("auto.date")) + '"')}<input class="mb-fin au-time" id="au-time" type="text" inputmode="numeric" maxlength="5" value="${esc(kind === "every" && windowFrom ? windowFrom : time)}"${kind === "every" && windowFrom ? " disabled" : ""} aria-label="${esc(t("auto.time"))}" placeholder="00:00"></div>` +
       `<div class="au-chips">${kinds.map(([value, label]) => btn(esc(label), "sm", ` data-dlg="kind" data-kind="${value}" aria-pressed="${kind === value}"`)).join("")}</div>` +
@@ -116,6 +118,29 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
       (more ? `<section class="au-more"><label class="au-field"><span>${esc(t("auto.end"))}</span>${sel(endChoices(), ending, t("auto.end"), ' data-dlg="end"')}` +
       (ending === "after" ? `<input id="au-count" class="mb-fin" type="number" min="1" max="10000" value="${esc(count)}" aria-label="${esc(t("auto.after"))}">` : ending === "until" ? btn(esc(until), "", ' data-dlg="until"') : "") +
       `</label><div class="au-field"><span>${esc(t("auto.results"))}</span>${sel([{ value: "main", label: t("auto.mainThread") }], "main", t("auto.results"), ' data-dlg="destination"')}</div></section>` : "")) + (routine ? `<div class="au-run-section">${runBody()}</div>` : "");
+  }
+  function tunnelCommand(): string {
+    const port = /^http:\/\/127\.0\.0\.1:(\d+)\//.exec(address)?.[1];
+    if (!port) return "";
+    return tunnelTool === "tailscale" ? `tailscale funnel --bg http://127.0.0.1:${port}` : tunnelTool === "cloudflare" ? `cloudflared tunnel --url http://127.0.0.1:${port}` : `ngrok http http://127.0.0.1:${port}`;
+  }
+  function tunnelBody(): string {
+    return btn(esc(t("tunnel.title")), "sm", ` data-dlg="tunnel" aria-expanded="${tunnel}"`) + (!tunnel ? "" :
+      `<section class="au-tunnel"><p class="note">${esc(t("tunnel.help"))}</p><div class="au-chips">${["tailscale", "cloudflare", "ngrok"].map(value => btn(esc({tailscale:"Tailscale Funnel",cloudflare:"Cloudflare Tunnel",ngrok:"ngrok"}[value]!), "sm", ` data-dlg="tunnel-tool" data-tool="${value}" aria-pressed="${tunnelTool === value}"`)).join("")}</div>` +
+      `<code class="au-hook-address">${esc(tunnelCommand())}</code>${btn(copyLabel(t("tunnel.copyCommand")), "sm", ' data-dlg="tunnel-command"')}` +
+      `<label class="au-field">${esc(t("tunnel.url"))}<input class="mb-fin" data-tunnel-url value="${esc(tunnelUrl)}" type="url" placeholder="https://example.ts.net" autocomplete="off"></label>` +
+      `${btn(esc(t(tunnelBusy ? "tunnel.testing" : "tunnel.test")), "sm", ` data-dlg="tunnel-test"${tunnelBusy ? " disabled" : ""}`)}<p role="status">${esc(tunnelResult)}</p>` +
+      `<div class="au-chips"><span>${esc(t("tunnel.auth"))}</span>${["bearer", "hmac"].map(value => btn(value === "bearer" ? "Bearer" : "HMAC-SHA256", "sm", ` data-dlg="hook-auth" data-auth="${value}" aria-pressed="${hookAuth === value}"`)).join("")}</div><p class="note">${esc(t("tunnel.on"))}</p></section>`);
+  }
+  async function testTunnel(): Promise<void> {
+    if (!routine || tunnelBusy) return;
+    tunnelUrl = dialog.el.querySelector<HTMLInputElement>("[data-tunnel-url]")?.value.trim() || "";
+    tunnelBusy = true; tunnelResult = ""; read(); draw();
+    try {
+      const result = await api.core<{tested: boolean; address: string}>("routines.webhook", {id:routine.id, url:tunnelUrl});
+      if (result.tested) {tunnelUrl = result.address; tunnelResult = t("tunnel.passed");}
+    } catch (error) {tunnelResult = describeError(error);}
+    finally {tunnelBusy = false; if (dialog.el.isConnected) draw();}
   }
   function eventBody(): string {
     const choice = selectedEvent();
@@ -161,26 +186,17 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
     control?.setAttribute("aria-busy", "true");
     if (control instanceof HTMLButtonElement) control.disabled = true;
     try {
-      const result = await api.routineWebhook(routine.id, action !== "address" && action !== "hook-url");
+      if (action === "hook-copy" || action === "hook-header") {
+        if (!secret) return;
+        if (control) await copyButton(control, action === "hook-copy" ? secret : hookAuth === "bearer" ? `Authorization: Bearer ${secret}` : `X-Raphael-Signature: sha256=<HMAC-SHA256(${secret}, raw request body)>`);
+        return;
+      }
+      const result = action === "hook-show" ? await api.core<{address:string;secret?:string;address_changed?:boolean}>("routines.webhook", {id:routine.id,reveal:true,rotate:true}) : await api.routineWebhook(routine.id);
       if (!dialog.el.isConnected) return;
       address = result.address;
       addressChanged = !!result.address_changed;
       if (action === "hook-url") { if (control) await copyButton(control, result.address); return; }
-      if (action === "hook-copy" || action === "hook-header") {
-        hookError = "";
-        const section = dialog.el.querySelector(".au-webhook"), line = section?.querySelector(".au-hook-address");
-        if (line && line.textContent !== address) line.textContent = address;
-        section?.querySelector('[role="alert"]')?.remove();
-        const notice = section?.querySelector('[role="status"]');
-        if (!addressChanged) notice?.remove();
-        else if (!notice && section) {
-          const message = document.createElement("p"); message.setAttribute("role", "status");
-          message.textContent = t("trigger.addressChanged"); section.append(message);
-        }
-        if (control) await copyButton(control, action === "hook-header" ? `Authorization: Bearer ${result.secret!}` : result.secret!);
-        return;
-      }
-      else if (action === "hook-show") secret = result.secret ?? "";
+      if (action === "hook-show") secret = result.secret ?? "";
       hookError = "";
     } catch (error) { hookError = describeError(error); }
     finally { control?.removeAttribute("aria-busy"); if (control instanceof HTMLButtonElement) control.disabled = false; }
@@ -207,10 +223,15 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
   }
   dialog = openDialog({ title: t(routine ? "auto.editRoutine" : "auto.newRoutine"), body: body(), cls: "au-routine-dialog",
     actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), destructive: routine ? { label: esc(t("auto.delete")), attrs: ' data-dlg="delete"' } : undefined, primary: { label: esc(t("members.save")), attrs: ' data-dlg="save"' } },
-    onClose: () => stopWatching(), canClose: () => !saving, onEnter: () => void save(),
+    onClose: () => {secret = ""; const field = dialog.el.querySelector<HTMLInputElement>(".au-hook-secret"); if (field) field.value = ""; stopWatching();}, canClose: () => !saving, onEnter: () => void save(),
     onAct(act, target) {
       read();
-      if (act === "test" && routine) void testRoutine(routine.id);
+      if (act === "tunnel") {tunnel = !tunnel; draw();}
+      else if (act === "tunnel-tool") {tunnelUrl = dialog.el.querySelector<HTMLInputElement>("[data-tunnel-url]")?.value || tunnelUrl; tunnelTool = target.dataset.tool!; draw();}
+      else if (act === "tunnel-command") void copyButton(target, tunnelCommand());
+      else if (act === "tunnel-test") void testTunnel();
+      else if (act === "hook-auth") {hookAuth = target.dataset.auth!; draw();}
+      else if (act === "test" && routine) void testRoutine(routine.id);
       else if (act === "recipe") openMenu(target, [{value:"sentry",label:"Sentry"},{value:"pagerduty",label:"PagerDuty"}], recipe, value => {recipe=value; draw();});
       else if (act === "save") void save();
       else if (act === "connections") dialog.close();

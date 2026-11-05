@@ -20,7 +20,7 @@ test("the sidebar plus makes members and groups, never a conversation, and keeps
   expect(document.querySelector("[data-pick=member]")).not.toBeNull();
   closeMenu();
   column.el.querySelector<HTMLElement>("[data-member-more='1']")!.click();
-  expect([...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(el => el.dataset.pick)).toEqual(["pin", "move", "primary", "unread", "read-all", "edit", "duplicate", "clear", "hide", "delete"]);
+  expect([...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(el => el.dataset.pick)).toEqual(["pin", "move", "primary", "unread", "read-all", "edit", "export-template", "duplicate", "clear", "hide", "delete"]);
   document.querySelector<HTMLElement>("[data-pick=hide]")!.click();
   expect(action).toHaveBeenCalledWith(1, "hide");
 });

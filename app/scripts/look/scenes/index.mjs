@@ -1,3 +1,4 @@
+import colleagues from "./colleagues.mjs";
 import cards from "./cards.mjs";
 import chatMetadata from "./chat-metadata.mjs";
 import vault from "./vault.mjs";
@@ -42,6 +43,7 @@ import ownerRound9 from "./owner-round9.mjs";
 import { withOwnerRound4, noNaming } from "./owner-round4.mjs";
 
 export const scenes = withOwnerRound4([...polish, ...mcpProposals, ...workBatch, ...batch, ...missing, ...ownerQuestions, ...richContent, ...sidebar, ...shortcuts, ...slime, ...pages, ...home, ...chat, ...desktop, ...automations, ...mentions, ...history, ...composerVoice, ...settings, ...apps, ...contextMenu, ...overlay, ...ownerRound, ...ownerRound3, ...ownerRound9, ...ownerRound10, noNaming]);
+scenes.push(...colleagues);
 scenes.push(...mediaData);
 scenes.push(...handoffGroup);
 scenes.push(...daily);

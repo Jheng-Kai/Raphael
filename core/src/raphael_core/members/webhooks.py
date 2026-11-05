@@ -26,6 +26,9 @@ class Webhooks:
         self.clients = set()
         self.known = set()
         self.address_changed = False
+        self.probes = set()
+        from ..services.fetch import PageFetcher
+        self.post_probe = PageFetcher(max_seconds=10).post_probe
 
     @staticmethod
     def key(identifier):
@@ -66,15 +69,49 @@ class Webhooks:
             task.cancel()
         await asyncio.gather(*clients, return_exceptions=True)
 
-    async def details(self, identifier, *, reveal=False):
+    async def details(self, identifier, *, reveal=False, rotate=False):
         await self.sync()
         if self.server is None:
             return {}
         port = self.server.sockets[0].getsockname()[1]
         result = {"address": f"http://127.0.0.1:{port}/routines/{identifier}", "header": "X-Raphael-Signature", "algorithm": "HMAC-SHA256", "address_changed": self.address_changed}
         if reveal:
+            if rotate:
+                self.vault.set(self.key(identifier), secrets.token_hex(32))
             result["secret"] = self.vault.get(self.key(identifier))
         return result
+
+    async def test_external(self, identifier, url):
+        from urllib.parse import urlsplit
+        from ..protocol import invalid_params
+        from ..services.common import ServiceError
+        if not isinstance(url, str) or len(url) > 2000:
+            raise invalid_params("Enter the tunnel HTTPS URL")
+        try:
+            parsed = urlsplit(url)
+            valid = (parsed.scheme == "https" and parsed.hostname and not parsed.username and not parsed.password
+                     and not parsed.query and not parsed.fragment and parsed.port in (None, 443)
+                     and parsed.path in ("", "/", f"/routines/{identifier}"))
+        except ValueError:
+            valid = False
+        if not valid:
+            raise invalid_params("Enter a plain tunnel HTTPS URL")
+        await self.sync()
+        address = f"https://{parsed.netloc}/routines/{identifier}"
+        nonce = secrets.token_hex(16)
+        self.probes.add(nonce)
+        body = b'{"raphael":"connection-test"}'
+        secret = self.vault.get(self.key(identifier))
+        signature = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+        try:
+            status = await self.post_probe(address, body, {"X-Raphael-Signature": signature, "X-Raphael-Probe": nonce})
+            if status != 204 or nonce in self.probes:
+                raise invalid_params("The tunnel did not reach this routine; check its URL and command")
+            return {"tested": True, "address": address}
+        except (TimeoutError, OSError, ServiceError):
+            raise invalid_params("The external URL test could not connect") from None
+        finally:
+            self.probes.discard(nonce)
 
     async def handle(self, reader, writer):
         task = asyncio.current_task()
@@ -123,12 +160,18 @@ class Webhooks:
             return 413
         identifier = int(match[1])
         routine = self.service.store.routine(identifier)
-        secret = self.vault.get(self.key(identifier)) if routine and routine.enabled and is_webhook(routine.when) else None
+        secret = self.vault.get(self.key(identifier)) if routine and is_webhook(routine.when) else None
         body = await reader.readexactly(length)
         expected = "sha256=" + hmac.new((secret or "").encode(), body, hashlib.sha256).hexdigest()
         signed = hmac.compare_digest(expected, fields.get("x-raphael-signature", ""))
         bearer = hmac.compare_digest("Bearer " + (secret or ""), fields.get("authorization", ""))
         if not secret or not (signed or bearer):
+            return 401
+        nonce = fields.get("x-raphael-probe")
+        if nonce in self.probes:
+            self.probes.remove(nonce)
+            return 204
+        if not routine.enabled:
             return 401
         current = self.service.store.routine(identifier)
         if current is None or not current.enabled or current.when != routine.when or current.prompt != routine.prompt:
