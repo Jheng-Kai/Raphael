@@ -1666,7 +1666,8 @@ export function checkRendered(name, context = {}) {
         require(pill && pill.textContent.trim(), 'status always has a word');
         require(Math.abs(pill.getBoundingClientRect().right - (box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth))) < 1.5, 'pill aligns with the right padding');
       }
-      require(![...card.querySelectorAll('.av,.slime,.ask-face,.bgq-face,.draft-face')].some(face => !face.closest('[data-card-desktop-screen] .desktop-preparation > .desktop-boot-face, [data-card-screen] .desktop-preparation > .desktop-boot-face')), 'no face is inside a card outside its booting computer screen');
+      // The computer screen's own character (booting, or saying its state in one sentence) belongs to the screen.
+      require(![...card.querySelectorAll('.av,.slime,.ask-face,.bgq-face,.draft-face')].some(face => !face.closest('[data-card-desktop-screen] .desktop-boot-face, [data-card-screen] .desktop-boot-face')), 'no face is inside a card outside its computer screen');
       require(!card.querySelector('select'), 'no native select is inside a card');
       if (card.matches('[data-desktop-work][data-work-state="waiting_control"]')) {
         const turn = card.closest('.tn');
@@ -3227,7 +3228,8 @@ export function checkRendered(name, context = {}) {
     const turn = document.querySelector('.tn[data-id="91"]');
     require(visible(turn) && turn.querySelector('.me')?.textContent.includes("明天早上要帶傘嗎"), "the Alt+Space question arrived in the open quick conversation");
     require(visible(turn.querySelector('.ra .chat-message[data-reply]')) && turn.querySelector('.ra .chat-message[data-reply]').textContent.includes("出門記得帶傘"), "its answer shows below its public step");
-    const meta = turn.querySelector('.message-work')?.dataset.tooltip ?? "";
+    // The calm thread keeps the model in the reply's work detail, not in the work button's tooltip.
+    const meta = turn.querySelector('.work-meta')?.textContent ?? turn.querySelector('.message-work')?.dataset.tooltip ?? "";
     require(/luna/i.test(meta) && !/\bsol\b/i.test(meta), `the answer names the quick model that answered it: ${meta}`);
     require(document.querySelector('.conversation-trigger')?.textContent.includes("快速提問"), "the quick conversation stays open");
     require(!document.querySelector('.tn[data-id="1"]'), "formal history stays out of quick questions");
@@ -5228,7 +5230,8 @@ export function checkRendered(name, context = {}) {
         "Connect reached the core with the card's id");
     }
     if (name === "connector-reconnected") {
-      const line = eventLines(2).at(-1), resumed = document.querySelector('.tn[data-id="121"]');
+      // The calm thread keeps one centred line for the resumption.
+      const line = eventLines(1).at(-1), resumed = document.querySelector('.tn[data-id="121"]');
       require(line.textContent === "Gmail 已連結，繼續原本的工作", `the resumed task opens with one line naming the app: ${line.textContent}`);
       const markBox = line.querySelector('.mono').getBoundingClientRect();
       require(markBox.width <= 20 && markBox.height <= 20, `the line's mark is no larger than its icons (${markBox.width}x${markBox.height})`);
