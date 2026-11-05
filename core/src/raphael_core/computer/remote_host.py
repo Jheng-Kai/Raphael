@@ -2,7 +2,6 @@
 
 import asyncio
 import ipaddress
-import json
 import re
 import tempfile
 import time
@@ -23,6 +22,19 @@ def ssh_args(alias):
             "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2", checked_alias(alias)]
 
 
+async def _login_user(alias, run):
+    """The user name ssh logs in with for `alias`, read locally from `ssh -G` (no connection). An IP
+    without a config entry logs in as this computer's user, often not the host's account."""
+    try:
+        code, out, _ = await run(["ssh", "-G", checked_alias(alias)])
+    except (OSError, TimeoutError):
+        return ""
+    if code:
+        return ""
+    user = next((line.split(None, 1)[1].strip() for line in out.splitlines() if line.lower().startswith("user ") and len(line.split(None, 1)) > 1), "")
+    return user if re.fullmatch(r"[A-Za-z0-9._-]{1,64}", user) else ""
+
+
 async def host_health(alias, *, run=None):
     """Read-only noninteractive checks. Return classifications, never raw SSH diagnostics."""
     checked_alias(alias)
@@ -40,27 +52,29 @@ async def host_health(alias, *, run=None):
     run = run or execute
     from .vm import IMAGE
     try:
+        # Only the two architectures are read: Docker Desktop's whole `docker info` JSON and the image's
+        # passed the 16 KiB read together, the image line was cut, and a matching arm64 host read as unsupported.
         code, out, err = await run([*ssh_args(alias), "command -v docker >/dev/null 2>&1 || { test -x /usr/local/bin/docker -o -x /opt/homebrew/bin/docker -o -x /Applications/Docker.app/Contents/Resources/bin/docker && exit 42; exit 43; }; "
-            "docker info --format '{{json .}}' || exit 44; " + f"docker image inspect {IMAGE} --format '{{{{json .}}}}' || exit 45"])
+            "docker info --format '{{.Architecture}}' || exit 44; " + f"docker image inspect {IMAGE} --format '{{{{.Architecture}}}}' || exit 45"])
     except (OSError, TimeoutError):
         return {"host": alias, "ok": False, "checks": [{"kind": "ssh_unreachable", "ok": False}]}
     checks = []
     if code == 255:
         kind = "ssh_key" if "permission denied" in err.lower() or "authentication" in err.lower() else "ssh_unreachable"
-        checks.append({"kind": kind, "ok": False})
+        check = {"kind": kind, "ok": False}
+        if kind == "ssh_key" and (user := await _login_user(alias, run)):
+            check["user"] = user
+        checks.append(check)
     else:
         checks.append({"kind": "ssh", "ok": True})
         if code and code != 45:
             checks.append({"kind": "docker_path" if code == 42 else "docker_missing" if code == 43 else "docker_stopped", "ok": False})
         else:
             checks.append({"kind": "docker", "ok": True})
-            try:
-                lines = out.splitlines()
-                normalize = lambda value: {"x86_64": "amd64", "aarch64": "arm64"}.get(value, value)
-                architecture = normalize(json.loads(lines[0]).get("Architecture", ""))
-                image = normalize(json.loads(lines[1]).get("Architecture", "")) if len(lines) > 1 else ""
-            except (ValueError, AttributeError, IndexError):
-                architecture, image = "", ""
+            normalize = lambda value: {"x86_64": "amd64", "aarch64": "arm64"}.get(value, value)
+            lines = [line.strip() for line in out.splitlines() if line.strip()]
+            architecture = normalize(lines[0]) if lines else ""
+            image = normalize(lines[1]) if len(lines) > 1 else ""
             if code == 45:
                 checks.append({"kind": "image_missing", "ok": False})
             else:
