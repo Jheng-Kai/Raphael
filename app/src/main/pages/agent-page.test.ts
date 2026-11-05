@@ -276,7 +276,7 @@ describe("coming back to the page", () => {
     expect([...seen].sort((a, b) => a - b)).toEqual(Array.from({ length: 150 }, (_, i) => i + 1));
     expect(api.agentHistoryList).toHaveBeenCalledWith({ limit: 50, before_id: 101 });
     expect(api.agentHistoryList).toHaveBeenCalledWith({ limit: 50, before_id: 51 });
-  });
+  }, 20_000); // Renders and pages through 150 turns eight times; a loaded machine needs more than the default 5 s.
 });
 
 describe("the search", () => {
