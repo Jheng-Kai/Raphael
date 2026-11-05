@@ -2041,7 +2041,7 @@ export const zhTW = {
   "store.changed": "範本內容已變更，請重新檢視。",
   "store.prepared": "已準備套件資料夾：{p0}。請在 GitHub 分支加入套件與目錄項目後提出變更請求。",
   "vault.title": "保管箱",
-  "vault.about": "保存成員可代你填入的資料；實際內容只存放在 Windows 認證管理員。",
+  "vault.about": "成員可代你填入的資料；內容只存在 Windows 認證管理員。",
   "vault.all": "全部",
   "vault.login": "登入",
   "vault.contact": "聯絡資料",

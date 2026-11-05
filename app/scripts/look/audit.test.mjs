@@ -11,6 +11,38 @@ import { LATIN_NAMES, needsDesktopFixture, sceneLatinNames } from "./runner.mjs"
 import { slimeParts } from "./slime-board.mjs";
 
 describe("rendered look checks", () => {
+  it("rejects short event actions, inline labels and misaligned confirmation", () => {
+    const browser = new Window();
+    browser.document.body.innerHTML = '<div class="au-event-fields"><label>Channel<input id="au-event-value" class="mb-fin" value="C012345"></label><label>Contains<input id="au-event-contains" class="mb-fin" value="&lt;@U012345&gt;"></label><button data-dlg="event-check">Check</button></div>';
+    browser.__look = {calls:[{method:'routines.list',params:{contains:'<@U012345>',value:'C012345'}}]};
+    let actionHeight = 36, actionBottom = 100, labelBottom = 56;
+    for (const input of browser.document.querySelectorAll('input')) input.getBoundingClientRect = () => ({top:64,bottom:100,height:36});
+    browser.document.querySelector('button').getBoundingClientRect = () => ({height:actionHeight,bottom:actionBottom});
+    browser.document.createRange = () => ({selectNodeContents() {},setEndBefore() {},getBoundingClientRect:()=>({bottom:labelBottom})});
+    vi.stubGlobal('document',browser.document); vi.stubGlobal('window',browser);
+    try {
+      expect(() => checkRendered('routine-trigger-slack')).not.toThrow();
+      actionHeight = 26; expect(() => checkRendered('routine-trigger-slack')).toThrow('share the control height'); actionHeight = 36;
+      labelBottom = 90; expect(() => checkRendered('routine-trigger-slack')).toThrow('above their fields'); labelBottom = 56;
+      actionBottom = 108; expect(() => checkRendered('routine-trigger-slack')).toThrow('aligns with the fields');
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
+
+  it("rejects recipe frontmatter, raw service ids and an unfolded default skill", () => {
+    const browser = new Window();
+    browser.document.body.innerHTML = '<div class="template-preview"><div class="template-skill"><div class="row"><span class="t">Check sources</span><span class="val">Check before publishing</span></div><button data-card-disclosure aria-expanded="false"></button><div class="card-detail" hidden>Keep this body.</div></div><div data-template-connection="gmail"><b class="card-title">Gmail</b></div></div>';
+    vi.stubGlobal('document',browser.document);
+    try {
+      expect(() => checkRendered('template-content')).not.toThrow();
+      const detail = browser.document.querySelector('.card-detail');
+      detail.textContent = '---\nname: Check sources\ndescription: Check before publishing\n---\nKeep this body.';
+      expect(() => checkRendered('template-content')).toThrow('omits frontmatter'); detail.textContent = 'Keep this body.';
+      const title = browser.document.querySelector('.card-title');
+      title.textContent = 'gmail'; expect(() => checkRendered('template-content')).toThrow('catalogue display names'); title.textContent = 'Gmail';
+      detail.hidden = false; expect(() => checkRendered('template-content')).toThrow('disclosure state');
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
+
   it("rejects split text edges, mismatched controls and centered location values", () => {
     const browser = new Window();
     browser.document.body.innerHTML = '<div class="computer-location-popover"><p class="computer-location-purpose">Shared scope</p><div class="lbl"><div class="t">Computer location</div></div><button class="sel"><span>Local</span></button><label class="field"><input></label></div>';
@@ -151,22 +183,25 @@ describe("rendered look checks", () => {
       expect(() => checkRendered("conversation-up")).toThrow("latest has its own opaque surface");
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });
-  it("rejects an event check button stretched to the labelled scope height", () => {
+  it("requires an event check button to match the scope control height and baseline", () => {
     const browser=new Window();
     browser.document.body.innerHTML='<section class="au-routine-dialog"><button data-dlg="trigger">Event</button><label><input id="au-event-value"></label><button data-dlg="event-check">Check event</button></section>';
     for(const element of browser.document.querySelectorAll('*')) element.getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:40,width:100,height:30});
     const button=browser.document.querySelector('[data-dlg="event-check"]');
     button.getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:78,width:100,height:68});
+    let labelBottom=8;
+    browser.document.createRange=()=>({selectNodeContents(){},setEndBefore(){},getBoundingClientRect:()=>({bottom:labelBottom})});
     vi.stubGlobal('document',browser.document);
     try {
-      expect(()=>checkRendered('moving-event-input')).toThrow('ordinary small button height');
+      expect(()=>checkRendered('moving-event-input')).toThrow('event scope and check share the control height');
       button.getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:40,width:100,height:30});
       expect(()=>checkRendered('moving-event-input')).not.toThrow();
-      browser.document.querySelector('label').getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:58,width:100,height:48});
-      expect(()=>checkRendered('moving-event-input')).toThrow('scope label stays on one line');
-      browser.document.querySelector('[data-dlg="trigger"]').getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:54,width:100,height:44});
-      browser.document.querySelector('#au-event-value').getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:54,width:100,height:44});
-      browser.document.querySelector('label').getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:54,width:100,height:44});
+      labelBottom=24;
+      expect(()=>checkRendered('moving-event-input')).toThrow('event scope label stays above its input');
+      labelBottom=8;
+      button.getBoundingClientRect=()=>({left:10,top:15,right:110,bottom:45,width:100,height:30});
+      expect(()=>checkRendered('moving-event-input')).toThrow('event scope and check share a baseline');
+      button.getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:40,width:100,height:30});
       expect(()=>checkRendered('moving-event-input')).not.toThrow();
     } finally {vi.unstubAllGlobals();browser.happyDOM.abort();}
   });

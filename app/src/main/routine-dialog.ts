@@ -145,10 +145,10 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
   function eventBody(): string {
     const choice = selectedEvent();
     if (!choices.length) return `<section class="au-field au-event"><p>${esc(eventError || t(noApps ? "trigger.noApps" : "trigger.emptyEvents"))}</p>${btn(esc(t("auto.connections")),"sm",' data-dlg="connections" data-missing-repair="connections"')}</section>`;
-    return `<section class="au-field au-event"><div class="au-chips">${sel([{value:"",label:t("trigger.pickEvent")},...choices.map(c=>({value:c.id,label:`${c.app_name} · ${c.label}`}))],eventId,t("auto.onEvent"),' data-dlg="event"')}` +
-      (choice?.input ? `<label>${esc(t(choice.input === "repository" ? "trigger.repository" : "trigger.channel"))}<input class="mb-fin" id="au-event-value" maxlength="500" value="${esc(eventValue)}" aria-label="${esc(t(choice.input === "repository" ? "trigger.repository" : "trigger.channel"))}" placeholder="${esc(choice.input === "repository" ? t("trigger.repositoryHint") : "")}"></label>` : "") +
-      (choice?.id === "slack-message" ? `<label>${esc(t("recipe.slackFilter"))}<input class="mb-fin" id="au-event-contains" maxlength="300" value="${esc(eventContains)}" placeholder="${esc(t("recipe.slackHint"))}"></label>` : "") +
-      (choice ? btn(esc(t(checking ? "trigger.checking" : eventError ? "trigger.retry" : "trigger.checkEvent")),"sm",` data-dlg="event-check"${checking ? " disabled" : ""}`) : "") +
+    return `<section class="au-field au-event"><label class="mp-label">${esc(t("auto.onEvent"))}${sel([{value:"",label:t("trigger.pickEvent")},...choices.map(c=>({value:c.id,label:`${c.app_name} · ${c.label}`}))],eventId,t("auto.onEvent"),' data-dlg="event"')}</label><div class="au-event-fields">` +
+      (choice?.input ? `<label class="mp-label">${esc(t(choice.input === "repository" ? "trigger.repository" : "trigger.channel"))}<input class="mb-fin" id="au-event-value" maxlength="500" value="${esc(eventValue)}" aria-label="${esc(t(choice.input === "repository" ? "trigger.repository" : "trigger.channel"))}" placeholder="${esc(choice.input === "repository" ? t("trigger.repositoryHint") : "")}"></label>` : "") +
+      (choice?.id === "slack-message" ? `<label class="mp-label">${esc(t("recipe.slackFilter"))}<input class="mb-fin" id="au-event-contains" maxlength="300" value="${esc(eventContains)}" placeholder="${esc(t("recipe.slackHint"))}"></label>` : "") +
+      (choice ? btn(esc(t(checking ? "trigger.checking" : eventError ? "trigger.retry" : "trigger.checkEvent")),"",` data-dlg="event-check"${checking ? " disabled" : ""}`) : "") +
       `</div><p class="note au-event-status" role="${eventError ? "alert" : "status"}">${esc(eventError || (when ? t("trigger.eventReady") : t("trigger.eventHelp")))}</p></section>`;
   }
   async function loadEvents(): Promise<void> {

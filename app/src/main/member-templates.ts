@@ -1,11 +1,12 @@
 // Local colleague recipes inspired by Grok Bot; see core/packaging/licenses/NOTICES.md.
 import * as api from "./api";
-import { cardHTML } from "./card";
+import { cardDisclosureHTML, cardHTML } from "./card";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
 import { slimeFaceHTML } from "./slime";
 import { routineSentenceHTML } from "./members";
+import { SERVICE_ICONS } from "./service-icons";
 import type { Member, NewMember, Routine } from "./types";
 import { btn, esc, row, toaster } from "./ui";
 
@@ -57,6 +58,29 @@ function scanLocation(warning: ScanFinding): string {
   return (labels[field] || t("store.facts")) + (index ? ` ${Number(index[1]) + 1}` : "");
 }
 
+/** Reuse the local service catalogue's brand spelling, preserving custom server ids. */
+function connectionName(id: string): string {
+  const key = id.replace(/^composio:/i, "").toLowerCase();
+  return Object.prototype.hasOwnProperty.call(SERVICE_ICONS, key) ? SERVICE_ICONS[key as keyof typeof SERVICE_ICONS].title : id;
+}
+
+/** Read plain skill metadata using the same scalar forms accepted by the skill store. */
+function skillContents(text: string): { name: string; description: string; body: string } {
+  const frontmatter = /^\uFEFF?[ \t]*---[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*---[ \t]*(?:\r?\n|$)/.exec(text);
+  const values: Record<string, string> = {};
+  let field = "";
+  for (const line of (frontmatter?.[1] || "").split(/\r?\n/)) {
+    if (field && /^\s/.test(line)) { values[field] += " " + line.trim(); continue; }
+    field = "";
+    const entry = /^(name|description):\s*(.*)$/.exec(line);
+    if (!entry) continue;
+    const [, key, value] = entry;
+    if (/^[|>]-?$/.test(value)) { values[key] = ""; field = key; }
+    else values[key] = value.replace(/^["']|["']$/g, "");
+  }
+  return {name: values.name?.trim() || t("template.skill"), description: values.description?.trim() || "", body: frontmatter ? text.slice(frontmatter[0].length) : text};
+}
+
 export function templateContents(template: MemberTemplate, warnings: ScanFinding[] = []): string {
   const full = (text: string): string => `<pre class="template-text">${esc(text || t("template.none"))}</pre>`;
   const risks = [...new Set(warnings.map(w => t(w.kind === "secret" ? "store.secret" : "store.injection", {p0:scanLocation(w)})))];
@@ -64,7 +88,11 @@ export function templateContents(template: MemberTemplate, warnings: ScanFinding
     (warnings.some(w => w.kind === "injection") ? "" : `<p>${esc(t("store.injectionNote"))}</p>`) + risks.map(text => `<p>${esc(text)}</p>`).join("") + `</div>` +
     `<section class="template-section"><h3>${esc(t("store.facts"))}</h3><div class="template-field"><h4>${esc(t("members.instructions"))}</h4>${full(template.instructions)}</div><div class="template-field"><h4>${esc(t("members.personality"))}</h4>${full(template.personality)}</div></section>` +
     `<section class="template-section"><h3>${esc(t("store.skills"))}</h3><p class="note">${esc(t("store.arriveOff"))}</p><div class="list">` +
-    (template.skills.map(skill => row(esc(/^name:\s*(.+)$/m.exec(skill.text)?.[1] || t("template.skill")), "", `<span class="val">${esc(/^description:\s*(.+)$/m.exec(skill.text)?.[1] || "")}</span>`) + full(skill.text) + Object.entries(skill.files || {}).map(([path, content]) => `<div class="template-field"><h4>${esc(path)}</h4>${full(content)}</div>`).join("")).join("") || esc(t("template.none"))) + `</div></section>` +
+    (template.skills.map((skill, index) => {
+      const {name, description, body} = skillContents(skill.text);
+      return `<div class="template-skill">` + row(esc(name), "", `<span class="val">${esc(description)}</span>`) +
+        cardDisclosureHTML(`template-skill-${index}`, full(body) + Object.entries(skill.files || {}).map(([path, content]) => `<div class="template-field"><h4>${esc(path)}</h4>${full(content)}</div>`).join("")) + `</div>`;
+    }).join("") || esc(t("template.none"))) + `</div></section>` +
     `<section class="template-section"><h3>${esc(t("template.routines"))}</h3><div class="list">` + (template.routines.map(r => row(esc(r.title), "", `<span class="val">${routineSentenceHTML(r)} · ${esc(t("computer.routinePaused"))}</span>`) + full(r.prompt)).join("") || esc(t("template.none"))) + `</div></section>`;
 }
 
@@ -76,7 +104,7 @@ export async function previewTemplate(raw: unknown, avatar: string, create: (mem
     const body = (): string => cardHTML({title: template.role || template.name, status: "ready", hideStatus: true, attrs: " data-member-template",
       content: `<label class="mp-label">${esc(t("members.name"))}<input class="mb-fin" data-template-name maxlength="24" value="${esc(made?.name || template.name)}"${made ? " disabled" : ""}></label>` +
         templateContents(template, findings) +
-        `<section class="template-section"><h3>${esc(t("template.connections"))}</h3>${template.connections.map(app => cardHTML({title: app, status: "done", statusText: t("conn.signedIn"), hideStatus: !connected.has(app), attrs: ` data-template-connection="${esc(app)}" data-connected="${connected.has(app)}"`, body: made ? t("template.connectHelp") : undefined, actions: btn(esc(t(connected.has(app) ? "conn.signedIn" : "template.connect")), "sm", ` data-dlg="connect" data-app="${esc(app)}"${!made || busy || connected.has(app) ? " disabled" : ""}`)})).join("") || `<p>${esc(t("template.none"))}</p>`}</section>`});
+        `<section class="template-section"><h3>${esc(t("template.connections"))}</h3>${template.connections.map(app => cardHTML({title: connectionName(app), status: "done", statusText: t("conn.signedIn"), hideStatus: !connected.has(app), attrs: ` data-template-connection="${esc(app)}" data-connected="${connected.has(app)}"`, body: made ? t("template.connectHelp") : undefined, actions: btn(esc(t(connected.has(app) ? "conn.signedIn" : "template.connect")), "sm", ` data-dlg="connect" data-app="${esc(app)}"${!made || busy || connected.has(app) ? " disabled" : ""}`)})).join("") || `<p>${esc(t("template.none"))}</p>`}</section>`});
     const dialog = openDialog({title: t("template.preview"), cls: "template-preview", body: body(),
       actions: {secondary: `<p class="note" data-template-notice>${esc(t("template.noGrants"))}</p>` + btn(esc(t("common.close")), "", ' data-dlg="close"'), primary: {label: esc(t("template.import")), attrs: ' data-dlg="import"'}}, canClose: () => !busy,
       onAct(action, button) {
@@ -140,7 +168,7 @@ export async function exportMemberTemplate(id: number): Promise<void> {
   let busy = false;
   const blocked = findings.some(w => w.kind === "secret");
   const dialog = openDialog({title: t("store.review"), cls: "template-preview template-export-review", body: templateContents(template, findings) +
-    `<h3>${esc(t("template.connections"))}</h3><p>${esc(template.connections.join(", ") || t("template.none"))}</p>`,
+    `<h3>${esc(t("template.connections"))}</h3><p>${esc(template.connections.map(connectionName).join(", ") || t("template.none"))}</p>`,
     actions: {secondary: btn(esc(t("store.publish")), "", ` data-dlg="publish"${blocked ? " disabled" : ""}`), primary: {label: esc(t("store.export")), attrs: ` data-dlg="export"${blocked ? " disabled" : ""}`}},
     canClose: () => !busy,
     onAct(action, button) {
