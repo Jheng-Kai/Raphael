@@ -18,23 +18,31 @@ export interface MentionRange { start: number; end: number; target: MentionTarge
 const WORD = String.raw`[\p{L}\p{N}_]`;
 const QUOTED = /```[\s\S]*?```|`[^`\n]*`|^\s*>.*$|[“「][^”」]*[”」]|"[^"\n]*"/gmu;
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const rosters = new WeakMap<readonly MentionTarget[], { patterns: { target: MentionTarget; pattern: RegExp }[]; texts: Map<string, MentionRange[]> }>();
 
 /** Where `text` addresses one of `targets`, in order and never overlapping. */
 export function mentionRanges(text: string, targets: readonly MentionTarget[]): MentionRange[] {
   if (!/[@＠]/u.test(text) || !targets.length) return [];
+  let roster = rosters.get(targets);
+  if (!roster) {
+    roster = { patterns: targets.flatMap(target => [target.name, ...(target.aliases ?? [])].filter(Boolean).map(name => ({
+      target, pattern: new RegExp(`(?<!${WORD})[@＠]${escapeRegExp(name)}(?!${WORD})`, "giu"),
+    }))), texts: new Map() };
+    rosters.set(targets, roster);
+  }
+  const known = roster.texts.get(text);
+  if (known) return known;
   const open = text.replace(QUOTED, quoted => " ".repeat(quoted.length));
   const hits: MentionRange[] = [];
-  for (const target of targets) {
-    for (const name of [target.name, ...(target.aliases ?? [])]) {
-      if (!name) continue;
-      const pattern = new RegExp(`(?<!${WORD})[@＠]${escapeRegExp(name)}(?!${WORD})`, "giu");
-      for (const match of open.matchAll(pattern)) hits.push({ start: match.index, end: match.index + match[0].length, target });
-    }
-  }
+  for (const { target, pattern } of roster.patterns) for (const match of open.matchAll(pattern)) hits.push({ start: match.index, end: match.index + match[0].length, target });
   hits.sort((a, b) => a.start - b.start || b.end - a.end);
   const kept: MentionRange[] = [];
   let end = 0;
   for (const hit of hits) if (hit.start >= end) { kept.push(hit); end = hit.end; }
+  if (text.length <= 65536) {
+    if (roster.texts.size >= 512) roster.texts.delete(roster.texts.keys().next().value!);
+    roster.texts.set(text, kept);
+  }
   return kept;
 }
 

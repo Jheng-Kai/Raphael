@@ -146,6 +146,9 @@ export const historyClear = (): Promise<{ deleted: number }> => core("history.cl
 // ---------- conversations with Raphael ----------
 
 export interface AgentHistoryQuery {
+  /** Bounded new arrivals and only the loaded records invalidated by events. */
+  after_id?: number;
+  turn_ids?: number[];
   conversation_id?: number;
   around_id?: number;
   limit?: number;
@@ -156,7 +159,7 @@ export interface AgentHistoryQuery {
 }
 
 /** The turns of the conversations, newest first. */
-export const agentHistoryList = (q: AgentHistoryQuery = {}): Promise<{ turns: AgentTurn[]; pending_questions?: OwnerQuestion[] }> => core("agent.history.list", q);
+export const agentHistoryList = (q: AgentHistoryQuery = {}): Promise<{ turns: AgentTurn[]; pending_questions?: OwnerQuestion[]; delta?: boolean; removed_ids?: number[]; has_more?: boolean; next_after_id?: number }> => core("agent.history.list", q);
 /** What the owner typed into a composer, newest first, whichever conversation or room it went to (the arrow keys of a composer walk it). */
 export const agentSent = async (limit = 50): Promise<string[]> => (await core<{ texts: string[] }>("agent.history.sent", { limit })).texts;
 /** Forgets Raphael conversation turns; says how many there were. */

@@ -1,4 +1,4 @@
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
 import type { AgentTurn } from "./types";
 
 type RecordValue = Record<string, unknown>;
@@ -11,7 +11,7 @@ const appName = (action?: string): string => {
 const slug = (value: RecordValue): string | undefined => [value.tool_slug, value.slug, value.tool].find(item => typeof item === "string" && /^[A-Z][A-Z0-9]+_[A-Z0-9_]+$/.test(item)) as string | undefined;
 
 function decode(value: unknown): unknown {
-  if (typeof value !== "string" || value.length > 65536) return value;
+  if (typeof value !== "string" || value.length > 65536 || !/[{\[]/.test(value)) return value;
   try { return JSON.parse(value); } catch { return value; }
 }
 
@@ -90,7 +90,21 @@ function fragments(text: string, action: string | undefined, trusted: boolean): 
 }
 
 /** Only the display projection changes; stored results and model tool messages retain their data. */
+const projections = new Map<string, string>();
 export function composioText(text: string, action?: string, mode: "member" | "tool" = "member"): string {
+  if (!/[{\[]/.test(text)) return text;
+  const key = `${getLocale()}\0${mode}\0${action ?? ""}\0${text}`;
+  const known = projections.get(key);
+  if (known !== undefined) return known;
+  const made = projectText(text, action, mode);
+  if (text.length <= 65536) {
+    if (projections.size >= 512) projections.delete(projections.keys().next().value!);
+    projections.set(key, made);
+  }
+  return made;
+}
+
+function projectText(text: string, action: string | undefined, mode: "member" | "tool"): string {
   const trusted = mode === "tool", unavailable = () => `${appName(action)} · ${t("composio.resultUnavailable")}`;
   const named = /"(?:tool_slug|slug|tool)"\s*:\s*"[A-Z][A-Z0-9]+_[A-Z0-9_]+"/.test(text);
   if (text.length > 65536) {

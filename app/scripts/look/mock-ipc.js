@@ -6,6 +6,23 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.routineGuard) for (const routine of data.routines.filter(item => item.member_id === 1)) {
     Object.assign(routine, { enabled: false, next_run: null, last_error: "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。" });
   }
+  if (variant.threadWindow) {
+    const sample = data.windowSample, base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
+    const words = index => index === 5 && variant.windowComposio ? JSON.stringify({tool_slug:"GMAIL_FETCH_EMAILS",successful:true,data:{subject:data.windowSample.needle}})
+      : `${sample.answer}\n\n${sample.paragraph}\n\n${index === 5 ? data.windowSample.needle : ""}\n\n\`\`\`python\nresult = ${index}\n\`\`\``;
+    data.members.forEach(member => { member.unread = false; member.unread_from = null; member.activity = "idle"; });
+    data.turns = data.turns.filter(turn => turn.member_id !== 1);
+    for (let index = 0; index < 150; index++) data.turns.push({ ...base, id:9000+index, session_id:`window-${index}`,
+      created_at_ms:data.now-(150-index)*1000, source:"app", route:"answer", question:`${sample.question} ${index}`, text:words(index), detail:null,
+      status:"done", task:null, steps:[], messages:[], attachments:[], handoffs:[], permissions:[], drafts:[], computers:[], connectors:[], secrets:[], pages:[] });
+    data.turns.find(turn => turn.id === 9149).quote = {text:data.windowSample.needle,author:data.members.find(member=>member.id===1).name};
+    if (variant.threadWindow === "room") {
+      const base = structuredClone(data.messages.find(message => message.room_id === 1));
+      data.messages = Array.from({length:150}, (_,index) => ({...base,id:9000+index,room_id:1,member_id:1,text:words(index),created:data.now-(150-index)*1000,status:"done",kind:"reply",turn:null,turn_id:null}));
+      data.messages[149].reply_reference = {message_id:9005,author_kind:"member",author_member_id:1};
+      data.roomHandoffs = []; data.roomExchanges = [];
+    }
+  }
   if (variant.unreadDivider) {
     const base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
     const sample = data.unreadSample;
@@ -906,6 +923,13 @@ export function installMock(fixture, config = {}, target = window) {
       case "conversations.delete": { const gone = data.conversations.find(item => item.id === p.id); data.turns = data.turns.filter(item => item.conversation_id !== p.id); data.conversations = data.conversations.filter(item => item.id !== p.id); if (gone) mainConversation(gone.member_id); return { deleted: 1 }; }
       case "agent.history.list": {
         const turns = byMember(data.turns, p).filter(turn => p.conversation_id === undefined || turn.conversation_id === p.conversation_id);
+          if (p.after_id !== undefined) {
+            const fresh = turns.filter(turn => turn.id > p.after_id).sort((a,b) => a.id-b.id), limit = Math.min(p.limit ?? 50, 50);
+            const ids = p.turn_ids ?? [], changed = turns.filter(turn => ids.includes(turn.id));
+            return { turns: [...new Map([...fresh.slice(0,limit), ...changed].map(turn => [turn.id,turn])).values()].sort((a,b) => b.id-a.id), delta: true,
+              has_more: fresh.length > limit, next_after_id: fresh.slice(0,limit).at(-1)?.id ?? p.after_id, removed_ids: ids.filter(id => !turns.some(turn => turn.id === id)),
+              pending_questions: turns.flatMap(turn => turn.owner_questions ?? []).filter(question => question.kind === "ask_owner" && question.state === "asked") };
+          }
         return { turns: turns.filter(turn=>!p.before_id||turn.id<p.before_id).sort((a,b)=>b.id-a.id).slice(0,p.limit??50), pending_questions: turns.flatMap(turn => turn.owner_questions ?? []).filter(question => question.kind === "ask_owner" && question.state === "asked") };
       }
       // What the owner typed, newest first (the core's rule: typed turns of the private conversations, repeats in a row once); a scene may state it.

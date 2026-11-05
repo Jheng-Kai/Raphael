@@ -56,6 +56,25 @@ consumed Approval and refuses replay. Existing T3 hold-to-confirm cards carry th
 full scope. A trusted origin-turn context prevents a requested history deletion
 from cancelling its own executing tool; completion writes a fresh receipt.
 
+## Bounded transcript rendering and incremental history (2026-11-05)
+
+TranscriptWindow owns the shared private/room mount range: newest 25 turns,
+20-turn expansion within 300px of a sentinel, and at most 100 mounted turns.
+Search, quote, bring and unread navigation restore the target range before
+scrolling. This frontend range does not replace core before/around pagination.
+agent.history.list additionally accepts bounded after_id and explicit turn_ids
+reads, scoped to the same member and conversation; dirty IDs never advance the
+forward-page cursor. Persisted history remains authoritative.
+
+Finished turn HTML is cached by its data and display version. Composio and
+mention projections are bounded presentation caches, never changes to raw tool
+results. The shared reading controller retains one anchor and invalidates queued
+corrections on explicit navigation. End/sentinel observers own following and
+paging admission; ordinary content mutations do not measure the entire thread.
+Slime transitions retain JS pose clocks, avoid computed-style reads and defer
+invisible strips. Parsed cel templates use a bounded 16-entry LRU; mounted clones
+keep independent phase and colour. Mount timestamps are not content identity.
+
 ## Meeting speech and private work lanes (2026-11-04)
 
 Migration 60 preserves existing room rows and the compatibility active_turn column.

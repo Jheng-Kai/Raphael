@@ -2,7 +2,8 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import type { AppContext, HandoffView, Member } from "./types";
 import * as chatComposer from "./chat-composer";
-const api=vi.hoisted(()=>({membersList:vi.fn(),roomsCreate:vi.fn(),roomsList:vi.fn(),roomMessages:vi.fn(),roomSend:vi.fn(),roomsDelete:vi.fn(),roomsUpdate:vi.fn(),roomStop:vi.fn(),core:vi.fn(),pagesOpen:vi.fn(),openTeamFile:vi.fn().mockResolvedValue(undefined)}));
+import * as richScroll from "./message-rich";
+const api=vi.hoisted(()=>({membersList:vi.fn(),roomsCreate:vi.fn(),roomsList:vi.fn(),roomMessages:vi.fn(),roomSend:vi.fn(),roomsDelete:vi.fn(),roomsUpdate:vi.fn(),roomStop:vi.fn(),core:vi.fn(),pagesOpen:vi.fn(),ownerQuestionBring:vi.fn(),openTeamFile:vi.fn().mockResolvedValue(undefined)}));
 vi.mock("./api",()=>api);
 import { configureRooms, openNewGroupChat, openGroupChat, openRoomsMenu, createRoomsSection, createRoomPane, clearRoomSelection } from "./group-chats";
 import { setLocale } from "./i18n";
@@ -22,6 +23,21 @@ let event:(e:any)=>void;
 let app:AppContext;
 const pane=async()=>{const view=createRoomPane(app,vi.fn());document.body.append(view.el);await view.open(1);return view;};
 const draft=(text:string)=>{const input=document.querySelector<HTMLTextAreaElement>("#room-message")!;input.value=text;input.dispatchEvent(new Event("input"));return input;};
+
+test("bringing a room question releases queued scroll corrections before revealing its moved turn", async () => {
+ const question={id:'pending-room',kind:'ask_owner',state:'asked',question:'Choose a date',turn_id:10};
+ api.roomMessages.mockResolvedValue({messages:[],pending_questions:[question]});
+ const view=await pane();
+ const pending = '.pending-questions:not(.room-meeting-row) .pending-question';
+ await vi.waitFor(()=>expect(view.el.querySelector(pending)).not.toBeNull());
+ const released=vi.spyOn(richScroll,'releaseRichScroll');
+ api.ownerQuestionBring.mockResolvedValue({turn_id:99});
+ api.roomMessages.mockResolvedValue({messages:[{id:999,member_id:1,text:'Moved question',created:2,status:'done',turn_id:99}],pending_questions:[{...question,turn_id:99}]});
+ view.el.querySelector<HTMLButtonElement>(pending)!.click();
+ await vi.waitFor(()=>expect(released).toHaveBeenCalledOnce());
+ expect(view.el.querySelector('[data-room-message="999"]')).not.toBeNull();
+ released.mockRestore(); view.close();
+});
 
 test("startup rooms recover from a failed first read without a CoreReady event", async () => {
  vi.useFakeTimers();

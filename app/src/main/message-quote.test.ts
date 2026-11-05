@@ -38,3 +38,11 @@ test("scroll, Escape, outside click and cleared selections dismiss the pill", ()
     () => { document.getSelection()!.removeAllRanges(); document.dispatchEvent(new Event("selectionchange")); },
   ]) { m.select(message); expect(m.pill().hidden).toBe(false); dismiss(); expect(m.pill().hidden).toBe(true); }
 });
+
+test("typing selections never query document selection or message geometry", () => {
+  const m = mount(); m.input.focus();
+  const selection = vi.spyOn(document, "getSelection"), geometry = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
+  document.dispatchEvent(new Event("selectionchange"));
+  expect(selection).not.toHaveBeenCalled(); expect(geometry).not.toHaveBeenCalled();
+  expect(m.pill().hidden).toBe(true);
+});

@@ -24,6 +24,11 @@ primary-only interactive offers, server authorization, firm destructive cards,
 UI RPC/settings coverage and the selected deferred card scenes. This brief allows
 fake offline core checks only and forbids look, native, network and paid APIs.
 
+## Long busy conversations (2026-11-05)
+
+See [Conversation](conversation.md#long-busy-conversations-and-bounded-mounting-2026-11-05) for R-PERF-14 through R-PERF-21, shared private/room window scenes, bounded event reads and the isolated native typing journey. Native latency, selected look and judge evidence remain separate.
+
+
 ## Shared installed skills (2026-11-04)
 
 See [Members](members.md#shared-installed-skills-2026-11-04) for R-SKILL-01 through
