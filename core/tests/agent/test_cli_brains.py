@@ -5,10 +5,20 @@ import subprocess
 import sys
 import asyncio
 import json
+import tomllib
 
 import pytest
 
 from raphael_core.agent.cli.discovery import CliBrains, cli_available, resolve_command
+
+
+def test_codex_reads_a_skill_list_as_a_toml_sequence_of_tables():
+    from raphael_core.agent.cli.drivers import toml_value
+    paths = [r"C:\Users\owner\AppData\Roaming\Raphael Dev\技能\write\SKILL.md", 'D:\\a "quoted" skill\\SKILL.md']
+    value = toml_value([{"path": path, "enabled": True} for path in paths])
+    assert tomllib.loads(f"value = {value}")["value"] == [{"path": path, "enabled": True} for path in paths]
+    assert toml_value(["deferred", "code_mode"]) == '["deferred", "code_mode"]'
+    assert (toml_value(False), toml_value(0), toml_value("catalog")) == ("false", "0", '"catalog"')
 
 
 def test_a_cli_brain_edits_the_memory_by_the_fields_an_api_brain_is_given():
@@ -131,6 +141,8 @@ for line in sys.stdin:
     assert command[:2] == ["app-server", "--strict-config"]
     overrides = dict(item.split("=", 1) for item in command[3::2])
     assert command[2::2] == ["-c"] * len(overrides)
+    for key, value in overrides.items():
+        tomllib.loads(f"value = {value}")  # Codex reads each -c value as TOML
     assert overrides["mcp_servers.raphael.url"] == '"http://127.0.0.1:1/mcp"'
     assert overrides["mcp_servers.raphael.bearer_token_env_var"] == '"RAPHAEL_MCP_TOKEN"'
     assert overrides["mcp_servers.raphael.omit_tools_from"] == '["deferred", "code_mode"]'

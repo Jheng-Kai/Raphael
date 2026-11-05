@@ -251,7 +251,7 @@ async def test_plugin_skills_and_commands_use_native_delivery_without_plugin_hoo
     cap.update_skill(0, check["id"], False)
     script = tmp_path / "fake-cli.py"
     record = tmp_path / "native.json"
-    script.write_text('''import json, sys
+    script.write_text('''import json, sys, tomllib
 from pathlib import Path
 args = sys.argv[2:]
 if '--plugin-dir' in args:
@@ -263,7 +263,7 @@ else:
     options = dict(item.split('=', 1) for item in args[3::2])
     assert options['features.plugins'] == 'false'
     assert options['features.shell_tool'] == 'false'
-    paths = [Path(item['path']) for item in json.loads(options['skills.config']) if item['enabled']]
+    paths = [Path(item['path']) for item in tomllib.loads('v = ' + options['skills.config'])['v'] if item['enabled']]
 texts = [path.read_text(encoding='utf-8') for path in paths]
 assert len(texts) == 2 and any('name: write' in text for text in texts)
 review = next(text for text in texts if 'name: "review"' in text)

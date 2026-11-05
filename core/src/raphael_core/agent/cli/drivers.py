@@ -25,6 +25,17 @@ from ...clock import wall_clock_ms
 logger = logging.getLogger(__name__)
 
 CODEX_SESSION_PREFIX = "raphael-codex-v1:"
+
+
+def toml_value(value) -> str:
+    """`value` as Codex's `-c key=value` reads it: TOML. A JSON object is not TOML, and Codex then
+    takes the whole value as one string (`skills.config` failed with "expected a sequence")."""
+    if isinstance(value, dict):
+        return "{" + ", ".join(f"{json.dumps(str(key))} = {toml_value(item)}" for key, item in value.items()) + "}"
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(toml_value(item) for item in value) + "]"
+    # Booleans, numbers and strings share one spelling in JSON and TOML (ASCII escapes included).
+    return json.dumps(value)
 # Verified against the installed Codex 0.159.3 config types and strict-config parser.
 CODEX_ISOLATION = {
     "project_doc_max_bytes": 0,
@@ -212,7 +223,7 @@ class Driver:
                         "mcp_servers.computer.omit_tools_from": ["deferred", "code_mode"]})
                 command += ["app-server", "--strict-config"]
                 for key, value in overrides.items():
-                    command += ["-c", f"{key}={json.dumps(value)}"]
+                    command += ["-c", f"{key}={toml_value(value)}"]
             elif self.name == "gemini":
                 # Google's Antigravity CLI (`agy`; Gemini CLI was retired). It reads MCP servers and
                 # rules only from its home folder, so it runs with a private home inside the
