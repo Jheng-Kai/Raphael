@@ -1,5 +1,47 @@
 # Settings and appearance
 
+## Signed updates and owner memory import (2026-11-05)
+
+General > About you > Import memory shows a copyable handover prompt, an answer field
+and Add to memory. The explicit action calls memory.import; accepted facts enter shared
+USER.md via the existing writer, while refused entries show an index and safe reason.
+Secret text is cleared after success and never echoed in refusals.
+
+Import memory stays inside General's About you section, immediately after shared memory.
+Time zone and output folder keep their regrouped owner rows; updates stay in About.
+
+```powershell
+npm run look -- update-found update-ready update-auto import-memory import-memory-result settings-owner about --theme both --width 1120,720,1920x1080
+```
+
+About checks https://github.com/Jheng-Kai/Raphael/releases/latest/download/latest.json on opening.
+The release-assets test rejects the former owner in updater configurations and publication.
+A newer version shows escaped notes
+and Download and restart. Auto update is off by default; opt-in downloads in the background,
+then installs only after ten minutes of native idle and a complete idle roster. The signed
+artifact must include the manifest's version. One startup receipt reports the installed
+version when the main page is visible; hidden startup retains the receipt. Unknown state,
+missing core, active or waiting members prevent installation.
+
+Selected look: update-found, update-ready, update-auto, import-memory,
+import-memory-result, profile, chat, attachment-limits and attachment-too-large;
+zh-TW, both themes, 1120,720,1920x1080. Compare About's update actions and switch with
+General's existing controls, and import fields/buttons with the owner profile and settings.
+Judge must use this same run and external references. Fake fixtures do not prove real
+GitHub releases, OS idle time, native asset ranges, upgrade restart or one-shot persistence.
+
+Targeted checks: updates, attachment-stream, memory-import, settings-view, agent-attach,
+chat-composer, attachment-media, architecture and catalog Vitest; memory service/import
+and attachment upload/readers pytest; release-asset tests with a temporary generated key.
+Offline Rust: cargo fmt --all -- --check; cargo test --offline --locked;
+cargo clippy --offline --locked --all-targets -- -D warnings; vendored listener unchanged.
+Use the official updater 2.14.1 recorded in Cargo.lock; populate the private Cargo cache
+from an authorized fetch before running offline. The fake-feed test covers a valid artifact,
+tampered bytes, an empty signature, an inflated version with an old signature and an older
+release, using a temporary generated key and never executing the payload. MSVC embeds the
+shared common-controls v6 manifest in both the app and library unit-test executables.
+No private key belongs in source.
+
 ## Settings merge consumers (2026-11-05)
 
 General keeps the owner profile, weather city, output folder and shared memory

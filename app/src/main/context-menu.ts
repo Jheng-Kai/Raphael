@@ -25,6 +25,7 @@ export const OVERFLOW_ROWS: readonly OverflowRow[] = [
   { more: '[data-computer-menu]', row: ".desktop-location-header" },
   { more: '[data-panel-task-menu]', row: '.mb-task-row' },
   { more: '[data-dlg="routine-menu"]', row: ".mp-resource" },
+  { more: '[data-det="routine-menu"]', row: ".mb-routine-row" },
   { more: '[data-res="skill-menu"]', row: ".mp-resource" },
   { more: '[data-res="command-menu"]', row: ".mp-resource" },
   { more: '[data-mem="section-more"]', row: ".mem-head" },

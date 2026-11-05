@@ -34,7 +34,7 @@ describe("rendered look checks", () => {
   });
   it("rejects a low-contrast Docker download on the desktop wallpaper", () => {
     const browser = new Window();
-    browser.document.body.innerHTML = '<section class="desktop-panel"><div class="missing-note">Docker Desktop</div><button data-act="docker-download">Download Docker Desktop</button></section>';
+    browser.document.body.innerHTML = '<section class="desktop-panel"><div class="desktop-message">Docker Desktop</div><button data-act="docker-download">Download Docker Desktop</button></section>';
     browser.__look = { calls: [] };
     for (const element of browser.document.querySelectorAll("*")) { element.checkVisibility = () => true; element.getBoundingClientRect = () => ({ width: 120, height: 32 }); }
     let backgroundColor = "rgb(255, 255, 255)";
@@ -556,24 +556,26 @@ describe("rendered look checks", () => {
     vi.stubGlobal("document", window.document);
     vi.stubGlobal("Element", window.Element);
     try {
-      for (const colour of colours) {
-        const chat = window.document.createElement("div");
-        chat.className = "page-agent mb-chat";
-        chat.dataset.memberBubble = theme;
-        chat.style.setProperty("--member-accent", memberAccent(colour));
-        chat.innerHTML = '<div data-desktop-slot="2"></div>';
-        window.document.body.append(chat);
-        mountDesktopTimeline(chat, () => "Member").update({ state: "running", ready: true, control: "member", works: [{ id: "private-computer-task", turn_id: 2, state: "waiting_control", tool: "get_desktop_state", reason: "sign_in" }] });
-        chat.replaceChildren(chat.querySelector("[data-card-desktop-screen]"));
-        chat.firstElementChild.style.backgroundImage = "none";
-        const button = chat.querySelector('[data-card-desktop-screen] > button[data-card-desktop="take"]');
-        expect(button.className).toBe("btn");
-        expect(button.textContent).toBe("");
-        expect(window.getComputedStyle(button.querySelector("svg.i")).color, colour).toBe("rgb(240, 240, 240)");
-      }
+      // Reuse one real preview: accumulating every colour in the document makes
+      // each style invalidation and hover-selector audit revisit all earlier previews.
+      const chat = window.document.createElement("div");
+      chat.className = "page-agent mb-chat";
+      chat.dataset.memberBubble = theme;
+      chat.innerHTML = '<div data-desktop-slot="2"></div>';
+      window.document.body.append(chat);
+      mountDesktopTimeline(chat, () => "Member").update({ state: "running", ready: true, control: "member", works: [{ id: "private-computer-task", turn_id: 2, state: "waiting_control", tool: "get_desktop_state", reason: "sign_in" }] });
+      chat.replaceChildren(chat.querySelector("[data-card-desktop-screen]"));
+      chat.firstElementChild.style.backgroundImage = "none";
       for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 110, bottom: 40, width: 100, height: 30 });
-      const failures = auditDocument(window.document, { width: 1120, height: 900 }, []).productRules.filter(item => item.rule === "R-UI-52" && item.class === "btn");
-      expect(failures).toEqual([]);
+      const button = chat.querySelector('[data-card-desktop-screen] > button[data-card-desktop="take"]');
+      expect(button.className).toBe("btn");
+      expect(button.textContent).toBe("");
+      for (const colour of colours) {
+        chat.style.setProperty("--member-accent", memberAccent(colour));
+        expect(window.getComputedStyle(button.querySelector("svg.i")).color, colour).toBe("rgb(240, 240, 240)");
+        const failures = auditDocument(window.document, { width: 1120, height: 900 }, []).productRules.filter(item => item.rule === "R-UI-52" && item.class === "btn");
+        expect(failures, colour).toEqual([]);
+      }
     } finally { vi.unstubAllGlobals(); window.happyDOM.abort(); }
   });
   it("rejects a disabled control whose reason exists only in a title (R-UI-69)", () => {
@@ -799,6 +801,10 @@ describe("rendered look checks", () => {
     const { audit } = productAudit('<button class="btn" style="border: none">Save</button><button class="btn icon" style="border: 1px solid red">X</button><button class="btn" style="border: 1px solid red">Cancel</button>');
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-18', 'R-UI-18']);
   });
+  it("allows a quiet routine inspection link only inside its reply origin", () => {
+    const { audit } = productAudit('<div class="chat-message"><div class="routine-origin"><button class="btn routine-run-link" data-act="open-routine" style="border:0">Sample routine</button></div></div><button class="btn routine-run-link" data-act="open-routine" style="border:0">Save</button>');
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-18').map(item => item.text)).toEqual(['Save']);
+  });
   it("allows a soft pending-question row only in its conversation container", () => {
     const { audit } = productAudit('<div class="pending-questions"><button class="btn sm pending-question" style="border:0">待回答</button></div><button class="btn pending-question" style="border:0">Save</button>');
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-18']);
@@ -904,6 +910,13 @@ describe("rendered look checks", () => {
     const result = auditDocument(window.document, { width: 1120, height: 900 }, ["members", "settings"]);
     expect(result.missingI18nKeys.map(item => item.key)).toEqual(["members.missingLabel"]);
     expect(result.nativeControls.map(item => item.tag)).toEqual(["select", "input"]);
+  });
+
+  it("distinguishes explicit provider JSON paths from untranslated keys elsewhere", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<code data-json-paths>data.issue.id · event.data.title · members.missingLabel</code><p>data.issue.id</p>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
+    expect(auditDocument(window.document, { width: 1120, height: 900 }, ["data", "event", "members"]).missingI18nKeys.map(item => item.key)).toEqual(["members.missingLabel", "data.issue.id"]);
   });
   it("fails horizontal overflow and reports controls outside the viewport", () => {
     const window = new Window();

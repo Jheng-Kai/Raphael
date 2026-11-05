@@ -7,6 +7,7 @@
 // A member's face is a slime (slime.ts), whatever an older build stored for it. Raphael's face is
 // the emblem or his picture (avatar.ts).
 
+import { zoneLabel } from "./timezones";
 import { presenceAttrs, slimeFaceHTML } from "./slime";
 import { avatarHTML } from "./avatar";
 import { catalogs, t } from "./i18n";
@@ -185,7 +186,7 @@ export const isTime = (text: string): boolean => /^([01]\d|2[0-3]):[0-5]\d$/.tes
 export type RoutineTrigger = Pick<Routine, "schedule"> & Partial<Pick<Routine, "when" | "app_name">>;
 
 /** One vocabulary for every trigger surface, without live values in its markup. */
-export function routineSentence(routine: RoutineTrigger, showWindow = true): { icon: "repeat" | "link"; verb: string; object: string } {
+function triggerSentence(routine: RoutineTrigger, showWindow = true): { icon: "repeat" | "link"; verb: string; object: string } {
   const s = routine.schedule, when = routine.when;
   if (when?.webhook) return {icon:"link", verb:t("trigger.postVerb"), object:"POST"};
   if (when) return {icon:"link", verb:t("trigger.eventVerb"), object:`${routine.app_name || when.app}${when.filter.equals ? ` · ${when.filter.equals}` : ""}`};
@@ -198,6 +199,12 @@ export function routineSentence(routine: RoutineTrigger, showWindow = true): { i
   }
   if (s.kind === "once") return {icon:"repeat", verb:t("trigger.once"), object:`${s.start_date ?? ""} ${s.time}`.trim()};
   return {icon:"repeat", verb:t(s.kind === "daily" ? "trigger.daily" : "trigger.weekdays"), object:s.time};
+}
+
+export function routineSentence(routine: RoutineTrigger, showWindow = true): { icon: "repeat" | "link"; verb: string; object: string } {
+  const sentence = triggerSentence(routine, showWindow);
+  const zone = routine.schedule?.timezone;
+  return zone ? {...sentence, object:`${sentence.object}（${zoneLabel(zone)}）`} : sentence;
 }
 
 export function routineSentenceHTML(routine: RoutineTrigger): string {

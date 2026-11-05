@@ -4,6 +4,15 @@
     "files": ["研究摘要.md", "專案計畫.html", "訪談筆記.txt"],
     "page": "每週工作報告"
   },
+  "appUpdateSample": { "version": "1.1.0", "notes": "改善更新安裝、記憶匯入與大型附件。\n更新會保留你的設定與工作資料。" },
+  "memoryImportSample": { "kept": "我喜歡以繁體中文溝通，每週五整理研究筆記。", "answer": "我喜歡以繁體中文溝通，每週五整理研究筆記。\n\npassword is synthetic123" },
+  "routineWorkflowSample": {"title":"早晨摘要", "prompt":"整理範例筆記，只在對話中回報。", "done":"已整理三則範例筆記。", "refused":"這位成員每小時已執行 200 次，請稍後再試。", "failed":"範例來源無法讀取，未使用舊資料。"},
+  "routineTimezoneSample": {"timezone":"America/New_York"},
+  "routineWebhookRecipes": [
+    {"provider":"Sentry","setup":"Custom Integrations > Webhook URL","fields":["action","data.issue.id","data.issue.title","data.issue.permalink","data.event.event_id","data.event.message"],"payload":{"action":"created","data":{"issue":{"id":"S001","title":"範例錯誤","permalink":"https://example.test/issues/S001"}}}},
+    {"provider":"PagerDuty","setup":"Generic Webhooks v3 > URL > Custom Headers","fields":["event.id","event.event_type","event.occurred_at","event.data.id","event.data.title","event.data.html_url","event.data.urgency"],"payload":{"event":{"id":"PD001","event_type":"incident.triggered","data":{"id":"I001","title":"範例事故","urgency":"high"}}}}
+  ],
+  "calmSample": {"question":"請再檢查一次範例新聞摘要。", "routine":"NHK Easy News 每日摘要", "failure":"Codex CLI 在回答完成前停止了。"},
   "lowDiskSample": "電腦磁碟快滿了。最大的資料夾：/home/cua/workspace/downloads (200 MiB), /home/cua/workspace/reports (100 MiB)。要我清理哪些？刪除前會先徵求你的同意。",
   "unreadSample": {"question": "Check the sample notes.", "answer": "The sample notes are ready for review.", "paragraph": "The sample comparison includes the observations, remaining questions and a suggested next step."},
   "windowSample": {"needle": "視窗搜尋標記", "question": "請檢查這份範例筆記。", "answer": "範例筆記已整理完成，可以開始檢閱。", "paragraph": "這份比較記錄了觀察結果、待釐清的問題，以及建議的下一步。"},

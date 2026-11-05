@@ -11,7 +11,7 @@ const fixtureDirectory = join(scripts, "..", ".test-cache", "release-assets-test
 const temporaryRoots = [];
 const env = {
   GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567", GITHUB_REF: "refs/heads/fix/release-licensing",
-  GITHUB_REPOSITORY: "owner/Raphael", GITHUB_WORKFLOW: "Build Windows release", GITHUB_RUN_ID: "4242",
+  GITHUB_REPOSITORY: "Jheng-Kai/Raphael", GITHUB_WORKFLOW: "Build Windows release", GITHUB_RUN_ID: "4242",
   GITHUB_RUN_ATTEMPT: "2", GITHUB_SERVER_URL: "https://github.com", ImageOS: "win25", ImageVersion: "20260901.1",
 };
 // Fixed tools, so that no test starts npm, rustc, cargo or uv: a busy runner took 26 s to start them.
@@ -36,6 +36,39 @@ function inputs() {
 const sha256 = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
 describe("release assets", () => {
+  it("pins updater configuration and publication to the current repository", () => {
+    const native = join(scripts, "..", "src-tauri");
+    const workflow = readFileSync(join(scripts, "..", "..", ".github", "workflows", "release.yml"), "utf8");
+    const configurations = readdirSync(native).filter(name => /^tauri.*\.json$/.test(name))
+      .map(name => readFileSync(join(native, name), "utf8"));
+    configurations.push(readFileSync(join(native, "src", "updates.rs"), "utf8"));
+    configurations.push(readFileSync(join(scripts, "prepare-release-assets.mjs"), "utf8"));
+    const config = JSON.parse(readFileSync(join(native, "tauri.conf.json"), "utf8"));
+    expect(config.plugins.updater.endpoints).toEqual(["https://github.com/Jheng-Kai/Raphael/releases/latest/download/latest.json"]);
+    for (const configuration of [...configurations, workflow]) expect(configuration.toLowerCase()).not.toContain(["Jack", "hehe"].join("-").toLowerCase());
+    expect(workflow).toContain("GH_REPO: Jheng-Kai/Raphael");
+    expect(workflow).toContain("$env:GITHUB_REPOSITORY -ne 'Jheng-Kai/Raphael'");
+  });
+
+  it("publishes a version-bound feed from an ephemeral signing key and refuses a replayed version", () => {
+    const { root, installer, notices, output } = inputs();
+    const cli = join(scripts, "..", "node_modules", "@tauri-apps", "cli", "tauri.js");
+    const key = join(root, "test.key");
+    const run = args => {
+      const result = spawnSync(process.execPath, [cli, "signer", ...args], { windowsHide: true, encoding: "utf8" });
+      if (result.status !== 0) throw new Error("The ephemeral test signer failed.");
+    };
+    run(["generate", "--ci", "-p", "", "-w", key]);
+    run(["sign", "--app-version", "0.1.0", "-p", "", "-f", key, installer]);
+    prepareReleaseAssets({ installer, notices, signature: installer + ".sig", version:"0.1.0", output, env:{...env,RELEASE_NOTES:"Synthetic release notes"}, tools });
+    const manifest = JSON.parse(readFileSync(join(output, "latest.json"), "utf8"));
+    expect(manifest.notes).toBe("Synthetic release notes");
+    expect(manifest.platforms["windows-x86_64"].url).toBe("https://github.com/Jheng-Kai/Raphael/releases/download/v0.1.0/Raphael-0.1.0-windows-x64-setup.exe");
+    expect(manifest.platforms["windows-x86_64"].signature).toBe(readFileSync(installer + ".sig", "utf8").trim());
+    expect(readFileSync(join(output, "SHA256SUMS.txt"), "utf8")).toContain("latest.json");
+    expect(() => prepareReleaseAssets({ installer, notices, signature:installer+".sig",version:"9.9.9",output:join(root,"replay"),env,tools })).toThrow("bind this release version");
+  });
+
   it("names the installer after the version and writes notices, build info and checksums", () => {
     const { installer, notices, output } = inputs();
 
@@ -75,11 +108,11 @@ describe("release assets", () => {
 version: 0.1.0
 commit: 0123456789abcdef0123456789abcdef01234567
 ref: refs/heads/fix/release-licensing
-repository: owner/Raphael
+repository: Jheng-Kai/Raphael
 workflow: Build Windows release
 run id: 4242
 run attempt: 2
-run url: https://github.com/owner/Raphael/actions/runs/4242/attempts/2
+run url: https://github.com/Jheng-Kai/Raphael/actions/runs/4242/attempts/2
 runner image: win25 20260901.1
 
 tools:

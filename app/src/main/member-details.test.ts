@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   workerRerun: vi.fn().mockResolvedValue({}),
   openTeamFile: vi.fn().mockResolvedValue(undefined),
   routinesList: vi.fn(),
+  routineRuns: vi.fn(),
   routinesCreate: vi.fn(),
   routinesUpdate: vi.fn(),
   routinesDelete: vi.fn(),
@@ -62,6 +63,7 @@ beforeEach(() => {
   current = 3;
   for (const fn of Object.values(api)) fn.mockReset();
   api.routinesList.mockResolvedValue({ routines: [ROUTINE] });
+  api.routineRuns.mockResolvedValue({ runs: [] });
   api.routinesCreate.mockResolvedValue({});
   api.routinesUpdate.mockResolvedValue({});
   api.core.mockImplementation(async (method: string, params: { space?: string }) => {
@@ -656,4 +658,21 @@ describe("primary changes do not add face badges", () => {
     }
     if (id === 0) expect(panel.el.querySelector('.mb-who-face .mb-av')).toBeNull();
   });
+});
+
+
+test("the details routine editor uses the same relative history timestamp", async () => {
+  const now = new Date(2026, 10, 5, 12).getTime();
+  const started = new Date(2026, 10, 4, 8, 0, 37).getTime();
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+  api.routineRuns.mockResolvedValue({ runs: [{ id: 1, routine_id: ROUTINE.id, started, finished: started + 1000, status: "done", summary: "Completed", cost: 0, turn_id: 1 }] });
+  try {
+    const panel = mount(false);
+    await flush();
+    panel.el.querySelector<HTMLElement>('[data-det="routine-open"]')!.click();
+    await flush();
+    expect(document.querySelector('[data-run-status="done"]')?.textContent).toBe("成功 · 昨天 08:00Completed");
+    expect(document.querySelector('.au-run-history')?.textContent).not.toContain("08:00:37");
+    document.querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();
+  } finally { clock.mockRestore(); }
 });

@@ -4,6 +4,11 @@
 
 The owner's 2026-11-05 request places newest member work before the existing routines and conversation list in Details (R-PANEL-01/02). A row opens its existing result and keeps stop/rerun in the shared contextual menu. Library lists recorded artifacts/pages and a bounded local workspace/team snapshot through shared file chips, grouped This week / Earlier with Show more. Empty sections use one sentence. New files remain at their existing location; browsing creates no task, computer or filesystem content. Output-folder preferences and delivery permissions remain governed by R-OUTPUT-01. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for the selected two-theme/three-size matrix and evidence scope.
 
+## Calm conversations (owner, 2026-11-05)
+
+See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) for R-UI-101/R-CLI-07 and the selected matrix. Routine origins now name the routine inside its reply, with the existing editor target. Failures appear once; rerun shares reply/copy actions. Public work receipts collapse into reply detail; calendars and owner cards retain their behavior. This supersedes older transcript trigger-chip and between-message receipt descriptions.
+
+
 ## Sub-features
 
 - R-NAV-01: Ctrl+K opens a searchable command/member palette using the shared
@@ -82,3 +87,21 @@ Rate limits count accepted attempts, including later refused/failed execution;
 uncertain work is never replayed. Polling checks are not routine runs. Scheduled
 work retries the limited slot without advancing max_runs accounting. The current
 member's Alt navigation does not switch between group rooms.
+
+
+## Routine tests and timezone preference (2026-11-05)
+
+General adds a searchable IANA timezone preference; blank means auto-detect.
+Changing it affects new schedules. Each saved routine keeps its original zone.
+The setting uses the existing settings.set boundary; owner activity reports the
+browser-detected zone through members.viewing, never through Home reads or model tools.
+See automations.md for the selected routine-zone, routine-zone-search and
+routine-zone-saved journeys, fake-only evidence, DST policy and full matrix.
+
+Explicit Test once in the shared editor/row menu uses the same 300 team/200 member
+rolling-hour admission receipts, worker cost limits and member conversation history.
+A paused test never resumes scheduled work. R-ROUTINE-02 owner-presence pausing and
+explicit re-enable remain authoritative. Rate or worker refusal has readable words.
+All provider payloads and Slack messages in this brief are synthetic; external
+HTTPS forwarding, real authentication and native subscription delivery remain
+separate acceptance.

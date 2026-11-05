@@ -45,6 +45,23 @@ async def setup(rig):
     return hub, routine
 
 
+@pytest.mark.parametrize("needle,text", [("needs repro", "This needs repro today"), ("<@U012345>", "Hi <@U012345> please review")])
+async def test_phrase_and_literal_mention_only_match_new_text_in_the_selected_channel(rig, needle, text):
+    hub, routine = await setup(rig)
+    when = {**routine["when"], "filter": {"field": "text", "equals": needle, "operator": "contains"}}
+    when["event"]["arguments"] = {"channel": "C012345"}
+    await rig.call("routines.update", {"id": routine["id"], "when": when})
+    hub.items = [{"id": "old", "text": text}]
+    await rig.service.poll_events()
+    assert not rig.background.submitted
+    hub.items += [{"id": "hit", "text": text}, {"id": "miss", "text": "unrelated"}, {"id": "missing"}, {"id": "object", "text": {"text": text}}]
+    rig.wall.now += POLL_MS
+    await rig.service.poll_events()
+    assert len(rig.background.submitted) == 1
+    assert "hit" in rig.background.submitted[0]["text"]
+    assert all(call[1] == {"channel": "C012345"} for call in hub.calls)
+
+
 async def test_hourly_cap_keeps_event_receipt_pending_until_capacity_returns(rig):
     hub, routine = await setup(rig)
     await rig.service.poll_events()

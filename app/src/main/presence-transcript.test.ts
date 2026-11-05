@@ -110,17 +110,18 @@ test("live and pending private work shows only a 28px avatar with the public pro
   expect(dom(pendingTurnHTML("Sample", "app", look, [], { time })).querySelector(".live-presence")).not.toBeNull();
 });
 
-test("time separators appear at the first message and at thirty-minute gaps", () => {
+test("time separators appear once per calendar day despite thirty-minute gaps", () => {
   const items = threadItems([turn(), turn({id: 52, created_at_ms: time + 60_000}), turn({id: 53, created_at_ms: time + 31 * 60_000})], time);
-  expect(items.filter(item => item.kind === "day")).toHaveLength(2);
+  expect(items.filter(item => item.kind === "day")).toHaveLength(1);
   expect(items.filter(item => item.kind === "day").every(item => item.key.startsWith("time:"))).toBe(true);
 });
 
-test("routine events leave the closed work body, open their routine and group consecutive receipts", () => {
+test("routine events stay inside closed work detail with their targets and grouped receipts", () => {
   const messages = [1,2].map(seq => ({ seq, kind: "event" as const, text: JSON.stringify({type: "routine", action: "created", id: seq, name: `Sample ${seq}`}), at_ms: time }));
   const html = turnHTML(turn({messages}), emptyTimelineState(), false, look), root = dom(html);
   expect(root.querySelector("[data-event-group]")).not.toBeNull();
   expect(root.querySelectorAll('[data-act="open-routine"]')).toHaveLength(2);
+  expect(root.querySelector('.work-body[hidden] [data-event-group]')).not.toBeNull();
   expect(root.querySelector(".work-body .turn-event")).toBeNull();
   const thread = document.createElement("ol"), drawn = new WeakMap<Element,string>();
   const patch = (value: string) => patchThread(thread, [{key: "sample", html: value}], drawn);

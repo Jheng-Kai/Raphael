@@ -54,7 +54,10 @@ def test_webp_and_the_jpg_alias_are_known():
 )
 def test_a_file_that_is_not_what_it_says_or_too_big_is_refused(mime, data, kind):
     if data is None:
-        data = PNG + b"\x00" * (MAX_FILE_BYTES - len(PNG) + 1)
+        class Oversized:
+            def __len__(self):
+                return MAX_FILE_BYTES + 1
+        data = Oversized()
     with pytest.raises(AttachmentError) as caught:
         checked("f", mime, data)
     assert caught.value.kind == kind

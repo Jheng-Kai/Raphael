@@ -127,7 +127,8 @@ class Webhooks:
         body = await reader.readexactly(length)
         expected = "sha256=" + hmac.new((secret or "").encode(), body, hashlib.sha256).hexdigest()
         signed = hmac.compare_digest(expected, fields.get("x-raphael-signature", ""))
-        if not secret or not signed:
+        bearer = hmac.compare_digest("Bearer " + (secret or ""), fields.get("authorization", ""))
+        if not secret or not (signed or bearer):
             return 401
         current = self.service.store.routine(identifier)
         if current is None or not current.enabled or current.when != routine.when or current.prompt != routine.prompt:

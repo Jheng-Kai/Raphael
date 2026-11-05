@@ -373,6 +373,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## Grok Bot conversation reference
+
+Raphael's calm conversation presentation was informed by the owner's Grok Bot walkthrough notes and message-and-collaboration research of 2026-11-05; this implementation copies no Grok Bot code, text or assets and implies no endorsement.
+
 ## Simple Icons (CC0-1.0)
 
 The single-path service marks in `app/src/main/service-icons.ts` use Simple Icons

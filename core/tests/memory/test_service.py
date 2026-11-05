@@ -48,6 +48,19 @@ def rpc(memory):
     return router
 
 
+@pytest.mark.asyncio
+async def test_owner_import_uses_shared_writer_and_redacts_secret_refusals(memory):
+    result = await memory._import({"text":"I prefer tea in the morning.\n\npassword is sample123\n\nI write weekly research notes."})
+    assert result["kept"] == ["I prefer tea in the morning.", "I write weekly research notes."]
+    assert result["refused"] == [{"index":2,"reason":"secret"}]
+    shared = memory.space("shared",0).read()
+    assert "tea" in shared and "weekly" in shared and "sample123" not in shared
+    assert memory.space("own",0).read() == ""
+    again = await memory._import({"text":"I prefer tea in the morning."})
+    assert again["kept"] == ["I prefer tea in the morning."]
+    assert memory.space("shared",0).read().count("tea") == 1
+
+
 # --- the RPC methods ------------------------------------------------------------------------------
 
 

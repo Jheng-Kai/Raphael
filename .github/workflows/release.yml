@@ -2,6 +2,15 @@ name: Build Windows release
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish verified signed assets to the version's GitHub Release
+        type: boolean
+        default: false
+      release_notes:
+        description: Owner-reviewed release notes included in the updater feed
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -34,6 +43,7 @@ jobs:
 
       - name: Check release inputs
         run: |
+          if ($env:GITHUB_REPOSITORY -ne 'Jheng-Kai/Raphael') { throw 'Release builds must use Jheng-Kai/Raphael.' }
           $excluded = @('models', 'voice', 'raphael_ref', '.superpowers', 'ui-shots', 'eval/data')
           foreach ($path in $excluded) {
             if (Test-Path -LiteralPath $path) { throw "Unexpected release input: $path" }
@@ -117,7 +127,25 @@ jobs:
 
       - name: Build Windows installer
         working-directory: app
-        run: node scripts/tauri.mjs build --config src-tauri/tauri.release.conf.json --bundles nsis --ci -- --locked
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          RAPHAEL_UPDATER_PUBLIC_KEY: ${{ secrets.RAPHAEL_UPDATER_PUBLIC_KEY }}
+        run: |
+          if (!$env:TAURI_SIGNING_PRIVATE_KEY -or !$env:RAPHAEL_UPDATER_PUBLIC_KEY) { throw 'Owner updater signing keys are required.' }
+          node scripts/tauri.mjs build --config src-tauri/tauri.release.conf.json --bundles nsis --ci -- --locked
+
+      # Bind the artifact version in the signed trusted comment; the runtime rejects replayed bytes.
+      - name: Sign updater artifact with its version
+        working-directory: app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          $installers = @(Get-ChildItem src-tauri/target/release/bundle/nsis -Filter '*-setup.exe' -File)
+          if ($installers.Count -ne 1) { throw 'Expected one Windows installer.' }
+          node scripts/tauri.mjs signer sign --app-version $env:RELEASE_VERSION $installers[0].FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Check Rust and keyboard listener
         working-directory: app/src-tauri
@@ -138,11 +166,14 @@ jobs:
 
       # The installer, the notices, BUILD-INFO.txt (commit, ref, run and tools) and SHA256SUMS.txt for all of them.
       - name: Prepare release assets and checksums
+        env:
+          RELEASE_NOTES: ${{ inputs.release_notes }}
         run: |
           $installers = @(Get-ChildItem app/src-tauri/target/release/bundle/nsis -Filter '*-setup.exe' -File)
           if ($installers.Count -ne 1) { throw 'Expected one Windows installer.' }
           node app/scripts/prepare-release-assets.mjs `
             --installer $installers[0].FullName `
+            --signature "$($installers[0].FullName).sig" `
             --notices app/src-tauri/release-notices/THIRD_PARTY_NOTICES.txt `
             --version $env:RELEASE_VERSION `
             --output release-assets
@@ -160,6 +191,28 @@ jobs:
           path: release-assets/*
           if-no-files-found: error
           retention-days: 14
+
+  publish:
+    name: Publish signed updater feed
+    needs: windows-release
+    if: ${{ inputs.publish && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.windows-release.outputs.artifact-name }}
+          path: release-assets
+      - name: Publish verified release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: Jheng-Kai/Raphael
+        run: |
+          cd release-assets
+          sha256sum --check --strict SHA256SUMS.txt
+          version=$(jq -r .version latest.json)
+          gh release create "v$version" ./* --title "Raphael $version" --generate-notes
 
   # Provenance only for what is published from main or a tag, and only where GitHub offers artifact
   # attestations: public repositories (private ones need GitHub Enterprise Cloud). This job alone gets

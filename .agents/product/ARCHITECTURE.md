@@ -10,6 +10,36 @@ computer-state.ts owns the full localized screen sentence and the semantically m
 
 LocalVm.status preserves fixed preflight reasons and the missing-image flag. ensure_engine defaults to refusing a stopped host engine. An explicit start_docker request on computer.viewer_status pins the current local host, reuses DockerDesktop and the 120-second wait, clears temporary engine progress and returns normal status. Windows launches the installed Docker Desktop.exe, macOS opens the installed Docker.app; no shell/elevation, remote launch, install or image maintenance occurs during a status read. Fake tests do not prove native launch or container operation.
 
+## Calm conversation projection (owner, 2026-11-05)
+
+conversation.ts owns calendar-day dividers; timeline.ts owns inline routine origins, reply actions and collapsed work receipts. The page retains latest-failure visibility as a render dependency. Find opens existing work detail and preserves its state. CliLoop emits one terminal reply, while Driver and Failure carry bounded, redacted stderr diagnostics into the existing foreground/background turn detail. Premature completion uses cli_stopped with the existing retry policy; real connection errors retain network guidance. No RPC, schema, worker, provider or model-loop boundary is added (A-01/03/04/06/08). See R-UI-101 and R-CLI-07.
+
+
+## Signed updates, owner imports and streamed composer files (2026-11-05)
+
+The updater feed is https://github.com/Jheng-Kai/Raphael/releases/latest/download/latest.json.
+Release builds require GITHUB_REPOSITORY=Jheng-Kai/Raphael and publication pins GH_REPO to
+that repository; a stale local git remote never selects an updater endpoint.
+updates.rs alone uses the official Tauri updater plugin. The public key is a compile-time
+RAPHAEL_UPDATER_PUBLIC_KEY, with no fallback key. requireSignedVersion binds bytes to
+manifest versions; the release workflow signs with the owner's secret, generates latest.json,
+and publishes only through an explicit workflow input. DeviceStore owns opt-in and a one-shot
+installed-version receipt. A native timer contacts releases only while opted in; a fail-closed
+roster read and Windows idle time gate installation. Native installation/rollback acceptance
+remains separate from fake-feed tests.
+
+memory.import is a main-window-only bounded RPC, not a model turn or second writer. It splits
+owner-approved paragraphs and applies each through the existing shared MemoryFile writer;
+refusals return only indices and reason classes. No LLM call, secret bypass or private-memory
+copy occurs.
+
+attachments.upload handles bounded sequential chunks, validates offset and declared length,
+then atomically publishes an opaque ID. Both conversation and room admissions resolve those
+IDs through AttachmentStore, using a read-only memory map. Existing readers keep their budgets;
+Office and ffmpeg read stored paths without whole-file copies. The native asset command
+resolves an ID through the core before granting access to that exact file. No caller path or
+recursive filesystem scope is accepted (A-06/10/11).
+
 ## Smooth member computers (2026-11-05)
 
 VmTools owns run_steps in the existing curated catalog; each subcall re-enters
@@ -537,7 +567,7 @@ Post-action recovery uses the existing RETRY_WAITS and PATIENT_WAITS once each,
 with shared jitter and provider cooldown handling. This is finite (eight attempts
 at current defaults), unlike the API loop's indefinite patient tail. Before any
 action, existing private/background quick waits and the explicit no-retry option
-remain in force. Child EOF/incomplete reads are transport failures; protocol
+remain in force. Child EOF/incomplete reads use cli_stopped while retaining the same bounded retry admission (owner, 2026-11-05); protocol
 errors remain terminal. Each post-action wait is localized progress. Permanent
 failures and cancellation stop on the same model and billing source. Terminal
 summaries expose counts/status only; exact receipts stay out of public events.
@@ -650,6 +680,28 @@ default true; members.update accepts only that preference for identity 0. The de
 panel uses the same switch and words for all members. Worker reports share the member
 text contract; the existing fit_text projection derives the quick overlay caption.
 
+
+## Routine test and saved timezone boundary (2026-11-05)
+
+The explicit main-window `routines.run` allowlist entry calls MembersService._run
+with manual admission; it shares the existing background worker, routine_runs,
+agent history/conversation routing and spend. It neither enables paused schedules
+nor advances next_run. Frontend routine-run.ts keeps pending state and observes
+the existing routines.runs projection until finished, including confirmations.
+
+Schedule JSON gains validated optional IANA timezone metadata; the shared registry
+adds routine_timezone and internal routine_detected_timezone. Owner-window
+members.viewing reports the detected zone and pins legacy schedules before future
+zone changes. Home remains read-only. Existing schedule parsing/next_run and the
+calendar occurrence engine own saved-zone/DST behavior, with no separate scheduler.
+The shared timezones.ts selector uses ui.ts popovers and the existing settings.set.
+
+Event filters add an optional literal contains operator for Slack text after the
+existing selected-channel read; shared routine tool schemas retain the production
+gate and baseline receipts. The loopback webhook listener accepts its existing
+vault key via constant-time Bearer comparison as well as HMAC. Recipes describe
+user-managed HTTPS forwarding and provider payload fields without provisioning
+cloud infrastructure or storing a second provider credential.
 
 ## Plugin sets and marketplaces (2026-11-04)
 

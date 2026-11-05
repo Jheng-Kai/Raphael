@@ -20,10 +20,11 @@ crate-type = ["rlib"]
 tauri-build = { version = "2.7", features = [] }
 
 [dependencies]
-tauri = { version = "2.12", features = ["tray-icon", "image-png"] }
+tauri = { version = "2.12", features = ["tray-icon", "image-png", "protocol-asset"] }
 tauri-plugin-autostart = "2.7"
 tauri-plugin-window-state = "2.5"
 tauri-plugin-log = "2"
+tauri-plugin-updater = "=2.14.1"
 # The file dialog of 頭像 (Settings › 拉斐爾): opened from Rust, never from a page.
 tauri-plugin-dialog = "2"
 # Member desktop notifications are sent from Rust, never from a page.
@@ -82,6 +83,7 @@ windows = { version = "0.62", features = [
   "Win32_System_RemoteDesktop",
   "Win32_System_SystemServices",
   "Win32_System_Threading",
+  "Win32_System_SystemInformation",
   "Win32_System_Variant",
   "Win32_System_WinRT",
   "Win32_UI_Accessibility",
@@ -94,7 +96,7 @@ windows = { version = "0.62", features = [
 tempfile = "3"
 # The mock runtime, for tests that start the app's first plugins in processes of their own (a
 # second launch handing over to the first).
-tauri = { version = "2.12", features = ["tray-icon", "image-png", "test"] }
+tauri = { version = "2.12", features = ["tray-icon", "image-png", "protocol-asset", "test"] }
 # Tests of the controller's timers (a question that is not answered, an answer on screen) run on
 # a clock that they move themselves.
 tokio = { version = "1", features = ["test-util"] }

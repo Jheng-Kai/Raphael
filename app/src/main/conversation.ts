@@ -5,7 +5,7 @@
 // the person through `esc` first.
 
 import { esc } from "./ui";
-import { dayLabel, formatClock } from "./format";
+import { dayLabel } from "./format";
 import type { AgentTurn } from "./types";
 import { publicEventText } from "./public-event";
 
@@ -48,8 +48,8 @@ export function threadItems(turns: readonly AgentTurn[], nowMs: number): ThreadI
   let previous: number | null = null;
   for (const turn of oldestFirst) {
     if (!visibleTurn(turn)) continue;
-    if (previous === null || turn.created_at_ms - previous >= 30 * 60 * 1000 || new Date(previous).toDateString() !== new Date(turn.created_at_ms).toDateString()) {
-      const label = `${dayLabel(turn.created_at_ms, nowMs)} ${formatClock(turn.created_at_ms)}`;
+    if (previous === null || new Date(previous).toDateString() !== new Date(turn.created_at_ms).toDateString()) {
+      const label = dayLabel(turn.created_at_ms, nowMs);
       items.push({ kind: "day", key: `time:${turn.id}`, label });
     }
     items.push({ kind: "turn", key: `turn:${turn.id}`, turn });

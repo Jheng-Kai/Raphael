@@ -129,7 +129,17 @@ test("Telegram is in the 訊息平台 tab, and only there", () => {
 
 test("shared owner memory lives in General, while own memory stays out of Settings", () => {
   const memoryShared = { ...emptyMemoryView(), status: { text: "Owner document", revision: "r", chars: 14, entries: 1, limit: 2200, summary: null }, space: "shared" as const, title: "共同記憶" };
-  expect(tab("general", { memoryShared })).toContain('data-mem-space="shared"');
+  const html = tab("general", { memoryShared });
+  expect(html).toContain('data-mem-space="shared"');
+  const document = new Window().document;
+  document.body.innerHTML = html;
+  const imported = document.querySelector("[data-memory-import]")!;
+  const owner = imported.parentElement!;
+  expect(owner.querySelector("h2")?.textContent).toBe("關於你");
+  expect(owner.querySelector('[data-mem-space="shared"]')).not.toBeNull();
+  expect(html.indexOf("data-memory-import")).toBeGreaterThan(html.indexOf('data-mem-space="shared"'));
+  expect(owner.querySelector('[data-k="routine-timezone"]')).not.toBeNull();
+  expect(owner.querySelector("#owner-output-folder")).not.toBeNull();
   for (const pane of ["tools", "safety", "dictation"] as const) expect(tab(pane, { memoryShared })).not.toContain("data-mem-section");
   expect(tab("general", { memoryShared })).not.toContain('data-mem-space="own"');
 });
@@ -294,7 +304,7 @@ describe("the rules for every tab, in every language", () => {
   });
 
   test("a line under a row's name only where the setting would otherwise be set wrong", () => {
-    expect(described(tab("general"))).toEqual(["輸出資料夾"]);
+    expect(described(tab("general"))).toEqual(["時區", "輸出資料夾"]);
     expect(described(tab("dictation"))).toEqual([]);
     // the key's status, the month's forecast, what the limit does, and what each model costs
     expect(described(tab("models"))).toEqual(["拉斐爾的快速提問", "整理文字", "語音轉文字", "畫圖", "做影片"]);
@@ -312,8 +322,8 @@ describe("一般", () => {
   });
   test("has the interface language, the theme and the emblem's size as dropdowns, the subtitles and the start as switches", () => {
     const html = tab("general");
-    expect(groups(html)).toEqual(["關於你", "介面與桌面", "啟動"]);
-    expect(names(html)).toEqual(["天氣的城市", "輸出資料夾", "桌面圖案大小", "字幕", "開機時自動啟動", "重新導覽"]);
+    expect(groups(html)).toEqual(["關於你", "匯入記憶", "介面與桌面", "啟動"]);
+    expect(names(html)).toEqual(["天氣的城市", "時區", "輸出資料夾", "桌面圖案大小", "字幕", "開機時自動啟動", "重新導覽"]);
     for (const k of ["size"]) expect(html).toMatch(new RegExp(`<button type="button" class="sel"[^>]*data-k="${k}"`));
     for (const k of ["subtitles", "autostart"]) expect(html).toMatch(new RegExp(`class="tg" role="switch"[^>]*data-k="${k}"`));
   });
@@ -649,12 +659,12 @@ describe("搜尋設定", () => {
 
   test("finds Raphael's memory by its name and by what one asks him to do, in any of the languages", () => {
     for (const query of ["記憶", "記住", "memory", "Remember", "メモリ", "覚える"]) {
-      expect(where(query), query).toEqual(["general:共同記憶"]);
+      expect(where(query), query).toContain("general:共同記憶");
     }
     setLocale("en");
-    expect(where("記憶")).toEqual(["general:Shared memory"]);
+    expect(where("記憶")).toEqual(["general:Import memory", "general:Shared memory"]);
     setLocale("ja");
-    expect(where("memory")).toEqual(["general:共有メモリ"]);
+    expect(where("memory")).toEqual(["general:メモリをインポート", "general:共有メモリ"]);
   });
 
   test("finds a tab by its name, before its rows, and a brand by its name; case does not matter", () => {

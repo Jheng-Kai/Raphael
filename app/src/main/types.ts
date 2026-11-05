@@ -537,6 +537,8 @@ export interface WireAttachment {
   name: string;
   mime: string;
   data: string;
+  stored_id?: string;
+  size?: number;
 }
 
 /** One thing Raphael did for a turn. Never what a tool was given or what it returned. */
@@ -598,6 +600,8 @@ export interface BrainSettings {
   owner_name?: string;
   owner_about?: string;
   owner_output_folder?: string;
+  routine_timezone?: string;
+  routine_detected_timezone?: string;
   owner_photo?: string;
   action_mode?: "ask" | "direct" | "plan" | "bypass";
   local_commands_mode?: "ask" | "always" | "never";
@@ -756,6 +760,7 @@ export interface DeviceSettings {
   appearance: "system" | "light" | "dark";
   ui_language: "zh-TW" | "en" | "ja";
   autostart: boolean;
+  auto_update?: boolean;
   onboarded: boolean;
   /**
    * The apps Raphael may always operate on this PC (the 一律允許 answer of a question), by the
@@ -992,7 +997,7 @@ export type RoutineSchedule = (
   | { kind: "weekly"; days: number[]; time: string }
   | { kind: "monthly"; day: number; time: string }
   | { kind: "every"; hours?: number; minutes?: number; time?: string; from?: string; to?: string }
-) & { start_date?: string; max_runs?: number; until?: string };
+) & { start_date?: string; max_runs?: number; until?: string; timezone?: string };
 
 export interface RoutineRun {
   id: number; routine_id: number; scheduled?: number; started: number; finished: number | null;
@@ -1050,7 +1055,7 @@ export interface RoutineEventWhen {
   webhook?: never;
   app: string;
   event: { tool: string; arguments: Record<string, unknown>; items: string; id: string; since?: { arg: string; format: "iso" } };
-  filter: { field: string; equals: string };
+  filter: { field: string; equals: string; operator?: "equals" | "contains" };
 }
 
 export interface Routine {

@@ -22,12 +22,12 @@ const visible = (html: string): string => html.replace(/<[^>]+>/g, " ").replace(
 const buttons = (html: string): string[] => [...html.matchAll(/<button\b[^>]*>/g)].map((m) => m[0]);
 
 describe("the safety rules section", () => {
-  test("it is the line that adds a rule, then the rules under 當拉斐爾想要 and 他會", () => {
+  test("the add line precedes the rules under the member action and verdict headings", () => {
     const html = rulesHTML(view());
     expect(html).toMatch(/^<section class="sgroup rules" data-rules-section aria-label="安全規則"><h2>安全規則<\/h2>/);
-    expect(html).toContain('placeholder="當拉斐爾想要…（例如：在網路上留言）"');
+    expect(html).toContain('placeholder="當成員想要…（例如：在網路上留言）"');
     expect(visible(html)).toBe(
-      "安全規則 先問我 新增 當拉斐爾想要 他會 付款結帳 先問我 刪除檔案 先問我 寄信或傳訊息給別人 先問我 在 Notion 新增頁面 直接做 在社群網站發文 不准做",
+      "安全規則 先問我 新增 當成員想要 處理方式 付款結帳 先問我 刪除檔案 先問我 寄信或傳訊息給別人 先問我 在 Notion 新增頁面 直接做 在社群網站發文 不准做",
     );
     expect(html.match(/class="rules-row"/g)).toHaveLength(5);
   });
@@ -64,7 +64,9 @@ describe("the safety rules section", () => {
   test("what is wrong with a rule is said under it", () => {
     const html = rulesHTML(view({ draft: { action: "", verdict: "ask", error: "empty", busy: false } }));
     expect(html).toContain('role="alert"');
-    expect(visible(html)).toContain("請寫下拉斐爾想要做的事");
+    expect(visible(html)).toContain("請寫下成員想要做的事");
+    expect(html.indexOf('role="alert"')).toBeGreaterThan(html.indexOf('class="rules-add"'));
+    expect(html.indexOf('role="alert"')).toBeLessThan(html.indexOf('class="rules-list"'));
     expect(ruleProblem("  ", RULES)).toBe("empty");
     expect(ruleProblem("x".repeat(81), RULES)).toBe("too_long");
     expect(ruleProblem("付款結帳 ", RULES)).toBe("duplicate");
@@ -86,7 +88,7 @@ describe("the safety rules section", () => {
   test("one language at a time", () => {
     setLocale("en");
     const html = rulesHTML(view({ status: RULES.slice(4) }));
-    expect(visible(html)).toBe("Safety rules Ask me first Add When Raphael wants to He will 在社群網站發文 Never do it");
+    expect(visible(html)).toBe("Safety rules Ask me first Add When a member wants to They will 在社群網站發文 Never do it");
     setLocale("ja");
     expect(visible(rulesHTML(view({ status: [] })))).toBe("安全ルール 先に聞く 追加 ルールはありません");
   });
@@ -96,9 +98,9 @@ describe("the safety rules section", () => {
     expect(rulesHTML(view({ status: "failed" }))).toContain('role="alert"');
   });
 
-  test("it is in Settings › 拉斐爾, after the memory, and the search finds it", () => {
+  test("search finds the shared rules in Settings > Safety", () => {
     const hits = searchSettings("安全規則");
-    expect(hits.some((h) => h.pane === "agent")).toBe(true);
+    expect(hits.some((h) => h.pane === "safety")).toBe(true);
   });
 });
 

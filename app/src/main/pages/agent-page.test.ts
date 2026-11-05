@@ -67,6 +67,7 @@ function mount() {
   } as unknown as AppContext;
   const agent = createAgent(app);
   document.body.append(agent.el);
+  agent.el.hidden = false;
   agent.show();
   return agent;
 }
@@ -78,6 +79,7 @@ const flush = async (): Promise<void> => {
 beforeEach(() => {
   document.body.innerHTML = "";
   for (const fn of Object.values(api)) fn.mockReset();
+  api.core.mockResolvedValue(null);
   api.agentQuestionOpen.mockResolvedValue(null);
   api.agentVoice.mockResolvedValue(undefined);
 });
@@ -206,12 +208,16 @@ describe("loading the earlier turns", () => {
     const earlier = deferred<{ turns: AgentTurn[] }>();
     const newest = deferred<{ turns: AgentTurn[] }>();
     api.agentHistoryList
-      .mockResolvedValueOnce({ turns: page(200, 50) }) // the first page; it does not fill the window, so the earlier one is asked at once
+      .mockResolvedValueOnce({ turns: page(200, 50) })
       .mockReturnValueOnce(earlier.promise)
       .mockReturnValueOnce(newest.promise)
       .mockResolvedValue({ turns: page(150, 50) });
     mount();
     await flush();
+    expect(shownIds()).toHaveLength(25);
+    await scrollEarlier(); // Expand the already loaded window before asking the core for more.
+    expect(shownIds()).toHaveLength(45);
+    await scrollEarlier();
     expect(api.agentHistoryList).toHaveBeenCalledTimes(2);
     expect(api.agentHistoryList.mock.calls[1][0]).toEqual({ limit: 50, before_id: 151 });
     // a turn is written: the newest turns are brought again while the earlier ones are on their way
@@ -223,9 +229,7 @@ describe("loading the earlier turns", () => {
     newest.resolve({ turns: page(201, 50) });
     await flush();
     // the page can page up again: the earlier ones are asked once more
-    const scroller = document.querySelector<HTMLElement>(".ra-scroll")!;
-    scroller.dispatchEvent(new Event("scroll"));
-    await flush();
+    await scrollEarlier();
     expect(api.agentHistoryList.mock.calls.some((call, i) => i > 2 && call[0]?.before_id !== undefined)).toBe(true);
   });
 });
@@ -233,8 +237,19 @@ describe("loading the earlier turns", () => {
 /** The ids of the turns the thread shows, oldest first. */
 const shownIds = (): number[] => [...document.querySelectorAll<HTMLElement>(".tn[data-id]")].map((line) => Number(line.dataset.id));
 
+/** The reader asks for earlier turns through the window's real wheel/animation-frame path. */
+async function scrollEarlier(): Promise<void> {
+  const scroller = document.querySelector<HTMLElement>(".ra-scroll")!;
+  vi.advanceTimersToNextFrame(); // Settle the initial follow-to-bottom frame before the reader scrolls.
+  scroller.scrollTop = 0;
+  scroller.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));
+  vi.advanceTimersToNextFrame();
+  await flush();
+}
+
 describe("coming back to the page", () => {
   test("turns written while it was away are paged back to without leaving a gap", async () => {
+    vi.useFakeTimers();
     // A history of `size` turns, ids 1..size, answered a page at a time as the core does.
     let size = 50;
     api.agentHistoryList.mockImplementation(async (q: { limit: number; before_id?: number }) => {
@@ -243,12 +258,24 @@ describe("coming back to the page", () => {
     });
     const agent = mount();
     for (let i = 0; i < 5; i++) await flush();
-    expect(shownIds()).toHaveLength(50); // 1..50, and the earlier page said there is nothing before
+    expect(shownIds()).toEqual(Array.from({ length: 25 }, (_, i) => i + 26));
+    expect(document.querySelector<HTMLElement>(".ra-scroll")!.dataset.windowTotal).toBe("50");
     agent.hide();
     size = 150; // a hundred turns while the page was not shown
     agent.show();
     for (let i = 0; i < 10; i++) await flush();
-    expect(shownIds()).toEqual(Array.from({ length: 150 }, (_, i) => i + 1));
+    expect(shownIds()).toEqual(Array.from({ length: 25 }, (_, i) => i + 126));
+    const seen = new Set(shownIds());
+    for (let i = 0; i < 8; i++) {
+      await scrollEarlier();
+      const ids = shownIds();
+      expect(ids.length).toBeLessThanOrEqual(100);
+      expect(ids).toEqual(Array.from({ length: ids.length }, (_, at) => ids[0] + at));
+      ids.forEach(id => seen.add(id));
+    }
+    expect([...seen].sort((a, b) => a - b)).toEqual(Array.from({ length: 150 }, (_, i) => i + 1));
+    expect(api.agentHistoryList).toHaveBeenCalledWith({ limit: 50, before_id: 101 });
+    expect(api.agentHistoryList).toHaveBeenCalledWith({ limit: 50, before_id: 51 });
   });
 });
 
@@ -267,15 +294,25 @@ describe("the search", () => {
   });
   test("search loads older pages and keeps their words in the complete conversation", async () => {
     vi.useFakeTimers();
-    api.agentHistoryList.mockImplementation(async (params: {limit:number;before_id?:number}) => params.limit===200 ? {turns:params.before_id ? [turn(3,{question:"needle"})] : page(250,200)} : {turns:params.before_id ? [] : page(250,50)});
+    const newest = (count: number) => [turn(250, { question: "needle" }), ...page(249, count - 1)];
+    api.agentHistoryList.mockImplementation(async (params: {limit:number;before_id?:number}) => params.limit===200 ? {turns:params.before_id ? [turn(3,{question:"needle"})] : newest(200)} : {turns:params.before_id ? [] : newest(50)});
     mount(); await flush();
     document.querySelector<HTMLElement>('[data-act="search"]')!.click();
     const field=document.querySelector<HTMLInputElement>('.ra-find-input')!;
     field.value='needle';field.dispatchEvent(new Event('input'));
     await vi.advanceTimersByTimeAsync(250);
     expect(api.agentHistoryList).toHaveBeenCalledWith(expect.objectContaining({before_id:51,limit:200}));
+    expect(document.querySelector('.ra-find-count')?.textContent).toBe('2/2');
+    document.querySelector<HTMLButtonElement>('[data-find="previous"]')!.click();
     expect(document.querySelector('.tn[data-id="3"] mark.is-current')?.textContent).toBe('needle');
-    expect(shownIds()).toHaveLength(201);
+    expect(shownIds()).toHaveLength(25);
+    expect(document.querySelector<HTMLElement>(".ra-scroll")!.dataset.windowTotal).toBe("201");
+    expect(document.querySelector('.tn[data-id="250"]')).toBeNull();
+    expect(document.querySelector('.ra-find-count')?.textContent).toBe('1/2');
+    document.querySelector<HTMLButtonElement>('[data-find="next"]')!.click();
+    expect(document.querySelector('.tn[data-id="250"] mark.is-current')?.textContent).toBe('needle');
+    expect(shownIds()).toHaveLength(25);
+    expect(document.querySelector('.ra-find-count')?.textContent).toBe('2/2');
   });
 
 });

@@ -2,7 +2,7 @@
 // commands of commands.rs. Every function rejects with the reason as a string (`describeError`
 // makes it fit to show).
 
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { withWindowHotkeyPause } from "./window-hotkeys";
 import type { DesktopState, DesktopSession } from "./desktop-viewer";
 import type { LanguageGroup } from "./languages";
@@ -247,7 +247,7 @@ export const membersSetAvatar = (id: number, file: WireAttachment): Promise<{ me
 /** The owner read the thread of member `id`: it is no longer unread. */
 export const membersRead = (id: number): Promise<unknown> => core("members.read", { id });
 /** The thread on screen now (null for none): what arrives there is no news. */
-export const membersViewing = (id: number | null): Promise<unknown> => core("members.viewing", { id });
+export const membersViewing = (id: number | null): Promise<unknown> => core("members.viewing", { id, tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
 /** Raphael's own tools a member may be given, by id, and the connections. */
 export const membersToolChoices = (): Promise<{ tools: string[]; connections: { id: string; name: string; enabled: boolean }[] }> =>
   core("members.tool_choices");
@@ -261,7 +261,7 @@ export const groupsDelete = (id: number): Promise<{ deleted: boolean }> => core(
 export interface RoutineEventChoice {
   id: string; toolkit: string; slug: string; input: "" | "repository" | "channel"; label: string; app: string; app_name: string;
 }
-export const routinesList = (memberId?: number, pick?: {event:string;value:string}): Promise<{ routines: Routine[]; events?: RoutineEventChoice[]; event_apps?: string[]; when?: Routine["when"]; event_error?: string }> => core("routines.list", { ...(memberId === undefined ? {} : {member_id:memberId}), ...pick });
+export const routinesList = (memberId?: number, pick?: {event:string;value:string;contains?:string}): Promise<{ routines: Routine[]; events?: RoutineEventChoice[]; event_apps?: string[]; when?: Routine["when"]; event_error?: string }> => core("routines.list", { ...(memberId === undefined ? {} : {member_id:memberId}), ...pick });
 export const routinesCreate = (
   routine: Pick<Routine, "member_id" | "title" | "prompt" | "schedule" | "when"> & { enabled?: boolean },
 ): Promise<{ routine: Routine }> => core("routines.create", routine);
@@ -270,6 +270,7 @@ export const routinesUpdate = (
   patch: Partial<Pick<Routine, "title" | "prompt" | "schedule" | "when" | "enabled">>,
 ): Promise<{ routine: Routine }> => core("routines.update", { id, ...patch });
 export const routineWebhook = (id: number, reveal = false): Promise<{address:string;secret?:string;address_changed?:boolean}> => core("routines.webhook", {id,reveal});
+export const routinesRun = (id: number): Promise<{run_id?:number;turn_id?:number;status?:string;reason?:string}> => core("routines.run", {id});
 export const routinesDelete = (id: number): Promise<{ deleted: boolean }> => core("routines.delete", { id });
 /** The routine the core would offer member `memberId` now (its group's places), in `uiLanguage`; null for none. */
 export const routinesTemplate = (memberId: number, uiLanguage?: string): Promise<{ offer: RoutineOffer | null }> =>
@@ -504,6 +505,12 @@ export async function subscribeMainEvents(handler: (event: MainEvent) => void): 
 
 /** Open only an opaque stored attachment, never a path supplied by a page. */
 export const openAttachment = (id: string): Promise<void> => invoke("open_attachment", { id });
+export const attachmentSource = async (id: string): Promise<string> => convertFileSrc(await invoke<string>("attachment_source", { id }));
+
+export interface UpdateView { state: "idle" | "checking" | "found" | "downloading" | "ready" | "installing" | "error"; version: string; notes: string; error: string; installed?: string; }
+export const updateControl = (action: "status" | "check" | "install"): Promise<UpdateView> => invoke("update_control", { action });
+export interface MemoryImportResult { kept: string[]; refused: { index: number; reason: string }[]; }
+export const importMemory = (text: string): Promise<MemoryImportResult> => core("memory.import", { text });
 export const openTeamFile = (path: string): Promise<void> => invoke("open_team_file", { path });
 
 // Retained execution metrics; exporting always requests the entire selected period.

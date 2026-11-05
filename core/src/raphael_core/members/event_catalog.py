@@ -66,7 +66,7 @@ def detect_items(data):
     return _detect(*unwrap_envelope(data))
 
 
-async def pick_event(service, member_id, identifier, value):
+async def pick_event(service, member_id, identifier, value, contains=""):
     language = service._language()
     choice = next((e for e in available_events(service._connections(), language) if e["id"] == identifier), None)
     name = choice["app_name"] if choice else "App"
@@ -84,6 +84,10 @@ async def pick_event(service, member_id, identifier, value):
     when = {"app": choice["app"], "event": {"tool": "mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL",
             "arguments": {"tools": [{"tool_slug": choice["slug"], "arguments": args}]}, "items": "", "id": "id"},
             "filter": {"field": "", "equals": ""}}
+    if contains:
+        if identifier != "slack-message" or not isinstance(contains, str) or not contains.strip() or len(contains) > 300:
+            return {"event_error": failure_message(language, name)}
+        when["filter"] = {"field": "text", "equals": contains.strip(), "operator": "contains"}
     # Discovery samples existing events; only subsequent polls move the time window.
     probe = deepcopy(when)
     if identifier == "calendar-event":
