@@ -1066,6 +1066,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** Loads the newest turns, or with `earlier` the ones before what is loaded, keeping the reader's place. */
   let activeRead: { key: string; promise: Promise<void> } | null = null;
   const dirtyTurnIds = new Set<number>();
+  // A delta read never names turns a clear or delete removed; after a conversation change the
+  // next read is whole. The version keeps a read started before the change from settling it.
+  const staleHistory = new Map<number, number>();
   let newestReadId = 0;
   let readAgain = false;
   const needsUnreadHistory = (): boolean => openingThread && unreadFrom !== null && canLoadEarlier && (oldestId(turns) ?? 0) > unreadFrom;
@@ -1097,7 +1100,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (turns.length === 0 && !earlier) render();
     else stage.setAttribute("aria-busy", "true");
     let got: AgentTurn[];
-    const deltaRead = fromEvent && loadedThread && turns.length > 0 && targetTurn === undefined;
+    const staleVersion = staleHistory.get(memberId());
+    const deltaRead = fromEvent && loadedThread && turns.length > 0 && targetTurn === undefined && staleVersion === undefined;
     const requestedIds = deltaRead ? [...new Set([...dirtyTurnIds, ...turns.filter(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting").map(turn => turn.id)])].slice(0, 50) : [];
     requestedIds.forEach(id => dirtyTurnIds.delete(id));
     let delta = false, more = false, removed: number[] = [];
@@ -1125,6 +1129,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (mine === loads) {
         // Invalidated rows can be newer than this forward page; only its cursor advances paging.
         newestReadId = delta && history.next_after_id !== undefined ? history.next_after_id : Math.max(newestReadId, ...history.turns.map(turn => turn.id));
+        if (!earlier && !delta && staleVersion !== undefined && staleHistory.get(member) === staleVersion) staleHistory.delete(member);
         pendingQuestions = { member, conversation: chosen, questions: history.pending_questions ?? [] };
         floatingQuestions.sync();
       }
@@ -2418,7 +2423,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (event.type === "Hotkey" && event.kind === "cancel_key" && visible ) cancelGesture().press();
     if (event.type === "Hotkey" && event.kind === "cancel_reset") cancelGesture().clear();
     members.follow(event);
-    if (event.type === "ConversationsChanged") { conversationsDirty.add(event.member_id); conversationChange(event.member_id); }
+    if (event.type === "ConversationsChanged") { conversationsDirty.add(event.member_id); staleHistory.set(event.member_id, (staleHistory.get(event.member_id) ?? 0) + 1); conversationChange(event.member_id); }
     if (event.type === "AgentTurn") { conversationsDirty.add(event.member_id ?? RAPHAEL_ID); conversationChange(event.member_id ?? RAPHAEL_ID); }
     if (event.type === "QuotaChanged") void readQuotas();
     if (event.type === "MembersChanged") void slashMenu.refresh(true);
