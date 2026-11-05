@@ -3993,9 +3993,22 @@ export function checkRendered(name, context = {}) {
     require(box.left >= line.left && box.right <= line.right + 1, "the page stays inside the reply");
     return { check: name, height };
   }
+  if (name === "page-placed" || name === "page-appended") {
+    const input = [...document.querySelectorAll('.composer .cmp-input')].find(visible);
+    const note = input?.closest('.composer').querySelector('.cmp-page-note');
+    const expected = `${name === "page-appended" ? "我原本的草稿\n" : ""}把輕量後背包加入購物車`;
+    require(input?.value === expected, "page text is a draft, preserving every existing word");
+    require(document.activeElement === input, "the conversation composer has focus");
+    require(visible(note) && note.textContent === "這段文字來自頁面，確認後再送出", "one localized note identifies page text before sending");
+    require(note.getBoundingClientRect().height <= parseFloat(getComputedStyle(note).lineHeight) * 1.2, "the note stays on one line");
+    require(!document.querySelector('.pg-view'), "placing from an expanded page returns to the conversation");
+    require(!window.__look.calls.some(call => call.command === "agent_ask_text" || ["rooms.send", "owner_questions.answer"].includes(call.method)), "a page never sends an owner message or answers a question");
+    return { check: name, text: input.value, note: note.textContent };
+  }
   if (name === "page-spoke") {
     const asked = window.__look.calls.filter(call => call.command === "agent_ask_text");
-    require(asked.length === 1 && JSON.stringify(asked[0]).includes("把輕量後背包加入購物車"), "the press became the owner's one next message");
+    require(asked.length === 1 && JSON.stringify(asked[0]).includes("把輕量後背包加入購物車"), "only the owner's send submits the placed text once");
+    require(![...document.querySelectorAll('.cmp-page-note')].some(visible), "the submitted draft no longer shows a page note");
     return { check: name };
   }
   if (name === "page-expanded") {

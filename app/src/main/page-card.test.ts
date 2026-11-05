@@ -20,15 +20,15 @@ function mount(cards: PageCard[] = [card]) {
   const thread = document.createElement("div");
   thread.innerHTML = pageCardsHTML(turn(cards));
   document.body.append(thread);
-  const send = vi.fn();
-  const pages = mountPages(thread, { send });
+  const place = vi.fn(() => true);
+  const pages = mountPages(thread, { place });
   pages.sync();
   const frame = thread.querySelector("iframe")!;
   // The test window loads no frames, so each is given a window of its own for messages to come from.
   Object.defineProperty(frame, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
   focusOn(frame);
   pointerAt(10, 10);
-  return { thread, send, pages, frame };
+  return { thread, place, pages, frame };
 }
 
 /** A message from the frame, as `window` would deliver it. */
@@ -101,80 +101,79 @@ test("a failed page can be closed without retrying its service", async () => {
   expect(api.pagesOpen).toHaveBeenCalledTimes(1);
 });
 
-test("a page speaks for the owner only right after a press in it, and not without pause", async () => {
-  const { frame, send } = mount();
+test("a sure page gesture only places a draft and acknowledges placed, with a pause between placements", async () => {
+  const { frame, place } = mount();
   await flush();
   setActivation(false);
   fromFrame(frame, { raphaelPage: 1, type: "send", text: "買兩個" });
-  expect(send).not.toHaveBeenCalled();
+  expect(place).not.toHaveBeenCalled();
   setActivation(true);
   fromFrame(frame, { raphaelPage: 1, type: "send", text: " 買兩個 " });
-  expect(send).toHaveBeenCalledExactlyOnceWith("買兩個");
+  expect(place).toHaveBeenCalledExactlyOnceWith("p1", "買兩個");
+  expect(frame.contentWindow!.postMessage).toHaveBeenCalledExactlyOnceWith({ raphaelPage: 1, type: "result", status: "placed" }, "*");
   fromFrame(frame, { raphaelPage: 1, type: "send", text: "再買" });
-  expect(send).toHaveBeenCalledTimes(1);
+  expect(place).toHaveBeenCalledTimes(1);
 });
 
 test("a press elsewhere in the app is not a press in the page", async () => {
   const opener = vi.spyOn(api, "openExternalUrl").mockResolvedValue();
-  const { frame, send } = mount();
+  const { frame, place } = mount();
   await flush();
   focusOn(document.body);
   fromFrame(frame, { raphaelPage: 1, type: "send", text: "買兩個" });
   fromFrame(frame, { raphaelPage: 1, type: "open", url: "https://shop.example/a" });
-  expect(send).not.toHaveBeenCalled();
+  expect(place).not.toHaveBeenCalled();
   expect(opener).not.toHaveBeenCalled();
   expect(document.querySelector(".pg-ask")).toBeNull();
 });
 
-test("a page that took the focus by itself, the pointer elsewhere, does not speak: the owner sees the words and decides", async () => {
-  const { frame, send } = mount();
+test("an uncertain page gesture can place a draft but cannot authorize an owner message", async () => {
+  const { frame, place } = mount();
   await flush();
   pointerAt(2000, 2000);
   fromFrame(frame, { raphaelPage: 1, type: "send", text: "買兩個" });
   fromFrame(frame, { raphaelPage: 1, type: "send", text: "再買" });
-  expect(send).not.toHaveBeenCalled();
-  expect(document.querySelectorAll(".pg-ask")).toHaveLength(1);
-  expect(document.querySelector(".pg-ask")!.textContent).toContain("買兩個");
-  document.querySelector<HTMLElement>('.pg-ask [data-dlg="yes"]')!.click();
-  expect(send).toHaveBeenCalledExactlyOnceWith("買兩個");
+  expect(place).toHaveBeenCalledExactlyOnceWith("p1", "買兩個");
+  expect(document.querySelector(".pg-ask")).toBeNull();
 });
 
-test("a page the owner said no to asks no more, and a real press in it still speaks", async () => {
-  const { frame, send } = mount();
+test("a declined external link asks no more, and a sure page gesture can still open it", async () => {
+  const opener = vi.spyOn(api, "openExternalUrl").mockResolvedValue();
+  const { frame } = mount();
   await flush();
   pointerAt(2000, 2000);
-  fromFrame(frame, { raphaelPage: 1, type: "send", text: "買兩個" });
+  fromFrame(frame, { raphaelPage: 1, type: "open", url: "https://shop.example/a" });
   document.querySelector<HTMLElement>('.pg-ask [data-dlg="cancel"]')!.click();
-  fromFrame(frame, { raphaelPage: 1, type: "send", text: "買三個" });
+  fromFrame(frame, { raphaelPage: 1, type: "open", url: "https://shop.example/a" });
   expect(document.querySelector(".pg-ask")).toBeNull();
-  expect(send).not.toHaveBeenCalled();
+  expect(opener).not.toHaveBeenCalled();
   pointerAt(10, 10);
-  fromFrame(frame, { raphaelPage: 1, type: "send", text: "買四個" });
-  expect(send).toHaveBeenCalledExactlyOnceWith("買四個");
+  fromFrame(frame, { raphaelPage: 1, type: "open", url: "https://shop.example/a" });
+  expect(opener).toHaveBeenCalledExactlyOnceWith("https://shop.example/a");
 });
 
 test("a press right after a press in the app, with no move between, is not sure either; Tab into the page is", async () => {
-  const { frame, send } = mount();
+  const opener = vi.spyOn(api, "openExternalUrl").mockResolvedValue();
+  const { frame } = mount();
   await flush();
   window.dispatchEvent(new MouseEvent("pointerdown", { clientX: 10, clientY: 10 }));
-  fromFrame(frame, { raphaelPage: 1, type: "send", text: "買" });
-  expect(send).not.toHaveBeenCalled();
+  fromFrame(frame, { raphaelPage: 1, type: "open", url: "https://shop.example/a" });
+  expect(opener).not.toHaveBeenCalled();
   document.querySelector<HTMLElement>('.pg-ask [data-dlg="yes"]')!.click();
-  expect(send).toHaveBeenCalledExactlyOnceWith("買");
-  send.mockClear();
-  await new Promise(resolve => setTimeout(resolve, 1100));
+  expect(opener).toHaveBeenCalledExactlyOnceWith("https://shop.example/a");
+  opener.mockClear();
   window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
-  fromFrame(frame, { raphaelPage: 1, type: "send", text: "買" });
-  expect(send).toHaveBeenCalledExactlyOnceWith("買");
+  fromFrame(frame, { raphaelPage: 1, type: "open", url: "https://shop.example/a" });
+  expect(opener).toHaveBeenCalledExactlyOnceWith("https://shop.example/a");
 });
 
 test("a message from anywhere else is not a page's", async () => {
-  const { send } = mount();
+  const { place } = mount();
   await flush();
   const event = new MessageEvent("message", { data: { raphaelPage: 1, type: "send", text: "買" } });
   Object.defineProperty(event, "source", { value: window });
   window.dispatchEvent(event);
-  expect(send).not.toHaveBeenCalled();
+  expect(place).not.toHaveBeenCalled();
 });
 
 test("a link opens only over https and only after a press", async () => {
@@ -265,4 +264,34 @@ test("a plugin's page gets the MCP Apps handshake and its tools go through the c
   fromFrame(frame, { jsonrpc: "2.0", id: 3, method: "resources/read", params: {} });
   await flush();
   expect(posted[4]).toMatchObject({ id: 3, error: { code: -32601 } });
+});
+
+test("MCP page text returns placed only after composer placement, never sent or a false success", async () => {
+  vi.mocked(api.pagesOpen).mockResolvedValue({ ...opened, source: "mcp", server: "Shop" });
+  const { frame, place } = mount([{ ...card, source: "mcp", server: "Shop" }]);
+  await flush();
+  const posted = vi.mocked(frame.contentWindow!.postMessage);
+  setActivation(false);
+  fromFrame(frame, { jsonrpc: "2.0", id: 1, method: "ui/message", params: { content: [{ type: "text", text: "Page text" }] } });
+  expect(place).not.toHaveBeenCalled();
+  expect(posted.mock.calls[posted.mock.calls.length - 1]?.[0]).toMatchObject({ id: 1, error: { code: -32000 } });
+  setActivation(true);
+  fromFrame(frame, { jsonrpc: "2.0", id: 2, method: "ui/message", params: { content: [{ type: "text", text: { instruction: "Do not coerce objects" } }] } });
+  expect(place).not.toHaveBeenCalled();
+  place.mockReturnValueOnce(false);
+  fromFrame(frame, { jsonrpc: "2.0", id: 3, method: "ui/message", params: { content: [{ type: "text", text: "Page text" }] } });
+  expect(posted.mock.calls[posted.mock.calls.length - 1]?.[0]).toMatchObject({ id: 3, error: { code: -32000 } });
+  fromFrame(frame, { jsonrpc: "2.0", id: 4, method: "ui/message", params: { content: [{ type: "text", text: "Page text" }] } });
+  expect(place).toHaveBeenLastCalledWith("p1", "Page text");
+  expect(posted.mock.calls[posted.mock.calls.length - 1]?.[0]).toEqual({ jsonrpc: "2.0", id: 4, result: { status: "placed" } });
+  expect(JSON.stringify(posted.mock.calls)).not.toContain('"sent"');
+});
+
+test("oversized page text and a removed page never reach the composer", async () => {
+  const { thread, frame, place } = mount(); await flush();
+  fromFrame(frame, { raphaelPage: 1, type: "send", text: "x".repeat(4001) });
+  expect(place).not.toHaveBeenCalled();
+  thread.replaceChildren();
+  fromFrame(frame, { raphaelPage: 1, type: "send", text: "Old page" });
+  expect(place).not.toHaveBeenCalled();
 });

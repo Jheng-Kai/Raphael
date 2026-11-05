@@ -521,15 +521,58 @@ fn spawn_core(shared: &Arc<Shared>, exits: &mpsc::Sender<()>) -> Result<(), Stri
     Ok(())
 }
 
+const MAX_RPC_LINE: usize = 64 * 1024 * 1024;
+const MAX_LOG_LINE: usize = 64 * 1024;
+
+#[derive(Debug, PartialEq)]
+enum PipeLine {
+    End,
+    Complete,
+    Oversized,
+}
+
+fn read_pipe_line(
+    reader: &mut impl BufRead,
+    line: &mut Vec<u8>,
+    limit: usize,
+) -> std::io::Result<PipeLine> {
+    line.clear();
+    let read = std::io::Read::take(&mut *reader, limit as u64 + 1).read_until(b'\n', line)?;
+    if read == 0 {
+        return Ok(PipeLine::End);
+    }
+    if read <= limit {
+        return Ok(PipeLine::Complete);
+    }
+    let mut ended = line.last() == Some(&b'\n');
+    line.clear();
+    // Drain without allocating or exposing a fragment as another protocol message.
+    while !ended {
+        let (used, found) = {
+            let bytes = reader.fill_buf()?;
+            if bytes.is_empty() {
+                break;
+            }
+            match bytes.iter().position(|byte| *byte == b'\n') {
+                Some(at) => (at + 1, true),
+                None => (bytes.len(), false),
+            }
+        };
+        reader.consume(used);
+        ended = found;
+    }
+    Ok(PipeLine::Oversized)
+}
+
 /// Feeds the core's stdout to the RPC client until it ends, then cleans up after the core.
 fn read_stdout(shared: &Shared, stdout: ChildStdout, exits: &mpsc::Sender<()>) {
     let mut lines = BufReader::new(stdout);
     let mut line = Vec::new();
     loop {
-        line.clear();
-        match lines.read_until(b'\n', &mut line) {
-            Ok(0) => break,
-            Ok(_) => shared.rpc.handle_line(&String::from_utf8_lossy(&line)),
+        match read_pipe_line(&mut lines, &mut line, MAX_RPC_LINE) {
+            Ok(PipeLine::End) => break,
+            Ok(PipeLine::Complete) => shared.rpc.handle_line(&String::from_utf8_lossy(&line)),
+            Ok(PipeLine::Oversized) => log::warn!("discarded an oversized core protocol line"),
             Err(err) => {
                 log::error!("could not read the core's output: {err}");
                 break;
@@ -558,10 +601,10 @@ fn log_stderr(stderr: ChildStderr) {
     let mut lines = BufReader::new(stderr);
     let mut line = Vec::new();
     loop {
-        line.clear();
-        match lines.read_until(b'\n', &mut line) {
-            Ok(0) | Err(_) => break,
-            Ok(_) => {
+        match read_pipe_line(&mut lines, &mut line, MAX_LOG_LINE) {
+            Ok(PipeLine::End) | Err(_) => break,
+            Ok(PipeLine::Oversized) => log::warn!("discarded an oversized core log line"),
+            Ok(PipeLine::Complete) => {
                 let text = String::from_utf8_lossy(&line);
                 let text = text.trim_end();
                 if !text.is_empty() {
@@ -742,6 +785,57 @@ mod tests {
     use std::ffi::OsString;
     use std::time::{Duration, Instant};
     use tokio::sync::broadcast::{Receiver, error::RecvError, error::TryRecvError};
+
+    #[test]
+    fn pipe_lines_bound_allocation_discard_oversized_content_and_resume() {
+        let mut terminated = vec![b'x'; 100_000];
+        terminated.extend_from_slice(b"\nOK\n");
+        for input in [terminated, vec![b'x'; 100_000]] {
+            let resumes = input.ends_with(b"OK\n");
+            let mut reader = BufReader::with_capacity(3, std::io::Cursor::new(input));
+            let mut line = Vec::new();
+            assert_eq!(
+                read_pipe_line(&mut reader, &mut line, 8).unwrap(),
+                PipeLine::Oversized
+            );
+            assert!(
+                line.is_empty(),
+                "oversized private content must not reach parsers or logs"
+            );
+            assert!(
+                line.capacity() <= 16,
+                "a long line must not grow the allocation without bound"
+            );
+            let next = read_pipe_line(&mut reader, &mut line, 8).unwrap();
+            if resumes {
+                assert_eq!(next, PipeLine::Complete);
+                assert_eq!(line, b"OK\n");
+            } else {
+                assert_eq!(next, PipeLine::End);
+            }
+        }
+    }
+
+    #[test]
+    fn pipe_lines_preserve_the_exact_limit_final_fragments_and_utf8_bytes() {
+        for input in [
+            b"1234567\n".as_slice(),
+            b"12345678".as_slice(),
+            "hello\u{4f60}".as_bytes(),
+        ] {
+            let mut reader = BufReader::new(std::io::Cursor::new(input));
+            let mut line = Vec::new();
+            assert_eq!(
+                read_pipe_line(&mut reader, &mut line, 8).unwrap(),
+                PipeLine::Complete
+            );
+            assert_eq!(line, input);
+            assert_eq!(
+                read_pipe_line(&mut reader, &mut line, 8).unwrap(),
+                PipeLine::End
+            );
+        }
+    }
 
     // ---- the command that starts the core ----
 

@@ -1633,7 +1633,7 @@ export const ja = {
   "members.changeAvatar": "アイコンを変更",
   "members.fromPc": "PC から選ぶ…",
   "members.slimeColor": "色 {p0}",
-  "page.askSend": "このページがあなたのメッセージとして送信しようとしています",
+  "page.composerNote": "この文章はページからのものです。確認してから送信してください。",
   "page.askOpen": "このページがこのリンクを開こうとしています",
   "page.askYes": "実行",
   "page.expand": "拡大",

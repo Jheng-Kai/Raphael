@@ -1680,3 +1680,38 @@ Eye atlases inherit typed pixel-fit scale, offsets and stroke from their shared
 parent. The 576 thinking poses must not each carry the vector face's fitting
 class. Keep the same pixel formulas, all poses and periods; cover the gallery,
 parts, presence hovers and handovers when changing this shared style boundary.
+
+## Page text is an owner-reviewed draft (2026-11-05 follow-up 1)
+
+R-CARD-11 / R-SEC-05: a sure page gesture never sends an owner message or answers
+a waiting question. Both generated HTML send and MCP ui/message append bounded
+plain text on a new line in that conversation's composer, preserving existing
+words, files and quotes. Focus moves to the field. The shared one-line hint reads
+"這段文字來自頁面，確認後再送出" in zh-TW, with English/Japanese translations. It
+uses the existing hint typography/color and spacing tokens below the controls;
+no success toast or second send button appears. The draft keeps page provenance
+through navigation, restart and failed delivery. Clearing/sending it hides the note.
+
+MCP success is {status: "placed"}; generated pages receive
+{raphaelPage: 1, type: "result", status: "placed"}. Rejected placement is never
+reported as sent/placed. Input source, length and rate checks remain. A page's
+waiting task continues only after the owner submits the reviewed composer; normal
+messages retain their existing send flow. Transcription never auto-submits a page
+draft. HTTPS links, tools/call with the existing core gate, resize, retry and frame
+carry remain; an expanded page returns to the conversation when it places text.
+
+Tests: page-card.test.ts, chat-composer.test.ts, composer-drafts.test.ts,
+pages/agent-page.test.ts, group-chats.test.ts and owner-questions.test.ts.
+Compare page-buy and page-room-draft at matching theme/width: identical note
+component, wording, typography, spacing and state. The blank page-product scene
+proves the note has no reserved space before a page requests placement.
+
+The follow-up explicitly selects both themes at 1120 and 720 once. The maintained
+matrix below also includes the standard 1920x1080 size for later acceptance:
+
+```powershell
+npm run look -- page-product page-buy page-send page-expand page-expand-place page-gone page-room-draft owner-card-room-page --theme both --width 1120,720,1920x1080
+```
+
+Use judge on this same run when its prerequisites and network are authorized.
+Offline fixture/browser evidence does not prove native MCP/provider transport.

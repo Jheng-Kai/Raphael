@@ -1632,7 +1632,7 @@ export const zhTW = {
   "members.changeAvatar": "換頭像",
   "members.fromPc": "從電腦選…",
   "members.slimeColor": "顏色 {p0}",
-  "page.askSend": "這個頁面想以你的名義傳送這段話",
+  "page.composerNote": "這段文字來自頁面，確認後再送出",
   "page.askOpen": "這個頁面想開啟這個連結",
   "page.askYes": "確定",
   "page.expand": "放大",

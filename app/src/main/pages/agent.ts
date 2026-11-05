@@ -112,7 +112,7 @@ import {
 import type { PageArgument, AgentQuestion, AgentTurn, AppContext, GroupDraft, MemberDraft, MessageQuote, OwnerQuestion, Page, TurnAttachment, WireAttachment } from "../types";
 import { copyButton, esc, ico, iconButton, patchHTML, toaster } from "../ui";
 import { createRoomPane } from "../group-chats";
-import { bindActionMode, composerHTML, drawTaskSlot } from "../chat-composer";
+import { bindActionMode, bindPageComposer, composerHTML, drawTaskSlot } from "../chat-composer";
 import { mountComposerBrain } from "../composer-brain";
 import { bindComposerHistory } from "../composer-history";
 import { bindComposerLearning, learnComposerCorrections } from "../composer-learning";
@@ -226,6 +226,7 @@ interface Outgoing {
 
 interface ComposerDraft {
   dictation?: DictationBaseline;
+  pageId?: string;
   text: string;
   files: ComposerFile[];
   missing: TurnAttachment[];
@@ -499,6 +500,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   composer.noValidate = true;
   composer.innerHTML = composerHTML();
   const input = composer.querySelector<HTMLTextAreaElement>(".cmp-input")!;
+  const pageDraft = bindPageComposer(input);
   const correctionLearning = bindComposerLearning(input);
   const slashMenu = mountSlashMenu(input, { memberId, scope: app });
   const attachButton = composer.querySelector<HTMLElement>(".cmp-attach")!;
@@ -586,10 +588,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function saveComposerDraft(): void {
     clearTimeout(draftTimer);
     if (composerKey === "deleted") return;
-    const draft: ComposerDraft = { text: input.value, files: [...files], missing: [...missingFiles], replacing, quote: composerQuote, dictation: correctionLearning.snapshot() };
+    const draft: ComposerDraft = { text: input.value, files: [...files], missing: [...missingFiles], replacing, quote: composerQuote, dictation: correctionLearning.snapshot(), pageId: pageDraft.pageId };
     if (draft.text || draft.files.length || draft.missing.length || draft.quote || draft.replacing !== undefined) restored.set(composerKey, draft);
     else restored.delete(composerKey);
-    writeDraftWords(`member:${composerKey}`, { text: wholeLinks(draft.text), quote: draft.quote });
+    writeDraftWords(`member:${composerKey}`, { text: wholeLinks(draft.text), quote: draft.quote, pageId: draft.pageId });
   }
   function loadComposerDraft(): void {
     composerKey = draftKey();
@@ -625,7 +627,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   let searching = false;
   /** What each line of the thread was drawn from, so that a line whose HTML is the same stays as it is. */
   const drawnHTML = new WeakMap<Element, string>();
-  const pagesHost = mountPages(thread, { send: text => sendFromPage(text), answer: (id, text) => answerOwnerPage(thread, id, text, () => { void load(false); }) });
+  const pagesHost = mountPages(thread, { place: pageDraft.place });
   mountOwnerQuestions(thread, () => { void load(false); });
   mountGreeting(thread, sendFromPage);
   const floatingQuestions = mountPendingQuestions(thread, scroller, () => load(false), () => pendingQuestions?.member === memberId() && pendingQuestions.conversation === conversationId() ? pendingQuestions.questions : [], revealTurn);
@@ -917,8 +919,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    */
   function sendFromPage(text: string): void {
     const typed = input.value;
+    const sourcePage = pageDraft.pageId;
     input.value = text;
-    void send().finally(() => { if (typed && !input.value) { input.value = typed; fit(); } });
+    pageDraft.restore();
+    void send().finally(() => { if (typed && !input.value) { input.value = typed; pageDraft.restore(sourcePage); fit(); } });
   }
 
   let renderedThread: ReturnType<typeof lines> = [];
@@ -1271,6 +1275,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (input.value.trim() !== "") toaster.info(t("agent.tooLong"));
       return;
     }
+    if (pageDraft.pageId && !files.length && !composerQuote && replacing === undefined && answerOwnerPage(thread, pageDraft.pageId, text, () => { void load(false); })) {
+      clearTimeout(draftTimer); discardComposerDraft(composerKey);
+      input.value = "";
+      input.dispatchEvent(new Event("composer-draft-restored"));
+      fit();
+      return;
+    }
     composer.querySelector(".composer-failure")?.remove();
     const sending = files;
     const dictation = correctionLearning.snapshot();
@@ -1278,7 +1289,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const member = memberId();
     const sentConversation = conversationId();
     const requestId = crypto.randomUUID();
-    const draft: ComposerDraft = { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation };
+    const draft: ComposerDraft = { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation, pageId: pageDraft.pageId };
     rememberDraft(requestId, draft);
     clearTimeout(draftTimer); discardComposerDraft(composerKey);
     const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" ? `data:${mime};base64,${data}` : undefined })), quote: composerQuote };
@@ -1886,6 +1897,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function restoreDraft(draft: ComposerDraft, focus = true): void {
     correctionLearning.restore(draft.dictation);
     input.value = draft.text;
+    pageDraft.restore(draft.pageId);
     attachmentEpoch++;
     files = [...draft.files];
     missingFiles = draft.missing.map(file => ({ ...file }));

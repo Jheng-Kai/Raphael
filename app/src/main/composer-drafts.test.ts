@@ -21,8 +21,17 @@ test("malformed and unavailable storage never prevents a composer from working",
   for (const data of ['invalid', 'null', '[]', '{"member:0:1":{"text":42}}']) {
     localStorage.setItem(DRAFT_STORAGE_KEY,data);expect(readDraftWords('member:0:1')).toBeUndefined();
   }
-  vi.spyOn(localStorage,'getItem').mockImplementation(()=>{throw new Error('unavailable');});
-  vi.spyOn(localStorage,'setItem').mockImplementation(()=>{throw new Error('unavailable');});
-  expect(readDraftWords('member:0:1')).toBeUndefined();
-  expect(()=>writeDraftWords('member:0:1',{text:'Still usable'})).not.toThrow();
+  const get = vi.spyOn(localStorage,'getItem').mockImplementation(()=>{throw new Error('unavailable');});
+  const set = vi.spyOn(localStorage,'setItem').mockImplementation(()=>{throw new Error('unavailable');});
+  try {
+    expect(readDraftWords('member:0:1')).toBeUndefined();
+    expect(()=>writeDraftWords('member:0:1',{text:'Still usable'})).not.toThrow();
+  } finally { get.mockRestore(); set.mockRestore(); }
+});
+
+test("page provenance survives draft storage without retaining non-string page identifiers", () => {
+  writeDraftWords("room:1", { text: "Page text", pageId: "p1" });
+  expect(readDraftWords("room:1")).toEqual({ text: "Page text", pageId: "p1" });
+  localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ "room:1": { text: "Draft", pageId: { unsafe: true } } }));
+  expect(readDraftWords("room:1")).toEqual({ text: "Draft" });
 });

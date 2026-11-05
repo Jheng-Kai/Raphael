@@ -17,7 +17,7 @@ const env = {
 // Fixed tools, so that no test starts npm, rustc, cargo or uv: a busy runner took 26 s to start them.
 const tools = { node: "v22.17.0", npm: "10.9.2", "tauri cli": "2.12.3", nsis: "v3.13" };
 const workflow = readFileSync(join(scripts, "..", "..", ".github", "workflows", "release.yml"), "utf8").replace(/\r\n/g, "\n");
-const workflowStep = name => workflow.split(`      - name: ${name}\n`)[1]?.split(/\n      (?:- name:|#)/)[0];
+const workflowStep = name => workflow.split(`      - name: ${name}\n`)[1]?.split(/\n(?:      (?:- name:|#)|  (?:[a-z][\w-]*:|#))/)[0];
 const workflowRun = name => workflowStep(name).split("        run: |\n")[1].split("\n").map(line => line.replace(/^ {10}/, "")).join("\n");
 
 afterEach(() => {
@@ -39,6 +39,53 @@ function inputs() {
 const sha256 = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
 describe("release assets", () => {
+  it("publishes from the built commit and refuses an existing tag pointing elsewhere", () => {
+    const step = workflowStep("Publish verified release assets");
+    const run = workflowRun("Publish verified release assets");
+    expect(step).toContain("RELEASE_COMMIT: ${{ github.sha }}");
+    expect(run).toContain('--target "$RELEASE_COMMIT"');
+    expect(run).toContain('"repos/$GH_REPO/git/matching-refs/tags/v$version"');
+    expect(run).toContain('"repos/$GH_REPO/commits/v$version"');
+    expect(run).toContain('[ "$tag_commit" = "$RELEASE_COMMIT" ]');
+  });
+
+  it.each(["missing", "matching", "mismatch", "api-error"])("executes publication offline with a %s tag", kind => {
+    const { root } = inputs();
+    const commands = `
+function sha256sum { return 0; }
+function gh {
+  if [ "$1" = "release" ]; then printf 'PUBLISH:%s\\n' "$*"; return 0; fi
+  if [ "$TEST_TAG" = "api-error" ]; then return 1; fi
+  if [[ "$2" == */git/matching-refs/* ]]; then
+    if [ "$TEST_TAG" != "missing" ]; then printf 'refs/tags/v0.1.0\\n'; fi
+  elif [ "$TEST_TAG" = "matching" ]; then
+    printf '%s\\n' "$RELEASE_COMMIT"
+  else
+    printf 'ffffffffffffffffffffffffffffffffffffffff\\n'
+  fi
+}
+${workflowRun("Publish verified release assets")}
+`;
+    mkdirSync(join(root, "release-assets"));
+    const bash = process.platform === "win32" ? join(process.env.ProgramFiles, "Git", "bin", "bash.exe") : "bash";
+    const result = spawnSync(bash, ["--noprofile", "--norc", "-e", "-o", "pipefail", "-c", commands], {
+      cwd: root, encoding: "utf8", windowsHide: true,
+      env: { ...process.env, TEST_TAG: kind, GH_REPO: env.GITHUB_REPOSITORY, RELEASE_VERSION: "0.1.0", RELEASE_COMMIT: env.GITHUB_SHA },
+    });
+    const accepted = kind === "missing" || kind === "matching";
+    expect(result.status, result.stderr).toBe(accepted ? 0 : 1);
+    expect(result.stdout.includes("PUBLISH:")).toBe(accepted);
+    if (accepted) expect(result.stdout).toContain(`--target ${env.GITHUB_SHA}`);
+    if (kind === "mismatch") expect(result.stderr).toContain("does not match the built commit");
+  });
+
+  it.each(["x/../../escaped", "x\\..\\..\\escaped", "1.2.3\nforged: yes", "1.2.3\n", "1.2.3\r\n", "01.2.3", "1.2.3-beta", ""])("refuses unsafe release version %j before writing files", version => {
+    const { root, installer, notices, output } = inputs();
+    expect(() => prepareReleaseAssets({ installer, notices, updater: "disabled", version, output, env, tools })).toThrow("numeric major.minor.patch");
+    expect(existsSync(output)).toBe(false);
+    expect(existsSync(join(root, "escaped-windows-x64-setup.exe"))).toBe(false);
+  });
+
   it("pins updater configuration and publication to the current repository", () => {
     const native = join(scripts, "..", "src-tauri");
     const workflow = readFileSync(join(scripts, "..", "..", ".github", "workflows", "release.yml"), "utf8");

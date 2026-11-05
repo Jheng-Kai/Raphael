@@ -1633,7 +1633,7 @@ export const en = {
   "members.changeAvatar": "Change picture",
   "members.fromPc": "From this PC…",
   "members.slimeColor": "Colour {p0}",
-  "page.askSend": "This page wants to send this as your message",
+  "page.composerNote": "This text came from a page. Review it before sending.",
   "page.askOpen": "This page wants to open this link",
   "page.askYes": "Go ahead",
   "page.expand": "Expand",

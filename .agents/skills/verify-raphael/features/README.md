@@ -756,3 +756,10 @@ See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) 
 ## Colleagues (2026-11-05)
 
 See [Members](members.md#colleague-recipes-and-goal-first-greeting-2026-11-05), [Connections](connections-mcp.md#named-connected-accounts-2026-11-05), [Automations](automations.md#owner-provided-external-webhook-tunnels-2026-11-05) and [Daily work](daily-work.md#native-output-folder-choice-2026-11-05) for R-COLLEAGUE-01..06 and the selected scene matrix. Recipe preview, imports, account labels and probes reuse existing owner UI/store boundaries; native/OAuth/SSH/live outcomes stay separate from fakes.
+
+## Desktop security and release path (2026-11-05)
+
+[Security boundary](security-boundary.md) maps R-SEC-01 through R-SEC-05 and R-CARD-11, native
+attachment associations, release path validation, publication commit binding and
+the reviewed shell/webview/IPC/update surfaces. Follow-up 1 adds composer-only page text
+placement; see conversation.md for the selected scene matrix.

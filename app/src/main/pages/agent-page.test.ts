@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
   workerRerun: vi.fn(),
   openLink: vi.fn(),
   openExternalUrl: vi.fn(),
+  pagesOpen: vi.fn(),
   core: vi.fn(),
 }));
 vi.mock("../api", () => api);
@@ -82,6 +83,34 @@ beforeEach(() => {
   api.core.mockResolvedValue(null);
   api.agentQuestionOpen.mockResolvedValue(null);
   api.agentVoice.mockResolvedValue(undefined);
+});
+
+test("a sure page gesture appends a draft and sends nothing until the owner submits", async () => {
+  const page = { id: "page-draft", title: "Sample page", rev: 0, height: 320, source: "html", server: null, fallback: "Sample fallback" } as const;
+  api.pagesOpen.mockResolvedValue({ ...page, url: "http://127.0.0.1:9/page-draft" });
+  api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { pages: [page] })] });
+  api.agentAskText.mockResolvedValue(undefined);
+  const agent = mount(); await flush();
+  const input = agent.el.querySelector<HTMLTextAreaElement>(".cmp-input")!;
+  input.value = "My existing draft"; input.dispatchEvent(new Event("input", { bubbles: true }));
+  const frame = agent.el.querySelector<HTMLIFrameElement>(".pg-frame")!;
+  Object.defineProperty(navigator, "userActivation", { value: { isActive: true }, configurable: true });
+  Object.defineProperty(frame, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
+  const focus = vi.spyOn(document, "activeElement", "get").mockReturnValue(frame);
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
+  const event = new MessageEvent("message", { data: { raphaelPage: 1, type: "send", text: "Page-provided words" } });
+  Object.defineProperty(event, "source", { value: frame.contentWindow });
+  window.dispatchEvent(event); focus.mockRestore(); await flush();
+  expect(api.agentAskText).not.toHaveBeenCalled();
+  expect(input.value).toBe("My existing draft\nPage-provided words");
+  expect(document.activeElement).toBe(input);
+  const note = agent.el.querySelector<HTMLElement>(".cmp-page-note")!;
+  expect(note.hidden).toBe(false);
+  expect(note.textContent).toBe("這段文字來自頁面，確認後再送出");
+  agent.el.querySelector<HTMLFormElement>("form.composer")!.requestSubmit(); await flush();
+  expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("My existing draft\nPage-provided words", [], 0, expect.any(Object));
+  expect(note.hidden).toBe(true);
+  agent.hide(); Reflect.deleteProperty(navigator, "userActivation");
 });
 
 test("the header computer button updates its accessible label and title when the locale changes", async () => {

@@ -226,11 +226,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: Jheng-Kai/Raphael
           RELEASE_VERSION: ${{ needs.windows-release.outputs.version }}
+          RELEASE_COMMIT: ${{ github.sha }}
         run: |
           cd release-assets
           sha256sum --check --strict SHA256SUMS.txt
           version="$RELEASE_VERSION"
-          gh release create "v$version" ./* --title "Raphael $version" --generate-notes
+          # An existing tag must resolve to the exact source that built these assets.
+          tag_ref=$(gh api "repos/$GH_REPO/git/matching-refs/tags/v$version" --jq ".[] | select(.ref == \"refs/tags/v$version\") | .ref")
+          if [ -n "$tag_ref" ]; then
+            tag_commit=$(gh api "repos/$GH_REPO/commits/v$version" --jq .sha)
+            if ! [ "$tag_commit" = "$RELEASE_COMMIT" ]; then
+              echo "Release tag does not match the built commit." >&2
+              exit 1
+            fi
+          fi
+          gh release create "v$version" ./* --target "$RELEASE_COMMIT" --title "Raphael $version" --generate-notes
 
   # Provenance only for what is published from main or a tag, and only where GitHub offers artifact
   # attestations: public repositories (private ones need GitHub Enterprise Cloud). This job alone gets

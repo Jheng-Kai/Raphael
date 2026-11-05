@@ -429,6 +429,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* Typing into it deepens its shadow a little; its edge keeps its colour, as no frame shows where the focus is. */
 .composer:focus-within { box-shadow: 0 6px 24px color-mix(in srgb, var(--text) 10%, transparent); }
 .cmp-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+.composer .cmp-page-note { display: block; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Under the words: what to add and how it acts on the left, which model and send on the right. */
 .cmp-bar { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
 .cmp-bar-fill { flex: 1; min-width: 0; }
