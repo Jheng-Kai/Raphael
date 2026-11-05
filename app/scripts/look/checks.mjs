@@ -1946,6 +1946,7 @@ export function checkRendered(name, context = {}) {
     require(!visible(nav.querySelector('.mb-find-input'))&&!visible(nav.querySelector('.sidebar-account-name')),'the rail shows no search or names');
     const faces=[...nav.querySelectorAll('.mb-row > .av, .mb-row > .room-avatar')].filter(visible);
     require(faces.length>0&&faces.every(face=>{const box=face.getBoundingClientRect();return Math.abs(box.left+box.width/2-36)<1;}),'every face is centered in the rail');
+    require([...nav.querySelectorAll('.mb-item .btn.mb-more, .au-room-row .btn.au-room-more')].every(button=>getComputedStyle(button).display==='none'),'the rail draws no ⋯ over a face; a right click opens its menu');
     const add=nav.querySelector('.side-foot [data-col="add"]').getBoundingClientRect(),owner=nav.querySelector('.sidebar-account').getBoundingClientRect();
     require(add.bottom<=owner.top,'plus sits above the owner in the rail');
     return {check:name,faces:faces.length};
