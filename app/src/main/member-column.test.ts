@@ -234,7 +234,7 @@ describe("the column, used", () => {
     const column = mount();
     column.el.querySelector<HTMLElement>('[data-col="add"]')!.click();
     const items = [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")];
-    expect(items.map(b => b.dataset.pick)).toEqual(["member", "group", "group-chat"]);
+    expect(items.map(b => b.dataset.pick)).toEqual(["member", "group", "group-chat", "member-store"]);
     items[0].click();
     expect(host.newMember).toHaveBeenCalled();
   });

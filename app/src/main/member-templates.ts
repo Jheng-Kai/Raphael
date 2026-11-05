@@ -5,14 +5,15 @@ import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
 import { slimeFaceHTML } from "./slime";
-import type { Member, NewMember } from "./types";
+import { routineSentenceHTML } from "./members";
+import type { Member, NewMember, Routine } from "./types";
 import { btn, esc, toaster } from "./ui";
 
 export interface MemberTemplate {
   format: "raphael-member"; version: 1;
   name: string; role: string; personality: string; instructions: string; reply_style: "full" | "conversational";
   skills: { text: string; files?: Record<string, string> }[];
-  routines: { title: string; prompt: string; schedule: { kind: "daily"; time: string }; when: null }[];
+  routines: Pick<Routine, "title" | "prompt" | "schedule" | "when">[];
   connections: string[];
 }
 const STARTERS = [
@@ -47,16 +48,34 @@ export function openTemplateGallery(create: (member: NewMember) => Promise<Membe
     }});
 }
 
-export async function previewTemplate(raw: unknown, avatar: string, create: (member: NewMember) => Promise<Member | null>, groupId: number | null, done: () => void): Promise<void> {
+export interface ScanFinding { kind: "secret" | "injection"; path: string }
+
+function scanLocation(warning: ScanFinding): string {
+  const field = warning.path.split(".")[1]?.split("[")[0] || "";
+  const labels: Record<string, string> = {name:t("members.name"), role:t("members.role"), instructions:t("members.instructions"), personality:t("members.personality"), skills:t("store.skills"), routines:t("template.routines"), connections:t("template.connections")};
+  const index = /\[(\d+)\]/.exec(warning.path);
+  return (labels[field] || t("store.facts")) + (index ? ` ${Number(index[1]) + 1}` : "");
+}
+
+export function templateContents(template: MemberTemplate, warnings: ScanFinding[] = []): string {
+  const full = (text: string): string => `<pre class="template-text">${esc(text)}</pre>`;
+  return `<p class="note">${esc(t("store.thirdParty"))}</p><p class="note">${esc(t("store.injectionNote"))}</p>` +
+    warnings.map(w => `<p class="note" role="status">${esc(t(w.kind === "secret" ? "store.secret" : "store.injection"))} · ${esc(scanLocation(w))}</p>`).join("") +
+    `<h3>${esc(t("store.facts"))}</h3><h4>${esc(t("members.instructions"))}</h4>${full(template.instructions)}<h4>${esc(t("members.personality"))}</h4>${full(template.personality)}` +
+    `<h3>${esc(t("store.skills"))}</h3><p class="note">${esc(t("store.arriveOff"))}</p>` +
+    (template.skills.map(skill => `<h4>${esc(t("template.skill"))}</h4>` + full(skill.text) + Object.entries(skill.files || {}).map(([path, content]) => `<h4>${esc(path)}</h4>${full(content)}`).join("")).join("") || `<p>${esc(t("template.none"))}</p>`) +
+    `<h3>${esc(t("template.routines"))}</h3>` + (template.routines.map(r => `<div class="card-well"><b>${esc(r.title)}</b><p>${routineSentenceHTML(r)} · ${esc(t("store.arriveOff"))}</p>${full(r.prompt)}</div>`).join("") || `<p>${esc(t("template.none"))}</p>`);
+}
+
+export async function previewTemplate(raw: unknown, avatar: string, create: (member: NewMember) => Promise<Member | null>, groupId: number | null, done: () => void, catalogId?: string): Promise<void> {
   try {
-    const {template} = await api.core<{template: MemberTemplate}>("members.template", {action: "preview", template: raw});
+    const {template, findings = []} = await api.core<{template: MemberTemplate; findings?: ScanFinding[]}>("members.template", catalogId ? {action: "catalog-preview", catalog_id: catalogId} : {action: "preview", template: raw});
     let made: Member | null = null, busy = false;
     const connected = new Set<string>();
-    const body = (): string => cardHTML({title: template.role || template.name, status: made ? "done" : "ready", body: template.instructions,
+    const body = (): string => cardHTML({title: template.role || template.name, status: made ? "done" : "ready",
       content: `<p class="note">${esc(t(made ? "template.imported" : "template.noGrants"))}</p>` +
         `<label class="mp-label">${esc(t("members.name"))}<input class="mb-fin" data-template-name maxlength="24" value="${esc(made?.name || template.name)}"${made ? " disabled" : ""}></label>` +
-        `<h3>${esc(t("members.profile.skillsTitle"))}</h3><div class="card-well">${template.skills.map(skill => `<p>${esc(/^name:\s*(.+)$/m.exec(skill.text)?.[1] || t("template.skill"))}</p>`).join("") || esc(t("template.none"))}</div>` +
-        `<h3>${esc(t("template.routines"))}</h3><div class="card-well">${template.routines.map(r => `<p>${esc(r.title)}</p>`).join("") || esc(t("template.none"))}</div>` +
+        templateContents(template, findings) +
         `<h3>${esc(t("template.connections"))}</h3>${template.connections.map(app => cardHTML({title: app, status: connected.has(app) ? "done" : "ready", body: t(made ? "template.connectHelp" : "template.noGrants"), actions: btn(esc(t(connected.has(app) ? "conn.signedIn" : "template.connect")), "sm", ` data-dlg="connect" data-app="${esc(app)}"${!made || busy || connected.has(app) ? " disabled" : ""}`)})).join("") || `<p>${esc(t("template.none"))}</p>`}`});
     const dialog = openDialog({title: t("template.preview"), cls: "template-preview", body: body(),
       actions: {secondary: btn(esc(t("common.close")), "", ' data-dlg="close"'), primary: {label: esc(t("template.import")), attrs: ' data-dlg="import"'}}, canClose: () => !busy,
@@ -67,7 +86,7 @@ export async function previewTemplate(raw: unknown, avatar: string, create: (mem
           busy = true; button.setAttribute("disabled", "");
           if (action === "import" && !made) {
             const name = dialog.el.querySelector<HTMLInputElement>("[data-template-name]")!.value.trim();
-            made = await create({name, template, avatar, group_id: groupId});
+            made = await create({name, template, avatar, group_id: groupId, ...(catalogId ? {catalog_id: catalogId} : {})});
             if (made) {done(); dialog.el.querySelector('[data-dlg="import"]')?.remove();}
           } else if (action === "connect" && made) {
             const app = button.dataset.app!;
@@ -113,6 +132,28 @@ async function connectTemplateApp(name: string): Promise<string> {
 }
 
 export async function exportMemberTemplate(id: number): Promise<void> {
-  const {template} = await api.core<{template: MemberTemplate}>("members.template", {action: "export", id});
-  await api.memberTemplateFile("save", JSON.stringify(template, null, 2));
+  const {template, findings = []} = await api.core<{template: MemberTemplate; findings: ScanFinding[]}>("members.template", {action: "review", id});
+  let busy = false;
+  const blocked = findings.some(w => w.kind === "secret");
+  const dialog = openDialog({title: t("store.review"), cls: "template-preview template-export-review", body: templateContents(template, findings) +
+    `<h3>${esc(t("template.connections"))}</h3><p>${esc(template.connections.join(", ") || t("template.none"))}</p>`,
+    actions: {secondary: btn(esc(t("store.publish")), "", ` data-dlg="publish"${blocked ? " disabled" : ""}`), primary: {label: esc(t("store.export")), attrs: ` data-dlg="export"${blocked ? " disabled" : ""}`}},
+    canClose: () => !busy,
+    onAct(action, button) {
+      if (busy || blocked || !["export", "publish"].includes(action)) return;
+      busy = true; button.setAttribute("disabled", "");
+      void (async () => {
+        if (action === "export") {
+          const result = await api.core<{template: MemberTemplate}>("members.template", {action: "export", id});
+          // The exact reviewed generation is the one the owner agreed to share.
+          if (JSON.stringify(result.template) !== JSON.stringify(template)) throw new Error(t("store.changed"));
+          await api.memberTemplateFile("save", JSON.stringify(template, null, 2));
+        } else {
+          const result = await api.core<{folder: string; url: string}>("members.template", {action: "publish", template});
+          const note = document.createElement("p"); note.className = "note"; note.textContent = t("store.prepared", {p0: result.folder});
+          dialog.el.querySelector(".mb-dlg-body")!.append(note);
+          await api.openExternalUrl(result.url);
+        }
+      })().catch(error => toaster.info(describeError(error))).finally(() => {busy = false; button.removeAttribute("disabled");});
+    }});
 }

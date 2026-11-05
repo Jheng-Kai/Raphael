@@ -957,6 +957,7 @@ export interface AppsInventory { state: "complete" | "partial" | "unknown"; coun
 /** What `members.create` takes (`ui_language` names the language of the routine it may offer). */
 export interface NewMember {
   template?: import("./member-templates").MemberTemplate;
+  catalog_id?: string;
   name: string;
   /** It speaks first in its own conversation, asking what it is for. */
   greet?: boolean;

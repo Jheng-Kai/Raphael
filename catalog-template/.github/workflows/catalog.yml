@@ -1,0 +1,55 @@
+name: Validate and sign catalogue
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install jsonschema==4.26.0 cryptography==50.0.2
+      - run: python scripts/validate.py
+      - run: python -m unittest discover -s tests
+      - name: Refuse rollback or removed revocations
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --depth=1 origin "$BASE_SHA"
+          git show "$BASE_SHA:index.json" > /tmp/base-index.json
+          python scripts/check-sequence.py /tmp/base-index.json index.json
+  sign:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    concurrency:
+      group: catalogue-signing
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install jsonschema==4.26.0 cryptography==50.0.2
+      - name: Sign validated index
+        env:
+          CATALOG_SIGNING_KEY: ${{ secrets.CATALOG_SIGNING_KEY }}
+        run: python scripts/sign.py
+      - name: Publish detached signature
+        run: |
+          git config user.name 'raphael-catalog-signing'
+          git config user.email 'catalog-signing@users.noreply.github.com'
+          git add index.json.sig
+          git diff --cached --quiet && exit 0
+          git commit -m 'Sign validated catalogue index [skip ci]'
+          git push

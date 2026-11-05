@@ -386,3 +386,5 @@ CC0 text remain in `app/scripts/release-licenses/manifest.json` and
 The marks are trademarks of their owners, who do not sponsor or endorse Raphael.
 
 Member templates, goal-first greetings, team folders, named accounts and webhook tunnel guidance are original Raphael implementations informed by the Grok Bot walkthrough (Gary Chen, 2026-11-04, frames f000405/f000920/f002005 and sheets 05/08/09/10) and xAI Grok Bot documentation reviewed 2026-11-05; no third-party code or artwork was copied.
+
+Member-store catalogue validation and export scanning were informed by OpenMausBot server/team-library.ts and shared/package-format.ts (Apache-2.0; https://github.com/milind-soni/openmausbot); original Raphael implementation, no enterprise code, artwork or branding copied.

@@ -2,6 +2,35 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith("store-")) {
+    const calls = window.__look.calls;
+    require(!calls.some(c => c.method === "members.template" && ["import", "publish"].includes(c.params.action)), "browsing and review never install or publish");
+    require(!calls.some(c => /connect$/.test(c.method || "")), "preview never connects apps");
+    if (["store-home", "store-category", "store-search"].includes(name)) {
+      require(visible(document.querySelector(".store-entry svg.slime")), "existing slime avatars");
+      require(document.querySelectorAll("[data-category]").length === 9, "all plus eight categories");
+      if (name === "store-home") require(document.querySelectorAll(".store-featured .store-entry").length === 2, "featured row");
+      else require(document.querySelectorAll(".store-entry").length === 1, "local filter selects one entry");
+      require(calls.filter(c => c.method === "members.template" && c.params.action === "catalog").length === 1, "filtering never refetches");
+    } else if (["store-empty", "store-offline"].includes(name)) {
+      require(document.querySelector(".store-results").textContent.includes("商店目前沒有內容"), "calm empty copy");
+      require(!document.querySelector(".store-entry"), "no fabricated catalogue entries");
+    } else {
+      const dialog = document.querySelector(".template-preview");
+      require(visible(dialog), "shared preview dialog");
+      const template = window.__look.data.colleagueSample.template;
+      require(dialog.textContent.includes(template.personality) && dialog.textContent.includes(template.skills[0].text) && dialog.textContent.includes(template.routines[0].prompt), "full personality, skill and routine text");
+      if (name === "store-export") {
+        require(!window.__look.exportedTemplate && visible(dialog.querySelector('[data-dlg="export"]')), "review precedes file save");
+      } else {
+        require(dialog.textContent.includes("加入前不會授予任何權限"), "no permissions before explicit import");
+        require(dialog.querySelectorAll('[data-dlg="connect"]').length === template.connections.length && [...dialog.querySelectorAll('[data-dlg="connect"]')].every(b => b.disabled), "one disabled connect action per app");
+        require(dialog.textContent.includes("09:00"), "actual schedule visible");
+        if (name === "store-warning") require(dialog.querySelector('.note[role="status"]') && !dialog.querySelector('.note[role="status"]').textContent.includes("template."), "scan warning uses a localized location");
+      }
+    }
+    return {check:name};
+  }
   if (name.startsWith("colleague-")) {
     const calls = window.__look.calls;
     if (name === "colleague-gallery") require(document.querySelectorAll('.template-gallery svg.slime').length === 8, "eight existing slime characters");

@@ -5,6 +5,23 @@ import { checkRendered } from "./checks.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixture.json", import.meta.url), "utf8"));
 describe("shared look IPC boundary", () => {
+  it("keeps member-store empty, offline and warning variants at the IPC boundary", async () => {
+    for (const variant of [{storeEmpty:true}, {storeOffline:true}, {storeWarning:true}]) {
+      const target = {}, state = installMock(fixture, {fixture:variant}, target);
+      const call = params => target.__TAURI_INTERNALS__.invoke("core_call", {method:"members.template",params});
+      const catalogue = await call({action:"catalog"});
+      expect(catalogue.entries).toHaveLength(variant.storeWarning ? 4 : 0);
+      expect(catalogue.offline).toBe(!!variant.storeOffline);
+      if (variant.storeWarning) {
+        const before = state.data.members.length;
+        const preview = await call({action:"catalog-preview",catalog_id:"research"});
+        expect(preview.findings).toEqual([{kind:"injection",path:"template.instructions"}]);
+        expect(preview.template.instructions).not.toBe(fixture.memberCatalog.templates.research.instructions);
+        expect(state.data.members).toHaveLength(before);
+      }
+      expect(state.errors).toEqual([]);
+    }
+  });
   it("installs a plugin set once, preserves its member choice on update and removes every set capability", async () => {
     const source = {kind:"plugin",name:"desk",version:"1.0.0",source:"local:C:/synthetic/plugin",skills:[{name:"write",description:"Write"},{name:"check",description:"Check"}],commands:[{name:"review",description:"Review",set_kind:"command"}]};
     const target = {}, state = installMock(fixture,{fixture:{skillSources:[source]}},target);

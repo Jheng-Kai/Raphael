@@ -3,6 +3,7 @@
 // greeting), and the owner's answer becomes its job: nothing else is asked here.
 import "./member-creator.css";
 import { openTemplateGallery } from "./member-templates";
+import { openMemberStore } from "./member-store";
 import { t } from "./i18n";
 import { type Dialog, openDialog } from "./member-dialogs";
 import { NAME_MAX, cleanName, isMemberNameTaken } from "./members";
@@ -17,6 +18,7 @@ export interface MemberCreatorOptions {
   groupId: number | null;
   /** The names already taken (the names are unique). */
   taken: readonly string[];
+  store?: boolean;
   /** Makes the member: what it became, or null when it could not, which was said. */
   create(member: NewMember): Promise<Member | null>;
 }
@@ -29,7 +31,7 @@ export function openMemberCreator(o: MemberCreatorOptions): Dialog {
   const dialog = openDialog({
     title: t("members.newMember"),
     cls: "cr-dialog",
-    body: `<div class="cr-maker"><div class="cr-face"></div>` +
+    body: `<div class="cr-tabs" role="tablist" aria-label="${esc(t("members.newMember"))}">${btn(esc(t("members.newMember")), "sm", ' role="tab" aria-selected="true"')}${btn(esc(t("store.title")), "sm", ' data-dlg="store" role="tab" aria-selected="false"')}</div><div class="cr-maker"><div class="cr-face"></div>` +
       `<div class="cr-colors" role="group" aria-label="${esc(t("members.creator.colors"))}">${slimeColorsHTML(avatar, esc)}</div>` +
       `<div class="cr-characters" role="group" aria-label="${esc(t("members.creator.characters"))}">${slimeCharactersHTML(avatar, esc)}</div>` +
       `<div class="cr-fields"><label class="mp-label" for="mb-new-name"><span>${esc(t("members.name"))}</span><input id="mb-new-name" class="mb-fin" maxlength="${NAME_MAX}" autocomplete="off"></label></div>` +
@@ -39,6 +41,7 @@ export function openMemberCreator(o: MemberCreatorOptions): Dialog {
     onAct(act) {
       if (!busy && act === "create") void create();
       if (!busy && act === "templates") openTemplateGallery(o.create, o.groupId, () => dialog.close());
+      if (!busy && act === "store") openMemberStore(o.create, o.groupId, () => dialog.close());
     },
     onEnter() { void create(); },
     onClose() { clearTimeout(hop); },
@@ -97,5 +100,6 @@ export function openMemberCreator(o: MemberCreatorOptions): Dialog {
   name.addEventListener("input", nameChanged);
   drawFace(false);
   name.focus();
+  if (o.store) openMemberStore(o.create, o.groupId, () => dialog.close());
   return dialog;
 }

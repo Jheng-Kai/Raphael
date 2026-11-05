@@ -242,9 +242,11 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
           { id: "member", label: t("members.newMember") + "  Ctrl+N", icon: "plus" },
           { id: "group", label: t("members.newGroup"), icon: "folder" },
           { id: "group-chat", label: t("members.sideNewGroupChat"), icon: "chat" },
+          { id: "member-store", label: t("store.title"), icon: "plus" },
         ],
         pick => {
           if (pick === "member") host.newMember(null);
+          else if (pick === "member-store") window.dispatchEvent(new Event("raphael:member-store"));
           else if (pick === "group") host.newGroup();
           else if (host.newGroupChat) host.newGroupChat();
           else void openNewGroupChat();
