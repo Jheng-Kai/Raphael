@@ -1,5 +1,5 @@
 import * as api from "./api";
-import { cardHTML } from "./card";
+import { cardDisclosureHTML, cardHTML } from "./card";
 import { avatarHTML } from "./avatar";
 import { getLocale, onLocaleChange, t } from "./i18n";
 import { openDialog } from "./member-dialogs";
@@ -38,9 +38,9 @@ const transcriptHTML = (turns: CallTranscript[], name: string): string => turns.
 export function voiceCallCardHTML(call: VoiceCall, name: string): string {
   const length = duration(Math.max(0, (call.ended_at_ms ?? call.started_at_ms) - call.started_at_ms));
   return `<li class="tn vc-receipt" data-id="${call.summary_id ?? ""}" data-call-card="${esc(call.id)}">` + cardHTML({
-    title: t("call.title"), status: "done", statusText: t("call.ended"), mark: ico("voice"), cls: "vc-card",
-    content: `<details><summary><span>${esc(t("call.transcript"))}</span><time>${length}</time>${ico("down")}</summary>` +
-      `<div class="vc-transcript">${transcriptHTML(call.transcript, name) || `<p>${esc(t("call.empty"))}</p>`}</div></details>` +
+    title: t("call.title"), status: "done", statusText: `${t("call.ended")} · ${length}`, mark: ico("voice"), cls: "vc-card",
+    content: cardDisclosureHTML(`call-${call.id}`, `<div class="vc-transcript">${transcriptHTML(call.transcript, name) || `<p>${esc(t("call.empty"))}</p>`}</div>`,
+      t("call.transcript"), t("call.hideTranscript")) +
       (call.failure ? failureNoticeHTML(call.failure) : ""),
     actions: `<div class="vc-rating"><span>${esc(t("call.feedback"))}</span>` +
       btn(esc(t("call.good")), "sm", ` data-call-rating="good" aria-pressed="${call.rating === "good"}"`) +

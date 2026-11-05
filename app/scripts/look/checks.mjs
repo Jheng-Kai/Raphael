@@ -99,6 +99,10 @@ export function checkRendered(name, context = {}) {
       require(document.querySelectorAll('[data-call-card]').length === 1, "one receipt after hang-up");
       require(!document.querySelector('.tn[data-id="8701"]'), "normal call turns fold under the card");
       require(document.querySelector('[data-call-rating="good"]').getAttribute('aria-pressed') === 'true', "local rating persists");
+      const toggle = document.querySelector('[data-call-card] [data-card-disclosure]');
+      require(toggle?.tagName === 'BUTTON' && toggle.textContent.trim() === '隱藏逐字稿', "the open transcript toggle is a button that says it hides");
+      require(visible(document.querySelector('[data-call-card] .vc-transcript')), "the transcript opens inside the receipt");
+      require(/已結束 · \d+:\d{2}/.test(document.querySelector('[data-call-card] [data-card-status-text]')?.textContent ?? ''), "the receipt says the call length beside its state");
       require(calls.some(call => call.method === "voice_chat.end") && calls.some(call => call.method === "voice_chat.feedback"), "hang-up and feedback cross the real IPC boundary");
     }
     if (name === "voice-call-no-mic") {

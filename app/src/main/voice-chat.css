@@ -17,9 +17,6 @@
 .vc-turn p { display: flex; flex-direction: column; gap: var(--sp-1); margin: 0 0 var(--sp-3); }
 .vc-turn b { font-size: var(--fs-sm); color: var(--text-2); font-weight: 500; }
 .vc-turn span { white-space: pre-wrap; overflow-wrap: anywhere; }
-.vc-card summary { display: flex; align-items: center; gap: var(--sp-2); cursor: pointer; list-style: none; }
-.vc-card summary > span { flex: 1; }
-.vc-card time { color: var(--text-2); font-variant-numeric: tabular-nums; }
 .vc-rating { width: 100%; font-size: var(--fs-sm); color: var(--text-2); }
 .vc-rating > span { flex: 1; }
 .vc-rating [aria-pressed="true"] { background: var(--surface-2); color: var(--text); }

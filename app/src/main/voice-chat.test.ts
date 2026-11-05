@@ -77,12 +77,25 @@ test("failed service uses one shared repair action and receipt escapes a folded 
   expect(view.root.querySelectorAll('[data-missing-repair="dictation"]')).toHaveLength(1);
   expect(view.composer.querySelector('.vc-failure [data-missing-repair="dictation"]')).not.toBeNull();
   const receipt = voiceCallCardHTML(call(), "<Member>");
-  expect(receipt).toContain("1:23");
-  expect(receipt).toContain('data-card-status-text>Ended</span>');
+  expect(receipt).toContain('data-card-status-text>Ended · 1:23</span>');
   expect(receipt).toContain("&lt;Owner&gt;");
   expect(receipt).not.toContain("<Owner>");
   const summary = {id:6,voice_call:call()} as AgentTurn;
   expect(foldCallTurns([{id:5,voice_call_id:"call-1"} as AgentTurn,summary])).toEqual([summary]);
+});
+
+test("the receipt's transcript toggle is a button that says hide while the transcript is open", () => {
+  const host = document.createElement("ul");
+  host.innerHTML = voiceCallCardHTML(call(), "Member");
+  document.body.append(host);
+  const toggle = host.querySelector<HTMLButtonElement>("button[data-card-disclosure]")!;
+  const transcript = host.querySelector<HTMLElement>(".card-detail")!;
+  expect([toggle.textContent, transcript.hidden]).toEqual(["Show transcript", true]);
+  toggle.click();
+  expect([toggle.textContent, transcript.hidden, toggle.getAttribute("aria-expanded")]).toEqual(["Hide transcript", false, "true"]);
+  toggle.click();
+  expect([toggle.textContent, transcript.hidden]).toEqual(["Show transcript", true]);
+  host.remove();
 });
 
 test("a durable failed receipt carries the repair once and a lost bridge retries hang-up", async () => {
