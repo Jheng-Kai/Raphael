@@ -1,10 +1,21 @@
 // @vitest-environment happy-dom
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { mentionChipHTML, mentionRanges, mentionsHTML, type MentionTarget } from "./mention-text";
 
 const target = (name: string, kind: MentionTarget["kind"] = "member", aliases: string[] = []): MentionTarget => ({ name, kind, aliases, mark: size => `<i data-size="${size}"></i>` });
 const TEAM = [target("Ops"), target("Ops Lead"), target("小森"), target("小晴"), target("Raphael", "member", ["拉斐爾", "ラファエル"]), target("Notion", "app")];
 const named = (text: string): string[] => mentionRanges(text, TEAM).map(range => range.target.name);
+
+test("finished mention ranges and patterns are reused until the roster version changes", () => {
+  const roster = [target("Cache Member")], text = "Ask @Cache Member about the result.";
+  const first = mentionRanges(text, roster);
+  const regexp = vi.spyOn(globalThis, "RegExp");
+  try {
+    expect(mentionRanges(text, roster)).toBe(first);
+    expect(regexp).not.toHaveBeenCalled();
+  } finally { regexp.mockRestore(); }
+  expect(mentionRanges(text, [target("Renamed Member")])).toEqual([]);
+});
 
 // The same table as core/tests/members/test_rooms.py::test_mentions_are_read_from_the_words_exactly_as_the_composer_draws_its_chips:
 // the composer draws a chip for what the core would address and for nothing else.

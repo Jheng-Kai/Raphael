@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { composioAction, composioText, isComposioTool } from "./composio-result";
 import { setLocale } from "./i18n";
-import { messageHTML, replyContentHTML } from "./message-content";
+import { messageHTML, messagePlainText, replyContentHTML } from "./message-content";
 import { permissionCardHTML, permissionStateText } from "./permission-card";
 import { emptyTimelineState, latestProgress, stepHTML, turnHTML } from "./timeline";
 import type { AgentTurn, PermissionCard } from "./types";
@@ -12,11 +12,34 @@ const result = { data: { results: [{ tool_slug: "GMAIL_FETCH_EMAILS", response: 
 const raw = JSON.stringify(result);
 afterEach(() => setLocale("zh-TW"));
 
+test("ordinary words never parse JSON and a projected text parses only once per locale and action", () => {
+  const parse = vi.spyOn(JSON, "parse");
+  try {
+    composioText("An ordinary reply without an envelope.");
+    expect(parse).not.toHaveBeenCalled();
+    const text = '{"tool_slug":"GMAIL_FETCH_EMAILS","successful":true,"data":{"subject":"Cached projection regression"}}';
+    composioText(text); const count = parse.mock.calls.length;
+    expect(count).toBeGreaterThan(0);
+    composioText(text); replyContentHTML(text); replyContentHTML(text);
+    expect(parse.mock.calls.length).toBe(count);
+  } finally { parse.mockRestore(); }
+});
+
 test("nested Composio results expose an app name and useful fields without changing raw data", () => {
   setLocale("en");
   expect(composioText(raw)).toBe("Gmail · Completed: Synthetic schedule · Two meetings next week");
   expect(JSON.stringify(result)).toBe(raw);
   expect(composioText(raw)).not.toContain("synthetic-private-token");
+});
+
+test("search and quote text use the same public projection as the rendered reply", () => {
+  setLocale("en");
+  const text = messagePlainText(raw, true);
+  expect(text).toBe(composioText(raw));
+  expect(text).toContain("Completed");
+  expect(text).not.toContain("tool_slug"); expect(text).not.toContain("synthetic-private-token");
+  const unnamed = JSON.stringify({successful:true,data:{subject:"Projected without transport fields"}});
+  expect(messagePlainText(unnamed, true, "GMAIL_FETCH_EMAILS")).toBe(composioText(unnamed, "GMAIL_FETCH_EMAILS"));
 });
 
 test("failure status and bounded multi-action summaries use the window language", () => {

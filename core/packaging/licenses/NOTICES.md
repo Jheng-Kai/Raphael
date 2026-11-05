@@ -1,5 +1,7 @@
 # Third-party notices
 
+`app/src/main/transcript-window.ts` adapts the centered focus range from OpenMausBot `src/lib/transcript-window.ts` (Apache-2.0; license retained in `Apache-2.0.txt`).
+
 ## OpenBot demonstrations (MIT)
 
 The owner demonstration lifecycle in `computer/teaching.py` was informed by

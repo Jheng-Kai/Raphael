@@ -465,12 +465,12 @@ def create_then_report(rig):
     made = {"name": "MEMBER-NAME", "role": "r", "instructions": "i"}
     rig.client.replies = [
         turn("Adding.", [call("create_member", made, "c1")]),
-        report("Added."),
+        report("Creation is unavailable here."),
     ]
 
 
 @pytest.mark.parametrize("verdict", [ASK, DENY])
-async def test_adding_a_member_is_judged_in_the_background(make_rig, clock, conn, verdict):
+async def test_background_cannot_offer_or_create_members_even_with_a_primary_and_safety_rule(make_rig, clock, conn, verdict):
     rules = SafetyRules(conn)
     rules.create("新增成員", verdict)
     judge = ScriptedJudge({1})
@@ -479,20 +479,13 @@ async def test_adding_a_member_is_judged_in_the_background(make_rig, clock, conn
     rig.service.use_team(team, team.tool)
     create_then_report(rig)
     task_id = rig.submit()
-    if verdict == DENY:
-        [done] = await rig.wait_for_reports()
-        assert done["text"] == "Added." and team.created == [] and questions(rig) == []
-        steps = [(s.tool, s.outcome, s.reason) for s in rig.steps(task_id) if s.kind == "tool"]
-        assert steps == [("create_member", "blocked", "forbidden")]
-    else:
-        asked = await paused(rig, task_id)
-        assert asked["text"].startswith("This falls under the safety rule 「新增成員」.")
-        assert team.created == []
-        answer = {"task_id": task_id, "question_id": asked["question_id"], "approved": True}
-        assert (await rig.rpc.call("background.answer", answer))["status"] == "approved"
-        await rig.wait_for_reports()
-        assert team.created == ["MEMBER-NAME"]
-    assert judge.shown[0].tool == "create_member"
+    [done] = await rig.wait_for_reports()
+    assert done["text"] == "Creation is unavailable here."
+    assert team.created == [] and questions(rig) == []
+    assert judge.shown == []
+    offered = {tool["function"]["name"] for tool in rig.client.chat_calls[0]["tools"]}
+    assert not {"create_member", "member_create", "member_delete"} & offered
+    assert not [step for step in rig.steps(task_id) if step.kind == "tool"]
 
 
 @pytest.mark.parametrize("approved", [True, False])

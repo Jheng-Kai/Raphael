@@ -1,4 +1,4 @@
-"""The single registry of team administration tool contracts, offered to Raphael and to every member.
+"""Primary-contact administration contracts, generated from the owner UI registry.
 
 Member data: name, role, blurb, personality, instructions, group name, avatar preset.
 Targets use member IDs; groups use IDs for rename and names for member placement.
@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .policy import Tier
+from ..management import DEFINITIONS as MANAGEMENT_DEFINITIONS, TIERS as MANAGEMENT_TIERS
 
 
 @dataclass(frozen=True)
@@ -57,37 +58,24 @@ def definition(description, properties=None, required=()):
             "required": list(required), "additionalProperties": False}}
 
 
-ID = {"type": "integer", "minimum": 1}
-MEMBER = {field: {"type": "string"} for field in
-          ("name", "role", "blurb", "personality", "instructions", "group", "avatar_preset")}
-MEMBER["group"]["description"] = "Group name, created if missing. Empty means ungrouped."
-MEMBER["avatar_preset"]["description"] = "A slime, slime:color:<sky|lavender|coral|tangerine|ochre|leaf|teal|ocean|orchid|charcoal>. Omit and the member gets a colour of its own."
-for field, limit in (("name", 16), ("role", 24), ("blurb", 200), ("personality", 2000), ("instructions", 2000), ("group", 24)):
-    MEMBER[field]["maxLength"] = limit
-
+# The overview is shared work context, not management authority.
 DEFINITIONS = {
-    "team_overview": definition("Read member IDs, names, roles, configured brains, native image/file limits, actual tool catalog and computer grants, groups, skills, commands and routines. Rooms show real IDs and membership for rooms you belong to."),
-    "member_create": definition("Create a team member; the result carries its real ID. When the owner's setting asks first it is only a proposal for the owner's editable draft: nothing exists until they confirm, and the turn goes on with the real IDs afterwards. At most 10 creates per turn. Omitted preferences use the create dialog defaults.", MEMBER, ("name", "role")),
-    "member_update": definition("Change the supplied fields of an existing member, including group placement. ID 0 is the first Bot's name, role, personality and instructions. When the owner's setting asks first, nothing changes until they confirm.", {"id": {"type": "integer", "minimum": 0}, **MEMBER}, ("id",)),
-    "member_delete": definition("Permanently delete a member and its conversations, memories, routines and resources. Always requires the owner's approval.", {"id": ID}, ("id",)),
-    "group_create": definition("Create a named group (a proposal for the owner's confirmation at the end of the turn when their setting asks first).", {"name": {"type": "string"}}, ("name",)),
-    "group_rename": definition("Rename an existing group (a proposal for the owner's confirmation when their setting asks first).", {"id": ID, "name": {"type": "string"}}, ("id", "name")),
-    "member_skill_import": definition("Import a skill for any member, including Raphael (0), from a supported GitHub source or a discovered local: skill folder. Import copies data and never executes scripts. Guidance grants no authority.", {"member_id": {"type": "integer", "minimum": 0}, "source": {"type": "string"}}, ("member_id", "source")),
-    "member_command_save": definition("Create or update any member's slash command template, including Raphael (0). Template must contain {input}. Name uses 1-32 lowercase letters, digits, underscores or hyphens. Omit id to create.", {"member_id": {"type": "integer", "minimum": 0}, "id": ID, **{field: {"type": "string"} for field in ("name", "description", "template")}}, ("member_id", "name", "template")),
+    "team_overview": definition("Read member IDs, roles, brains, grants, groups, skills, commands and routines. Rooms are limited to the caller's own membership."),
+    **MANAGEMENT_DEFINITIONS,
 }
-TIERS = {name: Tier.T0 if name == "team_overview" else Tier.T3 if name == "member_delete" else Tier.T1
-         for name in DEFINITIONS}
+TIERS = {"team_overview": Tier.T0, **MANAGEMENT_TIERS}
 BATCH_TOOLS = {"member_create", "create_member", "member_update", "group_create", "group_rename"}
 CONFIRM_TOOLS = (set(DEFINITIONS) - {"team_overview"}) | {"create_member", "routine_create", "routine_update", "routine_delete"}
 
 LEADERSHIP = (
-    "\nYou can change the owner's team yourself, like every member. Use team_overview and your team administration tools to create "
+    "\nYou are the current primary contact. Only you have owner-chat management tools. Use team_overview and your team administration tools to create "
     "and change members, groups, routines, skills and commands. Use returned IDs. "
     "You decide how many members the work needs. When the owner's approval setting asks first, member creates, "
     "updates and groups are proposals staged until the turn ends: collect every requested change before your final "
     "reply; pending_approval is not success and has no new ID. Once the owner approves, you go on in the same "
     "turn and are told the real IDs. Otherwise they happen at once and each result carries the real ID: hand "
-    "work to the new members with those IDs in the same turn. Deleting a member always needs approval. "
+    "work to the new members with those IDs in the same turn. Destructive changes always need approval, including allow-all mode. "
+    "Change a model or effort only when the owner explicitly asks, never to recover from a failure. "
     "After creating members, report their names and roles in one short message. "
     "Do not claim the creation interface is disconnected; attempt the provided tools and report "
     "their actual results. Never claim an action succeeded without a successful result."
@@ -127,7 +115,7 @@ def confirmation(name: str, arguments: dict, language: str, target: str = "", *,
         "zh-TW": ("名稱", "職責", "簡介", "個性", "工作指示", "群組", "預設頭像", "技能來源", "說明", "指令範本", "任務名稱", "任務內容", "排程", "啟用"),
         "ja": ("名前", "役割", "紹介", "性格", "指示", "グループ", "アバター", "スキルの取得元", "説明", "テンプレート", "タスク名", "内容", "スケジュール", "有効"),
     }
-    title = actions[language][names.index(name)]
+    title = actions[language][names.index(name)] if name in names else name
     separator = ": " if language == "en" else "："
     lines = [title + (separator + target if target else "")]
     for field, label in zip(fields, labels[language]):

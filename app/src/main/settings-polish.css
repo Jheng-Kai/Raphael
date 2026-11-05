@@ -19,3 +19,5 @@
 .data-record { padding: var(--sp-3) 0; border-bottom: 1px solid var(--line); }
 .data-record time { color: var(--text-3); font-size: var(--fs-xs); }
 .data-record-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: var(--fs-sm); line-height: 1.6; }
+
+.set-purpose { margin: var(--sp-2) 0 var(--sp-5); color: var(--text-3); font-size: var(--fs-sm); }

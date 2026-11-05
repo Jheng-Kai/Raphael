@@ -152,6 +152,12 @@ def cells(registry=(), catalog=(), *, servers=()):
                                       ("production_state",), "P21a" if family in ("routines", "skills", "memory") else "P21b-c",
                                       "routine-" + operation if implemented else "diagnostic-" + operation if family == "diagnostics"
                                       else "calendar-" + operation if family == "calendar" else ""))
+    # Keep new owner contracts visible in acceptance; an unbuilt live driver is
+    # an explicit failure, never offline-test evidence masquerading as acceptance.
+    from ..management import ACTIONS, SETTINGS_TOOL, GROUPED_TOOLS
+    for action in (*ACTIONS, SETTINGS_TOOL, *GROUPED_TOOLS.values()):
+        result.append(ScenarioCell("S21.management." + action.name, action.description,
+                                  SCENARIOS[20].prompt, ("production_state", "primary_only"), "R-AG-MGMT-01/02"))
     # The current reader has extension sets and inline MIME/dispatch branches,
     # rather than a separate format registry. Inventory those production source
     # declarations; never maintain a second hand-copied list in the evaluator.

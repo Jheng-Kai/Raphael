@@ -15,14 +15,19 @@ async def test_member_brain_is_used_instead_of_the_global_brain(rig):
     assert rig.service.speaker(member["id"]).model == "cli:codex"
 
 
-async def test_chief_role_moves_with_the_top_contact_and_no_tool_moves_with_it(rig):
+async def test_management_moves_with_primary_and_work_tools_stay_with_everyone(rig):
     member = (await rig.call("members.create", {"name": "Alice"}))["member"]
     await rig.call("members.set_primary", {"id": member["id"]})
     assert rig.service.team_context(0, "en")["chief_id"] == member["id"]
-    # the role decides who the owner brings work to; every speaker keeps the same tools
+    from raphael_core.management import MANAGEMENT_TOOLS
+    # Work context remains shared; administration moves with the primary contact.
     for speaker in (member["id"], 0):
         assert "team_overview" in dict(definitions_for(rig.service.speaker(speaker)))
         assert (await rig.service.admin_tool(speaker, "team_overview", {}))["members"]
+        assert bool(set(dict(definitions_for(rig.service.speaker(speaker)))) & MANAGEMENT_TOOLS) == (speaker == member["id"])
+    with pytest.raises(Exception, match="current primary contact"):
+        await rig.service.admin_tool(0, "group_create", {"name": "Denied"}, interactive=True)
+    assert (await rig.service.admin_tool(member["id"], "group_create", {"name": "Allowed"}, interactive=True))["group"]
     with pytest.raises(Exception):
         await rig.service.admin_tool(999, "team_overview", {})
 

@@ -430,6 +430,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "computer.viewer_control",
     "computer.viewer_close",
     "computer.revoke",
+    "computer.lifecycle",
     "computer.wallpaper",
     "pages.open",
     "owner_questions.answer",
@@ -2463,6 +2464,7 @@ mod tests {
             "computer.viewer_control",
             "computer.viewer_close",
             "computer.revoke",
+            "computer.lifecycle",
             "computer.wallpaper",
         ] {
             assert!(is_allowed_method(method));

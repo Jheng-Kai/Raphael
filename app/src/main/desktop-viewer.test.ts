@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-const api = vi.hoisted(() => ({ desktopWallpaper:vi.fn(), desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn(), desktopRevoke:vi.fn() }));
+const api = vi.hoisted(() => ({ settingsGet:vi.fn(), settingsSet:vi.fn(), desktopMaintain:vi.fn(), desktopWallpaper:vi.fn(), desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn(), desktopRevoke:vi.fn() }));
 vi.mock("./api", () => api);
 import { mountDesktopViewer, preparationHTML, type DesktopState } from "./desktop-viewer";
 import { setLocale, t } from "./i18n";
@@ -16,6 +16,34 @@ const peek = (): HTMLButtonElement => host.querySelector('[data-desktop="peek"]'
 const handback = (): HTMLButtonElement => host.querySelector('[data-desktop="return"]')!;
 const trySent = vi.fn();
 const waitChanged = vi.fn();
+const maintenanceState: DesktopState = {...running,host:'studio',target:'member-one',mode:'per-bot',idle_minutes:15,granted:true};
+const menuPick = (index: number): void => {
+  host.querySelector<HTMLButtonElement>('[data-computer-menu]')!.click();
+  document.querySelector<HTMLButtonElement>(`.menu [data-action="${index}"]`)!.click();
+};
+test('reset cancellation sends no maintenance and explicit yes pins the original target',async()=>{
+  panelOpen=true;api.desktopStatus.mockResolvedValue(maintenanceState);mounted.show();await flush();
+  menuPick(4); expect(api.desktopMaintain).not.toHaveBeenCalled();
+  document.querySelector<HTMLButtonElement>('[data-dlg="cancel"]')!.click(); await flush();
+  expect(api.desktopMaintain).not.toHaveBeenCalled();
+  api.desktopMaintain.mockResolvedValue(maintenanceState);
+  menuPick(4);document.querySelector<HTMLButtonElement>('[data-dlg="reset"]')!.click();await flush();
+  expect(api.desktopMaintain).toHaveBeenCalledExactlyOnceWith(1,'reset',maintenanceState,true);
+  expect(api.desktopOpen).toHaveBeenCalledTimes(2);
+});
+test('a reset confirmation cannot act on another member after navigation',async()=>{
+  panelOpen=true;api.desktopStatus.mockResolvedValue(maintenanceState);mounted.show();await flush();menuPick(4);
+  member=2;mounted.refresh();await flush();
+  document.querySelector<HTMLButtonElement>('[data-dlg="reset"]')!.click();await flush();
+  expect(api.desktopMaintain).not.toHaveBeenCalled();
+});
+test.each([5,15,60,0])('sleep dropdown persists %s without starting or deleting a computer',async value=>{
+  panelOpen=true;api.desktopStatus.mockResolvedValue(maintenanceState);mounted.show();await flush();menuPick(5);
+  api.settingsSet.mockResolvedValue({settings:{computer_vm_idle_minutes:value}});
+  document.querySelector<HTMLButtonElement>(`.menu [data-value="${value}"]`)!.click();await flush();
+  expect(api.settingsSet).toHaveBeenCalledWith('computer_vm_idle_minutes',value);
+  expect(api.desktopMaintain).not.toHaveBeenCalled();
+});
 test('teaching takes the member computer, warns visibly, and opens the shared unsaved skill editor on stop',async()=>{
   panelOpen=true;mounted.show();await flush();message('connected');
   api.desktopTeach.mockResolvedValueOnce({id:'demo',state:'recording',text:''});
@@ -69,6 +97,7 @@ test('a teaching trial cannot send into another conversation while handback is p
 function message(state: string, extra = {}): void { window.dispatchEvent(new MessageEvent('message', {source:frame().contentWindow, origin:'http://127.0.0.1:5000', data:{type:'raphael-desktop', state, ...extra}})); }
 beforeEach(() => {
   vi.useFakeTimers(); vi.resetAllMocks(); setLocale('zh-TW'); member=1; panelOpen=false;
+  api.settingsGet.mockResolvedValue({settings:{computer_ssh_alias:""}});
   api.desktopStatus.mockResolvedValue(running); api.desktopRenew.mockResolvedValue(running); api.desktopClose.mockResolvedValue({});
   api.desktopOpen.mockResolvedValue({session:'one',url:'http://127.0.0.1:5000/one/vnc.html'});
   host=document.createElement('aside'); host.innerHTML='<div class="mb-det-scroll"></div><ol><li data-desktop-slot="42"></li></ol>'; document.body.append(host);
@@ -396,9 +425,9 @@ test.each(['zh-TW','en','ja'] as const)('%s uses the existing stage words and hi
  expect(stage.textContent).not.toContain('Synthetic');
 });
 test('absent Docker keeps a visible reason and the exact installation entry without starting a computer',async()=>{
-  api.desktopStatus.mockResolvedValue({...running,state:'absent'});mounted.show();await flush();expect(panel().hidden).toBe(false);expect(api.desktopOpen).not.toHaveBeenCalled();
+  panelOpen=true;api.desktopStatus.mockResolvedValue({...running,state:'absent'});mounted.show();await flush();expect(panel().hidden).toBe(false);expect(api.desktopOpen).not.toHaveBeenCalled();
   expect(panel().textContent).toContain('成員電腦需要 Docker Desktop');
-  expect(panel().querySelector('[data-missing-repair="computer"]')).not.toBeNull();
+  expect(panel().querySelector('[data-act="docker-download"]')).not.toBeNull();
   expect(panel().querySelector<HTMLButtonElement>('[data-desktop="retry"]')!.hidden).toBe(true);
 });
 
@@ -474,9 +503,9 @@ test('the panel has a screen caption and quiet wallpaper with start inside the s
  expect(panel().querySelector<HTMLButtonElement>('[data-desktop="collapse"]')!.hidden).toBe(true);
 });
 
-test('a member without a provisioned or granted computer has no screen block',async()=>{
+test('a member without a computer retains location controls without starting one',async()=>{
  panelOpen=true; api.desktopStatus.mockResolvedValue({state:'missing',ready:false,control:'member',granted:false}); mounted.show(); await flush();
- expect(panel().hidden).toBe(true); expect(api.desktopOpen).not.toHaveBeenCalled();
+ expect(panel().hidden).toBe(false); expect(panel().querySelector("[data-computer-location]")).not.toBeNull(); expect(api.desktopOpen).not.toHaveBeenCalled();
 });
 
 test('handback restores the compact conversation even when takeover began in its preview',async()=>{
@@ -544,4 +573,15 @@ test("desktop renewal skips hidden ticks and resumes once without requiring focu
   await vi.advanceTimersByTimeAsync(10_000); await flush();
   expect(api.desktopRenew.mock.calls.length).toBeGreaterThanOrEqual(before + 2);
   visibility.mockRestore();
+});
+
+
+test('an absent remote host never offers a local Docker download', async () => {
+  panelOpen = true;
+  api.settingsGet.mockResolvedValue({settings:{computer_ssh_alias:"studio-mini"}});
+  api.desktopStatus.mockResolvedValue({state:'absent',ready:false,control:'member'});
+  mounted.show(); await flush();
+  expect(panel().querySelector('[data-act="docker-download"]')).toBeNull();
+  expect(panel().querySelector('.desktop-placeholder')!.textContent).toContain('遠端電腦');
+  expect(api.desktopOpen).not.toHaveBeenCalled();
 });

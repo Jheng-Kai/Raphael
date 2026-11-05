@@ -161,19 +161,17 @@ TIERS = {name: Tier.T0 if name in (ASK_OWNER, "self_check", "raphael_help", "sho
 ROUTINE_TOOLS = frozenset(name for name in DEFINITIONS if name.startswith("routine_"))
 DEFINITIONS.update(ADMIN_TOOLS)
 TIERS.update(ADMIN_TIERS)
-TIERS.update({"connections_list": Tier.T0, "add_mcp_server": Tier.T0, "manage_connection": Tier.T2})
+TIERS.update({"connections_list": Tier.T0})
 
 
 def definitions_for(speaker):
-    """What every speaker is offered: the same tools for Raphael and for each member. Changes to the team
-    are proposals the owner confirms, whoever makes them (`agent.service`)."""
+    """Shared work tools and primary-only management in the owner's interactive chat."""
+    from ..management import MANAGEMENT_TOOLS
     for name, item in DEFINITIONS.items():
+        if name in MANAGEMENT_TOOLS and (not speaker.is_chief or speaker.depth):
+            continue
         if name == SET_MY_JOB and not speaker.has_no_job:
             continue
-        if name in ROUTINE_TOOLS:
-            schema = item["parameters"]
-            item = {**item, "description": item["description"] + " Supply member_id to manage another member's routines.",
-                    "parameters": {**schema, "properties": {**schema["properties"], "member_id": {"type": "integer", "minimum": 0}}}}
         yield name, item
 
 

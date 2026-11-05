@@ -1,12 +1,14 @@
 // The profile and details panel share the member-owned skill and command editor. Each explicit
 // resource action is written immediately.
 import { noticeHTML } from "./missing";
+import { createServices, voiceLineHTML } from "./services";
+import type { BrainSettings } from "./types";
 import * as api from "./api";
 import { eventRead } from './event-read';
 import { openActions } from "./member-column";
-import { describeError, formatDate } from "./format";
+import { describeError } from "./format";
 import { onLocaleChange, t } from "./i18n";
-import { skillSourceLabel } from "./skill-source";
+import { skillOriginLabel } from "./skill-source";
 import type { Member, MemberCommand, MemberPatch, MemberSkill, MemberVoice, WireAttachment } from "./types";
 import { btn, esc, iconButton, openMenu, sel, tg, toaster } from "./ui";
 
@@ -30,6 +32,12 @@ export interface ResourceEditor {
 }
 
 export function mountMemberResources(container: HTMLElement, host: ResourceHost): ResourceEditor {
+  let brain: BrainSettings | null = null;
+  let voiceDraft: string | null = null;
+  const raphaelVoice = host.memberId === 0 && host.tab === "voice" ? createServices({
+    root: container, visible: () => alive, redraw: () => draw(), brain: () => brain,
+    changeSetting: async (key, value) => { brain = (await api.settingsSet(key, value)).settings; },
+  }) : null;
   let alive = true;
   let busy = false;
   let failed = false;
@@ -50,6 +58,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
   const label = (text: string, content: string): string => `<label class="mp-label"><span>${esc(text)}</span>${content}</label>`;
   const input = (id: string, value: string, placeholder: string, max = 200): string => `<input id="${id}" class="mb-fin" maxlength="${max}" value="${esc(value)}" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}" autocomplete="off">`;
   const capture = (): void => {
+    if (raphaelVoice) voiceDraft = container.querySelector<HTMLInputElement>("#svc-voice-id")?.value ?? voiceDraft;
     if (editing) editing.text = container.querySelector<HTMLTextAreaElement>("#mp-skill-text")?.value ?? editing.text;
     source = container.querySelector<HTMLInputElement>("#mp-skill-source")?.value ?? source;
     command.name = container.querySelector<HTMLInputElement>("#mp-command-name")?.value ?? command.name;
@@ -62,7 +71,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     const off = busy ? " disabled" : "";
     const skillHTML = `<section class="mp-card"><h3>${esc(t("members.profile.skillsTitle"))}</h3>` +
       (host.draft ? "" : `<div class="mp-add">${input("mp-skill-source", source, t("members.profile.source"), 2048)}${btn(esc(t("members.profile.import")), "sm", ` data-res="import"${off}`)}</div>`) +
-      skills.map(s => `<div class="mp-resource"><div><b>${esc(s.name)}</b><p>${esc(s.description || skillSourceLabel(s.source, s.plugin))}</p><p>${esc(s.shared ? `${t("skills.shared")} · ${skillSourceLabel(s.source, s.plugin)}` : skillSourceLabel(s.source, s.plugin))}</p><p>${esc(s.provenance === "learned" ? t("skills.learnedAt", { p0: s.learned_at ? formatDate(s.learned_at) : "" }) : t(s.provenance === "owner" || s.source === "owner" ? "skills.owner" : "skills.imported"))}</p></div>${tg(s.enabled, `${t("members.profile.enable")} ${s.name}`, ` data-res="skill-toggle" data-id="${s.id}"${off}`)}${s.shared ? "" : iconButton("more", t("members.more", { p0: s.name }), ` data-res="skill-menu" data-id="${s.id}" aria-haspopup="menu" aria-expanded="false"${off}`)}</div>`).join("") +
+      skills.map(s => `<div class="mp-resource"><div><b>${esc(s.name)}</b>${s.description ? `<p>${esc(s.description)}</p>` : ""}<p data-skill-provenance>${esc(skillOriginLabel(s))}</p></div>${tg(s.enabled, `${t("members.profile.enable")} ${s.name}`, ` data-res="skill-toggle" data-id="${s.id}"${off}`)}${s.shared ? "" : iconButton("more", t("members.more", { p0: s.name }), ` data-res="skill-menu" data-id="${s.id}" aria-haspopup="menu" aria-expanded="false"${off}`)}</div>`).join("") +
       (skills.length || host.draft ? "" : empty(t("members.profile.noSkills"))) +
       (editing ? `<label class="mp-label"><span>${esc(t("skills.instructions"))}</span><textarea id="mp-skill-text" class="mb-fin mb-ta" rows="12" spellcheck="false"${off}>${esc(editing.text)}</textarea></label><div class="mp-end">${btn(esc(t("common.cancel")), "sm", ` data-res="skill-cancel"${off}`)}${btn(esc(t("skills.save")), "sm", ` data-res="skill-save"${off}`)}</div>` : "") +
       (undo ? `<div class="mp-end">${btn(esc(t("skills.undo")), "sm", ` data-res="skill-undo"${off}`)}</div>` : "") + `</section>`;
@@ -75,6 +84,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     const voiceChoices = [{ value: "", label: t("members.profile.defaultVoice") }, ...voices.map(v => ({ value: v.id, label: v.name }))];
     if (voiceState.voice && !voiceChoices.some(v => v.value === voiceState.voice)) voiceChoices.push({ value: voiceState.voice, label: voiceState.voice });
     container.innerHTML = failed ? `<div class="mp-error" role="alert">${btn(esc(t("members.profile.retry")), "sm", ' data-res="retry"')}</div>` : !loaded ? `<span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span>` :
+      raphaelVoice ? `<section class="mp-card"><h3>${esc(t("members.panelVoice"))}</h3>${voiceLineHTML(raphaelVoice.view(), voiceDraft ?? brain?.tts_fish_voice ?? "")}</section>` :
       host.tab === "voice" ? `<section class="mp-card">${label(t("members.profile.voiceLabel"), sel(voiceChoices, voiceState.voice, t("members.profile.voiceLabel"), ` data-res="voice"${!configured || busy ? " disabled" : ""}`))}${configured ? "" : noticeHTML("voice", "voice", "fish")}</section>` +
         `<section class="mp-card">${(["read_aloud", "notify"] as const).map(key => `<div class="mp-resource"><span>${esc(t(key === "read_aloud" ? "members.profile.readAloud" : "members.profile.notify"))}</span>${tg(voiceState[key], t(key === "read_aloud" ? "members.profile.readAloud" : "members.profile.notify"), ` data-res="${key}"${off}`)}</div>`).join("")}</section>` :
       (host.tab === "skills" ? skillHTML : "") + (host.tab === "commands" || !host.standalone ? commandsHTML : "");
@@ -83,6 +93,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     const mine = ++generation;
     try {
       if (host.tab === "voice") {
+        if (raphaelVoice) { brain = (await api.settingsGet()).settings; await raphaelVoice.load(); }
         const answer = await (fromEvent ? eventRead('members.voices',()=>api.membersVoices(),host.scope ?? container) : api.membersVoices());
         if (!alive || mine !== generation) return;
         voices = answer.voices;
@@ -192,7 +203,9 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
       }
     });
   }
+  const key = (event: KeyboardEvent): void => { raphaelVoice?.key(event); };
   const click = (e: Event): void => {
+    if (raphaelVoice?.click(e.target as Element)) return;
     const target = (e.target as Element).closest<HTMLButtonElement>("[data-res]");
     if (!target || target.disabled || busy) return;
     capture();
@@ -204,6 +217,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     else choose(action, id, target);
   };
   container.addEventListener("click", click);
+  container.addEventListener("keydown", key);
   const stopLocale = onLocaleChange(draw);
   draw();
   if (!host.draft) void refresh();
@@ -216,7 +230,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
       container.innerHTML = "";
       draw();
     },
-    destroy() { alive = false; generation++; stopLocale(); container.removeEventListener("click", click); },
+    destroy() { raphaelVoice?.reset(); container.removeEventListener("keydown", key); alive = false; generation++; stopLocale(); container.removeEventListener("click", click); },
   };
 }
 

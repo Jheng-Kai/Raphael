@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { faceHTML } from "./members";
-import { followSlimeRoster, isSlimeAvatar, parseSlime, pickSlime, seasonalHat, setSlimeState, slimeFaceHTML, slimePickerHTML, slimeSVG, type SlimeState } from "./slime";
+import { followSlimeRoster, handOver, isSlimeAvatar, parseSlime, pickSlime, seasonalHat, setSlimeState, slimeFaceHTML, slimePickerHTML, slimeSVG, type SlimeState } from "./slime";
 
 const css = readFileSync(resolve(__dirname, "slime.css"), "utf8");
 const keyframes = css.split("@keyframes ").slice(1).map(chunk => {
@@ -18,6 +18,14 @@ const keyframes = css.split("@keyframes ").slice(1).map(chunk => {
 const stateIn = (el: Element): string | undefined => el.querySelector<SVGElement>("svg.slime")?.dataset.state;
 const plain = { now: new Date(2026, 5, 1) }, witch = { now: new Date(2026, 9, 31) };
 const same = (text: string): string => text;
+
+test('sampled eyes share pixel fitting instead of fitting every hidden pose separately', () => {
+  const host = document.createElement('div');
+  host.innerHTML = slimeSVG({character:'shion'}, {...plain, state:'thinking'});
+  const eyes = host.querySelector('.slime-loop-eyes')!;
+  expect(eyes.querySelectorAll('.slime-cel-eye')).toHaveLength(576);
+  expect(eyes.querySelectorAll('.slime-face')).toHaveLength(0);
+});
 
 test.each(['thinking','working','searching','computer','waiting','blocked','error'] as const)('R-PERF-01: %s carries only its current cels and keeps character marks in every body cel', state => {
   const host = document.createElement('div');
@@ -35,6 +43,14 @@ test('working uses only its twelve body poses without a Cartesian DOM expansion'
   expect(host.querySelectorAll('*').length).toBeLessThan(800);
 });
 
+test.each(['thinking','searching'] as const)('%s does not repeat a plain body for nonexistent independent marks', state => {
+  const host = document.createElement('div');
+  host.innerHTML = slimeSVG({color:'lavender'},{...plain,state});
+  expect(host.querySelectorAll('.slime-cel-body')).toHaveLength(12);
+  expect(host.querySelector('.slime-prop-cels')).toBeNull();
+  expect(host.querySelectorAll('.slime-cel-eye')).toHaveLength(12*12*4);
+});
+
 test('thinking cels avoid transient transform wrappers that inflate collection work', () => {
   const host=document.createElement('div');
   host.innerHTML=slimeSVG({character:'shion'},{...plain,state:'thinking'});
@@ -43,6 +59,20 @@ test('thinking cels avoid transient transform wrappers that inflate collection w
 });
 
 afterEach(() => { vi.useRealTimers(); document.body.innerHTML = ""; });
+
+test.each(["offscreen", "hidden", "collapsed", "unchanged"])("%s slimes receive state without transform reads", mode => {
+  const panel = document.createElement(mode === "collapsed" ? "details" : "div");
+  panel.innerHTML = slimeSVG({ character: "shion" }, { ...plain, state: "idle" });
+  if (mode === "offscreen") panel.setAttribute("data-offscreen", "");
+  if (mode === "hidden") panel.hidden = true;
+  document.body.append(panel);
+  const styled = vi.spyOn(globalThis, "getComputedStyle");
+  try {
+    handOver(panel.querySelector<SVGElement>("svg.slime")!, mode === "unchanged" ? "idle" : "working");
+    expect(styled).not.toHaveBeenCalled();
+    expect(stateIn(panel)).toBe(mode === "unchanged" ? "idle" : "working");
+  } finally { styled.mockRestore(); }
+});
 
 test("a member without a picture is a slime, its chosen one or a colour from its id; Raphael is not", () => {
   const face = (member: Parameters<typeof faceHTML>[0]): HTMLElement => {
@@ -319,9 +349,9 @@ test("idle press uses a finite squash and release on its resting vector", () => 
   host.innerHTML = slimeSVG({ character: "shion" }, plain);
   expect(host.querySelector("svg.slime")?.getAttribute("data-state")).toBe("idle");
   expect(host.querySelector(".slime-loop, .slime-idle")).toBeNull();
-  expect(css).toContain(':is(.mb-row, .mb-avbtn, .mb-preset, .mb-av-slime):active .slime-surface { --slime-squish: scale(1.12, 0.84); transition: --slime-squish 90ms cubic-bezier(0.2, 0.8, 0.3, 1); }');
-  expect(css).toContain('@property --slime-squish { syntax: "<transform-list>"; inherits: false; initial-value: scale(1); }');
-  expect(css).toContain("transition: --slime-squish 480ms");
+  expect(css).toContain(':is(.mb-row, .mb-avbtn, .mb-preset, .mb-av-slime):active .slime-surface { scale: 1.12 0.84; transition: scale 90ms cubic-bezier(0.2, 0.8, 0.3, 1); }');
+  expect(css).not.toMatch(/--slime-(?:touch|squish)/);
+  expect(css).toContain("transition: scale 480ms");
 });
 
 test("the pointer wakes a working slime once on the way in", () => {
@@ -375,7 +405,61 @@ test("a slime far out of sight takes its new state without reading its pose", ()
     const readNear = styled.mock.calls.filter(([element]) => near!.contains(element as Node) || element === near).length;
     expect([far!.dataset.state, near!.dataset.state]).toEqual(["thinking", "thinking"]);
     expect(readFar).toBe(0);
-    expect(readNear).toBeGreaterThan(0);
+    expect(readNear).toBe(0);
     expect(far!.dataset.transitioning).toBeUndefined();
   } finally { styled.mockRestore(); setSlimeState(21, "idle"); }
+});
+
+
+test("visible changes and interrupted handovers never read computed styles", async () => {
+  const animated = vi.spyOn(Element.prototype, "animate");
+  document.body.innerHTML = slimeFaceHTML({ id: 81 }, 40) + slimeFaceHTML({ id: 81, avatar: "slime:shion" }, 40);
+  const svgs = [...document.querySelectorAll<SVGElement>('svg.slime[data-slime-member="81"]')];
+  const read = window.getComputedStyle.bind(window), states: string[][] = [];
+  const styled = vi.spyOn(window, "getComputedStyle").mockImplementation((...args) => {
+    states.push(svgs.map(svg => svg.dataset.state!));
+    return read(...args);
+  });
+  try {
+    setSlimeState(81, "working");
+    setSlimeState(81, "searching");
+    setSlimeState(81, "done");
+    const transforms = animated.mock.calls.flatMap(([frames]) => Array.isArray(frames) ? frames : []).filter(frame => 'translate' in frame);
+    expect(transforms.length).toBeGreaterThan(0);
+    expect(transforms.every(frame => !Object.keys(frame).some(key => key.startsWith('--')))).toBe(true);
+    expect(states).toEqual([]);
+    expect(svgs.every(svg => svg.dataset.state === "done")).toBe(true);
+    setSlimeState(81, "working");
+    await vi.waitFor(() => expect(svgs.every(svg => svg.parentElement!.querySelector(".slime-loop-body"))).toBe(true));
+  } finally { styled.mockRestore(); setSlimeState(81, "idle"); }
+});
+
+test("a simultaneous presence burst mounts at most one visible strip per frame", () => {
+  const frames: FrameRequestCallback[] = [];
+  const created = vi.spyOn(document, 'createElement');
+  let time = 1000;
+  vi.spyOn(performance, 'now').mockImplementation(() => time);
+  const animated = vi.spyOn(Element.prototype, 'animate');
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation(callback => { frames.push(callback); return frames.length; });
+  document.body.innerHTML = [91,92,93].map(id => slimeFaceHTML({id},40)).join('');
+  for (const id of [91,92,93]) setSlimeState(id,'working');
+  expect(document.querySelectorAll('.slime-loop-body')).toHaveLength(0);
+  const observer = new MutationObserver(() => {});
+  observer.observe(document.body, {subtree:true, attributes:true, attributeFilter:['data-state','data-moved']});
+  for (let count = 1; count <= 3; count++) {
+    time += 16; frames.shift()!(time);
+    expect(document.querySelectorAll('.slime-loop-body')).toHaveLength(count);
+    const svg = document.querySelector<SVGElement>(`svg.slime[data-slime-member="${90+count}"]`)!;
+    const strip = svg.parentElement!.querySelector<HTMLElement>('.slime-loop-body')!;
+    expect(Number.parseFloat(strip.querySelector<HTMLElement>('.slime-cels')!.style.animationDelay)).toBe(Number.parseFloat(svg.style.getPropertyValue('--slime-delay')) - count*16);
+    expect(animated.mock.calls.filter(([frames]) => Array.isArray(frames) && frames[0]?.visibility === 'visible')).toHaveLength(3+count);
+    expect(observer.takeRecords()).toHaveLength(0);
+  }
+  expect(created.mock.calls.filter(([tag]) => tag === 'template').length).toBeLessThanOrEqual(1);
+  const bodies = [...document.querySelectorAll('.slime-loop-body')];
+  expect(new Set(bodies).size).toBe(3);
+  bodies[0]!.remove();
+  expect(bodies[1]!.isConnected && bodies[2]!.isConnected).toBe(true);
+  observer.disconnect();
+  for (const id of [91,92,93]) setSlimeState(id,'idle');
 });

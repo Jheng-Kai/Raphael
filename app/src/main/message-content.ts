@@ -245,8 +245,7 @@ function remembered(key: string, make: () => string): string {
 
 /** Rich cards are siblings of text bubbles, including in authored multi-message replies. */
 export function replyContentHTML(text: string, query = "", streaming = false, renderText?: (source: string) => string): string {
-  text = composioText(text);
-  const draw = (): string => parseMessageBlocks(text, streaming).map(block => block.type === "text"
+  const draw = (): string => parseMessageBlocks(composioText(text), streaming).map(block => block.type === "text"
     ? `<div class="ans"><div class="message-text">${renderText ? renderText(block.source) : textHTML(block.source, query, new Set())}</div></div>` : blockHTML(block, query, new Set(), streaming)).join("");
   // A forecast card marks today, so a kept reply lasts the day.
   return streaming || renderText ? draw() : remembered(`reply\0${new Date().toDateString()}\0${getLocale()}\0${query}\0${text}`, draw);
@@ -261,10 +260,10 @@ export const rememberedUrls = (text: string): string[] => {
 };
 
 /** Copy rendered Markdown as text, preserving full addresses even when their labels are short. */
-export function messagePlainText(text: string, markdown = false): string {
+export function messagePlainText(text: string, markdown = false, action?: string): string {
   text = publicEventText(text);
   if (!markdown) return text;
-  return parseMessageBlocks(text).map(block => {
+  return parseMessageBlocks(composioText(text, action)).map(block => {
     if (block.type === "text") return plainTextBlock(block.source);
     if (block.type === "code" && block.complete) {
       const form = parseAnswerForm(block.language, block.source);

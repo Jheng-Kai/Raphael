@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { AppContext, Member, Routine } from "./types";
-const api = vi.hoisted(() => ({ homeOverview:vi.fn(), membersList:vi.fn(), routinesList:vi.fn(), routineWebhook:vi.fn(), routineRuns:vi.fn(), routinesCreate:vi.fn(), routinesUpdate:vi.fn(), routinesDelete:vi.fn(), calendarAdd:vi.fn(), calendarUpdate:vi.fn(), calendarDelete:vi.fn(), keepAwakeGet:vi.fn(), keepAwakeSet:vi.fn(), roomsList:vi.fn(), settingsGet:vi.fn(), modelsCatalog:vi.fn(), brainsCli:vi.fn(), groupsCreate:vi.fn(), groupsUpdate:vi.fn(), groupsDelete:vi.fn(), membersUpdate:vi.fn(), roomsCreate:vi.fn(), roomSend:vi.fn(), roomStop:vi.fn(), roomMessages:vi.fn() }));
+const api = vi.hoisted(() => ({ homeOverview:vi.fn(), membersList:vi.fn(), routinesList:vi.fn(), routineWebhook:vi.fn(), routineRuns:vi.fn(), routinesRun:vi.fn(), routinesCreate:vi.fn(), routinesUpdate:vi.fn(), routinesDelete:vi.fn(), calendarAdd:vi.fn(), calendarUpdate:vi.fn(), calendarDelete:vi.fn(), keepAwakeGet:vi.fn(), keepAwakeSet:vi.fn(), roomsList:vi.fn(), settingsGet:vi.fn(), modelsCatalog:vi.fn(), brainsCli:vi.fn(), groupsCreate:vi.fn(), groupsUpdate:vi.fn(), groupsDelete:vi.fn(), membersUpdate:vi.fn(), roomsCreate:vi.fn(), roomSend:vi.fn(), roomStop:vi.fn(), roomMessages:vi.fn() }));
 vi.mock("./api",()=>api);
 import { openRoutineDialog } from "./routine-dialog";
 import { occurrences } from "./automation-calendar";
@@ -28,6 +28,27 @@ beforeEach(()=>{
   api.routinesList.mockResolvedValue({routines:[plan]});api.routineRuns.mockResolvedValue({runs:[]});
   api.routinesCreate.mockResolvedValue({routine:plan});api.routinesUpdate.mockResolvedValue({routine:plan});api.routinesDelete.mockResolvedValue({deleted:true});
   api.keepAwakeGet.mockResolvedValue(false);api.keepAwakeSet.mockResolvedValue(true);api.roomsList.mockResolvedValue({rooms:[]});api.settingsGet.mockResolvedValue({settings:{agent_model:"openai/shared-model"}});
+});
+
+test.each([0, 1, 2])("routine history and test results use relative days and minutes (%s days ago)", async days => {
+  setLocale("zh-TW");
+  const now = new Date(2026, 10, 5, 12).getTime();
+  const started = new Date(2026, 10, 5 - days, 8, 0, 37).getTime();
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+  const label = ["今天", "昨天", "11 月 3 日"][days];
+  const routine = { ...plan, id: 1001 + days };
+  api.routineRuns.mockResolvedValue({runs:[{id:501,routine_id:routine.id,started,finished:started+1000,status:"done",summary:"Completed",cost:0,turn_id:12}]});
+  api.routinesRun.mockResolvedValue({run_id:501});
+  try {
+    const dialog = openRoutineDialog({members, routine});
+    await flush();
+    expect(document.querySelector('[data-run-status="done"]')?.textContent).toBe(`成功 · ${label} 08:00Completed`);
+    click('[data-dlg="test"]');
+    await flush();
+    expect(document.querySelector('.au-test-status')?.textContent).toBe(`成功 · ${label} 08:00 · Completed`);
+    expect(document.querySelector('.au-run-section')?.textContent).not.toContain("08:00:37");
+    dialog.close();
+  } finally { clock.mockRestore(); }
 });
 
 test("monthly and minute choices save through the existing routine dialog", async () => {

@@ -1524,6 +1524,33 @@ async def test_the_history_pages_by_limit_and_before_id(rig):
     assert [t["question"] for t in await rig.turns(before_id=second[-1]["id"])] == ["q0"]
 
 
+async def test_history_changes_return_only_invalidated_turns_and_bounded_forward_pages(rig):
+    ids = [rig.seed(f"delta-{index}", "Retained reply") for index in range(160)]
+    conversation = rig.service.conversations.quick()
+    first = await rig.call("agent.history.list", {"conversation_id": conversation, "after_id": ids[149], "turn_ids": [ids[2], ids[-1]], "limit": 3})
+    assert first["delta"] is True and first["has_more"] is True
+    assert {turn["id"] for turn in first["turns"]} == {ids[2], ids[-1], *ids[150:153]}
+    assert first["removed_ids"] == []
+    assert first["next_after_id"] == ids[152]
+    second = await rig.call("agent.history.list", {"conversation_id": conversation, "after_id": first["next_after_id"], "limit": 50})
+    assert [turn["id"] for turn in second["turns"]] == list(reversed(ids[153:]))
+    assert second["has_more"] is False
+    foreign = rig.history.add(session_id="foreign-delta", question="Private words", route="answer", prefix="", text="Private reply", status="done", member_id=7)
+    missing = await rig.call("agent.history.list", {"conversation_id": conversation, "after_id": ids[-1], "turn_ids": [foreign, ids[-1] + 1000]})
+    assert missing["turns"] == [] and missing["removed_ids"] == [foreign, ids[-1] + 1000]
+
+
+@pytest.mark.parametrize("params", [
+    {"after_id": -1}, {"after_id": True}, {"after_id": 0, "before_id": 1},
+    {"after_id": 0, "around_id": 1}, {"turn_ids": [1]}, {"after_id": 0, "turn_ids": [True]},
+    {"after_id": 0, "turn_ids": list(range(1, 52))}, {"after_id": 0, "turn_ids": "1"},
+])
+async def test_history_changes_reject_invalid_cursors_and_unbounded_ids(rig, params):
+    with pytest.raises(RpcError) as error:
+        await rig.call("agent.history.list", params)
+    assert error.value.code == INVALID_PARAMS
+
+
 async def test_the_history_gives_fifty_turns_by_default_and_at_most_two_hundred(rig):
     for n in range(210):
         rig.seed(f"q{n}", "a")

@@ -361,7 +361,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 61
+LATEST = 62
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -587,6 +587,12 @@ SCHEMA_V60 = {
     "room_digest_requests": ["message_id INTEGER PK"],
 }
 SCHEMA_V61 = {**SCHEMA_V60, "member_skill_grants": ["member_id INTEGER PK NOT NULL", "skill_id INTEGER PK NOT NULL", "enabled INTEGER NOT NULL"]}
+SCHEMA_V62 = {
+    **SCHEMA_V61,
+    "skill_marketplaces": ["repo TEXT PK", "name TEXT NOT NULL", "catalog TEXT NOT NULL"],
+    "skill_sets": ["id INTEGER PK", "identity TEXT NOT NULL", "name TEXT NOT NULL", "version TEXT NOT NULL", "source TEXT NOT NULL", "description TEXT NOT NULL", "folder TEXT NOT NULL", "metadata TEXT NOT NULL"],
+    "member_skills": [*SCHEMA_V61["member_skills"], "set_id INTEGER", "set_key TEXT", "set_kind TEXT"],
+}
 
 
 def test_v48_adds_the_calendar_without_changing_existing_members_and_keeps_events_on_reopen(tmp_path):
@@ -743,7 +749,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V61) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V62) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -763,7 +769,7 @@ def test_connect_creates_the_latest_schema(conn):
         "agent_inbox_started",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V61.items():
+    for table, columns in SCHEMA_V62.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [

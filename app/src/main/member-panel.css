@@ -35,3 +35,7 @@
 .mb-routine-row > .mb-rt { flex: 1; min-width: 0; }
 .mb-routine-row > .mb-tool { flex: none; }
 .mb-routine-row .mb-rt-main > span { white-space: normal; overflow-wrap: anywhere; }
+
+.mb-panel-preference { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-3); font-size: var(--fs-sm); line-height: 1.4; }
+.mb-panel-preference + .mb-panel-row.btn { border-top: 1px solid var(--line); }
+.mb-panel-preference .mb-panel-row-copy small { white-space: normal; }

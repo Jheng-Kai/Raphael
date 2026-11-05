@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { Window } from "happy-dom";
 import { setLocale, t } from "./i18n";
 import type { SkillItem } from "./connection-skills";
+import { confirmDelete } from "./member-dialogs";
+import type { SkillSet } from "./skill-sets";
 import type { AppsInventory, AuditEntry, ConnectionGroup, InventoryApp, StoreService } from "./types";
 
 const api = vi.hoisted(() => ({
@@ -25,7 +27,7 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock("./api", () => api);
 vi.mock("./ui", async (original) => ({ ...(await original<typeof import("./ui")>()), toaster: { info: vi.fn() } }));
-vi.mock("./member-dialogs", async (original) => ({ ...(await original<typeof import("./member-dialogs")>()), confirmDelete: vi.fn(async () => true) }));
+vi.mock("./member-dialogs", () => ({ confirmDelete: vi.fn(async () => true), openDialog: vi.fn() }));
 
 import {
   type ConnectionForm,
@@ -876,6 +878,62 @@ describe("what the tab does", () => {
     expect(html.match(/data-skills-section/g)).toHaveLength(1);
     expect(html).not.toContain('data-dialog="skill-import"');
     expect(html.indexOf("<h2>應用程式</h2>")).toBeLessThan(html.indexOf("data-skills-section"));
+  });
+
+  test("a plugin imports once as a set and removal waits for the existing owner confirmation", async () => {
+    const set: SkillSet = { id: 1, name: "desk", version: "1.0.0", source: "local:C:/Synthetic/.claude/plugins/cache/market/desk/1.0.0", description: "Write", skill_count: 1, command_count: 1, mcp_servers: [] };
+    const source = { kind: "plugin", name: "desk", version: "1.0.0", source: set.source, skills: [{ name: "write", source: set.source + "/skills/write" }] };
+    let installed = false;
+    api.membersSkillsList.mockImplementation(async () => ({ skills: [], sets: installed ? [set] : [] }));
+    api.core.mockImplementation(async (method, params) => {
+      if (method === "members.skills.list") return { sources: [source], marketplaces: [] };
+      if (method === "members.skills.import") { installed = true; return { set }; }
+      if (method === "members.skills.delete") { expect(params.set_id).toBe(1); installed = false; return { deleted: true }; }
+      throw new Error("Unexpected IPC");
+    });
+    const c = createConnections(host); await c.load(); await settle();
+    c.click(button("skill-discover")); await settle();
+    c.click(button("skill-import-local", { source: "0" })); await settle();
+    expect(api.core).toHaveBeenCalledWith("members.skills.import", { member_id: 0, shared: true, source: set.source, plugin: true });
+    expect(c.view().skillSets).toEqual([set]);
+    expect(api.membersSkillsImport).not.toHaveBeenCalled();
+    c.click(button("set-open", { id: "1" }));
+    vi.mocked(confirmDelete).mockResolvedValueOnce(false);
+    c.click(button("set-delete", { id: "1" })); await settle();
+    expect(installed).toBe(true);
+    vi.mocked(confirmDelete).mockResolvedValueOnce(true);
+    c.click(button("set-delete", { id: "1" })); await settle();
+    expect(installed).toBe(false); expect(c.view().skillSets).toEqual([]);
+  });
+
+  test("marketplace refresh offers an update and an unsupported source never installs", async () => {
+    const market = { repo: "owner/repo", name: "market", plugins: [{ name: "desk", version: "2.0.0", installable: true, description: "Write" }, { name: "npm", version: "1.0.0", installable: false, reason: "Unsupported" }] };
+    api.core.mockImplementation(async (method) => method === "members.skills.list" ? { sources: [], marketplaces: [market], marketplace: market, sets: [] } : {});
+    const c = createConnections(host); await c.load();
+    c.click(button("skill-discover")); await settle();
+    c.click(button("marketplace-install", { market: "0", plugin: "1" })); await settle();
+    expect(api.core.mock.calls.filter(([method]) => method === "members.skills.import")).toHaveLength(0);
+    c.click(button("marketplace-refresh", { market: "0" })); await settle();
+    expect(api.core).toHaveBeenCalledWith("members.skills.list", { member_id: 0, marketplace: "owner/repo" });
+    c.click(button("marketplace-install", { market: "0", plugin: "0" })); await settle();
+    expect(api.core).toHaveBeenCalledWith("members.skills.import", { member_id: 0, shared: true, marketplace: "owner/repo", name: "desk" });
+  });
+
+  test("plugin MCP cards only open the existing setup form and never add a server during import", async () => {
+    const server = { name: "Desk MCP", transport: "stdio" as const, command: "python", args: ["server.py"], url: "", env: ["TOKEN"], headers: [] };
+    const set = { id: 1, name: "desk", version: "1.0.0", description: "Write", source: "plugin:desk", skill_count: 1, command_count: 0, mcp_servers: [server, { ...server, name: "Second MCP" }] };
+    api.membersSkillsList.mockResolvedValue({ skills: [], sets: [set] });
+    const c = createConnections(host); await c.load(); await settle();
+    c.click(button("set-open", { id: "1" }));
+    const browser = new Window();
+    browser.document.body.innerHTML = connectionsHTML(c.view());
+    vi.stubGlobal("document", browser.document);
+    try {
+      expect(browser.document.querySelectorAll(".mcp-proposal")).toHaveLength(2);
+      c.click(browser.document.querySelector('[data-conn="set-mcp"]')! as unknown as Element);
+      expect(c.view().form).toMatchObject({ name: "Desk MCP", type: "stdio", command: "python", args: "server.py", pairLines: "TOKEN=" });
+      expect(api.integrationsAdd).not.toHaveBeenCalled(); expect(api.integrationsTest).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); await browser.happyDOM.abort(); }
   });
 
   test("reads shared skills and every member including Raphael, and refreshes changes", async () => {

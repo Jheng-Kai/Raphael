@@ -339,7 +339,7 @@ def team_tools_for(
     if anyone:
         tools.append(ASK_MEMBER)
     # Every speaker may, when the owner asks it directly (never for a request another member handed it).
-    if speaker.depth == 0 and (always or asks_to_create_member(text)):
+    if speaker.is_chief and speaker.depth == 0 and (always or asks_to_create_member(text)):
         tools.append(CREATE_MEMBER)
     # The API path offers a team tool only when the request may need it: offering one costs a
     # tool-picking call on every question. CLI brains get every tool (`always`).

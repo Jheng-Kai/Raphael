@@ -251,6 +251,9 @@ class SkillLibrary:
         return self._skill(member_id, skill["id"])
 
     def source_details(self, member_id, identifier):
+        row = self.conn.execute("SELECT k.set_id,k.set_kind,s.name,s.version FROM member_skills k JOIN skill_sets s ON s.id=k.set_id WHERE k.id=?", (identifier,)).fetchone()
+        if row:
+            return {"set_id": row["set_id"], "set_kind": row["set_kind"], "plugin": row["name"], "plugin_version": row["version"]}
         path = self._path(member_id, identifier).parent / ".raphael-source.json"
         if not path.exists():
             return {}
@@ -269,7 +272,10 @@ class SkillLibrary:
     def require_owned(self, member_id, identifier):
         if self.skill_owner(member_id, identifier) != member_id:
             raise MemberError("scope", "edit shared skills in the shared library")
+        if self.conn.execute("SELECT set_id FROM member_skills WHERE id=? AND set_id IS NOT NULL", (identifier,)).fetchone():
+            raise MemberError("scope", "update or remove this skill through its plugin set")
 
     def native_skills(self, member_id):
-        return [{"name": s["slash_name"], "path": str(self._path(member_id, s["id"]))}
+        return [{"name": s["slash_name"], "path": str(self._path(member_id, s["id"])),
+                 **({"plugin_root": str(self.plugin_root(s["set_id"]))} if s.get("set_id") else {})}
                 for s in self.skills(member_id) if s["enabled"]]

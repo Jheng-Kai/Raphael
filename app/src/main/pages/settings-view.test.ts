@@ -10,6 +10,7 @@ import { emptyRulesView } from "../safety-rules";
 import { emptyServicesView } from "../services";
 import { emptyProvidersView } from "../providers";
 import { setLocale, t } from "../i18n";
+import { computerHostHealthHTML } from "../computer-location";
 import type { LanguageGroup } from "../languages";
 import type { BrainSettings, CatalogModel, DeviceSettings, LocalModel, ModelCatalog, SettingsPane, Status } from "../types";
 import {
@@ -34,7 +35,7 @@ import {
 afterEach(() => setLocale("zh-TW"));
 
 test("local commands use the shared three-choice dropdown beside computer operations", () => {
-  const html = tab("agent");
+  const html = tab("safety");
   expect(html).toContain('data-k="local-commands"');
   expect(html).toContain("本機指令");
   expect(html).toContain("每次詢問");
@@ -126,52 +127,40 @@ test("Telegram is in the 訊息平台 tab, and only there", () => {
   for (const id of ["general", "dictation", "agent", "connections", "usage", "data", "about"] as const) expect(tab(id)).not.toContain("data-msg");
 });
 
-test("the memory is in the 拉斐爾 tab, after its settings, and only there", () => {
-  const memory = { ...emptyMemoryView(), status: { text: "", revision: "r", chars: 0, entries: 0, limit: 2200, summary: null } };
-  const agent = tab("agent", { memory });
-  expect(agent).toContain("data-mem-section");
-  expect(agent.indexOf("data-mem-section")).toBeGreaterThan(agent.indexOf('data-k="worker-cap"'));
-  for (const id of ["general", "dictation", "connections", "messaging", "usage", "data", "about"] as const) expect(tab(id, { memory })).not.toContain("data-mem");
+test("shared owner memory lives in General, while own memory stays out of Settings", () => {
+  const memoryShared = { ...emptyMemoryView(), status: { text: "Owner document", revision: "r", chars: 14, entries: 1, limit: 2200, summary: null }, space: "shared" as const, title: "共同記憶" };
+  expect(tab("general", { memoryShared })).toContain('data-mem-space="shared"');
+  for (const pane of ["tools", "safety", "dictation"] as const) expect(tab(pane, { memoryShared })).not.toContain("data-mem-section");
+  expect(tab("general", { memoryShared })).not.toContain('data-mem-space="own"');
 });
 
-test("the safety rules are in the 拉斐爾 tab, after the memory and before 電腦操作, with no switch", () => {
-  const memory = { ...emptyMemoryView(), status: { text: "", revision: "r", chars: 0, entries: 0, limit: 2200, summary: null } };
-  const rules = { ...emptyRulesView(), status: [{ id: 1, action: "付款結帳", verdict: "ask" as const, position: 1 }] };
-  const agent = tab("agent", { memory, rules });
-  expect(agent).toContain("<h2>安全規則</h2>");
-  expect(agent.indexOf("data-rules-section")).toBeGreaterThan(agent.indexOf("data-mem-section"));
-  const computer = agent.indexOf("<h2>電腦操作</h2>");
-  expect(agent.indexOf("data-rules-section")).toBeLessThan(computer);
-  expect(agent.slice(agent.indexOf("data-rules-section"), computer)).not.toContain('role="switch"');
-  for (const id of ["general", "dictation", "connections", "messaging", "usage", "data", "about"] as const) expect(tab(id, { rules })).not.toContain("data-rules");
+test("shared safety rules and local permissions live in Safety", () => {
+  const rules = { ...emptyRulesView(), status: [{ id: 1, action: "Payment", verdict: "ask" as const, position: 1 }] };
+  const html = tab("safety", { rules });
+  expect(html).toContain("data-rules-section");
+  expect(html).toContain('data-k="local-commands"');
+  expect(html).not.toContain('data-k="computer-host"');
+  expect(tab("tools", { rules })).not.toContain("data-rules-section");
 });
 
-test("the memory is two documents: 共同記憶 first, then Raphael's own, each with its 編輯", () => {
-  const document = { text: "主人住台北\n", revision: "r", chars: 5, entries: 1, limit: 2200, summary: null };
-  const memoryShared = { ...emptyMemoryView(), status: document, space: "shared" as const, title: "共同記憶" };
-  const memory = { ...emptyMemoryView(), status: document, space: "own" as const, title: "拉斐爾 的記憶" };
-  const agent = tab("agent", { memory, memoryShared });
-  const shared = agent.indexOf('data-mem-space="shared"');
-  const own = agent.indexOf('data-mem-space="own"');
-  expect(shared).toBeGreaterThan(0);
-  expect(own).toBeGreaterThan(shared);
-  expect(agent).toContain('aria-label="共同記憶"');
-  expect(agent).toContain('aria-label="拉斐爾 的記憶"');
-  expect(agent.match(/data-mem="edit"/g)).toHaveLength(2);
-  expect(agent.match(/class="mem-entry"/g)).toHaveLength(2);
+test.each(["zh-TW", "en", "ja"] as const)("shared safety and connection wording applies to all members in %s", locale => {
+  setLocale(locale);
+  for (const key of ["rules.placeholder", "rules.action", "rules.err.empty", "settings.purposeConnections"] as const) {
+    expect(t(key)).not.toMatch(/Raphael|拉斐爾|ラファエル/);
+    expect(t(key)).toContain(locale === "zh-TW" ? "成員" : locale === "ja" ? "メンバー" : "member");
+  }
 });
 
-test("服務 is in the 拉斐爾 tab, after its settings and before the memory, as a clean list of five rows", () => {
-  const memory = { ...emptyMemoryView(), status: { text: "", revision: "r", chars: 0, entries: 0, limit: 2200, summary: null } };
-  const agent = tab("agent", { memory, services: emptyServicesView() });
+test("Tools contains five shared service rows and leaves memory in the owner pane", () => {
+  const agent = tab("tools", { services: emptyServicesView() });
   expect(agent).toContain("<h2>服務</h2>");
   expect(agent.indexOf("data-svc-section")).toBeGreaterThan(agent.indexOf('data-k="worker-cap"'));
-  expect(agent.indexOf("data-svc-section")).toBeLessThan(agent.indexOf("data-mem-section"));
+  expect(agent).not.toContain("data-mem-section");
   expect(agent.match(/data-k="svc-open:/g)).toHaveLength(5);
-  // nothing to choose or type at the tab's level: the picker of 看圖片 is in its dialog, not here
+  // Service choices and fields belong to their dialog rather than the shared list.
   expect(agent).not.toContain("data-model-picker");
   expect(agent).not.toContain('data-k="svc-search"');
-  // 看圖片 is the model picker, of the models that read images, in the dialog's page for 「指定模型」
+  // The explicit vision service uses the existing picker of image-capable models.
   const picker = tab("agent", { services: { ...emptyServicesView(), open: { kind: "vision", service: "model" } }, brain: { ...brain, vision_model: "anthropic/claude-haiku-5.5" } });
   expect(picker).toMatch(/<span class="mp-slot" data-model-picker="vision"><button type="button" class="sel mp-trigger"[^>]*data-k="svc-vision">/);
   expect(picker).toContain('<strong class="mp-tname">Claude Haiku 5.5</strong>');
@@ -225,11 +214,11 @@ const described = (html: string): string[] =>
 
 describe("the tabs", () => {
   test("are General, Dictation, Raphael; Connections, Messaging; Models & usage, Data and About, in each language", () => {
-    expect(IDS).toEqual(["general", "appearance", "dictation", "agent", "connections", "messaging", "models", "data", "about"]);
+    expect(IDS).toEqual(["general", "appearance", "dictation", "tools", "safety", "connections", "messaging", "models", "data", "about"]);
     const titles = {
-      "zh-TW": ["一般", "外觀", "聽寫", "拉斐爾", "連接", "訊息平台", "模型與用量", "資料", "關於"],
-      en: ["General", "Appearance", "Dictation", "Raphael", "Connections", "Messaging", "Models & usage", "Data", "About"],
-      ja: ["一般", "外観", "音声入力", "ラファエル", "接続", "メッセージ", "モデルと使用量", "データ", "アプリ情報"],
+      "zh-TW": ["一般", "外觀", "聽寫與快捷鍵", "工具", "安全", "連接", "訊息平台", "模型與用量", "資料", "關於"],
+      en: ["General", "Appearance", "Dictation & shortcuts", "Tools", "Safety", "Connections", "Messaging", "Models & usage", "Data", "About"],
+      ja: ["一般", "外観", "音声入力とショートカット", "ツール", "安全", "接続", "メッセージ", "モデルと使用量", "データ", "アプリ情報"],
     };
     for (const locale of LOCALES) {
       setLocale(locale);
@@ -240,7 +229,7 @@ describe("the tabs", () => {
   test("sit in three groups: the basics with no name, then 整合 and 帳戶 in small grey words", () => {
     const list = paneListHTML();
     const order = [...list.matchAll(/class="nav-group">([^<]+)<|data-pane="(\w+)"/g)].map((m) => m[1] ?? m[2]);
-    expect(order).toEqual(["general", "appearance", "dictation", "agent", "整合", "connections", "messaging", "帳戶", "models", "data", "about"]);
+    expect(order).toEqual(["基本", "general", "appearance", "dictation", "團隊", "tools", "safety", "整合", "connections", "messaging", "帳戶", "models", "data", "about"]);
     setLocale("en");
     expect(paneListHTML()).toContain('<div class="nav-group">Integrations</div>');
     expect(paneListHTML()).toContain('<div class="nav-group">Account</div>');
@@ -248,23 +237,22 @@ describe("the tabs", () => {
     expect(paneListHTML()).toContain('<div class="nav-group">連携</div>');
   });
 
-  test("every tab is a real button; 拉斐爾's has Raphael's emblem, in a version for each theme", () => {
-    const list = paneListHTML();
-    expect(list.match(/<button type="button" class="nav" data-pane="\w+" aria-current="false">/g)).toHaveLength(9);
-    const agent = list.slice(list.indexOf('data-pane="agent"'), list.indexOf('data-pane="connections"'));
-    expect(agent).toContain('src="/brand/app-emblem-light-64.webp"');
-    expect(agent).toContain('src="/brand/app-emblem-dark-64.webp"');
-    expect(agent).not.toContain("<svg");
+  test("every tab is a real button and legacy Raphael links resolve to Tools", () => {
+    expect(paneListHTML().match(/<button type="button" class="nav" data-pane="\w+" aria-current="false">/g)).toHaveLength(10);
+    expect(paneListHTML()).not.toContain('data-pane="agent"');
+    expect(canonicalPane("agent")).toBe("tools");
   });
 
-  test("each opens with its name without repeating the pane purpose (R-UI-02)", () => {
+  test("each opens with its name and one owner-requested purpose line", () => {
     for (const locale of LOCALES) {
       setLocale(locale);
       for (const id of IDS) {
         const html = tab(id);
         const title = PANES.find((p) => p.id === id)!.title();
         const head = `<h1 id="set-title" tabindex="-1">${title.replace("&", "&amp;")}</h1>`;
-        // 連接 has its 「新增」 on the line of its name
+        expect(html.match(/class="set-purpose"/g)).toHaveLength(1);
+        expect(html).toContain(PANES.find(p => p.id === id)!.purpose(view().device).replace(/&/g, "&amp;"));
+        // Connections keeps Add beside its title.
         if (id === "connections") {
           expect(html).toMatch(new RegExp(`^<div class="set-head">${head}<button[^>]*data-k="conn-add"[^>]*>.*?</button></div>`));
           expect(html).not.toContain('class="purpose"');
@@ -324,8 +312,8 @@ describe("一般", () => {
   });
   test("has the interface language, the theme and the emblem's size as dropdowns, the subtitles and the start as switches", () => {
     const html = tab("general");
-    expect(groups(html)).toEqual(["時區", "輸出資料夾", "介面與桌面", "啟動"]);
-    expect(names(html)).toEqual(["時區", "輸出資料夾", "桌面圖案大小", "字幕", "開機時自動啟動", "重新導覽"]);
+    expect(groups(html)).toEqual(["關於你", "介面與桌面", "啟動"]);
+    expect(names(html)).toEqual(["天氣的城市", "時區", "輸出資料夾", "桌面圖案大小", "字幕", "開機時自動啟動", "重新導覽"]);
     for (const k of ["size"]) expect(html).toMatch(new RegExp(`<button type="button" class="sel"[^>]*data-k="${k}"`));
     for (const k of ["subtitles", "autostart"]) expect(html).toMatch(new RegExp(`class="tg" role="switch"[^>]*data-k="${k}"`));
   });
@@ -346,8 +334,8 @@ describe("一般", () => {
 describe("聽寫", () => {
   test("is how a dictation starts, then how Raphael listens", () => {
     const html = tab("dictation");
-    expect(groups(html)).toEqual(["開始方式", "聆聽方式"]);
-    expect(names(html)).toEqual(["聽寫", "貼上上一次", "取消", "聽寫方式", "你說的語言", "麥克風"]);
+    expect(groups(html)).toEqual(["快捷鍵", "開始方式", "聆聽方式"]);
+    expect(names(html)).toEqual(["問拉斐爾", "聽寫", "貼上上一次", "取消", "聽寫方式", "你說的語言", "麥克風"]);
   });
 
   test("shows each shortcut as key caps, with a 變更 button on the one that can be changed here", () => {
@@ -365,7 +353,7 @@ describe("聽寫", () => {
   test("warns about Right Alt only when the keyboard uses it as AltGr", () => {
     expect(tab("dictation", { altgr: true })).toContain("AltGr");
     expect(tab("dictation")).not.toContain("AltGr");
-    expect(tab("dictation", { altgr: true, device: { ...device, dictation_keys: ["F9"] } })).not.toContain("AltGr");
+    expect(tab("dictation", { altgr: true, device: { ...device, dictation_keys: ["F9"], agent_keys: ["ControlLeft+Space"] } })).not.toContain("AltGr");
   });
 
   test("has one row for the languages, a dropdown that opens the picker of languages and their variants", () => {
@@ -416,22 +404,10 @@ describe("聽寫", () => {
 });
 
 describe("拉斐爾", () => {
-  test("has his picture, the key that asks him and the weather city, with no line of explanation, and no choice of router", () => {
-    for (const locale of LOCALES) {
-      setLocale(locale);
-      const html = tab("agent");
-      expect(html).not.toMatch(/agent-router|Jev|Luna/);
-      expect(html).not.toContain('data-k="agent-model"'); // with the other models
-    }
-    setLocale("zh-TW");
-    const html = tab("agent");
-    expect(names(html).slice(0, 2)).toEqual(["問拉斐爾", "天氣的城市"]);
-    expect(described(html)).toEqual(["電腦位置"]);
-    // Raphael's picture is changed in his details panel on the 拉斐爾 page, no longer here
-    expect(names(html)).not.toContain("頭像");
-    expect(html).not.toMatch(/avatar|app-emblem/);
-    expect(rowOf(html, "問拉斐爾")).toContain('<button type="button" class="btn" data-act="rec-agent" data-k="rec-agent">變更</button>');
-    expect(rowOf(html, "天氣的城市")).toContain('id="agent-city" type="text" value="台北"');
+  test("moved rows keep their existing field ids and shortcut action", () => {
+    expect(rowOf(tab("dictation"), "問拉斐爾")).toContain('data-act="rec-agent"');
+    expect(rowOf(tab("general"), "天氣的城市")).toContain('id="agent-city" type="text" value="台北"');
+    expect(tab("tools")).not.toContain('id="agent-city"');
   });
 
   test("hides the retired background cost cap", () => {
@@ -446,21 +422,21 @@ describe("拉斐爾", () => {
   });
 
   test("shows the missing shortcut beside its change action", () => {
-    const html = tab("agent", { device: { ...device, agent_keys: [] } });
+    const html = tab("dictation", { device: { ...device, agent_keys: [] } });
     expect(html).not.toContain('class="purpose"');
     expect(rowOf(html, "問拉斐爾")).toContain("尚未設定");
   });
 
   test("warns about Right Alt under her key only when the keyboard uses it as AltGr", () => {
-    const html = tab("agent", { altgr: true });
+    const html = tab("dictation", { altgr: true });
     expect(html).toContain("AltGr");
     expect(html.indexOf("AltGr")).toBeGreaterThan(html.indexOf('data-row="agent-hotkey"'));
     expect(tab("agent")).not.toContain("AltGr");
-    expect(tab("agent", { altgr: true, device: { ...device, agent_keys: ["ControlLeft+Space"] } })).not.toContain("AltGr");
+    expect(tab("dictation", { altgr: true, device: { ...device, dictation_keys: ["F9"], agent_keys: ["ControlLeft+Space"] } })).not.toContain("AltGr");
   });
 
   test("an empty city is said to be wrong", () => {
-    const html = tab("agent", { cityDraft: " ", cityError: () => "請輸入城市名稱" });
+    const html = tab("general", { cityDraft: " ", cityError: () => "請輸入城市名稱" });
     expect(html).toContain('role="alert"');
     expect(html).toContain('aria-invalid="true"');
   });
@@ -646,7 +622,7 @@ describe("搜尋設定", () => {
 
   test("finds a row by its name, in the window's language, and says where it is", () => {
     expect(where("麥克風")).toEqual(["dictation:麥克風"]);
-    expect(where("天氣")).toEqual(["agent:天氣的城市"]);
+    expect(where("天氣")).toEqual(["general:天氣的城市"]);
     expect(where("版本")).toEqual(["about:版本"]);
   });
 
@@ -658,9 +634,9 @@ describe("搜尋設定", () => {
   });
 
   test("finds the shortcuts by the word for them, though no row is called that", () => {
-    const shortcuts = ["dictation:聽寫", "dictation:貼上上一次", "agent:問拉斐爾"];
+    const shortcuts = ["dictation:聽寫與快捷鍵", "dictation:聽寫", "dictation:貼上上一次", "dictation:問拉斐爾"];
     expect(where("快捷鍵")).toEqual(shortcuts);
-    expect(where("hotkey")).toEqual(shortcuts);
+    expect(where("hotkey")).toEqual(shortcuts.slice(1));
     expect(where("ショートカット")).toEqual(shortcuts);
   });
 
@@ -673,12 +649,12 @@ describe("搜尋設定", () => {
 
   test("finds Raphael's memory by its name and by what one asks him to do, in any of the languages", () => {
     for (const query of ["記憶", "記住", "memory", "Remember", "メモリ", "覚える"]) {
-      expect(where(query), query).toEqual(["agent:記憶"]);
+      expect(where(query), query).toEqual(["general:共同記憶"]);
     }
     setLocale("en");
-    expect(where("記憶")).toEqual(["agent:Memory"]);
+    expect(where("記憶")).toEqual(["general:Shared memory"]);
     setLocale("ja");
-    expect(where("memory")).toEqual(["agent:記憶"]);
+    expect(where("memory")).toEqual(["general:共有メモリ"]);
   });
 
   test("finds a tab by its name, before its rows, and a brand by its name; case does not matter", () => {
@@ -697,7 +673,7 @@ describe("搜尋設定", () => {
 
   test("lists what it found as real buttons, each with the tab it is in under it", () => {
     const html = searchResultsHTML(searchSettings("麥克風"));
-    expect(html).toBe('<button type="button" class="nav set-hit" data-hit="0"><span class="hit-t">麥克風</span><span class="hit-p">聽寫</span></button>');
+    expect(html).toBe('<button type="button" class="nav set-hit" data-hit="0"><span class="hit-t">麥克風</span><span class="hit-p">聽寫與快捷鍵</span></button>');
   });
 
   test("knows a row of every tab, and each row it knows is drawn on its tab under that name, in every language", () => {
@@ -705,10 +681,10 @@ describe("搜尋設定", () => {
     for (const locale of LOCALES) {
       setLocale(locale);
       for (const entry of SEARCH_INDEX) {
-        if (!entry.label) continue;
+        if (!entry.label || entry.target) continue;
         const name = (t as unknown as (key: string) => string)(entry.label).replace("&", "&amp;");
         // a row's name, or the name of a section (電腦操作 is found as a whole)
-        const html = tab(entry.pane, { memory: emptyMemoryView(), rules: emptyRulesView(), services: emptyServicesView() });
+        const html = tab(entry.pane, { memoryShared: { ...emptyMemoryView(), space: "shared", title: t("mem.shared") }, rules: emptyRulesView(), services: emptyServicesView() });
         const headings = [...html.matchAll(/<h2(?: class="[^"]*")?>(.*?)<\/h2>/g)].map((m) => m[1]);
         // a capability of 服務 is a row of the rounded list, named by its `.nm`
         const items = [...html.matchAll(/<span class="nm">(.*?)<\/span>/g)].map((m) => m[1]);
@@ -744,9 +720,8 @@ describe("while the core does not answer", () => {
     expect(rowOf(dictation, "你說的語言")).toMatch(/data-k="languages" disabled>/);
     expect(rowOf(dictation, "麥克風")).not.toContain("disabled");
     expect(rowOf(dictation, "聽寫")).not.toContain("disabled");
-    const agent = tab("agent", down);
-    expect(rowOf(agent, "天氣的城市")).toContain("disabled");
-    expect(rowOf(agent, "問拉斐爾")).not.toContain("disabled");
+    expect(rowOf(tab("general", down), "天氣的城市")).toContain("disabled");
+    expect(rowOf(tab("dictation", down), "問拉斐爾")).not.toContain("disabled");
     const usage = tab("usage", down);
     expect(usage).not.toContain('id="limit-input"');
     for (const name of ["語音轉文字", "整理文字", "拉斐爾的快速提問"]) expect(rowOf(tab("models", down), name)).toMatch(/data-k="[\w-]+" disabled>/);
@@ -756,7 +731,7 @@ describe("while the core does not answer", () => {
 describe("電腦操作", () => {
   const EXCEL = { exe: "excel.exe", name: "Microsoft Excel" };
   const CALC = { exe: "calculatorapp.exe", name: "Calculator" };
-  const withApps = (apps: DeviceSettings["computer_apps"]) => tab("agent", { device: { ...device, computer_apps: apps } });
+  const withApps = (apps: DeviceSettings["computer_apps"]) => tab("safety", { device: { ...device, computer_apps: apps } });
 
   test("is the last section of Raphael: a row per always-allowed app with an overflow menu", () => {
     const html = withApps([EXCEL, CALC]);
@@ -769,7 +744,7 @@ describe("電腦操作", () => {
     expect(excel).toContain('aria-label="「Microsoft Excel」的選項"');
     // An overflow icon only: no word beside it, no helper text anywhere.
     expect(excel.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).toBe("Microsoft Excel");
-    expect(described(html)).toEqual(["電腦位置"]);
+    expect(described(html)).toEqual([]);
     expect(buttons(html).filter((b) => b.includes("computer-menu"))).toHaveLength(2);
   });
 
@@ -806,26 +781,17 @@ describe("電腦操作", () => {
     expect(source).not.toContain("computer_apps: computerAppsWithout");
   });
 
-  test("an absent Docker runtime has one download action in the existing computer area", () => {
-    const html = tab("agent", { desktopRequired: true });
-    expect(html.match(/data-act="docker-download"/g)).toHaveLength(1);
-    expect(html).toContain("成員電腦需要 Docker Desktop。");
-    expect(tab("agent", { desktopRequired: false })).not.toContain("docker-download");
-  });
-
-  test("computer location uses the shared dropdown and shows an SSH alias only for another host", () => {
-    const local = tab("agent", { desktopRequired: true });
-    expect(local).toContain('data-k="computer-host"');
-    expect(local).toContain("這台電腦");expect(local).not.toContain('id="computer-ssh-alias"');
-    const remote = tab("agent", { desktopRequired: true, brain: { ...brain, computer_ssh_alias: "studio-mini" } });
-    expect(remote).toContain("另一台電腦");expect(remote).toContain('id="computer-ssh-alias"');
-    expect(remote).toContain('value="studio-mini"');expect(remote).not.toContain('data-act="docker-download"');
-    expect(remote).toContain("帳號需各自登入");expect(remote).toContain("團隊資料夾");
+  test("computer location search has one destination outside Settings", () => {
+    for (const query of ["電腦位置", "遠端", "remote"]) {
+      const hits = searchSettings(query);
+      expect(hits).toHaveLength(1);
+      expect(hits[0].target).toBe("computer");
+    }
+    expect(tab("safety")).not.toContain("docker-download");
   });
 
   test('host health separates states and offers an exact copyable repair where it must be run', () => {
-    const html = tab('agent', {brain:{...brain,computer_ssh_alias:'studio-mini'}, computerHostHealth:{host:'studio-mini',ok:false,checks:[{kind:'docker_path',ok:false}]}});
-    expect(html).toContain('data-act="computer-host-check"');
+    const html = computerHostHealthHTML({host:'studio-mini',ok:false,checks:[{kind:'docker_path',ok:false}]});
     expect(html).toContain('data-computer-host-health');
     expect(html).not.toContain('非互動 SSH PATH');
     expect(html).toContain('遠端登入時找不到 Docker');
@@ -836,9 +802,9 @@ describe("電腦操作", () => {
   });
 
   test("the search finds the section by its name in any language", () => {
-    expect(searchSettings("電腦操作").map((hit) => `${hit.pane}:${hit.text}`)).toEqual(["agent:電腦操作"]);
-    expect(searchSettings("computer use").map((hit) => hit.pane)).toEqual(["agent"]);
-    expect(searchSettings("コンピューター").map((hit) => hit.pane)).toEqual(["agent"]);
+    expect(searchSettings("電腦操作").map((hit) => `${hit.pane}:${hit.text}`)).toEqual(["safety:電腦操作"]);
+    expect(searchSettings("computer use").map((hit) => hit.pane)).toEqual(["safety"]);
+    expect(searchSettings("コンピューター").some(hit => hit.pane === "safety")).toBe(true);
   });
 });
 

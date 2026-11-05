@@ -593,6 +593,7 @@ export interface BrainSettings {
   image_model?: string;
   video_model?: string;
   computer_ssh_alias?: string;
+  computer_vm_idle_minutes?: number;
   chief_pinned?: boolean;
   owner_name?: string;
   owner_about?: string;
@@ -1092,7 +1093,7 @@ export type MainPageId = Exclude<PageId, "settings" | "history" | "dictionary">;
 export type DictationTab = "overview" | "history" | "dictionary";
 
 /** The tabs of the settings panel. */
-export type SettingsPane = "general" | "appearance" | "dictation" | "agent" | "connections" | "messaging" | "models" | "usage" | "data" | "about";
+export type SettingsPane = "general" | "appearance" | "dictation" | "agent" | "tools" | "safety" | "connections" | "messaging" | "models" | "usage" | "data" | "about";
 
 /**
  * What the 拉斐爾 page is to put in its composer when it opens, ready to be sent or changed: the
@@ -1105,7 +1106,7 @@ export type CalendarEventFocus = `calendar:${CalendarDate}:${string}`;
 export type CalendarCreate = `calendar-new:${CalendarDate}`;
 /** Calendar on the week of that day, its usual view. */
 export type CalendarWeek = `calendar-week:${CalendarDate}`;
-export type PageArgument = SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}`;
+export type PageArgument = "computer" | SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}`;
 
 /** One of the five pages of the main window. */
 export interface Page {
@@ -1261,6 +1262,6 @@ export interface McpCandidate {
 export interface McpPreview { candidates: McpCandidate[]; rejected: number }
 export interface McpTest { ok: boolean; tools: string[]; error?: string }
 /** Member-owned resources; command templates expand only in the core. */
-export interface MemberSkill { shared?: boolean; source_changed?: boolean | null; id: number; name: string; description: string; enabled: boolean; source: string; plugin?: string; slash_name?: string; provenance?: "learned" | "imported" | "owner"; revision?: string; learned_at?: string | null; updated_at?: string | null }
+export interface MemberSkill { set_id?: number; set_kind?: "skill" | "command"; plugin_version?: string; shared?: boolean; source_changed?: boolean | null; id: number; name: string; description: string; enabled: boolean; source: string; plugin?: string; slash_name?: string; provenance?: "learned" | "imported" | "owner"; revision?: string; learned_at?: string | null; updated_at?: string | null }
 export interface MemberCommand { id: number; name: string; description: string; template: string }
 export interface MemberVoice { id: string; name: string }

@@ -800,6 +800,17 @@ export async function perform(page, step, evidenceDirectory) {
       await element.evaluate((node, position) => node.scrollTo({ top: position === "up" ? Math.max(1, (node.scrollHeight - node.clientHeight) / 2) : node.scrollHeight, behavior: "instant" }), step.position);
       await element.dispose(); break;
     }
+    case "thread-window-earlier": {
+      const scroll = await visible('.mb-chat:not([hidden]) .ra-scroll');
+      await scroll.evaluate(scroll => {
+        scroll.scrollTop = 1;
+        const anchor = scroll.querySelector('.tn[data-id], .tn[data-room-message]');
+        window.__windowAnchor = { node:anchor, top:anchor.getBoundingClientRect().top };
+        scroll.dispatchEvent(new Event('scroll'));
+      });
+      await page.waitForFunction((scroll, expected) => Number(scroll.dataset.windowMounted) === expected, {timeout:6000}, scroll, step.expected ?? 45);
+      await scroll.dispose(); break;
+    }
     case "scroll": { const element = await visible(step.selector); await element.evaluate((element, block) => element.scrollIntoView({ block, inline: "nearest", behavior: "instant" }), step.block ?? "end"); await element.dispose(); break; }
     case "wait-scroll-end": {
       const element = await visible(step.selector);

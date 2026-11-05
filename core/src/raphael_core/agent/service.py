@@ -572,6 +572,8 @@ OWN_CALENDAR_NOTE = (
 )
 # What the model is told when one of Raphael's own tools refuses it, by the kind of the refusal.
 _HARNESS_NOTES = {
+    "primary_private_chat_only": "Only the current primary contact can manage the owner's UI state in the owner's interactive private chat.",
+    "owner_model_request_required": "Only change a model or effort when the owner explicitly asks for that change. A failure does not authorize switching models.",
     "private_chat_only": (
         "This is not for this conversation: a card or a draft belongs to the owner's private chat typed at this computer. "
         "Do not put the mail's text, or anything private, here; say in one short sentence that you will write it in your "
@@ -2006,7 +2008,14 @@ class AgentService:
                 system += FULL_PERMISSION
             if ask.exchange_speakers is not None:
                 system += "\nA colleague, another of the owner's assistants, asks you this for the owner. " + CONSULTED
-            system += LEADERSHIP
+            from ..management import tools_for_request
+            management_tools = tools_for_request(ask.text, member_named=bool(
+                self._team and getattr(self._team, "named_in", lambda _: [])(ask.text)))
+            if self._management_chat(ask) and ask.speaker.is_chief:
+                system += (LEADERSHIP if management_tools else
+                           "\nYou are the current primary contact. Find owner management tools with find_tools when needed. "
+                           "They manage members, folders, group chats, conversations, connections, models and settings. "
+                           "Destructive changes always wait for the owner's approval.")
             user = build_user_message(
                 labelled_lines(ask.exchange_speakers[0], ask.text) if ask.exchange_speakers else ask.text,
                 self._moment(), context.turns, [], ask.language,
@@ -2058,7 +2067,15 @@ class AgentService:
                 attachments=bool(ask.attachments or earlier), speaker=ask.speaker,
                 team=team_tools_for(self._team, ask.speaker, always=True), max_tier=Tier.T3,
                 interactive=True,
+                owner_management=self._management_chat(ask),
+                management_tools=management_tools,
             )
+            from ..management import MANAGEMENT_TOOLS
+            if not self._management_chat(ask):
+                for name in MANAGEMENT_TOOLS:
+                    snapshot.refs.pop(name, None)
+                snapshot.definitions[:] = [item for item in snapshot.definitions
+                                           if item["function"]["name"] not in MANAGEMENT_TOOLS]
             urls = SeenUrls([ask.text, context.summary, *[
                 "\n".join([turn.question, turn.text, turn.detail or "", *turn.messages])
                 for turn in context.turns
@@ -2546,7 +2563,7 @@ class AgentService:
         """The tools a model may be offered now for `ask`, or None when there are none: the plugin
         tools that have a tier (a tool with no tier is never offered) and that the speaker may use,
         and the team tools the request is about (`team.team_tools_for`)."""
-        speaker = RAPHAEL if ask is None else ask.speaker
+        speaker = (self._speaker(0) or RAPHAEL) if ask is None else ask.speaker
         tools = []
         if self._plugins is not None:
             try:
@@ -2562,7 +2579,8 @@ class AgentService:
         """The team tools the request `ask` is about. Never for a request one member handed another
         (it asks nobody in turn). A team that cannot be read offers none."""
         try:
-            return team_tools_for(self._team, ask.speaker, ask.text)
+            tools = team_tools_for(self._team, ask.speaker, ask.text)
+            return [name for name in tools if name != CREATE_MEMBER or self._management_chat(ask)]
         except sqlite3.Error as exc:
             logger.warning("Could not read the members: %s", type(exc).__name__)
             return []
@@ -2671,6 +2689,12 @@ class AgentService:
         automatic: list[PlannedCall] = []
         asking: list[tuple[PlannedCall, Screening]] = []
         for call, screening in zip(calls, screenings):
+            if (call.tool.key in BATCH_TOOLS and self._changes_model(
+                    "member_create" if call.tool.key == CREATE_MEMBER else call.tool.key, call.arguments)
+                    and not self._owner_requested_model(ask.text)):
+                results.append(ToolResult(call.tool.key, False, None, "owner_model_request_required",
+                                          instruction=_HARNESS_NOTES["owner_model_request_required"]))
+                continue
             tier = self._tier_now(call)
             if call.tool.key in BATCH_TOOLS and not ask.nested and (self._gate.ask_first or screening.verdict == ASK):
                 creates = sum(queued.tool.key in ("member_create", "create_member") for queued in ask.admin_pending)
@@ -2682,7 +2706,7 @@ class AgentService:
                 continue
             # The 手動 switch asks for what the door asks for, whatever the screening said: a plugin's tool that only
             # reads passes the screening, and the door would refuse it with no question ever opened (`mode_asks`).
-            if tier is not None and not self._gate.full_permission and needs_yes(
+            if tier is not None and (not self._gate.full_permission or self._gate.firm_confirmation(call.tool.key, call.arguments)) and needs_yes(
                     tier >= Tier.T2 or self._gate.mode_asks(call.tool.key, call.arguments), screening, firm=tier >= Tier.T3):
                 asking.append((call, screening))
             else:
@@ -2774,6 +2798,7 @@ class AgentService:
         with vm_scope(("turn", ask.speaker.id, ask.conversation_id), turn_id=ask.turn_id,
                       private=ask.scope == "private" and not ask.nested and not ask.quick and ask.source in _AT_THIS_COMPUTER,
                       task=self._inflight.get(ask.session_id), language=ask.language,
+                      notice=lambda text: self._message(ask, "reply", text),
                       progress=lambda text: self._message(ask, "progress", text, PREFIXES[ask.language].notice)):
             result = await self._make_call_result(ask, call, approval, ledger, action, steps=steps)
         if self._tool_observer is not None:
@@ -2862,13 +2887,37 @@ class AgentService:
         name, args = call.tool.key, call.arguments
         began = time.perf_counter()
         try:
+            # Authorization comes before screening/approval consumption and is
+            # checked again by MembersService immediately before persistence.
+            from ..management import MANAGEMENT_TOOLS
+            if name in MANAGEMENT_TOOLS:
+                current = self._speaker(ask.speaker.id)
+                if not current or not current.is_chief or not self._management_chat(ask):
+                    raise HarnessToolError("primary_private_chat_only")
             self._gate.check_for(action or Action(name, args), name, args, approval)
             if name in ADMIN_TOOLS:
                 if self._team is None:
                     raise HarnessToolError("unavailable")
                 if name == "member_create" and ask.member_creates >= 10:
                     raise HarnessToolError("member_create_limit")
-                data = await self._team.admin_tool(ask.speaker.id, name, args)
+                from ..management import REGISTRY
+                current = self._speaker(ask.speaker.id)
+                if name != "team_overview" and (not current or not current.is_chief or not self._management_chat(ask)):
+                    raise HarnessToolError("primary_private_chat_only")
+                if self._changes_model(name, args) and not self._owner_requested_model(ask.text):
+                    raise HarnessToolError("owner_model_request_required")
+                if name in REGISTRY and REGISTRY[name].service == "connection":
+                    self._team.authorize_management(ask.speaker.id, name, args,
+                                                    interactive=self._management_chat(ask), approval=approval)
+                    data = await self._connection_tool(ask, name, args)
+                else:
+                    from ..management import ORIGIN_TURN
+                    token = ORIGIN_TURN.set(ask.turn_id)
+                    try:
+                        data = await self._team.admin_tool(ask.speaker.id, name, args,
+                                                          interactive=self._management_chat(ask), approval=approval)
+                    finally:
+                        ORIGIN_TURN.reset(token)
                 if name == "member_create":
                     ask.member_creates += 1
             elif name in ROUTINE_TOOLS:
@@ -2944,7 +2993,7 @@ class AgentService:
         except HarnessToolError as error:
             result = ToolResult(name, False, None, str(error), instruction=_HARNESS_NOTES.get(str(error)))
         except RpcError as error:
-            result = ToolResult(name, False, {"field": (error.data or {}).get("kind", "")}, "bad_arguments")
+            result = ToolResult(name, False, {"field": (error.data or {}).get("kind", "")}, "bad_arguments", instruction=error.message)
         except (ValueError, NotApproved, UnknownTool):
             result = ToolResult(name, False, None, "bad_arguments")
         except Exception as exc:
@@ -2954,6 +3003,31 @@ class AgentService:
         self._gate.record_builtin(name, outcome="ok" if result.ok else "error",
                                   approver="auto" if approval is None else "user")
         return result
+
+    @staticmethod
+    def _management_chat(ask) -> bool:
+        return (ask.scope == "private" and not ask.nested
+                and ask.exchange_speakers is None and ask.source in _AT_THIS_COMPUTER
+                and not ask.background_owner)
+
+    @staticmethod
+    def _changes_model(name, arguments) -> bool:
+        from ..management import resolve
+        item, _ = resolve(name, arguments)
+        if item is None:
+            return False
+        setting = item.setting or ""
+        return (setting.endswith(("_model", "_fallbacks")) or setting in {"quick_effort", "model_favorites"}
+                or name in {"member_create", "member_update"} and bool({"model", "effort"} & arguments.keys()))
+
+    @staticmethod
+    def _owner_requested_model(text) -> bool:
+        # A request must actually mention a model/effort change; provider failures
+        # do not authorize automatic substitution. Keep the same guard on API/CLI.
+        return bool(re.search(r"(?:change|set|switch|use|choose|select|star|favour|favor).{0,80}(?:model|effort|reasoning)|"
+                              r"(?:model|effort|reasoning).{0,80}(?:change|set|switch|use|choose|select)|"
+                              r"(?:模型|推理|思考|お気に入り).{0,40}(?:改|換|用|設|選|調|收藏|お気に入り)|"
+                              r"(?:改|換|用|設|選|調|收藏).{0,40}(?:模型|推理|思考)|モデル|effort=", text or "", re.I))
 
     def _show_page(self, ask: _Ask, name: str, args: Mapping[str, Any]) -> dict:
         if not ask.turn_id or (not ask.background_owner and (ask.scope != "private" or ask.nested or ask.quick or ask.source not in _AT_THIS_COMPUTER)):
@@ -3072,7 +3146,9 @@ class AgentService:
             ask.waiting_apps.append(server.name)
             ask.owner_card_ids = [card["id"]]
             return {"card": "shown", "note": "Review and test the custom MCP card; the task resumes after enabling."}
-        if operation == "disconnect":
+        if operation == "refresh":
+            result = await hub._refresh({"id": connection})
+        elif operation == "disconnect":
             result = await (hub.managed._handler(hub.managed.disconnect, "disconnect")({"id": connection}) if managed else hub._disconnect({"id": connection}))
         elif operation in ("enable", "disable", "tool_enable", "tool_disable"):
             enabled = operation in ("enable", "tool_enable")
@@ -3571,7 +3647,9 @@ class AgentService:
         """A team tool the picking call asked for, made for `ask` (see `team_tool`); a step of
         `steps` (the request's own when none is given), whatever came of it."""
         began = time.perf_counter()
-        if call.tool.key == CREATE_MEMBER and ask.member_creates >= 10:
+        if call.tool.key == CREATE_MEMBER and not self._management_chat(ask):
+            result = ToolResult(CREATE_MEMBER, False, None, "primary_private_chat_only")
+        elif call.tool.key == CREATE_MEMBER and ask.member_creates >= 10:
             result = ToolResult(CREATE_MEMBER, False, None, "member_create_limit")
         else:
             result = await self.team_tool(
@@ -3581,6 +3659,7 @@ class AgentService:
                 language=ask.language,
                 ledger=ledger,
                 session_id=ask.session_id, conversation_id=ask.conversation_id, source_turn_id=ask.turn_id or None, approval=approval, action=action,
+                owner_interactive=self._management_chat(ask),
             )
             if call.tool.key == CREATE_MEMBER and result.ok:
                 ask.member_creates += 1
@@ -3605,6 +3684,7 @@ class AgentService:
         approval: Approval | None = None,
         source_turn_id: int | None = None,
         action: Action | None = None,
+        owner_interactive: bool = False,
     ) -> ToolResult:
         """Make the team tool `name` (`team.ASK_MEMBER`, `team.CREATE_MEMBER`) for `speaker`, through
         the gate, and give what came of it as a tool's result. The fast tier calls it for a call
@@ -3617,8 +3697,10 @@ class AgentService:
         if name not in (*SKILL_TOOLS, "handoff", "work_status", *ROOM_TOOLS) and not speaker.may_ask:
             return ToolResult(name, False, None, "blocked", instruction="This consultation chain is at its depth limit. Answer with what you have and name what is missing; do not ask another colleague in this chain.")
         current = self._speaker(speaker.id)
-        if name in (CREATE_MEMBER, "room_meeting") and (current is None or speaker.depth):
+        if name in (CREATE_MEMBER, "room_meeting") and (current is None or not current.is_chief or speaker.depth):
             return ToolResult(name, False, None, "blocked")
+        if name == CREATE_MEMBER and not owner_interactive:
+            return ToolResult(name, False, None, "primary_private_chat_only")
         try:
             self._gate.check_for(action or Action(name, dict(arguments)), name, arguments, approval)
         except (UnknownTool, NotApproved):
@@ -3682,7 +3764,9 @@ class AgentService:
                               None if text is not None else "not_found", untrusted=True)
         if name == CREATE_MEMBER:
             try:
-                created = await team.admin_tool(speaker.id, "member_create", dict(arguments))
+                # The trusted caller already checked the interactive owner scope;
+                # quick voice creation can precede its first persisted turn.
+                created = await team.admin_tool(speaker.id, "member_create", dict(arguments), interactive=True)
             except RpcError as error:
                 return ToolResult(name, False, {"field": (error.data or {}).get("kind", "")}, "bad_arguments")
             except sqlite3.Error as exc:
@@ -3855,7 +3939,8 @@ class AgentService:
                 chief_before = self._team.speaker(0).name
                 with activity_step("team_admin_batch"):
                     results = await self._team.admin_batch(
-                        followup.ask.speaker.id, operations, drafts=drafts, groups=groups
+                        followup.ask.speaker.id, operations, drafts=drafts, groups=groups,
+                        interactive=self._management_chat(followup.ask),
                     )
             except (RpcError, ValueError, NotApproved, UnknownTool):
                 self._gate.record_unrun("team_admin_batch", outcome="error")
@@ -4671,12 +4756,16 @@ class AgentService:
         return {"conversation": conversation}
 
     async def _delete_turn(self, turn: Turn) -> bool:
-        if turn.status in ("running", "confirm"):
+        from ..management import ORIGIN_TURN
+        origin = self._history.get(ORIGIN_TURN.get()) if ORIGIN_TURN.get() else None
+        own_session = origin is not None and origin.session_id == turn.session_id
+        if turn.status in ("running", "confirm") and not own_session:
             inflight = self._inflight.get(turn.session_id)
             await self._cancel({"session_id": turn.session_id})
             if inflight:
                 await asyncio.gather(inflight, return_exceptions=True)
-        await self._background.cancel_session(turn.session_id)
+        if not own_session:
+            await self._background.cancel_session(turn.session_id)
         self._conversation_of(turn.member_id, turn.conversation_id).clear_summary()
         with self._conn:
             self._conn.execute("DELETE FROM agent_conversation_cli_sessions WHERE conversation_id = ?", (turn.conversation_id,))
@@ -4790,6 +4879,20 @@ class AgentService:
         conversation_id = self.conversations.resolve(member_id, _opt_int(params, "conversation_id"))
         # Every delivery belongs to the conversation that received it, including exchanges.
         exchanges = True
+        after_id = _opt_int(params, "after_id")
+        turn_ids = params.get("turn_ids", [])
+        if not isinstance(turn_ids, list) or len(turn_ids) > 50 or any(type(key) is not int or key <= 0 for key in turn_ids):
+            raise invalid_params("turn_ids must contain at most 50 positive turn IDs")
+        if after_id is not None:
+            if after_id < 0 or before_id is not None or around_id is not None:
+                raise invalid_params("after_id must be nonnegative and cannot combine with before_id or around_id")
+            turns, removed, more, cursor = self._history.changes(after_id, list(dict.fromkeys(turn_ids)), min(limit, 50),
+                member_id=member_id, conversation_id=conversation_id, exchanges=exchanges)
+            questions = getattr(self._background, "owner_questions", None)
+            return {"turns": self._turn_views(turns), "delta": True, "removed_ids": removed, "has_more": more, "next_after_id": cursor,
+                    "pending_questions": questions.in_conversation(conversation_id=conversation_id, member_id=member_id) if questions is not None else []}
+        if turn_ids:
+            raise invalid_params("turn_ids requires after_id")
         turns = self._history.list(limit=limit, before_id=before_id, member_id=member_id,
                                    conversation_id=conversation_id, exchanges=exchanges)
         if around_id is not None:
@@ -4940,18 +5043,23 @@ class AgentService:
     async def _history_clear(self, params: dict) -> dict:
         """Clear the conversations: every thread, with every summary (each member's too), what
         opening taught Raphael and the background tasks."""
+        from ..management import ORIGIN_TURN
+        origin = self._history.get(ORIGIN_TURN.get()) if ORIGIN_TURN.get() else None
         if "member_id" in params:
             member_id = self._member_param(params)
             await self._discard_inbox(member_id=member_id)
             sessions = {row[0] for row in self._conn.execute("SELECT DISTINCT session_id FROM agent_turns WHERE member_id = ?", (member_id,))}
             sessions |= {session for session, owner in self._inflight_members.items() if owner == member_id}
+            if origin is not None:
+                sessions.discard(origin.session_id)
             tasks = [self._inflight[session] for session in sessions if session in self._inflight]
             for session in sessions:
                 self.stop_session(session)
                 if self._computer is not None:
                     self._computer.stop_session(session)
             await asyncio.gather(*tasks, return_exceptions=True)
-            loops = [loop for loop in self._cli_loops if loop.member_id == member_id]
+            loops = [loop for loop in self._cli_loops if loop.member_id == member_id
+                     and (origin is None or loop.conversation_id != origin.conversation_id)]
             await asyncio.gather(*(loop.aclose() for loop in loops))
             self._cli_loops.difference_update(loops)
             self._cli_sessions.clear_member(member_id)
@@ -5286,6 +5394,19 @@ class AgentService:
             ask.exchange_answer = relayed_answer(ask.exchange_speakers[1], text, ask.exchange_owner_sources)
         try:
             cost = max(ledger.total - ask.cost_base, 0.0)
+            if ask.turn_id and self._history.get(ask.turn_id) is None:
+                # The owner approved deleting this chat's records. Keep only a
+                # fresh receipt after the deletion, in a surviving conversation.
+                ask.turn_id = 0
+                ask.recorded_steps = 0
+                ask.recorded_cost = 0
+                if self._speaker(member_id) is None:
+                    ask.speaker = self._speaker(self._team.primary_id()) or RAPHAEL
+                    member_id = ask.speaker.id
+                try:
+                    self.conversations.get(ask.conversation_id, member_id)
+                except RpcError:
+                    ask.conversation_id = self.conversations.main(member_id)
             if ask.turn_id:
                 turn_id = ask.turn_id
                 self._history.resolve(

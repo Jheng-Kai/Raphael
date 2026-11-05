@@ -2,9 +2,29 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  if (variant.raphaelVoice) data.settings.tts_fish_voice = "0123456789abcdef0123456789abcdef";
+  if (variant.computerHost) data.settings.computer_ssh_alias = variant.computerHost;
+
   if (variant.ownerOutputFolder) data.settings.owner_output_folder = "C:\\Owner\\Deliveries";
   if (variant.routineGuard) for (const routine of data.routines.filter(item => item.member_id === 1)) {
     Object.assign(routine, { enabled: false, next_run: null, last_error: "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。" });
+  }
+  if (variant.threadWindow) {
+    const sample = data.windowSample, base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
+    const words = index => index === 5 && variant.windowComposio ? JSON.stringify({tool_slug:"GMAIL_FETCH_EMAILS",successful:true,data:{subject:data.windowSample.needle}})
+      : `${sample.answer}\n\n${sample.paragraph}\n\n${index === 5 ? data.windowSample.needle : ""}\n\n\`\`\`python\nresult = ${index}\n\`\`\``;
+    data.members.forEach(member => { member.unread = false; member.unread_from = null; member.activity = "idle"; });
+    data.turns = data.turns.filter(turn => turn.member_id !== 1);
+    for (let index = 0; index < 150; index++) data.turns.push({ ...base, id:9000+index, session_id:`window-${index}`,
+      created_at_ms:data.now-(150-index)*1000, source:"app", route:"answer", question:`${sample.question} ${index}`, text:words(index), detail:null,
+      status:"done", task:null, steps:[], messages:[], attachments:[], handoffs:[], permissions:[], drafts:[], computers:[], connectors:[], secrets:[], pages:[] });
+    data.turns.find(turn => turn.id === 9149).quote = {text:data.windowSample.needle,author:data.members.find(member=>member.id===1).name};
+    if (variant.threadWindow === "room") {
+      const base = structuredClone(data.messages.find(message => message.room_id === 1));
+      data.messages = Array.from({length:150}, (_,index) => ({...base,id:9000+index,room_id:1,member_id:1,text:words(index),created:data.now-(150-index)*1000,status:"done",kind:"reply",turn:null,turn_id:null}));
+      data.messages[149].reply_reference = {message_id:9005,author_kind:"member",author_member_id:1};
+      data.roomHandoffs = []; data.roomExchanges = [];
+    }
   }
   if (variant.unreadDivider) {
     const base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
@@ -188,6 +208,9 @@ export function installMock(fixture, config = {}, target = window) {
     runningTurn.messages = variant.running === "fresh" ? [] : runningTurn.messages.filter(message => message.kind !== "reply");
     if (variant.running === "fresh") runningTurn.steps = [];
     runningTurn.text = "";
+    if (variant.lowDisk) {
+      runningTurn.messages = [{seq:1,kind:'reply',text:data.lowDiskSample,at_ms:data.now-1000}];
+    }
     if (variant.generatedProgress) {
       runningTurn.question = "請製作辦公室宣傳影片。";
       runningTurn.messages = [{seq:1,kind:"progress",text:"正在製作影片 · 40%",at_ms:data.now - 1000}];
@@ -680,6 +703,11 @@ export function installMock(fixture, config = {}, target = window) {
         // Not a file of the dev server, which would write its own client into the page.
         return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml)}`, title: "輕量後背包", rev: 1, height: 320, source: "html", server: null };
       case "computer.wallpaper": return variant.ownWallpaper ? { image: variant.ownWallpaper } : {};
+      case "computer.lifecycle": {
+        if (p.target !== data.desktop.target || p.host !== data.desktop.host || p.action === 'reset' && p.confirmed !== true) throw new Error('Maintenance confirmation or target missing');
+        data.desktop = { ...data.desktop, state:'running', ready:true, lifecycle:null };
+        return copy(data.desktop);
+      }
       case "computer.viewer_status": return p.check_host ? {host:p.alias,ok:false,checks:[{kind:'ssh',ok:true},{kind:'docker_path',ok:false}]} : data.desktop ?? { state: "absent", ready: false, control: "member" };
       case "computer.viewer_open": {
         if (variant.desktopStarts) data.desktop = { ...data.desktop, state: "running", ready: true };
@@ -722,6 +750,7 @@ export function installMock(fixture, config = {}, target = window) {
         if (desktopSessions.get(p.session)?.held && data.desktop) data.desktop.control = "member";
         desktopSessions.delete(p.session); return {};
       }
+      case "tts.preview": return {ok:true};
       case "settings.get": return { settings: data.settings };
       // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
       case "background.waiting.list": { data.waitingReads = (data.waitingReads ?? 0) + 1; return { waiting: variant.roomQuestion && (!variant.roomQuestionLate || data.waitingReads > 1) ? [{ id: "room-q", member_id: 1, member_name: "小晴", room_id: 1 }] : [] }; }
@@ -807,10 +836,42 @@ export function installMock(fixture, config = {}, target = window) {
         return { member, routine_offer: variant.routineOffer ? {title:"範例摘要",prompt:"整理範例資料。",schedule:{kind:"daily",time:"09:00"}} : null };
       }
       case "members.delete": data.members = data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
-      case "members.skills.list": return { skills: visibleSkills(p), undo: skillUndo.get(skillMember(p))?.revision ?? null,
-        ...(p.discover ? { sources: data.skillSources ?? [] } : {}) };
+      case "members.skills.list": {
+        if (p.marketplace) {
+          const marketplace = structuredClone(data.skillMarketplaceCatalog);
+          if (!marketplace || p.marketplace !== marketplace.repo) throw new Error("Invalid params: unknown synthetic marketplace");
+          data.skillMarketplaces = [...data.skillMarketplaces.filter(m => m.repo !== marketplace.repo), marketplace];
+          for (const set of data.skillSets) {
+            const latest = marketplace.plugins.find(plugin => plugin.name === set.name);
+            if (set.marketplace === marketplace.repo && latest?.version !== set.version) set.source_changed = true;
+          }
+          return { marketplace, sets: data.skillSets, skills: visibleSkills(p) };
+        }
+        return { skills: visibleSkills(p), sets: data.skillSets, undo: skillUndo.get(skillMember(p))?.revision ?? null,
+          ...(p.discover ? { sources: data.skillSources ?? [], marketplaces: data.skillMarketplaces } : {}) };
+      }
       case "members.skills.import": {
-        const source = (data.skillSources ?? []).find(item => item.source === p.source);
+        if (p.plugin || p.marketplace || p.set_id) {
+          if (!p.shared) throw new Error("Invalid params: plugin sets belong to the shared library");
+          const previous = data.skillSets.find(set => set.id === p.set_id);
+          const market = data.skillMarketplaces.find(m => m.repo === (p.marketplace || previous?.marketplace));
+          const plugin = market?.plugins.find(item => item.name === (p.name || previous?.name));
+          const source = data.skillSources.find(item => item.source === p.source && item.kind === "plugin");
+          if (!previous && !source && !plugin?.installable) throw new Error("Invalid params: unknown plugin");
+          const set = { ...(previous ?? source ?? plugin), id: previous?.id ?? nextId(data.skillSets), source: source?.source ?? previous?.source ?? `github:${p.marketplace}/${p.name}`, version: plugin?.version ?? previous?.version ?? source.version,
+            marketplace: market?.repo ?? "", skill_count: 2, command_count: 1, source_changed: false, mcp_servers: source?.mcp_servers ?? previous?.mcp_servers ?? [] };
+          data.skillSets = [...data.skillSets.filter(item => item.id !== set.id), set];
+          const parts = source ? [...source.skills, ...(source.commands ?? [])] : previous ? data.skills.filter(skill => skill.set_id === set.id) : [{name:"每週摘要",description:"整理本週重點與下一步"},{name:"來源核對",description:"核對引用資料與發布日期"},{name:"review",description:"檢視輸入內容",set_kind:"command"}];
+          for (const item of parts) {
+            const existing = data.skills.find(s => s.set_id === set.id && s.name === item.name);
+            const values = {...item, set_id:set.id, set_kind:item.set_kind ?? "skill", plugin:set.name, plugin_version:set.version, source:`plugin:${set.name}`, member_id:-1};
+            if (existing) Object.assign(existing, values);
+            else data.skills.push({...values,id:nextId(data.skills),enabled:true});
+          }
+          notify("MembersChanged", {member_id:0});
+          return {set,skills:visibleSkills({shared:true})};
+        }
+        const source = (data.skillSources ?? []).flatMap(item => [item, ...(item.skills ?? [])]).find(item => item.source === p.source);
         if (!source) throw new Error("Invalid params: choose an installed skill from the local source list");
         const member_id = skillMember(p);
         let skill = data.skills.find(s => s.member_id === member_id && s.source === p.source);
@@ -855,6 +916,14 @@ export function installMock(fixture, config = {}, target = window) {
         return { skill: skillRow(skill) };
       }
       case "members.skills.delete": {
+        if (p.set_id) {
+          if (!p.shared) throw new Error("Invalid params: plugin sets belong to the shared library");
+          const removed = data.skills.filter(s => s.set_id === p.set_id).map(s => s.id);
+          data.skills = data.skills.filter(s => s.set_id !== p.set_id);
+          data.skillSets = data.skillSets.filter(s => s.id !== p.set_id);
+          for (const key of skillGrants.keys()) if (removed.includes(Number(key.split(":")[1]))) skillGrants.delete(key);
+          notify("MembersChanged",{member_id:0}); return {deleted:true};
+        }
         if (!p.shared && data.skills.some(s => s.id === p.id && s.member_id === -1)) throw new Error("Invalid params: edit shared skills in the shared library");
         p = { ...p, member_id: skillMember(p) };
         saveSkills(p.member_id);
@@ -875,6 +944,13 @@ export function installMock(fixture, config = {}, target = window) {
       case "conversations.delete": { const gone = data.conversations.find(item => item.id === p.id); data.turns = data.turns.filter(item => item.conversation_id !== p.id); data.conversations = data.conversations.filter(item => item.id !== p.id); if (gone) mainConversation(gone.member_id); return { deleted: 1 }; }
       case "agent.history.list": {
         const turns = byMember(data.turns, p).filter(turn => p.conversation_id === undefined || turn.conversation_id === p.conversation_id);
+          if (p.after_id !== undefined) {
+            const fresh = turns.filter(turn => turn.id > p.after_id).sort((a,b) => a.id-b.id), limit = Math.min(p.limit ?? 50, 50);
+            const ids = p.turn_ids ?? [], changed = turns.filter(turn => ids.includes(turn.id));
+            return { turns: [...new Map([...fresh.slice(0,limit), ...changed].map(turn => [turn.id,turn])).values()].sort((a,b) => b.id-a.id), delta: true,
+              has_more: fresh.length > limit, next_after_id: fresh.slice(0,limit).at(-1)?.id ?? p.after_id, removed_ids: ids.filter(id => !turns.some(turn => turn.id === id)),
+              pending_questions: turns.flatMap(turn => turn.owner_questions ?? []).filter(question => question.kind === "ask_owner" && question.state === "asked") };
+          }
         return { turns: turns.filter(turn=>!p.before_id||turn.id<p.before_id).sort((a,b)=>b.id-a.id).slice(0,p.limit??50), pending_questions: turns.flatMap(turn => turn.owner_questions ?? []).filter(question => question.kind === "ask_owner" && question.state === "asked") };
       }
       // What the owner typed, newest first (the core's rule: typed turns of the private conversations, repeats in a row once); a scene may state it.

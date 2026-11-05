@@ -4,7 +4,8 @@ A member is not a second assistant with paths of its own. It is a parameter of t
 the same router, the same answer, the same gate and tiers, the same background worker, given a
 `Speaker` that says whose persona speaks (`name`, `role`, `personality` and work `instructions`),
 which model answers (`model`, "" for the answer model) and whose conversation and memory are read
-(`id`). Every speaker has the same capabilities under the same safety gate. Stored `tools` lists
+(`id`). Every speaker shares work capabilities under the same safety gate; owner management
+belongs to the live primary contact in an interactive owner chat. Stored `tools` lists
 are retained for compatibility and do not restrict tools. Raphael is the speaker with id 0.
 
 `depth` is how the speaker was reached, and `chain` who asked on the way. 0 is the owner (a message
@@ -105,4 +106,6 @@ class Speaker:
         return replace(self, depth=asker.depth + 1, chain=asker.chain | {asker.id})
 
 
-RAPHAEL = Speaker(capabilities=frozenset({"chief"}))
+# Identity alone grants no management authority. Live callers resolve the primary
+# capability from MembersService.speaker and the store's current primary_id.
+RAPHAEL = Speaker()

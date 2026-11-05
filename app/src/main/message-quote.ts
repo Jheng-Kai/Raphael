@@ -5,8 +5,9 @@ import { esc, ico } from "./ui";
 export const QUOTE_MAX_CHARS = 20_000;
 
 /** The same bounded visual excerpt in a sent bubble and in its editable draft. */
-export function quoteHTML(quote: MessageQuote): string {
-  return `<span class="message-quote"><span class="quote-author">${esc(quote.author)}</span><span class="quote-text">${esc(quote.text)}</span></span>`;
+export function quoteHTML(quote: MessageQuote, jump = false): string {
+  const tag = jump ? 'button type="button" data-act="jump-quote"' : "span";
+  return `<${tag} class="message-quote"><span class="quote-author">${esc(quote.author)}</span><span class="quote-text">${esc(quote.text)}</span></${jump ? "button" : "span"}>`;
 }
 
 /** A selection can quote exactly one message; toolbar/composer selections are never eligible. */
@@ -25,6 +26,9 @@ export function selectionQuote(options: {
   const messageOf = (node: Node | null): HTMLElement | null =>
     (node instanceof Element ? node : node?.parentElement)?.closest<HTMLElement>(".bubble, .message-text") ?? null;
   const update = (): void => {
+    // Typing changes a field's selection every key. It cannot quote a message, and querying it can force layout.
+    const focused = document.activeElement;
+    if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement || (focused as HTMLElement | null)?.isContentEditable) { hide(); return; }
     const selection = document.getSelection();
     if (!options.active() || !selection || selection.isCollapsed || selection.rangeCount !== 1) { hide(); return; }
     const message = messageOf(selection.anchorNode);

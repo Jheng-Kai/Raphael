@@ -94,7 +94,8 @@ async def test_a_members_task_runs_as_the_member_and_asks_raphael_with_the_team_
     assert "background worker" not in system
     # Stored member tool lists no longer limit capabilities.
     offered = {t["function"]["name"] for t in first["tools"]}
-    assert {"weather", "web_search", "web_read", "local_time", "ask_member", "create_member"} <= offered
+    assert {"weather", "web_search", "web_read", "local_time", "ask_member"} <= offered
+    assert "create_member" not in offered
     assert team.asked == [(MEMBER.id, "ask_member", {"member": "拉斐爾", "request": "主人住哪裡？"}, "zh-TW", "s1")]
     # Its report is in its thread, plain, and never said on the overlay.
     assert rig.reports() == []
@@ -135,7 +136,8 @@ async def test_raphaels_task_is_offered_the_team_tools_when_there_is_a_team(make
     rig.submit()
     await rig.wait_for_reports()
     names = [t["function"]["name"] for t in rig.client.chat_calls[0]["tools"]]
-    assert {"ask_member", "create_member"} <= set(names)
+    assert "ask_member" in names
+    assert "create_member" not in names
 
 
 async def test_a_deleted_members_tasks_go_with_it(make_rig):

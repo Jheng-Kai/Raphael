@@ -3,7 +3,7 @@ import { routineRunState, runStatusWords, testRoutine, watchRoutineRuns } from "
 import type { RoutineRun } from "./types";
 import { detectedTimezone, zonedTime } from "./timezones";
 import * as api from "./api";
-import { describeError } from "./format";
+import { dayLabel, describeError, formatClock } from "./format";
 import { t } from "./i18n";
 import { openDialog, confirmDelete, type Dialog } from "./member-dialogs";
 import { dayName, faceHTML, HOUR_STEPS, isTime, ROUTINE_TITLE_MAX, ROUTINE_PROMPT_MAX, routineSentenceHTML, routineStatus } from "./members";
@@ -79,7 +79,9 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
   function runBody(): string {
     if (!routine) return "";
     const state = routineRunState(routine.id);
-    return `<section class="au-field au-test"><div class="au-chips">${btn(esc(t(state.running ? "routine.testing" : "routine.test")), "sm", ` data-dlg="test"${state.running ? ' disabled aria-busy="true"' : ""}`)}</div><p class="note">${esc(t("routine.testHelp"))}</p><p role="${state.reason ? "alert" : "status"}" class="au-test-status">${esc(state.reason || (state.run ? `${runStatusWords(state.run.status)}${state.run.summary ? ` · ${state.run.summary}` : ""}` : ""))}</p></section><section class="au-field au-run-history"><h3>${esc(t("routine.history"))}</h3>${historyError ? `<p role="alert">${esc(historyError)}</p>` : history.length ? history.map(run => `<p data-run-status="${esc(run.status)}"><strong>${esc(runStatusWords(run.status))}</strong> · ${esc(new Date(run.started).toLocaleString())}${run.summary ? `<br>${esc(run.summary)}` : ""}</p>`).join("") : `<p class="note">${esc(t("routine.noRuns"))}</p>`}</section>`;
+    const now = Date.now();
+    const runTime = (run: RoutineRun): string => `${dayLabel(run.started, now)} ${formatClock(run.started)}`;
+    return `<section class="au-field au-test"><div class="au-chips">${btn(esc(t(state.running ? "routine.testing" : "routine.test")), "sm", ` data-dlg="test"${state.running ? ' disabled aria-busy="true"' : ""}`)}</div><p class="note">${esc(t("routine.testHelp"))}</p><p role="${state.reason ? "alert" : "status"}" class="au-test-status">${esc(state.reason || (state.run ? `${runStatusWords(state.run.status)} · ${runTime(state.run)}${state.run.summary ? ` · ${state.run.summary}` : ""}` : ""))}</p></section><section class="au-field au-run-history"><h3>${esc(t("routine.history"))}</h3>${historyError ? `<p role="alert">${esc(historyError)}</p>` : history.length ? history.map(run => `<p data-run-status="${esc(run.status)}"><strong>${esc(runStatusWords(run.status))}</strong> · ${esc(runTime(run))}${run.summary ? `<br>${esc(run.summary)}` : ""}</p>`).join("") : `<p class="note">${esc(t("routine.noRuns"))}</p>`}</section>`;
   }
   async function loadHistory(): Promise<void> {
     if (!routine) return;

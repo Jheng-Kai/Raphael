@@ -2,6 +2,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { ownerQuestionBring } from "./api";
 import { mountPendingQuestions } from "./pending-questions";
+import { preserveRichScroll } from "./message-rich";
 import { ownerQuestionHTML } from "./permission-card";
 import type { OwnerQuestion } from "./types";
 
@@ -23,6 +24,16 @@ function setup(questions = [question]) {
   return { scroll, thread, changed, position(value: number) { top = value; scroll.dispatchEvent(new Event("scroll")); } };
 }
 
+test("ordinary reply mutations do not measure an empty pending-question viewport", async () => {
+  const { scroll, thread } = setup([]);
+  const measured = vi.mocked(scroll.getBoundingClientRect);
+  measured.mockClear();
+  for (let index = 0; index < 20; index++) thread.append(document.createElement("li"));
+  await new Promise(requestAnimationFrame);
+  await new Promise(requestAnimationFrame);
+  expect(measured).not.toHaveBeenCalled();
+});
+
 test("only pending off-screen questions float; visible and answered cards do not", async () => {
   const view = setup();
   const row = document.querySelector<HTMLElement>(".pending-questions")!;
@@ -41,8 +52,10 @@ test("only pending off-screen questions float; visible and answered cards do not
 test("one press brings once, refreshes history and scrolls to the moved card", async () => {
   const view = setup(); view.position(-200);
   const card = view.thread.querySelector<HTMLElement>("[data-owner-question]")!;
-  card.scrollIntoView = vi.fn();
-  view.changed.mockImplementation(async () => { card.dataset.ownerTurn = "8"; });
+  card.scrollIntoView = vi.fn(() => { view.scroll.scrollTop = 20; });
+  view.changed.mockImplementation(async () => {
+    preserveRichScroll(view.scroll, () => { card.dataset.ownerTurn = "8"; });
+  });
   await vi.waitFor(() => expect(document.querySelector<HTMLElement>(".pending-questions")!.hidden).toBe(false));
   document.querySelector<HTMLButtonElement>(".pending-question")!.click();
   document.querySelector<HTMLButtonElement>(".pending-question")!.click();
@@ -50,6 +63,8 @@ test("one press brings once, refreshes history and scrolls to the moved card", a
   expect(ownerQuestionBring).toHaveBeenCalledExactlyOnceWith("day");
   expect(view.changed).toHaveBeenCalledOnce();
   expect(document.activeElement).toBe(card);
+  await new Promise(requestAnimationFrame);
+  expect(view.scroll.scrollTop).toBe(20);
 });
 
 test("several questions share a counted row and a small list", async () => {
