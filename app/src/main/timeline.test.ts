@@ -173,19 +173,22 @@ test.each(["zh-TW", "en", "ja"] as const)("completed work preserves the exact mi
   }
 });
 
-test("a meeting the turn opened stays one line in the conversation while routine events fold into the work", () => {
+test("a meeting opened and a skill learned stay one line each in the conversation while routine events fold into the work", () => {
   setLocale("zh-TW");
   const item = turn(1, {
     messages: [
       { seq: 1, kind: "event", text: JSON.stringify({ type: "meeting", room_id: 4, name: "Sample room" }), at_ms: T0 },
       { seq: 2, kind: "event", text: JSON.stringify({ type: "routine", action: "created", id: 7, name: "Sample routine" }), at_ms: T0 },
-      { seq: 3, kind: "reply", text: "Done.", at_ms: T0 },
+      { seq: 3, kind: "event", text: JSON.stringify({ type: "skill_learned", name: "sample-skill" }), at_ms: T0 },
+      { seq: 4, kind: "reply", text: "Done.", at_ms: T0 },
     ],
   });
   const root = document.createElement("div"); root.innerHTML = turnHTML(item, emptyTimelineState(), false, LOOK);
   const meeting = root.querySelector('[data-meeting-room="4"]')!;
   expect(meeting.closest(".work-section")).toBeNull();
   expect(meeting.textContent).toContain("Sample room");
+  const learned = [...root.querySelectorAll(".conversation-event-line")].find(line => line.textContent?.includes("sample-skill"));
+  expect(learned?.closest(".work-section")).toBeFalsy();
   expect(root.querySelector('[data-routine="7"]')?.closest(".work-body")).not.toBeNull();
 });
 

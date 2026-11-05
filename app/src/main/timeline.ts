@@ -900,10 +900,11 @@ function turnEventsHTML(turn: AgentTurn, look: TurnLook, said: boolean): string 
 }
 
 /**
- * `meetings` picks the meetings this turn opened: a meeting is an exchange with colleagues, kept as one
- * line in the conversation (2026-11-05); every other public event is work and folds into the reply.
+ * `conversation` picks the lines that stay in the conversation: a meeting this turn opened (an exchange
+ * with colleagues, one line since 2026-11-05) and a skill the member learned (it changes what the member
+ * does next). Every other public event is work and folds into the reply.
  */
-function publicEventsHTML(turn: AgentTurn, meetings: boolean): Map<number, string> {
+function publicEventsHTML(turn: AgentTurn, conversation: boolean): Map<number, string> {
   const labels = {
     "routine.created": "event.routine.created", "routine.updated": "event.routine.updated", "routine.deleted": "event.routine.deleted",
     "calendar.created": "event.calendar.created", "calendar.updated": "event.calendar.updated", "calendar.deleted": "event.calendar.deleted",
@@ -918,7 +919,7 @@ function publicEventsHTML(turn: AgentTurn, meetings: boolean): Map<number, strin
     if (plainLine(message.text) === plainLine(turn.text) || turn.messages?.some(reply => reply.kind === "reply" && plainLine(reply.text) === plainLine(message.text))) continue;
     const known = ["routine", "calendar"].includes(event?.type ?? "") && ["created", "updated", "deleted"].includes(event?.action ?? "") && typeof event.name === "string" && Number.isSafeInteger(event.id) && event.id! > 0;
     const meeting = meetingEvent(message.text), skill = learnedSkillEvent(message.text);
-    if (!!meeting !== meetings) continue;
+    if ((!!meeting || !!skill) !== conversation) continue;
     const kind = known ? `${event.type}.${event.action}` : meeting ? "meeting" : skill ? "skill" : `notice:${plainLine(message.text)}`;
     const words = known ? eventLineHTML(t(labels[`${event.type}.${event.action}` as keyof typeof labels], {p0: NAME}), ico(event.type === "routine" ? "clock" : "calendar"), event.name!) : meeting ? eventLineHTML(t("rooms.meetingOpened", {p0: NAME}), ico("chat"), meeting.name) : skill ? eventLineHTML(t("skills.learnedNotice", {p0: NAME}), ico("check"), skill) : `<span class="sys event-line">${esc(plainLine(message.text.trim().startsWith("{") || message.text.trim().startsWith("[") ? t("event.changed") : message.text))}</span>`;
     const attrs = meeting ? `data-meeting-room="${meeting.room_id}"` : event?.type === "routine" ? `data-act="open-routine" data-routine="${event.id}"${Number.isSafeInteger(event.member_id) && event.member_id! >= 0 ? ` data-routine-member="${event.member_id}"` : ""}` : `data-act="open-calendar-event" data-event="${event?.id}" data-date="${esc(event?.date ?? "")}"`;
@@ -972,7 +973,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
         bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))) + reactionRowHTML(turn.reactions?.owner) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "queued" || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit", true, "", turn.status === "queued") + `</div>` +
         `</div>`
       : "") +
-    turnEventsHTML(turn, look, said) + mailHandedLinesHTML(turn, look) + [...publicEventsHTML(turn, true).values()].join("") +
+    turnEventsHTML(turn, look, said) + mailHandedLinesHTML(turn, look) +
     (turn.route === "owner_input" || turn.status === "queued" ? "" : `<div class="ra${isBotRename(turn) ? " is-system-result" : ""}">` +
     `<div class="ra-body">` +
     // A question already answered came before the answer: it reads in that order, under the work and above the reply.
@@ -987,7 +988,9 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     (turn.status === "confirm" ? `<div class="turn-question" data-question-turn="${id}"></div>` : "") +
     (turn.task?.state === "done" ? `<div data-task-result-slot="${id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") +
     (!look.deferPresence && (live || waitingForOwner || waitsAtCard(turn) || revealing || turn.task?.state === "waiting" || turn.status === "confirm") ? livePresenceHTML(look, latestProgress(turn), live || revealing) : "") +
-    `</div></div>`) + `</li>`
+    `</div></div>`) +
+    // What the reply led to (a meeting opened, a skill learned) follows it as one quiet line.
+    [...publicEventsHTML(turn, true).values()].join("") + `</li>`
   );
 }
 
