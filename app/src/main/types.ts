@@ -289,6 +289,9 @@ export interface MediaPayload {
 /** A turn of the conversation with Raphael (`agent.history.list`, newest first). */
 export interface AgentTurn {
   reactions?: Record<string, string[]>;
+  voice_call_id?: string;
+  voice_call_summary_id?: number;
+  voice_call?: import("./voice-chat").VoiceCall;
   voice_memo?: boolean;
   voice_memo_state?: "playing" | "paused" | "done";
   routine?: Pick<Routine, "id" | "schedule" | "when" | "app_name">;

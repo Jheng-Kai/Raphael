@@ -58,10 +58,10 @@ export function missingText(value: Missing): string {
   return t(key);
 }
 
-export function missingHTML(value: Missing): string {
+export function missingHTML(value: Missing, text = missingText(value)): string {
   const repair = value.repair && repairs.has(value.repair) ? value.repair : null;
   const resource = value.requirement === "image_generation" ? "image" : value.requirement === "video_generation" ? "video" : value.resource;
-  return `<div class="missing-note" role="status"><span>${esc(missingText(value))}</span>` +
+  return `<div class="missing-note" role="status"><span>${esc(text)}</span>` +
     (repair ? btn(esc(t("missing.open")), "sm", ` data-missing-repair="${esc(repair)}" data-missing-resource="${esc(resource)}"`) : "") + `</div>`;
 }
 

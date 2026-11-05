@@ -542,6 +542,12 @@ const ALLOWED_METHODS: &[&str] = &[
     "quota.list",
     "agent.speech.status",
     "agent.speak",
+    "voice_chat.start",
+    "voice_chat.status",
+    "voice_chat.mute",
+    "voice_chat.settings",
+    "voice_chat.end",
+    "voice_chat.feedback",
     "agent.react",
     "members.create",
     "members.update",
@@ -2545,6 +2551,16 @@ mod tests {
         assert!(
             !is_allowed_method("dictation.start") && !is_allowed_method("brain.finalize_dictation")
         );
+    }
+
+    #[test]
+    fn member_voice_calls_have_only_explicit_owner_methods() {
+        for method in ["start", "status", "mute", "settings", "end", "feedback"] {
+            assert!(is_allowed_method(&format!("voice_chat.{method}")));
+        }
+        for method in ["voice_chat", "voice_chat.record", "voice_chat.start.extra"] {
+            assert!(!is_allowed_method(method));
+        }
     }
 
     #[test]

@@ -32,6 +32,7 @@ export const journeys = [
   { name: "slime-sharp", description: "Twelve slimes in the real sidebar: moving, each paints the pixels of its pose held still, and what they cost while idle" },
   { name: "locale-sweep", description: "Switch every locale and visit main pages and settings" },
   { name: "voice-conversation", description: "Speak into a newly created conversation and inspect persistence" },
+  { name: "voice-call", description: "Real shell admission, empty-member entry, draft guard and missing-voice repair without paid speech" },
   { name: "voice-keys", description: "The real worker: after the composer's microphone the dictation key works during the answer, one Esc ends it, the recognising light shows, and a slow brain at high depth finishes" },
   { name: "long-think", description: "The real core: a model that thinks past the old 60 second deadline finishes its turn, and the answer reaches the window" },
   { name: "every-source", description: "One real turn on every signed-in CLI: Claude Code, Codex, Antigravity, with Claude's models as the CLI lists them" },
@@ -1585,6 +1586,27 @@ if (!pillWindow || !(pillWindow.style & 0x08000000) || !pillWindow.rounded) thro
     result.afterExpiry = await context.windows();
     if (!(result.afterExpiry.windows.find(window => window.title === "Raphael learned word").style & 0x20)) throw new Error("Expired learned window is not click-through");
     await capture("learned-expired");
+  } else if (name === "voice-call") {
+    // A new isolated profile deliberately has no voice key; never borrow the owner's key.
+    const { member } = await context.rpc("members.create", { name: "Voice member", role: "Assistant" });
+    const conversation = await newConversation(context, member.id);
+    result.expectedConversation = conversation;
+    await wait(page, '.cmp-voice[data-voice-call-start="true"]');
+    await capture("empty-member-entry");
+    await type(page, ".composer .cmp-input", "Keep this draft");
+    await page.waitForFunction(() => document.querySelector('.cmp-voice')?.dataset.voiceCallStart === "false");
+    await capture("draft-keeps-send");
+    await page.$eval('.cmp-input', input => { input.value = ""; input.dispatchEvent(new Event("input", {bubbles:true})); });
+    await wait(page, '.cmp-voice[data-voice-call-start="true"]');
+    await click(page, '.cmp-voice[data-voice-call-start="true"]');
+    await wait(page, '.vc-failure [data-missing-repair="voice"]');
+    result.status = await context.rpc("voice_chat.status", {});
+    result.stored = await snapshot();
+    if (result.status.call || result.stored.voice_calls.length) throw new Error("Missing voice must not admit a native call");
+    await capture("voice-unavailable");
+    await click(page, '.vc-failure [data-missing-repair="voice"]');
+    await wait(page, '#svc-key-fish');
+    await capture("existing-repair-settings");
   } else if (name === "voice-conversation") {
     const conversation = await newConversation(context);
     const before = new Set((await snapshot()).agent_turns.map(row => row.id));
