@@ -216,11 +216,26 @@ def test_migration_62_keeps_rooms_and_existing_shared_grants(monkeypatch, tmp_pa
         identifier = conn.execute("SELECT id FROM member_skills").fetchone()[0]
         conn.execute("INSERT INTO member_skill_grants VALUES (0,?,0)", (identifier,))
     conn.close()
-    reopened = db.connect(path)
+    with monkeypatch.context() as migration:
+        migration.setattr(db, "LATEST_VERSION", 62)
+        reopened = db.connect(path)
     assert reopened.execute("PRAGMA user_version").fetchone()[0] == 62
     assert tuple(reopened.execute("SELECT member_id,skill_id,enabled FROM member_skill_grants").fetchone()) == (0, identifier, 0)
     assert reopened.execute("SELECT name FROM sqlite_master WHERE name='room_exchange_turns'").fetchone()
+    assert reopened.execute("SELECT name FROM sqlite_master WHERE name='skill_sets'").fetchone()
+    assert reopened.execute("SELECT name FROM sqlite_master WHERE name='skill_marketplaces'").fetchone()
+    steps = []
+    reopened.set_trace_callback(lambda sql: steps.append(int(sql.strip().rstrip(';').split('=')[1]))
+                                if sql.strip().startswith('PRAGMA user_version =') else None)
     db.migrate(reopened)
+    assert steps == list(range(63, db.LATEST_VERSION + 1))
+    assert reopened.execute("PRAGMA user_version").fetchone()[0] == db.LATEST_VERSION
+    assert tuple(reopened.execute("SELECT member_id,skill_id,enabled FROM member_skill_grants").fetchone()) == (0, identifier, 0)
+    assert reopened.execute("SELECT name FROM sqlite_master WHERE name='room_exchange_turns'").fetchone()
+    assert reopened.execute("SELECT name FROM sqlite_master WHERE name='vault_entries'").fetchone()
+    assert reopened.execute("SELECT name FROM sqlite_master WHERE name='message_reactions'").fetchone()
+    db.migrate(reopened)
+    assert steps == list(range(63, db.LATEST_VERSION + 1))
     reopened.close()
 
 

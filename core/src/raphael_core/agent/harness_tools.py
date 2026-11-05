@@ -181,4 +181,4 @@ def definitions_for(speaker):
 
 def tool(name: str) -> PluginTool:
     item = DEFINITIONS[name]
-    return PluginTool(key=name, server="Raphael", name=name, description=item["description"], schema=item["parameters"], tier=COMMANDS[name].tier if name in COMMANDS else TIERS[name])
+    return PluginTool(key=name, server="Raphael", name=name, description=item["description"], schema=item["parameters"], tier=COMMANDS[name].tier if name in COMMANDS else TIERS[name], deferred=name == SLACK_DRAFT)

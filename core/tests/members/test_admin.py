@@ -101,12 +101,11 @@ async def test_cli_turn_applies_or_denies_the_whole_batch_through_http_mcp(setup
     assert not any("{" in item["text"] for item in turn["messages"] if item["kind"] == "progress")
 
 
-@pytest.mark.parametrize("tool", ["member_create", "create_member"])
-async def test_ask_mode_previews_the_complete_change_and_resumes_the_same_turn(setup, client, tool):
+async def test_ask_mode_previews_the_complete_change_and_resumes_the_same_turn(setup, client):
     rig, team = setup
     rig.settings.set("action_mode", "ask")
     instructions = "Preserve all details. " * 50
-    client.chats = [chat("Creating COO.", (tool, {"name": "COO", "role": "Operations", "instructions": instructions, "group": "Company"})),
+    client.chats = [chat("Creating COO.", ("member_create", {"name": "COO", "role": "Operations", "instructions": instructions, "group": "Company"})),
                     live_said("Draft ready."), live_said("Created COO: Operations.")]
     result = await typed(rig, "Create company members COO", 0, language="en")
     assert result["status"] == "confirm"
@@ -172,7 +171,7 @@ async def test_nonprimary_keeps_work_tools_and_cannot_manage_the_team(setup, cli
 async def test_admin_turn_enforces_ten_creates_and_leaves_faces_to_the_app(setup, client, mode):
     rig, team = setup
     rig.settings.set("action_mode", mode)
-    calls = chat("Creating the team.", *(("member_create" if i % 2 else "create_member", {"name": f"Member {i}", "role": "RD"}) for i in range(11)))
+    calls = chat("Creating the team.", *(("member_create", {"name": f"Member {i}", "role": "RD"}) for i in range(11)))
     client.chats = [calls, live_said("Draft ready."), live_said("Created ten members.")] if mode == "ask" else [calls, live_said("Created ten members.")]
     asked = await typed(rig, "Create eleven members", 0, language="en")
     if mode == "ask":
@@ -184,11 +183,11 @@ async def test_admin_turn_enforces_ten_creates_and_leaves_faces_to_the_app(setup
     assert "member_create_limit" in client.chat_calls[1]["messages"][-1]["content"]
 
 
-async def test_legacy_create_reports_invalid_fields_without_failing_the_turn(setup, client):
+async def test_member_create_reports_invalid_fields_without_failing_the_turn(setup, client):
     rig, team = setup
     member(team, name="COO")
     rig.settings.set("action_mode", "ask")
-    client.chats = [chat("Creating COO.", ("create_member", {"name": "COO", "role": "Operations"})), live_said("COO already exists.")]
+    client.chats = [chat("Creating COO.", ("member_create", {"name": "COO", "role": "Operations"})), live_said("COO already exists.")]
     result = await typed(rig, "Create company members COO", 0, language="en")
     assert result["status"] == "confirm"
     done = await rig.confirm(result["confirm"]["id"])
@@ -202,12 +201,24 @@ async def test_in_automatic_mode_an_invalid_create_is_told_to_the_model_which_go
     member(team, name="COO")
     rig.settings.set("action_mode", "direct")
     # The last tool failed, so the loop asks the model once more before it accepts the reply.
-    client.chats = [chat("Creating COO.", ("create_member", {"name": "COO", "role": "Operations"})),
+    client.chats = [chat("Creating COO.", ("member_create", {"name": "COO", "role": "Operations"})),
                     live_said("COO already exists."), live_said("COO already exists.")]
     result = await typed(rig, "Create company members COO", 0, language="en")
     assert result["status"] == "done" and result["text"] == "COO already exists."
     assert len((await rig.call("members.list", {}))["members"]) == 2
-    assert "bad_arguments" in client.chat_calls[1]["messages"][-1]["content"]
+    failure = client.chat_calls[1]["messages"][-1]["content"]
+    assert 'tool="member_create" status="error"' in failure
+    assert "another member has that name" in failure
+
+
+async def test_saved_legacy_create_batch_keeps_its_execution_path(setup):
+    rig, team = setup
+    results = await team.members.admin_batch(0, [{"name": "create_member", "arguments": {
+        "name": "Legacy", "role": "Writer", "personality": "Patient", "instructions": "Write clearly.",
+    }}], interactive=True)
+    created = team.members.find("Legacy")
+    assert len(results) == 1 and created is not None
+    assert created.personality == "Patient" and created.instructions == "Write clearly."
 
 
 async def test_admin_turn_updates_groups_profiles_routines_and_commands_and_emits_changes(setup, client):

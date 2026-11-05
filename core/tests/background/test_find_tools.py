@@ -76,9 +76,11 @@ def test_a_task_is_shown_the_tools_that_fit_its_words_and_can_find_the_rest():
     assert "find_tools" in [d["function"]["name"] for d in snapshot.definitions]
 
 
-def test_a_few_tools_are_all_shown_and_there_is_nothing_to_find():
+def test_a_few_plugin_tools_are_all_shown_and_shared_work_remains_discoverable():
     snapshot = take_snapshot(Hub(notion_tools(MAX_OFFERED)), QUESTION)
-    assert len(mcp_names(snapshot)) == MAX_OFFERED and "find_tools" not in snapshot.refs
+    assert len(mcp_names(snapshot)) == MAX_OFFERED and not snapshot.hidden()
+    assert "slack_draft" not in snapshot.refs
+    assert snapshot.find("slack_draft")[0]
 
 
 async def test_the_model_chooses_the_tools_of_a_task_and_is_paid_for(conn):

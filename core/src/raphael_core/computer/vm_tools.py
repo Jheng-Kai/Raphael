@@ -303,7 +303,8 @@ class VmTools:
             description = definition["description"]
             if name in DRIVER_TOOLS and not description.startswith(VM_CONTRACT):
                 description = VM_CONTRACT + " " + description
-            self.tools[key] = PluginTool(key, "computer", name, description, definition["parameters"], Tier.T3 if name == "fill_card" else Tier.T0, pinned=True)
+            self.tools[key] = PluginTool(key, "computer", name, description, definition["parameters"], Tier.T3 if name == "fill_card" else Tier.T0, pinned=True,
+                                         deferred=name in ("vault_entries", "fill_contact", "fill_card"))
             self.routes[key] = target
             self.schemas[key] = definition.get("validation", definition["parameters"])
             keys.append(key)

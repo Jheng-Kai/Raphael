@@ -92,5 +92,7 @@ def test_primary_native_offer_stays_bounded_with_all_management_areas():
     from raphael_core.agent.plugins import MAX_OFFERED
     assert "member_create" in snapshot.refs
     assert "create_member" not in snapshot.refs
+    assert "slack_draft" not in snapshot.refs
+    snapshot.find("slack_draft")
     assert "slack_draft" in snapshot.refs
     assert len(snapshot.definitions) + MAX_OFFERED + 1 <= 128  # Reserve plugins and Claude's approval tool.

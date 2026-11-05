@@ -205,7 +205,7 @@ async def test_team_creation_keeps_personality_separate_from_work_instructions(s
     rig, team = setup
     rig.settings.set("action_mode", "ask")
     client.chats = [
-        chat("", ("create_member", {"name": "Teacher", "role": "Japanese", "personality": "Strict, patient.", "instructions": "Teach N1."})),
+        chat("", ("member_create", {"name": "Teacher", "role": "Japanese", "personality": "Strict, patient.", "instructions": "Teach N1."})),
         live_said("Draft ready."), live_said("Added."),
     ]
     asked = await typed(rig, "Add a member who is a strict but patient Japanese teacher.", 0)
@@ -214,5 +214,5 @@ async def test_team_creation_keeps_personality_separate_from_work_instructions(s
     created = team.members.find("Teacher")
     assert created is not None and created.personality == "Strict, patient."
     assert created.instructions == "Teach N1."
-    definition = next(t for t in client.chat_calls[0]["tools"] if t["function"]["name"] == "create_member")
+    definition = next(t for t in client.chat_calls[0]["tools"] if t["function"]["name"] == "member_create")
     assert "personality" in definition["function"]["parameters"]["properties"]
