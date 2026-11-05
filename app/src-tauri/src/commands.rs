@@ -872,20 +872,38 @@ pub async fn save_usage_csv(app: AppHandle, webview: Webview, csv: String) -> Re
 
 /// Return only the folder explicitly chosen by the owner; cancelling changes nothing.
 #[tauri::command]
-pub async fn pick_output_folder(app: AppHandle, webview: Webview) -> Result<Option<String>, String> {
+pub async fn pick_output_folder(
+    app: AppHandle,
+    webview: Webview,
+) -> Result<Option<String>, String> {
     require_main(&webview)?;
     let window = webview.window();
     tauri::async_runtime::spawn_blocking(move || {
         use tauri_plugin_dialog::DialogExt;
-        app.dialog().file().set_parent(&window).blocking_pick_folder()
-            .map(|chosen| chosen.into_path().map(|path| path.to_string_lossy().into_owned())
-                 .map_err(|_| "invalid folder location".to_owned())).transpose()
-    }).await.map_err(|err| format!("a background task failed: {err}"))?
+        app.dialog()
+            .file()
+            .set_parent(&window)
+            .blocking_pick_folder()
+            .map(|chosen| {
+                chosen
+                    .into_path()
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .map_err(|_| "invalid folder location".to_owned())
+            })
+            .transpose()
+    })
+    .await
+    .map_err(|err| format!("a background task failed: {err}"))?
 }
 
 /// Member recipes cross only an owner-selected file, never a caller-supplied path.
 #[tauri::command]
-pub async fn member_template_file(app: AppHandle, webview: Webview, action: String, text: String) -> Result<Option<String>, String> {
+pub async fn member_template_file(
+    app: AppHandle,
+    webview: Webview,
+    action: String,
+    text: String,
+) -> Result<Option<String>, String> {
     require_main(&webview)?;
     if !matches!(action.as_str(), "open" | "save") || text.len() > 512 * 1024 {
         return Err("invalid member template request".to_owned());
@@ -894,11 +912,24 @@ pub async fn member_template_file(app: AppHandle, webview: Webview, action: Stri
     tauri::async_runtime::spawn_blocking(move || {
         use std::io::Read;
         use tauri_plugin_dialog::DialogExt;
-        let picker = app.dialog().file().set_parent(&window).add_filter("Raphael member", &["raphael-member"]);
-        let chosen = if action == "open" { picker.blocking_pick_file() }
-                     else { picker.set_file_name("colleague.raphael-member").blocking_save_file() };
-        let Some(chosen) = chosen else { return Ok(None); };
-        let path = chosen.into_path().map_err(|_| "invalid template location".to_owned())?;
+        let picker = app
+            .dialog()
+            .file()
+            .set_parent(&window)
+            .add_filter("Raphael member", &["raphael-member"]);
+        let chosen = if action == "open" {
+            picker.blocking_pick_file()
+        } else {
+            picker
+                .set_file_name("colleague.raphael-member")
+                .blocking_save_file()
+        };
+        let Some(chosen) = chosen else {
+            return Ok(None);
+        };
+        let path = chosen
+            .into_path()
+            .map_err(|_| "invalid template location".to_owned())?;
         if path.extension().and_then(|ext| ext.to_str()) != Some("raphael-member") {
             return Err("choose a .raphael-member file".to_owned());
         }
@@ -907,12 +938,21 @@ pub async fn member_template_file(app: AppHandle, webview: Webview, action: Stri
             Ok(Some(String::new()))
         } else {
             let mut bytes = Vec::new();
-            std::fs::File::open(path).map_err(|_| "could not open member template".to_owned())?
-                .take(512 * 1024 + 1).read_to_end(&mut bytes).map_err(|_| "could not read member template".to_owned())?;
-            if bytes.len() > 512 * 1024 { return Err("member template is too large".to_owned()); }
-            String::from_utf8(bytes).map(Some).map_err(|_| "member template must be UTF-8".to_owned())
+            std::fs::File::open(path)
+                .map_err(|_| "could not open member template".to_owned())?
+                .take(512 * 1024 + 1)
+                .read_to_end(&mut bytes)
+                .map_err(|_| "could not read member template".to_owned())?;
+            if bytes.len() > 512 * 1024 {
+                return Err("member template is too large".to_owned());
+            }
+            String::from_utf8(bytes)
+                .map(Some)
+                .map_err(|_| "member template must be UTF-8".to_owned())
         }
-    }).await.map_err(|err| format!("a background task failed: {err}"))?
+    })
+    .await
+    .map_err(|err| format!("a background task failed: {err}"))?
 }
 
 // ---------- questions to Raphael from the window ----------
@@ -2567,10 +2607,26 @@ mod tests {
 
     #[test]
     fn vault_owner_methods_never_expose_private_value_reads_or_exports() {
-        for method in ["vault.list", "vault.add", "vault.update", "vault.remove", "vault.preview", "vault.cancel", "vault.import"] {
+        for method in [
+            "vault.list",
+            "vault.add",
+            "vault.update",
+            "vault.remove",
+            "vault.preview",
+            "vault.cancel",
+            "vault.import",
+        ] {
             assert!(is_allowed_method(method), "{method}");
         }
-        for method in ["vault", "vault.", "vault.get", "vault.read", "vault.values", "vault.export", "vault.execute"] {
+        for method in [
+            "vault",
+            "vault.",
+            "vault.get",
+            "vault.read",
+            "vault.values",
+            "vault.export",
+            "vault.execute",
+        ] {
             assert!(!is_allowed_method(method), "{method}");
         }
     }
