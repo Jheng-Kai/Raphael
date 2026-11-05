@@ -17,7 +17,7 @@ export interface UsageMember {
   turns: number;
   cost_usd: number;
   share: number;
-  models: { model: string; turns: number; cost_usd: number }[];
+  models: { model: string; turns: number; cost_usd: number | null }[];
 }
 export interface UsageAnalytics {
   range: UsageRequest["range"];

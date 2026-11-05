@@ -38,6 +38,17 @@ async function setup(answer: (p: UsageRequest) => Promise<UsageAnalytics> = asyn
 
 const charts = (host: Element) => [...host.querySelectorAll("svg:not(.i):not(.slime)")].filter((svg) => !svg.closest(".slime-cels"));
 
+test("renders subscription in the member and model cost cells", async () => {
+  setLocale("zh-TW");
+  const answer = data();
+  answer.members[0].cost_usd = 0;
+  answer.members[0].models = [{ model: "cli:codex:gpt-6.1-sol?effort=xhigh", turns: 2, cost_usd: null }];
+  const { host } = await setup(async () => answer);
+  expect(host.querySelector("tbody tr td:nth-child(3)")?.textContent).toBe("訂閱");
+  expect(host.querySelector(".ua-models li > span:last-child")?.textContent).toContain("訂閱");
+  expect(host.querySelector(".ua-models")?.textContent).not.toContain("?effort");
+});
+
 test("unchanged activity refresh retains usage faces and chart hover", async () => {
   const { host, mounted } = await setup();
   const face = host.querySelector(".av"), chart = charts(host)[0];

@@ -590,6 +590,7 @@ export const ja = {
   "usage.member": "メンバー",
   "usage.count": "回数",
   "usage.cost": "費用",
+  "usage.subscription": "サブスクリプション",
   "usage.share": "割合",
   "usage.more": "もっと表示",
   "usage.less": "表示を減らす",

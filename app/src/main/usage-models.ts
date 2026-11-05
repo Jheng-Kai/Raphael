@@ -5,6 +5,7 @@ import type { CatalogModel } from "./types";
 import { esc } from "./ui";
 
 export function usageModel(id: string, models: readonly CatalogModel[] = []): { name: string; html: string } {
+  id = id.split("?effort=")[0];
   if (!id || id === "unknown") return {name:t("runs.unknown"),html:esc(t("runs.unknown"))};
   const raw = id.replace(/^@[^:]+:/, "").replace(/^cli:[^:]+:/, "");
   const model = models.find(model => model.id === id || model.id === raw);

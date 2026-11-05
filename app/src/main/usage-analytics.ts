@@ -155,8 +155,8 @@ export function mountUsageAnalytics(host: HTMLElement, api: UsageAnalyticsApi): 
             const open = expanded.has(m.id), detailsId = `${tooltipId}-member-${m.id}`;
             return `<tr><th scope="row"><button type="button" class="btn" data-control="member-${m.id}" data-member="${m.id}" aria-expanded="${open}" aria-controls="${detailsId}">` +
               `<span aria-hidden="true">${open ? "⌄" : "›"}</span> ${faceHTML(m,24)}${esc(m.id === 0 ? t("nav.agent") : m.name)}</button>` +
-              (memberRole(m) ? `<small>${esc(memberRole(m))}</small>` : "") + `</th><td>${count(m.turns)}</td><td>${formatUsd(m.cost_usd)}</td><td>${share(m.share)}</td></tr>` +
-              `<tr id="${detailsId}" ${open ? "" : "hidden"}><td colspan="4"><ul class="ua-models">${m.models.map(model => `<li>${usageModel(model.model,modelData).html}<span>${count(model.turns)} · ${formatUsd(model.cost_usd)}</span></li>`).join("")}</ul></td></tr>`;
+              (memberRole(m) ? `<small>${esc(memberRole(m))}</small>` : "") + `</th><td>${count(m.turns)}</td><td>${m.cost_usd === 0 && m.models.length && m.models.every(model => model.cost_usd === null) ? t("usage.subscription") : formatUsd(m.cost_usd)}</td><td>${share(m.share)}</td></tr>` +
+              `<tr id="${detailsId}" ${open ? "" : "hidden"}><td colspan="4"><ul class="ua-models">${m.models.map(model => `<li>${usageModel(model.model,modelData).html}<span>${count(model.turns)} · ${model.cost_usd === null ? t("usage.subscription") : formatUsd(model.cost_usd)}</span></li>`).join("")}</ul></td></tr>`;
           }).join("") + `</tbody></table></div>`;
         if (usage.members.length > 5) html += `<button type="button" class="btn ua-more" data-control="more">${t(more ? "usage.less" : "usage.more")}</button>`;
       }

@@ -249,8 +249,8 @@ async def test_cli_turns_record_the_model_that_answered_and_keep_separate_sessio
         await rig.call("agent.ask", asking(session=f"quick-{n}", destination="quick"))
         await rig.call("agent.ask", asking(session=f"formal-{n}", source="app", conversation_id=formal))
     assert runs == [("fast", "low", None), ("deep", "high", None), ("fast", "low", "thread-1"), ("deep", "high", "thread-2")]
-    assert {turn.model for turn in rig.history.list(conversation_id=quick)} == {"cli:codex:fast-2026?effort=low"}
-    assert {turn.model for turn in rig.history.list(conversation_id=formal)} == {"cli:codex:deep?effort=high"}
+    assert {turn.model for turn in rig.history.list(conversation_id=quick)} == {"cli:codex:fast-2026"}
+    assert {turn.model for turn in rig.history.list(conversation_id=formal)} == {"cli:codex:deep"}
     assert rig.service._cli_sessions.get(0, "cli:codex:fast?effort=low", quick) == "thread-1"
     assert rig.service._cli_sessions.get(0, "cli:codex:deep?effort=high", formal) == "thread-2"
 

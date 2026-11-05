@@ -5,6 +5,13 @@ import { checkRendered } from "./checks.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixture.json", import.meta.url), "utf8"));
 describe("shared look IPC boundary", () => {
+  it("seeds subscription member analytics when the base fixture has no members", async () => {
+    const target = {}, model = "cli:codex:gpt-6.1?effort=xhigh";
+    const state = installMock(fixture, {fixture:{usageMemberSubscription:model}}, target);
+    const report = await target.__TAURI_INTERNALS__.invoke("core_call", {method:"usage.analytics",params:{range:"7d"}});
+    expect(report.members[0]).toMatchObject({id:0,cost_usd:0,models:[{model,cost_usd:null}]});
+    expect(state.errors).toEqual([]);
+  });
   it("keeps member-store empty, offline and warning variants at the IPC boundary", async () => {
     for (const variant of [{storeEmpty:true}, {storeOffline:true}, {storeWarning:true}]) {
       const target = {}, state = installMock(fixture, {fixture:variant}, target);

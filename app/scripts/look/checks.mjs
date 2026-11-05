@@ -4963,6 +4963,23 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, bars: tracks.length };
   }
+  if (name === "usage-subscription") {
+    const rows = [...document.querySelectorAll(".run-groups > section:last-child .run-bars li")];
+    require(rows.length === 3, "subscription and router models have separate rows");
+    require(rows.slice(0, 2).every(row => row.querySelector("small").textContent === "訂閱"), "unpriced tokens display the subscription label");
+    require(rows[2].querySelector("small").textContent === "US$0.0019", "the router retains its recorded price");
+    require(!rows.some(row => row.textContent.includes("?effort=")), "model names omit effort");
+    return { check: name, rows: rows.map(row => row.textContent) };
+  }
+  if (name === "usage-member-subscription") {
+    const button = document.querySelector('.ua-table-scroll [data-member="0"]'), row = button.closest("tr");
+    const details = document.getElementById(button.getAttribute("aria-controls"));
+    require(button.getAttribute("aria-expanded") === "true" && visible(details), "member model details are expanded");
+    require(row.querySelector("td:nth-child(3)").textContent === "訂閱", "subscription member cost is labeled");
+    require(details.querySelector(".ua-models li > span:last-child").textContent.includes("訂閱"), "subscription model cost is labeled");
+    require(!details.textContent.includes("?effort="), "daily model names omit effort");
+    return { check: name, member: row.textContent, models: details.textContent };
+  }
   if (name === "overlay-percentage") {
     const caption = document.querySelector("#progress");
     require(visible(caption) && /^\u300a \d+ % \u300b$/.test(caption.textContent), "original percentage caption is visible");
