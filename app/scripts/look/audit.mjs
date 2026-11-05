@@ -57,7 +57,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   };
   if (visible(doc.body) && onScreen(doc.body)) checkMarkdown(doc.body);
   const allowed = latinAllowed && new Set(latinAllowed), seenWords = new Set();
-  const phrases = latinAllowed?.filter(name => /\s|=/.test(name)) ?? [];
+  const phrases = latinAllowed?.filter(name => /\s|=|\d/.test(name)) ?? [];
   const productPattern = phrases.length ? new RegExp(`\\b(?:${phrases.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "gi") : null;
   const keyPattern = /\b([a-z][A-Za-z0-9]*\.[A-Za-z0-9_.-]+)\b/g;
   const seenKeys = new Set();

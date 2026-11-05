@@ -26,6 +26,7 @@ import { bindingLabels } from "../keys";
 import { type MessagingView, messagingHTML } from "../messaging";
 import { type MemoryView, memoryHTML } from "../memory-view";
 import { type RulesView, rulesHTML } from "../safety-rules";
+import { type VaultView, emptyVaultView, vaultHTML } from "../vault";
 import { AUTO_MICROPHONE, microphoneChoices } from "../microphone";
 import type { LocalView } from "../local-models";
 import { type ModelPickerLook, modelPickerHTML, modelsFor, planRef, priceDescription, splitEffort } from "../model-picker";
@@ -158,6 +159,7 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "general", label: "settings.agentCity" },
   { pane: "general", label: "mem.shared", also: "settings.searchMemory" },
   { pane: "safety", label: "rules.title" },
+  { pane: "safety", label: "vault.title", words: ["Chrome", "1Password", "CSV"] },
   { pane: "safety", label: "settings.computerUse" },
   { pane: "safety", target: "computer", label: "desktop.host", also: "desktop.remoteSearch" },
   { pane: "safety", label: "local.title" },
@@ -289,6 +291,7 @@ export interface SettingsView {
   messaging: MessagingView;
   /** The shared safety rules, in Safety (none: not drawn). */
   rules?: RulesView;
+  vault?: VaultView;
   /** Shared owner memory, in General (none: not drawn). */
   memoryShared?: MemoryView;
   /** Shared services, in Tools: who searches, reads pages and PDFs, and looks at images (none: not drawn). */
@@ -667,7 +670,7 @@ function toolsHTML(v: SettingsView): string {
 
 /** Shared safety rules and local command permissions. */
 function safetyHTML(v: SettingsView): string {
-  return headingHTML(v) + coreNote(v) + (v.rules ? rulesHTML(v.rules) : "") + section(t("settings.computerUse"), computerRows(v));
+  return headingHTML(v) + coreNote(v) + vaultHTML(v.vault ?? emptyVaultView()) + (v.rules ? rulesHTML(v.rules) : "") + section(t("settings.computerUse"), computerRows(v));
 }
 
 /** 連接: the services Raphael is connected to and the store that adds them, under the heading and its 「新增」. */

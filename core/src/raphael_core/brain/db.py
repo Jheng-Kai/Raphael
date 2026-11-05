@@ -1492,6 +1492,24 @@ PRAGMA user_version = 62;
 COMMIT;
 """
 
+_MIGRATIONS[63] = """
+BEGIN;
+CREATE TABLE vault_entries (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK(kind IN ('login','contact','card')),
+    label TEXT NOT NULL,
+    hint TEXT NOT NULL DEFAULT '',
+    origin TEXT NOT NULL DEFAULT '',
+    members TEXT NOT NULL,
+    credential TEXT NOT NULL
+);
+CREATE TABLE computer_payment_holds (target TEXT PRIMARY KEY);
+INSERT INTO vault_entries(id,kind,label,origin,members,credential)
+SELECT reference,'login',origin,origin,json_array(member_id),'computer-login:' || reference FROM computer_logins;
+PRAGMA user_version = 63;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

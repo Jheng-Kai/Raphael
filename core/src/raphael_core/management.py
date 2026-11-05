@@ -303,6 +303,8 @@ def destructive(name, arguments, retention=None):
 # These are UI-controlled boundaries, never direct management tools. Work tools may
 # propose a card, but may not answer it or handle its credentials.
 OWNER_ONLY = {
+    **dict.fromkeys(("vault.list", "vault.add", "vault.update", "vault.remove", "vault.preview", "vault.cancel", "vault.import"),
+                   "Vault metadata, values, sharing and CSV imports belong to the owner."),
     **dict.fromkeys(("owner_questions.answer", "owner_questions.bring", "background.answer", "pages.tool_call",
                      "integrations.card_connect", "integrations.card_cancel", "integrations.card_save", "integrations.card_resume",
                      "integrations.card_done", "integrations.card_stop", "integrations.card_allow", "integrations.card_always", "integrations.card_deny",

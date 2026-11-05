@@ -584,3 +584,14 @@ This owner decision supersedes the sequential room speech and room-scope tool-wo
 | ID | Date | Contract | Layer | Severity | Evidence |
 |---|---|---|---|---|---|
 | R-SKILL-08 | 2026-11-05 | Skill origins in member details, Connections rows, discovery and skill dialogs use localized labels. Learned skills show one origin/date line. Transport prefixes and plugin cache paths never appear in origin text or titles. | vitest, look | hard | app/src/main/member-profile.test.ts; app/src/main/connection-skills.test.ts::learned skill rows and their detail dialog show one localized origin and date; details-skills; skills-installed-sources; features/members.md |
+
+
+## Shared owner vault (2026-11-05)
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-VAULT-01 | 2026-11-05 | Safety lists three vault kinds with counted record filters, member grants and a one-line owner hint. Actual values stay in Credential Manager; migration preserves every legacy login and grant. | pytest, vitest, selected look | hard | test_vault_entries.py; vault-list; vault-filter; vault-sharing |
+| R-VAULT-02 | 2026-11-05 | Models receive labels/hints/opaque references only. Login/contact/card values and driver echoes never enter model input, tool results, logs, history, notifications or screenshots; each fill rechecks access and HTTPS origin. | fake model/browser pytest | hard | test_private_login.py; test_vault_entries.py; test_login_visibility.py |
+| R-VAULT-03 | 2026-11-05 | Every card fill needs exact single-use owner approval in all four modes, naming card label, merchant origin and visible amount. Filling never submits; a persisted computer hold leaves the final step to owner payment takeover. | pytest, selected look | hard | test_vault_entries.py; test_private_login.py; vault-card-permission |
+| R-VAULT-04 | 2026-11-05 | An owner-selected Chrome/1Password CSV produces a transient selectable metadata preview with no credential write. Only explicit confirmation imports selected rows, once; cancel/expiry discards it and the source file is never copied. | pytest, vitest, selected look | hard | test_vault_entries.py; vault.test.ts; vault-import-preview |
+| R-VAULT-05 | 2026-11-05 | Shared fill-tool instructions choose entries by owner hint and ask_owner when two fit; never request private values through chat. | definition/snapshot pytest; authorized live acceptance deferred | hard | ENTRY_CHOICES; fill_definition; vault_entries tool |

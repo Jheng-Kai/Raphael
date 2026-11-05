@@ -288,7 +288,11 @@ describe("the rules for every tab, in every language", () => {
 
   test("no tab shows the options of a setting in a row: no segmented controls, radio rows or chips", () => {
     for (const id of IDS) {
-      const html = tab(id);
+      const doc = new Window().document;
+      doc.body.innerHTML = tab(id);
+      // Vault filters browse saved data; they are not mutually exclusive setting values.
+      doc.querySelector(".vault .tabs")?.remove();
+      const html = doc.body.innerHTML;
       expect(html).not.toMatch(/role="radio|aria-pressed|class="tabs"|class="chip|lchip/);
     }
   });

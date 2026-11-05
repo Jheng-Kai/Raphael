@@ -293,6 +293,8 @@ Private login references in `core/src/raphael_core/computer/logins.py` and the f
 `computer/vm_tools.py` draw on OpenMausBot `server/drivers/agents-catalog.ts` and
 `server/drivers/agents-call.ts` at `f9191b5`, under the Apache-2.0 notice above.
 
+The shared owner vault in `computer/vault_entries.py` extends those private-reference and fill contracts with Raphael's own metadata, member grants, metadata-only legacy migration, transient CSV previews, contact/card filling and mandatory single-use payment approval; no additional upstream code or dependency is bundled.
+
 Owner input at loop boundaries in `core/src/raphael_core/worker/owner_input.py`
 and Telegram attachment delivery in `core/src/raphael_core/messaging/channels/telegram.py`
 are adapted from Hermes Agent revision `c419cf7c`, respectively

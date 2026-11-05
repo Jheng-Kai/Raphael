@@ -2,6 +2,32 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith('vault-')) {
+    const vault = document.querySelector('.vault');
+    if (name === 'vault-payment') {
+      const card = document.querySelector('[data-permission-card]');
+      const body = card?.querySelector('.card-body');
+      require(visible(body) && ['公司差旅卡', 'https://travel.example.invalid', 'NT$ 1,280', '最後付款由你完成'].every(text => body.innerText.includes(text)), 'payment visibly names the card, merchant, amount and owner final step without expanding details');
+      require(!card.querySelector('[data-act="perm-always"]'), 'no standing payment approval is offered');
+    } else if (name === 'vault-preview') {
+      require(vault.querySelectorAll('[data-vault-import]').length === 2 && vault.querySelectorAll('[data-vault-import]:checked').length === 1, 'preview supports individual selection');
+      require(!window.__look.calls.some(call => ['vault.add','vault.import'].includes(call.method)), 'preview writes no credentials');
+    } else if (name.startsWith('vault-new-')) {
+      const fields = { login:2, contact:4, card:4 }[name.slice(10)];
+      require(vault.querySelectorAll('[id^="vault-value-"][type="password"]').length === fields, 'all private fields are masked');
+      if (name === 'vault-new-card') require(vault.textContent.includes('最後的付款或送出由你完成'), 'card entry explains the final owner step');
+    } else if (name === 'vault-menu') require(visible(document.querySelector('#app-popover [data-pick="edit"]')) && visible(document.querySelector('#app-popover [data-pick="remove"]')), 'entry actions use the shared row menu');
+    else if (name === 'vault-filter') require(vault.querySelectorAll('.vault-row').length === 1 && vault.textContent.includes('公司差旅卡'), 'card filter selects only cards');
+    else if (name === 'vault-sharing') require(vault.querySelectorAll('[data-vault-member]').length >= 2 && vault.querySelector('#vault-label').value === '出差聯絡資料', 'sharing preserves form input');
+    else {
+      require(vault.querySelectorAll('.vault-row').length === 3 && vault.textContent.includes('出差用公司卡'), 'all kinds and hints appear');
+      for (const tab of vault.querySelectorAll('.tabs .tab')) {
+        const number = tab.querySelector('.n').getBoundingClientRect(), label = tab.querySelector('.tab-label').getBoundingClientRect();
+        require(number.top < label.bottom && number.bottom > label.top, 'filter counts remain on the label line');
+      }
+    }
+    return { check: name, passed: true };
+  }
   if (name.startsWith('routine-test-')) {
     if (name === 'routine-test-menu') {
       require(visible(document.querySelector('#app-popover [data-pick="test"]')), 'the row offers the shared test action');

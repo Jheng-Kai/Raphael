@@ -728,3 +728,10 @@ R-SKILL-08 also covers localized skill origins in member details, Connections,
 discovery and document dialogs; see [Members](members.md#localized-skill-origins-2026-11-05).
 The same selected twenty-scene skill matrix checks raw-source leakage and one learned
 origin/date line.
+
+
+## Shared owner vault (2026-11-05)
+
+See [Settings and appearance](settings-appearance.md#shared-owner-vault-2026-11-05)
+for R-VAULT-01..05, Safety navigation, shared Credential Manager entries, transient
+CSV import, mandatory payment consent and the eleven-scene selected look matrix.

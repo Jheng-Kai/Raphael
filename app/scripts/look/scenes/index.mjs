@@ -1,4 +1,5 @@
 import cards from "./cards.mjs";
+import vault from "./vault.mjs";
 import polish from "./polish.mjs";
 import handoffGroup from "./handoff-group.mjs";
 import menus from "./menus.mjs";
@@ -42,6 +43,7 @@ scenes.push(...handoffGroup);
 scenes.push(...daily);
 scenes.push(...menus);
 scenes.push(...cards);
+scenes.push(...vault);
 scenes.push(...presence);
 scenes.push(...answerForms);
 scenes.push(...unreadDivider);

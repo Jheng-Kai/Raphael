@@ -277,3 +277,50 @@ within 1px, matching select/field widths, and left-aligned trigger text. Keep th
 same standard field/select padding inside those controls. No status note repeats
 the host, and host errors remain contextual. The follow-up matrix is the four host
 scenes plus desktop-panel, both themes at 1120,720,1920x1080.
+
+
+## Shared owner vault (2026-11-05)
+
+R-VAULT-01..05: Settings > Safety contains Vault. Entries have login, contact or
+card kinds, counted list filters, a label, one-line owner hint and all/chosen-member
+access. The counted filters browse records; they are not setting-value controls.
+Use the shared fieldHTML, sel/openMenu, row action menu and confirm menu.
+
+Selected scenes: vault-list, vault-filter, vault-entry-menu, vault-new-login, vault-new-contact,
+vault-new-card, vault-sharing, vault-import-preview, vault-card-permission,
+local-command-settings and card-permission-waiting. Run both themes at
+1120,720,1920x1080. Inspect all contact sheets and each new scene at light 720
+and dark 1120. Compare fields, dropdowns, list filters, row menus and permission
+cards with existing consumers at the same dimensions.
+
+VaultEntries keeps only metadata in SQLite. Values stay in Windows Credential
+Manager. Migration 63 preserves every legacy computer_logins reference and its
+member grant without reading or rewriting a credential. CSV file input sends
+selected owner file bytes to an in-memory, ten-minute preview; previews return
+labels/origins only. Confirmation imports only checked entries, once; cancellation
+discards the preview. Chrome and 1Password login column variants are supported;
+non-HTTPS, malformed or non-login records are counted as skipped. The source is
+never copied. Partial credential-store failures report counts and require a fresh
+preview; inspect the list before retrying.
+
+The curated computer catalog adds vault_entries, fill_contact and fill_card.
+Members see opaque IDs, kinds, labels and hints, choose by hint and ask the owner
+if two fit. Value reads recheck member access and HTTPS origin before each input;
+driver echoes, exception details and screenshots stay private. Card use is firm
+T3 in every mode with no Always option, names merchant/amount/label, and persists
+a computer action hold before the first field. Only explicit owner completion of
+a payment takeover clears it; navigation, scripts, batched actions and restart
+do not. An interrupted payment may therefore require a fresh private payment
+takeover, even after restarting the core.
+
+Offline checks: tests/computer/test_vault_entries.py, test_login_vault.py,
+test_login_visibility.py, tests/agent/test_private_login.py, background question
+and snapshot consumers, frontend vault.test.ts and settings-view.test.ts. Tests
+use only fake keyrings and browsers. Real OS persistence, native file selection,
+real merchant pages, subscription judgment and live model choice remain separate
+acceptance. This unit explicitly skips full verify/core suites and forbids network.
+
+Payment permission cards deliberately show their merchant, amount and label in the
+shared card body without disclosure, and omit Always. Other permission cards keep
+their existing disclosure and policy. Vault count filters use the shared tabs with
+an inline count layout, required for this inventory rather than a setting choice.

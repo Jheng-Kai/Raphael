@@ -3497,6 +3497,10 @@ class AgentService:
             what=parenthesized(language, shown),
         )
         computer_request = call.tool.key.startswith("mcp:computer-access-")
+        payment = call.tool.name == "fill_card" and call.tool.server == "computer"
+        if payment:
+            from ..computer.vault_entries import payment_question
+            question = payment_question(call.arguments, language)
         if computer_request:
             from ..computer.grants import request_question
             question = request_question(language, ask.speaker.name or "Raphael", shown)
@@ -3514,6 +3518,8 @@ class AgentService:
             exact = phrase(language, "confirm_plugin", server=call.tool.server, tool=call.tool.name,
                            what=parenthesized(language, preview(call.arguments, CARD_PREVIEW_CHARS)))
             if computer_request:
+                exact = question
+            if payment:
                 exact = question
             managed = getattr(self._plugins, "managed", None)
             identity = permission_identity(call.tool, call.arguments, managed.store.connectors.values() if managed else ())
@@ -4287,7 +4293,7 @@ class AgentService:
             "timeout_ms": 0 if local else CONFIRM_TIMEOUT_MS,
         }
         # A call that cannot be undone (T3) keeps the gold card that is held to confirm: a click is not enough for it.
-        if (card is not None and self._permissions is not None and turn_id and tier < Tier.T3
+        if (card is not None and self._permissions is not None and turn_id and (tier < Tier.T3 or action.tool.endswith("/fill_card"))
                 and permission_cards_for(source=ask.source, quick=ask.quick, nested=ask.nested, scope=ask.scope)):
             self._permissions.show(
                 card_id=pending.id, turn_id=turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
