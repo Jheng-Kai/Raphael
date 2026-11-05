@@ -75,7 +75,7 @@ export function patchThread(thread: HTMLElement, wanted: readonly ThreadLine[], 
   let changed = false;
   for (const line of wanted) {
     // A newly inserted face samples the current phase; an existing face keeps its running clock.
-    const identity = line.html.replace(/--slime-(?:delay|since):-?[\d.]+ms;?/g, "");
+    const identity = line.html.replace(/--slime-(?:delay|since):-?[\d.]+ms;?| data-slime-mounted="[\d.]+"/g, "");
     let node = before.get(line.key);
     if (!node || drawn.get(node) !== identity) {
       changed = true;

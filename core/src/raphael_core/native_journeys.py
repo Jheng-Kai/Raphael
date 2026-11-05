@@ -238,9 +238,11 @@ def native_enabled(fake_llm: bool) -> bool:
     return fake_llm and os.environ.get("RAPHAEL_TEST_NATIVE") == "1"
 
 
-async def native_think() -> None:
+async def native_think(messages=None) -> None:
     """A native journey's model that takes as long as the journey says."""
     seconds = os.environ.get("RAPHAEL_NATIVE_THINK_S") if os.environ.get("RAPHAEL_TEST_NATIVE") == "1" else None
+    if seconds and any(message.get("role") == "user" and "[native-typing:stream]" in str(message.get("content")) for message in messages or []):
+        seconds = "1"
     if seconds:
         await asyncio.sleep(float(seconds))
 

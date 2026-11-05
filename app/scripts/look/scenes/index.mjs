@@ -16,6 +16,7 @@ import pages from "./pages.mjs";
 import richContent from "./rich-content.mjs";
 import answerForms from "./answer-forms.mjs";
 import unreadDivider from "./unread-divider.mjs";
+import threadWindow from "./thread-window.mjs";
 import chat from "./chat.mjs";
 import desktop from "./desktop.mjs";
 import automations from "./automations.mjs";
@@ -42,6 +43,7 @@ scenes.push(...cards);
 scenes.push(...presence);
 scenes.push(...answerForms);
 scenes.push(...unreadDivider);
+scenes.push(...threadWindow);
 scenes.push({name:'motion-cost-details',description:'Isolated emblem decoder and single large vector cost',fixture:{},motion:true,steps:[{action:'motion-details'}]});
 scenes.push({name:'motion-cost-comparison',description:'Identical mixed-state fixture and sampling window, starting revision versus current cels',fixture:{},motion:true,steps:[{action:'motion-cost',revision:'e2143ec7'},{action:'motion-cost'}]});
 for (const scene of scenes) if (['admin-approval','room-question-card','composer-stop-voice'].includes(scene.name)) {

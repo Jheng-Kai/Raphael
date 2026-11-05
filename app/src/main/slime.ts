@@ -1,15 +1,15 @@
 /**
  * The members' mascots: one low dome with two white eyes, drawn in code. A character is that same slime in a colour
- * of its own with one or two marks of who it is, so Shion is lavender with a horn and nothing more. What it is doing
- * is data too: all motion is CSS keyed on `data-state` (slime.css), and nothing runs per frame: script only says when
- * a state changes and where the slime stood at that moment.
+ * of its own with one or two marks of who it is, so Shion is lavender with a horn and nothing more. Loop motion is
+ * CSS keyed on `data-state` (slime.css); finite handovers use explicit keyframes from JS pose/timing state.
+ * Nothing in script runs per animation frame: it only changes state and admits deferred strips.
  * Raphael keeps his own emblem and never comes here (members.ts `faceHTML`).
  * A member's `avatar` is `slime:<character>` or `slime:color:<color>`; one without a picture gets a colour from its id.
  */
 import "./slime.css";
 import { t } from "./i18n";
 import { motionStrips } from "./slime-cels";
-import { loopState, LOOPS, sample } from "./slime-motion";
+import { loopState, LOOPS, sample, easing } from "./slime-motion";
 
 export type SlimeState = "idle" | "thinking" | "working" | "searching" | "computer" | "waiting" | "blocked" | "done" | "error" | "sleeping" | "arriving";
 type Hat = "witch" | "santa";
@@ -152,7 +152,7 @@ export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay
   let drawingId = drawingIds.get(key);
   if (!drawingId) { drawingId=String(drawings.size);drawingIds.set(key,drawingId);drawings.set(drawingId,{back:look.back ?? '',worn}); }
   const [bodyStrip,eyeStrip] = strips(state,drawings.get(drawingId)!);
-  return `<span class="slime-surface" data-slime-drawing="${drawingId}" data-slime-reuse="${drawingId}:${look.color}:${tempo}:${member ?? ''}" data-state="${state}" aria-hidden="true" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}">${bodyStrip}<svg class="slime" viewBox="4 11 92 92" data-state="${state}"${member === undefined ? "" : ` data-slime-member="${member}"`} aria-hidden="true" focusable="false" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}${since === undefined ? "" : `;--slime-since:${since}ms`}">` +
+  return `<span class="slime-surface" data-slime-drawing="${drawingId}" data-slime-reuse="${drawingId}:${look.color}:${tempo}:${member ?? ''}" data-state="${state}" aria-hidden="true" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}">${bodyStrip}<svg class="slime" viewBox="4 11 92 92" data-slime-mounted="${performance.now()}" data-state="${state}"${member === undefined ? "" : ` data-slime-member="${member}"`} aria-hidden="true" focusable="false" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}${since === undefined ? "" : `;--slime-since:${since}ms`}">` +
     `<g class="slime-press"><g class="slime-settle"><g class="slime-counterturn"><g class="slime-motion">` +
     (look.back ? `<g class="slime-back">${look.back}</g>` : "") + correction(`<path d="${BODY}" fill="var(--slime-color)" class="slime-body"/>`) + `<g class="slime-marks">${worn}</g>` +
     `<g class="slime-face" transform="${FACE_SCALE}"><g class="slime-look"><g class="slime-counterturn"><g class="slime-gaze" fill="none" stroke="#fff" stroke-linecap="round"><path class="slime-eyes" d="${EYES}"/></g></g></g></g>` +
@@ -184,7 +184,37 @@ function hearThePointer(): void {
   });
 }
 
-const settling = new WeakMap<SVGElement, EventListener>();
+type Bridge = { values: number[]; started: number; duration: number; animations: Animation[] };
+const settling = new WeakMap<SVGElement, Bridge>();
+interface SlimeClock {
+  state: SlimeState; mounted: number; delay: number; tempo: number; since: number;
+  sampled: boolean; transitionUntil: number;
+  reveal?: Animation;
+  surface: HTMLElement; drawingKey: string; drawing?: { back: string; worn: string }; pending: boolean;
+  settle: SVGElement; look: SVGElement; motion: SVGElement; gaze: SVGElement;
+  marks: { part: SVGElement; bridge: SVGElement; give: number }[];
+}
+const clocks = new WeakMap<SVGElement, SlimeClock>();
+/** Hydrate once at mount; subsequent handovers only consult the JS clock and cached parts. */
+function clockOf(svg: SVGElement): SlimeClock {
+  let clock = clocks.get(svg);
+  if (clock) return clock;
+  const surface = svg.parentElement!;
+  const drawingKey = surface.dataset.slimeDrawing ?? '';
+  const size = parseFloat(svg.closest<HTMLElement>('.mb-av-slime')?.style.getPropertyValue('--av') ?? '');
+  clock = { state: svg.dataset.state as SlimeState, mounted: Number(svg.dataset.slimeMounted) || performance.now(),
+    sampled: Number.isFinite(size) && size <= 72, transitionUntil: 0,
+    delay: parseFloat(svg.style.getPropertyValue('--slime-delay')) || 0,
+    tempo: parseFloat(svg.style.getPropertyValue('--slime-tempo')) || 1,
+    since: parseFloat(svg.style.getPropertyValue('--slime-since')) || 0,
+    surface, drawingKey, drawing: drawings.get(drawingKey), pending: false,
+    settle: svg.querySelector<SVGElement>('.slime-settle')!, look: svg.querySelector<SVGElement>('.slime-look')!,
+    motion: svg.querySelector<SVGElement>('.slime-motion')!, gaze: svg.querySelector<SVGElement>('.slime-gaze')!,
+    marks: [...svg.querySelectorAll<SVGElement>('.slime-mark')].map(part => ({ part,
+      bridge: part.closest<SVGElement>('.slime-correction')!, give: parseFloat(part.style.getPropertyValue('--mark-give')) || 1 })) };
+  clocks.set(svg, clock);
+  return clock;
+}
 
 // ---------- what each member is doing ----------
 
@@ -211,111 +241,191 @@ function restingState(member: SlimeFacts, now: number): SlimeState {
   return Number.isFinite(last) && now - last > SLEEP_AFTER_MS ? "sleeping" : "idle";
 }
 
-type PoseProperty = "translate" | "rotate" | "scale" | "transform";
-const WHOLE_POSE: readonly PoseProperty[] = ["translate", "rotate", "scale", "transform"];
-
-/** Where a part stands right now, whichever of its properties have put it there. */
-function poseOf(part: Element, properties: readonly PoseProperty[] = WHOLE_POSE): DOMMatrix {
-  const style = getComputedStyle(part);
-  return new DOMMatrix(properties.map(name => {
-    const value = style[name];
-    return !value || value === "none" ? "" : name === "transform" ? value : `${name}(${value.split(" ").join(",")}) `;
-  }).join(""));
-}
-
-function loopPose(svg: SVGElement, kind: 'body'|'eyes'): DOMMatrix {
-  const state=svg.dataset.state!;
-  if (!loopState(state)) return new DOMMatrix();
-  const surface=svg.parentElement!, strip=surface.querySelector('.slime-loop-body .slime-cels');
-  if (!strip || getComputedStyle(strip.parentElement!).display==='none' || getComputedStyle(strip.parentElement!).visibility==='hidden') return new DOMMatrix();
-  const index=Math.round(-poseOf(strip).e/(surface.clientWidth*3));
-  if (kind==='body') {
-    const props=strip.querySelector('.slime-prop-cels');
-    const row=props?Math.round(-poseOf(props).f/(surface.clientWidth*3)):0;
-    const cell=strip.querySelectorAll<SVGElement>('[data-loop-pose]')[row*12+index];
-    if (!cell) return new DOMMatrix();
-    const pose=JSON.parse(cell.dataset.loopPose!);
-    return new DOMMatrix().translate(pose.translate[0],pose.translate[1]).rotate(pose.rotate[0]).scale(pose.scale[0],pose.scale[1]);
+/** Poses follow the same keyframes and clock as the CSS strips, without asking layout or style. */
+function statePose(clock: SlimeClock, kind: 'body' | 'eyes' | 'mark', now: number, give = 1): DOMMatrix {
+  const state = clock.state, elapsed = now - clock.mounted;
+  let pose;
+  if (loopState(state)) {
+    const loop = LOOPS[state], period = (kind === 'eyes' ? loop.eyes : kind === 'mark' && state === 'thinking' ? 3.6 : loop.body) * clock.tempo * 1000;
+    const lag = kind === 'mark' ? state === 'thinking' ? 140 : state === 'searching' ? 120 : 0 : 0;
+    const phase = Math.max(0, elapsed - clock.delay - lag) / period;
+    // Small avatars display twelve sampled poses, with independently timed eyes and props.
+    const sampled = clock.sampled && now >= clock.transitionUntil ? Math.floor(((phase % 1) + 1) % 1 * 12) / 12 : phase;
+    pose = sample(`slime-${state}-${kind === 'eyes' ? 'gaze' : kind}`, sampled, kind === 'eyes' ? loop.gaze : loop.ease);
+    if (state === 'blocked' && kind === 'eyes') pose.translate = [0, -6];
+    if (state === 'error' && kind === 'body') pose.scale = [1.08, .62];
+  } else if (state === 'done' || state === 'arriving') {
+    const duration = state === 'done' ? 1900 : 1200;
+    const lag = kind === 'mark' ? state === 'done' ? 60 : 50 : 0;
+    pose = sample(`slime-${state}-${kind}`, Math.min(.999999, Math.max(0, (elapsed - clock.since - lag) / duration)));
+  } else {
+    return state === 'sleeping' && kind === 'body' ? new DOMMatrix().scale(1.04, .91) : new DOMMatrix();
   }
-  const eyeStrip=surface.querySelector('.slime-eye-cels')!;
-  const blinking=state==='thinking'||state==='searching';
-  const eyeIndex=Math.round(-poseOf(eyeStrip).f/(surface.clientWidth*3*(blinking?4:1)));
-  const gaze=sample(`slime-${state}-gaze`,eyeIndex/12,LOOPS[state].gaze);
-  if(state==='blocked')gaze.translate=[0,-6];
-  return new DOMMatrix().translate(gaze.translate[0],gaze.translate[1]);
+  return new DOMMatrix().translate(pose.translate[0], pose.translate[1]).rotate(pose.rotate[0]! * give).scale(pose.scale[0], pose.scale[1]);
 }
-
-/** Starts a part from a pose; its transition in slime.css brings it home. */
-function startFrom(part: SVGElement, pose: DOMMatrix): void {
-  const previous = settling.get(part);
-  if (previous) part.removeEventListener("transitionend", previous);
+function bridgePose(part: SVGElement, now: number): DOMMatrix {
+  const bridge = settling.get(part);
+  if (!bridge) return new DOMMatrix();
+  const amount = 1 - easing('cubic-bezier(.25,.8,.3,1)', Math.min(1, (now - bridge.started) / bridge.duration));
+  const [x,y,angle,wide,high,counter] = bridge.values;
+  return new DOMMatrix().translate(x! * amount, y! * amount).rotate(angle! * amount)
+    .scale(1 + (wide! - 1) * amount, 1 + (high! - 1) * amount).rotate(counter! * amount);
+}
+/** A finite bridge uses explicit keyframes, so starting it needs no forced style flush. */
+function startFrom(part: SVGElement, pose: DOMMatrix, now: number, duration = 320): void {
+  for (const animation of settling.get(part)?.animations ?? []) animation.cancel();
   settling.delete(part);
-  if (pose.isIdentity) { part.classList.remove("slime-in-between"); return; }
-  // Two rotations around a signed scale preserve shear too, without a cached CSS matrix raster.
+  if (pose.isIdentity || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+    part.classList.remove('slime-in-between'); return;
+  }
   const e = (pose.a + pose.d) / 2, f = (pose.a - pose.d) / 2, g = (pose.b + pose.c) / 2, h = (pose.b - pose.c) / 2;
   const q = Math.hypot(e, h), r = Math.hypot(f, g), first = Math.atan2(g, f), second = Math.atan2(h, e);
-  const values = { "--slime-dx": `${pose.e}px`, "--slime-dy": `${pose.f}px`, "--slime-angle": `${(first + second) / 2}rad`, "--slime-wide": String(q + r), "--slime-high": String(q - r) };
+  const values = [pose.e, pose.f, (first + second) / 2 * 180 / Math.PI, q + r, q - r, (second - first) / 2 * 180 / Math.PI];
+  // Animate native transform properties rather than custom properties. The latter
+  // require main-thread style resolution on every tick of a finite handover.
+  const from = { translate: `${values[0]}px ${values[1]}px`, rotate: `${values[2]}deg`, scale: `${values[3]} ${values[4]}` };
+  const to = { translate: '0px 0px', rotate: '0deg', scale: '1 1' };
+  part.classList.add('slime-in-between');
+  const options = { duration, easing: 'cubic-bezier(.25,.8,.3,1)' };
   const counter = part.firstElementChild as SVGElement;
-  part.classList.add("slime-in-between");
-  part.style.transition = counter.style.transition = "none";
-  for (const [name, value] of Object.entries(values)) part.style.setProperty(name, value);
-  counter.style.setProperty("--slime-counterangle", `${(second - first) / 2}rad`);
-  void getComputedStyle(part).translate;
-  void getComputedStyle(counter).rotate;
-  part.style.transition = counter.style.transition = "";
-  for (const name of Object.keys(values)) part.style.removeProperty(name);
-  counter.style.removeProperty("--slime-counterangle");
-  const finished: EventListener = event => {
-    if (event.target !== part || !((event as TransitionEvent).propertyName in values)) return;
-    part.classList.remove("slime-in-between");
-    part.removeEventListener("transitionend", finished);
-    settling.delete(part);
+  const animations = typeof part.animate === 'function' ? [part.animate([from,to], options),
+    counter.animate([{rotate: `${values[5]}deg`},{rotate:'0deg'}], options)] : [];
+  for (const animation of animations) void animation.finished.catch(() => { /* A newer state interrupts this finite bridge. */ });
+  const bridge = { values, started: now, duration, animations };
+  settling.set(part, bridge);
+  if (animations[0]) animations[0].onfinish = () => {
+    if (settling.get(part) !== bridge) return;
+    settling.delete(part); part.classList.remove('slime-in-between');
   };
-  part.addEventListener("transitionend", finished);
-  settling.set(part, finished);
 }
 
+// Keep parsed geometry bounded; colour and animation phase belong to each clone.
+const celTemplates = new Map<string, HTMLTemplateElement>();
+const CEL_TEMPLATE_LIMIT = 16;
 /** The slime takes `state` and the strips drawn for it. */
-function enter(svg: SVGElement, state: SlimeState): void {
-  svg.dataset.state = svg.dataset.moved = state;
-  svg.parentElement!.dataset.state = state;
-  const surface = svg.parentElement!;
+function enter(svg: SVGElement, state: SlimeState, visible = true): void {
+  const clock = clockOf(svg), surface = clock.surface;
+  if (clock.state !== state) {
+    svg.dataset.state = svg.dataset.moved = state;
+    surface.dataset.state = state;
+    clock.state = state;
+  }
   for (const strip of surface.querySelectorAll(':scope > .slime-loop')) strip.remove();
-  const drawing = drawings.get(surface.dataset.slimeDrawing!);
-  if (drawing) { const [bodyStrip, eyeStrip] = strips(state, drawing); svg.insertAdjacentHTML('beforebegin', bodyStrip); svg.insertAdjacentHTML('afterend', eyeStrip); }
+  clock.pending = !visible;
+  if (!visible) { surface.dataset.slimePending = "true"; return; }
+  delete surface.dataset.slimePending;
+  const drawing = clock.drawing;
+  if (drawing && loopState(state)) {
+    const key = `${clock.drawingKey}:${state}`;
+    let template = celTemplates.get(key);
+    if (!template) {
+      template = document.createElement('template');
+      template.innerHTML = strips(state, drawing).join('');
+      if (celTemplates.size >= CEL_TEMPLATE_LIMIT) celTemplates.delete(celTemplates.keys().next().value!);
+    } else celTemplates.delete(key);
+    celTemplates.set(key, template);
+    const content = template.content.cloneNode(true) as DocumentFragment;
+    if (content.firstElementChild) svg.before(content.firstElementChild);
+    if (content.firstElementChild) svg.after(content.firstElementChild);
+    // Motion retains the original phase. Each admitted surface reveals on its own
+    // frame's finite bridge instead of rasterizing an entire presence burst at once.
+    const elapsed = Math.max(0, performance.now() - clock.mounted);
+    // animation-delay does not inherit into hundreds of static cel paths.
+    const delay = clock.delay - elapsed;
+    for (const part of surface.querySelectorAll<HTMLElement>('.slime-cels, .slime-eye-cels, .slime-blink-cels')) part.style.animationDelay = `${delay}ms`;
+    const lag = state === 'thinking' ? 140 : state === 'searching' ? 120 : 0;
+    for (const part of surface.querySelectorAll<HTMLElement>('.slime-prop-cels')) part.style.animationDelay = `${delay + lag}ms`;
+    holdVector(svg, clock, state === 'error' ? 1600 : 320);
+  }
+}
+
+/** Keep the vector visible until this surface's deferred strips can take over. */
+function holdVector(svg: SVGElement, clock: SlimeClock, duration: number): void {
+  clock.reveal?.cancel(); clock.reveal = undefined;
+  if (typeof svg.animate !== 'function' || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+  clock.transitionUntil = performance.now() + duration;
+  const reveal = svg.animate([{visibility:'visible'},{visibility:'visible'}], {duration});
+  clock.reveal = reveal;
+  void reveal.finished.catch(() => { /* A newer state or deferred admission owns visibility. */ });
+  reveal.onfinish = () => {
+    if (clock.reveal !== reveal) return;
+    clock.reveal = undefined; delete svg.dataset.transitioning;
+    for (const part of [clock.motion,clock.gaze,...clock.marks.map(mark=>mark.part)]) part.style.removeProperty('animation-delay');
+  };
+}
+
+/** Deferred cels are mounted only after the visibility observer admits this surface. */
+export function showSlime(surface: Element): void {
+  if (document.visibilityState === "hidden" || surface.closest("[hidden], details:not([open])")) return;
+  const svg = surface.querySelector<SVGElement>("svg.slime");
+  if (svg) admitStrips(svg, clockOf(svg));
+}
+function admitStrips(svg: SVGElement, clock: SlimeClock): void {
+  if (!clock.pending) return;
+  if (!loopState(clock.state)) enter(svg, clock.state);
+  else { pendingStrips.add(svg); scheduleStrips(); }
+}
+
+const pendingStrips = new Set<SVGElement>();
+let stripsQueued = false;
+/** A presence burst must not parse every visible member's large strip in one IPC callback. */
+function scheduleStrips(): void {
+  if (stripsQueued) return;
+  stripsQueued = true;
+  requestAnimationFrame(() => {
+    stripsQueued = false;
+    for (const svg of pendingStrips) {
+      pendingStrips.delete(svg);
+      const clock = clockOf(svg);
+      if (!svg.isConnected || !clock.pending || document.visibilityState === 'hidden' || svg.closest('[data-offscreen], [hidden], details:not([open])')) continue;
+      enter(svg, clock.state);
+      break;
+    }
+    if (pendingStrips.size) scheduleStrips();
+  });
 }
 
 /** A new state takes over from where the slime stands, however far through the old one it was, so nothing jumps. */
 export function handOver(svg: SVGElement, state: SlimeState): void {
-  if (svg.dataset.state === state) return;
-  // Out of sight nothing can be seen to jump, so the pose is not read: reading it styled every far slime of a long thread.
-  if (svg.closest("[data-offscreen]")) { enter(svg, state); delete svg.dataset.transitioning; return; }
-  const one = (selector: string): SVGElement => svg.querySelector<SVGElement>(selector)!;
-  const settle = one(".slime-settle"), motion = one(".slime-motion"), look = one(".slime-look"), gaze = one(".slime-gaze");
-  const own = [...svg.querySelectorAll<SVGElement>(".slime-body, .slime-mark")];
-  const bridge = (part: SVGElement): SVGElement => part.closest<SVGElement>(".slime-correction")!;
-  const bridged = (part: SVGElement): DOMMatrix => poseOf(part).multiply(poseOf(part.firstElementChild!));
-  const loop: readonly PoseProperty[] = ["translate", "rotate", "scale"];
-  const cel = svg.parentElement!.querySelector('.slime-loop-body');
-  const paintedLoop = cel && getComputedStyle(cel).display !== 'none' && getComputedStyle(cel).visibility !== 'hidden';
-  const body = paintedLoop ? loopPose(svg,'body') : bridged(settle).multiply(poseOf(motion));
-  const eyes = paintedLoop ? loopPose(svg,'eyes') : bridged(look).multiply(poseOf(gaze, loop));
-  const each = own.map(part => bridged(bridge(part)).multiply(poseOf(part)));
-  // Error's first deflate uses the same hide animation name as a handover.
-  // Cancel its old timeline before starting this finite bridge.
-  svg.style.animationName='none';
-  void getComputedStyle(svg).animationName;
-  enter(svg, state);
-  if(loopState(state))svg.dataset.transitioning='true';else delete svg.dataset.transitioning;
-  svg.style.setProperty("--slime-since", "0ms");
-  svg.style.removeProperty('animation-name');
-  for(const part of svg.querySelectorAll<SVGElement>('.slime-motion,.slime-gaze,.slime-mark')){
-    const style=getComputedStyle(part), durations=style.animationDuration.split(',').map(parseFloat);
-    part.style.animationDelay=style.animationDelay.split(',').map((delay,index)=>`${parseFloat(delay)%(durations[index]??durations[0]??1)}s`).join(',');
+  handOverTogether([svg], state);
+}
+
+/** Every occurrence transitions from its cached clock; there are no computed-style reads. */
+function handOverTogether(svgs: SVGElement[], state: SlimeState): void {
+  const now = performance.now();
+  for (const svg of svgs) {
+    const clock = clockOf(svg);
+    if (clock.state === state) continue;
+    clock.reveal?.cancel(); clock.reveal = undefined;
+    if (document.visibilityState === 'hidden' || svg.closest('[data-offscreen], [hidden], details:not([open])')) {
+      clock.mounted = now; clock.since = 0;
+      enter(svg, state, false); delete svg.dataset.transitioning; continue;
+    }
+    const body = bridgePose(clock.settle, now).multiply(statePose(clock, 'body', now));
+    const eyes = bridgePose(clock.look, now).multiply(statePose(clock, 'eyes', now));
+    const marks = clock.marks.map(mark => bridgePose(mark.bridge, now).multiply(statePose(clock, 'mark', now, mark.give)));
+    enter(svg, state, false);
+    clock.mounted = now; clock.since = 0;
+    clock.transitionUntil = now + (state === 'error' ? 1600 : 320);
+    svg.style.setProperty('--slime-since', '0ms');
+    // Explicit visibility keyframes restart without flushing a reused CSS animation name.
+    // With no strip mounted the vector remains visible, even if a busy frame delays the queue.
+    svg.style.animationName = 'none';
+    if (loopState(state)) holdVector(svg, clock, clock.transitionUntil-now);
+    const parts = [clock.motion, clock.gaze, ...clock.marks.map(mark => mark.part)];
+    for (const [index, part] of parts.entries()) {
+      if (loopState(state)) {
+        const loop = LOOPS[state], period = (index === 1 ? loop.eyes : index > 1 && state === 'thinking' ? 3.6 : loop.body) * clock.tempo * 1000;
+        const lag = index > 1 ? state === 'thinking' ? 140 : state === 'searching' ? 120 : 0 : 0;
+        part.style.animationDelay = `${(clock.delay + lag) % period}ms`;
+      } else part.style.removeProperty('animation-delay');
+    }
+    if (loopState(state)) svg.dataset.transitioning = 'true'; else delete svg.dataset.transitioning;
+    startFrom(clock.settle, body.multiply(statePose(clock, 'body', now).inverse()), now);
+    startFrom(clock.look, eyes.multiply(statePose(clock, 'eyes', now).inverse()), now, 200);
+    clock.marks.forEach((mark,index) => startFrom(mark.bridge, marks[index]!.multiply(statePose(clock, 'mark', now, mark.give).inverse()), now));
+    admitStrips(svg, clock);
   }
-  startFrom(settle, body.multiply(poseOf(motion).inverse()));
-  startFrom(look, eyes.multiply(poseOf(gaze, loop).inverse()));
-  own.forEach((part, index) => startFrom(bridge(part), each[index]!.multiply(poseOf(part, loop).inverse())));
 }
 
 export function presenceAttrs(id: number): string {
@@ -324,7 +434,7 @@ export function presenceAttrs(id: number): string {
 }
 
 const paint = (id: number, state: SlimeState): void => {
-  for (const svg of document.querySelectorAll<SVGElement>(`svg.slime[data-slime-member="${id}"]`)) handOver(svg, state);
+  handOverTogether([...document.querySelectorAll<SVGElement>(`svg.slime[data-slime-member="${id}"]`)], state);
 };
 
 /** The list the core just read says what each member is doing, for a window that opened late. A moment plays out first. */

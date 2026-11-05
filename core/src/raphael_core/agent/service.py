@@ -4794,6 +4794,20 @@ class AgentService:
         conversation_id = self.conversations.resolve(member_id, _opt_int(params, "conversation_id"))
         # Every delivery belongs to the conversation that received it, including exchanges.
         exchanges = True
+        after_id = _opt_int(params, "after_id")
+        turn_ids = params.get("turn_ids", [])
+        if not isinstance(turn_ids, list) or len(turn_ids) > 50 or any(type(key) is not int or key <= 0 for key in turn_ids):
+            raise invalid_params("turn_ids must contain at most 50 positive turn IDs")
+        if after_id is not None:
+            if after_id < 0 or before_id is not None or around_id is not None:
+                raise invalid_params("after_id must be nonnegative and cannot combine with before_id or around_id")
+            turns, removed, more, cursor = self._history.changes(after_id, list(dict.fromkeys(turn_ids)), min(limit, 50),
+                member_id=member_id, conversation_id=conversation_id, exchanges=exchanges)
+            questions = getattr(self._background, "owner_questions", None)
+            return {"turns": self._turn_views(turns), "delta": True, "removed_ids": removed, "has_more": more, "next_after_id": cursor,
+                    "pending_questions": questions.in_conversation(conversation_id=conversation_id, member_id=member_id) if questions is not None else []}
+        if turn_ids:
+            raise invalid_params("turn_ids requires after_id")
         turns = self._history.list(limit=limit, before_id=before_id, member_id=member_id,
                                    conversation_id=conversation_id, exchanges=exchanges)
         if around_id is not None:

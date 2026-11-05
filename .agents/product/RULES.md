@@ -1,5 +1,19 @@
 # Raphael product rules
 
+## Long busy conversation input (2026-11-05)
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-PERF-14 | 2026-11-05 | Typing 200 human-paced keys in the isolated native 150-turn rich conversation with concurrent fake brains and paced replies records capturing-keydown performance.now to the second requestAnimationFrame for every key, with median below 16ms and p95 retained. Event Timing remains a censored cross-check, never zero-filled. Compare three consecutive runs per old/changed binary and retain each run's free memory and heavy-process count. | native | hard | app/scripts/look/native/typing.mjs; app/scripts/look/native/typing.test.mjs |
+| R-PERF-15 | 2026-11-05 | The same native typing interval has worst keydown-to-second-frame below 50ms; retain raw event entries and sampled CPU self time by function. | native | hard | app/scripts/look/native/typing.mjs; app/scripts/look/native/typing.test.mjs |
+| R-PERF-16 | 2026-11-05 | No long animation frame exceeds 100ms during that typing interval; report every frame over 50ms with script attribution. | native | hard | app/scripts/look/native/typing.mjs; app/scripts/look/native/typing.test.mjs |
+| R-PERF-17 | 2026-11-05 | Only changed turns rebuild HTML. Finished records retain their rendered text; Composio projection and mention matching cache by text and presentation/roster version. Text without a JSON opener returns immediately. | vitest, look | hard | app/src/main/thread-render.test.ts; app/src/main/composio-result.test.ts; app/src/main/mention-text.test.ts; busy-team-typing |
+| R-PERF-18 | 2026-11-05 | An unchanged slime reads no transforms. Hidden, collapsed and offscreen state changes defer strips and transition math until visible. Visible handovers use JS pose/timing state and finite explicit keyframes, with no computed-style or animated-attribute reads on the hot path. Concurrent presence changes mount at most one visible cel strip per frame. | vitest, look, native | hard | app/src/main/slime.test.ts; app/src/main/slime-offscreen.test.ts; slime-states; app/scripts/look/native/typing.mjs |
+| R-PERF-19 | 2026-11-05 | Rich-content mutations reuse one reading anchor chosen on scroll, with observers coalesced to a frame; each update measures at most that one anchor and never reads container heights. The native journey logs touched elements per call. Explicit quote/search navigation invalidates queued corrections before taking scroll ownership. | vitest, look | hard | app/src/main/message-rich.test.ts; busy-team-anchor; thread-window-earlier; room-window-earlier |
+| R-PERF-20 | 2026-11-05 | Sending and turn events request bounded appended/invalidated turns instead of a full history refresh. Existing before/around paging and thread ownership stay intact. The native journey logs UTF-8 bytes, JSON parse time and returned IDs for every history/room reply, independently from callback rendering cost. | pytest, vitest, native | hard | core/tests/agent/test_service.py::test_history_changes_return_only_invalidated_turns_and_bounded_forward_pages; app/src/main/pages/agent-members.test.ts; app/scripts/look/native/typing.mjs |
+| R-PERF-21 | 2026-11-05 | Private and room threads share one window: newest 25 turns on open, 20 earlier within 300px, maximum 100, stable reading anchor, bottom arrivals trim oldest. Search, quote jumps, external targets, pending-question bring, unread divider and latest mount their targets first. Core paging remains independent. | vitest, look, native | hard | app/src/main/transcript-window.test.ts; app/src/main/conversation-find.test.ts; thread-window-open; thread-window-earlier; thread-window-find; room-window-open; room-window-earlier; room-window-find; app/scripts/look/native/typing.mjs |
+
+
 ## Responsive member computer (2026-11-04)
 
 | ID | Date | Rule | Check | Severity | Evidence |

@@ -1,18 +1,22 @@
 // A slime far outside what can be seen does not move. Chromium does not paint content well outside a
 // scroller's view, so it cannot hand those animations to the compositor and instead advances them on the
 // main thread every frame, at the display's refresh rate, which froze the window in long threads.
-// Slimes within the margin keep moving, so one coming into view is already in motion. A newly drawn slime
-// moves until the observer has placed it, a frame later: holding it still first would make a slime in view
-// start from its rest pose and jump into its loop.
+// Only surfaces intersecting the viewport need animation work. The JS pose clock restores a newly visible
+// surface in phase; a preload margin would keep unseen atlases moving for no visible benefit.
 
-const MARGIN = "300px";
+import { showSlime } from "./slime";
+
+const MARGIN = "0px";
 const SURFACE = ".slime-surface";
 
 /** Watches every slime under `root`, now and as lines are drawn, and marks the far ones `data-offscreen`. Returns the way to stop. */
 export function stopOffscreenSlimes(root: ParentNode & Node = document.body): () => void {
   if (typeof IntersectionObserver === "undefined" || typeof MutationObserver === "undefined") return () => {};
   const sight = new IntersectionObserver(entries => {
-    for (const entry of entries) entry.target.toggleAttribute("data-offscreen", !entry.isIntersecting);
+    for (const entry of entries) {
+      entry.target.toggleAttribute("data-offscreen", !entry.isIntersecting);
+      if (entry.isIntersecting) showSlime(entry.target);
+    }
   }, { rootMargin: MARGIN });
   const surfacesIn = (node: Node): Element[] => {
     if (!(node instanceof Element)) return [];
@@ -27,5 +31,9 @@ export function stopOffscreenSlimes(root: ParentNode & Node = document.body): ()
     }
   });
   lines.observe(root, { childList: true, subtree: true });
-  return () => { lines.disconnect(); sight.disconnect(); };
+  const resume = (): void => {
+    if (document.visibilityState !== "hidden") for (const surface of root.querySelectorAll(`${SURFACE}[data-slime-pending]:not([data-offscreen])`)) showSlime(surface);
+  };
+  document.addEventListener("visibilitychange", resume);
+  return () => { lines.disconnect(); sight.disconnect(); document.removeEventListener("visibilitychange", resume); };
 }

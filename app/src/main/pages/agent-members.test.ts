@@ -1390,6 +1390,7 @@ test("a burst of turn events while typing makes one history request and preserve
   expect(api.agentHistoryList).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(500); await flush();
   expect(api.agentHistoryList).toHaveBeenCalledTimes(1);
+  expect(api.agentHistoryList.mock.calls[0]![0]).toMatchObject({after_id:expect.any(Number),turn_ids:[31]});
   expect(input.value).toBe("Keep typing this draft");
   expect($('.tn[data-id="31"]')).toBe(node);
   agent.hide();
@@ -1405,5 +1406,22 @@ test("a same-length reply edit still refreshes without serializing the full hist
   send({ type: "AgentTurn", turn_id: 31, member_id: 3 });
   await vi.advanceTimersByTimeAsync(500); await flush();
   expect($('.tn[data-id="31"]').textContent).toContain(edited);
+  agent.hide();
+});
+
+test("a metadata-only reply update does not force latest again", async () => {
+  vi.useFakeTimers();
+  const agent = mount(); await flush(); await pick(3);
+  await vi.advanceTimersByTimeAsync(100); await flush();
+  const scroll = $('.mb-chat .ra-scroll'), write = vi.fn();
+  Object.defineProperty(scroll, 'scrollTop', { get: () => 0, set: write });
+  const node = $('.tn[data-id="31"]');
+  const changed = structuredClone(THREADS[3]!);
+  changed[0]!.session_id = 'updated-session';
+  api.agentHistoryList.mockResolvedValueOnce({ turns: changed });
+  send({ type: "AgentTurn", turn_id: 31, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(500); await flush();
+  expect($('.tn[data-id="31"]')).toBe(node);
+  expect(write).not.toHaveBeenCalled();
   agent.hide();
 });

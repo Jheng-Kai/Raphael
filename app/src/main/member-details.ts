@@ -226,7 +226,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       const field = el.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${id}`);
       if (field && field !== focused && field.value !== value) field.value = value;
     }
-    const face = faceHTML(member, 64).replace(/--slime-(?:delay|since):[^;"\s]+;?/g, "");
+    const face = faceHTML(member, 64).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
     const signature = JSON.stringify([member, face, host.list()?.groups, counts, routines, tab, [...openFields], getLocale(), !!host.openConversation, host.conversationOf?.(member.id), tab === "memory" ? memories.map(list => list.view()) : null]);
     if (drawn === signature) return;
     drawn = signature;

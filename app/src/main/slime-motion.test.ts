@@ -5,6 +5,26 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { motionSource } from '../../scripts/slime-cels.mjs';
 
+test('the loop reserve retains the body and accessory envelope at every sampled pose', () => {
+  // Includes the outermost wings/hat, with padding for their independent mark rotation.
+  for (const state of Object.keys(LOOPS) as (keyof typeof LOOPS)[]) {
+    for (let cel = 0; cel < 12; cel++) {
+      const pose = sample(`slime-${state}-body`, cel/12, LOOPS[state].ease);
+      if (state === 'error') pose.scale = [1.08,.62];
+      const angle = pose.rotate[0]! * Math.PI/180;
+      for (const x of [-4,104]) for (const y of [0,96]) {
+        const dx = (x-50)*pose.scale[0]!, dy = (y-86)*pose.scale[1]!;
+        const drawnX = 50 + pose.translate[0]! + dx*Math.cos(angle) - dy*Math.sin(angle);
+        const drawnY = 86 + pose.translate[1]! + dx*Math.sin(angle) + dy*Math.cos(angle);
+        expect(drawnX, `${state}/${cel} x`).toBeGreaterThan(-19);
+        expect(drawnX, `${state}/${cel} x`).toBeLessThan(119);
+        expect(drawnY, `${state}/${cel} y`).toBeGreaterThan(-12);
+        expect(drawnY, `${state}/${cel} y`).toBeLessThan(126);
+      }
+    }
+  }
+});
+
 test('generated pose data matches the vector source of truth', () => {
   expect(raw).toBe(motionSource(readFileSync(resolve(__dirname,'slime.css'),'utf8')));
 });

@@ -2,6 +2,34 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith("thread-window-")) {
+    const pane = [...document.querySelectorAll('.mb-chat')].find(visible), scroll = pane?.querySelector('.ra-scroll');
+    require(scroll, "the real conversation is open");
+    const mounted = [...scroll.querySelectorAll('.tn[data-id], .tn[data-room-message]')];
+    require(mounted.length <= 100, "no more than 100 turns are mounted");
+    if (name === "thread-window-open") {
+      require(mounted.length === 25, "only the newest 25 turns open");
+      const quote = scroll.querySelector('button.message-quote, button.au-room-reply');
+      require(quote, "the newest turn retains its actionable quote");
+      const style = getComputedStyle(quote);
+      require(style.borderTopWidth === "0px" && style.borderBottomWidth === "0px" && style.borderInlineEndWidth === "0px", "quote jumps retain the shared excerpt style without browser button borders");
+    }
+    if (name === "thread-window-earlier") {
+      require(mounted.length === 45, "one earlier step mounts 20 more turns");
+      const anchor = window.__windowAnchor;
+      require(anchor.node.isConnected && Math.abs(anchor.node.getBoundingClientRect().top-anchor.top) <= 1, "the same reading anchor stays within one pixel");
+    }
+    if (name === "thread-window-find") {
+      const mark = scroll.querySelector('mark.is-current'), turn = mark?.closest('[data-id], [data-room-message]');
+      require(turn && (turn.dataset.id ?? turn.dataset.roomMessage) === "9005", "the old result is mounted before it is selected");
+      require(visible(mark), "the selected result is visible");
+    }
+    if (name === "thread-window-quote") {
+      const target = scroll.querySelector('.tn[data-id="9005"], .tn[data-room-message="9005"]');
+      require(target && target.getBoundingClientRect().bottom > scroll.getBoundingClientRect().top && target.getBoundingClientRect().top < scroll.getBoundingClientRect().bottom, "the unmounted quote source is revealed in the scrollport");
+    }
+    return {check:name,mounted:mounted.length,total:Number(scroll.dataset.windowTotal)};
+  }
   if (["room-meeting", "room-meeting-board", "room-meeting-report"].includes(name)) {
     const pane = document.querySelector('.au-room-pane:not([hidden])');
     require(pane, "the real group conversation is open");
@@ -44,8 +72,8 @@ export function checkRendered(name, context = {}) {
     return { check: name, labels: labels.length };
   }
   if (["owner-question-pending", "owner-question-brought", "owner-question-pending-many"].includes(name)) {
-    const host = [...document.querySelectorAll('.mb-chat')].find(element => visible(element.querySelector('.ra-scroll')) && element.querySelector('.pending-questions'));
-    const row = host?.querySelector('.pending-questions'), scroll = host?.querySelector('.ra-scroll');
+    const host = [...document.querySelectorAll('.mb-chat')].find(element => visible(element.querySelector('.ra-scroll')) && element.querySelector('.pending-questions:not(.room-meeting-row)'));
+    const row = host?.querySelector('.pending-questions:not(.room-meeting-row)'), scroll = host?.querySelector('.ra-scroll');
     require(host && scroll && row, "the open conversation owns the floating row");
     const cards = [...host.querySelectorAll('[data-owner-kind="ask_owner"][data-card-state="asked"]')];
     if (name === "owner-question-brought") {
@@ -67,6 +95,12 @@ export function checkRendered(name, context = {}) {
     if (name === "thread-new-divider-return") {
       require(!divider, "returning to a read thread has no divider");
       return { check: name };
+    }
+    if (name === "thread-new-divider-bottom" && !divider) {
+      const bottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      require(Number(scroller.dataset.windowBefore) > 0 && Number(scroller.dataset.windowLater) === 0, "only the older window containing the boundary is unmounted");
+      require(Number(scroller.dataset.windowMounted) <= 100 && bottom <= 2, "latest reveals a capped tail at the bottom");
+      return {check:name,bottom,boundaryUnmounted:true};
     }
     require(divider && scroller.querySelectorAll('.thread-new').length === 1, "one independent divider is present");
     require(divider.nextElementSibling?.dataset.id === "7001", "the line precedes the first unseen turn");

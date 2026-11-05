@@ -1428,3 +1428,130 @@ The existing test_retry_turns.py::test_a_colleagues_question_is_answered_while_t
 also preserves the colleague bypass and verifies that an owner CLI turn waits
 for the held conversation lock, then answers after release. It must not wait
 for that owner turn while still holding the lock or expect the removed busy reply.
+
+## Long busy conversations and bounded mounting (2026-11-05)
+
+R-PERF-14 through R-PERF-21 separate native latency budgets from deterministic
+rendering and reading contracts. `transcript-window.ts` owns the private/room
+25/20/100-turn policy and the 300px sentinel margin. Stable keys preserve a reader
+across history prepends, capped windows and bottom arrivals. Existing history
+before/around paging remains unchanged. A turn contains owner words, reply, work
+and cards, so its cold window is smaller than a message-only transcript.
+
+Search indexes loaded wire records and mounts the selected result's surrounding
+window before highlighting. Explicit quote jumps, member links and pending-question
+bring reveal an unmounted target first; latest restores the tail. Opening an unread
+conversation reveals the unread boundary rather than dropping its divider.
+Window search and quote-source matching use the rendered Composio projection with
+action context; room multi-message parts are projected individually before indexing.
+Typing selections inside editable fields never query document selection or message
+geometry; message selections retain the existing shared quote pill. Visible slime
+occurrences for one member share old-pose reads, new-pose reads and style flushes
+instead of forcing layout separately for each avatar.
+
+Mounted finished private/room records retain HTML by wire revision and presentation
+dependencies; unmounted HTML entries are released. Roster identity ignores activity-only changes. Bounded Composio and
+mention caches avoid repeated projection and regular-expression construction.
+Event reads append new turns and refresh only invalidated/active IDs through the
+optional `agent.history.list` delta query. Legacy cores retain their ordinary page
+response. New query parameters never cross member/conversation scope.
+
+Selected local matrix (both themes; 1120,720,1920x1080):
+
+```powershell
+npm run look -- thread-window-open thread-window-earlier thread-window-find thread-window-quote room-window-open room-window-earlier room-window-find room-window-quote thread-window-composio-find room-window-composio-find busy-team-typing busy-team-follow busy-team-anchor thread-new-divider thread-new-divider-latest thread-new-divider-remount thread-new-divider-stays rich-code rich-streaming conversation-chief-up conversation-member-up conversation-room-up composio-readable-result owner-question-pending-page owner-question-brought owner-question-pending-room reply room-reply-send slime-states presence-states-sidebar --theme both --width 1120,720,1920x1080
+```
+
+The new window scenes exercise the real entry and native-boundary fixtures with
+150 records; earlier scenes retain the same DOM anchor within one pixel, and old
+search scenes reveal record 9005 while at most 100 turns remain mounted. Keep all
+existing reading scenes available. Compare private/room latest buttons and quote
+excerpts at matching themes/sizes; no second window treatment is introduced.
+
+`npm run native -- typing` seeds 150 persisted rich turns and eight isolated fake
+members, checks 25 mounted on open, 45 after one prepend and 65 across a core page, types 200 keys at
+120ms intervals while seven brains work and four authored multi-message replies
+use ordinary pacing. It retains raw Event Timing, long-animation-frame entries
+and a 1ms sampled CPU profile under its existing native report directory. This is
+offline app reply pacing, not live provider token transport. Native performance, look layout and external judge acceptance are separate; failures stay failures.
+
+Only when recording an old binary, set `RAPHAEL_NATIVE_TYPING_BASELINE=1` to retain
+its original mounting policy; remove it for the changed build's strict 25/45/100
+guards. Use the same recorder and alert observer for both measurements. The alert
+observer inspects changed alerts, coalesced to one frame, so animated slime styles
+cannot trigger a document-wide layout scan inside the measurement harness.
+
+
+Follow-up 2 records all 200 capturing-keydown `performance.now()` timestamps and
+both subsequent rAF callback times. `keyToSecondFrame` retains median, p95 and
+worst without Event Timing's 16ms censoring; do not subtract a refresh interval.
+Keep the older Event Timing fields as a cross-check. The typing raw artifact also
+logs per-call rich-scroll measurements and every `agent.history.list` /
+`rooms.messages` response's UTF-8 byte size, returned IDs and timed JSON parse.
+The recorder reads the response body once and parses it once; decoding/waiting,
+byte counting and callback/render work are outside `parseMs`. Both binaries use
+the identical instrumentation. Long-thread fixtures use synthetic zh-TW prose.
+Compare old/changed builds three times each in alternating order, retaining every
+run and the median of the three run statistics, plus per-run free memory and busy
+process count (`RAPHAEL_NATIVE_LOAD` is recorded in the native report).
+
+The rich-scroll controller initializes its container metrics at mount and scroll,
+then measures at most one retained content anchor per coalesced update. Explicit
+quote/search/bring navigation releases queued corrections before choosing its
+new destination. Latest-button visibility uses an IntersectionObserver on the
+end marker; only a viewport/stage resize measures its control position. Visible
+slime handovers retain JS clocks and finite bridge poses; presence bursts parse
+at most one visible cel strip per frame instead of blocking one IPC callback.
+Admission compensates loop delay for elapsed time and holds the vector through
+that surface's own reveal, so deferred surfaces neither go blank nor all reveal
+in the same frame after a presence burst.
+Slime mount timestamps are phase metadata, not content identity: private/room
+lines, member details, desktop panels and sidebar search must ignore them when
+comparing generated markup. Moving between children of one live tooltip target
+does not measure that target again. Regression evidence includes
+presence-transcript.test.ts, message-search.test.ts and message-tooltip.test.ts.
+The rich-scroll listener shares the end observer's cached following state, so
+automatic following does not synchronously read container geometry. The private
+page invokes forced following only for initial display or explicit follow;
+metadata-only reply updates preserve their nodes and do not write scrollTop.
+Actual content changes retain one coalesced following/reading correction.
+Pending questions measure the viewport only when an asked card is actually mounted.
+Finite slime bridges animate native translate/rotate/scale properties, avoiding
+per-tick custom-property resolution while retaining the same JS pose clock.
+Window scroll callbacks use sentinel intersections to skip position reads far
+from either edge; browsers without IntersectionObserver retain the coalesced
+position fallback. Cover pending-question bring and old-content reading in the
+selected visual consumers after changing these shared observers.
+Code highlighting tracks completed blocks; ordinary text mutations and automatic
+following do not remeasure untouched offscreen code. Newly mounted code, reading
+scrolls, container resize, disclosure and theme invalidation still refresh it.
+Diagram theme versions retain token-derived rerendering without repeated style
+reads on unrelated messages. Cover rich-code, rich-diagram and rich-source.
+Thinking/searching plain bodies and printed marks do not allocate a second body
+axis for nonexistent independent marks; animated character marks retain that
+axis. The twelve body poses, eye/blink grid, loop periods and phases are unchanged.
+Repeated state/drawing geometry uses a 16-entry LRU of inert parsed templates;
+each surface gets independent clones and per-instance colour/phase. Do not
+reparse identical strips for every member, or retain an unbounded DOM cache.
+Pending-question bring invalidates queued rich-scroll corrections immediately
+before scrolling the moved card; restoring the target window alone is insufficient.
+The native typing window observer starts before earlier-page preparation, so its
+maximum includes the 45/65-turn setup as well as typing and reply updates.
+Fixed-size clipped slime atlases establish layout/paint containment; motion
+periods, sampled poses and the existing visible clipping reserve remain unchanged.
+Finite pointer delight and press/release use native translate/rotate/scale,
+retaining their angles, durations, easing and reduced-motion cancellation.
+Slime visibility uses a zero-margin viewport observer; unseen atlases do not
+animate in a preload band. Restoring visibility uses the retained JS phase.
+The transcript's independent 300px earlier-page sentinel remains unchanged.
+Typing in a composer also closes a sibling sidebar tooltip. Animated pointer
+retargets must not reopen or remeasure it until the pointer actually moves;
+keyboard focus must still expose the tooltip. Global listeners retain no host.
+Small slime atlases keep a 1.5-avatar clipping reserve with the same SVG units
+per CSS pixel, loop samples and timing, guarded by sampled accessory-envelope
+checks. Cover slime-gallery, slime-parts and
+slime-motion-recovery when changing the reserve or cel coordinate origin.
+Eye atlases inherit typed pixel-fit scale, offsets and stroke from their shared
+parent. The 576 thinking poses must not each carry the vector face's fitting
+class. Keep the same pixel formulas, all poses and periods; cover the gallery,
+parts, presence hovers and handovers when changing this shared style boundary.

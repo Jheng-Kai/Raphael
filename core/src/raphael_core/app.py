@@ -279,7 +279,7 @@ class EchoClient:
         from .native_journeys import record_model_request
         from .native_journeys import native_think, wait_for_native_cancel
         await wait_for_native_cancel(messages)
-        await native_think()
+        await native_think(messages)
         record_model_request(kwargs.get("model"), kwargs.get("reasoning_effort", "none"))
         # The scripted task of the background worker (see the class).
         offered = {tool["function"]["name"] for tool in tools}
@@ -292,6 +292,11 @@ class EchoClient:
             raw = json.dumps(arguments)
             call = ChatToolCall(id=f"call_{seen}", name=name, arguments=arguments, raw_arguments=raw)
             return ChatTurn("", [call], "fake/echo", 0.0, 0, 0, 0)
+
+        from .native_journeys import native_enabled
+        if native_enabled(True) and "[native-typing:" in task:
+            parts = [f"離線回覆 {index}：工作仍在進行，這則訊息透過一般歷史紀錄與回覆節奏送達。" for index in range(4)]
+            return ChatTurn(json.dumps({"text": "\n\n".join(parts), "messages": parts}), [], "fake/echo", 0.0, 0, 0, 0)
 
         # Native journeys script the provider's choice, then use the real member tool/store.
         from .native_journeys import native_calendar, native_consult, native_connect, native_diagnosis, native_memory, native_skills, native_computer

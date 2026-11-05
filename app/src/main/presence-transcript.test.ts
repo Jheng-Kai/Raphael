@@ -9,6 +9,15 @@ import { memberRowHTML } from "./member-column";
 import { messageTooltip } from "./message-tooltip";
 import { faceHTML, RAPHAEL_ID } from "./members";
 import { patchThread } from "./thread-diff";
+
+test("a changing slime mount timestamp does not rebuild the same live turn", () => {
+  const thread = document.createElement("ol"), drawn = new WeakMap<Element,string>();
+  const line = (time: number) => ({key:"sample", html:`<li><svg class="slime" data-slime-mounted="${time}"></svg><span>Working</span></li>`});
+  expect(patchThread(thread, [line(10)], drawn)).toBe(true);
+  const node = thread.firstElementChild;
+  expect(patchThread(thread, [line(20.5)], drawn)).toBe(false);
+  expect(thread.firstElementChild).toBe(node);
+});
 import type { AgentTurn, Member } from "./types";
 
 const time = Date.UTC(2026, 10, 2, 9);

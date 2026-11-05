@@ -451,6 +451,24 @@ class AgentHistory:
                 self._index(turn_id, row[0], text, detail)
         return cursor.rowcount > 0
 
+    def changes(self, after_id: int, turn_ids: list[int], limit: int, *, member_id: int,
+                conversation_id: int, exchanges: bool = False) -> tuple[list[Turn], list[int], bool, int]:
+        """One bounded forward page plus explicitly invalidated rows in this same private thread."""
+        where, params = _thread(member_id, conversation_id, exchanges)
+        fresh = self._conn.execute(
+            f"SELECT {_COLUMNS} FROM agent_turns WHERE {where} AND id > ? ORDER BY id LIMIT ?",
+            [*params, after_id, limit + 1],
+        ).fetchall()
+        changed = self._conn.execute(
+            f"SELECT {_COLUMNS} FROM agent_turns WHERE {where} AND id IN ({','.join('?' for _ in turn_ids)})",
+            [*params, *turn_ids],
+        ).fetchall() if turn_ids else []
+        found = {row["id"] for row in changed}
+        rows = {row["id"]: row for row in [*fresh[:limit], *changed]}
+        return ([_to_turn(rows[key]) for key in sorted(rows, reverse=True)],
+                [key for key in turn_ids if key not in found], len(fresh) > limit,
+                fresh[min(len(fresh), limit) - 1]["id"] if fresh else after_id)
+
     def list(
         self, limit: int = 50, before_id: int | None = None, *, member_id: int = 0,
         conversation_id: int | None = None, exchanges: bool = False,
