@@ -124,7 +124,7 @@ class ToolGate:
     def firm_confirmation(self, name, arguments) -> bool:
         from ..management import destructive
         retention = self._settings.get("history_retention_days") if self._settings else None
-        return name == "routine_delete" or destructive(name, arguments, retention)
+        return name.endswith("/fill_card") or name == "routine_delete" or destructive(name, arguments, retention)
 
     @property
     def ask_first(self) -> bool:
@@ -296,7 +296,7 @@ class ToolGate:
 
     def is_vm_tool(self, key: str) -> bool:
         """Sandbox gestures use the lease; using a saved identity or working on a dataset still obeys safety rules."""
-        return bool(getattr(self._plugins, "is_computer_tool", lambda _: False)(key)) and not key.endswith(("/fill_login", "/dataset"))
+        return bool(getattr(self._plugins, "is_computer_tool", lambda _: False)(key)) and not key.endswith(("/fill_login", "/fill_contact", "/fill_card", "/dataset"))
 
     # --- the plugins' tools ---------------------------------------------------------------------
 

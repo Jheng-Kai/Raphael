@@ -739,6 +739,15 @@ discovery and document dialogs; see [Members](members.md#localized-skill-origins
 The same selected twenty-scene skill matrix checks raw-source leakage and one learned
 origin/date line.
 
+
+## Shared owner vault (2026-11-05)
+
+See [Settings and appearance](settings-appearance.md#shared-owner-vault-2026-11-05)
+for R-VAULT-01..05, Safety navigation, shared Credential Manager entries, transient
+CSV import and mandatory payment consent. The merge follow-up maps all nine vault
+scenes plus calm-thread in the ten-scene selected look matrix; the feature entry
+contains the executable look command used by judge context discovery.
+
 ## Calm conversations (owner, 2026-11-05)
 
 See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) for R-UI-101 and R-CLI-07, the selected eleven-scene matrix and offline/native boundaries.

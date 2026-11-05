@@ -1,5 +1,23 @@
 # Raphael architecture and checked boundaries
 
+## Conversation metadata boundary (2026-11-05)
+
+Migration 64 adds bounded owner reaction tables with message/turn ownership, side
+thread root links, the existing draft store's transport kind and member voice_memo.
+agent.react and rooms.react only change metadata and notify their existing timeline;
+they never enter confirmation, owner-question or draft completion paths. Private
+context reads metadata through AgentHistory; room transcripts include the same
+explicit non-instruction label. rooms.thread_open validates a main-room root and
+reuses room_threads/thread_id, the existing worker and its isolated transcript.
+
+slack_draft shares EmailDrafts, its version digest, send claim and ToolGate. It refuses
+room origins at both tool and service boundaries. Discovered Slack sends obey the
+same draft-first/full-permission policy as mail. No second draft engine is added.
+Member voice_memo is a profile boolean; agent.speak uses Speaker.say_member and the
+existing PCM player with a pause event. All frontend IPC stays in api.ts and the
+literal owner-window RPCs use explicit Rust allowlist entries. No worker, provider,
+model loop or settings registry is added (A-01/03/04/06/08).
+
 ## Member panel and host preflight projection (2026-11-05)
 
 Owner request of 2026-11-05: use Grok Bot's clear Details / Library / Computer hierarchy and explain the actual unavailable-computer reason. This section supersedes earlier landing-panel and first-build-caption guidance for this panel.
@@ -755,3 +773,25 @@ LocalVm creates the three team directories on the existing shared mount when a c
 The existing routines.webhook RPC accepts an owner-requested URL probe. PageFetcher pins a public HTTPS address without redirects. A short-lived authenticated nonce reaches Webhooks._receive and returns 204 before admission or background work, including for paused routines. No tunnel subprocess is launched. Existing loopback binding, HMAC/Bearer validation, rate limits and untrusted body handling remain authoritative.
 
 The main-window-only pick_output_folder and member_template_file shell commands reuse tauri_plugin_dialog. No webview-supplied path is accepted; recipe files are bounded UTF-8 and filtered to .raphael-member. Native dialog and installed file-opening acceptance remain separate from IPC fixtures (A-06/10).
+
+## Shared owner vault (2026-11-05)
+
+VaultEntries extends LoginVault at the existing Windows Credential Manager
+boundary. Migration 63 adds nonsecret metadata/member grants and a durable payment
+action hold; no value moves into SQLite. Existing per-member credential keys stay
+readable and are projected into metadata without reading the OS vault. Owner-only
+vault RPCs are enumerated in management.py and the main-window Rust allowlist;
+no model management tool can read, import, edit sharing or delete credentials.
+
+The existing VmTools adapter owns choices/contact/card fill tools, per-field
+HTTPS/grant checks, driver-echo suppression and shared redaction. ToolGate's firm
+confirmation applies to fill_card across foreground API, CLI and worker paths.
+The ordinary conversation permission card and background question remain the
+approval surfaces. No new model loop, worker, provider, MCP server, browser
+service or feature-specific test harness is introduced (A-01/03/04).
+
+The real Settings Safety pane owns the vault controller and uses shared controls.
+The owner's file input reads a bounded CSV into a transient core preview with
+a single-use token and ten-minute expiry; no source path/copy is retained. The
+metadata preview is separate from private import candidates. Core RPC failures
+return fixed field identifiers and counts, never secret-bearing exception text.

@@ -28,6 +28,7 @@ import "../memory.css";
 import { createMemory } from "../memory-view";
 import "../safety-rules.css";
 import { createRules } from "../safety-rules";
+import { createVault } from "../vault";
 import { createConnections } from "../connections";
 import { createMessaging } from "../messaging";
 import { DICTATION_MODES, isDictationMode } from "../dictation";
@@ -272,6 +273,7 @@ export function createSettings(app: AppContext): SettingsPage {
     if (event.type === "MemoryChanged" && event.space !== "own" && memoryHost.visible()) void memoryShared.load();
   });
   const rules = createRules({ visible: () => visible && pane === "safety", redraw: () => render(), undo: app.undo });
+  const vault = createVault(el, () => { if (visible && pane === "safety") render(); });
   const services = createServices({ root: el, visible: () => visible && pane === "tools", redraw: () => render(), brain: () => brain, changeSetting: (key, value) => changeBrain(key, value) });
   const cliBrains = createCliBrains({ visible: () => visible, redraw: () => render() });
   const providers = createProviders({ root: el, visible: () => visible && pane === "models" && modelsTab === "models", redraw: () => render() });
@@ -291,7 +293,7 @@ export function createSettings(app: AppContext): SettingsPage {
     update, memoryImportHTML: memoryImport.html(),
     data, pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
     replacingKey, keyBusy, keyError, limitDraft, limitError, cityDraft, cityError, languageGroups, now: Date.now(),
-    connections: connections.view(), messaging: messaging.view(), memoryShared: memoryShared.view(), rules: rules.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
+    connections: connections.view(), messaging: messaging.view(), memoryShared: memoryShared.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
 
   /** The item at the foot of the microphones' menu that looks for them again. */
@@ -506,8 +508,8 @@ export function createSettings(app: AppContext): SettingsPage {
     else messaging.reset();
     if (pane === "general") for (const list of memories) void list.load();
     else for (const list of memories) list.reset();
-    if (pane === "safety") void rules.load();
-    else rules.reset();
+    if (pane === "safety") { void rules.load(); void vault.load(); }
+    else { rules.reset(); vault.reset(); }
     services.reset();
     providers.reset();
     if (pane === "tools") void services.load();
@@ -1215,7 +1217,7 @@ export function createSettings(app: AppContext): SettingsPage {
     // the usage view opens its own dropdowns' menus (usage-analytics.ts)
     const choose = target.closest<HTMLElement>(".sel");
     if (choose?.dataset.k === "routine-timezone") { openTimezoneMenu(choose, brain?.routine_timezone ?? "", value => void changeBrain("routine_timezone", value)); return; }
-    if (choose && !choose.closest(".usage-analytics, .run-analytics")) {
+    if (choose && !choose.closest(".usage-analytics, .run-analytics, .vault")) {
       if (menuIsOpenFor(choose)) {
         closeMenu();
         return;
@@ -1447,6 +1449,7 @@ export function createSettings(app: AppContext): SettingsPage {
       messaging.reset();
       for (const list of memories) list.reset();
       rules.reset();
+      vault.reset();
       services.reset();
       providers.reset();
       if (pane === "about") void checkUpdate();
@@ -1454,7 +1457,7 @@ export function createSettings(app: AppContext): SettingsPage {
       if (pane === "connections") void connections.load();
       if (pane === "messaging") void messaging.load();
       if (pane === "general") for (const list of memories) void list.load();
-      if (pane === "safety") void rules.load();
+      if (pane === "safety") { void rules.load(); void vault.load(); }
       if (pane === "tools") void services.load();
       if (pane === "models" && modelsTab === "models") void providers.load();
       searchField.value = "";
@@ -1531,6 +1534,7 @@ export function createSettings(app: AppContext): SettingsPage {
       messaging.reset();
       for (const list of memories) list.reset();
       rules.reset();
+      vault.reset();
       services.reset();
       providers.reset();
       document.removeEventListener("keydown", settingsKey);

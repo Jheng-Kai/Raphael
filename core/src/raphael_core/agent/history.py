@@ -92,6 +92,7 @@ class Turn:
     # For a turn that did not finish, what it already did (`steps.work_summary`); set where the model
     # reads the turn (`AgentHistory.with_work`), empty otherwise.
     work: str = ""
+    reactions: dict = field(default_factory=dict)
 
 
 def is_unfinished(turn: Turn) -> bool:
@@ -387,7 +388,9 @@ class AgentHistory:
 
     def _with_messages(self, turns: list[Turn]) -> list[Turn]:
         saved = self.messages(turn.id for turn in turns if turn.id is not None)
+        from .reactions import private_reactions
         for turn in turns:
+            turn.reactions = private_reactions(self._conn, turn.id)
             turn.messages = [event_text(m["text"]) if m["kind"] == "event" else m["text"] for m in saved.get(turn.id, []) if not (m["kind"] == "event" and is_action(m["text"]))]
         return turns
 

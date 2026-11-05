@@ -25,6 +25,7 @@ const messages: Record<string, MissingKey> = {
   "modelFormat": "missing.modelFormat",
   "noModels": "missing.noModels",
   "mail": "missing.mail",
+  "slack": "missing.slack",
   "attachment": "missing.attachment",
   "allowance": "missing.allowance",
   "conversation": "missing.conversation",

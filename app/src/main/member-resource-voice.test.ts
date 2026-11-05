@@ -9,6 +9,19 @@ const flush = async (): Promise<void> => { for (let i = 0; i < 40; i++) await Pr
 let editor: ReturnType<typeof mountMemberResources>;
 afterEach(() => { editor?.destroy(); document.body.replaceChildren(); vi.resetAllMocks(); });
 
+test("member voice memos are off by default and save independently of automatic read-aloud", async () => {
+  setLocale("en");
+  api.membersVoices.mockResolvedValue({configured:true,voices:[]});
+  api.membersUpdate.mockResolvedValue({});
+  const host = document.createElement("div"); document.body.append(host);
+  editor = mountMemberResources(host, {memberId:1,tab:"voice",standalone:true});
+  await flush();
+  expect(host.querySelector('[data-res="voice_memo"]')!.getAttribute("aria-checked")).toBe("false");
+  host.querySelector<HTMLButtonElement>('[data-res="voice_memo"]')!.click(); await flush();
+  expect(api.membersUpdate).toHaveBeenCalledExactlyOnceWith(1,{voice_memo:true});
+  expect(host.querySelector('[data-res="read_aloud"]')!.getAttribute("aria-checked")).toBe("false");
+});
+
 test("Raphael details save and preview the existing voice setting without member updates", async () => {
   setLocale("zh-TW");
   const voice = "0123456789abcdef0123456789abcdef";

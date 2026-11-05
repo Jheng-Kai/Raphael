@@ -41,6 +41,59 @@ export function checkRendered(name, context = {}) {
     if (name === "colleague-output-cancel") require(calls.some(call => call.command === "pick_output_folder") && !calls.some(call => call.method === "settings.set" && call.params.key === "owner_output_folder"), "cancel never writes the folder setting");
     return {check:name};
   }
+  if (name === 'reaction-layout-rest' || name === 'reaction-layout-hover') {
+    const rows = [...document.querySelectorAll('.chat-message > .message-reactions')].filter(visible);
+    require(rows.length > 0, 'there are saved reactions to inspect');
+    const positions = rows.map(row => {
+      const bubble = row.previousElementSibling, actions = row.nextElementSibling;
+      require(bubble?.matches('.ans, .bubble') && actions?.matches('.message-actions'), 'reactions follow the bubble before the hover actions');
+      const bounds = row.getBoundingClientRect(), message = row.parentElement.getBoundingClientRect();
+      const gap = bounds.top - bubble.getBoundingClientRect().bottom;
+      require(gap >= 0 && gap <= 8, 'reactions stay within eight pixels of their bubble');
+      return { top: bounds.top, left: bounds.left, height: message.height };
+    });
+    if (name === 'reaction-layout-rest') window.__look.reactionPositions = positions;
+    else {
+      const before = window.__look.reactionPositions;
+      require(before?.length === positions.length && positions.every((position, index) =>
+        Object.keys(position).every(key => Math.abs(position[key] - before[index][key]) < 1)), 'hover keeps reactions and message height stationary');
+      const actions = document.querySelector('.chat-message:hover > .message-actions');
+      require(actions && getComputedStyle(actions).opacity === '1', 'hover reveals the existing message actions');
+    }
+    return { check: name, positions };
+  }
+  if (name.startsWith('vault-')) {
+    const vault = document.querySelector('.vault');
+    if (name === 'vault-payment') {
+      const card = document.querySelector('[data-permission-card]');
+      const body = card?.querySelector('.card-body');
+      require(visible(body) && ['公司差旅卡', 'https://travel.example.invalid', 'NT$ 1,280', '最後付款由你完成'].every(text => body.innerText.includes(text)), 'payment visibly names the card, merchant, amount and owner final step without expanding details');
+      require(!card.querySelector('[data-act="perm-always"]'), 'no standing payment approval is offered');
+    } else if (name === 'vault-preview') {
+      require(vault.querySelectorAll('[data-vault-import]').length === 2 && vault.querySelectorAll('[data-vault-import]:checked').length === 1, 'preview supports individual selection');
+      require(!window.__look.calls.some(call => ['vault.add','vault.import'].includes(call.method)), 'preview writes no credentials');
+    } else if (name.startsWith('vault-new-')) {
+      const fields = { login:2, contact:4, card:4 }[name.slice(10)];
+      require(vault.querySelectorAll('[id^="vault-value-"][type="password"]').length === fields, 'all private fields are masked');
+      if (name === 'vault-new-card') require(vault.textContent.includes('最後的付款或送出由你完成'), 'card entry explains the final owner step');
+    } else if (name === 'vault-menu') require(visible(document.querySelector('#app-popover [data-pick="edit"]')) && visible(document.querySelector('#app-popover [data-pick="remove"]')), 'entry actions use the shared row menu');
+    else if (name === 'vault-filter') require(vault.querySelectorAll('.vault-row').length === 1 && vault.textContent.includes('公司差旅卡'), 'card filter selects only cards');
+    else if (name === 'vault-sharing') require(vault.querySelectorAll('[data-vault-member]').length >= 2 && vault.querySelector('#vault-label').value === '出差聯絡資料', 'sharing preserves form input');
+    else {
+      require(vault.querySelectorAll('.vault-row').length === 3 && vault.textContent.includes('出差用公司卡'), 'all kinds and hints appear');
+      require(vault.querySelector('.tabs.plain[role="tablist"]') && !vault.querySelector('.tabs.seg'), 'kind navigation shares plain tabs with Connections');
+      for (const tab of vault.querySelectorAll('.tabs .tab')) {
+        const count = tab.querySelector('.n');
+        require(count, 'each kind has a visible count');
+        const range = document.createRange();
+        range.selectNodeContents(tab);
+        range.setEndBefore(count);
+        const number = count.getBoundingClientRect(), label = range.getBoundingClientRect();
+        require(number.top < label.bottom && number.bottom > label.top, 'filter counts remain on the label line');
+      }
+    }
+    return { check: name, passed: true };
+  }
   if (name === "about-no-updater-key" || name === "about-release-page-opened") {
     const section = document.querySelector("[data-updates]");
     require(visible(section) && section.textContent.includes("0.2.0"), "the current app version is visible");
@@ -232,6 +285,43 @@ export function checkRendered(name, context = {}) {
     const expected = name.endsWith('saved') ? 'America/New_York' : '';
     require(window.__look.data.settings.routine_timezone === expected, 'the real settings action persists the zone choice');
     require(window.__look.calls.some(call=>call.method==='settings.set' && call.params.key==='routine_timezone' && call.params.value===expected), 'the existing settings boundary owns persistence');
+    return {check:name};
+  }
+  if (['reaction-picker','reaction-row','reaction-not-approval','room-thread-open','room-thread-chip','slack-draft','voice-memo'].includes(name)) {
+    const calls = window.__look.calls, data = window.__look.data;
+    require(!document.querySelector('.conversation-event-line[data-reaction]'), 'metadata adds no centered event line');
+    require([...document.querySelectorAll('[data-reaction]')].every(button => button.getAttribute('aria-pressed') === 'true' && button.getAttribute('aria-label')?.includes(button.dataset.reaction)), 'selected reactions are named pressed toggles');
+    if (name === 'reaction-picker') {
+      const menu = document.querySelector('#app-popover');
+      require(visible(menu) && ['👍','❤','✓','?'].every(emoji=>menu.textContent.includes(emoji)), 'one compact four-reaction menu');
+    }
+    if (name === 'reaction-row') require(document.querySelector('.tn[data-id="8201"] [data-reaction="👍"]') && document.querySelector('.tn[data-id="8201"] [data-reaction="❤"]'), 'saved reactions appear below their message');
+    if (name === 'reaction-not-approval') {
+      require(calls.some(call=>call.method==='agent.react' && call.params.emoji==='✓'), 'the actual reaction action reached core');
+      require(!calls.some(call=>['agent.confirm','owner_questions.answer','integrations.draft_send'].includes(call.method)), 'a reaction never approves, answers or sends');
+      const turn=data.turns.find(turn=>turn.id===8201);
+      require(turn.drafts[0].state==='draft' && turn.owner_questions[0].state==='asked', 'draft and owner question remain pending');
+      require(turn.permissions[0].state==='pending', 'permission remains pending');
+    }
+    if (name === 'room-thread-chip') require(document.querySelector('.room-thread-chip')?.textContent.includes('2 則回覆'), 'only a compact reply count under the root');
+    if (name === 'room-thread-open') {
+      require(visible(document.querySelector('.room-side-thread')), 'the side thread opens beside the room');
+      require(document.querySelectorAll('.room-side-thread [data-side-message]').length===3, 'root and two replies are in the side thread');
+      require(document.querySelector('.room-side-thread [data-side-message="8203"] .me .owner-message .bubble'), 'side replies retain the shared owner bubble');
+      require(document.querySelectorAll('.au-room-thread [data-room-message]').length===1, 'side replies are absent from the main room');
+      require(calls.some(call=>call.method==='rooms.messages' && call.params.thread_id===900), 'the side thread uses the core thread boundary');
+    }
+    if (name === 'slack-draft') {
+      const card=document.querySelector('[data-draft-kind="slack"]');
+      require(visible(card) && card.textContent.includes('需要你確認'), 'Slack uses the shared approval draft card');
+      require(card.querySelector('[data-mail-field="to"]')?.value==='#研究討論' && !card.querySelector('[data-mail-field="subject"]'), 'channel and body replace email-only fields');
+      require(calls.some(call=>call.method==='integrations.draft_save' && call.params.body.includes('週五')), 'owner edits persist through the existing versioned draft boundary');
+      require(!calls.some(call=>call.method==='integrations.draft_send'), 'editing never sends');
+    }
+    if (name === 'voice-memo') {
+      require(calls.some(call=>call.method==='agent.speak' && call.params.memo_action==='play') && calls.some(call=>call.method==='agent.speak' && call.params.memo_action==='pause'), 'Play and Pause use the existing read-aloud boundary');
+      require(document.querySelector('.memo-transcript[open]')?.textContent.includes(data.chatMetadataSample.reply), 'expanded transcript is the member reply');
+    }
     return {check:name};
   }
   if (name === 'calm-thread' || name === 'calm-thread-days') {

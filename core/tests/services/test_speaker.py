@@ -701,3 +701,29 @@ async def test_member_voice_override_uses_configured_service_without_mutating_de
     await until(lambda: bool(rig.requests))
     assert json.loads(rig.requests[0].content)["reference_id"] == member_voice
     assert rig.settings.get("tts_fish_voice") == VOICE
+
+
+def test_voice_memo_pause_preserves_unplayed_pcm_and_stop_ends_the_wait():
+    from raphael_core.services.speaker import Speaker, _Utterance
+    paused = threading.Event()
+    stopped = threading.Event()
+    stopped.paused = paused
+    paused.set()
+    log = []
+    player = a_player(log)
+    source = a_stream_of(b"\x00\x00" * 2400)
+    task = threading.Thread(target=player.play, args=(source, 24000, stopped, lambda: None))
+    task.start()
+    try:
+        assert not stopped.wait(0.08)
+        assert log == []
+        paused.clear()
+        task.join(2)
+        assert not task.is_alive() and any(isinstance(item, tuple) and item[0] == 'write' for item in log)
+    finally:
+        stopped.set(); task.join(2)
+    speaker = Speaker(None)
+    speaker._current = _Utterance(turn_id=73)
+    assert speaker.memo_control(73, pause=True) and speaker._current.paused.is_set()
+    assert not speaker.memo_control(74, pause=False)
+    assert speaker.memo_control(73, pause=False) and not speaker._current.paused.is_set()
