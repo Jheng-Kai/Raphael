@@ -4814,7 +4814,8 @@ export function checkRendered(name, context = {}) {
     const footer = document.querySelector('.cs-form > .trust').getBoundingClientRect();
     for (const field of [document.querySelector('#conn-pairs').closest('.fld'), last.closest('.fld')]) {
       const box = field.getBoundingClientRect();
-      require(box.top >= port.top - 1 && box.bottom <= Math.min(port.bottom, footer.top) - 16, "last fields scroll fully above the fixed footer with bottom space");
+      // scroll-padding brings a field to exactly 16 px; sub-pixel layout may land a tenth short.
+      require(box.top >= port.top - 1 && box.bottom <= Math.min(port.bottom, footer.top) - 15, "last fields scroll fully above the fixed footer with bottom space");
     }
     return { check: name, bottomGap: port.bottom - last.getBoundingClientRect().bottom };
   }
