@@ -1,7 +1,7 @@
 import {scene,click,type,wait,waitGone,member,settings,check,scroll} from "./steps.mjs";
 
 const maker = [{action:"member-column",collapsed:false},click('[data-col="add"]'),click('#app-popover [data-pick="member"]'),wait(".cr-dialog"),click('[data-dlg="templates"]'),wait(".template-gallery")];
-const preview = [...maker,click('[data-dlg="open"]'),wait(".template-preview")];
+const preview = [...maker,click('[data-dlg="open"]'),wait(".template-preview"),check("template-content")];
 const accountFixture = {managedConnectors:[{id:"composio:gmail",kind:"composio",name:"Gmail",description:"整理重要來信與準備回覆",status:"ACTIVE",enabled:true,enabled_tools:["GMAIL_FETCH_EMAILS"],disabled_tools:[],accounts:[{id:"work",status:"ACTIVE",label:"工作信箱 · work@example.test"},{id:"personal",status:"ACTIVE",label:"私人信箱 · personal@example.test"}]}]};
 const accounts = [...settings("connections"),click('[data-conn="open"][data-id="composio:gmail"]'),wait(".cs-accts")];
 const hookFixture = {routines:[{id:91,member_id:1,title:"表單回覆整理",prompt:"整理表單回覆，只在對話中回報。",schedule:null,when:{webhook:true},enabled:true,last_run:null,next_run:null}]};
@@ -10,8 +10,9 @@ const hook = [member(1),{action:"open-details"},wait('[data-routine="91"]'),clic
 export default [
   scene("member-template-gallery","Eight local slime colleague recipes",[...maker,check("colleague-gallery")]),
   scene("member-template-preview","Opening a recipe previews skills, paused routines and separate connect cards",[...preview,check("colleague-preview")]),
+  scene("member-template-starter","A local starter uses catalogue brand names without granting a connection",[...maker,click('[data-dlg="starter"][data-index="3"]'),wait('.template-preview'),check('template-content')]),
   scene("member-template-imported","Explicit import creates the colleague with routines off and no app grants",[...preview,type('[data-template-name]',"範例研究夥伴"),click('.template-preview [data-dlg="import"]'),waitGone('.template-preview [data-dlg="import"]'),scroll('.template-preview [data-dlg="connect"]'),check("colleague-imported")]),
-  scene("member-template-export","The member menu reviews then exports one private-state-free recipe",[{action:"member-column",collapsed:false},click('[data-member-more="1"]'),click('#app-popover [data-pick="export-template"]'),wait('.template-export-review'),click('.template-export-review [data-dlg="export"]'),check("colleague-export")]),
+  scene("member-template-export","The member menu reviews then exports one private-state-free recipe",[{action:"member-column",collapsed:false},click('[data-member-more="1"]'),click('#app-popover [data-pick="export-template"]'),wait('.template-export-review'),check('template-content'),click('.template-export-review [data-dlg="export"]'),check("colleague-export")]),
   scene("member-greeting-choices","The first message uses the shared answer form with local choices and free text",[member(1),wait('[data-greeting-question]'),check("colleague-greeting")],{colleague:"greeting"}),
   scene("member-greeting-goal","Choosing sends the owner words and the colleague asks one outcome question",[member(1),wait('[data-greeting-option]'),click('[data-greeting-option]'),{action:"wait-text",selector:'.ra-scroll',text:"這些工作希望達成什麼成果"},check("colleague-goal")],{colleague:"greeting"}),
   scene("team-folder-handoff","A colleague handoff can cite context, meetings and project paths",[member(1),{action:"wait-text",selector:'.ra-scroll',text:"/home/cua/team/projects/"},check("colleague-handoff")],{colleague:"handoff"}),

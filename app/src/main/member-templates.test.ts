@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, test, vi } from "vitest";
-import { exportMemberTemplate, previewTemplate, starterTemplate } from "./member-templates";
+import { exportMemberTemplate, previewTemplate, starterTemplate, templateContents } from "./member-templates";
 import { openMemberCreator } from "./member-creator";
 import type { Member } from "./types";
 import { t } from "./i18n";
@@ -27,7 +27,7 @@ test("preview shows skills, paused routines and a disabled card per requested co
   expect(dialog.textContent!.split(t("template.noGrants"))).toHaveLength(2);
   expect(dialog.querySelector(".mb-dlg-act")!.firstElementChild!.matches("[data-template-notice]")).toBe(true);
   expect(dialog.querySelectorAll(".card-status, .card-well")).toHaveLength(0);
-  expect(dialog.querySelectorAll(".list > .row")).toHaveLength(2);
+  expect(dialog.querySelectorAll(".list .row")).toHaveLength(2);
   expect(dialog.querySelector(".list .ctl")!.textContent).toBe(t("template.developerGoal"));
   expect(dialog.querySelectorAll(".list")[1].textContent).toContain(t("computer.routinePaused"));
   expect(create).not.toHaveBeenCalled(); expect(api.connectorsConnect).not.toHaveBeenCalled();
@@ -44,6 +44,46 @@ test("preview shows skills, paused routines and a disabled card per requested co
   expect(dialog.querySelectorAll(".card-status")).toHaveLength(1);
   expect(dialog.querySelector(".card-status")!.textContent).toBe(t("conn.signedIn"));
   expect(api.connectorsConnect).not.toHaveBeenCalled();
+});
+
+test("preview uses catalogue brand names and preserves unknown custom connection ids", async () => {
+  const template = {...starterTemplate(0), connections:["gmail", "github", "composio:googlecalendar", "my-private-server", "constructor"]};
+  await previewTemplate(template, "slime:rimuru", vi.fn(), null, vi.fn());
+  expect([...document.querySelectorAll('[data-template-connection] .card-title')].map(el => el.textContent)).toEqual(["Gmail", "GitHub", "Google Calendar", "my-private-server", "constructor"]);
+  expect([...document.querySelectorAll('[data-dlg="connect"]')].map(el => (el as HTMLElement).dataset.app)).toEqual(template.connections);
+});
+
+test.each(["\n", "\r\n"])("skill preview separates quoted and folded metadata from expandable body (%j)", newline => {
+  const text = ["---", 'name: "Check sources"', "description: >-", "  Check sources", "  before publishing.", "---", "# Method", "Keep this body.", "---", "name: body example"].join(newline);
+  const template = {...starterTemplate(0), skills:[{text,files:{"scripts/check.py":"print('<checked>')"}}]};
+  document.body.innerHTML = templateContents(template);
+  const skill = document.querySelector('.template-skill')!;
+  expect(skill.querySelector('.t')!.textContent).toBe("Check sources");
+  expect(skill.querySelector('.val')!.textContent).toBe("Check sources before publishing.");
+  const detail = skill.querySelector<HTMLElement>('.card-detail')!;
+  expect(detail.hidden).toBe(true);
+  expect(detail.querySelector('.template-text')!.textContent).toBe(["# Method", "Keep this body.", "---", "name: body example"].join(newline));
+  expect(detail.textContent).toContain("print('<checked>')");
+  const toggle = skill.querySelector<HTMLButtonElement>('[data-card-disclosure]')!;
+  toggle.click();
+  expect(detail.hidden).toBe(false); expect(toggle.getAttribute('aria-expanded')).toBe("true");
+  toggle.click(); expect(detail.hidden).toBe(true);
+  expect(template.skills[0].text).toBe(text);
+});
+
+test("skill text without a complete frontmatter block stays intact", () => {
+  for (const text of ["# Plain method\nname: body example", "---\nname: Unclosed\nKeep every line."]) {
+    document.body.innerHTML = templateContents({...starterTemplate(0),skills:[{text}]});
+    expect(document.querySelector('.template-skill .t')!.textContent).toBe(t("template.skill"));
+    expect(document.querySelector('.template-skill .template-text')!.textContent).toBe(text);
+  }
+});
+
+test("skill delimiters accept the whitespace allowed by the skill store", () => {
+  const text = ' \t--- \t\nname: Check sources\ndescription: Check before publishing\n \t--- \t\nKeep this body.';
+  document.body.innerHTML = templateContents({...starterTemplate(0),skills:[{text}]});
+  expect(document.querySelector('.template-skill .t')!.textContent).toBe('Check sources');
+  expect(document.querySelector('.template-skill .template-text')!.textContent).toBe('Keep this body.');
 });
 
 test("store filtering stays local and install carries catalogue identity", async () => {
