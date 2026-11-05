@@ -3349,7 +3349,9 @@ export function checkRendered(name, context = {}) {
     require(visible(document.getElementById(dialog.getAttribute('aria-describedby'))), "the irreversible-action description is announced");
     require(buttons[1].classList.contains('pri'), "Delete uses the skin's primary accent");
     require(getComputedStyle(dialog.querySelector('.mb-dlg-act')).borderTopWidth === '0px', "no divider separates the compact footer");
-    require(parseFloat(getComputedStyle(buttons[0]).borderRadius) >= 18, "actions have pill corners");
+    // Since 2026-11-03 the dialog's text buttons share the app's small radius, like every other text button.
+    const small = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--r-sm'));
+    require(buttons.every(button => parseFloat(getComputedStyle(button).borderRadius) === small), "actions share the app's small button radius");
     const box = dialog.getBoundingClientRect();
     const close = dialog.querySelector('[data-dlg="close"]').getBoundingClientRect();
     require(box.width <= 482 && box.left >= 0 && box.right <= innerWidth, "the compact panel fits the window");
@@ -4075,8 +4077,10 @@ export function checkRendered(name, context = {}) {
     require(members.some(member => member.id === 8) === (name === "admin-created"), "team reflects the owner's decision");
     if (name === "admin-created") {
       const details = [...document.querySelectorAll('.mb-det')].find(visible);
-      require(details?.querySelector('.mb-who-name')?.value === "COO", "created member details are selected");
-      require(details.querySelector('.mb-who-role')?.value === "營運長", "created role is shown");
+      // The panel's tabs name the member in one line; the editable fields live in its settings.
+      const identity = details?.querySelector('.mb-panel-identity b');
+      require(identity?.firstChild?.textContent.trim() === "COO", "created member details are selected");
+      require(identity.querySelector('span')?.textContent.includes("營運長"), "created role is shown");
       const created = members.find(member => member.id === 8);
       require(window.__look.data.groups.find(group => group.id === created.group_id)?.name === "個人公司", "member joins the approved group");
       require(created.preview === "" && created.last_at === null, "new conversation has no inherited activity");
