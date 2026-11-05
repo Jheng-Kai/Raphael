@@ -428,7 +428,7 @@ export function createMembers(host: MembersHost): MembersShell {
   const ownerActivity = (): void => {
     if (document.hidden || Date.now() - lastActivity < 60_000) return;
     lastActivity = Date.now();
-    void api.core("members.viewing", { activity_only: true }).catch(() => {});
+    void api.core("members.viewing", { activity_only: true, tz: Intl.DateTimeFormat().resolvedOptions().timeZone }).catch(() => {});
   };
   window.addEventListener("pointerdown", ownerActivity);
   window.addEventListener("keydown", ownerActivity);

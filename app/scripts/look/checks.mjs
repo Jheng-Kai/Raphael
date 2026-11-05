@@ -2,6 +2,64 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith('routine-test-')) {
+    if (name === 'routine-test-menu') {
+      require(visible(document.querySelector('#app-popover [data-pick="test"]')), 'the row offers the shared test action');
+    } else {
+      const calls = window.__look.calls.filter(call=>call.method==='routines.run');
+      require(calls.length === 1 && calls[0].params.id === 91, 'one real-boundary manual action targets the saved routine');
+      if (name === 'routine-test-conversation') {
+        require([...document.querySelectorAll('.mb-chat:not([hidden]) .ans')].some(node=>node.textContent.includes('已整理三則範例筆記')), 'the result appears in the owning member conversation');
+      } else {
+        const button = document.querySelector('[data-dlg="test"]'), status = document.querySelector('.au-test-status');
+        require(visible(button) && button.disabled === (name === 'routine-test-running'), 'pending lasts until the recorded run finishes');
+        if (name === 'routine-test-refused') require(status.textContent.includes('200') && status.getAttribute('role')==='alert', 'a refusal states the hourly reason');
+        if (name === 'routine-test-done') require(status.textContent.includes('成功') && status.textContent.includes('範例筆記'), 'a completed run has its actual result');
+        if (name !== 'routine-test-refused') require(/ · 今天 \d{2}:\d{2}(?: · |$)/.test(status.textContent), 'test results use the shared relative day and minute clock');
+      }
+    }
+    return {check:name};
+  }
+  if (name === 'routine-when-words' || name === 'routine-when-editor') {
+    const node = document.querySelector(name === 'routine-when-editor' ? '.au-trigger-preview' : '[data-routine="91"]');
+    require(visible(node) && node.textContent.includes('08:00') && node.textContent.includes('台北') && node.textContent.includes('工作日'), 'schedule words include the saved time and zone');
+    return {check:name};
+  }
+  if (name === 'routine-empty-words') {
+    require(document.querySelector('.mb-panel-routines .mp-empty')?.textContent === '在對話中請成員建立例行任務', 'the empty state tells the owner to ask in chat');
+    require(visible(document.querySelector('[data-det="routine-add"]')), 'the existing add button remains');
+    return {check:name};
+  }
+  if (name === 'routine-run-history') {
+    const history = document.querySelector('.au-run-history');
+    require(visible(history) && ['執行中','成功','失敗','未使用舊資料'].every(word=>history.textContent.includes(word)), 'history has readable statuses and the failure reason');
+    require([...history.querySelectorAll('[data-run-status]')].every(row => / · (今天|昨天) \d{2}:\d{2}(?!:)/.test(row.textContent)), 'each recent run uses a relative day and omits seconds');
+    return {check:name};
+  }
+  if (name.startsWith('routine-recipe-')) {
+    const fields = document.querySelector('.au-recipe-fields');
+    require(visible(fields) && fields.textContent.includes(name.endsWith('sentry') ? 'data.issue.id' : 'event.data.id'), 'the recipe names real provider payload paths');
+    require(document.querySelector('.au-webhook').textContent.includes('HTTPS'), 'the public relay prerequisite is explicit');
+    require(document.querySelector('[data-dlg="hook-header"]') && document.querySelector('[data-dlg="hook-url"]'), 'the local URL and Bearer header have shared copy buttons');
+    require(document.querySelector('.au-hook-secret').type === 'password', 'the key remains masked until requested');
+    return {check:name};
+  }
+  if (name === 'routine-trigger-slack') {
+    require(window.__look.calls.some(call=>call.method==='routines.list' && call.params.contains==='<@U012345>' && call.params.value==='C012345'), 'the phrase and selected channel reach the existing event boundary');
+    require(document.querySelector('#au-event-contains').value==='<@U012345>', 'the mention is retained in the editor');
+    return {check:name};
+  }
+  if (name === 'routine-zone' || name === 'routine-zone-search') {
+    require(visible(document.querySelector('[data-k="routine-timezone"]')), 'General contains a shared time-zone dropdown');
+    if (name.endsWith('search')) require(document.querySelectorAll('[data-zone]').length === 1 && document.querySelector('[data-zone="Asia/Taipei"]'), 'city search narrows to the saved IANA zone');
+    return {check:name};
+  }
+  if (name === 'routine-zone-saved' || name === 'routine-zone-reset') {
+    const expected = name.endsWith('saved') ? 'America/New_York' : '';
+    require(window.__look.data.settings.routine_timezone === expected, 'the real settings action persists the zone choice');
+    require(window.__look.calls.some(call=>call.method==='settings.set' && call.params.key==='routine_timezone' && call.params.value===expected), 'the existing settings boundary owns persistence');
+    return {check:name};
+  }
   if (name === 'computer-header-layout') {
     const header = document.querySelector('.mb-det-head');
     require(visible(header), 'the member panel header is visible');

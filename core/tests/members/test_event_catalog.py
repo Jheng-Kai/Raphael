@@ -138,6 +138,16 @@ async def test_owner_and_member_pick_identical_when_and_first_poll_is_baseline(r
     assert len(rig.background.submitted) == 2
 
 
+async def test_slack_catalogue_keeps_channel_and_phrase_in_the_shared_tool_result(rig):
+    hub = setup(rig)
+    rig.service._connections = lambda: [{"id":"composio:slack","name":"Slack","source":"composio","services":["slack"],"status":"ready","enabled":True}]
+    hub.payload = {"messages": [{"ts":"sample-1","text":"old <@U012345>"}]}
+    result = await rig.service.routine_tool(0, "routine_list", {"event":"slack-message","value":"C012345","contains":"<@U012345>"})
+    assert result["when"]["filter"] == {"field":"text","equals":"<@U012345>","operator":"contains"}
+    assert result["when"]["event"]["arguments"]["tools"][0]["arguments"]["channel"] == "C012345"
+    assert len(hub.calls) == 1
+
+
 @pytest.mark.parametrize("mode", ["empty", "identity", "network", "write", "disconnected"])
 async def test_failed_pick_creates_nothing_and_can_be_retried(rig, mode):
     hub = setup(rig)

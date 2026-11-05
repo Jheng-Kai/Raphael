@@ -641,6 +641,28 @@ panel uses the same switch and words for all members. Worker reports share the m
 text contract; the existing fit_text projection derives the quick overlay caption.
 
 
+## Routine test and saved timezone boundary (2026-11-05)
+
+The explicit main-window `routines.run` allowlist entry calls MembersService._run
+with manual admission; it shares the existing background worker, routine_runs,
+agent history/conversation routing and spend. It neither enables paused schedules
+nor advances next_run. Frontend routine-run.ts keeps pending state and observes
+the existing routines.runs projection until finished, including confirmations.
+
+Schedule JSON gains validated optional IANA timezone metadata; the shared registry
+adds routine_timezone and internal routine_detected_timezone. Owner-window
+members.viewing reports the detected zone and pins legacy schedules before future
+zone changes. Home remains read-only. Existing schedule parsing/next_run and the
+calendar occurrence engine own saved-zone/DST behavior, with no separate scheduler.
+The shared timezones.ts selector uses ui.ts popovers and the existing settings.set.
+
+Event filters add an optional literal contains operator for Slack text after the
+existing selected-channel read; shared routine tool schemas retain the production
+gate and baseline receipts. The loopback webhook listener accepts its existing
+vault key via constant-time Bearer comparison as well as HMAC. Recipes describe
+user-managed HTTPS forwarding and provider payload fields without provisioning
+cloud infrastructure or storing a second provider credential.
+
 ## Plugin sets and marketplaces (2026-11-04)
 
 Migration 62 adds skill_sets/skill_marketplaces and component ownership columns to

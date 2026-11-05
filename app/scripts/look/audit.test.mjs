@@ -905,6 +905,13 @@ describe("rendered look checks", () => {
     expect(result.missingI18nKeys.map(item => item.key)).toEqual(["members.missingLabel"]);
     expect(result.nativeControls.map(item => item.tag)).toEqual(["select", "input"]);
   });
+
+  it("distinguishes explicit provider JSON paths from untranslated keys elsewhere", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<code data-json-paths>data.issue.id · event.data.title · members.missingLabel</code><p>data.issue.id</p>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
+    expect(auditDocument(window.document, { width: 1120, height: 900 }, ["data", "event", "members"]).missingI18nKeys.map(item => item.key)).toEqual(["members.missingLabel", "data.issue.id"]);
+  });
   it("fails horizontal overflow and reports controls outside the viewport", () => {
     const window = new Window();
     window.document.body.innerHTML = '<button id="outside">Save</button>';

@@ -52,6 +52,8 @@ DEFAULTS: dict[str, Any] = {
     "owner_name": "",
     "owner_about": "",
     "owner_output_folder": "",
+    "routine_timezone": "",
+    "routine_detected_timezone": "",
     "routine_owner_seen_ms": 0,
     "routine_run_window": [],
     "owner_photo": "",
@@ -349,6 +351,14 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
     if value is None and key in _NULLABLE:
         return key, None
     value = _allowed(key, _checked(key, value))
+    if key in ("routine_timezone", "routine_detected_timezone") and value:
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+        try:
+            if len(value) > 100:
+                raise ValueError
+            ZoneInfo(value)
+        except (ValueError, ZoneInfoNotFoundError):
+            raise ValueError("Time zone must be an IANA time zone") from None
     if key == "computer_ssh_alias" and value and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", value):
         raise ValueError("Computer host must be a simple SSH config alias")
     if key == "computer_vm_idle_minutes" and value != 0 and not 5 <= value <= 1440:

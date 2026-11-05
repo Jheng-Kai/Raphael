@@ -114,6 +114,15 @@ export function installMock(fixture, config = {}, target = window) {
   let desktopSequence = 0;
   let teaching;
   for (const [key, value] of Object.entries(variant)) if (key in data) data[key] = structuredClone(value);
+  if (variant.routineWorkflow) {
+    const sample = data.routineWorkflowSample;
+    data.routines = [{id:91,member_id:1,title:sample.title,prompt:sample.prompt,enabled:true,last_run:null,next_run:data.now+86400000,schedule:{kind:"weekdays",time:"08:00",timezone:"Asia/Taipei"}}];
+    data.routineRuns = variant.routineWorkflow === "history" ? [
+      {id:93,routine_id:91,started:data.now,finished:null,status:"running",summary:"",cost:0},
+      {id:92,routine_id:91,started:data.now-3600000,finished:data.now-3500000,status:"error",summary:sample.failed,cost:0},
+      {id:91,routine_id:91,started:data.now-7200000,finished:data.now-7100000,status:"done",summary:sample.done,cost:0.001},
+    ] : [];
+  }
   if (variant.routineSentence && variant.routineSentence !== "waiting") {
     const routine = data.routines.find(r => r.member_id === 1);
     const template = data.turns.find(t => t.member_id === 1);
@@ -1027,10 +1036,20 @@ export function installMock(fixture, config = {}, target = window) {
         const calendar=choice?.id==='calendar-event';
         const args=calendar ? {calendarId:'primary',maxResults:50,singleEvents:true,orderBy:'updated'} : choice?.input==='repository' ? {owner,repo,per_page:20,status:'failure'} : choice?.input==='channel' ? {channel:value,limit:20} : {max_results:20,include_payload:false,verbose:false};
         const path=calendar ? 'items' : choice?.input==='repository' ? 'workflow_runs' : 'messages';
-        const detected=!p.event ? {} : variant.eventUndetectable || !choice ? {event_error:'目前沒有可用的 Gmail 項目。出現新項目後，請再試一次。'} : {when:{app:choice.app,event:{tool:'mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL',arguments:{tools:[{tool_slug:choice.slug,arguments:args}]},items:`data.results.0.response.data.${path}`,id:choice.id==='gmail-mail' ? 'messageId' : choice.input==='channel' ? 'ts' : 'id',...(calendar ? {since:{arg:'updatedMin',format:'iso'}} : {})},filter:{field:'',equals:''}}};
+        const detected=!p.event ? {} : variant.eventUndetectable || !choice ? {event_error:'目前沒有可用的 Gmail 項目。出現新項目後，請再試一次。'} : {when:{app:choice.app,event:{tool:'mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL',arguments:{tools:[{tool_slug:choice.slug,arguments:args}]},items:`data.results.0.response.data.${path}`,id:choice.id==='gmail-mail' ? 'messageId' : choice.input==='channel' ? 'ts' : 'id',...(calendar ? {since:{arg:'updatedMin',format:'iso'}} : {})},filter:p.contains ? {field:'text',equals:p.contains,operator:'contains'} : {field:'',equals:''}}};
         return {routines:p.member_id===undefined ? data.routines : byMember(data.routines,p),events,event_apps:variant.noEventApps ? [] : ['Gmail','Google 日曆','GitHub','Slack'],...detected};
       }
       case "routines.webhook": return {address:`http://127.0.0.1:43210/routines/${p.id}`, address_changed:!!variant.hookAddressChanged, ...(p.reveal ? {secret:'sample-fake-secret-for-visual-checks'} : {})};
+      case "routines.run": {
+        const sample = data.routineWorkflowSample;
+        if (variant.routineWorkflow === "refused") return {status:"refused",reason:sample.refused};
+        const routine = data.routines.find(item=>item.id===p.id), done=variant.routineWorkflow === "done", runId=nextId(data.routineRuns);
+        const turn = {...structuredClone(data.turns.find(item=>item.member_id===routine.member_id)),id:nextId(data.turns),source:"routine",route:"routine",routine:structuredClone(routine),question:routine.title,text:done?sample.done:"",status:done?"done":"running",messages:[],steps:[],task:null};
+        data.turns.push(turn);
+        data.routineRuns.unshift({id:runId,routine_id:p.id,started:data.now,finished:done?data.now+1000:null,status:done?"done":"running",summary:done?sample.done:"",turn_id:turn.id,cost:0});
+        notify("AgentTurn",{turn_id:turn.id,member_id:routine.member_id});
+        return {run_id:runId,turn_id:turn.id};
+      }
       case "routines.runs": return { runs: data.routineRuns.filter(run => run.routine_id === p.routine_id), total: data.routineRuns.filter(run => run.routine_id === p.routine_id).length };
       case "routines.create": { const routine = { ...p, ...(p.when ? { schedule: null, last_checked: null, last_error: "", app_name:routineEventChoices.find(e=>e.app===p.when.app)?.app_name ?? p.when.app ?? "" } : {}), id: nextId(data.routines), enabled: p.enabled ?? true, last_run: null, next_run: p.when ? data.now : data.now + 86400000 }; data.routines.push(routine); notify("RoutinesChanged", { member_id: routine.member_id }); return { routine }; }
       case "routines.update": {

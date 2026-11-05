@@ -13,6 +13,7 @@
 // it (`SEARCH_INDEX`, `searchSettings`).
 
 import { catalogs, t } from "../i18n";
+import { detectedTimezone, zoneLabel } from "../timezones";
 import { ownerProfileHTML } from "../owner-settings";
 import type { MessageKey } from "../i18n/zh-TW";
 
@@ -140,6 +141,7 @@ export interface SearchEntry {
 export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "general", label: "owner.name" },
   { pane: "general", label: "output.folder" },
+  { pane: "general", label: "zone.title" },
   ...PANES.map((p) => ({ pane: p.id })),
   { pane: "appearance", label: "settings.059" },
   { pane: "appearance", label: "settings.067", words: ["dark", "light"] },
@@ -587,6 +589,7 @@ function generalHTML(v: SettingsView): string {
     coreNote(v) + `<section class="sgroup"><h2>${esc(t("settings.ownerSection"))}</h2>` + ownerProfileHTML(v.brain) +
     `<div class="slist">` + row(t("settings.agentCity"), "", fieldHTML(t("settings.agentCityHint"), v.cityDraft ?? agentCity(v), { w: 200, label: t("settings.agentCity"), id: "agent-city", invalid: v.cityError !== null, disabled: v.brain === null })) +
     (v.cityError ? note(st("err", v.cityError()), ' role="alert"') : "") +
+    row(t("zone.title"), t("zone.help"), sel([{value:v.brain?.routine_timezone ?? "",label:v.brain?.routine_timezone ? zoneLabel(v.brain.routine_timezone) : `${t("zone.auto")} · ${zoneLabel(detectedTimezone())}`}], v.brain?.routine_timezone ?? "", t("zone.title"), ' data-k="routine-timezone"' + (v.brain === null ? ' disabled' : ''))) +
     row(t("output.folder"), t("output.help"), fieldHTML(t("output.empty"), v.brain?.owner_output_folder ?? "", { id: "owner-output-folder", label: t("output.folder"), w: 200, disabled: v.brain === null })) + `</div>` +
     (v.memoryShared ? memoryHTML(v.memoryShared) : "") + `</section>` +
     section(t("settings.groupAppearance"), [

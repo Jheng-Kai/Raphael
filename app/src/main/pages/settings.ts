@@ -7,6 +7,7 @@
 // to the Rust side with `device_settings_set`. What is always wanted (pausing the music while
 // Raphael listens, learning from corrections) has no switch: it is simply on.
 
+import { openTimezoneMenu } from "../timezones";
 import { confirmDelete } from "../member-dialogs";
 import { knownCatalog, rememberCatalog } from "../brain-lists";
 import { isUiLocale, onLocaleChange, t } from "../i18n";
@@ -1193,6 +1194,7 @@ export function createSettings(app: AppContext): SettingsPage {
     if (providers.click(target)) return;
     // the usage view opens its own dropdowns' menus (usage-analytics.ts)
     const choose = target.closest<HTMLElement>(".sel");
+    if (choose?.dataset.k === "routine-timezone") { openTimezoneMenu(choose, brain?.routine_timezone ?? "", value => void changeBrain("routine_timezone", value)); return; }
     if (choose && !choose.closest(".usage-analytics, .run-analytics")) {
       if (menuIsOpenFor(choose)) {
         closeMenu();
