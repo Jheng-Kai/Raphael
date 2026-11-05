@@ -11,6 +11,42 @@ from raphael_core.management import ACTIONS, MANAGEMENT_TOOLS, REGISTRY, destruc
 from raphael_core.protocol import RpcError
 
 
+@pytest.mark.parametrize("prompt", [
+    "Connect Sample and look up a sample", "Enable sample and read",
+    "Disable Sample", "Turn off Sample access", "Turn on Sample access",
+    "Disconnect Sample", "Reconnect Sample", "Manage the MCP connection",
+])
+@pytest.mark.parametrize("primary", [0, 7])
+def test_connection_intent_offers_management_only_to_the_interactive_primary(prompt, primary):
+    from raphael_core.agent.speaker import Speaker
+    from raphael_core.background.snapshot import take_snapshot
+
+    for identifier in (0, 7):
+        speaker = Speaker(id=identifier, capabilities=frozenset({"chief"}) if identifier == primary else frozenset())
+        for interactive, owner_management in ((True, True), (True, False), (False, True)):
+            snapshot = take_snapshot(None, prompt, speaker=speaker, interactive=interactive,
+                                     owner_management=owner_management)
+            allowed = identifier == primary and interactive and owner_management
+            assert ({"manage_connection", "add_mcp_server"} <= snapshot.refs.keys()) == allowed
+            snapshot.find("manage_connection")
+            assert ("manage_connection" in snapshot.refs) == allowed
+
+
+def test_default_primary_offer_stays_bounded_and_management_requires_discovery():
+    from raphael_core.agent.speaker import Speaker
+    from raphael_core.background.snapshot import take_snapshot
+
+    speaker = Speaker(id=0, capabilities=frozenset({"chief"}))
+    snapshot = take_snapshot(None, "Read my report", speaker=speaker, interactive=True,
+                             memory=True, attachments=True)
+    assert len(snapshot.definitions) <= 49
+    assert not MANAGEMENT_TOOLS & snapshot.refs.keys()
+    assert "find_tools" in snapshot.refs
+    added, _ = snapshot.find("manage_connection")
+    assert "manage_connection" in {item["function"]["name"] for item in added}
+    assert "manage_connection" in snapshot.refs
+
+
 def sample(schema):
     if "enum" in schema:
         return schema["enum"][0]
