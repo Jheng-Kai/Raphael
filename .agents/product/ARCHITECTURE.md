@@ -742,3 +742,26 @@ Skill source rendering uses skill-source.ts in member resources, Connections row
 discovery and document dialogs. skillOriginLabel owns the single localized origin
 and learned date line; skillSourceLabel removes transport prefixes and collapses
 plugin cache paths to name/version. Stored source identifiers remain unchanged.
+
+
+## Shared owner vault (2026-11-05)
+
+VaultEntries extends LoginVault at the existing Windows Credential Manager
+boundary. Migration 63 adds nonsecret metadata/member grants and a durable payment
+action hold; no value moves into SQLite. Existing per-member credential keys stay
+readable and are projected into metadata without reading the OS vault. Owner-only
+vault RPCs are enumerated in management.py and the main-window Rust allowlist;
+no model management tool can read, import, edit sharing or delete credentials.
+
+The existing VmTools adapter owns choices/contact/card fill tools, per-field
+HTTPS/grant checks, driver-echo suppression and shared redaction. ToolGate's firm
+confirmation applies to fill_card across foreground API, CLI and worker paths.
+The ordinary conversation permission card and background question remain the
+approval surfaces. No new model loop, worker, provider, MCP server, browser
+service or feature-specific test harness is introduced (A-01/03/04).
+
+The real Settings Safety pane owns the vault controller and uses shared controls.
+The owner's file input reads a bounded CSV into a transient core preview with
+a single-use token and ten-minute expiry; no source path/copy is retained. The
+metadata preview is separate from private import candidates. Core RPC failures
+return fixed field identifiers and counts, never secret-bearing exception text.

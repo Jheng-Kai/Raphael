@@ -1855,6 +1855,9 @@ class BackgroundService:
         prefix = PREFIXES[language].question
         what = parenthesized(language, preview(waiting.arguments))
         asked = phrase(language, "confirm_plugin", server=ref.server, tool=ref.name, what=what)
+        if ref.server == "computer" and ref.name == "fill_card":
+            from ..computer.vault_entries import payment_question
+            asked = payment_question(waiting.arguments, language)
         if ref.name == "routine_delete" and self._team is not None:
             asked = self._team.admin_confirmation(ref.name, waiting.arguments, language)
         text = asked_with(language, waiting.screening, asked)

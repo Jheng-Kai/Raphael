@@ -411,6 +411,12 @@ export function installMock(fixture, config = {}, target = window) {
   const messagePreview = { workspace: "範例工作室", to: "#規劃", thread: "123.456", body: "請確認範例排程，並回覆方便討論的時間。" };
   if (variant.permissionCard) {
     const made = structuredClone(data.permissionTurns[variant.permissionCard]);
+    if (variant.vaultPayment) {
+      data.settings.action_mode = "bypass";
+      Object.assign(made.turn.permissions[0], { service: "成員電腦", tool: "fill_card", summary: data.vaultPaymentSummary, always: false });
+      Object.assign(made.question, { text: data.vaultPaymentSummary, tier: "T3", always: null, timeout_ms: 0 });
+      Object.assign(made.turn, { question: "幫我填入出差住宿的付款資料。", text: "", messages: [] });
+    }
     if (variant.cardMessagePreview) Object.assign(made.turn.permissions[0], { service: "Slack", tool: "SLACK_SEND_MESSAGE", summary: "透過 Slack 傳送規劃訊息。", message: messagePreview });
     data.turns.push(made.turn);
     permission = { ...made, card: made.turn.permissions[0] };
@@ -730,6 +736,13 @@ export function installMock(fixture, config = {}, target = window) {
   async function core(method, p = {}) {
     if (variant.missingHidden && method === "members.list" && target.document.querySelector('[data-hidden-members]')) throw new Error("Synthetic hidden member read failure");
     switch (method) {
+      case "vault.list": return { entries: data.vaultEntries };
+      case "vault.preview": return data.vaultImportPreview;
+      case "vault.cancel": return { cancelled: true };
+      case "vault.import": return { saved: p.ids.length, remaining: 0 };
+      case "vault.add": { const { values, ...metadata } = p; data.vaultEntries.push({ id: "new-synthetic-entry", ...metadata }); return { id: "new-synthetic-entry" }; }
+      case "vault.update": Object.assign(data.vaultEntries.find(e => e.id === p.id), p); return { updated: true };
+      case "vault.remove": data.vaultEntries = data.vaultEntries.filter(e => e.id !== p.id); return { removed: true };
       case "links.preview": return { url: p.url, site: new URL(p.url).hostname, title: "", description: "", thumbnail: null };
       case "pages.open":
         if (variant.pageGone) throw { kind: "not_found", message: "gone" };

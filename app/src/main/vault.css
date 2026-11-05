@@ -1,0 +1,19 @@
+.vault { margin-block: 28px; }
+.vault-heading, .vault-actions, .vault-access { display: flex; align-items: center; gap: 8px; }
+.vault-heading { justify-content: space-between; flex-wrap: wrap; }
+.vault-heading h2 { margin: 0; }
+.vault > .dim { margin-block: 8px 16px; }
+.vault-editor { display: grid; gap: 12px; padding: 16px; margin-block: 16px; border: 1px solid var(--line); border-radius: 12px; }
+.vault-editor h3, .vault-editor p { margin: 0; }
+.vault-editor .field { width: 100%; }
+.vault-editor .vault-actions { justify-content: flex-end; }
+.vault-members, .vault-preview { display: grid; gap: 10px; }
+.vault-members { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.vault-preview { max-height: 260px; overflow: auto; }
+.vault-members label, .vault-preview label { display: flex; align-items: center; gap: 10px; }
+.vault-preview span, .vault-copy { min-width: 0; display: grid; gap: 4px; }
+.vault-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 16px; border-bottom: 1px solid var(--line); }
+.vault-copy strong, .vault-copy small, .vault-copy p { overflow-wrap: anywhere; margin: 0; }
+.vault-copy small { color: var(--text-3); }
+.vault-copy p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 800px) { .vault-actions { flex-wrap: wrap; } }

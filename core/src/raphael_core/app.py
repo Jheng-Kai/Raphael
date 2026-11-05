@@ -856,8 +856,9 @@ class App(Router):
         # The card for a key a connection declares and the vault holds none of: the value goes from the
         # window to the vault, and that task's one resume follows.
         self.secret_cards = SecretCards(self._conn, self.integrations, notify=self._agent_notice)
-        from .computer.logins import LoginVault
-        self.login_vault = LoginVault(self.vault, conn=self._conn)
+        from .computer.vault_entries import VaultEntries
+        self.login_vault = VaultEntries(self.vault, conn=self._conn)
+        self.login_vault.register(self)
         self.secret_cards.logins = self.login_vault
         self.secret_cards.register(self)
         # The owner's safety rules (`safety.rules.*`), which the gate asks before every action that

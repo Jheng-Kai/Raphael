@@ -593,14 +593,58 @@ SCHEMA_V62 = {
     "skill_sets": ["id INTEGER PK", "identity TEXT NOT NULL", "name TEXT NOT NULL", "version TEXT NOT NULL", "source TEXT NOT NULL", "description TEXT NOT NULL", "folder TEXT NOT NULL", "metadata TEXT NOT NULL"],
     "member_skills": [*SCHEMA_V61["member_skills"], "set_id INTEGER", "set_key TEXT", "set_kind TEXT"],
 }
-SCHEMA_V64 = {
+SCHEMA_V63 = {
     **SCHEMA_V62,
-    "room_threads": [*SCHEMA_V62["room_threads"], "parent_message_id INTEGER"],
+    "vault_entries": ["id TEXT PK", "kind TEXT NOT NULL", "label TEXT NOT NULL", "hint TEXT NOT NULL DEFAULT ''",
+                      "origin TEXT NOT NULL DEFAULT ''", "members TEXT NOT NULL", "credential TEXT NOT NULL"],
+    "computer_payment_holds": ["target TEXT PK"],
+}
+SCHEMA_V64 = {
+    **SCHEMA_V63,
+    "room_threads": [*SCHEMA_V63["room_threads"], "parent_message_id INTEGER"],
     "message_reactions": ["turn_id INTEGER PK NOT NULL", "message_key TEXT PK NOT NULL", "emoji TEXT PK NOT NULL"],
     "room_reactions": ["message_id INTEGER PK NOT NULL", "emoji TEXT PK NOT NULL"],
-    "email_drafts": [*SCHEMA_V62["email_drafts"], "kind TEXT NOT NULL DEFAULT 'email'"],
-    "members": [*SCHEMA_V62["members"], "voice_memo INTEGER NOT NULL DEFAULT 0"],
+    "email_drafts": [*SCHEMA_V63["email_drafts"], "kind TEXT NOT NULL DEFAULT 'email'"],
+    "members": [*SCHEMA_V63["members"], "voice_memo INTEGER NOT NULL DEFAULT 0"],
 }
+
+
+@pytest.mark.parametrize("start_version, expected_steps", [(62, [63, 64]), (63, [64])])
+def test_v64_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(monkeypatch, tmp_path, start_version, expected_steps):
+    path = tmp_path / f"v{start_version}-to-v64.db"
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 62)
+        conn = db.connect(path)
+    with conn:
+        conn.execute("INSERT INTO computer_logins(member_id,origin,reference) VALUES (7,'https://login.example.invalid','legacy-login')")
+    if start_version == 63:
+        with monkeypatch.context() as old:
+            old.setattr(db, "LATEST_VERSION", 63)
+            db.migrate(conn)
+        with conn:
+            conn.execute("UPDATE vault_entries SET label='Owner label',hint='Owner hint' WHERE id='legacy-login'")
+            conn.execute("INSERT INTO computer_payment_holds(target) VALUES ('pending-payment')")
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == start_version
+    steps = []
+    conn.set_trace_callback(lambda sql: steps.append(int(sql.strip().rstrip(';').split('=')[1]))
+                            if sql.strip().startswith('PRAGMA user_version =') else None)
+    db.migrate(conn)
+    assert steps == expected_steps
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 64
+    for table, columns in SCHEMA_V64.items():
+        if table != "agent_turns_fts":
+            assert describe_columns(conn, table) == columns
+    entry = conn.execute("SELECT kind,label,hint,origin,members,credential FROM vault_entries WHERE id='legacy-login'").fetchone()
+    assert tuple(entry) == ("login", "Owner label" if start_version == 63 else "https://login.example.invalid",
+                            "Owner hint" if start_version == 63 else "", "https://login.example.invalid", "[7]", "computer-login:legacy-login")
+    assert conn.execute("SELECT COUNT(*) FROM computer_payment_holds").fetchone()[0] == (start_version == 63)
+    db.migrate(conn)
+    assert steps == expected_steps
+    conn.close()
+    reopened = db.connect(path)
+    assert reopened.execute("PRAGMA user_version").fetchone()[0] == 64
+    assert reopened.execute("SELECT COUNT(*) FROM vault_entries").fetchone()[0] == 1
+    reopened.close()
 
 
 def test_v48_adds_the_calendar_without_changing_existing_members_and_keeps_events_on_reopen(tmp_path):

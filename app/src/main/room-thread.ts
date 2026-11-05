@@ -35,10 +35,11 @@ export async function openRoomThread(host: HTMLElement, app: AppContext, roomId:
   const render = (message: RoomMessage): string => {
     const member = people.members.find(person => person.id === message.member_id);
     const actions = messageActionsHTML(message.created, false, undefined, false, reactionControlHTML() + (message.turn?.voice_memo ? memoActionHTML(message.turn.voice_memo_state === "playing") : ""));
-    const metadata = reactionRowHTML(message.reactions) + (message.turn?.voice_memo ? memoTranscriptHTML(message.text) : "");
+    const reactions = reactionRowHTML(message.reactions);
+    const metadata = (message.turn?.voice_memo ? memoTranscriptHTML(message.text) : "");
     const body = message.member_id === null
-      ? `<div class="me"><div class="chat-message owner-message">${filesHTML(message.attachments)}<div class="bubble"><div class="message-text">${messageHTML(message.text, "", false)}</div></div>${actions}${metadata}</div></div>`
-      : `<div class="ra"><span class="ra-face">${member ? faceHTML(member, 28) : ""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name ?? t("rooms.owner"))}</b><div class="chat-message">${filesHTML(message.attachments)}${replyContentHTML(message.text, "", message.status === "running")}${actions}${metadata}</div>${message.turn ? conversationCardsHTML(message.turn, member?.name) : ""}</div></div>`;
+      ? `<div class="me"><div class="chat-message owner-message">${filesHTML(message.attachments)}<div class="bubble"><div class="message-text">${messageHTML(message.text, "", false)}</div></div>${reactions}${actions}${metadata}</div></div>`
+      : `<div class="ra"><span class="ra-face">${member ? faceHTML(member, 28) : ""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name ?? t("rooms.owner"))}</b><div class="chat-message">${filesHTML(message.attachments)}${replyContentHTML(message.text, "", message.status === "running")}${reactions}${actions}${metadata}</div>${message.turn ? conversationCardsHTML(message.turn, member?.name) : ""}</div></div>`;
     return `<li class="tn" data-side-message="${message.id}">${body}</li>`;
   };
   const refresh = async (): Promise<void> => {

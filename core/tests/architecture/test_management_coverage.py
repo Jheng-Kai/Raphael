@@ -52,6 +52,15 @@ def test_owner_only_rpc_cannot_become_a_direct_tool_by_adding_a_row():
         assert set(DEFINITIONS[name]["parameters"]["properties"]["action"]["enum"]) == {item.name for item in rows}
 
 
+def test_vault_rpcs_are_owner_only_without_model_or_private_read_settings():
+    methods = {"vault.list", "vault.add", "vault.update", "vault.remove", "vault.preview", "vault.cancel", "vault.import"}
+    assert {name for name in OWNER_ONLY if name.startswith("vault.")} == methods
+    assert not unclassified(methods)
+    assert not methods & ({item.rpc for item in ACTIONS} | READ_ONLY_RPCS | INTERACTION_RPCS.keys())
+    assert not any(key.startswith("vault") for key in DEFAULTS)
+    assert not any(item.rpc.startswith("vault.") or (item.setting or "").startswith("vault") for item in ACTIONS)
+
+
 def test_primary_native_offer_stays_bounded_with_all_management_areas():
     from raphael_core.agent.speaker import Speaker
     from raphael_core.agent.team import TEAM_TOOLS
