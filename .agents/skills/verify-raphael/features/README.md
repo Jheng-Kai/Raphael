@@ -1,5 +1,11 @@
 # Raphael feature map
 
+## Settings by purpose (2026-11-05)
+
+See [Settings and appearance](settings-appearance.md#settings-by-purpose-2026-11-05)
+for moved shared settings, member-owned voice/memory, grouped draft preferences,
+legacy agent links, computer location search and the selected offline UI matrix.
+
 ## Commands, routine limits and owner output (2026-11-05)
 
 See [Daily work](daily-work.md) for R-NAV-01, R-ROUTINE-01/02 and R-OUTPUT-01,

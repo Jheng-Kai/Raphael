@@ -1411,6 +1411,22 @@ test("a same-length reply edit still refreshes without serializing the full hist
   agent.hide();
 });
 
+
+test("computer search navigation leaves a room and restores the computer landing panel", async () => {
+  api.settingsGet.mockResolvedValue({settings:{computer_ssh_alias:""}});
+  const agent = mount(); await flush();
+  window.dispatchEvent(new CustomEvent("raphael:open-room", {detail:{roomId:1}})); await flush();
+  agent.show("computer"); await flush();
+  expect(agent.el.querySelector<HTMLElement>(".au-room-pane")!.hidden).toBe(true);
+  expect(agent.el.querySelector<HTMLElement>(".mb-det")!.hidden).toBe(false);
+  expect(agent.el.querySelector<HTMLElement>(".mb-det")!.dataset.detailsTab).toBe("details");
+  expect(agent.el.querySelector(".mb-det [data-computer-location]")).not.toBeNull();
+  agent.el.querySelector<HTMLButtonElement>('[data-det="gear"]')!.click();
+  agent.show("computer"); await flush();
+  expect(agent.el.querySelector<HTMLElement>(".mb-det")!.dataset.detailsTab).toBe("details");
+  agent.hide();
+});
+
 test("a metadata-only reply update does not force latest again", async () => {
   vi.useFakeTimers();
   const agent = mount(); await flush(); await pick(3);

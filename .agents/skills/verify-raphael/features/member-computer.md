@@ -1,5 +1,19 @@
 # Member computer (Phases A and B)
 
+## Settings and lifecycle merge (2026-11-05)
+
+The member header reads state, shared location, maintenance overflow, settings,
+close. A sleeping state gets a full-width line before the controls in the narrow
+panel. The same location control moves into takeover without a second copy.
+Empty computers retain location and installation guidance. Existing maintenance,
+sleep choices, watch-only enlargement, leases and render caching remain intact.
+The explicit remote host check and copyable repairs move from the retired settings
+pane into the location popover using the existing viewer_status owner RPC.
+
+```powershell
+npm run look -- settings-owner settings-memory safety desktop-host-local desktop-host-remote desktop-panel computer-maintenance-menu computer-state-sleeping owner-output-folder --theme both --width 1120,720,1920x1080
+```
+
 ## Computer lifecycle in words (2026-11-05)
 
 R-COMP-PERF-01/07/10/11/12 remain authoritative. The member panel header's
@@ -757,3 +771,11 @@ work-channels.test.ts and scripts/look/audit.test.mjs. The review follow-up runs
 computer, messaging, agent and background in full once, then targets any fixes.
 Report explicitly if that full run preceded the last change. Frontend verify uses
 two Vitest workers.
+
+
+## Computer location moves to its panel (2026-11-05)
+
+The former Settings > Raphael location and Docker installation area is superseded
+by [Settings by purpose](settings-appearance.md#settings-by-purpose-2026-11-05).
+The compact header/empty-state location popover is shared by all members. See that
+entry for scenes, existing setting/RPC contracts and offline acceptance limits.

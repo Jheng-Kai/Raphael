@@ -13,6 +13,12 @@
 .computer-lifecycle { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 .computer-lifecycle-state { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); }
 .computer-lifecycle-face > .av { --av: 28px; }
+.mb-det-head:has(.computer-lifecycle) { flex-wrap: wrap; }
+.mb-det-head .mb-det-fill:has(+ .computer-lifecycle) { display: none; }
+.mb-det-head .computer-lifecycle { display: contents; }
+.mb-det-head .computer-lifecycle-state:not(:empty) { flex-basis: 100%; }
+.computer-lifecycle-state:empty { display: none; }
+.computer-lifecycle-location { min-width: 0; margin-left: auto; }
 .desktop-screen, [data-card-desktop-screen], [data-card-screen] { --text: var(--desktop-frame-text); --text-2: var(--desktop-frame-text); --text-3: color-mix(in srgb, var(--desktop-frame-text) 70%, transparent); --panel: var(--desktop-frame-bg); --content: var(--desktop-frame-bg); }
 .desktop-takeover-bar { display: flex; align-items: center; gap: var(--sp-3); min-height: 44px; padding: var(--sp-2) var(--sp-3); }
 .desktop-identity { display: flex; align-items: center; gap: var(--sp-2); flex: 1; min-width: 0; }
@@ -57,7 +63,7 @@
 .desktop-placeholder { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--sp-3); overflow-wrap: anywhere; text-align: center; color: var(--text-2); pointer-events: none; }
 .desktop-placeholder > * { pointer-events: auto; }
 .desktop-message, .desktop-placeholder .missing-note, .desktop-preparation { padding: var(--sp-3) var(--sp-4); border-radius: var(--r-lg); background: color-mix(in srgb, var(--desktop-frame-bg) 82%, transparent); }
-.desktop-placeholder .missing-note { --btn: var(--desktop-frame-bg); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); }
+.desktop-placeholder .missing-note, .desktop-placeholder > [data-act="docker-download"] { --btn: var(--desktop-frame-bg); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); }
 .desktop-error { margin: 0; color: var(--err); }
 .desktop-preparation { width: fit-content; max-width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); }
 .desktop-boot-face > .av { --av: 64px; }
@@ -88,6 +94,24 @@
 .desktop-panel[data-expanded] .desktop-recording { grid-row: 4; }
 .desktop-panel[data-expanded] .desktop-actions { grid-row: 5; }
 :root[data-desktop-expanded] :is(.side, [data-sidebar="open"]) { visibility: hidden; }
+
+.desktop-location-header { display: flex; justify-content: flex-end; min-width: 0; }
+.computer-location { min-width: 0; }
+.computer-location .btn { max-width: 100%; }
+.computer-location .btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desktop-takeover-bar .computer-location { flex: 0 1 auto; }
+.menu.computer-location-popover { width: min(380px, calc(100vw - var(--sp-4))); padding: var(--sp-3); }
+.menu.computer-location-popover .slist { --slist-pad: 0px; padding-inline: 0; }
+.menu.computer-location-popover .row { flex-direction: column; align-items: stretch; min-height: 0; gap: var(--sp-2); padding-block: var(--sp-2); }
+.menu.computer-location-popover .row > .lbl { flex: none; min-width: 0; }
+.menu.computer-location-popover .row > .ctl { width: 100%; margin-left: 0; justify-content: flex-start; }
+.menu.computer-location-popover .field, .menu.computer-location-popover .ctl .sel { width: 100%; max-width: 100%; min-width: 0; }
+.menu.computer-location-popover .sel { justify-content: space-between; padding: 0 var(--sp-2) 0 var(--sp-3); border: 1px solid var(--btn-edge); background: var(--btn); text-align: left; }
+.menu.computer-location-popover .sel > span { flex: 1; min-width: 0; text-align: left; }
+.menu.computer-location-popover > .btn { border: 1px solid var(--btn-edge); background: var(--btn); }
+.computer-location-purpose, .computer-location-error { margin: var(--sp-2) 0; font-size: var(--fs-sm); line-height: 1.5; overflow-wrap: anywhere; white-space: normal; }
+.computer-location-purpose { color: var(--text-3); }
+.computer-location-error { color: var(--err); }
 
 /* Watching enlarges the same view-only stream and retains the existing sidebar. */
 .desktop-enlarge { position: absolute; z-index: 4; top: var(--sp-2); right: var(--sp-2); }

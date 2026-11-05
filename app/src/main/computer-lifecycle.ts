@@ -12,11 +12,11 @@ const maintenanceWords = {
 const stateWords = { sleeping:'desktop.sleeping', waking:'desktop.waking', updating:'desktop.updating', repairing:'desktop.repairing' } as const;
 
 export function mountComputerLifecycle(host: HTMLElement, panel: HTMLElement, member: () => number,
-  read: () => DesktopState | undefined, perform: (action: ComputerMaintenance, captured: DesktopState) => Promise<void>, face: () => string): { draw(): void } {
+  read: () => DesktopState | undefined, perform: (action: ComputerMaintenance, captured: DesktopState) => Promise<void>, face: () => string): { draw(): void; locationHost: HTMLElement } {
   const header = host.querySelector('.mb-det-head') ?? panel;
   const holder = document.createElement('span');
   holder.className = 'computer-lifecycle';
-  holder.innerHTML = `<span class="computer-lifecycle-state" role="status"></span>${iconButton('more', t('chat.more'), ' data-computer-menu aria-haspopup="menu" aria-expanded="false"')}`;
+  holder.innerHTML = `<span class="computer-lifecycle-state" role="status"></span><span class="computer-lifecycle-location"></span>${iconButton('more', t('chat.more'), ' data-computer-menu aria-haspopup="menu" aria-expanded="false"')}`;
   header.insertBefore(holder, header.querySelector('[data-det="gear"]'));
   const button = holder.querySelector<HTMLButtonElement>('[data-computer-menu]')!;
   const label = holder.querySelector<HTMLElement>('[role="status"]')!;
@@ -49,11 +49,12 @@ export function mountComputerLifecycle(host: HTMLElement, panel: HTMLElement, me
     ]);
   }
   button.addEventListener('click', menu);
-  return { draw() {
+  return { locationHost: holder.querySelector<HTMLElement>('.computer-lifecycle-location')!, draw() {
     const state = read();
     repaired.hidden = !state?.repair_revision;
     if (state?.repair_revision) repaired.textContent = t('desktop.repaired');
-    holder.hidden = !state || state.state === 'absent' || state.granted === false;
+    const available = !!state && state.state !== 'absent' && state.granted !== false;
+    label.hidden = button.hidden = !available;
     button.setAttribute('aria-label', t('chat.more')); button.title = t('chat.more');
     const phase = state?.lifecycle ?? (state?.state === 'stopped' ? 'sleeping' : ['starting','preparing'].includes(state?.state ?? '') ? 'waking' : state?.state === 'building' ? 'updating' : '');
     if (!phase) { patchHTML(label, ''); return; }

@@ -52,6 +52,9 @@ const pendingReply = [type('.cmp-input', "請整理這週的研究重點。"), k
 const voiceReply = [{ action: "main-event", event: { type: "Dictation", phase: "listening", agent: true, member_id: 0 } },
   { action: "main-event", event: { type: "Dictation", phase: "processing", agent: true, member_id: 0 } }, ...quickOpen, rosterRefresh, ...stopSlot, check("pending-work")];
 export default [
+  scene("settings-raphael-memory", "Raphael owns his memory in the same member details panel", [{action:'open-details'},click('[data-det="gear"]'),click('[data-det="tab"][data-tab="memory"]'),wait('.mb-det [data-mem-space="own"] .mem-entry'),scroll('.mb-det [data-mem-space="own"]'),check('settings-raphael-memory')]),
+  scene("settings-raphael-voice", "Raphael owns his voice and preview in the same member details panel", [{action:'open-details'},click('[data-det="gear"]'),click('[data-det="tab"][data-tab="voice"]'),wait('.mb-det #svc-voice-id'),click('.mb-det [data-svc="try"]'),wait('.mb-det [data-svc="try"]:not(:disabled)'),check('settings-raphael-voice')], {raphaelVoice:true}),
+
   scene("composer-stop-roster", "Roster refresh cannot repaint a restored running reply's Stop as an emblem", [rosterRefresh, ...stopSlot], { running: true }),
   { ...scene("composer-stop-pending", "A typed CLI request shares the running work line before its first turn", [...pendingReply, { action: "freeze-motion", at: 600 }, check("work-dots")], { stopPending: true }), motion: true },
   scene("composer-stop-pending-result", "Stop cancels the pending request once without starting voice", [...pendingReply, click('.cmp-voice'), wait('.composer[data-task-state="idle"] .av'), check("composer-stop-pending-result")], { stopPending: true }),
@@ -246,7 +249,7 @@ export default [
   scene("raphael-details", "Title opens Raphael details", [{ action: "open-details" }, check("member-details")]),
   ...[0, 1].map(id => scene(`speaker-draft-${id ? "member" : "chief"}`, "Every speaker can turn the shared draft preference off in details settings", [
     member(id), { action: "open-details" }, click('[data-det="gear"]'), wait('[data-det="draft"][aria-checked="true"]'),
-    click('[data-det="draft"]'), wait('[data-det="draft"][aria-checked="false"]'),
+    click('[data-det="draft"]'), wait('[data-det="draft"][aria-checked="false"]'), check('settings-draft-grouped'),
   ])),
   scene("speaker-draft-profile", "The member profile uses the same draft preference component and words", [
     ...details, click('[data-det="gear"]'), click('[data-det="edit"]'), wait('#mp-tab-permissions'),

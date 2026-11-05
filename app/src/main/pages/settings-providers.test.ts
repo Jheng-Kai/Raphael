@@ -39,12 +39,13 @@ const listeners = new Set<(event: MainEvent) => void>();
 const send = (event: MainEvent) => { for (const listener of listeners) listener(event); };
 let page: ReturnType<typeof createSettings>;
 const closeSettings = vi.fn();
+const go = vi.fn();
 async function mount(open: SettingsPane = "models") {
   page = createSettings({
     device: () => ({ dictation_keys: ["AltRight"], agent_keys: ["AltRight+Space"], ui_language: "en", dictation_mode: "hold" }),
     onEvent: (handler: (event: MainEvent) => void) => { listeners.add(handler); return () => { listeners.delete(handler); }; },
     refreshDevice: async () => {}, undo: { begin: vi.fn() },
-    closeSettings, cleared: new Cleared(),
+    go, closeSettings, cleared: new Cleared(),
   } as unknown as AppContext);
   document.body.append(page.el); page.el.hidden = false;
   await page.show(open); await flush();
@@ -466,7 +467,7 @@ test("vision keeps its primary image picker without fallback controls", async ()
     pdf: { enabled: true, service: "builtin", options: [] }, voice: { enabled: false, service: "fish", options: [] },
     vision: { enabled: true, model: "", resolved_model: "example", supports_images: true },
   });
-  await mount(); click('[data-pane="agent"]'); await flush();
+  await mount(); click('[data-pane="tools"]'); await flush();
   click('button[data-svc="open"][data-id="vision"]');
   click('button[data-svc="service"][data-service="model"]');
   expect(page.el.querySelector('[data-fallback-purpose]')).toBeNull();
@@ -474,4 +475,15 @@ test("vision keeps its primary image picker without fallback controls", async ()
   click('[data-model-picker="vision"] .mp-trigger');
   click('[data-source="p4"]'); click('[data-id="@p4:local:8b"]'); click('[data-dlg="use"]'); await flush();
   expect(api.settingsSet).toHaveBeenCalledWith("vision_model", "@p4:local:8b");
+});
+
+
+test("computer location search closes Settings and opens the member computer panel", async () => {
+  await mount("general");
+  const field = page.el.querySelector<HTMLInputElement>("#set-search")!;
+  field.value = "遠端"; field.dispatchEvent(new Event("input", { bubbles: true }));
+  expect(page.el.querySelectorAll(".set-hit")).toHaveLength(1);
+  click(".set-hit");
+  expect(closeSettings).toHaveBeenCalledOnce();
+  expect(go).toHaveBeenCalledExactlyOnceWith("agent", "computer");
 });
