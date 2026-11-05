@@ -1396,7 +1396,7 @@ export function checkRendered(name, context = {}) {
     const selector = name === 'generated-image' ? 'img[data-attachment]' : 'video[data-attachment]';
     const element = document.querySelector('.ra-body ' + selector);
     require(document.querySelectorAll(selector).length === 1, 'the generated output is not also fabricated as owner input');
-    require(visible(element) && element.src.startsWith('blob:'), 'the stored media is loaded through attachments.get');
+    require(visible(element) && element.src.startsWith('blob:'), name === 'generated-image' ? 'the stored image is loaded through attachments.get' : 'the stored video streams through attachment_source');
     require(name !== 'generated-image' || element.naturalWidth > 0, 'the image decoded');
     require(name !== 'generated-video' || element.controls && element.readyState >= 1, 'the existing video player has playable metadata');
     return {check:name,id:element.dataset.attachment};

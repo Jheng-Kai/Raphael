@@ -37,7 +37,8 @@ export default [
     ...settingsScenes.find(item=>item.name==='model-choices-stt').steps,
     {action:'press-feedback',selectors:['.mc-source:not([aria-pressed="true"])','.mc-source[aria-pressed="true"]']},
   ]),
-  (()=>{const source=presenceScenes.find(item=>item.name==='event-routine-line');return {...source,name:'daily-press-event',description:'An event receipt answers a press without opening during measurement',steps:[...source.steps,{action:'press-feedback',selectors:['.mb-chat:not([hidden]) .btn.event-open']}]};})(),
+  // The receipt folds into the reply's work detail (R-UI-101), so the press opens that detail first.
+  (()=>{const source=presenceScenes.find(item=>item.name==='event-routine-opens');return {...source,name:'daily-press-event',description:'An event receipt answers a press without opening during measurement',steps:[...source.steps.filter(step=>step.action!=='check'&&!String(step.selector).includes('open-routine')&&!String(step.selector).includes('au-routine-dialog')),{action:'press-feedback',selectors:['.mb-chat:not([hidden]) .btn.event-open']}]};})(),
   scene('daily-press-card','A conversation card primary action answers before its asynchronous work',[page('agent'),wait('[data-permission-card]'),{action:'press-feedback',selectors:['[data-act="perm-once"]']}],{permissionCard:'tool'}),
   (()=>{const source=desktopScenes.find(item=>item.name==='panel-screen-routines');return {...source,name:'daily-press-desktop',description:'Desktop preview controls answer without changing geometry',steps:[...source.steps,{action:'press-feedback',selectors:['.desktop-hit']}]};})(),
   scene('daily-newest','A new window opens recent activity rather than the stable default',[page('agent'),check('daily-newest')],{conversations:[

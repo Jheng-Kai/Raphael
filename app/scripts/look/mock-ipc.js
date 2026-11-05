@@ -1635,7 +1635,11 @@ export function installMock(fixture, config = {}, target = window) {
         return { state: variant.appUpdate === "ready" || data.device.auto_update ? "ready" : variant.appUpdate ? "found" : "idle", version: variant.appUpdate ? sample.version : "", notes: variant.appUpdate ? sample.notes : "", error: "" };
       }
       // The native asset protocol streams stored media from disk; the browser harness serves the same bytes as a Blob.
-      if (command === "attachment_source") return variant.audioFile?.id === args.id ? URL.createObjectURL(new Blob([syntheticWav()], {type: "audio/wav"})) : `C:\\synthetic\\${args.id}`;
+      if (command === "attachment_source") {
+        if (variant.audioFile?.id === args.id) return URL.createObjectURL(new Blob([syntheticWav()], {type: "audio/wav"}));
+        if (variant.generatedFile?.id === args.id) return URL.createObjectURL(new Blob([Uint8Array.from(atob(variant.generatedData), c => c.charCodeAt(0))], {type: variant.generatedFile.mime}));
+        return `C:\\synthetic\\${args.id}`;
+      }
       if (command === "device_settings_get") return copy(data.device);
       if (command === "device_settings_set") { Object.assign(data.device, args.patch); notify("DeviceSettings", { settings: copy(data.device) }); return copy(data.device); }
       if (command === "avatar_get") return copy(data.avatar);
