@@ -77,6 +77,7 @@ describe("a member's panel", () => {
     const toggle = panel.el.querySelector<HTMLButtonElement>('[data-det="draft"]')!;
     expect(toggle.getAttribute("aria-checked")).toBe("true");
     toggle.click(); await flush();
+    expect(toggle.closest(".mb-panel-pages")).not.toBeNull();
     expect(host.update).toHaveBeenCalledWith(id, { draft_first: false });
     host.member().draft_first = false; panel.draw();
     panel.el.querySelector<HTMLButtonElement>('[data-det="draft"]')!.click(); await flush();

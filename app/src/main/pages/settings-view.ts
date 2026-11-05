@@ -8,7 +8,7 @@
 // line under a row's name only where the setting would otherwise be set wrong. Each tab opens with
 // its name and one line on what it is for, then its rows in a few named groups.
 //
-// The tabs sit on the left in three groups: basics, integrations and account (Models & usage, Data, About).
+// The tabs sit on the left in four groups: basics, team, integrations and account (Models & usage, Data, About).
 // Settings search finds a row in any tab by its name in any of the three languages, and jumps to
 // it (`SEARCH_INDEX`, `searchSettings`).
 
@@ -76,25 +76,27 @@ export const RETENTIONS: Choice[] = [1, 7, 30, 365, KEEP_FOREVER_DAYS].map((days
 
 const PRICES_LOADING = () => t("settings.026");
 
-/** The groups of tabs: the basics have no name. */
-export type PaneGroup = "basics" | "integrations" | "account";
+/** Settings groups follow their shared purpose. */
+export type PaneGroup = "basics" | "team" | "integrations" | "account";
 
-/** The name of each group, over its tabs; the basics have none. */
+/** The localized group names above their tabs. */
 export const PANE_GROUPS: Record<PaneGroup, () => string> = {
-  basics: () => "",
+  basics: () => t("settings.navBasics"),
+  team: () => t("settings.navTeam"),
   integrations: () => t("settings.navIntegrations"),
   account: () => t("settings.navAccount"),
 };
 
 /**
  * The tabs on the left of the panel, in order and in their groups, each with the line under its name
- * that says what it is for. 拉斐爾's tab has Raphael's emblem for its icon, as the window's does.
+ * that says what it is for. Shared services and safety belong to the team.
  */
-export const PANES: { id: SettingsPane; group: PaneGroup; icon: IconName | "emblem"; title: () => string; purpose: (d: DeviceSettings) => string }[] = [
+export const PANES: { id: SettingsPane; group: PaneGroup; icon: IconName; title: () => string; purpose: (d: DeviceSettings) => string }[] = [
   { id: "general", group: "basics", icon: "gear", title: () => t("settings.paneGeneral"), purpose: () => t("settings.purposeGeneral") },
   { id: "appearance", group: "basics", icon: "grid", title: () => t("skin.title"), purpose: () => t("skin.about") },
   { id: "dictation", group: "basics", icon: "mic", title: () => t("settings.paneDictation"), purpose: () => t("settings.purposeDictation") },
-  { id: "agent", group: "basics", icon: "emblem", title: () => t("settings.paneAgent"), purpose: agentPurpose },
+  { id: "tools", group: "team", icon: "steps", title: () => t("settings.paneTools"), purpose: () => t("settings.purposeTools") },
+  { id: "safety", group: "team", icon: "lock", title: () => t("settings.paneSafety"), purpose: () => t("settings.purposeSafety") },
   { id: "connections", group: "integrations", icon: "plug", title: () => t("settings.paneConnections"), purpose: () => t("settings.purposeConnections") },
   { id: "messaging", group: "integrations", icon: "send", title: () => t("settings.paneMessaging"), purpose: () => t("settings.purposeMessaging") },
   { id: "models", group: "account", icon: "bot", title: () => t("settings.paneUsage"), purpose: () => t("providers.about") },
@@ -102,14 +104,9 @@ export const PANES: { id: SettingsPane; group: PaneGroup; icon: IconName | "embl
   { id: "about", group: "account", icon: "info", title: () => t("common.about"), purpose: () => t("settings.purposeAbout") },
 ];
 
-/** Raphael's emblem at the size of a tab's icon, in the version for each theme (app/public/brand). */
-const NAV_EMBLEM =
-  `<span class="nav-em" aria-hidden="true"><img class="em-l" src="/brand/app-emblem-light-64.webp" alt="" width="18" height="18">` +
-  `<img class="em-d" src="/brand/app-emblem-dark-64.webp" alt="" width="18" height="18"></span>`;
-
 /** The button of a tab in the list on the left. */
 const paneButton = (p: (typeof PANES)[number]): string =>
-  `<button type="button" class="nav" data-pane="${p.id}" aria-current="false">${p.icon === "emblem" ? NAV_EMBLEM : ico(p.icon)}<span>${esc(p.title())}</span></button>`;
+  `<button type="button" class="nav" data-pane="${p.id}" aria-current="false">${ico(p.icon)}<span>${esc(p.title())}</span></button>`;
 
 /** The tabs in their groups, each group under its small grey name. */
 export const paneListHTML = (): string =>
@@ -130,6 +127,7 @@ export const paneListHTML = (): string =>
  */
 export interface SearchEntry {
   pane: SettingsPane;
+  target?: "computer";
   label?: MessageKey;
   also?: MessageKey;
   words?: string[];
@@ -153,18 +151,19 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "dictation", label: "settings.055" },
   { pane: "dictation", label: "transcription.title" },
   { pane: "dictation", label: "common.microphone", words: ["mic"] },
-  { pane: "agent", label: "settings.agentKeys", also: "settings.searchShortcut" },
-  { pane: "agent", label: "settings.agentCity" },
-  { pane: "agent", label: "mem.title", also: "settings.searchMemory" },
-  { pane: "agent", label: "rules.title" },
-  { pane: "agent", label: "settings.computerUse" },
-  { pane: "agent", label: "local.title" },
-  { pane: "agent", label: "services.title" },
-  { pane: "agent", label: "services.search", words: ["Brave", "Tavily", "Exa", "SearXNG"] },
-  { pane: "agent", label: "services.read", words: ["Jina", "Firecrawl"] },
-  { pane: "agent", label: "services.vision" },
-  { pane: "agent", label: "services.pdf", words: ["PDF"] },
-  { pane: "agent", label: "services.voice", words: ["Fish Audio", "TTS"] },
+  { pane: "dictation", label: "settings.agentKeys", also: "settings.searchShortcut" },
+  { pane: "general", label: "settings.agentCity" },
+  { pane: "general", label: "mem.shared", also: "settings.searchMemory" },
+  { pane: "safety", label: "rules.title" },
+  { pane: "safety", label: "settings.computerUse" },
+  { pane: "safety", target: "computer", label: "desktop.host", also: "desktop.remoteSearch" },
+  { pane: "safety", label: "local.title" },
+  { pane: "tools", label: "services.title" },
+  { pane: "tools", label: "services.search", words: ["Brave", "Tavily", "Exa", "SearXNG"] },
+  { pane: "tools", label: "services.read", words: ["Jina", "Firecrawl"] },
+  { pane: "tools", label: "services.vision" },
+  { pane: "tools", label: "services.pdf", words: ["PDF"] },
+  { pane: "tools", label: "services.voice", words: ["Fish Audio", "TTS"] },
   { pane: "messaging", words: ["Telegram"] },
   { pane: "models", label: "providers.add", words: ["OpenAI", "Anthropic", "Gemini", "Azure", "Bedrock", "Ollama", "LM Studio", "OpenRouter", "LiteLLM", "Portkey", "Vercel", "Nebius", "Bifrost", "Groq", "DeepSeek", "Mistral"] },
   { pane: "usage", label: "common.apiKey", words: ["OpenRouter"] },
@@ -186,6 +185,7 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
 /** A row the search found: where it is, and its name in the window's language. */
 export interface SearchHit {
   pane: SettingsPane;
+  target?: "computer";
   /** The key of the row's name; none for a tab itself. */
   label?: MessageKey;
   /** What the hit says: the row's name, or the tab's. */
@@ -204,7 +204,7 @@ const allLanguages = (key: MessageKey): string[] => Object.values(catalogs).map(
 /** The keys of the tabs' names, in every language. */
 const PANE_TITLE_KEYS: Record<SettingsPane, MessageKey> = {
   appearance: "skin.title",
-  general: "settings.paneGeneral", dictation: "settings.paneDictation", agent: "settings.paneAgent", connections: "settings.paneConnections",
+  general: "settings.paneGeneral", dictation: "settings.paneDictation", agent: "settings.paneTools", tools: "settings.paneTools", safety: "settings.paneSafety", connections: "settings.paneConnections",
   messaging: "settings.paneMessaging", models: "settings.paneUsage", usage: "settings.paneUsage", data: "settings.paneData", about: "common.about",
 };
 
@@ -225,6 +225,7 @@ export function searchSettings(query: string): SearchHit[] {
   });
   return found.slice(0, SEARCH_SHOWN).map((entry) => ({
     pane: entry.pane,
+    target: entry.target,
     label: entry.label,
     text: entry.label ? tr(entry.label) : paneTitle(entry.pane),
   }));
@@ -237,21 +238,14 @@ export function searchResultsHTML(hits: SearchHit[]): string {
     .map(
       (hit, i) =>
         `<button type="button" class="nav set-hit" data-hit="${i}"><span class="hit-t">${esc(hit.text)}</span>` +
-        (hit.label ? `<span class="hit-p">${esc(paneTitle(hit.pane))}</span>` : "") +
+        (hit.label ? `<span class="hit-p">${esc(hit.target === "computer" ? t("card.pcTitle") : paneTitle(hit.pane))}</span>` : "") +
         `</button>`,
     )
     .join("");
 }
 
-/** 「按 右 Alt + Space 問拉斐爾」: the line names the keys that are set, so that it stays true when they change. */
-function agentPurpose(d: DeviceSettings): string {
-  // an app from before the question key has none yet
-  const binding = d.agent_keys?.[0];
-  return binding ? t("settings.purposeAgent", { p0: bindingLabels(binding).join(" + ") }) : t("settings.purposeAgentNoKeys");
-}
-
-/** Both legacy entry points select the single Models pane. */
-export const canonicalPane = (id: SettingsPane): SettingsPane => id === "usage" ? "models" : id;
+/** Legacy links select Models or the shared Tools pane. */
+export const canonicalPane = (id: SettingsPane): SettingsPane => id === "usage" ? "models" : id === "agent" ? "tools" : id;
 /** The name of a tab, in the language of the window. */
 export const paneTitle = (id: SettingsPane): string => PANES.find((p) => p.id === canonicalPane(id))!.title();
 export type ModelsTab = "models" | "usage";
@@ -262,11 +256,6 @@ export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotke
 /** Everything a tab is drawn from: what the panel has read, and what is being typed or done. */
 export interface SettingsView {
   data?: { items: import("../types").HistoryItem[]; total: number; conversations: number; more: boolean; busy?: boolean; error?: string };
-  /** An absent runtime is shown once in the existing computer settings area. */
-  desktopRequired?: boolean;
-  computerRemote?: boolean;
-  computerAliasDraft?: string;
-  computerHostError?: boolean;
   modelsTab?: ModelsTab;
   pane: SettingsPane;
   device: DeviceSettings;
@@ -295,13 +284,11 @@ export interface SettingsView {
   cityError: (() => string) | null;
   /** Telegram, in the 訊息平台 tab. */
   messaging: MessagingView;
-  /** Raphael's own memory, in the 拉斐爾 tab, after its settings (none: not drawn). */
-  memory?: MemoryView;
-  /** The owner's safety rules, in the 拉斐爾 tab, after the memory (none: not drawn). */
+  /** The shared safety rules, in Safety (none: not drawn). */
   rules?: RulesView;
-  /** 「共同記憶」, which every agent shares, drawn before Raphael's own (none: not drawn). */
+  /** Shared owner memory, in General (none: not drawn). */
   memoryShared?: MemoryView;
-  /** 服務, in the 拉斐爾 tab: who searches, reads pages and PDFs, and looks at images (none: not drawn). */
+  /** Shared services, in Tools: who searches, reads pages and PDFs, and looks at images (none: not drawn). */
   services?: ServicesView;
   providers?: ProvidersView;
   cliBrains?: CliBrainsView;
@@ -582,7 +569,8 @@ const altgrNote = (v: SettingsView, bindings: readonly string[]): string[] =>
  */
 export const headingHTML = (v: SettingsView, actions = ""): string => {
   const title = `<h1 id="set-title" tabindex="-1">${esc(paneTitle(v.pane))}</h1>`;
-  return actions ? `<div class="set-head">${title}${actions}</div>` : title;
+  return (actions ? `<div class="set-head">${title}${actions}</div>` : title) +
+    `<p class="set-purpose">${esc(PANES.find(p => p.id === canonicalPane(v.pane))!.purpose(v.device))}</p>`;
 };
 
 /** What the tabs that need the core say when it does not answer. */
@@ -595,7 +583,10 @@ function generalHTML(v: SettingsView): string {
   const d = v.device;
   return (
     headingHTML(v) +
-    coreNote(v) + ownerProfileHTML(v.brain) +
+    coreNote(v) + `<section class="sgroup"><h2>${esc(t("settings.ownerSection"))}</h2>` + ownerProfileHTML(v.brain) +
+    `<div class="slist">` + row(t("settings.agentCity"), "", fieldHTML(t("settings.agentCityHint"), v.cityDraft ?? agentCity(v), { w: 200, label: t("settings.agentCity"), id: "agent-city", invalid: v.cityError !== null, disabled: v.brain === null })) +
+    (v.cityError ? note(st("err", v.cityError()), ' role="alert"') : "") + `</div>` +
+    (v.memoryShared ? memoryHTML(v.memoryShared) : "") + `</section>` +
     section(t("settings.groupAppearance"), [
       row(t("settings.069"), "", sel(SIZES, String(d.emblem_size), t("settings.069"), ' data-k="size"')),
       row(t("settings.071"), "", tg(d.subtitles !== "off", t("settings.071"), ' data-k="subtitles"')),
@@ -613,13 +604,15 @@ function dictationHTML(v: SettingsView): string {
   return (
     headingHTML(v) +
     coreNote(v) +
-    section(t("settings.groupStart"), [
+    section(t("home.shortcuts"), [
+      shortcutRow(t("settings.agentKeys"), v.device.agent_keys ?? [], { act: "rec-agent", field: "agent_keys" }),
+      ...altgrNote(v, v.device.agent_keys ?? []),
       shortcutRow(t("home.020"), d.dictation_keys, { act: "rec", field: "dictation_keys" }),
       ...altgrNote(v, d.dictation_keys),
       ...(d.paste_last_keys.length ? [shortcutRow(t("home.021"), d.paste_last_keys)] : []),
       shortcutRow(t("common.cancel"), ["Escape"]),
-      row(t("settings.055"), "", sel(DICTATION_MODES, d.dictation_mode, t("settings.055"), ' data-k="mode"')),
     ]) +
+    section(t("settings.groupStart"), [row(t("settings.055"), "", sel(DICTATION_MODES, d.dictation_mode, t("settings.055"), ' data-k="mode"'))]) +
     section(t("settings.groupListen"), [
       row(
         t("transcription.title"),
@@ -653,15 +646,7 @@ export const computerApps = (device: DeviceSettings): readonly { exe: string; na
  */
 function computerRows(v: SettingsView): string[] {
   const apps = computerApps(v.device);
-  const remote = v.computerRemote ?? !!v.brain?.computer_ssh_alias;
   const desktop = [
-    row(t("desktop.host"), t("desktop.memberLogins"), sel([
-      { value: "local", label: t("desktop.local") }, { value: "remote", label: t("desktop.remote") },
-    ], remote ? "remote" : "local", t("desktop.host"), ` data-k="computer-host"${v.brain ? "" : " disabled"}`)),
-    ...(remote ? [row(t("desktop.sshAlias"), "", fieldHTML("", v.computerAliasDraft ?? v.brain?.computer_ssh_alias ?? "", {
-      id: "computer-ssh-alias", label: t("desktop.sshAlias"), w: 200, disabled: !v.brain, invalid: v.computerHostError,
-    })), ...(v.computerHostError ? [note(st("err", t("desktop.invalidAlias")), ' role="alert" data-computer-host-error')] : [])] : []),
-    ...(!remote && v.desktopRequired ? [row(esc(t("desktop.required")), "", btn(t("desktop.download"), "sm", ' data-act="docker-download"'))] : []),
     row(t("local.title"), "", sel(LOCAL_COMMAND_MODES, v.brain?.local_commands_mode ?? "ask", t("local.title"), ` data-k="local-commands"${v.brain === null ? " disabled" : ""}`)),
   ];
   if (apps.length === 0) return [...desktop, row(`<span class="val">${esc(t("settings.computerNone"))}</span>`)];
@@ -670,36 +655,14 @@ function computerRows(v: SettingsView): string[] {
   )];
 }
 
-/**
- * 拉斐爾: the key that asks Raphael, the city of the weather, what a background task may spend,
- * then the services of his tools (services.ts), his memory (the shared one first, then his own),
- * the owner's safety rules (safety-rules.ts) and the apps he may always operate. The model that
- * answers is with the other models. His picture is changed in his details panel on the 拉斐爾 page,
- * as every member's is (member-details.ts).
- */
-function agentHTML(v: SettingsView): string {
-  const cityShown = v.cityDraft ?? agentCity(v);
-  // an app from before the question key has none yet
-  const agentKeys = v.device.agent_keys ?? [];
-  return (
-    headingHTML(v) +
-    coreNote(v) +
-    section("", [
-      shortcutRow(t("settings.agentKeys"), agentKeys, { act: "rec-agent", field: "agent_keys" }),
-      ...altgrNote(v, agentKeys),
-      row(
-        t("settings.agentCity"),
-        "",
-        fieldHTML(t("settings.agentCityHint"), cityShown, { w: 200, get label() { return t("settings.agentCity"); }, id: "agent-city", invalid: v.cityError !== null, disabled: v.brain === null }),
-      ),
-      ...(v.cityError ? [note(st("err", v.cityError()), ' role="alert"')] : []),
-    ]) +
-    (v.services ? servicesHTML(v.services, modelPickerHTML(visionPickerLook(v)), v.brain) : "") +
-    (v.memoryShared ? memoryHTML(v.memoryShared) : "") +
-    (v.memory ? memoryHTML(v.memory) : "") +
-    (v.rules ? rulesHTML(v.rules) : "") +
-    section(t("settings.computerUse"), computerRows(v))
-  );
+/** Services shared by every member. */
+function toolsHTML(v: SettingsView): string {
+  return headingHTML(v) + coreNote(v) + (v.services ? servicesHTML(v.services, modelPickerHTML(visionPickerLook(v)), v.brain) : "");
+}
+
+/** Shared safety rules and local command permissions. */
+function safetyHTML(v: SettingsView): string {
+  return headingHTML(v) + coreNote(v) + (v.rules ? rulesHTML(v.rules) : "") + section(t("settings.computerUse"), computerRows(v));
 }
 
 /** 連接: the services Raphael is connected to and the store that adds them, under the heading and its 「新增」. */
@@ -781,7 +744,10 @@ export function paneHTML(v: SettingsView): string {
     case "dictation":
       return dictationHTML(v);
     case "agent":
-      return agentHTML(v);
+    case "tools":
+      return toolsHTML(v);
+    case "safety":
+      return safetyHTML(v);
     case "connections":
       return connectionsTabHTML(v);
     case "messaging":

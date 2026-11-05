@@ -1,5 +1,12 @@
 # Raphael feature map
 
+## Settings by purpose (2026-11-05)
+
+See [Settings and appearance](settings-appearance.md#settings-by-purpose-2026-11-05)
+for moved shared settings, member-owned voice/memory, grouped draft preferences,
+legacy agent links, computer location search and the selected offline UI matrix.
+
+
 ## Shared installed skills (2026-11-04)
 
 See [Members](members.md#shared-installed-skills-2026-11-04) for R-SKILL-01 through

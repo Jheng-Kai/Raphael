@@ -7,10 +7,53 @@ import { slimeCharactersHTML, slimeColorOf, slimeColorsHTML } from "../../src/ma
 import { auditDocument, failedChecks } from "./audit.mjs";
 import { checkRendered } from "./checks.mjs";
 import { scenes } from "./scenes/index.mjs";
-import { LATIN_NAMES, needsDesktopFixture } from "./runner.mjs";
+import { LATIN_NAMES, needsDesktopFixture, sceneLatinNames } from "./runner.mjs";
 import { slimeParts } from "./slime-board.mjs";
 
 describe("rendered look checks", () => {
+  it("rejects split text edges, mismatched controls and centered location values", () => {
+    const browser = new Window();
+    browser.document.body.innerHTML = '<div class="computer-location-popover"><p class="computer-location-purpose">Shared scope</p><div class="lbl"><div class="t">Computer location</div></div><button class="sel"><span>Local</span></button><label class="field"><input></label></div>';
+    let lineLeft = 100, fieldLeft = 100, fieldRight = 300, textInset = 13, textAlign = "left";
+    const rect = (left = 100, right = 300) => ({ left, right, width: right - left, height: 34 });
+    for (const element of browser.document.querySelectorAll("*")) { element.checkVisibility = () => true; element.getBoundingClientRect = () => element.matches('.field') ? rect(fieldLeft, fieldRight) : rect(); }
+    browser.document.createRange = () => {
+      let element;
+      return { selectNodeContents(node) { element = node; }, getClientRects: () => [rect(), rect(element.matches('.t') ? lineLeft : 100)], getBoundingClientRect: () => rect(100 + textInset) };
+    };
+    vi.stubGlobal("document", browser.document);
+    vi.stubGlobal("getComputedStyle", () => ({ textAlign, borderLeftWidth: "1px", paddingLeft: "12px" }));
+    try {
+      expect(() => checkRendered("host-settings-layout")).not.toThrow();
+      lineLeft = 118; expect(() => checkRendered("host-settings-layout")).toThrow("one left edge"); lineLeft = 100;
+      fieldLeft = 102; expect(() => checkRendered("host-settings-layout")).toThrow("one left edge"); fieldLeft = 100;
+      fieldRight = 290; expect(() => checkRendered("host-settings-layout")).toThrow("right edge"); fieldRight = 300;
+      textAlign = "center"; expect(() => checkRendered("host-settings-layout")).toThrow("left-aligned"); textAlign = "left";
+      textInset = 50; expect(() => checkRendered("host-settings-layout")).toThrow("left-aligned");
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
+  it("rejects a low-contrast Docker download on the desktop wallpaper", () => {
+    const browser = new Window();
+    browser.document.body.innerHTML = '<section class="desktop-panel"><div class="missing-note">Docker Desktop</div><button data-act="docker-download">Download Docker Desktop</button></section>';
+    browser.__look = { calls: [] };
+    for (const element of browser.document.querySelectorAll("*")) { element.checkVisibility = () => true; element.getBoundingClientRect = () => ({ width: 120, height: 32 }); }
+    let backgroundColor = "rgb(255, 255, 255)";
+    vi.stubGlobal("window", browser); vi.stubGlobal("document", browser.document);
+    vi.stubGlobal("getComputedStyle", () => ({ color: "rgb(240, 240, 240)", backgroundColor }));
+    try {
+      expect(() => checkRendered("desktop-absent")).toThrow("readable contrast");
+      backgroundColor = "rgb(23, 23, 23)";
+      expect(() => checkRendered("desktop-absent")).not.toThrow();
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
+  it("accepts a typed host name as data while still rejecting untranslated controls", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<button data-computer-location><span>studio-mini</span></button><button>Save</button>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 120, bottom: 32, width: 120, height: 32 });
+    const scene = { fixture: {}, steps: [{ action: "type", selector: "#computer-ssh-alias", text: "studio-mini" }] };
+    const result = auditDocument(window.document, { width: 1120, height: 900 }, [], sceneLatinNames(scene, "zh-TW", {}));
+    expect(result.mixedLanguage.map(item => item.word)).toEqual(["Save"]);
+  });
   it("rejects permission field labels taller than one line", () => {
     const browser = new Window();
     browser.document.body.innerHTML = '<div class="permission-card"><div class="card-field"><span>Connected app</span><span>Long action details</span></div></div>';

@@ -157,7 +157,7 @@ export function askLabels(q: AgentQuestion | null): { yes: string; no: string; a
   };
 }
 
-/** The gear button: Settings, open on the 拉斐爾 tab, as the sidebar's 設定 opens it on its first. */
+/** Retain the legacy settings link; Settings resolves the former agent pane to Tools. */
 export function openRaphaelSettings(app: Pick<AppContext, "go">): void {
   app.go("settings", "agent");
 }
@@ -1525,7 +1525,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function drawBackgroundQuestions(): void {
     waiting = mountBackgroundQuestions(backgroundSlot, {
       memberId: memberId(),
-      manageLocal: () => openRaphaelSettings(app),
+      manageLocal: () => app.go("settings", "safety"),
       asker: () => {
         const member = members.member();
         return inRaphael() ? { face: avatarHTML({ size: 22, cls: "bgq-face" }), name: null } : { face: faceHTML(member, 22, { cls: "bgq-face" }), name: member.name };
@@ -2031,7 +2031,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         }).catch(error => toaster.info(describeError(error)));
         break;
       case "local-settings":
-        openRaphaelSettings(app);
+        app.go("settings", "safety");
         break;
       case "settings":
         openRaphaelSettings(app);
@@ -2347,6 +2347,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       const wasVisible = visible;
       if (!wasVisible) { unreadFrom = null; unreadCaptured = false; openingThread = true; }
       visible = true;
+      if (arg === "computer") { if (roomPane.active) roomPane.close(); members.setDetails(true, true); }
       if (!wasVisible) members.show();
       if (!roomPane.active) desktop.show();
       else void roomPane.refresh();

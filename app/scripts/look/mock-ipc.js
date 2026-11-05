@@ -2,6 +2,8 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  if (variant.raphaelVoice) data.settings.tts_fish_voice = "0123456789abcdef0123456789abcdef";
+  if (variant.computerHost) data.settings.computer_ssh_alias = variant.computerHost;
   if (variant.unreadDivider) {
     const base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
     const sample = data.unreadSample;
@@ -709,6 +711,7 @@ export function installMock(fixture, config = {}, target = window) {
         if (desktopSessions.get(p.session)?.held && data.desktop) data.desktop.control = "member";
         desktopSessions.delete(p.session); return {};
       }
+      case "tts.preview": return {ok:true};
       case "settings.get": return { settings: data.settings };
       // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
       case "background.waiting.list": { data.waitingReads = (data.waitingReads ?? 0) + 1; return { waiting: variant.roomQuestion && (!variant.roomQuestionLate || data.waitingReads > 1) ? [{ id: "room-q", member_id: 1, member_name: "小晴", room_id: 1 }] : [] }; }

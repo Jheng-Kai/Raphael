@@ -92,7 +92,7 @@ export interface MembersShell {
   refreshRoutines(memberId: number): void;
   /** Whether the details panel is open. */
   detailsOpen(): boolean;
-  setDetails(open: boolean): void;
+  setDetails(open: boolean, overview?: boolean): void;
   /** The page went off screen. */
   hide(): void;
 }
@@ -293,8 +293,8 @@ export function createMembers(host: MembersHost): MembersShell {
     void readThread();
   }
 
-  function setDetails(next: boolean): void {
-    if (next === open) return;
+  function setDetails(next: boolean, overview = false): void {
+    if (next === open) { if (next && overview) details.overview(); return; }
     open = next;
     host.onDetailsChange?.(open);
     const page = details.el.parentElement;

@@ -619,3 +619,11 @@ work-channels.test.ts and scripts/look/audit.test.mjs. The review follow-up runs
 computer, messaging, agent and background in full once, then targets any fixes.
 Report explicitly if that full run preceded the last change. Frontend verify uses
 two Vitest workers.
+
+
+## Computer location moves to its panel (2026-11-05)
+
+The former Settings > Raphael location and Docker installation area is superseded
+by [Settings by purpose](settings-appearance.md#settings-by-purpose-2026-11-05).
+The compact header/empty-state location popover is shared by all members. See that
+entry for scenes, existing setting/RPC contracts and offline acceptance limits.

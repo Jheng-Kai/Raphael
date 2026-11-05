@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { setLocale } from "./i18n";
+import { setLocale, t } from "./i18n";
 import type { MentionTarget } from "./mention-text";
 import { ico } from "./ui";
 import {
@@ -147,6 +147,23 @@ const THREE = [
   step({ tool: "web_search", ms: 1_800, at_ms: T0 + 2_300 }),
   step({ tool: "create-event", server: "Google Calendar", outcome: "error", reason: "auth", ms: 600, at_ms: T0 + 2_900 }),
 ];
+
+test.each(["zh-TW", "en", "ja"] as const)("completed work preserves the exact missing-service repair in %s", locale => {
+  setLocale(locale);
+  const missing = { resource: "searxng", requirement: "url", state: "missing" as const, repair: "search" };
+  for (const withActions of [false, true]) {
+    const state = emptyTimelineState(); state.thinkingOpen.set(1, true);
+    const item = turn(1, {
+      status: "error", steps: [step({ tool: "web_search", outcome: "error", reason: "not_configured", missing })],
+      messages: withActions ? [{ seq: 1, kind: "event", text: JSON.stringify({ type: "action", id: "search", state: "done", present: "Search", past: "Searched", outcome: "error", reason: "not_configured" }), at_ms: T0 }] : [],
+    });
+    const root = document.createElement("div"); root.innerHTML = turnHTML(item, state, false, LOOK);
+    const work = root.querySelector(".work-section.is-open")!;
+    expect(work.querySelectorAll("[data-missing-repair]")).toHaveLength(1);
+    expect(work.querySelector("[data-missing-resource=searxng]")?.getAttribute("data-missing-repair")).toBe("search");
+    expect(work.textContent).toContain(t("missing.url"));
+  }
+});
 
 /** What a sighted reader sees: the text outside the tags, without what only a screen reader hears. */
 const visible = (html: string): string =>

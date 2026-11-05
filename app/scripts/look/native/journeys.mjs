@@ -1491,7 +1491,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
       await click(page, `#app-popover [data-value="${locale}"]`);
       await page.waitForFunction(locale => document.documentElement.lang === locale, {}, locale);
       await pause(250);
-      for (const pane of ["general", "appearance", "connections", "models", "dictation", "agent", "messaging", "data", "about"]) {
+      for (const pane of ["general", "appearance", "connections", "models", "dictation", "tools", "safety", "messaging", "data", "about"]) {
         await click(page, `.modal-scrim [data-pane="${pane}"]`); await pause(180);
         const issues = await page.evaluate(wrongLanguage, locale, phrases[locale], deviceNames);
         result.visits.push({ locale, page: `settings/${pane}`, issues });
