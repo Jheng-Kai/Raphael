@@ -2925,7 +2925,9 @@ export function checkRendered(name, context = {}) {
     return { check: name, title: dialog.querySelector('h2').textContent };
   }
   if (["quick-cleared", "conversation-empty"].includes(name)) {
-    require(visible(document.querySelector('.ra-empty')), "the conversation shows its empty state");
+    // The first .ra-empty in the document can be another conversation view's hidden one; any shown one counts.
+    const empties = [...document.querySelectorAll('.ra-empty')];
+    require(empties.some(visible), `the conversation shows its empty state (${empties.map(node => `${node.closest('[class*="page-"]')?.className ?? '?'} hidden=${node.hidden} shown=${node.checkVisibility()} ${Math.round(node.getBoundingClientRect().width)}x${Math.round(node.getBoundingClientRect().height)}`).join('; ')})`);
     require(!document.querySelector('.ra-col .tn, .ra-col .day, .ra-col .exchange-row'), "there are no turns, empty event lines or date separators");
     if (name === "quick-cleared") {
       require(window.__look.calls.filter(call => call.method === "conversations.clear" && call.params.id === 4).length === 1, "history is cleared exactly once");

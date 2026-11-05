@@ -985,7 +985,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function render(follow = false): void {
     renderedPage = pageStamp();
     stage.setAttribute("aria-busy", String(pending));
-    if (pending && isEmpty()) {
+    // Only a thread not read yet says it is loading: a refresh of an empty one keeps its empty state (R-UI-71).
+    if (pending && isEmpty() && !loadedThread) {
       wait.innerHTML = loadingHTML();
       wait.hidden = false;
       scroller.hidden = empty.hidden = dock.hidden = true;

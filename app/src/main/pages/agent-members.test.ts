@@ -1408,6 +1408,23 @@ test("a burst of turn events while typing makes one history request and preserve
   agent.hide();
 });
 
+test("an empty conversation keeps its empty state while an event refreshes it", async () => {
+  vi.useFakeTimers();
+  api.agentHistoryList.mockImplementation(async () => ({ turns: [] }));
+  const agent = mount(); await flush(); await pick(3);
+  const empty = $(".ra-empty");
+  expect(empty.hidden).toBe(false);
+  let answer!: (value: { turns: never[] }) => void;
+  api.agentHistoryList.mockImplementation(() => new Promise(resolve => { answer = resolve; }));
+  send({ type: "AgentTurn", turn_id: 0, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(500); await flush();
+  expect(api.agentHistoryList).toHaveBeenCalled();
+  expect(empty.hidden).toBe(false);
+  answer({ turns: [] }); await flush();
+  expect(empty.hidden).toBe(false);
+  agent.hide();
+});
+
 test("a cleared conversation reads its history whole, so its old turns leave the screen", async () => {
   vi.useFakeTimers();
   const agent = mount(); await flush(); await pick(3);
