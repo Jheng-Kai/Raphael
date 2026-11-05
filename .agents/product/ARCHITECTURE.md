@@ -5,6 +5,31 @@
 conversation.ts owns calendar-day dividers; timeline.ts owns inline routine origins, reply actions and collapsed work receipts. The page retains latest-failure visibility as a render dependency. Find opens existing work detail and preserves its state. CliLoop emits one terminal reply, while Driver and Failure carry bounded, redacted stderr diagnostics into the existing foreground/background turn detail. Premature completion uses cli_stopped with the existing retry policy; real connection errors retain network guidance. No RPC, schema, worker, provider or model-loop boundary is added (A-01/03/04/06/08). See R-UI-101 and R-CLI-07.
 
 
+## Signed updates, owner imports and streamed composer files (2026-11-05)
+
+The updater feed is https://github.com/Jheng-Kai/Raphael/releases/latest/download/latest.json.
+Release builds require GITHUB_REPOSITORY=Jheng-Kai/Raphael and publication pins GH_REPO to
+that repository; a stale local git remote never selects an updater endpoint.
+updates.rs alone uses the official Tauri updater plugin. The public key is a compile-time
+RAPHAEL_UPDATER_PUBLIC_KEY, with no fallback key. requireSignedVersion binds bytes to
+manifest versions; the release workflow signs with the owner's secret, generates latest.json,
+and publishes only through an explicit workflow input. DeviceStore owns opt-in and a one-shot
+installed-version receipt. A native timer contacts releases only while opted in; a fail-closed
+roster read and Windows idle time gate installation. Native installation/rollback acceptance
+remains separate from fake-feed tests.
+
+memory.import is a main-window-only bounded RPC, not a model turn or second writer. It splits
+owner-approved paragraphs and applies each through the existing shared MemoryFile writer;
+refusals return only indices and reason classes. No LLM call, secret bypass or private-memory
+copy occurs.
+
+attachments.upload handles bounded sequential chunks, validates offset and declared length,
+then atomically publishes an opaque ID. Both conversation and room admissions resolve those
+IDs through AttachmentStore, using a read-only memory map. Existing readers keep their budgets;
+Office and ffmpeg read stored paths without whole-file copies. The native asset command
+resolves an ID through the core before granting access to that exact file. No caller path or
+recursive filesystem scope is accepted (A-06/10/11).
+
 ## Smooth member computers (2026-11-05)
 
 VmTools owns run_steps in the existing curated catalog; each subcall re-enters

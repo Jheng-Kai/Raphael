@@ -1,5 +1,6 @@
 import cards from "./cards.mjs";
 import calmThread from "./calm-thread.mjs";
+import appUpdates from "./app-updates.mjs";
 import polish from "./polish.mjs";
 import handoffGroup from "./handoff-group.mjs";
 import menus from "./menus.mjs";
@@ -44,6 +45,7 @@ scenes.push(...daily);
 scenes.push(...menus);
 scenes.push(...cards);
 scenes.push(...calmThread);
+scenes.push(...appUpdates);
 scenes.push(...presence);
 scenes.push(...answerForms);
 scenes.push(...unreadDivider);

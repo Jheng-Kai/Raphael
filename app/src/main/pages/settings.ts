@@ -11,6 +11,7 @@ import { openTimezoneMenu } from "../timezones";
 import { confirmDelete } from "../member-dialogs";
 import { knownCatalog, rememberCatalog } from "../brain-lists";
 import { isUiLocale, onLocaleChange, t } from "../i18n";
+import { createMemoryImport } from "../memory-import";
 import { createOwnerControls } from "../owner-settings";
 
 import { getVersion } from "@tauri-apps/api/app";
@@ -202,6 +203,18 @@ export function createSettings(app: AppContext): SettingsPage {
   let data: SettingsView["data"];
   let dataEpoch = 0;
   let brain: BrainSettings | null = null;
+  const memoryImport = createMemoryImport(() => { if (visible) render(); });
+  let update: api.UpdateView | null = null;
+  let checkingUpdate = false;
+  async function checkUpdate(action: "check" | "install" = "check"): Promise<void> {
+    if (checkingUpdate) return;
+    checkingUpdate = true;
+    update = {state: action === "check" ? "checking" : "downloading", version: update?.version ?? "", notes: update?.notes ?? "", error: ""};
+    if (visible) render();
+    try { update = await api.updateControl(action); }
+    catch { update = {state:"error", version:"", notes:"", error:"feed"}; }
+    finally { checkingUpdate = false; if (visible) render(); }
+  }
   const ownerControls = createOwnerControls(settings => { brain = settings; if (visible) render(); });
   let hasKey = false;
   let openrouter: Status["openrouter"] | null = null;
@@ -275,6 +288,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
+    update, memoryImportHTML: memoryImport.html(),
     data, pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
     replacingKey, keyBusy, keyError, limitDraft, limitError, cityDraft, cityError, languageGroups, now: Date.now(),
     connections: connections.view(), messaging: messaging.view(), memoryShared: memoryShared.view(), rules: rules.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
@@ -482,6 +496,7 @@ export function createSettings(app: AppContext): SettingsPage {
     if (next === "usage") modelsTab = "usage";
     else if (tab) modelsTab = tab;
     pane = canonicalPane(next);
+    if (pane === "about") void checkUpdate();
     if (pane === "data") void loadData();
     if (pane === "general") void hiddenMembers.load();
     if (pane !== "models") destroyUsage();
@@ -1173,9 +1188,14 @@ export function createSettings(app: AppContext): SettingsPage {
 
   // ---------- events ----------
 
+  el.addEventListener("input", e => memoryImport.input(e.target as Element));
   el.addEventListener("click", (e) => {
     const target = e.target as Element;
-    if (ownerControls.click(target)) return;
+    if (ownerControls.click(target) || memoryImport.click(target)) return;
+    if (target.closest('.tg[data-k="auto-update"]')) {
+      void changeDevice({ auto_update: !app.device().auto_update }).then(() => { if (app.device().auto_update) void checkUpdate(); });
+      return;
+    }
     const modelTab = target.closest<HTMLElement>("[data-models-tab]");
     if (modelTab) { switchModelsTab(modelTab.dataset.modelsTab as ModelsTab); return; }
     const paneButton = target.closest<HTMLElement>("[data-pane]");
@@ -1224,6 +1244,8 @@ export function createSettings(app: AppContext): SettingsPage {
 
     const act = target.closest<HTMLElement>("[data-act]")?.dataset.act;
     switch (act) {
+      case "update-check": void checkUpdate(); break;
+      case "update-install": void checkUpdate("install"); break;
       case 'copy-code':
         void copyButton(target.closest<HTMLElement>('[data-act="copy-code"]')!, target.closest('.message-code')?.querySelector('code')?.textContent ?? '').catch(error => toaster.info(describeError(error)));
         break;
@@ -1423,6 +1445,7 @@ export function createSettings(app: AppContext): SettingsPage {
       rules.reset();
       services.reset();
       providers.reset();
+      if (pane === "about") void checkUpdate();
       if (pane === "data") void loadData();
       if (pane === "connections") void connections.load();
       if (pane === "messaging") void messaging.load();
@@ -1495,6 +1518,7 @@ export function createSettings(app: AppContext): SettingsPage {
     },
     hide() {
       visible = false;
+      memoryImport.reset();
       stopOutside();
       for (const picker of pickers.values()) picker.close();
       cliBrains.stop();

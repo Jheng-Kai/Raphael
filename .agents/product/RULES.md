@@ -1,5 +1,13 @@
 # Raphael product rules
 
+## Signed updates, owner imports and streaming attachments (2026-11-05)
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-APP-UPDATE-01 | 2026-11-05 | About checks on entry; auto update defaults off. Signed releases bind the artifact version and refuse tampering, missing signatures and replay. Automatic installation requires ten idle minutes and no active/waiting member; one receipt names the installed version when visible. | Rust, vitest, look, deferred native | hard | app/src-tauri/src/updates.rs::tests::fake_feed_refuses_tampering_unsigned_bytes_and_replayed_versions; app/src-tauri/src/updates.rs::tests::only_a_complete_idle_roster_allows_installation; app/src/main/updates.test.ts; app/scripts/prepare-release-assets.test.mjs; update-found; update-ready; update-auto |
+| R-APP-MEMORY-01 | 2026-11-05 | Explicit owner import writes shared USER.md through MemoryFile.apply; kept entries and redacted refusal reasons are listed. No private member memory is written. | pytest, vitest, look | hard | core/tests/memory/test_service.py::test_owner_import_uses_shared_writer_and_redacts_secret_refusals; app/src/main/memory-import.test.ts; import-memory; import-memory-result |
+| R-APP-ATTACH-01 | 2026-11-05 | A message admits twenty files, documents up to 250 MiB and video up to 1 GiB. Large files cross the page in at most 1 MiB chunks and opaque stored references; stored media plays through native ranges. Existing bounded readers are retained. | pytest, vitest, look, deferred native | hard | core/tests/services/test_attachment_upload.py; app/src/main/attachment-stream.test.ts; attachment-limits; attachment-too-large |
+
 ## Smooth computer contracts (2026-11-05)
 
 | ID | Date | Rule | Check | Severity | Evidence |

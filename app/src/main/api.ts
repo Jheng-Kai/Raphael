@@ -2,7 +2,7 @@
 // commands of commands.rs. Every function rejects with the reason as a string (`describeError`
 // makes it fit to show).
 
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { withWindowHotkeyPause } from "./window-hotkeys";
 import type { DesktopState, DesktopSession } from "./desktop-viewer";
 import type { LanguageGroup } from "./languages";
@@ -505,6 +505,12 @@ export async function subscribeMainEvents(handler: (event: MainEvent) => void): 
 
 /** Open only an opaque stored attachment, never a path supplied by a page. */
 export const openAttachment = (id: string): Promise<void> => invoke("open_attachment", { id });
+export const attachmentSource = async (id: string): Promise<string> => convertFileSrc(await invoke<string>("attachment_source", { id }));
+
+export interface UpdateView { state: "idle" | "checking" | "found" | "downloading" | "ready" | "installing" | "error"; version: string; notes: string; error: string; installed?: string; }
+export const updateControl = (action: "status" | "check" | "install"): Promise<UpdateView> => invoke("update_control", { action });
+export interface MemoryImportResult { kept: string[]; refused: { index: number; reason: string }[]; }
+export const importMemory = (text: string): Promise<MemoryImportResult> => core("memory.import", { text });
 export const openTeamFile = (path: string): Promise<void> => invoke("open_team_file", { path });
 
 // Retained execution metrics; exporting always requests the entire selected period.

@@ -2,6 +2,42 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith("app-update-")) {
+    const section = document.querySelector("[data-updates]");
+    require(visible(section) && section.textContent.includes("1.1.0"), "new version is visible");
+    require(section.textContent.includes("改善更新安裝"), "release notes remain readable");
+    require(visible(section.querySelector('[data-act="update-install"]')), "a framed install action is visible");
+    if (name === "app-update-ready") require(section.textContent.includes("更新已驗證"), "verified state is explicit");
+    require(section.querySelector('[data-k="auto-update"]').getAttribute("aria-checked") === (name === "app-update-auto" ? "true" : "false"), "auto updates are opt-in");
+    return {check:name};
+  }
+  if (name === "app-memory-import" || name === "app-memory-result") {
+    const imported = document.querySelector("[data-memory-import]");
+    const owner = imported?.parentElement;
+    const shared = owner?.querySelector('[data-mem-space="shared"]');
+    require(owner?.querySelector("h2")?.textContent === "關於你" && shared && !!(shared.compareDocumentPosition(imported) & Node.DOCUMENT_POSITION_FOLLOWING), "memory import follows shared memory inside About you");
+    require(visible(document.querySelector("[data-import-prompt]")), "handover prompt is visible");
+    require(visible(document.querySelector("[data-import-answer]")), "owner answer field is visible");
+    for (const field of document.querySelectorAll(".memory-import textarea")) {
+      require(field.getBoundingClientRect().height >= 140, "memory import fields retain room for multiple lines");
+    }
+    if (name === "app-memory-result") {
+      const result = document.querySelector(".import-result");
+      require(visible(result) && result.textContent.includes("已保留 1 項") && result.textContent.includes("未加入 1 項"), "kept and refused items are listed");
+      require(!result.textContent.includes("synthetic123"), "refused secrets are not echoed");
+    }
+    return {check:name};
+  }
+  if (name === "app-attachment-count") {
+    require(document.querySelectorAll(".cmp-chip").length === 20, "exactly twenty files remain");
+    require(!document.querySelector(".cmp-file").textContent.includes("超過數量"), "the twenty-first file is refused");
+    return {check:name};
+  }
+  if (name === "app-attachment-size") {
+    require(document.querySelectorAll(".cmp-chip").length === 0, "oversized files never reach the tray");
+    require(!window.__look.calls.some(call => call.method === "attachments.upload"), "oversized files are refused before streaming");
+    return {check:name};
+  }
   if (name.startsWith('routine-test-')) {
     if (name === 'routine-test-menu') {
       require(visible(document.querySelector('#app-popover [data-pick="test"]')), 'the row offers the shared test action');

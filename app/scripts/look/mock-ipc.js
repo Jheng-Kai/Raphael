@@ -766,6 +766,7 @@ export function installMock(fixture, config = {}, target = window) {
       case "settings.get": return { settings: data.settings };
       // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
       case "background.waiting.list": { data.waitingReads = (data.waitingReads ?? 0) + 1; return { waiting: variant.roomQuestion && (!variant.roomQuestionLate || data.waitingReads > 1) ? [{ id: "room-q", member_id: 1, member_name: "小晴", room_id: 1 }] : [] }; }
+      case "memory.import": return { kept: [data.memoryImportSample.kept], refused: [{index:2,reason:"secret"}] };
       case "attachments.get": {
         if (variant.generatedFile?.id === p.id) return {mime:variant.generatedFile.mime,data:variant.generatedData};
         if (data.keptFiles?.[p.id]) return data.keptFiles[p.id];
@@ -1459,6 +1460,11 @@ export function installMock(fixture, config = {}, target = window) {
         return null;
       }
       if (command === "core_call") return copy(await core(args.method, args.params));
+      if (command === "update_control") {
+        const sample = data.appUpdateSample;
+        return { state: variant.appUpdate === "ready" || data.device.auto_update ? "ready" : variant.appUpdate ? "found" : "idle", version: variant.appUpdate ? sample.version : "", notes: variant.appUpdate ? sample.notes : "", error: "" };
+      }
+      if (command === "attachment_source") return `C:\\synthetic\\${args.id}`;
       if (command === "device_settings_get") return copy(data.device);
       if (command === "device_settings_set") { Object.assign(data.device, args.patch); notify("DeviceSettings", { settings: copy(data.device) }); return copy(data.device); }
       if (command === "avatar_get") return copy(data.avatar);

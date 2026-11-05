@@ -44,6 +44,24 @@ calm-thread light 720 and dark 1120 at full size, plus representative controls.
 Run judge on this same selected evidence. Unit brief: targeted Vitest/pytest only;
 the integrator runs full verify/core. Native/live remain separate acceptance.
 
+## Streaming composer files (2026-11-05)
+
+Private and room composers share twenty-file admission, 250 MiB document limits and
+1 GiB video limits. Exact maxima are admitted and the next byte retains the existing
+localized refusal. Files above 4 MiB upload in 1 MiB chunks; draft/sent history retains
+opaque store IDs. Cancelling/navigation aborts incomplete uploads. Document readers
+retain bounded extraction; media uses the native asset range protocol rather than a
+whole-file page Blob. Saved large files restore by metadata without fetching their bytes.
+
+Selected scenes: attachment-limits, attachment-too-large and chat, plus the settings
+update/import consumers listed in settings-appearance.md. Both themes at
+1120,720,1920x1080, synthetic zh-TW fixtures. Oversize scene metadata is synthetic and
+is rejected before any read; exact upper boundaries are covered without allocating a
+gigabyte in unit tests. Actual native upload/playback and upgrades remain unverified.
+
+```powershell
+npm run look -- attachment-limits attachment-too-large --theme both --width 1120,720,1920x1080
+```
 
 ## Commands and conversation shortcuts (2026-11-05)
 

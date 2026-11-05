@@ -1,5 +1,11 @@
 # Raphael feature map
 
+## App updates, memory import and attachment limits (2026-11-05)
+
+See [Settings and appearance](settings-appearance.md#signed-updates-and-owner-memory-import-2026-11-05)
+and [Conversation](conversation.md#streaming-composer-files-2026-11-05) for the selected
+matrix, signed-version requirement and native/dependency acceptance boundaries.
+
 ## Settings by purpose (2026-11-05)
 
 See [Settings and appearance](settings-appearance.md#settings-by-purpose-2026-11-05)
