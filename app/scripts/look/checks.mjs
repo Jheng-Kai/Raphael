@@ -73,7 +73,19 @@ export function checkRendered(name, context = {}) {
   if (name.startsWith("voice-call-")) {
     require(["voice-call-idle", "voice-call-panel", "voice-call-transcript", "voice-call-settings", "voice-call-ended", "voice-call-no-mic", "voice-call-busy"].includes(name), "known voice call check");
     const calls = window.__look.calls;
-    if (name === "voice-call-idle") require(visible(document.querySelector('.cmp-voice[data-voice-call-start="true"]')), "empty member composer offers voice chat");
+    if (["voice-call-idle", "voice-call-no-mic"].includes(name)) {
+      const composer = document.querySelector('.page-agent .composer');
+      require(document.querySelector('[data-mount="background-questions"]')?.nextElementSibling === composer, "background questions remain directly above the composer");
+      require(composer?.contains(document.querySelector('.vc-failure')), "transient call failures stay inside the composer");
+    }
+    if (name === "voice-call-idle") {
+      const button = document.querySelector('.cmp-voice[data-voice-call-start="true"]');
+      require(visible(button), "empty member composer offers voice chat");
+      require(button.dataset.tooltip === "按住說話；點一下開始語音對話" && button.getAttribute('aria-label') === button.dataset.tooltip, "one localized line explains both gestures");
+      const tooltip = document.querySelector('.message-tooltip:not([hidden])');
+      require(visible(tooltip) && tooltip.textContent === button.dataset.tooltip, "the shared visible tooltip explains both gestures");
+      require(!calls.some(call => call.method === "voice_chat.start"), "hover never starts a call");
+    }
     if (["voice-call-panel", "voice-call-transcript", "voice-call-settings"].includes(name)) {
       require(visible(document.querySelector('.voice-call')), "one call panel is visible");
       require(!visible(document.querySelector('.page-agent .composer')), "call replaces the composer");

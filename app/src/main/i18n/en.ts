@@ -6,7 +6,7 @@ import type { Messages } from './zh-TW';
 export const en = {
   "call.title": "Voice chat",
   "call.ended": "Ended",
-  "call.start": "Start voice chat",
+  "call.start": "Hold to speak; click to start voice chat",
   "call.connecting": "Connecting…",
   "call.listening": "Listening",
   "call.thinking": "Thinking…",

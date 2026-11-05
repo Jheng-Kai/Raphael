@@ -2,8 +2,17 @@
 
 ## Private member voice chat (2026-11-05)
 
-An empty member composer offers Start voice chat in its existing right-hand slot;
-typed words/files retain Send, Raphael retains dictation, and rooms never offer calls.
+An empty member composer keeps both gestures in its existing right-hand slot:
+a pointer held for 300 ms records a voice message through the existing down/up
+path, while a shorter click starts voice chat. The destination is captured at press
+time and retained across navigation. Enter/Space starts voice chat; the existing
+dictation hotkey is unchanged. The tooltip explains both gestures in one localized
+line. Typed words/files retain Send, Raphael retains dictation, and rooms retain
+their existing recording path without offering calls. The background questions
+slot stays directly above the composer; transient call failures live inside the
+composer and durable failures keep their existing receipt repair entry.
+This follow-up selects voice-call-idle-button and voice-call-no-mic in both themes
+at 1120 and 720; the complete voice-call matrix below remains the broader scope.
 One call owns the microphone across navigation. Another start opens the shared
 confirmation dialog; only End and start ends the previous call. The panel replaces
 the composer and exposes Mute, Hang up, a transcript disclosure and shared Voice /

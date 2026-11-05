@@ -1457,19 +1457,19 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    * else, say), it comes back down.
    */
   let taskStopPressed=false;
-  function voiceDown(): void {
-    if (callEligible()) return;
+  function voiceDown(member = memberId(), conversation = conversationId()): void {
+    const here = member === memberId() && conversation === conversationId();
     // Recording clicks release/send audio through the native key path; only Escape cancels it.
-    if(!(listening && voiceMember === memberId()) && composer.dataset.taskState && composer.dataset.taskState!=="idle"){taskStopPressed=true;void stopComposerTask().catch(error=>toaster.info(describeError(error)));return;}
-    if (question) return;
-    pressedMember = memberId();
+    if(here && !(listening && voiceMember === memberId()) && composer.dataset.taskState && composer.dataset.taskState!=="idle"){taskStopPressed=true;void stopComposerTask().catch(error=>toaster.info(describeError(error)));return;}
+    if (here && question) return;
+    pressedMember = member;
     const starting = !listening;
     if (starting) {
       voiceMember = pressedMember;
-      rememberVoiceBoundary(pressedMember, conversationId());
+      rememberVoiceBoundary(pressedMember, conversation);
       voiceRequested = true;
     }
-    if (voiceMember === memberId()) voice.up();
+    if (here && voiceMember === memberId()) voice.up();
     if (starting) {
       listening = false;
       clearTimeout(listenTimer);
@@ -1483,7 +1483,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       toaster.info(describeError(err));
     });
   }
-  const voiceUp = (): void => {if(callEligible())return;if(taskStopPressed){taskStopPressed=false;return;}void sendVoice("up", pressedMember).catch(() => {});};
+  const voiceUp = (): void => {if(taskStopPressed){taskStopPressed=false;return;}void sendVoice("up", pressedMember).catch(() => {});};
 
   /** A click on the flyer: in toggle mode, a second press of the key ends the recording. */
   async function endVoice(): Promise<void> {
@@ -2321,35 +2321,60 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
   bindFilePaste(input, pasted => { void attachAll(pasted); }, fit, () => files.map(file => file.name));
 
-  // The voice button is the question key: down when it is pressed, up when it is let go.
+  // Empty member composers share one button: a short click calls, a 300 ms hold records.
+  // Capture the destination on press, before either the timer or navigation can change it.
+  let voicePointer: { id: number; member: number; conversation?: number; recording: boolean; timer?: ReturnType<typeof setTimeout> } | null = null;
+  let suppressVoiceClick = false;
   voiceButton.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || voicePointer) return;
     voiceButton.setPointerCapture(e.pointerId);
-    voiceDown();
+    suppressVoiceClick = true;
+    const press = { id: e.pointerId, member: memberId(), conversation: conversationId(), recording: false, timer: undefined as ReturnType<typeof setTimeout> | undefined };
+    voicePointer = press;
+    const record = (): void => { press.recording = true; voiceDown(press.member, press.conversation); };
+    if (callEligible()) press.timer = setTimeout(record, 300);
+    else record();
   });
-  voiceButton.addEventListener("pointerup", voiceUp);
-  voiceButton.addEventListener("pointercancel", voiceUp);
+  const releasePointer = (cancelled: boolean): void => {
+    const press = voicePointer;
+    if (!press) return;
+    voicePointer = null;
+    clearTimeout(press.timer);
+    suppressVoiceClick = cancelled || press.recording || press.member !== memberId() || press.conversation !== conversationId();
+    if (press.recording) voiceUp();
+  };
+  voiceButton.addEventListener("pointerup", e => { if (e.pointerId === voicePointer?.id) releasePointer(false); });
+  voiceButton.addEventListener("pointercancel", e => { if (e.pointerId === voicePointer?.id) releasePointer(true); });
+  voiceButton.addEventListener("lostpointercapture", e => { if (e.pointerId === voicePointer?.id) releasePointer(true); });
+  voiceButton.addEventListener("click", e => {
+    // A browser click follows pointerup even after a hold. Keyboard/assistive clicks stay usable.
+    if (e.detail > 0 && suppressVoiceClick) { e.preventDefault(); e.stopImmediatePropagation(); }
+  }, { capture: true });
   // A key held on the button is let go wherever the focus is by then: the release is heard on the
   // whole page, for the key that pressed it, once; a window that loses the focus lets it go too.
   // (The button stays where it is while the picture is up, but the focus may still move: the
   // approval card can take the composer's place.)
   let heldKey: string | null = null;
+  let keyRecordsVoice = false;
   const releaseKey = (): void => {
     heldKey = null;
-    voiceUp();
+    if (keyRecordsVoice) voiceUp();
+    keyRecordsVoice = false;
   };
   voiceButton.addEventListener("keydown", (e) => {
-    if ((e.key === "Enter" || e.key === " ") && !e.repeat) {
+    if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      if (heldKey !== null) return;
+      if (e.repeat || heldKey !== null || voicePointer) return;
       heldKey = e.key;
-      if (callEligible()) voiceButton.click(); else voiceDown();
+      keyRecordsVoice = !callEligible();
+      if (keyRecordsVoice) voiceDown(); else voiceButton.click();
     }
   });
   document.addEventListener("keyup", (e) => {
     if (heldKey !== null && e.key === heldKey) releaseKey();
   });
   window.addEventListener("blur", () => {
+    releasePointer(true);
     if (heldKey !== null) releaseKey();
   });
 
@@ -2550,6 +2575,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       drawBackgroundQuestions();
     },
     hide() {
+      releasePointer(true);
+      if (heldKey !== null) releaseKey();
       saveComposerDraft();
       desktop.hide();
       hideTooltip();

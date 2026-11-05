@@ -6,7 +6,7 @@ import type { Messages } from './zh-TW';
 export const ja = {
   "call.title": "音声チャット",
   "call.ended": "終了",
-  "call.start": "音声チャットを開始",
+  "call.start": "長押しで話す；クリックで音声チャットを開始",
   "call.connecting": "接続中…",
   "call.listening": "聞いています",
   "call.thinking": "考え中…",

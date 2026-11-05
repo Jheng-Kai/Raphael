@@ -5,7 +5,7 @@ import { missingZh } from "./missing-catalogs";
 export const zhTW = {
   "call.title": "語音對話",
   "call.ended": "已結束",
-  "call.start": "開始語音對話",
+  "call.start": "按住說話；點一下開始語音對話",
   "call.connecting": "連線中…",
   "call.listening": "正在聆聽",
   "call.thinking": "思考中…",
