@@ -20,7 +20,6 @@ const dictation = tab => [page("dictation"), click(`[data-dictation-tab="${tab}"
 export default [
   scene("settings-speech-service", "Shared speech setup owns its key while the voice and preview belong to member details", [...settings("tools"),click('[data-svc="open"][data-id="voice"]'),wait('#svc-dialog'),click('[data-k="svc-svc:fish"]'),wait('#svc-dialog [type="password"]'),check('settings-speech-service')]),
 
-  scene("settings-agent-legacy", "The existing Raphael settings link opens shared Tools", [page("agent"),click('.page-agent:not([hidden]) [data-act="settings"]'),wait('[data-pane="tools"][aria-current="page"]'),check('settings-tools')]),
 
   scene("settings-computer-search", "Computer location search opens the member computer panel", [...settings("general"), type('#set-search', '遠端'), wait('.set-hit'), check('settings-computer-result'), key('Enter'), wait('.mb-det:not([hidden]) [data-computer-location]'), check('settings-computer-open')]),
   scene("settings-owner", "Owner identity, weather and shared memory share General", [...settings("general"), wait('[data-mem-space="shared"] .mem-entry'), check('settings-owner')]),

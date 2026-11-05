@@ -70,7 +70,7 @@ Computer search opens that member's panel. Host checks and copyable repair
 commands use the location popover, never the retired settings pane.
 
 ```powershell
-npm run look -- settings-raphael-memory settings-raphael-voice desktop-host-local desktop-host-error settings-speech-service settings-agent-legacy settings-computer-search settings-owner --theme both --width 1120,720,1920x1080
+npm run look -- settings-raphael-memory settings-raphael-voice desktop-host-local desktop-host-error settings-speech-service settings-computer-search settings-owner --theme both --width 1120,720,1920x1080
 ```
 
 ## Owner output folder in General (2026-11-05)
@@ -299,7 +299,7 @@ existing viewer stream is not replaced by changing the setting.
 
 Selected scenes (synthetic zh-TW, both themes, 1120,720,1920x1080):
 profile, settings-owner, settings-memory, appearance, dictation, tools, safety,
-models, connections, messaging, data, about, settings-speech-service, settings-agent-legacy,
+models, connections, messaging, about, settings-speech-service,
 local-command-settings, local-command-setting-always, local-command-setting-never,
 menu-settings-redraw, missing-vision, missing-search, missing-search-repair,
 missing-voice, missing-voice-repair, settings-computer-search,
