@@ -44,7 +44,7 @@ export function openCommandPalette(anchor: HTMLElement, commands: Command[]): vo
   const draw = (): void => {
     const query = input.value.trim().toLocaleLowerCase();
     const found = commands.filter(command => `${command.label} ${command.keys ?? ""}`.toLocaleLowerCase().includes(query));
-    results.innerHTML = found.map(command => `<button type="button" data-command="${esc(command.id)}"><span class="mt">${esc(command.label)}</span>${command.keys ? `<span class="note">${esc(command.keys)}</span>` : ""}</button>`).join("") || `<p class="note">${esc(t("shortcuts.empty"))}</p>`;
+    results.innerHTML = found.map(command => `<button type="button" class="menu-action" data-command="${esc(command.id)}"><span class="mt">${esc(command.label)}</span>${command.keys ? `<span class="note">${esc(command.keys)}</span>` : ""}</button>`).join("") || `<p class="note">${esc(t("shortcuts.empty"))}</p>`;
   };
   input.addEventListener("input", draw);
   results.addEventListener("click", event => {
