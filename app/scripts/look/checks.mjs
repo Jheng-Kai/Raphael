@@ -511,10 +511,12 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }
   if (name.startsWith('computer-state-')) {
-    const phase = name.slice('computer-state-'.length), status = document.querySelector('.computer-lifecycle-state');
+    // Since the panel tabs the header keeps a short word and the screen says the state once, with the member's face.
+    const phase = name.slice('computer-state-'.length), status = document.querySelector('.computer-lifecycle-state'), panel = document.querySelector('.mb-det');
     const words = {sleeping:'電腦在休眠',waking:'正在喚醒',updating:'正在更新',repairing:'正在修復'};
-    require(visible(status) && status.textContent.includes(words[phase]), 'the header names the computer state');
-    require(status.querySelector(`svg.slime[data-state="${phase === 'sleeping' ? 'sleeping' : 'working'}"]`), 'the existing body state conveys sleeping or waking');
+    require(visible(status) && status.textContent.trim(), 'the header names the computer state in a short word');
+    require(panel.textContent.includes(words[phase]), 'the screen says the computer state');
+    require(panel.querySelector(`.desktop-boot-face svg.slime[data-state="${phase === 'sleeping' ? 'sleeping' : 'working'}"]`), 'the existing body state conveys sleeping or waking');
     return {check:name};
   }
   if (name === 'computer-low-disk') {
