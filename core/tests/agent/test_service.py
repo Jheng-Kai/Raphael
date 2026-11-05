@@ -45,6 +45,7 @@ METHODS = [
     "agent.history.search",
     "agent.history.sent",
     "agent.history.stop",
+    "agent.react",
     "agent.speak",
     "agent.speech.status",
     "brains.cli",

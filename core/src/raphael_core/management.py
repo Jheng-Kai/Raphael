@@ -303,6 +303,8 @@ def destructive(name, arguments, retention=None):
 # These are UI-controlled boundaries, never direct management tools. Work tools may
 # propose a card, but may not answer it or handle its credentials.
 OWNER_ONLY = {
+    **dict.fromkeys(("vault.list", "vault.add", "vault.update", "vault.remove", "vault.preview", "vault.cancel", "vault.import"),
+                   "Owner-only vault metadata, private value writes, sharing and transient CSV import; no private value read or export RPC exists."),
     "memory.import": "Only the owner explicitly imports outside memory through the checked shared-memory writer.",
     **dict.fromkeys(("owner_questions.answer", "owner_questions.bring", "background.answer", "pages.tool_call",
                      "integrations.card_connect", "integrations.card_cancel", "integrations.card_save", "integrations.card_resume",
@@ -327,6 +329,8 @@ OWNER_ONLY = {
                    "Device and downloaded speech-model settings belong to the owner."),
 }
 INTERACTION_RPCS = {
+    **dict.fromkeys(("agent.react", "rooms.react", "rooms.thread_open"),
+                   "Owner-authored message metadata and room thread navigation; never approval or model administration."),
     **dict.fromkeys(("attachments.info", "attachments.upload"),
                    "Owner composer file selection and bounded upload; not model management tools."),
     "routines.run": "Only the owner's explicit routine test starts a manual run through the existing worker.",

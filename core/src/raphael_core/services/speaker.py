@@ -126,6 +126,7 @@ class _Utterance:
     when there will be none: a failure, a stop), `failure` is the kind of the failure, if any."""
 
     stopped: threading.Event = field(default_factory=threading.Event)
+    paused: threading.Event = field(default_factory=threading.Event)
     ready: asyncio.Event = field(default_factory=asyncio.Event)
     failure: str | None = None
     task: "asyncio.Task[None] | None" = None
@@ -213,6 +214,20 @@ class Speaker:
         except TimeoutError:
             pass
 
+    def memo_control(self, turn_id, *, pause):
+        current = self._current
+        if current is None or current.turn_id != turn_id or current.finished:
+            return False
+        current.paused.set() if pause else current.paused.clear()
+        self._state(current, 'paused' if pause else 'playing')
+        return True
+
+    def memo_state(self, turn_id):
+        current = self._current
+        if current is None or current.turn_id != turn_id or current.finished:
+            return 'done'
+        return 'paused' if current.paused.is_set() else 'playing'
+
     def stop(self) -> None:
         """End the speech at once: the sound, a request still on its way, and the wait for it."""
         utterance, self._current = self._current, None
@@ -282,6 +297,7 @@ class Speaker:
                 except StopAsyncIteration:
                     self._fail(utterance, "bad_response")
                     return
+                utterance.stopped.paused = utterance.paused
                 if utterance.stopped.is_set():  # replaced or stopped while the sound was on its way
                     return
                 source.put(first)

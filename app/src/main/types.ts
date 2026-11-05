@@ -288,6 +288,9 @@ export interface MediaPayload {
 
 /** A turn of the conversation with Raphael (`agent.history.list`, newest first). */
 export interface AgentTurn {
+  reactions?: Record<string, string[]>;
+  voice_memo?: boolean;
+  voice_memo_state?: "playing" | "paused" | "done";
   routine?: Pick<Routine, "id" | "schedule" | "when" | "app_name">;
   handoffs?: HandoffView[];
   conversation_id?: number;
@@ -431,6 +434,7 @@ export interface MailSender {
 
 /** An email draft as the owner's chat shows it: editable while it is a draft, and sent only by 傳送, once. */
 export interface MailDraftCard {
+  kind?: "email" | "slack";
   id: string;
   mode: "card";
   state: "draft" | "sending" | "sent" | "failed" | "discarded";
@@ -882,6 +886,7 @@ export interface Member {
   blurb?: string;
   reply_style?: "full" | "conversational";
   voice?: string;
+  voice_memo?: boolean;
   read_aloud?: boolean;
   notify?: boolean;
   ask_before_members?: boolean;
@@ -970,6 +975,7 @@ export interface NewMember {
   blurb?: string;
   reply_style?: "full" | "conversational";
   voice?: string;
+  voice_memo?: boolean;
   read_aloud?: boolean;
   notify?: boolean;
   ask_before_members?: boolean;
@@ -980,7 +986,7 @@ export interface NewMember {
  * What `members.update` may change, beside its `id`: the avatar only as `""` or `"preset:<stem>"`
  * (a picture of the PC goes by `members.set_avatar`).
  */
-export type MemberPatch = Partial<Pick<Member, "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "voice" | "read_aloud" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">>;
+export type MemberPatch = Partial<Pick<Member, "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "voice" | "voice_memo" | "read_aloud" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">>;
 
 /** The routine the core offers with a new member of a group with places to look (`members.create`, `routines.template`). */
 export interface RoutineOffer {
@@ -1011,6 +1017,9 @@ export interface Room {
   roles?: Record<string, string>;
 }
 export interface RoomMessage {
+  reactions?: string[];
+  reply_thread_id?: number;
+  reply_count?: number;
   turn?: AgentTurn;
   id: number; room_id: number; member_id: number | null; text: string; created: number;
   request_id: string | null; reply_to: number | null; turn_id: number | null;

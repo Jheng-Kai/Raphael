@@ -33,6 +33,19 @@ const mount = (html: string): HTMLElement => {
   return host;
 };
 
+test("Slack shares editable draft controls, names confirmation and stays out of rooms", () => {
+  const slack = draft({kind:"slack",to:"#research",subject:"",from:{key:"mcp:slack/send",name:"Slack"},senders:[{key:"mcp:slack/send",name:"Slack"}]});
+  const host = mount(mailCardHTML(slack));
+  expect(host.textContent).toContain("需要你確認");
+  expect(host.querySelector('[data-mail-field="to"]')?.getAttribute("inputmode")).toBeNull();
+  expect(host.querySelector('[data-mail-field="subject"]')).toBeNull();
+  expect(actions(host.innerHTML)).toEqual(expect.arrayContaining(["mail-send","mail-discard"]));
+  expect(mailCardsHTML(turn({scope:"room",drafts:[slack]}))).toBe("");
+  expect(mailCardsHTML(turn({scope:"room",drafts:[draft()]}))).toContain("郵件草稿");
+  expect(visible(mailCardHTML({...slack,senders:[]}))).toContain("連接 Slack");
+  expect(visible(mailCardHTML({...slack,state:"discarded"}))).toContain("沒有傳送訊息");
+});
+
 describe("an email card", () => {
   test("shows sender, recipient, subject and body, with the primary Send first", () => {
     const html = mailCardHTML(draft());

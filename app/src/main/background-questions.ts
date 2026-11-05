@@ -70,6 +70,7 @@ export interface BackgroundQuestionsHost {
   memberId(): number;
   /** The room whose questions these are, when they wait in a room rather than a member's thread. */
   roomId?(): number | undefined;
+  threadId?(): number | undefined;
   /** Who asks in this thread (absent: Raphael). Read each time a card is drawn. */
   asker?(question?: BackgroundQuestion): Asker;
   /** The cards changed (one came or went): the page may keep its thread at the bottom. */
@@ -137,7 +138,7 @@ export function createBackgroundQuestions(host: BackgroundQuestionsHost): Backgr
     const mine = ++loads;
     try {
       const room = host.roomId?.();
-      const next = await core<{ questions: BackgroundQuestion[] }>("background.questions.list", room === undefined ? { member_id: host.memberId() } : { room_id: room });
+      const next = await core<{ questions: BackgroundQuestion[] }>("background.questions.list", room === undefined ? { member_id: host.memberId() } : { room_id: room, ...(host.threadId?.() === undefined ? {} : { thread_id: host.threadId!() }) });
       if (mine !== loads) return;
       shown = next?.questions ?? [];
     } catch {

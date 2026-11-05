@@ -2,6 +2,27 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  if (variant.chatMetadata) {
+    const sample = data.chatMetadataSample, base = structuredClone(data.mailTurns.draft);
+    data.members.forEach(member => Object.assign(member, {unread:false,unread_from:null,activity:"idle",waiting:false}));
+    const turn = {...base,id:8201,question:sample.question,text:sample.reply,created_at_ms:data.now, messages:[],drafts:[],reactions:{reply:["👍","❤"]},owner_questions:[],permissions:[]};
+    if (variant.chatMetadata === 'voice') turn.voice_memo = true;
+    if (['slack','approval'].includes(variant.chatMetadata)) {
+      const draft = {...structuredClone(base.drafts[0]),id:'slack-1',kind:'slack',to:sample.channel,subject:'',body:sample.body,from:{key:'mcp:slack/send_message',name:'Slack'},senders:[{key:'mcp:slack/send_message',name:'Slack'}]};
+      turn.drafts = [draft];
+    }
+    if (variant.chatMetadata === 'approval') {
+      turn.owner_questions = [{...structuredClone(data.ownerQuestionCard),id:'metadata-question',turn_id:turn.id,question:sample.question}];
+      turn.permissions = structuredClone(data.permissionTurns.local.turn.permissions);
+    }
+    data.turns = data.turns.filter(item=>item.member_id!==1).concat(turn);
+    if (variant.chatMetadata === 'room') {
+      data.messages = [{id:8202,room_id:1,thread_id:1,member_id:1,text:sample.root,created:data.now,status:'done',turn_id:null,reply_to:null,reactions:['👍'],reply_count:2,reply_thread_id:900},
+        {id:8203,room_id:1,thread_id:900,member_id:null,text:sample.sideOwner,created:data.now+1000,status:'done',turn_id:null,reply_to:null},
+        {id:8204,room_id:1,thread_id:900,member_id:2,text:sample.sideReply,created:data.now+2000,status:'done',turn_id:null,reply_to:null}];
+      data.roomExchanges = []; data.roomHandoffs = [];
+    }
+  }
   if (variant.calmThread) {
     const sample = data.calmSample, base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
     const start = new Date(data.now); start.setHours(7, 0, 0, 0);
@@ -391,6 +412,12 @@ export function installMock(fixture, config = {}, target = window) {
   const messagePreview = { workspace: "範例工作室", to: "#規劃", thread: "123.456", body: "請確認範例排程，並回覆方便討論的時間。" };
   if (variant.permissionCard) {
     const made = structuredClone(data.permissionTurns[variant.permissionCard]);
+    if (variant.vaultPayment) {
+      data.settings.action_mode = "bypass";
+      Object.assign(made.turn.permissions[0], { service: "成員電腦", tool: "fill_card", summary: data.vaultPaymentSummary, always: false });
+      Object.assign(made.question, { text: data.vaultPaymentSummary, tier: "T3", always: null, timeout_ms: 0 });
+      Object.assign(made.turn, { question: "幫我填入出差住宿的付款資料。", text: "", messages: [] });
+    }
     if (variant.cardMessagePreview) Object.assign(made.turn.permissions[0], { service: "Slack", tool: "SLACK_SEND_MESSAGE", summary: "透過 Slack 傳送規劃訊息。", message: messagePreview });
     data.turns.push(made.turn);
     permission = { ...made, card: made.turn.permissions[0] };
@@ -710,6 +737,13 @@ export function installMock(fixture, config = {}, target = window) {
   async function core(method, p = {}) {
     if (variant.missingHidden && method === "members.list" && target.document.querySelector('[data-hidden-members]')) throw new Error("Synthetic hidden member read failure");
     switch (method) {
+      case "vault.list": return { entries: data.vaultEntries };
+      case "vault.preview": return data.vaultImportPreview;
+      case "vault.cancel": return { cancelled: true };
+      case "vault.import": return { saved: p.ids.length, remaining: 0 };
+      case "vault.add": { const { values, ...metadata } = p; data.vaultEntries.push({ id: "new-synthetic-entry", ...metadata }); return { id: "new-synthetic-entry" }; }
+      case "vault.update": Object.assign(data.vaultEntries.find(e => e.id === p.id), p); return { updated: true };
+      case "vault.remove": data.vaultEntries = data.vaultEntries.filter(e => e.id !== p.id); return { removed: true };
       case "links.preview": return { url: p.url, site: new URL(p.url).hostname, title: "", description: "", thumbnail: null };
       case "pages.open":
         if (variant.pageGone) throw { kind: "not_found", message: "gone" };
@@ -1002,6 +1036,22 @@ export function installMock(fixture, config = {}, target = window) {
         notify("WorkerChanged");
         return { cancelled: true };
       }
+      case "agent.react": {
+        const turn = data.turns.find(item=>item.id===p.turn_id && (item.member_id ?? 0)===(p.member_id ?? 0));
+        if (!turn) throw new Error('Unknown private message');
+        const reactions = (turn.reactions ??= {});
+        reactions[p.message_key] = (reactions[p.message_key] ?? []).filter(emoji=>emoji!==p.emoji);
+        if (p.active) reactions[p.message_key].push(p.emoji);
+        notify('AgentTurn',{turn_id:turn.id,member_id:turn.member_id}); return {ok:true};
+      }
+      case "agent.speak": {
+        const turn = data.turns.find(turn => turn.id === p.turn_id);
+        if (turn && p.memo_action) {
+          turn.voice_memo_state = p.memo_action === 'play' ? 'playing' : 'paused';
+          notify('AgentTurn', {turn_id:turn.id,member_id:turn.member_id,activity_only:true});
+        }
+        return {ok:true};
+      }
       case "agent.speech.status": return data.speech;
       case "agent.question.open": return null;
       case "background.questions.list": {
@@ -1103,9 +1153,21 @@ export function installMock(fixture, config = {}, target = window) {
         return { ...room, preview: latest?.text.slice(0, 300) ?? "", last_at: latest?.created ?? null, waiting: !!variant.roomQuestion && room.id === 1,
           unread: messages.some(message => message.member_id != null && message.id > (room.read_message_id ?? 0)) };
       }) };
+      case "rooms.react": {
+        const message = data.messages.find(item=>item.id===p.message_id && item.room_id===p.room_id);
+        if (!message) throw new Error('Unknown room message');
+        message.reactions = (message.reactions ?? []).filter(emoji=>emoji!==p.emoji);
+        if (p.active) message.reactions.push(p.emoji);
+        notify('RoomsChanged',{room_id:p.room_id}); return {ok:true};
+      }
+      case "rooms.thread_open": {
+        const message = data.messages.find(item=>item.id===p.message_id && item.room_id===p.room_id);
+        if (!message) throw new Error('Unknown thread root');
+        return {thread_id:message.reply_thread_id};
+      }
       case "rooms.messages": {
-        const messages = data.messages.filter(item => item.room_id === p.room_id);
-        return { messages: messages.filter(item => !p.before || item.id < p.before).sort((a,b)=>a.id-b.id).slice(-100), decisions: messages.filter(item => item.kind === "decision"), pending_questions: messages.flatMap(item => item.turn?.owner_questions ?? []).filter(question => question.kind === "ask_owner" && question.state === "asked"), exchange: data.roomExchanges.filter(item => item.room_id === p.room_id).at(-1) ?? null, handoffs: data.roomHandoffs };
+        const messages = data.messages.filter(item => item.room_id === p.room_id && (!variant.chatMetadata || (item.thread_id ?? 1) === (p.thread_id ?? 1)));
+        return { parent: p.thread_id ? data.messages.find(item=>item.room_id===p.room_id && item.reply_thread_id===p.thread_id) : null, messages: messages.filter(item => !p.before || item.id < p.before).sort((a,b)=>a.id-b.id).slice(-100), decisions: messages.filter(item => item.kind === "decision"), pending_questions: messages.flatMap(item => item.turn?.owner_questions ?? []).filter(question => question.kind === "ask_owner" && question.state === "asked"), exchange: data.roomExchanges.filter(item => item.room_id === p.room_id).at(-1) ?? null, handoffs: data.roomHandoffs };
       }
       case "rooms.create": { const room = { ...p, member_ids: p.is_team ? data.members.map(m => m.id) : p.member_ids, id: nextId(data.rooms), created: data.now, group_id: p.group_id ?? null, is_team: Number(p.is_team ?? false), default_responder: p.default_responder ?? "auto" }; data.rooms.push(room); return { room }; }
       case "rooms.update": {
@@ -1117,7 +1179,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "rooms.delete": data.rooms = data.rooms.filter(item => item.id !== p.room_id); return { deleted: true };
       case "rooms.stop": { for (const exchange of data.roomExchanges.filter(item => item.room_id === p.room_id && ["running", "queued"].includes(item.state))) exchange.stop_requested = 1; for(const exchange of data.roomExchanges.filter(item=>item.room_id===p.room_id)){exchange.state="stopped";exchange.active_turn=null;}for(const message of data.messages.filter(item=>item.room_id===p.room_id&&item.status==="running")){message.status="error";message.text="已停止工作。";}for(const task of data.roomHandoffs.filter(item=>["queued","running","waiting"].includes(item.state)))task.state="cancelled";data.messages.push({...data.roomWrapupMessage,id:nextId(data.messages),reply_to:null,reply_to_member:null,text:"### 結論\n已停止本次工作，已完成的動作保留。\n\n### 待決定\n尚未完成的工作已取消。\n\n### 下一步\n等待你的新指示。"});notify("RoomsChanged", { room_id: p.room_id }); return { stopped: true }; }
-      case "rooms.send": { const message = { id: nextId(data.messages), room_id: p.room_id, member_id: null, text: p.text, request_id: p.request_id, status: "done", created: data.now, reply_to: p.reply_to ?? null, turn_id: null, reply_to_member: data.messages.find(item => item.id === p.reply_to)?.member_id ?? null, origin_message_id: nextId(data.messages), kind: "message", attachments: (p.attachments ?? []).map((file, index) => { const id = `${"f".repeat(30)}${String(index).padStart(2, "0")}.png`; (data.keptFiles ??= {})[id] = { mime: file.mime, data: file.data }; return { id, name: file.name, mime: file.mime }; }) }; data.messages.push(message); return { message_id: message.id, duplicate: false }; }
+      case "rooms.send": { const message = { thread_id:p.thread_id ?? 1, id: nextId(data.messages), room_id: p.room_id, member_id: null, text: p.text, request_id: p.request_id, status: "done", created: data.now, reply_to: p.reply_to ?? null, turn_id: null, reply_to_member: data.messages.find(item => item.id === p.reply_to)?.member_id ?? null, origin_message_id: nextId(data.messages), kind: "message", attachments: (p.attachments ?? []).map((file, index) => { const id = `${"f".repeat(30)}${String(index).padStart(2, "0")}.png`; (data.keptFiles ??= {})[id] = { mime: file.mime, data: file.data }; return { id, name: file.name, mime: file.mime }; }) }; data.messages.push(message); return { message_id: message.id, duplicate: false }; }
       case "computer.revoke": if (data.desktop) data.desktop.granted = false; return { granted: false };
       case "brains.cli":
         // As the core does: a CLI's models come after the first read, in the background.

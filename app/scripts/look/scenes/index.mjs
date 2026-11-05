@@ -1,4 +1,6 @@
 import cards from "./cards.mjs";
+import chatMetadata from "./chat-metadata.mjs";
+import vault from "./vault.mjs";
 import calmThread from "./calm-thread.mjs";
 import appUpdates from "./app-updates.mjs";
 import polish from "./polish.mjs";
@@ -45,7 +47,7 @@ scenes.push(...handoffGroup);
 scenes.push(...daily);
 scenes.push(...menus);
 scenes.push(...cards);
-scenes.push(...calmThread);
+scenes.push(...calmThread, ...chatMetadata, ...vault);
 scenes.push(...appUpdates);
 scenes.push(...presence);
 scenes.push(...answerForms);

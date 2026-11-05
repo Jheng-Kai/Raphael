@@ -12,6 +12,7 @@ CONNECT_APP = "connect_app"
 FIND_APP = "find_app"
 REQUEST_SECRET = "request_secret"
 EMAIL_DRAFT = "email_draft"
+SLACK_DRAFT = "slack_draft"
 SHOW_PAGE = "show_page"
 UPDATE_PAGE = "update_page"
 SET_MY_JOB = "set_my_job"
@@ -112,6 +113,9 @@ DEFINITIONS = {
     FIND_APP: definition("Search the public app catalog by name, slug, description or alias. Read-only: returns id, name, provider and connected state, never account data. An app that is not connected and needs more than a sign-in says what in `needs`: \"key\" (the owner's own API key or token) or \"own_app\" (a developer app of the owner's own). Use its exact id with connect_app when the request needs an unconnected app.", {"query": {"type": "string", "maxLength": 200}}, ["query"]),
     CONNECT_APP: definition("Show the owner a card in this chat to connect an app this request needs that is not connected, or whose sign-in expired. Use an exact catalog id returned by find_app or listed in TeamContextSnapshot. The owner connects from the card (a sign-in, or the form for the key or developer app the app needs, which goes to the secure vault: you never see it, and you never ask for one in chat); then this request resumes by itself, once, with the app's tools. If the card cannot connect, the failure that comes back names what is missing and where the owner adds it: tell them exactly that, in their language. After calling it, end your turn with one short sentence, and never claim the app's data before it is connected.", {"app": {"type": "string"}}, ["app"]),
     REQUEST_SECRET: definition("Show the existing secure card for a connection's missing key (connection, optional secret), or a saved web login (site: the exact HTTPS origin). Use exactly one of connection or site. Login values go straight to Credential Manager and never to you. The result supplies a reference for the member computer's fill_login. If a card is shown, end this turn; saving resumes the same task. Never ask for passwords in chat; request_takeover remains available.", {"connection": {"type": "string"}, "secret": {"type": "string"}, "site": {"type": "string"}}, []),
+    SLACK_DRAFT: definition(
+        "Prepare a Slack message as an editable draft in the owner's private chat. Only the owner sends it from the card. Never claim it was sent. End the turn after writing the draft. Unavailable in rooms.",
+        {"to": {"type": "string", "description": "Slack channel or person ID."}, "body": {"type": "string"}, "via": {"type": "string"}, "revise": {"type": "boolean"}}, ["to", "body"]),
     EMAIL_DRAFT: definition(
         "Write an email for the owner to review: it is shown in this chat as an editable card, and only the owner sends it (the card's 傳送), once, "
         "after they have edited whatever they want. You cannot send it and must not call a tool that sends mail yourself; never say it was sent. "
@@ -157,7 +161,7 @@ for name, command in COMMANDS.items():
     DEFINITIONS[name] = definition(command.guidance + " Only for an owner at this computer. Open a browser only when explicitly asked to open it.", properties, required)
 
 DEFINITIONS.update(MEMORY_DEFINITIONS)
-TIERS = {name: Tier.T0 if name in (ASK_OWNER, "self_check", "raphael_help", "show", "routine_list", CALENDAR_LIST, "computer", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SHOW_PAGE, UPDATE_PAGE, SET_MY_JOB) or name in MEMORY_DEFINITIONS and name not in GROWTH_WRITES else Tier.T1 for name in DEFINITIONS if name not in COMMANDS}
+TIERS = {name: Tier.T0 if name in (ASK_OWNER, "self_check", "raphael_help", "show", "routine_list", CALENDAR_LIST, "computer", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SLACK_DRAFT, SHOW_PAGE, UPDATE_PAGE, SET_MY_JOB) or name in MEMORY_DEFINITIONS and name not in GROWTH_WRITES else Tier.T1 for name in DEFINITIONS if name not in COMMANDS}
 ROUTINE_TOOLS = frozenset(name for name in DEFINITIONS if name.startswith("routine_"))
 DEFINITIONS.update(ADMIN_TOOLS)
 TIERS.update(ADMIN_TIERS)

@@ -500,6 +500,13 @@ const ALLOWED_METHODS: &[&str] = &[
     "messaging.discord.remove_user",
     "messaging.discord.disconnect",
     "computer.checkpoints",
+    "vault.list",
+    "vault.add",
+    "vault.update",
+    "vault.remove",
+    "vault.preview",
+    "vault.cancel",
+    "vault.import",
     // The conversation view stops the task it shows, by its id (`validate_core_call`). The other
     // methods of the worker stay closed (a task's question is answered by `background.answer`).
     "worker.cancel",
@@ -535,6 +542,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "quota.list",
     "agent.speech.status",
     "agent.speak",
+    "agent.react",
     "members.create",
     "members.update",
     "members.delete",
@@ -573,6 +581,8 @@ const ALLOWED_METHODS: &[&str] = &[
     "rooms.create",
     "rooms.delete",
     "rooms.messages",
+    "rooms.react",
+    "rooms.thread_open",
     "rooms.send",
     "rooms.stop",
     "rooms.transcribe",
@@ -2488,6 +2498,16 @@ mod tests {
         assert!(
             !is_allowed_method("dictation.start") && !is_allowed_method("brain.finalize_dictation")
         );
+    }
+
+    #[test]
+    fn vault_owner_methods_never_expose_private_value_reads_or_exports() {
+        for method in ["vault.list", "vault.add", "vault.update", "vault.remove", "vault.preview", "vault.cancel", "vault.import"] {
+            assert!(is_allowed_method(method), "{method}");
+        }
+        for method in ["vault", "vault.", "vault.get", "vault.read", "vault.values", "vault.export", "vault.execute"] {
+            assert!(!is_allowed_method(method), "{method}");
+        }
     }
 
     #[test]

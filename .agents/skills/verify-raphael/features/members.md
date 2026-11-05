@@ -1,5 +1,18 @@
 # Members and sidebar
 
+## Optional member voice memos (2026-11-05)
+
+Member details > Voice has a separate voice-memo switch, off by default. It uses the
+same saved voice as read-aloud without enabling automatic playback. Enabled members'
+finished private and room replies expose Play/Pause in the existing action row and a collapsed
+literal transcript retained across playback refreshes. The service owns one utterance; pause retains pending PCM and
+Stop still interrupts immediately. Voice model, credentials and live-call behavior
+remain in the existing voice service.
+
+Selected scene: voice-memo, with synthetic zh-TW and fake read-aloud responses, both
+themes at 1120,720,1920x1080; details-voice covers the setting and email-draft-edit is the shared card consistency consumer. Unit coverage includes the resource switch and fake PCM
+pause/resume. See conversation.md for the selected matrix and native limitations.
+
 ## Member panel tabs (2026-11-05)
 
 The owner's 2026-11-05 request supersedes the former landing panel. R-PANEL-01/02/03/04 require the existing member identity followed by shared Details / Library / Computer tabs. Details contains work, routines and conversations; Library uses the existing file chip; Computer owns the screen, location and lifecycle controls. Gear keeps identity/resource editing. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for the complete selected matrix and deferred native acceptance.

@@ -42,6 +42,12 @@ export const mailEditable = (draft: MailDraftCard): boolean => draft.state === "
 
 /** Why it was not sent, in words; "" when nothing is wrong. */
 export function mailErrorText(draft: MailDraftCard): string {
+  if (draft.kind === "slack") {
+    if (draft.state === "failed") return t("slack.errFailed");
+    if (draft.error === "no_sender") return t("slack.noSender");
+    if (draft.error === "forbidden") return t("slack.errForbidden");
+    if (draft.error === "empty") return t("slack.errEmpty");
+  }
   if (draft.state === "failed") return plain(draft.error === "interrupted" ? "mail.errInterrupted" : "mail.errFailed");
   if (!draft.error) return "";
   return plain(ERRORS[draft.error] ?? "mail.errOther");
@@ -62,16 +68,17 @@ function fieldRow(draft: MailDraftCard, field: Exclude<MailField, "body">, label
   const id = `${draft.id}-${field}`;
   return `<label class="mail-row" for="${esc(id)}"><span class="mail-k">${esc(label)}</span>` +
     `<input id="${esc(id)}" class="mb-fin mail-in" data-mail-field="${field}" value="${esc(draft[field])}" maxlength="${field === "subject" ? 300 : 1000}"` +
-    ` autocomplete="off" spellcheck="false"${field === "subject" ? "" : ' inputmode="email" autocapitalize="off"'}${editable ? "" : " disabled"}></label>`;
+    ` autocomplete="off" spellcheck="false"${field === "subject" || draft.kind === "slack" ? "" : ' inputmode="email" autocapitalize="off"'}${editable ? "" : " disabled"}></label>`;
 }
 
 function senderRow(draft: MailDraftCard, editable: boolean): string {
   const choices = draft.senders.map((sender) => ({ value: sender.key, label: sender.name }));
   const known = draft.senders.some((sender) => sender.key === draft.from.key);
-  const label = plain("mail.from");
+  const label = draft.kind === "slack" ? t("slack.from") : plain("mail.from");
+  const unavailable = draft.kind === "slack" ? t("slack.noSender") : plain("mail.noSender");
   const control = draft.senders.length === 0
-    ? `<span class="mail-none">${esc(plain("mail.noSender"))}</span>`
-    : sel(known ? choices : [{ value: "", label: plain("mail.noSender") }, ...choices], known ? draft.from.key : "", label, ` data-act="mail-from" data-via="${esc(draft.from.key)}"${editable ? "" : " disabled"}`);
+    ? `<span class="mail-none">${esc(unavailable)}</span>`
+    : sel(known ? choices : [{ value: "", label: unavailable }, ...choices], known ? draft.from.key : "", label, ` data-act="mail-from" data-via="${esc(draft.from.key)}"${editable ? "" : " disabled"}`);
   return `<div class="mail-row"><span class="mail-k">${esc(label)}</span>${control}</div>`;
 }
 
@@ -79,26 +86,27 @@ function senderRow(draft: MailDraftCard, editable: boolean): string {
 function editableHTML(draft: MailDraftCard): string {
   const editable = mailEditable(draft), sending = draft.state === "sending", failed = draft.state === "failed";
   const canSend = editable && draft.senders.some(sender => sender.key === draft.from.key);
-  const well = `<div class="card-well"><div class="mail-rows">${senderRow(draft, editable)}${fieldRow(draft, "to", plain("mail.to"), editable)}` +
-    (draft.cc ? fieldRow(draft, "cc", plain("mail.cc"), editable) : "") + fieldRow(draft, "subject", plain("mail.subject"), editable) + `</div>` +
+  const slack = draft.kind === "slack";
+  const well = `<div class="card-well"><div class="mail-rows">${senderRow(draft, editable)}${fieldRow(draft, "to", slack ? t("slack.to") : plain("mail.to"), editable)}` +
+    (draft.cc ? fieldRow(draft, "cc", plain("mail.cc"), editable) : "") + (slack ? "" : fieldRow(draft, "subject", plain("mail.subject"), editable)) + `</div>` +
     `<textarea class="mb-fin mb-ta mail-body" data-mail-field="body" aria-label="${esc(plain("mail.body"))}" rows="5" maxlength="50000" spellcheck="false"${editable ? "" : " disabled"}>${esc(draft.body)}</textarea></div>`;
-  return cardHTML({ title: plain("mail.title"), mark: senderMarkHTML(draft.from.name), status: failed ? "failed" : sending ? "waiting" : "ready",
-    statusText: failed ? t("cards.sendFailed") : sending ? t("mail.sending") : cardPromptText("draft"),
+  return cardHTML({ title: slack ? t("slack.title") : plain("mail.title"), mark: senderMarkHTML(draft.from.name), status: failed ? "failed" : sending ? "waiting" : "ready",
+    statusText: failed ? t("cards.sendFailed") : sending ? t("mail.sending") : slack ? t("slack.confirm") : cardPromptText("draft"),
     body: failed ? t("cards.retained") : draft.author_name ? t("mail.handedBy", { p0: draft.author_name }) : undefined,
-    content: well + (!draft.senders.some(sender => sender.key === draft.from.key) ? noticeHTML("mail", "store") : "") +
+    content: well + (!draft.senders.some(sender => sender.key === draft.from.key) ? noticeHTML(slack ? "slack" : "mail", "store") : "") +
       (mailErrorText(draft) ? `<div class="mail-note" role="status" data-mail-error="${esc(draft.error ?? draft.state)}">${esc(mailErrorText(draft))}</div>` : ""),
     actions: sending ? "" : btn(esc(failed ? t("cards.retry") : plain("mail.send")), "sm pri", ` data-act="mail-send" data-mail="${esc(draft.id)}"${canSend ? "" : " disabled"}`) +
       btn(esc(plain("mail.discard")), "sm", ` data-act="mail-discard" data-mail="${esc(draft.id)}"`),
-    cls: "mail-card", attrs: ` data-mail-card="${esc(draft.id)}" data-mail-state="${esc(draft.state)}" data-digest="${esc(draft.digest)}" data-version="${draft.version}" data-from="${esc(draft.from.key)}" data-senders="${esc(JSON.stringify(draft.senders))}"`,
+    cls: "mail-card", attrs: ` data-draft-kind="${draft.kind ?? "email"}" data-mail-card="${esc(draft.id)}" data-mail-state="${esc(draft.state)}" data-digest="${esc(draft.digest)}" data-version="${draft.version}" data-from="${esc(draft.from.key)}" data-senders="${esc(JSON.stringify(draft.senders))}"`,
   });
 }
 
 /** A draft that is over, in one quiet line: what it was about and what became of it. */
 function settledHTML(draft: MailDraftCard): string {
   const sent = draft.state === "sent";
-  return cardHTML({ title: draft.subject || plain("mail.title"), mark: senderMarkHTML(draft.from.name), status: sent ? "done" : "ready",
+  return cardHTML({ title: draft.kind === "slack" ? t("slack.title") : draft.subject || plain("mail.title"), mark: senderMarkHTML(draft.from.name), status: sent ? "done" : "ready",
     statusText: sent ? t("cards.done") : t("mail.discardedShort"),
-    content: cardDisclosureHTML(draft.id, `<div class="card-well"><p class="card-body">${esc(sent ? t("mail.sent", { p0: recipientsLine(draft.to) }) : plain("mail.discarded"))}</p><p class="card-body">${esc(draft.subject)}</p><p class="card-body">${esc(draft.body)}</p></div>`),
+    content: cardDisclosureHTML(draft.id, `<div class="card-well"><p class="card-body">${esc(sent ? t("mail.sent", { p0: recipientsLine(draft.to) }) : draft.kind === "slack" ? t("slack.discarded") : plain("mail.discarded"))}</p><p class="card-body">${esc(draft.subject)}</p><p class="card-body">${esc(draft.body)}</p></div>`),
     cls: "mail-done", attrs: ` data-mail-card="${esc(draft.id)}" data-mail-state="${esc(draft.state)}"`,
   });
 }
@@ -126,12 +134,12 @@ export function mailHandedLineHTML(draft: MailDraftHanded, face: string): string
 
 /** The cards a turn shows, below what it said (a draft handed on has none here: its line is outside the reply). */
 export function mailCardsHTML(turn: AgentTurn, look: MailLook = {}): string {
-  return (turn.drafts ?? []).map((draft: MailDraft) => (draft.mode === "card" ? mailCardHTML(draft, look) : "")).join("");
+  return (turn.drafts ?? []).filter(draft => turn.scope !== "room" || draft.mode !== "card" || draft.kind !== "slack").map((draft: MailDraft) => (draft.mode === "card" ? mailCardHTML(draft, look) : "")).join("");
 }
 
 /** The centred lines of the drafts this turn handed on, between the question and the reply. */
 export function mailHandedLinesHTML(turn: AgentTurn, look: MailLook = {}): string {
-  return (turn.drafts ?? []).map((draft: MailDraft) =>
+  return (turn.scope === "room" ? [] : turn.drafts ?? []).map((draft: MailDraft) =>
     draft.mode === "handed" ? mailHandedLineHTML(draft, look.memberFace?.(draft.holder_id, 18) ?? "") : "").join("");
 }
 

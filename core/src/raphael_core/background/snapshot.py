@@ -342,11 +342,10 @@ def take_snapshot(
     refs["generate_audio"] = ToolRef(BUILTIN, "generate_audio", BUILTIN_SERVER, "generate_audio", Tier.T1)
     definitions.append({"type": "function", "function": {"name": "generate_audio", **_DEFINITIONS["generate_audio"]}})
     for name in team:
-        if name == "create_member" and (not interactive or not owner_management or not speaker.is_chief or speaker.depth):
-            continue
         if name == "create_member":
-            if "member_create" not in wanted_management:
-                continue
+            # The management catalog offers member_create to the primary owner chat.
+            # Its legacy team alias must not consume a second native tool slot.
+            continue
         if name in TEAM_TOOLS:
             refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, TEAM_TIER)
             definitions.append(worker_definition(name))

@@ -11,6 +11,14 @@ import { toaster } from "./ui";
 
 afterEach(() => setLocale("zh-TW"));
 
+test("side thread permissions name their own room and thread", async () => {
+  api.core.mockResolvedValue({questions:[]});
+  const questions = createBackgroundQuestions({memberId:()=>0,roomId:()=>4,threadId:()=>9});
+  await questions.load();
+  expect(api.core).toHaveBeenCalledWith("background.questions.list", {room_id:4,thread_id:9});
+  questions.reset();
+});
+
 test("a background local command uses the shared card and submits its digest and global choice", async () => {
   const question: BackgroundQuestion = { ...QUESTION, permission: { id: "q-1", source: "background", kind: "local_access", service: "Alex", tool: "local_exec", summary: "Get-Process", reason: null, digest: "local-digest", always: true, state: "pending", expires_at_ms: 0 } };
   api.core.mockImplementation(async (method: string) => method === "background.questions.list" ? { questions: [question] } : { status: "approved" });
