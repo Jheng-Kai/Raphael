@@ -362,9 +362,10 @@ export function createMembers(host: MembersHost): MembersShell {
     return true;
   }
 
-  function newMember(groupId: number | null): void {
+  function newMember(groupId: number | null, store = false): void {
     window.dispatchEvent(new Event("raphael:close-sidebar"));
     openMemberCreator({
+      store,
       groupId,
       taken: (list?.members ?? []).map((m) => m.name),
       async create(made) {
@@ -471,6 +472,7 @@ export function createMembers(host: MembersHost): MembersShell {
   }
 
   window.addEventListener("raphael:new-member", () => newMember(null));
+  window.addEventListener("raphael:member-store", () => newMember(null, true));
   onLocaleChange(() => { drawAll(); details.refreshMemory(current); });
   details.el.hidden = !open;
   drawAll();

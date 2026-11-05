@@ -1,0 +1,88 @@
+{
+  "format": "raphael-catalog",
+  "version": 1,
+  "sequence": 1,
+  "entries": [
+    {
+      "id": "research",
+      "name": "研究夥伴",
+      "creator": "Raphael 範例作者",
+      "category": "engineering",
+      "summary": "核對來源，整理能查證的研究摘要。",
+      "avatar": "souei",
+      "featured": true,
+      "package": "packages/research/member.raphael-member",
+      "sha256": "d46e687c006fba647c8200fa5573c69862de95c201a620f9633ee7b543c167c0",
+      "version": "1.0.0",
+      "created": "2026-11-05",
+      "updated": "2026-11-05",
+      "skills": 1,
+      "routines": 1,
+      "connections": [
+        "gmail",
+        "github"
+      ]
+    },
+    {
+      "id": "writing",
+      "name": "文字編輯",
+      "creator": "Raphael 範例作者",
+      "category": "marketing",
+      "summary": "整理清楚易讀的文章與發佈草稿。",
+      "avatar": "shuna",
+      "featured": true,
+      "package": "packages/writing/member.raphael-member",
+      "sha256": "aea37fc38e49597da48c5ae96aa4004abb1f894cc70bf9ed577c09767605d707",
+      "version": "1.0.0",
+      "created": "2026-11-05",
+      "updated": "2026-11-05",
+      "skills": 1,
+      "routines": 1,
+      "connections": [
+        "gmail",
+        "github"
+      ]
+    },
+    {
+      "id": "planning",
+      "name": "產品規劃",
+      "creator": "Raphael 範例作者",
+      "category": "product",
+      "summary": "拆解目標，安排能追蹤的產品步驟。",
+      "avatar": "benimaru",
+      "featured": false,
+      "package": "packages/planning/member.raphael-member",
+      "sha256": "9144c76062c52c6872d0e17a84735d61a3d9d33b5d89a1e987989ab4a55b22d2",
+      "version": "1.0.0",
+      "created": "2026-11-05",
+      "updated": "2026-11-05",
+      "skills": 1,
+      "routines": 1,
+      "connections": [
+        "gmail",
+        "github"
+      ]
+    },
+    {
+      "id": "inbox",
+      "name": "信件助手",
+      "creator": "Raphael 範例作者",
+      "category": "personal",
+      "summary": "整理重要來信，先準備草稿再確認。",
+      "avatar": "gobta",
+      "featured": false,
+      "package": "packages/inbox/member.raphael-member",
+      "sha256": "8106a8f09d214cc93f90cc2269e92dd52af7e3121be1eeff8e4eb69837445797",
+      "version": "1.0.0",
+      "created": "2026-11-05",
+      "updated": "2026-11-05",
+      "skills": 1,
+      "routines": 1,
+      "connections": [
+        "gmail",
+        "github"
+      ]
+    }
+  ],
+  "revoked": []
+}

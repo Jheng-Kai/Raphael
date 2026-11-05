@@ -774,6 +774,21 @@ The existing routines.webhook RPC accepts an owner-requested URL probe. PageFetc
 
 The main-window-only pick_output_folder and member_template_file shell commands reuse tauri_plugin_dialog. No webview-supplied path is accepted; recipe files are bounded UTF-8 and filtered to .raphael-member. Native dialog and installed file-opening acceptance remain separate from IPC fixtures (A-06/10).
 
+
+## Signed member store (2026-11-05)
+
+members.template retains the sole owner-window RPC and raphael-member v1 codec.
+members/member_catalog.py owns bounded catalogue HTTP, Ed25519, sequence/revocation
+and verified disk cache. Imports refetch by catalogue identity and ignore caller
+package bytes, then use MembersService, MemberCapabilities and MemberStore with
+skills/routines off. Preview never creates a member, grant, routine or skill.
+templates.py owns structural caps and scan locations without credential excerpts.
+Review precedes native file save. Publish writes only an owned local export folder
+and returns the prefilled GitHub URL through the existing openExternalUrl API.
+No new RPC, migration, settings registry, worker or brain loop (A-01/05/06/08/10/11/12).
+catalog-template/ holds the future public repository's schema/scan/signing CI;
+PRs never receive the signing secret. Production trust roots require owner setup.
+
 ## Shared owner vault (2026-11-05)
 
 VaultEntries extends LoginVault at the existing Windows Credential Manager

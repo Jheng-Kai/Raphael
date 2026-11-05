@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, test, vi } from "vitest";
-import { previewTemplate, starterTemplate } from "./member-templates";
+import { exportMemberTemplate, previewTemplate, starterTemplate } from "./member-templates";
 import { openMemberCreator } from "./member-creator";
 import type { Member } from "./types";
 import { t } from "./i18n";
 
-const api = vi.hoisted(() => ({core: vi.fn(), memberTemplateFile: vi.fn(), connectorsConnect: vi.fn(), membersUpdate: vi.fn(), toolsetsList: vi.fn(), integrationsCatalog: vi.fn()}));
+const api = vi.hoisted(() => ({core: vi.fn(), memberTemplateFile: vi.fn(), connectorsConnect: vi.fn(), membersUpdate: vi.fn(), toolsetsList: vi.fn(), integrationsCatalog: vi.fn(), openExternalUrl: vi.fn()}));
 vi.mock("./api", () => api);
 beforeEach(() => {document.body.innerHTML = ""; vi.clearAllMocks(); api.core.mockImplementation(async (_method, params) => ({template: params.template}));});
 
@@ -44,4 +44,87 @@ test("preview shows skills, paused routines and a disabled card per requested co
   expect(dialog.querySelectorAll(".card-status")).toHaveLength(1);
   expect(dialog.querySelector(".card-status")!.textContent).toBe(t("conn.signedIn"));
   expect(api.connectorsConnect).not.toHaveBeenCalled();
+});
+
+test("store filtering stays local and install carries catalogue identity", async () => {
+  const create = vi.fn(async () => null);
+  api.core.mockImplementation(async (_method, p) => p.action === "catalog" ? {entries:[
+    {id:"research",name:"Research",creator:"Example",summary:"Check sources",category:"engineering",avatar:"souei",featured:true},
+    {id:"writer",name:"Writer",creator:"Example",summary:"Clear articles",category:"marketing",avatar:"shuna",featured:false},
+  ],offline:false} : {template:starterTemplate(3),findings:[]});
+  const maker = openMemberCreator({groupId:null, taken:[], create, store:true});
+  for (let i=0;i<6;i++) await Promise.resolve();
+  const input = document.querySelector<HTMLInputElement>("[data-store-search]")!;
+  input.value = "Writer"; input.dispatchEvent(new Event("input"));
+  expect(document.querySelectorAll(".store-entry")).toHaveLength(1);
+  expect(api.core).toHaveBeenCalledTimes(1);
+  const heading = maker.el.querySelector(".mb-dlg-head h2");
+  const tabs = maker.el.querySelector(".cr-tabs .tabs.plain.fill")!;
+  expect(tabs.querySelectorAll(".tab")).toHaveLength(2);
+  expect(tabs.querySelector('[data-tab="store"]')!.getAttribute("aria-selected")).toBe("true");
+  maker.el.querySelector<HTMLButtonElement>('[data-tab="maker"]')!.click();
+  maker.el.querySelector<HTMLInputElement>("#mb-new-name")!.value = "Draft member";
+  maker.el.querySelector<HTMLButtonElement>('[data-tab="store"]')!.click();
+  expect(maker.el.querySelector(".mb-dlg-head h2")).toBe(heading);
+  expect(document.querySelectorAll(".cr-dialog")).toHaveLength(1);
+  expect(maker.el.querySelector<HTMLInputElement>("#mb-new-name")!.value).toBe("Draft member");
+  expect(input.value).toBe("Writer");
+  expect(api.core).toHaveBeenCalledTimes(1);
+  input.value = ""; input.dispatchEvent(new Event("input"));
+  document.querySelector<HTMLButtonElement>('[data-category="engineering"]')!.click();
+  expect(document.querySelectorAll(".store-entry")).toHaveLength(1);
+  document.querySelector<HTMLButtonElement>('[data-dlg="store-preview"]')!.click();
+  for (let i=0;i<8;i++) await Promise.resolve();
+  expect(create).not.toHaveBeenCalled();
+  expect(api.core).toHaveBeenLastCalledWith("members.template", {action:"catalog-preview",catalog_id:"research"});
+  document.querySelector<HTMLButtonElement>('[data-dlg="import"]')!.click();
+  for (let i=0;i<8;i++) await Promise.resolve();
+  expect(create).toHaveBeenCalledWith(expect.objectContaining({catalog_id:"research"}));
+});
+
+test("secret findings block export and publish before any native action", async () => {
+  const template = {...starterTemplate(3),instructions:"password: synthetic-secret"};
+  api.core.mockResolvedValue({template,findings:[{kind:"secret",path:"template.instructions"}]});
+  await exportMemberTemplate(1);
+  expect(document.querySelector<HTMLButtonElement>('[data-dlg="export"]')!.disabled).toBe(true);
+  expect(document.querySelector<HTMLButtonElement>('[data-dlg="publish"]')!.disabled).toBe(true);
+  expect(api.memberTemplateFile).not.toHaveBeenCalled();
+  expect(api.openExternalUrl).not.toHaveBeenCalled();
+});
+
+test("scan warnings name the visible section without exposing internal translation-like paths", async () => {
+  const template = starterTemplate(3);
+  api.core.mockResolvedValue({template,findings:[{kind:"injection",path:"template.instructions"}]});
+  await previewTemplate(template, "slime:diablo", vi.fn(), null, vi.fn());
+  const warning = document.querySelector('.template-preview .note[role="status"]')!;
+  expect(warning).not.toBeNull();
+  expect(warning.textContent).not.toContain("template.");
+  expect(warning.textContent).not.toMatch(/[。.]\s*·/);
+  expect(warning.textContent).toContain(t("store.injection", {p0:t("members.instructions")}));
+  expect(warning.querySelectorAll("p")).toHaveLength(2);
+  expect(warning.compareDocumentPosition(document.querySelector(".template-field")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test("export rechecks the reviewed generation before file save", async () => {
+  const template = starterTemplate(0);
+  api.core.mockResolvedValue({template,findings:[]});
+  await exportMemberTemplate(1);
+  expect(api.memberTemplateFile).not.toHaveBeenCalled();
+  api.core.mockResolvedValue({template:{...template,instructions:"Changed after review"}});
+  document.querySelector<HTMLButtonElement>('[data-dlg="export"]')!.click();
+  for (let i=0;i<8;i++) await Promise.resolve();
+  expect(api.memberTemplateFile).not.toHaveBeenCalled();
+});
+
+test("publishing prepares the reviewed local recipe before opening the owner browser", async () => {
+  const template = starterTemplate(0);
+  const url = "https://github.com/Jheng-Kai/raphael-catalog/compare/main...main?quick_pull=1";
+  api.core.mockImplementation(async (_method, p) => p.action === "review" ? {template,findings:[]} : {folder:"C:\\Raphael\\template-exports\\sample",url});
+  await exportMemberTemplate(1);
+  expect(api.openExternalUrl).not.toHaveBeenCalled();
+  document.querySelector<HTMLButtonElement>('[data-dlg="publish"]')!.click();
+  for (let i=0;i<8;i++) await Promise.resolve();
+  expect(api.core).toHaveBeenLastCalledWith("members.template", {action:"publish",template});
+  expect(api.openExternalUrl).toHaveBeenCalledWith(url);
+  expect(api.memberTemplateFile).not.toHaveBeenCalled();
 });

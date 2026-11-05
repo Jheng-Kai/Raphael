@@ -618,6 +618,16 @@ This owner decision supersedes the sequential room speech and room-scope tool-wo
 | R-COLLEAGUE-05 | 2026-11-05 | External webhooks guide an already-installed tunnel with exact loopback commands; Raphael never launches it or opens a public port. A pinned HTTPS HMAC self-post must reach the exact hook nonce without running a job. Keys are displayed only on explicit generation and cleared on close; copy uses displayed data. The PC-on reminder stays visible. | pytest, look | hard | core/tests/members/test_webhooks.py::test_external_probe_reaches_the_exact_hook_without_work_or_admission; core/tests/members/test_webhooks.py::test_external_probe_refuses_credentials_redirect_shapes_and_rotates_only_on_request; app/src/main/routine-dialog.test.ts; webhook-external; webhook-external-tested; webhook-external-hmac |
 | R-COLLEAGUE-06 | 2026-11-05 | The General output folder retains typed absolute paths and adds an owner-selected native folder dialog. Cancel changes nothing. | vitest, look, deferred native | hard | app/src/main/pages/settings-view.test.ts::output folder belongs to General and is discoverable by settings search; output-folder-picker |
 
+
+## Member store (2026-11-05)
+
+| ID | Date | Rule | Verification | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-STORE-01 | 2026-11-05 | The existing member recipe is scanned and bounded; secret findings refuse export/publish, and Review contents precedes file save. | pytest, vitest, look | hard | core/tests/members/test_member_catalog.py::test_scanner_reports_locations_without_credentials_and_refuses_export; app/src/main/member-templates.test.ts; template-export-review |
+| R-STORE-02 | 2026-11-05 | Catalogue bytes require a pinned Ed25519 signature, monotonic sequence and permanent revocations; package SHA256, bounded HTTPS/timeout and verified offline cache remain enforced. | pytest | hard | core/tests/members/test_member_catalog.py::test_good_signed_fixture_etag_cache_restart_and_offline; core/tests/members/test_member_catalog.py::test_tampered_index_and_replayed_or_reused_sequence_fail_closed |
+| R-STORE-03 | 2026-11-05 | Store preview shows full instructions, personality, skills, schedules and separate connect cards before creation; catalogue installs recheck revocations and arrive with skills/routines off and no grants. | pytest, vitest, look | hard | core/tests/members/test_member_catalog.py::test_tampered_package_and_revocation_refuse_before_member_writes; core/tests/members/test_member_catalog.py::test_install_uses_verified_bytes_and_imports_skills_and_routines_off; template-preview; template-preview-warning |
+| R-STORE-04 | 2026-11-05 | Store filtering is local and unavailable/empty catalogues show calm empty copy. Publishing prepares local files and an owner-operated GitHub PR with no token or remote mutation. | pytest, vitest, look | hard | core/tests/members/test_member_catalog.py::test_publish_only_prepares_local_files_and_github_url; store-home; store-category; store-search; store-empty; store-offline |
+
 ## Shared owner vault (2026-11-05)
 
 | ID | Date | Rule | Check | Severity | Evidence |

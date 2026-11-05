@@ -1,6 +1,7 @@
 """Portable member recipes: explicit public fields only, never grants or private state."""
 
 import json
+import re
 from pathlib import PurePosixPath
 
 from ..bots.homes import redact_secrets
@@ -11,12 +12,33 @@ MAX_BYTES = 512 * 1024
 FIELDS = ("name", "role", "personality", "instructions", "reply_style")
 
 
-def checked(value):
+def findings(value):
+    """Return locations and warning classes, never matched credential values."""
+    result = []
+    def walk(item, path):
+        if isinstance(item, str):
+            if redact_secrets(item) != item or re.search(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|(?:gh[pousr]_|github_pat_|sk-(?:proj-)?)[A-Za-z0-9_-]{20,}|(?:api[_-]?key|token|secret|password)\s*[:=]\s*[\"']?[^\s\"']{8,}", item, re.I):
+                result.append({"kind": "secret", "path": path})
+            if re.search(r"ignore (?:all |previous |prior )*instructions|system prompt|忽略.*(?:指令|規則)", item, re.I):
+                result.append({"kind": "injection", "path": path})
+        elif isinstance(item, dict):
+            for key, child in item.items():
+                if key not in (*FIELDS, "skills", "routines", "connections", "text", "files", "prompt", "title", "format", "version", "schedule", "when"):
+                    walk(key, f"{path}.fileName")
+                walk(child, f"{path}.{key}" if key in (*FIELDS, "skills", "routines", "connections", "text", "files", "prompt", "title") else f"{path}.file")
+        elif isinstance(item, list):
+            for index, child in enumerate(item):
+                walk(child, f"{path}[{index}]")
+    walk(value, "template")
+    return result
+
+
+def checked(value, *, review=False):
     if not isinstance(value, dict) or set(value) != {"format", "version", *FIELDS, "skills", "routines", "connections"}:
         raise invalid_params("Invalid member template fields")
     if value["format"] != "raphael-member" or type(value["version"]) is not int or value["version"] != 1:
         raise invalid_params("Unsupported member template")
-    if len(json.dumps(value).encode()) > MAX_BYTES:
+    if max(len(json.dumps(value).encode()), len(json.dumps(value, ensure_ascii=False, indent=2).encode()) + 1) > MAX_BYTES:
         raise invalid_params("Member template is too large")
     clean_name(value["name"])
     clean_role(value["role"])
@@ -27,18 +49,22 @@ def checked(value):
     for key, maximum in (("skills", 40), ("routines", 50), ("connections", 30)):
         if not isinstance(value[key], list) or len(value[key]) > maximum:
             raise invalid_params("Invalid template list")
+    file_count = 1
     for skill in value["skills"]:
         if not isinstance(skill, dict) or not {"text"} <= set(skill) <= {"text", "files"} or not isinstance(skill["text"], str) or not 0 < len(skill["text"].encode()) <= 128 * 1024:
             raise invalid_params("Invalid template skill")
         files = skill.get("files", {})
         if not isinstance(files, dict) or len(files) > 100:
             raise invalid_params("Invalid template skill files")
+        file_count += 1 + len(files)
+        if file_count > 100:
+            raise invalid_params("Member template has too many files")
         for name, content in files.items():
             if not isinstance(name, str):
                 raise invalid_params("Invalid template dependency path")
             path = PurePosixPath(name)
             if (len(name) > 300 or "\\" in name or ":" in name
-                    or path.is_absolute() or any(p in (".", "..") or p.startswith(".") for p in path.parts)
+                    or path.is_absolute() or path.as_posix() != name or any(p in (".", "..") or p.startswith(".") for p in path.parts)
                     or path.suffix.lower() not in (".md", ".txt", ".json", ".py", ".sh", ".js", ".ts", ".ps1", ".toml", ".yaml", ".yml")
                     or path.name.casefold() in ("skill.md", "memory.md", "user.md", "soul.md")
                     or not isinstance(content, str) or "\x00" in content or len(content.encode()) > 128 * 1024):
@@ -55,13 +81,12 @@ def checked(value):
     if any(not isinstance(c, str) or not c.strip() or len(c) > 100 for c in value["connections"]):
         raise invalid_params("Invalid template connection")
     # Public instructions may themselves contain copied credentials; refuse them too.
-    raw = json.dumps(value, ensure_ascii=False)
-    if redact_secrets(raw) != raw:
+    if not review and any(f["kind"] == "secret" for f in findings(value)):
         raise invalid_params("Remove private credentials from the member recipe first")
     return value
 
 
-def export(service, member_id):
+def export(service, member_id, *, review=False):
     member = service.store.member(member_id)
     if member is None:
         raise invalid_params("No such member")
@@ -73,7 +98,7 @@ def export(service, member_id):
                            for r in service.store.routines(member_id)],
               "connections": [c["name"] for c in service._connections()
                               if member.tools is None or c["id"] in member.tools]}
-    return checked(result)
+    return checked(result, review=review)
 
 
 def export_skill(capabilities, member_id, identifier):
@@ -90,11 +115,23 @@ def export_skill(capabilities, member_id, identifier):
 
 async def handle(service, params):
     action = params.get("action")
+    if action in ("catalog", "catalog-preview", "publish"):
+        from .member_catalog import handle as catalog_handle
+        return await catalog_handle(service, params)
+    if action == "review":
+        value = export(service, service._member_id(params), review=True)
+        return {"template": value, "findings": findings(value)}
     if action == "export":
         return {"template": export(service, service._member_id(params))}
-    value = checked(params.get("template"))
+    if action == "import" and params.get("catalog_id"):
+        from .member_catalog import client
+        value = await client(service).package(params["catalog_id"])
+        if params.get("template") != value:
+            raise invalid_params("Template changed; review the current package before adding it")
+    else:
+        value = checked(params.get("template"))
     if action == "preview":
-        return {"template": value}
+        return {"template": value, "findings": findings(value)}
     if action != "import":
         raise invalid_params("Invalid template action")
     # Nothing is installed or granted during preview. Imports get no connection tools.
@@ -106,7 +143,8 @@ async def handle(service, params):
     identifier = made["member"]["id"]
     try:
         for skill in value["skills"]:
-            service.capabilities.keep_recipe(identifier, skill["text"], skill.get("files", {}))
+            kept = service.capabilities.keep_recipe(identifier, skill["text"], skill.get("files", {}))
+            service.capabilities.update_skill(identifier, kept["id"], False)
         for routine in value["routines"]:
             service.store.create_routine(member_id=identifier, **routine, enabled=False, next_run_ms=None)
     except Exception:

@@ -877,3 +877,32 @@ npm run look -- member-template-gallery member-template-preview member-template-
 Core fakes cover export/import, no-side-effect preview, no grants, disabled routines, local suggestions, goal question/save and first-use directories. Native save/open dialogs, real VM/SSH mounts and real model behavior need separate authorized acceptance.
 
 Follow-up 1 (2026-11-05): Template previews keep one quiet no-grants/privacy notice immediately above the Close/Import actions in the fixed footer. Skills and paused routines use the shared compact list rows with names and muted detail. Templates have no status pill; a connection gains its own signed-in status only after a successful explicit connection. The member-template-preview scene asserts these contracts; compare it with member-panel-details and calm-thread after merging.
+
+## Member store (2026-11-05)
+
+R-STORE-01 through R-STORE-04 extend the existing raphael-member v1 recipe, not a
+second package format. New member > Store and sidebar + > Store browse a signed
+catalogue. Featured rows, eight categories and local search reuse existing slime
+characters and shared buttons. Preview shows full instructions, personality, skill
+documents/dependencies, routine schedules and individual disabled app connect cards.
+Adding installs skills and routines off and grants no apps; only subsequent per-app
+Connect can request login. Export now opens Review contents before Export file or
+Publish to store. A secret finding disables both. Publishing prepares only a local
+package folder and opens GitHub's prefilled PR page; the owner submits through GitHub.
+
+The catalogue uses Ed25519 over exact index bytes, two compiled trust roots for
+rotation, a monotonic sequence, permanent revoked IDs and per-package SHA256. Reads
+are HTTPS without redirects, capped at 256 KiB/512 KiB and ten seconds, with ETag and
+verified disk cache. Installs revalidate the catalogue and recheck revocation after
+download. Offline cache proves last verified state, not current remote revocations.
+No production key or account is needed by fake HTTP or the signed synthetic fixture.
+
+npm run look -- store-home store-category store-search store-empty store-offline template-preview template-preview-warning template-export-review member-template-gallery member-template-preview member-template-imported member-template-export sidebar-plus --theme both --width 1120,720,1920x1080
+
+Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
+store chips/buttons with starter gallery and sidebar-plus, and preview/export cards
+with member-template-preview at matching dimensions. Run judge on that same run;
+missing external reference images/login are blocked, never design acceptance.
+Native file picker, OS browser/folder opening, persistence across desktop restart,
+public catalogue hosting, production trust-root provisioning and GitHub CI remain
+separate acceptance. No live provider calls, public repository creation or tokens.
