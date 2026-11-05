@@ -1,3 +1,4 @@
+import { installedUpdateNotice } from "./updates";
 import { watchWindowVisibility } from "./window-visibility";
 import { onLocaleChange, setLocale, t } from "./i18n";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -56,6 +57,7 @@ const DEFAULT_DEVICE: DeviceSettings = {
   appearance: "system",
   ui_language: "zh-TW",
   autostart: true,
+  auto_update: false,
   onboarded: false,
   computer_apps: [],
 };
@@ -378,6 +380,7 @@ watchChipRows(document.body);
   }
 
   startupHasSettings = true;
+  void installedUpdateNotice();
 
   // Until the first-run guide is done it takes the place of the pages. (Settings that could not be
   // read are no reason to start a guide for someone who has been through it.)

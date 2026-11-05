@@ -3,8 +3,6 @@
 .vault-heading { justify-content: space-between; flex-wrap: wrap; }
 .vault-heading h2 { margin: 0; }
 .vault > .dim { margin-block: 8px 16px; }
-.vault .tabs.seg .tab { display: inline-flex; align-items: center; gap: var(--sp-1); }
-.vault .tabs .n { font-size: var(--fs-xs); font-weight: 400; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .vault-editor { display: grid; gap: 12px; padding: 16px; margin-block: 16px; border: 1px solid var(--line); border-radius: 12px; }
 .vault-editor h3, .vault-editor p { margin: 0; }
 .vault-editor .field { width: 100%; }

@@ -17,10 +17,11 @@ test.each(["en", "zh-TW", "ja"] as const)("trigger sentences weight the verb and
   expect(webhook).toContain('POST');
 });
 
-test("a routine transcript line names the trigger and opens the exact routine", () => {
+test("a routine transcript line names the routine and opens the exact routine", () => {
   setLocale('en');
   const html = routineLineHTML({id:12,question:'Sample routine',routine:{id:4,schedule:null,when:{webhook:true}}} as unknown as AgentTurn);
   document.body.innerHTML=html;
   expect(document.querySelector('button[data-act="open-routine"]')?.getAttribute('data-routine')).toBe('4');
-  expect(document.body.textContent).toContain('POST');
+  expect(document.querySelector('.routine-origin')?.textContent).toContain('Sample routine');
+  expect(document.body.textContent).not.toContain('POST');
 });

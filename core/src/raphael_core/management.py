@@ -194,7 +194,7 @@ _AREA_WORDS = {
     "folders": r"\b(?:folders?|company|teams?)\b|\bgroups?\b(?!\s+chats?\b)|資料夾|文件夾|團隊|公司|フォルダ",
     "rooms": r"\b(?:group chats?|rooms?)\b|群聊|群組|グループ",
     "conversations": r"\b(?:conversations?|quick chat|chat history)\b|對話|交談|聊天紀錄|会話",
-    "connections": r"\b(?:connections?|connectors?|integrations?|mcp|disconnect|reconnect|app access)\b|連線|連接|斷線|接続",
+    "connections": r"\b(?:connections?|connectors?|integrations?|mcp|connect|disconnect|reconnect|enable|disable|app access)\b|\bturn\s+(?:on|off)\b|連線|連接|斷線|啟用|停用|接続",
     "models": r"\b(?:models?|effort|reasoning|favorites?|favourites?)\b|模型|推理|思考|收藏|モデル",
     "settings": r"\b(?:settings?|preferences?|city|retention|dictionary|dictation|memory)\b|設定|偏好|城市|保留|字典|辭典|聽寫|記憶",
 }
@@ -304,7 +304,7 @@ def destructive(name, arguments, retention=None):
 # propose a card, but may not answer it or handle its credentials.
 OWNER_ONLY = {
     **dict.fromkeys(("vault.list", "vault.add", "vault.update", "vault.remove", "vault.preview", "vault.cancel", "vault.import"),
-                   "Vault metadata, values, sharing and CSV imports belong to the owner."),
+                   "Owner-only vault metadata, private value writes, sharing and transient CSV import; no private value read or export RPC exists."),
     **dict.fromkeys(("owner_questions.answer", "owner_questions.bring", "background.answer", "pages.tool_call",
                      "integrations.card_connect", "integrations.card_cancel", "integrations.card_save", "integrations.card_resume",
                      "integrations.card_done", "integrations.card_stop", "integrations.card_allow", "integrations.card_always", "integrations.card_deny",

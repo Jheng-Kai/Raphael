@@ -1,5 +1,6 @@
 {
   "bundle": {
+    "createUpdaterArtifacts": true,
     "targets": ["nsis"],
     "resources": {
       "../../core/dist/raphael-core/": "core/",

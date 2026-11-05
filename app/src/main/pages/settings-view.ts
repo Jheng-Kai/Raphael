@@ -13,6 +13,8 @@
 // it (`SEARCH_INDEX`, `searchSettings`).
 
 import { catalogs, t } from "../i18n";
+import { updateHTML } from "../updates";
+import { createMemoryImport } from "../memory-import";
 import { detectedTimezone, zoneLabel } from "../timezones";
 import { ownerProfileHTML } from "../owner-settings";
 import type { MessageKey } from "../i18n/zh-TW";
@@ -141,6 +143,9 @@ export interface SearchEntry {
  */
 export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "general", label: "owner.name" },
+  { pane: "general", label: "import.title" },
+  { pane: "about", label: "update.title" },
+  { pane: "about", label: "update.auto" },
   { pane: "general", label: "output.folder" },
   { pane: "general", label: "zone.title" },
   ...PANES.map((p) => ({ pane: p.id })),
@@ -260,6 +265,8 @@ export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotke
 
 /** Everything a tab is drawn from: what the panel has read, and what is being typed or done. */
 export interface SettingsView {
+  update?: import("../api").UpdateView | null;
+  memoryImportHTML?: string;
   data?: { items: import("../types").HistoryItem[]; total: number; conversations: number; more: boolean; busy?: boolean; error?: string };
   modelsTab?: ModelsTab;
   pane: SettingsPane;
@@ -594,7 +601,8 @@ function generalHTML(v: SettingsView): string {
     (v.cityError ? note(st("err", v.cityError()), ' role="alert"') : "") +
     row(t("zone.title"), t("zone.help"), sel([{value:v.brain?.routine_timezone ?? "",label:v.brain?.routine_timezone ? zoneLabel(v.brain.routine_timezone) : `${t("zone.auto")} · ${zoneLabel(detectedTimezone())}`}], v.brain?.routine_timezone ?? "", t("zone.title"), ' data-k="routine-timezone"' + (v.brain === null ? ' disabled' : ''))) +
     row(t("output.folder"), t("output.help"), fieldHTML(t("output.empty"), v.brain?.owner_output_folder ?? "", { id: "owner-output-folder", label: t("output.folder"), w: 200, disabled: v.brain === null })) + `</div>` +
-    (v.memoryShared ? memoryHTML(v.memoryShared) : "") + `</section>` +
+    (v.memoryShared ? memoryHTML(v.memoryShared) : "") +
+    (v.memoryImportHTML ?? createMemoryImport(() => {}).html()) + `</section>` +
     section(t("settings.groupAppearance"), [
       row(t("settings.069"), "", sel(SIZES, String(d.emblem_size), t("settings.069"), ' data-k="size"')),
       row(t("settings.071"), "", tg(d.subtitles !== "off", t("settings.071"), ' data-k="subtitles"')),
@@ -735,6 +743,7 @@ function aboutHTML(v: SettingsView): string {
     row(t("nav.help"), "", btn(t("nav.help"), "", ' data-act="help"')) +
     row(t("settings.079"), t("settings.080"), btn(t("settings.081"), "", ' data-act="license"')) +
     `</div>` +
+    updateHTML(v.update ?? null, v.device.auto_update ?? false) +
     t("settings.082")
   );
 }

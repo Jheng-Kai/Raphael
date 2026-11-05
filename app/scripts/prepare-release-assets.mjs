@@ -93,10 +93,21 @@ export function checksums(directory) {
   return names.map((name) => `${createHash("sha256").update(readFileSync(join(directory, name))).digest("hex")}  ${name}\n`).join("");
 }
 
-export function prepareReleaseAssets({ installer, notices, version, output, env = process.env, tools = collectTools(env) }) {
+export function prepareReleaseAssets({ installer, notices, signature, version, output, env = process.env, tools = collectTools(env) }) {
   if (existsSync(output)) throw new Error(`Output directory already exists: ${output}`);
   mkdirSync(output, { recursive: true });
   copyFileSync(installer, join(output, `Raphael-${version}-windows-x64-setup.exe`));
+  if (signature) {
+    const signed = readFileSync(signature, "utf8").trim();
+    const comment = Buffer.from(signed, "base64").toString("utf8").split("\n").find(line => line.startsWith("trusted comment:"));
+    if (!comment?.split("\t").includes(`version:${version}`)) throw new Error("Updater signature must bind this release version; use tauri signer sign --app-version.");
+    if (!/^[\w.-]+\/[\w.-]+$/.test(env.GITHUB_REPOSITORY ?? "")) throw new Error("A GitHub repository is required for updater assets.");
+    const name = `Raphael-${version}-windows-x64-setup.exe`;
+    writeFileSync(join(output, name + ".sig"), signed + "\n");
+    writeFileSync(join(output, "latest.json"), JSON.stringify({ version, notes: env.RELEASE_NOTES ?? "", pub_date: new Date().toISOString(), platforms: {
+      "windows-x86_64": { signature: signed, url: `https://github.com/${env.GITHUB_REPOSITORY}/releases/download/v${version}/${name}` },
+    } }, null, 2) + "\n");
+  }
   copyFileSync(notices, join(output, "THIRD_PARTY_NOTICES.txt"));
   writeFileSync(join(output, "BUILD-INFO.txt"), buildInfo({ version, env, tools }), "utf8");
   writeFileSync(join(output, "SHA256SUMS.txt"), checksums(output), "utf8");
@@ -108,7 +119,7 @@ export function main(args = process.argv.slice(2), { env = process.env, tools } 
   const options = {};
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index]?.replace(/^--/, "");
-    if (!["installer", "notices", "version", "output"].includes(name) || !args[index + 1]) {
+    if (!["installer", "notices", "signature", "version", "output"].includes(name) || !args[index + 1]) {
       throw new Error(`Usage: node scripts/prepare-release-assets.mjs --installer FILE --notices FILE --version X.Y.Z --output DIRECTORY (got ${args[index] ?? "nothing"})`);
     }
     options[name] = name === "version" ? args[index + 1] : resolve(args[index + 1]);

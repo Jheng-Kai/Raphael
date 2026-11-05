@@ -29,6 +29,11 @@ export async function eventStorm(page, options) {
       cachedMisses: 0, changedKeys: [], calls: window.__look.calls.length, top: scroller.scrollTop, clock: Date.now(), startedMs: performance.now(), typed: "",
       hovered: hover ? scroller.querySelector('[data-id="200000"] .preview-card') : null };
     if (roster) {
+      // Idle and sleeping faces intentionally have no loops; visible working faces must have them.
+      seen.motionRequired = [...document.querySelectorAll('.mb-row svg.slime')].some(svg => {
+        const box = svg.getBoundingClientRect();
+        return box.width > 0 && box.height > 0 && ['thinking', 'working', 'searching', 'computer', 'waiting', 'blocked', 'error'].includes(svg.dataset.state);
+      });
       seen.animations = [...document.querySelectorAll('.mb-row svg.slime')].flatMap(svg => {
         const member = window.__look.data.members.find(member => member.id === Number(svg.dataset.slimeMember));
         if (member) member.activity = svg.dataset.state;
@@ -136,7 +141,8 @@ export async function eventStorm(page, options) {
       cachedMisses: seen.cachedMisses, changedKeys: [...new Set(seen.changedKeys)],
       hoverIntact: !hover || (seen.hovered.isConnected && seen.hovered.matches(":hover")),
       motionSamples: seen.animations?.length ?? 0,
-      motionIntact: !seen.animations || (seen.animations.length > 0 && seen.animations.every(({ animation, start, delay }) => animation.playState === 'running' && animation.startTime === start && animation.effect.getTiming().delay === delay)),
+      motionRequired: seen.motionRequired ?? false,
+      motionIntact: !seen.animations || ((!seen.motionRequired || seen.animations.length > 0) && seen.animations.every(({ animation, start, delay }) => animation.playState === 'running' && animation.startTime === start && animation.effect.getTiming().delay === delay)),
       anchorMovement: arrival && position === "middle" ? Math.abs(scroller.scrollTop - seen.top) : 0,
       arrivalShown: !arrival || !!scroller.querySelector('[data-id="200001"].is-new'),
       liveTextUpdated: !liveText || scroller.querySelector('[data-id="200000"] .live-action')?.textContent === `Checking sample ${seen.textStep}`,

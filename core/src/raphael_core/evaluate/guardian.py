@@ -239,7 +239,7 @@ async def cell(model, member, scenario, *, brains, client, sessions, conn, budge
     speaker = Speaker(id=member, name="測試員", role="助理",
                       capabilities=frozenset({"chief"}) if member == 0 else frozenset())
     files = attachments(scenario.attachment)
-    tools = take_snapshot(None, memory=True, attachments=bool(files), speaker=speaker, interactive=True, max_tier=Tier.T3).definitions
+    tools = take_snapshot(None, scenario.prompt, memory=True, attachments=bool(files), speaker=speaker, interactive=True, max_tier=Tier.T3).definitions
     recorder = Recorder(tools)
     ledger = Ledger(SpendTracker(conn))
     user = scenario.prompt + text_context(files)

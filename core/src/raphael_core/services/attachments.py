@@ -13,13 +13,19 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
+from pathlib import Path
 
 IMAGE_TYPES = ("image/png", "image/jpeg", "image/webp", "image/gif")
 PDF_TYPE = "application/pdf"
 ACCEPTED_TYPES = (*IMAGE_TYPES, PDF_TYPE)
-MAX_ATTACHMENTS = 4
-MAX_FILE_BYTES = 50 * 1024 * 1024
-MAX_TOTAL_BYTES = 100 * 1024 * 1024
+MAX_ATTACHMENTS = 20
+MAX_FILE_BYTES = 250 * 1024 * 1024
+MAX_VIDEO_BYTES = 1024 * 1024 * 1024
+MAX_TOTAL_BYTES = MAX_ATTACHMENTS * MAX_VIDEO_BYTES
+
+
+def file_limit(mime: str) -> int:
+    return MAX_VIDEO_BYTES if mime.startswith("video/") else MAX_FILE_BYTES
 # Legacy avatar and messaging download budgets stay independent of composer uploads.
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 MAX_PDF_BYTES = 20 * 1024 * 1024
@@ -51,6 +57,7 @@ class Attachment:
     mime: str
     data: bytes
     stored_id: str | None = None
+    source_path: Path | None = None
 
     def metadata(self) -> dict:
         result = {"name": self.name, "mime": self.mime}
@@ -97,7 +104,7 @@ def checked(name: str, mime: str, data: bytes, *, max_bytes: int = MAX_FILE_BYTE
     return Attachment(name=name, mime=mime, data=data)
 
 
-def from_wire(items: Any) -> list[Attachment]:
+def from_wire(items: Any, resolve=None) -> list[Attachment]:
     """The attachments of a request as `agent.ask` received them (None or a list of `{name, mime,
     data}`, data in base64), or AttachmentError for the first thing wrong with them."""
     if items is None:
@@ -110,18 +117,26 @@ def from_wire(items: Any) -> list[Attachment]:
     for item in items:
         if not isinstance(item, dict):
             raise AttachmentError("data")
+        if item.get("stored_id") is not None:
+            if resolve is None:
+                raise AttachmentError("data")
+            result.append(resolve(item))
+            if sum(len(a.data) for a in result) > MAX_TOTAL_BYTES:
+                raise AttachmentError("size")
+            continue
         name, mime, data = item.get("name"), item.get("mime"), item.get("data")
         if not isinstance(name, str) or not isinstance(mime, str) or not isinstance(data, str):
             raise AttachmentError("data")
         # base64 of the largest file a request may carry, plus a little: anything longer is refused
         # before it is decoded.
-        if len(data) > (MAX_FILE_BYTES * 4) // 3 + 8:
+        # Legacy inline inputs stay bounded; larger files must use the chunked store.
+        if len(data) > (50 * 1024 * 1024 * 4) // 3 + 8:
             raise AttachmentError("size")
         try:
             raw = base64.b64decode(data, validate=True)
         except (binascii.Error, ValueError):
             raise AttachmentError("data") from None
-        result.append(checked(name, mime, raw))
+        result.append(checked(name, mime, raw, max_bytes=file_limit(mime)))
         if sum(len(a.data) for a in result) > MAX_TOTAL_BYTES:
             raise AttachmentError("size")
     return result

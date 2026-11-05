@@ -2,6 +2,7 @@
 import { fileKind } from "./attachments";
 import { t } from "./i18n";
 import { ico, toaster } from "./ui";
+import { attachmentSource } from "./api";
 
 type Loaded = { url: string; size: number };
 export function createAttachmentMedia(root: HTMLElement, read: (id: string) => Promise<{ mime: string; data: string }>) {
@@ -56,6 +57,12 @@ export function createAttachmentMedia(root: HTMLElement, read: (id: string) => P
     const generation = epoch;
     pending.add(id);
     try {
+      // The native asset protocol serves ranges from disk; videos never become a page Blob.
+      if (node instanceof HTMLVideoElement || node instanceof HTMLAudioElement || node.hasAttribute("data-stream-file")) {
+        const url = await attachmentSource(id);
+        if (generation === epoch) { loaded.set(id, { url, size: 0 }); apply(id, url); }
+        return;
+      }
       const file = await read(id);
       if (generation !== epoch || fileKind(file.mime) === "file" || file.data.length > 70_000_000) return;
       const binary = atob(file.data);

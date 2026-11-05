@@ -15,9 +15,17 @@ export interface VaultView {
 }
 export const emptyVaultView = (): VaultView => ({ entries: [], members: [], filter: "all", loaded: false, error: "", busy: false, editing: null, kind: null, access: "all", preview: null });
 const kinds: EntryKind[] = ["login", "contact", "card"];
-const privateFields: Record<EntryKind, string[]> = { login: ["username", "password"], contact: ["name", "address", "phone", "email"], card: ["name", "number", "expiry", "cvc"] };
-const word = (key: string): string => (t as (key: MessageKey) => string)(`vault.${key}` as MessageKey);
-const action = (name: string, label = name, kind = ""): string => btn(word(label), kind, ` data-vault="${name}"`);
+const privateFields = { login: ["username", "password"], contact: ["name", "address", "phone", "email"], card: ["name", "number", "expiry", "cvc"] } as const;
+const words = {
+  title: "vault.title", about: "vault.about", all: "vault.all", login: "vault.login", contact: "vault.contact", card: "vault.card",
+  new: "vault.new", empty: "vault.empty", label: "vault.label", hint: "vault.hint", site: "vault.site",
+  everyone: "vault.everyone", chosen: "vault.chosen", access: "vault.access", username: "vault.username", password: "vault.password",
+  name: "vault.name", address: "vault.address", phone: "vault.phone", email: "vault.email", number: "vault.number", expiry: "vault.expiry", cvc: "vault.cvc",
+  save: "vault.save", edit: "vault.edit", remove: "vault.remove", removeConfirm: "vault.removeConfirm", cancel: "vault.cancel",
+  import: "vault.import", preview: "vault.preview", previewAbout: "vault.previewAbout", error: "vault.error", cardNotice: "vault.cardNotice", busy: "vault.busy",
+} as const satisfies Record<string, MessageKey>;
+const word = (key: keyof typeof words): string => t(words[key]);
+const action = (name: keyof typeof words | "confirm", label: keyof typeof words = name === "confirm" ? "import" : name, kind = ""): string => btn(word(label), kind, ` data-vault="${name}"`);
 
 export function vaultHTML(v: VaultView): string {
   const access = (current: "all" | number[] = "all"): string => `<div class="vault-access"><span>${esc(word("access"))}</span>${sel([{ value: "all", label: word("everyone") }, { value: "chosen", label: word("chosen") }], v.access, word("access"), ' data-k="vault-access"')}</div>` +
@@ -36,7 +44,7 @@ export function vaultHTML(v: VaultView): string {
   return `<section class="vault" aria-label="${esc(word("title"))}"><div class="vault-heading"><h2>${esc(word("title"))}</h2><div class="vault-actions">${action("import")}${action("new")}</div></div>` +
     `<p class="dim">${esc(word("about"))}</p><input type="file" id="vault-file" accept=".csv,text/csv" hidden>` +
     (v.error ? `<p role="alert" class="notice">${esc(v.error)}</p>` : "") + (v.busy ? `<p role="status">${esc(word("busy"))}</p>` : "") + editor + preview +
-    tabs(["all", ...kinds].map(id => ({ id, label: word(id), count: v.entries.filter(e => id === "all" || e.kind === id).length, attrs: ` data-vault="filter" data-kind="${id}"` })), v.filter, { kind: "filter", label: word("title"), plain: true }) +
+    tabs((["all", ...kinds] as const).map(id => ({ id, label: word(id), count: v.entries.filter(e => id === "all" || e.kind === id).length, attrs: ` data-vault="filter" data-kind="${id}"` })), v.filter, { kind: "nav", label: word("title"), plain: true }) +
     `<div class="vault-list">${v.entries.filter(e => v.filter === "all" || e.kind === v.filter).map(e => `<div class="vault-row" data-vault-row="${esc(e.id)}"><div class="vault-copy"><strong>${esc(e.label)}</strong>` +
       (e.origin ? `<small>${esc(e.origin)}</small>` : "") + `<small>${esc(e.members === "all" ? word("everyone") : e.members.map(id => v.members.find(m => m.id === id)?.name ?? String(id)).join("、"))}</small>` +
       (e.hint ? `<p>${esc(e.hint)}</p>` : "") + `</div>${iconBtn("more", t("members.more", { p0: e.label }), ` data-vault="menu" data-id="${esc(e.id)}"`)}</div>`).join("") || `<p class="dim">${esc(v.loaded ? word("empty") : word("busy"))}</p>`}</div></section>`;

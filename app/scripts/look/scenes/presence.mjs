@@ -1,6 +1,8 @@
 import { scene, member, room, wait, hover, click, stableClick, check, type } from "./steps.mjs";
 
-const conversation = (name, description, variant = "clean", extra = []) => ({ ...scene(name, description, [member(1), wait('.tn[data-id="651"]'), ...extra, check(name)], { presence: variant }), motion: extra.some(step => step.action === "event-storm" && step.roster) });
+const conversation = (name, description, variant = "clean", extra = []) => ({ ...scene(name, description, [member(1), wait('.tn[data-id="651"]'),
+  ...(["event-routine-opens", "event-calendar-opens", "event-lines-collapse"].includes(name) ? [hover('[data-id="651"] .message-work'), click('[data-id="651"] .message-work'), wait('[data-id="651"] .work-body:not([hidden])')] : []),
+  ...extra, check(name)], { presence: variant }), motion: extra.some(step => step.action === "event-storm" && step.roster) });
 export default [
   scene("presence-states-sidebar", "Distinct silhouettes in the shared sidebar", [{action: "member-column", collapsed: false}, check("presence-states-sidebar")], {presence: "states"}),
   conversation("presence-hover-action", "The header hover updates below its avatar, inside the window", "hover", [hover('.mb-head .av'), {action: "main-event", event: {type: "MemberActivity", member_id: 1, state: "searching", label: "Comparing sample sources"}}]),
@@ -15,11 +17,11 @@ export default [
   conversation("transcript-action-list", "Completed work is a quiet list of sentences", "actions", [hover('[data-id="651"] [data-reply]'), stableClick('[data-id="651"] .message-work')]),
   conversation("transcript-old-list", "Old turns retain readable work and failure reasons", "old-actions", [hover('[data-id="651"] [data-reply]'), stableClick('[data-id="651"] .message-work')]),
   scene("group-live-line", "A group action sits below its working member", [room(1),wait('.au-room-thinking .live-action'),hover('.au-room-thinking .live-presence'),check("group-live-line")], {presence:"action-group"}),
-  conversation("transcript-time-gap", "Centred day and time mark thirty-minute gaps", "gap"),
-  conversation("event-routine-line", "A routine receipt stands in the timeline", "events"),
+  conversation("transcript-time-gap", "Hour gaps within one day add no separator", "gap"),
+  conversation("event-routine-line", "A routine receipt stays in collapsed reply detail", "events"),
   conversation("event-routine-find", "Conversation find visits the receipt title without exposing transport metadata", "events", [click('.mb-chat:not([hidden]) [data-act="search"]'), type('.mb-chat:not([hidden]) .ra-find-input', 'Sample briefing'), wait('[data-id="651"] .event-line mark')]),
   conversation("event-routine-find-group", "Find reveals a selected receipt inside its collapsed group and keeps it through refresh", "collapse", [click('.mb-chat:not([hidden]) [data-act="search"]'), type('.mb-chat:not([hidden]) .ra-find-input', 'Sample briefing'), wait('[data-event-group][open] .handoff-detail mark.is-current'), {action: "event-storm", selector: ".mb-chat:not([hidden]) .ra-scroll", roster: true, wheelBy: 0, measure: {name: "event-find-presence", enforce: false}, limits: {replacedFaces: 0, longTaskMs: 600}}]),
-  conversation("event-routine-spacing", "Event lines share even spacing beside bubbles, cards and other lines", "spacing"),
+  conversation("event-routine-spacing", "Receipts add no vertical gaps between replies or media cards", "spacing"),
   conversation("event-routine-opens", "The receipt opens the routine it names", "events", [click('[data-id="651"] [data-act="open-routine"]'), wait('.au-routine-dialog')]),
   conversation("event-calendar-line", "A calendar receipt keeps the event name and date", "calendar"),
   conversation("event-calendar-opens", "A calendar receipt opens that event's detail", "calendar", [click('[data-id="651"] [data-act="open-calendar-event"]'), wait('.au-pop-detail')]),

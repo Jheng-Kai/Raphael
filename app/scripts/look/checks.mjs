@@ -21,12 +21,54 @@ export function checkRendered(name, context = {}) {
     else if (name === 'vault-sharing') require(vault.querySelectorAll('[data-vault-member]').length >= 2 && vault.querySelector('#vault-label').value === '出差聯絡資料', 'sharing preserves form input');
     else {
       require(vault.querySelectorAll('.vault-row').length === 3 && vault.textContent.includes('出差用公司卡'), 'all kinds and hints appear');
+      require(vault.querySelector('.tabs.plain[role="tablist"]') && !vault.querySelector('.tabs.seg'), 'kind navigation shares plain tabs with Connections');
       for (const tab of vault.querySelectorAll('.tabs .tab')) {
-        const number = tab.querySelector('.n').getBoundingClientRect(), label = tab.querySelector('.tab-label').getBoundingClientRect();
+        const count = tab.querySelector('.n');
+        require(count, 'each kind has a visible count');
+        const range = document.createRange();
+        range.selectNodeContents(tab);
+        range.setEndBefore(count);
+        const number = count.getBoundingClientRect(), label = range.getBoundingClientRect();
         require(number.top < label.bottom && number.bottom > label.top, 'filter counts remain on the label line');
       }
     }
     return { check: name, passed: true };
+  }
+  if (name.startsWith("app-update-")) {
+    const section = document.querySelector("[data-updates]");
+    require(visible(section) && section.textContent.includes("1.1.0"), "new version is visible");
+    require(section.textContent.includes("改善更新安裝"), "release notes remain readable");
+    require(visible(section.querySelector('[data-act="update-install"]')), "a framed install action is visible");
+    if (name === "app-update-ready") require(section.textContent.includes("更新已驗證"), "verified state is explicit");
+    require(section.querySelector('[data-k="auto-update"]').getAttribute("aria-checked") === (name === "app-update-auto" ? "true" : "false"), "auto updates are opt-in");
+    return {check:name};
+  }
+  if (name === "app-memory-import" || name === "app-memory-result") {
+    const imported = document.querySelector("[data-memory-import]");
+    const owner = imported?.parentElement;
+    const shared = owner?.querySelector('[data-mem-space="shared"]');
+    require(owner?.querySelector("h2")?.textContent === "關於你" && shared && !!(shared.compareDocumentPosition(imported) & Node.DOCUMENT_POSITION_FOLLOWING), "memory import follows shared memory inside About you");
+    require(visible(document.querySelector("[data-import-prompt]")), "handover prompt is visible");
+    require(visible(document.querySelector("[data-import-answer]")), "owner answer field is visible");
+    for (const field of document.querySelectorAll(".memory-import textarea")) {
+      require(field.getBoundingClientRect().height >= 140, "memory import fields retain room for multiple lines");
+    }
+    if (name === "app-memory-result") {
+      const result = document.querySelector(".import-result");
+      require(visible(result) && result.textContent.includes("已保留 1 項") && result.textContent.includes("未加入 1 項"), "kept and refused items are listed");
+      require(!result.textContent.includes("synthetic123"), "refused secrets are not echoed");
+    }
+    return {check:name};
+  }
+  if (name === "app-attachment-count") {
+    require(document.querySelectorAll(".cmp-chip").length === 20, "exactly twenty files remain");
+    require(!document.querySelector(".cmp-file").textContent.includes("超過數量"), "the twenty-first file is refused");
+    return {check:name};
+  }
+  if (name === "app-attachment-size") {
+    require(document.querySelectorAll(".cmp-chip").length === 0, "oversized files never reach the tray");
+    require(!window.__look.calls.some(call => call.method === "attachments.upload"), "oversized files are refused before streaming");
+    return {check:name};
   }
   if (name.startsWith('routine-test-')) {
     if (name === 'routine-test-menu') {
@@ -85,6 +127,23 @@ export function checkRendered(name, context = {}) {
     require(window.__look.data.settings.routine_timezone === expected, 'the real settings action persists the zone choice');
     require(window.__look.calls.some(call=>call.method==='settings.set' && call.params.key==='routine_timezone' && call.params.value===expected), 'the existing settings boundary owns persistence');
     return {check:name};
+  }
+  if (name === 'calm-thread' || name === 'calm-thread-days') {
+    const thread = document.querySelector('.tn[data-id="8101"]').parentElement;
+    const days = thread.querySelectorAll('.day');
+    const extras = [...thread.querySelectorAll('.sys,.task-actions,.timeline-event,.event-group')].filter(node => !node.closest('.work-body') && !node.parentElement.closest('.sys,.task-actions,.timeline-event,.event-group'));
+    const count = {days:days.length, centredExtras:extras.length, verticalItems:days.length + extras.length + thread.querySelectorAll('.chat-message').length};
+    require(days.length === (name === 'calm-thread-days' ? 2 : 1), `one divider per day: ${JSON.stringify(count)}`);
+    require([...days].every(day => !/\d{2}:\d{2}/.test(day.textContent)), 'day dividers contain no clock');
+    require(extras.length === 0, `no centred extras: ${JSON.stringify(count)}`);
+    for (const id of [8101,8102]) {
+      const turn = thread.querySelector(`[data-id="${id}"]`), reply = turn.querySelector('[data-reply="true"]');
+      require(turn.textContent.split('Codex CLI 在回答完成前停止了。').length === 2, 'failure occurs once per turn');
+      require(reply?.querySelector('.message-actions .rerun'), 'rerun belongs to the failed reply action row');
+    }
+    require(thread.querySelector('[data-id="8101"] .chat-message .routine-run-link')?.textContent.includes('NHK Easy News'), 'routine name belongs to the reply');
+    require(getComputedStyle(thread.querySelector('[data-id="8102"] .message-actions:has(.rerun)')).opacity === '1', 'latest failed action is visible without hover');
+    return {check:name,...count};
   }
   if (name === 'computer-header-layout') {
     const header = document.querySelector('.mb-det-head');
@@ -431,26 +490,14 @@ export function checkRendered(name, context = {}) {
       require([...turn.querySelectorAll('.message-work')].every(button=>button.textContent === '' && button.dataset.tooltip.startsWith('查看過程')), 'process controls match adjacent icon buttons');
       require(body.lastElementChild.classList.contains('work-meta'), 'model and cost stay at the bottom');
     }
-    if (name === "transcript-time-gap") require(document.querySelectorAll('.tns > .day, .thread > .day, .ra-thread > .day').length === 2 || [...turn.parentElement.children].filter(line => line.classList.contains('day')).length === 2, "thirty-minute gaps have two centred separators");
+    if (name === "transcript-time-gap") require([...turn.parentElement.children].filter(line => line.classList.contains('day')).length === 1, "hour gaps within one day have one date separator");
     if (name === "event-routine-line") {
-      require(visible(turn.querySelector('.conversation-event-line [data-routine="2"]')) && !turn.querySelector('.work-body .turn-event'), "the routine is outside closed work");
-      const line = turn.querySelector('.timeline-event').getBoundingClientRect();
-      const before = turn.querySelector('.owner-message .bubble').getBoundingClientRect();
-      const after = turn.querySelector('.ra-body .chat-message .ans').getBoundingClientRect();
-      const above = line.top - before.bottom, below = after.top - line.bottom;
-      require(Math.abs(above - below) <= 1 && above >= 12, `event gaps are even (${above}px above, ${below}px below)`);
+      require(turn.querySelector('.work-body[hidden] [data-routine="2"]') && !visible(turn.querySelector('[data-routine="2"]')), "the routine receipt is in closed reply detail");
+      require(!turn.querySelector('.ra-body > .timeline-event'), "no separate event row interrupts the conversation");
     }
     if (name === "event-routine-spacing") {
-      const items = [...turn.querySelector('.ra-body').children].filter(node => node.matches('.timeline-event, [data-seq], .chat-message'));
-      const visual = node => node.matches('.timeline-event') ? node : node.querySelector('.ans, .media-card');
-      for (let i = 0; i < items.length; i++) {
-        if (!items[i].matches('.timeline-event')) continue;
-        const line = items[i].getBoundingClientRect();
-        const before = (i ? visual(items[i - 1]) : turn.querySelector('.owner-message .bubble')).getBoundingClientRect();
-        const after = visual(items[i + 1]).getBoundingClientRect();
-        const above = line.top - before.bottom, below = after.top - line.bottom;
-        require(Math.abs(above - 32) <= 1 && Math.abs(below - 32) <= 1, `bubble/card/line gaps stay even (${above}px above, ${below}px below)`);
-      }
+      require(!turn.querySelector('.ra-body > .timeline-event,.ra-body > .event-group'), 'receipts add no rows between replies and cards');
+      require(turn.querySelector('.work-body[hidden] .timeline-event'), 'the full receipt remains available in collapsed detail');
     }
     if (name === "event-routine-opens") require(visible(document.querySelector('.au-routine-dialog')) && document.querySelector('#au-title')?.value === window.__look.data.presenceSample.routine, "the named routine opens");
     if (name === "event-routine-find") {
@@ -458,13 +505,12 @@ export function checkRendered(name, context = {}) {
       require(!turn.textContent.includes('"type"') && !turn.textContent.includes('"created"'), "transport metadata stays out of thread selection");
     }
     if (name === "event-routine-find-group") require(turn.querySelector('[data-event-group]')?.open && visible(turn.querySelector('.handoff-detail mark.is-current')), "the selected receipt is visible in the retained open group");
-    if (name === "event-calendar-line") require(visible(turn.querySelector('[data-act="open-calendar-event"][data-event="1"][data-date="2026-10-24"]')), "the calendar receipt keeps its inspection target");
+    if (name === "event-calendar-line") require(turn.querySelector('.work-body[hidden] [data-act="open-calendar-event"][data-event="1"][data-date="2026-10-24"]'), "the collapsed calendar receipt keeps its inspection target");
     if (name === "event-calendar-opens") require(visible(document.querySelector('.au-pop-detail')) && document.querySelector('.au-pop-detail h2')?.textContent === window.__look.data.presenceSample.calendar, "the named calendar event detail opens");
     if (name === "event-lines-collapse") {
       const group = turn.querySelector('[data-event-group]');
       require(group?.open && turn.querySelectorAll('[data-event-group] [data-routine="2"]').length === 3, "every receipt stays in the open group");
-      const gap = group.nextElementSibling.querySelector('.ans').getBoundingClientRect().top - group.getBoundingClientRect().bottom;
-      require(Math.abs(gap - 32) <= 1, `an opened event group keeps the same 32px gap (${gap}px)`);
+      require(visible(group.closest('.work-body')) && !turn.querySelector('.ra-body > .event-group'), 'the opened receipt group stays in reply detail without adding a transcript row');
     }
     if (name === "sidebar-row-time") {
       const row = document.querySelector('.side [data-member="1"]');
@@ -662,7 +708,7 @@ export function checkRendered(name, context = {}) {
     const form = document.querySelector('.au-routine-dialog');
     if (name === 'moving-sentence') {
       const line = document.querySelector('button[data-act="open-routine"]');
-      require(visible(line) && line.querySelector('.routine-sentence strong') && line.querySelector('.routine-object'), 'a real button shares the trigger sentence');
+      require(visible(line) && line.closest('.chat-message .routine-origin') && line.textContent.trim(), 'the routine name is a real button inside its reply');
       return {check:name};
     }
     require(visible(form) && visible(form.querySelector('[data-dlg="trigger"]')), 'all triggers share the existing editor');
@@ -2698,13 +2744,12 @@ export function checkRendered(name, context = {}) {
     return { check: name, words: plainWords() };
   }
   if (name === "centred-system-events") {
-    const nodes = eventLines(3), lines = nodes.map(line => line.textContent);
+    const nodes = eventLines(1), lines = nodes.map(line => line.textContent);
     const historic = window.__look.data.turns.find(turn => turn.id === 1).messages.find(message => message.kind === 'event' && message.seq !== 99);
-    require(lines[0].includes("2 則訊息") && lines[1] === historic.text && lines[2] === "已開啟會議 產品方向討論", `exchanges and historical receipts retain their sequence: ${lines.join("|")}`);
+    const body = document.querySelector('.tn[data-id="1"] .work-body[hidden]');
+    require(lines[0].includes("2 則訊息") && body?.textContent.includes(historic.text) && body.textContent.includes("已開啟會議 產品方向討論"), 'only colleague exchanges stay outside collapsed work');
     const receipts = [...document.querySelectorAll('[data-handoff-group] [data-handoff] > summary')].map(line => line.textContent);
     require(receipts.join("|") === "已轉交給 小晴已完成|和 小森 討論執行中", "folded receipts retain their individual words and states");
-    const answer = document.querySelector('.tn[data-id="1"] .ra [data-reply] .ans').getBoundingClientRect();
-    require(nodes[1].getBoundingClientRect().bottom <= answer.top && nodes[2].getBoundingClientRect().top >= answer.bottom, "the historical receipt precedes the reply and the later meeting follows it");
     return { check: name, lines };
   }
   if (name.startsWith("handoff-group")) {

@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { attachmentSource } from "./api";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { createAttachmentMedia } from "./attachment-media";
 import { sentFileHTML } from "./attachments";
@@ -72,6 +73,8 @@ test("removed media are stopped when the timeline redraws", () => {
   expect(pause).toHaveBeenCalledTimes(1);
 });
 
+vi.mock("./api", () => ({ attachmentSource: vi.fn(async () => "asset:voice") }));
+
 test("lazy loading watches the visible audio pill rather than its hidden media element", async () => {
   let intersect!: IntersectionObserverCallback;
   const observe = vi.fn();
@@ -89,5 +92,6 @@ test("lazy loading watches the visible audio pill rather than its hidden media e
   expect(observe).toHaveBeenCalledWith(pill);
   intersect([{ isIntersecting: true, target: pill } as IntersectionObserverEntry], {} as IntersectionObserver);
   for (let i = 0; i < 10; i++) await Promise.resolve();
-  expect(root.querySelector("audio")!.src).toBe("blob:voice");
+  expect(root.querySelector("audio")!.src).toBe("asset:voice");
+  expect(attachmentSource).toHaveBeenCalled();
 });

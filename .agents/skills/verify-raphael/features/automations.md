@@ -1,5 +1,10 @@
 # Calendar and automations
 
+## Calm conversations (owner, 2026-11-05)
+
+See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) for R-UI-101/R-CLI-07 and the selected matrix. Routine origins now name the routine inside its reply, with the existing editor target. Failures appear once; rerun shares reply/copy actions. Public work receipts collapse into reply detail; calendars and owner cards retain their behavior. This supersedes older transcript trigger-chip and between-message receipt descriptions.
+
+
 ## Routine guard reasons (2026-11-05)
 
 R-ROUTINE-01/02 share admission across schedule, event and webhook execution.

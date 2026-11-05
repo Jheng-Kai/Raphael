@@ -1654,7 +1654,7 @@ class BackgroundService:
                     reply = {"status": "stopped", "kind": run.ceiling, "final": outcome.final}
                 if loop.failure:
                     legacy = {"rate_limit": "rate_limited", "usage_limit": "quota", "auth_expired": "login", "unknown": "error"}
-                    reply = {"status":"stopped", "kind":"failed", "detail":"cli_" + legacy.get(loop.failure, loop.failure), "final":outcome.final}
+                    reply = {"status":"stopped", "kind":"failed", "detail":"cli_" + legacy.get(loop.failure, loop.failure), "final":outcome.final, "diagnostic_detail":outcome.detail}
                 self._conclude_run(task, run, reply)
         except TimeoutError:
             self._conclude_run(task, run, {"status":"stopped", "kind":"limit_time"})
@@ -2319,7 +2319,7 @@ class BackgroundService:
         elif status == "stopped" and kind == "failed":
             detail = reply.get("detail")
             if str(detail).startswith("cli_"):  # the CLI loop's own words already say what happened
-                self._conclude(task, run, "failed", negative, reply.get("final") or phrase(language, "error"), None, detail)
+                self._conclude(task, run, "failed", negative, reply.get("final") or phrase(language, "error"), reply.get("diagnostic_detail"), detail)
                 return
             diagnostic = getattr(run, "model_failure", None)
             if detail == "tools":

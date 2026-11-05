@@ -27,8 +27,11 @@ it("finds Vault under Safety and escapes labels and hints while preserving filte
   expect(searchSettings("保管箱")[0].pane).toBe("safety");
   expect(root.innerHTML).toContain("&lt;Travel&gt;");
   expect(root.querySelectorAll(".vault-row")).toHaveLength(3);
+  expect(root.querySelector('.tabs.plain[role="tablist"]')).not.toBeNull();
+  expect(root.querySelector(".tabs.seg")).toBeNull();
   click(root, '[data-vault="filter"][data-kind="card"]');
   expect(root.querySelectorAll(".vault-row")).toHaveLength(1);
+  expect(root.querySelector('[data-kind="card"]')?.getAttribute("aria-selected")).toBe("true");
   expect(root.querySelector('[data-kind="login"] .n')?.textContent).toBe("1");
 });
 

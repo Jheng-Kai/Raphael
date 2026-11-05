@@ -537,6 +537,8 @@ export interface WireAttachment {
   name: string;
   mime: string;
   data: string;
+  stored_id?: string;
+  size?: number;
 }
 
 /** One thing Raphael did for a turn. Never what a tool was given or what it returned. */
@@ -758,6 +760,7 @@ export interface DeviceSettings {
   appearance: "system" | "light" | "dark";
   ui_language: "zh-TW" | "en" | "ja";
   autostart: boolean;
+  auto_update?: boolean;
   onboarded: boolean;
   /**
    * The apps Raphael may always operate on this PC (the 一律允許 answer of a question), by the

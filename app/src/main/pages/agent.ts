@@ -2,7 +2,7 @@ import { visibilityGate, windowVisible } from "../window-visibility";
 import { readDraftWords, writeDraftWords } from "../composer-drafts";
 import { cardDisclosureHTML, cardFailure, cardHTML, cardPromptText } from "../card";
 import { mountTaskResults } from "../task-result";
-import { patchThread } from "../thread-diff";
+import { patchThread, threadLineIdentity } from "../thread-diff";
 import { sameWire, ThreadRenderCache } from "../thread-render";
 import { mountTranscriptWindow, TranscriptWindow } from "../transcript-window";
 import { composioAction } from "../composio-result";
@@ -47,7 +47,7 @@ import { mountConversationFind } from "../conversation-find";
 import { confirmDelete } from "../member-dialogs";
 import { openRoutineDialog } from "../routine-dialog";
 import { createAttachmentMedia } from "../attachment-media";
-import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
+import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachmentLimit, readComposerFile, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
 import { closeMediaLightbox, openMediaLightbox } from "../media-lightbox";
 import { wholeLinks } from "../composer-links";
 import { mountSlashMenu } from "../slash-menu";
@@ -82,7 +82,7 @@ import { mountPendingQuestions } from "../pending-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
 import { memberAccent, ownerBubble } from "../owner-bubble";
 import { slimeColorOf } from "../slime";
-import { dayLabel, describeError, formatClock } from "../format";
+import { dayLabel, describeError } from "../format";
 import { loadingHTML } from "../loading";
 import {
   type TimelineState,
@@ -185,7 +185,7 @@ export const PDF_TYPE = "application/pdf";
 /** An empty accept list leaves the picker open to every file type. */
 export const PICKER_ACCEPT = "";
 export const attachmentType = fileMime;
-export const attachLimit = (_mime: string): number => FILE_MAX_BYTES;
+export const attachLimit = attachmentLimit;
 /** A file attached to the next question, with its tray identity and byte count. */
 export interface ComposerFile extends WireAttachment {
   id: number;
@@ -193,7 +193,7 @@ export interface ComposerFile extends WireAttachment {
 }
 
 /** The files as `agent.ask` takes them: name, type and bytes, nothing of the page's own. */
-export const wireAttachments = (files: readonly ComposerFile[]): WireAttachment[] => files.map(({ name, mime, data }) => ({ name, mime, data }));
+export const wireAttachments = (files: readonly ComposerFile[]): WireAttachment[] => files.map(({ name, mime, data, stored_id }) => ({ name, mime, data, ...(stored_id ? { stored_id } : {}) }));
 
 /** Whether a key press in the composer sends: Enter alone, never while an input method composes. */
 export const sendsOnEnter = (e: Pick<KeyboardEvent, "key" | "shiftKey" | "isComposing" | "keyCode">): boolean =>
@@ -785,7 +785,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     chip.innerHTML = draftFileHTML(file, `data-act="unattach-file" data-file="${file.id}"`);
     const thumb = chip.querySelector<HTMLImageElement>(".cmp-thumb");
     // A raster thumbnail from the draft's own bytes.
-    if (thumb) thumb.src = `data:${file.mime};base64,${file.data}`;
+    if (thumb) {
+      if (file.stored_id) void api.attachmentSource(file.stored_id).then(url => { if (thumb.isConnected) thumb.src = url; }).catch(() => {});
+      else thumb.src = `data:${file.mime};base64,${file.data}`;
+    }
     return chip;
   }
 
@@ -869,6 +872,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       turnWindow.focus(String(openingTarget), chronological.map(turn => String(turn.id))); openingWindowTarget = openingTarget;
     }
     const mounted = turnWindow.select(chronological, turn => String(turn.id), drawingFollows && !searching);
+    const latestFailedTurnId = [...chronological].reverse().find(turn => turn.status === "error" || turn.task && ["failed", "interrupted", "cancelled", "limit"].includes(turn.task.state))?.id;
     windowMount.sync();
     const out = threadItems(mounted, state.nowMs).map((item) =>
       item.kind === "day"
@@ -881,8 +885,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), shape.mentions, turnLook.query ?? "", details.has(turn.id),
             state.open.get(turn.id), state.thinkingOpen.get(turn.id), expanded, task !== undefined && state.stopping.has(task), task !== undefined && state.rerunning.has(task),
             state.workStartedAt.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
-            live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", turn.permissions?.some(card => shape.answerable?.(card.id))],
-            () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id }));
+            live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId],
+            () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId }));
         })(), turnId: item.turn.id },
     );
     renderedTurns.retain(new Set(out.map(line => line.key)));
@@ -895,7 +899,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     // What is on its way stands under the day its turn will have, so it does not move when the turn comes.
     const pendingAt = outgoing.find(belongs)?.sentAt ?? (hearingBelongs() ? hearing!.since : undefined);
     const lastAt = Math.max(0, ...turns.map(turn => turn.created_at_ms));
-    if (pendingAt !== undefined && pendingAt - lastAt >= 30 * 60 * 1000) out.push({ key: `time:pending:${pendingAt}`, html: dayHTML(`${dayLabel(pendingAt, state.nowMs)} ${formatClock(pendingAt)}`) });
+    if (pendingAt !== undefined && (!lastAt || new Date(pendingAt).toDateString() !== new Date(lastAt).toDateString())) out.push({ key: `time:pending:${pendingAt}`, html: dayHTML(dayLabel(pendingAt, state.nowMs)) });
     for (const sent of outgoing) if (belongs(sent)) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs, state.expandedMessages.has(`pending:${sent.requestId}:question`), !additions) });
     if (hearingBelongs()) out.push({ key: "hearing", html: pendingTurnHTML(null, VOICE, shape, [], { time: hearing!.since }, state.nowMs) });
     if (additions) out.push({ key: `presence:${memberId()}:${conversationId()}`, html: `<li class="tn tn-presence"><div class="ra"><div class="ra-body">${livePresenceHTML(shape, active ? latestProgress(active) : undefined, !active || active.status === "running" || isLive(active.task))}</div></div></li>` });
@@ -1370,17 +1374,17 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       return false;
     }
     if (refusal === "size") {
-      toaster.info(t("agent.attachTooBig", { p0: name, p1: FILE_MAX_BYTES / 1024 / 1024 }));
+      toaster.info(t("agent.attachTooBig", { p0: name, p1: attachmentLimit(mime) / 1024 / 1024 }));
       return true;
     }
     if (refusal === "total") {
       toaster.info(t("agent.attachTotal", { p0: TOTAL_MAX_BYTES / 1024 / 1024 }));
       return true;
     }
-    let data: string;
+    let attached: WireAttachment;
     try {
       if (refusal === "empty") throw new Error("empty");
-      data = base64Of(new Uint8Array(await file.arrayBuffer()));
+      attached = await readComposerFile(file, mime, () => epoch === attachmentEpoch);
     } catch {
       toaster.info(t("agent.attachUnreadable", { p0: name }));
       return true;
@@ -1391,7 +1395,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       toaster.info(t("agent.attachTooMany", { p0: ATTACH_MAX }));
       return false;
     }
-    files = [...files, { id: ++fileIds, name, mime, data, size: file.size }];
+    files = [...files, { ...attached, id: ++fileIds, name, mime, size: file.size }];
     const missing = missingFiles.findIndex(file => file.name === name && file.mime === mime);
     if (missing >= 0) missingFiles.splice(missing, 1);
     drawFile();
@@ -1505,6 +1509,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     records: () => turnWindow.before || turnWindow.after ? [...turns].sort((a,b) => a.created_at_ms-b.created_at_ms || a.id-b.id).map(turn => ({ key: `turn:${turn.id}`,
       texts: [turn.question, ...(turn.messages?.length ? turn.messages.filter(message => ["reply", "event"].includes(message.kind)).map(message => messagePlainText(message.text, true, composioAction(turn))) : [messagePlainText(turn.text, true, composioAction(turn))])] })) : undefined,
     reveal: key => { if (turnWindow.focus(key.replace(/^turn:/, ""))) render(); },
+    revealWork: id => {
+      state.thinkingOpen.set(id, true);
+      // Search opens this body in place; acknowledge that state without replacing its marks or face.
+      const line = lines().find(line => line.turnId === id), node = thread.querySelector(`.tn[data-id="${id}"]`);
+      if (line && node) drawnHTML.set(node, threadLineIdentity(line.html));
+    },
     changed: open => { searching = open; if (open) { pacing.flush(); render(); } }, load: async current => {
     const member = memberId(), conversation = conversationId();
     const gathered: AgentTurn[] = [];
@@ -1807,7 +1817,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   async function regenerate(control: HTMLElement): Promise<void> {
     const source = messageSource(control);
-    if (!source || look().regenerateTurnId !== source.turn.id) return;
+    const latest = look().regenerateTurnId;
+    if (!source || latest === undefined || latest !== source.turn.id && !(source.turn.status === "error" && control.classList.contains("rerun"))) return;
     const member = memberId(), turn = source.turn;
     const sentConversation = conversationId();
     const requestId = crypto.randomUUID();
@@ -1848,6 +1859,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     for (const file of turn.attachments ?? []) {
       if (file.id) {
         try {
+          if ((file.size ?? 0) > 4 * 1024 * 1024) {
+            const stored = await api.core<{ mime: string; size: number }>("attachments.info", { id: file.id });
+            draft.files.push({ id: ++fileIds, name: file.name, mime: stored.mime, data: "", stored_id: file.id, size: stored.size });
+            continue;
+          }
           const stored = await api.core<{ mime: string; data: string }>("attachments.get", { id: file.id });
           if (typeof stored.data !== "string" || typeof stored.mime !== "string") throw new Error("unavailable");
           const size = file.size ?? Math.floor(stored.data.length * 3 / 4) - (stored.data.endsWith("==") ? 2 : stored.data.endsWith("=") ? 1 : 0);
