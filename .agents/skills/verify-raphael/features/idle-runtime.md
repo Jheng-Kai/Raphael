@@ -53,7 +53,7 @@ Tauri cursor_position or inner_position. Non-Windows cursor fallback is retained
 Run the existing isolated fake-brain journeys, with one heavy job at a time:
 
 ```powershell
-npm.cmd run native -- hidden-window owner-round10 voice-conversation voice-keys locale-sweep delete-conversation
+npm.cmd run native -- hidden-window hidden-window-refused owner-round10 voice-conversation voice-keys locale-sweep delete-conversation
 ```
 
 owner-round10 covers learned hover/expiry, mouse pass-through, foreground
@@ -61,7 +61,7 @@ continuity, monitor positioning and Undo. voice-conversation and voice-keys cove
 worker/controller input, release, cancellation and dictation timing; debug native
 journeys omit registration on the owner's global keyboard, so a separately
 authorized physical-key hold/chord/swallow journey is still required. Check
-rapid show during pending suspend, long-hidden
+long-hidden
 history/activity catch-up, idle/active overlay memory target, hidden dictation and
 floating controls across negative origins and 100/125/150/200 percent DPI.
 Retain native logs, screenshots and channel/persistence evidence. These remaining
@@ -90,6 +90,15 @@ the ordinary native report. A control build retaining this harness but omitting
 main-window suspension must fail its counter assertion even with once-per-second
 hidden timer throttling. Native before/after evidence remains integrator-owned;
 offline native.test.mjs covers selection and rejects throttled counter samples.
+
+After both cycles, six rapid minimize-and-return trips (dwell 0 to 2.5 s, racing a
+pending suspension) must each leave a visible page that ticks within three seconds.
+hidden-window-refused repeats the journey while the debug-only
+RAPHAEL_TEST_NATIVE_POWER_REFUSE makes WebView2 refuse the normal-memory step with
+0x8007139F, the owner's frozen return of 2026-11-05: once one step was refused the
+old code never reached SetIsVisible, and Resume kept failing with the same error.
+The old code fails it at the first return; each step now runs on its own and both
+journeys pass (red run-F3lA4L, green run-VdelwA).
 
 The existing member-computer journey verifies the real stream, renewals, takeover,
 handback and reconnect, including click latency. It starts/stops Docker and needs
