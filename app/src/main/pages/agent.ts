@@ -1068,7 +1068,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function finishOpening(): void {
     if (!openingThread || !unreadCaptured || pending || needsUnreadHistory() || !visible || scroller.hidden || targetTurn !== undefined) return;
     openingThread = false;
-    openUnread(scroller);
+    // Opening at the first unread line is navigation: the first draw's follow must not pull it to the bottom.
+    releaseRichScroll(scroller);
+    if (!openUnread(scroller)) followRichScroll(scroller);
   }
   async function load(earlier: boolean, fromEvent = false): Promise<void> {
     if (earlier) return readPage(true);

@@ -169,6 +169,8 @@ test("a delayed initial roster still opens at news before the newest history pag
 });
 
 test.each([false, true])("opening unread content follows its length (long: %s)", async long => {
+  // Without an end observer the reading anchor decides following from the real scroll position.
+  vi.stubGlobal("IntersectionObserver", undefined);
   const roster = structuredClone(LIST);
   Object.assign(roster.members.find(m => m.id === 3)!, { unread: true, unread_from: 31 });
   api.membersList.mockResolvedValue(roster);
@@ -180,7 +182,15 @@ test.each([false, true])("opening unread content follows its length (long: %s)",
   });
   await pick(3);
   expect(scroller.scrollTop).toBe(long ? 176 : 1500);
-  rect.mockRestore(); agent.hide();
+  // A later draw keeps a long run at its line; a short run keeps following the bottom.
+  api.agentHistoryList.mockResolvedValue({ turns: [turn(32, { member_id: 3 }), ...THREADS[3]] });
+  send({ type: "AgentTurn", turn_id: 32, member_id: 3 });
+  await new Promise(resolve => setTimeout(resolve, 800)); await flush();
+  for (let frame = 0; frame < 3; frame++) await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  expect(document.querySelector('.tn[data-id="32"]')).not.toBeNull();
+  if (long) expect(scroller.scrollTop).toBe(176);
+  else expect(scroller.scrollTop).toBeGreaterThanOrEqual(1500);
+  rect.mockRestore(); agent.hide(); vi.unstubAllGlobals();
 });
 
 test("member drafts follow the composer owner through switching and page return", async () => {
