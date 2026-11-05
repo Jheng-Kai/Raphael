@@ -34,7 +34,7 @@ async def slack(plugins):
 async def test_reactions_persist_as_context_and_never_resolve_a_draft(office, client):
     client.decisions.append(decision('answer'))
     client.chats = [chat('Drafting.', ('slack_draft', {'to': 'C012345', 'body': 'Synthetic update.'})), finished()]
-    await typed(office.rig)
+    await typed(office.rig, "Draft a Slack reply")
     turn = await office.turn()
     card = turn['drafts'][0]
     from types import SimpleNamespace
@@ -70,7 +70,7 @@ async def test_slack_draft_edit_send_once_uses_existing_gate(office, client, sla
     office.drafts.register(office.rig.rpc)
     client.decisions.append(decision('answer'))
     client.chats = [chat('Drafting.', ('slack_draft', {'to':'C012345','body':'Synthetic update.'})), finished()]
-    await typed(office.rig)
+    await typed(office.rig, "Draft a Slack reply")
     card = (await office.turn())['drafts'][0]
     assert card['kind'] == 'slack' and card['from']['name'] == 'Slack' and slack == []
     with pytest.raises(RpcError):

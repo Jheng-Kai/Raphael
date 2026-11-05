@@ -131,6 +131,8 @@ async def inventory(servers=()):
                                  interactive=True, max_tier=Tier.T3)
         if snapshot.pool:
             snapshot.show(snapshot.pool.by_alias)
+        for name in snapshot.work:
+            snapshot.find(name)  # Inventory includes discoverable schemas, not just the default offer.
         api = snapshot.definitions
         # find_tools is registered even when a small fixture has no hidden tools.
         conditional = [] if any(d["function"]["name"] == "find_tools" for d in api) else [

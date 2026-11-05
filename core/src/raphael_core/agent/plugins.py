@@ -81,6 +81,7 @@ class PluginTool:
     schema: dict[str, Any]
     tier: Tier
     pinned: bool = False  # Core-owned tools stay together and do not consume the plugin cap.
+    deferred: bool = False  # Discover through find_tools instead of expanding every default offer.
 
 
 @dataclass
