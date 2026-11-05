@@ -591,6 +591,7 @@ export const en = {
   "usage.member": "Member",
   "usage.count": "Count",
   "usage.cost": "Cost",
+  "usage.subscription": "Subscription",
   "usage.share": "Share",
   "usage.more": "Show more",
   "usage.less": "Show less",

@@ -52,6 +52,15 @@ def test_a_call_that_cost_nothing_is_still_written_down(conn, spend):
     assert rows(conn) == [("agent", "m", 0.0, 0, 0)]
 
 
+@pytest.mark.parametrize('model', ['cli:codex:gpt-6.1-sol', '@provider:gpt-6.1-sol'])
+def test_effort_is_removed_from_new_spend_and_call_metadata(conn, spend, model):
+    ledger = Ledger(spend)
+    ledger.add(model=f'{model}?effort=xhigh', cost_usd=.1, prompt_tokens=10, completion_tokens=2)
+    assert rows(conn) == [('agent', model, .1, 10, 2)]
+    assert ledger.model == model
+    assert ledger.calls[0]['model'] == model
+
+
 @pytest.mark.parametrize("cost", [-1.0, float("nan"), float("inf")])
 def test_a_cost_the_spend_refuses_counts_as_nothing_and_is_logged_by_its_type(
     conn, spend, caplog, cost

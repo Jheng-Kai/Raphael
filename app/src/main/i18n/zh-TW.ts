@@ -590,6 +590,7 @@ export const zhTW = {
   "usage.member": "角色",
   "usage.count": "次數",
   "usage.cost": "花費",
+  "usage.subscription": "訂閱",
   "usage.share": "占比",
   "usage.more": "顯示更多",
   "usage.less": "顯示較少",

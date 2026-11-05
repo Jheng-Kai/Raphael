@@ -5,6 +5,27 @@ import type { RunAnalyticsApi, RunReport } from "./run-analytics-types";
 import { setLocale, t } from "./i18n";
 
 afterEach(() => document.body.replaceChildren());
+it("renders subscription tokens separately from the router price in every locale", async () => {
+  const report: RunReport = { range: "month", start_day: null, end_day: "2026-10-24",
+    summary: { duration_ms: 2000, cost_usd: .0019, tokens: 11932035, ai_steps: 2, tools: 0, errors: 0 },
+    bill: { cost_usd: .0019, purposes: [] }, fish_voice: false, total: 1,
+    groups: { member: [], day: [], provider: [], routine: [], model: [
+      { label: "@chatgpt:gpt-6.1-terra", tokens: 11932035, cost_usd: null, runs: 1 },
+      { label: "typesafe/jev-1.14", tokens: 0, cost_usd: .0019, runs: 1 },
+    ] } };
+  const api: RunAnalyticsApi = { usageRuns: vi.fn().mockResolvedValue(report), usageExport: vi.fn(),
+    saveUsageCsv: vi.fn(), usageAllowances: vi.fn().mockResolvedValue({ brains: [] }) };
+  const host = document.createElement("div"); document.body.append(host);
+  const view = mountRunAnalytics(host, api); await view.ready;
+  try {
+    for (const [locale, label] of [["zh-TW", "訂閱"], ["en", "Subscription"], ["ja", "サブスクリプション"]] as const) {
+      setLocale(locale);
+      const rows = host.querySelectorAll(".run-bars li");
+      expect(rows[0].querySelector("small")?.textContent).toBe(label);
+      expect(rows[1].querySelector("small")?.textContent).toContain("0.0019");
+    }
+  } finally { view.destroy(); setLocale("zh-TW"); }
+});
 it("separates the ledger bill from retained work and only shows applicable exclusions", async () => {
   setLocale("zh-TW");
   const summary = { duration_ms: 0, cost_usd: .01, tokens: 0, ai_steps: 0, tools: 0, errors: 0 };

@@ -502,6 +502,22 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.roomWrapup) data.messages.push(data.roomWrapupMessage);
   if (variant.roomMissingSource) data.messages[2].reply_reference = { message_id: 999, unavailable: true };
   if (variant.usageFishVoice) { data.settings.tts_enabled = true; data.settings.tts_service = "fish"; }
+  if (variant.usageSubscription) {
+    data.usage.total = 2;
+    Object.assign(data.usage.summary, { tokens: 11946235, cost_usd: .0019 });
+    for (const key of ["member", "day", "provider", "routine"]) {
+      data.usage.groups[key] = [{ ...data.usage.groups[key][0], tokens: 11946235, cost_usd: .0019, runs: 2 }];
+    }
+    data.usage.groups.model = [
+      { label: variant.usageSubscription.model, tokens: 11932035, cost_usd: null, runs: 1 },
+      { label: variant.usageSubscription.cli, tokens: 14200, cost_usd: null, runs: 1 },
+      { label: variant.usageSubscription.router, tokens: 0, cost_usd: .0019, runs: 1 },
+    ];
+  }
+  if (variant.usageMemberSubscription) {
+    data.analytics.members = [{ id: 0, name: "Raphael", role: "", deleted: false, turns: 2, cost_usd: 0, share: 0,
+      models: [{ model: variant.usageMemberSubscription, turns: 2, cost_usd: null }] }];
+  }
   if (variant.usageEmpty) {
     data.spendRows = [];
     data.status.spend.month_usd = 0;
