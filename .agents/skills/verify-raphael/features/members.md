@@ -655,7 +655,8 @@ Each package is bounded to 32 MiB/2000 files; linked packages are refused.
 Source paths and plugin attribution remain visible. A changed source offers
 Re-import, retaining skill identity and individual member choices.
 
-Discovery opens only bounded SKILL.md documents. Package fingerprints use relative
+Single-skill discovery opens only bounded SKILL.md documents; plugin-set discovery
+also opens bounded plugin manifests. Package fingerprints use relative
 file paths, sizes and nanosecond mtimes, without reading scripts/references/assets.
 Discovery stops below a skill folder, skips node_modules/dot-folders, and shares a
 20,000-entry budget across all roots and metadata walks, with depth at most 12.
@@ -675,7 +676,7 @@ test_discovery_walk_is_bounded in core/tests/members/test_skill_library.py.
 
 The existing member_skills table stores library entries with internal member -1;
 SkillHomes maps them to shared/skills. The existing owner RPCs select that scope
-with shared:true and a real member_id, never a negative public ID. Migration 60
+with shared:true and a real member_id, never a negative public ID. Migration 61
 adds individual member_skill_grants; absence means enabled, subject to the
 library's global switch. A member can toggle shared access; shared documents are
 edited/deleted in the library only. Own skill edits/undo never include inherited
@@ -789,3 +790,56 @@ Compare the shared draft switch in both details panes with the existing profile 
 ```powershell
 npm run look -- speaker-draft-chief speaker-draft-member speaker-draft-profile --theme both --width 1120,720,1920x1080
 ```
+
+
+## Plugin sets and GitHub marketplaces (2026-11-04)
+
+R-SKILL-06/07 extend the shared library without another settings page. In the existing
+import dialog a local plugin shows one name/version/count row and one import; its
+disclosure still permits individual skill imports. Add a GitHub owner/repo to read
+its marketplace catalog, inspect plugin versions and unsupported-source reasons,
+then install a selected plugin. Refresh explicitly checks newer versions. Installed
+sets group their shared skills and slash commands, retain individual member grants,
+and offer one whole-set reimport. The existing confirmation precedes set removal.
+Set details state that hooks, agents and other plugin features are not run and offer
+one existing add-MCP card per declared server. Clicking that card opens the existing
+custom MCP form; importing or viewing a set never adds/tests a server. Secret values
+are absent and must be supplied through existing setup. Set components are read-only
+in their document dialog; grant switches remain editable for every member.
+
+Migration 62 preserves rooms 60 and shared grants 61. Stable component paths retain
+IDs and grants across updates; removal clears all set components and grants. API and
+CLI delivery use the existing skill store/skill_read/native skills rather than plugin
+execution. Synthetic HTTP tests check commit pinning, version agreement, byte/file
+bounds, link/traversal refusal and unsupported sources. Fake CLI tests cover assigned
+skills/commands only, disabled hooks and no automatic shell expansion. They do not
+prove an installed CLI or live GitHub behavior.
+
+npm run look -- connected-apps-skills skill-private-detail raphael-skills details-skills details-commands completion-slash completion-plugin completion-clash slash-commands local-command-consent local-command-background skills-installed-sources skills-import-shared skills-member-grants skills-source-changed skills-plugin-entry skills-marketplace skills-plugin-set skills-plugin-update skills-plugin-details --theme both --width 1120,720,1920x1080
+
+New scene checks cover one plugin import, individual import disclosure, market version
+and unsupported-source copy, exactly three grouped fixture capabilities, one whole-set
+update offer, one existing MCP card per server and zero connection side effects.
+Inspect every contact sheet and all six full-size images per new scene. Compare
+row/import/update buttons to existing skill-source scenes and MCP cards to their
+shared component; record any omissions. Judge uses this same selected run, with
+missing references reported as blocked and no unapproved network requests.
+
+Run core/tests/members/test_skill_plugins.py, test_skill_library.py,
+core/tests/brain/test_db.py and core/tests/agent/test_cli_skill_packages.py plus the
+changed frontend files: connection-skills.test.ts, skill-sets.test.ts,
+connections.test.ts, mcp-proposal.test.ts, i18n/i18n.test.ts and look/mock-ipc.test.mjs.
+Follow-up 5 additionally requires one frontend verify and one final complete core
+suite, each after wait-heavy.ps1. R-SKILL-05 named evidence above remains in force.
+## Localized skill origins (2026-11-05)
+
+R-SKILL-08 shares skillOriginLabel across member details, Connections rows and skill
+dialogs; discovery uses the same source formatter. Learned rows have exactly one
+localized origin/date line. No origin text or title exposes learned/owner/imported,
+local:/github:/plugin: prefixes or plugin cache paths. The source fixture includes a
+GitHub transport prefix. The growing-skills check asserts the learned line exactly;
+the shared source guard checks source labels and row paragraphs, including titles.
+Run the twenty-scene skill matrix above in both themes and all three sizes, inspect
+every contact sheet and relevant full-size member/detail/source views. Unit evidence
+is connection-skills.test.ts and the three localized learned-origin cases in
+member-profile.test.ts. This presentation change adds no migration or RPC.

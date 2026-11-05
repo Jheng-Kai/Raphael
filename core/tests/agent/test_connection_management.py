@@ -10,11 +10,15 @@ from raphael_core.connectors.secret_cards import SecretCards
 
 
 @pytest.fixture
-async def wired_connections(conn, plugins, make_rig):
+async def wired_connections(conn, plugins, make_rig, tmp_path):
     background = BackgroundRig(conn, plugins)
     keys = SecretCards(conn, plugins.hub)
-    agent = make_rig(background=background.service, plugins=plugins.hub, gate=background.gate, secret_cards=keys)
+    from raphael_core.members.service import MembersService
+    team = MembersService(conn, tmp_path, background=background.service)
+    agent = make_rig(background=background.service, plugins=plugins.hub, gate=background.gate, secret_cards=keys, team=team)
+    team.register(agent.rpc)
     agent.settings.set("worker_cost_cap_usd", 1.0)
+    background.service.use_team(team, agent.service.team_tool)
     background.service.use_owner_tools(agent.service.background_owner_tool)
     yield agent, background
     await background.close()
@@ -32,24 +36,25 @@ async def test_disconnect_waits_in_private_chat_until_the_owner_says_yes(wired_c
 
 
 @pytest.mark.parametrize("mode", ["ask", "bypass"])
-async def test_background_connection_change_uses_the_same_approval_and_current_offers(wired_connections, plugins, mode):
+@pytest.mark.parametrize("tool,args", [
+    ("manage_connection", {"connection": "Notes", "operation": "disable"}),
+    ("add_mcp_server", {"name": "Sample", "transport": "http", "url": "https://example.invalid/mcp"}),
+])
+async def test_background_cannot_manage_connections_or_propose_mcp(wired_connections, plugins, mode, tool, args):
     agent, background = wired_connections
-    server = await plugins.connect(look="T1")
+    await plugins.connect(look="T1")
     agent.settings.set("action_mode", mode)
-    background.client.replies = [turn("Disable.", [call("manage_connection", {"connection": server, "operation": "disable"})]), report("Disabled.")]
-    identifier = background.submit("Turn off sample")
-    origin = agent.history.add(session_id="sample-background", question="Turn off sample", route="delegate", prefix="", text="", status="running", source="app",
+    background.client.replies = [turn("Try management.", [call(tool, args)]), report("Unavailable.")]
+    identifier = background.submit("Change connections")
+    origin = agent.history.add(session_id="sample-background", question="Change connections", route="delegate", prefix="", text="", status="running", source="app",
         conversation_id=agent.service.conversations.main())
     background.service.attach_turn(identifier, origin)
-    await until(lambda: background.task(identifier).state in ("waiting", "done", "failed"))
-    if mode == "ask":
-        assert background.task(identifier).state == "waiting" and plugins.hub.offered()
-        [question] = background.service.waiting_questions()
-        background.service.answer(identifier, question["id"], True)
     await until(lambda: background.task(identifier).state in ("done", "failed"))
     assert background.task(identifier).state == "done"
-    assert not plugins.hub.offered()
-    assert "Notes__look" not in {item["function"]["name"] for item in background.client.chat_calls[-1]["tools"]}
+    assert plugins.hub.offered()
+    assert not background.service.waiting_questions()
+    for request in background.client.chat_calls:
+        assert not {"manage_connection", "add_mcp_server"} & {item["function"]["name"] for item in request["tools"]}
 
 
 async def test_cli_lists_and_calls_use_current_grants(wired_connections, plugins, tmp_path, monkeypatch):
@@ -87,72 +92,55 @@ async def test_cli_lists_and_calls_use_current_grants(wired_connections, plugins
         yield Event("final", "Sample read.")
 
     monkeypatch.setattr(Driver, "run", run)
-    assert (await typed(agent, "Manage sample and read"))["status"] == "done"
+    assert (await typed(agent, "Manage sample connection and read"))["status"] == "done"
     assert attempts == [0, 1, 2]
 
 
-async def test_background_cli_refreshes_and_reloads_after_connection_changes(wired_connections, plugins, monkeypatch):
+async def test_background_cli_observes_owner_connection_changes_without_management_tools(wired_connections, plugins, monkeypatch):
     from raphael_core.agent.cli.loop import CliLoop
     from raphael_core.worker.loop import Outcome
 
     agent, background = wired_connections
     server = await plugins.connect(look="T1")
-    agent.settings.set("action_mode", "bypass")
     background.service.use_cli(object())
     async def work(loop):
         names = lambda: {item["function"]["name"] for item in loop.tools}
         assert "Notes__look" in names()
-        assert (await loop._tool("disable", "manage_connection", {"connection": server, "operation": "disable"})).ok
-        assert "Notes__look" not in names() and loop.catalog_changed
-        loop.catalog_changed = False
+        assert not {"manage_connection", "add_mcp_server"} & names()
+        # The owner changes the service externally while this worker is running.
+        await plugins.hub._set_enabled({"id": server, "enabled": False})
         stale = await loop._tool("stale", "Notes__look", {"topic": "sample"})
-        assert not stale.ok and "no longer enabled or connected" in stale.content
-        assert (await loop._tool("enable", "manage_connection", {"connection": server, "operation": "enable"})).ok
-        assert "Notes__look" in names() and loop.catalog_changed
-        loop._queue.put_nowait(Outcome("done", final="Sample done."))
+        assert not stale.ok
+        loop._queue.put_nowait(Outcome("done", final="Owner disabled sample."))
     monkeypatch.setattr(CliLoop, "_work", work)
-    identifier = background.submit("Manage sample", model="cli:codex:test")
-    origin = agent.history.add(session_id="cli-background", question="Manage sample", route="delegate", prefix="", text="", status="running", source="app", conversation_id=agent.service.conversations.main())
+    identifier = background.submit("Read sample", model="cli:codex:test")
+    origin = agent.history.add(session_id="cli-background", question="Read sample", route="delegate", prefix="", text="", status="running", source="app", conversation_id=agent.service.conversations.main())
     background.service.attach_turn(identifier, origin)
     await until(lambda: background.task(identifier).state in ("done", "failed"))
     assert background.task(identifier).state == "done"
 
 
-@pytest.mark.parametrize("mode", ["ask", "bypass"])
-async def test_background_mcp_secret_then_test_enable_resumes_the_same_task(wired_connections, plugins, mode):
-    from background.conftest import fake_server
+@pytest.mark.parametrize("mode", ["ask", "plan", "direct", "bypass"])
+@pytest.mark.parametrize("approved", [False, True])
+async def test_background_own_routine_delete_always_waits_and_names_the_routine(wired_connections, mode, approved):
     agent, background = wired_connections
     agent.settings.set("action_mode", mode)
-    plugins.servers.by_name["Sample"] = fake_server.build()
-    fields = {"name": "Sample", "transport": "http", "url": "https://example.invalid/mcp", "headers": ["Authorization"]}
-    async def after(**kwargs):
-        assert "Sample__look" in {item["function"]["name"] for item in kwargs["tools"]}
-        assert "sample-private-value" not in str(kwargs)
-        return report("Connected.")
-    background.client.replies = [turn("Connect.", [call("add_mcp_server", fields)]), after]
-    identifier = background.submit("Connect Sample and continue")
-    origin = agent.history.add(session_id="mcp-background", question="Connect Sample and continue", route="delegate", prefix="", text="", status="running", source="app", conversation_id=agent.service.conversations.main())
+    routine = (await agent.call("routines.create", {"member_id": 0, "title": "Morning report", "prompt": "Read the report",
+                                                  "schedule": {"kind": "daily", "time": "09:00"}}))["routine"]
+    background.client.replies = [turn("Delete my routine.", [call("routine_delete", {"id": routine["id"]})]), report("Finished.")]
+    identifier = background.submit("Delete Morning report")
+    origin = agent.history.add(session_id="routine-background", question="Delete Morning report", route="delegate", prefix="", text="", status="running", source="app",
+        conversation_id=agent.service.conversations.main())
     background.service.attach_turn(identifier, origin)
     await until(lambda: background.task(identifier).state in ("waiting", "done", "failed"))
     assert background.task(identifier).state == "waiting"
-    keys = agent.service._secret_cards
-    [secret] = keys.cards_of(origin)
-    await keys._save({"id": secret.id, "value": "sample-private-value"})
-    await keys.idle()
-    proposals = agent.service._connection_proposals
-    if mode == "ask":
-        [card] = proposals.views([origin])[origin]
-        assert card["state"] == "draft" and not plugins.hub.offered()
-        await proposals.act({"id": card["id"], "revision": 1, "operation": "test"})
-        await proposals.act({"id": card["id"], "revision": 1, "operation": "enable"})
-        if proposals._tasks:
-            import asyncio
-            await asyncio.gather(*list(proposals._tasks))
+    [question] = background.service.waiting_questions()
+    assert question["tier"] == "T3" and "Morning report" in question["text"]
+    assert agent.service._team.store.routine(routine["id"])
+    background.service.answer(identifier, question["id"], approved)
     await until(lambda: background.task(identifier).state in ("done", "failed"))
     assert background.task(identifier).state == "done"
-    calls = len(agent.client.chat_calls)
-    await agent.service.resume_turn(origin)
-    assert len(agent.client.chat_calls) == calls
+    assert bool(agent.service._team.store.routine(routine["id"])) != approved
 
 
 @pytest.mark.parametrize("operation", ["disable", "enable", "tool_disable", "tool_enable", "disconnect"])
@@ -165,9 +153,17 @@ async def test_managed_app_changes_use_the_existing_connector_policy(make_rig, c
         await managed.set_tools({"id": entry.id, "enabled": False})
     if operation == "tool_enable":
         await managed.set_tools({"id": entry.id, "disabled_tools": ["GMAIL_FETCH_EMAILS"]})
-    rig = make_rig(plugins=hub, secret_cards=SecretCards(conn, hub))
+    from raphael_core.members.service import MembersService
+    from members.conftest import FakeBackground
+    team = MembersService(conn, tmp_path, background=FakeBackground(conn))
+    rig = make_rig(plugins=hub, secret_cards=SecretCards(conn, hub), team=team)
+    team.register(rig.rpc)
     rig.settings.set("action_mode", "bypass")
     client.chats = [chat("Change.", ("manage_connection", {"connection": entry.id, "operation": operation, "tool": "GMAIL_FETCH_EMAILS"})), chat("Changed.")]
-    assert (await typed(rig, "Change sample app access"))["text"] == "Changed."
+    asked = await typed(rig, "Change sample app access")
+    if operation == "disconnect":
+        assert asked["status"] == "confirm" and entry.id in asked["confirm"]["text"]
+        asked = await rig.confirm(asked["confirm"]["id"])
+    assert asked["text"] == "Changed."
     allowed = managed.allow_call(COMPOSIO_SERVER, META_EXECUTE, {"tools": [{"tool_slug": "GMAIL_FETCH_EMAILS", "arguments": {}}]}, "auto")
     assert allowed == (operation in ("enable", "tool_enable"))

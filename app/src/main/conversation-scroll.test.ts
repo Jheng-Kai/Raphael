@@ -18,6 +18,7 @@ test("scrolling up exposes latest, incoming messages preserve position, and late
   });
   Object.defineProperty(scroller, "scrollTo", { value: scrollTo });
   vi.stubGlobal("matchMedia", () => ({ matches: false }));
+  vi.stubGlobal("IntersectionObserver", undefined);
   mountConversationScroll(scroller);
   const latest = document.querySelector<HTMLButtonElement>(".conversation-latest")!;
   expect(latest.hidden).toBe(true);
@@ -39,15 +40,25 @@ test("scrolling up exposes latest, incoming messages preserve position, and late
 });
 
 
-test("a burst of scroll events measures the latest affordance once per frame", () => {
+test("observer-driven latest visibility never measures container heights on content mutations", async () => {
   document.body.innerHTML = '<div><div class="ra-scroll"><ol></ol></div></div>';
-  const scroller = document.querySelector<HTMLElement>(".ra-scroll")!;
-  const frames: FrameRequestCallback[] = [];
-  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
-  vi.stubGlobal("matchMedia", () => ({ matches: false }));
+  const scroller = document.querySelector<HTMLElement>('.ra-scroll')!;
+  let update!: IntersectionObserverCallback;
+  vi.stubGlobal('IntersectionObserver', class {
+    constructor(callback: IntersectionObserverCallback) { update = callback; }
+    observe = vi.fn();
+  });
+  Object.defineProperty(scroller, 'scrollHeight', { get: () => { throw new Error('Unexpected container height read'); } });
   mountConversationScroll(scroller);
-  const measure = vi.spyOn(scroller, "getBoundingClientRect");
-  for (let i = 0; i < 20; i++) scroller.dispatchEvent(new Event("scroll"));
-  expect(frames).toHaveLength(1); expect(measure).not.toHaveBeenCalled();
-  frames.shift()!(0); expect(measure).toHaveBeenCalledTimes(1);
+  const latest = document.querySelector<HTMLButtonElement>('.conversation-latest')!;
+  const geometry = vi.spyOn(scroller, 'getBoundingClientRect');
+  update([{isIntersecting:false} as IntersectionObserverEntry], {} as IntersectionObserver);
+  expect(latest.hidden).toBe(false);
+  for (let index = 0; index < 20; index++) scroller.querySelector('ol')!.append(document.createElement('li'));
+  await new Promise(requestAnimationFrame);
+  expect(geometry).not.toHaveBeenCalled();
+  update([{isIntersecting:true} as IntersectionObserverEntry], {} as IntersectionObserver);
+  expect(latest.hidden).toBe(true);
+  scroller.dataset.windowLater = '20';
+  await vi.waitFor(() => expect(latest.hidden).toBe(false));
 });

@@ -2,6 +2,159 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === 'computer-header-layout') {
+    const header = document.querySelector('.mb-det-head');
+    require(visible(header), 'the member panel header is visible');
+    const selectors = ['.computer-lifecycle-state', '[data-computer-location]', '[data-computer-menu]', '[data-det="gear"]', '[data-det="close"]'];
+    const nodes = selectors.map(selector => header.querySelector(selector)).filter(node => visible(node) && (node.matches('button') || node.textContent.trim()));
+    require(nodes.length >= 4, 'location, overflow, gear and close remain available');
+    const bounds = header.getBoundingClientRect(), boxes = nodes.map(node => node.getBoundingClientRect());
+    for (let i = 0; i < boxes.length; i++) {
+      const box = boxes[i];
+      require(box.left >= bounds.left - 1 && box.right <= bounds.right + 1, 'every header control stays inside the panel');
+      if (!i) continue;
+      require(!!(nodes[i - 1].compareDocumentPosition(nodes[i]) & Node.DOCUMENT_POSITION_FOLLOWING), 'header order is state, location, overflow, gear, close');
+      const before = boxes[i - 1];
+      require(box.top >= before.bottom - 1 || box.left >= before.right - 1, 'header controls retain reading order without overlap');
+    }
+    return {check:name, controls:nodes.map(node => node.getAttribute('data-det') || node.className || node.textContent)};
+  }
+  if (name.startsWith('computer-maintenance-')) {
+    const calls = window.__look.calls.filter(call => call.method === 'computer.lifecycle');
+    if (name === 'computer-maintenance-menu') {
+      const menu = document.querySelector('.menu');
+      require(visible(menu) && menu.querySelectorAll('.mdesc').length === 6, 'each maintenance action explains preservation and removal');
+      require([...menu.querySelectorAll('.mt')].slice(0,5).map(node=>node.textContent).join('/') === '稍候/重新啟動/更新/修復/重設', 'escalation order is fixed');
+      require(!calls.length, 'opening the menu has no maintenance effect');
+    } else if (name === 'computer-maintenance-reset') {
+      require(visible(document.querySelector('.mb-confirm')) && document.querySelector('.mb-confirm').textContent.includes('成員共用'), 'reset names shared scope in the shared confirmation');
+      require(!calls.length, 'reset has not been sent before yes');
+    } else {
+      const action = name === 'computer-maintenance-reset-done' ? 'reset' : name.split('-').at(-1);
+      require(calls.length === 1 && calls[0].params.action === action && calls[0].params.target === 'synthetic-member' && calls[0].params.host === '', 'one action pins the captured computer');
+      require(action !== 'reset' || calls[0].params.confirmed === true, 'reset carries explicit confirmation');
+    }
+    return {check:name};
+  }
+  if (name === 'computer-sleep-menu') {
+    require([...document.querySelectorAll('.menu [data-value]')].map(node=>node.dataset.value).join(',') === '5,15,60,0', 'all four idle choices use the shared dropdown');
+    return {check:name};
+  }
+  if (name.startsWith('computer-state-')) {
+    const phase = name.slice('computer-state-'.length), status = document.querySelector('.computer-lifecycle-state');
+    const words = {sleeping:'電腦在休眠',waking:'正在喚醒',updating:'正在更新',repairing:'正在修復'};
+    require(visible(status) && status.textContent.includes(words[phase]), 'the header names the computer state');
+    require(status.querySelector(`svg.slime[data-state="${phase === 'sleeping' ? 'sleeping' : 'working'}"]`), 'the existing body state conveys sleeping or waking');
+    return {check:name};
+  }
+  if (name === 'computer-low-disk') {
+    const message = document.querySelector('.chat-message[data-reply="true"]');
+    const text = message?.textContent ?? '';
+    require(text.includes('downloads (200 MiB)') && text.includes('刪除前會先徵求你的同意'), 'conversation names largest folders and asks before deleting');
+    require(visible(message) && message.scrollWidth <= message.clientWidth + 1, 'the full disk question wraps in a normal member message');
+    require(!window.__look.calls.some(call => call.method === 'computer.lifecycle'), 'the disk warning performs no maintenance or deletion');
+    return {check:name};
+  }
+  if (name === 'desktop-host-repair') {
+    const repair = document.querySelector('[data-computer-host-repair]'), code = repair.querySelector('.message-code'), button = code.querySelector('[data-act="copy-code"]');
+    const bounds = code.getBoundingClientRect(), dialog = repair.closest('[role="dialog"]').getBoundingClientRect();
+    require(bounds.top >= dialog.top && bounds.bottom <= dialog.bottom && bounds.left >= dialog.left && bounds.right <= dialog.right, 'the entire command is readable after scrolling');
+    require(code.querySelector('pre').scrollWidth <= code.clientWidth + 1, 'the command wraps at narrow widths');
+    require(button.getAttribute('aria-label') === '已複製', 'the shared copy action completes inside Settings');
+    return {check:name};
+  }
+  if (name === 'desktop-host-health') {
+    const note = document.querySelector('[data-computer-host-health]');
+    require(visible(note) && note.textContent.includes('正常'), 'each check has its own clear state');
+    const repair = document.querySelector('[data-computer-host-repair]');
+    require(visible(repair) && repair.textContent.includes('終端機') && repair.querySelector('code')?.textContent.includes('~/.zshenv'), 'host health says where to run the exact repair command');
+    require(visible(repair.querySelector('[data-act="copy-code"]')), 'repair command uses the shared copy control');
+    require(window.__look.calls.some(call => call.method === 'computer.viewer_status' && call.params.check_host && call.params.alias === 'studio-mini'), 'checks the selected alias through the existing owner RPC');
+    return {check:name};
+  }
+  if (name === 'delete-member-computer') {
+    const checkbox = document.querySelector('[data-remove-computer]');
+    require(visible(checkbox) && checkbox.matches('.tg[role="switch"][aria-checked="false"]'), 'computer cleanup uses the shared switch and defaults to unchecked');
+    require(checkbox.closest('.row').textContent.includes('小晴的電腦'), 'deletion names the member computer');
+    require(!window.__look.calls.some(call => call.method === 'members.delete'), 'showing the option performs no deletion');
+    return {check:name};
+  }
+  if (name === 'desktop-stream') {
+    const frame = document.querySelector('iframe[data-desktop-stream]');
+    require(visible(frame) && frame.contentDocument?.defaultView.__desktopConnections === 1, 'the existing viewer is connected before enlargement');
+    window.__look.desktopStream = { frame, document: frame.contentDocument, opens: window.__look.calls.filter(call => call.method === 'computer.viewer_open').length, closes: window.__look.calls.filter(call => call.method === 'computer.viewer_close').length };
+    return {check:name};
+  }
+  if (name === 'desktop-watch' || name === 'desktop-watch-collapse') {
+    const panel = document.querySelector('.desktop-panel'), calls = window.__look.calls;
+    require(!calls.some(call => call.method === 'computer.viewer_control'), 'watching never changes owner control');
+    if (name === 'desktop-watch-collapse') {
+      require(!panel.hasAttribute('data-expanded'), 'Esc returns to conversation');
+      const before = window.__look.desktopStream, frame = document.querySelector('iframe[data-desktop-stream]');
+      require(before && calls.filter(call => call.method === 'computer.viewer_open').length === before.opens && calls.filter(call => call.method === 'computer.viewer_close').length === before.closes && frame === before.frame && frame.contentDocument === before.document, 'collapse keeps the same stream without opening, closing or reloading');
+    } else {
+      require(document.documentElement.hasAttribute('data-desktop-watch'), 'watch mode is enlarged');
+      const bounds = panel.getBoundingClientRect();
+      const sidebar = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width'));
+      require(Math.abs(bounds.right - innerWidth) <= 2 && Math.abs(bounds.left - sidebar) <= 2, 'watch fills the area beside the sidebar');
+      require(visible(panel.querySelector('[data-desktop="collapse"]')), 'collapse remains available');
+      require(innerWidth >= 860 || getComputedStyle(document.querySelector('#nav')).visibility === 'hidden', 'off-canvas navigation stays hidden at narrow widths');
+      if (name === 'desktop-watch' && window.__look.data.desktop.works?.some(work => work.state === 'running')) {
+        require(visible(panel.querySelector('.desktop-live')) && panel.querySelector('.desktop-live').textContent.trim(), 'the current action remains visible');
+        const stop = panel.querySelector('[data-desktop="stop"]');
+        require(visible(stop) && stop.title === stop.getAttribute('aria-label') && stop.title.trim(), 'Stop has its translated tooltip');
+      }
+      const frame = panel.querySelector('iframe');
+      if (frame && visible(frame)) require(getComputedStyle(frame).pointerEvents === 'none', 'watch stays view-only');
+    }
+    return {check:name};
+  }
+  if (name === "owner-output-folder") {
+    const input = document.querySelector('#owner-output-folder');
+    const reference = document.querySelector('.owner-profile input.field');
+    require(visible(input) && visible(reference), "General shows the output folder beside the existing owner fields");
+    const control = input.closest('.field') ?? input;
+    const box = control.getBoundingClientRect(), referenceBox = reference.getBoundingClientRect();
+    const inset = input.getBoundingClientRect().left - box.left;
+    require(Math.abs(box.height - referenceBox.height) <= 1, "the folder uses the same control height as the General owner field");
+    require(inset >= 7, "the folder text retains the shared settings field inset");
+    require(input.value === 'C:\\Owner\\Deliveries', "the saved output path remains visible");
+    return { check: name, height: box.height, inset };
+  }
+  if (name.startsWith("skills-") || ["growing-skills", "member-shared-source", "skill-page"].includes(name)) {
+    for (const label of document.querySelectorAll('[data-skill-provenance], .mp-resource p, .cs-item .ds, .cs-dialog > .cs-desc')) {
+      const text = label.textContent.trim(), title = label.getAttribute('title') ?? '';
+      require(!/^(learned|owner|imported)$/i.test(text) && !/(?:local:|github:|plugin:|[/\\]plugins[/\\]cache[/\\])/i.test(text + title), "R-SKILL-08: skill origins never show raw source values or plugin cache paths");
+    }
+  }
+  if (name.startsWith("thread-window-")) {
+    const pane = [...document.querySelectorAll('.mb-chat')].find(visible), scroll = pane?.querySelector('.ra-scroll');
+    require(scroll, "the real conversation is open");
+    const mounted = [...scroll.querySelectorAll('.tn[data-id], .tn[data-room-message]')];
+    require(mounted.length <= 100, "no more than 100 turns are mounted");
+    if (name === "thread-window-open") {
+      require(mounted.length === 25, "only the newest 25 turns open");
+      const quote = scroll.querySelector('button.message-quote, button.au-room-reply');
+      require(quote, "the newest turn retains its actionable quote");
+      const style = getComputedStyle(quote);
+      require(style.borderTopWidth === "0px" && style.borderBottomWidth === "0px" && style.borderInlineEndWidth === "0px", "quote jumps retain the shared excerpt style without browser button borders");
+    }
+    if (name === "thread-window-earlier") {
+      require(mounted.length === 45, "one earlier step mounts 20 more turns");
+      const anchor = window.__windowAnchor;
+      require(anchor.node.isConnected && Math.abs(anchor.node.getBoundingClientRect().top-anchor.top) <= 1, "the same reading anchor stays within one pixel");
+    }
+    if (name === "thread-window-find") {
+      const mark = scroll.querySelector('mark.is-current'), turn = mark?.closest('[data-id], [data-room-message]');
+      require(turn && (turn.dataset.id ?? turn.dataset.roomMessage) === "9005", "the old result is mounted before it is selected");
+      require(visible(mark), "the selected result is visible");
+    }
+    if (name === "thread-window-quote") {
+      const target = scroll.querySelector('.tn[data-id="9005"], .tn[data-room-message="9005"]');
+      require(target && target.getBoundingClientRect().bottom > scroll.getBoundingClientRect().top && target.getBoundingClientRect().top < scroll.getBoundingClientRect().bottom, "the unmounted quote source is revealed in the scrollport");
+    }
+    return {check:name,mounted:mounted.length,total:Number(scroll.dataset.windowTotal)};
+  }
   if (["room-meeting", "room-meeting-board", "room-meeting-report"].includes(name)) {
     const pane = document.querySelector('.au-room-pane:not([hidden])');
     require(pane, "the real group conversation is open");
@@ -44,8 +197,8 @@ export function checkRendered(name, context = {}) {
     return { check: name, labels: labels.length };
   }
   if (["owner-question-pending", "owner-question-brought", "owner-question-pending-many"].includes(name)) {
-    const host = [...document.querySelectorAll('.mb-chat')].find(element => visible(element.querySelector('.ra-scroll')) && element.querySelector('.pending-questions'));
-    const row = host?.querySelector('.pending-questions'), scroll = host?.querySelector('.ra-scroll');
+    const host = [...document.querySelectorAll('.mb-chat')].find(element => visible(element.querySelector('.ra-scroll')) && element.querySelector('.pending-questions:not(.room-meeting-row)'));
+    const row = host?.querySelector('.pending-questions:not(.room-meeting-row)'), scroll = host?.querySelector('.ra-scroll');
     require(host && scroll && row, "the open conversation owns the floating row");
     const cards = [...host.querySelectorAll('[data-owner-kind="ask_owner"][data-card-state="asked"]')];
     if (name === "owner-question-brought") {
@@ -67,6 +220,12 @@ export function checkRendered(name, context = {}) {
     if (name === "thread-new-divider-return") {
       require(!divider, "returning to a read thread has no divider");
       return { check: name };
+    }
+    if (name === "thread-new-divider-bottom" && !divider) {
+      const bottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      require(Number(scroller.dataset.windowBefore) > 0 && Number(scroller.dataset.windowLater) === 0, "only the older window containing the boundary is unmounted");
+      require(Number(scroller.dataset.windowMounted) <= 100 && bottom <= 2, "latest reveals a capped tail at the bottom");
+      return {check:name,bottom,boundaryUnmounted:true};
     }
     require(divider && scroller.querySelectorAll('.thread-new').length === 1, "one independent divider is present");
     require(divider.nextElementSibling?.dataset.id === "7001", "the line precedes the first unseen turn");
@@ -245,8 +404,8 @@ export function checkRendered(name, context = {}) {
       if (active) require(getComputedStyle(monitor).color !== getComputedStyle(document.querySelector('.conversation-trigger')).color, 'active status uses the purple token');
     } else if (name === 'level-panel' || name === 'level-off' || name === 'level-no-computer') {
       require(visible(panel.querySelector('.mb-panel-routines')) && !visible(panel.querySelector('.mb-who')), 'routines live on the landing view, identity lives behind the gear');
-      require(!panel.querySelector('[data-tab="routines"], .mb-rt [role="switch"], [data-desktop="expand"], [data-desktop="collapse"]'), 'there is no routines page, row switch or window control');
-      if (name === 'level-no-computer') require(visible(desktop) && visible(desktop.querySelector('[data-computer-location]')), 'an empty computer panel retains its shared location control');
+      require(!panel.querySelector('[data-tab="routines"], .mb-rt [role="switch"], [data-desktop="expand"]') && !visible(panel.querySelector('[data-desktop="collapse"]')), 'there is no routines page, row switch or visible collapse control');
+      if (name === 'level-no-computer') require(visible(desktop) && visible(panel.querySelector('[data-computer-location]')), 'an empty computer panel retains its shared location control');
       else {
         require(visible(desktop) && visible(desktop.querySelector('.desktop-caption')), 'the screen has its centered member caption');
         require(desktop.getBoundingClientRect().bottom <= panel.querySelector('.mb-panel-routines').getBoundingClientRect().top, 'the screen precedes routines');
@@ -1515,7 +1674,12 @@ export function checkRendered(name, context = {}) {
     const events=document.querySelectorAll('[data-desktop-work]');
     if(name.startsWith('computer-'))require(events.length===1&&events[0].matches(name==='computer-panel'?'.conversation-event-line':'.conversation-card')&&events[0].closest('.tn')?.dataset.id==='2','one work presentation belongs to the private turn');
     if(name==='computer-takeover')require(panel.querySelector('.desktop-request').textContent.includes('登入'),'request sits above the live screen');
-    if(name==='computer-takeover-owner')require(panel.querySelector('[data-desktop="return"]').textContent==='我完成了','one explicit done action');
+    if(name==='computer-takeover-owner') {
+      require(visible(document.querySelector('[data-card-desktop="return"]')), 'one explicit done action in the card');
+      require(!panel.hasAttribute('data-expanded') && frame.closest('[data-card-desktop-screen]'), 'owner input stays in the conversation card');
+      require(frame.contentDocument.defaultView.__desktopAcceptedKeys > 0, 'synthetic keyboard input reaches the RFB surface');
+      require(!calls.some(call => JSON.stringify(call.params ?? {}).includes('synthetic-owner-input')), 'owner input never enters an RPC');
+    }
     if(name==='computer-takeover-done')require(calls.filter(call=>call.method==='computer.viewer_control'&&!call.params.held&&call.params.takeover==='private-takeover-request').length===1,'one explicit handback with the current nonce');
     if(name==='computer-takeover-owner'||name==='desktop-owner'){
       require(panel.dataset.interactive==='true'&&getComputedStyle(frame).pointerEvents==='auto','click enables input in place');
@@ -1661,6 +1825,8 @@ export function checkRendered(name, context = {}) {
     const editor = document.querySelector('#mp-skill-text');
     require(visible(editor) && editor.value.includes("## Verification"), "the actual saved skill opens in the existing member pane");
     require(document.querySelector('.mb-det').textContent.includes("自行學會"), "learned provenance and date are shown");
+    const learned = [...document.querySelectorAll('.mb-det .mp-resource')].find(row => row.querySelector('b')?.textContent === 'research-summary');
+    require(learned?.querySelectorAll('[data-skill-provenance]').length === 1 && learned.querySelector('[data-skill-provenance]').textContent === '自行學會 · 2026/10/29', "a learned skill has exactly one localized origin and date line");
     const calls = window.__look.calls;
     require(calls.some(c => c.method === "members.skills.read"), "opening reads the real skill boundary");
     if (window.__look.data.skills[0].member_id === 1) require(!calls.some(c => c.method === "members.skills.update" || c.method === "members.skills.delete"), "reading the editor never mutates skills");
@@ -3750,6 +3916,54 @@ export function checkRendered(name, context = {}) {
     const button = list.querySelector("[data-conversation-new]"), box = button.getBoundingClientRect(), parent = list.getBoundingClientRect();
     require(box.left >= parent.left && box.right <= parent.right + 1, "new conversation button fits inside the list");
     return { check: name, width: list.clientWidth, scrollWidth: list.scrollWidth };
+  }
+  if (name === "skills-plugin-details-bottom") {
+    const button = document.querySelector('[data-set-mcp="1"] [data-conn="set-mcp"]');
+    require(visible(button), "the second MCP server's setup action can be reached by scrolling");
+    const box = button.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    require(hit && button.contains(hit), "the sticky set footer never covers the reached MCP setup action");
+    return { check: name };
+  }
+  if (["skills-plugin-entry", "skills-marketplace", "skills-plugin-set", "skills-plugin-update", "skills-plugin-details"].includes(name)) {
+    const section = document.querySelector('[data-skills-section]');
+    require(section && document.querySelectorAll('[data-skills-section]').length === 1, "plugin sets stay in the one existing Skills section");
+    if (name === "skills-plugin-entry") {
+      const entries = [...document.querySelectorAll('[data-plugin-source]')];
+      require(entries.length === 1 && entries[0].textContent.includes('research-tools · 1.2.0') && entries[0].textContent.includes('2 個技能'), "one plugin entry shows its name, version and skill count");
+      require(document.querySelectorAll('.cs-dialog [data-conn="skill-import-local"]').length === 1, "one import action installs the entire plugin");
+      require(document.querySelectorAll('.cs-dialog [data-conn="skill-import-alone"]').length === 2, "individual skill imports remain available in the disclosure");
+      require(!document.querySelector('.cs-dialog').textContent.includes('local:'), "plugin entries hide internal source prefixes");
+    }
+    if (name === "skills-marketplace") {
+      const supported = document.querySelector('[data-market-plugin="research-tools"]'), unsupported = document.querySelector('[data-market-plugin="npm-workflows"]');
+      require(supported.textContent.includes('2.0.0') && !supported.querySelector('button').disabled, "a marketplace plugin shows the listed version and install action");
+      require(unsupported.querySelector('button').disabled && unsupported.textContent.includes('僅支援 GitHub 來源'), "unsupported plugin sources explain why they cannot be installed");
+      require(window.__look.calls.some(call => call.method === 'members.skills.list' && call.params.marketplace === 'sample/workflows'), "the owner adds the marketplace through the existing skill boundary");
+    }
+    if (name === "skills-plugin-set" || name === "skills-plugin-update") {
+      const groups = [...section.querySelectorAll('[data-skill-set]')], rows = [...section.querySelectorAll('.cs-set .cs-skill')];
+      require(groups.length === 1 && rows.length === 3 && rows.every(row => row.hasAttribute('data-library-skill')), "the set groups each shared skill and command exactly once");
+      require(groups[0].textContent.includes('2 個技能 · 1 個指令'), "the installed set counts skills and slash commands separately");
+      require(section.querySelectorAll('[data-conn="set-update"]').length === (name === 'skills-plugin-update' ? 1 : 0), "an update offer appears once for the complete set");
+      require(section.querySelectorAll('[data-conn="skill-reimport"]').length === 0, "set members have no duplicate per-skill reimport action");
+      if (name === 'skills-plugin-set') {
+        const calls = window.__look.calls.filter(call => call.method === 'members.skills.import');
+        require(calls.length === 1 && calls[0].params.plugin && calls[0].params.shared, "one owner action installs all plugin capabilities");
+      }
+      for (const button of section.querySelectorAll('[data-conn="set-update"]')) {
+        const box = button.getBoundingClientRect(), parent = button.parentElement.getBoundingClientRect();
+        require(box.left >= parent.left && box.right <= parent.right + 1, "the whole-set update fits its heading at every width");
+      }
+    }
+    if (name === "skills-plugin-details") {
+      const dialog = document.querySelector('[data-dialog="skill-set:1"]');
+      require(visible(dialog) && dialog.querySelectorAll('.conversation-card.mcp-proposal').length === 2, "the set detail reuses one existing MCP card per declared server");
+      require(dialog.querySelectorAll('[data-conn="set-mcp"]').length === 2 && !dialog.querySelector('[data-mcp-operation="enable"]'), "each server needs explicit setup before it can be added");
+      require(dialog.textContent.includes('不執行事件鉤子、代理定義或其他外掛功能'), "the set states which plugin parts Raphael does not run");
+      require(dialog.querySelector('[data-conn="set-delete"]') && dialog.querySelector('[data-conn="set-update"]'), "the set reuses the existing action row for removal and reimport");
+    }
+    require(!window.__look.calls.some(call => ['integrations.add','integrations.import','integrations.test','integrations.proposal'].includes(call.method)), "skill discovery, install and details never add or run MCP servers");
+    return {check:name,sets:window.__look.data.skillSets.length};
   }
   if (["skills-section", "skills-installed-sources", "skills-import-shared", "skills-member-grants", "skills-source-changed"].includes(name)) {
     const sections = [...document.querySelectorAll('.cs-body [data-skills-section]')];

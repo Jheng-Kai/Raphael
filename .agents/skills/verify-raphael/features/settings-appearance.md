@@ -1,5 +1,34 @@
 # Settings and appearance
 
+## Settings merge consumers (2026-11-05)
+
+General keeps the owner profile, weather city, output folder and shared memory
+together in About you. Tools and Safety retain their shared scope; legacy agent
+links resolve to Tools. Raphael's memory and voice remain in member details.
+Computer search opens that member's panel. Host checks and copyable repair
+commands use the location popover, never the retired settings pane.
+
+```powershell
+npm run look -- settings-raphael-memory settings-raphael-voice desktop-host-local desktop-host-error settings-speech-service settings-agent-legacy settings-computer-search settings-owner --theme both --width 1120,720,1920x1080
+```
+
+## Owner output folder in General (2026-11-05)
+
+R-OUTPUT-01 adds the optional absolute delivery folder to Settings > General,
+using its existing row, text field and settings search. Changing the preference
+never moves existing files. The shared owner context tells every speaker to use
+it by default within existing permissions; VM and owner-PC paths remain distinct.
+See [Daily work](daily-work.md) for prompt and native delivery limits.
+Follow-up 1 authorizes the selected look run; actual native/live delivery is deferred.
+
+```powershell
+npm run look -- owner-output-folder --theme both --width 1120,720,1920x1080
+```
+
+Inspect its full-size General pane in both themes at all three sizes. Compare
+the folder row's field, spacing, help text and focus with the surrounding owner
+and General settings; judge the selected run only under authorized prerequisites.
+
 Owner decision 2026-10-30 adds the owner's avatar to the account/profile section.
 Use the existing presets or file picker and drag/zoom crop dialog. A bounded 192px
 WebP is stored in the existing owner_photo setting. Sidebar account footer and all

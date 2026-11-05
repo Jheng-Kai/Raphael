@@ -279,7 +279,7 @@ class EchoClient:
         from .native_journeys import record_model_request
         from .native_journeys import native_think, wait_for_native_cancel
         await wait_for_native_cancel(messages)
-        await native_think()
+        await native_think(messages)
         record_model_request(kwargs.get("model"), kwargs.get("reasoning_effort", "none"))
         # The scripted task of the background worker (see the class).
         offered = {tool["function"]["name"] for tool in tools}
@@ -292,6 +292,11 @@ class EchoClient:
             raw = json.dumps(arguments)
             call = ChatToolCall(id=f"call_{seen}", name=name, arguments=arguments, raw_arguments=raw)
             return ChatTurn("", [call], "fake/echo", 0.0, 0, 0, 0)
+
+        from .native_journeys import native_enabled
+        if native_enabled(True) and "[native-typing:" in task:
+            parts = [f"離線回覆 {index}：工作仍在進行，這則訊息透過一般歷史紀錄與回覆節奏送達。" for index in range(4)]
+            return ChatTurn(json.dumps({"text": "\n\n".join(parts), "messages": parts}), [], "fake/echo", 0.0, 0, 0, 0)
 
         # Native journeys script the provider's choice, then use the real member tool/store.
         from .native_journeys import native_calendar, native_consult, native_connect, native_diagnosis, native_memory, native_skills, native_computer
@@ -900,7 +905,7 @@ class App(Router):
             self._conn,
             self.client,
             self.gate,
-            Tools(self.client, services=self.services),
+            Tools(self.client, services=self.services, rendered_read=self.vm_tools.rendered_read),
             notify=self._worker_notice,
             model_observer=agent_model_observer,
             known_models=self.brain.known_models,
@@ -1013,6 +1018,7 @@ class App(Router):
         self.background.use_workspaces(
             lambda member: [path for path in (self.vm.target(member).workspace, self.vm.target(member).shared) if path] if self.vm.grants.allowed(member) else None)
         self.vm_tools.names = self.members.name_of
+        self.members.remove_computer_data = self.vm.delete_member_data
         # A member made by one the owner let use a computer has one too: it is a sandbox of its own, and a team
         # that was just made would otherwise stop at its first step to ask for each of them.
         self.members.member_made = lambda maker, made: self.vm.grants.set(made, True) if self.vm.grants.state(maker) is True else None

@@ -61,7 +61,7 @@ class CuaBridge:
 
     async def __aenter__(self):
         self.process = await asyncio.create_subprocess_exec(
-            *self.vm.command(self.target, exec_args(self.target, [DRIVER, "mcp", "--socket", SOCKET], interactive=True)),
+            *await self.vm.bridge_command(self.target, exec_args(self.target, [DRIVER, "mcp", "--socket", SOCKET], interactive=True)),
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL, limit=16 * 1024 * 1024, creationflags=NO_WINDOW,
         )

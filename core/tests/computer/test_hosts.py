@@ -96,7 +96,7 @@ async def test_remote_never_starts_desktop_and_reports_unreachable(tmp_path, con
     assert not any(args[0] in ("pull", "build", "run") for args, _ in runtime.calls)
 
 
-async def test_remote_stays_awake_without_idle_stop(tmp_path, conn):
+async def test_remote_idle_sleep_stops_only_its_container_without_removing_workspace(tmp_path, conn):
     settings = SettingsStore(conn)
     settings.set("computer_ssh_alias", "studio-mini")
     runtime = Runtime()
@@ -105,8 +105,9 @@ async def test_remote_stays_awake_without_idle_stop(tmp_path, conn):
     runtime.raw = container(vm, target, runtime)
     vm.last_activity[target.key] = 0
     await vm.sweep()
-    assert runtime.raw["State"]["Running"]
-    assert not any(args[0] == "stop" for args, _ in runtime.calls)
+    assert not runtime.raw["State"]["Running"]
+    assert [args for args, _ in runtime.calls if args[0] == "stop"] == [["stop", "--time", "10", target.name]]
+    assert not any(args[0] in ("rm", "volume") for args, _ in runtime.calls)
 
 
 async def test_remote_viewer_forwards_private_ip_and_disposes_only_its_tunnel(tmp_path, conn, monkeypatch):

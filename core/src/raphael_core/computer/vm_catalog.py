@@ -49,7 +49,8 @@ NOTICES = ("computer_busy", "screen_changed")
 
 # Everything else is excluded: updates/installs/configuration, recording/replay,
 # escalation, lifecycle, cosmetic cursor settings and redundant primitives. In
-# particular page/run_script/run_steps never bypass the single vm_exec path.
+# particular page/run_script are never forwarded. Raphael's run_steps composite
+# recursively uses the ordinary gate instead of forwarding the driver's batch tool.
 READS = frozenset({
     "get_guide", "get_desktop_state", "get_window_state", "get_cursor_position",
     "list_apps", "list_windows", "clipboard_read", "verify_state", "get_browser_state",

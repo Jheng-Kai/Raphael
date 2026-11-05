@@ -8,7 +8,7 @@ export function paintedSlime(svg) {
   const fallback=()=>({body:svg.querySelector('.slime-body'),eyes:svg.querySelector('.slime-eyes'),marks:[...svg.querySelectorAll('.slime-mark')]});
   const bodyStrip=surface.querySelector('.slime-loop-body .slime-cels');
   if(bodyStrip && getComputedStyle(bodyStrip.parentElement).display!=='none' && getComputedStyle(bodyStrip.parentElement).visibility!=='hidden'){
-    const frame=surface.clientWidth*3, index=Math.round(-new DOMMatrix(getComputedStyle(bodyStrip).transform).e/frame);
+    const frame=bodyStrip.parentElement.clientWidth, index=Math.round(-new DOMMatrix(getComputedStyle(bodyStrip).transform).e/frame);
     const props=bodyStrip.querySelector('.slime-prop-cels');
     const row=props?Math.round(-new DOMMatrix(getComputedStyle(props).transform).f/frame):0;
     const bodyCell=(props??bodyStrip).firstElementChild.children[row*12+index];
@@ -248,8 +248,8 @@ export async function slimePointer(page, selector) {
   const box = await row.boundingBox();
   const read = () => row.evaluate(host => {
     const svg = host.querySelector("svg.slime"), rect = host.getBoundingClientRect();
-    const press = new DOMMatrix(getComputedStyle(svg.closest(".slime-surface")).getPropertyValue("--slime-squish"));
-    return { delighted: svg.classList.contains("is-delighted"), scale: `${press.a} ${press.d}`, top: rect.top, height: rect.height };
+    const scale = getComputedStyle(svg.closest(".slime-surface")).scale;
+    return { delighted: svg.classList.contains("is-delighted"), scale, top: rect.top, height: rect.height };
   });
   const rest = await read();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);

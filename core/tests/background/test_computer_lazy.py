@@ -41,6 +41,7 @@ async def test_background_turn_starts_only_for_real_computer_call(make_rig, tmp_
                 assert "approve" in {tool["function"]["name"] for tool in loop.tools}
             loop.catalog_changed = False
             assert (await loop._tool("click", "computer__click", {})).ok
+            assert (await loop._tool("check", "computer__get_window_state", {"pid": 7, "window_id": 9})).ok
             used = True
         loop._queue.put_nowait(Outcome("done", final="Done."))
 
@@ -50,7 +51,8 @@ async def test_background_turn_starts_only_for_real_computer_call(make_rig, tmp_
     for index in range(2):
         if not cli:
             rig.client.replies = ([turn("Look.", [call("computer__get_desktop_state", {})]),
-                turn("Click.", [call("computer__click", {})])] if use_computer and index == 0 else []) + [report("Done.")]
+                turn("Click.", [call("computer__click", {})]),
+                turn("Check.", [call("computer__get_window_state", {"pid": 7, "window_id": 9})])] if use_computer and index == 0 else []) + [report("Done.")]
         before = vm.start.await_count, len(runtime.calls)
         task = rig.submit(session=f"lazy-{index}", model=f"cli:{cli}:test" if cli else "fake/model")
         await until(lambda: rig.task(task).state in ("done", "failed"))
@@ -58,7 +60,7 @@ async def test_background_turn_starts_only_for_real_computer_call(make_rig, tmp_
         if index or not use_computer:
             assert (vm.start.await_count, len(runtime.calls)) == before
     if use_computer:
-        assert vm.start.await_count == 2
+        assert vm.start.await_count == 3
     else:
         vm.start.assert_not_awaited()
         assert runtime.calls == []

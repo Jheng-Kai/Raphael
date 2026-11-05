@@ -89,9 +89,14 @@ export function createMemberActions(host: MemberActionHost) {
   async function deleteMember(id: number): Promise<void> {
     const list = host.list();
     const m = list?.members.find((other) => other.id === id);
-    if (!m || !(await confirmDelete(m.name))) return;
+    if (!m) return;
+    const settings = await api.settingsGet().catch(() => null);
+    const computerHost = settings?.settings.computer_ssh_alias;
+    let removeComputer = false;
+    if (!(await confirmDelete(m.name, { ...(settings ? { computerHost: computerHost ?? '' } : {}), removeComputer: value => { removeComputer = value; } }))) return;
     try {
-      await api.membersDelete(id);
+      if (removeComputer) await api.membersDelete(id, true, computerHost ?? '');
+      else await api.membersDelete(id);
     } catch (err) {
       toaster.info(describeError(err));
       return;

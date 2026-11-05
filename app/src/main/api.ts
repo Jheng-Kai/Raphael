@@ -89,6 +89,8 @@ export const desktopRenew = (session: string): Promise<DesktopState> => core("co
 export const desktopControl = (session: string, held: boolean, takeover?: string): Promise<DesktopState> => core("computer.viewer_control", { session, held, takeover });
 export const desktopClose = (session: string): Promise<unknown> => core("computer.viewer_close", { session });
 export const desktopRevoke = (member_id: number): Promise<{ granted: boolean }> => core("computer.revoke", { member_id });
+export const desktopMaintain = (member_id: number, action: import('./computer-lifecycle').ComputerMaintenance, captured: DesktopState, confirmed = false): Promise<DesktopState> =>
+  core('computer.lifecycle', { member_id, action, host: captured.host, target: captured.target, confirmed });
 export interface TeachingDraft { id: string; state: string; text: string; conversation_id?: number }
 export const desktopTeach = (params: { action: string; session?: string; member_id?: number; id?: string; text?: string }): Promise<TeachingDraft & { skill?: import("./types").MemberSkill }> => core("computer.teach", params);
 
@@ -146,6 +148,9 @@ export const historyClear = (): Promise<{ deleted: number }> => core("history.cl
 // ---------- conversations with Raphael ----------
 
 export interface AgentHistoryQuery {
+  /** Bounded new arrivals and only the loaded records invalidated by events. */
+  after_id?: number;
+  turn_ids?: number[];
   conversation_id?: number;
   around_id?: number;
   limit?: number;
@@ -156,7 +161,7 @@ export interface AgentHistoryQuery {
 }
 
 /** The turns of the conversations, newest first. */
-export const agentHistoryList = (q: AgentHistoryQuery = {}): Promise<{ turns: AgentTurn[]; pending_questions?: OwnerQuestion[] }> => core("agent.history.list", q);
+export const agentHistoryList = (q: AgentHistoryQuery = {}): Promise<{ turns: AgentTurn[]; pending_questions?: OwnerQuestion[]; delta?: boolean; removed_ids?: number[]; has_more?: boolean; next_after_id?: number }> => core("agent.history.list", q);
 /** What the owner typed into a composer, newest first, whichever conversation or room it went to (the arrow keys of a composer walk it). */
 export const agentSent = async (limit = 50): Promise<string[]> => (await core<{ texts: string[] }>("agent.history.sent", { limit })).texts;
 /** Forgets Raphael conversation turns; says how many there were. */
@@ -230,7 +235,10 @@ export const membersCreate = (member: NewMember): Promise<{ member: Member; rout
 /** Changes a member (never Raphael: the core refuses id 0 with the kind `raphael`). */
 export const membersUpdate = (id: number, patch: MemberPatch): Promise<{ member: Member }> => core("members.update", { id, ...patch });
 /** Deletes a member with its conversation, its memory and its routines. The page asks the owner first. */
-export const membersDelete = (id: number): Promise<{ deleted: boolean }> => core("members.delete", { id });
+export const membersDelete = (id: number, remove_computer_data = false, computer_host?: string): Promise<{ deleted: boolean }> => core("members.delete", { id, remove_computer_data, ...(remove_computer_data ? { computer_host } : {}) });
+
+export interface ComputerHostHealth { host: string; ok: boolean; checks: { kind: string; ok: boolean; architecture?: string }[] }
+export const desktopHostCheck = (alias: string): Promise<ComputerHostHealth> => core("computer.viewer_status", { check_host: true, alias });
 
 /** Makes member `id` the owner's primary contact (0 is Raphael). Only that choice changes; the roster of `membersList` says who it is. */
 export const membersSetPrimary = (id: number): Promise<{ primary_id: number }> => core("members.set_primary", { id });
@@ -523,7 +531,7 @@ export const keepAwakeGet = (): Promise<boolean> => invoke("schedule_keep_awake_
 export const keepAwakeSet = (enabled: boolean): Promise<boolean> => invoke("schedule_keep_awake_set", { enabled });
 // Member profile resources use the same member boundary as conversations.
 const skillScope = (memberId: number): { member_id: number; shared?: boolean } => memberId === -1 ? { member_id: 0, shared: true } : { member_id: memberId };
-export const membersSkillsList = (memberId: number): Promise<{ skills: import("./types").MemberSkill[]; undo?: string | null }> => core("members.skills.list", { ...skillScope(memberId) });
+export const membersSkillsList = (memberId: number): Promise<{ skills: import("./types").MemberSkill[]; sets?: import("./skill-sets").SkillSet[]; undo?: string | null }> => core("members.skills.list", { ...skillScope(memberId) });
 export const membersSkillsImport = (memberId: number, source: string): Promise<{ skill: import("./types").MemberSkill; skills?: import("./types").MemberSkill[] }> => core("members.skills.import", { ...skillScope(memberId), source });
 export const membersSkillsUpdate = (memberId: number, id: number, enabled: boolean): Promise<unknown> => core("members.skills.update", { ...skillScope(memberId), id, enabled });
 /** A skill and its whole Markdown document, for its page (one that is switched off too). */

@@ -24,7 +24,7 @@ for (const match of source.matchAll(/@keyframes\s+([\w-]+)\s*\{((?:[^{}]|\{[^{}]
   frames.set(match[1]!, list.sort((a,b) => a.at-b.at));
 }
 
-function easing(name: string, x: number): number {
+export function easing(name: string, x: number): number {
   if (name === 'linear') return x;
   const curves: Record<string, number[]> = { 'ease-in-out':[.42,0,.58,1], 'ease-in':[.42,0,1,1], 'ease-out':[0,0,.58,1], ease:[.25,.1,.25,1] };
   const curve = curves[name] ?? name.match(/-?[\d.]+/g)?.map(Number) ?? [0,0,1,1];

@@ -4,8 +4,11 @@ import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
 import { idleCost, slimeSharp } from "../slime-board.mjs";
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { typingJourney } from "./typing.mjs";
 
 export const journeys = [
+  { name: "computer-speed", description: "Five warm first observations, browser opens and five-step forms; isolated disposable container, median/worst budgets, no paid model" },
+  { name: "typing", description: "200 human-paced keys on 150 persisted rich turns with concurrent offline brains; Event Timing, long frames and CPU profile" },
   { name: "appearance", description: "Real Appearance dropdown, theme persistence and narrow rows at three native sizes" },
   { name: "owner-face", description: "A window that may load before the core still hears it: a saved owner photo reaches the sidebar" },
   { name: "sidebar-home", description: "Inspect the Grok-style sidebar, in-place search and Home emblem in the real WebView" },
@@ -165,6 +168,7 @@ export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
 
 export async function drive(name, context) {
   const { page, result, capture, snapshot, phrases } = context;
+  if (name === "typing") return typingJourney(context);
   if (name === "startup-rooms") {
     const expected = (await snapshot()).rooms.filter(room => room.name.startsWith("Startup room "));
     if (expected.length !== 3 || expected.some(room => room.hidden)) throw new Error("Startup fixture needs three visible persisted rooms");
@@ -955,6 +959,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     result.transport = "Fake provider; real picker, RPC, catalog cache, settings, member and agent routing";
     return;
   }
+  if (name === "computer-speed") { result.paid_requests = 0; return; }
   if (name === "member-computer") {
     // The pre-launch smoke deliberately creates a desktop before Home knows TZ.
     // Await the real app's timezone propagation before checking that same VM.

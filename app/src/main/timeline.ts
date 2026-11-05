@@ -616,7 +616,7 @@ function taskActionsHTML(turn: AgentTurn, state: TimelineState): string {
 
 /** Media stands above the owner's bubble, whose quote precedes the words. */
 function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined, quote?: MessageQuote | null, expand = ""): string {
-  const bubble = words || quote ? `<div class="bubble">${quote ? quoteHTML(quote) : ""}<div class="message-text">${words}</div>${expand}</div>` : "";
+  const bubble = words || quote ? `<div class="bubble">${quote ? quoteHTML(quote, true) : ""}<div class="message-text">${words}</div>${expand}</div>` : "";
   return files?.length ? `<div class="owner-content">${filesHTML(files)}${bubble}</div>` : bubble;
 }
 

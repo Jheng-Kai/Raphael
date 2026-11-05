@@ -59,6 +59,10 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
     else if (!open && wasOpen && compact) toggle.focus();
   };
   const close = (): void => setOpen(false);
+  window.addEventListener("raphael:toggle-sidebar", () => {
+    if (compactWindow.matches) setOpen(!document.documentElement.hasAttribute("data-sidebar-open"));
+    else collapse.click();
+  });
   const compactWindow = matchMedia("(max-width: 859px)");
   let collapsed = false;
   try { collapsed = localStorage.getItem("raphael.sidebar.collapsed") === "true"; } catch { /* Keep the full list when storage is unavailable. */ }

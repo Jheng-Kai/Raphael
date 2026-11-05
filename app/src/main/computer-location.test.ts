@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-const api = vi.hoisted(() => ({ settingsGet: vi.fn(), settingsSet: vi.fn() }));
+const api = vi.hoisted(() => ({ settingsGet: vi.fn(), settingsSet: vi.fn(), desktopHostCheck: vi.fn() }));
 vi.mock("./api", () => api);
 import { computerLocationHTML, mountComputerLocation, validComputerAlias } from "./computer-location";
 import { closeMenu } from "./ui";
@@ -72,7 +72,30 @@ test("a host status error is current state only and opening the popover starts n
   const { mounted } = await mount("studio-mini"); mounted.status(true);
   expect(document.querySelector('[role="alert"]')).not.toBeNull();
   expect(api.settingsSet).not.toHaveBeenCalled();
+  expect(api.desktopHostCheck).not.toHaveBeenCalled();
   mounted.hide(); expect(document.querySelector('.computer-location-popover')).toBeNull();
+});
+
+test("the explicit host check keeps its existing owner RPC and copyable repair in the popover", async () => {
+  await mount("studio-mini");
+  api.desktopHostCheck.mockResolvedValue({host:"studio-mini",ok:false,checks:[{kind:"docker_path",ok:false}]});
+  click('[data-act="computer-host-check"]'); await flush();
+  expect(api.desktopHostCheck).toHaveBeenCalledExactlyOnceWith("studio-mini");
+  expect(document.querySelector('[data-computer-host-health]')!.textContent).toContain("遠端登入時找不到 Docker");
+  expect(document.querySelector('[data-computer-host-repair]')!.textContent).toContain("那台 Mac 的終端機");
+  expect(document.querySelector('[data-act="copy-code"]')).not.toBeNull();
+  expect(document.querySelector('code')!.textContent).toContain("~/.zshenv");
+  expect(api.settingsSet).not.toHaveBeenCalled();
+});
+
+test("a late host check cannot replace the result for a changed alias", async () => {
+  await mount("studio-mini");
+  let finish!: (value: unknown) => void;
+  api.desktopHostCheck.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+  click('[data-act="computer-host-check"]');
+  await change("workstation");
+  finish({host:"studio-mini",ok:false,checks:[{kind:"docker_path",ok:false}]}); await flush();
+  expect(document.querySelector('[data-computer-host-health]')).toBeNull();
 });
 
 test("the local host label follows the window language and the shared popover reopens in it", async () => {

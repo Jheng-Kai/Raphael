@@ -3,6 +3,9 @@ import { readDraftWords, writeDraftWords } from "../composer-drafts";
 import { cardDisclosureHTML, cardFailure, cardHTML, cardPromptText } from "../card";
 import { mountTaskResults } from "../task-result";
 import { patchThread } from "../thread-diff";
+import { sameWire, ThreadRenderCache } from "../thread-render";
+import { mountTranscriptWindow, TranscriptWindow } from "../transcript-window";
+import { composioAction } from "../composio-result";
 // 拉斐爾: the one conversation with Raphael (`agent.history.list`), oldest at the top and newest at
 // the bottom, under the days it was had, whether it was said to the emblem, sent from a chat app or
 // typed here. Scrolling up brings the earlier turns; the page follows the newest only while it is
@@ -54,7 +57,7 @@ import { plainReplies } from "../../shared/anime";
 import * as api from "../api";
 import { createLinkPreviews, type LinkPreview } from "../link-previews";
 import { messagePlainText } from "../message-content";
-import { mountRichContent, preserveRichScroll } from "../message-rich";
+import { mountRichContent, preserveRichScroll, richScrollFollows, followRichScroll, releaseRichScroll } from "../message-rich";
 import { mountConversationScroll } from "../conversation-scroll";
 import { openUnread, unreadLine } from "../unread-divider";
 import { measureMessagePreviews, messagePreviewMeasure } from "../message-preview";
@@ -123,7 +126,6 @@ const PAGE_SIZE = 50;
 /** Within this many px of the bottom, the conversation counts as read to the end and follows new turns. */
 const BOTTOM_SLACK_PX = 80;
 /** Within this many px of the top, the earlier turns are loaded. */
-const TOP_SLACK_PX = 160;
 /** Events that come together (a task's step and its turn) bring the turns once. */
 const REFRESH_DELAY_MS = 150;
 /** The most a typed question may hold (the app's own limit is the same). */
@@ -622,7 +624,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const drawnHTML = new WeakMap<Element, string>();
   const pagesHost = mountPages(thread, { send: text => sendFromPage(text), answer: (id, text) => answerOwnerPage(thread, id, text, () => { void load(false); }) });
   mountOwnerQuestions(thread, () => { void load(false); });
-  const floatingQuestions = mountPendingQuestions(thread, scroller, () => load(false), () => pendingQuestions?.member === memberId() && pendingQuestions.conversation === conversationId() ? pendingQuestions.questions : []);
+  const floatingQuestions = mountPendingQuestions(thread, scroller, () => load(false), () => pendingQuestions?.member === memberId() && pendingQuestions.conversation === conversationId() ? pendingQuestions.questions : [], revealTurn);
   /** The newest turn drawn: a turn after it comes in from below. */
   let newestDrawn = 0;
   let drewOnce = false;
@@ -630,6 +632,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** The thread's own turns: what colleagues asked this member is drawn, never stopped or searched here. */
   const own = (): AgentTurn[] => turns.filter((turn) => !exchangeTurn(turn));
   mountConversationScroll(scroller);
+  const turnWindow = new TranscriptWindow();
+  const windowMount = mountTranscriptWindow(scroller, thread, turnWindow, { draw: () => render(), older: () => load(true), canOlder: () => canLoadEarlier && !loadingEarlier && !searching });
+  let drawingFollows = false;
+  let openingWindowTarget: number | undefined;
   mountRichContent(scroller);
   const atBottom = (): boolean => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= BOTTOM_SLACK_PX;
   const newestId = (): number => turns.reduce((max, turn) => Math.max(max, turn.id), 0);
@@ -849,21 +855,41 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
 
   /** One line of the thread as HTML, with the key it keeps across draws. */
+  const renderedTurns = new ThreadRenderCache();
+  let presentationVersion = 0;
   function lines(): { key: string; html: string; turnId?: number }[] {
     const shape = look();
     const active = [...turns].reverse().find(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting");
     const sentHere = outgoing.filter(belongs);
     const additions = sentHere.length > 1 || active && (sentHere.length > 0 || turns.some(turn => turn.id > active.id && (turn.route === "owner_input" || turn.status === "queued")));
     const turnLook = additions ? { ...shape, deferPresence: true } : shape;
-    const out = threadItems(turns, state.nowMs).map((item) =>
+    const chronological = [...turns].sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id);
+    const openingTarget = targetTurn ?? (openingThread && unreadFrom !== null ? chronological.find(turn => turn.id >= unreadFrom!)?.id : undefined);
+    if (openingTarget !== undefined && openingTarget !== openingWindowTarget && chronological.some(turn => turn.id === openingTarget)) {
+      turnWindow.focus(String(openingTarget), chronological.map(turn => String(turn.id))); openingWindowTarget = openingTarget;
+    }
+    const mounted = turnWindow.select(chronological, turn => String(turn.id), drawingFollows && !searching);
+    windowMount.sync();
+    const out = threadItems(mounted, state.nowMs).map((item) =>
       item.kind === "day"
         ? { key: item.key, html: dayHTML(item.label) }
         // Eligibility belongs to the turn; the menu checks which reply is latest when opened.
-        : { key: item.key, html: turnHTML(pacing.view(item.turn), state, details.has(item.turn.id), { ...turnLook, regenerateTurnId: item.turn.id }), turnId: item.turn.id },
+        : { key: item.key, html: (() => {
+          const turn = item.turn, view = pacing.view(turn), task = turn.task?.id;
+          const expanded = [...state.expandedMessages].filter(key => key.startsWith(`${turn.id}:`)).join("\0");
+          const live = turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting" || pacing.waiting(turn.id);
+          return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), shape.mentions, turnLook.query ?? "", details.has(turn.id),
+            state.open.get(turn.id), state.thinkingOpen.get(turn.id), expanded, task !== undefined && state.stopping.has(task), task !== undefined && state.rerunning.has(task),
+            state.workStartedAt.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
+            live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", turn.permissions?.some(card => shape.answerable?.(card.id))],
+            () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id }));
+        })(), turnId: item.turn.id },
     );
+    renderedTurns.retain(new Set(out.map(line => line.key)));
     const boundary = unreadFrom;
     if (boundary !== null) {
-      const at = out.findIndex(line => line.turnId !== undefined && line.turnId >= boundary);
+      const firstUnread = chronological.find(turn => turn.id >= boundary)?.id;
+      const at = out.findIndex(line => line.turnId !== undefined && line.turnId === firstUnread);
       if (at >= 0) out.splice(at, 0, unreadLine(boundary));
     }
     // What is on its way stands under the day its turn will have, so it does not move when the turn comes.
@@ -887,9 +913,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     void send().finally(() => { if (typed && !input.value) { input.value = typed; fit(); } });
   }
 
-  function drawThread(): void {
+  let renderedThread: ReturnType<typeof lines> = [];
+  function drawThread(wanted = lines()): void {
     hideSelection();
-    const wanted = lines();
     const droppedPending = [...thread.children].some(node => {
       const key = (node as HTMLElement).dataset.key ?? "";
       return (key.startsWith("out:") || key === "hearing") && !wanted.some(line => line.key === key);
@@ -923,11 +949,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const historyVersions = new Map<number, { turn: AgentTurn; revision: number }>();
   let historyRevision = 0;
   function sameValue(a: unknown, b: unknown): boolean {
-    if (a === b) return true;
-    if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
-    const left = a as Record<string, unknown>, right = b as Record<string, unknown>;
-    const keys = Object.keys(left);
-    return keys.length === Object.keys(right).length && keys.every(key => Object.prototype.hasOwnProperty.call(right, key) && sameValue(left[key], right[key]));
+    return sameWire(a, b);
   }
   function historyStamp(items: AgentTurn[]): string {
     const ids = new Set(items.map(turn => turn.id));
@@ -962,6 +984,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (shown.length === 0 && searching) closeSearch(false);
     if (isEmpty()) {
       thread.replaceChildren();
+      renderedThread = [];
       scroller.hidden = dock.hidden = true;
       empty.hidden = false;
       empty.classList.toggle("is-failed", failure !== null);
@@ -973,23 +996,27 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const wasEmpty = scroller.hidden;
     empty.hidden = true;
     scroller.hidden = dock.hidden = false;
-    const beforeHeight = scroller.scrollHeight;
-    const keepUp = !searching && (follow || wasEmpty || atBottom());
+    const keepUp = !searching && (follow || wasEmpty || richScrollFollows(scroller));
+    if (follow) turnWindow.latest();
+    drawingFollows = keepUp && !turnWindow.after;
     drawDock();
     state.nowMs = Date.now();
     noteTaskEnds(shown, state);
-    preserveRichScroll(scroller, drawThread);
+    const wanted = lines();
+    if (wanted.length !== renderedThread.length || wanted.some((line,index) => line.key !== renderedThread[index]?.key || line.html !== renderedThread[index]?.html)) {
+      preserveRichScroll(scroller, () => drawThread(wanted)); renderedThread = wanted;
+    }
     drawDock();
     markSeen(shown, state);
     none.hidden = true;
     finder.refresh();
     older.hidden = !loadingEarlier;
     older.innerHTML = loadingEarlier ? loadingHTML() : "";
-    if (keepUp && (wasEmpty || scroller.scrollHeight !== beforeHeight) && !atBottom()) scroller.scrollTop = scroller.scrollHeight;
+    if (keepUp && (follow || wasEmpty)) followRichScroll(scroller);
     if (thread.querySelector(".work-section.is-live")) startTicker();
     else stopTicker();
     // A first page that does not fill the window has no scrolling to bring the earlier ones.
-    if (canLoadEarlier && !loadingEarlier && !searching && scroller.scrollHeight <= scroller.clientHeight) void load(true);
+    if (wasEmpty && canLoadEarlier && !turnWindow.before && !loadingEarlier && !searching && scroller.scrollHeight <= scroller.clientHeight) void load(true);
   }
 
   /** The time since a task began, each second, in the lines that show it. */
@@ -1015,6 +1042,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   /** Loads the newest turns, or with `earlier` the ones before what is loaded, keeping the reader's place. */
   let activeRead: { key: string; promise: Promise<void> } | null = null;
+  const dirtyTurnIds = new Set<number>();
+  let newestReadId = 0;
   let readAgain = false;
   const needsUnreadHistory = (): boolean => openingThread && unreadFrom !== null && canLoadEarlier && (oldestId(turns) ?? 0) > unreadFrom;
   function finishOpening(): void {
@@ -1045,6 +1074,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (turns.length === 0 && !earlier) render();
     else stage.setAttribute("aria-busy", "true");
     let got: AgentTurn[];
+    const deltaRead = fromEvent && loadedThread && turns.length > 0 && targetTurn === undefined;
+    const requestedIds = deltaRead ? [...new Set([...dirtyTurnIds, ...turns.filter(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting").map(turn => turn.id)])].slice(0, 50) : [];
+    requestedIds.forEach(id => dirtyTurnIds.delete(id));
+    let delta = false, more = false, removed: number[] = [];
     try {
       const before = earlier ? oldestId(turns) : undefined;
       const member = memberId();
@@ -1055,6 +1088,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       const chosen = conversationId();
       const params = {
           limit: PAGE_SIZE,
+          ...(deltaRead ? { after_id: newestReadId, turn_ids: requestedIds } : {}),
           ...(chosen !== undefined ? { conversation_id: chosen } : {}),
           ...(!earlier && targetTurn !== undefined ? { around_id: targetTurn } : {}),
           ...(before === undefined ? {} : { before_id: before }),
@@ -1062,12 +1096,18 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         };
       const historyRead = () => api.agentHistoryList(params);
       const history = await (fromEvent ? eventRead(`agent.history.list:${JSON.stringify(params)}`,historyRead,app) : historyRead());
+      delta = history.delta === true;
+      more = history.has_more === true;
+      removed = history.removed_ids ?? [];
       if (mine === loads) {
+        // Invalidated rows can be newer than this forward page; only its cursor advances paging.
+        newestReadId = delta && history.next_after_id !== undefined ? history.next_after_id : Math.max(newestReadId, ...history.turns.map(turn => turn.id));
         pendingQuestions = { member, conversation: chosen, questions: history.pending_questions ?? [] };
         floatingQuestions.sync();
       }
       got = history.turns.filter(turn => !turn.session_id || !retracted.has(turn.session_id));
     } catch (err) {
+      if (mine === loads) requestedIds.forEach(id => dirtyTurnIds.add(id));
       // A newer load of the newest turns took over: what this one shows does not count, but an
       // earlier page that failed must still let the reader page up again.
       if (mine !== loads) {
@@ -1107,6 +1147,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       loadingEarlier = false;
       turns = mergeTurns(turns, got);
       canLoadEarlier = got.length === PAGE_SIZE;
+    } else if (delta) {
+      pending = false;
+      const updates = new Map(got.map(turn => [turn.id, turn]));
+      turns = [...turns.filter(turn => !removed.includes(turn.id)).map(turn => updates.get(turn.id) ?? turn), ...got.filter(turn => !turns.some(old => old.id === turn.id))].sort((a, b) => b.id - a.id);
     } else {
       pending = false;
       // The newest page replaces what it covers; what was paged back to beyond it stays while it
@@ -1128,6 +1172,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       await readPage(true);
     }
     if (mine !== loads) return;
+    if (more || dirtyTurnIds.size) scheduleRefresh();
     finishOpening();
     if (targetTurn !== undefined) {
       openingThread = false;
@@ -1262,7 +1307,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (retracted.has(requestId)) return;
     if (askingMember === member) askingMember = null;
     // The turn is written by now: the history brings it, and the question waits no more.
-    if (memberId() === member && conversationId() === sentConversation) await load(false);
+    if (memberId() === member && conversationId() === sentConversation) await load(false, true);
     else members.changed();
     outgoing = outgoing.filter((item) => item !== mine);
     render();
@@ -1456,7 +1501,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (visible && turns.some((turn) => turn.permissions?.length)) drawThread();
   }
 
-  const finder = mountConversationFind({ button: searchButton, bar: find, thread, scroll: scroller, changed: open => { searching = open; if (open) { pacing.flush(); render(); } }, load: async current => {
+  const finder = mountConversationFind({ button: searchButton, bar: find, thread, scroll: scroller,
+    records: () => turnWindow.before || turnWindow.after ? [...turns].sort((a,b) => a.created_at_ms-b.created_at_ms || a.id-b.id).map(turn => ({ key: `turn:${turn.id}`,
+      texts: [turn.question, ...(turn.messages?.length ? turn.messages.filter(message => ["reply", "event"].includes(message.kind)).map(message => messagePlainText(message.text, true, composioAction(turn))) : [messagePlainText(turn.text, true, composioAction(turn))])] })) : undefined,
+    reveal: key => { if (turnWindow.focus(key.replace(/^turn:/, ""))) render(); },
+    changed: open => { searching = open; if (open) { pacing.flush(); render(); } }, load: async current => {
     const member = memberId(), conversation = conversationId();
     const gathered: AgentTurn[] = [];
     let before: number | undefined;
@@ -1476,6 +1525,25 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }});
 
   function closeSearch(_draw = true): void { finder.close(false); searching = false; }
+  window.addEventListener("raphael:conversation-shortcut", event => {
+    if (!visible) return;
+    const action = (event as CustomEvent<string>).detail;
+    if (action === "find") {
+      if (roomPane.active) {
+        const input = roomPane.el.querySelector<HTMLInputElement>('.ra-find:not([hidden]) input');
+        if (input) input.focus();
+        else roomPane.el.querySelector<HTMLElement>('[data-room-search]')?.click();
+      }
+      else finder.open();
+      return;
+    }
+    if (roomPane.active) return;
+    const items = conversationCache.get(memberId()) ?? [];
+    const current = conversationId() ?? items.find(item => item.is_default)?.id;
+    const at = items.findIndex(item => item.id === current);
+    const next = items[at + (action === "previous" ? -1 : 1)];
+    if (next) openConversation(memberId(), next.id);
+  });
 
   /** The conversation is gone in the core: the page drops every turn it loaded and shows the empty page. */
   function forgetTurns(): void {
@@ -1542,6 +1610,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    * closes, the composer and the card become that thread's, and nothing of the last thread moves in.
    */
   function switchThread(): void {
+    turnWindow.reset(); openingWindowTarget = undefined; renderedTurns.clear(); renderedThread = [];
     unreadFrom = members.member().unread_from ?? null;
     unreadCaptured = true;
     openingThread = true;
@@ -1554,6 +1623,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     hideSelection();
     pacing.flush();
     loadedThread = false;
+    dirtyTurnIds.clear();
+    newestReadId = 0;
     loads++;
     attachmentEpoch++;
     attachmentMedia.reset();
@@ -2063,6 +2134,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "reply-message":
         replyMessage(act);
         break;
+      case "jump-quote":
+        void jumpQuote(act).catch(err => toaster.info(describeError(err)));
+        break;
       case "more-message":
         void messageMenu(act);
         break;
@@ -2225,9 +2299,33 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (heldKey !== null) releaseKey();
   });
 
-  scroller.addEventListener("scroll", () => {
-    if (scroller.scrollTop < TOP_SLACK_PX && canLoadEarlier && !loadingEarlier && !searching) void load(true);
-  });
+  async function revealTurn(id: number): Promise<void> {
+    releaseRichScroll(scroller);
+    const member = memberId(), conversation = conversationId();
+    if (!turns.some(turn => turn.id === id)) {
+      const page = await api.agentHistoryList({ member_id: member, conversation_id: conversation, around_id: id, limit: PAGE_SIZE });
+      if (member !== memberId() || conversation !== conversationId()) return;
+      turns = mergeTurns(turns, page.turns);
+    }
+    const keys = [...turns].sort((a,b) => a.created_at_ms-b.created_at_ms || a.id-b.id).map(turn => String(turn.id));
+    if (turnWindow.focus(String(id), keys)) { drawingFollows = false; render(); }
+  }
+
+  async function jumpQuote(control: HTMLElement): Promise<void> {
+    const quotedAt = Number(control.closest<HTMLElement>(".tn[data-id]")?.dataset.id), quote = turns.find(turn => turn.id === quotedAt)?.quote;
+    if (!quote) return;
+    const member = memberId(), conversation = conversationId();
+    const source = (): AgentTurn | undefined => [...turns].sort((a,b) => b.id-a.id).find(turn => turn.id < quotedAt &&
+      [messagePlainText(turn.question), ...plainReplies((turn.messages ?? []).filter(message => message.kind === "reply").map(message => message.text)).map(text => messagePlainText(text, true, composioAction(turn))), messagePlainText(turn.text, true, composioAction(turn))].some(text => text.includes(quote.text)));
+    let target = source();
+    while (!target && canLoadEarlier) {
+      const before = oldestId(turns), page = await api.agentHistoryList({member_id:member,conversation_id:conversation,before_id:before,limit:PAGE_SIZE});
+      if (member !== memberId() || conversation !== conversationId()) return;
+      turns = mergeTurns(turns, page.turns); canLoadEarlier = page.turns.length === PAGE_SIZE && oldestId(turns) !== before;
+      target = source();
+    }
+    if (target) { await revealTurn(target.id); thread.querySelector<HTMLElement>(`.tn[data-id="${target.id}"]`)?.scrollIntoView({block:"center"}); }
+  }
 
   app.onEvent((event) => {
     if (event.type === "Hotkey" && event.kind === "cancel_key" && visible ) cancelGesture().press();
@@ -2240,11 +2338,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (wantsRefresh(event)) {
       // a turn of another thread changes only that member's row
       if (event.type === "WorkerChanged") {
+        for (const turn of turns) if (turn.task?.id === event.task_id) dirtyTurnIds.add(turn.id);
         const loaded=hasWorkerTask(turns,event.task_id);
         if (!loaded && visible && !roomPane.active && renderedPage!==pageStamp()) render();
         scheduleRefresh(loaded ? 0 : 1000+REFRESH_DELAY_MS);
       }
-      else if (event.type === "AgentTurn" && (event.member_id ?? RAPHAEL_ID) === memberId()) scheduleRefresh();
+      else if (event.type === "AgentTurn" && (event.member_id ?? RAPHAEL_ID) === memberId()) { dirtyTurnIds.add(event.turn_id); scheduleRefresh(); }
       // Loaded running work changes history; activity and turn events own the roster's state and preview.
       if (event.type !== "WorkerChanged" || event.state !== "running" || !hasWorkerTask(turns, event.task_id)) members.changed(event.type === "WorkerChanged" ? 1000 : undefined);
     }
@@ -2292,6 +2391,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
 
   onAvatarChange(() => {
+    presentationVersion++;
     drawFaces();
     void members.load();
     for (const child of thread.children) drawnHTML.delete(child); // every face is drawn again
@@ -2299,6 +2399,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
 
   onLocaleChange(() => {
+    presentationVersion++;
     closeMediaLightbox();
     void slashMenu.refresh();
     drawWords();
@@ -2333,7 +2434,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         return;
       }
       turns = mergeTurns(turns, result.turns);
-      render();
+      await revealTurn(turnId);
       el.querySelector<HTMLElement>(`.tn[data-id="${turnId}"]`)?.scrollIntoView({ block: "center" });
     }).catch(error => toaster.info(describeError(error)));
   });

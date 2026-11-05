@@ -139,6 +139,7 @@ export interface SearchEntry {
  */
 export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "general", label: "owner.name" },
+  { pane: "general", label: "output.folder" },
   ...PANES.map((p) => ({ pane: p.id })),
   { pane: "appearance", label: "settings.059" },
   { pane: "appearance", label: "settings.067", words: ["dark", "light"] },
@@ -585,7 +586,8 @@ function generalHTML(v: SettingsView): string {
     headingHTML(v) +
     coreNote(v) + `<section class="sgroup"><h2>${esc(t("settings.ownerSection"))}</h2>` + ownerProfileHTML(v.brain) +
     `<div class="slist">` + row(t("settings.agentCity"), "", fieldHTML(t("settings.agentCityHint"), v.cityDraft ?? agentCity(v), { w: 200, label: t("settings.agentCity"), id: "agent-city", invalid: v.cityError !== null, disabled: v.brain === null })) +
-    (v.cityError ? note(st("err", v.cityError()), ' role="alert"') : "") + `</div>` +
+    (v.cityError ? note(st("err", v.cityError()), ' role="alert"') : "") +
+    row(t("output.folder"), t("output.help"), fieldHTML(t("output.empty"), v.brain?.owner_output_folder ?? "", { id: "owner-output-folder", label: t("output.folder"), w: 200, disabled: v.brain === null })) + `</div>` +
     (v.memoryShared ? memoryHTML(v.memoryShared) : "") + `</section>` +
     section(t("settings.groupAppearance"), [
       row(t("settings.069"), "", sel(SIZES, String(d.emblem_size), t("settings.069"), ' data-k="size"')),

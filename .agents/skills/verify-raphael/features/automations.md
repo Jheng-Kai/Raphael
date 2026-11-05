@@ -1,5 +1,20 @@
 # Calendar and automations
 
+## Routine guard reasons (2026-11-05)
+
+R-ROUTINE-01/02 share admission across schedule, event and webhook execution.
+The existing member details row shows the localized rate/absence reason for
+scheduled routines too. A 30-day absence pauses work until explicit re-enable.
+See [Daily work](daily-work.md) for limits, receipts and offline/native boundaries.
+Follow-up 1 authorizes this representative row/editor rendering:
+
+```powershell
+npm run look -- routine-guard-reason automation-edit --theme both --width 1120,720,1920x1080
+```
+
+Inspect the full-size paused reason in both themes/all sizes, comparing its
+existing row, icon and typography with ordinary routines and event error rows.
+
 ## Calendar navigation review (2026-11-01)
 
 The general Home calendar entrance resumes its in-memory date and view. Explicit date/event links still jump. View choice persists in guarded browser storage across reload; the date starts on today in a fresh launch. Week uses all seven columns at content widths of at least 520px, otherwise a short range with an explicit date title. All-day and rhythm bars align with the hour columns. Previous/Today/next share a quiet borderless group; Today dims in its current range without moving.

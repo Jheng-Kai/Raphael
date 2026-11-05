@@ -718,9 +718,9 @@ async def test_real_driver_catalog_offers_only_the_curated_tools(desktop, tmp_pa
     assert DRIVER_CATALOG["reported_count"] == 67
     assert len(DRIVER_CATALOG["names"]) == len(set(DRIVER_CATALOG["names"])) == 68
     assert CURATED <= set(DRIVER_CATALOG["names"])
-    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login", "browser_open"}
+    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps"}
     snapshot = take_snapshot(hub)
-    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover", "fill_login", "browser_open"}
+    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps"}
     assert not snapshot.hidden()
     assert not snapshot.refresh_computer(hub, 0)
     assert all(tool.pinned for tool in hub.offered())
@@ -910,7 +910,7 @@ async def test_native_vm_journey_checks_no_approval_and_owner_control(desktop, t
     directory = tmp_path / "journey"
     directory.mkdir()
     report = await vm_smoke(directory)
-    expected = ["computer__" + name for name in ("get_desktop_state", "click", "vm_exec", "attach_file")]
+    expected = ["computer__" + name for name in ("get_desktop_state", "click", "get_desktop_state", "vm_exec", "attach_file")]
     assert report["completed"] == report["without_approval"] == report["owner_held_refused"] == expected
     assert forwarded == ["set_config", "set_agent_cursor_enabled", *[name.removeprefix("computer__") for name in expected]]
     assert report["paid_requests"] == 0

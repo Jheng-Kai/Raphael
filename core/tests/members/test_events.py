@@ -45,6 +45,23 @@ async def setup(rig):
     return hub, routine
 
 
+async def test_hourly_cap_keeps_event_receipt_pending_until_capacity_returns(rig):
+    hub, routine = await setup(rig)
+    await rig.service.poll_events()
+    hub.items = [{"id": "limited-event", "sender": "client@example.com"}]
+    rig.wall.now += 300_000
+    rig.service._settings.set("routine_run_window", [[0, rig.wall.now]] * 200)
+    await rig.service.poll_events()
+    assert rig.background.submitted == []
+    receipt = rig.conn.execute("SELECT state FROM routine_receipts WHERE routine_id=? AND item_id=?", (routine["id"], "limited-event")).fetchone()
+    assert receipt[0] == "pending"
+    assert "200" in rig.service.store.routine(routine["id"]).last_error
+    rig.wall.now += 3_600_000
+    await rig.service.poll_events()
+    assert len(rig.background.submitted) == 1
+    assert rig.conn.execute("SELECT state FROM routine_receipts WHERE routine_id=? AND item_id=?", (routine["id"], "limited-event")).fetchone()[0] == "fired"
+
+
 async def test_non_composio_poll_does_not_request_catalogue(rig):
     hub, routine = await setup(rig)
 

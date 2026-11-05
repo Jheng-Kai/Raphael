@@ -39,7 +39,7 @@ export async function stopOwned(process, executeCommand = execute) {
   await Promise.race([process.closed, new Promise((_, reject) => setTimeout(() => reject(new Error(`PID ${process.pid} did not close`)), 10000).unref())]);
 }
 
-export async function connectWebView(puppeteer, port, process, timeout = 90000) {
+export async function connectWebView(puppeteer, port, process, timeout = 90000, protocolTimeout = 5000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     if (process.child.exitCode !== null) throw new Error(`App PID ${process.pid} exited: ${JSON.stringify(await process.closed)}`);
@@ -51,7 +51,7 @@ export async function connectWebView(puppeteer, port, process, timeout = 90000) 
       }
       const response = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1000) });
       const version = await response.json();
-      return await puppeteer.connect({ browserWSEndpoint: version.webSocketDebuggerUrl, defaultViewport: null, protocolTimeout: 5000 });
+      return await puppeteer.connect({ browserWSEndpoint: version.webSocketDebuggerUrl, defaultViewport: null, protocolTimeout });
     } catch { await new Promise(resolve => setTimeout(resolve, 250)); }
   }
   throw new Error(`WebView2 CDP readiness timed out on port ${port}`);

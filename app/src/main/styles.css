@@ -295,6 +295,9 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .spend .bar { width: 120px; }
 [data-row="raphael-spend"] .st { white-space: normal; align-items: baseline; }
 .note[data-computer-host-error] .st { white-space: normal; align-items: baseline; }
+[data-computer-host-health] .ctl { max-width: 70%; }
+[data-computer-host-health] .st { white-space: normal; align-items: baseline; }
+[data-computer-host-repair] .message-code pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* ---------- the stage: the emblem and Raphael's words (home, first run) ---------- */
 .stage { position: relative; display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: var(--sp-4); align-items: center; min-height: 132px; color: var(--text); border-bottom: 1px solid var(--line); padding: 0 0 var(--sp-4); }

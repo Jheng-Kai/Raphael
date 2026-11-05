@@ -645,6 +645,15 @@ export async function perform(page, step, evidenceDirectory) {
       if (writes.length) throw new Error(`An unchanged desktop refresh wrote to the panel: ${writes.join(', ')}`);
       return { check: 'desktop-refresh-still', mutations: writes.length };
     }
+    case 'desktop-owner-typing': {
+      await page.waitForFunction(() => document.querySelector('.desktop-panel')?.dataset.interactive === 'true');
+      const handle = await page.$('[data-card-desktop-screen] iframe');
+      const frame = await handle.contentFrame();
+      await frame.click('canvas');
+      await page.keyboard.type('synthetic-owner-input');
+      await frame.waitForFunction(() => window.__desktopAcceptedKeys > 0);
+      return {check:'desktop-owner-typing', synthetic:true};
+    }
     case "desktop-boot-connect": {
       const before = await page.evaluate(() => {
         const box = document.querySelector('.desktop-screen').getBoundingClientRect();
@@ -790,6 +799,17 @@ export async function perform(page, step, evidenceDirectory) {
       const element = await visible('.ra-scroll');
       await element.evaluate((node, position) => node.scrollTo({ top: position === "up" ? Math.max(1, (node.scrollHeight - node.clientHeight) / 2) : node.scrollHeight, behavior: "instant" }), step.position);
       await element.dispose(); break;
+    }
+    case "thread-window-earlier": {
+      const scroll = await visible('.mb-chat:not([hidden]) .ra-scroll');
+      await scroll.evaluate(scroll => {
+        scroll.scrollTop = 1;
+        const anchor = scroll.querySelector('.tn[data-id], .tn[data-room-message]');
+        window.__windowAnchor = { node:anchor, top:anchor.getBoundingClientRect().top };
+        scroll.dispatchEvent(new Event('scroll'));
+      });
+      await page.waitForFunction((scroll, expected) => Number(scroll.dataset.windowMounted) === expected, {timeout:6000}, scroll, step.expected ?? 45);
+      await scroll.dispose(); break;
     }
     case "scroll": { const element = await visible(step.selector); await element.evaluate((element, block) => element.scrollIntoView({ block, inline: "nearest", behavior: "instant" }), step.block ?? "end"); await element.dispose(); break; }
     case "wait-scroll-end": {

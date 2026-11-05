@@ -107,6 +107,9 @@ logger = logging.getLogger(__name__)
 TICK_S = 30.0
 # A routine due while the core was not running runs once if it was due within this long.
 CATCH_UP_MS = 12 * 3_600_000
+ROUTINE_HOURLY_TOTAL = 300
+ROUTINE_HOURLY_MEMBER = 200
+OWNER_ABSENCE_MS = 30 * 24 * 3_600_000
 # What the member column shows of the last line of a thread, at most.
 PREVIEW_CHARS = 80
 # The folders of the pictures, in the app's local folder.
@@ -270,8 +273,11 @@ class MembersService:
         self._notify = notify
         # Told of each member made through the tools: who made it, and which it is.
         self.member_made = lambda maker, made: None
+        self.remove_computer_data = None
         self._connections = connections
         self._now_ms = now_ms
+        if not self._settings.get("routine_owner_seen_ms"):
+            self._settings.set("routine_owner_seen_ms", now_ms())
         self._tz = tz
         self._tick_s = tick_s
         self._avatars = local_dir / AVATARS_DIR
@@ -304,6 +310,7 @@ class MembersService:
             homes.safe(homes.state(identifier) / "SOUL.md").unlink(missing_ok=True)  # the old JSON mirror
 
     def register(self, router: Router) -> None:
+        self._management_rpc = router.call
         methods = {
             "members.skills.list": self._skills_list,
             "members.skills.read": self._skills_read,
@@ -711,8 +718,16 @@ class MembersService:
     async def _skills_list(self, params: dict) -> dict:
         member_id = self._skill_scope(params)
         result = {"skills": self._cap(self.capabilities.skills, member_id), "undo": self.capabilities.undo_revision(member_id)}
+        result["sets"] = self._cap(self.capabilities.plugin_sets) if member_id == -1 or params.get("discover") is True else []
         if params.get("discover") is True:
-            result["sources"] = self._cap(self.capabilities.local_sources)
+            result["sources"] = self._cap(self.capabilities.plugin_sources)
+            result["marketplaces"] = [json.loads(row[0]) for row in self._conn.execute("SELECT catalog FROM skill_marketplaces ORDER BY repo")]
+        if "marketplace" in params:
+            try:
+                result["marketplace"] = await self.capabilities.add_marketplace(params["marketplace"])
+                result["sets"] = self.capabilities.plugin_sets()
+            except MemberError as error:
+                raise _rpc_error(error) from None
         return result
 
     async def _skills_import(self, params: dict) -> dict:
@@ -720,6 +735,14 @@ class MembersService:
         added = []
         try:
             source = params.get("source")
+            if params.get("plugin") is True or "set_id" in params or "marketplace" in params:
+                if member_id != -1:
+                    raise MemberError("scope", "plugin sets belong to the shared library")
+                identifier = _whole(params, "set_id", least=1) if "set_id" in params else None
+                installed = await self.capabilities.import_plugin(source, set_id=identifier, marketplace=params.get("marketplace"), name=params.get("name"))
+                self._changed("members.skills.changed", 0)
+                self._changed()
+                return {"set": installed, "skills": self.capabilities.skills(-1)}
             if isinstance(source, str) and source.startswith("local:"):
                 skill = self.capabilities.import_local(member_id, source)
                 self._changed("members.skills.changed", 0 if member_id == -1 else member_id)
@@ -770,6 +793,13 @@ class MembersService:
 
     async def _skills_delete(self, params: dict) -> dict:
         member_id = self._skill_scope(params)
+        if "set_id" in params:
+            if member_id != -1:
+                raise invalid_params("plugin sets belong to the shared library")
+            deleted = self._cap(self.capabilities.delete_set, _whole(params, "set_id", least=1))
+            self._changed("members.skills.changed", 0)
+            self._changed()
+            return {"deleted": deleted}
         deleted = self._cap(self.capabilities.delete_skill, member_id, _whole(params, "id", least=1))
         self._changed("members.skills.changed", member_id)
         self._changed()
@@ -935,6 +965,12 @@ class MembersService:
 
     async def _delete(self, params: dict) -> dict:
         member_id = self._member_id(params)
+        if type(params.get("remove_computer_data", False)) is not bool:
+            raise invalid_params("remove_computer_data must be a boolean")
+        if params.get("remove_computer_data"):
+            if self.remove_computer_data is None:
+                raise invalid_params("Computer data removal unavailable")
+            await self.remove_computer_data(member_id, params.get("computer_host"))
         member = self.store.member(member_id)
         assert member is not None
         self._background.forget_member(member_id)
@@ -1026,6 +1062,10 @@ class MembersService:
         return {}
 
     async def _viewing_now(self, params: dict) -> dict:
+        if params.get("activity_only") is True:
+            self.pause_absent_routines()
+            self._settings.set("routine_owner_seen_ms", self._now_ms())
+            return {}
         member_id = params.get("id")
         if member_id is not None:
             member_id = _whole(params, "id")
@@ -1036,6 +1076,8 @@ class MembersService:
             self.activity.seen(member_id)
             if self.store.mark_read(member_id):
                 self._changed()
+        self.pause_absent_routines()
+        self._settings.set("routine_owner_seen_ms", self._now_ms())
         self._viewing = member_id
         return {}
 
@@ -1101,12 +1143,14 @@ class MembersService:
         return routine_id
 
     async def routine_tool(self, member_id: int, name: str, arguments: dict) -> dict:
-        """Any speaker can select any member; the routine must belong to the one selected."""
+        """Shared work tools act on the speaker's own routines only."""
         handlers = {"routine_list": self._routines_list, "routine_create": self._routine_create,
                     "routine_update": self._routine_update, "routine_delete": self._routine_delete}
         if name not in handlers:
             raise invalid_params("unknown routine tool")
         target = _whole(arguments, "member_id") if "member_id" in arguments else member_id
+        if target != member_id:
+            raise invalid_params("Use primary-contact management tools in the owner's interactive chat for another member's routines")
         params = {**arguments, "member_id": target}
         if name in ("routine_update", "routine_delete"):
             routine_id = self._routine_id(params)
@@ -1120,6 +1164,22 @@ class MembersService:
 
     def admin_confirmation(self, name: str, arguments: dict, language: str, *, question: bool = True) -> str:
         from ..agent.team_admin import confirmation
+        from ..management import resolve
+
+        action, values = resolve(name, arguments)
+        traditional = {"member_create", "member_update", "member_delete", "group_create", "group_rename",
+                       "member_skill_import", "member_command_save"}
+        if action is not None and name not in traditional:
+            labels = {"en": "Affected target", "zh-TW": "影響對象", "ja": "対象"}
+            target = self.management_target(name, arguments)
+            values = {key: value for key, value in values.items() if key != "data"}
+            if "data" in arguments:
+                values["image"] = arguments.get("name", "uploaded image")
+            heading = {"en": "Requested change", "zh-TW": "要求的變更", "ja": "変更内容"}[language]
+            scope = action.description if language == "en" else self.management_label(action.name, language)
+            return (f"{heading}: {scope}\n{labels[language]}: {target}\n"
+                    + json.dumps(values, ensure_ascii=False, indent=2)
+                    + ({"en": "\nAllow this change?", "zh-TW": "\n允許這項變更嗎？", "ja": "\nこの変更を許可しますか？"}[language] if question else ""))
 
         identifier = arguments.get("member_id", 0) if name.startswith("routine_") else arguments.get("member_id", arguments.get("id"))
         target = ""
@@ -1138,7 +1198,12 @@ class MembersService:
             group = self.store.group(current.group_id) if current and current.group_id else None
             arguments = {"name": current.name if current else "", "role": current.role if current else "",
                          "blurb": current.blurb if current else "", "group": group.name if group else "", **arguments}
-        return confirmation(name, arguments, language, target, question=question)
+        text = confirmation(name, arguments, language, target, question=False)
+        original_fields = {"id", "name", "role", "blurb", "personality", "instructions", "group", "avatar_preset", "source", "member_id", "description", "template"}
+        extra = {key: value for key, value in arguments.items() if key not in original_fields}
+        if extra:
+            text += "\n" + json.dumps(extra, ensure_ascii=False, indent=2)
+        return text + ({"en": "\nAllow this change?", "zh-TW": "\n允許這項變更嗎？", "ja": "\nこの変更を許可しますか？"}[language] if question else "")
 
     async def admin_drafts(self, operations: list[dict]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """Build structured member and group drafts for a pending team administration batch."""
@@ -1260,9 +1325,18 @@ class MembersService:
                 raw_id = raw.pop("id", None)
                 target_id = raw.pop("member_id", raw_id if type(raw_id) is int else None)
                 if target_id is not None:
+                    original = next((op["arguments"] for op in operations
+                                     if op["name"] == "member_update" and op["arguments"].get("id") == target_id), {})
+                    # The editable draft contains persona fields. Preserve the
+                    # other fields the owner saw in the full permission details.
+                    raw = {**original, **raw}
                     raw["id"] = target_id
                     planned.append({"name": "member_update", "arguments": raw})
                 else:
+                    index = sum(op["name"] == "member_create" for op in planned)
+                    originals = [op["arguments"] for op in operations if op["name"] in ("member_create", "create_member")]
+                    if index < len(originals):
+                        raw = {**originals[index], **raw}
                     raw.setdefault("role", "")
                     planned.append({"name": "member_create", "arguments": raw})
         else:
@@ -1278,11 +1352,12 @@ class MembersService:
         *,
         drafts: list[dict] | None = None,
         groups: list[dict] | None = None,
+        interactive: bool = False,
     ) -> list[dict]:
         """Apply the approved list atomically and publish only committed roster changes."""
         from ..agent.team_admin import BATCH_TOOLS
 
-        if not self.store.exists(member_id) or not operations or any(op["name"] not in BATCH_TOOLS for op in operations):
+        if not interactive or not self.store.is_chief(member_id) or not operations or any(op["name"] not in BATCH_TOOLS for op in operations):
             raise invalid_params("invalid team administration batch")
         planned = self.plan_admin_batch(operations, drafts=drafts, groups=groups)
         allowed_targets = {op["arguments"].get("id") for op in operations if op["name"] == "member_update"}
@@ -1300,7 +1375,7 @@ class MembersService:
         self._remove_picture = pictures.append
         try:
             with self.store.transaction():
-                results = [await self.admin_tool(member_id, "member_create" if op["name"] == "create_member" else op["name"], op["arguments"])
+                results = [await self.admin_tool(member_id, "member_create" if op["name"] == "create_member" else op["name"], op["arguments"], interactive=True)
                            for op in planned]
         finally:
             self._notify, self._remove_picture = notify, remove_picture
@@ -1311,16 +1386,131 @@ class MembersService:
                 notify(method, data)
         return results
 
-    async def admin_tool(self, member_id: int, name: str, arguments: dict) -> dict:
-        """Adapt the registry of team administration tools to the same RPC handlers, defaults and notifications."""
-        from ..agent.team_admin import DEFINITIONS
+    @staticmethod
+    def management_label(name, language):
+        labels = {
+            "member_primary": ("移轉主要聯絡人與管理權", "主担当と管理権限を移動"),
+            "member_history_clear": ("清除此成員的全部對話紀錄", "メンバーの全会話履歴を消去"),
+            "member_history_delete": ("刪除此則對話紀錄", "会話記録を削除"),
+            "group_delete": ("刪除資料夾；成員保留並移至未分類", "フォルダーを削除しメンバーは保持"),
+            "room_members": ("替換群聊成員；移除下列成員", "グループのメンバーを置換"),
+            "room_delete": ("刪除群聊及全部訊息", "グループと全メッセージを削除"),
+            "conversation_delete": ("刪除對話及全部紀錄", "会話と全記録を削除"),
+            "conversation_clear": ("清除此對話的全部紀錄", "会話の全記録を消去"),
+            "member_skill_delete": ("刪除技能套件與授權", "スキルと権限を削除"),
+            "member_skill_undo": ("???????????????", "???????????????????"),
+            "member_command_delete": ("刪除成員指令", "コマンドを削除"),
+            "member_routine_delete": ("刪除例行任務及排程", "定期タスクと予定を削除"),
+            "connection_disconnect": ("中斷連線並撤銷認證", "接続と認証を解除"),
+            "connector_disconnect": ("中斷應用程式連線並撤銷認證", "アプリ接続と認証を解除"),
+            "manage_connection": ("變更連線；中斷連線會撤銷認證", "接続を変更・認証を解除"),
+            "dictionary_delete": ("刪除字典詞彙", "辞書の単語を削除"),
+            "dictation_delete": ("刪除此則聽寫紀錄", "音声入力記録を削除"),
+            "dictation_clear": ("刪除全部聽寫紀錄", "音声入力の全記録を削除"),
+            "memory_clear": ("清除記憶文件", "メモリ文書を消去"),
+            "memory_summary_clear": ("清除對話摘要", "会話の要約を消去"),
+            "settings_history_retention_days": ("變更保留天數；較舊紀錄會被永久刪除", "保持期間を変更・古い記録を完全削除"),
+        }
+        return labels.get(name, ("套用下列管理變更", "次の管理変更を適用"))[0 if language == "zh-TW" else 1]
 
-        if not self.store.exists(member_id) or name not in DEFINITIONS:
+    def management_target(self, name: str, arguments: dict) -> str:
+        """Resolve the target at card time; retain exact IDs and all removal scope."""
+        from ..management import resolve
+
+        item, arguments = resolve(name, arguments)
+        name = item.name
+        identifier = arguments.get("room_id", arguments.get("member_id", arguments.get("id")))
+        routine = None
+        if item.rpc.startswith("routines."):
+            identifier = arguments.get("id")
+            routine = self.store.routine(identifier) if type(identifier) is int else None
+        target = (f"ID {identifier}" if identifier is not None else
+                  str(arguments.get("name", arguments.get("title", "all relevant records"))))
+        if item.rpc.startswith("members.") or name.startswith(("member_history", "member_routine")):
+            member_id = (arguments.get("member_id", routine.member_id if routine else None)
+                         if item.rpc.startswith("routines.") else arguments.get("member_id", arguments.get("id")))
+            if type(member_id) is int:
+                target += f" / {self.name_of(member_id)}"
+        table = ("member_groups" if item.rpc.startswith("groups.") else "rooms" if item.rpc.startswith("rooms.")
+                 else "conversations" if item.rpc.startswith("conversations.") else "routines" if item.rpc.startswith("routines.") else None)
+        if table and type(identifier) is int:
+            # Table names are fixed above, never model input.
+            record = self._conn.execute(f"SELECT * FROM {table} WHERE id=?", (identifier,)).fetchone()
+            if record:
+                data = dict(record)
+                target += " / " + str(data.get("name", data.get("title", "")))
+        if name == "member_delete":
+            target += " / conversations, memory, routines, skills, commands and resources"
+        if name == "member_history_delete":
+            turn = self._history.get(arguments.get("turn_id"))
+            target += f" / turn {arguments.get('turn_id')}"
+            if turn is not None:
+                target += " / " + turn.question
+        if name == "member_primary":
+            target += f" / authority moves from {self.name_of(self.primary_id())}"
+        if name == "group_delete":
+            target += " / folder only; members remain ungrouped"
+        if name == "room_delete":
+            target += " / all room messages and room state"
+        if name == "room_members":
+            previous = [row[0] for row in self._conn.execute("SELECT member_id FROM room_members WHERE room_id=?", (identifier,))]
+            removed = sorted(set(previous) - set(arguments.get("member_ids", [])))
+            target += " / removed: " + ", ".join(f"{i} ({self.name_of(i)})" for i in removed)
+        if name == "dictionary_delete":
+            record = self._conn.execute("SELECT word FROM dictionary WHERE id=?", (identifier,)).fetchone()
+            if record:
+                target += " / " + record[0]
+        if name in ("member_skill_delete", "member_command_delete"):
+            member = arguments.get("member_id", 0)
+            try:
+                resources = (self.capabilities.skills(-1 if arguments.get("shared") else member)
+                             if name == "member_skill_delete" else self.capabilities.commands(member))
+            except MemberError:
+                resources = []
+            target += f" / {self.name_of(member)} / " + ", ".join(item["name"] for item in resources if item["id"] == arguments.get("id"))
+        if name == "member_skill_undo":
+            target += " / restore the last skill snapshot, replacing its current documents"
+        if item.setting:
+            target = f"{item.setting}: {self._settings.get(item.setting)} -> {arguments.get('value')}"
+        if item.rpc in ("integrations.disconnect", "connectors.disconnect") or name == "manage_connection":
+            connection = arguments.get("id", arguments.get("connection"))
+            label = next((entry.get("name", connection) for entry in self._connections() if entry.get("id") == connection), connection)
+            target = f"{label} (ID {connection}) / connection and stored authorization"
+        return target
+
+    def authorize_management(self, member_id, name, arguments, *, interactive=False, approval=None):
+        """Recheck live authority and the consumed exact-action gate token before a write."""
+        from ..agent.team_admin import DEFINITIONS
+        from ..management import REGISTRY, destructive
+        from ..agent.policy import Approval, action_digest
+
+        if not self.store.exists(member_id) or name not in DEFINITIONS and name not in REGISTRY:
             raise invalid_params("unknown team administration tool")
-        schema = DEFINITIONS[name]["parameters"]
+        if name != "team_overview" and (not self.store.is_chief(member_id) or not interactive):
+            raise invalid_params("Only the current primary contact can manage the team in the owner's interactive private chat")
+        schema = DEFINITIONS[name]["parameters"] if name in DEFINITIONS else REGISTRY[name].schema
         if (set(arguments) - set(schema["properties"]) or
                 any(field not in arguments for field in schema["required"])):
             raise invalid_params("invalid team administration fields")
+        if name != "team_overview":
+            from ..management import validate, resolve
+            validate(arguments, schema)
+            item, values = resolve(name, arguments)
+            validate(values, item.schema)
+            if destructive(name, arguments, self._settings.get("history_retention_days")):
+                if (not isinstance(approval, Approval) or not approval.spent
+                        or approval.digest != action_digest(name, arguments)):
+                    raise invalid_params("This destructive change requires the owner's approval for this exact action")
+                used = getattr(self, "_management_approvals", set())
+                if approval.pending_id in used:
+                    raise invalid_params("This approval has already been used")
+                used.add(approval.pending_id)
+                self._management_approvals = used
+
+    async def admin_tool(self, member_id: int, name: str, arguments: dict, *, interactive: bool = False, approval=None) -> dict:
+        """Run the same services as the UI after live authorization."""
+        from ..management import REGISTRY, resolve
+        self.authorize_management(member_id, name, arguments, interactive=interactive, approval=approval)
         if name == "team_overview":
             from ..computer.grants import ComputerGrants
             roster = await self._list({})
@@ -1344,12 +1534,27 @@ class MembersService:
                     "rooms": rooms.member_rooms(member_id)["rooms"] if rooms else []}
         if name in ("member_create", "member_update"):
             params = dict(arguments)
+            if "effort" in params:
+                identifier = params.get("id", 0)
+                current = self.speaker(identifier)
+                model = params.get("model", current.model if current else "") or self._starting_model()
+                params["model"] = model.partition("?effort=")[0] + "?effort=" + params.pop("effort")
             if name == "member_update" and params.get("id") == 0:
                 from ..brain.settings import checked
 
                 changes = {key: value for key, value in params.items() if key in ("name", "role", "personality", "instructions")}
-                if any(params.get(key) for key in ("group", "avatar_preset", "blurb")):
-                    raise invalid_params("the first Bot cannot be regrouped")
+                preferences = {"draft_first": "raphael_draft_first", "model": "agent_model", "pinned": "chief_pinned",
+                               "read_aloud": "tts_enabled", "voice": "tts_fish_voice"}
+                # Profile drafts include these empty fields for ordinary members.
+                for field in ("blurb", "group", "avatar_preset"):
+                    if params.get(field) == "":
+                        params.pop(field)
+                if set(params) - {"id", "name", "role", "personality", "instructions", *preferences}:
+                    raise invalid_params("This field is not editable for the first Bot")
+                # Validate the whole request before any profile/preference write.
+                for field, setting in preferences.items():
+                    if field in params:
+                        checked(setting, params[field])
                 profile = {"name": RAPHAEL_NAMES[self._language()], **self.first_bot_profile(), **changes}
                 try:
                     key, profile = checked("first_bot_profile", profile)
@@ -1362,6 +1567,9 @@ class MembersService:
                     self._conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                                        (key, json.dumps(profile)))
                 self._changed()
+                for field, setting in preferences.items():
+                    if field in params:
+                        await self._management_rpc("settings.set", {"key": setting, "value": params[field]})
                 return {"member": self._raphael_view(self._language(), {}, set(), {})}
             if name == "member_update":
                 self._member_id(params)
@@ -1390,10 +1598,17 @@ class MembersService:
                 if created_group:
                     await self._group_delete({"id": created_group["id"]})
                 raise
-        handlers = {"member_delete": self._delete, "group_create": self._group_create,
-                    "group_rename": self._group_update, "member_skill_import": self._skills_import,
-                    "member_command_save": self._commands_save}
-        return await handlers[name](dict(arguments))
+        action, arguments = resolve(name, arguments)
+        if action.service != "rpc":
+            raise invalid_params("This action requires its existing owner card service")
+        params = {"key": action.setting, "value": arguments["value"]} if action.setting else dict(arguments)
+        result = await self._management_rpc(action.rpc, params)
+        if action.setting or name == "settings_read":
+            # The UI response includes internal provider/device/authority state.
+            # Management tools return only the explicitly managed preferences.
+            managed = {item.setting for item in REGISTRY.values() if item.setting}
+            result = {**result, "settings": {key: value for key, value in result.get("settings", {}).items() if key in managed}}
+        return result
 
     async def _routines_list(self, params: dict) -> dict:
         member_id = self._routine_member(params) if "member_id" in params else None
@@ -1444,7 +1659,7 @@ class MembersService:
         rows = self._conn.execute(
             "SELECT r.id, r.routine_id, r.scheduled, r.started, r.finished,"
             f" {ROUTINE_RUN_STATUS_SQL} AS status, r.turn_id, r.summary, r.cost"
-            " FROM routine_runs r LEFT JOIN agent_turns t ON t.id=r.turn_id WHERE r.routine_id = ? ORDER BY r.id DESC LIMIT 100", (routine_id,)
+            " FROM routine_runs r LEFT JOIN agent_turns t ON t.id=r.turn_id WHERE r.routine_id = ? ORDER BY r.id DESC LIMIT 20", (routine_id,)
         )
         runs = [dict(row) for row in rows]
         total = self._conn.execute("SELECT COUNT(*) FROM routine_runs WHERE routine_id = ?", (routine_id,)).fetchone()[0]
@@ -1523,6 +1738,7 @@ class MembersService:
         self._events = EventPoller(self, gate)
 
     async def poll_events(self) -> None:
+        self.pause_absent_routines()
         if self._events is not None:
             try:
                 await self._events.poll()
@@ -1555,6 +1771,7 @@ class MembersService:
         """Run the routines that are due now; the ids of those that were run. Each is moved to its
         next time before it runs. One due longer ago than CATCH_UP_MS is not run, only moved."""
         now = self._now_ms() if now_ms is None else now_ms
+        self.pause_absent_routines()
         ran: list[int] = []
         for routine in self.store.due(now):
             assert routine.next_run_ms is not None
@@ -1567,6 +1784,9 @@ class MembersService:
             if routine.schedule.max_runs is not None and count >= routine.schedule.max_runs:
                 self.store.advance(routine.id, next_run_ms=None, ran_at_ms=None)
                 self._changed("routines.changed", routine.member_id)
+                continue
+            if catch_up and not self.admit_routine(routine):
+                self.store.advance(routine.id, next_run_ms=now + 60_000, ran_at_ms=None)
                 continue
             if catch_up and routine.schedule.max_runs is not None and count + 1 >= routine.schedule.max_runs:
                 following = None
@@ -1583,12 +1803,61 @@ class MembersService:
             ran.append(routine.id)
         return ran
 
+    def _guard_reason(self, kind: str) -> str:
+        messages = {
+            "zh-TW": {"absence": "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。", "member": "此成員最近一小時已執行 200 次，稍後自動重試。", "total": "團隊最近一小時已執行 300 次，稍後自動重試。"},
+            "ja": {"absence": "30 日間利用がないため停止しました。確認して再開してください。", "member": "このメンバーは過去 1 時間に 200 回実行しました。後で再試行します。", "total": "チームは過去 1 時間に 300 回実行しました。後で再試行します。"},
+            "en": {"absence": "Paused after 30 days without owner activity. Review and enable to resume.", "member": "This member reached 200 runs in the last hour. Retrying later.", "total": "The team reached 300 runs in the last hour. Retrying later."},
+        }
+        return messages.get(self._language(), messages["en"])[kind]
+
+    def pause_absent_routines(self) -> None:
+        if self._now_ms() - self._settings.get("routine_owner_seen_ms") < OWNER_ABSENCE_MS:
+            return
+        members = {routine.member_id for routine in self.store.routines() if routine.enabled}
+        with self._conn:
+            self._conn.execute("UPDATE routines SET enabled=0,next_run_ms=NULL,last_error=? WHERE enabled=1", (self._guard_reason("absence"),))
+        for member in members:
+            self._changed("routines.changed", member)
+
+    def admit_routine(self, routine: Routine) -> bool:
+        self.pause_absent_routines()
+        current = self.store.routine(routine.id)
+        if current is None or not current.enabled:
+            return False
+        counts = self._conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(r.member_id=?),0) FROM routine_runs rr JOIN routines r ON r.id=rr.routine_id WHERE rr.started>?",
+            (routine.member_id, self._now_ms() - 3_600_000),
+        ).fetchone()
+        window = self._run_window()
+        total = max(counts[0], len(window))
+        member = max(counts[1], sum(entry[0] == routine.member_id for entry in window))
+        kind = "total" if total >= ROUTINE_HOURLY_TOTAL else "member" if member >= ROUTINE_HOURLY_MEMBER else None
+        if kind:
+            with self._conn:
+                self._conn.execute("UPDATE routines SET last_error=? WHERE id=?", (self._guard_reason(kind), routine.id))
+            self._changed("routines.changed", routine.member_id)
+            return False
+        return True
+
+    def _run_window(self) -> list[list[int]]:
+        """Keep admission receipts across restarts and routine deletion; at most 300 per hour."""
+        since = self._now_ms() - 3_600_000
+        return [entry for entry in self._settings.get("routine_run_window")
+                if isinstance(entry, list) and len(entry) == 2
+                and all(type(value) is int for value in entry) and entry[1] > since]
+
     def routine_busy(self, routine_id: int) -> bool:
         return self._conn.execute("SELECT 1 FROM worker_tasks WHERE routine_id=? AND state IN ('queued','running','waiting') LIMIT 1", (routine_id,)).fetchone() is not None
 
     def _run(self, routine: Routine, *, text: str | None = None, session: str | None = None) -> int | None:
         """A routine's run: a turn of its thread, and a background task of its member that
         completes it."""
+        if not self.admit_routine(routine):
+            return None
+        self._settings.set("routine_run_window", [*self._run_window(), [routine.member_id, self._now_ms()]])
+        with self._conn:
+            self._conn.execute("UPDATE routines SET last_error='' WHERE id=?", (routine.id,))
         speaker = self.store.speaker(routine.member_id)
         if speaker is None:
             return

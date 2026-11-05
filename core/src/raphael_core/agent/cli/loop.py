@@ -167,6 +167,8 @@ class CliLoop:
         self._stream_records = []
         self._usage = {}
         self._guardrails = ToolGuardrails()
+        from ...worker.computer_verification import ComputerVerification
+        self._computer_check = ComputerVerification()
         self.failure_reason = None
         # A CLI reads its tool list once, when it starts: after a change (`catalog_changed`) it starts again in the same
         # thread, and is told why.
@@ -218,6 +220,7 @@ class CliLoop:
                 return ToolOutcome(True, content=json.dumps(answer))
             previous_tools = list(self.tools)
             result = await self._execute(identifier, name, args)
+            self._computer_check.after(name, args, result.ok, result.kind)
             refresh = getattr(self, "refresh_tools", None)
             if refresh is not None and previous_tools != refresh() and not self.catalog_changed:
                 self.reload_note = ("The connected tools changed. Read the current tool list and continue the original task "
@@ -637,6 +640,13 @@ class CliLoop:
                         return None
                     final = event.text.strip()
                     if final:
+                        if check := self._computer_check.finishing():
+                            if check == "stop":
+                                self._queue.put_nowait(Outcome("stopped", kind="computer_verification_required"))
+                                return None
+                            self.reload_note = check
+                            self.catalog_changed = True
+                            return "tools_changed"
                         self.owner_input.closed = True
                         self._queue.put_nowait(Outcome("done", final=final))
                         return None

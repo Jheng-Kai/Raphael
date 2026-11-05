@@ -10,6 +10,15 @@
 .desktop-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .desktop-shell { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--sp-2); min-height: 0; }
 .desktop-caption { margin: 0; color: var(--text-3); font-size: var(--fs-sm); font-weight: 400; text-align: center; }
+.computer-lifecycle { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.computer-lifecycle-state { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); }
+.computer-lifecycle-face > .av { --av: 28px; }
+.mb-det-head:has(.computer-lifecycle) { flex-wrap: wrap; }
+.mb-det-head .mb-det-fill:has(+ .computer-lifecycle) { display: none; }
+.mb-det-head .computer-lifecycle { display: contents; }
+.mb-det-head .computer-lifecycle-state:not(:empty) { flex-basis: 100%; }
+.computer-lifecycle-state:empty { display: none; }
+.computer-lifecycle-location { min-width: 0; margin-left: auto; }
 .desktop-screen, [data-card-desktop-screen], [data-card-screen] { --text: var(--desktop-frame-text); --text-2: var(--desktop-frame-text); --text-3: color-mix(in srgb, var(--desktop-frame-text) 70%, transparent); --panel: var(--desktop-frame-bg); --content: var(--desktop-frame-bg); }
 .desktop-takeover-bar { display: flex; align-items: center; gap: var(--sp-3); min-height: 44px; padding: var(--sp-2) var(--sp-3); }
 .desktop-identity { display: flex; align-items: center; gap: var(--sp-2); flex: 1; min-width: 0; }
@@ -25,7 +34,7 @@
 .desktop-shell .desktop-heading .btn.icon:active:not(:disabled) { color: var(--desktop-frame-text); }
 .desktop-shell .desktop-heading .btn.icon:active:not(:disabled) { color: color-mix(in srgb, var(--desktop-frame-text) 85%, transparent); }
 .desktop-heading h2 { margin: 0; overflow: hidden; color: inherit; font-size: var(--fs-sm); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
-.desktop-request { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.desktop-request, .computer-repair-note { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .desktop-panel[data-expanded] > .desktop-request { padding: 0 var(--sp-3); }
 .desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; min-height: 160px; overflow: hidden; background: var(--content); border: 1px solid var(--line); border-radius: var(--r-sm); }
 .desktop-screen iframe, [data-card-desktop-screen] iframe, [data-card-screen] iframe { position: relative; z-index: 1; display: block; width: 100%; height: 100%; border: 0; }
@@ -99,6 +108,18 @@
 .menu.computer-location-popover .field, .menu.computer-location-popover .ctl .sel { width: 100%; max-width: 100%; min-width: 0; }
 .menu.computer-location-popover .sel { justify-content: space-between; padding: 0 var(--sp-2) 0 var(--sp-3); border: 1px solid var(--btn-edge); background: var(--btn); text-align: left; }
 .menu.computer-location-popover .sel > span { flex: 1; min-width: 0; text-align: left; }
+.menu.computer-location-popover > .btn { border: 1px solid var(--btn-edge); background: var(--btn); }
 .computer-location-purpose, .computer-location-error { margin: var(--sp-2) 0; font-size: var(--fs-sm); line-height: 1.5; overflow-wrap: anywhere; white-space: normal; }
 .computer-location-purpose { color: var(--text-3); }
 .computer-location-error { color: var(--err); }
+
+/* Watching enlarges the same view-only stream and retains the existing sidebar. */
+.desktop-enlarge { position: absolute; z-index: 4; top: var(--sp-2); right: var(--sp-2); }
+.desktop-live { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: var(--fs-sm); }
+:root[data-desktop-watch] .page-agent .mb-det { left: var(--sidebar-width); width: auto; }
+@media (min-width: 860px) {
+  :root[data-desktop-watch] :is(.side, [data-sidebar="open"]) { visibility: visible; }
+}
+:root[data-desktop-watch] .desktop-panel { position: fixed; inset: var(--window-controls-height) 0 0 var(--sidebar-width); width: auto; height: auto; background: var(--content); }
+:root[data-desktop-watch] .desktop-actions { display: none; }
+[data-card-desktop-screen][data-owner-control] { cursor: auto; }

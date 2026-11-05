@@ -8,6 +8,12 @@ export default class RFB extends EventTarget {
     target.style.cssText = 'display:flex;align-items:center;justify-content:center;width:100%;height:100%;overflow:hidden;background:rgb(40,40,40)';
     this.canvas = document.createElement('canvas');
     this.canvas.width = 1024; this.canvas.height = 768;
+    this.canvas.tabIndex = 0;
+    this.canvas.addEventListener('keydown', event => {
+      if (this.viewOnly || event.key.length !== 1) return;
+      window.__desktopAcceptedKeys = (window.__desktopAcceptedKeys ?? 0) + 1;
+      this.draw();
+    });
     const hour = new parent.Date().getHours();
     this.wallpaper = new Image();
     this.wallpaper.onload = () => this.draw();
@@ -36,6 +42,12 @@ export default class RFB extends EventTarget {
     ctx.fillStyle = '#182332'; ctx.font = '14px system-ui'; ctx.fillText('工作區 — 測試桌面', 12, 19);
     ctx.fillStyle = '#eef3fa'; ctx.font = '16px monospace';
     ['$ cat raphael-smoke.txt', 'Raphael VM smoke', '', '$ pwd', '/home/cua/workspace'].forEach((line, i) => ctx.fillText(line, 24, 72 + i * 26));
+    if (window.__desktopAcceptedKeys) {
+      ctx.fillStyle = '#eef3fa'; ctx.fillRect(180, 310, 650, 200);
+      ctx.fillStyle = '#182332'; ctx.font = '22px system-ui';
+      ctx.fillText('Synthetic sign-in', 210, 355);
+      ctx.fillText('Password: ' + '•'.repeat(Math.min(18, window.__desktopAcceptedKeys)), 210, 410);
+    }
   }
   disconnect() { this.observer.disconnect(); this.canvas.remove(); this.dispatchEvent(new Event('disconnect')); }
 }

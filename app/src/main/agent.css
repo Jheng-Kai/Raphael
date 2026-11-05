@@ -126,6 +126,7 @@
 /* ---------- the stage ---------- */
 .ra-stage { grid-row: 3; position: relative; display: flex; flex-direction: column; min-height: 0; }
 .ra-scroll { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; overflow-anchor: none; padding: var(--sp-1) var(--sp-1) var(--sp-4); }
+.thread-window-sentinel { height: 1px; pointer-events: none; }
 .ra-col { max-width: var(--pa-colw); margin: 0 auto; }
 .ra-older { display: flex; justify-content: center; padding: var(--sp-1) 0 var(--sp-1); }
 .ra-wait { padding-top: var(--sp-5); }
@@ -192,7 +193,8 @@
 .message-tooltip[hidden], :has([data-cancel-armed="true"]) > .message-tooltip { display: none; }
 .page-agent .btn.quote-pill { position: fixed; z-index: 99; width: auto; min-height: 32px; padding: var(--sp-1) var(--sp-3); gap: var(--sp-1); border: 1px solid var(--edge); border-radius: var(--r-pill); background: var(--panel); color: var(--text); box-shadow: var(--pop); font: var(--fs-xs)/1.5 var(--ui); }
 .page-agent .btn.quote-pill[hidden], .cmp-quote[hidden] { display: none; }
-.message-quote { display: block; min-width: 0; max-width: 100%; padding-inline-start: 10px; border-inline-start: 2px solid var(--accent-text); margin-block-end: 8px; white-space: normal; color: var(--text-2); font: var(--fs-xs)/1.5 var(--ui); }
+.message-quote { display: block; min-width: 0; max-width: 100%; padding: 0; padding-inline-start: 10px; border: 0; border-inline-start: 2px solid var(--accent-text); margin-block-end: 8px; white-space: normal; color: var(--text-2); font: var(--fs-xs)/1.5 var(--ui); }
+button.message-quote { width: 100%; text-align: start; background: none; cursor: pointer; }
 .quote-author { display: block; color: var(--accent-text); font-weight: 600; }
 .quote-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
 .cmp-quote { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3) 0; }

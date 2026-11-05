@@ -96,9 +96,9 @@ async def test_raphael_uses_the_same_admin_import_and_command_contract(rig, tmp_
     folder = installed(tmp_path)
     for name in ("member_skill_import", "member_command_save"):
         assert DEFINITIONS[name]["parameters"]["properties"]["member_id"]["minimum"] == 0
-    imported = await rig.service.admin_tool(0, "member_skill_import", {"member_id": 0, "source": "local:" + str(folder.resolve())})
+    imported = await rig.service.admin_tool(0, "member_skill_import", {"member_id": 0, "source": "local:" + str(folder.resolve())}, interactive=True)
     assert imported["skill"]["name"] == "writing"
-    await rig.service.admin_tool(0, "member_command_save", {"member_id": 0, "name": "review", "template": "Review {input}"})
+    await rig.service.admin_tool(0, "member_command_save", {"member_id": 0, "name": "review", "template": "Review {input}"}, interactive=True)
     assert cap.expand(0, "/review notes") == "Review notes"
     assert "REFERENCE-2048" in cap.expand(0, "/writing notes")
 

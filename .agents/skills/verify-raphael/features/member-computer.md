@@ -1,5 +1,157 @@
 # Member computer (Phases A and B)
 
+## Settings and lifecycle merge (2026-11-05)
+
+The member header reads state, shared location, maintenance overflow, settings,
+close. A sleeping state gets a full-width line before the controls in the narrow
+panel. The same location control moves into takeover without a second copy.
+Empty computers retain location and installation guidance. Existing maintenance,
+sleep choices, watch-only enlargement, leases and render caching remain intact.
+The explicit remote host check and copyable repairs move from the retired settings
+pane into the location popover using the existing viewer_status owner RPC.
+
+```powershell
+npm run look -- settings-owner settings-memory safety desktop-host-local desktop-host-remote desktop-panel computer-maintenance-menu computer-state-sleeping owner-output-folder --theme both --width 1120,720,1920x1080
+```
+
+## Computer lifecycle in words (2026-11-05)
+
+R-COMP-PERF-01/07/10/11/12 remain authoritative. The member panel header's
+overflow offers Wait, Restart, Update, Repair and Reset, in that order. Shared
+openMenu descriptions explain preservation/removal. Reset uses the existing
+mb-confirm dialog and sends confirmed=true only after the owner's explicit yes;
+changing members before confirmation performs no maintenance. Host and target
+identity are captured and checked again in the main-window-only computer.lifecycle
+RPC. The location control remains owned by the separate header unit.
+
+Restart stops/starts the exact compatible owned container. Update rebuilds the
+container on the currently installed image, without pulling or building a shared
+image. Repair recovers the exact owned container by rebuilding it. Both retain
+workspace mounts and browser profiles; changes outside workspace are ephemeral.
+Reset removes only its validated workspace after confirmation, never team/shared
+storage. Shared mode is explicitly named. Foreign/weakened, busy and owner-held
+computers refuse maintenance. Other members cannot start the target while its
+maintenance is running. No broad recovery/removal scan is used.
+
+The header names sleeping, waking, updating and repairing using existing slime
+sleeping/working states only. The menu's shared dropdown saves 5/15/60/0 idle
+minutes through SettingsStore; zero means never. Shared/per-member mode is
+read-only. Both local and SSH computers use the existing idle-stop contract.
+
+VmTools reads bounded fake-testable df/du results at most every five minutes.
+At 90 percent disk use, the current member's ordinary persisted conversation reply
+names its three largest workspace/cache folders and asks before deletion. One
+notice is emitted per pressure episode in the running core; below-threshold
+readings admit a future episode. It never deletes, buys a service or calls a model.
+
+Before dispatch, a failed driver connection receives one targeted reconnect or
+missing-socket restart. Stopped computers follow existing start. A failed viewer
+tunnel is closed and retried once. Repairs preserve workspaces and emit one
+localized progress line when a member turn is active. An uncertain action gets
+connection repair without replay; its result requires a fresh window/page read.
+Grants and holds remain checked, and a second failure is returned to the caller.
+Freshly started computers wait for driver readiness without a premature restart;
+an already admitted repair also keeps its normal bounded readiness wait.
+
+Synthetic zh-TW matrix, both themes and 1120/720/1920x1080:
+
+```powershell
+npm run look -- computer-maintenance-menu computer-maintenance-restart computer-maintenance-update computer-maintenance-repair computer-maintenance-reset computer-maintenance-reset-done computer-sleep-menu computer-state-sleeping computer-state-waking computer-state-updating computer-state-repairing computer-low-disk desktop-panel takeover-menu computer-file-confirm --theme both --width 1120,720,1920x1080
+```
+
+Compare maintenance/idle menus to takeover-menu, reset to computer-file-confirm,
+and sleeping/working faces and header icon controls to desktop-panel at matching
+theme/size. Maintenance descriptions use the shared mdesc rows, so their content
+requires a wider/taller menu; reset adds a scope paragraph to the shared dialog.
+The header face uses 28px to fit beside the existing icon buttons; its art and
+states are unchanged. Tests: test_lifecycle.py, test_vm.py, test_latency.py, test_viewer.py,
+test_smooth_computer.py, test_settings.py, desktop-viewer.test.ts and
+member-details.test.ts. Only fakes are authorized; never operate real Docker.
+The brief defers full verify/core suites and native/live acceptance to integration.
+See .fold/report.md for exact exits, visual inspection and judge prerequisites.
+
+The existing read-only SSH repair consumer also remains mapped separately; it is
+not part of this brief's selected lifecycle capture:
+
+```powershell
+npm run look -- desktop-host-repair --theme both --width 1120,720,1920x1080
+```
+
+
+## Smooth computer work and private inline sign-in (2026-11-05)
+
+The details screen has a separate Enlarge icon. It carries the existing iframe
+into the window area beside the sidebar, retains no member-specific expansion,
+preserves the guest aspect ratio through noVNC scaleViewport and never acquires
+input. Its thin bar reuses the current public action words, Stop and collapse;
+Esc collapses with the connection intact. Explicit takeover/teaching/files keep
+their earlier behavior. The private request_takeover card now acquires input
+inside its own iframe instead of opening full-window takeover. Its Done action
+returns the current nonce once; Stop/cancel/disconnect never count as Done.
+Owner input travels over RFB only. Held-control screenshots are not forwarded
+to the parent thumbnail cache. Existing private work scope and post-handback
+fresh-read requirements remain authoritative.
+
+run_steps is a Raphael composite, not a forwarded driver batch. It accepts up
+to ten curated driver actions and one targeted observation. Each subcall passes
+ToolGate.call_plugin and the existing current tool/schema, grant, action-lock,
+owner hold and audit boundary. Stop on the first error/lease notice; identify the
+one-based failed step and count completed steps without returning intermediate
+screen contents. Never reuse the outer approval for another action. Shell,
+takeover, secrets and nested composites are excluded. Shared API/worker and CLI
+completion guards require a post-action window/page read or nonempty verify_state
+predicates before completion; one correction is allowed, then completion fails.
+
+Thin/empty/consent-wall web_read results escalate through the current member's
+granted browser. Exact Reject all / necessary-only semantic buttons may be
+clicked; ambiguous controls never imply consent. Every browser subcall retains
+the normal gate and owner-hold checks. No fallback reader/provider is purchased.
+
+Settings checks remote SSH key access, noninteractive Docker PATH, daemon and
+installed image architecture through read-only SSH commands. Fixed localized
+repair words replace raw diagnostics. Docker operations share an owned SSH
+session forwarding the remote Unix socket to loopback; the viewer uses SOCKS on
+that same session. Forwarding failure falls back to ssh:// with bounded backoff.
+No Windows ControlMaster or remote install/start is required.
+
+Idle/eviction and app shutdown only stop compatible owned computers; workspace
+mounts and browser profiles survive. A recognized v3-to-v4 rebuild announces its
+workspace/sign-in preservation before removal, never removes a volume and refuses
+foreign or weakened containers. Files/installs outside workspace are explicitly
+ephemeral in tool/persona text. Member deletion retains computer data by default;
+its unchecked option names the host, pins that host for the operation and excludes
+shared/team storage. No deletion/host operation was executed in this brief.
+
+Selected future look matrix (both themes, 1120,720,1920x1080): desktop-panel,
+desktop-watch, desktop-watch-collapse, desktop-watch-boot, desktop-watch-stopped,
+desktop-watch-owner, desktop-takeover, desktop-takeover-owner,
+desktop-takeover-done, desktop-owner, desktop-host-remote, desktop-host-invalid,
+desktop-host-health, delete-member-computer. Compare Enlarge/collapse/Stop with
+the existing icon buttons and card Done/Skip with computer-card controls at the
+same theme/size. The owner-typing scene uses synthetic RFB input only.
+
+```powershell
+npm run look -- desktop-panel desktop-watch desktop-watch-collapse desktop-watch-boot desktop-watch-stopped desktop-watch-owner desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-owner desktop-host-remote desktop-host-invalid desktop-host-health desktop-host-repair delete-member-computer --theme both --width 1120,720,1920x1080
+```
+
+Native journeys: member-computer; computer-speed (explicit opt-in, never --all or
+verify). computer-speed creates its own random-root/name container, uses an
+already running Docker engine and prepared image, serves its own form inside
+that computer, measures five warm first observations, browser_open and five
+browser_type actions via run_steps, and removes only that exact owned container.
+It reports median/worst; every first observation must be <8s and page open <6s.
+No unrequested batch budget is invented. Missing refs/results fail measurement.
+
+```powershell
+npm.cmd run native -- computer-speed
+```
+
+Offline evidence: test_smooth_computer.py, test_web_read_hint.py, existing VM,
+takeover and persona tests, desktop-viewer.test.ts and member-dialogs.test.ts.
+This brief prohibits look, native, judge, live, network/provider and real Docker
+acceptance. These remain SKIP; fake connection counts establish sharing, not real
+SSH/macOS/driver compatibility or latency. Check the task report for exact exits.
+
 ## Responsive computer tools (2026-11-04)
 
 R-COMP-PERF-01 through R-COMP-PERF-06 supersede the earlier full-screen bootstrap,

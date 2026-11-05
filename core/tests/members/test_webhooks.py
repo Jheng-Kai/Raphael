@@ -42,6 +42,15 @@ async def setup(rig, monkeypatch):
     return hooks, routine, start
 
 
+async def test_hourly_cap_returns_429_before_creating_work(rig, monkeypatch):
+    hooks, routine, _ = await setup(rig, monkeypatch)
+    details = await rig.call("routines.webhook", {"id": routine["id"], "reveal": True})
+    rig.service._settings.set("routine_run_window", [[0, rig.wall.now]] * 200)
+    assert b"429" in await request(hooks, routine["id"], b"sample", details["secret"])
+    assert rig.background.submitted == []
+    assert "200" in rig.service.store.routine(routine["id"]).last_error
+
+
 async def test_signature_untrusted_body_overlap_rate_limit_and_no_secret_log(rig, monkeypatch, caplog):
     caplog.set_level(logging.DEBUG)
     hooks, routine, start = await setup(rig, monkeypatch)

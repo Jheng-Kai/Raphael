@@ -1,11 +1,12 @@
 import { ownerQuestionBring } from "./api";
 import { describeError } from "./format";
 import { onLocaleChange, t } from "./i18n";
+import { releaseRichScroll } from "./message-rich";
 import type { OwnerQuestion } from "./types";
 import { btn, esc, ico, openMenu } from "./ui";
 
 interface PendingQuestion { id: string; title: string; card?: HTMLElement }
-export function mountPendingQuestions(thread: HTMLElement, scroller: HTMLElement, changed: () => Promise<void>, questions: () => readonly OwnerQuestion[] = () => []): { sync(): void } {
+export function mountPendingQuestions(thread: HTMLElement, scroller: HTMLElement, changed: () => Promise<void>, questions: () => readonly OwnerQuestion[] = () => [], reveal?: (turn: number) => Promise<void>): { sync(): void } {
   const row = document.createElement("div");
   row.className = "pending-questions";
   row.hidden = true;
@@ -17,16 +18,18 @@ export function mountPendingQuestions(thread: HTMLElement, scroller: HTMLElement
       const moved = [...thread.querySelectorAll<HTMLElement>("[data-owner-question]")].find(card => card.dataset.ownerQuestion === brought!.id && Number(card.dataset.ownerTurn) === brought!.turn);
       if (moved) {
         brought = undefined;
+        releaseRichScroll(scroller);
         moved.scrollIntoView({ block: "end", behavior: "instant" });
         moved.focus({ preventScroll: true });
       }
     }
-    const viewport = scroller.getBoundingClientRect();
     const mounted = [...thread.querySelectorAll<HTMLElement>('[data-owner-kind="ask_owner"]')];
-    cards = mounted.filter(card => {
-      if (card.dataset.cardState !== "asked") return false;
+    const asked = mounted.filter(card => card.dataset.cardState === "asked");
+    // Ordinary reply mutations need no layout when there is no mounted question.
+    const viewport = asked.length ? scroller.getBoundingClientRect() : undefined;
+    cards = asked.filter(card => {
       const bounds = card.getBoundingClientRect();
-      return bounds.bottom <= viewport.top + 40 || bounds.top >= viewport.bottom;
+      return bounds.bottom <= viewport!.top + 40 || bounds.top >= viewport!.bottom;
     }).map(card => ({ id: card.dataset.ownerQuestion!, title: card.querySelector(".card-title")?.textContent ?? "", card }));
     for (const question of questions()) if (question.state === "asked" && question.kind === "ask_owner" && !mounted.some(card => card.dataset.ownerQuestion === question.id)) cards.push({ id: question.id, title: question.question });
     row.hidden = !cards.length || !!scroller.closest("[hidden]");
@@ -53,6 +56,7 @@ export function mountPendingQuestions(thread: HTMLElement, scroller: HTMLElement
       if (!current()) return;
       brought = { id, turn: result.turn_id };
       await changed();
+      await reveal?.(result.turn_id);
     } catch (error) {
       failure = describeError(error);
     } finally { busy = false; schedule(); }
