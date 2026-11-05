@@ -26,7 +26,7 @@ export const ja = {
   "recipe.copyUrl": "ローカル URL をコピー",
   "recipe.copyHeader": "Authorization ヘッダーをコピー",
   "recipe.slackFilter": "メンションまたはフレーズ",
-  "recipe.slackHint": "例：<@U012345> または要再現",
+  "recipe.slackHint": "例：メンバー ID（U012345 など）または要再現",
   "shortcuts.palette": "コマンドとメンバーを検索",
   "shortcuts.empty": "一致するコマンドはありません",
   "shortcuts.sidebar": "サイドバーを切り替え",

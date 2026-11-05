@@ -25,7 +25,7 @@ export const zhTW = {
   "recipe.copyUrl": "複製本機網址",
   "recipe.copyHeader": "複製 Authorization 標頭",
   "recipe.slackFilter": "提及或包含字詞",
-  "recipe.slackHint": "例如 <@U012345> 或需要重現",
+  "recipe.slackHint": "例如成員 ID（像 U012345）或需要重現",
   "shortcuts.palette": "搜尋命令與成員",
   "shortcuts.empty": "沒有符合的命令",
   "shortcuts.sidebar": "切換側欄",

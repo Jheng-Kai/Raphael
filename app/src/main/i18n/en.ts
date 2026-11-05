@@ -26,7 +26,7 @@ export const en = {
   "recipe.copyUrl": "Copy local URL",
   "recipe.copyHeader": "Copy Authorization header",
   "recipe.slackFilter": "Mention or phrase",
-  "recipe.slackHint": "For example <@U012345> or needs repro",
+  "recipe.slackHint": "For example a member ID such as U012345, or needs repro",
   "shortcuts.palette": "Search commands and members",
   "shortcuts.empty": "No matching commands",
   "shortcuts.sidebar": "Toggle sidebar",
