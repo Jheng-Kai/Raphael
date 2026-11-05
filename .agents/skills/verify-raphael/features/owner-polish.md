@@ -17,7 +17,7 @@ Settings, member and confirmation dialogs.
 
 ## Driving it with look
 
-Selected look scenes: polish-effort-composer, polish-effort, polish-data, polish-data-more, polish-data-delete, polish-data-conversations, polish-scroll,
+Selected look scenes: polish-effort-composer, polish-effort, polish-scroll,
 polish-caption-settings, polish-caption-member, polish-caption-confirm,
 polish-search-chief, polish-search-member, polish-search-room, polish-room-recording,
 composer-voice-recording, quick-effort-menu and member-edit-memory. Use both themes and
@@ -28,7 +28,7 @@ conversation-find.test.ts also checks typing while the initial history load is p
 the first completed result starts at the newest word, and stale replies cannot reposition it.
 
 ```powershell
-npm run look -- polish-effort-composer polish-effort polish-data polish-data-more polish-data-delete polish-data-conversations polish-scroll polish-caption-settings polish-caption-member polish-caption-confirm polish-search-chief polish-search-member polish-search-room polish-room-recording composer-voice-recording quick-effort-menu member-edit-memory --theme both --width 1120,720,1920x1080
+npm run look -- polish-effort-composer polish-effort polish-scroll polish-caption-settings polish-caption-member polish-caption-confirm polish-search-chief polish-search-member polish-search-room polish-room-recording composer-voice-recording quick-effort-menu member-edit-memory --theme both --width 1120,720,1920x1080
 ```
 
 Run npm run verify for the frontend and the focused brain/messaging tests.

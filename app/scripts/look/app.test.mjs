@@ -42,7 +42,7 @@ describe("real app entry with the shared look fixture", () => {
     expect(document.querySelector('#nav [data-go][aria-current="page"]').dataset.go).toBe("home");
     document.querySelector('#nav .nav[data-go="settings"]').click();
     await vi.waitFor(() => expect(document.querySelector('.modal-scrim [data-pane="general"]')).not.toBeNull());
-    for (const pane of ["general", "appearance", "dictation", "tools", "safety", "connections", "messaging", "models", "data", "about"]) {
+    for (const pane of ["general", "appearance", "dictation", "tools", "safety", "connections", "messaging", "models", "about"]) {
       document.querySelector(`.modal-scrim [data-pane="${pane}"]`).click();
       await vi.waitFor(() => expect(document.querySelector(`.modal-scrim [data-pane="${pane}"][aria-current="page"]`), pane).not.toBeNull());
     }

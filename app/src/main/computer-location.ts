@@ -11,7 +11,7 @@ export function computerHostHealthHTML(health: api.ComputerHostHealth): string {
   return `<div class="slist">` + health.checks.flatMap(check => {
     const words = { ssh: 'desktop.health.ssh', docker: 'desktop.health.docker', ssh_unreachable: 'desktop.health.ssh_unreachable', ssh_key: 'desktop.health.ssh_key', docker_path: 'desktop.health.docker_path', docker_missing: 'desktop.health.docker_missing', docker_stopped: 'desktop.health.docker_stopped', architecture: 'desktop.health.architecture', image_missing: 'desktop.health.image_missing' } as const;
     const label = t(check.kind.startsWith('ssh') ? 'desktop.health.connection' : check.kind === 'architecture' || check.kind === 'image_missing' ? 'desktop.health.image' : 'desktop.health.runtime');
-    const state = check.ok ? t('desktop.health.ok') : t(words[check.kind as keyof typeof words] ?? 'desktop.health.ssh_unreachable');
+    const state = check.ok ? t('desktop.health.ok') : check.kind === 'ssh_key' && check.user ? t('desktop.health.ssh_key_user', { p0: check.user }) : t(words[check.kind as keyof typeof words] ?? 'desktop.health.ssh_unreachable');
     const repair: { where: 'desktop.health.macTerminal' | 'desktop.health.projectTerminal' | 'desktop.health.localTerminal'; command: string } = check.kind === 'docker_path' ? { where: 'desktop.health.macTerminal', command: `echo 'export PATH="/usr/local/bin:/opt/homebrew/bin:$HOME/.docker/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"' >> ~/.zshenv` } :
       check.kind === 'docker_stopped' ? { where: 'desktop.health.macTerminal', command: 'open -a Docker' } :
       check.kind === 'docker_missing' ? { where: 'desktop.health.macTerminal', command: 'open https://www.docker.com/products/docker-desktop/' } :

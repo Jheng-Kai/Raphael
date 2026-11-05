@@ -245,7 +245,7 @@ export async function perform(page, step, evidenceDirectory) {
       await dialog.dispose();
       if (step.kind === 'settings') await click('#nav [data-go="settings"]');
       else if (step.kind === 'member') { await perform(page, {action:'open-details'}, evidenceDirectory); await click('[data-det="gear"]'); await click('[data-det="edit"]'); }
-      else await click('[data-act="data-clear"][data-what="dictation"]');
+      else { await click('[data-room-menu]'); await click('[data-pick="delete"]'); }
       await page.evaluate(() => { window.__polishCaptionOutside = true; });
       break;
     }

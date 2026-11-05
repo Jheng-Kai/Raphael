@@ -892,9 +892,8 @@ describe("a member's thread", () => {
     expect($<HTMLTextAreaElement>(".cmp-input").placeholder).toBe("傳訊息給 日文老師");
     expect($(".cmp-voice").hidden).toBe(false);
     expect($(".mb-pill-t").textContent).toContain("日文老師");
-    // 清除全部 and Raphael's settings are his thread's
     expect(document.querySelector('[data-act="clear"]')).toBeNull();
-    expect($('[data-act="settings"]').hidden).toBe(true);
+    expect(document.querySelector('[data-act="settings"]')).toBeNull();
     $<HTMLTextAreaElement>(".cmp-input").value = "考我";
     $<HTMLFormElement>(".composer").requestSubmit();
     await flush();

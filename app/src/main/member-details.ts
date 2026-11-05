@@ -84,7 +84,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   let drawn = "";
 
   let tab: DetailsTab = "details";
-  let work: PanelWork | null = null, workFailed = false, workEpoch = 0, fileLimit = 12;
+  let work: PanelWork | null = null, workFailed = false, workEpoch = 0, fileLimit = 12, allTasks = false;
   async function loadWork(fromEvent = false): Promise<void> {
     const epoch = ++workEpoch, id = host.member().id, limit = fileLimit;
     try {
@@ -262,7 +262,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       if (field && field !== focused && field.value !== value) field.value = value;
     }
     const face = faceHTML(member, 64).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([member, face, host.list()?.groups, counts, routines, work, workFailed, tab, [...openFields], getLocale(), !!host.openConversation, host.conversationOf?.(member.id), tab === "memory" ? memories.map(list => list.view()) : null]);
+    const signature = JSON.stringify([member, face, host.list()?.groups, counts, routines, work, workFailed, allTasks, tab, [...openFields], getLocale(), !!host.openConversation, host.conversationOf?.(member.id), tab === "memory" ? memories.map(list => list.view()) : null]);
     if (drawn === signature) return;
     drawn = signature;
     el.dataset.detailsTab = tab;
@@ -300,7 +300,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     const mainTab = ['details', 'library', 'computer'].includes(tab);
     tabBar.hidden = !mainTab;
     body.hidden = tab === 'computer';
-    patchHTML(tabBar, tabs(['details', 'library', 'computer'].map(id => ({id, label:t(({details:'members.panelTab.details', library:'members.panelTab.library', computer:'members.panelTab.computer'} as const)[id as 'details' | 'library' | 'computer']), attrs:` id="member-tab-${id}" data-det="tab" data-tab="${id}" aria-controls="${id === 'computer' ? 'member-computer-panel' : 'member-panel-body'}" tabindex="${tab === id ? 0 : -1}"`})), tab, {kind:'nav', plain:true, fill:true, label:t('members.panel')}));
+    patchHTML(tabBar, tabs(['details', 'library', 'computer'].map(id => ({id, label:t(({details:'members.panelTab.details', library:'members.panelTab.library', computer:'members.panelTab.computer'} as const)[id as 'details' | 'library' | 'computer']), attrs:` id="member-tab-${id}" data-det="tab" data-tab="${id}" aria-controls="${id === 'computer' ? 'member-computer-panel' : 'member-panel-body'}" tabindex="${tab === id ? 0 : -1}"`})), tab, {kind:'nav', plain:true, label:t('members.panel')}));
     body.setAttribute('aria-labelledby', `member-tab-${tab}`);
     const typingText = typingIn === "mb-det-instr" || typingIn === "mb-det-personality";
     const kept = typingText ? (focused as HTMLElement).closest<HTMLElement>("section") : null;
@@ -332,7 +332,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         // The skeleton is kept across draws, so its heading follows a language change here.
         const heading = body.querySelector<HTMLElement>('[data-panel-conversations-heading]');
         if (heading && heading.textContent !== t('members.panelConversations')) heading.textContent = t('members.panelConversations');
-        patchHTML(body.querySelector('.mb-panel-tasks')!, panelTasksHTML(work, workFailed));
+        patchHTML(body.querySelector('.mb-panel-tasks')!, panelTasksHTML(work, workFailed, allTasks));
         patchHTML(body.querySelector('.mb-panel-routines')!, routinesHTML());
       } else if (tab === 'library') {
         conversationHost.remove(); patchHTML(body, panelLibraryHTML(work, workFailed));
@@ -441,6 +441,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       return;
     }
     if (target.closest('[data-panel-more]')) { fileLimit = Math.min(100, fileLimit + 12); void loadWork(); return; }
+    if (target.closest('[data-panel-tasks-more]')) { allTasks = true; draw(); return; }
     const fileButton = target.closest<HTMLElement>('[data-panel-file]');
     if (fileButton) {
       const file = work?.files.find(file => file.id === fileButton.dataset.panelFile);
@@ -555,7 +556,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     },
     showMember() {
       tab = "details";
-      work = null; workFailed = false; fileLimit = 12; void loadWork();
+      work = null; workFailed = false; fileLimit = 12; allTasks = false; void loadWork();
       counts = {skills: 0, commands: 0, memory: 0};
       void loadCounts();
       routines = "loading";

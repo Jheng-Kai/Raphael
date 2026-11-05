@@ -162,11 +162,6 @@ export function askLabels(q: AgentQuestion | null): { yes: string; no: string; a
   };
 }
 
-/** Retain the legacy settings link; Settings resolves the former agent pane to Tools. */
-export function openRaphaelSettings(app: Pick<AppContext, "go">): void {
-  app.go("settings", "agent");
-}
-
 /** The words of the empty page: the overlay's greeting to a question, without its last stop. */
 export const greetingLine = (): string => t("agent.greet");
 
@@ -246,7 +241,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     iconButton("search", t("agent.search"), ' data-act="search" aria-expanded="false" hidden', "ra-tool") +
     `</span><span class="mb-head-c"></span><div class="ra-tools">` +
     iconButton("monitor", t("card.pcTitle"), ' data-act="computer"', "ra-tool") +
-    iconButton("gear", t("agent.settings"), ' data-act="settings"', "ra-tool") +
     `</div></div>` +
     `<div class="ra-find" hidden></div>` +
     `<div class="ra-stage">` +
@@ -259,7 +253,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const heading = el.querySelector<HTMLElement>("h1")!;
   const searchButton = el.querySelector<HTMLElement>('[data-act="search"]')!;
   const computerButton = el.querySelector<HTMLElement>('[data-act="computer"]')!;
-  const settingsButton = el.querySelector<HTMLElement>('[data-act="settings"]')!;
   const find = el.querySelector<HTMLElement>(".ra-find")!;
 
   const stage = el.querySelector<HTMLElement>(".ra-stage")!;
@@ -722,7 +715,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const words = inRaphael() ? t("home.askRaphael") : memberPlaceholder(members.member().name);
     input.placeholder = words;
     input.setAttribute("aria-label", words);
-    settingsButton.hidden = !inRaphael();
     empty.classList.toggle("is-member", !inRaphael());
   }
 
@@ -738,7 +730,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     voiceButton.setAttribute("aria-label", t("agent.voice"));
     for (const [button, label] of [
       [computerButton, t("card.pcTitle")],
-      [settingsButton, t("agent.settings")],
       [searchButton, t("agent.search")],
       [attachButton, t("agent.attach")],
     ] as const) {
@@ -2162,9 +2153,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         break;
       case "local-settings":
         app.go("settings", "safety");
-        break;
-      case "settings":
-        openRaphaelSettings(app);
         break;
       case "search":
       case "search-close":

@@ -247,8 +247,13 @@ export function checkRendered(name, context = {}) {
       require(!window.__look.calls.some(call => ['worker.cancel','worker.rerun'].includes(call.method)), 'opening a menu does not mutate work');
     } else if (name === 'member-panel-details') {
       const rows = [...panel.querySelectorAll('.mb-task-row')];
-      require(rows.length === 4 && rows.map(row => row.querySelector('small').textContent).join('/') === '進行中/等你/完成/失敗', 'work names all four states newest first');
+      require(rows.length === 4 && rows.map(row => row.querySelector('small').textContent.split(' · ')[0]).join('/') === '進行中/等你/完成/失敗', 'work in hand comes first, then the newest finished work');
       require(rows.every(row => row.querySelector('time') && row.querySelector('[data-panel-task-menu]')), 'each work row has time and its menu');
+      require(rows.every(row => row.parentElement === rows[0].parentElement && row.parentElement.matches('.mb-task-list')), 'all work sits in one list, as in Grok Bot');
+      require(rows.every(row => parseFloat(getComputedStyle(row.querySelector('.mb-task-open')).borderTopWidth) === 0), 'no frame is drawn around each work row');
+      const closeRight = panel.querySelector('[data-det="close"]').getBoundingClientRect().right, listBox = panel.querySelector('.mb-task-list').getBoundingClientRect(), tabBar = panel.querySelector('.mb-tabs .tabs').getBoundingClientRect();
+      require(Math.abs(closeRight - listBox.right) < 1, `close stands on the content's right edge (${Math.round(closeRight)} vs ${Math.round(listBox.right)})`);
+      require(Math.abs((tabBar.left + tabBar.right) / 2 - (listBox.left + listBox.right) / 2) < 1, 'the tabs sit in the middle of the content');
       require(!!panel.querySelector('.mb-panel-routines') && !!panel.querySelector('[data-slot="conversations"]'), 'routines and conversations follow work');
     } else if (name === 'member-panel-details-empty') {
       require(panel.querySelector('.mb-panel-tasks').textContent.includes('還沒有工作'), 'work has a one-line empty state');
@@ -1194,38 +1199,6 @@ export function checkRendered(name, context = {}) {
     });
     if (name === 'polish-effort-reference') window.__polishRuler = ruler('.cb-now');
     if (name === 'polish-effort') require(JSON.stringify(ruler('.mc-effort')) === JSON.stringify(window.__polishRuler), 'title, track, dots, labels and sizes match the conversation ruler');
-    if (name.startsWith('polish-data') || name.startsWith('polish-conversations')) {
-      const title = document.querySelector('.modal-body h1');
-      for (const heading of document.querySelectorAll('.data-heading h2')) {
-        const style = getComputedStyle(heading);
-        require(style.fontSize === getComputedStyle(document.documentElement).getPropertyValue('--fs-sm').trim() && parseFloat(style.fontSize) < parseFloat(getComputedStyle(title).fontSize), 'Data uses the shared small Settings group heading below the page title');
-        const button = heading.parentElement.querySelector('[data-act="data-clear"]');
-        if (button) require(Math.abs(heading.getBoundingClientRect().y + heading.getBoundingClientRect().height/2 - button.getBoundingClientRect().y - button.getBoundingClientRect().height/2) < 1, 'Delete all remains on the group heading row');
-      }
-      for (const time of document.querySelectorAll('.data-record time')) {
-        const date = new Date(time.dateTime), year = date.getFullYear() === new Date().getFullYear() ? '' : `${date.getFullYear()}/`;
-        const clock = `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
-        require(time.textContent === `${year}${date.getMonth()+1}/${date.getDate()} ${clock}`, 'Data timestamps omit seconds and include the year only outside this year');
-      }
-    }
-    if (name === 'polish-data') {
-      require(document.querySelectorAll('.data-record').length === 20, 'twenty newest records are rendered');
-      require(document.querySelector('.data-record').textContent.includes('Synthetic dictation 25'), 'records are newest first');
-      require(document.querySelectorAll('[data-act="data-clear"]').length === 2 && !document.querySelector('.modal-body [data-overflow]'), 'real heading buttons replace one-action menus');
-      require([...document.querySelectorAll('.data-record-text')].every(el => getComputedStyle(el).webkitLineClamp === '2'), 'record text is limited to two lines');
-      const preview = document.querySelector('.data-record-text');
-      require(preview.scrollHeight > preview.clientHeight && preview.clientHeight <= 2 * parseFloat(getComputedStyle(preview).lineHeight) + 1, 'a long real preview is visibly clamped to two lines');
-    }
-    if (name === 'polish-data-more') require(document.querySelectorAll('.data-record').length === 25 && !document.querySelector('[data-act="data-more"]'), 'the real load-more button reaches all records');
-    if (name === 'polish-data-confirm') require(document.querySelector('.mb-confirm').textContent.includes('25'), 'confirmation names the actual deletion count');
-    if (name === 'polish-data-empty') require(!document.querySelector('.data-record') && !document.querySelector('[data-act="data-clear"][data-what="dictation"]'), 'successful deletion redraws immediately without a clear button');
-    if (name === 'polish-data-conversations') require(document.querySelector('[data-act="data-clear"][data-what="conversation"]') && document.querySelector('.data-section:last-of-type').textContent.includes('2'), 'two saved Raphael conversations have a direct heading action');
-    if (name === 'polish-conversations-confirm') require(document.querySelector('.mb-confirm').textContent.includes('2'), 'conversation confirmation names its true count');
-    if (name === 'polish-conversations-empty') {
-      const note = document.querySelector('.data-section:last-of-type .note'), box = note.getBoundingClientRect(), viewport = document.querySelector('.modal-body').getBoundingClientRect();
-      require(!document.querySelector('[data-act="data-clear"][data-what="conversation"]') && note.textContent.includes('0') && box.top >= viewport.top && box.bottom <= viewport.bottom, 'the deleted conversation count redraws immediately and is visible');
-      require(window.__look.calls.some(call=>call.method==='agent.history.clear' && call.params.member_id===0), 'Data clears only Raphael, preserving members');
-    }
     if (name === 'polish-scrolled') require(document.querySelector('.modal-body').scrollTop > 0, 'the reset exercise starts from a genuinely scrolled pane');
     if (name === 'polish-scroll') require(document.querySelector('.modal-body').scrollTop === 0, 'newly opened pane starts at the top');
     if (name === 'polish-caption') require(window.__polishCaption === true && window.__polishCaptionOutside === true, 'all caption actions and drag worked once without dismissing');
@@ -1935,6 +1908,13 @@ export function checkRendered(name, context = {}) {
     require(face.width>=64&&Math.abs(face.left+face.width/2-(box.left+box.width/2))<1,'the tile has a larger centered face');
     require(label.top>=face.bottom&&Math.abs(label.left+label.width/2-(box.left+box.width/2))<1,'the name is centered below the face');
     return {check:name,face:face.width};
+  }
+  if(name==='messaging-paired-aligned'){
+    const card=document.querySelector('[data-msg-kind="telegram"]'),mark=card?.querySelector('.msg-head .msg-mark'),face=card?.querySelector('.msg-sub .msg-avatar'),title=[...(card?.querySelectorAll('.row:not(.msg-head):not(.msg-sub) > .lbl')??[])].find(visible);
+    require(visible(mark)&&visible(face)&&title,'the bot, a paired person and 中斷 Telegram are shown');
+    const left=mark.getBoundingClientRect().left;
+    require(Math.abs(face.getBoundingClientRect().left-left)<1&&Math.abs(title.getBoundingClientRect().left-left)<1,'the person and 中斷 Telegram start on the bot mark\'s left edge');
+    return {check:name,left};
   }
   if(name==='sidebar-rail'){
     const nav=document.getElementById('nav'),compact=matchMedia('(max-width: 859px)').matches;

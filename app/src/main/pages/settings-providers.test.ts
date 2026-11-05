@@ -71,33 +71,6 @@ test("opening Settings and navigating back to Models starts at the top and a red
   expect(body.scrollTop).toBe(0);
 });
 
-test("Data deletes the counted records immediately after a real confirmation and retains them on failure", async () => {
-  api.historyList.mockResolvedValue({items:[{id:1,created_at_ms:1000,text:'Synthetic record'}],total:1});
-  api.core.mockResolvedValue({conversations:[{turn_count:2}]});
-  const said = vi.spyOn(Cleared.prototype, 'say');
-  api.historyClear.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({deleted:1});
-  await mount('data'); await flush();
-  expect(page.el.querySelector('.data-record')?.textContent).toContain('Synthetic record');
-  click('[data-act="data-clear"][data-what="dictation"]');
-  expect(document.querySelector('.mb-confirm')?.textContent).toContain('1 dictation records');
-  click('.mb-confirm [data-dlg="delete"]'); await flush();
-  expect(page.el.querySelector('.data-record')).not.toBeNull();
-  expect(page.el.querySelector('[role="alert"]')).not.toBeNull();
-  expect(said).not.toHaveBeenCalled();
-  let emptied!: (result: {deleted:number}) => void;
-  api.historyClear.mockImplementationOnce(() => new Promise(resolve => { emptied = resolve; }));
-  click('[data-act="data-clear"][data-what="dictation"]');click('.mb-confirm [data-dlg="delete"]'); await flush();
-  expect(said).not.toHaveBeenCalled();
-  expect(page.el.querySelector('.data-record')).not.toBeNull();
-  emptied({deleted:1}); await flush();
-  expect(said).toHaveBeenCalledExactlyOnceWith('dictation');
-  expect(api.historyClear).toHaveBeenCalledTimes(2);
-  expect(page.el.querySelector('[role="alert"]')).toBeNull();
-  expect(page.el.querySelector('.data-record')).toBeNull();
-  expect(page.el.querySelector('[data-act="data-clear"][data-what="dictation"]')).toBeNull();
-  expect(page.el.querySelector('[data-act="data-clear"][data-what="conversation"]')).not.toBeNull();
-});
-
 test("快速提問 picks its effort inside the model list, as the answer model does, and saves model and effort apart", async () => {
   api.settingsGet.mockResolvedValue({ settings: { agent_model: "cli:codex", quick_model: "", quick_effort: "low" } });
   api.settingsSet.mockImplementation(async (key: string, value: string) => ({ settings: { agent_model: "cli:codex", quick_model: "", quick_effort: "low", [key]: value } }));

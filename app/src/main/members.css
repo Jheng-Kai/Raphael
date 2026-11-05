@@ -116,10 +116,11 @@
 .mb-det.leaving { animation: mb-det-out 0.16s ease-in forwards; pointer-events: none; }
 @keyframes mb-det-in { from { opacity: 0; transform: translateX(16px); } }
 @keyframes mb-det-out { to { opacity: 0; transform: translateX(16px); } }
-.mb-det-head { display: flex; align-items: center; padding: 4px calc(8px + 4 * var(--pa-u)) 0; }
+/* The gear and close stand on the content's own edges, so the top right lines up with the tabs and rows. */
+.mb-det-head { display: flex; align-items: center; width: 100%; max-width: calc(var(--layout-card-max) + 2 * var(--pa-dpad)); margin-inline: auto; padding: 4px var(--pa-dpad) 0; }
 .mb-det-fill { flex: 1; }
 .page-agent .mb-det-head .btn.icon { width: var(--pa-dclose); min-height: var(--pa-dclose); border-radius: var(--r-sm); }
-.mb-det-scroll { flex: 1; min-height: 0; width: 100%; max-width: calc(var(--layout-card-max) + 2 * var(--pa-dpad)); overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: var(--pa-dgap); padding: 0 var(--pa-dpad) calc(18px + 6 * var(--pa-u)); }
+.mb-det-scroll { flex: 1; min-height: 0; width: 100%; max-width: calc(var(--layout-card-max) + 2 * var(--pa-dpad)); margin-inline: auto; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: var(--pa-dgap); padding: 0 var(--pa-dpad) calc(18px + 6 * var(--pa-u)); }
 .mb-det-scrim { display: none; }
 .mb-who { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: calc(2px + 3 * var(--pa-u)); text-align: center; }
 /* the face is the button that changes it: no edge and no fill, so that Raphael's emblem stands bare */
@@ -135,8 +136,9 @@
 .mb-brain { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2); max-width: 100%; color: var(--text-2); font-size: var(--fs-sm); }
 .mb-brain .mono.md { width: 16px; height: 16px; flex: none; }
 .mb-who-role::placeholder { color: var(--text-3); }
-.mb-tabs .tabs.plain { width: 100%; }
-.mb-tabs .tabs.plain .tab { min-height: var(--pa-dtab-h); font-size: var(--pa-dtab); }
+/* Grok Bot's panel tabs: words side by side in the middle, the open one in a soft pill (2026-11-05). */
+.mb-tabs:has(> .tabs.plain) { display: flex; justify-content: center; }
+.mb-tabs .tabs.plain .tab { min-height: var(--pa-dtab-h); padding: 0 var(--sp-3); border-radius: var(--r-pill); font-size: var(--pa-dtab); }
 /* the sections of a tab (個性, 指示, 分組, 模型, 例行任務) are set apart, each label close to its own field */
 .mb-tab-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: calc(16px + 6 * var(--pa-u)); }
 .mb-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }

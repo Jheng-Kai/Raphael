@@ -6,12 +6,11 @@ import { createAgent } from "./agent";
 import { Cleared } from "../cleared";
 import { closeMenu } from "../ui";
 import { setLocale } from "../i18n";
-import { ico } from "../ui";
 import type { AppContext, MainEvent } from "../types";
 const flush = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
 afterEach(() => { closeMenu(); document.body.replaceChildren(); vi.clearAllMocks(); vi.useRealTimers(); });
 
-test("the stacked member and conversation title toggles details with one state; the gear still opens Settings", async () => {
+test("the stacked member and conversation title toggles details with one state, and the header has only the computer", async () => {
   api.agentQuestionOpen.mockResolvedValue(null);
   api.agentHistoryList.mockResolvedValue({ turns: [] });
   api.core.mockImplementation(async method => method === "conversations.list" ? { conversations: [{ id: 1, member_id: 0, is_default: 1, title: "Research" }] } : method === "background.questions.list" ? { questions: [] } : {});
@@ -23,10 +22,8 @@ test("the stacked member and conversation title toggles details with one state; 
   expect(title.querySelector(".conversation-caption")?.textContent).toBe("Research");
   expect(title.querySelector("button")).toBeNull();
   expect(page.el.querySelector(".conversation-head")?.textContent).not.toContain(" / ");
-  expect(page.el.querySelectorAll('.mb-head .ra-tools [data-act="settings"]')).toHaveLength(1);
+  expect([...page.el.querySelectorAll<HTMLElement>('.mb-head .ra-tools [data-act]')].map(button => button.dataset.act)).toEqual(["computer"]);
   expect(page.el.querySelector('.desktop-panel')?.closest('.mb-det')).not.toBeNull();
-  const expectedGear = document.createElement("div"); expectedGear.innerHTML = ico("gear");
-  expect(page.el.querySelector('[data-act="settings"] path')?.getAttribute("d")).toBe(expectedGear.querySelector("path")?.getAttribute("d"));
   expect(page.el.querySelector('[data-act="clear"]')).toBeNull();
   expect(title.hasAttribute("aria-haspopup")).toBe(false);
   expect(title.querySelector(".i")).toBeNull();
@@ -42,8 +39,6 @@ test("the stacked member and conversation title toggles details with one state; 
   expect(title.getAttribute("aria-expanded")).toBe("false");
   title.click(); await flush();
   expect(title.getAttribute("aria-expanded")).toBe("true");
-  page.el.querySelector<HTMLButtonElement>('[data-act="settings"]')!.click();
-  expect(go).toHaveBeenCalledWith("settings", "agent");
   page.hide();
 });
 

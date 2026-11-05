@@ -8,7 +8,6 @@
 // Raphael listens, learning from corrections) has no switch: it is simply on.
 
 import { openTimezoneMenu } from "../timezones";
-import { confirmDelete } from "../member-dialogs";
 import { knownCatalog, rememberCatalog } from "../brain-lists";
 import { isUiLocale, onLocaleChange, t } from "../i18n";
 import { createMemoryImport } from "../memory-import";
@@ -201,8 +200,6 @@ export function createSettings(app: AppContext): SettingsPage {
   /** A row the search chose, to be lit once its tab is drawn with its rows (not while it is being read). */
   let pendingJump: SearchHit | null = null;
 
-  let data: SettingsView["data"];
-  let dataEpoch = 0;
   let brain: BrainSettings | null = null;
   const memoryImport = createMemoryImport(() => { if (visible) render(); });
   let update: api.UpdateView | null = null;
@@ -291,7 +288,7 @@ export function createSettings(app: AppContext): SettingsPage {
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
     update, memoryImportHTML: memoryImport.html(),
-    data, pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
+    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
     replacingKey, keyBusy, keyError, limitDraft, limitError, cityDraft, cityError, languageGroups, now: Date.now(),
     connections: connections.view(), messaging: messaging.view(), memoryShared: memoryShared.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
@@ -499,7 +496,6 @@ export function createSettings(app: AppContext): SettingsPage {
     else if (tab) modelsTab = tab;
     pane = canonicalPane(next);
     if (pane === "about") void checkUpdate();
-    if (pane === "data") void loadData();
     if (pane === "general") void hiddenMembers.load();
     if (pane !== "models") destroyUsage();
     if (pane === "connections") void connections.load();
@@ -1062,37 +1058,6 @@ export function createSettings(app: AppContext): SettingsPage {
     void changeBrain("monthly_limit_usd", limit);
   }
 
-  async function loadData(more = false): Promise<void> {
-    const mine = ++dataEpoch;
-    const last = more ? data?.items.slice(-1)[0] : undefined;
-    try {
-      const [history, conversations] = await Promise.all([
-        api.historyList({limit:21, ...(last ? {before_ms:last.created_at_ms, before_id:last.id} : {})}),
-        api.core<{conversations: {turn_count?:number}[]}>("conversations.list", {member_id:0}),
-      ]);
-      if (mine !== dataEpoch) return;
-      data = { items:[...(more ? data?.items ?? [] : []), ...history.items.slice(0,20)], total:history.total ?? history.items.length, conversations:conversations.conversations.filter(c => (c.turn_count ?? 0) > 0).length, more:history.items.length>20 };
-    } catch (error) {
-      if (mine !== dataEpoch) return;
-      data = {...data ?? {items:[],total:0,conversations:0,more:false},busy:false,error:describeError(error)};
-    }
-    if (visible && pane === "data") render();
-  }
-
-  async function clear(what: "dictation" | "conversation"): Promise<void> {
-    if (!data || data.busy) return;
-    const count = what === "dictation" ? data.total : data.conversations;
-    if (!await confirmDelete(t(what === "dictation" ? "data.deleteDictations" : "data.deleteConversations", {p0:count}))) return;
-    dataEpoch++; data = {...data,busy:true,error:undefined}; render();
-    try {
-      if (what === "dictation") { await api.historyClear(); data = {...data,items:[],total:0,more:false}; }
-      else { await api.agentHistoryClear(); data = {...data,conversations:0}; }
-      app.cleared.say(what);
-    } catch (error) { data = {...data,error:describeError(error)}; }
-    data = {...data,busy:false};
-    if (visible && pane === "data") render();
-  }
-
   function commitCity(input: HTMLInputElement): void {
     const city = input.value.trim();
     if (city === "") {
@@ -1298,12 +1263,6 @@ export function createSettings(app: AppContext): SettingsPage {
         }
         break;
       }
-      case "data-clear":
-        void clear(target.closest<HTMLElement>('[data-what]')?.dataset.what === "dictation" ? "dictation" : "conversation");
-        break;
-      case "data-more":
-        if (data && !data.busy) { data = {...data,busy:true}; render(); void loadData(true); }
-        break;
       case "help":
         void api.openExternalUrl("https://github.com/Jheng-Kai/Raphael/issues").catch(error => toaster.info(describeError(error)));
         break;
@@ -1453,7 +1412,6 @@ export function createSettings(app: AppContext): SettingsPage {
       services.reset();
       providers.reset();
       if (pane === "about") void checkUpdate();
-      if (pane === "data") void loadData();
       if (pane === "connections") void connections.load();
       if (pane === "messaging") void messaging.load();
       if (pane === "general") for (const list of memories) void list.load();

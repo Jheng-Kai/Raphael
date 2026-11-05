@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 const api = vi.hoisted(() => ({ settingsGet: vi.fn(), settingsSet: vi.fn(), desktopHostCheck: vi.fn() }));
 vi.mock("./api", () => api);
-import { computerLocationHTML, mountComputerLocation, validComputerAlias } from "./computer-location";
+import { computerHostHealthHTML, computerLocationHTML, mountComputerLocation, validComputerAlias } from "./computer-location";
 import { closeMenu } from "./ui";
 import { setLocale, t } from "./i18n";
 
@@ -105,4 +105,11 @@ test("the local host label follows the window language and the shared popover re
   expect(document.querySelector('.computer-location-popover')).toBeNull();
   host.querySelector<HTMLButtonElement>('[data-computer-location]')!.click();
   expect(document.querySelector('.computer-location-popover')!.textContent).toContain(t("desktop.sharedLocation"));
+});
+
+test("a refused key login names the user ssh tried, so a wrong account is the first thing to check", () => {
+  setLocale("zh-TW");
+  const html = computerHostHealthHTML({ host: "192.168.8.178", ok: false, checks: [{ kind: "ssh_key", ok: false, user: "jack2" }] });
+  expect(html).toContain("以 jack2 登入被拒");
+  expect(computerHostHealthHTML({ host: "studio-mini", ok: false, checks: [{ kind: "ssh_key", ok: false }] })).toContain(t("desktop.health.ssh_key"));
 });

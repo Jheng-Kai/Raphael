@@ -22,7 +22,7 @@ import type { MessageKey } from "../i18n/zh-TW";
 import { brandIcon } from "../brand";
 import { type ConnectionsView, connectionsAddHTML, connectionsHTML } from "../connections";
 import { DICTATION_MODES } from "../dictation";
-import { KEEP_FOREVER_DAYS, formatClock, formatShortDateTime, formatRetention, formatUsd } from "../format";
+import { KEEP_FOREVER_DAYS, formatClock, formatRetention, formatUsd } from "../format";
 import { type LanguageGroup, languageSelectHTML, normalizeLanguages } from "../languages";
 import { bindingLabels } from "../keys";
 import { type MessagingView, messagingHTML } from "../messaging";
@@ -104,7 +104,6 @@ export const PANES: { id: SettingsPane; group: PaneGroup; icon: IconName; title:
   { id: "connections", group: "integrations", icon: "plug", title: () => t("settings.paneConnections"), purpose: () => t("settings.purposeConnections") },
   { id: "messaging", group: "integrations", icon: "send", title: () => t("settings.paneMessaging"), purpose: () => t("settings.purposeMessaging") },
   { id: "models", group: "account", icon: "bot", title: () => t("settings.paneUsage"), purpose: () => t("providers.about") },
-  { id: "data", group: "account", icon: "database", title: () => t("settings.paneData"), purpose: () => t("settings.purposeData") },
   { id: "about", group: "account", icon: "info", title: () => t("common.about"), purpose: () => t("settings.purposeAbout") },
 ];
 
@@ -184,9 +183,7 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "models", label: "settings.quickModel", also: "settings.searchModel", words: ["Alt", "Space"] },
   { pane: "models", label: "media.image", words: ["image", "drawing"] },
   { pane: "models", label: "media.video", words: ["video"] },
-  { pane: "data", label: "data.retention", also: "settings.searchHistory" },
-  { pane: "data", label: "data.groupDictation", also: "data.clearDictation" },
-  { pane: "data", label: "data.groupConversation", also: "data.clearConversation" },
+  { pane: "dictation", label: "data.retention", also: "settings.searchHistory" },
   { pane: "about", label: "settings.078" },
   { pane: "about", label: "nav.help" },
   { pane: "about", label: "settings.079" },
@@ -215,7 +212,7 @@ const allLanguages = (key: MessageKey): string[] => Object.values(catalogs).map(
 const PANE_TITLE_KEYS: Record<SettingsPane, MessageKey> = {
   appearance: "skin.title",
   general: "settings.paneGeneral", dictation: "settings.paneDictation", agent: "settings.paneTools", tools: "settings.paneTools", safety: "settings.paneSafety", connections: "settings.paneConnections",
-  messaging: "settings.paneMessaging", models: "settings.paneUsage", usage: "settings.paneUsage", data: "settings.paneData", about: "common.about",
+  messaging: "settings.paneMessaging", models: "settings.paneUsage", usage: "settings.paneUsage", data: "settings.paneDictation", about: "common.about",
 };
 
 /**
@@ -255,7 +252,7 @@ export function searchResultsHTML(hits: SearchHit[]): string {
 }
 
 /** Legacy links select Models or the shared Tools pane. */
-export const canonicalPane = (id: SettingsPane): SettingsPane => id === "usage" ? "models" : id === "agent" ? "tools" : id;
+export const canonicalPane = (id: SettingsPane): SettingsPane => id === "usage" ? "models" : id === "agent" ? "tools" : id === "data" ? "dictation" : id;
 /** The name of a tab, in the language of the window. */
 export const paneTitle = (id: SettingsPane): string => PANES.find((p) => p.id === canonicalPane(id))!.title();
 export type ModelsTab = "models" | "usage";
@@ -267,7 +264,6 @@ export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotke
 export interface SettingsView {
   update?: import("../api").UpdateView | null;
   memoryImportHTML?: string;
-  data?: { items: import("../types").HistoryItem[]; total: number; conversations: number; more: boolean; busy?: boolean; error?: string };
   modelsTab?: ModelsTab;
   pane: SettingsPane;
   device: DeviceSettings;
@@ -645,7 +641,9 @@ function dictationHTML(v: SettingsView): string {
         meter: { place: "after", segments: MIC_METER_SEGMENTS },
         row: { cls: "row-mic" },
       }),
-    ])
+    ]) +
+    // How long the history is kept lives with dictation; there is no separate Data page (2026-11-05).
+    section(t("data.groupDictation"), [row(t("data.retention"), "", sel(retentionChoices(v), retentionOf(v), t("data.retention"), ` data-k="retention"${v.brain === null ? " disabled" : ""}`))])
   );
 }
 
@@ -700,19 +698,6 @@ export function retentionChoices(v: SettingsView): Choice[] {
 /** How long the dictation history is kept, as the value of its dropdown (30 days until the core says). */
 export const retentionOf = (v: SettingsView): string => String(v.brain?.history_retention_days ?? 30);
 
-function dataHTML(v: SettingsView): string {
-  const data = v.data;
-  const clear = (what: string, count: number) => count > 0 ? btn(esc(t("data.deleteAll")), "sm", ` data-act="data-clear" data-what="${what}"${data?.busy ? " disabled" : ""}`) : "";
-  const records = data?.items.map(item => `<div class="data-record" data-record="${item.id}"><time class="num" datetime="${new Date(item.created_at_ms).toISOString()}">${esc(formatShortDateTime(item.created_at_ms, v.now))}</time><div class="data-record-text">${esc(item.text)}</div></div>`).join("");
-  return headingHTML(v) + coreNote(v) +
-    `<section class="sgroup data-section"><div class="data-heading"><h2>${esc(t("data.groupDictation"))}</h2>${clear("dictation", data?.total ?? 0)}</div><div class="slist">` +
-    row(t("data.retention"), "", sel(retentionChoices(v), retentionOf(v), t("data.retention"), ` data-k="retention"${v.brain === null ? " disabled" : ""}`)) +
-    (records || `<p class="note">${esc(t(data ? "data.emptyDictation" : "settings.loading"))}</p>`) +
-    (data?.more ? btn(esc(t("history.009")), "sm", ` data-act="data-more"${data.busy ? " disabled" : ""}`) : "") + `</div></section>` +
-    `<section class="sgroup data-section"><div class="data-heading"><h2>${esc(t("data.groupConversation"))}</h2>${clear("conversation", data?.conversations ?? 0)}</div><p class="note">${esc(data ? t("data.conversationCount", {p0:data.conversations}) : t("settings.loading"))}</p></section>` +
-    (data?.error ? `<p class="note" role="alert">${esc(data.error)}</p>` : "");
-}
-
 /** One page with model connections and usage in separate views. Legacy ids choose their own view. */
 function modelsHTML(v: SettingsView): string {
   const providers = v.providers ?? emptyProvidersView();
@@ -758,6 +743,7 @@ export function paneHTML(v: SettingsView): string {
       ]) + `</div>`;
     case "general":
       return generalHTML(v);
+    case "data":
     case "dictation":
       return dictationHTML(v);
     case "agent":
@@ -772,8 +758,6 @@ export function paneHTML(v: SettingsView): string {
     case "usage":
     case "models":
       return modelsHTML(v);
-    case "data":
-      return dataHTML(v);
     case "about":
       return aboutHTML(v);
   }

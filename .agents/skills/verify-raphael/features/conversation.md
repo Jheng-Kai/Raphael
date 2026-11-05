@@ -439,7 +439,7 @@ Offline fixtures do not prove native microphone, providers or transport.
 From Home, click Raphael in the rail or open a member report. Select Raphael or another member in the sidebar (compact width:
 member picker). Raphael stays first with his original large bare emblem and name. The column's top-left arrow toggles a remembered 56px face strip, including at compact width. Other expanded rows retain their 40px faces, time and preview. Click the stacked member/conversation title to toggle details. The title displays
 the current session only; conversation creation, search, switching and row menus
-live in the details list. The top-right gear opens Settings. Use sidebar search, or
+live in the details list. The header's only tool is the computer, for Raphael too (2026-11-05). Use sidebar search, or
 the compact picker's search action, for messages.
 
 ## Driving it with look

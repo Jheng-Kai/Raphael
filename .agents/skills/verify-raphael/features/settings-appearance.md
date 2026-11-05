@@ -141,7 +141,7 @@ upload and crop an image; the resulting face appears on the footer and outgoing 
 ## Driving it with look
 
 ```powershell
-npm run look -- profile appearance appearance-menu appearance-keyboard models dictation tools safety messaging data about theme-clarity --theme both --width 1120,720
+npm run look -- profile appearance appearance-menu appearance-keyboard models dictation tools safety messaging about theme-clarity --theme both --width 1120,720
 npm run look -- home sidebar sidebar-search sidebar-group-avatar-pair sidebar-group-avatar-four chat appearance appearance-menu appearance-keyboard desktop-takeover-owner home-calendar dictation-dictionary theme-clarity --theme both --width 1120,720,1920x1080
 npm run look -- appearance --theme both --width 1120,720,1920x1080 --locale ja
 npm run look -- chatgpt-signed-out chatgpt-signed-in chooser-chatgpt-signed-out chooser-chatgpt-signed-in cli-account-menu cli-account-disconnected cli-account-reconnected window-hover-minimize window-hover-maximize window-hover-restore window-hover-close window-hover-modal --theme both --width 1120,720,1920x1080

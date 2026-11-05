@@ -24,28 +24,42 @@
 
 .mb-panel-routines { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .mb-tab-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); }
-.mb-det .mb-rt.btn { display: flex; width: 100%; gap: var(--sp-3); padding: var(--sp-2); text-align: left; background: transparent; border: 1px solid var(--line); border-radius: var(--r-sm); }
+.mb-det .mb-rt.btn { display: flex; width: 100%; gap: var(--sp-3); padding: var(--sp-2); text-align: left; background: transparent; border: 0; border-radius: var(--r-md); }
 .mb-rt-state { display: flex; color: var(--text-3); flex: none; }
 .mb-rt-state.is-on { color: var(--ok); }
 .mb-rt-main { flex: 1; }
 .mb-routine-row { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
 .mb-routine-row > .mb-rt { flex: 1; min-width: 0; }
-.mb-routine-row > .mb-tool { flex: none; }
+.mb-routine-row > .mb-tool { flex: none; opacity: 0; }
+.mb-routine-row:is(:hover, :focus-within) > .mb-tool, .mb-routine-row > .mb-tool[aria-expanded="true"] { opacity: 1; }
 .mb-routine-row .mb-rt-main > span { white-space: normal; overflow-wrap: anywhere; }
 
 .mb-panel-preference { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-3); font-size: var(--fs-sm); line-height: 1.4; }
 .mb-panel-preference + .mb-panel-row.btn { border-top: 1px solid var(--line); }
 .mb-panel-preference .mb-panel-row-copy small { white-space: normal; }
-.mb-panel-identity { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; width: 100%; }
+.mb-panel-identity { display: flex; align-items: center; justify-content: center; gap: var(--sp-2); min-width: 0; width: 100%; }
 .mb-panel-identity > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sm); }
 .mb-panel-identity > b > span { color: var(--text-3); font-weight: 400; }
 .mb-det .mb-who:has(.mb-panel-identity) { display: block; }
-.mb-panel-tasks { min-width: 0; }
-.mb-task-row { display: flex; align-items: center; min-width: 0; gap: var(--sp-1); }
-.mb-task-open.btn { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; flex: 1; text-align: left; padding: var(--sp-2); border: 1px solid var(--line); background: transparent; }
-.mb-task-open > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mb-task-open > small, .mb-task-open > time { flex: none; color: var(--text-3); font-size: var(--fs-2xs); }
-.mb-task-open > .i { flex: none; }
+.mb-panel-tasks { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); min-width: 0; }
+.mb-panel-tasks > .btn { justify-self: start; }
+/* Grok Bot's task list (2026-11-05): one quiet tinted list, no frame around each row; a row is its state,
+   its title over 「狀態 · 時間」 and a chevron, and its ⋯ appears over the chevron under the pointer. */
+:is(.mb-task-list, .mb-rts) { display: grid; grid-template-columns: minmax(0, 1fr); padding: var(--sp-1); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.mb-task-row { position: relative; display: flex; align-items: center; min-width: 0; }
+.mb-task-open.btn { display: flex; align-items: center; gap: var(--sp-3); flex: 1; min-width: 0; padding: var(--sp-2); border: 0; border-radius: var(--r-md); background: transparent; text-align: left; }
+.mb-task-open.btn:disabled { opacity: 1; }
+.mb-task-state { display: flex; flex: none; color: var(--text-3); }
+.mb-task-row.is-running .mb-task-state { color: var(--accent-text); }
+.mb-task-row.is-waiting .mb-task-state { color: var(--warn); }
+.mb-task-row.is-failed .mb-task-state { color: var(--err); }
+.mb-task-copy { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; min-width: 0; gap: 2px; }
+.mb-task-copy b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sm); font-weight: 500; }
+.mb-task-copy small { color: var(--text-3); font-size: var(--fs-2xs); }
+.mb-task-open > .i { flex: none; color: var(--text-3); }
+.mb-task-row > .btn.icon { position: absolute; right: var(--sp-1); opacity: 0; }
+.mb-task-row:is(:hover, :focus-within) > .btn.icon, .mb-task-row > .btn.icon[aria-expanded="true"] { opacity: 1; }
+.mb-task-row:is(:hover, :focus-within) .mb-task-open > .i { visibility: hidden; }
 .mb-library-files { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
 .mb-library-files .team-file { max-width: 100%; }
 .mb-library-files .team-file > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
