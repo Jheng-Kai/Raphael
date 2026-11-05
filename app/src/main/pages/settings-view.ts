@@ -714,7 +714,7 @@ function modelsHTML(v: SettingsView): string {
     tabs((["models", "usage"] as const).map((id) => ({
       id, label: id === "models" ? t("providers.title") : t("models.usage"),
       attrs: ` id="models-tab-${id}" data-models-tab="${id}" data-k="models-tab:${id}" aria-controls="models-panel-${id}" tabindex="${id === selected ? 0 : -1}"`,
-    })), selected, { label: t("settings.paneUsage"), kind: "nav", plain: true, fill: true }) +
+    })), selected, { label: t("settings.paneUsage"), kind: "nav", plain: true }) +
     (["models", "usage"] as const).map((id) => `<div class="models-content" id="models-panel-${id}" role="tabpanel" aria-labelledby="models-tab-${id}"${id === selected ? "" : " hidden"}>${id === selected ? content : ""}</div>`).join("") + `</div>`;
 }
 
