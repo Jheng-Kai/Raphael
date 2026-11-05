@@ -577,7 +577,9 @@ export async function perform(page, step, evidenceDirectory) {
         let pressed;
         try { await new Promise(resolve => setTimeout(resolve, 180)); pressed = await measure(); }
         finally { await page.mouse.move(0, 100); await page.mouse.up(); }
-        if (pressed.background !== normal.background || pressed.layer !== 'rgba(0, 0, 0, 0)') throw new Error('Whole block press preserves its background and transparent target');
+        // R-UI-88: an enabled control changes colour on press without moving; the block's target layer stays transparent.
+        if (pressed.background === normal.background || pressed.layer !== 'rgba(0, 0, 0, 0)') throw new Error(`A whole block press changes its surface colour with a transparent target (${step.selector}: ${normal.background} -> ${pressed.background}, target ${pressed.layer})`);
+        if (pressed.visual.some((node, index) => node.slice(0, 4).some((value, edge) => Math.abs(value - hovered.visual[index][edge]) > .5))) throw new Error('A whole block press moves nothing inside it');
         await element.focus();
         const pointer = await measure();
         if (pointer.outline !== 'none' && pointer.width > 0) throw new Error('Pointer focus must not show a keyboard ring');

@@ -1002,7 +1002,9 @@ export function checkRendered(name, context = {}) {
   if (name === "conversation-day-today" || name === "conversation-day-yesterday") {
     const days = [...document.querySelectorAll('.mb-chat .thread .day')], line = document.querySelector('.mb-chat .thread .tn');
     const label = name === "conversation-day-today" ? "今天" : "昨天";
-    require(days.at(-1)?.textContent.startsWith(`${label} `), `the last day heading says ${label} with the shared look clock`);
+    // The calm thread's divider is the bare word; older dividers added the date after it.
+    const heading = days.at(-1)?.textContent.trim() ?? "";
+    require(heading === label || heading.startsWith(`${label} `), `the last day heading says ${label} with the shared look clock`);
     if (name === "conversation-day-today") window.__look.midnightLine = line;
     else require(line === window.__look.midnightLine, "the date change retains the conversation line");
     return { check: name, label };

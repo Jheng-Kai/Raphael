@@ -66,6 +66,8 @@ export interface DetailsPanel {
   refreshRoutines(): void;
   refreshMemory(memberId: number, space?: "own" | "shared"): void;
   refreshResources(): void;
+  /** A turn of the selected member changed: only its work list can have moved. */
+  refreshWork(): void;
 }
 
 export function createDetails(host: DetailsHost): DetailsPanel {
@@ -527,6 +529,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     select,
     refreshRoutines() { void loadRoutines(); },
     refreshResources() { void loadCounts(true); void resources?.refresh(true); if (tab === 'details' || tab === 'library') void loadWork(); },
+    refreshWork() { if (!el.hidden && (tab === 'details' || tab === 'library')) void loadWork(); },
     refreshMemory(memberId, space) {
       if (el.hidden) return;
       if (memberId === host.member().id) {
