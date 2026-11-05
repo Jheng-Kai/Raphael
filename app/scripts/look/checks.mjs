@@ -2,6 +2,18 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "about-no-updater-key" || name === "about-release-page-opened") {
+    const section = document.querySelector("[data-updates]");
+    require(visible(section) && section.textContent.includes("0.2.0"), "the current app version is visible");
+    require(section.textContent.includes("新版本請到發布頁查看"), "release-page guidance is quiet and explicit");
+    require(visible(section.querySelector('[data-act="update-releases"]')), "the shared release-page button is visible");
+    require(!section.querySelector('[data-act="update-check"], [data-act="update-install"], [data-k="auto-update"], [role="alert"], .error'), "unavailable update controls and error tone are absent");
+    if (name === "about-release-page-opened") {
+      require(window.__look.urls.filter(url => url === "https://github.com/Jheng-Kai/Raphael/releases").length === 1, "one click opens the release page through the native opener boundary");
+      require(window.__look.calls.filter(call => call.command === "update_control" && call.action === "check").length === 1, "opening the release page does not check for updates again");
+    }
+    return {check:name};
+  }
   if (name.startsWith("app-update-")) {
     const section = document.querySelector("[data-updates]");
     require(visible(section) && section.textContent.includes("1.1.0"), "new version is visible");

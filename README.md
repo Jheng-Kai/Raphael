@@ -57,6 +57,23 @@ npm run verify -- --core   # plus the Python core
 npm run verify -- --rust   # plus the Rust shell
 ```
 
+### Windows releases
+
+The manually dispatched Windows release workflow builds and verifies the installer,
+dependency notices, `BUILD-INFO.txt` and `SHA256SUMS.txt`. Publishing requires the
+explicit `publish` input and a main-branch or tag build.
+
+With both `TAURI_SIGNING_PRIVATE_KEY` and `RAPHAEL_UPDATER_PUBLIC_KEY` repository
+secrets, it also signs the installer with a version-bound trusted comment and
+publishes its `.sig` and `latest.json` updater feed. If either key is missing, it
+warns once and still releases the verified installer using the release config plus
+the small `tauri.release-no-updater.conf.json` override. That mode publishes no
+signature or updater feed and records the reason in `BUILD-INFO.txt`.
+
+`prepare-release-assets.mjs` requires `--signature` by default. Only the explicit
+`--updater disabled` mode accepts its omission; signed mode still rejects missing
+signatures and signatures that do not bind the release version.
+
 ## Project layout
 
 ```text

@@ -11,9 +11,17 @@ The updater feed is https://github.com/Jheng-Kai/Raphael/releases/latest/downloa
 Release builds require GITHUB_REPOSITORY=Jheng-Kai/Raphael and publication pins GH_REPO to
 that repository; a stale local git remote never selects an updater endpoint.
 updates.rs alone uses the official Tauri updater plugin. The public key is a compile-time
-RAPHAEL_UPDATER_PUBLIC_KEY, with no fallback key. requireSignedVersion binds bytes to
-manifest versions; the release workflow signs with the owner's secret, generates latest.json,
-and publishes only through an explicit workflow input. DeviceStore owns opt-in and a one-shot
+RAPHAEL_UPDATER_PUBLIC_KEY, with no fallback key. A missing key returns not_configured before
+any feed request. updates.ts maps only that result to the current-version releases-page row;
+Settings uses its existing open_external_url plumbing. Configured-key behavior is unchanged. requireSignedVersion binds bytes to
+manifest versions. With both owner signing keys, the release workflow retains version-bound
+signing, latest.json and its published feed. If either key is absent, it warns once and layers
+tauri.release-no-updater.conf.json over the release config to disable updater artifacts; the
+installer, notices, BUILD-INFO and SHA256SUMS still build, verify and publish without .sig or
+latest.json. prepare-release-assets defaults to signed mode and requires a signature; explicit
+--updater disabled omits the feed and records the missing-key reason in BUILD-INFO. Publication
+uses the checked version job output rather than reading latest.json, and still requires the
+explicit workflow input. DeviceStore owns opt-in and a one-shot
 installed-version receipt. A native timer contacts releases only while opted in; a fail-closed
 roster read and Windows idle time gate installation. Native installation/rollback acceptance
 remains separate from fake-feed tests.

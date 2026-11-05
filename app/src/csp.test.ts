@@ -43,6 +43,8 @@ describe("content security policy", () => {
 
   test("sources are the app itself, its IPC, loopback desktop and allowed media/YouTube embeds: no wildcard host", () => {
     const allowed = new Set(["'self'", "'none'", "data:", "ipc:", "http://ipc.localhost"]);
+    // Tauri's local asset URLs serve only files granted by the opaque attachment ID resolver.
+    const mediaSources = new Set([...allowed, "https:", "blob:", "asset:", "http://asset.localhost"]);
     const frameHosts = new Set(["'self'", "http://127.0.0.1:*", "https://www.youtube-nocookie.com", "https://www.youtube.com"]);
     for (const [name, sources] of policy()) {
       for (const source of sources) {
@@ -50,8 +52,8 @@ describe("content security policy", () => {
           expect(name, "'unsafe-inline' is for style attributes only").toBe("style-src");
         } else if (name === "frame-src") {
           expect(frameHosts, `${name} ${source}`).toContain(source);
-        } else if ((name === "img-src" || name === "media-src") && (source === "https:" || source === "blob:")) {
-          expect(["https:", "blob:"]).toContain(source);
+        } else if (name === "img-src" || name === "media-src") {
+          expect(mediaSources, `${name} ${source}`).toContain(source);
         } else {
           expect(allowed, `${name} ${source}`).toContain(source);
         }
