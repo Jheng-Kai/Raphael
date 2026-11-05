@@ -3049,7 +3049,8 @@ export function checkRendered(name, context = {}) {
       require(lines[0].textContent === "小森 未能回覆：請求太頻繁而被限流" && lines[1].textContent === "小晴 未能回覆：已停止", "blocked replies name the member and why in the window language");
     }
     if (name === "p02-meeting-event") {
-      const line = eventLines(2).at(-1);
+      // The day divider is no longer an event line; the meeting stays one line (an exchange, 2026-11-05).
+      const line = eventLines(1).at(-1);
       require(line.closest('.conversation-event-line [data-meeting-room]') && line.textContent === "已開啟會議 產品方向討論", "the meeting is one centred line that opens its room");
       require(visible(line.querySelector('svg.i')) && !line.querySelector('.av'), "a small icon leads the line, beside no avatar");
     }
@@ -5310,7 +5311,8 @@ export function checkRendered(name, context = {}) {
       if (name === "pc-handback") {
         require(card.dataset.cardState === "done" && card.querySelector(".card-detail[hidden]")?.textContent.includes("已交還控制 · 工作已繼續") && visible(card.querySelector('.card-status.is-done')), `the card says control went back and the task continued: "${state}"`);
         require(!card.querySelector("[data-act^=card-]"), "no action is left, and the owner no longer controls");
-        const line = eventLines(2).at(-1), resumed = document.querySelector('.tn[data-id="141"]');
+        // The calm thread keeps one centred line for the resumption.
+        const line = eventLines(1).at(-1), resumed = document.querySelector('.tn[data-id="141"]');
         require(line.textContent === "電腦 已交還控制，繼續原本的工作", `the resumed task opens with one line: ${line.textContent}`);
         const markBox = line.querySelector('svg.i').getBoundingClientRect();
         require(markBox.width <= 20 && markBox.height <= 20, `the line's icon is no larger than the other lines' (${markBox.width}x${markBox.height})`);
@@ -5352,8 +5354,9 @@ export function checkRendered(name, context = {}) {
     require(visible(toggle) && toggle.getAttribute('role') === 'switch' && toggle.classList.contains('tg'), "the draft preference is a real switch");
     require(toggle.getAttribute('aria-checked') === 'false', "this member was set to send mail itself, so the switch is off");
     const row = toggle.closest('.mp-resource');
-    require(row.querySelector('b').textContent === "先擬成草稿，由我寄出", `the switch says what it does: ${row.querySelector('b').textContent}`);
-    require(row.querySelector('p').textContent.includes("由你按「傳送」才會寄出"), "its line says that only 傳送 sends");
+    // Slack drafts follow the same rule as mail since 1.2.
+    require(row.querySelector('b').textContent === "郵件與 Slack 先擬成草稿，由我傳送", `the switch says what it does: ${row.querySelector('b').textContent}`);
+    require(row.querySelector('p').textContent.includes("由你按「傳送」才會送出"), "its line says that only 傳送 sends");
     require(document.querySelectorAll('.mb-dialog .mp-resource [role="switch"]').length === 2, "it stands beside the one that asks before contacting colleagues");
     return { check: name };
   }
@@ -5364,7 +5367,8 @@ export function checkRendered(name, context = {}) {
     require(window.__look.sent.length === 0 && !draftCalls.some(call => call.method === "integrations.draft_send"), "nothing was sent");
     const first = "a".repeat(64), second = "b".repeat(63) + "2", third = "b".repeat(63) + "3";
     if (name === "mail-handed-first") {
-      const line = eventLines(2).at(-1);
+      // The calm thread's day divider is no longer an event line; the hand-off is the one line left.
+      const line = eventLines(1).at(-1);
       require(line.textContent === "已轉交給 小森", `the first chat keeps one line naming the colleague: ${line.textContent}`);
       require(visible(line.querySelector('.av, svg, .mono')), "the colleague's face stands before the name");
       require(!document.querySelector('.mail-card, .mail-offer'), "the card and its choice are not in this chat any more");
