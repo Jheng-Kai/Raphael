@@ -47,7 +47,13 @@ beforeEach(() => {
   }));
 });
 
+// A test that times out never reaches its own cleanup; stop its page and timers here so the
+// next test does not count the refreshes it would still schedule.
+const mounted: { hide(): void; el: HTMLElement }[] = [];
 afterEach(() => {
+  for (const page of mounted.splice(0)) { page.hide(); page.el.remove(); }
+  vi.clearAllTimers();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -64,6 +70,7 @@ async function mount() {
   const heard: ((event: MainEvent) => void)[] = [];
   const app = { go: vi.fn(), onEvent: (handler: (event: MainEvent) => void) => (heard.push(handler), () => {}), cleared: { on: () => () => {} } } as unknown as AppContext;
   const page = createHome(app);
+  mounted.push(page);
   document.body.append(page.el);
   page.show();
   await flush();
