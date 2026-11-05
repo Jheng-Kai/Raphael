@@ -106,7 +106,9 @@ async def _search_call(service: str, http: httpx.AsyncClient, method: str, url: 
             # Event-loop timers can wake early on Windows; keep the provider's deadline.
             while (remaining := wait_until - loop.time()) > 0:
                 await asyncio.sleep(remaining)
-            if wait_s > budget:
+            # A cooldown equal to the budget must not read as longer: on Windows the clock ticks every
+            # ~15 ms, so (t + wait) - t can exceed wait by a rounding error and skip a due retry.
+            if wait_s - budget > 1e-6:
                 # Do not send before the provider's cooldown, even when it exceeds this turn's budget.
                 raise _RateLimited(str(wait_s - budget))
             gate.next_at = loop.time() + SEARCH_INTERVAL_S
