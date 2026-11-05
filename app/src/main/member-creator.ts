@@ -2,6 +2,7 @@
 // where the conversation stands, with the sidebar beside it. The member then opens and asks what it is for (the core's
 // greeting), and the owner's answer becomes its job: nothing else is asked here.
 import "./member-creator.css";
+import { openTemplateGallery } from "./member-templates";
 import { t } from "./i18n";
 import { type Dialog, openDialog } from "./member-dialogs";
 import { NAME_MAX, cleanName, isMemberNameTaken } from "./members";
@@ -32,11 +33,12 @@ export function openMemberCreator(o: MemberCreatorOptions): Dialog {
       `<div class="cr-colors" role="group" aria-label="${esc(t("members.creator.colors"))}">${slimeColorsHTML(avatar, esc)}</div>` +
       `<div class="cr-characters" role="group" aria-label="${esc(t("members.creator.characters"))}">${slimeCharactersHTML(avatar, esc)}</div>` +
       `<div class="cr-fields"><label class="mp-label" for="mb-new-name"><span>${esc(t("members.name"))}</span><input id="mb-new-name" class="mb-fin" maxlength="${NAME_MAX}" autocomplete="off"></label></div>` +
-      `<div class="cr-start">${btn(esc(t("members.create")), "pri", ' data-dlg="create" disabled')}</div></div>`,
+      `<div class="cr-start">${btn(esc(t("template.gallery")), "", ' data-dlg="templates"')}${btn(esc(t("members.create")), "pri", ' data-dlg="create" disabled')}</div></div>`,
     actions: {},
     canClose: () => !busy,
     onAct(act) {
       if (!busy && act === "create") void create();
+      if (!busy && act === "templates") openTemplateGallery(o.create, o.groupId, () => dialog.close());
     },
     onEnter() { void create(); },
     onClose() { clearTimeout(hop); },

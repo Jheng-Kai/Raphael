@@ -607,3 +607,14 @@ npm run look -- mcp-proposal-edit mcp-proposal-tested mcp-proposal-enabled mcp-p
 ```
 
 Offline contracts: core/tests/integrations/test_chat_connections.py, core/tests/agent/test_connection_management.py, core/tests/background/test_connection_offers.py, core/tests/test_connect_cards.py, core/tests/test_secret_cards.py, core/tests/brain/test_db.py, app/src/main/mcp-proposal.test.ts. Native provider/OAuth/stdio processes, Rust, live and judge remain separately authorized checks.
+
+
+## Named connected accounts (2026-11-05)
+
+R-COLLEAGUE-04: Connections > an app shows each public account label; Account label edits that exact account. Add another account reuses existing sign-in and asks for a label afterward. A returned email is the default; provider refresh retains owner labels by account ID. Members and connections_list receive public labels and the shared instruction to ask which account unless specified.
+
+```powershell
+npm run look -- account-labels account-label-edit output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
+```
+
+Core fakes prove persistence and projection. IPC fixtures never prove OAuth or provider metadata. Custom MCP services without multiple managed account identities retain their service identity.

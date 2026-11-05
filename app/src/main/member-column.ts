@@ -165,6 +165,7 @@ export function memberMenu(id: number, anchor: HTMLElement, host: Pick<ColumnHos
     { id: "unread", label: t("members.sideUnread"), icon: "chat" },
     { id: "read-all", label: t("members.sideReadAll"), icon: "check" },
     { id: "edit", label: t("members.sideEdit"), icon: "pencil" },
+    { id: "export-template", label: t("template.export"), icon: "download" },
     { id: "duplicate", label: t("members.sideDuplicate"), icon: "copy" },
     { id: "clear", label: t("members.sideClear"), icon: "trash" },
     { id: "hide", label: t("members.sideHide"), icon: "eyeOff" },

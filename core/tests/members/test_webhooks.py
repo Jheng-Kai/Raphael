@@ -43,6 +43,40 @@ async def setup(rig, monkeypatch):
     return hooks, routine, start
 
 
+async def test_external_probe_reaches_the_exact_hook_without_work_or_admission(rig, monkeypatch):
+    hooks, routine, start = await setup(rig, monkeypatch)
+    await rig.call("routines.update", {"id": routine["id"], "enabled": False})
+    async def post(url, body, headers):
+        assert url == f"https://sample.ts.net/routines/{routine['id']}"
+        reader = asyncio.StreamReader()
+        reader.feed_data((f"POST /routines/{routine['id']} HTTP/1.1\r\nContent-Length: {len(body)}\r\n" +
+                          "".join(f"{k}: {v}\r\n" for k, v in headers.items()) + "\r\n").encode() + body)
+        reader.feed_eof()
+        return await hooks._receive(reader)
+    hooks.post_probe = post
+    result = await rig.call("routines.webhook", {"id": routine["id"], "url": "https://sample.ts.net"})
+    assert result["tested"] is True and not rig.background.submitted and not hooks.last_fire
+    assert rig.service._settings.get("routine_run_window") == []
+    assert start.call_args.kwargs["host"] == "127.0.0.1"
+    hooks.post_probe = AsyncMock(return_value=204)
+    with pytest.raises(Exception, match="did not reach"):
+        await hooks.test_external(routine["id"], "https://unrelated.example")
+    assert hooks.probes == set()
+
+
+async def test_external_probe_refuses_credentials_redirect_shapes_and_rotates_only_on_request(rig, monkeypatch):
+    hooks, routine, _ = await setup(rig, monkeypatch)
+    before = (await hooks.details(routine["id"], reveal=True))["secret"]
+    assert (await hooks.details(routine["id"], reveal=True))["secret"] == before
+    after = (await hooks.details(routine["id"], reveal=True, rotate=True))["secret"]
+    assert before != after
+    hooks.post_probe = AsyncMock()
+    for url in ("http://sample.example", "https://user:pass@sample.example", "https://sample.example/path", "https://sample.example?secret=x"):
+        with pytest.raises(Exception):
+            await hooks.test_external(routine["id"], url)
+    hooks.post_probe.assert_not_called()
+
+
 @pytest.mark.parametrize("payload", [
     {"action": "created", "data": {"issue": {"id": "S001", "title": "Synthetic issue", "permalink": "https://example.test/issues/S001"}}},
     {"event": {"id": "PD001", "event_type": "incident.triggered", "occurred_at": "2026-11-05T08:00:00Z", "data": {"id": "I001", "title": "Synthetic incident", "html_url": "https://example.test/incidents/I001", "urgency": "high"}}},

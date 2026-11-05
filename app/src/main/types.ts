@@ -956,6 +956,7 @@ export interface AppsInventory { state: "complete" | "partial" | "unknown"; coun
 
 /** What `members.create` takes (`ui_language` names the language of the routine it may offer). */
 export interface NewMember {
+  template?: import("./member-templates").MemberTemplate;
   name: string;
   /** It speaks first in its own conversation, asking what it is for. */
   greet?: boolean;
@@ -1176,7 +1177,7 @@ export interface ConnectionGroup {
   description?: string;
   logo?: string;
   /** The accounts a managed service is signed in with, by their status (`ACTIVE`, `EXPIRED`, ...): never an account's name or id. */
-  accounts?: { status: string }[];
+  accounts?: { id?: string; status: string; label?: string }[];
   disabled_tools?: string[];
   tools_state?: "loading" | "failed" | "ready";
   result_size_limit?: number;

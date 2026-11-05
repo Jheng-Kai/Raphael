@@ -192,6 +192,8 @@ pub fn run() {
             learned::learned_layout,
             learned::learned_finish,
             commands::save_usage_csv,
+            commands::pick_output_folder,
+            commands::member_template_file,
             commands::schedule_keep_awake_get,
             commands::schedule_keep_awake_set,
             commands::device_settings_get,

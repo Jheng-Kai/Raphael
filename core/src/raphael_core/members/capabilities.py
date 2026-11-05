@@ -252,6 +252,16 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
             self._mirror(member_id)
         return next(skill for skill in self.skills(member_id) if skill["id"] == cursor.lastrowid)
 
+    def keep_recipe(self, member_id, text, files):
+        """Install the validated public text dependencies through the same local package writer."""
+        from ..bots.homes import atomic
+        skill = self.keep_skill(member_id, "member-template", text)
+        folder = self._path(member_id, skill["id"]).parent
+        for name, content in files.items():
+            atomic(self.homes.safe(folder / name), content.encode("utf-8"))
+        self._mirror(member_id)
+        return skill
+
     def revert_state(self, member_id: int, revision: str, *, expected_hash: str) -> None:
         """Core-only metadata undo; documents must still match the restored revisions."""
         self.check(member_id)

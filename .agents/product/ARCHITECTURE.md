@@ -724,3 +724,16 @@ Skill source rendering uses skill-source.ts in member resources, Connections row
 discovery and document dialogs. skillOriginLabel owns the single localized origin
 and learned date line; skillSourceLabel removes transport prefixes and collapses
 plugin cache paths to name/version. Stored source identifiers remain unchanged.
+
+
+## Colleague recipes, accounts and tunnel probes (2026-11-05)
+
+MembersService owns the main-window-only members.template RPC. The allowlisted recipe codec never reads memory, credentials, pictures or model settings; it validates bounded data before mutations. MemberCapabilities remains the skill writer and MemberStore remains the routine writer. Import grants no app tools and schedules no runs. Existing member creation, AgentHistory greetings, ownerQuestionHTML and the existing sendFromPage composer path supply the local greeting form; NEW_MEMBER_STEP stays next to the owner input. There is no second model loop (A-01/03/04/11).
+
+ConnectorStore keeps account labels in its existing accounts rows. The owner-only connectors.label RPC updates one current account; refresh preserves names by account ID and copies only a returned public email. IntegrationsService projects these labels to members and connections_list. The shared persona instructs account disambiguation. No token or provider auth blob crosses that projection (A-05/12).
+
+LocalVm creates the three team directories on the existing shared mount when a computer first becomes ready, locally or through an exact remote mkdir command. Handoffs and requested wrap-ups can cite this shared contract; no new file store or renderer is added.
+
+The existing routines.webhook RPC accepts an owner-requested URL probe. PageFetcher pins a public HTTPS address without redirects. A short-lived authenticated nonce reaches Webhooks._receive and returns 204 before admission or background work, including for paused routines. No tunnel subprocess is launched. Existing loopback binding, HMAC/Bearer validation, rate limits and untrusted body handling remain authoritative.
+
+The main-window-only pick_output_folder and member_template_file shell commands reuse tauri_plugin_dialog. No webview-supplied path is accepted; recipe files are bounded UTF-8 and filtered to .raphael-member. Native dialog and installed file-opening acceptance remain separate from IPC fixtures (A-06/10).

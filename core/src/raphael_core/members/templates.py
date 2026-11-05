@@ -1,0 +1,117 @@
+"""Portable member recipes: explicit public fields only, never grants or private state."""
+
+import json
+from pathlib import PurePosixPath
+
+from ..bots.homes import redact_secrets
+from ..protocol import invalid_params
+from .store import clean_name, clean_role, clean_instructions, clean_personality, clean_title, clean_prompt, clean_schedule
+
+MAX_BYTES = 512 * 1024
+FIELDS = ("name", "role", "personality", "instructions", "reply_style")
+
+
+def checked(value):
+    if not isinstance(value, dict) or set(value) != {"format", "version", *FIELDS, "skills", "routines", "connections"}:
+        raise invalid_params("Invalid member template fields")
+    if value["format"] != "raphael-member" or type(value["version"]) is not int or value["version"] != 1:
+        raise invalid_params("Unsupported member template")
+    if len(json.dumps(value).encode()) > MAX_BYTES:
+        raise invalid_params("Member template is too large")
+    clean_name(value["name"])
+    clean_role(value["role"])
+    clean_personality(value["personality"])
+    clean_instructions(value["instructions"])
+    if value["reply_style"] not in ("full", "conversational"):
+        raise invalid_params("Invalid reply style")
+    for key, maximum in (("skills", 40), ("routines", 50), ("connections", 30)):
+        if not isinstance(value[key], list) or len(value[key]) > maximum:
+            raise invalid_params("Invalid template list")
+    for skill in value["skills"]:
+        if not isinstance(skill, dict) or not {"text"} <= set(skill) <= {"text", "files"} or not isinstance(skill["text"], str) or not 0 < len(skill["text"].encode()) <= 128 * 1024:
+            raise invalid_params("Invalid template skill")
+        files = skill.get("files", {})
+        if not isinstance(files, dict) or len(files) > 100:
+            raise invalid_params("Invalid template skill files")
+        for name, content in files.items():
+            if not isinstance(name, str):
+                raise invalid_params("Invalid template dependency path")
+            path = PurePosixPath(name)
+            if (len(name) > 300 or "\\" in name or ":" in name
+                    or path.is_absolute() or any(p in (".", "..") or p.startswith(".") for p in path.parts)
+                    or path.suffix.lower() not in (".md", ".txt", ".json", ".py", ".sh", ".js", ".ts", ".ps1", ".toml", ".yaml", ".yml")
+                    or path.name.casefold() in ("skill.md", "memory.md", "user.md", "soul.md")
+                    or not isinstance(content, str) or "\x00" in content or len(content.encode()) > 128 * 1024):
+                raise invalid_params("Only safe, public text dependencies belong in a skill recipe")
+    from .events import clean_when
+    for routine in value["routines"]:
+        if not isinstance(routine, dict) or set(routine) != {"title", "prompt", "schedule", "when"}:
+            raise invalid_params("Invalid template routine")
+        clean_title(routine["title"])
+        clean_prompt(routine["prompt"])
+        if (routine["schedule"] is None) == (routine["when"] is None):
+            raise invalid_params("Invalid template trigger")
+        clean_when(routine["when"]) if routine["when"] is not None else clean_schedule(routine["schedule"])
+    if any(not isinstance(c, str) or not c.strip() or len(c) > 100 for c in value["connections"]):
+        raise invalid_params("Invalid template connection")
+    # Public instructions may themselves contain copied credentials; refuse them too.
+    raw = json.dumps(value, ensure_ascii=False)
+    if redact_secrets(raw) != raw:
+        raise invalid_params("Remove private credentials from the member recipe first")
+    return value
+
+
+def export(service, member_id):
+    member = service.store.member(member_id)
+    if member is None:
+        raise invalid_params("No such member")
+    result = {"format": "raphael-member", "version": 1, **{key: getattr(member, key) for key in FIELDS},
+              "skills": [export_skill(service.capabilities, member_id, s["id"])
+                         for s in service.capabilities.owned_skills(member_id)],
+              "routines": [{"title": r.title, "prompt": r.prompt,
+                            "schedule": r.schedule.to_json() if r.schedule else None, "when": r.when}
+                           for r in service.store.routines(member_id)],
+              "connections": [c["name"] for c in service._connections()
+                              if member.tools is None or c["id"] in member.tools]}
+    return checked(result)
+
+
+def export_skill(capabilities, member_id, identifier):
+    from .skill_library import package
+    snapshot = package(capabilities._path(member_id, identifier).parent)
+    snapshot.pop(".raphael-source.json", None)
+    try:
+        text = snapshot.pop("SKILL.md").decode("utf-8-sig")
+        files = {name: data.decode("utf-8") for name, data in snapshot.items()}
+    except UnicodeError:
+        raise invalid_params("Remove pictures and binary/private files from this skill before sharing") from None
+    return {"text": text, **({"files": files} if files else {})}
+
+
+async def handle(service, params):
+    action = params.get("action")
+    if action == "export":
+        return {"template": export(service, service._member_id(params))}
+    value = checked(params.get("template"))
+    if action == "preview":
+        return {"template": value}
+    if action != "import":
+        raise invalid_params("Invalid template action")
+    # Nothing is installed or granted during preview. Imports get no connection tools.
+    made = await service._create({**{key: value[key] for key in FIELDS},
+                                  "name": params.get("name", value["name"]), "tools": [],
+                                  "avatar": params.get("avatar", "slime:color:blue"),
+                                  "group_id": params.get("group_id"), "greet": True,
+                                  "ui_language": params.get("ui_language")})
+    identifier = made["member"]["id"]
+    try:
+        for skill in value["skills"]:
+            service.capabilities.keep_recipe(identifier, skill["text"], skill.get("files", {}))
+        for routine in value["routines"]:
+            service.store.create_routine(member_id=identifier, **routine, enabled=False, next_run_ms=None)
+    except Exception:
+        # Never leave a partly imported recipe presented as complete.
+        await service._delete({"id": identifier})
+        raise
+    service._changed()
+    return made

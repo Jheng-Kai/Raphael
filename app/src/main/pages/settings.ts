@@ -1244,6 +1244,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
     const act = target.closest<HTMLElement>("[data-act]")?.dataset.act;
     switch (act) {
+      case "output-pick": void api.pickOutputFolder().then(path => { if (path !== null) return changeBrain("owner_output_folder", path); }).catch(error => toaster.info(describeError(error))); break;
       case "update-check": void checkUpdate(); break;
       case "update-install": void checkUpdate("install"); break;
       case 'copy-code':

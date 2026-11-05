@@ -1,4 +1,5 @@
 // Shared member actions for the column and the team board.
+import { exportMemberTemplate } from "./member-templates";
 import * as api from "./api";
 import { describeError } from "./format";
 import { t } from "./i18n";
@@ -33,6 +34,7 @@ export function createMemberActions(host: MemberActionHost) {
     if (action === "edit") return editMember(m);
     if (action === "primary") return choosePrimary(id);
     try {
+      if (action === "export-template") return await exportMemberTemplate(id);
       if (action === "pin") await host.update(id, {pinned: !m.pinned});
       else if (action === "hide") {
         await api.membersUpdate(id, {hidden: true});

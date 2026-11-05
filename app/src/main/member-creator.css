@@ -21,3 +21,10 @@
 .cr-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); width: 100%; margin-top: var(--sp-2); }
 .cr-start { display: flex; justify-content: center; margin-top: var(--sp-1); }
 .cr-start .btn { min-width: 120px; }
+
+.template-gallery { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-2); }
+.template-starter { display: flex; flex-direction: column; height: auto; white-space: normal; padding: var(--sp-2); }
+.template-preview .card-well { padding: var(--sp-2); }
+.template-preview .conversation-card { width: 100%; }
+.cr-start { gap: var(--sp-2); flex-wrap: wrap; }
+@media (max-width: 760px) { .template-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

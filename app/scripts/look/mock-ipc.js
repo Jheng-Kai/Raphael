@@ -630,6 +630,12 @@ export function installMock(fixture, config = {}, target = window) {
   let maximized = false;
   target.__look = state;
   const copy = value => value === undefined ? undefined : structuredClone(value);
+  if (variant.colleague === "greeting" || variant.colleague === "handoff") {
+    const base = structuredClone(data.turns.find(turn => turn.member_id === 1));
+    const sample = data.colleagueSample;
+    Object.assign(data.members.find(member => member.id === 1), {role: sample.role, name:sample.name, unread:false, activity:"idle", waiting:false});
+    data.turns = data.turns.filter(turn => turn.member_id !== 1).concat({...base,id:9800,session_id:"colleague-greeting",member_id:1,conversation_id:11,question:"",route:variant.colleague === "greeting" ? "greeting" : "answer",source:variant.colleague === "greeting" ? "greeting" : "app",text:variant.colleague === "greeting" ? sample.greeting : sample.handoff,detail:variant.colleague === "greeting" ? JSON.stringify({kind:"greeting",options:sample.options}) : null,status:"done",steps:[],messages:[],task:null,permissions:[],owner_questions:[],computers:[],secrets:[],connectors:[],drafts:[],pages:[],handoffs:[]});
+  }
   const nextId = items => Math.max(0, ...items.map(item => item.id)) + 1;
   const unsupported = name => { const message = `Unmocked IPC: ${name}`; state.errors.push(message); throw new Error(message); };
   let keyRemoved = false;
@@ -837,13 +843,24 @@ export function installMock(fixture, config = {}, target = window) {
         if (p.id !== 0 && !data.members.some(member => member.id === p.id && !member.hidden)) throw new Error("Invalid params: no such member");
         data.primaryId = p.id; notify("MembersChanged", { member_id: p.id }); return { primary_id: p.id };
       }
+      case "members.template": {
+        if (p.action === "preview") return {template:p.template};
+        if (p.action === "export") return {template:data.colleagueSample.template};
+        if (p.action === "import") {
+          const member = {...data.members[1],...p.template,name:p.name,id:nextId(data.members),tools:[],avatar:p.avatar,group_id:p.group_id};
+          delete member.template; data.members.push(member);
+          for (const routine of p.template.routines) data.routines.push({...routine,id:nextId(data.routines),member_id:member.id,enabled:false,next_run:null,last_run:null});
+          notify("MembersChanged",{member_id:member.id}); return {member,routine_offer:null};
+        }
+        throw new Error("Unknown template action");
+      }
       case "members.create": {
         const member = { ...data.members[1], role: "", blurb: "", ...p, id: nextId(data.members) };
         data.members.push(member);
         if (p.greet) {
           mainConversation(member.id);
           const conversation = data.conversations.find(item => item.member_id === member.id);
-          data.turns.push({ id: nextId(data.turns), session_id: `greeting-${member.id}`, question: "", route: "greeting", prefix: "", text: `你好，我是${member.name}。你想請我幫你做什麼？`, detail: null, status: "done", cost_usd: 0, source: "greeting", model: null, steps: [], messages: [], attachments: [], member_id: member.id, conversation_id: conversation.id, created_at_ms: data.now, created_at: new Date(data.now).toISOString() });
+          data.turns.push({ id: nextId(data.turns), session_id: `greeting-${member.id}`, question: "", route: "greeting", prefix: "", text: `你好，我是${member.name}。你想請我幫你做什麼？`, detail: JSON.stringify({kind:"greeting",options:data.colleagueSample.options}), status: "done", cost_usd: 0, source: "greeting", model: null, steps: [], messages: [], attachments: [], member_id: member.id, conversation_id: conversation.id, created_at_ms: data.now, created_at: new Date(data.now).toISOString() });
         }
         notify("MembersChanged", { member_id: member.id });
         return { member, routine_offer: variant.routineOffer ? {title:"範例摘要",prompt:"整理範例資料。",schedule:{kind:"daily",time:"09:00"}} : null };
@@ -1052,7 +1069,7 @@ export function installMock(fixture, config = {}, target = window) {
         const detected=!p.event ? {} : variant.eventUndetectable || !choice ? {event_error:'目前沒有可用的 Gmail 項目。出現新項目後，請再試一次。'} : {when:{app:choice.app,event:{tool:'mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL',arguments:{tools:[{tool_slug:choice.slug,arguments:args}]},items:`data.results.0.response.data.${path}`,id:choice.id==='gmail-mail' ? 'messageId' : choice.input==='channel' ? 'ts' : 'id',...(calendar ? {since:{arg:'updatedMin',format:'iso'}} : {})},filter:p.contains ? {field:'text',equals:p.contains,operator:'contains'} : {field:'',equals:''}}};
         return {routines:p.member_id===undefined ? data.routines : byMember(data.routines,p),events,event_apps:variant.noEventApps ? [] : ['Gmail','Google 日曆','GitHub','Slack'],...detected};
       }
-      case "routines.webhook": return {address:`http://127.0.0.1:43210/routines/${p.id}`, address_changed:!!variant.hookAddressChanged, ...(p.reveal ? {secret:'sample-fake-secret-for-visual-checks'} : {})};
+      case "routines.webhook": if (p.url) return {tested:true,address:p.url.replace(/\/$/, "")+`/routines/${p.id}`}; return {address:`http://127.0.0.1:43210/routines/${p.id}`, address_changed:!!variant.hookAddressChanged, ...(p.reveal ? {secret:'sample-fake-secret-for-visual-checks'} : {})};
       case "routines.run": {
         const sample = data.routineWorkflowSample;
         if (variant.routineWorkflow === "refused") return {status:"refused",reason:sample.refused};
@@ -1147,6 +1164,11 @@ export function installMock(fixture, config = {}, target = window) {
       case "audio.devices": return data.audioDevices;
       case "audio.monitor": return {};
       case "services.status": return data.serviceStatus;
+      case "connectors.label": {
+        const entry = data.managedConnectors.find(c => c.id === p.id);
+        const account = entry.accounts.find(a => a.id === p.account_id);
+        account.label = p.label; return {connector:entry};
+      }
       case "connectors.status": return { connectors: data.managedConnectors, composio_configured: data.composioConfigured, google_configured: true };
       case "connectors.catalog": {
         if (!data.composioConfigured) return { ok: false, error: "missing_key" };
@@ -1445,6 +1467,11 @@ export function installMock(fixture, config = {}, target = window) {
         return;
       }
       if (command === "agent_ask_text") {
+        if (variant.colleague === "greeting") {
+          const base = data.turns.find(turn => turn.member_id === args.memberId);
+          const turn = {...base,id:nextId(data.turns),session_id:args.requestId,route:"answer",source:"app",question:args.text,text:data.colleagueSample.outcomeQuestion,detail:null};
+          data.turns.push(turn); notify("AgentTurn",{turn_id:turn.id,member_id:args.memberId}); return null;
+        }
         if (variant.cardSendFailure && !variant.cardSendRetried) { variant.cardSendRetried = true; throw new Error("Synthetic send unavailable"); }
         if (variant.ownerAddition || variant.queuedOwner) {
           const active = data.turns.find(turn => turn.status === "running" && turn.member_id === args.memberId);
@@ -1562,6 +1589,11 @@ export function installMock(fixture, config = {}, target = window) {
         state.urls.push(args.url); return;
       }
       if (command === "open_team_file") { state.openedTeamFile = args.path; return; }
+      if (command === "pick_output_folder") return variant.folderCancel ? null : data.colleagueSample.path;
+      if (command === "member_template_file") {
+        if (args.action === "open") return JSON.stringify(data.colleagueSample.template);
+        state.exportedTemplate = args.text; return "";
+      }
       if (command === "save_usage_csv") { state.exported = args.csv; return true; }
       if (["agent_page_shown", "hotkeys_pause", "hotkeys_practice", "plugin:event|unlisten", "plugin:window|set_focus", "plugin:window|minimize", "plugin:window|close", "plugin:window|start_dragging", "plugin:webview|set_webview_zoom"].includes(command)) return;
       return unsupported(command);

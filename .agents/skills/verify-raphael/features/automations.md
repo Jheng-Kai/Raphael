@@ -300,3 +300,14 @@ test_events.py, test_event_catalog.py, test_event_harness.py, test_webhooks.py,
 test_settings.py; routine-run.test.ts, timezones.test.ts, automations.test.ts,
 member-profile.test.ts, member-details.test.ts, routine-sentence.test.ts,
 settings-view.test.ts, agent-members.test.ts and look audit/app tests.
+
+
+## Owner-provided external webhook tunnels (2026-11-05)
+
+R-COLLEAGUE-05: Edit a saved webhook routine > External URL. Choose Tailscale Funnel, Cloudflare Tunnel or ngrok, copy the exact command and run the already-installed tool yourself. Paste its HTTPS URL and Test external URL. The PC-on reminder stays beside auth choices. Explicit key generation rotates the key; copy uses the displayed value and closing clears it. HMAC and Bearer share the existing receiver.
+
+```powershell
+npm run look -- webhook-external webhook-external-tested webhook-external-hmac automation-webhook routine-trigger-recipes --theme both --width 1120,720,1920x1080
+```
+
+The self-post uses a short-lived authenticated nonce and must reach this exact hook without executing its work or consuming admission. Private addresses, redirects, credentials and unrelated endpoints fail. Fakes prove these boundaries; no tunnel, public network or live form service is started during offline checks.

@@ -321,6 +321,7 @@ class MembersService:
             "members.commands.save": self._commands_save,
             "members.commands.delete": self._commands_delete,
             "members.duplicate": self._duplicate,
+            "members.template": self._member_template,
             "members.mark_all_read": self._mark_all_read,
             "members.voices": self._voices,
             "members.list": self._list,
@@ -915,11 +916,20 @@ class MembersService:
         language = self._ui_language(params)
         offer = routine_template(group.sources if group else (), language)
         if params.get("greet") is True:
+            from .greeting import choices
+            options = choices(member.role, self._connections(), language)
             self._history.add(session_id=f"greeting-{member.id}", question="", route="greeting", prefix="",
-                              text=GREETINGS[language].format(name=member.name), status="done", source="greeting",
+                              text=GREETINGS[language].format(name=member.name), detail=json.dumps({"kind": "greeting", "options": options}, ensure_ascii=False), status="done", source="greeting",
                               member_id=member.id)
         self._changed()
         return {"member": self.view_of(member), "routine_offer": offer}
+
+    async def _member_template(self, params):
+        from .templates import handle
+        try:
+            return await handle(self, params)
+        except MemberError as error:
+            raise _rpc_error(error) from None
 
     async def set_my_job(self, member_id: int, arguments: dict) -> dict:
         """A new member saves the job its owner has just given it. Once only: after that the job is the owner's to edit."""
@@ -1659,7 +1669,11 @@ class MembersService:
             raise invalid_params("This routine is not a webhook")
         if type(params.get("reveal", False)) is not bool:
             raise invalid_params("reveal must be a boolean")
-        return await self.webhooks.details(routine.id, reveal=params.get("reveal", False))
+        if "url" in params:
+            return await self.webhooks.test_external(routine.id, params["url"])
+        if type(params.get("rotate", False)) is not bool:
+            raise invalid_params("rotate must be a boolean")
+        return await self.webhooks.details(routine.id, reveal=params.get("reveal", False), rotate=params.get("rotate", False))
 
     def _finish_run(self, turn_id: int) -> None:
         run = self._conn.execute(

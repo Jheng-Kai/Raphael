@@ -384,3 +384,5 @@ the upstream develop files on 2026-10-23. The pinned source, component usage and
 CC0 text remain in `app/scripts/release-licenses/manifest.json` and
 `app/scripts/release-licenses/simple-icons-16.35.0-LICENSE.txt`.
 The marks are trademarks of their owners, who do not sponsor or endorse Raphael.
+
+Member templates, goal-first greetings, team folders, named accounts and webhook tunnel guidance are original Raphael implementations informed by the Grok Bot walkthrough (Gary Chen, 2026-11-04, frames f000405/f000920/f002005 and sheets 05/08/09/10) and xAI Grok Bot documentation reviewed 2026-11-05; no third-party code or artwork was copied.

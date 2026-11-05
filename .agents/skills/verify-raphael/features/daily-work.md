@@ -101,3 +101,14 @@ explicit re-enable remain authoritative. Rate or worker refusal has readable wor
 All provider payloads and Slack messages in this brief are synthetic; external
 HTTPS forwarding, real authentication and native subscription delivery remain
 separate acceptance.
+
+
+## Native output folder choice (2026-11-05)
+
+R-COLLEAGUE-06: Settings > General > output folder keeps the typed full-path field and adds Choose folder. A chosen native path uses the same settings writer; cancel leaves the preference unchanged.
+
+```powershell
+npm run look -- owner-output-folder output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
+```
+
+The look picker is an IPC fixture. The actual OS dialog, cancel and filesystem delivery remain native acceptance.

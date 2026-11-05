@@ -597,7 +597,7 @@ function generalHTML(v: SettingsView): string {
     `<div class="slist">` + row(t("settings.agentCity"), "", fieldHTML(t("settings.agentCityHint"), v.cityDraft ?? agentCity(v), { w: 200, label: t("settings.agentCity"), id: "agent-city", invalid: v.cityError !== null, disabled: v.brain === null })) +
     (v.cityError ? note(st("err", v.cityError()), ' role="alert"') : "") +
     row(t("zone.title"), t("zone.help"), sel([{value:v.brain?.routine_timezone ?? "",label:v.brain?.routine_timezone ? zoneLabel(v.brain.routine_timezone) : `${t("zone.auto")} · ${zoneLabel(detectedTimezone())}`}], v.brain?.routine_timezone ?? "", t("zone.title"), ' data-k="routine-timezone"' + (v.brain === null ? ' disabled' : ''))) +
-    row(t("output.folder"), t("output.help"), fieldHTML(t("output.empty"), v.brain?.owner_output_folder ?? "", { id: "owner-output-folder", label: t("output.folder"), w: 200, disabled: v.brain === null })) + `</div>` +
+    row(t("output.folder"), t("output.help"), fieldHTML(t("output.empty"), v.brain?.owner_output_folder ?? "", { id: "owner-output-folder", label: t("output.folder"), w: 200, disabled: v.brain === null }) + btn(ico("folder") + esc(t("output.pick")), "sm", ` data-act="output-pick"${v.brain === null ? " disabled" : ""}`)) + `</div>` +
     (v.memoryShared ? memoryHTML(v.memoryShared) : "") +
     (v.memoryImportHTML ?? createMemoryImport(() => {}).html()) + `</section>` +
     section(t("settings.groupAppearance"), [

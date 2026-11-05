@@ -252,7 +252,7 @@ describe("the column, used", () => {
   test("a row's more gives 移到分組 and 刪除; a right click gives the same", () => {
     const column = mount();
     column.el.querySelector<HTMLElement>('[data-member-more="2"]')!.click();
-    expect([...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(b => b.dataset.pick)).toEqual(["pin", "move", "primary", "unread", "read-all", "edit", "duplicate", "clear", "hide", "delete"]);
+    expect([...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(b => b.dataset.pick)).toEqual(["pin", "move", "primary", "unread", "read-all", "edit", "export-template", "duplicate", "clear", "hide", "delete"]);
     document.querySelector<HTMLElement>('#app-popover [data-pick="primary"]')!.click();
     expect(host.memberAction).toHaveBeenCalledWith(2, "primary");
     column.el.querySelector<HTMLElement>('[data-member-more="2"]')!.click();

@@ -843,3 +843,18 @@ Run the twenty-scene skill matrix above in both themes and all three sizes, insp
 every contact sheet and relevant full-size member/detail/source views. Unit evidence
 is connection-skills.test.ts and the three localized learned-origin cases in
 member-profile.test.ts. This presentation change adds no migration or RPC.
+
+
+## Colleague recipes and goal-first greeting (2026-11-05)
+
+R-COLLEAGUE-01..03: New member > Start from a template opens eight shipped slime roles; Open template file uses the system file picker and previews profile, skill names, paused routines and one disabled connect card per app. Import creates the colleague without grants; only subsequent per-app Connect requests sign-in and member access. The member row menu exports one .raphael-member file without memory, pictures, credentials or model choices.
+
+An ordinary new member's first shared answer form offers locally computed ready-app/role suggestions and free text. Sending a choice uses the existing composer words and task route. The shared API/CLI prompt puts the one outcome question rule beside owner input before set_my_job saves the goal. Fake-brain tests prove routing and persistence, not a real model's judgment.
+
+The shared team mount /home/cua/team creates context/, meetings/ and projects/ on first computer use. Existing contents survive. Handoffs and requested wrap-ups may cite successful file writes there.
+
+```powershell
+npm run look -- member-template-gallery member-template-preview member-template-imported member-template-export member-greeting-choices member-greeting-goal team-folder-handoff --theme both --width 1120,720,1920x1080
+```
+
+Core fakes cover export/import, no-side-effect preview, no grants, disabled routines, local suggestions, goal question/save and first-use directories. Native save/open dialogs, real VM/SSH mounts and real model behavior need separate authorized acceptance.

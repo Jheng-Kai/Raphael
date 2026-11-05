@@ -2,6 +2,39 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith("colleague-")) {
+    const calls = window.__look.calls;
+    if (name === "colleague-gallery") require(document.querySelectorAll('.template-gallery svg.slime').length === 8, "eight existing slime characters");
+    if (name === "colleague-preview") {
+      require(visible(document.querySelector('.template-preview')), "preview is visible");
+      require([...document.querySelectorAll('.template-preview [data-dlg="connect"]')].every(button => button.disabled), "preview cannot grant connections");
+      require(!calls.some(call => call.method === "members.template" && call.params.action === "import"), "preview never imports");
+    }
+    if (name === "colleague-imported") {
+      require(calls.some(call => call.method === "members.template" && call.params.action === "import"), "import follows explicit action");
+      const member = window.__look.data.members.at(-1);
+      require(member.tools.length === 0, "no imported app grants");
+      require(window.__look.data.routines.filter(r => r.member_id === member.id).every(r => !r.enabled), "imported routines stay off");
+    }
+    if (name === "colleague-export") {
+      const template = JSON.parse(window.__look.exportedTemplate);
+      require(template.format === "raphael-member" && !template.memory && !template.tools && !template.avatar, "one recipe excludes private state and grants");
+    }
+    if (name === "colleague-greeting") require(visible(document.querySelector('[data-greeting-question]')) && document.querySelectorAll('[data-greeting-option]').length === 3, "shared choice form and free text");
+    if (name === "colleague-goal") {
+      require(calls.some(call => call.command === "agent_ask_text" && call.text === window.__look.data.colleagueSample.options[0]), "choice submits exactly the owner's words");
+      require(document.querySelector('.ra-scroll').innerText.includes(window.__look.data.colleagueSample.outcomeQuestion), "one outcome question is visible");
+    }
+    if (name === "colleague-handoff") require(document.querySelector('.ra-scroll').innerText.includes('/home/cua/team/projects/'), "handoff cites a shared-team path");
+    if (name === "colleague-accounts") require(document.querySelector('.cs-accts').textContent.includes('工作信箱') && document.querySelector('.cs-accts').textContent.includes('私人信箱'), "accounts have distinct public labels");
+    if (name === "colleague-label-saved") require(calls.some(call => call.method === "connectors.label" && call.params.label === "研究信箱"), "owner label is saved by account id");
+    if (name === "colleague-tunnel") require(document.querySelector('.au-tunnel').textContent.includes('tailscale funnel --bg http://127.0.0.1:43210'), "exact loopback-forward command");
+    if (name === "colleague-tunnel-tested") require(document.querySelector('.au-tunnel').innerText.includes('已收到自測 POST'), "public URL probe returned to the editor");
+    if (name === "colleague-tunnel-hmac") require(document.querySelector('[data-auth="hmac"]').getAttribute('aria-pressed') === 'true' && document.querySelector('.au-hook-secret').type === 'text', "explicit HMAC choice and one-time key");
+    if (name === "colleague-output") require(document.querySelector('#owner-output-folder').value === window.__look.data.colleagueSample.path && calls.some(call => call.command === "pick_output_folder") && calls.some(call => call.method === "settings.set" && call.params.key === "owner_output_folder" && call.params.value === window.__look.data.colleagueSample.path), "native picker result is stored in the existing typed field and settings");
+    if (name === "colleague-output-cancel") require(calls.some(call => call.command === "pick_output_folder") && !calls.some(call => call.method === "settings.set" && call.params.key === "owner_output_folder"), "cancel never writes the folder setting");
+    return {check:name};
+  }
   if (name.startsWith("app-update-")) {
     const section = document.querySelector("[data-updates]");
     require(visible(section) && section.textContent.includes("1.1.0"), "new version is visible");
@@ -1280,8 +1313,8 @@ export function checkRendered(name, context = {}) {
       require(box.width <= 480.5, `card width is at most 480px: ${box.width}`);
       const draftHost = card.closest('.draft-panel');
       if (draftHost) require(parseFloat(getComputedStyle(draftHost).borderTopWidth) === 0 && parseFloat(getComputedStyle(draftHost).paddingLeft) === 0, 'the draft host adds no second card frame');
-      if (card.matches('[data-owner-question][data-card-state="asked"]')) {
-        const close = card.querySelector('[data-owner-answer="cancel"]');
+      if (card.matches('[data-owner-question][data-card-state="asked"],[data-greeting-question][data-card-state="asked"]')) {
+        const close = card.querySelector('[data-owner-answer="cancel"],[data-greeting-answer="cancel"]');
         require(!pill, 'a waiting question uses its title without a redundant status pill');
         require(close?.parentElement?.matches('.card-head') && close === close.parentElement.lastElementChild, 'question close follows the heading at the far right');
         require(Math.abs(close.getBoundingClientRect().right - (box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth))) < 1.5, 'question close aligns with the right padding');
@@ -1297,7 +1330,7 @@ export function checkRendered(name, context = {}) {
         require(!turn?.hasAttribute('data-live'), 'the member is paused while waiting for computer handoff');
       }
       const taskLine = card.closest('.ra-body')?.querySelector(':scope > .task-actions');
-      if (card.matches('.task-result,[data-owner-question],[data-permission-card],[data-secret-card],[data-connector]')) require(!taskLine || taskLine.hidden || !visible(taskLine), 'the card replaces a duplicate task state line');
+      if (card.matches('.task-result,[data-owner-question],[data-greeting-question],[data-permission-card],[data-secret-card],[data-connector]')) require(!taskLine || taskLine.hidden || !visible(taskLine), 'the card replaces a duplicate task state line');
       for (const hint of [...card.querySelectorAll('.cn-hint')].filter(visible)) require(getComputedStyle(hint).whiteSpace === 'nowrap' && hint.getBoundingClientRect().height <= parseFloat(getComputedStyle(hint).lineHeight) + 1, 'field hints stay on one line');
         for (const well of [...card.querySelectorAll('.card-well')].filter(visible)) {
           const shade = value => value.match(/[\d.]+/g).slice(0, 3).reduce((sum, part) => sum + Number(part), 0);

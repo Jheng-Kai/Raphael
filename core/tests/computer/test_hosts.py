@@ -213,6 +213,23 @@ async def test_two_local_members_run_together_before_third_evicts_idle_lru(tmp_p
     assert runtime.computers[one.name]["State"]["Running"]
     assert not runtime.computers[two.name]["State"]["Running"]
     assert runtime.computers[three.name]["State"]["Running"]
+
+
+async def test_team_layout_is_created_on_first_use_and_existing_files_survive(tmp_path, conn):
+    runtime = Computers()
+    vm = LocalVm(tmp_path, settings=SettingsStore(conn), runner=runtime)
+    target = vm.target(1)
+    raw = container(vm, target, runtime)
+    raw["State"]["Running"] = False
+    runtime.computers[target.name] = raw
+    (target.shared / "context").mkdir(parents=True)
+    existing = target.shared / "context" / "owner.md"
+    existing.write_text("Keep this exact content", encoding="utf-8")
+    assert (await vm.start(target))["ready"]
+    assert all((target.shared / name).is_dir() for name in ("context", "meetings", "projects"))
+    assert existing.read_text(encoding="utf-8") == "Keep this exact content"
+    assert (await vm.start(target))["ready"]
+    assert existing.read_text(encoding="utf-8") == "Keep this exact content"
     assert not any(args[0] == "rm" for args, _ in runtime.calls)
 
 
