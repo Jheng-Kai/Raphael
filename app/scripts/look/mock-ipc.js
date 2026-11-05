@@ -2,6 +2,18 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  if (variant.calmThread) {
+    const sample = data.calmSample, base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
+    const start = new Date(data.now); start.setHours(7, 0, 0, 0);
+    data.members.forEach(member => Object.assign(member, {unread:false, unread_from:null, activity:"idle", waiting:false}));
+    const make = (id, time) => ({...base, id, created_at_ms:time, session_id:`calm-${id}`, status:"error", route:"answer", source:"app", question:sample.question, text:sample.failure,
+      prefix:"", detail:null, model:"cli:codex", steps:[], messages:[{seq:1,kind:"event",text:sample.failure,at_ms:time}], attachments:[], handoffs:[], permissions:[], drafts:[], computers:[], connectors:[], secrets:[], pages:[], owner_questions:[],
+      task:{id,state:"failed",started_at_ms:time,finished_at_ms:time+1000}});
+    const first = make(8101, start.getTime()), last = make(8102, start.getTime() + (variant.calmThread === "days" ? 86400000 : 3600000));
+    first.source = "routine"; first.question = sample.routine; first.messages = []; first.routine = {...data.routines.find(routine => routine.member_id === 1),title:sample.routine};
+    last.task = null;
+    data.turns = data.turns.filter(turn => turn.member_id !== 1).concat(first, last);
+  }
   if (variant.raphaelVoice) data.settings.tts_fish_voice = "0123456789abcdef0123456789abcdef";
   if (variant.computerHost) data.settings.computer_ssh_alias = variant.computerHost;
 

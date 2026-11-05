@@ -60,6 +60,22 @@ async def test_cli_room_turn_uses_shared_tools_and_keeps_private_sessions_separa
     assert rig.client.chat_calls == [] and rig.reports() == []
 
 
+async def test_cli_failure_keeps_diagnostics_in_background_turn_detail(make_rig, monkeypatch):
+    from raphael_core.failures import classify
+    rig = make_rig()
+    async def work(loop):
+        loop.failure = "cli_stopped"
+        loop.failure_reason = classify({"kind":"cli_stopped", "message":"CLI process ended before completion", "detail":"original error\nlast background diagnostic"})
+        loop._failure(loop.failure, "Codex CLI")
+    monkeypatch.setattr(CliLoop, "_work", work)
+    task, turn = submit_room(rig)
+    await until(lambda: rig.task(task).state == "failed")
+    saved = AgentHistory(rig.conn).get(turn)
+    assert saved.status == "error" and saved.text == "Codex CLI stopped before finishing its answer."
+    assert saved.detail == "original error\nlast background diagnostic"
+    assert rig.task(task).reason == "cli_cli_stopped"
+
+
 async def test_cli_speech_never_opens_an_approval_or_calls_a_plugin(make_rig, monkeypatch, calls):
     rig = make_rig()
     await rig.plugins.connect(look='T2')

@@ -8,7 +8,6 @@ import signal
 import subprocess
 import tempfile
 from pathlib import Path
-from .native_diagnostics import enabled as native_diagnostics_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +151,7 @@ class Child:
         self._job = None
         self._kill_lock = asyncio.Lock()
         self._closed = False
-        self.stderr_tail = b"" if native_diagnostics_enabled() else None
+        self.stderr_tail = b""
 
     async def start(self):
         if sum(len(arg) + 3 for arg in self.command) > 30000:
@@ -217,5 +216,9 @@ class Child:
             self.process.kill()
         await self.process.wait()
         if self._stderr:
+            try:
+                await asyncio.wait_for(asyncio.shield(self._stderr), .25)
+            except (TimeoutError, OSError):
+                pass
             self._stderr.cancel()
             await asyncio.gather(self._stderr, return_exceptions=True)

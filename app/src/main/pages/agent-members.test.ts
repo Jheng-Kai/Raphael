@@ -720,6 +720,14 @@ test.each(["finish", "switch", "search", "reduced"])("a finished member burst re
   agent.hide();
 });
 
+test("rerunning an older failed reply asks its original question in the same member thread", async () => {
+  api.agentHistoryList.mockResolvedValue({turns:[turn(33,{member_id:3}),turn(32,{member_id:3,status:"error",text:"CLI stopped"})]});
+  const agent = mount(); await flush(); await pick(3);
+  $('[data-id="32"] .message-actions .rerun').click(); await flush();
+  expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("問題 32", [], 3, expect.objectContaining({requestId:expect.any(String)}));
+  agent.hide();
+});
+
 test("regenerating the latest member reply asks the same question in that member's thread", async () => {
   const agent = mount(); await flush(); await pick(3);
   document.querySelector<HTMLButtonElement>('.tn[data-id="30"] [data-act="more-message"]')!.click();
@@ -870,7 +878,7 @@ describe("a member's thread", () => {
     expect(thread.textContent).toContain("今天的單字");
     expect(thread.textContent).not.toContain("《");
     expect(thread.querySelector(".tn .ans")!.textContent).toBe("10 題已送出");
-    expect(thread.querySelector(".sys")!.textContent).toBe("例行任務每天的單字");
+    expect(thread.querySelector(".chat-message .routine-origin")!.textContent).toBe("例行任務 · 每天的單字");
     // a routine's prompt is no bubble of the owner's
     expect(thread.querySelector('[data-id="30"] .bubble')).toBeNull();
     expect($('.mb-col [data-member="3"]').getAttribute("aria-current")).toBe("true");
@@ -1115,13 +1123,13 @@ describe("a member's thread", () => {
     expect(api.agentHistoryList).toHaveBeenCalledWith(expect.objectContaining({ member_id: 3 }));
   });
 
-  test("a routine's run that has not reported yet shows the dots under its line", async () => {
+  test("a routine's unfinished run shows only live work until its reply arrives", async () => {
     THREADS[3] = [turn(32, { member_id: 3, source: "routine", route: "routine", prefix: "", question: "每天的單字", text: "", status: "running" })];
     mount();
     await flush();
     await pick(3);
     const run = $('.tn[data-id="32"]');
-    expect(run.querySelector(".sys")!.textContent).toBe("例行任務每天的單字");
+    expect(run.querySelector(".sys,.routine-origin")).toBeNull();
     expect(run.querySelector(".live-presence")).not.toBeNull();
     expect(run.querySelector(".me")).toBeNull();
     THREADS[3] = [turn(31, { member_id: 3, text: "今天的單字" })];
@@ -1396,6 +1404,26 @@ test("a burst of turn events while typing makes one history request and preserve
   expect(api.agentHistoryList.mock.calls[0]![0]).toMatchObject({after_id:expect.any(Number),turn_ids:[31]});
   expect(input.value).toBe("Keep typing this draft");
   expect($('.tn[data-id="31"]')).toBe(node);
+  agent.hide();
+});
+
+test("finding a folded work receipt preserves the reply and its match through a roster refresh", async () => {
+  vi.useFakeTimers();
+  const history = structuredClone(THREADS[3]!);
+  history[0]!.messages = [{ seq: 1, kind: "event", text: "Sample briefing ready", at_ms: history[0]!.created_at_ms }, { seq: 2, kind: "reply", text: history[0]!.text, at_ms: history[0]!.created_at_ms }];
+  api.agentHistoryList.mockImplementation(async (q: {member_id?: number}) => ({ turns: q.member_id === 3 ? structuredClone(history) : THREADS[0] }));
+  const agent = mount(); await flush(); await pick(3);
+  $('[data-act="search"]').click();
+  const input = $<HTMLInputElement>('.ra-find-input');
+  input.value = "Sample briefing"; input.dispatchEvent(new Event("input"));
+  await vi.advanceTimersByTimeAsync(250); await flush();
+  const node = $('.tn[data-id="31"]'), mark = $('mark.is-current');
+  expect(mark.textContent).toBe("Sample briefing");
+  expect(node.querySelector<HTMLElement>('.work-body')!.hidden).toBe(false);
+  send({ type: "MembersChanged" });
+  await vi.advanceTimersByTimeAsync(500); await flush();
+  expect($('.tn[data-id="31"]')).toBe(node);
+  expect($('mark.is-current')).toBe(mark);
   agent.hide();
 });
 

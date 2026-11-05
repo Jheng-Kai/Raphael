@@ -1,5 +1,8 @@
 export interface ThreadLine { key: string; html: string; turnId?: number }
 
+/** Face animation timing is sampled on mount, outside the line's content identity. */
+export const threadLineIdentity = (html: string): string => html.replace(/--slime-(?:delay|since):-?[\d.]+ms;?| data-slime-mounted="[\d.]+"/g, "");
+
 const eventKey = (node: HTMLElement): string => node.dataset.eventGroup !== undefined ? `events:${node.dataset.eventGroup}` : node.dataset.timelineEvent !== undefined ? `event:${node.dataset.timelineEvent}` : node.dataset.handoffGroup !== undefined ? `group:${node.dataset.handoffGroup}` :
   node.dataset.handoff !== undefined ? `task:${node.dataset.handoff}` : `exchange:${node.dataset.exchange}`;
 const outerEvents = (node: ParentNode): HTMLDetailsElement[] => [...node.querySelectorAll<HTMLDetailsElement>(".handoff-event, .timeline-event")]
@@ -75,7 +78,7 @@ export function patchThread(thread: HTMLElement, wanted: readonly ThreadLine[], 
   let changed = false;
   for (const line of wanted) {
     // A newly inserted face samples the current phase; an existing face keeps its running clock.
-    const identity = line.html.replace(/--slime-(?:delay|since):-?[\d.]+ms;?| data-slime-mounted="[\d.]+"/g, "");
+    const identity = threadLineIdentity(line.html);
     let node = before.get(line.key);
     if (!node || drawn.get(node) !== identity) {
       changed = true;

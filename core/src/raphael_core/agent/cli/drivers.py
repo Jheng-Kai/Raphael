@@ -19,7 +19,7 @@ from pathlib import Path
 from .process import Child, PrivateFiles, secure_directory
 from .native_diagnostics import capture as native_capture, directory as native_directory, enabled as native_enabled
 from ..quota import parse_quota
-from ...failures import classify
+from ...failures import classify, redact
 from ...clock import wall_clock_ms
 
 logger = logging.getLogger(__name__)
@@ -100,10 +100,18 @@ class Driver:
     def _event(self, kind, text):
         if kind == "error":
             failure = classify(text, secrets=self._diagnostic_secrets)
+            tail = getattr(self.child, "stderr_tail", b"") or b""
+            original = failure.detail.split("\n\nstderr:\n", 1)[0] if failure.detail else (text.get("error", text) if isinstance(text, dict) else str(text))
+            if isinstance(original, dict):
+                original = original.get("message") or original.get("reason") or json.dumps(original, ensure_ascii=False, default=str)
+            detail = "\n".join(redact(line, secrets=self._diagnostic_secrets, limit=1800) for line in str(original).splitlines())[:1800]
+            if tail:
+                detail += "\n\nstderr:\n" + "\n".join(redact(line, secrets=self._diagnostic_secrets, limit=160) for line in tail.decode("utf-8", errors="replace").splitlines()[-12:])
+            failure = classify({**failure.wire(), "detail": detail[:4000]}, secrets=self._diagnostic_secrets, record=False)
             if self.exhausted and failure.kind not in ("credits", "auth_expired", "refused"):
-                failure = classify({"kind": "usage_limit", "message": failure.reason})
+                failure = classify({**failure.wire(), "kind": "usage_limit", "message": failure.reason})
             if failure.kind == "usage_limit" and self.reset_at_ms:
-                failure = classify({"kind": failure.kind, "message": failure.reason, "resets_at": self.reset_at_ms / 1000})
+                failure = classify({**failure.wire(), "message": failure.reason, "resets_at": self.reset_at_ms / 1000})
             return Event(kind, failure.kind, failure.wire())
         elif kind == "final" and self.quota and not self.exhausted:
             self.quota(self.name, {"exhausted": False})
@@ -237,11 +245,17 @@ class Driver:
                 await self.child.send({"type": "user", "message": {"role": "user", "content": content}})
                 self.child.process.stdin.close()
                 async for event in self._claude():
+                    if event.kind == "error":
+                        await self.interrupt()
+                        event = self._event("error", event.data)
                     yield event
             elif self.name == "gemini":
                 await self.child.send({"event": "user", "message": {"role": "user", "content": user}})
                 self.child.process.stdin.close()
                 async for event in self._antigravity():
+                    if event.kind == "error":
+                        await self.interrupt()
+                        event = self._event("error", event.data)
                     yield event
             else:
                 image_paths = []
@@ -252,11 +266,15 @@ class Driver:
                     path.write_bytes(image.data)
                     image_paths.append(str(path.resolve()))
                 async for event in self._rpc(user, system, endpoint, token, session, permission, image_paths):
+                    if event.kind == "error":
+                        await self.interrupt()
+                        event = self._event("error", event.data)
                     yield Event("session", CODEX_SESSION_PREFIX + event.text) if event.kind == "session" else event
         except (OSError, ValueError, TimeoutError, EOFError, asyncio.IncompleteReadError) as error:
             self.native_diagnostic("transport", {"type": type(error).__name__, "message": str(error)})
             logger.warning("CLI transport failed: %s", type(error).__name__)
-            yield self._event("error", {"kind": "network", "message": "CLI process ended before completion"}
+            await self.interrupt()
+            yield self._event("error", {"kind": "cli_stopped", "message": "CLI process ended before completion"}
                               if isinstance(error, (EOFError, asyncio.IncompleteReadError)) else error)
         finally:
             try:

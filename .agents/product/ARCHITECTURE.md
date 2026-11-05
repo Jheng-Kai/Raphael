@@ -1,5 +1,10 @@
 # Raphael architecture and checked boundaries
 
+## Calm conversation projection (owner, 2026-11-05)
+
+conversation.ts owns calendar-day dividers; timeline.ts owns inline routine origins, reply actions and collapsed work receipts. The page retains latest-failure visibility as a render dependency. Find opens existing work detail and preserves its state. CliLoop emits one terminal reply, while Driver and Failure carry bounded, redacted stderr diagnostics into the existing foreground/background turn detail. Premature completion uses cli_stopped with the existing retry policy; real connection errors retain network guidance. No RPC, schema, worker, provider or model-loop boundary is added (A-01/03/04/06/08). See R-UI-101 and R-CLI-07.
+
+
 ## Smooth member computers (2026-11-05)
 
 VmTools owns run_steps in the existing curated catalog; each subcall re-enters
@@ -527,7 +532,7 @@ Post-action recovery uses the existing RETRY_WAITS and PATIENT_WAITS once each,
 with shared jitter and provider cooldown handling. This is finite (eight attempts
 at current defaults), unlike the API loop's indefinite patient tail. Before any
 action, existing private/background quick waits and the explicit no-retry option
-remain in force. Child EOF/incomplete reads are transport failures; protocol
+remain in force. Child EOF/incomplete reads use cli_stopped while retaining the same bounded retry admission (owner, 2026-11-05); protocol
 errors remain terminal. Each post-action wait is localized progress. Permanent
 failures and cancellation stop on the same model and billing source. Terminal
 summaries expose counts/status only; exact receipts stay out of public events.

@@ -801,6 +801,10 @@ describe("rendered look checks", () => {
     const { audit } = productAudit('<button class="btn" style="border: none">Save</button><button class="btn icon" style="border: 1px solid red">X</button><button class="btn" style="border: 1px solid red">Cancel</button>');
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-18', 'R-UI-18']);
   });
+  it("allows a quiet routine inspection link only inside its reply origin", () => {
+    const { audit } = productAudit('<div class="chat-message"><div class="routine-origin"><button class="btn routine-run-link" data-act="open-routine" style="border:0">Sample routine</button></div></div><button class="btn routine-run-link" data-act="open-routine" style="border:0">Save</button>');
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-18').map(item => item.text)).toEqual(['Save']);
+  });
   it("allows a soft pending-question row only in its conversation container", () => {
     const { audit } = productAudit('<div class="pending-questions"><button class="btn sm pending-question" style="border:0">待回答</button></div><button class="btn pending-question" style="border:0">Save</button>');
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-18']);
