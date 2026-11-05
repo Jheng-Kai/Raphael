@@ -1461,6 +1461,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       if (command === "core_call") return copy(await core(args.method, args.params));
       if (command === "update_control") {
+        if (variant.appUpdate === "not_configured") return { state: "error", version: "", notes: "", error: "not_configured" };
         const sample = data.appUpdateSample;
         return { state: variant.appUpdate === "ready" || data.device.auto_update ? "ready" : variant.appUpdate ? "found" : "idle", version: variant.appUpdate ? sample.version : "", notes: variant.appUpdate ? sample.notes : "", error: "" };
       }
