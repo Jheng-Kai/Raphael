@@ -906,3 +906,30 @@ missing external reference images/login are blocked, never design acceptance.
 Native file picker, OS browser/folder opening, persistence across desktop restart,
 public catalogue hosting, production trust-root provisioning and GitHub CI remain
 separate acceptance. No live provider calls, public repository creation or tokens.
+
+## Recipe preview polish (2026-11-05)
+
+R-COLLEAGUE-01 and R-STORE-03: local recipes, store previews and export review share
+one renderer. Known connection ids use the existing SERVICE_ICONS catalogue's
+brand titles (including Gmail, GitHub and Google Calendar); unknown custom ids
+retain their exact spelling. Presentation never changes connection ids or grants.
+Skill rows show plain name/description metadata; the existing card disclosure
+reveals the complete body and dependency files without the opening frontmatter.
+Quoted and folded scalar metadata and CRLF files follow the skill store's forms;
+missing/incomplete frontmatter preserves all text. Export still retains source bytes.
+
+The routine editor uses shared mp-label field rows with labels above controls,
+equal control heights and a bottom-aligned confirmation action. Vault's Traditional
+Chinese owner hint is shortened without changing typography (R-VAULT-01).
+The existing look checks guard metadata leakage, disclosure state, service names,
+Slack control geometry and a single-character final line in the vault hint.
+
+npm run look -- routine-trigger-slack automation-event-channel automation-event-repository automation-event-pick member-template-preview member-template-imported member-template-export member-template-starter template-preview template-preview-warning template-skill-expanded template-export-review member-panel-details calm-thread vault-list store-home member-greeting-choices reaction-row room-thread-open local-permission-card --theme both --width 1120,720,1920x1080
+
+Inspect every contact sheet, full-size light 720/dark 1120 views of the seven
+review consumers, the Slack row at all sizes and the folded/expanded previews.
+Compare Slack fields with the event selector and ordinary routine fields;
+compare preview rows with member panel rows and disclosures with existing cards.
+Run the selected tests and frontend verify once at the end. Judge uses the same
+selected run; missing external reference images are blocked, never design PASS.
+No core, Rust, native, OS vault or live-provider acceptance is implied.
