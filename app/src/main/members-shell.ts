@@ -517,8 +517,10 @@ export function createMembers(host: MembersHost): MembersShell {
       } else if (event.type === "MemberActivity") {
         setSlimeState(event.member_id, event.state, event.label);
       } else if (event.type === 'AgentTurn' && (event.member_id ?? 0) === current && open) {
-        // A busy turn moves the work list only; skills, commands and memory change through their own events.
-        details.refreshWork();
+        // Skills, commands and memory change through their own events; a streaming turn can only add files.
+        details.refreshWork('turn');
+      } else if (event.type === 'WorkerChanged' && open) {
+        details.refreshWork('task');
       }
     },
     hide() {

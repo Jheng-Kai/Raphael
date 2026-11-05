@@ -66,8 +66,8 @@ export interface DetailsPanel {
   refreshRoutines(): void;
   refreshMemory(memberId: number, space?: "own" | "shared"): void;
   refreshResources(): void;
-  /** A turn of the selected member changed: only its work list can have moved. */
-  refreshWork(): void;
+  /** Work moved: a task changed state, or a turn of the selected member changed (only files can follow from that). */
+  refreshWork(cause: 'task' | 'turn'): void;
 }
 
 export function createDetails(host: DetailsHost): DetailsPanel {
@@ -85,14 +85,24 @@ export function createDetails(host: DetailsHost): DetailsPanel {
 
   let tab: DetailsTab = "details";
   let work: PanelWork | null = null, workFailed = false, workEpoch = 0, fileLimit = 12;
-  async function loadWork(): Promise<void> {
-    const epoch = ++workEpoch, id = host.member().id;
+  async function loadWork(fromEvent = false): Promise<void> {
+    const epoch = ++workEpoch, id = host.member().id, limit = fileLimit;
     try {
-      const result = await readPanelWork(id, fileLimit);
+      // A burst of turns reads the work list once, as the counts below do.
+      const result = await (fromEvent ? eventRead(`members.panel:${id}:${limit}`, () => readPanelWork(id, limit), host.app) : readPanelWork(id, limit));
       if (epoch !== workEpoch || id !== host.member().id) return;
       work = {tasks: result?.tasks ?? [], files: result?.files ?? [], has_more: result?.has_more ?? false}; workFailed = false;
     } catch { if (epoch !== workEpoch || id !== host.member().id) return; workFailed = true; }
     draw();
+  }
+  // Events carry no owner for a task, so a busy team would read the list on every one: wait for a
+  // quiet 1.5 s, and never longer than 5 s while work keeps moving.
+  let workTimer: ReturnType<typeof setTimeout> | undefined, workSince = 0;
+  function scheduleWork(): void {
+    const now = performance.now();
+    if (workTimer === undefined) workSince = now;
+    else clearTimeout(workTimer);
+    workTimer = setTimeout(() => { workTimer = undefined; if (!el.hidden) void loadWork(true); }, Math.min(1500, Math.max(0, workSince + 5000 - now)));
   }
   function select(page: 'details' | 'library' | 'computer'): void {
     tab = page; draw();
@@ -528,8 +538,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     overview() { select('details'); },
     select,
     refreshRoutines() { void loadRoutines(); },
-    refreshResources() { void loadCounts(true); void resources?.refresh(true); if (tab === 'details' || tab === 'library') void loadWork(); },
-    refreshWork() { if (!el.hidden && (tab === 'details' || tab === 'library')) void loadWork(); },
+    refreshResources() { void loadCounts(true); void resources?.refresh(true); if (tab === 'details' || tab === 'library') void loadWork(true); },
+    refreshWork(cause) { if (!el.hidden && (tab === 'library' || (cause === 'task' && tab === 'details'))) scheduleWork(); },
     refreshMemory(memberId, space) {
       if (el.hidden) return;
       if (memberId === host.member().id) {
