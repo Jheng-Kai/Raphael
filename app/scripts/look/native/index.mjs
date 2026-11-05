@@ -69,10 +69,13 @@ async function run(options) {
         env.RAPHAEL_TEST_NATIVE_CORE_DELAY_MS = String(journey.startup.delayMs);
         if (journey.startup.variant === "slow") env.RAPHAEL_TEST_NATIVE_ROOMS_FAIL_FIRST = "1";
       }
-      if (journey.name === "hidden-window") {
+      delete env.RAPHAEL_TEST_NATIVE_POWER_REFUSE;
+      if (journey.name === "hidden-window" || journey.name === "hidden-window-refused") {
         env.RAPHAEL_TEST_NATIVE_WINDOW_LIFECYCLE = "1";
         env.RAPHAEL_NATIVE_THINK_S = "4";
       }
+      // The owner's frozen return: WebView2 refused one power step and the rest never ran.
+      if (journey.name === "hidden-window-refused") env.RAPHAEL_TEST_NATIVE_POWER_REFUSE = "normal memory";
       if (journey.name === "home-timing") env.RAPHAEL_TEST_NATIVE_HOME = "1";
       if (journey.name === "openrouter-turn") delete env.RAPHAEL_FAKE_LLM;
       if (journey.name === "owner-words") env.RAPHAEL_TEST_NATIVE_LOCAL = "1";
@@ -191,7 +194,7 @@ async function run(options) {
         }
       } finally {
         // The lifecycle journey keeps CloseRequested's real hide path; terminate only its owned PID below.
-        if (activePage && journey.name !== "hidden-window") {
+        if (activePage && !journey.name.startsWith("hidden-window")) {
           try {
             await activePage.evaluate(() => window.__TAURI_INTERNALS__.invoke("plugin:window|close", { label: "main" }));
             await Promise.race([owned.closed, pause(2000)]);

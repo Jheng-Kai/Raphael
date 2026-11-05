@@ -2920,7 +2920,9 @@ export function checkRendered(name, context = {}) {
     const host = document.querySelector('.mb-det .conversation-list');
     require(visible(host), "the conversation list is visible");
     const quick = host.querySelector('[data-conversation-section="quick"]'), standard = host.querySelector('[data-conversation-section="standard"]');
-    require(visible(standard) && standard.querySelector('.mb-dh').textContent === "對話", "ordinary conversations use the existing small heading");
+    // Since the panel tabs the 詳細資料 section names the list once, above it.
+    const heading = host.closest('section')?.querySelector(':scope > .mb-dh') ?? standard?.querySelector('.mb-dh');
+    require(visible(standard) && heading?.textContent === "對話", "ordinary conversations use the existing small heading");
     if (quick) {
       require(!quick.querySelector('.mb-dh') && quick.querySelector('[data-conversation-open]').textContent.includes("快速提問"), "quick questions are named once on their row");
       require(standard.getBoundingClientRect().top - quick.getBoundingClientRect().bottom >= 8, "the two sections have breathing room");

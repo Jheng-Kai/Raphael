@@ -16,6 +16,7 @@ export const journeys = [
   { name: "owner-round10", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
   { name: "home-timing", description: "Measure first painted Home against a two-second offline CLI allowance read" },
   { name: "hidden-window", description: "Close to tray and minimize suspend page timers; returning catches up a fake reply completed while hidden" },
+  { name: "hidden-window-refused", description: "The same returns while WebView2 refuses the normal-memory step (0x8007139F): the page still shows and runs" },
   { name: "startup-rooms", description: "Ten normal and ten slow-core owner-path launches keep seeded group chats in the sidebar, without a page reload" },
   { name: "model-sync", description: "The real core and the real Codex CLI: its models reach the composer, a choice and a depth reach Settings, a change reaches the composer, and a turn runs on it" },
   { name: "owner-words", description: "The real core and the real Codex CLI, on what the owner really asks: an event goes on today's calendar, and a question about this PC's CPU runs read-only commands after the card" },
@@ -199,7 +200,7 @@ export async function drive(name, context) {
     await capture("rooms-visible");
     return;
   }
-  if (name === "hidden-window") {
+  if (name === "hidden-window" || name === "hidden-window-refused") {
     const { member } = await context.rpc("members.create", { name: "Window sleeper", role: "Offline suspension check" });
     const conversation = await newConversation(context, member.id);
     await typed(context, "Visible baseline before the window sleeps", conversation);
@@ -276,6 +277,31 @@ export async function drive(name, context) {
         await capture(`${action}-returned`);
         await page.evaluate(() => clearInterval(window.__nativeWindowProbe.timer));
       }
+      // A return that races the suspension (minimized, then back before or while it settles) must
+      // still leave a visible page that runs: the owner found the window frozen after one.
+      result.windowSleep.rapid = [];
+      await page.evaluate(() => {
+        window.__nativeWindowProbe = { ticks: [] };
+        window.__nativeWindowProbe.timer = setInterval(() => window.__nativeWindowProbe.ticks.push(Date.now()), 100);
+      });
+      for (const dwell of [0, 40, 150, 400, 900, 2500]) {
+        await context.windowAction("minimize");
+        await pause(dwell);
+        const showAt = Date.now();
+        await forwardMainWindow(wakePage);
+        const shown = await context.windowAction("state");
+        if (!shown.visible || shown.minimized) throw new Error(`The main window did not return after a ${dwell} ms minimize`);
+        try {
+          await page.waitForFunction(() => !document.hidden && window.__nativeWindowProbe.ticks.length > 0 &&
+            Date.now() - window.__nativeWindowProbe.ticks.at(-1) < 400, { timeout: 3000, polling: 50 });
+        } catch {
+          await capture(`rapid-${dwell}-frozen`);
+          throw new Error(`The page stayed hidden or frozen after a ${dwell} ms minimize and return`);
+        }
+        result.windowSleep.rapid.push({ dwell, awakeMs: Date.now() - showAt });
+      }
+      await capture("rapid-returned");
+      await page.evaluate(() => clearInterval(window.__nativeWindowProbe.timer));
       if (result.runtimeErrors.length) throw new Error("Hidden-window journey collected runtime errors");
     } finally {
       page.off("console", logVisibility);
