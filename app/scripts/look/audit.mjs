@@ -5,7 +5,8 @@
 // reaches with a right click: each is a violation of R-UI-44.
 export function auditDocument(doc = document, viewport = { width: innerWidth, height: innerHeight }, namespaces = [], latinAllowed = null, englishUI = [], overflowOrphans = []) {
   const win = doc.defaultView;
-  const describe = element => ({ tag: element.tagName.toLowerCase(), id: element.id, class: typeof element.className === "string" ? element.className : "", text: element.textContent?.trim().slice(0, 100) });
+  // An icon button has no words, so its accessible name says which one a finding means.
+  const describe = element => ({ tag: element.tagName.toLowerCase(), id: element.id, class: typeof element.className === "string" ? element.className : "", text: element.textContent?.trim().slice(0, 100), ...(element.getAttribute?.("aria-label") ? { label: element.getAttribute("aria-label") } : {}) });
   const visible = element => {
     const box = element.getBoundingClientRect();
     if (box.width <= 0 || box.height <= 0) return false;
