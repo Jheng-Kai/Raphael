@@ -98,7 +98,7 @@ export function mountVoiceChat(options: {
     const here = current && current.member_id === target.member && current.conversation_id === target.conversation;
     if (options.composer.parentElement) {
       options.composer.after(panel);
-      options.composer.before(failure);
+      options.composer.prepend(failure);
     }
     panel.hidden = !here;
     options.root.classList.toggle("has-member-call", !!here);

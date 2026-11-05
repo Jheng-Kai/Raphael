@@ -6,7 +6,7 @@ import * as richScroll from "./message-rich";
 const api=vi.hoisted(()=>({membersList:vi.fn(),roomsCreate:vi.fn(),roomsList:vi.fn(),roomMessages:vi.fn(),roomSend:vi.fn(),roomsDelete:vi.fn(),roomsUpdate:vi.fn(),roomStop:vi.fn(),core:vi.fn(),pagesOpen:vi.fn(),ownerQuestionBring:vi.fn(),openTeamFile:vi.fn().mockResolvedValue(undefined)}));
 vi.mock("./api",()=>api);
 import { configureRooms, openNewGroupChat, openGroupChat, openRoomsMenu, createRoomsSection, createRoomPane, clearRoomSelection } from "./group-chats";
-import { setLocale } from "./i18n";
+import { getLocale, setLocale } from "./i18n";
 import { setAvatar } from './avatar';
 
 test('an avatar repaint uses the loaded room and roster without IPC reads', async () => {
@@ -23,6 +23,29 @@ let event:(e:any)=>void;
 let app:AppContext;
 const pane=async()=>{const view=createRoomPane(app,vi.fn());document.body.append(view.el);await view.open(1);return view;};
 const draft=(text:string)=>{const input=document.querySelector<HTMLTextAreaElement>("#room-message")!;input.value=text;input.dispatchEvent(new Event("input"));return input;};
+
+test("a room page appends to its composer and waits for the owner's send", async () => {
+  const page = { id: "room-page-draft", title: "Sample page", rev: 0, height: 320, source: "html", server: null };
+  api.pagesOpen.mockResolvedValue({ ...page, url: "http://127.0.0.1:9/room-page-draft" });
+  api.roomMessages.mockResolvedValue({ messages: [{ id: 22, member_id: 1, text: "Page", created: 1, status: "done", turn: { pages: [page] } }] });
+  const view = await pane(); await flush();
+  const input = draft("My room draft");
+  const frame = view.el.querySelector<HTMLIFrameElement>(".pg-frame")!;
+  Object.defineProperty(navigator, "userActivation", { value: { isActive: true }, configurable: true });
+  Object.defineProperty(frame, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
+  const focus = vi.spyOn(document, "activeElement", "get").mockReturnValue(frame);
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
+  const event = new MessageEvent("message", { data: { raphaelPage: 1, type: "send", text: "Page room words" } });
+  Object.defineProperty(event, "source", { value: frame.contentWindow });
+  window.dispatchEvent(event); focus.mockRestore(); await flush();
+  expect(api.roomSend).not.toHaveBeenCalled();
+  expect(input.value).toBe("My room draft\nPage room words");
+  expect(document.activeElement).toBe(input);
+  expect(view.el.querySelector<HTMLElement>(".cmp-page-note")!.hidden).toBe(false);
+  view.el.querySelector<HTMLFormElement>("form.composer")!.requestSubmit(); await flush();
+  expect(api.roomSend).toHaveBeenCalledExactlyOnceWith(1, "My room draft\nPage room words", expect.any(String), getLocale(), [], undefined);
+  view.close(); Reflect.deleteProperty(navigator, "userActivation");
+});
 
 test("bringing a room question releases queued scroll corrections before revealing its moved turn", async () => {
  const question={id:'pending-room',kind:'ask_owner',state:'asked',question:'Choose a date',turn_id:10};

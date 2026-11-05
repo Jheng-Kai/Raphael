@@ -29,7 +29,7 @@ function mount() {
 
 test("an empty member entry starts the captured conversation and a panel replaces its composer", async () => {
   const view = mount(); await flush();
-  expect(view.button.getAttribute("aria-label")).toBe("Start voice chat");
+  expect(view.button.getAttribute("aria-label")).toBe("Hold to speak; click to start voice chat");
   view.button.click(); await flush();
   expect(api.voiceCallStart).toHaveBeenCalledExactlyOnceWith(1,11,"en");
   expect(view.composer.classList.contains("has-voice-call")).toBe(true);
@@ -75,6 +75,7 @@ test("failed service uses one shared repair action and receipt escapes a folded 
   api.voiceCallStart.mockResolvedValue({failure:"microphone"});
   view.button.click(); await flush();
   expect(view.root.querySelectorAll('[data-missing-repair="dictation"]')).toHaveLength(1);
+  expect(view.composer.querySelector('.vc-failure [data-missing-repair="dictation"]')).not.toBeNull();
   const receipt = voiceCallCardHTML(call(), "<Member>");
   expect(receipt).toContain("1:23");
   expect(receipt).toContain('data-card-status-text>Ended</span>');

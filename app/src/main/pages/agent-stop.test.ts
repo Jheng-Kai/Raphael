@@ -7,6 +7,7 @@ const api = vi.hoisted(() => Object.fromEntries([
   "agentHistoryList", "agentQuestionOpen", "agentAskText", "agentVoice", "agentStop", "cancelSession", "workerCancel",
   "membersList", "membersPresets", "membersRead", "membersViewing", "membersToolChoices", "toolsetsList",
   "routinesList", "modelsCatalog", "providersList", "brainsCli", "core", "roomsList", "statusGet",
+  "voiceCallStart", "voiceCallStatus", "voiceCallEnd",
 ].map(name => [name, vi.fn()])));
 vi.mock("../api", () => api);
 import { Cleared } from "../cleared";
@@ -46,6 +47,11 @@ const press = () => {
   $(".cmp-voice").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   document.body.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", bubbles: true }));
 };
+const pointer = (button: HTMLElement, type: string) => {
+  button.setPointerCapture = vi.fn();
+  button.dispatchEvent(new PointerEvent(type, { button: 0, pointerId: 7, bubbles: true }));
+};
+const pointerClick = (button: HTMLElement) => button.dispatchEvent(new MouseEvent("click", { detail: 1, bubbles: true }));
 function mount() {
   agent = createAgent({ go: vi.fn(), device: () => ({ dictation_mode: "hold" }), cleared: new Cleared(),
     undo: { begin: vi.fn() }, onEvent(handler: typeof emit) { emit = handler; return () => {}; },
@@ -74,10 +80,15 @@ test("while work runs the field sends message after message and stops nothing", 
 
 test.each([[0, 1], [0, 2], [3, 31], [3, 32]])("the composer voice press stays in member %s conversation %s through navigation", async (member, conversation) => {
   mount(); await flush(); await choose(member, conversation);
-  press(); await flush();
-  expect(api.agentVoice.mock.calls).toEqual([["down", member, conversation], ["up", member, conversation]]);
+  const button = $(".cmp-voice");
+  pointer(button, "pointerdown");
+  await vi.advanceTimersByTimeAsync(300); await flush();
+  expect(api.agentVoice.mock.calls).toEqual([["down", member, conversation]]);
   emit({ type: "Dictation", phase: "listening", agent: true, member_id: member });
   await choose(0, 4);
+  pointer(button, "pointerup"); pointerClick(button); await flush();
+  expect(api.agentVoice.mock.calls).toEqual([["down", member, conversation], ["up", member, conversation]]);
+  expect(api.voiceCallStart).not.toHaveBeenCalled();
   emit({ type: "Dictation", phase: "processing", agent: true, member_id: member });
   expect(document.querySelector('[data-key="hearing"]')).toBeNull();
   await choose(member, conversation); expectStop("ack");
@@ -85,6 +96,53 @@ test.each([[0, 1], [0, 2], [3, 31], [3, 32]])("the composer voice press stays in
   await refresh({ type: "AgentTurn", turn_id: 11, member_id: member });
   expect(document.querySelector('[data-key="hearing"]')).toBeNull();
   expect(document.body.textContent).toContain("Report ready");
+});
+
+test.each([0, 299])("a member pointer click shorter than 300 ms starts one call without a voice message (%s ms)", async delay => {
+  mount(); await flush(); await choose(3, 31);
+  const button = $(".cmp-voice");
+  pointer(button, "pointerdown"); await vi.advanceTimersByTimeAsync(delay);
+  expect(api.agentVoice).not.toHaveBeenCalled(); expect(api.voiceCallStart).not.toHaveBeenCalled();
+  pointer(button, "pointerup"); pointerClick(button); await flush();
+  expect(api.voiceCallStart).toHaveBeenCalledExactlyOnceWith(3, 31, "zh-TW");
+  expect(api.agentVoice).not.toHaveBeenCalled();
+});
+
+test.each(["Enter", " "])("%j starts a member call without voice-message edges, even after navigation", async key => {
+  mount(); await flush(); await choose(3, 31);
+  $(".cmp-voice").dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })); await flush();
+  await choose(0, 4);
+  document.body.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true })); await flush();
+  expect(api.voiceCallStart).toHaveBeenCalledExactlyOnceWith(3, 31, "zh-TW");
+  expect(api.agentVoice).not.toHaveBeenCalled();
+});
+
+test("a held member pointer keeps its press destination when navigation precedes the threshold", async () => {
+  mount(); await flush(); await choose(3, 31);
+  const button = $(".cmp-voice"); pointer(button, "pointerdown");
+  await vi.advanceTimersByTimeAsync(200); await choose(0, 4);
+  await vi.advanceTimersByTimeAsync(100);
+  pointer(button, "pointerup"); pointerClick(button); await flush();
+  expect(api.agentVoice.mock.calls).toEqual([["down", 3, 31], ["up", 3, 31]]);
+  expect(api.voiceCallStart).not.toHaveBeenCalled();
+});
+
+test.each(["pointercancel", "lostpointercapture"])("%s releases a hold once and cancels a pending short click", async event => {
+  mount(); await flush(); await choose(3, 31);
+  const button = $(".cmp-voice"); pointer(button, "pointerdown");
+  pointer(button, event); await vi.advanceTimersByTimeAsync(300); pointerClick(button); await flush();
+  expect(api.agentVoice).not.toHaveBeenCalled(); expect(api.voiceCallStart).not.toHaveBeenCalled();
+  pointer(button, "pointerdown"); await vi.advanceTimersByTimeAsync(300);
+  pointer(button, event); pointer(button, "pointerup"); pointerClick(button); await flush();
+  expect(api.agentVoice.mock.calls).toEqual([["down", 3, 31], ["up", 3, 31]]);
+  expect(api.voiceCallStart).not.toHaveBeenCalled();
+});
+
+test("leaving the page cancels a pending member hold", async () => {
+  mount(); await flush(); await choose(3, 31);
+  pointer($(".cmp-voice"), "pointerdown"); agent.hide();
+  await vi.advanceTimersByTimeAsync(300); await flush();
+  expect(api.agentVoice).not.toHaveBeenCalled(); expect(api.voiceCallStart).not.toHaveBeenCalled();
 });
 
 beforeEach(() => {
@@ -99,6 +157,7 @@ beforeEach(() => {
   api.routinesList.mockResolvedValue({ routines: [] }); api.roomsList.mockResolvedValue({ rooms: [] });
   api.brainsCli.mockResolvedValue({ clis: [] }); api.providersList.mockResolvedValue({ providers: [] });
   api.agentVoice.mockResolvedValue(undefined); api.cancelSession.mockResolvedValue(undefined);
+  api.voiceCallStatus.mockResolvedValue({ call: null }); api.voiceCallStart.mockResolvedValue({ failure: "microphone" });
   api.core.mockImplementation(async (method: string, params: { member_id?: number } = {}) => method === "conversations.list"
     ? { conversations: conversations.filter(c => c.member_id === params.member_id) } : { questions: [] });
   api.agentHistoryList.mockImplementation(async (q: { member_id?: number; conversation_id?: number }) => ({ turns: turns.filter(turn =>

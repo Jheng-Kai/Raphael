@@ -239,14 +239,14 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   let newestMessage = 0, drewOnce = false, refreshTimer: ReturnType<typeof setTimeout> | undefined;
   let rosterDirty = true;
   let snapshot: unknown;
-  const drafts=new Map<number,{text:string;files:WireAttachment[];quote?:RoomMessage}>();
+  const drafts=new Map<number,{text:string;files:WireAttachment[];quote?:RoomMessage;pageId?:string}>();
   let draftTimer: ReturnType<typeof setTimeout> | undefined;
   function saveRoomDraft(): void {
     clearTimeout(draftTimer);
     if (roomId === undefined) return;
     const value = {...composer.snapshot(), quote: replyTo};
     if (value.text || value.files.length || value.quote) drafts.set(roomId, value); else drafts.delete(roomId);
-    writeDraftWords(`room:${roomId}`, {text:wholeLinks(value.text), quote:value.quote ? {id:value.quote.id,member_id:value.quote.member_id,text:value.quote.text} : undefined});
+    writeDraftWords(`room:${roomId}`, {text:wholeLinks(value.text), pageId:value.pageId, quote:value.quote ? {id:value.quote.id,member_id:value.quote.member_id,text:value.quote.text} : undefined});
   }
   function deliveredDraft(id: number, text: string, files: WireAttachment[], quoteId?: number): void {
     const draft = drafts.get(id);
@@ -257,7 +257,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       if (!draft.text && !draft.files.length && !draft.quote) drafts.delete(id);
     }
     const remaining = drafts.get(id);
-    writeDraftWords(`room:${id}`, remaining && {text:wholeLinks(remaining.text),quote:remaining.quote});
+    writeDraftWords(`room:${id}`, remaining && {text:wholeLinks(remaining.text),quote:remaining.quote,pageId:remaining.pageId});
   }
   function forgetRoomDraft(id: number): void {
     if (roomId === id) { roomId = undefined; close(); }
@@ -303,9 +303,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   });
   const resultCards = new WeakMap<HTMLElement, { sync(): void }>();
   mountConversationCardActions(thread, () => _app.go("settings", "connections"));
-  const pagesHost = mountPages(thread, { send: text => {
-    if (roomId) void api.roomSend(roomId, text, crypto.randomUUID(), getLocale()).then(() => refresh());
-  }, answer: (id, text) => answerOwnerPage(thread, id, text, () => { void refresh(); }) });
+  const pagesHost = mountPages(thread, { place: (id, text) => composer.placePageText(id, text) });
   const measureAllMessages = messagePreviewMeasure(thread);
   const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(measureAllMessages) : null;
   messageResize?.observe(thread);
@@ -328,7 +326,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     scroll.scrollTop=top+scroll.scrollHeight-height;
   }});
   const sendingRooms=new Set<number>(),pendingStops=new Set<number>();
-  const composer=createChatComposer({stopTask:stopRoom,placeholder:()=>t("rooms.message"),transcriptTarget(){const id=roomId;return text=>{if(roomId===id){composer.input.value+=(composer.input.value?" ":"")+text;composer.seedDictation(text);}else if(id){const draft=drafts.get(id)??{text:"",files:[]};draft.text+=(draft.text?" ":"")+text;drafts.set(id,draft);writeDraftWords(`room:${id}`,{text:draft.text,quote:draft.quote});}};},async send(text,files){
+  const composer=createChatComposer({stopTask:stopRoom,placeholder:()=>t("rooms.message"),answerPage:(id,text)=>!replyTo && answerOwnerPage(thread,id,text,()=>{void refresh();}),transcriptTarget(){const id=roomId;return text=>{if(roomId===id){composer.input.value+=(composer.input.value?" ":"")+text;composer.seedDictation(text);}else if(id){const draft=drafts.get(id)??{text:"",files:[]};draft.text+=(draft.text?" ":"")+text;drafts.set(id,draft);writeDraftWords(`room:${id}`,{text:draft.text,quote:draft.quote,pageId:draft.pageId});}};},async send(text,files){
     if (!roomId) return;
     const id = roomId, sentQuote = replyTo?.id, key = JSON.stringify([id,text,files,sentQuote]);
     const requestId = failedRequests.get(key) ?? crypto.randomUUID();
@@ -579,7 +577,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     roomWindow.reset(); renderedMessages.clear();
     opened=true;generation++;rosterDirty=true;snapshot="";newestMessage=0;drewOnce=false;roomId=id;room=undefined;messages=[];handoffs=[];exchange=undefined;replyTo=undefined;stopping=false;canOlder=false;
     el.querySelector('.au-room-heading')!.replaceChildren();thread.replaceChildren();older.replaceChildren();status.replaceChildren();
-    composer.setTaskState("idle");const draft=drafts.get(id)??readDraftWords<RoomMessage>(`room:${id}`);replyTo=draft?.quote;composer.setDraft(draft?.text??"",drafts.get(id)?.files??[]);el.hidden=false;
+    composer.setTaskState("idle");const draft=drafts.get(id)??readDraftWords<RoomMessage>(`room:${id}`);replyTo=draft?.quote;composer.setDraft(draft?.text??"",drafts.get(id)?.files??[],draft?.pageId);el.hidden=false;
     await refresh();void questions.load();
     if(opened&&roomId===id&&room){canOlder=messages.length===100;draw();scroll.scrollTop=scroll.scrollHeight;composer.input.focus();}
   },get active(){return opened;}};

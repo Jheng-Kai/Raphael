@@ -1,6 +1,6 @@
-/** Only words and quotes survive restart; file bytes stay in the live composer. */
+/** Words, quotes and page provenance survive restart; file bytes stay in the live composer. */
 export const DRAFT_STORAGE_KEY = "raphael.composer.drafts";
-export interface DraftWords<Q> { text: string; quote?: Q }
+export interface DraftWords<Q> { text: string; quote?: Q; pageId?: string }
 
 function stored(): Record<string, DraftWords<unknown>> {
   try {
@@ -11,7 +11,7 @@ function stored(): Record<string, DraftWords<unknown>> {
 
 export function readDraftWords<Q>(key: string): DraftWords<Q> | undefined {
   const value = stored()[key];
-  return value && typeof value.text === "string" ? { text: value.text, ...(value.quote && typeof value.quote === "object" ? { quote: value.quote as Q } : {}) } : undefined;
+  return value && typeof value.text === "string" ? { text: value.text, ...(value.quote && typeof value.quote === "object" ? { quote: value.quote as Q } : {}), ...(typeof value.pageId === "string" ? { pageId: value.pageId } : {}) } : undefined;
 }
 
 export function writeDraftWords<Q>(key: string, draft?: DraftWords<Q>): void {

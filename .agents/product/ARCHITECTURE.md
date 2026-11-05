@@ -826,6 +826,41 @@ a single-use token and ten-minute expiry; no source path/copy is retained. The
 metadata preview is separate from private import candidates. Core RPC failures
 return fixed field identifiers and counts, never secret-bearing exception text.
 
+## Desktop security review (2026-11-05)
+
+AttachmentStore.open_path is the authoritative native file-association boundary for
+open_attachment and attachment_source. Its reviewed extension allowlist does not
+restrict upload, opaque ID storage or bounded model readers. Unknown associations
+fail before Rust receives a native path. Existing team-file read-or-reveal behavior
+remains separate. This does not certify third-party document viewers or custom owner
+file associations.
+
+prepare-release-assets validates the version before writes. The existing publication
+job resolves an exact existing tag to its commit (including annotated tags), refuses
+a mismatch or API failure, and supplies github.sha as gh release create --target.
+Signature/version verification in updates.rs and the pinned updater plugin remains
+authoritative at runtime. No new RPC, provider, registry or execution engine is added
+(A-01/03/04/06/08/10/11).
+
+See ../skills/verify-raphael/features/security-boundary.md in the verification map for coverage, evidence,
+remaining consent decisions and offline/native boundaries.
+
+The shell drains oversized child-process lines without retaining their content:
+stdout admits at most 64 MiB per JSON-RPC line and stderr at most 16 KiB per log
+line, including the delimiter. Discarding a line preserves framing and emits only
+a fixed diagnostic. The RPC waits for its existing timeout if its reply was dropped.
+This bounds shell buffering; it does not bound all Python/provider allocations.
+
+### Page composer boundary (follow-up 1)
+
+mountPages now accepts only a place(pageId, text) callback. Neither HTML send nor
+MCP ui/message calls an owner send or owner-question answer. The existing shared
+composer owns append, focus and the localized page provenance note; its existing
+draft store retains the page ID alongside words and quotes. Owner submission uses
+the existing delivery or waiting-question controller. No new RPC, transport or
+provider loop is introduced (A-01/03/04/06). Voice transcription leaves page drafts
+unsent, and an expanded page closes back to the focused composer on placement.
+
 
 ## Offline storage security review (2026-11-05)
 

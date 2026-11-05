@@ -6,7 +6,7 @@ import type { Messages } from './zh-TW';
 export const en = {
   "call.title": "Voice chat",
   "call.ended": "Ended",
-  "call.start": "Start voice chat",
+  "call.start": "Hold to speak; click to start voice chat",
   "call.connecting": "Connecting…",
   "call.listening": "Listening",
   "call.thinking": "Thinking…",
@@ -1667,7 +1667,7 @@ export const en = {
   "members.changeAvatar": "Change picture",
   "members.fromPc": "From this PC…",
   "members.slimeColor": "Colour {p0}",
-  "page.askSend": "This page wants to send this as your message",
+  "page.composerNote": "This text came from a page. Review it before sending.",
   "page.askOpen": "This page wants to open this link",
   "page.askYes": "Go ahead",
   "page.expand": "Expand",

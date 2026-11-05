@@ -6,7 +6,7 @@ import type { Messages } from './zh-TW';
 export const ja = {
   "call.title": "音声チャット",
   "call.ended": "終了",
-  "call.start": "音声チャットを開始",
+  "call.start": "長押しで話す；クリックで音声チャットを開始",
   "call.connecting": "接続中…",
   "call.listening": "聞いています",
   "call.thinking": "考え中…",
@@ -1667,7 +1667,7 @@ export const ja = {
   "members.changeAvatar": "アイコンを変更",
   "members.fromPc": "PC から選ぶ…",
   "members.slimeColor": "色 {p0}",
-  "page.askSend": "このページがあなたのメッセージとして送信しようとしています",
+  "page.composerNote": "この文章はページからのものです。確認してから送信してください。",
   "page.askOpen": "このページがこのリンクを開こうとしています",
   "page.askYes": "実行",
   "page.expand": "拡大",

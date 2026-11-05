@@ -8,6 +8,32 @@ const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
 beforeEach(()=>{document.body.innerHTML="";vi.clearAllMocks();setLocale("en");api.core.mockImplementation(async method => method === "settings.get" ? { settings: { action_mode: "ask" } } : {});});
 function mount(send=vi.fn().mockResolvedValue(undefined)) {const view=createChatComposer({placeholder:()=>"Room message",send});document.body.append(view.el);return {view,send};}
 
+test("page provenance follows its draft across restoration, localization and failed delivery", async () => {
+ const {view,send}=mount(vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(undefined));
+ view.setDraft("Owner words\n");
+ expect(view.placePageText("p1","Page words <b>")).toBe(true);
+ expect(view.input.value).toBe("Owner words\nPage words <b>");
+ expect(send).not.toHaveBeenCalled();
+ const saved=view.snapshot(),note=view.el.querySelector<HTMLElement>(".cmp-page-note")!;
+ view.setDraft("Another conversation");expect(note.hidden).toBe(true);
+ view.setDraft(saved.text,saved.files,saved.pageId);expect(note.hidden).toBe(false);
+ setLocale("zh-TW");expect(note.textContent).toBe("這段文字來自頁面，確認後再送出");
+ view.el.requestSubmit();await flush();expect(note.hidden).toBe(false);
+ expect(view.snapshot().pageId).toBe("p1");
+ view.el.requestSubmit();await flush();expect(note.hidden).toBe(true);
+ expect(send).toHaveBeenCalledTimes(2);
+ view.el.hidden=true;expect(view.placePageText("p2","Stale page")).toBe(false);
+});
+
+test("a page's pending question is answered only after the owner submits the composer", () => {
+ const answerPage=vi.fn(()=>true),send=vi.fn().mockResolvedValue(undefined);
+ const view=createChatComposer({placeholder:()=>"Message",send,answerPage});document.body.append(view.el);
+ view.placePageText("p1","Chosen date");
+ expect(answerPage).not.toHaveBeenCalled();expect(send).not.toHaveBeenCalled();
+ view.el.requestSubmit();
+ expect(answerPage).toHaveBeenCalledExactlyOnceWith("p1","Chosen date");expect(send).not.toHaveBeenCalled();
+});
+
 test("room sends clear immediately and accept more messages while delivery is pending", async () => {
  const complete: (() => void)[] = [];
  const {view,send}=mount(vi.fn(()=>new Promise<void>(resolve=>complete.push(resolve))));
@@ -83,6 +109,22 @@ test("voice shows Send while recording and its next press delivers the combined 
 });
 test("WAV encoding produces mono PCM with correct sample rate and clipping",()=>{
  const bytes=wavBytes([new Float32Array([-2,0,2])],16000),view=new DataView(bytes.buffer);expect(new TextDecoder().decode(bytes.slice(0,4))).toBe("RIFF");expect(view.getUint32(24,true)).toBe(16000);expect(view.getUint16(22,true)).toBe(1);expect(view.getInt16(44,true)).toBe(-32768);expect(view.getInt16(48,true)).toBe(32767);
+});
+
+test("speech completion cannot automatically submit text placed by a page", async () => {
+ Object.defineProperty(navigator,"mediaDevices",{configurable:true,value:{getUserMedia:vi.fn().mockResolvedValue({getTracks:()=>[{stop(){}}]})}});
+ vi.stubGlobal("MediaRecorder",class {state="inactive";onstop?:()=>void;start(){this.state="recording";}stop(){this.state="inactive";this.onstop?.();}});
+ vi.stubGlobal("AudioContext",class {decodeAudioData=async()=>({numberOfChannels:1,sampleRate:16000,getChannelData:()=>new Float32Array([0])});close=async()=>{};});
+ api.roomTranscribe.mockResolvedValue({text:"Owner dictation"});
+ try {
+  const {view,send}=mount();view.placePageText("p1","Page words");
+  const voice=view.el.querySelector<HTMLButtonElement>('.cmp-voice')!;
+  voice.click();await flush();voice.click();await flush();
+  expect(send).not.toHaveBeenCalled();
+  expect(view.input.value).toBe("Page words Owner dictation");
+  view.el.requestSubmit();await flush();
+  expect(send).toHaveBeenCalledExactlyOnceWith("Page words Owner dictation",[]);
+ } finally {vi.unstubAllGlobals();}
 });
 
 test("denied microphone permission says why and preserves the typed draft", async () => {

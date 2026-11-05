@@ -17,7 +17,16 @@ from ..paths import local_storage_root
 from .attachments import Attachment, AttachmentError, MAX_VIDEO_BYTES, checked, file_limit
 
 ID = re.compile(r"[a-f0-9]{32}\.[a-z0-9]{1,12}")
-EXECUTABLE = {"exe", "com", "bat", "cmd", "ps1", "vbs", "vbe", "js", "jse", "wsf", "wsh", "msi", "msp", "scr", "hta", "lnk", "url", "reg", "cpl", "dll", "sh", "py", "jar", "appref-ms"}
+# Native opening invokes the owner's file association. Unknown extensions must not
+# acquire execution permission merely because they are missing from a denylist.
+OPENABLE = frozenset("""
+    txt md markdown csv tsv json jsonl xml yaml yml toml ini cfg conf log
+    html htm pdf rtf doc docx xls xlsx ppt pptx odt ods odp
+    png jpg jpeg gif webp avif bmp svg tif tiff ico
+    mp3 wav m4a aac ogg oga opus flac wma
+    mp4 webm mov m4v mkv avi wmv ogv
+    zip 7z rar tar gz bz2 xz
+""".split())
 
 
 class AttachmentStore:
@@ -150,6 +159,6 @@ class AttachmentStore:
 
     async def open_path(self, params):
         path = self.path(params.get("id"))
-        if path.suffix.lstrip(".") in EXECUTABLE:
-            raise invalid_params("executable attachments cannot be opened")
+        if path.suffix.lstrip(".").lower() not in OPENABLE:
+            raise invalid_params("unreviewed attachment types cannot be opened")
         return {"path": str(path)}
