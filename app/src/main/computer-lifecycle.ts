@@ -3,17 +3,17 @@ import type { DesktopState } from "./desktop-viewer";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
 import { btn, closeMenu, esc, iconButton, openMenu, patchHTML } from "./ui";
+import { computerStateLabel } from './computer-state';
 
 export type ComputerMaintenance = "restart" | "update" | "repair" | "reset";
 const maintenanceWords = {
   restart: ['desktop.restart', 'desktop.restartHint'], update: ['desktop.update', 'desktop.updateHint'],
   repair: ['desktop.repair', 'desktop.repairHint'], reset: ['desktop.reset', 'desktop.resetHint'],
 } as const;
-const stateWords = { sleeping:'desktop.sleeping', waking:'desktop.waking', updating:'desktop.updating', repairing:'desktop.repairing' } as const;
 
-export function mountComputerLifecycle(host: HTMLElement, panel: HTMLElement, member: () => number,
-  read: () => DesktopState | undefined, perform: (action: ComputerMaintenance, captured: DesktopState) => Promise<void>, face: () => string): { draw(): void; locationHost: HTMLElement } {
-  const header = host.querySelector('.mb-det-head') ?? panel;
+export function mountComputerLifecycle(_host: HTMLElement, panel: HTMLElement, member: () => number,
+  read: () => DesktopState | undefined, perform: (action: ComputerMaintenance, captured: DesktopState) => Promise<void>): { draw(): void; locationHost: HTMLElement } {
+  const header = panel.querySelector('.desktop-location-header') ?? panel;
   const holder = document.createElement('span');
   holder.className = 'computer-lifecycle';
   holder.innerHTML = `<span class="computer-lifecycle-state" role="status"></span><span class="computer-lifecycle-location"></span>${iconButton('more', t('chat.more'), ' data-computer-menu aria-haspopup="menu" aria-expanded="false"')}`;
@@ -54,13 +54,8 @@ export function mountComputerLifecycle(host: HTMLElement, panel: HTMLElement, me
     repaired.hidden = !state?.repair_revision;
     if (state?.repair_revision) repaired.textContent = t('desktop.repaired');
     const available = !!state && state.state !== 'absent' && state.granted !== false;
-    label.hidden = button.hidden = !available;
+    label.hidden = !state; button.hidden = !available;
     button.setAttribute('aria-label', t('chat.more')); button.title = t('chat.more');
-    const phase = state?.lifecycle ?? (state?.state === 'stopped' ? 'sleeping' : ['starting','preparing'].includes(state?.state ?? '') ? 'waking' : state?.state === 'building' ? 'updating' : '');
-    if (!phase) { patchHTML(label, ''); return; }
-    const character = document.createElement('template'); character.innerHTML = face();
-    for (const node of character.content.querySelectorAll('[data-presence-member], [data-tooltip]')) { node.removeAttribute('data-presence-member'); node.removeAttribute('data-tooltip'); }
-    for (const node of character.content.querySelectorAll('.slime-surface, svg.slime')) { node.setAttribute('data-state', phase === 'sleeping' ? 'sleeping' : 'working'); node.removeAttribute('data-slime-member'); }
-    patchHTML(label, `<span class="computer-lifecycle-face" aria-hidden="true">${character.innerHTML}</span><span>${esc(t(stateWords[phase]))}</span>`);
+    patchHTML(label, `<span data-computer-state-text>${esc(computerStateLabel(state))}</span>`);
   } };
 }

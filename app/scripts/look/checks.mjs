@@ -14,6 +14,91 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name};
   }
+  if (name.startsWith('member-panel-')) {
+    const panel = document.querySelector('.mb-det'), selected = panel.querySelector('.mb-tabs [aria-selected="true"]');
+    const tab = name.includes('library') ? 'library' : name.includes('details') || name.includes('task-') ? 'details' : 'computer';
+    require([...panel.querySelectorAll('.mb-tabs [role="tab"]')].map(node => node.textContent).join('/') === '詳細資料/檔案庫/電腦', 'the shared tabs name the three destinations');
+    require(selected?.dataset.tab === tab, 'the intended tab is selected');
+    require(visible(panel.querySelector('.mb-panel-identity')), 'member face, name and role stay above the tabs');
+    if (tab === 'computer') {
+      const live = visible(panel.querySelector('.desktop-screen iframe'));
+      require(!!visible(panel.querySelector('[data-desktop="enlarge"]')) === !!live, 'Enlarge is offered only with a live screen');
+      if (!live) require(!visible(panel.querySelector('[data-desktop="take"]')), 'an offline screen offers no Take control');
+      else require(panel.querySelector('[data-computer-state-text]')?.textContent === '執行中', 'the live header names the running state');
+    }
+    if (tab === 'details') require([...panel.querySelectorAll('.mb-dh')].filter(node => visible(node) && node.textContent === '對話').length === 1, 'Details names the conversation section only once');
+    if (name === 'member-panel-task-stop' || name === 'member-panel-task-rerun') {
+      const items = document.querySelectorAll('.menu [role="menuitem"]');
+      require(items.length === 1 && items[0].textContent.trim() === (name.endsWith('stop') ? '停止' : '重新執行'), 'work exposes only the action for its current state');
+      require(!window.__look.calls.some(call => ['worker.cancel','worker.rerun'].includes(call.method)), 'opening a menu does not mutate work');
+    } else if (name === 'member-panel-details') {
+      const rows = [...panel.querySelectorAll('.mb-task-row')];
+      require(rows.length === 4 && rows.map(row => row.querySelector('small').textContent).join('/') === '進行中/等你/完成/失敗', 'work names all four states newest first');
+      require(rows.every(row => row.querySelector('time') && row.querySelector('[data-panel-task-menu]')), 'each work row has time and its menu');
+      require(!!panel.querySelector('.mb-panel-routines') && !!panel.querySelector('[data-slot="conversations"]'), 'routines and conversations follow work');
+    } else if (name === 'member-panel-details-empty') {
+      require(panel.querySelector('.mb-panel-tasks').textContent.includes('還沒有工作'), 'work has a one-line empty state');
+    } else if (name === 'member-panel-library' || name === 'member-panel-library-more') {
+      require(panel.querySelectorAll('.team-file[data-panel-file]').length === (name.endsWith('-more') ? 15 : 12), 'library reuses file chips and its bounded next page');
+      require(panel.querySelector('.mb-tab-body').textContent.includes('本週') && panel.querySelector('.mb-tab-body').textContent.includes('更早'), 'library groups recent and earlier files/pages');
+    } else if (name === 'member-panel-library-empty') {
+      require(panel.querySelector('.mb-tab-body').textContent === '還沒有檔案或頁面', 'library has one empty sentence');
+    } else if (name === 'member-panel-computer-live') {
+      require(visible(panel.querySelector('iframe')), 'the existing stream is visible');
+      require(visible(panel.querySelector('[data-desktop="enlarge"]')) && visible(panel.querySelector('[data-desktop="take"]')), 'Enlarge and Take control share the row below the screen');
+      require(!visible(panel.querySelector('.desktop-caption')), 'no caption repeats the member name under the screen');
+    } else if (name === 'member-panel-computer-docker-stopped') {
+      require(panel.querySelector('.desktop-message').textContent.includes('Docker Desktop'), 'the real local engine failure names Docker Desktop');
+      require(panel.querySelector('[data-desktop="retry"]').textContent === '啟動 Docker Desktop' && panel.querySelector('[data-desktop-location]').textContent === '改用遠端電腦', 'both contextual recovery actions are offered');
+      require(!window.__look.calls.some(call => call.params?.start_docker), 'reading never starts Docker');
+    } else if (name === 'member-panel-computer-docker-missing') {
+      require(visible(panel.querySelector('[data-act="docker-download"]')), 'missing installation retains the download action');
+    } else if (name === 'member-panel-computer-remote') {
+      require(panel.querySelector('.desktop-message').textContent.includes('studio-mini'), 'remote failure names the configured host');
+    } else if (name === 'member-panel-docker-start') {
+      const calls = window.__look.calls.filter(call => call.params?.start_docker);
+      require(calls.length === 1 && calls[0].params.host === '' && calls[0].params.member_id === 1, 'one explicit press starts only the captured local engine');
+      require(panel.querySelector('.desktop-error').getAttribute('role') === 'status', 'engine readiness is a status notice');
+      require(panel.querySelector('.desktop-error').textContent === 'Docker Desktop 已準備好', 'engine readiness is reported beside its screen');
+    } else if (name === 'member-panel-remote-location') {
+      require(visible(document.querySelector('.computer-location-popover')), 'recovery opens the existing location control');
+    }
+    return {check:name, tab};
+  }
+  if (name === 'panel-state-layout') {
+    const screen = document.querySelector('.desktop-panel .desktop-screen');
+    const sentence = screen?.querySelector('.desktop-message, .missing-note, .desktop-stage');
+    require(visible(screen) && visible(sentence), 'the screen contains its state sentence');
+    const bounds = screen.getBoundingClientRect(), text = sentence.getBoundingClientRect();
+    const inside = box => box.left >= bounds.left - 1 && box.right <= bounds.right + 1 && box.top >= bounds.top - 1 && box.bottom <= bounds.bottom + 1;
+    require(inside(text), 'the state sentence stays inside the screen');
+    const state = window.__look.data.desktop;
+    const phase = state.lifecycle ?? (['docker_stopped', 'remote_unavailable'].includes(state.error) || ['absent','unavailable','incompatible'].includes(state.state) || state.state === 'missing' && state.image === false ? 'unavailable'
+      : ['stopped','missing'].includes(state.state) ? 'sleeping' : state.state === 'building' ? 'updating' : 'starting');
+    const words = {sleeping:'休眠中',starting:'啟動中',waking:'喚醒中',updating:'更新中',repairing:'修復中',unavailable:'無法使用'};
+    const header = document.querySelector('[data-computer-state-text]');
+    require(visible(header) && header.textContent === words[phase], 'the short header word agrees with the screen state');
+    const walker = document.createTreeWalker(document.querySelector('.mb-det'), NodeFilter.SHOW_TEXT);
+    let occurrences = 0;
+    while (walker.nextNode()) if (visible(walker.currentNode.parentElement)) occurrences += walker.currentNode.textContent.split(sentence.textContent).length - 1;
+    require(occurrences === 1, 'the full state sentence appears only once');
+    const location = document.querySelector('.desktop-location-header [data-computer-location]').getBoundingClientRect();
+    const word = header.getBoundingClientRect();
+    require(word.top < location.bottom && word.bottom > location.top, 'the short state stays on the location control row');
+    require(visible(screen.querySelector('.desktop-boot-face')), 'each offline state uses the member face');
+    const buttons = [...screen.querySelectorAll('button')].filter(visible);
+    for (const button of buttons) {
+      const box = button.getBoundingClientRect();
+      require(inside(box), 'each state button stays inside the screen');
+      require(box.right <= text.left || box.left >= text.right || box.bottom <= text.top || box.top >= text.bottom, 'the state sentence and buttons never overlap');
+      require(box.top >= text.bottom, 'state actions follow the sentence');
+      for (const other of buttons.filter(other => other !== button)) {
+        const next = other.getBoundingClientRect();
+        require(box.right <= next.left || box.left >= next.right || box.bottom <= next.top || box.top >= next.bottom, 'state buttons never overlap one another');
+      }
+    }
+    return {check:name};
+  }
   if (name.startsWith("app-update-")) {
     const section = document.querySelector("[data-updates]");
     require(visible(section) && section.textContent.includes("1.1.0"), "new version is visible");
@@ -52,6 +137,8 @@ export function checkRendered(name, context = {}) {
   }
   if (name.startsWith('routine-test-')) {
     if (name === 'routine-test-menu') {
+      require(document.querySelector('.mb-det')?.dataset.detailsTab === 'details' && visible(document.querySelector('.mb-panel-routines [data-routine="91"]')), 'the routine row stays in the Details routine section');
+      require(document.querySelector('[data-routine="91"]')?.textContent.includes('台北'), 'the Details routine row retains the saved schedule zone');
       require(visible(document.querySelector('#app-popover [data-pick="test"]')), 'the row offers the shared test action');
     } else {
       const calls = window.__look.calls.filter(call=>call.method==='routines.run');
@@ -126,11 +213,11 @@ export function checkRendered(name, context = {}) {
     return {check:name,...count};
   }
   if (name === 'computer-header-layout') {
-    const header = document.querySelector('.mb-det-head');
+    const header = document.querySelector('.desktop-location-header');
     require(visible(header), 'the member panel header is visible');
-    const selectors = ['.computer-lifecycle-state', '[data-computer-location]', '[data-computer-menu]', '[data-det="gear"]', '[data-det="close"]'];
+    const selectors = ['.computer-lifecycle-state', '[data-computer-location]', '[data-computer-menu]'];
     const nodes = selectors.map(selector => header.querySelector(selector)).filter(node => visible(node) && (node.matches('button') || node.textContent.trim()));
-    require(nodes.length >= 4, 'location, overflow, gear and close remain available');
+    require(nodes.length === 3 && visible(document.querySelector('[data-det="gear"]')) && visible(document.querySelector('[data-det="close"]')), 'computer controls stay in their tab while gear and close remain available');
     const bounds = header.getBoundingClientRect(), boxes = nodes.map(node => node.getBoundingClientRect());
     for (let i = 0; i < boxes.length; i++) {
       const box = boxes[i];
@@ -1768,13 +1855,13 @@ export function checkRendered(name, context = {}) {
   if (name.startsWith("computer-") || ['desktop-owner','desktop-handback','desktop-viewer','desktop-offline','desktop-absent'].includes(name)) {
     const panel=document.querySelector('.desktop-panel'), frame=document.querySelector('iframe[data-desktop-stream]'), calls=window.__look.calls;
     if(name==='desktop-absent'){
-      require(visible(panel)&&visible(panel.querySelector('.missing-note')),'absent Docker says what is missing in the existing panel');
+      require(visible(panel)&&visible(panel.querySelector('.desktop-message')),'absent Docker says what is missing in the existing panel');
       require(visible(panel.querySelector('[data-act="docker-download"]')),'absent Docker offers its download in the computer panel');
       const downloadStyle = getComputedStyle(panel.querySelector('[data-act="docker-download"]'));
       const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(Number).map(channel => channel / 255).map(channel => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4).reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
       const ink = luminance(downloadStyle.color), surface = luminance(downloadStyle.backgroundColor);
       require((Math.max(ink, surface) + 0.05) / (Math.min(ink, surface) + 0.05) >= 4.5, 'Docker download text retains readable contrast over the desktop frame');
-      require(!panel.querySelector('.missing-note').textContent.includes('設定 › 拉斐爾'),'Docker recovery never points to the removed Settings pane');
+      require(!panel.querySelector('.desktop-message').textContent.includes('設定 › 拉斐爾'),'Docker recovery never points to the removed Settings pane');
       require(!calls.some(call=>call.method==='computer.viewer_open'),'reading the missing state never starts a computer');
       return {check:name};
     }

@@ -168,6 +168,17 @@ class DesktopViewer:
     async def team_file(self, params):
         """Where a file of the team folder is on this PC, for the owner's own press. A folder on another computer has no such place."""
         path = params.get("path")
+        member_file = re.fullmatch(r"member-file:(0|[1-9][0-9]*):(workspace|team):(.+)", path) if isinstance(path, str) else None
+        if member_file:
+            member, area, relative = member_file.groups()
+            target = self.target({"member_id": int(member)})
+            if target.remote or Path(relative).is_absolute() or "\\" in relative:
+                raise invalid_params("not a member file on this computer")
+            root = Path(target.workspace if area == "workspace" else target.shared).resolve()
+            found = (root / relative).resolve()
+            if not found.is_relative_to(root) or not found.is_file():
+                raise invalid_params("no such member file")
+            return {"path": str(found), "reads": found.suffix.lower() in READABLE}
         artifact = re.fullmatch(r"task-artifact:([1-9][0-9]*):([1-9][0-9]*)", path) if isinstance(path, str) else None
         if artifact:
             found = self.task_artifact(*(int(value) for value in artifact.groups()))
@@ -212,6 +223,15 @@ class DesktopViewer:
             except ValueError:
                 raise invalid_params("Invalid SSH config alias") from None
         target = self.target(params)
+        if params.get("start_docker") is True:
+            # Only an explicit owner-window press may start this PC's engine.
+            if target.remote or params.get("host") != target.remote:
+                raise invalid_params("Docker Desktop can only be started on this PC")
+            try:
+                await self.vm.ensure_engine(target, start_desktop=True)
+            finally:
+                self.vm.preparation.pop(target.key, None)
+            self.vm.changes += 1
         if not await self.vm.installed():
             return {"state": "absent", "control": "member", "ready": False, "error": "disabled" if not self.vm.enabled else "docker_missing"}
         state = await self.unwatched_status(target)
@@ -316,6 +336,7 @@ class DesktopViewer:
         except (VmError, OSError, TimeoutError):
             state = {"state": "unavailable"}
         return {"state": state["state"], "ready": state["state"] == "running",
+                **({"image": state["image"]} if "image" in state else {}),
                 **({"progress": state["progress"]} if state.get("progress") else {}),
                 **({"error": state["error"]} if state.get("error") else {})}
 

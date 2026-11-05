@@ -1,5 +1,9 @@
 # Conversation
 
+## Member panel destinations (2026-11-05)
+
+The owner request of 2026-11-05 introduces R-PANEL-01/02/03/04. The conversation title opens Details first; the chat monitor opens Computer directly, and new active computer work selects Computer. One member identity line precedes the shared Details / Library / Computer tabs, with arrow-key navigation. Work results and pages navigate through the existing conversation result path; identity/resources remain behind the gear. Routines and conversation creation/search remain in Details. This supersedes the older screen/routines/conversations landing arrangement. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for the selected matrix, state-layout assertions, external references and deferred native acceptance.
+
 ## Calm conversations (owner request, 2026-11-05)
 
 R-UI-101 supersedes the older centred routine/event and thirty-minute separator

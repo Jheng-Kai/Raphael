@@ -1,5 +1,5 @@
 /* The panel previews the member's workspace; takeover carries that same stream. */
-.mb-det:not([data-details-tab="details"]) .desktop-panel:not([data-expanded]) { display: none; }
+.mb-det:not([data-details-tab="computer"]) .desktop-panel:not([data-expanded]) { display: none; }
 .is-computer-active.btn.icon { color: var(--computer-active); }
 .desktop-wallpaper { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center bottom; }
 /* xfdesktop zooms the owner's picture from its centre, and its subject sits in the middle rather than along the bottom. */
@@ -9,10 +9,10 @@
 .desktop-last { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .desktop-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .desktop-shell { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--sp-2); min-height: 0; }
-.desktop-caption { margin: 0; color: var(--text-3); font-size: var(--fs-sm); font-weight: 400; text-align: center; }
-.computer-lifecycle { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.desktop-caption { display: none; }
+.computer-lifecycle { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; width: 100%; }
 .computer-lifecycle-state { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); }
-.computer-lifecycle-face > .av { --av: 28px; }
+.desktop-location-header .computer-lifecycle-state { white-space: nowrap; }
 .mb-det-head:has(.computer-lifecycle) { flex-wrap: wrap; }
 .mb-det-head .mb-det-fill:has(+ .computer-lifecycle) { display: none; }
 .mb-det-head .computer-lifecycle { display: contents; }
@@ -60,11 +60,22 @@
 .checkpoint-uncovered { margin: 0; padding-left: var(--sp-5); overflow-wrap: anywhere; }
 .desktop-panel:has(.desktop-review:not([hidden])) .desktop-shell { display: none; }
 .desktop-actions:has(> [hidden]:only-child), .desktop-actions:not(:has(> :not([hidden]))) { display: none; }
-.desktop-placeholder { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--sp-3); overflow-wrap: anywhere; text-align: center; color: var(--text-2); pointer-events: none; }
+.desktop-placeholder { position: relative; min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); padding: var(--sp-3); overflow-wrap: anywhere; text-align: center; color: var(--text-2); pointer-events: none; }
+.desktop-screen:has(.desktop-placeholder:not([hidden])) { aspect-ratio: auto; min-height: 230px; }
+.desktop-state-content { display: grid; justify-items: center; gap: var(--sp-2); width: 100%; min-width: 0; }
+.desktop-state-content .desktop-boot-face > .av { --av: 48px; }
+.desktop-state-actions, .desktop-state-recovery { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-2); }
+.desktop-state-actions .btn { --btn: var(--desktop-frame-bg); --btn-edge: color-mix(in srgb, var(--desktop-frame-text) 30%, var(--desktop-frame-bg)); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); color: var(--desktop-frame-text); max-width: 100%; white-space: normal; }
+.desktop-preview-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); }
+.desktop-preview-actions [data-desktop="enlarge"] { position: static; opacity: 1; }
+.desktop-panel:not([data-expanded]) .desktop-screen:has(.desktop-placeholder:not([hidden])) { display: flex; align-items: stretch; }
+.desktop-panel:not([data-expanded]) .desktop-placeholder { width: 100%; }
 .desktop-placeholder > * { pointer-events: auto; }
+[data-card-desktop-screen] > .desktop-placeholder, [data-card-screen] > .desktop-placeholder { position: absolute; inset: 0; }
 .desktop-message, .desktop-placeholder .missing-note, .desktop-preparation { padding: var(--sp-3) var(--sp-4); border-radius: var(--r-lg); background: color-mix(in srgb, var(--desktop-frame-bg) 82%, transparent); }
 .desktop-placeholder .missing-note, .desktop-placeholder > [data-act="docker-download"] { --btn: var(--desktop-frame-bg); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); }
 .desktop-error { margin: 0; color: var(--err); }
+.desktop-error[role="status"] { color: var(--text-2); }
 .desktop-preparation { width: fit-content; max-width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); }
 .desktop-boot-face > .av { --av: 64px; }
 .card-computer-screen:has(.desktop-preparation) > button .i { visibility: hidden; }
@@ -87,6 +98,7 @@
 .desktop-panel[data-expanded] { display: flex; flex-direction: column; flex: 1; width: 100%; min-height: 0; height: 100%; margin: 0; gap: 0; }
 .desktop-panel[data-expanded] .desktop-shell { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); background: var(--desktop-frame-bg); }
 .desktop-panel[data-expanded] .desktop-caption { display: none; }
+.desktop-panel[data-expanded] .desktop-screen:has(.desktop-placeholder:not([hidden])) { aspect-ratio: auto; }
 .desktop-panel[data-expanded][data-files] .desktop-shell { display: none; }
 .desktop-panel[data-expanded] .desktop-checkpoints { padding: var(--sp-4); }
 .desktop-panel[data-expanded] .desktop-review { padding: var(--sp-4); }

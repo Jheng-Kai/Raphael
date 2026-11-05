@@ -34,7 +34,7 @@ describe("rendered look checks", () => {
   });
   it("rejects a low-contrast Docker download on the desktop wallpaper", () => {
     const browser = new Window();
-    browser.document.body.innerHTML = '<section class="desktop-panel"><div class="missing-note">Docker Desktop</div><button data-act="docker-download">Download Docker Desktop</button></section>';
+    browser.document.body.innerHTML = '<section class="desktop-panel"><div class="desktop-message">Docker Desktop</div><button data-act="docker-download">Download Docker Desktop</button></section>';
     browser.__look = { calls: [] };
     for (const element of browser.document.querySelectorAll("*")) { element.checkVisibility = () => true; element.getBoundingClientRect = () => ({ width: 120, height: 32 }); }
     let backgroundColor = "rgb(255, 255, 255)";
