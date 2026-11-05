@@ -52,6 +52,20 @@ def test_owner_only_rpc_cannot_become_a_direct_tool_by_adding_a_row():
         assert set(DEFINITIONS[name]["parameters"]["properties"]["action"]["enum"]) == {item.name for item in rows}
 
 
+def test_owner_import_upload_and_routine_test_do_not_add_model_authority():
+    assert "memory.import" in OWNER_ONLY
+    assert {"attachments.info", "attachments.upload", "routines.run"} <= INTERACTION_RPCS.keys()
+    assert {"routine_timezone", "routine_detected_timezone"} <= OWNER_ONLY_SETTINGS.keys()
+    assert not {"memory.import", "attachments.info", "attachments.upload", "routines.run"} & {item.rpc for item in ACTIONS}
+    from raphael_core.management import resolve
+    from raphael_core.protocol import RpcError
+    import pytest
+
+    for key in ("routine_timezone", "routine_detected_timezone", "auto_update"):
+        with pytest.raises(RpcError):
+            resolve("settings_update", {"key": key, "value": "UTC"})
+
+
 def test_primary_native_offer_stays_bounded_with_all_management_areas():
     from raphael_core.agent.speaker import Speaker
     from raphael_core.agent.team import TEAM_TOOLS
