@@ -125,7 +125,7 @@ async def handle(service, params):
         return {"template": export(service, service._member_id(params))}
     if action == "import" and params.get("catalog_id"):
         from .member_catalog import client
-        value = await client(service).package(params["catalog_id"])
+        value = await client(service).package(params["catalog_id"], require_fresh=True)
         if params.get("template") != value:
             raise invalid_params("Template changed; review the current package before adding it")
     else:

@@ -40,6 +40,7 @@ from .words import heard, words
 logger = logging.getLogger(__name__)
 
 MAX_INCOMING_CHARS = 4000
+MAX_PENDING_MESSAGES = 64
 # A voice message larger than this is declined without being downloaded. It is the most a bot may
 # download from Telegram (getFile), so no message the bot could fetch is turned away for its size;
 # the bound only keeps what a message holds in memory in check. A voice message has no limit of
@@ -174,6 +175,8 @@ class Switchboard:
             await self.aclose()
 
     def _deliver(self, message: Incoming) -> None:
+        if len(self._tasks) >= MAX_PENDING_MESSAGES:
+            return
         self._spawn(lambda: self._route(message))
 
     def _spawn(self, work: Callable[[], Awaitable[None]]) -> asyncio.Task[None]:
@@ -322,6 +325,8 @@ class Switchboard:
         # One question at a time for a chat: a second would cancel the first in the assistant.
         lock = self._locks.setdefault(chat, asyncio.Lock())
         async with lock:
+            if not self._chat_allowed(chat):
+                return
             prefix = ""
             try:
                 async with self._channel.busy(chat):
@@ -341,12 +346,16 @@ class Switchboard:
                             chat_hash(chat),
                         )
                         try:
+                            if not self._chat_allowed(chat):
+                                return
                             answer = await self._ask(
                                 session, text or "", language, source, attachments=taken
                             )
                         finally:
                             del taken
                     else:
+                        if not self._chat_allowed(chat):
+                            return
                         answer = await self._ask(session, text or "", language, source)
             except asyncio.CancelledError:
                 raise
@@ -358,7 +367,7 @@ class Switchboard:
             if isinstance(answer, Answer):
                 await self.tell(chat, prefix + answer.text, files=answer.files)
             else:
-                await self._reply(chat, prefix + answer)
+                await self.tell(chat, prefix + answer)
 
     async def _hear(self, voice: Attachment, language: str) -> str:
         """The words of a voice message, however long it is. Declined before it is downloaded when

@@ -39,6 +39,86 @@ def harness(tmp_path):
     return Catalog(tmp_path, url="https://example.test/catalog", keys=(pub,), transport=transport), state, transport, pub
 
 
+def clocked_catalog(rig, tmp_path):
+    cat, state, transport, pub = harness(tmp_path)
+    # These tests sign their own index; keep its hashes tied to actual checkout bytes.
+    for entry in state["index"]["entries"]:
+        entry["sha256"] = hashlib.sha256((FIXTURE / entry["package"]).read_bytes()).hexdigest()
+    clock = [1_800_000_000]
+    cat.now = lambda: clock[0]
+    cat.language = lambda: rig.language
+    rig.service._member_catalog = cat
+    return cat, state, transport, pub, clock
+
+
+async def test_store_install_expires_after_seven_days_but_cached_browsing_and_preview_work(rig, tmp_path):
+    cat, state, _, _, clock = clocked_catalog(rig, tmp_path)
+    preview = await rig.call("members.template", {"action": "catalog-preview", "catalog_id": "research"})
+    state["offline"] = True
+    clock[0] += 7 * 24 * 60 * 60
+    await rig.call("members.template", {"action": "import", "catalog_id": "research", "template": preview["template"]})
+    clock[0] += 1
+    assert len((await cat.fetch())["entries"]) == 4
+    assert (await cat.package("research"))["name"] == preview["template"]["name"]
+    before = list(rig.service.store.members())
+    with pytest.raises(RpcError) as error:
+        await rig.call("members.template", {"action": "import", "catalog_id": "research", "template": preview["template"]})
+    assert error.value.message == "請連上網路後再加入，以確認範本沒有被撤銷"
+    assert rig.service.store.members() == before
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+async def test_store_cache_restart_preserves_age_and_legacy_cache_needs_online_verification(rig, tmp_path, legacy):
+    cat, state, transport, pub, clock = clocked_catalog(rig, tmp_path)
+    preview = await rig.call("members.template", {"action": "catalog-preview", "catalog_id": "research"})
+    cache = cat.folder / "index-cache.json"
+    if legacy:
+        saved = json.loads(cache.read_bytes())
+        saved.pop("verified_at", None)
+        cache.write_text(json.dumps(saved), encoding="utf-8")
+    clock[0] += 8 * 24 * 60 * 60
+    state["offline"] = True
+    restarted = Catalog(tmp_path, url=cat.url, keys=(pub,), transport=transport)
+    restarted.now, restarted.language = cat.now, cat.language
+    rig.service._member_catalog = restarted
+    assert len((await restarted.fetch())["entries"]) == 4
+    with pytest.raises(RpcError, match="請連上網路後再加入"):
+        await rig.call("members.template", {"action": "import", "catalog_id": "research", "template": preview["template"]})
+    assert not rig.service.store.members()
+
+
+async def test_online_not_modified_renews_verified_cache_age_across_restart(rig, tmp_path):
+    cat, state, transport, pub, clock = clocked_catalog(rig, tmp_path)
+    preview = await rig.call("members.template", {"action": "catalog-preview", "catalog_id": "research"})
+    clock[0] += 8 * 24 * 60 * 60
+    state["not_modified"] = True
+    assert not (await cat.fetch())["offline"]
+    saved = json.loads((cat.folder / "index-cache.json").read_bytes())
+    assert saved["verified_at"] == clock[0]
+    state["offline"] = True
+    restarted = Catalog(tmp_path, url=cat.url, keys=(pub,), transport=transport)
+    restarted.now, restarted.language = cat.now, cat.language
+    rig.service._member_catalog = restarted
+    result = await rig.call("members.template", {"action": "import", "catalog_id": "research", "template": preview["template"]})
+    assert result["member"]["tools"] == []
+
+
+async def test_store_rechecks_age_after_package_download_before_install(rig, tmp_path):
+    cat, state, transport, _, clock = clocked_catalog(rig, tmp_path)
+    preview = await rig.call("members.template", {"action": "catalog-preview", "catalog_id": "research"})
+    state["not_modified"] = True
+
+    def slow_download(request):
+        if request.url.path.endswith("member.raphael-member"):
+            clock[0] += 8 * 24 * 60 * 60
+        return transport.handler(request)
+
+    cat.transport = httpx.MockTransport(slow_download)
+    with pytest.raises(RpcError, match="請連上網路後再加入"):
+        await rig.call("members.template", {"action": "import", "catalog_id": "research", "template": preview["template"]})
+    assert not rig.service.store.members()
+
+
 async def test_good_signed_fixture_etag_cache_restart_and_offline(tmp_path):
     cat, state, transport, pub = harness(tmp_path)
     assert len((await cat.fetch())["entries"]) == 4

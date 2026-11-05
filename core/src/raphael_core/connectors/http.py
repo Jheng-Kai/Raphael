@@ -1,6 +1,7 @@
 """HTTP boundary with deliberately value-free failures and diagnostics."""
 
 import logging
+import zlib
 from typing import Any
 
 import httpx
@@ -30,10 +31,43 @@ class PrivateHttp:
     def __init__(self, *, transport: httpx.AsyncBaseTransport | None = None) -> None:
         self.transport = transport
 
-    async def response(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+    async def response(self, method: str, url: str, *, max_bytes: int | None = None, **kwargs: Any) -> httpx.Response:
         try:
-            async with httpx.AsyncClient(transport=self.transport, timeout=20, follow_redirects=False) as client:
+            headers = {"Accept-Encoding": "gzip"} if max_bytes is not None else None
+            async with httpx.AsyncClient(transport=self.transport, timeout=20, follow_redirects=False, headers=headers) as client:
+                if max_bytes is not None:
+                    async with client.stream(method, url, **kwargs) as response:
+                        encoding = response.headers.get("content-encoding", "identity").lower().strip()
+                        if encoding not in ("identity", "gzip"):
+                            raise ConnectorFailure("protocol")
+                        # Injected transports may return an already decoded response.
+                        cached = response.is_stream_consumed
+                        decoder = zlib.decompressobj(31) if encoding == "gzip" and not cached else None
+                        data = bytearray()
+                        received = 0
+                        chunks = response.aiter_bytes() if cached else response.aiter_raw()
+                        async for chunk in chunks:
+                            received += len(chunk)
+                            if received > max_bytes:
+                                raise ConnectorFailure("protocol")
+                            if decoder:
+                                try:
+                                    chunk = decoder.decompress(chunk, max_bytes - len(data) + 1)
+                                except zlib.error:
+                                    raise ConnectorFailure("protocol") from None
+                            if len(data) + len(chunk) > max_bytes:
+                                raise ConnectorFailure("protocol")
+                            data.extend(chunk)
+                        if decoder and (not decoder.eof or decoder.unused_data):
+                            raise ConnectorFailure("protocol")
+                        # The body is already decoded; do not decode Content-Encoding again.
+                        headers = dict(response.headers)
+                        headers.pop("content-encoding", None)
+                        headers["content-length"] = str(len(data))
+                        return httpx.Response(response.status_code, headers=headers, content=bytes(data), request=response.request)
                 response = await client.request(method, url, **kwargs)
+        except ConnectorFailure:
+            raise
         except httpx.TimeoutException:
             raise ConnectorFailure("timeout") from None
         except Exception:
