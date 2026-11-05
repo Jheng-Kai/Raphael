@@ -593,6 +593,7 @@ export interface BrainSettings {
   image_model?: string;
   video_model?: string;
   computer_ssh_alias?: string;
+  computer_vm_idle_minutes?: number;
   chief_pinned?: boolean;
   owner_name?: string;
   owner_about?: string;

@@ -125,6 +125,8 @@ async def test_bridge_failure_invalidates_start_without_replaying_action(desktop
         assert sum(params.get("name") == "click" for _, params in Driver.calls) == 1
         runtime.calls.clear()
         Driver.broken = False
+        if failure.__class__ is ConnectionError or str(failure) == "transport_closed":
+            assert (await hub.call(tool(hub, "get_window_state").key, {}, approver="auto")).ok
         assert (await hub.call(tool(hub, "click").key, {}, approver="auto")).ok
         assert any(args[0] == "info" for args, _ in runtime.calls)
     finally:

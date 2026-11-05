@@ -2,6 +2,42 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith('computer-maintenance-')) {
+    const calls = window.__look.calls.filter(call => call.method === 'computer.lifecycle');
+    if (name === 'computer-maintenance-menu') {
+      const menu = document.querySelector('.menu');
+      require(visible(menu) && menu.querySelectorAll('.mdesc').length === 6, 'each maintenance action explains preservation and removal');
+      require([...menu.querySelectorAll('.mt')].slice(0,5).map(node=>node.textContent).join('/') === '稍候/重新啟動/更新/修復/重設', 'escalation order is fixed');
+      require(!calls.length, 'opening the menu has no maintenance effect');
+    } else if (name === 'computer-maintenance-reset') {
+      require(visible(document.querySelector('.mb-confirm')) && document.querySelector('.mb-confirm').textContent.includes('成員共用'), 'reset names shared scope in the shared confirmation');
+      require(!calls.length, 'reset has not been sent before yes');
+    } else {
+      const action = name === 'computer-maintenance-reset-done' ? 'reset' : name.split('-').at(-1);
+      require(calls.length === 1 && calls[0].params.action === action && calls[0].params.target === 'synthetic-member' && calls[0].params.host === '', 'one action pins the captured computer');
+      require(action !== 'reset' || calls[0].params.confirmed === true, 'reset carries explicit confirmation');
+    }
+    return {check:name};
+  }
+  if (name === 'computer-sleep-menu') {
+    require([...document.querySelectorAll('.menu [data-value]')].map(node=>node.dataset.value).join(',') === '5,15,60,0', 'all four idle choices use the shared dropdown');
+    return {check:name};
+  }
+  if (name.startsWith('computer-state-')) {
+    const phase = name.slice('computer-state-'.length), status = document.querySelector('.computer-lifecycle-state');
+    const words = {sleeping:'電腦在休眠',waking:'正在喚醒',updating:'正在更新',repairing:'正在修復'};
+    require(visible(status) && status.textContent.includes(words[phase]), 'the header names the computer state');
+    require(status.querySelector(`svg.slime[data-state="${phase === 'sleeping' ? 'sleeping' : 'working'}"]`), 'the existing body state conveys sleeping or waking');
+    return {check:name};
+  }
+  if (name === 'computer-low-disk') {
+    const message = document.querySelector('.chat-message[data-reply="true"]');
+    const text = message?.textContent ?? '';
+    require(text.includes('downloads (200 MiB)') && text.includes('刪除前會先徵求你的同意'), 'conversation names largest folders and asks before deleting');
+    require(visible(message) && message.scrollWidth <= message.clientWidth + 1, 'the full disk question wraps in a normal member message');
+    require(!window.__look.calls.some(call => call.method === 'computer.lifecycle'), 'the disk warning performs no maintenance or deletion');
+    return {check:name};
+  }
   if (name === 'desktop-host-repair') {
     const repair = document.querySelector('[data-computer-host-repair]'), code = repair.querySelector('.message-code'), button = code.querySelector('[data-act="copy-code"]');
     const bounds = code.getBoundingClientRect(), dialog = repair.closest('[role="dialog"]').getBoundingClientRect();
