@@ -194,7 +194,7 @@ _AREA_WORDS = {
     "folders": r"\b(?:folders?|company|teams?)\b|\bgroups?\b(?!\s+chats?\b)|資料夾|文件夾|團隊|公司|フォルダ",
     "rooms": r"\b(?:group chats?|rooms?)\b|群聊|群組|グループ",
     "conversations": r"\b(?:conversations?|quick chat|chat history)\b|對話|交談|聊天紀錄|会話",
-    "connections": r"\b(?:connections?|connectors?|integrations?|mcp|disconnect|reconnect|app access)\b|連線|連接|斷線|接続",
+    "connections": r"\b(?:connections?|connectors?|integrations?|mcp|connect|disconnect|reconnect|enable|disable|app access)\b|\bturn\s+(?:on|off)\b|連線|連接|斷線|啟用|停用|接続",
     "models": r"\b(?:models?|effort|reasoning|favorites?|favourites?)\b|模型|推理|思考|收藏|モデル",
     "settings": r"\b(?:settings?|preferences?|city|retention|dictionary|dictation|memory)\b|設定|偏好|城市|保留|字典|辭典|聽寫|記憶",
 }

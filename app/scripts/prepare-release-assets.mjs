@@ -63,7 +63,7 @@ export function collectTools(env = process.env, run = spawnText) {
 }
 
 /** BUILD-INFO.txt: plain ASCII lines, so it reads the same everywhere and hashes the same everywhere. */
-export function buildInfo({ version, env = process.env, tools }) {
+export function buildInfo({ version, updater = "signed", env = process.env, tools }) {
   const run = env.GITHUB_RUN_ID;
   const attempt = env.GITHUB_RUN_ATTEMPT ?? "1";
   const server = env.GITHUB_SERVER_URL ?? "https://github.com";
@@ -80,6 +80,7 @@ export function buildInfo({ version, env = process.env, tools }) {
     `run attempt: ${attempt}`,
     `run url: ${runUrl}`,
     `runner image: ${[env.ImageOS, env.ImageVersion].filter(Boolean).join(" ") || "unknown"}`,
+    ...(updater === "disabled" ? ["updater feed: skipped because the owner's signing keys are not set"] : []),
     "",
     "tools:",
     ...Object.entries(tools).map(([name, value]) => `  ${name}: ${value}`),
@@ -93,7 +94,10 @@ export function checksums(directory) {
   return names.map((name) => `${createHash("sha256").update(readFileSync(join(directory, name))).digest("hex")}  ${name}\n`).join("");
 }
 
-export function prepareReleaseAssets({ installer, notices, signature, version, output, env = process.env, tools = collectTools(env) }) {
+export function prepareReleaseAssets({ installer, notices, signature, updater = "signed", version, output, env = process.env, tools = collectTools(env) }) {
+  if (!["signed", "disabled"].includes(updater)) throw new Error("Updater mode must be signed or disabled.");
+  if (updater === "signed" && !signature) throw new Error("Signed updater mode requires --signature.");
+  if (updater === "disabled" && signature) throw new Error("Disabled updater mode must not include --signature.");
   if (existsSync(output)) throw new Error(`Output directory already exists: ${output}`);
   mkdirSync(output, { recursive: true });
   copyFileSync(installer, join(output, `Raphael-${version}-windows-x64-setup.exe`));
@@ -109,7 +113,7 @@ export function prepareReleaseAssets({ installer, notices, signature, version, o
     } }, null, 2) + "\n");
   }
   copyFileSync(notices, join(output, "THIRD_PARTY_NOTICES.txt"));
-  writeFileSync(join(output, "BUILD-INFO.txt"), buildInfo({ version, env, tools }), "utf8");
+  writeFileSync(join(output, "BUILD-INFO.txt"), buildInfo({ version, updater, env, tools }), "utf8");
   writeFileSync(join(output, "SHA256SUMS.txt"), checksums(output), "utf8");
   return readdirSync(output).sort();
 }
@@ -119,10 +123,10 @@ export function main(args = process.argv.slice(2), { env = process.env, tools } 
   const options = {};
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index]?.replace(/^--/, "");
-    if (!["installer", "notices", "signature", "version", "output"].includes(name) || !args[index + 1]) {
-      throw new Error(`Usage: node scripts/prepare-release-assets.mjs --installer FILE --notices FILE --version X.Y.Z --output DIRECTORY (got ${args[index] ?? "nothing"})`);
+    if (!["installer", "notices", "signature", "updater", "version", "output"].includes(name) || !args[index + 1]) {
+      throw new Error(`Usage: node scripts/prepare-release-assets.mjs --installer FILE --notices FILE --version X.Y.Z --output DIRECTORY [--updater signed|disabled] [--signature FILE] (got ${args[index] ?? "nothing"})`);
     }
-    options[name] = name === "version" ? args[index + 1] : resolve(args[index + 1]);
+    options[name] = ["version", "updater"].includes(name) ? args[index + 1] : resolve(args[index + 1]);
   }
   for (const name of ["installer", "notices", "version", "output"]) {
     if (!options[name]) throw new Error(`Missing --${name}`);

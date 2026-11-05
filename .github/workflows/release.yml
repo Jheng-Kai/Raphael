@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish verified signed assets to the version's GitHub Release
+        description: Publish verified assets to the version's GitHub Release
         type: boolean
         default: false
       release_notes:
@@ -26,6 +26,7 @@ jobs:
     timeout-minutes: 60
     outputs:
       artifact-name: ${{ steps.identity.outputs.artifact-name }}
+      version: ${{ steps.version.outputs.version }}
     defaults:
       run:
         shell: pwsh
@@ -58,11 +59,13 @@ jobs:
 
       # app/package.json, tauri.conf.json, Cargo.toml and core/pyproject.toml must carry the same x.y.z.
       - name: Check release versions
+        id: version
         working-directory: app
         run: |
           $version = node scripts/check-release-version.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
+          "version=$version" >> $env:GITHUB_OUTPUT
 
       # Artifacts of different refs and commits must not share a name. Characters that an artifact name
       # forbids, such as the slash in a branch name, become hyphens.
@@ -126,17 +129,28 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Build Windows installer
+        id: build
         working-directory: app
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           RAPHAEL_UPDATER_PUBLIC_KEY: ${{ secrets.RAPHAEL_UPDATER_PUBLIC_KEY }}
         run: |
-          if (!$env:TAURI_SIGNING_PRIVATE_KEY -or !$env:RAPHAEL_UPDATER_PUBLIC_KEY) { throw 'Owner updater signing keys are required.' }
-          node scripts/tauri.mjs build --config src-tauri/tauri.release.conf.json --bundles nsis --ci -- --locked
+          $config = @('--config', 'src-tauri/tauri.release.conf.json')
+          if ($env:TAURI_SIGNING_PRIVATE_KEY -and $env:RAPHAEL_UPDATER_PUBLIC_KEY) {
+            "updater=signed" >> $env:GITHUB_OUTPUT
+          } else {
+            "updater=disabled" >> $env:GITHUB_OUTPUT
+            Write-Output "::warning::Updater feed was skipped because the owner's signing keys are not set."
+            $config += @('--config', 'src-tauri/tauri.release-no-updater.conf.json')
+            Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY, Env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD, Env:RAPHAEL_UPDATER_PUBLIC_KEY -ErrorAction SilentlyContinue
+          }
+          node scripts/tauri.mjs build @config --bundles nsis --ci -- --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # Bind the artifact version in the signed trusted comment; the runtime rejects replayed bytes.
       - name: Sign updater artifact with its version
+        if: steps.build.outputs.updater == 'signed'
         working-directory: app
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -168,12 +182,15 @@ jobs:
       - name: Prepare release assets and checksums
         env:
           RELEASE_NOTES: ${{ inputs.release_notes }}
+          UPDATER_MODE: ${{ steps.build.outputs.updater }}
         run: |
           $installers = @(Get-ChildItem app/src-tauri/target/release/bundle/nsis -Filter '*-setup.exe' -File)
           if ($installers.Count -ne 1) { throw 'Expected one Windows installer.' }
+          $signature = @()
+          if ($env:UPDATER_MODE -eq 'signed') { $signature = @('--signature', "$($installers[0].FullName).sig") }
           node app/scripts/prepare-release-assets.mjs `
             --installer $installers[0].FullName `
-            --signature "$($installers[0].FullName).sig" `
+            --updater $env:UPDATER_MODE @signature `
             --notices app/src-tauri/release-notices/THIRD_PARTY_NOTICES.txt `
             --version $env:RELEASE_VERSION `
             --output release-assets
@@ -193,7 +210,7 @@ jobs:
           retention-days: 14
 
   publish:
-    name: Publish signed updater feed
+    name: Publish verified release assets
     needs: windows-release
     if: ${{ inputs.publish && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
     runs-on: ubuntu-24.04
@@ -208,10 +225,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: Jheng-Kai/Raphael
+          RELEASE_VERSION: ${{ needs.windows-release.outputs.version }}
         run: |
           cd release-assets
           sha256sum --check --strict SHA256SUMS.txt
-          version=$(jq -r .version latest.json)
+          version="$RELEASE_VERSION"
           gh release create "v$version" ./* --title "Raphael $version" --generate-notes
 
   # Provenance only for what is published from main or a tag, and only where GitHub offers artifact

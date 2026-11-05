@@ -17,7 +17,7 @@ const picks = (): string[] => [...document.querySelectorAll<HTMLElement>("#app-p
 const popover = (): HTMLElement | null => document.querySelector<HTMLElement>("#app-popover");
 
 test('the member computer header overflow has the same right-click entry', () => {
-  const header = document.createElement('div'); header.className = 'mb-det-head';
+  const header = document.createElement('div'); header.className = 'desktop-location-header';
   header.innerHTML = `<span>Computer</span>${iconButton('more','More',' data-computer-menu')}`;
   document.body.append(header);
   const button = header.querySelector<HTMLButtonElement>('[data-computer-menu]')!;

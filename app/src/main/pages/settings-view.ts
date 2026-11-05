@@ -740,7 +740,7 @@ function aboutHTML(v: SettingsView): string {
     row(t("nav.help"), "", btn(t("nav.help"), "", ' data-act="help"')) +
     row(t("settings.079"), t("settings.080"), btn(t("settings.081"), "", ' data-act="license"')) +
     `</div>` +
-    updateHTML(v.update ?? null, v.device.auto_update ?? false) +
+    updateHTML(v.update ?? null, v.device.auto_update ?? false, v.version) +
     t("settings.082")
   );
 }

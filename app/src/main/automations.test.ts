@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { AppContext, Member, Routine } from "./types";
-const api = vi.hoisted(() => ({ homeOverview:vi.fn(), membersList:vi.fn(), routinesList:vi.fn(), routineWebhook:vi.fn(), routineRuns:vi.fn(), routinesRun:vi.fn(), routinesCreate:vi.fn(), routinesUpdate:vi.fn(), routinesDelete:vi.fn(), calendarAdd:vi.fn(), calendarUpdate:vi.fn(), calendarDelete:vi.fn(), keepAwakeGet:vi.fn(), keepAwakeSet:vi.fn(), roomsList:vi.fn(), settingsGet:vi.fn(), modelsCatalog:vi.fn(), brainsCli:vi.fn(), groupsCreate:vi.fn(), groupsUpdate:vi.fn(), groupsDelete:vi.fn(), membersUpdate:vi.fn(), roomsCreate:vi.fn(), roomSend:vi.fn(), roomStop:vi.fn(), roomMessages:vi.fn() }));
+const api = vi.hoisted(() => ({ core:vi.fn(), homeOverview:vi.fn(), membersList:vi.fn(), routinesList:vi.fn(), routineWebhook:vi.fn(), routineRuns:vi.fn(), routinesRun:vi.fn(), routinesCreate:vi.fn(), routinesUpdate:vi.fn(), routinesDelete:vi.fn(), calendarAdd:vi.fn(), calendarUpdate:vi.fn(), calendarDelete:vi.fn(), keepAwakeGet:vi.fn(), keepAwakeSet:vi.fn(), roomsList:vi.fn(), settingsGet:vi.fn(), modelsCatalog:vi.fn(), brainsCli:vi.fn(), groupsCreate:vi.fn(), groupsUpdate:vi.fn(), groupsDelete:vi.fn(), membersUpdate:vi.fn(), roomsCreate:vi.fn(), roomSend:vi.fn(), roomStop:vi.fn(), roomMessages:vi.fn() }));
 vi.mock("./api",()=>api);
 import { openRoutineDialog } from "./routine-dialog";
 import { occurrences } from "./automation-calendar";
@@ -78,51 +78,65 @@ test("webhook choice saves without exposing technical event fields", async () =>
 });
 
 test("webhook details share the masked secret field and reveal only on request", async () => {
-  api.routineWebhook.mockImplementation(async (_id:number,reveal:boolean)=>({address:'http://127.0.0.1:43210/routines/1',...(reveal?{secret:'sample-secret'}:{})}));
+  api.routineWebhook.mockResolvedValue({address:'http://127.0.0.1:43210/routines/1'});
+  api.core.mockResolvedValue({address:'http://127.0.0.1:43210/routines/1',secret:'sample-secret'});
   openRoutineDialog({members,routine:{...plan,schedule:null,when:{webhook:true}}}); await flush();
   expect(document.querySelector('.field.sc-field .au-hook-secret')).not.toBeNull();
   expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('password');
-  expect(api.routineWebhook).toHaveBeenCalledWith(1,false);
+  expect(api.routineWebhook).toHaveBeenCalledWith(1);
+  expect(api.core).not.toHaveBeenCalled();
   expect(document.body.innerHTML).not.toContain('sample-secret');
   click('[data-dlg="hook-show"]'); await flush();
-  expect(api.routineWebhook).toHaveBeenLastCalledWith(1,true);
+  expect(api.core).toHaveBeenLastCalledWith('routines.webhook',{id:1,reveal:true,rotate:true});
   expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.value).toBe('sample-secret');
   click('[data-dlg="hook-show"]');
   expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('password');
   expect(document.body.innerHTML).not.toContain('sample-secret');
 });
 
-test("copying a webhook secret keeps the unchanged form and its mask", async () => {
+test("copying requires explicit generation and keeps the displayed field without another key request", async () => {
   const copied = vi.spyOn(navigator.clipboard,'writeText').mockResolvedValue();
-  api.routineWebhook.mockImplementation(async (_id:number,reveal:boolean)=>({address:'http://127.0.0.1:43210/routines/1',...(reveal?{secret:'sample-secret'}:{})}));
+  api.routineWebhook.mockResolvedValue({address:'http://127.0.0.1:43210/routines/1'});
+  api.core.mockResolvedValue({address:'http://127.0.0.1:43210/routines/1',secret:'sample-secret'});
   openRoutineDialog({members,routine:{...plan,schedule:null,when:{webhook:true}}}); await flush();
+  click('[data-dlg="hook-copy"]'); await flush();
+  expect(copied).not.toHaveBeenCalled(); expect(api.core).not.toHaveBeenCalled();
+  click('[data-dlg="hook-show"]'); await flush();
   const input = document.querySelector('.au-hook-secret');
   click('[data-dlg="hook-copy"]'); await flush();
   expect(copied).toHaveBeenCalledWith('sample-secret');
   expect(document.querySelector('.au-hook-secret')).toBe(input);
+  expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('text');
+  expect(api.core).toHaveBeenCalledTimes(1); expect(api.routineWebhook).toHaveBeenCalledTimes(1);
+  click('[data-dlg="hook-show"]');
   expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('password');
+  expect(document.querySelector<HTMLButtonElement>('[data-dlg="hook-copy"]')!.disabled).toBe(true);
   expect(document.body.innerHTML).not.toContain('sample-secret');
   copied.mockRestore();
 });
 
-test("copying a webhook secret keeps its feedback when the address changes", async () => {
+test("explicit generation updates a replacement address and local copying keeps its feedback", async () => {
   const copied = vi.spyOn(navigator.clipboard,'writeText').mockResolvedValue();
   api.routineWebhook.mockResolvedValueOnce({address:'http://127.0.0.1:43210/routines/1'});
   openRoutineDialog({members,routine:{...plan,schedule:null,when:{webhook:true}}}); await flush();
   let complete!: (value: unknown) => void;
-  api.routineWebhook.mockImplementationOnce(() => new Promise(resolve => { complete=resolve; }));
-  const button=document.querySelector<HTMLButtonElement>('[data-dlg="hook-copy"]')!;
-  button.click();
-  expect(button.disabled).toBe(true);
-  expect(button.getAttribute('aria-busy')).toBe('true');
+  api.core.mockImplementationOnce(() => new Promise(resolve => { complete=resolve; }));
+  const generate=document.querySelector<HTMLButtonElement>('[data-dlg="hook-show"]')!;
+  generate.click();
+  expect(generate.disabled).toBe(true);
+  expect(generate.getAttribute('aria-busy')).toBe('true');
   complete({address:'http://127.0.0.1:43211/routines/1',address_changed:true,secret:'sample-secret'}); await flush();
   expect(document.querySelector('.au-hook-address')?.textContent).toContain(':43211/');
   expect(document.querySelector('.au-webhook [role="status"]')?.textContent).toBeTruthy();
+  const button=document.querySelector<HTMLButtonElement>('[data-dlg="hook-copy"]')!;
+  button.click(); await flush();
+  expect(copied).toHaveBeenCalledWith('sample-secret');
+  expect(api.core).toHaveBeenCalledTimes(1); expect(api.routineWebhook).toHaveBeenCalledTimes(1);
   expect(document.querySelector('[data-dlg="hook-copy"]')).toBe(button);
   expect(button.getAttribute('aria-label')).toBe('Copied');
   expect(button.disabled).toBe(false);
   expect(button.hasAttribute('aria-busy')).toBe(false);
-  expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('password');
+  expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('text');
   copied.mockRestore();
 });
 

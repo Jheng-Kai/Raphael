@@ -6,7 +6,7 @@ import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
 import { slimeFaceHTML } from "./slime";
 import type { Member, NewMember } from "./types";
-import { btn, esc, toaster } from "./ui";
+import { btn, esc, row, toaster } from "./ui";
 
 export interface MemberTemplate {
   format: "raphael-member"; version: 1;
@@ -52,14 +52,13 @@ export async function previewTemplate(raw: unknown, avatar: string, create: (mem
     const {template} = await api.core<{template: MemberTemplate}>("members.template", {action: "preview", template: raw});
     let made: Member | null = null, busy = false;
     const connected = new Set<string>();
-    const body = (): string => cardHTML({title: template.role || template.name, status: made ? "done" : "ready", body: template.instructions,
-      content: `<p class="note">${esc(t(made ? "template.imported" : "template.noGrants"))}</p>` +
-        `<label class="mp-label">${esc(t("members.name"))}<input class="mb-fin" data-template-name maxlength="24" value="${esc(made?.name || template.name)}"${made ? " disabled" : ""}></label>` +
-        `<h3>${esc(t("members.profile.skillsTitle"))}</h3><div class="card-well">${template.skills.map(skill => `<p>${esc(/^name:\s*(.+)$/m.exec(skill.text)?.[1] || t("template.skill"))}</p>`).join("") || esc(t("template.none"))}</div>` +
-        `<h3>${esc(t("template.routines"))}</h3><div class="card-well">${template.routines.map(r => `<p>${esc(r.title)}</p>`).join("") || esc(t("template.none"))}</div>` +
-        `<h3>${esc(t("template.connections"))}</h3>${template.connections.map(app => cardHTML({title: app, status: connected.has(app) ? "done" : "ready", body: t(made ? "template.connectHelp" : "template.noGrants"), actions: btn(esc(t(connected.has(app) ? "conn.signedIn" : "template.connect")), "sm", ` data-dlg="connect" data-app="${esc(app)}"${!made || busy || connected.has(app) ? " disabled" : ""}`)})).join("") || `<p>${esc(t("template.none"))}</p>`}`});
+    const body = (): string => cardHTML({title: template.role || template.name, status: "ready", hideStatus: true, attrs: " data-member-template", body: template.instructions,
+      content: `<label class="mp-label">${esc(t("members.name"))}<input class="mb-fin" data-template-name maxlength="24" value="${esc(made?.name || template.name)}"${made ? " disabled" : ""}></label>` +
+        `<h3>${esc(t("members.profile.skillsTitle"))}</h3><div class="list">${template.skills.map(skill => row(esc(/^name:\s*(.+)$/m.exec(skill.text)?.[1] || t("template.skill")), "", `<span class="val">${esc(/^description:\s*(.+)$/m.exec(skill.text)?.[1] || "")}</span>`)).join("") || esc(t("template.none"))}</div>` +
+        `<h3>${esc(t("template.routines"))}</h3><div class="list">${template.routines.map(r => row(esc(r.title), "", `<span class="val">${esc(t("computer.routinePaused"))}</span>`)).join("") || esc(t("template.none"))}</div>` +
+        `<h3>${esc(t("template.connections"))}</h3>${template.connections.map(app => cardHTML({title: app, status: "done", statusText: t("conn.signedIn"), hideStatus: !connected.has(app), attrs: ` data-template-connection="${esc(app)}" data-connected="${connected.has(app)}"`, body: made ? t("template.connectHelp") : undefined, actions: btn(esc(t(connected.has(app) ? "conn.signedIn" : "template.connect")), "sm", ` data-dlg="connect" data-app="${esc(app)}"${!made || busy || connected.has(app) ? " disabled" : ""}`)})).join("") || `<p>${esc(t("template.none"))}</p>`}`});
     const dialog = openDialog({title: t("template.preview"), cls: "template-preview", body: body(),
-      actions: {secondary: btn(esc(t("common.close")), "", ' data-dlg="close"'), primary: {label: esc(t("template.import")), attrs: ' data-dlg="import"'}}, canClose: () => !busy,
+      actions: {secondary: `<p class="note" data-template-notice>${esc(t("template.noGrants"))}</p>` + btn(esc(t("common.close")), "", ' data-dlg="close"'), primary: {label: esc(t("template.import")), attrs: ' data-dlg="import"'}}, canClose: () => !busy,
       onAct(action, button) {
         if (action === "close") return dialog.close();
         if (busy) return;
@@ -78,7 +77,11 @@ export async function previewTemplate(raw: unknown, avatar: string, create: (mem
         };
         void run().catch(error => toaster.info(describeError(error))).finally(() => {
           busy = false;
-          if (dialog.el.isConnected) {dialog.el.querySelector(".mb-dlg-body")!.innerHTML = body(); button.removeAttribute("disabled");}
+          if (dialog.el.isConnected) {
+            dialog.el.querySelector(".mb-dlg-body")!.innerHTML = body();
+            dialog.el.querySelector("[data-template-notice]")!.textContent = t(made ? "template.imported" : "template.noGrants");
+            button.removeAttribute("disabled");
+          }
         });
       }});
   } catch (error) {toaster.info(describeError(error));}

@@ -1015,6 +1015,8 @@ class App(Router):
         # Work that was to leave a file is judged on the file found in the member's computer; the
         # shared computer says who holds it by the member's name.
         self.desktop_viewer.task_artifact = self.background.artifact_path
+        self.members.panel_workspaces = lambda member: [] if self.vm.remote else [
+            ("workspace", self.vm.target(member).workspace), ("team", self.vm.target(member).shared)]
         self.background.use_workspaces(
             lambda member: [path for path in (self.vm.target(member).workspace, self.vm.target(member).shared) if path] if self.vm.grants.allowed(member) else None)
         self.vm_tools.names = self.members.name_of

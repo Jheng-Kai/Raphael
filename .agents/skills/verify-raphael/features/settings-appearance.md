@@ -11,11 +11,24 @@ Import memory stays inside General's About you section, immediately after shared
 Time zone and output folder keep their regrouped owner rows; updates stay in About.
 
 ```powershell
-npm run look -- update-found update-ready update-auto import-memory import-memory-result settings-owner about --theme both --width 1120,720,1920x1080
+npm run look -- about-no-updater-key update-found update-ready update-auto import-memory import-memory-result settings-owner about --theme both --width 1120,720,1920x1080
 ```
 
-About checks https://github.com/Jheng-Kai/Raphael/releases/latest/download/latest.json on opening.
+With a compiled public key, About checks https://github.com/Jheng-Kai/Raphael/releases/latest/download/latest.json on opening.
 The release-assets test rejects the former owner in updater configurations and publication.
+Release verification also covers both owner updater keys, neither key and either key alone.
+Only both keys enable version-bound signing and latest.json; otherwise one warning accompanies
+the verified installer, notices, BUILD-INFO and checksums, with no .sig or feed. The disabled
+mode uses a small config override and records its reason in BUILD-INFO. Publication reads the
+checked version job output in both modes. Signed mode refuses missing or malformed signatures
+and a mismatched trusted-comment version. These offline contracts do not prove a CI build or
+GitHub publication. Without a compiled public key, the existing native not_configured result
+maps to a quiet About row with the current app version, localized release-page guidance and
+one shared button. It opens https://github.com/Jheng-Kai/Raphael/releases through the existing
+open_external_url boundary. No unavailable check/install/automatic controls or error notice
+appear. The native check returns before contacting the feed; the release-page action makes
+no update request. The configured-key UI remains unchanged. about-no-updater-key checks the
+real settings entry, native opener boundary and absence of another update check.
 A newer version shows escaped notes
 and Download and restart. Auto update is off by default; opt-in downloads in the background,
 then installs only after ten minutes of native idle and a complete idle roster. The signed
@@ -23,7 +36,13 @@ artifact must include the manifest's version. One startup receipt reports the in
 version when the main page is visible; hidden startup retains the receipt. Unknown state,
 missing core, active or waiting members prevent installation.
 
-Selected look: update-found, update-ready, update-auto, import-memory,
+Selected look for the release-page fallback: about, about-no-updater-key, update-found,
+update-ready and update-auto; zh-TW, both themes, 1120,720,1920x1080. Inspect every contact
+sheet and the fallback at light 720 and dark 1120. Compare its button and row with About
+Help/License at the same theme and width. This fixture does not prove the default OS browser
+or installed-app behavior. No Rust changed for this mapping.
+
+Selected look for the original updater/import work: update-found, update-ready, update-auto, import-memory,
 import-memory-result, profile, chat, attachment-limits and attachment-too-large;
 zh-TW, both themes, 1120,720,1920x1080. Compare About's update actions and switch with
 General's existing controls, and import fields/buttons with the owner profile and settings.

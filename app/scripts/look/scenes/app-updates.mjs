@@ -3,6 +3,10 @@ import { scene, settings, click, wait, scroll, type, dropFile, check } from "./s
 const about = [...settings("about"), wait("[data-updates]"), scroll("[data-updates]")];
 const memory = [...settings("general"), scroll("[data-memory-import]"), click('[data-import="open"]'), wait("[data-import-answer]")];
 export default [
+  scene("about-no-updater-key", "About offers the releases page when this build has no updater public key", [
+    ...about, wait('[data-act="update-releases"]'), check("about-no-updater-key"),
+    click('[data-act="update-releases"]'), check("about-release-page-opened"),
+  ], {appUpdate:"not_configured"}),
   scene("update-found", "A signed release is named with readable notes and an install action", [...about, wait('[data-act="update-install"]'), check("app-update-found")], {appUpdate:"found"}),
   scene("update-ready", "A verified downloaded release waits for restart", [...about, check("app-update-ready")], {appUpdate:"ready"}),
   scene("update-auto", "Automatic updates are explicitly enabled through the shared switch", [...about, click('[data-k="auto-update"]'), wait('[data-k="auto-update"][aria-checked="true"]'), check("app-update-auto")], {appUpdate:"found"}),
