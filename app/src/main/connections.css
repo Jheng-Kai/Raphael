@@ -2,6 +2,8 @@
    rounded list of the connected services, a dialog for each over the settings, and the store as cards
    in two columns. Colours are the app's tokens. */
 .cs { width: 100%; max-width: var(--layout-reading-max); margin-top: var(--sp-4); container: connections / inline-size; }
+/* The store's column layout does not collapse margins; the purpose line alone spaces the tabs on both views. */
+.set-purpose + .cs { margin-top: 0; }
 .cs h2.big { margin: 0; font: 600 var(--fs-lg)/1.3 var(--display); }
 .cs h2 { margin: 0 0 var(--sp-2) var(--sp-1); font-size: var(--fs-md); font-weight: 600; }
 .cs h3, .cs-skill-import h3 { margin: 0 0 var(--sp-2) var(--sp-1); font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); }
@@ -12,9 +14,8 @@
 .cs-find { gap: var(--sp-2); }
 .cs-find .sel { max-width: 180px; }
 .cs-find .sel span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cs-find .field { width: 220px; height: 32px; }
-.cs:has([data-conn="store-group"]) .cs-find { order: 0; width: 100%; margin: 0; }
-.cs:has([data-conn="store-group"]) .cs-find .field { width: 100%; height: 40px; }
+/* One search for both views, so switching tabs never reshapes it. */
+.cs-find .field { width: 100%; height: 40px; }
 .cs-store-groups-row { margin-bottom: var(--sp-3); }
 .cs-store-groups { display: flex; flex-wrap: nowrap; gap: var(--sp-2); }
 .cs-store-groups .btn { flex: 0 0 auto; border-radius: var(--r-pill); font-size: var(--fs-xs); }

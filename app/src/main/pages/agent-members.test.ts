@@ -1409,6 +1409,26 @@ test("a burst of turn events while typing makes one history request and preserve
   agent.hide();
 });
 
+test("a cleared conversation reads its history whole, so its old turns leave the screen", async () => {
+  vi.useFakeTimers();
+  const agent = mount(); await flush(); await pick(3);
+  expect(document.querySelector('.tn[data-id="31"]')).not.toBeNull();
+  const fresh = { ...structuredClone(THREADS[3]![0]!), id: 40 };
+  const last = () => api.agentHistoryList.mock.calls[api.agentHistoryList.mock.calls.length - 1]![0];
+  api.agentHistoryList.mockClear();
+  api.agentHistoryList.mockImplementation(async (q: { after_id?: number }) => q.after_id === undefined ? { turns: [structuredClone(fresh)] } : { turns: [], delta: true, removed_ids: [] });
+  send({ type: "ConversationsChanged", member_id: 3 });
+  send({ type: "AgentTurn", turn_id: 0, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(500); await flush();
+  expect(api.agentHistoryList.mock.calls.some(([q]) => !("after_id" in q))).toBe(true);
+  expect(document.querySelector('.tn[data-id="31"]')).toBeNull();
+  expect(document.querySelector('.tn[data-id="40"]')).not.toBeNull();
+  send({ type: "AgentTurn", turn_id: 40, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(500); await flush();
+  expect(last()).toMatchObject({ after_id: 40 });
+  agent.hide();
+});
+
 test("finding a folded work receipt preserves the reply and its match through a roster refresh", async () => {
   vi.useFakeTimers();
   const history = structuredClone(THREADS[3]!);

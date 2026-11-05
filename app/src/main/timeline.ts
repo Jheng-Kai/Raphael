@@ -723,6 +723,13 @@ function artifactHTML(text: string, seq: number): string {
   return "";
 }
 
+function missingKey(text: string): string {
+  try {
+    const missing = JSON.parse(text)?.missing;
+    return typeof missing?.resource === "string" && typeof missing?.requirement === "string" ? `${missing.resource}:${missing.requirement}` : "";
+  } catch { return ""; }
+}
+
 /** Parses a `media` message's JSON string; returns null when malformed. */
 export function parseMediaPayload(raw: string): MediaPayload | null {
   try {
@@ -768,13 +775,15 @@ function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, r
     .map(m => ({ ...m, text: composioText(plainLine(m.text), composioAction(turn)) }));
   const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
   if (live) return "";
-  const events = [...publicEventsHTML(turn).values()].join("");
+  const events = [...publicEventsHTML(turn, false).values()].join("");
   if (!messages.length && !events && !hasDetail(turn) && !workActions(turn).length && !(turn.steps?.length) && !turn.model && !revealing) return "";
   const open = state.thinkingOpen.get(turn.id) ?? false;
   const actions = workActions(turn).filter(action => action.state === "done").map(action => ({ ...action, past: composioText(action.past, composioAction(turn)) }));
   const steps = shownSteps(turn).filter(step => step.kind !== "model");
   const rows = actions.length ? actions.map(action => `<li>${esc(action.past)}${action.outcome && action.outcome !== "ok" ? ` · ${esc(reasonText({kind:"tool", tool:"", server:null, ms:0, at_ms:0, outcome:action.outcome, reason:action.reason ?? null}))}` : ""}</li>`).join("") : steps.length ? steps.map(step => `<li>${esc(pastStep(step))}${!step.missing && step.outcome !== "ok" ? ` · ${esc(reasonText(step))}` : ""}</li>`).join("") : messages.map(message => `<li class="work-progress">${messageHTML(message.text, query)}</li>`).join("");
-  const prerequisites = shownSteps(turn).map(step => step.missing ? missingHTML(step.missing) : "").join("");
+  // A prerequisite the reply already states is said once, in the reply.
+  const stated = new Set((turn.messages ?? []).filter(m => m.kind === "media").map(m => missingKey(m.text)).filter(Boolean));
+  const prerequisites = shownSteps(turn).map(step => step.missing && !stated.has(`${step.missing.resource}:${step.missing.requirement}`) ? missingHTML(step.missing) : "").join("");
   const meta = [esc(answerMeta(turn)), ...shownSteps(turn).map(mediaBillHTML)].filter(Boolean).join(" · ");
   const detail = hasDetail(turn) && (!turn.messages?.length || turn.status === "error" || turn.task?.state === "failed");
   const body = (rows ? `<ol class="work-sentences">${rows}</ol>` : "") + events + prerequisites + (detail ? `<pre class="failure-detail">${highlightHTML(turn.detail, query)}</pre>` : "") + (meta ? `<p class="work-meta">${meta}</p>` : "");
@@ -890,7 +899,12 @@ function turnEventsHTML(turn: AgentTurn, look: TurnLook, said: boolean): string 
     name: look.memberName?.(task.member_id) || task.member_name })));
 }
 
-function publicEventsHTML(turn: AgentTurn): Map<number, string> {
+/**
+ * `conversation` picks the lines that stay in the conversation: a meeting this turn opened (an exchange
+ * with colleagues, one line since 2026-11-05) and a skill the member learned (it changes what the member
+ * does next). Every other public event is work and folds into the reply.
+ */
+function publicEventsHTML(turn: AgentTurn, conversation: boolean): Map<number, string> {
   const labels = {
     "routine.created": "event.routine.created", "routine.updated": "event.routine.updated", "routine.deleted": "event.routine.deleted",
     "calendar.created": "event.calendar.created", "calendar.updated": "event.calendar.updated", "calendar.deleted": "event.calendar.deleted",
@@ -905,6 +919,7 @@ function publicEventsHTML(turn: AgentTurn): Map<number, string> {
     if (plainLine(message.text) === plainLine(turn.text) || turn.messages?.some(reply => reply.kind === "reply" && plainLine(reply.text) === plainLine(message.text))) continue;
     const known = ["routine", "calendar"].includes(event?.type ?? "") && ["created", "updated", "deleted"].includes(event?.action ?? "") && typeof event.name === "string" && Number.isSafeInteger(event.id) && event.id! > 0;
     const meeting = meetingEvent(message.text), skill = learnedSkillEvent(message.text);
+    if ((!!meeting || !!skill) !== conversation) continue;
     const kind = known ? `${event.type}.${event.action}` : meeting ? "meeting" : skill ? "skill" : `notice:${plainLine(message.text)}`;
     const words = known ? eventLineHTML(t(labels[`${event.type}.${event.action}` as keyof typeof labels], {p0: NAME}), ico(event.type === "routine" ? "clock" : "calendar"), event.name!) : meeting ? eventLineHTML(t("rooms.meetingOpened", {p0: NAME}), ico("chat"), meeting.name) : skill ? eventLineHTML(t("skills.learnedNotice", {p0: NAME}), ico("check"), skill) : `<span class="sys event-line">${esc(plainLine(message.text.trim().startsWith("{") || message.text.trim().startsWith("[") ? t("event.changed") : message.text))}</span>`;
     const attrs = meeting ? `data-meeting-room="${meeting.room_id}"` : event?.type === "routine" ? `data-act="open-routine" data-routine="${event.id}"${Number.isSafeInteger(event.member_id) && event.member_id! >= 0 ? ` data-routine-member="${event.member_id}"` : ""}` : `data-act="open-calendar-event" data-event="${event?.id}" data-date="${esc(event?.date ?? "")}"`;
@@ -973,7 +988,9 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     (turn.status === "confirm" ? `<div class="turn-question" data-question-turn="${id}"></div>` : "") +
     (turn.task?.state === "done" ? `<div data-task-result-slot="${id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") +
     (!look.deferPresence && (live || waitingForOwner || waitsAtCard(turn) || revealing || turn.task?.state === "waiting" || turn.status === "confirm") ? livePresenceHTML(look, latestProgress(turn), live || revealing) : "") +
-    `</div></div>`) + `</li>`
+    `</div></div>`) +
+    // What the reply led to (a meeting opened, a skill learned) follows it as one quiet line.
+    [...publicEventsHTML(turn, true).values()].join("") + `</li>`
   );
 }
 

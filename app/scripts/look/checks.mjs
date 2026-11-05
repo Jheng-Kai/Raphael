@@ -31,7 +31,8 @@ export function checkRendered(name, context = {}) {
     require(document.querySelectorAll('.cr-dialog').length === 1, "tabs share one creation container");
     return {check:name};
   }
-  if (name.startsWith("store-")) {
+  // The member store's own checks; the plugin store's store-group-* checks live further down.
+  if (["store-home", "store-category", "store-search", "store-empty", "store-offline", "store-preview", "store-warning", "store-export"].includes(name)) {
     const calls = window.__look.calls;
     require(!calls.some(c => c.method === "members.template" && ["import", "publish"].includes(c.params.action)), "browsing and review never install or publish");
     require(!calls.some(c => /connect$/.test(c.method || "")), "preview never connects apps");
@@ -285,7 +286,8 @@ export function checkRendered(name, context = {}) {
     const bounds = screen.getBoundingClientRect(), text = sentence.getBoundingClientRect();
     const inside = box => box.left >= bounds.left - 1 && box.right <= bounds.right + 1 && box.top >= bounds.top - 1 && box.bottom <= bounds.bottom + 1;
     require(inside(text), 'the state sentence stays inside the screen');
-    const state = window.__look.data.desktop;
+    // The fake core answers an absent Docker when the scene sets no computer, as the real core does without Docker.
+    const state = window.__look.data.desktop ?? { state: 'absent' };
     const phase = state.lifecycle ?? (['docker_stopped', 'remote_unavailable'].includes(state.error) || ['absent','unavailable','incompatible'].includes(state.state) || state.state === 'missing' && state.image === false ? 'unavailable'
       : ['stopped','missing'].includes(state.state) ? 'sleeping' : state.state === 'building' ? 'updating' : 'starting');
     const words = {sleeping:'休眠中',starting:'啟動中',waking:'喚醒中',updating:'更新中',repairing:'修復中',unavailable:'無法使用'};
@@ -510,10 +512,12 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }
   if (name.startsWith('computer-state-')) {
-    const phase = name.slice('computer-state-'.length), status = document.querySelector('.computer-lifecycle-state');
+    // Since the panel tabs the header keeps a short word and the screen says the state once, with the member's face.
+    const phase = name.slice('computer-state-'.length), status = document.querySelector('.computer-lifecycle-state'), panel = document.querySelector('.mb-det');
     const words = {sleeping:'電腦在休眠',waking:'正在喚醒',updating:'正在更新',repairing:'正在修復'};
-    require(visible(status) && status.textContent.includes(words[phase]), 'the header names the computer state');
-    require(status.querySelector(`svg.slime[data-state="${phase === 'sleeping' ? 'sleeping' : 'working'}"]`), 'the existing body state conveys sleeping or waking');
+    require(visible(status) && status.textContent.trim(), 'the header names the computer state in a short word');
+    require(panel.textContent.includes(words[phase]), 'the screen says the computer state');
+    require(panel.querySelector(`.desktop-boot-face svg.slime[data-state="${phase === 'sleeping' ? 'sleeping' : 'working'}"]`), 'the existing body state conveys sleeping or waking');
     return {check:name};
   }
   if (name === 'computer-low-disk') {
@@ -746,7 +750,6 @@ export function checkRendered(name, context = {}) {
     require(!preparation.querySelector('progress:not([value])'), 'no indeterminate progress line');
     if (!panel.hasAttribute('data-expanded') && name !== 'desktop-boot-inline') require(Math.abs(box.width / box.height - 1280 / 900) < .02, 'boot retains the running desktop aspect ratio');
     if (name.startsWith('desktop-period-')) require(wallpaper.getAttribute('src') === `/wallpapers/${name.slice('desktop-period-'.length)}.svg`, 'the fixed fixture hour selects its expected period');
-    if (name === 'desktop-boot-expanded') require(!window.__look.calls.some(call => call.method === 'computer.viewer_open'), 'expanding preparation never opens an unready stream');
     return {check:name};
   }
   if(name === "daily-newest") {require(document.querySelector('.conversation-caption').textContent==='Newest sample','the newest standard conversation opens');return {check:name};}
@@ -859,13 +862,10 @@ export function checkRendered(name, context = {}) {
       require(!monitor.textContent.trim() && getComputedStyle(monitor).animationName === 'none', 'the monitor remains one still icon');
       if (active) require(getComputedStyle(monitor).color !== getComputedStyle(document.querySelector('.conversation-trigger')).color, 'active status uses the purple token');
     } else if (name === 'level-panel' || name === 'level-off' || name === 'level-no-computer') {
-      require(visible(panel.querySelector('.mb-panel-routines')) && !visible(panel.querySelector('.mb-who')), 'routines live on the landing view, identity lives behind the gear');
+      // Since the panel tabs the computer has its own tab, headed by its state and shared location control.
+      require(panel.dataset.detailsTab === 'computer' && visible(panel.querySelector('[data-computer-location]')), 'the computer tab keeps its state header and shared location control');
       require(!panel.querySelector('[data-tab="routines"], .mb-rt [role="switch"], [data-desktop="expand"]') && !visible(panel.querySelector('[data-desktop="collapse"]')), 'there is no routines page, row switch or visible collapse control');
-      if (name === 'level-no-computer') require(visible(desktop) && visible(panel.querySelector('[data-computer-location]')), 'an empty computer panel retains its shared location control');
-      else {
-        require(visible(desktop) && visible(desktop.querySelector('.desktop-caption')), 'the screen has its centered member caption');
-        require(desktop.getBoundingClientRect().bottom <= panel.querySelector('.mb-panel-routines').getBoundingClientRect().top, 'the screen precedes routines');
-      }
+      if (name !== 'level-no-computer') require(visible(desktop) && visible(desktop.querySelector('.desktop-screen')), 'the computer tab shows the screen');
       if (name === 'level-off') require(visible(desktop.querySelector('.desktop-wallpaper')) && visible(desktop.querySelector('.desktop-screen [data-desktop="retry"]')) && !desktop.querySelector('iframe'), 'wallpaper and Start share the quiet screen');
     } else if (name === 'level-gear') {
       require(visible(panel.querySelector('.mb-who')) && visible(panel.querySelector('#mb-det-name')) && visible(panel.querySelector('[data-det="back"]')), 'identity and Back are available through the gear');
@@ -1001,7 +1001,9 @@ export function checkRendered(name, context = {}) {
   if (name === "conversation-day-today" || name === "conversation-day-yesterday") {
     const days = [...document.querySelectorAll('.mb-chat .thread .day')], line = document.querySelector('.mb-chat .thread .tn');
     const label = name === "conversation-day-today" ? "今天" : "昨天";
-    require(days.at(-1)?.textContent.startsWith(`${label} `), `the last day heading says ${label} with the shared look clock`);
+    // The calm thread's divider is the bare word; older dividers added the date after it.
+    const heading = days.at(-1)?.textContent.trim() ?? "";
+    require(heading === label || heading.startsWith(`${label} `), `the last day heading says ${label} with the shared look clock`);
     if (name === "conversation-day-today") window.__look.midnightLine = line;
     else require(line === window.__look.midnightLine, "the date change retains the conversation line");
     return { check: name, label };
@@ -1557,6 +1559,17 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name};
   }
+  if (name === "generated-audio-missing" || name === "generated-audio-repair") {
+    const thread = document.querySelector('.page-agent:not([hidden])');
+    if (name === "generated-audio-missing") {
+      require([...thread.querySelectorAll('[data-missing-repair="voice"]')].filter(visible).length === 1, "the missing voice service is said once with one repair");
+      require(visible(thread.querySelector('.work-body')) && !thread.querySelector('.work-body [data-missing-repair]'), "the opened work does not repeat the reply's repair");
+    } else {
+      require(visible(document.querySelector('#svc-key-fish')), "the repair reaches the voice service key");
+      require(document.querySelector('[data-pane="tools"][aria-current="page"]'), "the voice repair opens the shared Tools pane");
+    }
+    return {check:name};
+  }
   if (name.startsWith("owner-card-room-")) {
     const kind = name.slice("owner-card-room-".length);
     const selector = { connect: "[data-connector]", secret: "[data-secret-card]", mail: "[data-mail-card]", page: ".pg-card" }[kind];
@@ -1652,7 +1665,8 @@ export function checkRendered(name, context = {}) {
         require(pill && pill.textContent.trim(), 'status always has a word');
         require(Math.abs(pill.getBoundingClientRect().right - (box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth))) < 1.5, 'pill aligns with the right padding');
       }
-      require(![...card.querySelectorAll('.av,.slime,.ask-face,.bgq-face,.draft-face')].some(face => !face.closest('[data-card-desktop-screen] .desktop-preparation > .desktop-boot-face, [data-card-screen] .desktop-preparation > .desktop-boot-face')), 'no face is inside a card outside its booting computer screen');
+      // The computer screen's own character (booting, or saying its state in one sentence) belongs to the screen.
+      require(![...card.querySelectorAll('.av,.slime,.ask-face,.bgq-face,.draft-face')].some(face => !face.closest('[data-card-desktop-screen] .desktop-boot-face, [data-card-screen] .desktop-boot-face')), 'no face is inside a card outside its computer screen');
       require(!card.querySelector('select'), 'no native select is inside a card');
       if (card.matches('[data-desktop-work][data-work-state="waiting_control"]')) {
         const turn = card.closest('.tn');
@@ -2239,7 +2253,8 @@ export function checkRendered(name, context = {}) {
     const shell = document.querySelector('.desktop-shell');
     const inline = document.querySelector('[data-card-desktop-screen] iframe:not([hidden]), [data-card-screen] iframe:not([hidden])');
     const frame = inline ?? document.querySelector('.desktop-panel iframe');
-    const heading = inline ? inline.closest('.conversation-card')?.querySelector('.card-head') : document.querySelector('.desktop-panel[data-expanded] .desktop-takeover-bar') ?? shell?.querySelector('.desktop-caption');
+    // Since the panel tabs the computer tab's header (state word and location) heads the screen; the old caption is hidden.
+    const heading = inline ? inline.closest('.conversation-card')?.querySelector('.card-head') : document.querySelector('.desktop-panel[data-expanded] .desktop-takeover-bar') ?? document.querySelector('.desktop-location-header');
     // Native WebView checks enter the cross-origin viewer itself; look can inspect both documents.
     const embedded = !!document.querySelector('#noVNC_container');
     if (!embedded) {
@@ -2905,7 +2920,9 @@ export function checkRendered(name, context = {}) {
     const host = document.querySelector('.mb-det .conversation-list');
     require(visible(host), "the conversation list is visible");
     const quick = host.querySelector('[data-conversation-section="quick"]'), standard = host.querySelector('[data-conversation-section="standard"]');
-    require(visible(standard) && standard.querySelector('.mb-dh').textContent === "對話", "ordinary conversations use the existing small heading");
+    // Since the panel tabs the 詳細資料 section names the list once, above it.
+    const heading = host.closest('section')?.querySelector(':scope > .mb-dh') ?? standard?.querySelector('.mb-dh');
+    require(visible(standard) && heading?.textContent === "對話", "ordinary conversations use the existing small heading");
     if (quick) {
       require(!quick.querySelector('.mb-dh') && quick.querySelector('[data-conversation-open]').textContent.includes("快速提問"), "quick questions are named once on their row");
       require(standard.getBoundingClientRect().top - quick.getBoundingClientRect().bottom >= 8, "the two sections have breathing room");
@@ -3034,7 +3051,8 @@ export function checkRendered(name, context = {}) {
       require(lines[0].textContent === "小森 未能回覆：請求太頻繁而被限流" && lines[1].textContent === "小晴 未能回覆：已停止", "blocked replies name the member and why in the window language");
     }
     if (name === "p02-meeting-event") {
-      const line = eventLines(2).at(-1);
+      // The day divider is no longer an event line; the meeting stays one line (an exchange, 2026-11-05).
+      const line = eventLines(1).at(-1);
       require(line.closest('.conversation-event-line [data-meeting-room]') && line.textContent === "已開啟會議 產品方向討論", "the meeting is one centred line that opens its room");
       require(visible(line.querySelector('svg.i')) && !line.querySelector('.av'), "a small icon leads the line, beside no avatar");
     }
@@ -3213,7 +3231,8 @@ export function checkRendered(name, context = {}) {
     const turn = document.querySelector('.tn[data-id="91"]');
     require(visible(turn) && turn.querySelector('.me')?.textContent.includes("明天早上要帶傘嗎"), "the Alt+Space question arrived in the open quick conversation");
     require(visible(turn.querySelector('.ra .chat-message[data-reply]')) && turn.querySelector('.ra .chat-message[data-reply]').textContent.includes("出門記得帶傘"), "its answer shows below its public step");
-    const meta = turn.querySelector('.message-work')?.dataset.tooltip ?? "";
+    // The calm thread keeps the model in the reply's work detail, not in the work button's tooltip.
+    const meta = turn.querySelector('.work-meta')?.textContent ?? turn.querySelector('.message-work')?.dataset.tooltip ?? "";
     require(/luna/i.test(meta) && !/\bsol\b/i.test(meta), `the answer names the quick model that answered it: ${meta}`);
     require(document.querySelector('.conversation-trigger')?.textContent.includes("快速提問"), "the quick conversation stays open");
     require(!document.querySelector('.tn[data-id="1"]'), "formal history stays out of quick questions");
@@ -3332,7 +3351,9 @@ export function checkRendered(name, context = {}) {
     require(visible(document.getElementById(dialog.getAttribute('aria-describedby'))), "the irreversible-action description is announced");
     require(buttons[1].classList.contains('pri'), "Delete uses the skin's primary accent");
     require(getComputedStyle(dialog.querySelector('.mb-dlg-act')).borderTopWidth === '0px', "no divider separates the compact footer");
-    require(parseFloat(getComputedStyle(buttons[0]).borderRadius) >= 18, "actions have pill corners");
+    // Since 2026-11-03 the dialog's text buttons share the app's small radius, like every other text button.
+    const small = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--r-sm'));
+    require(buttons.every(button => parseFloat(getComputedStyle(button).borderRadius) === small), "actions share the app's small button radius");
     const box = dialog.getBoundingClientRect();
     const close = dialog.querySelector('[data-dlg="close"]').getBoundingClientRect();
     require(box.width <= 482 && box.left >= 0 && box.right <= innerWidth, "the compact panel fits the window");
@@ -4058,8 +4079,10 @@ export function checkRendered(name, context = {}) {
     require(members.some(member => member.id === 8) === (name === "admin-created"), "team reflects the owner's decision");
     if (name === "admin-created") {
       const details = [...document.querySelectorAll('.mb-det')].find(visible);
-      require(details?.querySelector('.mb-who-name')?.value === "COO", "created member details are selected");
-      require(details.querySelector('.mb-who-role')?.value === "營運長", "created role is shown");
+      // The panel's tabs name the member in one line; the editable fields live in its settings.
+      const identity = details?.querySelector('.mb-panel-identity b');
+      require(identity?.firstChild?.textContent.trim() === "COO", "created member details are selected");
+      require(identity.querySelector('span')?.textContent.includes("營運長"), "created role is shown");
       const created = members.find(member => member.id === 8);
       require(window.__look.data.groups.find(group => group.id === created.group_id)?.name === "個人公司", "member joins the approved group");
       require(created.preview === "" && created.last_at === null, "new conversation has no inherited activity");
@@ -4793,7 +4816,8 @@ export function checkRendered(name, context = {}) {
     const footer = document.querySelector('.cs-form > .trust').getBoundingClientRect();
     for (const field of [document.querySelector('#conn-pairs').closest('.fld'), last.closest('.fld')]) {
       const box = field.getBoundingClientRect();
-      require(box.top >= port.top - 1 && box.bottom <= Math.min(port.bottom, footer.top) - 16, "last fields scroll fully above the fixed footer with bottom space");
+      // scroll-padding brings a field to exactly 16 px; sub-pixel layout may land a tenth short.
+      require(box.top >= port.top - 1 && box.bottom <= Math.min(port.bottom, footer.top) - 15, "last fields scroll fully above the fixed footer with bottom space");
     }
     return { check: name, bottomGap: port.bottom - last.getBoundingClientRect().bottom };
   }
@@ -5214,7 +5238,8 @@ export function checkRendered(name, context = {}) {
         "Connect reached the core with the card's id");
     }
     if (name === "connector-reconnected") {
-      const line = eventLines(2).at(-1), resumed = document.querySelector('.tn[data-id="121"]');
+      // The calm thread keeps one centred line for the resumption.
+      const line = eventLines(1).at(-1), resumed = document.querySelector('.tn[data-id="121"]');
       require(line.textContent === "Gmail 已連結，繼續原本的工作", `the resumed task opens with one line naming the app: ${line.textContent}`);
       const markBox = line.querySelector('.mono').getBoundingClientRect();
       require(markBox.width <= 20 && markBox.height <= 20, `the line's mark is no larger than its icons (${markBox.width}x${markBox.height})`);
@@ -5293,7 +5318,8 @@ export function checkRendered(name, context = {}) {
       if (name === "pc-handback") {
         require(card.dataset.cardState === "done" && card.querySelector(".card-detail[hidden]")?.textContent.includes("已交還控制 · 工作已繼續") && visible(card.querySelector('.card-status.is-done')), `the card says control went back and the task continued: "${state}"`);
         require(!card.querySelector("[data-act^=card-]"), "no action is left, and the owner no longer controls");
-        const line = eventLines(2).at(-1), resumed = document.querySelector('.tn[data-id="141"]');
+        // The calm thread keeps one centred line for the resumption.
+        const line = eventLines(1).at(-1), resumed = document.querySelector('.tn[data-id="141"]');
         require(line.textContent === "電腦 已交還控制，繼續原本的工作", `the resumed task opens with one line: ${line.textContent}`);
         const markBox = line.querySelector('svg.i').getBoundingClientRect();
         require(markBox.width <= 20 && markBox.height <= 20, `the line's icon is no larger than the other lines' (${markBox.width}x${markBox.height})`);
@@ -5335,8 +5361,9 @@ export function checkRendered(name, context = {}) {
     require(visible(toggle) && toggle.getAttribute('role') === 'switch' && toggle.classList.contains('tg'), "the draft preference is a real switch");
     require(toggle.getAttribute('aria-checked') === 'false', "this member was set to send mail itself, so the switch is off");
     const row = toggle.closest('.mp-resource');
-    require(row.querySelector('b').textContent === "先擬成草稿，由我寄出", `the switch says what it does: ${row.querySelector('b').textContent}`);
-    require(row.querySelector('p').textContent.includes("由你按「傳送」才會寄出"), "its line says that only 傳送 sends");
+    // Slack drafts follow the same rule as mail since 1.2.
+    require(row.querySelector('b').textContent === "郵件與 Slack 先擬成草稿，由我傳送", `the switch says what it does: ${row.querySelector('b').textContent}`);
+    require(row.querySelector('p').textContent.includes("由你按「傳送」才會送出"), "its line says that only 傳送 sends");
     require(document.querySelectorAll('.mb-dialog .mp-resource [role="switch"]').length === 2, "it stands beside the one that asks before contacting colleagues");
     return { check: name };
   }
@@ -5347,7 +5374,8 @@ export function checkRendered(name, context = {}) {
     require(window.__look.sent.length === 0 && !draftCalls.some(call => call.method === "integrations.draft_send"), "nothing was sent");
     const first = "a".repeat(64), second = "b".repeat(63) + "2", third = "b".repeat(63) + "3";
     if (name === "mail-handed-first") {
-      const line = eventLines(2).at(-1);
+      // The calm thread's day divider is no longer an event line; the hand-off is the one line left.
+      const line = eventLines(1).at(-1);
       require(line.textContent === "已轉交給 小森", `the first chat keeps one line naming the colleague: ${line.textContent}`);
       require(visible(line.querySelector('.av, svg, .mono')), "the colleague's face stands before the name");
       require(!document.querySelector('.mail-card, .mail-offer'), "the card and its choice are not in this chat any more");

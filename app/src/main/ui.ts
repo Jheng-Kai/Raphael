@@ -514,6 +514,13 @@ function listenForMenuEvents(): void {
       closeMenuLevel(); anchor.focus({ preventScroll: true });
       return;
     }
+    if (e.key === "Tab" && menu.el.getAttribute("role") === "dialog") {
+      // A popover form (the computer location) keeps Tab inside it; only tabbing past its ends closes it.
+      const stops = [...menu.el.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')]
+        .filter(stop => stop.getClientRects().length > 0);
+      const at = stops.indexOf(document.activeElement as HTMLElement), next = at + (e.shiftKey ? -1 : 1);
+      if (at !== -1 && next >= 0 && next < stops.length) return;
+    }
     if (e.key === "Escape" || e.key === "Tab") {
       if (e.key === "Escape") e.preventDefault();
       const anchor = menuRootAnchor() ?? menu.anchor;

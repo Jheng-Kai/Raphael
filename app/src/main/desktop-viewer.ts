@@ -53,6 +53,8 @@ export function preparationHTML(state: DesktopState, face = ""): string {
   return `<div class="desktop-preparation" role="status"><div class="desktop-boot-face" data-k="desktop-face-${esc(identity)}" aria-hidden="true">${character.innerHTML}</div>` +
     `<p class="desktop-stage">${esc(computerStateText(state))}</p>` +
     (value === undefined ? "" : `<progress aria-label="${label}" max="100" value="${value}"></progress>`) +
+    // R-UI-93: only a first build says how long it can take.
+    (state.state === "building" ? `<p class="desktop-first-build">${esc(t("desktop.firstBuild"))}</p>` : "") +
     `</div>`;
 }
 
@@ -138,6 +140,10 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   function paint<T extends object, K extends keyof T>(target: T, key: K, value: T[K]): void {
     if (target[key] !== value) target[key] = value;
   }
+  // R-UI-71: a renewal that changes nothing on screen writes nothing, attributes included.
+  function attr(target: Element, name: string, value: string): void {
+    if (target.getAttribute(name) !== value) target.setAttribute(name, value);
+  }
 
   function draw(): void {
     const inline = options.timeline.querySelector<HTMLElement>('[data-card-desktop-screen], [data-card-screen]');
@@ -153,20 +159,20 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(panel.querySelector('h2')!, 'textContent', t("desktop.screenOf", { p0: options.name() }));
     patchHTML(panel.querySelector('.desktop-identity')!, face + `<span>${esc(options.name())}</span>`);
     options.status?.(state?.state === "running");
-    paint(frame, "title", t("desktop.open")); hit.setAttribute('aria-label', t("desktop.expand"));
+    paint(frame, "title", t("desktop.open")); attr(hit, 'aria-label', t("desktop.expand"));
     const expanded = panel.hasAttribute('data-expanded');
     const locationHost = expanded ? panel.querySelector<HTMLElement>('.desktop-takeover-bar')! : lifecycle.locationHost;
     if (location.control.parentElement !== locationHost) locationHost.insertBefore(location.control, expanded ? locationHost.querySelector('[data-desktop="menu"]') : null);
-    locationHeader.hidden = expanded;
+    paint(locationHeader, 'hidden', expanded);
     location.status(!!state?.error);
     const currentWork = state?.works?.find(work => work.state === 'running' || work.state === 'waiting_control');
     paint(panel.querySelector<HTMLElement>('.desktop-live')!, 'textContent', currentWork ? desktopWorkText(currentWork) : '');
     const stop = panel.querySelector<HTMLElement>('[data-desktop="stop"]')!;
     paint(stop, 'hidden', !watching || !currentWork || !options.stop);
-    stop.setAttribute('title', t('agent.stop')); stop.setAttribute('aria-label', t('agent.stop'));
+    attr(stop, 'title', t('agent.stop')); attr(stop, 'aria-label', t('agent.stop'));
     paint(panel.querySelector<HTMLElement>('[data-desktop="collapse"]')!, 'hidden', !watching);
-    panel.querySelector<HTMLElement>('.desktop-takeover-bar')!.hidden = !expanded;
-    panel.querySelector<HTMLElement>('[data-desktop="back"]')!.hidden = !filesOpen && (!skillEditor || review.hidden);
+    paint(panel.querySelector<HTMLElement>('.desktop-takeover-bar')!, 'hidden', !expanded);
+    paint(panel.querySelector<HTMLElement>('[data-desktop="back"]')!, 'hidden', !filesOpen && (!skillEditor || review.hidden));
     panel.toggleAttribute('data-files', filesOpen);
     const request = panel.querySelector<HTMLElement>('.desktop-request')!;
     paint(request, "hidden", !pending()); paint(request, "textContent", pending() ? desktopWorkText(pending()!) : "");
@@ -185,7 +191,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const warning = panel.querySelector<HTMLElement>('.desktop-recording')!;
     paint(warning, "hidden", !recording && !drafting); paint(warning, "textContent", t(drafting ? "teach.drafting" : demonstration?.state === "full" ? "teach.full" : "teach.warning"));
     const tryButton = tryHost.querySelector<HTMLButtonElement>('button')!;
-    paint(tryButton, "textContent", t("teach.try")); tryInput.placeholder = t("teach.input"); tryInput.setAttribute('aria-label', t("teach.input"));
+    paint(tryButton, "textContent", t("teach.try")); paint(tryInput, "placeholder", t("teach.input")); attr(tryInput, 'aria-label', t("teach.input"));
     paint(tryHost, "hidden", !skillName);
     const preparing = state && (!!state.lifecycle || ["starting", "building", "preparing"].includes(state.state));
     const label = preparing ? state!.state as "starting" | "building" | "preparing" : !running ? state?.state === "stopped" || state?.state === "missing" ? "stopped" : "unavailable" : !connected && !suspended ? "connecting" : owner ? "owner" : "member";
@@ -203,7 +209,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const asleep = state?.state === "stopped" || state?.state === "missing";
     paint(retry, "textContent", t(state?.error === 'docker_stopped' ? 'desktop.startDocker' : state?.state === 'missing' && state.image === false ? 'desktop.prepareImage' : asleep ? "computer.open" : "desktop.retry"));
     paint(retry, "hidden", !!running || !!preparing || state?.state === "absent" || state?.error === 'remote_unavailable'); paint(retry, "disabled", opening);
-    enlarge.textContent = t('desktop.expand');
+    paint(enlarge, 'textContent', t('desktop.expand'));
     paint(enlarge, 'hidden', expanded || !running || !connected); paint(previewActions, 'hidden', expanded || !running || !connected);
     paint(revoke, "textContent", t("desktop.revoke")); paint(revoke, "hidden", !state?.granted || owner || !!preparing);
     const source = ownWallpaper ?? `/wallpapers/${period}.svg`;

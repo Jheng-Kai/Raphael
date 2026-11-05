@@ -106,7 +106,8 @@ export function mountVoiceChat(options: {
     const offered = options.button.dataset.voiceCallStart === "true", eligible = options.eligible();
     options.button.dataset.voiceCallStart = String(eligible);
     if (eligible) {
-      patchHTML(options.button, ico("voice"));
+      // R-UI-08: the empty composer's slot stays the gold emblem; its name says hold to speak and click to call.
+      patchHTML(options.button, avatarHTML({size:32,avatar:null}));
       options.button.setAttribute("aria-label", t("call.start"));
       options.button.dataset.tooltip = t("call.start");
     } else if (offered && options.composer.dataset.taskState === "idle") {

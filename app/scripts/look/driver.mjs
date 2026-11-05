@@ -505,7 +505,8 @@ export async function perform(page, step, evidenceDirectory) {
           active = await state();
         } finally { await page.mouse.move(0, 0); await page.mouse.up(); }
         if ([hover, active].some(value => value.background !== "rgba(0, 0, 0, 0)")) throw new Error("Icon hover/active must remain transparent");
-        if (active.color !== active.accent) throw new Error("Pressed icon must use the accent color");
+        // R-UI-88 (2026-11-03): a press changes colour from the hover, without a surface (R-UI-16).
+        if (active.color === hover.color) throw new Error("A pressed icon must change colour from its hover");
         await page.keyboard.press("Tab");
         await element.focus();
         const focus = await state();
@@ -577,7 +578,9 @@ export async function perform(page, step, evidenceDirectory) {
         let pressed;
         try { await new Promise(resolve => setTimeout(resolve, 180)); pressed = await measure(); }
         finally { await page.mouse.move(0, 100); await page.mouse.up(); }
-        if (pressed.background !== normal.background || pressed.layer !== 'rgba(0, 0, 0, 0)') throw new Error('Whole block press preserves its background and transparent target');
+        // R-UI-88: an enabled control changes colour on press without moving; the block's target layer stays transparent.
+        if (pressed.background === normal.background || pressed.layer !== 'rgba(0, 0, 0, 0)') throw new Error(`A whole block press changes its surface colour with a transparent target (${step.selector}: ${normal.background} -> ${pressed.background}, target ${pressed.layer})`);
+        if (pressed.visual.some((node, index) => node.slice(0, 4).some((value, edge) => Math.abs(value - hovered.visual[index][edge]) > .5))) throw new Error('A whole block press moves nothing inside it');
         await element.focus();
         const pointer = await measure();
         if (pointer.outline !== 'none' && pointer.width > 0) throw new Error('Pointer focus must not show a keyboard ring');
@@ -590,7 +593,8 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case "stable-click":
     case "click": {
-      const enabled = step.action === "stable-click" || await page.evaluate(({ selector, selectors }) => [...document.querySelectorAll(selector)].some(node => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0 && node.matches(selectors) && !node.closest('#nav, .page-home')), { selector: step.selector, selectors: stableControls });
+      // A choice in a shared popover (the narrow calendar tools' dates) closes it once made; tabs there stay checked.
+      const enabled = step.action === "stable-click" || await page.evaluate(({ selector, selectors }) => [...document.querySelectorAll(selector)].some(node => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0 && node.matches(selectors) && !node.closest('#nav, .page-home') && !(node.closest('#app-popover') && node.matches('button[aria-pressed]'))), { selector: step.selector, selectors: stableControls });
       if (!enabled) { await click(step.selector); break; }
       const target = await visible(step.selector);
       await target.evaluate(node => node.scrollIntoView({ block: "nearest", inline: "nearest" }));

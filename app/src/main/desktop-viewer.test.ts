@@ -375,7 +375,8 @@ test.each(['starting','building','preparing'] as const)('%s shows preparation wi
   expect(preparation.querySelector('.desktop-stage')?.textContent).toBe(t(`desktop.${state}`));
   expect(preparation.textContent).not.toContain('#3');
   expect(preparation.querySelector('svg.slime[data-state="working"]')).not.toBeNull();
-  expect(preparation.querySelector('.desktop-first-build')).toBeNull();
+  // R-UI-93: only a first build adds how long it can take.
+  expect(preparation.querySelector('.desktop-first-build')?.textContent ?? null).toBe(state === 'building' ? t('desktop.firstBuild') : null);
 });
 
 test('real build percent updates preserve the working character and unchanged refresh writes nothing',async()=>{
@@ -447,7 +448,7 @@ test.each(['zh-TW','en','ja'] as const)('%s uses the existing stage words and hi
  setLocale(locale);
  const stage=document.createElement('div'); stage.innerHTML=preparationHTML({state:'building',ready:false,control:'member',progress:'Synthetic step 37%'},faceHTML({id:1,name:'Sample'},22));
  expect(stage.querySelector('.desktop-stage')?.textContent).toBe(t('desktop.building'));
- expect(stage.querySelector('.desktop-first-build')).toBeNull();
+ expect(stage.querySelector('.desktop-first-build')?.textContent).toBe(t('desktop.firstBuild'));
  expect(stage.querySelector('progress')?.getAttribute('value')).toBe('37');
  expect(stage.textContent).not.toContain('Synthetic');
 });

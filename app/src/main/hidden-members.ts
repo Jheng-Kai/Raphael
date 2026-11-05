@@ -1,9 +1,9 @@
-import { noticeHTML } from "./missing";
+import { missingHTML } from "./missing";
 import * as api from "./api";
 import { describeError } from "./format";
 import { getLocale, t } from "./i18n";
 import type { Member, Room } from "./types";
-import { btn, esc, toaster } from "./ui";
+import { btn, esc, row, toaster } from "./ui";
 
 /** The members and the group chats taken off the sidebar, each with the way back: a hidden group had none and was lost. */
 export function createHiddenMembers(): { load(): Promise<void>; mount(root: HTMLElement): void } {
@@ -12,15 +12,16 @@ export function createHiddenMembers(): { load(): Promise<void>; mount(root: HTML
   let root: HTMLElement | null = null;
   let epoch = 0;
   let failed = false;
-  const row = (name: string, attrs: string): string =>
-    `<div class="mb-hidden-row"><span>${esc(name)}</span>${btn(esc(t("members.sideRestore")), "sm", attrs)}</div>`;
+  const restoreRow = (name: string, attrs: string): string => row(esc(name), "", btn(esc(t("members.sideRestore")), "sm", attrs));
   function draw(): void {
     const slot = root?.querySelector<HTMLElement>("[data-hidden-members]");
     if (!slot) return;
-    const rows = members.map(member => row(member.name, ` data-restore-member="${member.id}"`)).join("") +
-      rooms.map(room => row(room.name, ` data-restore-room="${room.id}"`)).join("");
-    slot.innerHTML = `<h3>${esc(t("members.sideHidden"))}</h3>` + (failed ? noticeHTML("hidden") + btn(esc(t("page.retry")), "sm", ' data-hidden-retry') :
-      rows || `<p class="muted">${esc(t("members.sideNoHidden"))}</p>`);
+    const rows = members.map(member => restoreRow(member.name, ` data-restore-member="${member.id}"`)).join("") +
+      rooms.map(room => restoreRow(room.name, ` data-restore-room="${room.id}"`)).join("");
+    // The same section and rows as the rest of Settings; a failed read is the shared note with its retry beside it.
+    slot.innerHTML = `<h2>${esc(t("members.sideHidden"))}</h2>` + (failed
+      ? missingHTML({ resource: "app", requirement: "hidden", state: "missing", repair: null }, undefined, btn(esc(t("page.retry")), "sm", ' data-hidden-retry'))
+      : `<div class="slist">${rows || row(esc(t("members.sideNoHidden")))}</div>`);
     slot.onclick = event => {
       if ((event.target as Element).closest("[data-hidden-retry]")) { void load(); return; }
       const button = (event.target as Element).closest<HTMLButtonElement>("[data-restore-member], [data-restore-room]");
