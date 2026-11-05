@@ -105,14 +105,37 @@ async def test_a_cancelled_sign_in_never_connects_and_can_be_tried_again(tmp_pat
     assert card.state == "connected" and rig.resumed == [rig.turn]
 
 
-@pytest.mark.parametrize("mode,error", [("deny", "denied"), ("forged", "state")])
-async def test_a_refused_or_forged_callback_fails_without_connecting(tmp_path, conn, fixture, mode, error):
-    fixture.mode = mode
+async def test_a_refused_callback_fails_without_connecting(tmp_path, conn, fixture):
+    fixture.mode = "deny"
     rig = Rig(tmp_path, conn, fixture)
     await rig.configure()
     _, card = await rig.connect(rig.card())
-    assert (card.state, card.error, card.resumed) == ("failed", error, False)
+    assert (card.state, card.error, card.resumed) == ("failed", "denied", False)
     assert not rig.cards.ready_tools(APPS["gmail"]) and not rig.resumed
+
+
+async def test_a_forged_callback_keeps_authorizing_until_a_valid_callback(tmp_path, conn, fixture):
+    fixture.mode = "forged"
+
+    async def browser(url):
+        await fixture.browser(url)
+        pending = rig.cards.store.get(card.id)
+        assert (pending.state, pending.error, pending.resumed) == ("authorizing", "", False)
+        assert not rig.cards.ready_tools(APPS["gmail"]) and not rig.resumed
+        assert not rig.vault.get("connectors:google:refresh_token")
+        fixture.mode = "approve"
+        await fixture.browser(url)
+
+    rig = Rig(tmp_path, conn, fixture, browser=browser)
+    await rig.configure()
+    card = rig.card()
+    _, connected = await rig.connect(card)
+    assert (connected.state, connected.error, connected.resumed) == ("connected", "", True)
+    assert rig.cards.ready_tools(APPS["gmail"]) == ["gmail_search", "gmail_get_message"]
+    assert rig.resumed == [rig.turn] and fixture.opened == 2
+    assert await fixture.replay() is None
+    _, connected = await rig.connect(connected)
+    assert connected.state == "connected" and rig.resumed == [rig.turn] and fixture.opened == 2
 
 
 async def test_a_grant_without_the_apps_scope_is_never_connected(tmp_path, conn):

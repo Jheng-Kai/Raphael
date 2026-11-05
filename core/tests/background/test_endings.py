@@ -88,31 +88,32 @@ async def test_named_owner_path_uses_the_task_timestamp_grace(make_rig, tmp_path
 
 
 @pytest.mark.parametrize("workspace", [False, True])
-@pytest.mark.parametrize("oversized", [False, True])
-async def test_named_owner_path_size_is_checked_before_reading(make_rig, tmp_path, monkeypatch, workspace, oversized):
+@pytest.mark.parametrize("size", [50 * 1024 * 1024 - 1, 50 * 1024 * 1024, 50 * 1024 * 1024 + 1, 64 * 1024 * 1024])
+async def test_named_owner_path_size_is_checked_before_reading(make_rig, tmp_path, monkeypatch, workspace, size):
     rig = make_rig()
     target, source = setup(rig)
     output = tmp_path / "artifact.txt"
     output.write_text("Synthetic completed work", encoding="utf8")
     rig.service.use_workspaces(lambda member: tmp_path if workspace else None)
-    original_stat, original_read = Path.stat, Path.read_bytes
+    oversized = size > 50 * 1024 * 1024
+    original_stat, original_open = Path.stat, Path.open
     reads = []
 
     def stat(path, *args, **kwargs):
         info = original_stat(path, *args, **kwargs)
         if path == output:
             fields = list(info)
-            fields[6] = 64 * 1024 * 1024 + int(oversized)
+            fields[6] = size
             return os.stat_result(fields)
         return info
 
-    def read(path):
-        if path == output:
+    def open_file(path, mode="r", *args, **kwargs):
+        if path == output and mode == "rb":
             reads.append(path)
-        return original_read(path)
+        return original_open(path, mode, *args, **kwargs)
 
     monkeypatch.setattr(Path, "stat", stat)
-    monkeypatch.setattr(Path, "read_bytes", read)
+    monkeypatch.setattr(Path, "open", open_file)
     rig.client.replies.append(report(f'Saved "{output}"'))
     receipt = rig.service.handoff(RAPHAEL, args(target, requires_artifact=True), source_turn_id=source.id, language="en")
     task_id = receipt.data["task_id"]
@@ -120,6 +121,7 @@ async def test_named_owner_path_size_is_checked_before_reading(make_rig, tmp_pat
     assert bool(reads) == (not oversized)
     assert rig.task(task_id).state == ("failed" if oversized else "done")
     assert rig.task(task_id).reason == ("missing_artifact" if oversized else None)
+    assert bool(rig.service._store.evidence(task_id)) == (not oversized)
 
 
 @pytest.mark.parametrize("mode", ["work", "consult"])
