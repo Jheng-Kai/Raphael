@@ -115,6 +115,7 @@ export function mountComputerLocation(host: HTMLElement, changed: () => void) {
   draw();
   return {
     control,
+    open,
     async refresh(): Promise<void> {
       const mine = ++epoch;
       try {

@@ -1,5 +1,9 @@
 # Members and sidebar
 
+## Member panel tabs (2026-11-05)
+
+The owner's 2026-11-05 request supersedes the former landing panel. R-PANEL-01/02/03/04 require the existing member identity followed by shared Details / Library / Computer tabs. Details contains work, routines and conversations; Library uses the existing file chip; Computer owns the screen, location and lifecycle controls. Gear keeps identity/resource editing. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for the complete selected matrix and deferred native acceptance.
+
 ## Quiet resting poses (2026-11-04)
 
 [Performance](performance.md) supersedes the idle-strip and droplet descriptions below.

@@ -1,5 +1,9 @@
 # Commands, routine limits and owner output
 
+## Work and files in the member panel (2026-11-05)
+
+The owner's 2026-11-05 request places newest member work before the existing routines and conversation list in Details (R-PANEL-01/02). A row opens its existing result and keeps stop/rerun in the shared contextual menu. Library lists recorded artifacts/pages and a bounded local workspace/team snapshot through shared file chips, grouped This week / Earlier with Show more. Empty sections use one sentence. New files remain at their existing location; browsing creates no task, computer or filesystem content. Output-folder preferences and delivery permissions remain governed by R-OUTPUT-01. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for the selected two-theme/three-size matrix and evidence scope.
+
 ## Sub-features
 
 - R-NAV-01: Ctrl+K opens a searchable command/member palette using the shared

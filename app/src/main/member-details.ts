@@ -1,4 +1,4 @@
-// The landing view holds the screen, routines and conversations. Identity and resources live
+// The landing view holds tasks, routines and conversations. Identity and resources live
 // behind the gear; fields being typed in survive live member updates.
 
 import { noticeHTML } from "./missing";
@@ -29,8 +29,10 @@ import {
 import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
 import { esc, ico, iconButton, openMenu, patchHTML, sel, tg, toaster } from "./ui";
 import { eventRead } from './event-read';
+import { panelTasksHTML, panelLibraryHTML, readPanelWork, type PanelWork } from './member-panel-work';
+import { tabs } from './ui';
 
-export type DetailsTab = "details" | "settings" | "memory" | "skills" | "commands" | "voice";
+export type DetailsTab = "details" | "library" | "computer" | "settings" | "memory" | "skills" | "commands" | "voice";
 
 export interface DetailsHost {
   app: AppContext;
@@ -46,6 +48,7 @@ export interface DetailsHost {
   edit?(member: Member): void;
   hide?(member: Member): void;
   openConversation?(member: number, conversation: number): void;
+  openTurn?(member: number, conversation: number | undefined, turn: number): void;
   /** The conversation open with this member, undefined for their default. */
   conversationOf?(member: number): number | undefined;
 }
@@ -55,7 +58,8 @@ export interface DetailsPanel {
   /** Draws the panel again (the list changed, or the language). */
   draw(): void;
   overview(): void;
-  /** Another member's thread is open: its routines and memory are read, its tab is 詳細資訊. */
+  select(tab: 'details' | 'library' | 'computer'): void;
+  /** Reads the selected member's routines and memory, and opens Details. */
   showMember(): void;
   refreshRoutines(): void;
   refreshMemory(memberId: number, space?: "own" | "shared"): void;
@@ -67,7 +71,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   el.className = "mb-det";
   el.innerHTML =
     `<div class="mb-det-head">${iconButton("left", t("members.panelBack"), ' data-det="back" hidden', "mb-tool")}<span class="mb-det-fill"></span>${iconButton("gear", t("computer.settings"), ' data-det="gear"', "mb-tool")}${iconButton("x", t("members.close"), ' data-det="close"', "mb-tool")}</div>` +
-    `<div class="mb-det-scroll"><div class="mb-who"></div><div class="mb-tabs"></div><div class="mb-tab-body"></div></div>`;
+    `<div class="mb-det-scroll"><div class="mb-who"></div><div class="mb-tabs"></div><div class="mb-tab-body" role="tabpanel" id="member-panel-body"></div></div>`;
   const who = el.querySelector<HTMLElement>(".mb-who")!;
   const tabBar = el.querySelector<HTMLElement>(".mb-tabs")!;
   const body = el.querySelector<HTMLElement>(".mb-tab-body")!;
@@ -76,6 +80,21 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   let drawn = "";
 
   let tab: DetailsTab = "details";
+  let work: PanelWork | null = null, workFailed = false, workEpoch = 0, fileLimit = 12;
+  async function loadWork(): Promise<void> {
+    const epoch = ++workEpoch, id = host.member().id;
+    try {
+      const result = await readPanelWork(id, fileLimit);
+      if (epoch !== workEpoch || id !== host.member().id) return;
+      work = {tasks: result?.tasks ?? [], files: result?.files ?? [], has_more: result?.has_more ?? false}; workFailed = false;
+    } catch { if (epoch !== workEpoch || id !== host.member().id) return; workFailed = true; }
+    draw();
+  }
+  function select(page: 'details' | 'library' | 'computer'): void {
+    tab = page; draw();
+    el.dispatchEvent(new CustomEvent('member-panel-tab', {bubbles:true}));
+    if (page !== 'computer') void loadWork();
+  }
   let routines: Routine[] | "loading" | "failed" = "loading";
   let routineLoads = 0;
   /** The long fields that are open (個性, 指示): closed, each is one line. */
@@ -100,7 +119,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     if (!conversationList) conversationList = mountConversationList(conversationHost, {
       scope: host.app,
       active: () => host.visible?.() ?? true,
-      memberId, collapseWhenEmpty: true,
+      memberId, collapseWhenEmpty: true, showHeading: false,
       onVisibility(visible) { const current = body.querySelector<HTMLElement>('[data-slot="conversations"]'); if (current && current.hidden !== !visible) current.hidden = !visible; },
       onOpen(id) { host.openConversation?.(memberId, id); },
       current: () => host.conversationOf?.(memberId),
@@ -149,6 +168,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   // ---------- drawing ----------
 
   function whoHTML(member: Member): string {
+    if (tab !== 'settings') return `<span class="mb-panel-identity">${faceHTML(member, 32)}<b>${esc(member.name)}${member.role ? ` <span>· ${esc(member.role)}</span>` : ''}</b></span>`;
     // The face is the button that changes its picture.
     const face =
       `<span class="mb-who-face"><button type="button" class="btn mb-avbtn" data-det="avatar" data-k="det-avatar" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}" title="${esc(t("members.changeAvatar"))}">` +
@@ -228,13 +248,13 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       if (field && field !== focused && field.value !== value) field.value = value;
     }
     const face = faceHTML(member, 64).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([member, face, host.list()?.groups, counts, routines, tab, [...openFields], getLocale(), !!host.openConversation, host.conversationOf?.(member.id), tab === "memory" ? memories.map(list => list.view()) : null]);
+    const signature = JSON.stringify([member, face, host.list()?.groups, counts, routines, work, workFailed, tab, [...openFields], getLocale(), !!host.openConversation, host.conversationOf?.(member.id), tab === "memory" ? memories.map(list => list.view()) : null]);
     if (drawn === signature) return;
     drawn = signature;
     el.dataset.detailsTab = tab;
     closeButton.setAttribute("aria-label", t("members.close"));
     closeButton.title = t("members.close");
-    backButton.hidden = tab === "details";
+    backButton.hidden = ['details', 'library', 'computer'].includes(tab);
     backButton.title = t('members.panelBack'); backButton.setAttribute('aria-label', backButton.title);
     const gear = el.querySelector<HTMLElement>('[data-det="gear"]')!;
     gear.title = t("computer.settings"); gear.setAttribute("aria-label", gear.title);
@@ -262,8 +282,12 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       if (input && (!sameMember || id !== typingIn) && input.value !== value) input.value = value;
     }
     drawnFor = member.id;
-    who.hidden = tab !== "settings";
-    patchHTML(tabBar, "");
+    who.hidden = false;
+    const mainTab = ['details', 'library', 'computer'].includes(tab);
+    tabBar.hidden = !mainTab;
+    body.hidden = tab === 'computer';
+    patchHTML(tabBar, tabs(['details', 'library', 'computer'].map(id => ({id, label:t(({details:'members.panelTab.details', library:'members.panelTab.library', computer:'members.panelTab.computer'} as const)[id as 'details' | 'library' | 'computer']), attrs:` id="member-tab-${id}" data-det="tab" data-tab="${id}" aria-controls="${id === 'computer' ? 'member-computer-panel' : 'member-panel-body'}" tabindex="${tab === id ? 0 : -1}"`})), tab, {kind:'nav', plain:true, fill:true, label:t('members.panel')}));
+    body.setAttribute('aria-labelledby', `member-tab-${tab}`);
     const typingText = typingIn === "mb-det-instr" || typingIn === "mb-det-personality";
     const kept = typingText ? (focused as HTMLElement).closest<HTMLElement>("section") : null;
     if (sameMember && kept && kept.parentElement === body && tab === "settings") {
@@ -290,8 +314,13 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       }
     } else {
       if (tab === "details") {
-        if (!body.querySelector('.mb-panel-routines')) patchHTML(body, `<section class="mb-panel-routines" data-k="panel-routines"></section><div data-slot="conversations" data-k="panel-conversations"></div>`);
+        if (!body.querySelector('.mb-panel-routines')) patchHTML(body, `<section class="mb-panel-tasks" data-k="panel-tasks"></section><section class="mb-panel-routines" data-k="panel-routines"></section><section><div class="mb-dh">${esc(t('members.panelConversations'))}</div><div data-slot="conversations" data-k="panel-conversations"></div></section>`);
+        patchHTML(body.querySelector('.mb-panel-tasks')!, panelTasksHTML(work, workFailed));
         patchHTML(body.querySelector('.mb-panel-routines')!, routinesHTML());
+      } else if (tab === 'library') {
+        conversationHost.remove(); patchHTML(body, panelLibraryHTML(work, workFailed));
+      } else if (tab === 'computer') {
+        conversationHost.remove(); patchHTML(body, '');
       } else {
         conversationHost.remove();
         patchHTML(body, tab === "settings" ? detailsHTML(member) : memoryHTML(shared.view()) + memoryHTML(own.view()));
@@ -380,6 +409,28 @@ export function createDetails(host: DetailsHost): DetailsPanel {
 
   el.addEventListener("click", (e) => {
     const target = e.target as Element;
+    const taskButton = target.closest<HTMLElement>('[data-panel-task],[data-panel-task-menu]');
+    if (taskButton) {
+      const task = work?.tasks.find(task => task.id === Number(taskButton.dataset.panelTask ?? taskButton.dataset.panelTaskMenu));
+      if (!task) return;
+      if (taskButton.hasAttribute('data-panel-task')) { if (task.turn_id) host.openTurn?.(host.member().id, task.conversation_id ?? undefined, task.turn_id); }
+      else {
+        const member = host.member().id;
+        openMenu(taskButton, [], '', () => {}, undefined, [{label:t(['queued','running','waiting','waiting_owner','blocked'].includes(task.state) ? 'agent.stop' : 'members.panelRerun'), run() {
+          if (member !== host.member().id) return;
+          void (['queued','running','waiting','waiting_owner','blocked'].includes(task.state) ? api.workerCancel(task.id) : api.workerRerun(task.id)).then(() => loadWork()).catch(() => toaster.info(t('members.panelReadFailed')));
+        }}]);
+      }
+      return;
+    }
+    if (target.closest('[data-panel-more]')) { fileLimit = Math.min(100, fileLimit + 12); void loadWork(); return; }
+    const fileButton = target.closest<HTMLElement>('[data-panel-file]');
+    if (fileButton) {
+      const file = work?.files.find(file => file.id === fileButton.dataset.panelFile);
+      if (file?.kind === 'page' && file.turn_id) host.openTurn?.(host.member().id, file.conversation_id, file.turn_id);
+      else if (file?.path) void api.openTeamFile(file.path).catch(() => toaster.info(t('agent.fileUnavailable')));
+      return;
+    }
     if (memories.some((list) => list.click(target))) return;
     const act = target.closest<HTMLElement>("[data-det]");
     if (!act || (act as HTMLButtonElement).disabled) return;
@@ -405,6 +456,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         break;
       }
       case "tab":
+        if (['details', 'library', 'computer'].includes(act.dataset.tab!)) { select(act.dataset.tab as 'details' | 'library' | 'computer'); break; }
         tab = act.dataset.tab as DetailsTab;
         if (tab === "memory") for (const list of memories) void list.load();
         draw();
@@ -433,6 +485,13 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   el.addEventListener("keydown", (e) => {
     if (memories.some((list) => list.key(e))) return;
     const target = e.target as HTMLElement;
+    if (tabBar.contains(target) && target.matches('[role="tab"]') && ['ArrowLeft','ArrowRight','Home','End'].includes(e.key)) {
+      e.preventDefault(); e.stopPropagation();
+      const pages = ['details','library','computer'] as const;
+      const at = pages.indexOf(tab as typeof pages[number]);
+      select(pages[e.key === 'Home' ? 0 : e.key === 'End' ? 2 : (at + (e.key === 'ArrowRight' ? 1 : 2)) % 3]);
+      tabBar.querySelector<HTMLElement>('[aria-selected="true"]')?.focus(); return;
+    }
     if (e.key === "Enter" && !e.isComposing && target instanceof HTMLInputElement && (target.id === "mb-det-name" || target.id === "mb-det-role")) {
       e.preventDefault();
       target.blur();
@@ -454,9 +513,10 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   return {
     el,
     draw,
-    overview() { tab = "details"; draw(); },
+    overview() { select('details'); },
+    select,
     refreshRoutines() { void loadRoutines(); },
-    refreshResources() { void loadCounts(true); void resources?.refresh(true); },
+    refreshResources() { void loadCounts(true); void resources?.refresh(true); if (tab === 'details' || tab === 'library') void loadWork(); },
     refreshMemory(memberId, space) {
       if (el.hidden) return;
       if (memberId === host.member().id) {
@@ -469,6 +529,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     },
     showMember() {
       tab = "details";
+      work = null; workFailed = false; fileLimit = 12; void loadWork();
       counts = {skills: 0, commands: 0, memory: 0};
       void loadCounts();
       routines = "loading";

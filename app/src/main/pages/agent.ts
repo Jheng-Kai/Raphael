@@ -325,12 +325,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     name: () => members.nameOf(members.current()),
     face: () => members.faceOf(members.current(), 22),
     closePanel: () => members.setDetails(false),
-    openPanel: () => members.setDetails(true), panelVisible: () => members.detailsOpen(),
+    openPanel: () => members.computer(), panelVisible: () => members.detailsOpen() && members.details.dataset.detailsTab === 'computer',
     status: active => el.querySelector('[data-act="computer"]')!.classList.toggle('is-computer-active', active),
     changed: () => { if (visible && !scroller.hidden) drawThread(); },
     trySkill: text => sendFromPage(text),
     stop: turnId => { const turn = turns.find(turn => turn.id === turnId); return turn?.task ? api.workerCancel(turn.task.id) : turn?.session_id ? api.agentStop(turn.session_id, memberId()) : Promise.resolve(); },
   });
+  members.details.addEventListener('member-panel-tab', () => { desktop.show(); desktop.sync(); });
   const detailsScrim = document.createElement("div");
   detailsScrim.className = "mb-det-scrim";
   detailsScrim.setAttribute("aria-hidden", "true");
@@ -436,7 +437,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     members.setDetails(!members.detailsOpen());
   });
   el.querySelector('[data-act="computer"]')!.addEventListener("click", () => {
-    members.setDetails(!members.detailsOpen());
+    members.computer();
   });
   window.addEventListener("conversations-changed", (event) => {
     const member = (event as CustomEvent<number>).detail;
@@ -2448,7 +2449,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       const wasVisible = visible;
       if (!wasVisible) { unreadFrom = null; unreadCaptured = false; openingThread = true; }
       visible = true;
-      if (arg === "computer") { if (roomPane.active) roomPane.close(); members.setDetails(true, true); }
+      if (arg === "computer") { if (roomPane.active) roomPane.close(); members.computer(); }
       if (!wasVisible) members.show();
       if (!roomPane.active) desktop.show();
       else void roomPane.refresh();

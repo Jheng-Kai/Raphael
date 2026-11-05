@@ -308,7 +308,7 @@ class LocalVm:
         self.preparation[target.key] = {"state": state, "ready": False,
                                         "progress": " ".join(text.split())[:180]}
 
-    async def ensure_engine(self, target):
+    async def ensure_engine(self, target, *, start_desktop=False):
         if not self.enabled:
             raise VmError("absent")
         async with self.engine_lock:
@@ -318,6 +318,8 @@ class LocalVm:
                 raise VmError("remote_unavailable")
             if not await self.installed():
                 raise VmError("absent")
+            if not start_desktop:
+                raise VmError("docker_stopped")
             self._progress(target, "starting")
             try:
                 await self.desktop.start()
@@ -405,7 +407,8 @@ class LocalVm:
         if probe or not kept or kept[2] != changes or not 0 <= now - kept[0] < 60:
             if not await self.available(target):
                 self.invalidate(target)
-                return {"state": "unavailable", "ready": False}
+                return {"state": "unavailable", "ready": False,
+                        "error": "remote_unavailable" if target.remote else "docker_stopped" if await self.installed() else "docker_missing"}
             image_id = await self.image(target)
             self.status_engines[target.remote] = (now, image_id, changes)
         else:

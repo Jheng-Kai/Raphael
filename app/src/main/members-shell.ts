@@ -63,6 +63,7 @@ export interface MembersShell {
   readonly column: HTMLElement;
   /** The details panel. */
   readonly details: HTMLElement;
+  computer(): void;
   /** The narrow windows' dropdown of members, for the left of the chat's top row. */
   readonly picker: HTMLElement;
   /** The pill with the open member, for the middle of the chat's top row. */
@@ -163,6 +164,7 @@ export function createMembers(host: MembersHost): MembersShell {
     hide: m => void memberAction(m.id, "hide"),
     openConversation: host.onOpenConversation ? (member, conversation) => host.onOpenConversation!(member, conversation) : undefined,
     conversationOf: member => host.conversationOf?.(member),
+    openTurn: (member, conversation, turn) => host.onOpenConversation?.(member, conversation!, turn),
   });
 
   const pill = document.createElement("span");
@@ -476,6 +478,7 @@ export function createMembers(host: MembersHost): MembersShell {
   return {
     column: column.el,
     details: details.el,
+    computer() { setDetails(true); details.select('computer'); },
     picker,
     pill,
     current: () => current,
@@ -511,6 +514,8 @@ export function createMembers(host: MembersHost): MembersShell {
         details.refreshMemory(event.member_id, event.space);
       } else if (event.type === "MemberActivity") {
         setSlimeState(event.member_id, event.state, event.label);
+      } else if (event.type === 'AgentTurn' && (event.member_id ?? 0) === current && open) {
+        details.refreshResources();
       }
     },
     hide() {

@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-const api = vi.hoisted(() => ({ settingsGet:vi.fn(), settingsSet:vi.fn(), desktopMaintain:vi.fn(), desktopWallpaper:vi.fn(), desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn(), desktopRevoke:vi.fn() }));
+const api = vi.hoisted(() => ({ core:vi.fn(), settingsGet:vi.fn(), settingsSet:vi.fn(), desktopMaintain:vi.fn(), desktopWallpaper:vi.fn(), desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn(), desktopRevoke:vi.fn() }));
 vi.mock("./api", () => api);
 import { mountDesktopViewer, preparationHTML, type DesktopState } from "./desktop-viewer";
 import { setLocale, t } from "./i18n";
 import { faceHTML } from "./members";
+import { computerStateText } from './computer-state';
 const running: DesktopState = { state:"running", ready:true, control:"member" };
 const work = { id:"task", request_id:"nonce", turn_id:42, state:"waiting_control", reason:"sign_in", tool:"get_desktop_state" } as const;
 let host: HTMLElement, mounted: ReturnType<typeof mountDesktopViewer>, member = 1, panelOpen = false;
@@ -106,7 +107,13 @@ beforeEach(() => {
 afterEach(async()=>{mounted.hide();await flush();document.body.replaceChildren();vi.useRealTimers();});
 
 test('enlarge watches the same stream, Esc collapses without control, and another member starts small', async () => {
-  panelOpen=true; mounted.show(); await flush(); message('connected');
+  panelOpen=true; mounted.show(); await flush();
+  const enlarge = host.querySelector<HTMLButtonElement>('[data-desktop="enlarge"]')!;
+  expect(enlarge.hidden).toBe(true); expect(take().hidden).toBe(true);
+  enlarge.click(); expect(panel().hasAttribute('data-expanded')).toBe(false);
+  message('connected');
+  expect(enlarge.hidden).toBe(false); expect(take().hidden).toBe(false);
+  expect(panel().querySelector('[data-computer-state-text]')?.textContent).toBe(t('desktop.state.running'));
   const stream=frame();
   host.querySelector<HTMLButtonElement>('[data-desktop="enlarge"]')!.click(); await flush();
   expect(panel().hasAttribute('data-expanded')).toBe(true);
@@ -312,6 +319,26 @@ test('a stopped computer is shown, not started, until the owner presses start',a
   host.querySelector<HTMLButtonElement>('[data-desktop="retry"]')!.click();await flush();
   expect(api.desktopOpen).toHaveBeenCalledTimes(1);
 });
+
+test.each([
+  [{state:'stopped'}, 'sleeping'], [{state:'missing'}, 'sleeping'],
+  [{state:'starting'}, 'starting'], [{state:'preparing'}, 'starting'], [{state:'building'}, 'updating'],
+  [{state:'preparing',lifecycle:'waking'}, 'waking'], [{state:'building',lifecycle:'updating'}, 'updating'], [{state:'preparing',lifecycle:'repairing'}, 'repairing'],
+  [{state:'unavailable',error:'docker_stopped'}, 'unavailable'], [{state:'absent',error:'docker_missing'}, 'unavailable'],
+  [{state:'unavailable',error:'remote_unavailable',host:'studio'}, 'unavailable'], [{state:'missing',image:false}, 'unavailable'],
+  [{state:'incompatible'}, 'unavailable'], [{state:'unavailable'}, 'unavailable'],
+] as const)('offline %j explains itself once with the short %s header and no live actions', async (status, phase) => {
+  const snapshot: DesktopState = {...status,ready:false,control:'member'};
+  panelOpen=true; api.desktopStatus.mockResolvedValue(snapshot); mounted.show(); await flush();
+  expect(panel().querySelector('[data-computer-state-text]')?.textContent).toBe(t(`desktop.state.${phase}`));
+  const sentence = computerStateText(snapshot);
+  expect(panel().textContent!.split(sentence)).toHaveLength(2);
+  expect(panel().querySelector('.desktop-location-header .desktop-boot-face, .computer-lifecycle-face')).toBeNull();
+  const enlarge = panel().querySelector<HTMLButtonElement>('[data-desktop="enlarge"]')!;
+  expect(enlarge.hidden).toBe(true); expect(take().hidden).toBe(true);
+  enlarge.click(); expect(panel().hasAttribute('data-expanded')).toBe(false);
+  expect(api.desktopOpen).not.toHaveBeenCalled();
+});
 test('a screen press retains the same iframe and lease while opening takeover',async()=>{
   panelOpen=true;mounted.show();await flush();message('connected');const same=frame();
   peek().click();await flush();expect(panel().hasAttribute('data-expanded')).toBe(true);
@@ -348,7 +375,7 @@ test.each(['starting','building','preparing'] as const)('%s shows preparation wi
   expect(preparation.querySelector('.desktop-stage')?.textContent).toBe(t(`desktop.${state}`));
   expect(preparation.textContent).not.toContain('#3');
   expect(preparation.querySelector('svg.slime[data-state="working"]')).not.toBeNull();
-  expect(preparation.textContent?.includes(t('desktop.firstBuild'))).toBe(state === 'building');
+  expect(preparation.querySelector('.desktop-first-build')).toBeNull();
 });
 
 test('real build percent updates preserve the working character and unchanged refresh writes nothing',async()=>{
@@ -420,13 +447,13 @@ test.each(['zh-TW','en','ja'] as const)('%s uses the existing stage words and hi
  setLocale(locale);
  const stage=document.createElement('div'); stage.innerHTML=preparationHTML({state:'building',ready:false,control:'member',progress:'Synthetic step 37%'},faceHTML({id:1,name:'Sample'},22));
  expect(stage.querySelector('.desktop-stage')?.textContent).toBe(t('desktop.building'));
- expect(stage.querySelector('.desktop-first-build')?.textContent).toBe(t('desktop.firstBuild'));
+ expect(stage.querySelector('.desktop-first-build')).toBeNull();
  expect(stage.querySelector('progress')?.getAttribute('value')).toBe('37');
  expect(stage.textContent).not.toContain('Synthetic');
 });
 test('absent Docker keeps a visible reason and the exact installation entry without starting a computer',async()=>{
   panelOpen=true;api.desktopStatus.mockResolvedValue({...running,state:'absent'});mounted.show();await flush();expect(panel().hidden).toBe(false);expect(api.desktopOpen).not.toHaveBeenCalled();
-  expect(panel().textContent).toContain('成員電腦需要 Docker Desktop');
+  expect(panel().textContent).toContain(t('desktop.dockerMissing'));
   expect(panel().querySelector('[data-act="docker-download"]')).not.toBeNull();
   expect(panel().querySelector<HTMLButtonElement>('[data-desktop="retry"]')!.hidden).toBe(true);
 });
@@ -579,9 +606,44 @@ test("desktop renewal skips hidden ticks and resumes once without requiring focu
 test('an absent remote host never offers a local Docker download', async () => {
   panelOpen = true;
   api.settingsGet.mockResolvedValue({settings:{computer_ssh_alias:"studio-mini"}});
-  api.desktopStatus.mockResolvedValue({state:'absent',ready:false,control:'member'});
+  api.desktopStatus.mockResolvedValue({state:'unavailable',ready:false,control:'member',host:'studio-mini',error:'remote_unavailable'});
   mounted.show(); await flush();
   expect(panel().querySelector('[data-act="docker-download"]')).toBeNull();
-  expect(panel().querySelector('.desktop-placeholder')!.textContent).toContain('遠端電腦');
+  expect(panel().querySelector('.desktop-placeholder')!.textContent).toContain('studio-mini');
+  expect(api.desktopOpen).not.toHaveBeenCalled();
+});
+
+test('Docker recovery waits for one owner press, uses the local host and reports readiness', async () => {
+  panelOpen = true; api.desktopStatus.mockResolvedValue({state:'unavailable',ready:false,control:'member',host:'',error:'docker_stopped'});
+  api.core.mockResolvedValue({state:'stopped',ready:false,control:'member',host:''});
+  mounted.show(); await flush();
+  expect(api.core).not.toHaveBeenCalled();
+  const button = panel().querySelector<HTMLButtonElement>('[data-desktop="retry"]')!;
+  expect(button.textContent).toBe(t('desktop.startDocker'));
+  button.click(); await flush();
+  expect(api.core).toHaveBeenCalledExactlyOnceWith('computer.viewer_status',{member_id:1,start_docker:true,host:''});
+  expect(panel().querySelector('.desktop-error')?.textContent).toBe(t('desktop.dockerReady'));
+  expect(panel().querySelector('.desktop-error')?.getAttribute('role')).toBe('status');
+});
+
+test('new computer work opens Computer while an initial idle read leaves Details alone', async () => {
+  api.desktopStatus.mockResolvedValue({state:'stopped',ready:false,control:'member'});
+  mounted.show(); await flush();
+  expect(panelOpen).toBe(false);
+  api.desktopStatus.mockResolvedValue({...running,works:[{...work,state:'running'}]});
+  await vi.advanceTimersByTimeAsync(4_000); await flush();
+  expect(panelOpen).toBe(true);
+});
+
+test('an engine recovery reply cannot update another member after navigation', async () => {
+  let resolve!: (value: DesktopState) => void;
+  panelOpen = true; api.desktopStatus.mockResolvedValue({state:'unavailable',ready:false,control:'member',host:'',error:'docker_stopped'});
+  api.core.mockImplementation(() => new Promise<DesktopState>(done => {resolve=done;}));
+  mounted.show(); await flush();
+  panel().querySelector<HTMLButtonElement>('[data-desktop="retry"]')!.click();
+  member = 2; api.desktopStatus.mockResolvedValue({state:'stopped',ready:false,control:'member'}); mounted.refresh(); await flush();
+  expect(panel().querySelector<HTMLButtonElement>('[data-desktop="retry"]')!.disabled).toBe(false);
+  resolve(running); await flush();
+  expect(panel().querySelector('.desktop-error')?.textContent).not.toBe(t('desktop.dockerReady'));
   expect(api.desktopOpen).not.toHaveBeenCalled();
 });
