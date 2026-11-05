@@ -10,8 +10,15 @@ import { mountDesktopTimeline, desktopWorkText, type DesktopWork } from "./deskt
 import { mountMemberResources } from "./member-profile-resources";
 import { mountCheckpoints } from "./checkpoint-view";
 import { cardFailure } from "./card";
+import { mountComputerLifecycle } from "./computer-lifecycle";
 
 export interface DesktopState {
+  lifecycle?: "waking" | "updating" | "repairing";
+  host?: string;
+  target?: string;
+  mode?: "shared" | "per-bot";
+  idle_minutes?: number;
+  repair_revision?: number;
   state: "absent" | "unavailable" | "missing" | "stopped" | "incompatible" | "running" | "starting" | "building" | "preparing";
   ready: boolean;
   control: "member" | "owner";
@@ -79,6 +86,19 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   let drawn = "", drawnInline: Element | null = null, suspended = false, returnPanelOpen = false, filesOpen = false, filesOnly = false;
   let returnedRequests: string[] = [];
   let state: DesktopState | undefined, session: DesktopSession | undefined;
+  let maintenance: { member: number; phase: NonNullable<DesktopState['lifecycle']> } | undefined;
+  const lifecycle = mountComputerLifecycle(host, panel, member, () => state, async (action, captured) => {
+    const id = member();
+    const operation = { member: id, phase: (action === 'update' ? 'updating' : action === 'repair' ? 'repairing' : 'waking') as NonNullable<DesktopState['lifecycle']> };
+    maintenance = operation;
+    if (state) state = { ...state, lifecycle: operation.phase }; draw();
+    closeStream();
+    const current = generation;
+    try {
+      const next = await api.desktopMaintain(id, action, captured, action === 'reset');
+      if (id === member() && current === generation) update(next);
+    } finally { if (maintenance === operation) maintenance = undefined; if (id === member() && current === generation) { if (state) state = {...state, lifecycle: undefined}; draw(); if (state?.state === 'running' && active()) void openStream(); } }
+  }, () => options.face?.() ?? '');
   let connected = false, interactive = false, changing = false, loading = false, opening = false, takeOnConnect = false;
   let closePending: Promise<unknown> = Promise.resolve(), clickedAt = 0;
   // Nothing is painted until the read answers, so the town never flashes under the owner's picture.
@@ -112,6 +132,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const signature = JSON.stringify([visible, options.panelVisible(), member(), state, connected, interactive, changing, opening, suspended, demonstration, skillName, teachingBusy, drafting, !!skillEditor, review.hidden, filesOpen, filesOnly, panel.hasAttribute('data-expanded'), options.name(), face.replace(/--slime-(?:delay|since):[^;"\s]+;?/g, ""), getLocale(), session, lastFrames.get(member()), period, wallpaperKnown, !!ownWallpaper]);
     if (signature === drawn && inline === drawnInline) return;
     drawn = signature; drawnInline = inline;
+    lifecycle.draw();
     paint(panel, "hidden", !visible || !state || state.state === 'missing' && state.granted === false);
     paint(panel.querySelector('h2')!, 'textContent', t("desktop.screenOf", { p0: options.name() }));
     patchHTML(panel.querySelector('.desktop-identity')!, face + `<span>${esc(options.name())}</span>`);
@@ -235,7 +256,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   }
   window.addEventListener('message', message);
   async function openStream(): Promise<void> {
-    if (session || opening || suspended || !active()) return;
+    if (session || opening || suspended || maintenance?.member === member() || !active()) return;
     opening = true;
     const current = generation, id = member();
     try {
@@ -255,7 +276,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   function update(next: DesktopState): void {
     const previousWaiting = waitingTurns();
     if (!next.works?.some(work => work.state === "waiting_control")) parkFrame();
-    state = next;
+    state = maintenance?.member === member() ? { ...next, lifecycle: maintenance.phase } : next;
     if (pending()) lastFrames.delete(member());
     if (suspended && waitingRequests().some(request => !returnedRequests.includes(request))) suspended = false;
     if (next.state !== 'running') connected = interactive = false;
@@ -263,7 +284,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (previousWaiting !== waitingTurns()) options.changed?.();
     if (next.teaching && !teachingBusy) demonstration = next.teaching;
     // Looking never starts a computer: only a running one is streamed, and only a press starts one.
-    if (active() && next.state === 'running') void openStream();
+    if (maintenance?.member !== member() && active() && next.state === 'running') void openStream();
     draw();
   }
   let pollDelay = 2000;

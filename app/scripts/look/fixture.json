@@ -1,4 +1,5 @@
 {
+  "lowDiskSample": "電腦磁碟快滿了。最大的資料夾：/home/cua/workspace/downloads (200 MiB), /home/cua/workspace/reports (100 MiB)。要我清理哪些？刪除前會先徵求你的同意。",
   "unreadSample": {"question": "Check the sample notes.", "answer": "The sample notes are ready for review.", "paragraph": "The sample comparison includes the observations, remaining questions and a suggested next step."},
   "presenceSample": {"question": "Check the sample report.", "answer": "The sample report is ready.", "secondAnswer": "The sample comparison is complete.", "progress": "Checking sample sources", "nextAction": "Comparing sample sources", "routine": "Sample briefing", "calendar": "Sample review", "source": "https://example.test/sample"},
   "handoffGroupSample": {

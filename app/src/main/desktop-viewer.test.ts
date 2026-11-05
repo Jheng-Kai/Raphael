@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-const api = vi.hoisted(() => ({ desktopWallpaper:vi.fn(), desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn(), desktopRevoke:vi.fn() }));
+const api = vi.hoisted(() => ({ settingsSet:vi.fn(), desktopMaintain:vi.fn(), desktopWallpaper:vi.fn(), desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn(), desktopRevoke:vi.fn() }));
 vi.mock("./api", () => api);
 import { mountDesktopViewer, preparationHTML, type DesktopState } from "./desktop-viewer";
 import { setLocale, t } from "./i18n";
@@ -16,6 +16,34 @@ const peek = (): HTMLButtonElement => host.querySelector('[data-desktop="peek"]'
 const handback = (): HTMLButtonElement => host.querySelector('[data-desktop="return"]')!;
 const trySent = vi.fn();
 const waitChanged = vi.fn();
+const maintenanceState: DesktopState = {...running,host:'studio',target:'member-one',mode:'per-bot',idle_minutes:15,granted:true};
+const menuPick = (index: number): void => {
+  host.querySelector<HTMLButtonElement>('[data-computer-menu]')!.click();
+  document.querySelector<HTMLButtonElement>(`.menu [data-action="${index}"]`)!.click();
+};
+test('reset cancellation sends no maintenance and explicit yes pins the original target',async()=>{
+  panelOpen=true;api.desktopStatus.mockResolvedValue(maintenanceState);mounted.show();await flush();
+  menuPick(4); expect(api.desktopMaintain).not.toHaveBeenCalled();
+  document.querySelector<HTMLButtonElement>('[data-dlg="cancel"]')!.click(); await flush();
+  expect(api.desktopMaintain).not.toHaveBeenCalled();
+  api.desktopMaintain.mockResolvedValue(maintenanceState);
+  menuPick(4);document.querySelector<HTMLButtonElement>('[data-dlg="reset"]')!.click();await flush();
+  expect(api.desktopMaintain).toHaveBeenCalledExactlyOnceWith(1,'reset',maintenanceState,true);
+  expect(api.desktopOpen).toHaveBeenCalledTimes(2);
+});
+test('a reset confirmation cannot act on another member after navigation',async()=>{
+  panelOpen=true;api.desktopStatus.mockResolvedValue(maintenanceState);mounted.show();await flush();menuPick(4);
+  member=2;mounted.refresh();await flush();
+  document.querySelector<HTMLButtonElement>('[data-dlg="reset"]')!.click();await flush();
+  expect(api.desktopMaintain).not.toHaveBeenCalled();
+});
+test.each([5,15,60,0])('sleep dropdown persists %s without starting or deleting a computer',async value=>{
+  panelOpen=true;api.desktopStatus.mockResolvedValue(maintenanceState);mounted.show();await flush();menuPick(5);
+  api.settingsSet.mockResolvedValue({settings:{computer_vm_idle_minutes:value}});
+  document.querySelector<HTMLButtonElement>(`.menu [data-value="${value}"]`)!.click();await flush();
+  expect(api.settingsSet).toHaveBeenCalledWith('computer_vm_idle_minutes',value);
+  expect(api.desktopMaintain).not.toHaveBeenCalled();
+});
 test('teaching takes the member computer, warns visibly, and opens the shared unsaved skill editor on stop',async()=>{
   panelOpen=true;mounted.show();await flush();message('connected');
   api.desktopTeach.mockResolvedValueOnce({id:'demo',state:'recording',text:''});

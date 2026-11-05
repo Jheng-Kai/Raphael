@@ -2774,6 +2774,7 @@ class AgentService:
         with vm_scope(("turn", ask.speaker.id, ask.conversation_id), turn_id=ask.turn_id,
                       private=ask.scope == "private" and not ask.nested and not ask.quick and ask.source in _AT_THIS_COMPUTER,
                       task=self._inflight.get(ask.session_id), language=ask.language,
+                      notice=lambda text: self._message(ask, "reply", text),
                       progress=lambda text: self._message(ask, "progress", text, PREFIXES[ask.language].notice)):
             result = await self._make_call_result(ask, call, approval, ledger, action, steps=steps)
         if self._tool_observer is not None:

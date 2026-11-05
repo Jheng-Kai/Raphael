@@ -348,7 +348,7 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
     value = _allowed(key, _checked(key, value))
     if key == "computer_ssh_alias" and value and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", value):
         raise ValueError("Computer host must be a simple SSH config alias")
-    if key == "computer_vm_idle_minutes" and not 5 <= value <= 1440:
+    if key == "computer_vm_idle_minutes" and value != 0 and not 5 <= value <= 1440:
         raise ValueError("Computer idle minutes must be between 5 and 1440")
     if key in ("owner_name", "owner_about"):
         value = value.strip()

@@ -10,6 +10,9 @@
 .desktop-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .desktop-shell { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--sp-2); min-height: 0; }
 .desktop-caption { margin: 0; color: var(--text-3); font-size: var(--fs-sm); font-weight: 400; text-align: center; }
+.computer-lifecycle { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.computer-lifecycle-state { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); }
+.computer-lifecycle-face > .av { --av: 28px; }
 .desktop-screen, [data-card-desktop-screen], [data-card-screen] { --text: var(--desktop-frame-text); --text-2: var(--desktop-frame-text); --text-3: color-mix(in srgb, var(--desktop-frame-text) 70%, transparent); --panel: var(--desktop-frame-bg); --content: var(--desktop-frame-bg); }
 .desktop-takeover-bar { display: flex; align-items: center; gap: var(--sp-3); min-height: 44px; padding: var(--sp-2) var(--sp-3); }
 .desktop-identity { display: flex; align-items: center; gap: var(--sp-2); flex: 1; min-width: 0; }
@@ -25,7 +28,7 @@
 .desktop-shell .desktop-heading .btn.icon:active:not(:disabled) { color: var(--desktop-frame-text); }
 .desktop-shell .desktop-heading .btn.icon:active:not(:disabled) { color: color-mix(in srgb, var(--desktop-frame-text) 85%, transparent); }
 .desktop-heading h2 { margin: 0; overflow: hidden; color: inherit; font-size: var(--fs-sm); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
-.desktop-request { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.desktop-request, .computer-repair-note { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .desktop-panel[data-expanded] > .desktop-request { padding: 0 var(--sp-3); }
 .desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; min-height: 160px; overflow: hidden; background: var(--content); border: 1px solid var(--line); border-radius: var(--r-sm); }
 .desktop-screen iframe, [data-card-desktop-screen] iframe, [data-card-screen] iframe { position: relative; z-index: 1; display: block; width: 100%; height: 100%; border: 0; }

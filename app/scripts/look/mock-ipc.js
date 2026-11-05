@@ -175,6 +175,9 @@ export function installMock(fixture, config = {}, target = window) {
     runningTurn.messages = variant.running === "fresh" ? [] : runningTurn.messages.filter(message => message.kind !== "reply");
     if (variant.running === "fresh") runningTurn.steps = [];
     runningTurn.text = "";
+    if (variant.lowDisk) {
+      runningTurn.messages = [{seq:1,kind:'reply',text:data.lowDiskSample,at_ms:data.now-1000}];
+    }
     if (variant.generatedProgress) {
       runningTurn.question = "請製作辦公室宣傳影片。";
       runningTurn.messages = [{seq:1,kind:"progress",text:"正在製作影片 · 40%",at_ms:data.now - 1000}];
@@ -667,6 +670,11 @@ export function installMock(fixture, config = {}, target = window) {
         // Not a file of the dev server, which would write its own client into the page.
         return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml)}`, title: "輕量後背包", rev: 1, height: 320, source: "html", server: null };
       case "computer.wallpaper": return variant.ownWallpaper ? { image: variant.ownWallpaper } : {};
+      case "computer.lifecycle": {
+        if (p.target !== data.desktop.target || p.host !== data.desktop.host || p.action === 'reset' && p.confirmed !== true) throw new Error('Maintenance confirmation or target missing');
+        data.desktop = { ...data.desktop, state:'running', ready:true, lifecycle:null };
+        return copy(data.desktop);
+      }
       case "computer.viewer_status": return p.check_host ? {host:p.alias,ok:false,checks:[{kind:'ssh',ok:true},{kind:'docker_path',ok:false}]} : data.desktop ?? { state: "absent", ready: false, control: "member" };
       case "computer.viewer_open": {
         if (variant.desktopStarts) data.desktop = { ...data.desktop, state: "running", ready: true };

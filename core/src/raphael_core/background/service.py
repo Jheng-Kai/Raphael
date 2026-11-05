@@ -1325,7 +1325,7 @@ class BackgroundService:
                  status=lambda self, result, task, files=(): getattr(self._store.get(task.id), "state", "cancelled"))
     async def _execute(self, task: Task, files: Sequence[Attachment] = ()) -> None:
         from ..computer.vm_tools import vm_scope
-        with vm_scope(("task", task.id), progress=lambda text: self._progress(task, text), language=task.language):
+        with vm_scope(("task", task.id), progress=lambda text: self._progress(task, text), notice=lambda text: self._computer_notice(task, text), language=task.language):
             await self._execute_scoped(task, files)
 
     async def _execute_scoped(self, task: Task, files: Sequence[Attachment] = ()) -> None:
@@ -1466,7 +1466,7 @@ class BackgroundService:
         if task.routine_id is not None and task.session_id.startswith(f"routine:{task.routine_id}:event:"):
             run._memory_untrusted = True
         from ..computer.vm_tools import vm_scope
-        run.scope = lambda: vm_scope(("task", task.id), progress=lambda text: self._progress(task, text), language=language)
+        run.scope = lambda: vm_scope(("task", task.id), progress=lambda text: self._progress(task, text), notice=lambda text: self._computer_notice(task, text), language=language)
         if recovered is not None:
             run.model_calls,run.tool_calls = task.model_calls,task.tool_calls
             run.ledger.total = task.cost_usd
@@ -2231,6 +2231,12 @@ class BackgroundService:
             run.public_progress = text[:400]
             self._changed(task.id, RUNNING)
         self._notify('worker.progress', {'task_id':task.id,'turn_id':task.turn_id,'room_id':task.room_id,'text':text,'kind':'progress'})
+
+    def _computer_notice(self, task: Task, text: str) -> None:
+        if task.id in self._discarded or task.scope != 'private' or not self._has_linked_turn(task):
+            return
+        self._history.add_message(task.turn_id, 'reply', text)
+        self._changed(task.id, RUNNING)
 
     def _conclude_run(self, task: Task, run: TaskRun, reply: dict) -> None:
         """Turn how the worker said the task ended into the task's state and report."""
