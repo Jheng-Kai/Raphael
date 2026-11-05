@@ -505,7 +505,8 @@ export async function perform(page, step, evidenceDirectory) {
           active = await state();
         } finally { await page.mouse.move(0, 0); await page.mouse.up(); }
         if ([hover, active].some(value => value.background !== "rgba(0, 0, 0, 0)")) throw new Error("Icon hover/active must remain transparent");
-        if (active.color !== active.accent) throw new Error("Pressed icon must use the accent color");
+        // R-UI-88 (2026-11-03): a press changes colour from the hover, without a surface (R-UI-16).
+        if (active.color === hover.color) throw new Error("A pressed icon must change colour from its hover");
         await page.keyboard.press("Tab");
         await element.focus();
         const focus = await state();
