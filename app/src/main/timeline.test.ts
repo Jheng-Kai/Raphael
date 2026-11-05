@@ -173,6 +173,20 @@ test.each(["zh-TW", "en", "ja"] as const)("completed work preserves the exact mi
   }
 });
 
+test("a prerequisite the reply already states is not repeated in the opened work", () => {
+  setLocale("zh-TW");
+  const missing = { resource: "fish", requirement: "setup", state: "missing", repair: "voice" } as const;
+  const state = emptyTimelineState(); state.thinkingOpen.set(1, true);
+  const item = turn(1, {
+    status: "error", text: "請先設定語音服務。",
+    steps: [step({ tool: "generate_audio", server: "Raphael", outcome: "error", reason: "not_configured", missing })],
+    messages: [{ seq: 1, kind: "media", text: JSON.stringify({ missing }), at_ms: T0 }],
+  });
+  const root = document.createElement("div"); root.innerHTML = turnHTML(item, state, false, LOOK);
+  expect(root.querySelectorAll('[data-missing-repair="voice"]')).toHaveLength(1);
+  expect(root.querySelector(".work-section.is-open [data-missing-repair]")).toBeNull();
+});
+
 /** What a sighted reader sees: the text outside the tags, without what only a screen reader hears. */
 const visible = (html: string): string =>
   html.replace(/<span class="sr">.*?<\/span>/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();

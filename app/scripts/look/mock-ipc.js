@@ -2,6 +2,15 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  // One second of 8 kHz mono silence: the stored audio fixture.
+  const syntheticWav = () => {
+    const bytes = new Uint8Array(16044), view = new DataView(bytes.buffer);
+    const word = (offset, text) => [...text].forEach((letter, index) => { bytes[offset + index] = letter.charCodeAt(0); });
+    word(0, "RIFF"); view.setUint32(4, 16036, true); word(8, "WAVEfmt "); view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, 8000, true); view.setUint32(28, 16000, true);
+    view.setUint16(32, 2, true); view.setUint16(34, 16, true); word(36, "data"); view.setUint32(40, 16000, true);
+    return bytes;
+  };
   if (variant.voiceCall) {
     data.members.forEach(member => Object.assign(member, {unread:false,unread_from:null,activity:"idle",waiting:false}));
     data.voiceCallBase = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
@@ -763,7 +772,8 @@ export function installMock(fixture, config = {}, target = window) {
     notify("AgentTurn",{turn_id:8702,member_id:1});
   };
   async function core(method, p = {}) {
-    if (variant.missingHidden && method === "members.list" && target.document.querySelector('[data-hidden-members]')) throw new Error("Synthetic hidden member read failure");
+    // Settings reads the hidden list as it opens, before the list's section is drawn; the sidebar keeps the roster it already read.
+    if (variant.missingHidden && method === "members.list" && [...target.document.querySelectorAll('#set-title')].some(title => title.offsetParent !== null)) throw new Error("Synthetic hidden member read failure");
     switch (method) {
       case "voice_chat.status": return {call:voiceCall,ended:endedCall};
       case "voice_chat.start": {
@@ -855,12 +865,7 @@ export function installMock(fixture, config = {}, target = window) {
         if (variant.generatedFile?.id === p.id) return {mime:variant.generatedFile.mime,data:variant.generatedData};
         if (data.keptFiles?.[p.id]) return data.keptFiles[p.id];
         if (!variant.audioFile || p.id !== variant.audioFile.id) return unsupported(method);
-        const bytes = new Uint8Array(16044), view = new DataView(bytes.buffer);
-        const word = (offset, text) => [...text].forEach((letter, index) => { bytes[offset + index] = letter.charCodeAt(0); });
-        word(0, "RIFF"); view.setUint32(4, 16036, true); word(8, "WAVEfmt "); view.setUint32(16, 16, true);
-        view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, 8000, true); view.setUint32(28, 16000, true);
-        view.setUint16(32, 2, true); view.setUint16(34, 16, true); word(36, "data"); view.setUint32(40, 16000, true);
-        return {mime: "audio/wav", data: btoa(String.fromCharCode(...bytes))};
+        return {mime: "audio/wav", data: btoa(String.fromCharCode(...syntheticWav()))};
       }
       case "settings.set": data.settings[p.key] = p.value; notify("SettingsChanged"); return { settings: data.settings };
       case "status.get": return data.status;
@@ -1613,7 +1618,8 @@ export function installMock(fixture, config = {}, target = window) {
         const sample = data.appUpdateSample;
         return { state: variant.appUpdate === "ready" || data.device.auto_update ? "ready" : variant.appUpdate ? "found" : "idle", version: variant.appUpdate ? sample.version : "", notes: variant.appUpdate ? sample.notes : "", error: "" };
       }
-      if (command === "attachment_source") return `C:\\synthetic\\${args.id}`;
+      // The native asset protocol streams stored media from disk; the browser harness serves the same bytes as a Blob.
+      if (command === "attachment_source") return variant.audioFile?.id === args.id ? URL.createObjectURL(new Blob([syntheticWav()], {type: "audio/wav"})) : `C:\\synthetic\\${args.id}`;
       if (command === "device_settings_get") return copy(data.device);
       if (command === "device_settings_set") { Object.assign(data.device, args.patch); notify("DeviceSettings", { settings: copy(data.device) }); return copy(data.device); }
       if (command === "avatar_get") return copy(data.avatar);

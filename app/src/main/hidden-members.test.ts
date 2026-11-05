@@ -44,7 +44,8 @@ test("a failed hidden member read is visible and its retry reloads the real list
     .mockResolvedValueOnce({members: [{id: 3, name: "Mia", hidden: true}]});
   const root = document.createElement("div"); root.innerHTML = "<section data-hidden-members></section>";
   const controller = createHiddenMembers(); controller.mount(root); await controller.load();
-  expect(root.textContent).toContain("目前無法讀取已隱藏的成員");
+  expect(root.textContent).toContain("目前無法讀取隱藏的成員與群組");
+  expect(root.querySelector(".missing-note [data-hidden-retry]")).not.toBeNull();
   expect(root.querySelector("[title]")).toBeNull();
   root.querySelector<HTMLButtonElement>("[data-hidden-retry]")!.click(); await flush();
   expect(root.textContent).toContain("Mia");

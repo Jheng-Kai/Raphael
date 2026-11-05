@@ -18,9 +18,6 @@
 /* 選擇主要成員: the chosen member is tinted and carries a check, so that colour is not the only sign of it */
 .mb-primary-picker .mb-chat-choice[aria-checked="true"] { background: var(--selected); }
 .mb-primary-picker .mb-chat-choice > .i { flex: none; margin-left: auto; color: var(--accent-text); }
-.mb-hidden-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin-top: var(--sp-5); }
-.mb-hidden-row { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) 0; }
-.mb-hidden-row > span { flex: 1; }
 
 .mb-det .mb-rsched { display: grid; grid-template-columns: minmax(0, 1fr); }
 .mb-det .mb-time { width: 100%; }

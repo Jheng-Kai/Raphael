@@ -31,7 +31,8 @@ export function checkRendered(name, context = {}) {
     require(document.querySelectorAll('.cr-dialog').length === 1, "tabs share one creation container");
     return {check:name};
   }
-  if (name.startsWith("store-")) {
+  // The member store's own checks; the plugin store's store-group-* checks live further down.
+  if (["store-home", "store-category", "store-search", "store-empty", "store-offline", "store-preview", "store-warning", "store-export"].includes(name)) {
     const calls = window.__look.calls;
     require(!calls.some(c => c.method === "members.template" && ["import", "publish"].includes(c.params.action)), "browsing and review never install or publish");
     require(!calls.some(c => /connect$/.test(c.method || "")), "preview never connects apps");
@@ -1554,6 +1555,17 @@ export function checkRendered(name, context = {}) {
       if (name === 'missing-card') require(note.textContent.includes('設定 › 連接 › 商店') && note.querySelectorAll('button').length === 1, 'the card names its existing repair form with one action');
       if (name === 'missing-hidden') require(visible(document.querySelector('[data-hidden-retry]')), 'the unreadable list offers a real retry');
       if (name === 'missing-vision') require(document.querySelector('[data-svc="use"]').disabled && note.textContent.includes('回答模型無法讀取圖片'), 'same-as-answer says why it cannot be used');
+    }
+    return {check:name};
+  }
+  if (name === "generated-audio-missing" || name === "generated-audio-repair") {
+    const thread = document.querySelector('.page-agent:not([hidden])');
+    if (name === "generated-audio-missing") {
+      require([...thread.querySelectorAll('[data-missing-repair="voice"]')].filter(visible).length === 1, "the missing voice service is said once with one repair");
+      require(visible(thread.querySelector('.work-body')) && !thread.querySelector('.work-body [data-missing-repair]'), "the opened work does not repeat the reply's repair");
+    } else {
+      require(visible(document.querySelector('#svc-key-fish')), "the repair reaches the voice service key");
+      require(document.querySelector('[data-pane="tools"][aria-current="page"]'), "the voice repair opens the shared Tools pane");
     }
     return {check:name};
   }

@@ -723,6 +723,13 @@ function artifactHTML(text: string, seq: number): string {
   return "";
 }
 
+function missingKey(text: string): string {
+  try {
+    const missing = JSON.parse(text)?.missing;
+    return typeof missing?.resource === "string" && typeof missing?.requirement === "string" ? `${missing.resource}:${missing.requirement}` : "";
+  } catch { return ""; }
+}
+
 /** Parses a `media` message's JSON string; returns null when malformed. */
 export function parseMediaPayload(raw: string): MediaPayload | null {
   try {
@@ -774,7 +781,9 @@ function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, r
   const actions = workActions(turn).filter(action => action.state === "done").map(action => ({ ...action, past: composioText(action.past, composioAction(turn)) }));
   const steps = shownSteps(turn).filter(step => step.kind !== "model");
   const rows = actions.length ? actions.map(action => `<li>${esc(action.past)}${action.outcome && action.outcome !== "ok" ? ` · ${esc(reasonText({kind:"tool", tool:"", server:null, ms:0, at_ms:0, outcome:action.outcome, reason:action.reason ?? null}))}` : ""}</li>`).join("") : steps.length ? steps.map(step => `<li>${esc(pastStep(step))}${!step.missing && step.outcome !== "ok" ? ` · ${esc(reasonText(step))}` : ""}</li>`).join("") : messages.map(message => `<li class="work-progress">${messageHTML(message.text, query)}</li>`).join("");
-  const prerequisites = shownSteps(turn).map(step => step.missing ? missingHTML(step.missing) : "").join("");
+  // A prerequisite the reply already states is said once, in the reply.
+  const stated = new Set((turn.messages ?? []).filter(m => m.kind === "media").map(m => missingKey(m.text)).filter(Boolean));
+  const prerequisites = shownSteps(turn).map(step => step.missing && !stated.has(`${step.missing.resource}:${step.missing.requirement}`) ? missingHTML(step.missing) : "").join("");
   const meta = [esc(answerMeta(turn)), ...shownSteps(turn).map(mediaBillHTML)].filter(Boolean).join(" · ");
   const detail = hasDetail(turn) && (!turn.messages?.length || turn.status === "error" || turn.task?.state === "failed");
   const body = (rows ? `<ol class="work-sentences">${rows}</ol>` : "") + events + prerequisites + (detail ? `<pre class="failure-detail">${highlightHTML(turn.detail, query)}</pre>` : "") + (meta ? `<p class="work-meta">${meta}</p>` : "");
