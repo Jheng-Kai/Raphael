@@ -980,7 +980,7 @@ class AgentService:
     async def _ask(self, params: dict) -> dict:
         """`agent.ask`: the params checked, then `ask`."""
         try:
-            attachments = from_wire(params.get("attachments"))
+            attachments = from_wire(params.get("attachments"), self._attachment_store.resolve if self._attachment_store else None)
         except AttachmentError as error:
             raise RpcError(
                 INVALID_PARAMS, f"Invalid params: attachments ({error.kind})", {"kind": error.kind}

@@ -120,11 +120,11 @@ def read_text(attachment: Attachment, *, budget: int = TEXT_BUDGET) -> dict | No
     return {**facts, "text": text, "truncated": truncated}
 
 
-def office_text(data: bytes, extension: str) -> str:
+def office_text(data: bytes | Path, extension: str) -> str:
     """Read only known document parts, without extraction, relationships or external entities."""
     parts = []
     used = 0
-    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+    with zipfile.ZipFile(data if isinstance(data, Path) else io.BytesIO(data)) as archive:
         infos = sorted(archive.infolist(), key=lambda i: i.filename)
         strings: list[str] = []
         for info in infos:
@@ -178,9 +178,10 @@ def convert_media(attachment: Attachment) -> tuple[bytes, float | None, bool]:
     if not extension or len(extension) > 10 or not extension[1:].isalnum():
         extension = ".bin"
     with tempfile.TemporaryDirectory(prefix="raphael-media-") as directory:
-        source = Path(directory) / ("input" + extension)
+        source = attachment.source_path or Path(directory) / ("input" + extension)
         target = Path(directory) / "audio.wav"
-        source.write_bytes(attachment.data)
+        if attachment.source_path is None:
+            source.write_bytes(attachment.data)
         flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
         subprocess.run(
             [ffmpeg, "-nostdin", "-v", "error", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mov,matroska,webm,mp3,wav,ogg,flac,aac", "-i", str(source),
@@ -206,7 +207,7 @@ async def read_file(attachment: Attachment, transcribe: Transcribe | None = None
             return kind, {**facts, "limitation_kind": "audio_transcriber", "limitation": "This installation cannot transcribe media attachments. Attach a text transcript and ask an administrator to check the speech recognition component; there is no setting here to add it."}
         try:
             # libsndfile can read these directly; other formats need ffmpeg's WAV conversion.
-            direct = not video and extension in (".wav", ".mp3", ".ogg", ".flac")
+            direct = not video and len(attachment.data) <= MAX_EXTRACT_BYTES and extension in (".wav", ".mp3", ".ogg", ".flac")
             if direct:
                 import soundfile
                 with soundfile.SoundFile(io.BytesIO(attachment.data)) as clip:
@@ -228,7 +229,7 @@ async def read_file(attachment: Attachment, transcribe: Transcribe | None = None
             return kind, {**facts, "limitation_kind": "audio_decode", "limitation": "The media could not be decoded or transcribed. Attach WAV audio or a text transcript; ask an administrator to check the decoding component if it continues."}
     if extension in (".docx", ".xlsx", ".pptx"):
         try:
-            text = await asyncio.to_thread(office_text, attachment.data, extension)
+            text = await asyncio.to_thread(office_text, attachment.source_path or attachment.data, extension)
         except (ValueError, OSError, zipfile.BadZipFile, ET.ParseError, RuntimeError):
             return "document", {**facts, "limitation": "The Office document could not be read."}
         text, cut = fit(text)

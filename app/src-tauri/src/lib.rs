@@ -25,6 +25,7 @@ mod paste;
 mod rpc;
 mod schedule_awake;
 mod tray;
+mod updates;
 mod webview_power;
 
 use std::path::PathBuf;
@@ -151,6 +152,7 @@ pub fn run() {
         // The file dialog of 頭像 (avatar.rs). Used from Rust only: no page may open it.
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .on_window_event(|window, event| {
             // The app lives in the tray, so closing the main window only hides it.
             // "Quit" in the tray menu is the way out.
@@ -199,6 +201,8 @@ pub fn run() {
             commands::open_link,
             commands::open_external_url,
             commands::open_attachment,
+            commands::attachment_source,
+            updates::update_control,
             commands::open_team_file,
             commands::hotkeys_pause,
             commands::window_hotkey,
@@ -354,6 +358,7 @@ pub fn run() {
             // theme, autostart) and keeps the core told which microphone to use. It takes the
             // overlay, the core and the hotkeys from the app state, so it comes after them.
             commands::start(app.handle());
+            updates::start(app.handle());
 
             // A member's desktop notices follow the core even while the main window is hidden.
             member_notifications::spawn(app.handle());

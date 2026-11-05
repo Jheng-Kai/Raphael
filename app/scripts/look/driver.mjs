@@ -614,11 +614,16 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case "clipboard-paste": case "file-drop": {
       if (step.action === "clipboard-paste") await page.focus(step.selector);
-      await page.$eval(step.selector, (element, { action, name, image, text, hold }) => {
+      await page.$eval(step.selector, (element, { action, name, image, text, hold, mime, size }) => {
         // One opaque pixel, a real picture for the composer to show and the look to load.
         const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="), c => c.charCodeAt(0));
         const transfer = new DataTransfer(), file = image ?? name;
-        if (file) transfer.items.add(new File([bytes], file, { type: "image/png" }));
+        if (file) {
+          const input = new File([bytes], file, { type: mime ?? "image/png" });
+          // Synthetic oversize metadata exercises pre-read refusals without allocating a gigabyte.
+          if (size !== undefined) Object.defineProperty(input, "size", { value: size });
+          transfer.items.add(input);
+        }
         if (text) transfer.setData("text/plain", text);
         if (action === "clipboard-paste") { element.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer })); return; }
         for (const type of hold ? ["dragenter", "dragover"] : ["dragenter", "dragover", "drop"]) element.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: transfer }));

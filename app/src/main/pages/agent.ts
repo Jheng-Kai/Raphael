@@ -44,7 +44,7 @@ import { mountConversationFind } from "../conversation-find";
 import { confirmDelete } from "../member-dialogs";
 import { openRoutineDialog } from "../routine-dialog";
 import { createAttachmentMedia } from "../attachment-media";
-import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
+import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachmentLimit, readComposerFile, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
 import { closeMediaLightbox, openMediaLightbox } from "../media-lightbox";
 import { wholeLinks } from "../composer-links";
 import { mountSlashMenu } from "../slash-menu";
@@ -183,7 +183,7 @@ export const PDF_TYPE = "application/pdf";
 /** An empty accept list leaves the picker open to every file type. */
 export const PICKER_ACCEPT = "";
 export const attachmentType = fileMime;
-export const attachLimit = (_mime: string): number => FILE_MAX_BYTES;
+export const attachLimit = attachmentLimit;
 /** A file attached to the next question, with its tray identity and byte count. */
 export interface ComposerFile extends WireAttachment {
   id: number;
@@ -191,7 +191,7 @@ export interface ComposerFile extends WireAttachment {
 }
 
 /** The files as `agent.ask` takes them: name, type and bytes, nothing of the page's own. */
-export const wireAttachments = (files: readonly ComposerFile[]): WireAttachment[] => files.map(({ name, mime, data }) => ({ name, mime, data }));
+export const wireAttachments = (files: readonly ComposerFile[]): WireAttachment[] => files.map(({ name, mime, data, stored_id }) => ({ name, mime, data, ...(stored_id ? { stored_id } : {}) }));
 
 /** Whether a key press in the composer sends: Enter alone, never while an input method composes. */
 export const sendsOnEnter = (e: Pick<KeyboardEvent, "key" | "shiftKey" | "isComposing" | "keyCode">): boolean =>
@@ -779,7 +779,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     chip.innerHTML = draftFileHTML(file, `data-act="unattach-file" data-file="${file.id}"`);
     const thumb = chip.querySelector<HTMLImageElement>(".cmp-thumb");
     // A raster thumbnail from the draft's own bytes.
-    if (thumb) thumb.src = `data:${file.mime};base64,${file.data}`;
+    if (thumb) {
+      if (file.stored_id) void api.attachmentSource(file.stored_id).then(url => { if (thumb.isConnected) thumb.src = url; }).catch(() => {});
+      else thumb.src = `data:${file.mime};base64,${file.data}`;
+    }
     return chip;
   }
 
@@ -1325,17 +1328,17 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       return false;
     }
     if (refusal === "size") {
-      toaster.info(t("agent.attachTooBig", { p0: name, p1: FILE_MAX_BYTES / 1024 / 1024 }));
+      toaster.info(t("agent.attachTooBig", { p0: name, p1: attachmentLimit(mime) / 1024 / 1024 }));
       return true;
     }
     if (refusal === "total") {
       toaster.info(t("agent.attachTotal", { p0: TOTAL_MAX_BYTES / 1024 / 1024 }));
       return true;
     }
-    let data: string;
+    let attached: WireAttachment;
     try {
       if (refusal === "empty") throw new Error("empty");
-      data = base64Of(new Uint8Array(await file.arrayBuffer()));
+      attached = await readComposerFile(file, mime, () => epoch === attachmentEpoch);
     } catch {
       toaster.info(t("agent.attachUnreadable", { p0: name }));
       return true;
@@ -1346,7 +1349,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       toaster.info(t("agent.attachTooMany", { p0: ATTACH_MAX }));
       return false;
     }
-    files = [...files, { id: ++fileIds, name, mime, data, size: file.size }];
+    files = [...files, { ...attached, id: ++fileIds, name, mime, size: file.size }];
     const missing = missingFiles.findIndex(file => file.name === name && file.mime === mime);
     if (missing >= 0) missingFiles.splice(missing, 1);
     drawFile();
@@ -1796,6 +1799,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     for (const file of turn.attachments ?? []) {
       if (file.id) {
         try {
+          if ((file.size ?? 0) > 4 * 1024 * 1024) {
+            const stored = await api.core<{ mime: string; size: number }>("attachments.info", { id: file.id });
+            draft.files.push({ id: ++fileIds, name: file.name, mime: stored.mime, data: "", stored_id: file.id, size: stored.size });
+            continue;
+          }
           const stored = await api.core<{ mime: string; data: string }>("attachments.get", { id: file.id });
           if (typeof stored.data !== "string" || typeof stored.mime !== "string") throw new Error("unavailable");
           const size = file.size ?? Math.floor(stored.data.length * 3 / 4) - (stored.data.endsWith("==") ? 2 : stored.data.endsWith("=") ? 1 : 0);

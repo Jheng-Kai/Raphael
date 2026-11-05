@@ -208,14 +208,15 @@ describe("what 「＋」 takes", () => {
     expect(attachmentType({ name: "fake.png", type: "application/x-msdownload" })).toBe("application/x-msdownload");
   });
 
-  test("at most four, 50 MB each and 100 MB total", () => {
-    expect(ATTACH_MAX).toBe(4);
-    expect(attachRefusal(2, "text/plain", 1, 100 * 1024 * 1024)).toBe("total");
+  test("at most twenty, 2250 MB documents and 1 GB videos", () => {
+    expect(ATTACH_MAX).toBe(20);
+    expect(attachRefusal(19, "video/mp4", 1024 * 1024 * 1024)).toBeNull();
+    expect(attachRefusal(0, "video/mp4", 1024 * 1024 * 1024 + 1)).toBe("size");
     // the app's own limit is the same (commands.rs)
     const commands = readFileSync(path.resolve(import.meta.dirname, "..", "..", "..", "src-tauri", "src", "commands.rs"), "utf8");
     expect(commands).toContain(`pub const TYPED_MAX_ATTACHMENTS: usize = ${ATTACH_MAX};`);
     expect(attachRefusal(3, "image/png", IMAGE_MAX_BYTES)).toBeNull();
-    expect(attachRefusal(4, "image/png", 10)).toBe("count");
+    expect(attachRefusal(20, "image/png", 10)).toBe("count");
     expect(attachRefusal(0, "image/png", IMAGE_MAX_BYTES + 1)).toBe("size");
     expect(attachRefusal(0, "application/pdf", PDF_MAX_BYTES)).toBeNull();
     expect(attachRefusal(0, "application/pdf", PDF_MAX_BYTES + 1)).toBe("size");
@@ -282,16 +283,16 @@ describe("the composer with images and PDFs", () => {
     expect(agent.el.querySelector<HTMLElement>(".cmp-file")!.hidden).toBe(true);
   });
 
-  test("a fifth is refused with a toast; too big is refused with a toast; the rest are taken", async () => {
+  test("a twenty-first file and an oversized document are refused before reading", async () => {
     const { pick, chips } = mount();
     await flush();
     await pick(png("1.png"), sized(png("huge.png"), IMAGE_MAX_BYTES + 1), png("2.png"));
     expect(chips()).toEqual(["1.png", "2.png"]);
-    expect(toaster.info).toHaveBeenCalledWith("「huge.png」太大了（每個檔案最多 50 MB）");
-    await pick(png("3.png"), pdf("4.pdf"), png("5.png"), png("6.png"));
-    expect(chips()).toEqual(["1.png", "2.png", "3.png", "4.pdf"]);
-    expect(toaster.info).toHaveBeenLastCalledWith("最多只能附加 4 個檔案");
-    expect(toaster.info).toHaveBeenCalledTimes(2); // the sixth is not tried after the fifth
+    expect(toaster.info).toHaveBeenCalledWith("「huge.png」太大了（每個檔案最多 250 MB）");
+    await pick(...Array.from({length:19}, (_,i)=>png(`${i+3}.png`)));
+    expect(chips()).toHaveLength(20);
+    expect(toaster.info).toHaveBeenLastCalledWith("最多只能附加 20 個檔案");
+    expect(toaster.info).toHaveBeenCalledTimes(2); // Reading stops at the first file beyond the count limit.
   });
 
   test("any file type is attached and the picker has no accept filter", async () => {

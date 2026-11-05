@@ -556,7 +556,7 @@ class RoomsService:
             raise invalid_params("adjust room membership before sending")
         thread_id = self._thread(room, params.get("thread_id"))
         try:
-            attachments = from_wire(params.get("attachments"))
+            attachments = from_wire(params.get("attachments"), self._attachment_store.resolve if self._attachment_store else None)
         except AttachmentError as error:
             raise invalid_params(f"invalid attachments ({error.kind})") from None
         text = params.get("text")

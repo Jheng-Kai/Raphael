@@ -1,4 +1,6 @@
 {
+  "appUpdateSample": { "version": "1.1.0", "notes": "改善更新安裝、記憶匯入與大型附件。\n更新會保留你的設定與工作資料。" },
+  "memoryImportSample": { "kept": "我喜歡以繁體中文溝通，每週五整理研究筆記。", "answer": "我喜歡以繁體中文溝通，每週五整理研究筆記。\n\npassword is synthetic123" },
   "unreadSample": {"question": "Check the sample notes.", "answer": "The sample notes are ready for review.", "paragraph": "The sample comparison includes the observations, remaining questions and a suggested next step."},
   "presenceSample": {"question": "Check the sample report.", "answer": "The sample report is ready.", "secondAnswer": "The sample comparison is complete.", "progress": "Checking sample sources", "nextAction": "Comparing sample sources", "routine": "Sample briefing", "calendar": "Sample review", "source": "https://example.test/sample"},
   "handoffGroupSample": {

@@ -139,6 +139,10 @@ pub struct DeviceSettings {
     pub ui_language: String,
     /// Start with Windows.
     pub autostart: bool,
+    /// Download signed updates and install only after ten idle minutes without active members.
+    pub auto_update: bool,
+    /// Internal receipt consumed once by the first main page after the installed version starts.
+    pub update_receipt: String,
     /// The first-run guide has been done.
     pub onboarded: bool,
     /// The apps Raphael may operate without asking first, each once.
@@ -159,6 +163,8 @@ impl Default for DeviceSettings {
             appearance: Appearance::default(),
             ui_language: "zh-TW".to_owned(),
             autostart: true,
+            auto_update: false,
+            update_receipt: String::new(),
             onboarded: false,
             computer_apps: Vec::new(),
         }
@@ -221,6 +227,7 @@ impl DeviceSettings {
                 "appearance" => next.appearance = parse_value(name, value)?,
                 "ui_language" => next.ui_language = parse_value(name, value)?,
                 "autostart" => next.autostart = parse_value(name, value)?,
+                "auto_update" => next.auto_update = parse_value(name, value)?,
                 "onboarded" => next.onboarded = parse_value(name, value)?,
                 "computer_apps" => next.computer_apps = parse_value(name, value)?,
                 other => return Err(format!("unknown setting \"{other}\"")),
@@ -581,6 +588,21 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn automatic_updates_are_opt_in_and_receipts_cannot_be_forged_by_a_page() {
+        let mut settings = DeviceSettings::default();
+        assert!(!settings.auto_update);
+        assert!(settings.update_receipt.is_empty());
+        settings.apply_patch(&json!({"auto_update": true})).unwrap();
+        assert!(settings.auto_update);
+        assert!(
+            settings
+                .apply_patch(&json!({"update_receipt": "9.9.9"}))
+                .is_err()
+        );
+        assert!(settings.update_receipt.is_empty());
+    }
+
+    #[test]
     fn rejects_unknown_key_and_bad_size() {
         let mut s = DeviceSettings::default();
         assert!(s.apply_patch(&json!({"emblem_size": 151})).is_err());
@@ -696,6 +718,8 @@ mod tests {
                 "appearance": "light",
                 "ui_language": "zh-TW",
                 "autostart": true,
+                "auto_update": false,
+                "update_receipt": "",
                 "onboarded": false,
                 "computer_apps": [],
             })
@@ -1059,6 +1083,8 @@ mod tests {
             ("emblem_size", json!("large")),
             ("emblem_size", json!(-1)),
             ("autostart", json!("yes")),
+            ("auto_update", json!("yes")),
+            ("update_receipt", json!(7)),
             ("onboarded", json!(1)),
             ("microphone", json!(7)),
             ("dictation_keys", json!("AltRight")),
@@ -1078,6 +1104,8 @@ mod tests {
                 "appearance": "dark",
                 "ui_language": "ja",
                 "autostart": false,
+                "auto_update": true,
+                "update_receipt": "2.0.0",
                 "onboarded": true,
                 "computer_apps": [{"exe": "calc.exe", "name": "Calculator"}],
                 "a_setting_of_a_newer_version": {"anything": true},

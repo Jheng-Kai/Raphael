@@ -203,9 +203,9 @@ test("an image pasted into the composer is attached with its picture, and its wo
  expect(send).toHaveBeenCalledWith("caption",[{name:"shot.png",mime:"image/png",data:"AAAAAA=="}]);
 });
 test("too many files says so and the first ones stay",async()=>{
- const {view}=mount();view.addFiles([png("1.png"),png("2.png"),png("3.png"),png("4.png"),png("5.png")]);await new Promise(resolve=>setTimeout(resolve,10));await flush();
- expect(view.el.querySelectorAll(".cmp-chip")).toHaveLength(4);
- expect(document.querySelector(".toasts")?.textContent??"").toContain("4");
+ const {view}=mount();view.addFiles(Array.from({length:21},(_,i)=>png(`${i}.png`)));await new Promise(resolve=>setTimeout(resolve,10));await flush();
+ expect(view.el.querySelectorAll(".cmp-chip")).toHaveLength(20);
+ expect(document.querySelector(".toasts")?.textContent??"").toContain("20");
 });
 test("a file still being read does not reach the next room's draft",async()=>{
  const {view}=mount();view.addFiles([png()]);view.setDraft("Other room");await new Promise(resolve=>setTimeout(resolve,10));await flush();

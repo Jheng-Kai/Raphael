@@ -131,7 +131,7 @@ test("the memory is in the 拉斐爾 tab, after its settings, and only there", (
   const agent = tab("agent", { memory });
   expect(agent).toContain("data-mem-section");
   expect(agent.indexOf("data-mem-section")).toBeGreaterThan(agent.indexOf('data-k="worker-cap"'));
-  for (const id of ["general", "dictation", "connections", "messaging", "usage", "data", "about"] as const) expect(tab(id, { memory })).not.toContain("data-mem");
+  for (const id of ["general", "dictation", "connections", "messaging", "usage", "data", "about"] as const) expect(tab(id, { memory })).not.toContain("data-mem-section");
 });
 
 test("the safety rules are in the 拉斐爾 tab, after the memory and before 電腦操作, with no switch", () => {
@@ -324,7 +324,7 @@ describe("一般", () => {
   });
   test("has the interface language, the theme and the emblem's size as dropdowns, the subtitles and the start as switches", () => {
     const html = tab("general");
-    expect(groups(html)).toEqual(["輸出資料夾", "介面與桌面", "啟動"]);
+    expect(groups(html)).toEqual(["匯入記憶", "輸出資料夾", "介面與桌面", "啟動"]);
     expect(names(html)).toEqual(["輸出資料夾", "桌面圖案大小", "字幕", "開機時自動啟動", "重新導覽"]);
     for (const k of ["size"]) expect(html).toMatch(new RegExp(`<button type="button" class="sel"[^>]*data-k="${k}"`));
     for (const k of ["subtitles", "autostart"]) expect(html).toMatch(new RegExp(`class="tg" role="switch"[^>]*data-k="${k}"`));
@@ -673,12 +673,12 @@ describe("搜尋設定", () => {
 
   test("finds Raphael's memory by its name and by what one asks him to do, in any of the languages", () => {
     for (const query of ["記憶", "記住", "memory", "Remember", "メモリ", "覚える"]) {
-      expect(where(query), query).toEqual(["agent:記憶"]);
+      expect(where(query), query).toContain("agent:記憶");
     }
     setLocale("en");
-    expect(where("記憶")).toEqual(["agent:Memory"]);
+    expect(where("記憶")).toEqual(["general:Import memory", "agent:Memory"]);
     setLocale("ja");
-    expect(where("memory")).toEqual(["agent:記憶"]);
+    expect(where("memory")).toEqual(["general:メモリをインポート", "agent:記憶"]);
   });
 
   test("finds a tab by its name, before its rows, and a brand by its name; case does not matter", () => {
