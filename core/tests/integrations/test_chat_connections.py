@@ -100,7 +100,10 @@ def chat_rig(tmp_path, conn, vault, connector, servers, make_rig):
     hub = IntegrationsService(conn, tmp_path, vault, connector=connector)
     servers.add("Sample")
     keys = SecretCards(conn, hub)
-    rig = make_rig(plugins=hub, secret_cards=keys)
+    from raphael_core.members.service import MembersService
+    team = MembersService(conn, tmp_path, background=SimpleNamespace())
+    rig = make_rig(plugins=hub, secret_cards=keys, team=team)
+    team.register(rig.rpc)
     hub.register(rig.rpc)
     keys.register(rig.rpc)
     return rig, hub, keys
@@ -143,6 +146,9 @@ async def test_chat_revocation_changes_next_model_offer_and_refuses_an_old_alias
         return chat("Old cached call.", ("Sample__look", {"topic": "sample"}))
     client.chats = [chat("Change access.", ("manage_connection", {"connection": server.id, "operation": operation, "tool": "look"})), after, chat("Access was revoked."), chat("Access was revoked.")]
     result = await typed(rig, "Turn off Sample access")
+    if operation == "disconnect":
+        assert result["status"] == "confirm" and hub.offered()
+        result = await rig.confirm(result["confirm"]["id"])
     assert result["text"] == "Access was revoked."
     assert not next((t for t in hub.offered() if t.name == "look"), None)
     assert "no longer enabled" in str(client.chat_calls[-1]["messages"])
@@ -338,6 +344,7 @@ async def test_stdio_reuses_always_allowed_commands_but_external_content_still_a
 
 async def test_chat_reconnect_of_a_local_server_waits_before_launching_it(chat_rig, client, servers):
     rig, hub, keys = chat_rig
+    rig.settings.set("action_mode", "ask")
     await hub._add({"name": "Sample", "transport": "stdio", "command": "sample-mcp"})
     server = hub._config.servers()[0]
     await hub._refresh({"id": server.id})

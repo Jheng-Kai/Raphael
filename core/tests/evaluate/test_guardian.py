@@ -65,6 +65,7 @@ async def test_api_records_two_creates_without_side_effects(conn, tmp_path):
     assert conn.execute("SELECT COUNT(*) FROM members").fetchone()[0] == before
     assert all(request["fallbacks"] == [] for request in client.requests)
     assert result["cost_usd"] == .002
+    assert "member_create" in {tool["function"]["name"] for tool in client.requests[0]["tools"]}
 
 
 @pytest.mark.parametrize("approved", [True, False])
@@ -74,6 +75,7 @@ async def test_approval_pauses_and_resumes_without_deleting(conn, tmp_path, appr
     assert result["status"] == "PASS", result
     assert result["approvals"] == [{"tool": "member_delete", "language": "zh-TW", "choices": ["YES", "NO"], "executed": False, "decision": "YES" if approved else "NO"}]
     assert client.requests[-1]["messages"][-1]["role"] == "tool"
+    assert "member_delete" in {tool["function"]["name"] for tool in client.requests[0]["tools"]}
 
 
 async def test_missing_calls_and_empty_or_english_replies_fail(conn, tmp_path):
