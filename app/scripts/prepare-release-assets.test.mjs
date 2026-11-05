@@ -38,7 +38,8 @@ function inputs() {
 
 const sha256 = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
-describe("release assets", () => {
+// These tests start Windows PowerShell and the Tauri signer; a cold CI runner needs more than 5 s.
+describe("release assets", { timeout: 30_000 }, () => {
   it("pins updater configuration and publication to the current repository", () => {
     const native = join(scripts, "..", "src-tauri");
     const workflow = readFileSync(join(scripts, "..", "..", ".github", "workflows", "release.yml"), "utf8");
