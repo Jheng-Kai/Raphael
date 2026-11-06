@@ -211,8 +211,9 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       `</div>`;
     if (routines === "loading") return head + `<span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span>`;
     if (routines === "failed") return head + noticeHTML("routines");
-    const rows = routines.length ? routines.map(routineRowHTML).join("") : `<p class="mp-empty">${esc(t("members.profile.noRoutines"))}</p>`;
-    return head + `<div class="mb-rts">${rows}</div>`;
+    // An empty list is one quiet line outside the tinted list, in Grok Bot's words (Ask in chat to set a routine).
+    if (!routines.length) return head + `<p class="mp-empty">${esc(t("members.profile.noRoutines"))}</p>`;
+    return head + `<div class="mb-rts">${routines.map(routineRowHTML).join("")}</div>`;
   }
 
   /**

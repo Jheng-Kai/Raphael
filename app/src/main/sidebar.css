@@ -51,6 +51,10 @@
 :root[data-sidebar-collapsed] .sidebar-foot-row { flex-direction: column; align-items: center; }
 :root[data-sidebar-collapsed] .sidebar-account { order: 3; }
 :root[data-sidebar-collapsed] .side .sidebar-apps { width: 44px; height: 44px; min-height: 44px; padding: 0; }
+/* Without its words the Connections pill is an icon button: no frame on the rail (R-UI-18), a soft fill under the pointer. */
+:root[data-sidebar-collapsed] .side .side-foot .sidebar-apps { border-color: transparent; border-radius: var(--r-sm); }
+:root[data-sidebar-collapsed] .side .side-foot .sidebar-apps:is(:hover, :active) { border-color: transparent; background: var(--hover); }
+:root[data-sidebar-collapsed] .side .side-foot .sidebar-apps:active { background: var(--pressed); }
 :root[data-sidebar-collapsed] .sidebar-app-marks { display: none; }
 :root[data-sidebar-collapsed] .side .sidebar-account { flex: none; }
 :root[data-sidebar-collapsed] .side .side-foot .nav { justify-content: center; width: 44px; padding: 0; border-radius: var(--r-sm); }
