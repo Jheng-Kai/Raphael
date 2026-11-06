@@ -428,13 +428,13 @@ export function createSettings(app: AppContext): SettingsPage {
     const scroll = body.scrollTop;
     body.setAttribute("aria-busy", String(loading && pane !== "about"));
     // Only what changed moves: a list drawn again stands still, a switch that was turned slides.
-    // Analytics owns its controls and filters; keep that live subtree out of page HTML redraws.
+    // The allowances own their reading; keep that live subtree out of page HTML redraws.
     usageHost.remove();
     swapHTML(body, `<div class="set-content">${pane !== "about" && loading ? loadingHTML(view()) : paneHTML(view())}</div>`);
     const slot = body.querySelector<HTMLElement>("[data-usage-host]");
     if (slot) {
       slot.replaceWith(usageHost);
-      usage ??= mountUsageAnalytics(usageHost, { usageAnalytics: api.usageAnalytics, usageRuns: api.usageRuns, usageExport: api.usageExport, usageAllowances: api.usageAllowances, saveUsageCsv: api.saveUsageCsv, modelsCatalog: api.modelsCatalog, brainsCli: api.brainsCli, chatgptStatus: api.chatgptStatus, openExternalUrl: api.openExternalUrl });
+      usage ??= mountUsageAnalytics(usageHost, { usageAllowances: api.usageAllowances, chatgptStatus: api.chatgptStatus, openExternalUrl: api.openExternalUrl });
       if (usageFocus?.isConnected) usageFocus.focus({ preventScroll: true });
     }
     // Before the focus goes back by `data-k`, which the pickers' buttons have too.
@@ -1179,10 +1179,10 @@ export function createSettings(app: AppContext): SettingsPage {
 
     if (target.closest("[data-cli], [data-cli-menu], [data-chatgpt], [data-chatgpt-menu]")) { void cliBrains.click(target); return; }
     if (providers.click(target)) return;
-    // the usage view opens its own dropdowns' menus (usage-analytics.ts)
+    // the vault opens its own dropdowns' menus (vault.ts)
     const choose = target.closest<HTMLElement>(".sel");
     if (choose?.dataset.k === "routine-timezone") { openTimezoneMenu(choose, brain?.routine_timezone ?? "", value => void changeBrain("routine_timezone", value)); return; }
-    if (choose && !choose.closest(".usage-analytics, .run-analytics, .vault")) {
+    if (choose && !choose.closest(".vault")) {
       if (menuIsOpenFor(choose)) {
         closeMenu();
         return;

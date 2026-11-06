@@ -19,8 +19,8 @@ const pcCard = '[data-computer-card="card-pc"]';
 const permCard = id => `[data-permission-card="${id}"]`;
 const mailCard = '[data-mail-card="mail-1"]';
 const mailField = field => `${mailCard} [data-mail-field="${field}"]`;
-// The owner's primary contact (P15b): 小森's menu, 設為主要, and 選擇主要成員 with 小森 chosen already.
-const primaryMenu = [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), click('#app-popover [data-pick="primary"]'), wait(".mb-dialog.mb-primary-picker")];
+// The owner's primary contact (P15b): the primary's own menu (Raphael's until another is chosen), 換成其他成員, and 選擇主要成員.
+const primaryMenu = (id = 0) => [{ action: "member-column", collapsed: false }, click(`.mb-col [data-member-more="${id}"]`), click('#app-popover [data-pick="primary"]'), wait(".mb-dialog.mb-primary-picker")];
 const adminDraftEdits = [wait('.draft-panel:not([hidden])'), type('[data-draft-group="group-1"]', "工作室"), click('[data-draft-id="draft-1"] [data-draft-act="more"]'), type('[data-draft-id="draft-1"] [data-draft-field="role"]', "首席營運長"), click('[data-draft-id="draft-3"] [data-draft-act="remove"]'), check("member-draft-edit")];
 // Pick the quick conversation, then close the details panel, which covers the composer at compact width.
 const quickOpen = [{ action: "open-details" }, click('[data-conversation-open="4"]'), wait('.tn[data-id="90"]'),
@@ -194,9 +194,10 @@ export default [
   ], { dictationText }),
   scene("members-expanded", "Original Raphael emblem and expanded member column", [{ action: "member-column", collapsed: false }, check("member-column")]),
   scene("primary-contact-column", "The primary takes the first conversation row and Raphael takes its group slot", [{ action: "member-column", collapsed: false }, check("member-column"), check("primary-column")], { primaryMember: 1 }),
-    scene("primary-contact-menu", "A member's menu gives 設為主要, without a star, right after 移到分組", [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), wait('#app-popover [data-pick="primary"]'), check("primary-menu")]),
-  scene("primary-contact-picker", "設為主要 in 小森's menu opens 選擇主要成員 while 小晴 is the primary: Raphael and the other members as buttons, 小森 chosen, the primary action ready", [...primaryMenu, check("primary-picker")], { primaryMember: 1 }),
-  scene("primary-contact-set", "設為主要 on 小晴 exchanges display positions without changing rooms, tasks or conversations", [...primaryMenu, click('.mb-primary-picker [data-id="1"]'), click('.mb-primary-picker [data-dlg="set"]'), wait('.mb-col .mb-chief[data-member="1"]'), member(1), { action: "open-details" }, click('[data-det="gear"]'), wait(".mb-det .mb-who-face"), check("primary-set")]),
+  scene("primary-contact-menu", "The primary's own menu (Raphael's) ends with 換成其他成員 after a hairline, without a star", [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="0"]'), wait('#app-popover [data-pick="primary"]'), check("primary-menu")]),
+  scene("member-row-menu", "A member's row menu is grouped as Grok Bot's: 釘選, 移到分組, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除 in red", [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), wait('#app-popover [data-pick="delete"]'), check("member-menu")]),
+  scene("primary-contact-picker", "換成其他成員 in 小晴's menu opens 選擇主要成員: Raphael and the other members as buttons, and choosing 小森 readies the primary action", [...primaryMenu(1), click('.mb-primary-picker [data-id="2"]'), check("primary-picker")], { primaryMember: 1 }),
+  scene("primary-contact-set", "換成其他成員, then 小晴, exchanges display positions without changing rooms, tasks or conversations", [...primaryMenu(), click('.mb-primary-picker [data-id="1"]'), click('.mb-primary-picker [data-dlg="set"]'), wait('.mb-col .mb-chief[data-member="1"]'), member(1), { action: "open-details" }, click('[data-det="gear"]'), wait(".mb-det .mb-who-face"), check("primary-set")]),
   scene("primary-room-chief", "The current chief wears the room crown and writes its one wrap-up", [{ action: "member-column", collapsed: false }, room(1), wait(".au-room-wrapup"), check("primary-room-chief")], { primaryMember: 1, roomWrapup: true }),
   scene("chat", "Conversation with public progress, replies and an attachment", [wait(".ra .chat-message[data-reply]"), check("conversation-design")]),
   scene("plain-bot-chat", "Raphael's stored two-message 《答。…》 reply reads plainly", [wait(".ra .chat-message[data-reply]"), check("conversation-design"), check("plain-bot-chat")], { splitReply: true }),
@@ -287,6 +288,9 @@ export default [
   scene("composer", "Composer attachment menu", composer),
   scene("mode", "Composer permission modes, each saying what it does", [...composer, wait("#app-popover [data-mode]"), check("permission-menu")]),
   scene("actions", "An answer's menu has its reactions above Reply and Copy, as Grok Bot's", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="more-message"]'), wait("#app-popover"), check("message-menu")]),
+  scene("reaction-bar", "An answer's react button opens Grok's pill of five quick reactions and a slot for every emoji", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="react-message"]'), wait("#app-popover.reaction-bar"), check("reaction-bar")]),
+  scene("emoji-picker", "Every emoji in one card: a search field, one grid of eight columns under section labels, and a footer naming the emoji under the pointer", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="react-message"]'), click('#app-popover [data-quick="+"]'), wait("#app-popover.emoji-picker .emoji-cell"), hover('#app-popover .emoji-cell[data-emoji="😂"]'), check("emoji-picker")]),
+  scene("emoji-search", "Search filters the grid in place to emoji whose names match, with no section labels", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="react-message"]'), click('#app-popover [data-quick="+"]'), wait("#app-popover.emoji-picker .emoji-cell"), type("#app-popover.emoji-picker input", "愛心"), check("emoji-search")]),
   scene("reply", "Quote a reply into the composer", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="reply-message"]')]),
   scene("search", "Search conversation messages", [search("研究"), wait("[data-message-result]")]),
   scene("search-target", "Navigate to a message search match", [search("研究"), click("[data-message-result]"), wait(".is-search-target")]),

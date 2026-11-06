@@ -1,278 +1,113 @@
-/** Self-contained analytics view. Mount in a settings slot and destroy when the page leaves. */
-import "./usage-analytics.css";
-import { mountRunAnalytics } from "./run-analytics";
-import { usageModel } from "./usage-models";
-import { faceHTML, memberRole } from "./members";
-import type { CatalogModel } from "./types";
-import type { RunAnalyticsApi } from "./run-analytics-types";
-import { formatUsd } from "./format";
-import { onLocaleChange, t } from "./i18n";
-import { iconButton, openMenu, patchHTML, sel, type Choice } from "./ui";
-import type { MessageKey } from "./i18n/zh-TW";
-import type { UsageAnalytics, UsageGroup, UsageRequest, UsageSeries } from "./usage-analytics-types";
+// Settings › 模型與用量 › 用量, as plain as Grok Bot's (owner, 2026-11-06): what each subscription has left, one card
+// each, above the rows of what was spent (settings-view.ts). No periods, charts, breakdowns or exports.
+// Mount it in the page's slot and destroy it when the page leaves.
 
-export type { UsageAnalytics, UsageRequest } from "./usage-analytics-types";
-export interface UsageAnalyticsApi extends Partial<RunAnalyticsApi> { usageAnalytics(params: UsageRequest): Promise<UsageAnalytics> }
+import "./usage-analytics.css";
+import { CHATGPT_USAGE_URL, CLIS } from "./cli-brains";
+import { describeError } from "./format";
+import { getLocale, onLocaleChange, t } from "./i18n";
+import { noticeHTML } from "./missing";
+import { providerMark } from "./provider-marks";
+import type { ChatGptStatus } from "./types";
+import { btn, esc, patchHTML, toaster } from "./ui";
+import type { CliAllowances } from "./usage-analytics-types";
+
+export type { CliAllowances } from "./usage-analytics-types";
+export interface UsageAnalyticsApi {
+  usageAllowances(): Promise<CliAllowances>;
+  chatgptStatus?(): Promise<ChatGptStatus>;
+  openExternalUrl?(url: string): Promise<void>;
+}
 export interface UsageAnalyticsMount {
-  /** Initial request completion (errors render in the component). */
+  /** The first reading has come back (a failure renders in the view). */
   ready: Promise<void>;
+  /** Reads again without a loading state; only a change redraws. */
   refresh(): Promise<void>;
   destroy(): void;
 }
 
-const esc = (value: string | number) => String(value).replace(/[&<>"']/g, c => ({
-  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-})[c]!);
-const count = (value: number) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value);
-const share = (value: number) => `${(value * 100).toFixed(1)}%`;
-const exactUsd = (value: number) => `US$${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 20, useGrouping: false }).format(value)}`;
-const compact = (value: number) => value >= 1_000_000 ? `${+(value / 1_000_000).toFixed(1)}M`
-  : value >= 1000 ? `${+(value / 1000).toFixed(1)}K` : `${+value.toPrecision(3)}`;
+const PERIODS = { fiveHour: "runs.fiveHour", weekly: "runs.weekly", weeklyOpus: "runs.weeklyOpus", weeklySonnet: "runs.weeklySonnet" } as const;
+const time = (ms: number): string => new Date(ms).toLocaleString(getLocale(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
-type PlainUsageKey = Exclude<Extract<MessageKey, `usage.${string}`>, "usage.estimates"> | "media.image" | "media.video";
-const labelKeys: Record<string, PlainUsageKey> = {
-  __other__: "usage.other", other: "usage.other", unknown: "usage.unknown",
-  agent: "usage.agent", cleanup: "usage.cleanup", stt: "usage.stt", memory: "usage.memory",
-  image: "media.image", video: "media.video",
-  web_search: "usage.web_search", web_read: "usage.web_read", computer: "usage.computer",
-  routines: "usage.routines", ask_member: "usage.ask_member", files: "usage.files",
-  app: "usage.app", voice: "usage.voice", routine: "usage.routine", member: "usage.memberSource",
-  telegram: "usage.telegram",
-};
-const choiceKeys = {
-  "7d": "usage.7d", "30d": "usage.30d", purpose: "usage.purpose", model: "usage.model",
-  provider: "usage.provider", source: "usage.source", dictations: "usage.dictations", words: "usage.words",
-} as const;
-function seriesLabel(series: UsageSeries, category: string, models: CatalogModel[] = []): string {
-  // A model or a connection's name is user data even when it matches a translated category.
-  const key = series.key;
-  if (key === "__other__" || key === "unknown" || (category !== "model" && category !== "provider")) {
-    const translated = labelKeys[key];
-    if (translated) return t(translated);
-  }
-  return category === "model" ? usageModel(series.key,models).name : series.label;
+/** One card per subscription brain: each window's share left as a bar, and when it resets. */
+export function allowanceCardsHTML(allowance: CliAllowances): string {
+  return allowance.brains.map((brain) => {
+    const cli = CLIS.find((c) => c.id === brain.id), name = brain.id === "claude" ? "Claude" : cli?.name ?? brain.name;
+    const quota = allowance.quotas?.find((q) => q.provider === brain.id);
+    const reported = brain.source === "reported";
+    return `<article class="run-subscription"><header><h4>${providerMark(cli?.mark ?? brain.id)}${esc(name)}</h4>` +
+      (brain.windows.length ? `<span class="run-allowance-source">${t(reported ? "runs.lastReported" : "runs.liveAllowance")}</span>` : "") + `</header>` +
+      (quota ? `<p class="run-quota"><strong>${t("runs.exhausted")}</strong><small>${quota.reset_at_ms ? `${t("runs.resets")} ${esc(time(quota.reset_at_ms))}` : t("runs.resetUnknown")}</small></p>` : "") +
+      (!brain.windows.length ? `<p class="run-allowance-unavailable">${t("missing.allowanceUnknown")}</p>` : brain.windows.map((w) => {
+        const known = typeof w.remaining_percent === "number" && Number.isFinite(w.remaining_percent);
+        const remaining = Math.min(100, Math.max(0, w.remaining_percent ?? 0));
+        return `<div class="run-window"><span>${t(PERIODS[w.period])}</span>` +
+          (known ? `<strong>${remaining}% ${t("runs.remaining")}</strong>` : `<span>${t("runs.allowancePercentUnknown")}</span>`) +
+          (w.status ? `<small>${t(w.status === "allowed" ? "runs.allowanceAllowed" : w.status === "allowed_warning" ? "runs.allowanceWarning" : "runs.exhausted")}</small>` : "") +
+          (known ? `<div class="run-bar-track" role="progressbar" aria-label="${esc(name)} ${esc(t(PERIODS[w.period]))}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${remaining}"><i style="width:${remaining}%"></i></div>` : "") +
+          (w.resets_at ? `<small>${t("runs.resets")} ${esc(time(w.resets_at * 1000))}</small>` : "") +
+          (reported && w.updated_at_ms ? `<small>${t("runs.allowanceUpdated", { time: time(w.updated_at_ms) })}</small>` : "") +
+          (reported && w.resets_at && w.resets_at * 1000 <= Date.now() ? `<small>${t("runs.allowanceExpired")}</small>` : "") + `</div>`;
+      }).join("")) + `</article>`;
+  }).join("");
 }
 
-function legend(group: UsageGroup, category: string, money = false, models: CatalogModel[] = []): string {
-  return `<ul class="ua-legend">${group.series.map((s, i) => `<li><i class="ua-color ua-color-${i}" aria-hidden="true"></i>` +
-    `<span>${category === "model" && s.key !== "__other__" ? usageModel(s.key,models).html : esc(seriesLabel(s, category,models))}</span><strong>${money ? share(s.share) : count(s.total)}</strong></li>`).join("")}</ul>`;
-}
+/** ChatGPT keeps its plan's numbers on its own page: the card has the button to read them there. */
+const chatgptHTML = (): string =>
+  `<article class="run-subscription" data-allowance="chatgpt"><header><h4>${providerMark("openai")}ChatGPT</h4>${btn(esc(t("brains.manageUsage")), "", ' data-run-act="chatgpt-usage"')}</header>` +
+  `<p class="run-allowance-unavailable">${t("runs.chatgptAllowance")}</p></article>`;
 
-/** All exact values remain keyboard-accessible; line styles also distinguish series without color. */
-function chart(days: string[], group: UsageGroup, title: string, category: string, mode: "bars" | "lines", money = false, models: CatalogModel[] = []): string {
-  if (!group.series.length || group.total === 0) return `<p class="ua-empty">${t("usage.empty")}</p>`;
-  const left = 64, width = 640, top = 18, height = 154, bottom = top + height;
-  const totals = days.map((_, i) => group.series.reduce((sum, s) => sum + s.values[i]!, 0));
-  const peak = Math.max(1e-9, ...(mode === "bars" ? totals : group.series.flatMap(s => s.values)));
-  const magnitude = 10 ** Math.floor(Math.log10(peak / 3));
-  const interval = [1, 2, 2.5, 5, 10].find(n => n * magnitude >= peak / 3)! * magnitude;
-  const max = interval * 3;
-  const step = width / days.length;
-  const x = (i: number) => left + (i + 0.5) * step;
-  const y = (v: number) => bottom - v / max * height;
-  let svg = `<svg class="ua-chart" viewBox="0 0 720 218" role="group" aria-label="${esc(title)}">`;
-  for (let i = 0; i <= 3; i++) {
-    const value = max * i / 3, at = y(value);
-    svg += `<line class="ua-grid" x1="${left}" x2="704" y1="${at}" y2="${at}"/>` +
-      `<text class="ua-axis" x="56" y="${at + 4}" text-anchor="end">${money ? "$" : ""}${compact(value)}</text>`;
-  }
-  const prior = days.map(() => 0);
-  group.series.forEach((s, seriesIndex) => {
-    const name = seriesLabel(s, category,models);
-    if (mode === "lines") {
-      svg += `<path class="ua-line ua-color-${seriesIndex}" stroke-dasharray="${["none", "8 3", "3 3", "10 3 2 3", "2 4", "12 4"][seriesIndex]}" d="` +
-        s.values.map((v, i) => `${i ? "L" : "M"}${x(i)},${y(v)}`).join(" ") + `"/>`;
-    }
-    s.values.forEach((v, i) => {
-      const exact = `${days[i]} · ${name} · ${money ? exactUsd(v) : count(v)}`;
-      const attrs = `class="ua-mark ua-color-${seriesIndex}" tabindex="0" role="img" aria-label="${esc(exact)}" data-tooltip="${esc(exact)}"`;
-      if (mode === "bars") {
-        if (v > 0) svg += `<rect ${attrs} x="${x(i) - step * 0.32}" y="${y(prior[i]! + v)}" width="${step * 0.64}" height="${v / max * height}"/>`;
-        prior[i]! += v;
-      } else {
-        svg += `<circle ${attrs} cx="${x(i)}" cy="${y(v)}" r="3"/>`;
-      }
-    });
-  });
-  const stride = Math.ceil((days.length - 1) / 5);
-  days.forEach((day, i) => {
-    if (i % stride === 0 || i === days.length - 1) svg += `<text class="ua-axis" x="${x(i)}" y="196" text-anchor="middle">${esc(day.slice(5).replace("-", "/"))}</text>`;
-  });
-  return `<div class="ua-chart-scroll">${svg}</svg></div>${legend(group, category, money,models)}`;
-}
-
-/** The groupings a dropdown offers, as the app's own dropdown (ui.ts `sel`) lists them. */
-const GROUPINGS = { cost: ["purpose", "model", "provider"], messages: ["model", "source"], dictation: ["dictations", "words"] } as const;
-const choices = (control: keyof typeof GROUPINGS): Choice[] => GROUPINGS[control].map((key) => ({ value: key, label: t(choiceKeys[key]) }));
-
-let nextId = 0;
 const mounted = new WeakMap<HTMLElement, UsageAnalyticsMount>();
+
 export function mountUsageAnalytics(host: HTMLElement, api: UsageAnalyticsApi): UsageAnalyticsMount {
   mounted.get(host)?.destroy();
   const root = document.createElement("section");
-  root.className = "usage-analytics";
+  root.className = "usage-analytics run-allowance";
   host.replaceChildren(root);
-  const runsHost = document.createElement("div");
-  host.prepend(runsHost);
-  let modelData: CatalogModel[] = [];
-  const runs = api.usageRuns ? mountRunAnalytics(runsHost, api as RunAnalyticsApi, models => { modelData=models; render(); }) : null;
-  const tooltipId = `usage-tooltip-${++nextId}`;
-  let data: UsageAnalytics | null = null;
-  let range: UsageRequest["range"] = "7d";
-  let endDay: string | undefined;
-  let costBy: "purpose" | "model" | "provider" = "purpose";
-  let messageBy: "model" | "source" = "model";
-  let dictationBy: "dictations" | "words" = "dictations";
-  const expanded = new Set<number>();
-  let more = false, loading = true, failed = false, disposed = false, revision = 0;
-  let requestStamp = "";
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  let allowance: CliAllowances = { brains: [] }, failed = false, chatgpt = false, busy = true, disposed = false, revision = 0;
 
   function render(): void {
     if (disposed) return;
-    const focused = root.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.control : undefined;
-    root.setAttribute("aria-busy", String(loading));
-    root.setAttribute("aria-label", t("usage.history"));
-    let html = `<header class="ua-header"><h2>${t("usage.history")}</h2><div class="ua-period" role="group" aria-label="${t("usage.period")}">` +
-      `<div class="ua-segment">${(["7d", "30d"] as const).map(key => `<button type="button" class="btn" data-control="${key}" data-range="${key}" aria-pressed="${range === key}">${t(choiceKeys[key])}</button>`).join("")}</div>` +
-      iconButton("left", t("usage.previous"), ` data-control="previous" ${!data || loading ? "disabled" : ""}`) +
-      iconButton("right", t("usage.next"), ` data-control="next" ${!data || loading || data.end_day >= data.today_day ? "disabled" : ""}`) +
-      `</div></header>`;
-    if (loading) html += `<p role="status" class="ua-status">${t("usage.loading")}</p>`;
-    else if (failed) html += `<p role="alert">${t("usage.error")}</p><button type="button" class="btn" data-control="retry">${t("usage.retry")}</button>`;
-    else if (data) {
-      const usage = data;
-      const costs = usage.cost_by[costBy];
-      html += `<div class="ua-cost-head"><div><p class="ua-dates">${esc(usage.start_day)} — ${esc(usage.end_day)} · ${esc(usage.tz)}</p>` +
-        `<strong class="ua-total">${formatUsd(costs.total)}</strong></div>` +
-        sel(choices("cost"), costBy, t("usage.costGrouping"), ' data-control="cost"') + `</div>` +
-        chart(usage.days, costs, t("usage.history"), costBy, "bars", true,modelData) + `<p class="ua-note">${t("usage.recordedCosts")}</p>`;
-      html += `<section class="ua-section"><h3>${t("usage.members")}</h3>`;
-      if (!usage.members.length) html += `<p class="ua-empty">${t("usage.empty")}</p>`;
-      else {
-        html += `<div class="ua-table-scroll"><table><thead><tr><th scope="col">${t("usage.member")}</th><th scope="col">${t("usage.count")}</th><th scope="col">${t("usage.cost")}</th><th scope="col">${t("usage.share")}</th></tr></thead><tbody>` +
-          usage.members.slice(0, more ? undefined : 5).map(m => {
-            const open = expanded.has(m.id), detailsId = `${tooltipId}-member-${m.id}`;
-            return `<tr><th scope="row"><button type="button" class="btn" data-control="member-${m.id}" data-member="${m.id}" aria-expanded="${open}" aria-controls="${detailsId}">` +
-              `<span aria-hidden="true">${open ? "⌄" : "›"}</span> ${faceHTML(m,24)}${esc(m.id === 0 ? t("nav.agent") : m.name)}</button>` +
-              (memberRole(m) ? `<small>${esc(memberRole(m))}</small>` : "") + `</th><td>${count(m.turns)}</td><td>${m.cost_usd === 0 && m.models.length && m.models.every(model => model.cost_usd === null) ? t("usage.subscription") : formatUsd(m.cost_usd)}</td><td>${share(m.share)}</td></tr>` +
-              `<tr id="${detailsId}" ${open ? "" : "hidden"}><td colspan="4"><ul class="ua-models">${m.models.map(model => `<li>${usageModel(model.model,modelData).html}<span>${count(model.turns)} · ${model.cost_usd === null ? t("usage.subscription") : formatUsd(model.cost_usd)}</span></li>`).join("")}</ul></td></tr>`;
-          }).join("") + `</tbody></table></div>`;
-        if (usage.members.length > 5) html += `<button type="button" class="btn ua-more" data-control="more">${t(more ? "usage.less" : "usage.more")}</button>`;
-      }
-      html += `<p class="ua-note">${t("usage.memberCosts")}</p></section>` +
-        `<section class="ua-section"><h3>${t("usage.tools")}</h3><strong class="ua-total">${count(usage.tools.total)}</strong>` +
-        chart(usage.days, usage.tools, t("usage.tools"), "tools", "lines") + `<p class="ua-note">${t("usage.retained")}</p></section>` +
-        `<section class="ua-section"><div class="ua-section-head"><div><h3>${t("usage.messages")}</h3><strong class="ua-total">${count(usage.messages_by[messageBy].total)}</strong></div>` +
-        sel(choices("messages"), messageBy, t("usage.messageGrouping"), ' data-control="messages"') + `</div>` +
-        chart(usage.days, usage.messages_by[messageBy], t("usage.messages"), messageBy, "lines",false,modelData) + `</section>`;
-      const values = usage.dictation[dictationBy], total = values.reduce((a, b) => a + b, 0);
-      const dictation = { total, series: [{ key: dictationBy, label: t(choiceKeys[dictationBy]), values, total, share: 1 }] };
-      html += `<section class="ua-section"><div class="ua-section-head"><div><h3>${t("usage.dictation")}</h3><strong class="ua-total">${count(total)}</strong></div>` +
-        sel(choices("dictation"), dictationBy, t("usage.dictation"), ' data-control="dictation"') + `</div>` +
-        chart(usage.days, dictation, t("usage.dictation"), "dictation", "bars") + `<p class="ua-note">${t("usage.captureDays")}</p>` +
-        (usage.dictation.estimated.some(Boolean) ? `<p class="ua-note ua-estimates">${t("usage.estimates", { dictations: count(usage.dictation.estimated_dictations), words: count(usage.dictation.estimated_words) })}</p>` : "") + `</section>`;
-    }
-    html += `<div id="${tooltipId}" role="tooltip" class="ua-tooltip" hidden></div>`;
-    patchHTML(root, html);
-    if (focused) root.querySelector<HTMLElement>(`[data-control="${focused}"]`)?.focus();
+    const focused = root.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.runAct : undefined;
+    const cards = failed ? noticeHTML("allowance", "models") : allowanceCardsHTML(allowance) + (chatgpt ? chatgptHTML() : "");
+    // With no subscription signed in there is nothing to show here, and the rows of what was spent stand alone.
+    root.hidden = !busy && !cards;
+    root.setAttribute("aria-busy", String(busy));
+    root.setAttribute("aria-label", t("runs.allowance"));
+    patchHTML(root, `<header><h2 tabindex="-1">${t("runs.allowance")}</h2>${btn(t("runs.refresh"), "sm", ` data-run-act="allowance"${busy ? " disabled" : ""}`)}</header>${cards}`);
+    if (focused) root.querySelector<HTMLElement>(`[data-run-act="${focused}"]`)?.focus({ preventScroll: true });
   }
 
-  async function refresh(): Promise<void> {
-    if (disposed) return;
-    const current = ++revision;
-    const stamp = JSON.stringify([range, endDay, tz]);
-    const quiet = data !== null && stamp === requestStamp && !failed;
-    requestStamp = stamp;
-    const before = JSON.stringify(data);
-    loading = !quiet;
-    failed = false;
+  async function read(quiet: boolean): Promise<void> {
+    const current = ++revision, before = JSON.stringify([allowance, failed, chatgpt]);
+    busy = !quiet;
     if (!quiet) render();
-    try {
-      const result = await api.usageAnalytics({ range, ...(endDay ? { end_day: endDay } : {}), ...(tz ? { tz } : {}) });
-      if (disposed || current !== revision) return;
-      data = result;
-    } catch {
-      if (disposed || current !== revision) return;
-      failed = true;
-    }
-    loading = false;
-    if (!quiet || failed || JSON.stringify(data) !== before) render();
+    let next = allowance, broke = false;
+    try { next = await api.usageAllowances(); } catch { broke = true; }
+    const account = await api.chatgptStatus?.().catch(() => null);
+    if (disposed || current !== revision) return;
+    allowance = next; failed = broke;
+    chatgpt = !!account?.signed_in && account.plan_scope_granted !== false;
+    busy = false;
+    if (!quiet || JSON.stringify([allowance, failed, chatgpt]) !== before) render();
   }
 
-  function hideTooltip(): void {
-    const tooltip = root.querySelector<HTMLElement>(".ua-tooltip");
-    if (tooltip) tooltip.hidden = true;
-    root.querySelectorAll("[aria-describedby]").forEach(mark => mark.removeAttribute("aria-describedby"));
-  }
-  function showTooltip(event: Event): void {
-    const mark = (event.target as Element).closest<SVGElement>("[data-tooltip]");
-    if (!mark) return;
-    hideTooltip();
-    const tooltip = root.querySelector<HTMLElement>(".ua-tooltip")!;
-    tooltip.textContent = mark.dataset.tooltip!;
-    tooltip.hidden = false;
-    mark.setAttribute("aria-describedby", tooltipId);
-    const box = mark.getBoundingClientRect();
-    tooltip.style.left = `${Math.max(8, Math.min(box.left, window.innerWidth - tooltip.offsetWidth - 8))}px`;
-    tooltip.style.top = `${Math.max(8, Math.min(box.bottom + 8, window.innerHeight - tooltip.offsetHeight - 8))}px`;
-  }
-  function keydown(event: KeyboardEvent): void { if (event.key === "Escape") hideTooltip(); }
   function clicked(event: MouseEvent): void {
     const button = (event.target as Element).closest<HTMLButtonElement>("button");
     if (!button || button.disabled) return;
-    const control = button.dataset.control;
-    if (button.matches(".sel") && (control === "cost" || control === "messages" || control === "dictation")) {
-      const current = control === "cost" ? costBy : control === "messages" ? messageBy : dictationBy;
-      openMenu(button, choices(control), current, (value) => {
-        if (control === "cost") costBy = value as typeof costBy;
-        else if (control === "messages") messageBy = value as typeof messageBy;
-        else dictationBy = value as typeof dictationBy;
-        render();
-      });
-    } else if (button.dataset.range) {
-      const next = button.dataset.range as UsageRequest["range"];
-      if (next !== range) { range = next; void refresh(); }
-    } else if (control === "retry") void refresh();
-    else if ((control === "previous" || control === "next") && data) {
-      const day = new Date(`${data.end_day}T12:00:00Z`);
-      day.setUTCDate(day.getUTCDate() + (control === "previous" ? -1 : 1) * (range === "7d" ? 7 : 30));
-      endDay = day.toISOString().slice(0, 10);
-      if (endDay > data.today_day) endDay = data.today_day;
-      void refresh();
-    } else if (control === "more") { more = !more; render(); }
-    else if (button.dataset.member !== undefined) {
-      const id = Number(button.dataset.member);
-      if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
-      render();
-    }
+    if (button.dataset.runAct === "allowance") void read(false);
+    else if (button.dataset.runAct === "chatgpt-usage") void api.openExternalUrl?.(CHATGPT_USAGE_URL).catch((error) => toaster.info(describeError(error)));
   }
-  root.addEventListener("focusin", showTooltip);
-  root.addEventListener("pointerover", showTooltip);
-  root.addEventListener("focusout", hideTooltip);
-  root.addEventListener("pointerout", hideTooltip);
-  root.addEventListener("keydown", keydown);
   root.addEventListener("click", clicked);
-  window.addEventListener("scroll", hideTooltip, true);
-  window.addEventListener("resize", hideTooltip);
   const stopLocale = onLocaleChange(render);
-  const ready = Promise.all([refresh(), runs?.ready]).then(() => {});
   const controller: UsageAnalyticsMount = {
-    ready, refresh: async () => { await Promise.all([refresh(), runs?.refresh()]); },
+    ready: read(false),
+    refresh: () => read(true),
     destroy() {
       disposed = true;
       ++revision;
       stopLocale();
-      root.removeEventListener("focusin", showTooltip);
-      root.removeEventListener("pointerover", showTooltip);
-      root.removeEventListener("focusout", hideTooltip);
-      root.removeEventListener("pointerout", hideTooltip);
-      root.removeEventListener("keydown", keydown);
       root.removeEventListener("click", clicked);
-      window.removeEventListener("scroll", hideTooltip, true);
-      window.removeEventListener("resize", hideTooltip);
-      runs?.destroy();
-      runsHost.remove();
       root.remove();
       if (mounted.get(host) === controller) mounted.delete(host);
     },

@@ -474,9 +474,6 @@ const ALLOWED_METHODS: &[&str] = &[
     "chatgpt.sign_out",
     "chatgpt.models",
     "stats.summary",
-    "usage.analytics",
-    "usage.runs",
-    "usage.export",
     "usage.allowances",
     "messaging.telegram.status",
     "messaging.telegram.connect",
@@ -834,37 +831,6 @@ pub async fn core_call(
         MONITORING.store(on, Ordering::Relaxed);
     }
     Ok(result)
-}
-
-/// Saves an already exported CSV only at the location chosen in the native save dialog. The
-/// webview cannot supply a path. Cancel is a normal result and writes nothing.
-#[tauri::command]
-pub async fn save_usage_csv(app: AppHandle, webview: Webview, csv: String) -> Result<bool, String> {
-    require_main(&webview)?;
-    if csv.len() > 32 * 1024 * 1024 || !csv.starts_with("time,member,title,model,provider,") {
-        return Err("invalid usage CSV".to_owned());
-    }
-    let window = webview.window();
-    tauri::async_runtime::spawn_blocking(move || {
-        use tauri_plugin_dialog::DialogExt;
-        let chosen = app
-            .dialog()
-            .file()
-            .set_parent(&window)
-            .add_filter("CSV", &["csv"])
-            .set_file_name("raphael-usage.csv")
-            .blocking_save_file();
-        let Some(chosen) = chosen else {
-            return Ok(false);
-        };
-        let path = chosen
-            .into_path()
-            .map_err(|_| "invalid save location".to_owned())?;
-        std::fs::write(path, format!("\u{feff}{csv}")).map_err(|err| err.to_string())?;
-        Ok(true)
-    })
-    .await
-    .map_err(|err| format!("a background task failed: {err}"))?
 }
 
 /// Return only the folder explicitly chosen by the owner; cancelling changes nothing.
@@ -2308,7 +2274,6 @@ mod tests {
                 "open_link",
                 "open_team_file",
                 "pick_output_folder",
-                "save_usage_csv",
                 "schedule_keep_awake_get",
                 "schedule_keep_awake_set",
                 "window_hotkey",
@@ -2650,14 +2615,13 @@ mod tests {
     }
 
     #[test]
-    fn usage_analytics_is_a_named_read_of_the_main_window_only() {
+    fn usage_is_a_named_read_of_the_main_window_only() {
         assert!(is_allowed_method("home.overview"));
         assert!(validate_core_call("home.overview", &json!({"tz": "Asia/Taipei"})).is_ok());
-        assert!(is_allowed_method("usage.analytics"));
-        assert!(validate_core_call("usage.analytics", &json!({"range": "7d"})).is_ok());
-        assert!(!is_allowed_method("usage.clear"));
-        assert!(is_allowed_method("usage.export"));
-        assert!(is_allowed_method("usage.runs"));
+        // The usage page shows only subscription allowances since 2026-11-06: the analytics, runs and CSV reads are closed.
+        for retired in ["usage.analytics", "usage.runs", "usage.export", "usage.clear"] {
+            assert!(!is_allowed_method(retired), "{retired}");
+        }
         assert!(is_allowed_method("usage.allowances"));
         assert!(ensure_caller(crate::MAIN_WINDOW, crate::MAIN_WINDOW).is_ok());
         assert!(ensure_caller("overlay", crate::MAIN_WINDOW).is_err());
@@ -3036,7 +3000,6 @@ mod tests {
             "models.local_delete",
             "models.catalog",
             "stats.summary",
-            "usage.analytics",
             "languages.list",
             "agent.history.list",
             "agent.history.clear",

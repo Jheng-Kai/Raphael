@@ -5,17 +5,16 @@ import type { AppContext, MainEvent, ModelCatalog, SettingsPane } from "../types
 import { setLocale, t } from "../i18n";
 import { Cleared } from "../cleared";
 import * as analytics from "../usage-analytics";
-import type { UsageRequest } from "../usage-analytics-types";
 
 const api = vi.hoisted(() => ({
   settingsGet: vi.fn(), settingsSet: vi.fn(), secretsStatus: vi.fn(), statusGet: vi.fn(), audioDevices: vi.fn(),
   desktopStatus: vi.fn(),
   historyList: vi.fn(), historyClear: vi.fn(), agentHistoryClear: vi.fn(), core: vi.fn(),
   keyboardHasAltgr: vi.fn(), languagesList: vi.fn(), modelsCatalog: vi.fn(), modelsLocal: vi.fn(), hotkeysPause: vi.fn(), audioMonitor: vi.fn(),
-  providersKinds: vi.fn(), providersList: vi.fn(), providersModels: vi.fn(), providersAdd: vi.fn(), servicesStatus: vi.fn(), usageAnalytics: vi.fn(),
+  providersKinds: vi.fn(), providersList: vi.fn(), providersModels: vi.fn(), providersAdd: vi.fn(), servicesStatus: vi.fn(),
   brainsCli: vi.fn(), brainsCliLogin: vi.fn(), brainsCliDisconnect: vi.fn(), openExternalUrl: vi.fn(),
   chatgptStatus: vi.fn(async () => ({ signed_in: false })), chatgptSignIn: vi.fn(), chatgptCancel: vi.fn(), chatgptSignOut: vi.fn(), chatgptModels: vi.fn(async () => ({ models: [] })),
-  usageRuns: vi.fn(), usageExport: vi.fn(), usageAllowances: vi.fn(), saveUsageCsv: vi.fn(),
+  usageAllowances: vi.fn(),
 }));
 vi.mock("../api", () => api);
 vi.mock("@tauri-apps/api/app", () => ({ getVersion: async () => "test" }));
@@ -117,16 +116,7 @@ beforeEach(() => {
   api.providersKinds.mockResolvedValue({ kinds: [] });
   api.providersList.mockResolvedValue({ providers: [] });
   api.brainsCli.mockResolvedValue({ clis: [] });
-  api.usageRuns.mockResolvedValue({ range: "month", start_day: "2026-10-01", end_day: "2026-10-24", summary: { duration_ms: 0, cost_usd: 0, tokens: 0, ai_steps: 0, tools: 0, errors: 0 }, groups: { member: [], model: [], day: [], provider: [], routine: [] }, bill: { cost_usd: 0, purposes: [] }, fish_voice: false, total: 0 });
-  api.usageAllowances.mockResolvedValue({ brains: [] });
-  api.usageAnalytics.mockImplementation(async ({ range }: UsageRequest) => {
-    const group = { total: 0, series: [] };
-    const days = Array.from({ length: range === "30d" ? 30 : 7 }, (_, i) => `2026-10-${String(i + 1).padStart(2, "0")}`);
-    const cost = (key: string, total: number) => ({ total, series: [{ key, label: key, total, share: 1, values: days.map((_, i) => i === days.length - 1 ? total : 0) }] });
-    return { range, start_day: days[0], end_day: days[days.length - 1], today_day: "2026-10-30", days, tz: "Asia/Taipei",
-      cost_by: { purpose: cost("agent", 1), model: cost("example/model", 2), provider: cost("example", 3) }, tools: group, messages_by: { model: group, source: group }, members: [],
-      dictation: { dictations: days.map(() => 0), words: days.map(() => 0), estimated: days.map(() => false), estimated_words: 0, estimated_dictations: 0, day_basis: "capture_local" } };
-  });
+  api.usageAllowances.mockResolvedValue({ brains: [{ id: "codex", name: "Codex", source: "live", windows: [{ period: "weekly", remaining_percent: 89, resets_at: 1792900000 }] }] });
   api.settingsSet.mockImplementation(async (key: string, value: string) => ({ settings: { stt_engine: "cloud", [key]: value } }));
 });
 afterEach(() => { page?.hide(); document.body.innerHTML = ""; setLocale("zh-TW"); });
@@ -244,22 +234,23 @@ test("settings delegates the CLI row menu and refreshes an open model chooser on
   expect(closeSettings).not.toHaveBeenCalled();
 });
 
-test("Models contains no spending and Usage mounts analytics once, preserving filters across tabs and redraws", async () => {
+test("Models contains no spending and Usage mounts its allowances once, plainly, across tabs and redraws", async () => {
   const mountAnalytics = vi.spyOn(analytics, "mountUsageAnalytics");
   await mount();
   expect(page.el.querySelector("#set-title")?.textContent).toBe("Models & usage");
   expect(page.el.querySelector('[data-row="openrouter-usage"]')).toBeNull();
   expect(page.el.querySelector('[data-row="raphael-spend"]')).toBeNull();
-  expect(api.usageAnalytics).not.toHaveBeenCalled();
+  expect(api.usageAllowances).not.toHaveBeenCalled();
   click('[data-models-tab="usage"]'); await flush();
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
-  expect(api.usageAnalytics).toHaveBeenCalledTimes(1);
+  expect(api.usageAllowances).toHaveBeenCalledTimes(1);
   expect(page.el.querySelector('[data-row="openrouter-usage"]')).not.toBeNull();
+  expect(page.el.querySelector('[data-row="raphael-spend"]')).not.toBeNull();
   expect(page.el.querySelector('[data-pv="directory"]')).toBeNull();
-  const node = page.el.querySelector(".usage-analytics");
-  click('[data-range="30d"]'); await flush();
-  click('.sel[data-control="cost"]'); click('.menu [data-value="provider"]');
-  expect(page.el.querySelector(".ua-total")?.textContent).toBe("US$3.00");
+  const node = page.el.querySelector(".usage-analytics")!;
+  // The allowances stand above the rows of what was spent, and nothing else is on the page.
+  expect(node.compareDocumentPosition(page.el.querySelector('[data-row="raphael-spend"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(page.el.querySelector(".ua-chart, .run-tiles, .run-bill, [data-range], .foot")).toBeNull();
   setLocale("ja"); await flush();
   expect(page.el.querySelector(".usage-analytics")).toBe(node);
   click('[data-models-tab="models"]');
@@ -267,32 +258,20 @@ test("Models contains no spending and Usage mounts analytics once, preserving fi
   click('[data-models-tab="usage"]'); await flush();
   expect(page.el.querySelector(".usage-analytics")).toBe(node);
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
-  expect(page.el.querySelector('.sel[data-control="cost"]')?.getAttribute("title")).toBe(t("usage.provider"));
-  expect(page.el.querySelector(".ua-total")?.textContent).toBe("US$3.00");
-  expect(page.el.querySelector('[data-range="30d"]')?.getAttribute("aria-pressed")).toBe("true");
 });
 
-test("the run period menu survives settings delegation and Escape closes only its menu", async () => {
-  await mount("usage");
-  click('[data-run-act="period"]');
-  expect(document.querySelector('.menu [data-value="last_month"]')).not.toBeNull();
-  document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
-  expect(document.querySelector(".menu")).toBeNull();
-  expect(page.el.hidden).toBe(false);
-});
-
-test("analytics refreshes on completed activity while visible, and is destroyed on pane leave or Settings close", async () => {
+test("the allowances refresh on completed activity while visible, and are destroyed on pane leave or Settings close", async () => {
   const mountAnalytics = vi.spyOn(analytics, "mountUsageAnalytics");
   await mount(); click('[data-models-tab="usage"]'); await flush();
   const first = mountAnalytics.mock.results[0].value;
   const destroyed = vi.spyOn(first, "destroy");
-  const calls = api.usageAnalytics.mock.calls.length;
+  const calls = api.usageAllowances.mock.calls.length;
   send({ type: "ProvidersChanged" }); await flush();
   send({ type: "AgentTurn", turn_id: 42 }); await flush();
-  expect(api.usageAnalytics).toHaveBeenCalledTimes(calls + 2);
+  expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 2);
   click('[data-models-tab="models"]');
   send({ type: "AgentTurn", turn_id: 43 }); await flush();
-  expect(api.usageAnalytics).toHaveBeenCalledTimes(calls + 2);
+  expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 2);
   expect(destroyed).not.toHaveBeenCalled();
   click('[data-pane="general"]');
   expect(destroyed).toHaveBeenCalledTimes(1);
@@ -322,12 +301,12 @@ test("the shared tabs support arrow keys and usage search selects and focuses th
   expect((document.activeElement as HTMLElement).closest('[data-row="openrouter-key"]')).not.toBeNull();
 });
 
-test("show awaits the initial analytics reading and leaving during it disposes the stale view", async () => {
-  const result = await api.usageAnalytics({ range: "7d" });
+test("show awaits the initial allowance reading and leaving during it disposes the stale view", async () => {
+  const result = await api.usageAllowances();
   const mountAnalytics = vi.spyOn(analytics, "mountUsageAnalytics");
   await mount();
   let finish!: (value: unknown) => void;
-  api.usageAnalytics.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  api.usageAllowances.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   let ready = false;
   const showing = Promise.resolve(page.show("usage")).then(() => { ready = true; });
   await flush();
@@ -338,24 +317,24 @@ test("show awaits the initial analytics reading and leaving during it disposes t
   finish(result); await showing; await flush();
   expect(page.pane()).toBe("general");
   expect(page.el.querySelector(".usage-analytics")).toBeNull();
-  const requests = api.usageAnalytics.mock.calls.length;
+  const requests = api.usageAllowances.mock.calls.length;
   send({ type: "AgentTurn", turn_id: 44 }); await flush();
-  expect(api.usageAnalytics).toHaveBeenCalledTimes(requests);
+  expect(api.usageAllowances).toHaveBeenCalledTimes(requests);
 });
 
 test("activity during the initial reading is coalesced into one refresh", async () => {
-  const result = await api.usageAnalytics({ range: "7d" });
-  api.usageAnalytics.mockClear();
+  const result = await api.usageAllowances();
+  api.usageAllowances.mockClear();
   let finish!: (value: unknown) => void;
-  api.usageAnalytics.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  api.usageAllowances.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   await mount(); click('[data-models-tab="usage"]');
-  expect(api.usageAnalytics).toHaveBeenCalledTimes(1);
+  expect(api.usageAllowances).toHaveBeenCalledTimes(1);
   send({ type: "AgentTurn", turn_id: 45 });
   send({ type: "AgentTurn", turn_id: 46 });
   send({ type: "Dictation", phase: "pasted", agent: false });
-  expect(api.usageAnalytics).toHaveBeenCalledTimes(1);
+  expect(api.usageAllowances).toHaveBeenCalledTimes(1);
   finish(result); await flush();
-  expect(api.usageAnalytics).toHaveBeenCalledTimes(2);
+  expect(api.usageAllowances).toHaveBeenCalledTimes(2);
 });
 
 test("provider search focuses the Models add action and opens its searchable dialog", async () => {

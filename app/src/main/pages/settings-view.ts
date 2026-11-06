@@ -698,18 +698,21 @@ export function retentionChoices(v: SettingsView): Choice[] {
 /** How long the dictation history is kept, as the value of its dropdown (30 days until the core says). */
 export const retentionOf = (v: SettingsView): string => String(v.brain?.history_retention_days ?? 30);
 
-/** One page with model connections and usage in separate views. Legacy ids choose their own view. */
+/**
+ * One page with model connections and usage in separate views. Legacy ids choose their own view. Usage is as plain as
+ * Grok Bot's (owner, 2026-11-06): what each subscription has left, then the key and what was spent, with no charts.
+ */
 function modelsHTML(v: SettingsView): string {
   const providers = v.providers ?? emptyProvidersView();
   const selected = v.modelsTab ?? (v.pane === "usage" ? "usage" : "models");
   const content = selected === "models" ? section(t("models.used"), [quickRow(v), ...MODEL_ROWS.slice(1).map(r => modelRow(v, r))], v.catalog === "failed" ? priceSpan(v, "note") : "") +
     cliBrainsHTML(v.cliBrains ?? emptyCliBrainsView()) + providersHTML(providers) + providersAddHTML(providers) :
-    `<div data-usage-host></div><section class="sgroup" aria-label="${esc(t("models.usage"))}"><div class="slist">` + [
+    `<div data-usage-host></div>` + section(t("models.spend"), [
       keyRow(v),
       ...(v.keyError ? [note(st("err", v.keyError()), ' role="alert"')] : []),
       spendRow(v),
       usageRow(v),
-    ].join("") + `</div><p class="foot">${esc(t("settings.usageDifference"))}</p></section>`;
+    ]);
   return headingHTML(v) + coreNote(v) + `<div class="models-page">` +
     tabs((["models", "usage"] as const).map((id) => ({
       id, label: id === "models" ? t("providers.title") : t("models.usage"),

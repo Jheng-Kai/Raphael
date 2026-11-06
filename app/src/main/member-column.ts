@@ -1,8 +1,8 @@
 // The member column puts the primary contact first, followed by member groups and ungrouped members.
 // Raphael keeps his emblem even when the primary contact takes the first conversation slot.
 //
-// A row's borderless 「more」 that shows under the pointer, or a right click on the row (context-menu.ts), gives 「設為主要」 (the
-// primary contact, shown in the top slot), 「移到分組 ▸」 and 「刪除」; a group header's gives 「重新命名」, 「看的地方」 and 「刪除」. What they do is the host's
+// A row's borderless 「more」 that shows under the pointer, or a right click on the row (context-menu.ts), opens the row menu
+// (`memberMenu`); a group header's gives 「重新命名」, 「看的地方」 and 「刪除」. What they do is the host's
 // (members-shell.ts): the column only draws and says what was asked.
 //
 // `columnHTML` draws the list from a snapshot (pure, so its rules can be tested without a browser);
@@ -12,7 +12,7 @@ import { createRoomsSection, openNewGroupChat } from "./group-chats";
 import { t } from "./i18n";
 import { formatClock } from "./format";
 import { createMessageSearch } from "./message-search";
-import { type MemberSection, faceHTML, memberMatches, memberSections, memberDisplayList, memberRole, previewOf, raphaelOf } from "./members";
+import { type MemberSection, faceHTML, memberMatches, memberSections, memberDisplayList, memberRole, previewOf, primaryIdOf, raphaelOf } from "./members";
 import type { Member, MembersList } from "./types";
 import { closeMenu, esc, ico, iconButton, openPopover } from "./ui";
 
@@ -127,15 +127,19 @@ export interface MemberColumn {
   menu(id: number, anchor: HTMLElement): void;
 }
 
+export interface ActionItem { id: string; label: string; icon?: Parameters<typeof ico>[0]; submenu?: boolean }
+/** A hairline between groups of items, as Grok Bot's row menu has. */
+export const SEP = "-";
+
 /** A menu of plain items under `anchor`; `onPick` gets the chosen item's `id`. */
 /** `lead` is a row above the items, such as a message's reactions; its buttons carry `data-lead`. */
-export function openActions(anchor: HTMLElement, items: readonly { id: string; label: string; icon?: Parameters<typeof ico>[0]; submenu?: boolean }[], onPick: (id: string, row: HTMLElement) => void,
+export function openActions(anchor: HTMLElement, items: readonly (ActionItem | typeof SEP)[], onPick: (id: string, row: HTMLElement) => void,
   lead?: { html: string; onPick(value: string): void }): void {
   const el = openPopover(
     anchor,
     (lead?.html ?? "") + items
       .map(
-        (item) =>
+        (item) => item === SEP ? `<div class="menu-sep" role="separator"></div>` :
           `<button type="button" role="menuitem"${item.icon === "trash" ? ' class="danger"' : ""} tabindex="-1" data-pick="${esc(item.id)}"${item.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
           `<span class="ck">${item.icon ? ico(item.icon) : ""}</span><span class="mt">${esc(item.label)}</span>${item.submenu ? ico("right") : ""}</button>`,
       )
@@ -157,23 +161,27 @@ export function openActions(anchor: HTMLElement, items: readonly { id: string; l
   el.querySelector<HTMLElement>("button")?.focus();
 }
 
+/**
+ * A row's menu, grouped as Grok Bot's (owner, 2026-11-06): 釘選, 移到分組, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除.
+ * The primary sits in the top slot instead of a group and is not deleted from here: its menu ends with 換成其他成員.
+ */
 export function memberMenu(id: number, anchor: HTMLElement, host: Pick<ColumnHost, "view" | "moveMember" | "deleteMember" | "memberAction">): void {
-  const member = host.view().list?.members.find(m => m.id === id);
-  const pin = { id: "pin", label: t(member?.pinned ? "members.sideUnpin" : "members.sidePin"), icon: "pin" } as const;
-  // Raphael is not a member row the owner can edit: pinning is all there is to do to him here.
-  if (id === 0) return openActions(anchor, [pin], pick => host.memberAction?.(id, pick));
-  openActions(anchor, [
-    pin,
-    { id: "move", label: t("members.moveTo"), icon: "folder", submenu: true },
-    { id: "primary", label: t("members.sidePrimary"), icon: "up" },
-    { id: "unread", label: t("members.sideUnread"), icon: "chat" },
-    { id: "read-all", label: t("members.sideReadAll"), icon: "check" },
-    { id: "edit", label: t("members.sideEdit"), icon: "pencil" },
-    { id: "export-template", label: t("template.export"), icon: "download" },
-    { id: "duplicate", label: t("members.sideDuplicate"), icon: "copy" },
-    { id: "clear", label: t("members.sideClear"), icon: "trash" },
-    { id: "hide", label: t("members.sideHide"), icon: "eyeOff" },
-    { id: "delete", label: t("members.sideDelete"), icon: "trash" },
+  const list = host.view().list;
+  const member = list?.members.find(m => m.id === id);
+  const primary = primaryIdOf(list) === id;
+  const pin: ActionItem = { id: "pin", label: t(member?.pinned ? "members.sideUnpin" : "members.sidePin"), icon: "pin" };
+  const replace: ActionItem = { id: "primary", label: t("members.sideReplacePrimary"), icon: "up" };
+  // Raphael is not a member row the owner can edit: pinning is all there is to do to him here, and handing on the primary when it is his.
+  if (id === 0) return openActions(anchor, primary ? [pin, SEP, replace] : [pin], pick => host.memberAction?.(id, pick));
+  const unread: ActionItem = { id: "unread", label: t("members.sideUnread"), icon: "chat" };
+  const tail: (ActionItem | typeof SEP)[] = [
+    SEP, { id: "edit", label: t("members.sideEdit"), icon: "pencil" },
+    SEP, { id: "export-template", label: t("template.export"), icon: "download" },
+    SEP, { id: "hide", label: t("members.sideHide"), icon: "eyeOff" },
+  ];
+  openActions(anchor, primary ? [pin, unread, ...tail, replace] : [
+    pin, { id: "move", label: t("members.moveTo"), icon: "folder", submenu: true }, unread,
+    ...tail, { id: "delete", label: t("members.sideDelete"), icon: "trash" },
   ], (pick, row) => {
     if (pick === "move") host.moveMember(id, null, row);
     else if (pick === "delete") host.deleteMember(id);

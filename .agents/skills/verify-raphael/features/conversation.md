@@ -404,8 +404,18 @@ reactions above 回覆 and 複製, and 重新產生 on the latest answer; the ow
 The jump-to-latest button sits centred just above the composer (R-UI-105). Voice chat waits for
 a later release (R-UI-106): the voice button records voice messages only.
 
+Reactions are Grok Bot's (R-UI-108): the reaction row of the menu, and the pill a message's react
+button opens, hold 👍 😂 👎 ❤️ 🎉 and a last slot (a smiley with a plus) that opens every emoji in
+one card about 300 by 340 px: a focused search field, one scrolling grid of eight 34 px cells under
+small section labels in Unicode's order (names from emojibase-data in the app's language, skin
+tones left out, emoji newer than 15.1 left out because a Windows font may draw them as boxes), and
+a footer naming the emoji under the pointer. Search filters in place with no labels; the arrows walk
+the grid; a click chooses and closes; one Esc leaves. The data loads the first time the card opens.
+A message shows any emoji it has as its own chip; the core accepts any single emoji, up to 20 on a
+message, and still takes back the old ✓ and ?.
+
 ```powershell
-npm run look -- conversation-sections member-conversation-sections quick-conversation quick-clear-confirm quick-cleared actions thread-new-divider-latest raphael-details details member-panel-details composer-voice-pending-0 composer-voice-pending-1 empty-conversation-recording empty-conversation-hearing --theme both --width 1120,720,1920x1080
+npm run look -- conversation-sections member-conversation-sections quick-conversation quick-clear-confirm quick-cleared actions reaction-bar emoji-picker emoji-search thread-new-divider-latest raphael-details details member-panel-details composer-voice-pending-0 composer-voice-pending-1 empty-conversation-recording empty-conversation-hearing --theme both --width 1120,720,1920x1080
 ```
 
 Core: tests/brain/test_one_conversation_migration.py and tests/agent/test_folded_conversations.py.
@@ -766,8 +776,8 @@ unverified by rendered fixtures.
 
 ## Right click on an answer (R-UI-44)
 
-A right click anywhere on one of Raphael's answers opens the menu of its ⋯ (重新產生, 朗讀, 刪除這則), at the pointer, as a click on the ⋯ opens it: see
-[Members](members.md) for the rule and its table. A conversation row in a member's details gives its rename and delete menu the same way; its left click still opens the conversation.
+A right click anywhere on one of Raphael's answers opens the menu of its ⋯ (the reactions, 回覆, 複製, and 重新產生 on the latest answer, R-UI-104), at the pointer, as a click on the ⋯ opens it: see
+[Members](members.md) for the rule and its table. The quick-questions row in Raphael's details gives its clear menu the same way; its left click still opens the conversation.
 
 ```powershell
 npm run look -- context-menu-message context-menu-conversation --theme both --width 1120,720,1920x1080
@@ -1378,9 +1388,9 @@ Unit evidence: app/scripts/look/event-storm.test.mjs (nearest-rank P90, retained
 npm run look -- busy-team-thread busy-team-up busy-team-steps busy-team-typing busy-team-follow busy-team-anchor busy-team-hover busy-team-room busy-team-home --theme both --width 1120,720,1920x1080
 ```
 
-Activity listener audit also covers Settings usage: unchanged analytics and allowances retain their nodes; changed values use the shared DOM patch. Evidence: usage-analytics.test.ts and run-analytics.test.ts. Representative additional consumers:
+Activity listener audit also covers Settings usage: unchanged allowances retain their nodes; changed values use the shared DOM patch. Evidence: usage-analytics.test.ts. Representative additional consumers:
 ```powershell
-npm run look -- slime-states sidebar-unread usage usage-allowances --theme both --width 1120,720,1920x1080
+npm run look -- slime-states sidebar-unread usage usage-allowances-chatgpt --theme both --width 1120,720,1920x1080
 ```
 
 Animation clocks are not content identity: retained slimes keep their phase, delight and handover transition; new room messages retain older slime lines. ui-patch.test.ts::a changed row preserves its slime clock and active transition and group-chats.test.ts::a new room message retains older slime lines across animation clocks pin this. slime-states now updates a row preview during WorkerChanged traffic and asserts the actual CSS animation objects, start times and delays remain unchanged before checking the real member states.

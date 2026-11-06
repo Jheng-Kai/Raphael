@@ -2616,10 +2616,9 @@ export function checkRendered(name, context = {}) {
     return { check: name, rows: rows.length };
   }
   if (name === "compact-action") {
-    const action = document.querySelector('.run-header [data-run-act="export"], .keys-card [data-go="settings"]');
+    const action = document.querySelector('.keys-card [data-go="settings"]');
     require(visible(action) && action.classList.contains('icon') && !action.textContent.trim(), "secondary actions use a bare icon");
     require(!!action.getAttribute('aria-label') && action.title === action.getAttribute('aria-label'), "icon actions retain a localized name and tooltip");
-    if (action.dataset.runAct === 'export' && document.documentElement.lang === 'zh-TW') require(document.querySelector('.run-tiles').textContent.includes('權杖數') && !document.querySelector('.run-tiles').textContent.includes('Tokens'), "usage headings follow the Traditional Chinese glossary");
     return { check: name, label: action.getAttribute('aria-label') };
   }
   if (name === "details-alignment") {
@@ -2923,9 +2922,49 @@ export function checkRendered(name, context = {}) {
     const picks = [...menu.querySelectorAll('[data-pick]')].map(item => item.dataset.pick).filter(pick => pick !== "regenerate");
     require(picks.join("|") === "reply|copy", "the menu is Reply and Copy, with no read aloud or delete");
     const reactions = [...menu.querySelectorAll('.menu-reactions [data-lead]')];
-    require(reactions.length === 4 && reactions.every(visible), "its reactions stand above the items");
+    require(reactions.map(button => button.dataset.lead).join(" ") === "👍 😂 👎 ❤️ 🎉 +" && reactions.every(visible), "Grok's five quick reactions and the slot for every emoji stand above the items");
     require(reactions[0].getBoundingClientRect().bottom <= menu.querySelector('[data-pick]').getBoundingClientRect().top + 1, "the reactions come first");
     return { check: name, picks };
+  }
+  if (name === "reaction-bar") {
+    const bar = document.querySelector('#app-popover.reaction-bar');
+    require(visible(bar), "the quick bar is open");
+    const slots = [...bar.querySelectorAll('[data-quick]')];
+    require(slots.map(slot => slot.dataset.quick).join(" ") === "👍 😂 👎 ❤️ 🎉 +", "five quick reactions in Grok's order, then every emoji");
+    const tops = slots.map(slot => Math.round(slot.getBoundingClientRect().top));
+    require(new Set(tops).size === 1, "the slots stand in one row");
+    require(slots.every(slot => { const box = slot.getBoundingClientRect(); return box.width >= 32 && box.height >= 32; }), "each slot is a target of at least 32 px");
+    require(visible(bar.querySelector('[data-quick="+"] svg.i')), "the last slot is drawn as a smiley with a plus");
+    const box = bar.getBoundingClientRect();
+    require(parseFloat(getComputedStyle(bar).borderTopLeftRadius) >= box.height / 2 - 1, "the bar is a pill");
+    require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the bar is inside the viewport");
+    return { check: name };
+  }
+  if (name === "emoji-picker" || name === "emoji-search") {
+    const card = document.querySelector('#app-popover.emoji-picker');
+    require(visible(card) && card.getAttribute('role') === 'dialog', "the card of every emoji is open");
+    const box = card.getBoundingClientRect();
+    require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the card is inside the viewport");
+    require(box.width >= 280 && box.width <= 320 && box.height <= 360, "the card is Grok's size: about 300 by 340 px");
+    const input = card.querySelector('input');
+    require(document.activeElement === input && input.placeholder !== "", "the search field is focused and says what it searches");
+    const cells = [...card.querySelectorAll('.emoji-cell')].filter(visible);
+    require(cells.length > 0, "emoji are shown");
+    const first = cells[0].getBoundingClientRect();
+    require(Math.abs(first.width - 34) <= 1 && Math.abs(first.height - 34) <= 1, "cells are 34 px");
+    const row = cells.filter(cell => Math.round(cell.getBoundingClientRect().top) === Math.round(first.top));
+    require(row.length === Math.min(8, cells.length), "a row holds eight emoji");
+    const grid = card.querySelector('.emoji-grid'), foot = card.querySelector('.emoji-foot');
+    require(grid.getBoundingClientRect().right <= box.right && foot.getBoundingClientRect().bottom <= box.bottom + 1, "the grid and its footer stay inside the card");
+    if (name === "emoji-picker") {
+      require(card.querySelector('.emoji-sec h4')?.textContent === "笑臉和情緒", "the grid opens at Smileys under its small label");
+      require(grid.scrollHeight > grid.clientHeight, "the grid scrolls inside the card");
+      require(card.querySelector('.emoji-foot-char').textContent === "😂" && card.querySelector('.emoji-foot-name').textContent !== "", "the footer names the emoji under the pointer");
+    } else {
+      require(!card.querySelector('.emoji-sec') && cells.some(cell => cell.dataset.emoji === "❤️"), "search shows matching emoji with no section labels");
+    }
+    require(window.__look.calls.every(call => !/react$/.test(call.method ?? "")), "opening the card reacts with nothing");
+    return { check: name, cells: cells.length };
   }
   if (name === "member-no-conversations") {
     const panel = document.querySelector('.mb-det:not([hidden])');
@@ -4672,11 +4711,28 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "member-column") return checkRendered("sidebar-shell");
   // Primary is a display position; the room's coordinator remains identity 0.
-  if (name === "primary-menu") {
+  if (name === "member-menu") {
+    // Grok Bot's row menu (owner, 2026-11-06): groups split by hairlines, the destructive item last and red.
     const menu = document.querySelector('#app-popover');
     require(visible(menu), "the member's menu is open");
+    const shape = [...menu.children].map(node => node.matches('[role="separator"]') ? "|" : node.dataset.pick).join(" ");
+    require(shape === "pin move unread | edit | export-template | hide delete", `the menu is grouped as Grok's: ${shape}`);
+    for (const line of menu.querySelectorAll('[role="separator"]')) {
+      const box = line.getBoundingClientRect();
+      require(box.height >= 1 && box.height <= 9 && box.width > menu.getBoundingClientRect().width * 0.7, "each hairline spans the menu");
+    }
+    const remove = menu.querySelector('[data-pick="delete"]');
+    require(remove.classList.contains('danger') && getComputedStyle(remove).color !== getComputedStyle(menu.querySelector('[data-pick="pin"]')).color, "刪除 is last and red");
+    require(!menu.querySelector('[data-pick="primary"], [data-pick="clear"], [data-pick="duplicate"], [data-pick="read-all"]'), "an ordinary member's menu has nothing more");
+    const box = menu.getBoundingClientRect();
+    require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the menu is inside the viewport");
+    return { check: name, shape };
+  }
+  if (name === "primary-menu") {
+    const menu = document.querySelector('#app-popover');
+    require(visible(menu), "the primary's menu is open");
     const items = [...menu.querySelectorAll('[data-pick]')], picks = items.map(item => item.dataset.pick), row = items[picks.indexOf('primary')];
-    require(row && picks.indexOf('primary') === picks.indexOf('move') + 1 && picks.filter(pick => pick === 'primary').length === 1, "設為主要 is one item, right after 移到分組");
+    require(row && picks.at(-1) === 'primary' && picks.filter(pick => pick === 'primary').length === 1 && row.previousElementSibling?.matches('[role="separator"]'), "換成其他成員 is one item, last, after a hairline");
     require(visible(row.querySelector('.ck svg.i')) && row.textContent.trim() !== "" && !row.classList.contains('danger'), "the primary action keeps its label and a non-star icon");
     const box = menu.getBoundingClientRect();
     require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the menu is inside the viewport");
@@ -4712,7 +4768,7 @@ export function checkRendered(name, context = {}) {
       require(!dialog.querySelector('select, input[type=radio], input[type=checkbox]'), "no native controls");
       require(data.primaryId === 1 && choices.some(button => button.dataset.id === '0') && !choices.some(button => button.dataset.id === '1'), "小晴 is the primary now and is not offered, and Raphael can be chosen again");
       const picked = choices.filter(button => button.getAttribute('aria-checked') === 'true');
-      require(picked.length === 1 && visible(picked[0].querySelector('svg.i')), "one member is chosen, and it carries a check");
+      require(picked.length === 1 && picked[0].dataset.id === '2' && visible(picked[0].querySelector('svg.i')), "the member clicked is the one chosen, and it carries a check");
       const set = dialog.querySelector('[data-dlg="set"]'), actions = [...dialog.querySelectorAll('.mb-dlg-act .btn')];
       require(!set.disabled && set.classList.contains('pri'), "設為主要 is the enabled primary action");
       require(actions.at(-1) === set && actions.at(-2)?.dataset.dlg === 'cancel', "the primary action is rightmost and 取消 is just left of it");
@@ -4766,20 +4822,6 @@ export function checkRendered(name, context = {}) {
     require(visible(card) && card.querySelector('.ra-face'), "the current chief writes the wrap-up");
     require(document.querySelectorAll('.au-room-wrapup').length === 1 && (document.querySelector('.au-room-thread .tn:last-child .au-room-wrapup') || document.querySelector('.au-room-thread .tn:last-child.au-room-wrapup')), "the room ends with one wrap-up");
     return { check: name, crowned: crowned[0].dataset.tooltip, members };
-  }
-  if (name === "usage-allowance-link") {
-    const heading = document.querySelector(".run-allowance h3");
-    require(document.activeElement === heading, "subscription link moves keyboard focus to allowances");
-    require(document.querySelectorAll(".run-subscription").length === 3, "all subscription allowances remain available");
-    return { check: name, heading: heading.textContent };
-  }
-  if (name === "usage-bill-breakdown") {
-    const bill = document.querySelector(".run-bill-total");
-    require(Number(bill.dataset.billTotal) === window.__look.data.status.spend.month_usd, "month bill uses the sidebar ledger total");
-    require(document.querySelectorAll("[data-bill-purpose]").length === 5, "all four purposes and unknown spend are included");
-    require(document.querySelector(".run-exclusions").textContent.includes("Fish Audio"), "enabled Fish Audio voice is excluded explicitly");
-    require(document.querySelector('[data-run-act="show-allowance"]'), "subscription exclusion links to allowances");
-    return { check: name, bill: bill.textContent };
   }
   if (name === "store-toolbar-visible") {
     const pane = document.querySelector('.modal-body'), frame = pane.getBoundingClientRect();
@@ -4944,33 +4986,23 @@ export function checkRendered(name, context = {}) {
     require(window.__look.calls.filter(c => c.method === 'connectors.set_key').length === 1, "the error comes through the real IPC boundary");
     return { check: name, message: alert.textContent };
   }
-  if (name === "usage-summary") {
-    require(document.querySelectorAll(".run-tile").length === 5, "overview totals remain available");
-    require(!document.querySelector(".run-list, .run-timeline, [data-run-id]"), "per-run navigation is absent");
-    const tracks = [...document.querySelectorAll(".run-groups .run-bar-track, .run-allowance .run-bar-track")];
-    for (const track of tracks) {
-      const fill = track.querySelector("i"), box = track.getBoundingClientRect();
-      require(box.width > 0 && box.height === 7, "grouping and allowance tracks retain their visible height");
-      require(visible(fill) && fill.getBoundingClientRect().height === 7, "bar fills remain visible");
-    }
-    return { check: name, bars: tracks.length };
-  }
-  if (name === "usage-subscription") {
-    const rows = [...document.querySelectorAll(".run-groups > section:last-child .run-bars li")];
-    require(rows.length === 3, "subscription and router models have separate rows");
-    require(rows.slice(0, 2).every(row => row.querySelector("small").textContent === "訂閱"), "unpriced tokens display the subscription label");
-    require(rows[2].querySelector("small").textContent === "US$0.0019", "the router retains its recorded price");
-    require(!rows.some(row => row.textContent.includes("?effort=")), "model names omit effort");
-    return { check: name, rows: rows.map(row => row.textContent) };
-  }
-  if (name === "usage-member-subscription") {
-    const button = document.querySelector('.ua-table-scroll [data-member="0"]'), row = button.closest("tr");
-    const details = document.getElementById(button.getAttribute("aria-controls"));
-    require(button.getAttribute("aria-expanded") === "true" && visible(details), "member model details are expanded");
-    require(row.querySelector("td:nth-child(3)").textContent === "訂閱", "subscription member cost is labeled");
-    require(details.querySelector(".ua-models li > span:last-child").textContent.includes("訂閱"), "subscription model cost is labeled");
-    require(!details.textContent.includes("?effort="), "daily model names omit effort");
-    return { check: name, member: row.textContent, models: details.textContent };
+  if (name === "usage-plain") {
+    // As plain as Grok Bot's (owner, 2026-11-06): what each subscription has left, then the key and what was spent.
+    const panel = document.querySelector('#models-panel-usage');
+    require(visible(panel), "the usage tab is open");
+    require(!panel.querySelector('svg.ua-chart, .ua-chart, .run-tiles, .run-tile, .run-bill, .run-groups, table, [data-range], [data-run-act="export"], [data-run-act="period"], .foot'), "no periods, charts, breakdowns, tiles, exports or footnotes");
+    const rows = ["openrouter-key", "raphael-spend", "openrouter-usage"].map(row => panel.querySelector(`[data-row="${row}"]`));
+    require(rows.every(visible), "the key, what Raphael spent this month and the key's own usage are rows");
+    const cards = [...panel.querySelectorAll('.run-subscription')].filter(visible), allowance = panel.querySelector('.run-allowance');
+    const subscriptions = window.__look.data.allowances.brains.length;
+    if (subscriptions) {
+      require(cards.length >= subscriptions && allowance.compareDocumentPosition(rows[0]) & Node.DOCUMENT_POSITION_FOLLOWING, "each subscription has a card, above the rows");
+      for (const track of panel.querySelectorAll('.run-allowance .run-bar-track')) {
+        const fill = track.querySelector('i'), box = track.getBoundingClientRect();
+        require(box.width > 0 && box.height === 7 && fill.getBoundingClientRect().height === 7, "allowance bars keep their visible height");
+      }
+    } else require(!visible(allowance), "with no subscription the allowance section stands aside");
+    return { check: name, cards: cards.length };
   }
   if (name === "overlay-percentage") {
     const caption = document.querySelector("#progress");

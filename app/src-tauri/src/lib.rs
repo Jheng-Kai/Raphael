@@ -191,7 +191,6 @@ pub fn run() {
             learned::learned_subscribe,
             learned::learned_layout,
             learned::learned_finish,
-            commands::save_usage_csv,
             commands::pick_output_folder,
             commands::member_template_file,
             commands::schedule_keep_awake_get,

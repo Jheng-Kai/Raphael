@@ -77,6 +77,7 @@ import { carryInlineSetup, mountInlineConnectionSetup } from "../connection-setu
 import { carryMail } from "../mail-card";
 import { mountPages } from "../page-card";
 import { carryMessageMetadata, menuReactionsHTML, mountMessageMetadata } from "../message-metadata";
+import { MORE_EMOJI, openEmojiPicker } from "../emoji-picker";
 import { mountMailActions } from "../mail-actions";
 import { mountGreeting } from "../member-greeting";
 import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
@@ -1827,10 +1828,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (pick === "regenerate") void regenerate(control);
       else if (pick === "reply") replyMessage(control);
       else void copyMessage(message?.querySelector<HTMLElement>('[data-act="copy-message"]') ?? control);
-    }, reactions ? { html: menuReactionsHTML(reactions), onPick: emoji => {
-      const scope = { member_id: source.turn.member_id ?? 0, conversation_id: source.turn.conversation_id, turn_id: source.turn.id };
-      void api.core("agent.react", { ...scope, message_key: source.key, emoji, active: !reactions.includes(emoji) })
-        .then(() => { if (visible) void load(false); }).catch(err => toaster.info(describeError(err)));
+    }, reactions ? { html: menuReactionsHTML(reactions), onPick: lead => {
+      const react = (emoji: string): void => {
+        const scope = { member_id: source.turn.member_id ?? 0, conversation_id: source.turn.conversation_id, turn_id: source.turn.id };
+        void api.core("agent.react", { ...scope, message_key: source.key, emoji, active: !reactions.includes(emoji) })
+          .then(() => { if (visible) void load(false); }).catch(err => toaster.info(describeError(err)));
+      };
+      if (lead === MORE_EMOJI) openEmojiPicker(control, reactions, react);
+      else react(lead);
     } } : undefined);
   }
 

@@ -8,9 +8,8 @@ import type { DesktopState, DesktopSession } from "./desktop-viewer";
 import type { LanguageGroup } from "./languages";
 import type { TelegramStatus } from "./messaging";
 import type { AvatarCrop } from "./avatar";
-import type { UsageAnalytics, UsageRequest } from "./usage-analytics-types";
 import type { HomeOverview } from "./home-types";
-import type { CliAllowances, RunReport, RunRequest } from "./run-analytics-types";
+import type { CliAllowances } from "./usage-analytics-types";
 import type {
   AgentQuestion,
   AgentTurn,
@@ -99,14 +98,6 @@ export const desktopTeach = (params: { action: string; session?: string; member_
 /** The numbers of the home page: words, time, speed, the last 14 days. */
 export const statsSummary = (days?: number): Promise<StatsSummary> =>
   core("stats.summary", days === undefined ? {} : { days });
-/** Daily local usage, without conversation contents or provider credentials. */
-export async function usageAnalytics(params: UsageRequest): Promise<UsageAnalytics> {
-  const [report,members] = await Promise.all([core<UsageAnalytics>("usage.analytics",params),membersList().catch(() => null)]);
-  return !report.members ? report : {...report,members:report.members.map(row => {
-    const member=members?.members?.find(member=>member.id===row.id);
-    return {...row,name:member?.name ?? row.name,avatar:member?.avatar,avatar_url:member?.avatar_url};
-  })};
-}
 /** Every OpenRouter model Raphael could use, with its price and what each role can make of it. */
 export const modelsCatalog = (): Promise<ModelCatalog> => core("models.catalog");
 export const brainsCli = (): Promise<{ clis: CliBrain[] }> => core("brains.cli");
@@ -520,19 +511,9 @@ export interface MemoryImportResult { kept: string[]; refused: { index: number; 
 export const importMemory = (text: string): Promise<MemoryImportResult> => core("memory.import", { text });
 export const openTeamFile = (path: string): Promise<void> => invoke("open_team_file", { path });
 
-// Retained execution metrics; exporting always requests the entire selected period.
-export async function usageRuns(params: RunRequest): Promise<RunReport> {
-  const [report, members] = await Promise.all([core<RunReport>("usage.runs", params), membersList().catch(() => null)]);
-  return { ...report, ...(report.groups ? { groups: { ...report.groups, member: report.groups.member.map(group => {
-    const member = members?.members.find(member => member.name === group.label || member.id === 0 && group.label === "Raphael");
-    return { ...group, member_id: member?.id ?? (group.label === "Raphael" ? 0 : undefined), avatar: member?.avatar, avatar_url: member?.avatar_url };
-  }) } } : {}) };
-}
-export const usageExport = (params: RunRequest): Promise<{ csv: string }> => core("usage.export", params);
 export const usageAllowances = (): Promise<CliAllowances> => core("usage.allowances");
 export const pickOutputFolder = (): Promise<string | null> => invoke("pick_output_folder");
 export const memberTemplateFile = (action: "open" | "save", text = ""): Promise<string | null> => invoke("member_template_file", { action, text });
-export const saveUsageCsv = (csv: string): Promise<boolean> => invoke("save_usage_csv", { csv });
 // Group threads reuse the same worker and safety gate as individual conversations.
 export const routineRuns = (routineId: number): Promise<{ runs: RoutineRun[]; total?: number }> => core("routines.runs", { routine_id: routineId });
 export const roomsList = (): Promise<{ rooms: Room[] }> => core("rooms.list");

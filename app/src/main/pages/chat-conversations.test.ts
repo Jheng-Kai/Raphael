@@ -80,9 +80,15 @@ test("quick questions scope history, quote the entire answer, send their ID, and
   expect(api.agentAskText).toHaveBeenCalledWith("Continue", [], 0, expect.objectContaining({ conversationId: 2, quote: expect.objectContaining({ text: "Entire answer\nSecond paragraph." }) }));
   page.el.querySelector<HTMLButtonElement>('.ra [data-act="more-message"]')!.click(); await flush();
   expect([...document.querySelectorAll<HTMLElement>('#app-popover [data-pick]')].map(item => item.dataset.pick)).toEqual(["reply", "copy", "regenerate"]);
-  expect(document.querySelectorAll('#app-popover .menu-reactions [data-lead]')).toHaveLength(4);
+  expect([...document.querySelectorAll<HTMLElement>('#app-popover .menu-reactions [data-lead]')].map(item => item.dataset.lead)).toEqual(["👍", "😂", "👎", "❤️", "🎉", "+"]);
   document.querySelector<HTMLButtonElement>('#app-popover [data-lead="👍"]')!.click(); await flush();
   expect(api.core).toHaveBeenCalledWith("agent.react", { member_id: 0, conversation_id: 2, turn_id: 2, message_key: "reply", emoji: "👍", active: true });
+  page.el.querySelector<HTMLButtonElement>('.ra [data-act="more-message"]')!.click(); await flush();
+  document.querySelector<HTMLButtonElement>('#app-popover [data-lead="+"]')!.click();
+  expect(document.querySelector("#app-popover.emoji-picker")).not.toBeNull();
+  await vi.waitFor(() => expect(document.querySelector('#app-popover .emoji-cell[data-emoji="🚀"]')).not.toBeNull());
+  document.querySelector<HTMLButtonElement>('#app-popover .emoji-cell[data-emoji="🚀"]')!.click(); await flush();
+  expect(api.core).toHaveBeenCalledWith("agent.react", { member_id: 0, conversation_id: 2, turn_id: 2, message_key: "reply", emoji: "🚀", active: true });
   expect(api.core).not.toHaveBeenCalledWith("agent.speak", expect.anything());
   page.el.querySelector<HTMLButtonElement>('.owner-message [data-act="more-message"]')!.click(); await flush();
   expect([...document.querySelectorAll<HTMLElement>('#app-popover [data-pick]')].map(item => item.dataset.pick)).toEqual(["reply", "copy"]);

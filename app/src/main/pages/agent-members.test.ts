@@ -412,7 +412,7 @@ test("sidebar pin and hide update only their target and hiding the open member r
   agent.hide();
 });
 
-test("an unconfigured Raphael is immediately usable before and after history clears", async () => {
+test("an unconfigured Raphael is immediately usable, and so is an empty member", async () => {
   api.membersList.mockResolvedValue({...LIST,members:LIST.members.map(m=>({...m,profile_ready:false}))});
   api.agentHistoryList.mockResolvedValue({turns:[]});
   const agent=mount(); await flush();
@@ -422,25 +422,15 @@ test("an unconfigured Raphael is immediately usable before and after history cle
     expect($('.composer').hidden).toBe(false);
     expect($('.ra-hi').hidden).toBe(false);
   }
-  api.core.mockResolvedValue({questions:[]});
-  $('[data-member-more="3"]').click(); $('[data-pick="clear"]').click();
-  $('[data-dlg="clear"]').click(); await flush();
-  expect(api.core).toHaveBeenCalledWith("agent.history.clear", {member_id:3});
-  expect(document.querySelector('.first-bot')).toBeNull();
-  expect($('.composer').hidden).toBe(false);
   agent.hide();
 });
 
-test("clearing conversations requires confirmation and scopes the request to that member", async () => {
+test("a member's menu no longer clears its one conversation (one conversation per member, R-UI-103)", async () => {
   const agent = mount(); await flush(); await pick(3);
-  api.core.mockResolvedValue({questions: []});
-  $('[data-member-more="3"]').click(); $('[data-pick="clear"]').click();
+  $('[data-member-more="3"]').click();
+  expect(document.querySelector('#app-popover [data-pick="clear"]')).toBeNull();
   expect(api.core).not.toHaveBeenCalledWith("agent.history.clear", expect.anything());
-  $('[data-dlg="cancel"]').click();
-  $('[data-member-more="3"]').click(); $('[data-pick="clear"]').click();
-  $('[data-dlg="clear"]').click(); await flush();
-  expect(api.core).toHaveBeenCalledWith("agent.history.clear", {member_id: 3});
-  expect(document.querySelector(".mb-confirm")).toBeNull(); agent.hide();
+  agent.hide();
 });
 
 test("a fresh window opens the member's one conversation, never the quick questions", async () => {

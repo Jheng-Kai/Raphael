@@ -122,7 +122,7 @@ export function createMembers(host: MembersHost): MembersShell {
 
   const { editMember, memberAction, moveMember, deleteMember } = createMemberActions({
     list: () => list, current: () => current, select, load, update,
-    cleared: id => host.onSelect(id), deleted: id => previews.delete(id),
+    deleted: id => previews.delete(id),
   });
 
   const column = createMemberColumn({

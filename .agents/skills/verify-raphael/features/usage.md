@@ -2,50 +2,41 @@
 
 ## Sub-features
 
-The overview starts with the selected period's ledger bill: conversations and work,
-speech recognition, dictation cleanup, memory and any other purpose, each with an
-amount, share and bar. This month's total equals the sidebar, using the same spend
-tracker, clock and calendar zone. History deletion never reduces the bill.
+Usage is as plain as Grok Bot's (owner, 2026-11-06, R-UI-109). At the top, each signed-in
+subscription brain (Claude, Codex, Antigravity) has one card: every window it reports
+(5 hours, weekly) as the share left with a bar and when it resets, whether the number is
+live or from the last run, and an honest line when the percentage is unknown or the
+allowance ran out. ChatGPT has its card with 管理用量, which opens its own usage page.
+With no subscription signed in the cards stand aside.
 
-CLI subscriptions link to allowances and enabled Fish Audio voice is identified as
-separately billed. These exclusions appear only when applicable. Below the bill,
-Conversations and work contains retained run cost, time, tokens, AI steps, tool uses,
-errors and member/model/day/provider/routine groups, with a retained-record caveat.
-CSV remains retained-run data. No per-run list or trace navigation.
+Below them are three rows: the OpenRouter key, what Raphael spent this month (the same
+ledger as everywhere else) and the key's own monthly usage with its limit and what is left.
+
+There are no periods, charts, breakdowns by purpose, member or model, work statistics,
+CSV export or footnotes: the shell no longer allows `usage.analytics`, `usage.runs` or
+`usage.export`, and `save_usage_csv` is gone (app/src-tauri/src/commands.rs
+`usage_is_a_named_read_of_the_main_window_only`).
 
 ## How to get to it (user POV)
 
-Open Settings > Models > Usage. Select this week, this month, last month or all time.
-Read the bill before retained work metrics. Expand members, change grouping or export
-CSV. The subscription exclusion button scrolls and moves focus to allowances below.
+Open Settings > 模型與用量 > 用量. 重新整理 reads the allowances again; activity while the
+page is open refreshes them quietly.
 
 ## Driving it with look
 
 ```powershell
-npm run look -- usage usage-bill-breakdown usage-members usage-period usage-group-day usage-group-provider usage-group-routine usage-empty usage-allowances usage-allowances-chatgpt --theme both --width 1120,720,1920x1080
+npm run look -- usage usage-allowances-chatgpt usage-empty usage-key-menu usage-key-removed --theme both --width 1120,720,1920x1080
 ```
 
-Keep all summary/group/allowance PNGs and the report. Inspect both themes at all
-three sizes for monetary labels and overflow. `usage-bill-breakdown` asserts the
-ledger total and formatted amount equal the sidebar, includes all purposes and an
-unknown purpose, and identifies enabled Fish Audio voice and subscription allowances.
-The fixture's spend rows drive period bills. `usage-empty` clears ledger rows and
-retained runs independently of subscriptions. Core tests cover local month equality,
-calendar boundaries, DST, all periods, unknown purposes and retained-record deletion.
+`usage-plain` asserts the cards stand above the rows, the bars keep their height, the
+three rows are there, and nothing of the old analytics is on the page. `usage-empty`
+has no subscription and no spend.
 
 ## Gotchas
 
-CLI allowances and spend rows are synthetic. Scroll before driving lower sections.
-Look cannot prove provider billing, native persistence, quota refresh or CSV filesystem
-writes. Retained run periods use the requested IANA display zone; bills always use the
-sidebar ledger's zone and full calendar boundaries. A real harmless turn/routine and
-sanitized export remain native acceptance if those paths change. No live provider or
-user database access is required for this presentation change.
+CLI allowances and spend rows are synthetic. Look cannot prove provider billing or quota
+refresh; a real subscription reading is native acceptance if that path changes.
 
 ## Shared content measures (2026-10-28)
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
-
-## Owner round 6 contracts
-
-Owner round 6: usage/usage-bill-breakdown display the zh-TW glossary term 權杖數 and remove the breakdown helper paragraph. CSV export uses the shared download icon button with an accessible localized name and tooltip. compact-action asserts the icon-only control and localized heading.

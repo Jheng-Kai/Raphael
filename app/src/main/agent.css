@@ -698,6 +698,30 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .menu-reactions .btn.reaction:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
 .menu-reactions .btn.reaction:active:not(:disabled) { border-color: transparent; background: color-mix(in srgb, var(--text) 12%, transparent); }
 .menu-reactions .btn.reaction[aria-pressed="true"] { border-color: transparent; background: color-mix(in srgb, var(--text) 8%, transparent); }
+/* The last slot opens every emoji: a smiley with a plus, drawn as a line icon beside the emoji. */
+.btn.reaction-more .i { width: 20px; height: 20px; color: var(--text-3); }
+/* The react button opens a pill of the quick reactions (emoji-picker.ts), as Grok Bot does. */
+.menu.reaction-bar { display: flex; gap: 2px; min-width: 0; padding: var(--sp-1); border-radius: var(--r-pill); }
+.reaction-bar .btn.reaction { width: 36px; min-height: 36px; padding: 0; justify-content: center; border-color: transparent; background: transparent; font-size: var(--fs-lg); border-radius: var(--r-pill); }
+.reaction-bar .btn.reaction:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
+.reaction-bar .btn.reaction:active:not(:disabled) { border-color: transparent; background: color-mix(in srgb, var(--text) 12%, transparent); }
+.reaction-bar .btn.reaction[aria-pressed="true"] { border-color: transparent; background: color-mix(in srgb, var(--text) 8%, transparent); }
+/* Every emoji in one card: a search field, one scrolling grid of eight columns under small section labels, and a footer that names the emoji under the pointer. */
+.menu.emoji-picker { display: flex; flex-direction: column; width: min(304px, calc(100vw - 16px)); max-width: none; height: min(340px, calc(100vh - 16px)); padding: 0; overflow: hidden; }
+.emoji-find { display: flex; flex: none; align-items: center; gap: var(--sp-2); margin: var(--sp-2); padding: 0 var(--sp-2); min-height: 32px; border-radius: var(--r-sm); background: var(--surface-2); color: var(--text-3); }
+.emoji-find input { flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--text); font: inherit; font-size: var(--fs-sm); outline: none; }
+.emoji-find input::-webkit-search-cancel-button { display: none; }
+.emoji-grid { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--sp-2) var(--sp-1); scrollbar-width: thin; }
+.emoji-sec h4 { margin: var(--sp-2) 2px var(--sp-1); font-size: var(--fs-xs); font-weight: 500; color: var(--text-3); }
+.emoji-sec:first-child h4 { margin-top: 0; }
+.emoji-cells { display: grid; grid-template-columns: repeat(8, 34px); }
+.emoji-picker .emoji-cell { display: grid; place-items: center; width: 34px; min-height: 0; height: 34px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; font-size: var(--fs-h1); line-height: 1; cursor: pointer; }
+.emoji-picker .emoji-cell:hover, .emoji-picker .emoji-cell:focus-visible { background: var(--surface-2); outline: none; }
+.emoji-picker .emoji-cell[aria-selected="true"] { background: color-mix(in srgb, var(--text) 8%, transparent); }
+.emoji-none { margin: var(--sp-4) var(--sp-2); color: var(--text-3); font-size: var(--fs-sm); text-align: center; }
+.emoji-foot { display: flex; flex: none; align-items: center; gap: var(--sp-2); min-height: 36px; padding: 0 var(--sp-3); border-top: 1px solid var(--line); color: var(--text-2); font-size: var(--fs-sm); }
+.emoji-foot-char { font-size: var(--fs-lg); line-height: 1; }
+.emoji-foot-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .memo-transcript { margin-block: var(--sp-2); font-size: var(--fs-sm); color: var(--text-2); }
 .memo-transcript summary { cursor: pointer; width: fit-content; }
 .memo-transcript p { white-space: pre-wrap; color: var(--text); margin-block: var(--sp-2); }

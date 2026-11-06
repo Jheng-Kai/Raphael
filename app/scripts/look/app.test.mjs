@@ -48,15 +48,13 @@ describe("real app entry with the shared look fixture", () => {
     }
     expect(state.errors).toEqual([]);
   });
-  it("exercises the usage member expansion with the shared fixture", async () => {
+  it("shows each subscription's allowance above the spending rows, with the shared fixture", async () => {
     document.querySelector('.modal-scrim [data-pane="models"]').click();
     await vi.waitFor(() => expect(document.querySelector('[data-models-tab="usage"]')).not.toBeNull());
     document.querySelector('[data-models-tab="usage"]').click();
-    await vi.waitFor(() => expect(document.querySelectorAll(".run-members .run-bars > li")).toHaveLength(5));
-    const expand = document.querySelector('[data-run-act="members"]');
-    expect(expand).not.toBeNull();
-    expand.click();
-    expect(document.querySelectorAll(".run-members .run-bars > li")).toHaveLength(6);
+    await vi.waitFor(() => expect(document.querySelectorAll(".run-allowance .run-subscription").length).toBeGreaterThan(0));
+    expect(document.querySelector('[data-row="raphael-spend"]')).not.toBeNull();
+    expect(document.querySelector(".run-tiles, .run-bill, .ua-chart")).toBeNull();
   });
   it("deletes a dictionary word through its overflow menu and keeps undo available", async () => {
     document.querySelector('.modal-scrim [data-act="close"]').click();

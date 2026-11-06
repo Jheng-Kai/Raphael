@@ -2,10 +2,7 @@
 import { readFileSync } from "node:fs";
 
 const css = readFileSync(new URL("../src/main/styles.css", import.meta.url), "utf8");
-const usageCss = readFileSync(new URL("../src/main/usage-analytics.css", import.meta.url), "utf8");
 const overlayCss = readFileSync(new URL("../src/overlay/overlay.css", import.meta.url), "utf8");
-const usageColors = [...usageCss.matchAll(/--ua-\d:\s*var\(--([\w-]+)\)/g)].map(([, token]) => token);
-if (usageColors.length !== 6) throw new Error("Expected six usage chart palette colors");
 const tokens = (block) => Object.fromEntries([...block.matchAll(/--([\w-]+):\s*([^;]+);/g)].map(([, key, value]) => [key, value.trim()]));
 const light = tokens(css.match(/:root\s*\{([\s\S]*?)\n\}/)[1]);
 const dark = { ...light, ...tokens(css.match(/:root\[data-theme="dark"\]\s*\{([\s\S]*?)\n\}/)[1]) };
@@ -45,9 +42,6 @@ for (const [theme, palette] of Object.entries({ light, dark })) {
     const channels = palette[token].slice(1).match(/../g).map(value => parseInt(value, 16));
     if (Math.max(...channels) - Math.min(...channels) > 12) throw new Error(`Non-neutral interaction token: ${theme}/${token}`);
   }
-  // Chart marks need 3:1 against their surface; legend text uses the ordinary text palette.
-  contrast.usageCharts = Object.fromEntries(usageColors.map(token => [token, +ratio(palette[token], palette.panel).toFixed(2)]));
-  if (usageColors.some(token => ratio(palette[token], palette.panel) < 3)) process.exitCode = 1;
   contrast.sendIcon = Object.fromEntries(["panel", "hover", "pressed"].map(surface => [surface, +ratio(palette["accent-icon"], palette[surface]).toFixed(2)]));
   if (Object.values(contrast.sendIcon).some(value => value < 3)) process.exitCode = 1;
   contrast.computerActive = Object.fromEntries(["side", "content", "hover", "pressed"].map(surface => [surface, +ratio(palette["computer-active"], palette[surface]).toFixed(2)]));

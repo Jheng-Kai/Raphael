@@ -500,29 +500,10 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.roomDiscussion || variant.roomWrapup) data.messages.push(...data.roomDiscussionMessages);
   if (variant.roomWrapup) data.messages.push(data.roomWrapupMessage);
   if (variant.roomMissingSource) data.messages[2].reply_reference = { message_id: 999, unavailable: true };
-  if (variant.usageFishVoice) { data.settings.tts_enabled = true; data.settings.tts_service = "fish"; }
-  if (variant.usageSubscription) {
-    data.usage.total = 2;
-    Object.assign(data.usage.summary, { tokens: 11946235, cost_usd: .0019 });
-    for (const key of ["member", "day", "provider", "routine"]) {
-      data.usage.groups[key] = [{ ...data.usage.groups[key][0], tokens: 11946235, cost_usd: .0019, runs: 2 }];
-    }
-    data.usage.groups.model = [
-      { label: variant.usageSubscription.model, tokens: 11932035, cost_usd: null, runs: 1 },
-      { label: variant.usageSubscription.cli, tokens: 14200, cost_usd: null, runs: 1 },
-      { label: variant.usageSubscription.router, tokens: 0, cost_usd: .0019, runs: 1 },
-    ];
-  }
-  if (variant.usageMemberSubscription) {
-    data.analytics.members = [{ id: 0, name: "Raphael", role: "", deleted: false, turns: 2, cost_usd: 0, share: 0,
-      models: [{ model: variant.usageMemberSubscription, turns: 2, cost_usd: null }] }];
-  }
   if (variant.usageEmpty) {
     data.spendRows = [];
     data.status.spend.month_usd = 0;
-    data.usage.total = 0;
-    data.usage.summary = Object.fromEntries(Object.keys(data.usage.summary).map(key => [key, 0]));
-    data.usage.groups = Object.fromEntries(Object.keys(data.usage.groups).map(key => [key, []]));
+    data.allowances = { brains: [], quotas: [] };
   }
   if (variant.homeManyQuestions) {
     data.home.today.unshift(...[3, 4].map(id => ({ ...data.home.today[0], id: `question:${id}`, turn_id: id,
@@ -1530,10 +1511,7 @@ export function installMock(fixture, config = {}, target = window) {
         return {};
       }
       case "integrations.disconnect": update(data.servers, p.id, { enabled: false, status: "disconnected", auth: "none" }); return { disconnected: true };
-      case "usage.runs": return { ...data.usage, range: p.range ?? data.usage.range, bill: usageBill(p.range ?? "month"), fish_voice: !!(data.settings.tts_enabled && data.settings.tts_service === "fish") };
       case "usage.allowances": return data.allowances;
-      case "usage.analytics": return { ...data.analytics, range: p.range ?? data.analytics.range };
-      case "usage.export": return { csv: data.usageCsv };
       case "messaging.telegram.status": return data.messaging;
       case "messaging.slack.status":
       case "messaging.discord.status": return variant.workMessaging?.[method.split('.')[1]] ?? {connected:false,enabled:false,running:false,error:null,bot:null,allowed:[],pending:[]};

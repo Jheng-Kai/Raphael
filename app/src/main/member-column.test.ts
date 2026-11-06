@@ -6,6 +6,7 @@ import { type ColumnHost, columnHTML, createMemberColumn, memberRowHTML } from "
 import { openNewGroupChat } from "./group-chats";
 import { installContextMenus } from "./context-menu";
 import { setLocale, t } from "./i18n";
+import { closeMenu } from "./ui";
 vi.mock("./group-chats", () => ({ createRoomsSection: () => document.createElement("section"), openNewGroupChat: vi.fn() }));
 import type { Member, MembersList } from "./types";
 
@@ -249,12 +250,12 @@ describe("the column, used", () => {
     expect(openNewGroupChat).toHaveBeenCalled();
   });
 
-  test("a row's more gives 移到分組 and 刪除; a right click gives the same", () => {
+  test("a row's menu is grouped as Grok's, ending with 刪除, and a right click gives the same", () => {
     const column = mount();
     column.el.querySelector<HTMLElement>('[data-member-more="2"]')!.click();
-    expect([...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(b => b.dataset.pick)).toEqual(["pin", "move", "primary", "unread", "read-all", "edit", "export-template", "duplicate", "clear", "hide", "delete"]);
-    document.querySelector<HTMLElement>('#app-popover [data-pick="primary"]')!.click();
-    expect(host.memberAction).toHaveBeenCalledWith(2, "primary");
+    const menu = document.querySelector<HTMLElement>("#app-popover")!;
+    expect([...menu.children].map(node => node.matches('[role="separator"]') ? "|" : (node as HTMLElement).dataset.pick)).toEqual(["pin", "move", "unread", "|", "edit", "|", "export-template", "|", "hide", "delete"]);
+    expect(menu.querySelector('[data-pick="delete"]')!.classList.contains("danger")).toBe(true);
     column.el.querySelector<HTMLElement>('[data-member-more="2"]')!.click();
     document.querySelector<HTMLElement>('#app-popover [data-pick="delete"]')!.click();
     expect(host.deleteMember).toHaveBeenCalledWith(2);
@@ -264,6 +265,27 @@ describe("the column, used", () => {
     column.el.querySelector('[data-member="1"]')!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 40, clientY: 50 }));
     document.querySelector<HTMLElement>('#app-popover [data-pick="move"]')!.click();
     expect(host.moveMember).toHaveBeenCalledWith(1, null, document.querySelector('#app-popover [data-pick="move"]'));
+  });
+
+  test("only the primary's menu hands the primary on, with 換成其他成員 last, and the primary cannot be deleted or moved from it", () => {
+    const shape = () => [...document.querySelector("#app-popover")!.children].map(node => node.matches('[role="separator"]') ? "|" : (node as HTMLElement).dataset.pick);
+    let column = mount();
+    column.el.querySelector<HTMLElement>('[data-member-more="0"]')!.click();
+    expect(shape()).toEqual(["pin", "|", "primary"]);
+    expect(document.querySelector('#app-popover [data-pick="primary"]')!.textContent).toBe("換成其他成員");
+    document.querySelector<HTMLElement>('#app-popover [data-pick="primary"]')!.click();
+    expect(host.memberAction).toHaveBeenCalledWith(0, "primary");
+    column.el.remove();
+    host.view = () => ({ list: { ...LIST, team_context: { primary_id: 1 } } as MembersList, current: 0, previews, fresh: new Set() });
+    column = mount();
+    column.el.querySelector<HTMLElement>('[data-member-more="1"]')!.click();
+    expect(shape()).toEqual(["pin", "unread", "|", "edit", "|", "export-template", "|", "hide", "primary"]);
+    closeMenu();
+    column.el.querySelector<HTMLElement>('[data-member-more="0"]')!.click();
+    expect(shape()).toEqual(["pin"]);
+    closeMenu();
+    column.el.querySelector<HTMLElement>('[data-member-more="2"]')!.click();
+    expect(shape()).not.toContain("primary");
   });
 
   test("a group's menu gives 重新命名, 看的地方 and 刪除", () => {

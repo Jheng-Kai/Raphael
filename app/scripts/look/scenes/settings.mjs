@@ -7,7 +7,7 @@ const serverDetail = [...connections, click('[data-conn="open"][data-id="notes"]
 const store = [...connections, { ...click('[data-conn="tab"][data-id="store"]'), measure: { name: "store-render-paint", budgetMs: 250, maxLongTaskMs: 50 } }, wait('.cs-card'), waitGone('[data-cs-pending]')];
 // A key made up for the scenes: it is typed into a masked field and must reach nothing but the one call that adds the app.
 const setupKey = "zk-look-0123456789";
-const usage = [...settings("models"), click('[data-models-tab="usage"]'), wait(".run-tile"), wait(".run-bill-total"), check("usage-summary")];
+const usage = [...settings("models"), click('[data-models-tab="usage"]'), wait('[data-row="raphael-spend"]')];
 const cliMenu = [...settings("models"), scroll(".cli-accounts"), click('[data-cli-menu="codex"]')];
 const cliDisconnected = [...cliMenu, click('#app-popover [data-pick="disconnect"]'), wait('[data-cli="codex"]')];
 const modelChooser = role => [...settings("models"), click(`.modal-scrim [data-model-picker="${role}"] .mp-trigger`), wait(".model-chooser .mc-row")];
@@ -151,14 +151,9 @@ export default [
   scene("connections-discover", "Discover local MCP definitions", [...add, click('.menu [data-value="import"]')]),
   scene("connections-empty", "Connections without servers", [...connections, click('[data-conn="tab"][data-id="installed"]')], { servers: [], managedConnectors: [] }),
   scene("connections-discover-empty", "Discovery without candidates", [...add, click('.menu [data-value="import"]')], { servers: [], candidates: [] }),
-  scene("usage", "Usage summary keeps subscription tokens and the router price on separate model rows", [...usage, scroll(".run-groups"), check("usage-subscription")], { usageSubscription: { model: "@chatgpt:gpt-6.1-terra", cli: "cli:codex:gpt-6.1?effort=xhigh", router: "typesafe/jev-1.14" } }),
-  scene("usage-bill-breakdown", "Ledger purposes reconcile exactly with the sidebar", [...usage, check("usage-bill-breakdown")], { usageFishVoice: true }),
-  scene("usage-members", "Expanded member usage shows subscription costs", [...usage, click('[data-run-act="members"]'), { ...scroll(".ua-table-scroll"), block: "start" }, click('.ua-table-scroll [data-member="0"]'), wait('.ua-table-scroll [data-member="0"][aria-expanded="true"]'), { ...scroll(".ua-table-scroll"), block: "start" }, check("usage-member-subscription")], { usageMemberSubscription: "cli:codex:gpt-6.1?effort=xhigh" }),
-  scene("usage-period", "Usage period menu", [...usage, click('[data-run-act="period"]')]),
-  ...["day", "provider", "routine"].map(group => scene(`usage-group-${group}`, `Usage grouped by ${group}`, [...usage, click(`[data-run-group="${group}"]`), scroll(".run-groups")])),
-  scene("usage-allowances", "Subscription exclusion opens Claude, Codex and Gemini allowances", [...usage, click('[data-run-act="show-allowance"]'), check("usage-allowance-link")]),
-  scene("usage-allowances-chatgpt", "ChatGPT sits with the other subscriptions, with the button to its own usage page", [...usage, click('[data-run-act="show-allowance"]'), wait('[data-allowance="chatgpt"]'), scroll('[data-allowance="chatgpt"]')], { chatgptSignedIn: true }),
-  scene("usage-empty", "Usage without runs", usage, { usageEmpty: true }),
+  scene("usage", "Usage as plain as Grok Bot's: what each subscription has left, then the key and what was spent, with no charts", [...usage, wait(".run-subscription"), check("usage-plain")]),
+  scene("usage-allowances-chatgpt", "ChatGPT sits with the other subscriptions, with the button to its own usage page", [...usage, wait('[data-allowance="chatgpt"]'), scroll('[data-allowance="chatgpt"]'), check("usage-plain")], { chatgptSignedIn: true }),
+  scene("usage-empty", "With no subscription signed in, the rows of what was spent stand alone", [...usage, check("usage-plain")], { usageEmpty: true }),
   ...["overview", "history", "dictionary"].map(tab => scene(`dictation-${tab}`, `Dictation ${tab}`, [...dictation(tab), ...(tab === "dictionary" ? [wait(".wrow"), click('[data-act="word-menu"]'), wait('#app-popover [data-pick="delete"]'), key("Escape")] : [])], tab === "dictionary" ? {
     dictionary: ["Raphael", "Methelia", "GitHub", "Composio", "OpenRouter", "Notion", "Slack", "Telegram", "Calendar", "Claude", "Codex", "Gemini"].map((word, index) => ({ id: index + 1, word, misheard: index === 0 ? ["Rafael"] : [], source: index % 2 ? "learned" : "manual", created_at_ms: 1792720800000 })),
   } : {})),
