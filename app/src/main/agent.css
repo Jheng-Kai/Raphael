@@ -17,7 +17,7 @@
    (its dialogs and menus), so no other page changes with them (they are not in :root). The faces
    are drawn by the markup at `--av: <px>` (members.ts, avatar.ts); the rules below set `--av` again
    with !important where a face must follow these sizes, which the inline value would otherwise win. */
-.page-agent, .side, .mb-scrim, .menu.mb-avpop, .menu.mb-menu, .menu.mb-toolpop, .toasts {
+.page-agent, .side, .mb-scrim, .menu.mb-avpop, .menu.mb-menu, .menu.mb-toolpop, .menu.side-search, .toasts {
   --pa-t: clamp(0px, calc(100vw - 960px), 960px);
   --pa-u: calc(var(--pa-t) / 960);
   /* the three columns */

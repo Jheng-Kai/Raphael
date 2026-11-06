@@ -57,9 +57,10 @@ describe("keyboard focus and the window controls", () => {
   });
 
   test("a dialog dims the caption too and starts below it, whichever dialog it is", () => {
-    const dimmed = ":root:has(.mb-scrim:not(.cr-scrim))";
-    expect(lastOf(`${dimmed} .window-chrome`, "background")).toBe("transparent");
-    expect(lastOf(`${dimmed} .window-button:focus-visible:not(:hover)`, "background")).toBe("transparent");
+    for (const dimmed of [":root:has(.mb-scrim:not(.cr-scrim))", ":root:has(.menu.side-search)"]) {
+      expect(lastOf(`${dimmed} .window-chrome`, "background")).toBe("transparent");
+      expect(lastOf(`${dimmed} .window-button:focus-visible:not(:hover)`, "background")).toBe("transparent");
+    }
     const dialogs = readFileSync(path.join(import.meta.dirname, "members.css"), "utf8");
     expect(dialogs.match(/\.mb-scrim \{[^}]*padding: ([^;]+);/)?.[1]).toContain("var(--window-controls-height)");
   });

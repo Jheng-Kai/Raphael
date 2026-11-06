@@ -127,6 +127,8 @@ describe("buttons", () => {
       // Daily sidebar controls share the owner's requested round soft press surface.
       'sidebar.css: .side .side-foot .btn.icon[aria-current="page"]:active:not(:disabled)',
       "sidebar.css: .side .btn.icon:hover:not(:disabled)", "sidebar.css: .side .btn.icon:active:not(:disabled)",
+      // Search and plus are Grok Bot's two soft round buttons (owner, 2026-11-06).
+      "sidebar.css: .side .btn.icon.mb-tool[data-col]:hover:not(:disabled)", "sidebar.css: .side .btn.icon.mb-tool[data-col]:active:not(:disabled)",
       "styles.css: .window-button:hover", "styles.css: .window-button:active",
       "styles.css: .window-close:hover", "styles.css: .window-close:active",
       // R-UI-50: the contextual latest action floats over messages and needs an opaque surface.

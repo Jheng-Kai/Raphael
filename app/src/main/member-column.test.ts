@@ -29,7 +29,7 @@ const LIST: MembersList = {
 };
 const previews = new Map([[1, "PR #17 已開"], [2, "移動 12 個檔案"], [3, "今天的 10 題單字已送出"], [4, "明天 10:00 有會議"]]);
 const view = (over: Partial<Parameters<typeof columnHTML>[0]> = {}) => ({
-  list: LIST, current: 0, previews, query: "", folded: new Set<number>(), fresh: new Set<number>(), ...over,
+  list: LIST, current: 0, previews, folded: new Set<number>(), fresh: new Set<number>(), ...over,
 });
 const dom = (html: string): HTMLElement => {
   const div = document.createElement("div");
@@ -51,11 +51,6 @@ describe("the column, drawn", () => {
     for (const last_at of [null, NaN, 1e20]) expect(dom(memberRowHTML(member(1, { last_at }), view())).querySelector("time")).toBeNull();
   });
 
-  test("search matching only Raphael does not show a contradictory empty result", () => {
-    const el = dom(columnHTML(view({ query: LIST.members[0].name })));
-    expect(el.querySelectorAll(".mb-row")).toHaveLength(1);
-    expect(el.querySelector(".mb-none")).toBeNull();
-  });
   test("Raphael leads the column as an ordinary row with his bare emblem", () => {
     const el = dom(columnHTML(view()));
     const chief = el.querySelector<HTMLElement>(".mb-chief")!;
@@ -85,16 +80,14 @@ describe("the column, drawn", () => {
     expect(LIST.members[3].group_id).toBe(20);
   });
 
-  test("a pinned primary is a tile, Raphael takes its group slot, and searching finds each member only in its new place", () => {
+  test("a pinned primary is a tile and Raphael takes its group slot", () => {
     const list = { ...LIST, members: LIST.members.map(m => m.id === 1 ? { ...m, pinned: true } : m), team_context: { primary_id: 1 } } as MembersList;
     const el = dom(columnHTML(view({ list })));
     expect(el.querySelector('.mb-pinned [data-member="1"]')).not.toBeNull();
     expect(el.querySelector('.mb-pinned [data-member="0"]')).toBeNull();
     expect(el.querySelector('.mb-chief')?.getAttribute('data-member')).toBe('1');
-    const search = dom(columnHTML(view({ list, query: '拉斐爾' })));
-    expect(search.querySelectorAll('[data-member]')).toHaveLength(1);
-    expect(search.querySelector('.mb-none')).toBeNull();
-    expect(search.querySelector('[data-member="0"] .mb-av')).toBeNull();
+    expect(el.querySelectorAll('[data-member="0"]')).toHaveLength(1);
+    expect(el.querySelector('[data-member="0"] .mb-av')).toBeNull();
   });
 
   test("only owner-created groups have headers, followed by ungrouped rows", () => {
@@ -149,14 +142,6 @@ describe("the column, drawn", () => {
     expect(section.querySelector("[data-group-fold]")!.getAttribute("aria-expanded")).toBe("false");
   });
 
-  test("a search shows only what matches, folded groups opened, or says nothing matches", () => {
-    const el = dom(columnHTML(view({ query: "老師", folded: new Set([20]) })));
-    expect([...el.querySelectorAll(".mb-row")].map((n) => (n as HTMLElement).dataset.member)).toEqual(["3"]);
-    expect(el.querySelector<HTMLElement>('[data-group="20"]')!.dataset.open).toBe("true");
-    const none = dom(columnHTML(view({ query: "沒有這個人" })));
-    expect(none.querySelector(".mb-none")!.textContent).toBe("沒有相符的成員");
-    expect(none.querySelector(".mb-chief")).toBeNull();
-  });
 });
 
 describe("the column, used", () => {
@@ -199,15 +184,29 @@ describe("the column, used", () => {
     expect(host.select).toHaveBeenLastCalledWith(0);
   });
 
-  test("the search narrows the rows as it is typed, and Escape closes it", () => {
+  test("search and plus stand side by side at the top, and search opens a card of every member with 新增成員 at its foot", () => {
     const column = mount();
-    const input = column.el.querySelector<HTMLInputElement>(".mb-find-input")!;
-    input.value = "信箱";
-    input.dispatchEvent(new Event("input"));
-    expect([...column.el.querySelectorAll(".mb-row")].map((n) => (n as HTMLElement).dataset.member)).toEqual(["4"]);
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    expect(column.query()).toBe("");
-    expect(column.el.querySelectorAll(".mb-row")).toHaveLength(5);
+    expect([...column.el.querySelectorAll(".mb-top [data-col]")].map(button => button.getAttribute("data-col"))).toEqual(["search", "add"]);
+    expect(column.el.querySelector("input")).toBeNull();
+    column.el.querySelector<HTMLElement>('[data-col="search"]')!.click();
+    const card = document.querySelector<HTMLElement>("#app-popover.side-search")!;
+    const input = card.querySelector<HTMLInputElement>(".side-search-input")!;
+    expect(document.activeElement).toBe(input);
+    const rows = () => [...card.querySelectorAll<HTMLElement>(".side-search-row")].map(row => row.dataset.member);
+    expect(rows()).toEqual(["0", "1", "2", "3", "4"]);
+    expect(card.querySelector('[data-member="1"] .side-search-main span')!.textContent).toBe("PR #17 已開");
+    input.value = "信箱"; input.dispatchEvent(new Event("input"));
+    expect(rows()).toEqual(["4"]);
+    input.value = "沒有這個人"; input.dispatchEvent(new Event("input"));
+    expect(card.querySelector(".mb-none")!.textContent).toBe("沒有相符的成員");
+    input.value = "老師"; input.dispatchEvent(new Event("input"));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(host.select).toHaveBeenCalledWith(3);
+    expect(document.getElementById("app-popover")).toBeNull();
+    column.el.querySelector<HTMLElement>('[data-col="search"]')!.click();
+    document.querySelector<HTMLElement>("#app-popover [data-search-new]")!.click();
+    expect(host.newMember).toHaveBeenCalledWith(null);
+    expect(document.getElementById("app-popover")).toBeNull();
   });
 
   test("the persistent plus tooltip follows language changes with its accessible label", () => {
@@ -222,13 +221,17 @@ describe("the column, used", () => {
     } finally { setLocale("zh-TW"); }
   });
 
-  test("the narrow-window search opens a member and closes its popover", () => {
-    const column = mount(), anchor = document.createElement("button");
-    document.body.append(anchor); column.openSearch(anchor);
-    expect(document.activeElement).toBe(document.querySelector("#app-popover input"));
-    document.querySelector<HTMLButtonElement>('#app-popover [data-member="3"]')!.click();
-    expect(host.select).toHaveBeenCalledWith(3);
-    expect(document.getElementById("app-popover")).toBeNull();
+  test("the search card from Ctrl+Shift+F opens a member, closes, and closes the drawer behind it", () => {
+    const column = mount(), anchor = document.createElement("button"), drawer = vi.fn();
+    window.addEventListener("raphael:close-sidebar", drawer);
+    try {
+      document.body.append(anchor); column.openSearch(anchor);
+      expect(document.activeElement).toBe(document.querySelector("#app-popover input"));
+      document.querySelector<HTMLButtonElement>('#app-popover [data-member="3"]')!.click();
+      expect(host.select).toHaveBeenCalledWith(3);
+      expect(document.getElementById("app-popover")).toBeNull();
+      expect(drawer).toHaveBeenCalledTimes(1);
+    } finally { window.removeEventListener("raphael:close-sidebar", drawer); }
   });
 
   test("＋ offers 新增成員 and 新增分組", () => {
@@ -307,7 +310,7 @@ describe("the column, used", () => {
     expect(column.el.querySelector<HTMLElement>('[data-group="10"]')!.dataset.open).toBe("true");
   });
 
-  test("the whole group heading folds except its menu, search and a completed drag", () => {
+  test("the whole group heading folds except its menu and a completed drag", () => {
     const column = mount();
     const section = column.el.querySelector<HTMLElement>('[data-group="10"]')!;
     const name = section.querySelector<HTMLElement>('.mb-gname')!;
@@ -322,11 +325,6 @@ describe("the column, used", () => {
     name.dispatchEvent(new Event('dragstart', { bubbles: true, cancelable: true }));
     name.dispatchEvent(new Event('dragend', { bubbles: true }));
     section.querySelector<HTMLElement>('[data-group-fold]')!.click(); expect(section.dataset.open).toBe('false');
-    const search = column.el.querySelector<HTMLInputElement>('.mb-find-input')!;
-    search.value = '老師'; search.dispatchEvent(new Event('input'));
-    const heading = column.el.querySelector<HTMLElement>('.mb-ghead')!;
-    const open = heading.closest<HTMLElement>('.mb-sec')!.dataset.open;
-    heading.click(); expect(heading.closest<HTMLElement>('.mb-sec')!.dataset.open).toBe(open);
   });
 
   test("member drops and folder reorder use the shared persistence callbacks", () => {

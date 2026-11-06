@@ -11,7 +11,6 @@
 .sidebar-conversations { display: flex; flex: 1; min-height: 0; }
 .side .mb-col { flex: 1; width: 100%; padding-top: 0; }
 .side .mb-top { justify-content: flex-end; min-height: 40px; padding: 0 0 var(--sp-1); gap: var(--sp-1); }
-.side .mb-find { flex: none; height: 36px; margin: 0 0 var(--sp-2); }
 .side .btn.mb-tool { flex: none; width: 36px; min-height: 36px; border-radius: var(--r-sm); }
 .side .mb-scroll { padding: 0 0 var(--sp-3); }
 .side .mb-list { gap: var(--sp-1); }
@@ -42,7 +41,7 @@
 /* Collapsed: a rail of faces. Every control keeps working and each face is named on hover. */
 :root[data-sidebar-collapsed] { --sidebar-width: 72px; }
 :root[data-sidebar-collapsed] .side .mb-top { flex-direction: column; min-height: 0; }
-:root[data-sidebar-collapsed] .side .mb-sec[data-open="false"], :root[data-sidebar-collapsed] .side .mb-find, :root[data-sidebar-collapsed] .side .mb-ghead, :root[data-sidebar-collapsed] .side .mb-row-time, :root[data-sidebar-collapsed] .side .mb-item .btn.mb-more, :root[data-sidebar-collapsed] .side .au-room-row .btn.au-room-more { display: none; }
+:root[data-sidebar-collapsed] .side .mb-sec[data-open="false"], :root[data-sidebar-collapsed] .side .mb-ghead, :root[data-sidebar-collapsed] .side .mb-row-time, :root[data-sidebar-collapsed] .side .mb-item .btn.mb-more, :root[data-sidebar-collapsed] .side .au-room-row .btn.au-room-more { display: none; }
 :root[data-sidebar-collapsed] .side .mb-pinned { grid-template-columns: minmax(0, 1fr); }
 :root[data-sidebar-collapsed] .side .mb-row-main * { overflow: hidden; }
 :root[data-sidebar-collapsed] .side .mb-item .nav.mb-row, :root[data-sidebar-collapsed] .side .au-room-row > .nav.mb-row, :root[data-sidebar-collapsed] .side .mb-pinned .mb-item .nav.mb-tile.mb-row { position: relative; display: flex; justify-content: center; min-height: 48px; padding: var(--sp-1); }
@@ -79,6 +78,10 @@
 .side :is(.btn.mb-tool, .side-foot .btn.icon):is(:hover, :active, [aria-current="page"]):not(:disabled) { border-color: transparent; background: transparent; color: var(--text); }
 .side :is(.btn.mb-tool, .side-foot .btn.icon):is(:hover, :active, [aria-current="page"]):not(:disabled) .i { color: var(--text); }
 .side :is(.btn.mb-tool, .side-foot .btn.icon):active:not(:disabled) :is(.i, .i *) { color: var(--text-3); }
+/* Search and plus are Grok Bot's two soft round buttons (owner, 2026-11-06), in the top row or at the rail's foot. */
+.side .btn.icon.mb-tool[data-col] { border-radius: var(--r-pill); background: var(--surface-2); }
+.side .btn.icon.mb-tool[data-col]:hover:not(:disabled) { background: var(--hover); }
+.side .btn.icon.mb-tool[data-col]:active:not(:disabled) { background: var(--pressed); }
 .side .side-foot .sidebar-apps { height: 40px; border: 1px solid var(--line); border-radius: var(--r-pill); padding-inline: 12px; background: transparent; }
 .side .sidebar-apps:is(:hover, :active) { border-color: var(--edge); color: var(--text); background: transparent; }
 .side .sidebar-account:is(:hover, :active) { background: transparent; color: var(--text); }

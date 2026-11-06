@@ -346,9 +346,10 @@ export async function drive(name, context) {
       if (width === 720) { await click(page, '[data-sidebar="open"]'); await pause(300); }
       result.layout.push(await page.evaluate(checkRendered, "sidebar-shell"));
       await page.evaluate(checkRendered, "sidebar-search-before");
-      await click(page, '.mb-find-input');
+      await click(page, '[data-col="search"]');
       result.layout.push(await page.evaluate(checkRendered, "sidebar-search-open"));
       await capture(`home-sidebar-${width}`);
+      await page.keyboard.press('Escape'); await pause(150);
       if (width === 720) await click(page, '.sidebar-scrim');
     }
     return;

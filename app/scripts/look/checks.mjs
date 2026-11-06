@@ -1856,9 +1856,7 @@ export function checkRendered(name, context = {}) {
   const selection = () => {
     const rows = [...document.querySelectorAll('#nav .nav[aria-current="true"], #nav [data-go][aria-current="page"]')];
     const home = !document.querySelector('.page-home').hidden;
-    const searching = !!document.querySelector('#nav .mb-find-input')?.value.trim();
-    require(rows.length <= 1 && (rows.length === 1 || searching), `only the current destination is selected, found ${rows.length}`);
-    if (!rows.length) return 'filtered';
+    require(rows.length === 1, `only the current destination is selected, found ${rows.length}`);
     if (home) require(rows[0].matches('[data-go="home"]'), "Home selects only its own icon");
     else if (!document.querySelector('.page-agent').hidden) require(rows[0].matches('[data-member], [data-room]'), "chat selects only its conversation");
     return rows[0].getAttribute('data-go') ?? rows[0].getAttribute('data-member') ?? rows[0].getAttribute('data-room');
@@ -1881,12 +1879,15 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('[data-go="team"], .team-page, [data-col="collapse"], .nav-apps, [data-go="automations"]'), "retired navigation and icon rails are absent");
     const header=nav.querySelector('.mb-top');
     const rail=document.documentElement.hasAttribute('data-sidebar-collapsed');
-    require(!nav.querySelector('.brand, .app-icon, [data-col="search"], [data-sidebar="collapse"]')&&nav.querySelector('.sidebar-foot-row [data-go="home"]'),'no brand and no fold button (the edge drags, as Grok Bot\'s); Home sits beside the owner');
+    require(!nav.querySelector('.brand, .app-icon, [data-sidebar="collapse"]')&&nav.querySelector('.sidebar-foot-row [data-go="home"]'),'no brand and no fold button (the edge drags, as Grok Bot\'s); Home sits beside the owner');
     if(!compact){const edge=nav.querySelector(':scope > .side-edge'),box=edge?.getBoundingClientRect(),side=nav.getBoundingClientRect();require(edge&&edge.getAttribute('role')==='separator'&&getComputedStyle(edge).cursor==='col-resize'&&Math.abs(box.right-side.right)<1&&box.width<=8&&getComputedStyle(edge,'::after').content==='none','the list has a draggable edge at its right, with no handle drawn');}
-    if(!rail)require(header.querySelector('[data-col="add"]')&&visible(nav.querySelector('.mb-find-input'))&&nav.querySelector('.mb-find').getBoundingClientRect().top>=header.getBoundingClientRect().bottom-1,'plus shares the top row and search stands below it');
+    const pair=[...nav.querySelectorAll('[data-col]')];
+    require(pair.map(button=>button.dataset.col).join()==='search,add'&&!column.querySelector('input'),'search then plus, as Grok Bot\'s, with no field standing in the list');
+    for(const button of pair.filter(visible)){const box=button.getBoundingClientRect(),style=getComputedStyle(button);require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&parseFloat(style.borderRadius)>=18&&style.backgroundColor!=='rgba(0, 0, 0, 0)'&&style.borderTopColor==='rgba(0, 0, 0, 0)','search and plus are 36px soft round buttons with no frame');}
+    if(!rail&&pair.every(visible))require(pair.every(button=>button.parentElement===header)&&Math.abs(pair[0].getBoundingClientRect().top-pair[1].getBoundingClientRect().top)<1&&pair[1].getBoundingClientRect().right>pair[0].getBoundingClientRect().right,'search and plus stand side by side in the top row');
     require([...nav.querySelectorAll('.side-foot [data-go]')].map(el=>el.dataset.go).join()==='settings,settings,dictation,home','footer opens Connections above account, dictation and Home');
     if(!document.documentElement.hasAttribute('data-sidebar-collapsed')){const home=nav.querySelector('.sidebar-home'),box=home.getBoundingClientRect();require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&getComputedStyle(home).borderRadius===getComputedStyle(nav.querySelector('.sidebar-dictation')).borderRadius,'Home keeps the shared icon surface');}
-    for(const button of nav.querySelectorAll('.btn.icon, .side-foot .nav'))if(visible(button)&&!visible(button.querySelector('.nav-t'))){const box=button.getBoundingClientRect(),corner=parseFloat(getComputedStyle(button).borderRadius);require(corner>0&&corner<Math.min(box.width,box.height)/2,`sidebar buttons are rounded squares, never circles (${button.className})`);}
+    for(const button of nav.querySelectorAll('.btn.icon:not([data-col]), .side-foot .nav'))if(visible(button)&&!visible(button.querySelector('.nav-t'))){const box=button.getBoundingClientRect(),corner=parseFloat(getComputedStyle(button).borderRadius);require(corner>0&&corner<Math.min(box.width,box.height)/2,`sidebar buttons are rounded squares, never circles (${button.className})`);}
     require(nav.querySelector('.side-foot [data-go="dictation"]').getAttribute('aria-label')&&!nav.querySelector('.side-foot [data-go="dictation"] .nav-t'),'dictation is a named icon button');
     require(nav.querySelector('.sidebar-account .owner-face')&&nav.querySelector('.sidebar-account').getAttribute('aria-label'),'account has its own face and accessible name');
     require(!nav.querySelector('.sidebar-account > svg.i')&&(rail||visible(nav.querySelector('.sidebar-account-name'))),'account shows its face and name, without a gear');
@@ -1901,7 +1902,7 @@ export function checkRendered(name, context = {}) {
       require(!visible(document.querySelector('.sidebar-toggle')) && !visible(nav.querySelector('.sidebar-close')), "desktop has no drawer controls");
     }
     const chief = column.querySelector('.mb-chief');
-    if (!column.querySelector('.mb-find-input').value) require(chief && chief.querySelector('b') && chief.querySelector('.av'), "the top member shows its face and name");
+    require(chief && chief.querySelector('b') && chief.querySelector('.av'), "the top member shows its face and name");
     if(chief)require(!document.querySelector('.mb-star'),'no member carries a star');
     if(!rail){const pill=nav.querySelector('.sidebar-apps'),name=pill.querySelector('.nav-t').getBoundingClientRect(),plug=pill.querySelector('.i').getBoundingClientRect(),owner=nav.querySelector('.sidebar-account-name').getBoundingClientRect(),face=nav.querySelector('.sidebar-account .owner-face').getBoundingClientRect();require(name.left>=plug.right+6&&name.left<=plug.right+16&&owner.left>=face.right+6&&owner.left<=face.right+16,'pill and account words start after their own leading mark');}
     const mic=nav.querySelector('.sidebar-dictation').getBoundingClientRect(),home=nav.querySelector('.sidebar-home').getBoundingClientRect();require(Math.abs(mic.width-home.width)<1&&Math.abs(mic.height-home.height)<1&&Math.abs(mic.width-36)<1,'both footer icon buttons share the top controls size');
@@ -1934,25 +1935,35 @@ export function checkRendered(name, context = {}) {
       return {check:name,compact};
     }
     require(document.documentElement.hasAttribute('data-sidebar-collapsed')&&Math.abs(nav.getBoundingClientRect().width-72)<1,'the list collapses to a 72px rail');
-    require(!visible(nav.querySelector('.mb-find-input'))&&!visible(nav.querySelector('.sidebar-account-name')),'the rail shows no search or names');
+    require(!visible(nav.querySelector('.sidebar-account-name')),'the rail shows no names');
     const faces=[...nav.querySelectorAll('.mb-row > .av, .mb-row > .room-avatar')].filter(visible);
     require(faces.length>0&&faces.every(face=>{const box=face.getBoundingClientRect();return Math.abs(box.left+box.width/2-36)<1;}),'every face is centered in the rail');
     require([...nav.querySelectorAll('.mb-item .btn.mb-more, .au-room-row .btn.au-room-more')].every(button=>getComputedStyle(button).display==='none'),'the rail draws no ⋯ over a face; a right click opens its menu');
-    const add=nav.querySelector('.side-foot [data-col="add"]').getBoundingClientRect(),owner=nav.querySelector('.sidebar-account').getBoundingClientRect();
-    require(add.bottom<=owner.top,'plus sits above the owner in the rail');
+    const search=nav.querySelector('.side-foot [data-col="search"]').getBoundingClientRect(),add=nav.querySelector('.side-foot [data-col="add"]').getBoundingClientRect(),owner=nav.querySelector('.sidebar-account').getBoundingClientRect();
+    require(search.bottom<=add.top&&add.bottom<=owner.top,'search and plus sit above the owner in the rail');
     return {check:name,faces:faces.length};
   }
   if(name==='sidebar-search-before'||name==='sidebar-search-open'){
-    const header=document.querySelector('#nav .mb-top'), buttons=[...header.querySelectorAll('[data-col]')];
+    const buttons=[...document.querySelectorAll('#nav [data-col]')];
     const positions=buttons.map(button=>button.getBoundingClientRect().toJSON());
     if(name==='sidebar-search-before'){
-      require(visible(document.querySelector('#nav .mb-find-input')),'search stands ready');
+      require(buttons.map(button=>button.dataset.col).join()==='search,add'&&buttons.every(visible),'search and plus stand ready');
       window.__sidebarSearchPositions=positions;
-    }else{
-      require(document.activeElement===document.querySelector('#nav .mb-find-input'),'search receives focus');
-      require(positions.every((box,index)=>Math.abs(box.x-window.__sidebarSearchPositions[index].x)<1&&Math.abs(box.y-window.__sidebarSearchPositions[index].y)<1),'opening search never moves its icon or plus');
+      return {check:name,positions};
     }
-    return {check:name,positions};
+    require(positions.every((box,index)=>Math.abs(box.x-window.__sidebarSearchPositions[index].x)<1&&Math.abs(box.y-window.__sidebarSearchPositions[index].y)<1),'opening search never moves its icon or plus');
+    // Grok Bot's search is a card in the middle of the window over a dimmed page (owner, 2026-11-06).
+    const card=document.querySelector('#app-popover.side-search'),input=card?.querySelector('.side-search-input');
+    require(visible(card)&&document.activeElement===input,'search opens its card with the keys in its field');
+    const box=card.getBoundingClientRect();
+    require(Math.abs(box.left+box.width/2-innerWidth/2)<=2&&box.width<=560&&box.left>=12&&box.bottom<=innerHeight,'the card stands in the middle of the window');
+    require(/\b\d{3,}px\b/.test(getComputedStyle(card).boxShadow),'the page behind the card is dimmed by its wide shadow');
+    require(getComputedStyle(document.querySelector('.window-chrome')).backgroundColor==='rgba(0, 0, 0, 0)','the caption takes the same dim as everything else');
+    const rows=[...card.querySelectorAll('.side-search-rows > .side-search-row')],add=card.querySelector('.side-search-new');
+    require(rows.length>=2&&rows.every(row=>row.querySelector('.av')&&row.querySelector('.side-search-main b')),'every member is a row with its face and name');
+    require(getComputedStyle(rows[0]).backgroundColor!=='rgba(0, 0, 0, 0)'&&getComputedStyle(rows[1]).backgroundColor==='rgba(0, 0, 0, 0)','the first row, which Enter opens, carries the soft fill');
+    require(visible(add)&&add.getBoundingClientRect().bottom<=box.bottom+1&&add.getBoundingClientRect().top>=rows.at(-1).getBoundingClientRect().top,'新增成員 stands at the foot of the card');
+    return {check:name,width:Math.round(box.width),rows:rows.length};
   }
   if (name === "slime-marks-at-rest") {
     const surfaces = [...document.querySelectorAll('.look-slime-board .slime-surface[data-state="idle"]')].filter(visible);
@@ -1987,7 +1998,7 @@ export function checkRendered(name, context = {}) {
     require(width > 300, "the list is wider than its default");
     const main = document.querySelector('#main').getBoundingClientRect();
     require(Math.abs(main.left - width) <= 2, "the conversation starts where the list ends");
-    require(!document.querySelector('[data-sidebar="collapse"]') && visible(nav.querySelector('.mb-find-input')), "no fold button, and the search stands in the wider list");
+    require(!document.querySelector('[data-sidebar="collapse"]') && visible(nav.querySelector('.mb-top [data-col="search"]')), "no fold button, and search stands at the top of the wider list");
     return {check:name, width:Math.round(width)};
   }
   if (name === "panel-width" || name === "panel-closed") {

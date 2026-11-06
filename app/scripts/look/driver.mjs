@@ -849,7 +849,8 @@ export async function perform(page, step, evidenceDirectory) {
     case "room-row-menu": { const more = await visible(`[data-room-more="${step.id}"]`); try { await more.hover(); await more.click(); } finally { await more.dispose(); } break; }
     case "rooms-menu": await visible(".mb-col [data-room]"); break;
     case "search":
-      await fill(".mb-find-input", step.text); break;
+      if (!(await page.$("#app-popover .side-search-input"))) await click('[data-col="search"]');
+      await fill("#app-popover .side-search-input", step.text); break;
     case "drop": case "drag-start": case "drag-over":
       { const element = await visible(step.selector);
       await element.evaluate((element, options) => {

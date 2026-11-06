@@ -78,7 +78,7 @@ describe("Raphael's emblem stands bare", () => {
       expect(html).not.toMatch(/mb-av|border|background|radius/);
     }
     const column = document.createElement("div");
-    column.innerHTML = columnHTML({ list: null, current: 0, previews: new Map(), query: "", folded: new Set(), fresh: new Set() });
+    column.innerHTML = columnHTML({ list: null, current: 0, previews: new Map(), folded: new Set(), fresh: new Set() });
     const face = column.querySelector(".mb-chief > .av")!;
     expect(face.className).toBe("av");
     expect(face.getAttribute("style")).toBe("--av:40px");

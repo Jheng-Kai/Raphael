@@ -181,9 +181,9 @@ test("room rows render the RPC summary and select only the visible conversation 
  expect(section.querySelector('[data-room="1"] .is-unread')).not.toBeNull();
  openGroupChat(1);await flush();
  expect(section.querySelector('[data-room="1"]')?.getAttribute('aria-current')).toBe('true');
- active=false;section.dispatchEvent(new CustomEvent('sidebar-search',{detail:""}));
+ active=false;section.dispatchEvent(new Event('sidebar-draw'));
  expect(section.querySelector('[aria-current="true"]')).toBeNull();
- active=true;section.dispatchEvent(new CustomEvent('sidebar-search',{detail:""}));
+ active=true;section.dispatchEvent(new Event('sidebar-draw'));
  expect(section.querySelector('[data-room="1"]')?.getAttribute('aria-current')).toBe('true');
 });
 

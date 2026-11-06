@@ -221,9 +221,11 @@ apply.
 
 ## Sidebar redesign (2026-10-30)
 
-One 296px sidebar has no brand: a collapse icon and a plus share the top row, with a
-standing search box below. It collapses to a 72px rail of faces (hover names a face; the plus moves
-above the owner). The chief, without a star, is the first ordinary row; any pinned member leaves the
+One 296px sidebar has no brand. Search and plus stand side by side at the top as Grok Bot's two
+36px soft round buttons (2026-11-06); search opens a card in the middle of the dimmed window with the
+field, every member as face, name and last line, message results once words are typed, and 新增成員
+at its foot (Enter opens the first row). The edge drags the list down to a 72px rail of faces (hover
+names a face; search and plus move above the owner). The chief, without a star, is the first ordinary row; any pinned member leaves the
 rows for a larger centered face above its name at the top, over one continuous list of member rows and unframed group face grids (up to four faces).
 Only owner-created folders have headings; their chevrons appear on hover. Times
 appear on hover, and current-page selection remains unique. The footer is a Notion-like list without a

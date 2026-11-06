@@ -25,7 +25,6 @@ export interface ColumnView {
   active?: boolean;
   /** The last message of each member's thread, as far as it is known. */
   previews: ReadonlyMap<number, string>;
-  query: string;
   /** The groups folded away, by id. */
   folded: ReadonlySet<number>;
   /** The members that were not there at the last drawing: their rows fade in. */
@@ -73,7 +72,7 @@ function sectionHTML(section: MemberSection, v: ColumnView): string {
   const group = section.group;
   const id = group ? String(group.id) : "none";
   const name = group ? group.name : t("members.ungrouped");
-  const open = !(group && v.folded.has(group.id)) || v.query.trim() !== "";
+  const open = !(group && v.folded.has(group.id));
   return (
     `<section class="mb-sec"${group ? ' draggable="true"' : ""} data-group="${id}" data-open="${open}">` +
     (group ? `<div class="mb-ghead"><span class="mb-gname">${esc(name)}</span>` +
@@ -87,20 +86,18 @@ function sectionHTML(section: MemberSection, v: ColumnView): string {
   );
 }
 
-/** The list under the search: the primary, groups and ungrouped members, or an empty result. */
+/** The list: the pinned tiles, the primary, then groups and ungrouped members. */
 export function columnHTML(v: ColumnView): string {
   const all = memberDisplayList(v.list), top = all.members[0];
-  const pinned = all.members.filter(m => m.pinned && (m.id === top.id || !m.hidden) && memberMatches(m, v.query));
-  const sections = memberSections({ ...all, members: all.members.filter(m => !m.pinned) }, v.query, top.id);
-  const searching = v.query.trim() !== "";
-  const showChief = !top.pinned && (!searching || memberMatches(top, v.query));
+  const pinned = all.members.filter(m => m.pinned && (m.id === top.id || !m.hidden));
+  const sections = memberSections({ ...all, members: all.members.filter(m => !m.pinned) }, "", top.id);
   const chief = memberRowHTML(top, v).replace('class="nav mb-row"', 'class="nav mb-row mb-chief"');
-  return (pinned.length ? `<div class="mb-pinned" data-count="${Math.min(pinned.length, 3)}">${pinned.map(m => pinnedTileHTML(m, v, m.id === top.id)).join("")}</div>` : "") + (showChief ? chief : "") + sections.map((section) => sectionHTML(section, v)).join("") + (searching && !showChief && sections.length === 0 && pinned.length === 0 ? `<p class="mb-none">${esc(t("members.noMatch"))}</p>` : "");
+  return (pinned.length ? `<div class="mb-pinned" data-count="${Math.min(pinned.length, 3)}">${pinned.map(m => pinnedTileHTML(m, v, m.id === top.id)).join("")}</div>` : "") + (top.pinned ? "" : chief) + sections.map((section) => sectionHTML(section, v)).join("");
 }
 
 export interface ColumnHost {
   openMessage?(member: number, conversation: number, turn: number): void;
-  view(): Omit<ColumnView, "query" | "folded">;
+  view(): Omit<ColumnView, "folded">;
   /** Opens the thread of member `id`. */
   select(id: number): void;
   newMember(groupId: number | null): void;
@@ -120,10 +117,8 @@ export interface ColumnHost {
 export interface MemberColumn {
   readonly el: HTMLElement;
   draw(): void;
-  /** The same cross-conversation search, available when the column is hidden on narrow windows. */
+  /** The search card: members and what is found in the messages, from the search button, Ctrl+Shift+F or the palette. */
   openSearch(anchor: HTMLElement): void;
-  /** The search's words now. */
-  query(): string;
   menu(id: number, anchor: HTMLElement): void;
 }
 
@@ -192,17 +187,18 @@ export function memberMenu(id: number, anchor: HTMLElement, host: Pick<ColumnHos
 export function createMemberColumn(host: ColumnHost): MemberColumn {
   const el = document.createElement("aside");
   el.className = "mb-col";
+  // Search and plus side by side at the top, as Grok Bot's (owner, 2026-11-06): search opens a card in the middle of the
+  // window instead of a field standing in the list.
   el.innerHTML =
-    `<div class="mb-top">${iconButton("plus", t("members.add"), ' data-col="add" aria-haspopup="menu" aria-expanded="false"', "mb-tool")}</div>` +
-    `<label class="mb-find">${ico("search")}<input type="search" class="mb-find-input" autocomplete="off" spellcheck="false" maxlength="40"></label>` +
+    `<div class="mb-top">${iconButton("search", t("chat.searchAll"), ' data-col="search" aria-haspopup="dialog"', "mb-tool")}` +
+    `${iconButton("plus", t("members.add"), ' data-col="add" aria-haspopup="menu" aria-expanded="false"', "mb-tool")}</div>` +
     `<nav class="mb-scroll"><div class="mb-list"></div></nav>`;
   const rooms = createRoomsSection(() => host.view().active !== false);
   el.querySelector(".mb-scroll")!.append(rooms);
-  const findInput = el.querySelector<HTMLInputElement>(".mb-find-input")!;
+  const searchButton = el.querySelector<HTMLElement>('[data-col="search"]')!;
   const addButton = el.querySelector<HTMLElement>('[data-col="add"]')!;
   const list = el.querySelector<HTMLElement>(".mb-list")!;
   const nav = el.querySelector<HTMLElement>(".mb-scroll")!;
-  let query = "";
   const folded = new Set<number>();
   try { for (const id of JSON.parse(localStorage.getItem("raphael.sidebar.folders") ?? "[]")) if (Number.isInteger(id)) folded.add(id); } catch { /* Keep folders open when storage is unavailable. */ }
   const search = createMessageSearch(list, {
@@ -219,12 +215,12 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     nav.setAttribute("aria-label", t("members.title"));
     addButton.setAttribute("aria-label", t("members.add"));
     addButton.title = t("members.add");
-    findInput.placeholder = t("chat.searchAll");
-    findInput.setAttribute("aria-label", t("chat.searchAll"));
+    searchButton.setAttribute("aria-label", t("chat.searchAll"));
+    searchButton.title = t("chat.searchAll");
     const focusKey = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-k]");
     const key = focusKey && list.contains(focusKey) ? focusKey.dataset.k : undefined;
-    search.draw(query, columnHTML({ ...host.view(), query, folded }));
-    rooms.dispatchEvent(new CustomEvent("sidebar-search", { detail: query }));
+    search.draw("", columnHTML({ ...host.view(), folded }));
+    rooms.dispatchEvent(new Event("sidebar-draw"));
     const focused = key ? list.querySelector<HTMLElement>(`[data-k="${CSS.escape(key)}"]`) : null;
     if (focused && focused !== document.activeElement) focused.focus({ preventScroll: true });
   }
@@ -276,7 +272,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     if (fold) {
       if (suppressFold) { suppressFold = false; if (e.detail !== 0) return; }
       const value = fold.dataset.groupFold!;
-      if (value === "none" || query.trim() !== "") return;
+      if (value === "none") return;
       const id = Number(value);
       if (folded.has(id)) folded.delete(id);
       else folded.add(id);
@@ -293,17 +289,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     if (row) host.select(Number(row.dataset.member));
   });
 
-  findInput.addEventListener("input", () => {
-    query = findInput.value;
-    draw();
-  });
-  findInput.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      query = ""; findInput.value = ""; draw();
-    }
-  });
+  searchButton.addEventListener("click", () => openSearch(searchButton));
 
   let drag: { kind: "member" | "group"; id: number } | null = null;
   el.addEventListener("dragstart", event => {
@@ -334,26 +320,57 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     else if (target !== null && target !== moving.id) void host.reorderGroup?.(moving.id, target);
   });
 
+  /** Every member the search can reach, as two-line rows (face, name, last message), filtered by the words typed. */
+  function searchRowsHTML(words: string): string {
+    const view = host.view();
+    const members = memberDisplayList(view.list).members.filter((m, index) => (index === 0 || !m.hidden) && memberMatches(m, words));
+    if (!members.length) return `<p class="mb-none">${esc(t("members.noMatch"))}</p>`;
+    return members.map(m => `<button type="button" class="nav side-search-row" data-member="${m.id}">${faceHTML(m, 28)}` +
+      `<span class="side-search-main"><b>${esc(m.name)}</b><span>${esc(previewOf(m, view.previews.get(m.id)).text)}</span></span></button>`).join("");
+  }
+
+  /**
+   * Grok Bot's search (owner, 2026-11-06): a card in the middle of the window with the field, every member as a two-line
+   * row, what the words find in the messages, and 新增成員 at its foot. Enter takes the first row; the arrows walk them.
+   */
   function openSearch(anchor: HTMLElement): void {
-    const panel = openPopover(anchor, '<div class="conversation-tools"><input type="search"></div><div class="conversation-rows page-agent"></div>', { className: "menu conversation-search", role: "dialog", label: t("chat.searchAll") });
+    if (document.querySelector(".side-search")) { closeMenu(); return; }
+    const width = (): number => Math.min(560, innerWidth - 24);
+    const panel = openPopover(anchor,
+      `<label class="side-search-field">${ico("search")}<input type="search" class="side-search-input" autocomplete="off" spellcheck="false" maxlength="40"></label>` +
+      `<div class="side-search-rows"></div>` +
+      `<button type="button" class="nav side-search-new" data-search-new>${ico("plus")}<span>${esc(t("members.newMember"))}</span></button>`,
+      {
+        className: "menu side-search", role: "dialog", label: t("chat.searchAll"),
+        anchorRect: () => new DOMRect((innerWidth - width()) / 2, Math.min(Math.max(48, innerHeight * 0.26), 280), width(), 0),
+        onKey: event => {
+          if (event.key !== "Enter" || !(event.target instanceof HTMLInputElement)) return false;
+          panel.querySelector<HTMLButtonElement>(".side-search-rows button")?.click();
+          return true;
+        },
+      });
     const input = panel.querySelector<HTMLInputElement>("input")!;
     input.placeholder = t("chat.searchAll"); input.setAttribute("aria-label", t("chat.searchAll"));
-    const results = panel.querySelector<HTMLElement>(".conversation-rows")!;
-    const lookup = createMessageSearch(results, {
+    const rows = panel.querySelector<HTMLElement>(".side-search-rows")!;
+    // What is chosen here takes the whole window: a drawer behind the card has no use any more.
+    const leave = (): void => { closeMenu(); window.dispatchEvent(new Event("raphael:close-sidebar")); };
+    const lookup = createMessageSearch(rows, {
       name: id => (id === 0 ? raphaelOf(host.view().list) : host.view().list?.members.find(member => member.id === id))?.name ?? "",
       face: id => {
         const member = id === 0 ? raphaelOf(host.view().list) : host.view().list?.members.find(member => member.id === id);
-        return member ? faceHTML(member, 34) : "";
+        return member ? faceHTML(member, 28) : "";
       },
-      open: (member, conversation, turn) => { closeMenu(); host.openMessage?.(member, conversation, turn); },
+      open: (member, conversation, turn) => { leave(); host.openMessage?.(member, conversation, turn); },
     });
-    const redraw = (): void => lookup.draw(input.value, columnHTML({ ...host.view(), query: input.value, folded }));
+    const redraw = (): void => lookup.draw(input.value, searchRowsHTML(input.value));
     input.addEventListener("input", redraw);
-    results.addEventListener("click", event => {
-      const member = (event.target as Element).closest<HTMLElement>("[data-member]")?.dataset.member;
-      if (member !== undefined) { closeMenu(); host.select(Number(member)); }
+    panel.addEventListener("click", event => {
+      const target = event.target as Element;
+      if (target.closest("[data-search-new]")) { leave(); host.newMember(null); return; }
+      const member = target.closest<HTMLElement>("[data-member]")?.dataset.member;
+      if (member !== undefined) { leave(); host.select(Number(member)); }
     });
     redraw(); input.focus();
   }
-  return { el, draw, openSearch, query: () => query, menu: (id, anchor) => memberMenu(id, anchor, host) };
+  return { el, draw, openSearch, menu: (id, anchor) => memberMenu(id, anchor, host) };
 }

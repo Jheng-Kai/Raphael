@@ -45,6 +45,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
   void refreshApps();
   const header = column.querySelector('.mb-top');
   nav.querySelector(".sidebar-conversations")!.append(column);
+  const search = column.querySelector<HTMLElement>('[data-col="search"]')!;
   const add = column.querySelector<HTMLElement>('[data-col="add"]')!;
   const foot = nav.querySelector<HTMLElement>(".side-foot")!;
   const toggle = document.createElement("button");
@@ -61,7 +62,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
     if (nav.inert !== (compact && !open)) nav.inert = compact && !open;
     const main = document.getElementById("main")!;
     if (main.inert !== (compact && open)) main.inert = compact && open;
-    if (open && !wasOpen) nav.querySelector<HTMLElement>(".mb-find-input, [data-col='add']")?.focus();
+    if (open && !wasOpen) search.focus();
     else if (!open && wasOpen && compact) toggle.focus();
   };
   const close = (): void => setOpen(false);
@@ -89,7 +90,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
   const placeRail = (): void => {
     const rail = collapsed && !compactWindow.matches;
     document.documentElement.toggleAttribute("data-sidebar-collapsed", rail);
-    if (rail) foot.prepend(add); else header?.append(add);
+    if (rail) foot.prepend(search, add); else header?.append(search, add);
     if (!rail) nav.querySelectorAll(".mb-row[data-tooltip], .sidebar-account[data-tooltip]").forEach(row => row.removeAttribute("data-tooltip"));
     placeWidth();
   };

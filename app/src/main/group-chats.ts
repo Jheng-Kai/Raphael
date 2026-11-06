@@ -585,16 +585,16 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
 
 export function createRoomsSection(active: () => boolean = () => true): HTMLElement {
   const el = document.createElement("section"); el.className = "au-rooms-section";
-  let rooms: Room[] = [], list: MembersList = { members: [], groups: [] }, generation = 0, query = "";
-  let drawnQuery = "", drawnSelection: number | null = null, drawnRows = "";
+  let rooms: Room[] = [], list: MembersList = { members: [], groups: [] }, generation = 0;
+  let drawnSelection: number | null = null, drawnRows = "";
   let rosterDirty = true, timer: ReturnType<typeof setTimeout> | undefined;
   let loaded = false, retry = 0;
   const retryDelays = [100, 250, 500, 1000, 2000];
   const draw = (): void => {
-    drawnQuery = query; drawnSelection = active() ? selectedRoom : null;
+    drawnSelection = active() ? selectedRoom : null;
     // Groups are the owner's own; a former team room stays only for the conversation it already holds.
     const html = rooms
-      .filter(room => (!room.is_team || room.last_at) && (!room.hidden || query) && (!query || `${room.is_team ? t("rooms.team") : room.name} ${room.preview ?? ""}`.toLocaleLowerCase().includes(query)))
+      .filter(room => (!room.is_team || room.last_at) && !room.hidden)
       .map(room => {
         const date = new Date(room.last_at ?? NaN), name = room.is_team ? t("rooms.team") : room.name;
         return `<div class="au-room-row"><button type="button" class="nav mb-row" data-room="${room.id}" aria-current="${active() && selectedRoom === room.id}">${roomAvatarHTML(room,list,40)}<span class="mb-row-main"><span class="mb-row-t"><b>${esc(name)}</b>${room.pinned ? ico("pin") : ""}${Number.isFinite(date.getTime()) ? `<time class="mb-row-time" datetime="${date.toISOString()}">${formatClock(date.getTime())}</time>` : ""}</span><span class="mb-row-p${room.waiting ? " is-wait" : ""}">${esc(room.waiting ? t("members.waitingShort") : ((room.preview && room.preview_member_id !== undefined ? `${room.preview_member_id === null ? t("rooms.owner") : list?.members.find(m => m.id === room.preview_member_id)?.name ?? t("members.title")}：` : "") + plainLine(replyBody(room.preview ?? ""))))}</span></span>${room.waiting ? `<span class="mb-dot is-wait" role="img" aria-label="${esc(t("members.waitingShort"))}"></span>` : room.unread ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>` : ""}</button>${room.id ? iconButton("more", t("members.more",{p0:name}), ` data-room-more="${room.id}" aria-haspopup="menu" aria-expanded="false"`, "au-room-more") : ""}</div>`;
@@ -627,7 +627,8 @@ export function createRoomsSection(active: () => boolean = () => true): HTMLElem
     if (!event || event.type === "MembersChanged" || ["CoreReady"].includes(event.type)) rosterDirty = true;
     clearTimeout(timer); timer = undefined; void load(true,!event || event.type==='RoomsChanged' || ['CoreReady'].includes(event.type));
   }); onLocaleChange(() => { draw(); void load(); });
-  el.addEventListener("sidebar-search", event => { query = (event as CustomEvent<string>).detail.trim().toLocaleLowerCase(); if (query !== drawnQuery || drawnSelection !== (active() ? selectedRoom : null)) draw(); });
+  // The member column draws on every page change: the row of the open room follows it.
+  el.addEventListener("sidebar-draw", () => { if (drawnSelection !== (active() ? selectedRoom : null)) draw(); });
   onAvatarChange(()=>{if(el.isConnected)draw();});
   el.addEventListener("click", e => {
     const target = (e.target as Element).closest<HTMLElement>("[data-room], [data-room-new], [data-room-more]");
