@@ -94,7 +94,8 @@ export function slimeParts() {
   let samples = 0;
   for (const svg of document.querySelectorAll('.look-slime-board svg.slime')) {
     const surface = svg.closest('.slime-surface'), host = surface.parentElement;
-    const animations = surface.getAnimations({subtree: true});
+    // The eyes easing toward the pointer (slime-follow.ts) answer the pointer; they are no resting animation (R-UI-99).
+    const animations = surface.getAnimations({subtree: true}).filter(animation => !animation.effect?.target?.matches?.('.slime-follow'));
     const state = svg.dataset.state, size = host.getBoundingClientRect().width;
     if (surface.querySelector('.slime-drop, .slime-bubble, .slime-cel-prop')) failures.push({state, size, part: 'detached droplet or bubble'});
     if (['idle', 'sleeping'].includes(state) && animations.length) failures.push({state, size, part: 'resting animation'});

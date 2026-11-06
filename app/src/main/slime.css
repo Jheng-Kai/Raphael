@@ -27,6 +27,9 @@
 .slime-counterturn { transform-box: view-box; transform-origin: inherit; }
 .slime-settle, .slime-look, .slime-correction, .slime-counterturn { transition-property: --slime-dx, --slime-dy, --slime-angle, --slime-counterangle, --slime-wide, --slime-high; transition-duration: var(--slime-settle-time, 320ms); transition-timing-function: cubic-bezier(0.25, 0.8, 0.3, 1); }
 .slime-look { --slime-settle-time: 200ms; }
+/* The eyes turn toward the pointer near a resting slime, as Grok Bot's do (owner, 2026-11-06; slime-follow.ts). The
+   offset is in the drawing's own units and eases back when the pointer goes. */
+.slime[data-state="idle"] .slime-follow { translate: var(--slime-follow-x, 0px) var(--slime-follow-y, 0px); transition: translate 160ms cubic-bezier(0.25, 0.8, 0.3, 1); }
 .slime-in-between { translate: var(--slime-dx) var(--slime-dy); rotate: var(--slime-angle); scale: var(--slime-wide) var(--slime-high); }
 .slime-in-between > .slime-counterturn { rotate: var(--slime-counterangle); }
 

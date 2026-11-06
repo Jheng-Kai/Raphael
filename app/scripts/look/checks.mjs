@@ -4760,7 +4760,8 @@ export function checkRendered(name, context = {}) {
     const trigger = document.querySelector('.mb-chat .conversation-trigger'), pill = trigger.querySelector('.mb-pill'), go = pill.querySelector('.mb-pill-go');
     const style = getComputedStyle(pill), box = pill.getBoundingClientRect();
     require(Math.abs(box.height - 40) <= 1 && parseFloat(style.borderTopLeftRadius) >= 20, 'the face and name sit in one 40 px pill');
-    require(style.backgroundColor !== 'rgba(0, 0, 0, 0)' && getComputedStyle(trigger).backgroundColor === 'rgba(0, 0, 0, 0)', 'the pill lights under the pointer, not the button around it');
+    const surface = getComputedStyle(pill, '::before');
+    require(surface.backgroundColor !== 'rgba(0, 0, 0, 0)' && parseFloat(surface.right) === 0 && getComputedStyle(trigger).backgroundColor === 'rgba(0, 0, 0, 0)', "the pill's surface lights and reaches the › under the pointer, not the button around it");
     require(Math.abs(go.getBoundingClientRect().width - 16) <= 1 && getComputedStyle(go).opacity === '1', 'a › shows in the pill under the pointer');
     return { check: name, pill: Math.round(box.width) };
   }
