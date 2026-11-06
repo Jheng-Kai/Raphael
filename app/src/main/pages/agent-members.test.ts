@@ -331,6 +331,31 @@ test("show reads an unread thread already loaded while hidden", async () => {
 
 const openDetails = async (): Promise<void> => { if (document.querySelector<HTMLElement>(".mb-det")?.hidden) $(".conversation-trigger").click(); await flush(); };
 
+test("the details panel has no fold button: its left edge drags it, narrower than it can be it closes, and it reopens at its width", async () => {
+  localStorage.removeItem("raphael.panel.width");
+  const agent = mount(); await flush(); await pick(3);
+  await openDetails();
+  const panel = document.querySelector<HTMLElement>(".mb-det")!, page = panel.parentElement!;
+  const edge = panel.querySelector<HTMLElement>(":scope > .det-edge")!;
+  expect(edge.getAttribute("role")).toBe("separator");
+  panel.getBoundingClientRect = () => ({ left: 700, right: 1120, width: 420, top: 0, bottom: 900, height: 900, x: 700, y: 0, toJSON() {} }) as DOMRect;
+  edge.setPointerCapture = vi.fn(); edge.hasPointerCapture = () => true; edge.releasePointerCapture = vi.fn();
+  const drag = (...xs: number[]): void => {
+    edge.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerId: 1, clientX: xs[0], bubbles: true }));
+    for (const x of xs.slice(1)) edge.dispatchEvent(new PointerEvent("pointermove", { pointerId: 1, clientX: x, bubbles: true }));
+    edge.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1, bubbles: true }));
+  };
+  drag(700, 600);
+  expect(page.style.getPropertyValue("--pa-det")).toBe("520px");
+  expect(localStorage.getItem("raphael.panel.width")).toBe("520");
+  drag(600, 1000);
+  await vi.waitFor(() => expect(panel.hidden).toBe(true));
+  await openDetails();
+  expect(page.style.getPropertyValue("--pa-det")).toBe("520px");
+  localStorage.removeItem("raphael.panel.width");
+  agent.hide();
+});
+
 test("a closed details panel reads nothing while work runs, and opening it shows the current counts", async () => {
   const agent = mount(); await flush(); await pick(3);
   expect(document.querySelector<HTMLElement>(".mb-det")!.hidden).toBe(true);

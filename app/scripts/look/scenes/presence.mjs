@@ -1,4 +1,4 @@
-import { scene, member, room, wait, hover, click, stableClick, check, type } from "./steps.mjs";
+import { scene, member, room, wait, hover, click, stableClick, check, type, drag } from "./steps.mjs";
 
 const conversation = (name, description, variant = "clean", extra = []) => ({ ...scene(name, description, [member(1), wait('.tn[data-id="651"]'),
   ...(["event-routine-opens", "event-calendar-opens", "event-lines-collapse"].includes(name) ? [hover('[data-id="651"] .message-work'), click('[data-id="651"] .message-work'), wait('[data-id="651"] .work-body:not([hidden])')] : []),
@@ -7,7 +7,7 @@ export default [
   scene("presence-states-sidebar", "Distinct silhouettes in the shared sidebar", [{action: "member-column", collapsed: false}, check("presence-states-sidebar")], {presence: "states"}),
   conversation("presence-hover-action", "The header hover updates below its avatar, inside the window", "hover", [hover('.mb-head .av'), {action: "main-event", event: {type: "MemberActivity", member_id: 1, state: "searching", label: "Comparing sample sources"}}]),
   conversation("presence-sidebar-hover", "Expanded rows share the live public action hover", "hover", [{action: "member-column", collapsed: false}, hover('.side [data-member="1"] .av'), {action: "main-event", event: {type: "MemberActivity", member_id: 1, state: "searching", label: "Comparing sample sources"}}]),
-  conversation("presence-rail-hover", "The collapsed rail names its member before the public action", "hover", [{action: "member-column", collapsed: false}, click('[data-sidebar="collapse"]'), {action: "member-column", collapsed: false}, hover('.side [data-member="1"] .av'), {action: "main-event", event: {type: "MemberActivity", member_id: 1, state: "searching", label: "Comparing sample sources"}}]),
+  conversation("presence-rail-hover", "The collapsed rail names its member before the public action", "hover", [{action: "member-column", collapsed: false}, drag('.side-edge', -240, { wide: true }), {action: "member-column", collapsed: false}, hover('.side [data-member="1"] .av'), {action: "main-event", event: {type: "MemberActivity", member_id: 1, state: "searching", label: "Comparing sample sources"}}]),
   conversation("presence-blocked-stays", "Owner attention survives unchanged roster refreshes", "blocked", [{action: "event-storm", selector: ".mb-chat:not([hidden]) .ra-scroll", roster: true, wheelBy: 0, measure: {name: "blocked-presence", enforce: false}, limits: {replacedFaces: 0, longTaskMs: 600}}]),
   conversation("presence-waiting-colleague", "Dependency waiting has lidded eyes rather than an attention mark", "colleague"),
   conversation("transcript-clean", "Private bubbles leave room for the words"),

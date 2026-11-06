@@ -111,7 +111,11 @@
 .ra-empty.is-member .ra-hi { font: 600 var(--fs-lg)/1.5 var(--display); letter-spacing: 0; }
 
 /* ---------- the details panel ---------- */
-.mb-det { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--side); border-left: 0; padding-top: var(--window-controls-height); }
+.mb-det { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--side); border-left: 0; padding-top: var(--window-controls-height); }
+/* The panel's left edge drags it, as Grok Bot's (members-shell.ts): no handle, a thin line only while it moves or has the keyboard. */
+.det-edge { position: absolute; top: 0; left: 0; bottom: 0; z-index: 5; width: 6px; cursor: col-resize; touch-action: none; outline: none; }
+.det-edge:focus-visible::after, .det-edge.is-dragging::after { content: ""; position: absolute; top: 0; left: 0; bottom: 0; width: 2px; background: var(--edge); }
+:root[data-desktop-expanded] .det-edge, :root[data-desktop-watch] .det-edge { display: none; }
 .mb-det.is-in { animation: mb-det-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .mb-det.leaving { animation: mb-det-out 0.16s ease-in forwards; pointer-events: none; }
 @keyframes mb-det-in { from { opacity: 0; transform: translateX(16px); } }

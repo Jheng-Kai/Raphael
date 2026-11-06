@@ -25,6 +25,11 @@ import { bindComposerMentions, mentionTargets } from "./team-mentions";
 import { createMemberActions } from "./member-actions";
 import { createMemberColumn } from "./member-column";
 import { createDetails } from "./member-details";
+import { mountEdge, savedWidth, saveWidth } from "./edge-drag";
+
+/** The details panel's widths (px): Grok Bot's opens at about 453 and drags to about 685; narrower than PANEL_CLOSE it closes. */
+const PANEL_MIN = 300, PANEL_MAX = 720, PANEL_CLOSE = 240;
+const PANEL_KEY = "raphael.panel.width";
 import {
   askGroupName,
   confirmDelete,
@@ -167,6 +172,31 @@ export function createMembers(host: MembersHost): MembersShell {
     openTurn: (member, conversation, turn) => host.onOpenConversation?.(member, conversation!, turn),
   });
 
+  // As Grok Bot's: the panel's left edge drags it wider or narrower, and dragged narrower than it can be it closes; the
+  // header's name opens it again at the width it had. There is no button for it (owner, 2026-11-06).
+  let panelWidth = savedWidth(PANEL_KEY, PANEL_MIN, PANEL_MAX);
+  const panelEdge = document.createElement("div");
+  panelEdge.className = "det-edge";
+  details.el.prepend(panelEdge);
+  const placePanel = (): void => {
+    const page = details.el.parentElement;
+    if (panelWidth === null) page?.style.removeProperty("--pa-det");
+    else page?.style.setProperty("--pa-det", `${panelWidth}px`);
+  };
+  mountEdge(panelEdge, {
+    label: t("nav.panelWidth"),
+    grow: -1,
+    widthAt: x => details.el.getBoundingClientRect().right - x,
+    width: () => details.el.getBoundingClientRect().width,
+    resize: next => {
+      if (next < PANEL_CLOSE) { setDetails(false); return false; }
+      panelWidth = Math.round(Math.min(PANEL_MAX, innerWidth * 0.6, Math.max(PANEL_MIN, next)));
+      placePanel();
+    },
+    done: () => saveWidth(PANEL_KEY, panelWidth),
+    toggle: () => setDetails(false),
+  });
+
   const pill = document.createElement("span");
   pill.className = "mb-pill";
   pill.dataset.shell = "pill";
@@ -189,6 +219,8 @@ export function createMembers(host: MembersHost): MembersShell {
     column.draw();
     details.draw();
     drawHead();
+    // The panel joins its page after the shell is made; its width follows it there.
+    placePanel();
   }
 
   // ---------- reading ----------
@@ -305,6 +337,7 @@ export function createMembers(host: MembersHost): MembersShell {
     stopLeaving = null;
     if (next) {
       details.el.hidden = false;
+      placePanel();
       page?.setAttribute("data-det", "open");
       details.el.classList.remove("is-in");
       void details.el.offsetWidth;

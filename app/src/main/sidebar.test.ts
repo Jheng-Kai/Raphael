@@ -63,31 +63,56 @@ test("the chief is an ordinary row until it is pinned, then a larger centered fa
   expect(el.querySelectorAll('[data-member="0"]')).toHaveLength(1);
 });
 
-test("the sidebar has no brand, names Home in each language, and collapses to a rail and back", () => {
+test("the sidebar has no brand and no fold button, names Home in each language, and its edge drags it to a rail and back", () => {
   localStorage.clear();
   document.documentElement.removeAttribute("data-sidebar-collapsed");
+  document.documentElement.style.removeProperty("--sidebar-width");
   document.body.innerHTML = '<div class="window-chrome"></div><nav id="nav"></nav><main id="main"></main>';
   const nav = document.getElementById("nav")!;
   const column = document.createElement("aside");
   column.innerHTML = '<div class="mb-top"><button type="button" data-col="add"></button></div>';
   createSidebar(nav, column);
-  expect(nav.querySelector(".brand, .app-icon")).toBeNull();
+  expect(nav.querySelector(".brand, .app-icon, [data-sidebar='collapse']")).toBeNull();
   for (const [locale, label] of [["zh-TW", "回到首頁"], ["en", "Back to home"], ["ja", "ホームへ"]] as const) {
     setLocale(locale);
     expect(nav.querySelector('[data-go="home"]')!.getAttribute("aria-label")).toBe(label);
   }
   setLocale("zh-TW");
-  const collapse = nav.querySelector<HTMLElement>('[data-sidebar="collapse"]')!;
+  const edge = nav.querySelector<HTMLElement>(".side-edge")!;
+  expect(edge.getAttribute("role")).toBe("separator");
+  expect(edge.getAttribute("aria-label")).toBe("拖曳調整側欄寬度");
   const add = nav.querySelector<HTMLElement>('[data-col="add"]')!;
   expect(add.parentElement!.className).toBe("mb-top");
-  collapse.click();
+  edge.setPointerCapture = vi.fn(); edge.hasPointerCapture = () => true; edge.releasePointerCapture = vi.fn();
+  const drag = (...xs: number[]): void => {
+    edge.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerId: 1, clientX: xs[0], bubbles: true }));
+    for (const x of xs.slice(1)) edge.dispatchEvent(new PointerEvent("pointermove", { pointerId: 1, clientX: x, bubbles: true }));
+    edge.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1, bubbles: true }));
+  };
+  drag(296, 360);
+  expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("360px");
+  expect(localStorage.getItem("raphael.sidebar.width")).toBe("360");
+  drag(360, 520);
+  expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("400px");
+  drag(400, 220, 120);
   expect(document.documentElement.hasAttribute("data-sidebar-collapsed")).toBe(true);
-  expect(collapse.getAttribute("aria-label")).toBe("展開側欄");
+  expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("");
   expect(add.parentElement!.className).toBe("side-foot");
   expect(localStorage.getItem("raphael.sidebar.collapsed")).toBe("true");
-  collapse.click();
+  drag(72, 110);
+  expect(document.documentElement.hasAttribute("data-sidebar-collapsed")).toBe(true);
+  drag(72, 260);
   expect(document.documentElement.hasAttribute("data-sidebar-collapsed")).toBe(false);
+  expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("260px");
   expect(add.parentElement!.className).toBe("mb-top");
+  edge.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  expect(document.documentElement.hasAttribute("data-sidebar-collapsed")).toBe(true);
+  window.dispatchEvent(new Event("raphael:toggle-sidebar"));
+  expect(document.documentElement.hasAttribute("data-sidebar-collapsed")).toBe(false);
+  edge.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+  expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("276px");
+  document.documentElement.style.removeProperty("--sidebar-width");
+  document.documentElement.removeAttribute("data-sidebar-collapsed");
 });
 
 test("closing an already closed drawer preserves the destination's focus", () => {
@@ -107,7 +132,7 @@ test("closing an already closed drawer preserves the destination's focus", () =>
     expect(document.activeElement).toBe(entry);
     const toggle=document.querySelector<HTMLElement>('[data-sidebar="open"]')!;
     toggle.click();
-    expect(document.activeElement).toBe(nav.querySelector('[data-sidebar="collapse"]'));
+    expect(document.activeElement).toBe(nav.querySelector('[data-col="add"]'));
     sidebar.close();
     expect(document.activeElement).toBe(toggle);
     entry.focus(); sidebar.close();

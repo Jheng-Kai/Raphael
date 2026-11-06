@@ -1876,10 +1876,11 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('[data-go="team"], .team-page, [data-col="collapse"], .nav-apps, [data-go="automations"]'), "retired navigation and icon rails are absent");
     const header=nav.querySelector('.mb-top');
     const rail=document.documentElement.hasAttribute('data-sidebar-collapsed');
-    require(!nav.querySelector('.brand, .app-icon, [data-col="search"]')&&header.querySelector('[data-sidebar="collapse"]')&&nav.querySelector('.sidebar-foot-row [data-go="home"]'),'no brand; collapse leads the top row and Home sits beside the owner');
+    require(!nav.querySelector('.brand, .app-icon, [data-col="search"], [data-sidebar="collapse"]')&&nav.querySelector('.sidebar-foot-row [data-go="home"]'),'no brand and no fold button (the edge drags, as Grok Bot\'s); Home sits beside the owner');
+    if(!compact){const edge=nav.querySelector(':scope > .side-edge'),box=edge?.getBoundingClientRect(),side=nav.getBoundingClientRect();require(edge&&edge.getAttribute('role')==='separator'&&getComputedStyle(edge).cursor==='col-resize'&&Math.abs(box.right-side.right)<1&&box.width<=8&&getComputedStyle(edge,'::after').content==='none','the list has a draggable edge at its right, with no handle drawn');}
     if(!rail)require(header.querySelector('[data-col="add"]')&&visible(nav.querySelector('.mb-find-input'))&&nav.querySelector('.mb-find').getBoundingClientRect().top>=header.getBoundingClientRect().bottom-1,'plus shares the top row and search stands below it');
     require([...nav.querySelectorAll('.side-foot [data-go]')].map(el=>el.dataset.go).join()==='settings,settings,dictation,home','footer opens Connections above account, dictation and Home');
-    if(!document.documentElement.hasAttribute('data-sidebar-collapsed')){const home=nav.querySelector('.sidebar-home'),box=home.getBoundingClientRect();require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&getComputedStyle(home).borderRadius===getComputedStyle(header.querySelector('[data-sidebar="collapse"]')).borderRadius,'Home keeps the shared icon surface');}
+    if(!document.documentElement.hasAttribute('data-sidebar-collapsed')){const home=nav.querySelector('.sidebar-home'),box=home.getBoundingClientRect();require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&getComputedStyle(home).borderRadius===getComputedStyle(nav.querySelector('.sidebar-dictation')).borderRadius,'Home keeps the shared icon surface');}
     for(const button of nav.querySelectorAll('.btn.icon, .side-foot .nav'))if(visible(button)&&!visible(button.querySelector('.nav-t'))){const box=button.getBoundingClientRect(),corner=parseFloat(getComputedStyle(button).borderRadius);require(corner>0&&corner<Math.min(box.width,box.height)/2,`sidebar buttons are rounded squares, never circles (${button.className})`);}
     require(nav.querySelector('.side-foot [data-go="dictation"]').getAttribute('aria-label')&&!nav.querySelector('.side-foot [data-go="dictation"] .nav-t'),'dictation is a named icon button');
     require(nav.querySelector('.sidebar-account .owner-face')&&nav.querySelector('.sidebar-account').getAttribute('aria-label'),'account has its own face and accessible name');
@@ -1924,7 +1925,7 @@ export function checkRendered(name, context = {}) {
   if(name==='sidebar-rail'){
     const nav=document.getElementById('nav'),compact=matchMedia('(max-width: 859px)').matches;
     if(compact){
-      require(!document.documentElement.hasAttribute('data-sidebar-collapsed')&&!document.documentElement.hasAttribute('data-sidebar-open'),'on a narrow window the same control closes the drawer');
+      require(!document.documentElement.hasAttribute('data-sidebar-collapsed')&&!visible(nav.querySelector('.side-edge')),'on a narrow window the list is a drawer: it never folds to a rail and has no edge to drag');
       return {check:name,compact};
     }
     require(document.documentElement.hasAttribute('data-sidebar-collapsed')&&Math.abs(nav.getBoundingClientRect().width-72)<1,'the list collapses to a 72px rail');
@@ -1971,6 +1972,34 @@ export function checkRendered(name, context = {}) {
     const close = chrome.querySelector('.window-close'), box = close.getBoundingClientRect();
     require(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)?.closest('.window-close') === close, "the window buttons still answer over a dialog");
     return {check:name,top:dialog.getBoundingClientRect().top};
+  }
+  if (name === "sidebar-width") {
+    // Grok Bot's list is dragged by its edge between a rail and about 400 px (owner, 2026-11-06).
+    if (matchMedia('(max-width: 859px)').matches) return {check:name,compact:true};
+    const nav = document.querySelector('#nav'), width = nav.getBoundingClientRect().width, stored = Number(localStorage.getItem('raphael.sidebar.width'));
+    require(!document.documentElement.hasAttribute('data-sidebar-collapsed') && width >= 240 && width <= 400, "the list is open, between 240 and 400 px");
+    require(Math.abs(width - stored) <= 1 && Math.abs(width - parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width'))) <= 1, "the width the edge was let go at is the list's, and is kept");
+    require(width > 300, "the list is wider than its default");
+    const main = document.querySelector('#main').getBoundingClientRect();
+    require(Math.abs(main.left - width) <= 2, "the conversation starts where the list ends");
+    require(!document.querySelector('[data-sidebar="collapse"]') && visible(nav.querySelector('.mb-find-input')), "no fold button, and the search stands in the wider list");
+    return {check:name, width:Math.round(width)};
+  }
+  if (name === "panel-width" || name === "panel-closed") {
+    const page = document.querySelector('.page-agent'), panel = page.querySelector('.mb-det');
+    if (name === "panel-closed") {
+      require(panel.hidden && page.dataset.det !== 'open', "dragged narrower than it can be, the panel closed");
+      const trigger = document.querySelector('.conversation-trigger');
+      require(visible(trigger) && trigger.getAttribute('aria-expanded') === 'false', "the header's name is there to open it again");
+      return {check:name};
+    }
+    require(visible(panel) && !panel.hidden, "the panel is open");
+    const width = panel.getBoundingClientRect().width, set = parseFloat(page.style.getPropertyValue('--pa-det'));
+    require(Math.abs(width - set) <= 1 && Number(localStorage.getItem('raphael.panel.width')) === Math.round(set), "the panel takes the width it was dragged to, and keeps it");
+    require(width >= 300 && width <= Math.min(720, innerWidth * 0.6) + 1, "within its range");
+    const edge = panel.querySelector(':scope > .det-edge'), box = edge.getBoundingClientRect();
+    require(edge.getAttribute('role') === 'separator' && Math.abs(box.left - panel.getBoundingClientRect().left) < 1 && getComputedStyle(edge, '::after').content === 'none', "its left edge drags it, with no handle drawn");
+    return {check:name, width:Math.round(width)};
   }
   if (name === "sidebar-rail-folded") {
     if (matchMedia('(max-width: 859px)').matches) return {check:name,compact:true};

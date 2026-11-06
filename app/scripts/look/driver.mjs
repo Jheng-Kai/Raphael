@@ -362,7 +362,7 @@ export async function perform(page, step, evidenceDirectory) {
       for (const target of step.selectors) {
         const selector = typeof target === 'string' ? target : target.selector;
         const behindDrawer = await page.evaluate(selector => matchMedia('(max-width: 859px)').matches && document.documentElement.hasAttribute('data-sidebar-open') && [...document.querySelectorAll(selector)].some(el => !el.closest('#nav')), selector);
-        if (behindDrawer) await page.click('[data-sidebar="collapse"]');
+        if (behindDrawer) await page.click('.sidebar-scrim');
         const element = await visible(selector);
         try {
           const snapshot = () => element.evaluate(button => {
@@ -641,6 +641,15 @@ export async function perform(page, step, evidenceDirectory) {
       const element = await visible(step.selector), box = await element.boundingBox(); await element.dispose();
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down();
       try { await new Promise(resolve => setTimeout(resolve, step.ms ?? 500)); } finally { await page.mouse.up(); }
+      break;
+    }
+    // A press moved across in small steps and let go: a pane's edge resizes it as the owner's pointer would.
+    case "drag": {
+      if (step.wide && await page.evaluate(() => matchMedia("(max-width: 859px)").matches)) break;
+      const element = await visible(step.selector), box = await element.boundingBox(); await element.dispose();
+      const x = box.x + box.width / 2, y = box.y + box.height / 2;
+      await page.mouse.move(x, y); await page.mouse.down();
+      try { await page.mouse.move(x + step.dx, y, { steps: 12 }); } finally { await page.mouse.up(); }
       break;
     }
     case "desktop-refresh-still": {

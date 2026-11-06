@@ -8,10 +8,18 @@ import { serviceIconOf } from "./service-icons";
 import type { AppContext } from "./types";
 import { onOwnerProfile, ownerFaceHTML, ownerName } from "./owner-avatar";
 import { esc, ico, iconButton } from "./ui";
+import { mountEdge, savedWidth, saveWidth } from "./edge-drag";
+
+/** The full list's widths (px): Grok Bot's runs from about 277 to 399; ours starts at the stylesheet's 296. */
+const DEFAULT_WIDTH = 296, MIN_WIDTH = 240, MAX_WIDTH = 400;
+/** The rail of faces (sidebar.css), the width a drag folds the list at, and the width a dragged rail opens again past. */
+const RAIL_WIDTH = 72, TO_RAIL = 176, FROM_RAIL = 136;
+const WIDTH_KEY = "raphael.sidebar.width";
+const clampWidth = (width: number): number => Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width)));
 
 export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<AppContext, "onEvent">): { close(): void } {
   nav.classList.add("sidebar");
-  nav.innerHTML = `<div class="sidebar-brand">${iconButton("sidebar", t("nav.collapseSidebar"), ' data-sidebar="collapse" aria-expanded="true"')}</div><div class="sidebar-conversations"></div><div class="side-foot"><button type="button" class="nav sidebar-apps" data-go="settings" data-pane="connections">${ico("plug")}<span class="nav-t"></span><span class="sidebar-app-marks" aria-hidden="true"></span></button><div class="sidebar-foot-row"><button type="button" class="nav sidebar-account" data-go="settings" data-pane="general"></button>${iconButton("mic", t("nav.dictation"), ' data-go="dictation" aria-current="false"', "sidebar-dictation")}${iconButton("home", t("nav.home"), ' data-go="home" aria-current="false"', "sidebar-home")}</div></div>`;
+  nav.innerHTML = `<div class="sidebar-conversations"></div><div class="side-foot"><button type="button" class="nav sidebar-apps" data-go="settings" data-pane="connections">${ico("plug")}<span class="nav-t"></span><span class="sidebar-app-marks" aria-hidden="true"></span></button><div class="sidebar-foot-row"><button type="button" class="nav sidebar-account" data-go="settings" data-pane="general"></button>${iconButton("mic", t("nav.dictation"), ' data-go="dictation" aria-current="false"', "sidebar-dictation")}${iconButton("home", t("nav.home"), ' data-go="home" aria-current="false"', "sidebar-home")}</div></div>`;
   let inventory: InventoryView = "loading";
   let lastMarks = "";
   const apps = nav.querySelector<HTMLElement>(".sidebar-apps")!;
@@ -36,9 +44,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
   app?.onEvent(event => { if (["ConnectionsChanged", "CoreReady"].includes(event.type)) void refreshApps(); });
   void refreshApps();
   const header = column.querySelector('.mb-top');
-  if (header) header.prepend(nav.querySelector('.sidebar-brand')!);
   nav.querySelector(".sidebar-conversations")!.append(column);
-  const collapse = nav.querySelector<HTMLElement>('[data-sidebar="collapse"]')!;
   const add = column.querySelector<HTMLElement>('[data-col="add"]')!;
   const foot = nav.querySelector<HTMLElement>(".side-foot")!;
   const toggle = document.createElement("button");
@@ -55,32 +61,59 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
     if (nav.inert !== (compact && !open)) nav.inert = compact && !open;
     const main = document.getElementById("main")!;
     if (main.inert !== (compact && open)) main.inert = compact && open;
-    if (open && !wasOpen) collapse.focus();
+    if (open && !wasOpen) nav.querySelector<HTMLElement>(".mb-find-input, [data-col='add']")?.focus();
     else if (!open && wasOpen && compact) toggle.focus();
   };
   const close = (): void => setOpen(false);
   window.addEventListener("raphael:toggle-sidebar", () => {
     if (compactWindow.matches) setOpen(!document.documentElement.hasAttribute("data-sidebar-open"));
-    else collapse.click();
+    else toggleRail();
   });
   const compactWindow = matchMedia("(max-width: 859px)");
   let collapsed = false;
   try { collapsed = localStorage.getItem("raphael.sidebar.collapsed") === "true"; } catch { /* Keep the full list when storage is unavailable. */ }
+  let width = savedWidth(WIDTH_KEY, MIN_WIDTH, MAX_WIDTH) ?? DEFAULT_WIDTH;
+  const edge = document.createElement("div");
+  edge.className = "side-edge";
+  nav.append(edge);
+  // The full list's width is the owner's (dragged); the rail and the drawer keep the stylesheet's.
+  const placeWidth = (): void => {
+    const own = !collapsed && !compactWindow.matches && width !== DEFAULT_WIDTH;
+    if (own) document.documentElement.style.setProperty("--sidebar-width", `${width}px`);
+    else document.documentElement.style.removeProperty("--sidebar-width");
+    edge.setAttribute("aria-valuenow", String(collapsed ? RAIL_WIDTH : width));
+    edge.setAttribute("aria-valuemin", String(RAIL_WIDTH));
+    edge.setAttribute("aria-valuemax", String(MAX_WIDTH));
+  };
   // Below the desktop width the list is a drawer, so the rail only exists on a wide window.
   const placeRail = (): void => {
     const rail = collapsed && !compactWindow.matches;
     document.documentElement.toggleAttribute("data-sidebar-collapsed", rail);
-    collapse.setAttribute("aria-expanded", String(!rail));
-    const label = t(rail ? "nav.expandSidebar" : "nav.collapseSidebar");
-    collapse.setAttribute("aria-label", label); collapse.title = label;
     if (rail) foot.prepend(add); else header?.append(add);
     if (!rail) nav.querySelectorAll(".mb-row[data-tooltip], .sidebar-account[data-tooltip]").forEach(row => row.removeAttribute("data-tooltip"));
+    placeWidth();
   };
-  collapse.addEventListener("click", () => {
-    if (compactWindow.matches) { close(); return; }
-    collapsed = !collapsed;
+  const keep = (): void => {
     try { localStorage.setItem("raphael.sidebar.collapsed", String(collapsed)); } catch { /* Keep the current session choice. */ }
-    placeRail();
+    saveWidth(WIDTH_KEY, width === DEFAULT_WIDTH ? null : width);
+  };
+  const toggleRail = (): void => { collapsed = !collapsed; placeRail(); keep(); };
+  // As Grok Bot's: the list's edge drags it wider or narrower; dragged narrow enough it folds to a rail of faces, and the
+  // rail dragged out opens the list again. There is no button for it (owner, 2026-11-06).
+  mountEdge(edge, {
+    label: t("nav.sidebarWidth"),
+    grow: 1,
+    widthAt: x => x - nav.getBoundingClientRect().left,
+    width: () => (collapsed ? FROM_RAIL : width),
+    resize: next => {
+      if (collapsed) {
+        if (next <= FROM_RAIL) return;
+        collapsed = false; width = clampWidth(next); placeRail();
+      } else if (next < TO_RAIL) { collapsed = true; placeRail(); }
+      else { width = clampWidth(next); placeWidth(); }
+    },
+    done: keep,
+    toggle: toggleRail,
   });
   // A face in the rail is named on hover or focus; the row's name stays in the page for screen readers.
   const nameFace = (event: Event): void => {
@@ -96,8 +129,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
     const home = nav.querySelector<HTMLElement>('[data-go="home"]')!;
     home.setAttribute("aria-label", t("nav.home"));
     add.setAttribute("aria-label", t("members.add")); add.title = t("members.add");
-    const rail = document.documentElement.hasAttribute("data-sidebar-collapsed");
-    collapse.setAttribute("aria-label", t(rail ? "nav.expandSidebar" : "nav.collapseSidebar")); collapse.title = collapse.getAttribute("aria-label")!;
+    edge.setAttribute("aria-label", t("nav.sidebarWidth"));
     const dictation = nav.querySelector<HTMLElement>('[data-go="dictation"]')!;
     dictation.setAttribute("aria-label", t("nav.dictation"));
     dictation.title = t("nav.dictation"); home.title = t("nav.home");
@@ -126,6 +158,11 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
     }
   });
   compactWindow.addEventListener("change", () => { close(); placeRail(); });
+  // The list's own width never squeezes the conversation on a window narrower than it was dragged on.
+  window.addEventListener("resize", () => {
+    const room = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, innerWidth - 560));
+    if (!collapsed && width > room) { width = room; placeWidth(); }
+  });
   onLocaleChange(draw); onOwnerProfile(draw); placeRail(); draw(); close();
   return { close };
 }

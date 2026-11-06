@@ -1,4 +1,4 @@
-import { scene, click, hover, check, page, room, settings, wait } from "./steps.mjs";
+import { scene, click, hover, check, page, room, settings, wait, waitGone, drag } from "./steps.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 const fixture = JSON.parse(readFileSync(join(import.meta.dirname, "../fixture.json"), "utf8"));
@@ -12,8 +12,12 @@ export default [
   scene("sidebar-drawer", "Compact menu opens the same full conversation list", [{ action: "member-column", collapsed: false }, check("sidebar-shell")]),
   scene("sidebar-search", "The standing search box never moves the top controls", [{ action:"member-column",collapsed:false },check('sidebar-search-before'),click('.mb-find-input'),check('sidebar-search-open'),{ action: "search", text: "小晴" }, check("sidebar-shell")]),
   scene("sidebar-chief-pinned", "Pinning the top member turns its row into a larger centered tile", [{ action: "member-column", collapsed: false }, click('[data-member-more="0"]'), click('#app-popover [data-pick="pin"]'), wait('#nav .mb-pinned .mb-tile'), check("sidebar-tile"), check("sidebar-shell")]),
-  scene("sidebar-rail", "The list collapses to a rail of faces, with the plus above the owner", [{ action: "member-column", collapsed: false }, click('[data-sidebar="collapse"]'), check("sidebar-rail"), check("sidebar-selection")]),
-  scene("sidebar-rail-folded", "A folder folded in the list shows none of its members in the rail", [{ action: "member-column", collapsed: false }, click('[data-group-fold="1"]'), click('[data-sidebar="collapse"]'), check("sidebar-rail-folded"), check("sidebar-rail")]),
+  scene("sidebar-rail", "Dragged narrow by its edge, the list folds to a rail of faces, with the plus above the owner", [{ action: "member-column", collapsed: false }, drag('.side-edge', -240, { wide: true }), check("sidebar-rail"), check("sidebar-selection")]),
+  scene("sidebar-rail-dragged-open", "The rail dragged out by its edge opens the list again at the width it was let go", [{ action: "member-column", collapsed: false }, drag('.side-edge', -240, { wide: true }), drag('.side-edge', 260, { wide: true }), check("sidebar-width")]),
+  scene("sidebar-dragged-wider", "The list's edge drags it wider, as Grok Bot's: no handle and no button", [{ action: "member-column", collapsed: false }, drag('.side-edge', 90, { wide: true }), check("sidebar-width")]),
+  scene("panel-dragged-wider", "The details panel's left edge drags it wider and the conversation gives way", [{ action: "open-details" }, drag('.page-agent .det-edge', -140), check("panel-width")]),
+  scene("panel-drag-closes", "Dragged narrower than it can be, the details panel closes, and the header's name is how it opens again", [{ action: "open-details" }, drag('.page-agent .det-edge', 420), waitGone('.page-agent .mb-det:not([hidden])'), check("panel-closed")]),
+  scene("sidebar-rail-folded", "A folder folded in the list shows none of its members in the rail", [{ action: "member-column", collapsed: false }, click('[data-group-fold="1"]'), drag('.side-edge', -240, { wide: true }), check("sidebar-rail-folded"), check("sidebar-rail")]),
   scene("sidebar-plus", "The global plus shares member and group chat creation", [click('[data-col="add"]'), wait('#app-popover [data-pick="group-chat"]'), check("sidebar-shell")]),
   scene("sidebar-group-avatar", "Room identity shares bare faces and one header participant row", [room(1), check("sidebar-room-summary"), check("sidebar-room-avatar"), check("sidebar-shell")]),
   scene("sidebar-group-avatar-hover", "Unselected, hovered and selected face clusters have no outer ring", [room(1), { action: "member-column", collapsed: false }, hover('[data-room="2"]'), check("sidebar-room-avatar"), check("sidebar-shell")]),

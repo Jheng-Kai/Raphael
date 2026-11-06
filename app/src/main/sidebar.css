@@ -1,13 +1,16 @@
 /* One fixed conversation list, shared by Home, chat, calendar and dictation. */
-.side { overflow: hidden; padding: var(--sp-2); gap: var(--sp-2); }
-.sidebar-brand { display: flex; align-items: center; gap: var(--sp-1); flex: 1; min-width: 0; }
-.sidebar-brand .btn.icon { flex: none; width: 36px; min-height: 36px; border-radius: var(--r-sm); }
+.side { position: relative; overflow: hidden; padding: var(--sp-2); gap: var(--sp-2); }
+/* The list is dragged by its edge, as Grok Bot's (edge-drag.ts): no handle is drawn, the cursor changes over it, and a thin
+   line shows only while it moves or has the keyboard. */
+.side-edge { position: absolute; top: 0; right: 0; bottom: 0; z-index: 5; width: 6px; cursor: col-resize; touch-action: none; outline: none; }
+.side-edge:focus-visible::after, .side-edge.is-dragging::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 2px; background: var(--edge); }
+:root[data-resizing] body { cursor: col-resize; user-select: none; }
 .side .btn.icon:hover:not(:disabled) { background: var(--hover); }
 .side .btn.icon:active:not(:disabled) { background: var(--pressed); }
 .btn.sidebar-close, .btn.sidebar-toggle { display: none; }
 .sidebar-conversations { display: flex; flex: 1; min-height: 0; }
 .side .mb-col { flex: 1; width: 100%; padding-top: 0; }
-.side .mb-top { min-height: 40px; padding: 0 0 var(--sp-1); gap: var(--sp-1); }
+.side .mb-top { justify-content: flex-end; min-height: 40px; padding: 0 0 var(--sp-1); gap: var(--sp-1); }
 .side .mb-find { flex: none; height: 36px; margin: 0 0 var(--sp-2); }
 .side .btn.mb-tool { flex: none; width: 36px; min-height: 36px; border-radius: var(--r-sm); }
 .side .mb-scroll { padding: 0 0 var(--sp-3); }
@@ -39,7 +42,6 @@
 /* Collapsed: a rail of faces. Every control keeps working and each face is named on hover. */
 :root[data-sidebar-collapsed] { --sidebar-width: 72px; }
 :root[data-sidebar-collapsed] .side .mb-top { flex-direction: column; min-height: 0; }
-:root[data-sidebar-collapsed] .side .sidebar-brand { flex: none; flex-direction: column; }
 :root[data-sidebar-collapsed] .side .mb-sec[data-open="false"], :root[data-sidebar-collapsed] .side .mb-find, :root[data-sidebar-collapsed] .side .mb-ghead, :root[data-sidebar-collapsed] .side .mb-row-time, :root[data-sidebar-collapsed] .side .mb-item .btn.mb-more, :root[data-sidebar-collapsed] .side .au-room-row .btn.au-room-more { display: none; }
 :root[data-sidebar-collapsed] .side .mb-pinned { grid-template-columns: minmax(0, 1fr); }
 :root[data-sidebar-collapsed] .side .mb-row-main * { overflow: hidden; }
@@ -73,10 +75,10 @@
 .side .side-foot .btn.icon { flex: none; justify-content: center; width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: var(--r-sm); }
 /* Collapse, plus, dictation and Home only light up: under the pointer or on their page the icon brightens,
    with no frame and no filled square (2026-11-03). A press dims it for a moment, so it still answers (R-UI-88). */
-.side :is(.sidebar-brand .btn.icon, .btn.mb-tool, .side-foot .btn.icon) { border-color: transparent; background: transparent; color: var(--text-2); }
-.side :is(.sidebar-brand .btn.icon, .btn.mb-tool, .side-foot .btn.icon):is(:hover, :active, [aria-current="page"]):not(:disabled) { border-color: transparent; background: transparent; color: var(--text); }
-.side :is(.sidebar-brand .btn.icon, .btn.mb-tool, .side-foot .btn.icon):is(:hover, :active, [aria-current="page"]):not(:disabled) .i { color: var(--text); }
-.side :is(.sidebar-brand .btn.icon, .btn.mb-tool, .side-foot .btn.icon):active:not(:disabled) :is(.i, .i *) { color: var(--text-3); }
+.side :is(.btn.mb-tool, .side-foot .btn.icon) { border-color: transparent; background: transparent; color: var(--text-2); }
+.side :is(.btn.mb-tool, .side-foot .btn.icon):is(:hover, :active, [aria-current="page"]):not(:disabled) { border-color: transparent; background: transparent; color: var(--text); }
+.side :is(.btn.mb-tool, .side-foot .btn.icon):is(:hover, :active, [aria-current="page"]):not(:disabled) .i { color: var(--text); }
+.side :is(.btn.mb-tool, .side-foot .btn.icon):active:not(:disabled) :is(.i, .i *) { color: var(--text-3); }
 .side .side-foot .sidebar-apps { height: 40px; border: 1px solid var(--line); border-radius: var(--r-pill); padding-inline: 12px; background: transparent; }
 .side .sidebar-apps:is(:hover, :active) { border-color: var(--edge); color: var(--text); background: transparent; }
 .side .sidebar-account:is(:hover, :active) { background: transparent; color: var(--text); }
@@ -110,6 +112,7 @@
 @media (max-width: 859px) {
   :root { --sidebar-width: 0px; }
   .side { position: fixed; inset: var(--window-controls-height) auto 0 0; width: min(320px, calc(100vw - 48px)); z-index: 95; background: var(--side); box-shadow: var(--pop); visibility: hidden; transform: translateX(-100%); }
+  .side-edge { display: none; }
   :root[data-sidebar-open] .side { visibility: visible; transform: none; }
   .btn.sidebar-close { display: inline-flex; }
   .btn.sidebar-toggle { display: inline-flex; width: 40px; min-height: 32px; }

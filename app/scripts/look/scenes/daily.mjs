@@ -1,4 +1,4 @@
-import { scene, click, hover, check, page, member, room, type, wait, paste, stableClick, settings, key, waitGone } from "./steps.mjs";
+import { scene, click, hover, check, page, member, room, type, wait, paste, stableClick, settings, key, waitGone, drag } from "./steps.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import settingsScenes from "./settings.mjs";
@@ -67,6 +67,6 @@ export default [
     ...(kind==='room'?[room(1)]:[page('agent')]),{action:'composer-measure-start'},paste(kind==='room'?'#room-message':input,{text:'x'.repeat(200000)}),wait(kind==='room'?'.au-room-pane .cmp-chip':'.mb-chat:not([hidden]) .cmp-chip'),{action:'composer-measure-end',selector:kind==='room'?'#room-message':input},
   ])),
   scene('daily-long-draft','A stored long draft restores without a long task',[{action:'composer-restore-long'},{action:'reload'},{action:'composer-measure-start'},{...page('agent'),measure:{name:'long-draft-restore',budgetMs:100,maxLongTaskMs:100}},{action:'composer-measure-end',selector:input,longDraft:true}]),
-  ...[2,3,4].map(count=>scene(`daily-faces-${count}-rail`,'Bare participant faces retain marks and rail centring',[room(1),{action:'member-column',collapsed:false},click('[data-sidebar="collapse"]'),check('sidebar-room-avatar'),check('sidebar-rail')],faces(count))),
+  ...[2,3,4].map(count=>scene(`daily-faces-${count}-rail`,'Bare participant faces retain marks and rail centring',[room(1),{action:'member-column',collapsed:false},drag('.side-edge', -240, { wide: true }),check('sidebar-room-avatar'),check('sidebar-rail')],faces(count))),
   ...[2,3,4].map(count=>scene(`daily-faces-${count}`,'The sidebar cluster and single header row retain hats and horns',[room(1),{action:'member-column',collapsed:false},check('sidebar-room-avatar'),check('sidebar-shell')],faces(count))),
 ];
