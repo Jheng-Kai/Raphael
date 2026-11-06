@@ -1,12 +1,11 @@
 """Owner reactions are bounded message metadata, never instructions or approvals."""
 from ..protocol import invalid_params
-
-EMOJI = ('👍', '❤', '✓', '?')
+from .emoji import single_emoji
 
 
 def set_reaction(conn, params, *, turn_id=None, message_id=None):
     emoji, active = params.get('emoji'), params.get('active')
-    if emoji not in EMOJI or type(active) is not bool:
+    if not single_emoji(emoji) or type(active) is not bool:
         raise invalid_params('reaction requires a supported emoji and boolean active')
     if message_id is not None:
         table, columns, values = 'room_reactions', 'message_id,emoji', (message_id, emoji)
@@ -24,6 +23,10 @@ def set_reaction(conn, params, *, turn_id=None, message_id=None):
         where = 'turn_id=? AND message_key=? AND emoji=?'
     with conn:
         if active:
+            scope, scope_values = where.rsplit(' AND emoji=?', 1)[0], values[:-1]
+            if (not conn.execute(f'SELECT 1 FROM {table} WHERE {where}', values).fetchone()
+                    and conn.execute(f'SELECT COUNT(*) FROM {table} WHERE {scope}', scope_values).fetchone()[0] >= 20):
+                raise invalid_params('reaction requires a supported emoji and boolean active')
             conn.execute(f'INSERT OR IGNORE INTO {table}({columns}) VALUES({",".join("?" for _ in values)})', values)
         else:
             conn.execute(f'DELETE FROM {table} WHERE {where}', values)

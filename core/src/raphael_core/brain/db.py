@@ -1651,6 +1651,39 @@ PRAGMA user_version = 68;
 COMMIT;
 """
 
+# Keep existing reactions and their parent cleanup semantics; validation belongs to set_reaction.
+_MIGRATIONS[69] = """
+BEGIN;
+DROP TRIGGER clear_message_reactions;
+DROP TRIGGER clear_room_reactions;
+CREATE TABLE message_reactions_v69 (
+    turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE,
+    message_key TEXT NOT NULL,
+    emoji TEXT NOT NULL,
+    PRIMARY KEY(turn_id, message_key, emoji)
+);
+INSERT INTO message_reactions_v69 SELECT turn_id,message_key,emoji FROM message_reactions;
+DROP TABLE message_reactions;
+ALTER TABLE message_reactions_v69 RENAME TO message_reactions;
+CREATE TABLE room_reactions_v69 (
+    message_id INTEGER NOT NULL REFERENCES room_messages(id) ON DELETE CASCADE,
+    emoji TEXT NOT NULL,
+    PRIMARY KEY(message_id, emoji)
+);
+INSERT INTO room_reactions_v69 SELECT message_id,emoji FROM room_reactions;
+DROP TABLE room_reactions;
+ALTER TABLE room_reactions_v69 RENAME TO room_reactions;
+CREATE TRIGGER clear_message_reactions AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM message_reactions WHERE turn_id=OLD.id;
+END;
+CREATE TRIGGER clear_room_reactions AFTER DELETE ON room_messages BEGIN
+    DELETE FROM room_reactions WHERE message_id=OLD.id;
+    UPDATE room_threads SET parent_message_id=NULL WHERE parent_message_id=OLD.id;
+END;
+PRAGMA user_version = 69;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

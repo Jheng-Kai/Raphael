@@ -16,6 +16,18 @@ from raphael_core.protocol import RpcError
 FIXTURE = Path(__file__).parents[1] / "fixtures/member-catalog"
 
 
+@pytest.fixture
+async def rig(rig):
+    from agent.conftest import FakeActions, FakeOpenRouter
+    from agent.test_service import Rig as AgentRig
+    from .test_answering import live_said
+    client = FakeOpenRouter()
+    client.chats = [live_said("I am your new assistant. What would you like me to take off your plate?")]
+    agent = AgentRig(rig.conn, client, FakeActions(), team=rig.service, memory=rig.memory)
+    yield rig
+    await agent.aclose()
+
+
 def harness(tmp_path):
     key = Ed25519PrivateKey.generate()
     pub = key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw).hex()

@@ -11,10 +11,12 @@ The RPC methods (the main window only, through the shell's allow-list):
   says the thread has news the owner has not seen (`members.read` clears it), `unread_from` names
   its first unseen turn when known, and `waiting` that a
   question waits for the owner there. `groups` is `[{id, name, position, sources}]`.
-- `members.create {name, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, ui_language?}` ->
+- `members.create {name, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, ui_language?, greet?}` ->
   `{member, routine_offer}`. `routine_offer` is the routine offered to a member of a group that
   has places to look (`sources`): `{title, prompt, schedule}` for 「每天早上的進度」 at 09:00, or
   null. It is offered, not made: `routines.create` makes it.
+- `members.greet {id}` -> `{turn_id}`: start another hidden, tool-free greeting before any owner
+  message, replacing failed greetings. Only the member's own interactive brain answers it.
 - `members.update {id, name?, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, position?}`
   -> `{member}`. `avatar` here is "" or a slime, "slime:<character>" or "slime:color:<color>". Raphael (0) is not changed here: his picture is the app's to change.
 - `members.delete {id}` -> `{deleted}`: the member, its conversation (and the exchanges of other
@@ -113,12 +115,6 @@ OWNER_ABSENCE_MS = 30 * 24 * 3_600_000
 # What the member column shows of the last line of a thread, at most.
 PREVIEW_CHARS = 80
 # The folders of the pictures, in the app's local folder.
-# What a member made in the maker says first, before anything has run: no model is asked, so it costs nothing and is there at once.
-GREETINGS = {
-    "zh-TW": "你好，我是{name}。你想請我幫你做什麼？",
-    "en": "Hi, I'm {name}. What would you like me to do for you?",
-    "ja": "はじめまして、{name}です。どんなことをお手伝いしましょうか？",
-}
 AVATARS_DIR = "avatars"
 SLIME = "slime:"
 MEMBERS_DIR = "members"
@@ -258,6 +254,7 @@ class MembersService:
         self.store = MemberStore(conn, now_ms)
         self.capabilities = MemberCapabilities(conn, local_dir / "member-skills", self.store)
         self._speech = None
+        self.greeting = None  # Bound by the interactive AgentService, never the routine worker.
         self._delivered: set[tuple[int, int, str]] = set()
         self._speech_tasks: set[asyncio.Task] = set()
         self._conn = conn
@@ -326,6 +323,7 @@ class MembersService:
             "members.voices": self._voices,
             "members.list": self._list,
             "members.create": self._create,
+            "members.greet": self._greet,
             "members.update": self._update,
             "members.delete": self._delete,
             "members.set_primary": self._set_primary,
@@ -923,13 +921,31 @@ class MembersService:
         language = self._ui_language(params)
         offer = routine_template(group.sources if group else (), language)
         if params.get("greet") is True:
-            from .greeting import choices
-            options = choices(member.role, self._connections(), language)
-            self._history.add(session_id=f"greeting-{member.id}", question="", route="greeting", prefix="",
-                              text=GREETINGS[language].format(name=member.name), detail=json.dumps({"kind": "greeting", "options": options}, ensure_ascii=False), status="done", source="greeting",
-                              member_id=member.id)
+            self.greeting(member.id, language)
         self._changed()
         return {"member": self.view_of(member), "routine_offer": offer}
+
+    async def _greet(self, params: dict) -> dict:
+        member_id = self._member_id(params)
+        owner = self._conn.execute(
+            "SELECT 1 FROM agent_turns WHERE member_id=? AND scope='private' AND trim(question)<>'' "
+            "AND source NOT IN ('greeting','member','routine','resumed') LIMIT 1", (member_id,),
+        ).fetchone()
+        running = self._conn.execute(
+            "SELECT 1 FROM agent_turns WHERE member_id=? AND source='greeting' AND status='running' LIMIT 1",
+            (member_id,),
+        ).fetchone()
+        if owner or running:
+            raise invalid_params("greeting requires a conversation without an owner message or running greeting")
+        failed = self._conn.execute(
+            "SELECT id FROM agent_turns WHERE member_id=? AND source='greeting' AND status='error'", (member_id,),
+        ).fetchall()
+        result = self.greeting(member_id, self._ui_language(params))
+        for row in failed:
+            self._history.delete(row['id'])
+            if self._notify is not None:
+                self._notify("agent.turn", {"turn_id": row['id'], "member_id": member_id})
+        return result
 
     async def _member_template(self, params):
         from .templates import handle

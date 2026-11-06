@@ -80,7 +80,7 @@ def test_v68_moves_every_conversation_record_and_keeps_quick_and_target_context(
 
     db.migrate(conn)
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 68
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.LATEST_VERSION
     for member, cid in [(1, target), (0, chief), (2, fallback[-1])]:
         standard = conn.execute("SELECT id,is_default FROM conversations WHERE member_id=? AND kind='standard'", (member,)).fetchall()
         assert [tuple(row) for row in standard] == [(cid, 1)]

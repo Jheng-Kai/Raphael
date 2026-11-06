@@ -16,17 +16,21 @@ def member_rpc(setup):
 
 
 async def made(rig, **fields):
-    return (await rig.call("members.create", {"greet": True, **fields}))["member"]
+    return (await rig.call("members.create", fields))["member"]
 
 
 @pytest.mark.parametrize("language,words", [("zh-TW", "你想請我"), ("en", "What would you like"), ("ja", "お手伝い")])
-async def test_it_speaks_first_in_the_window_language_without_a_model(setup, client, language, words):
+async def test_it_speaks_first_with_its_model_in_the_window_language(setup, client, language, words):
+    from agent.test_service import until
     rig, team = setup
-    new = await made(rig, name="Mia", ui_language=language)
+    client.chats = [live_said(f"Mia: {words}")]
+    new = await made(rig, name="Mia", ui_language=language, greet=True)
+    [running] = await rig.turns(member_id=new["id"])
+    await until(lambda: rig.history.get(running["id"]).status == "done")
     [turn] = await rig.turns(member_id=new["id"])
     assert "Mia" in turn["text"] and words in turn["text"]
-    assert turn["question"] == "" and turn["status"] == "done" and turn["cost_usd"] == 0
-    assert client.chat_calls == []
+    assert turn["question"] == "" and turn["status"] == "done" and turn["cost_usd"] == 0.3
+    assert client.chat_calls[0]["tools"] == []
     [conversation] = (await rig.call("conversations.list", {"member_id": new["id"]}))["conversations"]
     assert conversation["title"] == ""
 

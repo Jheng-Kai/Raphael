@@ -105,7 +105,7 @@ class CliLoop:
     def __init__(self, *, brains, sessions, member_id, model, ledger, language, plain,
                  system, user, tools, progress, thinking, event, execute, expire=None, spoken=False,
                  conversation_id=None, quota=None, attachments=(), wait_timeout_s=None, resume_session=True,
-                 rate_limit_waits=None, structured=None, alive=lambda: None, skills=()):
+                 rate_limit_waits=None, structured=None, alive=lambda: None, skills=(), no_tools=False):
         self.brains, self.sessions, self.member_id, self.model = brains, sessions, member_id, model
         # Told whenever the CLI does anything (a word, a tool): whoever watches for a stalled turn hears it.
         self.alive = alive
@@ -113,6 +113,7 @@ class CliLoop:
         self.quota = quota
         self.resume_session = resume_session
         self.structured = structured
+        self.no_tools = no_tools
         self.skills = skills
         # The waits before running a rate-limited request again: None waits as for a turn someone is reading
         # (RATE_LIMIT_WAITS_S), () never waits.
@@ -136,12 +137,14 @@ class CliLoop:
         # a Codex model offered it called it itself to ask for permission: a question about no action at all.
         if structured is not None:
             self.system = system + "\nThis is a tool-less memory pass. Return only JSON matching this schema:\n" + json.dumps(structured)
+        if no_tools:
+            self.system = system
         from ...worker.owner_input import OwnerInput
         self.owner_input = OwnerInput()
         self._steering = set()
         self.user = user
         self._original_user = user
-        self.tools = list(tools) + ([APPROVE] if structured is None and (brain_ref(model) or ("",))[0] == "claude" else [])
+        self.tools = [] if no_tools else list(tools) + ([APPROVE] if structured is None and (brain_ref(model) or ("",))[0] == "claude" else [])
         self.images = [attachment for attachment in attachments if attachment.is_image]
         self.progress, self.thinking, self.event, self.execute = progress, thinking, event, execute
         self.seen, self.batch_calls = [], []
@@ -197,6 +200,8 @@ class CliLoop:
     @tool_step(lambda self, identifier, name, args: name,
                scope=lambda self, *args: self.activity_turn)
     async def _tool(self, identifier, name, args):
+        if self.no_tools:
+            return ToolOutcome(False, "tools_disabled")
         async with self._serial:
             if getattr(self, 'speech_only', False) and name == 'approve':
                 return ToolOutcome(False, 'room_speech_only', content='Start this as private work with handoff.')
@@ -585,6 +590,7 @@ class CliLoop:
         async with aclosing(self.driver.run(user=user, system=self.system, endpoint=server.url,
                 **({"skills": self.skills} if self.skills else {}),
                 **({"structured": self.structured} if self.structured is not None else {}),
+                **({"no_tools": True} if self.no_tools else {}),
                 token=server.token, session=session, permission=self._native_permission,
                 **({"computer_endpoint": server.computer_url} if server.computer_url else {}),
                 cwd=str(workspace), images=self.images if name in ("codex", "claude") else ())) as stream:
@@ -661,6 +667,8 @@ class CliLoop:
         return "cli_stopped"
 
     async def _native_permission(self, args):
+        if self.no_tools:
+            return "deny"
         async with self._serial:
             receipt = {"attempt": self._attempts, "name": "cli_permission", "arguments": args, "status": "unknown"}
             self._receipts.append(receipt)

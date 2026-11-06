@@ -544,6 +544,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "voice_chat.feedback",
     "agent.react",
     "members.create",
+    "members.greet",
     "members.update",
     "members.delete",
     "members.set_primary",

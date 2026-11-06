@@ -336,7 +336,7 @@ INTERACTION_RPCS = {
     **dict.fromkeys(("voice_chat.start", "voice_chat.end", "voice_chat.mute", "voice_chat.settings",
                      "voice_chat.feedback", "voice_chat.status"),
                    "The owner's own voice call controls with one member; never a model tool."),
-    **dict.fromkeys(("members.viewing", "rooms.send", "rooms.transcribe", "agent.history.stop", "agent.history.retract",
+    **dict.fromkeys(("members.viewing", "members.greet", "rooms.send", "rooms.transcribe", "agent.history.stop", "agent.history.retract",
                      "worker.cancel", "worker.rerun", "agent.speak", "tts.preview", "tts.stop", "pages.open"),
                    "Existing owner conversation, work or presentation entry; not team administration."),
     **dict.fromkeys(("calendar.add", "calendar.update", "calendar.delete"), "Shared calendar work tools retain their existing gate for every member."),

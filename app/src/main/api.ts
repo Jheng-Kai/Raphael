@@ -230,6 +230,8 @@ export const membersList = (uiLanguage?: string): Promise<MembersList> => core("
  */
 export const membersCreate = (member: NewMember): Promise<{ member: Member; routine_offer: RoutineOffer | null }> =>
   member.template ? core("members.template", { action: "import", ...member }) : core("members.create", member);
+/** Restarts a greeting before the owner has written to this member. */
+export const membersGreet = (id: number): Promise<{ turn_id: number }> => core("members.greet", { id });
 /** Changes a member (never Raphael: the core refuses id 0 with the kind `raphael`). */
 export const membersUpdate = (id: number, patch: MemberPatch): Promise<{ member: Member }> => core("members.update", { id, ...patch });
 /** Deletes a member with its conversation, its memory and its routines. The page asks the owner first. */
