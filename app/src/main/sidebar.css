@@ -128,3 +128,7 @@
   .main { grid-column: 1; }
   :root[data-window-layout="main"] .window-chrome { left: 0; }
 }
+/* The hidden folder shows only when it holds a member or a group chat (member-column.ts, R-UI-112). */
+.mb-sec.mb-hidden[data-empty]:not(:has([data-hidden-rooms] > *)) { display: none; }
+.mb-hidden-rooms { display: flex; flex-direction: column; gap: var(--sp-1); }
+.mb-hidden-rooms:empty { display: none; }

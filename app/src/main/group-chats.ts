@@ -593,17 +593,28 @@ export function createRoomsSection(active: () => boolean = () => true): HTMLElem
   const draw = (): void => {
     drawnSelection = active() ? selectedRoom : null;
     // Groups are the owner's own; a former team room stays only for the conversation it already holds.
-    const html = rooms
-      .filter(room => (!room.is_team || room.last_at) && !room.hidden)
-      .map(room => {
-        const name = room.is_team ? t("rooms.team") : room.name;
-        return `<div class="au-room-row"><button type="button" class="nav mb-row" data-room="${room.id}" aria-current="${active() && selectedRoom === room.id}">${roomAvatarHTML(room,list,40)}<span class="mb-row-main"><span class="mb-row-t"><b>${esc(name)}</b>${room.pinned ? ico("pin") : ""}</span><span class="mb-row-p${room.waiting ? " is-wait" : ""}">${esc(room.waiting ? t("members.waitingShort") : ((room.preview && room.preview_member_id !== undefined ? `${room.preview_member_id === null ? t("rooms.owner") : list?.members.find(m => m.id === room.preview_member_id)?.name ?? t("members.title")}：` : "") + plainLine(replyBody(room.preview ?? ""))))}</span></span>${room.waiting ? `<span class="mb-dot is-wait" role="img" aria-label="${esc(t("members.waitingShort"))}"></span>` : room.unread ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>` : ""}</button>${room.id ? iconButton("more", t("members.more",{p0:name}), ` data-room-more="${room.id}" aria-haspopup="menu" aria-expanded="false"`, "au-room-more") : ""}</div>`;
-      }).join("");
+    const shown = rooms.filter(room => (!room.is_team || room.last_at));
+    const html = shown.filter(room => !room.hidden).map(rowOf).join("");
+    fillHidden(shown.filter(room => room.hidden).map(rowOf).join(""));
     const rows = html.replace(/--slime-(?:delay|since):-?[\d.]+ms;?| data-slime-mounted="[\d.]+"/g, "");
     if (rows === drawnRows) return;
     drawnRows = rows;
     patchHTML(el, html);
   };
+  /** A group chat's row in the sidebar, the hidden ones' too. */
+  function rowOf(room: Room): string {
+        const name = room.is_team ? t("rooms.team") : room.name;
+        return `<div class="au-room-row"><button type="button" class="nav mb-row" data-room="${room.id}" aria-current="${active() && selectedRoom === room.id}">${roomAvatarHTML(room,list,40)}<span class="mb-row-main"><span class="mb-row-t"><b>${esc(name)}</b>${room.pinned ? ico("pin") : ""}</span><span class="mb-row-p${room.waiting ? " is-wait" : ""}">${esc(room.waiting ? t("members.waitingShort") : ((room.preview && room.preview_member_id !== undefined ? `${room.preview_member_id === null ? t("rooms.owner") : list?.members.find(m => m.id === room.preview_member_id)?.name ?? t("members.title")}：` : "") + plainLine(replyBody(room.preview ?? ""))))}</span></span>${room.waiting ? `<span class="mb-dot is-wait" role="img" aria-label="${esc(t("members.waitingShort"))}"></span>` : room.unread ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>` : ""}</button>${room.id ? iconButton("more", t("members.more",{p0:name}), ` data-room-more="${room.id}" aria-haspopup="menu" aria-expanded="false"`, "au-room-more") : ""}</div>`;
+  }
+  /** The hidden group chats wait in the sidebar's hidden folder (member-column.ts), drawn again with it (R-UI-112). */
+  let hiddenRows = "";
+  function fillHidden(html = hiddenRows): void {
+    hiddenRows = html;
+    const slot = el.closest(".mb-scroll")?.querySelector<HTMLElement>("[data-hidden-rooms]");
+    if (!slot) return;
+    if (slot.innerHTML !== html) patchHTML(slot, html);
+    slot.onclick = onRoomClick;
+  }
   const load = async (fromEvent=false, readRooms=true): Promise<void> => {
     clearTimeout(timer); timer = undefined;
     readRooms ||= !loaded;
@@ -628,14 +639,16 @@ export function createRoomsSection(active: () => boolean = () => true): HTMLElem
     clearTimeout(timer); timer = undefined; void load(true,!event || event.type==='RoomsChanged' || ['CoreReady'].includes(event.type));
   }); onLocaleChange(() => { draw(); void load(); });
   // The member column draws on every page change: the row of the open room follows it.
-  el.addEventListener("sidebar-draw", () => { if (drawnSelection !== (active() ? selectedRoom : null)) draw(); });
+  // The column draws its hidden folder anew each time, so the hidden group chats go back into it.
+  el.addEventListener("sidebar-draw", () => { if (drawnSelection !== (active() ? selectedRoom : null)) draw(); else fillHidden(); });
   onAvatarChange(()=>{if(el.isConnected)draw();});
-  el.addEventListener("click", e => {
+  function onRoomClick(e: MouseEvent): void {
     const target = (e.target as Element).closest<HTMLElement>("[data-room], [data-room-new], [data-room-more]");
     if (!target) return;
     if (target.hasAttribute("data-room-new")) void openNewGroupChat();
     else if (target.dataset.room) void openGroupChat(Number(target.dataset.room));
     else { const room = rooms.find(r => r.id === Number(target.dataset.roomMore)); if (room) roomActions(target,room); }
-  });
+  }
+  el.addEventListener("click", onRoomClick);
   draw(); void load(); return el;
 }

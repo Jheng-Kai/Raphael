@@ -1560,7 +1560,6 @@ export function checkRendered(name, context = {}) {
       require(!note.querySelector('[title]'), 'no reason depends on a hover title');
       if (name === 'missing-search') require(note.textContent.includes('尚未設定 SearXNG 網址') && note.querySelectorAll('button').length === 1, 'the step says address, not key, with one action');
       if (name === 'missing-card') require(note.textContent.includes('設定 › 連接 › 商店') && note.querySelectorAll('button').length === 1, 'the card names its existing repair form with one action');
-      if (name === 'missing-hidden') require(visible(document.querySelector('[data-hidden-retry]')), 'the unreadable list offers a real retry');
       if (name === 'missing-vision') require(document.querySelector('[data-svc="use"]').disabled && note.textContent.includes('回答模型無法讀取圖片'), 'same-as-answer says why it cannot be used');
     }
     return {check:name};
@@ -4745,6 +4744,17 @@ export function checkRendered(name, context = {}) {
     const box = close.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
     require(close === hit || close.contains(hit), "rounded corners do not clip the close control");
     return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius };
+  }
+  if (name === "sidebar-hidden-folder") {
+    // R-UI-112: as Grok Bot's Hidden Bots, the members and group chats taken off the list wait in one folder at its end.
+    const folder = document.querySelector('.side .mb-hidden'), sections = [...document.querySelectorAll('.side .mb-list > .mb-sec')];
+    require(visible(folder) && sections[sections.length - 1] === folder, 'the hidden folder is the last folder of the list');
+    require(folder.querySelector('.mb-gname')?.textContent === '隱藏的成員', 'the folder is named like any other');
+    require(visible(folder.querySelector('[data-member="2"]')) && !document.querySelector('.side .mb-sec:not(.mb-hidden) [data-member="2"]'), 'the hidden member waits only there');
+    require(visible(folder.querySelector('[data-hidden-rooms] [data-room="1"]')) && !document.querySelector('.au-rooms-section [data-room="1"]'), 'the hidden group chat waits there too, not with the others');
+    require(document.querySelector('#app-popover [data-pick="hide"]')?.textContent.includes('取消隱藏'), 'a right click offers to bring the member back');
+    require(!document.querySelector('[data-hidden-members]'), 'Settings keeps no list of its own');
+    return { check: name };
   }
   if (name === "header-pill") {
     const trigger = document.querySelector('.mb-chat .conversation-trigger'), pill = trigger.querySelector('.mb-pill'), go = pill.querySelector('.mb-pill-go');

@@ -1,9 +1,10 @@
-import { scene, click, hover, check, page, room, settings, wait, waitGone, drag } from "./steps.mjs";
+import { scene, click, hover, check, page, room, settings, wait, waitGone, drag, rightClick } from "./steps.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 const fixture = JSON.parse(readFileSync(join(import.meta.dirname, "../fixture.json"), "utf8"));
 
 export default [
+  scene("sidebar-hidden-folder", "Hidden members and group chats wait in one folder at the end of the list, as Grok Bot's Hidden Bots, and a right click brings one back", [rightClick('.mb-hidden [data-member="2"]'), wait('#app-popover [data-pick="hide"]'), check("sidebar-hidden-folder")], { hiddenMember: true }),
   scene("sidebar", "One conversation sidebar across Home and dictation", [page("home"), check("sidebar-shell"), page("dictation"), check("sidebar-shell"), page("agent"), check("sidebar-shell")]),
   scene("sidebar-folders", "Open member folders and group chats", [{ action: "member-column", collapsed: false }, check("sidebar-shell")]),
   scene("sidebar-folded", "A collapsed folder preserves its choice", [{ action: "member-column", collapsed: false }, click('[data-group-fold="1"]'), check("sidebar-folded"), check("sidebar-shell")]),

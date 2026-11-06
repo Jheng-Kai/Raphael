@@ -38,6 +38,21 @@ const dom = (html: string): HTMLElement => {
 };
 
 describe("the column, drawn", () => {
+  test("hidden members wait in the last folder and are brought back from their own menu", () => {
+    const list = { ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, hidden: true } : m) };
+    const el = dom(columnHTML(view({ list })));
+    const sections = [...el.querySelectorAll(".mb-sec")];
+    const folder = sections[sections.length - 1]!;
+    expect(folder.classList.contains("mb-hidden")).toBe(true);
+    expect(folder.hasAttribute("data-empty")).toBe(false);
+    expect(folder.querySelector(".mb-gname")?.textContent).toBe("隱藏的成員");
+    expect([...folder.querySelectorAll("[data-member]")].map(row => row.getAttribute("data-member"))).toEqual(["3"]);
+    expect(el.querySelectorAll('[data-member="3"]')).toHaveLength(1);
+    expect(folder.querySelector("[data-hidden-rooms]")).not.toBeNull();
+    // With nothing hidden the folder is empty and does not show (sidebar.css).
+    expect(dom(columnHTML(view())).querySelector(".mb-hidden")?.hasAttribute("data-empty")).toBe(true);
+  });
+
   test("remembering a conversation never selects it while another page is visible", () => {
     const el = dom(columnHTML(view({active:false})));
     expect(el.querySelector('[aria-current="true"]')).toBeNull();
@@ -88,7 +103,8 @@ describe("the column, drawn", () => {
 
   test("only owner-created groups have headers, followed by ungrouped rows", () => {
     const el = dom(columnHTML(view()));
-    expect([...el.querySelectorAll(".mb-gname")].map((n) => n.textContent)).toEqual(["專案", "學習"]);
+    // The hidden folder is drawn too, empty, and stays out of sight until something is hidden (R-UI-112).
+    expect([...el.querySelectorAll(".mb-sec:not([data-empty]) .mb-gname")].map((n) => n.textContent)).toEqual(["專案", "學習"]);
     const ids = (group: string) => [...el.querySelectorAll(`[data-group="${group}"] .mb-row`)].map((n) => (n as HTMLElement).dataset.member);
     expect(ids("10")).toEqual(["1", "2"]);
     expect(ids("20")).toEqual(["3"]);

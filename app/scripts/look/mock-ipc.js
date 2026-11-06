@@ -11,6 +11,12 @@ export function installMock(fixture, config = {}, target = window) {
     view.setUint16(32, 2, true); view.setUint16(34, 16, true); word(36, "data"); view.setUint32(40, 16000, true);
     return bytes;
   };
+  if (variant.hiddenMember) {
+    // One member and one group chat taken off the list: they wait in the sidebar's hidden folder.
+    const member = data.members.find(item => item.id === 2), room = data.rooms.find(item => item.id === 1);
+    if (member) member.hidden = true;
+    if (room) room.hidden = true;
+  }
   if (variant.voiceCall) {
     data.members.forEach(member => Object.assign(member, {unread:false,unread_from:null,activity:"idle",waiting:false}));
     data.voiceCallBase = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
@@ -773,7 +779,6 @@ export function installMock(fixture, config = {}, target = window) {
   };
   async function core(method, p = {}) {
     // Settings reads the hidden list as it opens, before the list's section is drawn; the sidebar keeps the roster it already read.
-    if (variant.missingHidden && method === "members.list" && [...target.document.querySelectorAll('#set-title')].some(title => title.offsetParent !== null)) throw new Error("Synthetic hidden member read failure");
     switch (method) {
       case "voice_chat.status": return {call:voiceCall,ended:endedCall};
       case "voice_chat.start": {

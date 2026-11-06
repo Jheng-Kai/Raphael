@@ -1212,7 +1212,7 @@ form. Installation dependencies and file repair steps without an app setting hav
 no settings button. Local services remain in Settings > Raphael > Services.
 A store card opens the Composio form; the native Google client needs an administrator.
 
-npm run look -- missing-card missing-card-repair missing-onboarding-repair missing-store-repair missing-search missing-search-repair missing-voice missing-voice-repair missing-hidden missing-vision missing-model-list missing-provider missing-provider-repair missing-routines missing-learned missing-pdf missing-media missing-expired missing-mail --theme both --width 1120,720,1920x1080
+npm run look -- missing-card missing-card-repair missing-onboarding-repair missing-store-repair missing-search missing-search-repair missing-voice missing-voice-repair missing-vision missing-model-list missing-provider missing-provider-repair missing-routines missing-learned missing-pdf missing-media missing-expired missing-mail --theme both --width 1120,720,1920x1080
 
 Run both themes at 1120,720,1920x1080. Also cover desktop-absent,
 desktop-unavailable, desktop-install, model-choices-answer, plugins-store-key,
@@ -1533,7 +1533,7 @@ Additional calendar target journeys: event-calendar-line and event-calendar-open
 verify the named event opens directly in its existing calendar detail.
 
 ```powershell
-npm run look -- presence-hover-action presence-sidebar-hover presence-rail-hover presence-blocked-stays presence-waiting-colleague transcript-clean transcript-working transcript-hover-detail transcript-time-gap event-routine-line event-routine-opens event-calendar-line event-calendar-opens event-lines-collapse sidebar-row-time sidebar-group-author --theme both --width 1120,720,1920x1080
+npm run look -- presence-hover-action presence-sidebar-hover presence-rail-hover presence-blocked-stays presence-waiting-colleague transcript-clean transcript-working transcript-hover-detail transcript-time-gap event-routine-line event-routine-opens event-calendar-line event-calendar-opens event-lines-collapse sidebar-row-time sidebar-hidden-folder sidebar-group-author --theme both --width 1120,720,1920x1080
 ```
 
 Owner 2026-11-05 supersedes the notes-1 32px between-message event gaps: receipts now live in collapsed reply detail; shared header hovers open below the face, stay clear of window controls, and show no pointer focus ring. Expanded sidebar hovers show the action, collapsed rails show the name then action.

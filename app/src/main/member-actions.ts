@@ -36,8 +36,9 @@ export function createMemberActions(host: MemberActionHost) {
       if (action === "export-template") return await exportMemberTemplate(id);
       if (action === "pin") await host.update(id, {pinned: !m.pinned});
       else if (action === "hide") {
-        await api.membersUpdate(id, {hidden: true});
-        if (host.current() === id) host.select(RAPHAEL_ID);
+        // Hidden members wait in the sidebar's hidden folder, where the same item brings them back (R-UI-112).
+        await api.membersUpdate(id, {hidden: !m.hidden});
+        if (!m.hidden && host.current() === id) host.select(RAPHAEL_ID);
         await host.load();
       } else if (action === "unread") {
         await api.core("members.unread", {id});

@@ -598,7 +598,7 @@ function generalHTML(v: SettingsView): string {
     // weather city is the member's to ask when it needs it: none of them is a setting any more.
     section(t("settings.groupStartup"), [
       row(t("settings.rerunGuide"), "", btn(esc(t("settings.rerunGuideButton")), "", ' data-act="rerun-guide"')),
-    ]) + `<section class="sgroup" data-hidden-members></section>`
+    ])
   );
 }
 

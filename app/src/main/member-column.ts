@@ -84,13 +84,30 @@ function sectionHTML(section: MemberSection, v: ColumnView): string {
   );
 }
 
-/** The list: the pinned tiles, the primary, then groups and ungrouped members. */
+/** The folder id the hidden section folds by: no group has it. */
+export const HIDDEN_SECTION = -1;
+
+/**
+ * As Grok Bot's Hidden Bots (owner, 2026-11-06): the members taken off the list sit in one more folder at its end, with
+ * the hidden group chats, which group-chats.ts puts in its `[data-hidden-rooms]`. Empty, it does not show.
+ */
+function hiddenSectionHTML(hidden: readonly Member[], v: ColumnView): string {
+  const open = !v.folded.has(HIDDEN_SECTION), name = t("members.hiddenSection");
+  return `<section class="mb-sec mb-hidden" data-group="hidden" data-open="${open}"${hidden.length ? "" : " data-empty"}>` +
+    `<div class="mb-ghead"><span class="mb-gname">${esc(name)}</span>` +
+    iconButton("down", t("members.toggleGroup", { p0: name }), ` data-group-fold="${HIDDEN_SECTION}" aria-expanded="${open}" data-k="group-fold:hidden"`, "mb-fold") +
+    `</div><div class="mb-gbody"${open ? "" : " inert"}><div class="mb-gclip">${hidden.map((member) => memberRowHTML(member, v)).join("")}` +
+    `<div class="mb-hidden-rooms" data-hidden-rooms></div></div></div></section>`;
+}
+
+/** The list: the pinned tiles, the primary, then groups and ungrouped members, then the hidden ones. */
 export function columnHTML(v: ColumnView): string {
   const all = memberDisplayList(v.list), top = all.members[0];
   const pinned = all.members.filter(m => m.pinned && (m.id === top.id || !m.hidden));
   const sections = memberSections({ ...all, members: all.members.filter(m => !m.pinned) }, "", top.id);
   const chief = memberRowHTML(top, v).replace('class="nav mb-row"', 'class="nav mb-row mb-chief"');
-  return (pinned.length ? `<div class="mb-pinned" data-count="${Math.min(pinned.length, 3)}">${pinned.map(m => pinnedTileHTML(m, v, m.id === top.id)).join("")}</div>` : "") + (top.pinned ? "" : chief) + sections.map((section) => sectionHTML(section, v)).join("");
+  const hidden = (v.list?.members ?? []).filter(m => m.hidden && m.id !== top.id);
+  return (pinned.length ? `<div class="mb-pinned" data-count="${Math.min(pinned.length, 3)}">${pinned.map(m => pinnedTileHTML(m, v, m.id === top.id)).join("")}</div>` : "") + (top.pinned ? "" : chief) + sections.map((section) => sectionHTML(section, v)).join("") + hiddenSectionHTML(hidden, v);
 }
 
 export interface ColumnHost {
@@ -170,7 +187,7 @@ export function memberMenu(id: number, anchor: HTMLElement, host: Pick<ColumnHos
   const tail: (ActionItem | typeof SEP)[] = [
     SEP, { id: "edit", label: t("members.sideEdit"), icon: "pencil" },
     SEP, { id: "export-template", label: t("template.export"), icon: "download" },
-    SEP, { id: "hide", label: t("members.sideHide"), icon: "eyeOff" },
+    SEP, member?.hidden ? { id: "hide", label: t("members.sideUnhide"), icon: "eye" } : { id: "hide", label: t("members.sideHide"), icon: "eyeOff" },
   ];
   openActions(anchor, primary ? [pin, unread, ...tail, replace] : [
     pin, { id: "move", label: t("members.moveTo"), icon: "folder", submenu: true }, unread,

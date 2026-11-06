@@ -15,7 +15,6 @@ import { createOwnerControls } from "../owner-settings";
 
 import { getVersion } from "@tauri-apps/api/app";
 import * as api from "../api";
-import { createHiddenMembers } from "../hidden-members";
 import { openActions } from "../member-column";
 import "../member-panel.css";
 import "../settings-polish.css";
@@ -184,7 +183,6 @@ export function createSettings(app: AppContext): SettingsPage {
     `<div class="modal-body"></div>` +
     `${iconBtn("x", t("common.close"), ' data-act="close"', "modal-x")}` +
     `</div>`;
-  const hiddenMembers = createHiddenMembers();
   const body = el.querySelector<HTMLElement>(".modal-body")!;
   const searchField = el.querySelector<HTMLInputElement>("#set-search")!;
   const navList = el.querySelector<HTMLElement>(".set-list")!;
@@ -442,7 +440,6 @@ export function createSettings(app: AppContext): SettingsPage {
       if (input && !input.disabled) input.value = value;
     }
     if (ownerFocus) el.querySelector<HTMLElement>(`[data-owner="${ownerFocus}"]`)?.focus({ preventScroll: true });
-    hiddenMembers.mount(body);
     const keyInput = el.querySelector<HTMLInputElement>("#key-input");
     if (keyInput && keyDraft !== undefined) keyInput.value = keyDraft;
     const limitInput = el.querySelector<HTMLInputElement>("#limit-input");
@@ -498,7 +495,6 @@ export function createSettings(app: AppContext): SettingsPage {
     else if (tab) modelsTab = tab;
     pane = canonicalPane(next);
     if (pane === "about") void checkUpdate();
-    if (pane === "general") void hiddenMembers.load();
     if (pane !== "models") destroyUsage();
     if (pane === "connections") void connections.load();
     else connections.reset();
@@ -1438,7 +1434,6 @@ export function createSettings(app: AppContext): SettingsPage {
           field?.scrollIntoView({block: "center"}); field?.focus();
         }
       }
-      void hiddenMembers.load();
       if (!el.contains(document.activeElement)) el.querySelector<HTMLElement>("#set-title")?.focus();
       void loadCatalog();
       void loadLocalModels();
@@ -1446,7 +1441,6 @@ export function createSettings(app: AppContext): SettingsPage {
       stopEvents?.();
       const stopLevels = app.onEvent((event) => {
         if (event.type === "Level") onLevel(event.value);
-        if (event.type === "MembersChanged") void hiddenMembers.load();
       });
       windowFocused = true;
       window.addEventListener("focus", onFocus);
