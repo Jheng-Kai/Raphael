@@ -249,9 +249,10 @@ export function checkRendered(name, context = {}) {
     }
     if (tab === 'computer') {
       const live = visible(panel.querySelector('.desktop-screen iframe'));
-      require(!!visible(panel.querySelector('[data-desktop="enlarge"]')) === !!live, 'Enlarge is offered only with a live screen');
-      if (!live) require(!visible(panel.querySelector('[data-desktop="take"]')), 'an offline screen offers no Take control');
-      else require(panel.querySelector('[data-computer-state-text]')?.textContent === '執行中', 'the live header names the running state');
+      const runs = ['member', 'owner', 'connecting'].includes(panel.querySelector('.desktop-panel')?.dataset.desktopState);
+      require(!!visible(panel.querySelector('[data-desktop="enlarge"]')) === runs, 'the preview opens the larger view whenever the computer runs');
+      require(!visible(panel.querySelector('[data-desktop="take"]')), 'Take control waits in the larger view, never under the preview');
+      if (live) require(panel.querySelector('[data-computer-state-text]')?.textContent === '執行中', 'the live header names the running state');
     }
     if (tab === 'details') require([...panel.querySelectorAll('.mb-dh')].filter(node => visible(node) && node.textContent === '對話').length === (panel.querySelector('[data-slot="conversations"]') ? 1 : 0), 'Details names the conversation section once, and only for Raphael');
     if (name === 'member-panel-task-stop' || name === 'member-panel-task-rerun') {
@@ -277,8 +278,10 @@ export function checkRendered(name, context = {}) {
       require(panel.querySelector('.mb-tab-body').textContent === '還沒有檔案或頁面', 'library has one empty sentence');
     } else if (name === 'member-panel-computer-live') {
       require(visible(panel.querySelector('iframe')), 'the existing stream is visible');
-      require(visible(panel.querySelector('[data-desktop="enlarge"]')) && visible(panel.querySelector('[data-desktop="take"]')), 'Enlarge and Take control share the row below the screen');
-      require(!visible(panel.querySelector('.desktop-caption')), 'no caption repeats the member name under the screen');
+      const open = panel.querySelector('[data-desktop="enlarge"]'), screen = panel.querySelector('.desktop-screen').getBoundingClientRect(), cover = open.getBoundingClientRect(), caption = panel.querySelector('.desktop-caption');
+      require(visible(open) && Math.abs(cover.width - screen.width) <= 2 && Math.abs(cover.height - screen.height) <= 2, 'the whole preview is the button that opens the larger view');
+      require(getComputedStyle(open.querySelector('.desktop-open-pill')).opacity === '0', 'the Open pill shows only under the pointer');
+      require(visible(caption) && caption.textContent.endsWith('的畫面') && caption.getBoundingClientRect().top >= screen.bottom, 'the screen is captioned below with whose it is, as in Grok Bot');
     } else if (name === 'member-panel-computer-docker-stopped') {
       require(panel.querySelector('.desktop-message').textContent.includes('Docker Desktop'), 'the real local engine failure names Docker Desktop');
       require(panel.querySelector('[data-desktop="retry"]').textContent === '啟動 Docker Desktop' && panel.querySelector('[data-desktop-location]').textContent === '改用遠端電腦', 'both contextual recovery actions are offered');
@@ -591,12 +594,15 @@ export function checkRendered(name, context = {}) {
     } else {
       require(document.documentElement.hasAttribute('data-desktop-watch'), 'watch mode is enlarged');
       const bounds = panel.getBoundingClientRect();
-      const sidebar = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width'));
-      require(Math.abs(bounds.right - innerWidth) <= 2 && Math.abs(bounds.left - sidebar) <= 2, 'watch fills the area beside the sidebar');
-      require(visible(panel.querySelector('[data-desktop="collapse"]')), 'collapse remains available');
-      require(innerWidth >= 860 || getComputedStyle(document.querySelector('#nav')).visibility === 'hidden', 'off-canvas navigation stays hidden at narrow widths');
+      require(Math.abs(bounds.right - innerWidth) <= 2 && bounds.left <= 2, 'the larger view fills the whole window, as in Grok Bot');
+      require(getComputedStyle(document.querySelector('#nav')).visibility === 'hidden', 'the sidebar steps away under the larger view');
+      const collapse = document.querySelector('.window-chrome > [data-desktop="collapse"]'), strip = document.querySelector('.window-chrome').getBoundingClientRect();
+      require(visible(collapse) && collapse.getBoundingClientRect().bottom <= strip.bottom + 1 && collapse.getBoundingClientRect().right <= document.querySelector('.window-controls').getBoundingClientRect().left + 1, 'fold back sits beside the window buttons');
+      const dock = panel.querySelector('.desktop-dock'), screenBox = panel.querySelector('.desktop-screen').getBoundingClientRect();
+      require(visible(dock) && Math.abs((dock.getBoundingClientRect().left + dock.getBoundingClientRect().right) / 2 - innerWidth / 2) <= 2 && dock.getBoundingClientRect().top >= screenBox.bottom, 'one pill sits centred below the screen');
+      require(Math.abs(screenBox.width / screenBox.height - 1280 / 900) < 0.03, 'the screen keeps its own proportions');
+      require(dock.querySelector('.desktop-mode-label').textContent === (panel.dataset.desktopState === 'owner' ? '你正在操作' : '觀看中'), 'the pill says who holds the computer');
       if (name === 'desktop-watch' && window.__look.data.desktop.works?.some(work => work.state === 'running')) {
-        require(visible(panel.querySelector('.desktop-live')) && panel.querySelector('.desktop-live').textContent.trim(), 'the current action remains visible');
         const stop = panel.querySelector('[data-desktop="stop"]');
         require(visible(stop) && stop.title === stop.getAttribute('aria-label') && stop.title.trim(), 'Stop has its translated tooltip');
       }
@@ -904,10 +910,11 @@ export function checkRendered(name, context = {}) {
       const strip = document.querySelector('.window-chrome'), stripStyle = getComputedStyle(strip);
       require(strip.getBoundingClientRect().left === 0 && stripStyle.borderTopLeftRadius === '0px' && stripStyle.backgroundColor === getComputedStyle(panel).backgroundColor, 'the window strip reads as one surface with the bar');
     } else if (name === 'level-takeover' || name === 'level-menu') {
-      const frame = desktop.querySelector('iframe'), bar = desktop.querySelector('.desktop-takeover-bar');
-      require(desktop.hasAttribute('data-expanded') && visible(frame) && visible(bar), 'the same stream fills the window below its thin bar');
-      require(visible(bar.querySelector('.av')) && visible(bar.querySelector('[data-desktop="return"]')), 'the bar identifies the member and offers handback');
-      require(frame.getBoundingClientRect().width > innerWidth * .9 && bar.getBoundingClientRect().height <= 64, 'the screen has window width and a thin bar');
+      const frame = desktop.querySelector('iframe'), dock = desktop.querySelector('.desktop-dock');
+      require(desktop.hasAttribute('data-expanded') && visible(frame) && visible(dock), 'the same stream fills the window above its one pill');
+      require(dock.textContent.includes('你正在操作') && visible(dock.querySelector('[data-desktop="return"]')), 'the pill says the owner is in control and offers handback');
+      const box = frame.getBoundingClientRect();
+      require(Math.abs(box.width / box.height - 1280 / 900) < 0.03 && (box.width >= innerWidth - 96 || box.height >= innerHeight - 160), 'the screen fills the window at its own proportions');
       require(!document.querySelector('[data-sidebar="open"]')?.checkVisibility({visibilityProperty:true}), 'takeover leaves no sidebar entry above its bar');
       const current = calls.findLast(call => call.method === 'computer.viewer_open').params.member_id;
       require(calls.filter(call => call.method === 'computer.viewer_open' && call.params.member_id === current).length === 1 && frame.contentWindow.__desktopConnections === 1, 'takeover opens no additional stream');
@@ -2188,7 +2195,7 @@ export function checkRendered(name, context = {}) {
       return {check:name};
     }
     require(panel.closest('.mb-det') && (visible(panel) || visible(frame) || name==='computer-takeover-done' || name==='desktop-handback') && ![...document.querySelectorAll('[role="dialog"]')].some(visible), 'computer uses the existing viewer in its panel or card');
-    const screenHit=panel.querySelector('[data-desktop="peek"]');
+    const screenHit=panel.querySelector('[data-desktop="enlarge"]');
     if(frame&&!screenHit.hidden)require(getComputedStyle(screenHit).backgroundColor==='rgba(0, 0, 0, 0)','screen click target stays transparent including hover');
     const events=document.querySelectorAll('[data-desktop-work]');
     if(name.startsWith('computer-'))require(events.length===1&&events[0].matches(name==='computer-panel'?'.conversation-event-line':'.conversation-card')&&events[0].closest('.tn')?.dataset.id==='2','one work presentation belongs to the private turn');
@@ -2298,7 +2305,7 @@ export function checkRendered(name, context = {}) {
     const inline = document.querySelector('[data-card-desktop-screen] iframe:not([hidden]), [data-card-screen] iframe:not([hidden])');
     const frame = inline ?? document.querySelector('.desktop-panel iframe');
     // Since the panel tabs the computer tab's header (state word and location) heads the screen; the old caption is hidden.
-    const heading = inline ? inline.closest('.conversation-card')?.querySelector('.card-head') : document.querySelector('.desktop-panel[data-expanded] .desktop-takeover-bar') ?? document.querySelector('.desktop-location-header');
+    const heading = inline ? inline.closest('.conversation-card')?.querySelector('.card-head') : document.querySelector('.desktop-panel[data-expanded] .desktop-dock') ?? document.querySelector('.desktop-location-header');
     // Native WebView checks enter the cross-origin viewer itself; look can inspect both documents.
     const embedded = !!document.querySelector('#noVNC_container');
     if (!embedded) {

@@ -1039,6 +1039,9 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     };
     await inspectDesktop("viewer");
     await capture("viewer");
+    // As Grok Bot's: the preview opens the larger view, and Take control is there.
+    await click(page, '[data-desktop="enlarge"]');
+    await page.waitForSelector('.desktop-panel[data-expanded] [data-desktop="take"]:not(:disabled)', { visible: true, timeout: 60000 });
     await click(page, '[data-desktop="take"]');
     await page.waitForSelector('.desktop-panel[data-interactive="true"]', { visible: true, timeout: 60000 });
     const state = await context.rpc("computer.viewer_status", { member_id: 0 });
@@ -1062,6 +1065,8 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     await capture("takeover");
     const auditBefore = (await snapshot()).tool_audit.filter(row => row.server === "computer").length;
     await page.waitForSelector('.desktop-panel iframe:not([hidden])', {visible:true,timeout:60000});
+    await click(page, '[data-desktop="enlarge"]');
+    await page.waitForSelector('.desktop-panel[data-expanded] [data-desktop="take"]:not(:disabled)', { visible: true, timeout: 60000 });
     await click(page, '[data-desktop="take"]');
     await page.waitForSelector('.desktop-panel[data-interactive="true"][data-control-latency-ms]', { visible: true, timeout: 60000 });
     const ownerFrame = await (await page.$('.desktop-panel iframe')).contentFrame();

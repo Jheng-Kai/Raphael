@@ -3,7 +3,7 @@ import { visibilityGate, windowVisible } from "./window-visibility";
 import { noticeHTML } from "./missing";
 import * as api from "./api";
 import { getLocale, onLocaleChange, t } from "./i18n";
-import { esc, iconButton, btn, patchHTML } from "./ui";
+import { esc, ico, iconButton, btn, patchHTML } from "./ui";
 import { openActions } from "./member-column";
 import "./desktop-viewer.css";
 import { mountDesktopTimeline, desktopWorkText, type DesktopWork } from "./desktop-timeline";
@@ -62,11 +62,14 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   options: { timeline: HTMLElement; conversation: () => number | undefined; name: () => string; face?(): string; closePanel?(): void; openPanel(): void; panelVisible(): boolean; status?(active: boolean): void; changed?(): void; stop?(turnId: number): Promise<unknown>; trySkill?(text: string): void }): { show(): void; hide(close?: boolean): void; refresh(): void; sync(): void; carry(before: Element): void; takeover(): void; files(): void; waitingForOwner(turnId: number): boolean } {
   const panel = document.createElement("section");
   panel.className = "desktop-panel"; panel.id = 'member-computer-panel'; panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', 'member-tab-computer'); panel.hidden = true;
-  panel.innerHTML = `<div class="desktop-location-header"></div><div class="desktop-takeover-bar" hidden>${iconButton("left", t("members.panelBack"), ' data-desktop="back" hidden')}<span class="desktop-identity"></span><span class="desktop-live" role="status"></span>${iconButton("stop", t("agent.stop"), ' data-desktop="stop" hidden')}${iconButton("left", t("agent.collapsePdf"), ' data-desktop="collapse" hidden')}${btn("", "sm", ' data-desktop="return"')}${iconButton("more", t("chat.more"), ' data-desktop="menu" aria-haspopup="menu" aria-expanded="false"')}</div><p class="desktop-request" role="status" hidden></p><div class="desktop-shell">` +
+  // As Grok Bot's: the preview is one button that opens the larger view; the larger view fills the window, folds back
+  // from beside the window buttons, and keeps what the owner does with it in one pill at the bottom (owner, 2026-11-06).
+  panel.innerHTML = `<div class="desktop-location-header"></div><div class="desktop-takeover-bar" hidden>${iconButton("left", t("members.panelBack"), ' data-desktop="back" hidden')}${iconButton("shrink", t("desktop.collapse"), ' data-desktop="collapse" hidden')}` +
+    `<div class="desktop-dock"><div class="desktop-mode"><span class="desktop-mode-label" role="status">${ico("eye")}<span></span></span>${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="return"')}</div>${iconButton("stop", t("agent.stop"), ' data-desktop="stop" hidden')}${iconButton("more", t("chat.more"), ' data-desktop="menu" aria-haspopup="menu" aria-expanded="false"')}</div></div><p class="desktop-request" role="status" hidden></p><div class="desktop-shell">` +
     `<div class="desktop-screen"><img class="desktop-wallpaper" alt=""><img class="desktop-last" alt="" hidden><div class="desktop-placeholder"></div>${btn("", "sm", ' data-desktop="retry" hidden')}` +
     `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
-    `<button type="button" class="btn desktop-hit" data-desktop="peek" hidden></button>${iconButton("expand", t("desktop.expand"), ' data-desktop="enlarge"', 'desktop-enlarge')}<span class="desktop-owner" role="status" hidden></span></div><h2 class="desktop-caption"></h2></div>` +
-    `<p class="desktop-error" role="alert" hidden></p><p class="desktop-recording" role="status" hidden></p><div class="desktop-teach-missing" hidden></div><div class="desktop-actions">${btn("", "sm", ' data-desktop="revoke" hidden')}${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="discard-teach" hidden')}${btn("", "sm", ' data-desktop="teach"')}</div><div class="desktop-review" hidden></div><div class="desktop-try" hidden><input class="mb-fin" data-teach-input maxlength="4000">${btn("", "sm", ' data-desktop="try-teach"')}</div>`;
+    `<button type="button" class="btn desktop-open" data-desktop="enlarge" hidden><span class="desktop-open-pill">${ico("open")}<span></span></span></button><span class="desktop-owner" role="status" hidden></span></div><p class="desktop-caption"></p></div>` +
+    `<p class="desktop-error" role="alert" hidden></p><p class="desktop-recording" role="status" hidden></p><div class="desktop-teach-missing" hidden></div><div class="desktop-actions">${btn("", "sm", ' data-desktop="revoke" hidden')}${btn("", "sm", ' data-desktop="discard-teach" hidden')}${btn("", "sm", ' data-desktop="teach"')}</div><div class="desktop-review" hidden></div><div class="desktop-try" hidden><input class="mb-fin" data-teach-input maxlength="4000">${btn("", "sm", ' data-desktop="try-teach"')}</div>`;
   const locationHeader = panel.querySelector<HTMLElement>(".desktop-location-header")!;
   const location = mountComputerLocation(locationHeader, draw);
   const frame = panel.querySelector<HTMLIFrameElement>('iframe')!;
@@ -74,7 +77,6 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   frame.remove();
   const tabBar = host.querySelector('.mb-tabs');
   if (tabBar) tabBar.after(panel); else (host.querySelector('.mb-det-scroll') ?? host).prepend(panel);
-  const hit = panel.querySelector<HTMLButtonElement>('[data-desktop="peek"]')!;
   const take = panel.querySelector<HTMLButtonElement>('[data-desktop="take"]')!;
   const action = panel.querySelector<HTMLButtonElement>('[data-desktop="return"]')!;
   const retry = panel.querySelector<HTMLButtonElement>('[data-desktop="retry"]')!;
@@ -83,10 +85,22 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   const stateActions = document.createElement('div'); stateActions.className = 'desktop-state-actions';
   const stateRecovery = document.createElement('span'); stateRecovery.className = 'desktop-state-recovery';
   stateActions.append(retry, stateRecovery); placeholder.append(stateContent, stateActions);
-  const previewActions = document.createElement('div'); previewActions.className = 'desktop-preview-actions';
   const enlarge = panel.querySelector<HTMLButtonElement>('[data-desktop="enlarge"]')!;
-  enlarge.className = 'btn sm'; enlarge.textContent = t('desktop.expand');
-  previewActions.append(enlarge, take); panel.querySelector('.desktop-shell')!.after(previewActions);
+  const modeLabel = panel.querySelector<HTMLElement>('.desktop-mode-label')!;
+  const takeoverBar = panel.querySelector<HTMLElement>('.desktop-takeover-bar')!;
+  const collapseButton = panel.querySelector<HTMLButtonElement>('[data-desktop="collapse"]')!;
+  const backButton = panel.querySelector<HTMLButtonElement>('[data-desktop="back"]')!;
+  /** The larger view's fold back and Back sit in the window's own top strip, beside its buttons, as Grok Bot's: the
+   *  strip paints above every page, so a button left in the panel would be under it. */
+  function placeStripButtons(expanded: boolean): void {
+    const strip = document.querySelector<HTMLElement>('.window-chrome'), controls = strip?.querySelector('.window-controls');
+    if (expanded && strip && controls) {
+      if (collapseButton.nextElementSibling !== controls) controls.before(collapseButton);
+      if (backButton.parentElement !== strip) strip.prepend(backButton);
+    } else if (collapseButton.parentElement !== takeoverBar || backButton.parentElement !== takeoverBar) {
+      takeoverBar.prepend(backButton, collapseButton);
+    }
+  }
   const revoke = panel.querySelector<HTMLButtonElement>('[data-desktop="revoke"]')!;
   const error = panel.querySelector<HTMLElement>('.desktop-error')!;
   function showNotice(message: string, ready = false): void { error.textContent = message; error.setAttribute('role', ready ? 'status' : 'alert'); error.hidden = false; }
@@ -156,23 +170,25 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     drawn = signature; drawnInline = inline;
     lifecycle.draw();
     paint(panel, "hidden", !visible || !state);
-    paint(panel.querySelector('h2')!, 'textContent', t("desktop.screenOf", { p0: options.name() }));
-    patchHTML(panel.querySelector('.desktop-identity')!, face + `<span>${esc(options.name())}</span>`);
+    paint(panel.querySelector<HTMLElement>('.desktop-caption')!, 'textContent', t("desktop.screenOf", { p0: options.name() }));
     options.status?.(state?.state === "running");
-    paint(frame, "title", t("desktop.open")); attr(hit, 'aria-label', t("desktop.expand"));
+    paint(frame, "title", t("desktop.open"));
+    attr(enlarge, 'aria-label', t("desktop.openLarger"));
+    paint(enlarge.querySelector<HTMLElement>('.desktop-open-pill > span')!, 'textContent', t("desktop.openShort"));
     const expanded = panel.hasAttribute('data-expanded');
-    const locationHost = expanded ? panel.querySelector<HTMLElement>('.desktop-takeover-bar')! : lifecycle.locationHost;
-    if (location.control.parentElement !== locationHost) locationHost.insertBefore(location.control, expanded ? locationHost.querySelector('[data-desktop="menu"]') : null);
+    const locationHost = lifecycle.locationHost;
+    if (location.control.parentElement !== locationHost) locationHost.append(location.control);
     paint(locationHeader, 'hidden', expanded);
     location.status(!!state?.error);
     const currentWork = state?.works?.find(work => work.state === 'running' || work.state === 'waiting_control');
-    paint(panel.querySelector<HTMLElement>('.desktop-live')!, 'textContent', currentWork ? desktopWorkText(currentWork) : '');
+    placeStripButtons(expanded);
+    attr(collapseButton, 'title', t('desktop.collapse')); attr(collapseButton, 'aria-label', t('desktop.collapse'));
     const stop = panel.querySelector<HTMLElement>('[data-desktop="stop"]')!;
     paint(stop, 'hidden', !watching || !currentWork || !options.stop);
     attr(stop, 'title', t('agent.stop')); attr(stop, 'aria-label', t('agent.stop'));
-    paint(panel.querySelector<HTMLElement>('[data-desktop="collapse"]')!, 'hidden', !watching);
+    paint(collapseButton, 'hidden', !watching);
     paint(panel.querySelector<HTMLElement>('.desktop-takeover-bar')!, 'hidden', !expanded);
-    paint(panel.querySelector<HTMLElement>('[data-desktop="back"]')!, 'hidden', !filesOpen && (!skillEditor || review.hidden));
+    paint(backButton, 'hidden', !filesOpen && (!skillEditor || review.hidden));
     panel.toggleAttribute('data-files', filesOpen);
     const request = panel.querySelector<HTMLElement>('.desktop-request')!;
     paint(request, "hidden", !pending()); paint(request, "textContent", pending() ? desktopWorkText(pending()!) : "");
@@ -197,9 +213,10 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const label = preparing ? state!.state as "starting" | "building" | "preparing" : !running ? state?.state === "stopped" || state?.state === "missing" ? "stopped" : "unavailable" : !connected && !suspended ? "connecting" : owner ? "owner" : "member";
     paint(panel.dataset, "desktopState", label);
     paint(panel.dataset, "interactive", String(interactive));
-    // Only pressing the preview or a takeover action acquires input.
-    paint(hit, "hidden", !running || !connected && !suspended || owner || panel.hasAttribute('data-expanded'));
-    paint(take, "textContent", t("desktop.take")); paint(take, "hidden", !running || !connected || owner || !!demonstration); paint(take, "disabled", changing);
+    // The preview only opens the larger view; input is taken there, with Take control, or from a card (R-PANEL-03).
+    paint(modeLabel.querySelector('span')!, "textContent", t(owner ? "desktop.operating" : "desktop.watching"));
+    paint(modeLabel.dataset, "mode", owner ? "operating" : "watching");
+    paint(take, "textContent", t("desktop.take")); paint(take, "hidden", !watching || !running || owner || !!demonstration); paint(take, "disabled", changing || !connected);
     paint(frame, "hidden", !running || !connected);
     paint(frame.style, "pointerEvents", interactive && !watching ? "auto" : "none");
     const status = panel.querySelector<HTMLElement>('.desktop-owner')!;
@@ -209,8 +226,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const asleep = state?.state === "stopped" || state?.state === "missing";
     paint(retry, "textContent", t(state?.error === 'docker_stopped' ? 'desktop.startDocker' : state?.state === 'missing' && state.image === false ? 'desktop.prepareImage' : asleep ? "computer.open" : "desktop.retry"));
     paint(retry, "hidden", !!running || !!preparing || state?.state === "absent" || state?.error === 'remote_unavailable'); paint(retry, "disabled", opening);
-    paint(enlarge, 'textContent', t('desktop.expand'));
-    paint(enlarge, 'hidden', expanded || !running || !connected); paint(previewActions, 'hidden', expanded || !running || !connected);
+    paint(enlarge, 'hidden', expanded || !running || !!preparing);
     paint(revoke, "textContent", t("desktop.revoke")); paint(revoke, "hidden", !state?.granted || owner || !!preparing);
     const source = ownWallpaper ?? `/wallpapers/${period}.svg`;
     const paintWallpaper = (image: HTMLImageElement): void => {
@@ -254,7 +270,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const previous = session; session = undefined;
     if (previous) closePending = closePending.then(() => api.desktopClose(previous.session)).catch(() => {});
     panel.removeAttribute('data-expanded'); document.documentElement.removeAttribute('data-desktop-expanded');
-    document.documentElement.removeAttribute('data-desktop-watch');
+    document.documentElement.removeAttribute('data-desktop-watch'); placeStripButtons(false);
   }
   /** Out of sight: the stream lingers, unless the owner holds the controls, which end with the view. */
   function leave(): void {
@@ -366,14 +382,16 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (!returnPanelOpen) options.closePanel?.();
     draw();
   }
-  panel.querySelector('[data-desktop="enlarge"]')!.addEventListener('click', () => {
-    if (state?.state !== 'running' || !connected) return;
-    watching = true;
+  // Opening never waits for the stream: a screen that is still connecting opens large and connects there.
+  enlarge.addEventListener('click', () => {
+    if (state?.state !== 'running') return;
+    watching = true; suspended = false;
     send(false);
     document.documentElement.setAttribute('data-desktop-watch', '');
     expand(true);
+    if (!connected) void openStream();
   });
-  panel.querySelector('[data-desktop="collapse"]')!.addEventListener('click', collapseWatch);
+  collapseButton.addEventListener('click', collapseWatch);
   panel.querySelector('[data-desktop="stop"]')!.addEventListener('click', () => {
     const work = state?.works?.find(work => work.state === 'running' || work.state === 'waiting_control');
     if (work) void options.stop?.(work.turn_id);
@@ -444,13 +462,13 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     });
   });
   function acquire(): void {
+    if (watching) { watching = false; document.documentElement.removeAttribute('data-desktop-watch'); }
     suspended = false; takeOnConnect = true; expand(true);
     if (connected) { takeOnConnect = false; void control(true); } else if (state?.state === 'running') void openStream();
   }
   panel.addEventListener('click', event => {
     if ((event.target as Element).closest('[data-act="docker-download"]')) void api.openExternalUrl("https://www.docker.com/products/docker-desktop/").catch(() => { showNotice(t("desktop.unavailable")); });
   });
-  hit.addEventListener('click', acquire);
   // A small picture is no place to work: the same stream fills the window, under the owner's hands.
   take.addEventListener('click', acquire);
   async function handback(): Promise<boolean> {
@@ -499,7 +517,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     { id: 'files', label: t('files.changes'), icon: 'file' },
     { id: 'teach', label: teach.textContent ?? t('teach.start'), icon: 'steps' },
   ], choice => { if (choice === 'files') { filesOpen = true; void checkpoints.show(); draw(); } else teach.click(); }));
-  panel.querySelector('[data-desktop="back"]')!.addEventListener('click', () => {
+  backButton.addEventListener('click', () => {
     filesOpen = false; checkpoints.hide(); review.hidden = true;
     // Opened from a card, nothing was taken over: Back is the way home.
     if (filesOnly) { filesOnly = false; expand(false); if (!returnPanelOpen || innerWidth < 1440) options.closePanel?.(); }
