@@ -29,6 +29,7 @@ import { loadAvatar } from "./avatar";
 import { followDictation, installWindowHotkeys } from "./window-hotkeys";
 import { installFocusKeys } from "./focus-keys";
 import { installContextMenus } from "./context-menu";
+import { prefetchEmojiWhenIdle } from "./emoji-data";
 import { followTray } from "./tray-open";
 import { installWindowChrome, labelWindowControls, showMaximized } from "./window-chrome";
 import { installWindowZoom } from "./window-zoom";
@@ -133,6 +134,7 @@ async function start(): Promise<void> {
 
   // A right click presses the ⋯ of the row under it; elsewhere the browser's own menu has no place in an app. Text fields keep theirs.
   installContextMenus(document);
+  prefetchEmojiWhenIdle();
 
   const listeners = new Set<(event: MainEvent) => void>();
   const ctx: AppContext = {

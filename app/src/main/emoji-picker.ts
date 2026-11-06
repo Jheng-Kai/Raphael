@@ -24,6 +24,8 @@ export function quickReactionsHTML(chosen: readonly string[], attr: string): str
 /** The pill under a message's react button: the quick reactions, then every emoji. */
 export function openReactionBar(anchor: HTMLElement, chosen: readonly string[], onPick: (emoji: string) => void): void {
   const el = openPopover(anchor, quickReactionsHTML(chosen, "data-quick"), { className: "menu reaction-bar", role: "menu", label: t("chat.react") });
+  // Every emoji may be wanted next: their names load now, so the grid needs no wait when + is pressed.
+  void emojiSections().catch(() => {});
   el.addEventListener("click", (event) => {
     const button = (event.target as Element).closest<HTMLElement>("[data-quick]");
     if (!button) return;
@@ -47,7 +49,17 @@ export function emojiGridHTML(sections: readonly EmojiSection[], query: string, 
     return found.length ? `<div class="emoji-cells" role="group">${found.map((emoji) => cellHTML(emoji, chosen)).join("")}</div>`
       : `<p class="emoji-none">${esc(t("chat.emojiNone"))}</p>`;
   }
-  return sections.map((section) => `<section class="emoji-sec" role="group" aria-label="${esc(section.name)}"><h4 aria-hidden="true">${esc(section.name)}</h4><div class="emoji-cells">${section.emoji.map((emoji) => cellHTML(emoji, chosen)).join("")}</div></section>`).join("");
+  return sections.map((section) => `<section class="emoji-sec" role="group" aria-label="${esc(section.name)}"><h4 aria-hidden="true">${esc(section.name)}</h4>${blocksHTML(section.emoji, chosen)}</section>`).join("");
+}
+
+/** Rows a block of the grid holds: a block out of sight is neither laid out nor painted (agent.css .emoji-block). */
+const BLOCK_ROWS = 4;
+
+/** A section's cells in blocks of a few rows, each its own grid, so only the blocks in sight cost anything. */
+function blocksHTML(emoji: readonly Emoji[], chosen: readonly string[]): string {
+  const size = BLOCK_ROWS * COLUMNS, blocks: string[] = [];
+  for (let at = 0; at < emoji.length; at += size) blocks.push(`<div class="emoji-cells emoji-block">${emoji.slice(at, at + size).map((each) => cellHTML(each, chosen)).join("")}</div>`);
+  return blocks.join("");
 }
 
 /** Every emoji in one card beside `anchor`; `onPick` gets the one chosen. */
@@ -70,10 +82,23 @@ export function openEmojiPicker(anchor: HTMLElement, chosen: readonly string[], 
     footChar.textContent = cell?.dataset.emoji ?? "";
     footName.textContent = cell?.dataset.name ?? "";
   };
+  // Opening drew all the sections at once: one 1.15 s long task (measured, emoji-picker-speed). The first section is
+  // drawn now and the rest a few at a frame, each kept from layout and paint until it scrolls near (agent.css).
+  let pass = 0;
   const draw = (): void => {
-    grid.innerHTML = emojiGridHTML(sections, input.value, chosen);
+    const mine = ++pass;
+    if (input.value.trim()) { grid.innerHTML = emojiGridHTML(sections, input.value, chosen); grid.scrollTop = 0; name(cells()[0]); return; }
+    grid.innerHTML = emojiGridHTML(sections.slice(0, 1), "", chosen);
     grid.scrollTop = 0;
     name(cells()[0]);
+    let next = 1;
+    const more = (): void => {
+      if (mine !== pass || !el.isConnected || next >= sections.length) return;
+      grid.insertAdjacentHTML("beforeend", emojiGridHTML(sections.slice(next, next + 2), "", chosen));
+      next += 2;
+      requestAnimationFrame(more);
+    };
+    requestAnimationFrame(more);
   };
   const pick = (cell: HTMLElement): void => {
     closeMenu();

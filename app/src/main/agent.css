@@ -720,6 +720,8 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .emoji-find input { flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--text); font: inherit; font-size: var(--fs-sm); outline: none; }
 .emoji-find input::-webkit-search-cancel-button { display: none; }
 .emoji-grid { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--sp-2) var(--sp-1); scrollbar-width: thin; }
+/* A section out of sight is neither laid out nor painted: hundreds of colour glyphs cost most of opening the picker. */
+.emoji-block { content-visibility: auto; contain-intrinsic-size: auto calc(4 * 34px); }
 .emoji-sec h4 { margin: var(--sp-2) 2px var(--sp-1); font-size: var(--fs-xs); font-weight: 500; color: var(--text-3); }
 .emoji-sec:first-child h4 { margin-top: 0; }
 .emoji-cells { display: grid; grid-template-columns: repeat(8, 34px); }
