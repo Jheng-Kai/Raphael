@@ -26,4 +26,4 @@
 .modal-body .slist .ctl .sel:disabled:hover { border-color: transparent; }
 /* The model picker is a card with the model's mark, name and price, and keeps its frame. */
 .modal-body .slist .ctl .sel.mp-trigger { justify-content: flex-start; padding-inline: var(--sp-3); border-color: var(--btn-edge); background-color: var(--btn); color: var(--text); }
-.modal-body .slist .ctl .sel.mp-trigger:hover:not(:disabled) { border-color: var(--hover-edge); background-color: var(--hover); }
+.modal-body .slist .ctl .sel.mp-trigger:hover:not(:disabled) { background-color: var(--hover); }

@@ -103,7 +103,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const glyph = element.querySelector(':scope > svg.i');
       if (glyph) {
         const rect = glyph.getBoundingClientRect();
-        const sizes = element.matches('.cmp-send') ? [32] : [16, 20];
+        // Lucide's icons: 16 px, 18 on the round edge buttons (Grok Bot's 1.5 px lines), 20 where a larger one is meant (R-UI-19).
+        const sizes = element.matches('.cmp-send') ? [32] : [16, 18, 20];
         // CSS zoom scales glyphs too; compare their shared size before scaling.
         let zoom = 1;
         for (let parent = element; parent; parent = parent.parentElement) {

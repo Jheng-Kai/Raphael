@@ -72,7 +72,7 @@
 .ho-calendar-note .btn { pointer-events: auto; }
 .ho-calendar-note .cal-notice { min-width: 0; color: var(--text-3); }
 .ho-calendar-note .cal-notice-words { flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.page-home .ho-calendar .ho-calendar-note .btn.sm:is(:hover, :active) { border-color: var(--hover-edge); }
+.page-home .ho-calendar .ho-calendar-note .btn.sm:is(:hover, :active) { background: var(--hover); }
 .ho-create-month { display: none; }
 .ho-create-day { align-self: flex-start; pointer-events: auto; }
 .ho-month-actions { position: relative; z-index: 2; display: flex; align-items: center; gap: var(--sp-1); flex: none; pointer-events: none; }

@@ -629,7 +629,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .draft-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; padding: var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--content); }
 .draft-card-top { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: start; gap: 6px; min-width: 0; }
 .page-agent .btn.draft-av-btn { width: 40px; height: 40px; min-height: 40px; padding: 0; border-color: transparent; background: transparent; border-radius: var(--r-pill); }
-.page-agent .btn.draft-av-btn:hover:not(:disabled) { border-color: var(--hover-edge); background: transparent; }
+.page-agent .btn.draft-av-btn:hover:not(:disabled) { background: var(--hover); }
 .page-agent .btn.draft-av-btn:active:not(:disabled) { background: var(--pressed); }
 .draft-card-ident { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; }
 .draft-card .mb-fin { width: 100%; min-height: 32px; padding: 4px 6px; font-size: var(--fs-xs); }
@@ -658,7 +658,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* settled one-line summary in conversation */
 .draft-done { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); justify-self: start; max-width: 100%; min-width: 0; }
 .page-agent .btn.draft-done-sum { justify-self: start; display: inline-flex; align-items: center; gap: var(--sp-2); max-width: 100%; min-height: 36px; padding: var(--sp-1) var(--sp-3); border: 1px solid var(--edge); border-radius: var(--r-lg); background: var(--panel); color: var(--text); font-size: var(--fs-sm); font-weight: 500; }
-.page-agent .btn.draft-done-sum:hover:not(:disabled) { background: var(--hover); border-color: var(--hover-edge); }
+.page-agent .btn.draft-done-sum:hover:not(:disabled) { background: var(--hover); }
 .page-agent .btn.draft-done-sum:active:not(:disabled) { background: var(--pressed); }
 .draft-done-mark { display: inline-grid; place-items: center; width: 16px; height: 16px; color: var(--ok); flex: none; }
 .draft-done-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

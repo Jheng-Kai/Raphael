@@ -98,7 +98,8 @@ test("every service row has its brand mark or a meaningful local icon, never an 
         seen.add(row.id);
       } else {
         const expected = ico(row.id === "builtin" ? "monitor" : row.id === "same" ? "sparkle" : "bot");
-        expect(picture.querySelector("path")?.getAttribute("d"), row.id).toBe(/d="([^"]+)"/.exec(expected)![1]);
+        const drawn = document.createElement("template"); drawn.innerHTML = expected;
+        expect(picture.querySelector("svg")?.innerHTML, row.id).toBe(drawn.content.querySelector("svg")!.innerHTML);
       }
     }
   }

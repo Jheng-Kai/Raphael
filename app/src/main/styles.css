@@ -35,7 +35,7 @@
   /* surfaces: the window (sidebar), the page, the panels on it, a recessed fill */
   --side: #f7f7f7; --content: #ffffff; --panel: #f7f7f7; --surface-2: #efefef;
   --edge: #e5e5e5; --line: #ebebeb;
-  --hover: #ededed; --pressed: #e2e2e2; --hover-edge: #8f8f8f;
+  --hover: #ededed; --pressed: #e2e2e2; --hover-edge: #8f8f8f; --edge-rim: #e3e3e3;
   --danger-hover: #fdf0f0; --danger-pressed: #fbe5e5;
   /* text: body, secondary, muted (all at least AA on every surface above) */
   --text: #0a0a0a; --text-2: #404040; --text-3: #595959;
@@ -68,7 +68,7 @@
 :root[data-theme="dark"] {
   --side: #000000; --content: #0a0a0a; --panel: #161616; --surface-2: #1f1f1f;
   --edge: #262626; --line: #262626;
-  --hover: #262626; --pressed: #303030; --hover-edge: #929292;
+  --hover: #262626; --pressed: #303030; --hover-edge: #929292; --edge-rim: #2b2b2b;
   --danger-hover: #322023; --danger-pressed: #3c2429;
   --text: #f5f5f5; --text-2: #d0d0d0; --text-3: #b5b5b5;
   --accent: #f5f5f5; --accent-text: #eeeeee; --accent-icon: #eeeeee; --on-accent: #0a0a0a; --accent-soft: #262626;
@@ -124,9 +124,9 @@ input::placeholder { color: var(--text-3); opacity: 1; }
 .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 [data-price] { font-feature-settings: "tnum"; }
 [hidden] { display: none !important; }
-/* Every icon is drawn for 16 px (ui.ts ICON) and shown at 16 px, or 20 where a larger one is meant:
-   never 12 to 15 px, nor with a stroke of its own, which would blur its lines. */
-svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+/* Every icon is Lucide's 24 x 24 drawing (icon-set.ts) with its stroke of 2, shown at 16 px (1.33 px lines), or 18 on the
+   round edge buttons (Grok Bot's 1.5 px) and 20 where a larger one is meant: never 12 to 15 px, nor with a stroke of its own. */
+svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ---------- window: sidebar and content ---------- */
 .window-chrome { position: fixed; inset: 0 0 auto; z-index: 150; display: flex; height: var(--window-controls-height); background: var(--content); user-select: none; }
@@ -181,7 +181,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .side-fill { flex: 1; min-height: 12px; }
 /* This month's spend, a way into the settings. */
 .usage-box { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); width: 100%; padding: var(--sp-3) var(--sp-3) var(--sp-3); border-radius: var(--r-lg); border: 1px solid var(--edge); background: var(--panel); text-align: left; color: var(--text); }
-.usage-box:hover { border-color: var(--hover-edge); }
+.usage-box:hover { background-color: var(--hover); }
 .usage-t { font-size: var(--fs-xs); color: var(--text-2); }
 .usage-num { font-size: var(--fs-xs); color: var(--text-2); }
 .side-foot { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); margin-top: var(--sp-2); padding-top: var(--sp-2); border-top: 1px solid var(--line); }
@@ -226,15 +226,15 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .tg[aria-checked="mixed"]::after { transform: translateX(8px); background: var(--accent-text); }
 .sel { display: inline-flex; align-items: center; gap: var(--sp-2); height: var(--h-ctl); max-width: 260px; padding: 0 var(--sp-2) 0 var(--sp-3); border-radius: var(--r-sm); border: 1px solid var(--btn-edge); background: var(--btn); font-size: var(--fs-sm); color: var(--text); }
 .sel > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sel:hover { border-color: var(--hover-edge); }
+.sel:hover { background-color: var(--hover); }
 .sel:disabled { opacity: 0.55; cursor: default; }
 .sel:disabled:hover { border-color: var(--btn-edge); }
 .sel .i { color: var(--text-2); }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); min-height: var(--h-ctl); padding: var(--sp-1) var(--sp-3); border-radius: var(--r-sm); border: 1px solid var(--btn-edge); background: var(--btn); font-size: var(--fs-sm); line-height: 1.4; color: var(--text); white-space: nowrap; }
 /* Every action is a button with a shape: an edge at rest, a fill under the pointer, a deeper one
    when pressed. Never a word alone that can be clicked. */
-.btn:hover:not(:disabled) { background: var(--hover); border-color: var(--hover-edge); }
-.btn:active:not(:disabled) { background: var(--pressed); border-color: var(--hover-edge); filter: none; }
+.btn:hover:not(:disabled) { background: var(--hover); }
+.btn:active:not(:disabled) { background: var(--pressed); filter: none; }
 .btn:disabled { opacity: 0.55; cursor: default; }
 .copy-label { display: inline-grid; grid-template-columns: minmax(0, 1fr); align-items: center; }
 .copy-label > span { grid-area: 1 / 1; display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); }
@@ -396,11 +396,11 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .dsearch { margin-left: auto; display: flex; flex: 1; justify-content: flex-end; min-width: 160px; }
 .dsearch .field { max-width: 260px; }
 .chip { display: inline-flex; align-items: center; height: 26px; border-radius: var(--r-lg); border: 1px dashed var(--btn-edge); background: transparent; font-size: var(--fs-xs); color: var(--text); }
-.chip:hover, :where(:root[data-keys]) .chip:focus-within { border-style: solid; border-color: var(--hover-edge); }
+.chip:hover, :where(:root[data-keys]) .chip:focus-within { background-color: var(--hover); }
 .chip button { display: inline-flex; align-items: center; height: 100%; border: 0; background: transparent; color: inherit; font: inherit; }
 .wgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--layout-word-min)), 1fr)); gap: var(--sp-2); margin-top: var(--sp-4); }
 .wchip { position: relative; display: flex; align-items: center; gap: var(--sp-2); width: 100%; max-width: var(--layout-word-max); min-height: 46px; padding: var(--sp-2) var(--sp-1) var(--sp-2) var(--sp-3); border-radius: var(--r-lg); border: 1px solid var(--edge); background: var(--panel); min-width: 0; }
-.wchip:hover { border-color: var(--hover-edge); }
+.wchip:hover { background-color: var(--hover); }
 .wchip .spark { display: inline-flex; color: var(--accent-text); }
 .wchip .spark .i { fill: currentColor; }
 .wchip .wtext { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
@@ -512,7 +512,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .menu .ck { width: 16px; height: 16px; flex: none; color: var(--accent-text); }
 /* The check stands at the end of a choice, so that the names line up. An action's icon leads; without one it needs no room. */
 .menu .menu-action .ck:empty { display: none; }
-.menu .ck svg { display: block; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.menu .ck svg { display: block; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .menu .mt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* A face or a mark before the label (mentions): one 20px column, and the item's state quieter on the right. */
 .menu .mlead { display: inline-grid; place-items: center; flex: none; width: 20px; height: 20px; color: var(--text-3); }
@@ -752,11 +752,11 @@ kbd.ob-cap { white-space: nowrap; }
    header, a dialog's close and the composer's attach are an icon in a soft round button, a little lighter under the
    pointer. Small actions beside a message or inside a bar stay bare icons, as Grok Bot's; the sidebar's search and plus
    are the same buttons (sidebar.css). */
-:is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon, .btn.icon.modal-x, .page-agent .cmp-bar .btn.cmp-attach { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-color: transparent; border-radius: var(--r-pill); background: var(--surface-2); color: var(--text); }
+:is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon, .btn.icon.modal-x, .page-agent .cmp-bar .btn.cmp-attach { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-color: transparent; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); color: var(--text-2); }
 .page-agent .cmp-bar .btn.cmp-attach { width: 32px; min-width: 32px; height: 32px; min-height: 32px; }
 :is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon:is(:hover, [aria-expanded="true"]):not(:disabled), .btn.icon.modal-x:hover:not(:disabled), .page-agent .cmp-bar .btn.cmp-attach:is(:hover, [aria-expanded="true"]):not(:disabled) { border-color: transparent; background: var(--hover); color: var(--text); }
 :is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon:active:not(:disabled), .btn.icon.modal-x:active:not(:disabled), .page-agent .cmp-bar .btn.cmp-attach:active:not(:disabled) { background: var(--pressed); color: var(--text); }
-:is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon .i, .btn.icon.modal-x .i, .page-agent .cmp-bar .btn.cmp-attach .i { width: 20px; height: 20px; }
+:is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon .i, .btn.icon.modal-x .i, .page-agent .cmp-bar .btn.cmp-attach .i { width: 18px; height: 18px; }
 :where(:root[data-keys]) .btn.icon:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 :where(:root[data-keys]) .cmp-attach:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 :where(:root[data-keys]) .cmp-voice:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

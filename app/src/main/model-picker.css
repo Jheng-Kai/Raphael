@@ -30,7 +30,7 @@
 .mc-source small { font-size: var(--fs-xs); color: var(--text-3); }
 .mc-current { margin-left: auto; width: 5px; height: 5px; border-radius: var(--r-pill); background: var(--accent-text); flex: none; }
 .mc-rail > .btn.ghost { flex: none; min-height: 40px; padding: 0 var(--sp-3); width: 100%; justify-content: flex-start; margin-top: var(--sp-4); background: var(--btn); border-color: var(--btn-edge); font-size: var(--fs-xs); }
-.mc-rail > .btn.ghost:hover:not(:disabled) { background: var(--hover); border-color: var(--hover-edge); }
+.mc-rail > .btn.ghost:hover:not(:disabled) { background: var(--hover); }
 .mc-rail > .btn.ghost:active:not(:disabled) { background: var(--pressed); }
 .mc-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--panel); }
 .mc-signin { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-2); max-width: 340px; }
@@ -99,7 +99,7 @@
 .model-chooser .lm-main:disabled { cursor: default; color: var(--text-3); }
 .model-chooser .lm-main:disabled:has(.lm-bar) { color: var(--text); }
 .lm-main .ck { display: grid; place-items: center; flex: none; width: 18px; height: 18px; margin-top: 2px; border: 1px solid var(--text-3); border-radius: var(--r-pill); }
-.lm-main .ck svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.lm-main .ck svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .lm-main[aria-checked="true"] .ck { border-color: var(--accent-text); color: var(--accent-text); }
 .lm-main .mp-line { flex-wrap: wrap; row-gap: var(--sp-1); }
 .lm-main .mp-name { font-weight: 600; overflow-wrap: anywhere; }
@@ -110,7 +110,7 @@
 .lm-bar { display: block; height: 4px; margin-top: var(--sp-1); border-radius: var(--r-sm); background: var(--line); overflow: hidden; }
 .lm-bar i { display: block; height: 100%; border-radius: var(--r-sm); background: var(--accent); transition: width 0.15s linear; }
 .model-chooser .lm-row .btn:not(.icon) { flex: none; width: auto; justify-content: center; min-height: var(--h-ctl-sm); margin: var(--sp-1) var(--sp-1) 0 0; padding: var(--sp-1) var(--sp-2); border: 1px solid var(--btn-edge); border-radius: var(--r-sm); background: var(--btn); font-size: var(--fs-xs); color: var(--text); }
-.model-chooser .lm-row .btn:hover { background: var(--hover); border-color: var(--text-3); }
+.model-chooser .lm-row .btn:hover { background: var(--hover); }
 .model-chooser .lm-row .btn:active:not(:disabled) { background: var(--pressed); }
 .model-chooser .lm-row .btn.icon { flex: none; margin-right: var(--sp-2); }
 .model-chooser .lm-row .btn.icon:hover { background: transparent; }

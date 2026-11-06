@@ -187,7 +187,8 @@ describe("main window translations", () => {
       readdirSync(dir).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts")).map((f) => path.join(dir, f)),
     );
     expect(cjkLiterals(files)).toEqual([]);
-  });
+    // Parsing every main-window source takes seconds under the whole suite's load (timed out on 2026-11-06).
+  }, 60_000);
 
   test("overlay source and page have no hard-coded CJK UI text either: Rust sends the words", () => {
     const overlay = path.resolve(import.meta.dirname, "..", "..", "overlay");
