@@ -181,7 +181,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   // ---------- drawing ----------
 
   function whoHTML(member: Member): string {
-    if (tab !== 'settings') return `<span class="mb-panel-identity">${faceHTML(member, 32)}<b>${esc(member.name)}${member.role ? ` <span>· ${esc(member.role)}</span>` : ''}</b></span>`;
+    if (tab !== 'settings') return `<span class="mb-panel-identity">${faceHTML(member, 64)}<b>${esc(member.name)}</b>${member.role ? `<small>${esc(member.role)}</small>` : ''}</span>`;
     // The face is the button that changes its picture.
     const face =
       `<span class="mb-who-face"><button type="button" class="btn mb-avbtn" data-det="avatar" data-k="det-avatar" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}" title="${esc(t("members.changeAvatar"))}">` +

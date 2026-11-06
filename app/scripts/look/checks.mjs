@@ -234,6 +234,15 @@ export function checkRendered(name, context = {}) {
     require([...panel.querySelectorAll('.mb-tabs [role="tab"]')].map(node => node.textContent).join('/') === '詳細資料/檔案庫/電腦', 'the shared tabs name the three destinations');
     require(selected?.dataset.tab === tab, 'the intended tab is selected');
     require(visible(panel.querySelector('.mb-panel-identity')), 'member face, name and role stay above the tabs');
+    const face = panel.querySelector('.mb-panel-identity > .av').getBoundingClientRect(), named = panel.querySelector('.mb-panel-identity > b').getBoundingClientRect();
+    require(face.width >= 56 && face.bottom <= named.top + 1 && Math.abs(face.left + face.width / 2 - (named.left + named.width / 2)) <= 1, 'a large face stands centred above the name, as Grok Bot\'s');
+    if (tab === 'details') for (const section of panel.querySelectorAll('.mb-tab-body > section')) {
+      const head = section.querySelector(':scope > .mb-dh'), list = section.querySelector('.mb-task-list, .mb-rts, .conversation-rows, :scope > .mp-empty');
+      if (!visible(head) || !visible(list)) continue;
+      const pad = node => node ? parseFloat(getComputedStyle(node).paddingLeft) : 0, row = list.querySelector('.mb-task-open, .mb-rt, .conversation-open');
+      const inner = list.getBoundingClientRect().left + pad(list) + pad(row), start = head.getBoundingClientRect().left + pad(head);
+      require(Math.abs(inner - start) <= 1 && getComputedStyle(list).backgroundColor !== 'rgba(0, 0, 0, 0)', `a panel heading starts where the text of its tinted list starts (${Math.round(start)} vs ${Math.round(inner)})`);
+    }
     if (tab === 'computer') {
       const live = visible(panel.querySelector('.desktop-screen iframe'));
       require(!!visible(panel.querySelector('[data-desktop="enlarge"]')) === !!live, 'Enlarge is offered only with a live screen');
@@ -4171,9 +4180,9 @@ export function checkRendered(name, context = {}) {
     if (name === "admin-created") {
       const details = [...document.querySelectorAll('.mb-det')].find(visible);
       // The panel's tabs name the member in one line; the editable fields live in its settings.
-      const identity = details?.querySelector('.mb-panel-identity b');
-      require(identity?.firstChild?.textContent.trim() === "COO", "created member details are selected");
-      require(identity.querySelector('span')?.textContent.includes("營運長"), "created role is shown");
+      const identity = details?.querySelector('.mb-panel-identity');
+      require(identity?.querySelector('b')?.textContent.trim() === "COO", "created member details are selected");
+      require(identity.querySelector('small')?.textContent.includes("營運長"), "created role is shown");
       const created = members.find(member => member.id === 8);
       require(window.__look.data.groups.find(group => group.id === created.group_id)?.name === "個人公司", "member joins the approved group");
       require(created.preview === "" && created.last_at === null, "new conversation has no inherited activity");
