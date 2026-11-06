@@ -42,6 +42,9 @@
 :where(:root[data-keys]) .heat [data-date]:focus-visible { stroke: var(--text); stroke-width: 2; }
 .heat .ax { font: var(--fs-2xs) var(--ui); fill: var(--text-3); }
 .legend { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-1); margin-top: var(--sp-2); font-size: var(--fs-xs); color: var(--text-3); }
+.heat-foot { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-2); }
+.heat-foot .legend { margin: 0 0 0 auto; }
+.heat-said { min-width: 0; margin: 0; overflow: hidden; color: var(--text-2); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
 .legend span:first-child { margin-right: var(--sp-1); } .legend span:last-child { margin-left: var(--sp-1); }
 .legend i { width: 11px; height: 11px; border-radius: var(--r-sm); background: var(--heat-0); }
 .legend i.h1 { background: var(--heat-1); } .legend i.h2 { background: var(--heat-2); } .legend i.h3 { background: var(--heat-3); } .legend i.h4 { background: var(--heat-4); }

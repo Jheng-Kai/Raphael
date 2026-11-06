@@ -26,7 +26,7 @@ describe("the days that can be opened", () => {
     const svg = heatmapSVG(grid());
     expect(buttons(svg).map((tag) => tag.match(/data-date="([^"]*)"/)![1])).toEqual(["2026-10-08", "2026-10-10", "2026-10-13"]);
     for (const tag of buttons(svg)) expect(tag).toContain('role="button"');
-    expect(svg).toContain('aria-label="10 月 13 日：40 字，開啟當天的聽寫紀錄"');
+    expect(svg).toContain('aria-label="10 月 13 日：40 字"');
   });
 
   test("future days, days without data and days with nothing said have no button", () => {
@@ -62,9 +62,9 @@ describe("the days that can be opened", () => {
 
   test("the names follow the language of the window", () => {
     setLocale("en");
-    expect(heatmapSVG(grid())).toContain('aria-label="10/13: 40 words. Open that day&#39;s history"');
+    expect(heatmapSVG(grid())).toContain('aria-label="10/13: 40 words"');
     setLocale("ja");
-    expect(heatmapSVG(grid())).toContain('aria-label="10月13日：40語。その日の履歴を開く"');
+    expect(heatmapSVG(grid())).toContain('aria-label="10月13日：40語"');
   });
 
   test("the days come oldest first, the order of the cells", () => {

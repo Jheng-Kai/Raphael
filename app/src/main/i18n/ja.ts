@@ -1312,7 +1312,7 @@ export const ja = {
   "report.limitSoon": "《告。今月の予算の {p0}% を使用。このペースでは {p1}月{p2}日に上限です。》",
   "report.allWell": "《告。全システム正常。今月の予算は {p0}% 使用済みです。》",
   "report.coreDown": "《告。コアが応答しません。音声入力は今は使えません。》",
-  "heatmap.openDay": "{p0}：{p1}語。その日の履歴を開く",
+  "heatmap.openDay": "{p0}：{p1}語",
   "history.dayAll": "すべての日を表示",
   "history.dayEmpty": "<div class=\"say\">《告。この日の音声入力の履歴はありません。》</div>",
   "settings.paneConnections": "接続",

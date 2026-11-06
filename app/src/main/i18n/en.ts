@@ -1312,7 +1312,7 @@ export const en = {
   "report.limitSoon": "《Notice. {p0}% of this month's budget is used. At this pace it runs out on {p1}/{p2}.》",
   "report.allWell": "《Notice. All is well. {p0}% of this month's budget is used.》",
   "report.coreDown": "《Notice. Raphael's core is not responding. Dictation is unavailable for now.》",
-  "heatmap.openDay": "{p0}: {p1} words. Open that day's history",
+  "heatmap.openDay": "{p0}: {p1} words",
   "history.dayAll": "Show all days",
   "history.dayEmpty": "<div class=\"say\">《Notice. No dictation on this day.》</div>",
   "settings.paneConnections": "Connections",

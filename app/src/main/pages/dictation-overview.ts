@@ -63,7 +63,8 @@ function activityHTML(s: StatsSummary): string {
     `<div class="activity-head"><h2 id="activity-h">${esc(t("home.activity"))}</h2><div class="activity-sum">${activitySummary(s)}</div>` +
     `<div class="activity-nav">${iconBtn("left", t("home.023"), ' data-act="older"')}${iconBtn("right", t("home.024"), ' data-act="newer"')}</div></div>` +
     `<div class="heat-box"></div>` +
-    legend() +
+    // A day pressed says its words here, in place: no history opens from the grid (owner, 2026-11-06).
+    `<div class="heat-foot"><p class="heat-said" role="status"></p>${legend()}</div>` +
     `</section>`
   );
 }
@@ -204,7 +205,7 @@ export function createDictationOverview(app: AppContext): Page {
     paintGrid();
   }
 
-  /** What a click or a key on a day of the grid does: opens the history at that day, or moves to another day. */
+  /** What a click or a key on a day of the grid does: says that day's words beside the grid, or moves to another day. */
   function onHeat(event: MouseEvent | KeyboardEvent): void {
     const dates = Array.from(el.querySelectorAll(".heat [data-date]"), (cell) => cell.getAttribute("data-date")!);
     const action = heatAction(
@@ -215,7 +216,8 @@ export function createDictationOverview(app: AppContext): Page {
     event.preventDefault();
     if ("open" in action) {
       heatStop = action.open;
-      app.showDay(action.open);
+      const said = el.querySelector<HTMLElement>(".heat-said");
+      if (said) said.textContent = heatCell(action.open)?.querySelector("title")?.textContent ?? "";
     } else {
       moveHeatFocus(action.focus);
     }

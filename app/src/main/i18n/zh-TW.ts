@@ -1311,7 +1311,7 @@ export const zhTW = {
   "report.limitSoon": "《告。本月額度已使用 {p0}%。照目前的速度，{p1} 月 {p2} 日會用完。》",
   "report.allWell": "《告。一切正常。本月額度已使用 {p0}%。》",
   "report.coreDown": "《告。拉斐爾的核心沒有回應，聽寫暫時無法使用。》",
-  "heatmap.openDay": "{p0}：{p1} 字，開啟當天的聽寫紀錄",
+  "heatmap.openDay": "{p0}：{p1} 字",
   "history.dayAll": "顯示所有日期",
   "history.dayEmpty": "<div class=\"say\">《告。這一天沒有聽寫紀錄。》</div>",
   "settings.paneConnections": "連接",
