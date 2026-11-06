@@ -645,7 +645,8 @@ describe("rendered look checks", () => {
         expect(failures, colour).toEqual([]);
       }
     } finally { vi.unstubAllGlobals(); window.happyDOM.abort(); }
-  });
+  // It audits every member colour in four stylesheets: about 3 s alone, past the 5 s default when the whole suite runs.
+  }, 30000);
   it("rejects a disabled control whose reason exists only in a title (R-UI-69)", () => {
     const { window, audit } = productAudit('<div><button disabled title="Needs an API key">Add</button></div>');
     expect(audit().productRules.filter(item => item.rule === 'R-UI-69')).toHaveLength(1);
