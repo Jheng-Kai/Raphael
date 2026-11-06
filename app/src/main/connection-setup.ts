@@ -9,7 +9,7 @@
 import "./connection-setup.css";
 import { cardDisclosureHTML, cardFailure } from "./card";
 import * as api from "./api";
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
 import { type Dialog, openDialog } from "./member-dialogs";
 import type { ToolkitPlan } from "./plugins-data";
 import type { AppNeeds } from "./types";
@@ -60,12 +60,16 @@ export function mountInlineConnectionSetup(thread: HTMLElement,
       const plan = await api.connectorsToolkit(slot.dataset.toolkit ?? "");
       if (!active || !slot.isConnected) return;
       plans.set(slot, plan);
+      // The form arrives after the card: a reader at the latest line stays there, so the card's foot never hides under the composer.
+      const scroller = slot.closest<HTMLElement>(".ra-scroll");
+      const pinned = !!scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 80;
       slot.classList.add("inline-connection-setup");
       slot.innerHTML = fieldsHTML(plan) + `<div class="card-actions">${btn(esc(t("card.keySave")), "sm pri", " data-inline-submit")}</div>` +
         `<p class="card-shield">${ico("lock")}<span>${esc(t(plan.needs === "own_app" ? "setup.keepApp" : "setup.keepKey"))}</span></p>` +
         cardDisclosureHTML(`setup-${slot.dataset.inlineSetup}`, whereHTML(plan, true) + stepsHTML(plan, true) + redirectHTML(plan), t("setup.where"));
       const old = slot.closest("[data-connector]")?.querySelector<HTMLElement>('[data-act="card-setup"]');
       if (old) old.hidden = true;
+      if (pinned) scroller.scrollTop = scroller.scrollHeight;
     } catch {
       if (active && slot.isConnected) cardFailure(slot.closest(".conversation-card"), () => { loaded.delete(slot); void load(slot); });
     }
@@ -160,9 +164,12 @@ const redirectHTML = (plan: ToolkitPlan): string => plan.needs === "own_app" && 
     btn(copyLabel(t("setup.copy"), true), "sm", ' data-dlg="copy"') + `</div></div>` : "";
 
 function fieldsHTML(plan: ToolkitPlan): string {
+  // A field's description is the provider's own English: it shows in an English window only (one language, R-UI-14);
+  // elsewhere the steps above and the guide say where the value is.
+  const hints = getLocale().startsWith("en");
   return `<div class="cn-fields">${plan.fields.map((field, index) =>
     `<label class="cn-field"><span class="cn-label">${esc(field.label)}${field.required ? "" : ` <i>(${esc(t("setup.optional"))})</i>`}</span>` +
-    (field.description ? `<span class="cn-hint" title="${esc(field.description)}">${esc(field.description)}</span>` : "") +
+    (hints && field.description ? `<span class="cn-hint" title="${esc(field.description)}">${esc(field.description)}</span>` : "") +
     `<input class="field" type="${field.secret ? "password" : "text"}" data-setup-field="${esc(field.name)}"` +
     `${field.default ? ` placeholder="${esc(field.default)}"` : ""} autocomplete="${field.secret ? "new-password" : "off"}"` +
     ` spellcheck="false" autocapitalize="off"${index === 0 ? " data-setup-first" : ""}></label>`).join("")}</div>`;

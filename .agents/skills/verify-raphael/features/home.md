@@ -7,15 +7,17 @@
 Home is Raphael as a secretary. The owner asked for today's plans and the team's state,
 not quotas, tokens or dictation counts; no boxes; no scroll on a small screen.
 
-- **Hero.** His emblem stands in the middle (112px, 88px when the main area is 760px or
+- **Hero.** His emblem stands in the middle (128px, 96px when the main area is 760px or
   narrower), then a greeting by the time of day (早安／午安／晚上好，主人) at --fs-h1, the date,
-  and one health line in his voice: all members are well, or who waits for the owner. A
+  and one health line in plain words: all members are well, or who waits for the owner. A
   report that needs fixing (no key, OpenRouter offline, budget used up) adds its own line and
-  one fix icon; a well budget says nothing. No ask-Raphael icon (R-UI-43). The emblem turns
+  one fix icon; a well budget says nothing. The main window never shows the 《告。…》 caption
+  wrapper (R-UI-42), so the report's words are unwrapped with `plainReplies`. No ask-Raphael icon (R-UI-43). The emblem turns
   while motion is allowed, stands still under reduced motion, and stays the same DOM node
   through refreshes.
 - **Three sections** side by side (one column when the main area is 640px or narrower):
-  今天的行程, 還沒解決的事 and 成員. Each is a heading over a hairline and at most four rows;
+  今天的行程, 還沒解決的事 and 成員, the last narrower as it holds only names and states. In a
+  narrow main area an open item drops its time to keep its words. Each is a heading over a hairline and at most four rows;
   the rest is counted below them. Rows are plain buttons that light their own background
   under the pointer; nothing is framed.
 - **Today's schedule** lists today's items from the month projection, all-day first, then by

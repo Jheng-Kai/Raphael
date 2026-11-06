@@ -80,7 +80,10 @@
 .quota-chips { display: grid; gap: var(--sp-1); width: 100%; max-width: var(--pa-colw); margin: 0 auto var(--sp-2); }
 .quota-chip { padding: var(--sp-1) var(--sp-3); font-size: var(--fs-2xs); border-radius: var(--r-sm); color: var(--text-2); background: var(--surface-2); display: flex; gap: var(--sp-1); align-items: center; }
 .quota-chip .i { width: 16px; height: 16px; }
-.tn.is-search-target { border-radius: var(--r-lg); outline: 2px solid var(--accent); outline-offset: -2px; }
+/* The turn a search or a report opened: a soft tint that fades, never a ring that reads as keyboard focus (R-UI-31). */
+.tn.is-search-target { border-radius: var(--r-lg); animation: tn-found 2400ms ease-out both; }
+@keyframes tn-found { from, 40% { background-color: var(--selected); } to { background-color: transparent; } }
+@media (prefers-reduced-motion: reduce) { .tn.is-search-target { animation: none; background-color: var(--selected); } }
 .work-section { margin: var(--sp-1) 0 var(--sp-2); }
 /* Work is a muted one-line state above the answer, not a framed control. */
 .page-agent .btn.work-toggle { display: inline-flex; justify-self: start; align-items: center; gap: var(--sp-1); min-height: 0; max-width: 100%; padding: 2px 0; border-color: transparent; border-radius: var(--r-sm); background: transparent; font-size: var(--fs-xs); color: var(--text-3); }

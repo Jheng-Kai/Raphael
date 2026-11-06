@@ -59,6 +59,13 @@ test("the form for a key says what is needed, where to get it, how, and that Com
   expect(api.openExternalUrl).toHaveBeenCalledWith("https://docs.acme.example/keys");
 });
 
+test("a field's description is the provider's English, so only an English window shows it", async () => {
+  setLocale("zh-TW");
+  await open(keyPlan);
+  expect(dialog().querySelector(".cn-hint")).toBeNull();
+  expect(dialog().querySelector(".cn-label")?.textContent).toBe("API Key");
+});
+
 test("without a guide it says so and offers the service's own page; without either it says to look it up", async () => {
   await open({ ...keyPlan, guide_url: null });
   expect(dialog().querySelector(".cn-where")?.textContent).toContain("The catalog gives no instructions for this");

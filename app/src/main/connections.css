@@ -18,7 +18,8 @@
 .cs-store-groups-row { margin-bottom: var(--sp-3); }
 .cs-store-groups { display: flex; flex-wrap: nowrap; gap: var(--sp-2); }
 .cs-store-groups .btn { flex: 0 0 auto; border-radius: var(--r-pill); font-size: var(--fs-xs); }
-.cs-store-groups [aria-pressed="true"] { color: var(--text); background: var(--selected); border-color: var(--accent-text); }
+/* The chosen chip is filled, as Grok Bot's, not only outlined. */
+.cs-store-groups [aria-pressed="true"], .cs-store-groups [aria-pressed="true"]:hover:not(:disabled) { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
 .cs-store-pages { display: flex; align-items: center; justify-content: center; gap: var(--sp-3); margin: var(--sp-3) 0; }
 /* Keep search and groups outside the results scrollport, including after a page change. */
 .modal-body:has(.cs-store) { display: flex; flex-direction: column; overflow: hidden; }
@@ -174,6 +175,9 @@
 .cs-say { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
 .cs-say li { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-radius: 0; border: 0; background: transparent; font-size: var(--fs-xs); line-height: 1.5; }
 .cs-say .i { color: var(--text-3); }
+/* A store page's headings, examples and words share one left edge with its head. */
+.cs-page .cs-sec h3 { margin-left: 0; }
+.cs-page .cs-say li { padding-inline: 0; }
 
 /* Store rows share the detail button, action slot and divider across both catalogs. */
 .cs-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2) var(--sp-3); }
@@ -243,8 +247,6 @@
   .cs-find { margin-left: 0; width: 100%; }
   .cs-find .field { flex: 1; width: auto; }
   .add-grid .two { grid-template-columns: minmax(0, 1fr); }
-  .cs-head { flex-wrap: wrap; }
-  .cs-join { width: 100%; }
   .cs-scrim { padding: var(--sp-4); }
 }
 

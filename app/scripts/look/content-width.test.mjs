@@ -55,7 +55,7 @@ it("rejects the owner's stretched dictionary geometry on 97fa61bd", () => {
   } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
 });
 
-it("keeps Home's lead across the page and its three sections side by side at one width", () => {
+it("keeps Home's lead across the page and its three sections side by side, the team's the narrow one", () => {
   const browser = new Window();
   const doc = browser.document;
   doc.documentElement.style.setProperty('--sp-6', '32px');
@@ -64,7 +64,7 @@ it("keeps Home's lead across the page and its three sections side by side at one
   const page = doc.querySelector('.page-home'), hero = page.firstElementChild, sections = [...page.querySelectorAll('.ho-sec')];
   const measure = (element, width, top) => { element.getBoundingClientRect = () => ({ width, height: 100, top, bottom: top + 100 }); };
   measure(page, 1264, 0); measure(hero, 384, 32);
-  sections.forEach(section => measure(section, 384, 300));
+  sections.forEach((section, i) => measure(section, i < 2 ? 384 : 240, 300));
   vi.stubGlobal('document', doc);
   vi.stubGlobal('innerWidth', 1180);
   vi.stubGlobal('getComputedStyle', browser.getComputedStyle.bind(browser));
@@ -72,9 +72,9 @@ it("keeps Home's lead across the page and its three sections side by side at one
     expect(() => checkRendered('content-width')).toThrow(/hero spans/);
     measure(hero, 1200, 32);
     expect(checkRendered('content-width').home).toEqual({ heroWidth: 1200, available: 1200, columns: 3 });
-    measure(sections[2], 300, 300);
-    expect(() => checkRendered('content-width')).toThrow(/share their width/);
-    measure(sections[2], 384, 300); measure(sections[0], 384, 32);
+    measure(sections[1], 300, 300);
+    expect(() => checkRendered('content-width')).toThrow(/share a width/);
+    measure(sections[1], 384, 300); measure(sections[0], 384, 32);
     expect(() => checkRendered('content-width')).toThrow(/hero leads/);
   } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
 });

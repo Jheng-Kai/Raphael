@@ -1813,7 +1813,7 @@ export function checkRendered(name, context = {}) {
   if(name==='home-hero'){
     // Raphael as a secretary (owner, 2026-11-07): his emblem in the middle, the greeting, the date and his health line under it.
     const page=document.querySelector('.page-home:not([hidden])'), hero=page.querySelector('.ho-hero'), emblem=hero.querySelector('.ho-orb > .av'), heading=hero.querySelector('h1'), health=hero.querySelector('.ho-health');
-    const main=document.querySelector('.main'), expected=main.clientWidth<=760?88:112, root=getComputedStyle(document.documentElement);
+    const main=document.querySelector('.main'), expected=main.clientWidth<=760?96:128, root=getComputedStyle(document.documentElement);
     require(Math.abs(emblem.offsetWidth-expected)<1,`Raphael's emblem is ${expected}px on Home (${emblem.offsetWidth})`);
     const style=getComputedStyle(page), box=page.getBoundingClientRect();
     const middle=box.left+parseFloat(style.paddingLeft)+(box.width-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight))/2;
@@ -1821,7 +1821,8 @@ export function checkRendered(name, context = {}) {
     for (const [element,what] of [[emblem,'emblem'],[heading,'greeting'],[health,'health line']]) require(Math.abs(centre(element)-middle)<=2,`the ${what} stands in the middle (${Math.round(centre(element)-middle)}px off)`);
     require(/^(早安|午安|晚上好)，主人$/.test(heading.textContent.trim()),`a greeting by the time of day: ${heading.textContent}`);
     require(getComputedStyle(heading).fontSize===root.getPropertyValue('--fs-h1').trim(),'the greeting uses the heading token');
-    require(/^《告。健康檢查完成，.+》$/.test(health.textContent.trim()),`Raphael reports the team's health in his own words: ${health.textContent}`);
+    require(/^健康檢查完成，.+。$/.test(health.textContent.trim()),`Raphael reports the team's health in plain words: ${health.textContent}`);
+    require(!/[《》]/.test(hero.textContent),"the main window shows his words plainly; 《告。…》 is the desktop caption's (R-UI-42)");
     require(heading.getBoundingClientRect().top>=emblem.getBoundingClientRect().bottom-1 && health.getBoundingClientRect().top>=heading.getBoundingClientRect().bottom-1,'emblem, greeting and health line stack in that order');
     require(health.getBoundingClientRect().height<=parseFloat(getComputedStyle(health).lineHeight)*2+1,'the health line keeps to one or two lines');
     return {check:name,emblem:expected,heading:getComputedStyle(heading).fontSize};
@@ -2944,7 +2945,8 @@ export function checkRendered(name, context = {}) {
       require(Math.abs(lead.width - available) <= 1, 'Home hero spans the page measure');
       require(sections.length === 3 && sections.every(section => section.top >= lead.bottom - 1 && section.width <= lead.width + 1), 'Home hero leads every section');
       const columns = new Set(sections.map(section => Math.round(section.top))).size === 1 ? 3 : 1;
-      require(columns === 1 || sections.every(section => Math.abs(section.width - sections[0].width) <= 1), 'side by side, the sections share their width');
+      // Side by side, the team's column is the narrow one: it holds names and states, the others titles.
+      require(columns === 1 || (Math.abs(sections[0].width - sections[1].width) <= 1 && sections[2].width < sections[0].width), 'side by side, the schedule and what is open share a width and the team is narrower');
       home = { heroWidth: lead.width, available, columns };
     }
     return { check: name, limits, measurements, ...(home ? { home } : {}) };
@@ -5419,7 +5421,9 @@ export function checkRendered(name, context = {}) {
     require(box.left >= column.left - 1 && box.right <= column.right + 1, "R-UI-29: the card fits the reply column");
     require(box.width >= Math.min(300, column.width) - 1, `the card keeps a card's width, not a chip's (${Math.round(box.width)}px)`);
     const mark = card.querySelector('.mono'), markStyle = mark && getComputedStyle(mark);
-    require(visible(mark) && mark.querySelector('svg.logo path, img.logo'), "R-UI-34: the app's own catalog or bundled mark");
+    // An app the catalog has no logo for draws the generic plug, never another brand's mark (R-UI-28).
+    require(visible(mark) && mark.querySelector('svg.logo path, img.logo, svg.i'), "R-UI-34: the app's own catalog or bundled mark, or the generic plug");
+    if (name === 'connector-key' || name === 'connector-app') require(!mark.querySelector('img.logo'), "an app without a catalog logo draws the generic plug");
     if (name.startsWith('connector-slack')) require(mark.querySelector('img.logo')?.getAttribute('src') === window.__look.data.pluginCatalog.find(app => app.slug === 'slack').logo, "the card uses exactly the store's catalog logo");
     if (mark) require(markStyle.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(markStyle.borderTopWidth) === 0, "R-UI-34: the mark is bare, on no tile");
     const reply = [...card.closest('.tn').querySelectorAll('.ra .chat-message')].filter(visible).at(-1);

@@ -629,7 +629,8 @@ function storeHTML(v: ConnectionsView, entries: StoreEntries = storeEntries(v), 
     btn(esc(group ? tr(STORE_GROUP_LABELS[group]) : t("conn.all")), "sm", ` data-conn="store-group" data-id="${group}" aria-pressed="${v.category === group}"`)).join("")}</div>${chipSteps()}</div>`;
   let html = (v.catalog === "loading" ? loading : v.catalog === "failed" ? retry("retry-builtin-store") : "") +
     section("connected", t("conn.tab.installed"), connected) + section("hot", t("store.popular"), popular) +
-    section("all", t("conn.all"), rest);
+    // Under a chosen chip the list is that group, so it is named for it rather than 「全部」.
+    section("all", v.category ? tr(STORE_GROUP_LABELS[v.category]) : t("conn.all"), rest);
   if (entries.count > STORE_PAGE_SIZE) html += `<nav class="cs-store-pages" aria-label="${esc(t("conn.all"))}">` +
     btn(esc(t("store.previous")), "sm", ` data-conn="store-page" data-id="${page - 1}"${page === 0 ? " disabled" : ""}`) +
     `<span class="num" role="status">${page * STORE_PAGE_SIZE + 1}–${Math.min((page + 1) * STORE_PAGE_SIZE, entries.count)} / ${entries.count}</span>` +

@@ -108,10 +108,10 @@ describe("the secretary's page", () => {
   test("the health line names who waits for the owner, and says all is well otherwise", async () => {
     const { healthText, teamOf } = await load();
     const all = team.members as Member[];
-    expect(healthText(teamOf(all))).toBe("《告。健康檢查完成，2 位成員都正常。》");
-    expect(healthText(teamOf([...all, person(3, "Cy", { hidden: true })]))).toBe("《告。健康檢查完成，2 位成員都正常。》");
-    expect(healthText(teamOf([all[0]!, person(1, "Ari", { waiting: true }), person(2, "Bo", { activity: "error", activity_label: "需要你處理" })]))).toBe("《告。健康檢查完成，Ari和Bo 在等你。》");
-    expect(healthText([])).toBe("《告。健康檢查完成，一切正常。》");
+    expect(healthText(teamOf(all))).toBe("健康檢查完成，2 位成員都正常。");
+    expect(healthText(teamOf([...all, person(3, "Cy", { hidden: true })]))).toBe("健康檢查完成，2 位成員都正常。");
+    expect(healthText(teamOf([all[0]!, person(1, "Ari", { waiting: true }), person(2, "Bo", { activity: "error", activity_label: "需要你處理" })]))).toBe("健康檢查完成，Ari和Bo 在等你。");
+    expect(healthText([])).toBe("健康檢查完成，一切正常。");
   });
 
   test("each member says what it does, the ones who wait for the owner first, and a row opens its conversation", async () => {
@@ -132,7 +132,7 @@ describe("the secretary's page", () => {
     const reads = vi.mocked(membersList).mock.calls.length;
     emit({ type: "MemberActivity", member_id: 2, state: "blocked", label: "等你回答" });
     expect(page.el.querySelector('.ho-member[data-home-member="2"]')!.getAttribute("data-state")).toBe("needs");
-    expect(page.el.querySelector(".ho-health")!.textContent).toBe("《告。健康檢查完成，Bo 在等你。》");
+    expect(page.el.querySelector(".ho-health")!.textContent).toBe("健康檢查完成，Bo 在等你。");
     emit({ type: "MemberActivity", member_id: 2, state: "idle" });
     expect(page.el.querySelector('.ho-member[data-home-member="2"]')!.getAttribute("data-state")).toBe("idle");
     expect(vi.mocked(membersList).mock.calls.length).toBe(reads);
@@ -212,6 +212,8 @@ describe("the secretary's page", () => {
     expect(parse(homeHTML(overview(5))).querySelector(".ho-alert")).toBeNull();
     const broken = parse(homeHTML(overview(5, "no_key")));
     expect(broken.querySelector(".ho-alert")!.textContent).toContain("OpenRouter");
+    // The main window shows his words plainly; 《告。…》 is the desktop caption's (R-UI-42).
+    expect(broken.querySelector(".ho-hero")!.textContent).not.toMatch(/[《》]/);
     expect([...broken.querySelectorAll(".ho-hero button")].map(button => button.getAttribute("data-home-go"))).toEqual(["report"]);
     expect(broken.innerHTML).not.toContain('data-home-go="agent"');
   });

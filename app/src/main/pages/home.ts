@@ -12,6 +12,7 @@ import { buildReport } from "../report";
 import { dateKey } from "../schedule-picker";
 import { RAPHAEL_ID, faceHTML as memberFaceHTML } from "../members";
 import { onOwnerProfile } from "../owner-avatar";
+import { plainReplies } from "../../shared/anime";
 import { openMemberThread } from "../team-navigation";
 import type { AppContext, CalendarCreate, CalendarDate, CalendarEventFocus, Member, Page } from "../types";
 import { btn, esc, ico, iconButton, patchHTML } from "../ui";
@@ -121,9 +122,10 @@ function sectionHTML(key: string, title: string, body: string, action = ""): str
 export function homeHTML(data: HomeOverview, members: readonly Member[] = []): string {
   const team = teamOf(members), report = buildReport(data.report, data.generated_at_ms);
   const date = new Date(data.generated_at_ms).toLocaleDateString(getLocale(), { month: "long", day: "numeric", weekday: "long" });
-  // Only a report that needs fixing speaks here, with its one fix; a well budget is no news for a secretary.
-  const alert = report.action ? `<p class="ho-alert">${esc(report.text)}${iconButton(report.action.target === "retry" ? "refresh" : "info", report.action.label, ' data-home-go="report"')}</p>` : "";
-  const hero = `<section class="ho-hero"><div class="ho-orb">${avatarHTML({ size: 112, avatar: null, loop: true })}</div>` +
+  // Only a report that needs fixing speaks here, with its one fix; a well budget is no news for a secretary. The main window
+  // shows his words plainly: 《告。…》 stays on the desktop's captions (R-UI-42).
+  const alert = report.action ? `<p class="ho-alert">${esc(plainReplies([report.text])[0] ?? report.text)}${iconButton(report.action.target === "retry" ? "refresh" : "info", report.action.label, ' data-home-go="report"')}</p>` : "";
+  const hero = `<section class="ho-hero"><div class="ho-orb">${avatarHTML({ size: 128, avatar: null, loop: true })}</div>` +
     `<h1 class="ho-greet">${esc(greeting(data.generated_at_ms))}</h1><p class="ho-date">${esc(date)}</p>` +
     `<p class="ho-health" role="status">${esc(healthText(team))}</p>${alert}</section>`;
   return hero + `<div class="ho-board">${scheduleHTML(data)}${pendingHTML(data)}${teamHTML(team)}</div>`;

@@ -11,7 +11,8 @@
 .ho-alert { display: inline-flex; align-items: center; gap: var(--sp-1); margin: 0; max-width: var(--layout-reading-max); font-size: var(--fs-sm); line-height: 1.5; color: var(--warn); text-wrap: pretty; }
 .ho-alert > .btn { flex: none; }
 /* Three sections side by side: a heading and plain rows, at the same height whatever they hold. */
-.ho-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-5); align-items: start; min-width: 0; }
+/* The schedule and what is open carry titles; the team only names and states, so its column is the narrow one. */
+.ho-board { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, .75fr); gap: var(--sp-5); align-items: start; min-width: 0; }
 .ho-sec { min-width: 0; display: grid; grid-template-rows: 32px auto; gap: var(--sp-2); }
 .ho-sec > header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-width: 0; padding-left: var(--sp-2); border-bottom: 1px solid var(--line); }
 .ho-sec h2 { margin: 0; font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -43,15 +44,19 @@
 .ho-count { margin: 0; padding-left: var(--sp-2); min-height: 32px; display: flex; align-items: center; font-size: var(--fs-xs); color: var(--text-3); }
 .page-home .ho-more.btn { justify-self: start; margin: var(--sp-1) 0 0 var(--sp-2); }
 .ho-create.btn { justify-self: start; margin-left: var(--sp-2); }
-.ho-schedule .cal-notice { margin: var(--sp-2) 0 0 var(--sp-2); min-width: 0; color: var(--text-3); font-size: var(--fs-xs); }
-.ho-schedule .cal-notice-words { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* What the schedule says of Google: its mark and words on one line, wrapping in a narrow column, the action under them. */
+.ho-schedule .cal-notice { flex-wrap: wrap; margin: var(--sp-2) 0 0 var(--sp-2); min-width: 0; color: var(--text-3); font-size: var(--fs-xs); }
+.ho-schedule .cal-notice-words { flex: 1 1 calc(100% - 2 * var(--sp-5)); min-width: 0; text-wrap: pretty; }
 @container main (max-width: 640px) {
   .ho-board { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); }
 }
 @container main (max-width: 760px) {
   .page.page-home { padding-inline: var(--sp-5); gap: var(--sp-5); }
   .ho-board { gap: var(--sp-4); }
-  .ho-orb > .av { --av: 88px !important; }
+  .ho-orb > .av { --av: 96px !important; }
+  /* A narrow column keeps an open item's words and drops its time. */
+  .ho-pending .ho-row.btn { grid-template-columns: 28px minmax(0, 1fr); }
+  .ho-pending .ho-row > time { display: none; }
 }
 
 /* Once a day Raphael flies in from his corner, rings out around himself, reads the health line and the sections rise. */

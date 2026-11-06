@@ -1192,7 +1192,7 @@
       "prefix": "", "text": "Acme Ledger 需要你自己的 API key，填好後就繼續這項工作。", "detail": null, "status": "done", "cost_usd": 0,
       "model": "fixture", "steps": [], "attachments": [],
       "messages": [{ "seq": 1, "kind": "reply", "text": "Acme Ledger 需要你自己的 API key，填好後就繼續這項工作。", "at_ms": 1792807186000 }],
-      "connectors": [{ "id": "card-acme", "app": "acme-ledger", "name": "Acme Ledger", "logo": "https://logos.composio.dev/api/slack", "needs": "key", "toolkit": "acme-ledger",
+      "connectors": [{ "id": "card-acme", "app": "acme-ledger", "name": "Acme Ledger", "logo": "", "needs": "key", "toolkit": "acme-ledger",
         "state": "pending", "error": null, "reconnect": false, "tool_count": null, "expires_at_ms": 1792893585000, "resumed": false }]
     },
     "app": {
@@ -1201,7 +1201,7 @@
       "prefix": "", "text": "Orbit Ads 需要你自己的開發者 app，設定好後就繼續這項工作。", "detail": null, "status": "done", "cost_usd": 0,
       "model": "fixture", "steps": [], "attachments": [],
       "messages": [{ "seq": 1, "kind": "reply", "text": "Orbit Ads 需要你自己的開發者 app，設定好後就繼續這項工作。", "at_ms": 1792807186000 }],
-      "connectors": [{ "id": "card-orbit", "app": "orbit-ads", "name": "Orbit Ads", "logo": "https://logos.composio.dev/api/slack", "needs": "own_app", "toolkit": "orbit-ads",
+      "connectors": [{ "id": "card-orbit", "app": "orbit-ads", "name": "Orbit Ads", "logo": "", "needs": "own_app", "toolkit": "orbit-ads",
         "state": "pending", "error": null, "reconnect": false, "tool_count": null, "expires_at_ms": 1792893585000, "resumed": false }]
     },
     "calendar": {

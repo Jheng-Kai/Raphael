@@ -21,6 +21,8 @@ test("the inline guide names its own save button in every language for keys and 
 });
 
 test("inline field hints stay on one line and the guide heading is not repeated inside its disclosure", async () => {
+  // The catalog's hint is the provider's English: an English window shows it (connection-setup.ts).
+  setLocale("en");
   const {readFileSync}=await import("node:fs");
   api.connectorsToolkit.mockResolvedValue({slug:"sample",name:"Sample",needs:"key",fields:[{name:"key",label:"API Key",description:"A long catalog hint for this field",secret:true,required:true}]});
   const thread=document.createElement("div");document.body.append(thread);
@@ -35,6 +37,23 @@ test("inline field hints stay on one line and the guide heading is not repeated 
   expect(css).toMatch(/\.inline-connection-setup \.cn-hint\s*\{[^}]*white-space:\s*nowrap/);
   controller.disconnect();
 });
+test("a reader at the latest line stays there when the card's form arrives, and one reading earlier lines is not moved", async () => {
+  api.connectorsToolkit.mockResolvedValue({ slug: "sample", name: "Sample", needs: "key", fields: [{ name: "key", label: "Key", secret: true, required: true }] });
+  for (const [from, moved] of [[900, true], [200, false]] as const) {
+    const scroller = document.createElement("div"); scroller.className = "ra-scroll"; document.body.append(scroller);
+    const thread = document.createElement("div"); scroller.append(thread);
+    thread.innerHTML = connectorCardHTML({ id: "sample", app: "sample", name: "Sample", state: "pending", needs: "key", error: null, reconnect: false, tool_count: null, expires_at_ms: 0, resumed: false });
+    // The thread grows by the form itself once it arrives.
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 100 });
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => thread.querySelector("[data-setup-field]") ? 1300 : 1000 });
+    scroller.scrollTop = from;
+    const controller = mountInlineConnectionSetup(thread, vi.fn());
+    await vi.waitFor(() => expect(thread.querySelector("[data-setup-field]")).not.toBeNull());
+    expect(scroller.scrollTop, `from ${from}`).toBe(moved ? 1300 : 200);
+    controller.disconnect(); scroller.remove();
+  }
+});
+
 test("conversation key setup stays inline and sends secrets only to its own connection call", async () => {
   api.connectorsToolkit.mockResolvedValue({ slug: "sample", name: "Sample", needs: "key", fields: [{ name: "key", label: "Key", secret: true, required: true }], guide_url: "https://example.invalid/keys" });
   const thread = document.createElement("div"); document.body.append(thread);
