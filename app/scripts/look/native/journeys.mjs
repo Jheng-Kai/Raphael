@@ -383,11 +383,8 @@ export async function drive(name, context) {
     await page.waitForFunction(() => window.__homeTiming?.firstPaintMs !== null);
     result.homeTiming = await page.evaluate(() => window.__homeTiming);
     await capture("first-paint");
-    await page.waitForFunction(() => document.querySelector('.ho-allowance')?.textContent.includes('40%'), { timeout: 15000 });
-    result.homeTiming.liveVisibleMs = await page.evaluate(() => performance.now());
-    await capture("live-allowance");
+    // Home shows no allowances since 2026-11-07, but the core still reads them for its overview: that read must not hold Home up.
     if (result.homeTiming.firstPaintMs >= 1500) throw new Error(`Home waited for CLI allowances: ${result.homeTiming.firstPaintMs.toFixed(1)} ms`);
-    if (!result.homeTiming.firstAllowance?.includes('25%')) throw new Error("Home did not first paint the stored allowance before the live 40% window");
     return;
   }
   if (name === "voice-keys") {
@@ -1370,21 +1367,12 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     }
     await scrim?.dispose();
     await click(page, '#nav [data-go="home"]'); await wait(page, '.ho-hero h1');
-    await inspect("home-720", ["sidebar-shell", "home-lead-width", "home-overview", "home-redesign"]);
-    const originalMonth = await page.$eval('.ho-calendar', node => node.dataset.month);
-    await click(page, '[data-home-month="1"]');
-    await page.waitForFunction(month => document.querySelector('.ho-calendar')?.dataset.month !== month, {}, originalMonth);
-    await click(page, '[data-home-month="-1"]');
-    await page.waitForFunction(month => document.querySelector('.ho-calendar')?.dataset.month === month, {}, originalMonth);
-    await perform(page, {action:'scroll',selector:'.ho-calendar'});
-    await inspect("home-month-720", ["home-month"]);
-    await click(page, '[data-home-today]');
+    await inspect("home-720", ["sidebar-shell", "home-hero", "home-overview"]);
     await page.setViewport({ width: 1920, height: 1080 });
-    await inspect("home-month-full-1920", ["home-month", "home-redesign"]);
+    await inspect("home-1920", ["home-hero", "home-overview"]);
     await page.setViewport({ width: 1280, height: 800 });
-    await perform(page, {action:'scroll',selector:'.ho-calendar'});
-    await inspect("home-month-compact-1280", ["home-month"]);
-    await perform(page, {action:'click-position',selector:'.ho-calendar',x:.02,y:.02,expect:'.au-day-col'}); await pause(200);
+    await inspect("home-1280", ["home-hero", "home-overview"]);
+    await click(page, '.ho-schedule header [data-home-go="calendar"]'); await wait(page, '.au-day-col'); await pause(200);
     await inspect("calendar-week-1280", ["calendar-shell"]);
     await click(page, '[data-au="view"]'); await click(page, '#app-popover [data-value="day"]');
     await inspect("calendar-day-1280", ["calendar-shell"]);
@@ -1419,7 +1407,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     };
     const inspectPage = async (label, checks) => { await pause(200); for (const check of checks) await page.evaluate(checkRendered, check); await capture(label); };
     await page.setViewport({ width: 1280, height: 800 });
-    await perform(page, { action: "click-position", selector: ".ho-calendar", x: .02, y: .02, expect: ".au-day-col" });
+    await click(page, '.ho-schedule header [data-home-go="calendar"]'); await wait(page, ".au-day-col");
     await inspectPage("week-empty", ["calendar-shell", "calendar-now"]);
     // The owner, by hand: 建立, then the small form beside the placeholder.
     await click(page, '[data-au="new"]');
@@ -1464,7 +1452,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     // Home draws both, and a click on the member's event opens it on the Calendar page.
     await perform(page, { action: "click", selector: '#nav [data-go="home"]' });
     await wait(page, ".ho-hero h1");
-    const eventOnHome = `.ho-calendar [data-home-event="own:${added.id}"]`;
+    const eventOnHome = `.ho-schedule [data-home-event="own:${added.id}"]`;
     await wait(page, eventOnHome);
     await inspectPage("home", ["home-calendar-language"]);
     await click(page, eventOnHome);

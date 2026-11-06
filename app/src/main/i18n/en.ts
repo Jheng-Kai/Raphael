@@ -1876,7 +1876,6 @@ export const en = {
   "rooms.blockedQuota": "Subscription quota used up",
   "rooms.blockedLogin": "Needs a CLI sign-in",
   "rooms.blockedBusy": "The CLI is busy",
-  "overview.needsYou": "Needs you",
   "overview.used": "Used {p0}%",
   "nav.apps": "Connect apps",
   "nav.appsCount": "Connect apps, {p0} connected",

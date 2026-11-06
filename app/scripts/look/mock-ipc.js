@@ -533,6 +533,12 @@ export function installMock(fixture, config = {}, target = window) {
       title: id === 3 ? "確認資料來源範圍" : "核准後續研究安排" })));
     data.home.counts.today = data.home.today.length;
   }
+  if (variant.homeTeam) {
+    // Home's team section with every state at once, and more members than it shows.
+    Object.assign(data.members[1], { waiting: true, activity: "blocked", activity_label: "等你回答" });
+    Object.assign(data.members[2], { activity: "searching", activity_label: "正在搜尋網路" });
+    data.members.push(...[[4, "阿凱"], [5, "小魚"]].map(([id, name]) => ({ ...structuredClone(data.members[3]), id, name, position: id, unread: false, waiting: false })));
+  }
   if (variant.calendarSparse) data.routines = data.routines.slice(0, 1);
   if (variant.calendarAllDay) {
     const event = data.home.calendar.find(item => item.kind === "event");

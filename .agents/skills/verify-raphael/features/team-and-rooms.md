@@ -38,7 +38,7 @@ heavy process at a time.
 
 Owner review regression scenes: sidebar-group-avatar-hover, sidebar-group-avatar-pair,
 sidebar-room-home and sidebar-unread. Run every sidebar-prefixed scene plus home,
-home-hover and chat in both themes at 1120, 720 and 1920x1080. The native
+home-row-hover and chat in both themes at 1120, 720 and 1920x1080. The native
 readable-layout journey checks two- and three-face rooms, production RPC summaries,
 and selection after leaving each room for Home. Inspect contact sheets and full-size
 images separately from automated assertions.

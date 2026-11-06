@@ -1,6 +1,6 @@
 import { scene, click, hover, type, wait, waitGone, page, key, scroll, room, newRoom, check, rightClick, member } from "./steps.mjs";
 
-const auto = [page("home"), { action: "click-position", selector: ".ho-calendar", x: 0.02, y: 0.02, expect: ".au-toolbar" }, wait(".au-toolbar")];
+const auto = [page("home"), click('.ho-schedule header [data-home-go="calendar"]'), wait(".au-toolbar")];
 const calendar = [...auto, wait(".au-occurrence"), check("calendar-chips"), check("calendar-shell")];
 const view = name => [click('[data-au="view"]'), click(`#app-popover [data-value="${name}"]`)];
 const dialog = [...auto, click('[data-au="new"]'), wait(".au-pop-editor"), click('[data-pop="routine"]'), wait(".mb-dialog")];

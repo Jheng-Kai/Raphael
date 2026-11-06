@@ -894,7 +894,7 @@ describe("rendered look checks", () => {
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-27', 'R-UI-27']);
   });
   it("distinguishes date choices and navigation from ordinary text actions", () => {
-    const { audit } = productAudit('<div class="au-month-grid"><button class="btn" style="border:0">25</button></div><button class="btn mb-panel-back" style="border:0">Members</button><button class="btn mc-source" style="border:0">Provider</button><button class="btn cs-main" style="border:0">Notion service details</button><div class="ho-month"><button class="btn ho-day" style="border:0">30</button></div><button class="btn conversation-new" style="border:0">New conversation</button>');
+    const { audit } = productAudit('<div class="au-month-grid"><button class="btn" style="border:0">25</button></div><button class="btn mb-panel-back" style="border:0">Members</button><button class="btn mc-source" style="border:0">Provider</button><button class="btn cs-main" style="border:0">Notion service details</button><button class="btn ho-row" style="border:0">Dentist</button><button class="btn conversation-new" style="border:0">New conversation</button>');
     expect(audit().productRules.map(item => item.text)).toEqual(['New conversation']);
   });
   it.each(scenes.filter(scene => scene.name.endsWith("composer-learn")))("keeps $name correction data distinct from untranslated UI", scene => {

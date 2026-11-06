@@ -1876,7 +1876,6 @@ export const ja = {
   "rooms.blockedQuota": "サブスクリプションの上限に達しました",
   "rooms.blockedLogin": "CLI へのログインが必要です",
   "rooms.blockedBusy": "CLI が使用中です",
-  "overview.needsYou": "あなたへの確認",
   "overview.used": "{p0}% 使用済み",
   "nav.apps": "アプリを連携",
   "nav.appsCount": "アプリを連携、{p0} 件接続済み",

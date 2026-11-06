@@ -2,7 +2,6 @@ import { check, scene } from "./steps.mjs";
 
 // Extend ordinary feature scenes so each future main-page run retains these regressions.
 const checks = {
-  home: "home-redesign", "home-empty": "home-redesign", "home-many": "home-redesign",
   "dictation-overview": "dictation-layout", chat: "thread-measure",
   "member-text": "thread-measure", "room-text": "thread-measure",
   "raphael-details": "details-pointer-focus",
@@ -13,7 +12,6 @@ export function withOwnerRound4(scenes) {
     ...original.steps.flatMap(step => original.name === "details" && step.action === "icon-interactions"
       ? [check("details-pointer-focus"), step] : [step]),
     ...(checks[original.name] ? [check(checks[original.name])] : []),
-    ...(["home", "home-empty", "home-many"].includes(original.name) ? [check("home-lead-width")] : []),
     ...(["home", "automations-calendar", "dictation-overview", "chat"].includes(original.name) ? [check("sidebar-shell")] : []),
     ...(original.name === "onboarding-abilities" ? [check("onboarding-abilities-hero")] : []),
     ...(original.name === "raphael-details" ? [check("details-quick-once")] : []),

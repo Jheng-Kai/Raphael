@@ -800,13 +800,14 @@ export async function perform(page, step, evidenceDirectory) {
       } finally { await element.dispose(); }
       break;
     }
-    case "home-day": {
-      const calendar = await visible('.ho-calendar');
-      const expanded = await calendar.evaluate(node => getComputedStyle(node).getPropertyValue('--home-calendar-expanded').trim() === '1');
-      await calendar.dispose();
-      await click(`[data-home-select="${step.date}"]`);
-      const day = await visible(`.au-day-col[data-day="${step.date}"]`); await day.dispose();
-      return {check:'home-day-selection',expanded,date:step.date,opened:true};
+    case "home-arrive-again": {
+      // Raphael flies in on Home's first showing of a day: forget the day, leave Home and come back to it.
+      await page.evaluate(() => { try { localStorage.removeItem('raphael.home.arrived'); } catch { /* the page then shows him still */ } });
+      await click('#nav [data-go="dictation"]');
+      await (await visible('.page-dictation:not([hidden])')).dispose();
+      await click('#nav [data-go="home"]');
+      await (await visible('.page-home:not([hidden])[data-arrive] .ho-hero')).dispose();
+      return {check:'home-arrive-again'};
     }
     case "touch-swipe": {
       const element = await visible(step.selector), client = await page.createCDPSession();

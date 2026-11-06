@@ -1875,7 +1875,6 @@ export const zhTW = {
   "rooms.blockedQuota": "訂閱額度已用完",
   "rooms.blockedLogin": "需要登入 CLI",
   "rooms.blockedBusy": "CLI 忙碌中",
-  "overview.needsYou": "需要你",
   "overview.used": "已使用 {p0}%",
   "nav.apps": "連結應用程式",
   "nav.appsCount": "連結應用程式，已連結 {p0} 個",
