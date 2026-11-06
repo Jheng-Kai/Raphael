@@ -16,7 +16,8 @@
   --layout-card-min: calc(9 * var(--sp-6));
   --layout-card-max: calc(12 * var(--sp-6));
   --layout-reading-max: calc(20 * var(--sp-6));
-  --layout-thread-max: calc(28 * var(--sp-6));
+  /* Grok Bot's message column is 960 px (owner, 2026-11-07). */
+  --layout-thread-max: calc(30 * var(--sp-6));
   --layout-page-max: calc(3 * var(--layout-card-max) + 2 * var(--sp-5) + 2 * var(--sp-6));
   --layout-workspace-max: calc(55 * var(--sp-6));
   --fs-2xs: 12px; --fs-xs: 13px; --fs-sm: 14px; --fs-md: 15px; --fs-lg: 18px; --fs-h1: 22px;
@@ -49,6 +50,7 @@
   --computer-active: #7138bd;
   /* Usage bars: a member's lavender, as Grok Bot's coloured bar, never the black or white of the controls (owner, 2026-11-07). */
   --meter: #905afb;
+  --ans-edge: #ececec;
   --btn: #ffffff; --btn-edge: #d4d4d4; --key: #f7f7f7; --key-edge: #d4d4d4;
   --track: #e5e5e5; --menu: #ffffff; --scrim: rgba(0, 0, 0, 0.3);
   --pop: 0 20px 64px rgba(0, 0, 0, 0.14), 0 3px 10px rgba(0, 0, 0, 0.07);
@@ -72,7 +74,8 @@
   --edge: #262626; --line: #262626;
   --hover: #262626; --pressed: #303030; --hover-edge: #929292; --edge-rim: #2b2b2b; --rail-line: #1c1c1c;
   --danger-hover: #322023; --danger-pressed: #3c2429;
-  --text: #f5f5f5; --text-2: #d0d0d0; --text-3: #b5b5b5;
+  /* Grok Bot's three steps of grey, a little lighter to keep the small words readable: primary, secondary, quiet. */
+  --text: #f5f5f5; --text-2: #b4b4b4; --text-3: #8f8f8f;
   --accent: #f5f5f5; --accent-text: #eeeeee; --accent-icon: #eeeeee; --on-accent: #0a0a0a; --accent-soft: #262626;
   --accent-hover: #ffffff; --accent-pressed: #d6d6d6;
   --accent-ring: rgba(255, 255, 255, 0.2); --conversation-glow: transparent; --focus: #eeeeee;
@@ -81,6 +84,7 @@
   --ok: #9fd7b5; --warn: #edc677; --err: #ff9aa9; --warn-soft: #2a251c; --warn-edge: #5b4e32;
   --computer-active: #b98aff;
   --meter: #a47dff;
+  --ans-edge: #232323;
   --btn: #1f1f1f; --btn-edge: #555555; --key: #1f1f1f; --key-edge: #555555;
   --track: #333333; --menu: #161616; --scrim: rgba(0, 0, 0, 0.65);
   --pop: 0 20px 64px rgba(0, 0, 0, 0.5), 0 3px 10px rgba(0, 0, 0, 0.3);

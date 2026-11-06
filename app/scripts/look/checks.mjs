@@ -2781,7 +2781,7 @@ export function checkRendered(name, context = {}) {
   }
   if(name === "thread-measure") {
     const composer=[...document.querySelectorAll('.page-agent .composer')].find(el=>visible(el)&&!el.closest('[hidden]')), cap=parseFloat(getComputedStyle(composer).maxWidth);
-    require(cap===896,"thread and composer use the shared 28-space 896px measure");
+    require(cap===960,"thread and composer use the shared 30-space 960px measure, Grok Bot's column");
     require(composer.getBoundingClientRect().width<=cap+1,"composer respects its measure");
     if(innerWidth<1440) require(!document.querySelector('.page-agent[data-det="open"]'),"details start collapsed before they crowd the thread");
     return {check:name,width:composer.getBoundingClientRect().width,cap};
@@ -2909,7 +2909,7 @@ export function checkRendered(name, context = {}) {
     require(space > 0, "the shared spacing scale is available");
     const gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sp-5'));
     require(gap > 0, "the shared grid gap is available");
-    const limits = { word: 10 * space, card: 12 * space, reading: 20 * space, thread: 28 * space, page: 3 * 12 * space + 2 * gap + 2 * space, workspace: 55 * space };
+    const limits = { word: 10 * space, card: 12 * space, reading: 20 * space, thread: 30 * space, page: 3 * 12 * space + 2 * gap + 2 * space, workspace: 55 * space };
     const groups = [
       ['word', '.wrow'],
       // The details panel's rows follow the panel's width, as Grok Bot's do (owner, 2026-11-07): the panel's drag bounds them.
@@ -4816,7 +4816,7 @@ export function checkRendered(name, context = {}) {
     for (const element of [bubble, answer]) {
       require(visible(element), "owner and assistant messages are visible");
       const style = getComputedStyle(element);
-      require(style.fontSize === "15px" && style.lineHeight === "24px", "messages use 15px type at 1.6 line height");
+      require(style.fontSize === "15px" && style.lineHeight === "22px", "messages use 15px type on a 22px line, as Grok Bot's");
       require(style.borderTopLeftRadius === "12px", "messages use the shared card radius");
     }
     require(getComputedStyle(answer).borderTopWidth === "0px", "assistant bubble has no decorative border");

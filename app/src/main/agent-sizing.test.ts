@@ -50,7 +50,8 @@ describe("the page's responsive sizes", () => {
 
   test("the conversation's thread measure stops growing with the window", () => {
     expect(block![2]).toContain("--pa-colw: var(--layout-thread-max);");
-    expect(read("styles.css")).toContain("--layout-thread-max: calc(28 * var(--sp-6));");
+    // Grok Bot's 960 px message column (owner, 2026-11-07).
+    expect(read("styles.css")).toContain("--layout-thread-max: calc(30 * var(--sp-6));");
     expect(agent).toMatch(/\.ra-col \{ max-width: var\(--pa-colw\)/);
     expect(agent).toMatch(/\.composer \{[^}]*max-width: var\(--layout-thread-max\)/);
   });
