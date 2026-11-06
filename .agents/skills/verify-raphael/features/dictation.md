@@ -234,7 +234,7 @@ begins with the configured global key while a target field has focus.
 
 ```powershell
 npm run look -- dictation-overview dictation-history dictation-heat-press dictation-dictionary dictation-keyboard dictation-notice dictation --theme both --width 1120,720,1920x1080
-npm run look -- overlay-transcribing overlay-cleaning --theme both --width 1120,720,1920x1080
+npm run look -- overlay-transcribing overlay-cleaning overlay-emblem-gold overlay-emblem-angry --theme both --width 1120,720,1920x1080
 npm run look -- composer-learn member-composer-learn room-composer-learn --theme both --width 1120,720,1920x1080
 ```
 

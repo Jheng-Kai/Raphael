@@ -22,7 +22,15 @@ export default [{
     { type: "mode", mode: "thinking", quiet: true },
     { type: "step", text: "《告。正在查看今天下午的行程。》", language: "zh-TW" },
   ] }), entry: "overlay.html",
-}, ...["transcribing", "cleaning"].map(stage => ({
+}, ...[["gold", "《告。一切正常。本月額度已使用 6%。》"], ["angry", "《否。未偵測到麥克風。請接上裝置，再到「設定 › 聽寫 › 麥克風」選擇。》"]].map(([mood, line]) => ({
+  // The vector rune ring (owner, 2026-11-07): crisp at the largest corner size, gold for a report, red for a refusal.
+  ...scene(`overlay-emblem-${mood}`, `Raphael's emblem drawn as vectors, ${mood === "gold" ? "in his gold for a report" : "red while he refuses"}`, [
+    { action: "advance-time", ms: 1500 }, check(`overlay-emblem-${mood}`),
+  ], { emblem: true, overlayEvents: [
+    { type: "settings", px: 194, subtitles: "on", language: "zh-TW" },
+    { type: "notice", text: line },
+  ] }), entry: "overlay.html", ready: ".subs.on .sub-line",
+})), ...["transcribing", "cleaning"].map(stage => ({
   ...scene(`overlay-${stage}`, `Overlay ${stage} percentage caption`, [{ action: "advance-time", ms: 500 }, check("overlay-percentage")], {
     overlayEvents: [
       { type: "settings", px: 96, subtitles: "all", language: "zh-TW" },

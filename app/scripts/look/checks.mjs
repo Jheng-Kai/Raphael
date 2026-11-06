@@ -3884,8 +3884,9 @@ export function checkRendered(name, context = {}) {
     require(!!home.querySelector('h1.ho-said'), "Raphael reports in the page headline");
     require(!home.querySelector('.ho-hero [data-home-go="agent"], .ho-ask'), "the hero has no ask-Raphael icon: Raphael is asked on his own page");
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const pictures = [...emblem.querySelectorAll('img')].map(image => image.getAttribute('src'));
-    require(pictures.length === 2 && pictures.every(src => /-loop\.webp$/.test(src) !== reduced), reduced ? "under reduced motion Raphael's emblem is his still picture" : "Raphael's emblem is the turning loop");
+    // Drawn from vectors since 2026-11-07 (R-UI-113): it turns by a transform, and stands still under reduced motion.
+    const images = [...emblem.querySelectorAll('img')];
+    require(images.length === 2 && images.every(image => image.classList.contains('em-turn') !== reduced), reduced ? "under reduced motion Raphael's emblem is his still picture" : "Raphael's emblem is the turning loop");
     require(!home.querySelector('.ho-pending [data-home-item^="routine:"], .ho-pending [data-home-item^="report:"]'), "Pending lists only what waits for the owner");
     for (const card of home.querySelectorAll('.ho-card')) require(visible(card.querySelector(':scope > header .ho-open')), "every card opens its details from an icon");
     require(document.querySelector('#nav [data-go][aria-current="page"]')?.dataset.go === "home", "Home is the selected rail destination");
@@ -3897,23 +3898,14 @@ export function checkRendered(name, context = {}) {
     return { check: name, items: home.querySelectorAll('[data-home-item]').length, width: home.clientWidth };
   }
   if (name === "home-emblem-motion") {
-    // The loop plays by itself, which a canvas cannot show (it draws the first frame), so the check is that the page
-    // asks for the loop, and that what it asks for is an animation: its RIFF holds an ANIM header and many frames.
+    // Since 2026-11-07 the emblem is drawn from the vector rune ring at its own size (crisp), and turns by a transform.
     const picture = [...document.querySelectorAll('.page-home:not([hidden]) .ho-hero > .av img')].find(visible);
     require(!matchMedia('(prefers-reduced-motion: reduce)').matches, "this scene runs with motion allowed");
-    require(picture && /app-emblem-(?:light|dark)-loop\.webp$/.test(picture.getAttribute('src')), "Raphael's emblem on Home is the turning loop when motion is allowed");
+    // Its layout width, not its turning bounding box.
+    require(picture && picture.getAttribute('src').startsWith('data:image/png') && picture.naturalWidth >= picture.offsetWidth, `Raphael's emblem on Home is drawn at its own size from vectors (${picture?.naturalWidth} for ${picture?.offsetWidth})`);
+    require(picture.classList.contains('em-turn') && getComputedStyle(picture).animationName === 'av-turn', "it turns when motion is allowed");
     require(!document.querySelector('.page-home .ho-hero [data-home-go="agent"]'), "the hero has no ask-Raphael icon");
-    return fetch(picture.getAttribute('src')).then(response => response.arrayBuffer()).then(buffer => {
-      const view = new DataView(buffer), tag = at => String.fromCharCode(...new Uint8Array(buffer, at, 4));
-      require(tag(0) === 'RIFF' && tag(8) === 'WEBP', "the loop is a WebP picture");
-      let frames = 0, milliseconds = 0, animated = false;
-      for (let at = 12; at + 8 <= buffer.byteLength; at += 8 + view.getUint32(at + 4, true) + (view.getUint32(at + 4, true) & 1)) {
-        if (tag(at) === 'ANIM') animated = true;
-        if (tag(at) === 'ANMF') { frames++; milliseconds += view.getUint8(at + 8 + 12) | view.getUint8(at + 8 + 13) << 8 | view.getUint8(at + 8 + 14) << 16; }
-      }
-      require(animated && frames > 24 && milliseconds >= 2000, `the loop is an animation of many frames: ${frames} frames, ${milliseconds} ms`);
-      return { check: name, frames, milliseconds };
-    });
+    return { check: name, pixels: picture.naturalWidth };
   }
   if (name === "home-report") {
     require(window.__look.calls.some(call => call.method === "agent.history.list" && call.params.member_id === 1), "Reported member history was requested");
@@ -5233,6 +5225,20 @@ export function checkRendered(name, context = {}) {
     require(!rows.some(row => row.textContent.includes("拉斐爾") || row.querySelector('[title*="拉斐爾"], [aria-label*="拉斐爾"]')), "no row or picture names Raphael");
     require(!body.querySelector('.step-mark,.step-ms'), 'the list has no per-row ticks or milliseconds');
     return { check: name, words };
+  }
+  if (name === "overlay-emblem-gold" || name === "overlay-emblem-angry") {
+    // The rune band, sampled where the letters stand: gold for a report, red while he refuses (owner, 2026-11-07).
+    const canvas = document.querySelector('#emblem'), ctx = canvas.getContext('2d'), side = canvas.width, c = side / 2;
+    const R = side / 1.3 / 2, data = ctx.getImageData(0, 0, side, side).data, picked = [];
+    for (let a = 0; a < 360; a += 1.5) for (let r = 0.82; r <= 0.98; r += 0.02) {
+      const x = Math.round(c + Math.cos(a * Math.PI / 180) * r * R), y = Math.round(c + Math.sin(a * Math.PI / 180) * r * R), i = (y * side + x) * 4;
+      if (data[i + 3] > 200) picked.push([data[i], data[i + 1], data[i + 2]]);
+    }
+    require(picked.length > 120, `the rune band is drawn (${picked.length} opaque samples)`);
+    const [r, g, b] = [0, 1, 2].map(k => picked.reduce((sum, p) => sum + p[k], 0) / picked.length);
+    if (name === "overlay-emblem-gold") require(r > 200 && g > 120 && b < 110 && r - g < 110, `the runes are vivid gold and orange: rgb(${[r, g, b].map(Math.round)})`);
+    else require(r > 180 && g < 110 && b < 110, `the runes are red while he refuses: rgb(${[r, g, b].map(Math.round)})`);
+    return { check: name, rgb: [r, g, b].map(Math.round), samples: picked.length };
   }
   if (name === "peer-chat") {
     // Grok Bot's conversation between Bots (owner, 2026-11-06): in place of the thread and composer, the pill 「A ⇄ B」,

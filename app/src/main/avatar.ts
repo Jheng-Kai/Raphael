@@ -9,9 +9,42 @@
 // sidebar's 拉斐爾, the composer's voice button, the approval card, the voice-mode flyer and the
 // settings row. They draw again when `onAvatarChange` says the picture changed.
 
-import { pictureStyle } from "../overlay/emblem";
+import { drawEmblem, params, pictureStyle, useVectorGlyphs } from "../overlay/emblem";
 import { esc } from "./ui";
 import "./avatar.css";
+
+// ---------- the emblem as a picture, drawn from vectors ----------
+//
+// Since 2026-11-07 (owner: the emblem was blurry) the faces are the overlay's own renderer drawn once at the size they
+// are shown, times the screen's pixel ratio, from the vector rune ring: crisp at every size, the same art as the corner.
+// Where there is no canvas (the tests) the pictures of app/public/brand stay.
+
+const stills = new Map<string, string | null>();
+
+/** The emblem standing still for `theme`, `px` CSS pixels square, as a data URL; null where it cannot be drawn. */
+function emblemStill(theme: "light" | "dark", px: number): string | null {
+  const ratio = typeof window === "undefined" ? 1 : Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+  const side = Math.min(512, Math.ceil(px * ratio));
+  const key = `${theme}:${side}`;
+  if (stills.has(key)) return stills.get(key)!;
+  let url: string | null = null;
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = side;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      useVectorGlyphs();
+      ctx.translate(side / 2, side / 2);
+      // The letters' rim reaches a little past the outer radius; a small face keeps its white ring visible.
+      drawEmblem(ctx, side / 2 / 1.04, params("steady", 0, px < 48 ? 0.3 : 0.15), { tq: 0, rot: 0.4, dim: 1, calm: 0.7, lvl: 0.15, surface: theme });
+      url = canvas.toDataURL("image/png");
+    }
+  } catch {
+    url = null;
+  }
+  stills.set(key, url);
+  return url;
+}
 
 /**
  * Which part of the picture shows in the circle. The picture covers the circle (its shorter side
@@ -176,6 +209,17 @@ export function avatarHTML(o: AvatarOptions): string {
     const url = shownUrl(chosen.url);
     const img = url === null ? "" : `<img src="${esc(url)}" alt="" draggable="false" style="${cropStyle(chosen.crop)}">`;
     return `<span class="${cls}" ${box} aria-hidden="true">${img}</span>`;
+  }
+  const light = emblemStill("light", o.size), dark = emblemStill("dark", o.size);
+  if (light && dark) {
+    // While he thinks or listens the drawn emblem turns slowly, as the corner's ring does (still under reduced motion).
+    const turn = o.loop && !reduced ? " em-turn" : "";
+    return (
+      `<span class="${cls}" ${box} aria-hidden="true">` +
+      `<img class="em-l${turn}" src="${light}" alt="" draggable="false">` +
+      `<img class="em-d${turn}" src="${dark}" alt="" draggable="false">` +
+      `</span>`
+    );
   }
   const kind = o.loop && !reduced ? "loop" : o.size > 40 ? "128" : "64";
   return (

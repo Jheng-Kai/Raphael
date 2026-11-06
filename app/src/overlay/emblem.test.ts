@@ -65,11 +65,11 @@ test("a hidden emblem draws nothing", () => {
   expect(params("hidden", 0, 0)).toBeNull();
 });
 
-test("the white ring is about 1 px when quiet and 7 px when loud (R = 97)", () => {
+test("the white ring is about 2.5 px when quiet and 7.4 px when loud (R = 97): heavy as the owner's reference", () => {
   const quiet = params("listening", 0, 0)!;
   const loud = params("listening", 0, 1)!;
-  expect(quiet.ringW * 97).toBeCloseTo(1.16, 1);
-  expect(loud.ringW * 97).toBeCloseTo(7.18, 1);
+  expect(quiet.ringW * 97).toBeCloseTo(2.52, 1);
+  expect(loud.ringW * 97).toBeCloseTo(7.37, 1);
 });
 
 test("the canvas leaves room for the rays: 1.3 times the diameter", () => {

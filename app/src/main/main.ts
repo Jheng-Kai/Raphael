@@ -4,7 +4,7 @@ import { onLocaleChange, setLocale, t } from "./i18n";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-import { loadGlyphTexture } from "../overlay/emblem";
+import { useVectorGlyphs } from "../overlay/emblem";
 import * as api from "./api";
 import { createAutomationsPage } from "./pages/automations";
 import { createHome } from "./pages/home";
@@ -44,9 +44,6 @@ import { leave, toaster } from "./ui";
 import { bindMissing, missingHTML, noticeHTML } from "./missing";
 import "./styles.css";
 import "./sidebar.css";
-
-/** The glyph ring texture (app/public/brand/glyph-ring.png); if it fails to load the emblem draws a plain ring. */
-const GLYPH_URL = "/brand/glyph-ring.png";
 
 /** What the window uses until the real settings arrive (the same as device_settings.rs). */
 const DEFAULT_DEVICE: DeviceSettings = {
@@ -134,7 +131,8 @@ async function start(): Promise<void> {
   const fixed = deviceRead ? fixedDevicePatch(device.get()) : null;
   if (fixed) void device.set(fixed).catch((err) => console.error("main: could not keep the fixed device settings", err));
   installWindowHotkeys(() => device.get());
-  void loadGlyphTexture(GLYPH_URL);
+  // The emblem's glyph ring is drawn from vectors, crisp at every size (overlay/glyph-ring.ts).
+  useVectorGlyphs();
 
   // A right click presses the ⋯ of the row under it; elsewhere the browser's own menu has no place in an app. Text fields keep theirs.
   installContextMenus(document);

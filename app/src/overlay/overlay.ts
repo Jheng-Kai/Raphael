@@ -21,7 +21,7 @@ import { ja } from "../main/i18n/ja";
 import { zhTW } from "../main/i18n/zh-TW";
 import { replyLine } from "../shared/anime";
 import { captionLines } from "./caption";
-import { Emblem, canvasSize, loadGlyphTexture, pictureStyle, type Mode, type Phase, type PictureCrop } from "./emblem";
+import { Emblem, canvasSize, pictureStyle, useVectorGlyphs, type Mode, type Mood, type Phase, type PictureCrop } from "./emblem";
 import { noticeDurationMs } from "./notice";
 import type { ProgressReport, Stage } from "./progress";
 import { ProgressArc } from "./progress";
@@ -97,7 +97,15 @@ export interface EmblemControl {
   set(mode: Mode): void;
   speak(seconds: number): void;
   size(px: number): void;
+  /** Gold, or red while Raphael refuses (a 否 line). */
+  mood?: Mood;
 }
+
+/**
+ * Whether a line is one of Raphael's refusals: his notices and answers start with 告 (report) or 否 (refusal) in Chinese
+ * and Japanese and `Notice.` or `Negative.` in English (notices.rs). A refusal is when he is angry.
+ */
+export const isRefusal = (text: string): boolean => /^\s*《?\s*(?:否|Negative)[。.]/u.test(text);
 
 /** How far a pointer hold on the YES of a T3 question has come. */
 export type HoldState = "idle" | "holding" | "armed";
@@ -151,6 +159,8 @@ interface Notice {
   kind: "notice" | "learned" | "say";
   /** The app owns the lifetime of a voiced answer, including a delayed first sound. */
   hold?: boolean;
+  /** A refusal (《否。…》 / 《Negative. …》): Raphael's emblem is red while it shows (owner, 2026-11-07). */
+  angry?: boolean;
 }
 
 /** A question that is on screen, or about to be. */
@@ -623,7 +633,8 @@ export class OverlayController {
     if (this.ask) this.cancelNotices();
     // Told in pages without addresses (`captionLines`); a voiced answer holds only its last page.
     const lines = captionLines(notice.text, this.language);
-    const pages = lines.map((text, i) => ({ ...notice, text, hold: i === lines.length - 1 ? notice.hold : undefined }));
+    const angry = isRefusal(notice.text);
+    const pages = lines.map((text, i) => ({ ...notice, text, angry, hold: i === lines.length - 1 ? notice.hold : undefined }));
     // Before the learned words that wait, but behind the lines of Raphael's that came earlier.
     const at = first ? this.queue.findIndex((queued) => queued.kind === "learned") : -1;
     if (at >= 0) this.queue.splice(at, 0, ...pages);
@@ -641,6 +652,8 @@ export class OverlayController {
       return;
     }
     this.busy = true;
+    // Red for a refusal from its first frame, gold again for any other line.
+    this.emblem.mood = notice.angry ? "angry" : "calm";
     this.appearIfHidden();
     this.emblem.set("steady");
     // The words come when the appear animation has played (at once if already visible).
@@ -676,6 +689,8 @@ export class OverlayController {
     this.busy = false;
     this.heldSay = false;
     this.view.clearLine();
+    // Whatever takes the emblem next (a dictation, a question) starts in his gold.
+    this.emblem.mood = "calm";
   }
 }
 
@@ -794,12 +809,8 @@ const questionLabels = (language: UiLanguage) => {
   return {more:messages["common.showAll"],less:messages["common.showLess"],stop:messages["rooms.stop"],hint:messages["common.cancelAgain"]};
 };
 
-/** The glyph ring texture (app/public/brand/glyph-ring.png). */
-const GLYPH_URL = "/brand/glyph-ring.png";
 /** Until the first Settings event arrives. */
 const DEFAULT_PX = 150;
-/** The texture is a local file; if it takes longer than this, start without it. */
-const TEXTURE_WAIT_MS = 2000;
 
 /**
  * Writes `message` to the app's log (raphael.log, as "overlay page: ..."). Never throws and never
@@ -909,12 +920,8 @@ async function start(): Promise<void> {
   });
   const entrance = new EntranceTimer(pageLog, () => document.visibilityState);
 
-  // The texture comes first, so that no event meets a half-ready emblem. Without the file the
-  // load fails and the plain vector ring is drawn.
-  await Promise.race([
-    loadGlyphTexture(GLYPH_URL),
-    new Promise((resolve) => setTimeout(resolve, TEXTURE_WAIT_MS)),
-  ]);
+  // The ring is drawn from vectors (glyph-ring.ts), crisp at every size and in every mood; nothing is loaded first.
+  useVectorGlyphs();
 
   // Raphael's picture, when the person chose one: it is drawn in the emblem's place.
   const picture = (): Promise<void> => showPicture(emblem);

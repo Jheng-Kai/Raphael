@@ -5,6 +5,13 @@
 .av .em-d { display: none; }
 :root[data-theme="dark"] .av .em-l { display: none; }
 :root[data-theme="dark"] .av .em-d { display: block; }
+/* The drawn emblem turns as slowly as the corner's ring while he thinks; a transform only, on the compositor. */
+@media (prefers-reduced-motion: no-preference) {
+  .av > img.em-turn { animation: av-turn 60s linear infinite; }
+  @keyframes av-turn { to { transform: rotate(360deg); } }
+}
+/* The emblem is a circle inside its square: the turning square's corners are clipped, never scrolled. */
+.av:has(> img.em-turn) { overflow: clip; }
 .av.av-custom { overflow: hidden; border-radius: var(--r-pill); }
 .av.av-custom > img { object-fit: cover; }
 

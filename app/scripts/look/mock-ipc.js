@@ -349,6 +349,8 @@ export function installMock(fixture, config = {}, target = window) {
     turn.handoffs = [{ ...data.roomHandoff, state: "done" }, { ...data.roomHandoff, task_id: 43, member_id: 2, member_name: "小森", mode: "consult", state: "running", result: "", evidence: [] }];
     turn.messages.push({ seq: 99, kind: "event", text: JSON.stringify(data.p02MeetingEvent), at_ms: data.now });
   }
+  // Raphael as his emblem, with no picture of the owner's in its place.
+  if (variant.emblem) data.avatar = null;
   if (variant.peerChat) {
     // Raphael asked 小晴 yesterday and today, and 小森 once yesterday: today's line opens only Raphael ⇄ 小晴 (R-UI-72).
     const turn = data.turns.find(turn => turn.id === 1), sample = data.peerChatSample, DAY = 86_400_000;
