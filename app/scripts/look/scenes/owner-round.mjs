@@ -5,7 +5,8 @@ const open = id => [...details, click(`[data-conversation-open="${id}"]`)];
 // The voice button records a voice message while held; voice chat waits for a later release (owner, 2026-11-06).
 const voice = id => [click('.mb-det [data-det="close"]'), wait('.conversation-trigger[aria-expanded="false"]'), id ? hold('.cmp-voice') : click('.cmp-voice')];
 const language = locale => [click('[data-k="ui-language"]'), click(`#app-popover [data-value="${locale}"]`), wait(`html[lang="${locale}"]`), check(`locale-${locale}`)];
-const panes = ["general", "appearance", "connections", "models", "dictation", "tools", "safety", "messaging", "about"];
+// 連結應用程式 is walked from the sidebar below: it is a dialog of its own, not a tab of Settings (R-UI-111).
+const panes = ["general", "appearance", "models", "dictation", "tools", "safety", "messaging", "about"];
 
 export default [
   ...["en", "ja", "zh-TW"].map(locale => scene(`settings-language-${locale}`, `Switch to ${locale} in Settings and walk every page and section`, [
@@ -13,6 +14,7 @@ export default [
     ...(locale === "zh-TW" ? language(locale) : []),
     ...panes.flatMap(pane => [click(`.modal-scrim [data-pane="${pane}"]`), wait(`.modal-scrim [data-pane="${pane}"][aria-current="page"]`), check(`locale-${locale}`)]),
     click('.modal-scrim [data-act="close"]'),
+    ...settings("connections"), check(`locale-${locale}`), click('.modal-scrim [data-act="close"]'),
     ...["home", "agent", "dictation"].flatMap(name => [page(name), check(`locale-${locale}`)]),
     ...["history", "dictionary", "overview"].flatMap(tab => [page("dictation"), click(`[data-dictation-tab="${tab}"]`), check(`locale-${locale}`)]),
     page("home"), click('.ho-calendar [data-home-go="calendar"]'), wait('.au-page:not([hidden]) .au-day-col'), check(`locale-${locale}`), key("Escape"), waitGone('.au-pop-detail'),

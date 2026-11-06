@@ -39,7 +39,7 @@ import { pricingNote } from "../pricing";
 import type { HotkeyField } from "../hotkey-recording";
 import type { AudioDevices, BrainSettings, DeviceSettings, LocalModel, ModelCatalog, ModelRole, SettingsPane, Status } from "../types";
 import { keyEntryRow, micRow } from "../setup-rows";
-import { type Choice, type IconName, actionRow, btn, esc, fieldHTML, ico, iconBtn, iconButton, keys, note, row, sel, st, tabs, tg } from "../ui";
+import { type Choice, type IconName, actionRow, btn, esc, fieldHTML, ico, iconBtn, iconButton, keys, note, row, sel, st, tabs } from "../ui";
 
 /** The models the core reads when none is chosen (brain/settings.py), shown while it does not answer. */
 const DEFAULT_MODELS = { cleanup: "openai/gpt-6-luna", answer: "openai/gpt-6-luna", stt: "elevenlabs/scribe-v2" } as const;
@@ -154,9 +154,6 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
   ...PANES.filter((p) => p.id !== STANDALONE_PANE).map((p) => ({ pane: p.id })),
   { pane: "appearance", label: "settings.059" },
   { pane: "appearance", label: "settings.067", words: ["dark", "light"] },
-  { pane: "general", label: "settings.069" },
-  { pane: "general", label: "settings.071" },
-  { pane: "general", label: "settings.073" },
   { pane: "general", label: "settings.rerunGuide" },
   { pane: "dictation", label: "home.020", also: "settings.searchShortcut" },
   { pane: "dictation", label: "home.021", also: "settings.searchShortcut" },
@@ -164,7 +161,6 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "dictation", label: "transcription.title" },
   { pane: "dictation", label: "common.microphone", words: ["mic"] },
   { pane: "dictation", label: "settings.agentKeys", also: "settings.searchShortcut" },
-  { pane: "general", label: "settings.agentCity" },
   { pane: "general", label: "mem.shared", also: "settings.searchMemory" },
   { pane: "safety", label: "rules.title" },
   { pane: "safety", label: "vault.title", words: ["Chrome", "1Password", "CSV"] },
@@ -292,8 +288,6 @@ export interface SettingsView {
   limitDraft: string | null;
   limitError: (() => string) | null;
   /** What is typed in the weather city while it is not saved, and what is wrong with it. */
-  cityDraft: string | null;
-  cityError: (() => string) | null;
   /** Telegram, in the 訊息平台 tab. */
   messaging: MessagingView;
   /** The shared safety rules, in Safety (none: not drawn). */
@@ -354,7 +348,6 @@ export const quickPickerLook = (v: SettingsView): ModelPickerLook => ({
 const quickRow = (v: SettingsView): string =>
   row(t("settings.quickModel"), priceSpan(v, "quick-model", "price num"),
     modelPickerHTML(quickPickerLook(v)), { cls: "row-model", attrs: ' data-row="quick-model"' });
-export const agentCity = (v: SettingsView): string => v.brain?.agent_city ?? "";
 /** What one background task may spend, as the value of its dropdown (the core's default is 0.2). */
 export const workerCostCap = (v: SettingsView): string => String(v.brain?.worker_cost_cap_usd ?? 0.2);
 /** The catalog once it is read. */
@@ -593,22 +586,17 @@ const coreNote = (v: SettingsView): string => (v.brain === null ? `<div class="a
 
 /** 一般: the language of the window, and how Raphael looks and starts on this computer. */
 function generalHTML(v: SettingsView): string {
-  const d = v.device;
   return (
     headingHTML(v) +
     coreNote(v) + `<section class="sgroup"><h2>${esc(t("settings.ownerSection"))}</h2>` + ownerProfileHTML(v.brain) +
-    `<div class="slist">` + row(t("settings.agentCity"), "", fieldHTML(t("settings.agentCityHint"), v.cityDraft ?? agentCity(v), { w: 200, label: t("settings.agentCity"), id: "agent-city", invalid: v.cityError !== null, disabled: v.brain === null })) +
-    (v.cityError ? note(st("err", v.cityError()), ' role="alert"') : "") +
+    `<div class="slist">` +
     row(t("zone.title"), t("zone.help"), sel([{value:v.brain?.routine_timezone ?? "",label:v.brain?.routine_timezone ? zoneLabel(v.brain.routine_timezone) : `${t("zone.auto")} · ${zoneLabel(detectedTimezone())}`}], v.brain?.routine_timezone ?? "", t("zone.title"), ' data-k="routine-timezone"' + (v.brain === null ? ' disabled' : ''))) +
     row(t("output.folder"), t("output.help"), fieldHTML(t("output.empty"), v.brain?.owner_output_folder ?? "", { id: "owner-output-folder", label: t("output.folder"), w: 200, disabled: v.brain === null }) + btn(ico("folder") + esc(t("output.pick")), "sm", ` data-act="output-pick"${v.brain === null ? " disabled" : ""}`)) + `</div>` +
     (v.memoryShared ? memoryHTML(v.memoryShared) : "") +
     (v.memoryImportHTML ?? createMemoryImport(() => {}).html()) + `</section>` +
-    section(t("settings.groupAppearance"), [
-      row(t("settings.069"), "", sel(SIZES, String(d.emblem_size), t("settings.069"), ' data-k="size"')),
-      row(t("settings.071"), "", tg(d.subtitles !== "off", t("settings.071"), ' data-k="subtitles"')),
-    ]) +
+    // The emblem's size, its subtitles and starting with Windows are fixed (device-fixed.ts, owner 2026-11-06), and the
+    // weather city is the member's to ask when it needs it: none of them is a setting any more.
     section(t("settings.groupStartup"), [
-      row(t("settings.073"), "", tg(d.autostart, t("settings.073"), ' data-k="autostart"')),
       row(t("settings.rerunGuide"), "", btn(esc(t("settings.rerunGuideButton")), "", ' data-act="rerun-guide"')),
     ]) + `<section class="sgroup" data-hidden-members></section>`
   );

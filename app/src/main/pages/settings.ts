@@ -74,7 +74,6 @@ import {
   APPEARANCES,
   LOCAL_COMMAND_MODES,
   HOTKEY_ROWS,
-  agentCity,
   quickModels,
   quickPickerLook,
   WORKER_COST_CAPS,
@@ -238,8 +237,6 @@ export function createSettings(app: AppContext): SettingsPage {
   let limitDraft: string | null = null;
   let limitError: (() => string) | null = null;
   /** The same for the weather city. */
-  let cityDraft: string | null = null;
-  let cityError: (() => string) | null = null;
   /** A shortcut being recorded (「變更」): the row is drawn again when it is over. */
   const recording = createHotkeyRecording(app, () => {
     if (visible) render();
@@ -290,7 +287,7 @@ export function createSettings(app: AppContext): SettingsPage {
   const view = (): SettingsView => ({
     update, memoryImportHTML: memoryImport.html(),
     pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
-    replacingKey, keyBusy, keyError, limitDraft, limitError, cityDraft, cityError, languageGroups, now: Date.now(),
+    replacingKey, keyBusy, keyError, limitDraft, limitError, languageGroups, now: Date.now(),
     connections: connections.view(), messaging: messaging.view(), memoryShared: memoryShared.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
 
@@ -1063,23 +1060,6 @@ export function createSettings(app: AppContext): SettingsPage {
     void changeBrain("monthly_limit_usd", limit);
   }
 
-  function commitCity(input: HTMLInputElement): void {
-    const city = input.value.trim();
-    if (city === "") {
-      cityDraft = input.value;
-      cityError = () => t("settings.agentCityEmpty");
-      render();
-      return;
-    }
-    cityDraft = null;
-    cityError = null;
-    if (city === agentCity(view())) {
-      render();
-      return;
-    }
-    void changeBrain("agent_city", city);
-  }
-
   // ---------- the microphone and its level ----------
 
   // After a core restart the app switches the new core's monitoring back on by itself.
@@ -1287,14 +1267,12 @@ export function createSettings(app: AppContext): SettingsPage {
     const input = e.target as HTMLInputElement;
     if (input.id === "owner-output-folder") void changeBrain("owner_output_folder", input.value);
     else if (input.id === "limit-input") commitLimit(input);
-    else if (input.id === "agent-city") commitCity(input);
   });
   el.addEventListener("input", (e) => {
     const input = e.target as HTMLInputElement;
     providers.input(input);
     if (connections.input(input) || messaging.input(input) || memories.some((list) => list.input(input)) || rules.input(input)) return;
     if (input.id === "limit-input") limitDraft = input.value;
-    else if (input.id === "agent-city") cityDraft = input.value;
   });
   el.addEventListener("keydown", (e) => {
     const tab = (e.target as Element).closest<HTMLElement>("[data-models-tab]");
@@ -1403,8 +1381,6 @@ export function createSettings(app: AppContext): SettingsPage {
       keyError = null;
       limitDraft = null;
       limitError = null;
-      cityDraft = null;
-      cityError = null;
       // the first tab, unless the way in knows better (the report that says there is no key goes to the key)
       pane = open && PANES.some((p) => p.id === canonicalPane(open as SettingsPane)) ? canonicalPane(open as SettingsPane) : "general";
       if (open === "usage" || open === "models") modelsTab = open;

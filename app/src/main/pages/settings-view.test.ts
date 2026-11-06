@@ -111,7 +111,7 @@ const view = (over: Partial<SettingsView> = {}): SettingsView => ({
   pane: "general", device, brain, hasKey: true, openrouter, spend, catalog, checkingOpenrouter: false,
   devices: { devices: [{ index: 0, name: REALTEK, is_default: true }], selected: null, automatic_device: REALTEK },
   altgr: false, version: "0.1.0", replacingKey: false, keyBusy: false, keyError: null, limitDraft: null, limitError: null,
-  cityDraft: null, cityError: null, languageGroups: GROUPS, now: NOW, connections: emptyConnectionsView(), messaging: emptyMessagingView(),
+  languageGroups: GROUPS, now: NOW, connections: emptyConnectionsView(), messaging: emptyMessagingView(),
   localModels: LOCAL_MODELS, localDownload: null, ...over,
 });
 
@@ -326,12 +326,10 @@ describe("一般", () => {
     expect(SEARCH_INDEX).toContainEqual({ pane: "general", label: "output.folder" });
     expect(paneHTML(view({ pane: "agent" }))).not.toContain('id="owner-output-folder"');
   });
-  test("has the interface language, the theme and the emblem's size as dropdowns, the subtitles and the start as switches", () => {
+  test("General holds only what the owner sets: time zone, output folder and the guide", () => {
     const html = tab("general");
-    expect(groups(html)).toEqual(["關於你", "匯入記憶", "介面與桌面", "啟動"]);
-    expect(names(html)).toEqual(["天氣的城市", "時區", "輸出資料夾", "桌面圖案大小", "字幕", "開機時自動啟動", "重新導覽"]);
-    for (const k of ["size"]) expect(html).toMatch(new RegExp(`<button type="button" class="sel"[^>]*data-k="${k}"`));
-    for (const k of ["subtitles", "autostart"]) expect(html).toMatch(new RegExp(`class="tg" role="switch"[^>]*data-k="${k}"`));
+    expect(groups(html)).toEqual(["關於你", "匯入記憶", "啟動"]);
+    expect(names(html)).toEqual(["時區", "輸出資料夾", "重新導覽"]);
   });
 
   test("starts the guide again with a real bordered button, not a switch or a link", () => {
@@ -422,8 +420,7 @@ describe("聽寫", () => {
 describe("拉斐爾", () => {
   test("moved rows keep their existing field ids and shortcut action", () => {
     expect(rowOf(tab("dictation"), "問拉斐爾")).toContain('data-act="rec-agent"');
-    expect(rowOf(tab("general"), "天氣的城市")).toContain('id="agent-city" type="text" value="台北"');
-    expect(tab("tools")).not.toContain('id="agent-city"');
+    expect(rowOf(tab("general"), "輸出資料夾")).toContain('id="owner-output-folder"');
   });
 
   test("hides the retired background cost cap", () => {
@@ -451,10 +448,9 @@ describe("拉斐爾", () => {
     expect(tab("dictation", { altgr: true, device: { ...device, dictation_keys: ["F9"], agent_keys: ["ControlLeft+Space"] } })).not.toContain("AltGr");
   });
 
-  test("an empty city is said to be wrong", () => {
-    const html = tab("general", { cityDraft: " ", cityError: () => "請輸入城市名稱" });
-    expect(html).toContain('role="alert"');
-    expect(html).toContain('aria-invalid="true"');
+  test("General keeps it simple: no emblem size, subtitles, start with Windows or weather city to set", () => {
+    const html = tab("general");
+    for (const gone of ['data-k="size"', 'data-k="subtitles"', 'data-k="autostart"', 'id="agent-city"']) expect(html).not.toContain(gone);
   });
 });
 
@@ -635,7 +631,7 @@ describe("搜尋設定", () => {
 
   test("finds a row by its name, in the window's language, and says where it is", () => {
     expect(where("麥克風")).toEqual(["dictation:麥克風"]);
-    expect(where("天氣")).toEqual(["general:天氣的城市"]);
+    expect(where("時區")[0]).toBe("general:時區");
     expect(where("版本")).toEqual(["about:版本"]);
   });
 
@@ -733,7 +729,7 @@ describe("while the core does not answer", () => {
     expect(rowOf(dictation, "你說的語言")).toMatch(/data-k="languages" disabled>/);
     expect(rowOf(dictation, "麥克風")).not.toContain("disabled");
     expect(rowOf(dictation, "聽寫")).not.toContain("disabled");
-    expect(rowOf(tab("general", down), "天氣的城市")).toContain("disabled");
+    expect(rowOf(tab("general", down), "輸出資料夾")).toContain("disabled");
     expect(rowOf(tab("dictation", down), "問拉斐爾")).not.toContain("disabled");
     const usage = tab("usage", down);
     expect(usage).not.toContain('id="limit-input"');

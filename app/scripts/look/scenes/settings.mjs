@@ -22,7 +22,7 @@ export default [
 
 
   scene("settings-computer-search", "Computer location search opens the member computer panel", [...settings("general"), type('#set-search', '遠端'), wait('.set-hit'), check('settings-computer-result'), key('Enter'), wait('.mb-det:not([hidden]) [data-computer-location]'), check('settings-computer-open')]),
-  scene("settings-owner", "Owner identity, weather and shared memory share General", [...settings("general"), wait('[data-mem-space="shared"] .mem-entry'), check('settings-owner')]),
+  scene("settings-owner", "Owner identity and shared memory share General, with no weather city to set", [...settings("general"), wait('[data-mem-space="shared"] .mem-entry'), check('settings-owner')]),
 
   scene("settings-memory", "Shared owner memory belongs in General", [...settings("general"), wait('[data-mem-space="shared"] .mem-entry'), scroll('[data-mem-space="shared"]'), check("settings-memory")]),
   scene("local-command-settings", "One shared local command dropdown beside computer use", [...settings("safety"), scroll('[data-k="local-commands"]'), check("local-command-setting"), click('[data-k="local-commands"]'), wait('.menu [data-value="never"]'), check("local-command-menu")]),
