@@ -85,6 +85,15 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (title && title !== label && !text.includes(title)) violation('R-UI-69', 'A disabled control explains its reason only in a hover title');
     }
     if (element.matches('.page-agent .ans.thinking')) violation('R-UI-38', 'Conversation waiting must use the shared work line');
+    // A message hugs its bubble and the actions beside it, as Grok Bot's: empty room to its side is no part of it, so a
+    // pointer or a right click there shows nothing (owner, 2026-11-06).
+    if (element.matches('.chat-message') && box.width > 0) {
+      const parts = [...element.children].filter(child => !child.matches('.message-actions'));
+      const widest = Math.max(0, ...parts.map(child => child.getBoundingClientRect().width));
+      const actions = element.querySelector(':scope > .message-actions')?.getBoundingClientRect().width ?? 0;
+      const allowed = widest + (actions ? actions + parseFloat(style.columnGap || '0') : 0);
+      if (box.width > allowed + 2) violation('R-UI-104', `A message is wider than its bubble and actions: ${Math.round(box.width)} > ${Math.round(allowed)}`);
+    }
     const scrollbar = element.offsetWidth - element.clientWidth - (parseFloat(style.borderLeftWidth) || 0) - (parseFloat(style.borderRightWidth) || 0);
     if (['auto', 'scroll'].includes(style.overflowY) && scrollbar > 1 && !element.matches('.main, .modal-body, .cs-results, .cs-form .add-grid')) violation('R-UI-62', 'A scrollbar takes room from a narrow part; only a wide page shows one');
     if (element.matches('.main') && scrollbar > 1 && element.querySelector(':scope > .page-agent:not([hidden])')) violation('R-UI-62', 'A conversation never scrolls the main area, so it keeps no strip for a scrollbar');

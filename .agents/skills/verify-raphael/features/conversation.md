@@ -90,7 +90,7 @@ stays in the message action row and the expandable transcript is the reply text.
 The existing PCM player retains unplayed samples while paused; this adds no live call.
 
 ```powershell
-npm run look -- reaction-picker reaction-row reaction-not-approval room-thread-open room-thread-chip slack-draft voice-memo calm-thread --theme both --width 1120,720,1920x1080
+npm run look -- message-hugs-bubble reaction-picker reaction-row reaction-not-approval room-thread-open room-thread-chip slack-draft voice-memo calm-thread --theme both --width 1120,720,1920x1080
 ```
 
 Synthetic zh-TW fixtures replace only native IPC. Inspect all contact sheets and every

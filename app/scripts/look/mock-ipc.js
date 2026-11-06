@@ -16,6 +16,10 @@ export function installMock(fixture, config = {}, target = window) {
     data.voiceCallBase = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
     data.turns = data.turns.filter(turn => turn.member_id !== 1);
   }
+  if (variant.chatMetadata === 'long') {
+    // A reply whose paragraphs run far past one line, with a list: the shape that once stretched a message to the column.
+    data.chatMetadataSample = { ...data.chatMetadataSample, reply: `${'這份範例紀錄只有期限，沒有操作步驟，所以下面的步驟是依公開的說明整理的。'.repeat(4)}\n\n**準備**\n\n1. 範例卡片\n2. 電腦\n3. 讀卡機\n\n${'完成後系統會核對資料，帳號就註冊完成。'.repeat(3)}` };
+  }
   if (variant.chatMetadata) {
     const sample = data.chatMetadataSample, base = structuredClone(data.mailTurns.draft);
     data.members.forEach(member => Object.assign(member, {unread:false,unread_from:null,activity:"idle",waiting:false}));

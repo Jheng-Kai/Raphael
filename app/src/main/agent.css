@@ -156,12 +156,15 @@
 .ans.progress { color: var(--text-2); }
 /* As Grok Bot's, a message's actions sit beside its bubble, centred on it: the message is one column of its parts with
    the actions in a second (a first, for the owner's), on the bubble's row. */
-.chat-message { display: grid; grid-template-columns: minmax(0, auto) auto; column-gap: var(--sp-1); justify-items: start; align-items: start; width: fit-content; min-width: 0; max-width: 100%; position: relative; }
+/* The first column stops at the bubble's own limit: a long paragraph would otherwise stretch the message to the whole
+   column, so the empty room beside the bubble answered the pointer and a right click, and the actions stood far from it
+   (measured: 900 px for a 500 px bubble). */
+.chat-message { display: grid; grid-template-columns: fit-content(60ch) auto; column-gap: var(--sp-1); justify-items: start; align-items: start; width: fit-content; min-width: 0; max-width: 100%; position: relative; }
 .chat-message > * { grid-column: 1; min-width: 0; max-width: 100%; }
 .chat-message > .message-actions { grid-column: 2; grid-row: 1; align-self: center; }
 .chat-message:has(> .routine-origin) > .message-actions { grid-row: 2; }
 .chat-message > .turn-event { width: fit-content; max-width: 100%; margin-inline: auto; }
-.owner-message { grid-template-columns: auto minmax(0, auto); justify-items: end; margin-inline-start: auto; max-width: min(var(--pa-bw), 78%); }
+.owner-message { grid-template-columns: auto fit-content(var(--pa-bw)); justify-items: end; margin-inline-start: auto; max-width: min(var(--pa-bw), 78%); }
 .owner-message > * { grid-column: 2; }
 .owner-message > .message-actions { grid-column: 1; }
 .owner-message .bubble { box-sizing: border-box; max-width: 100%; }
@@ -215,7 +218,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .bubble > .btn.message-expand { margin-top: var(--sp-1); margin-inline-start: calc(-1 * var(--sp-2)); align-self: flex-start; font: inherit; color: inherit; border-color: transparent; background: transparent; padding-inline: var(--sp-2); }
 .bubble > .btn.message-expand:hover:not(:disabled) { background: color-mix(in srgb, currentColor 14%, transparent); border-color: transparent; }
 .bubble > .btn.message-expand:active:not(:disabled) { background: color-mix(in srgb, currentColor 22%, transparent); border-color: transparent; }
-.chat-message:has(> .preview-cards) { width: 100%; }
+.chat-message:has(> .preview-cards) { width: 100%; grid-template-columns: minmax(0, 1fr) auto; }
 .preview-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); width: min(calc(440px + 120 * var(--pa-u)), 100%); min-width: 0; }
 /* Every link card has one height, whatever its page gave: cards of two heights under one reply looked uneven. */
 .page-agent .btn.preview-card { display: flex; align-items: center; justify-content: flex-start; gap: var(--sp-3); width: 100%; height: 88px; min-height: 88px; padding: var(--sp-2) var(--sp-3); text-align: start; white-space: normal; border-inline-start: 3px solid var(--accent-text); background: var(--surface-2); border-radius: var(--r-sm); overflow: hidden; }
@@ -613,7 +616,9 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 
 /* Keep the conversation surface flat and opaque through its parent. */
 .mb-chat { background: none; }
-.ra-body > .ans, .chat-message > .ans { max-width: min(60ch, 100%); border: 0; border-radius: var(--r-lg); }
+.ra-body > .ans { max-width: min(60ch, 100%); border: 0; border-radius: var(--r-lg); }
+/* The message's first column holds the 60ch limit (one font for it), so the bubble and its actions meet. */
+.chat-message > .ans { max-width: 100%; border: 0; border-radius: var(--r-lg); }
 
 .bubble .message-quote, .bubble .quote-author, .bubble .message-link { color: var(--on-bubble); border-color: currentColor; }
 /* Send and Raphael voice form one quiet, equal-sized pair in every composer. */

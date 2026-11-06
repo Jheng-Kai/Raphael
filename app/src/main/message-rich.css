@@ -1,6 +1,6 @@
 /* Rich reply cards share the message column and existing surface/control tokens. */
-.chat-message:has(> .rich-block) { width: 100%; gap: var(--sp-3); }
-.chat-message > .ans { max-width: min(60ch, 100%); }
+.chat-message:has(> .rich-block) { width: 100%; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-3); }
+.chat-message > .ans { max-width: 100%; }
 .rich-block { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; margin: 0; overflow: hidden; border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--panel); color: var(--text); font: var(--fs-sm)/1.6 var(--ui); white-space: normal; }
 .rich-head { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-2); min-height: 38px; padding: var(--sp-1) var(--sp-3); border-bottom: 1px solid var(--edge); color: var(--text-2); font-size: var(--fs-xs); }
 .rich-head > span { min-width: 0; overflow-wrap: anywhere; }
