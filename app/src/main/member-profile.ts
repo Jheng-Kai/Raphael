@@ -1,5 +1,6 @@
 // The profile dialog of a member that exists. The footer owns member fields; explicit resource
 // actions belong to the resource itself. A new member is made in member-creator.ts.
+import { routineRunState, testRoutine } from "./routine-run";
 import * as api from "./api";
 import { openActions } from "./member-column";
 import { defaultSlimeAvatar } from "./slime";
@@ -70,8 +71,9 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
       else if (act === "routine-add") routineForm();
       else if (act === "routine-menu") {
         const routine = routines.find(r => r.id === Number(target.dataset.id));
-        if (routine) openActions(target, [{ id: "edit", label: t("members.profile.editResource"), icon: "pencil" }, { id: "delete", label: t("members.profile.delete"), icon: "trash" }], choice => {
-          if (choice === "edit") routineForm(routine);
+        if (routine) openActions(target, [{ id: "test", label: t(routineRunState(routine.id).running ? "routine.testing" : "routine.test"), icon: "play" }, { id: "edit", label: t("members.profile.editResource"), icon: "pencil" }, { id: "delete", label: t("members.profile.delete"), icon: "trash" }], choice => {
+          if (choice === "test") { routineForm(routine); void testRoutine(routine.id); }
+          else if (choice === "edit") routineForm(routine);
           else void resourceAction(async () => {
             await api.routinesDelete(routine.id);
             toaster.info(t("common.deleted"));

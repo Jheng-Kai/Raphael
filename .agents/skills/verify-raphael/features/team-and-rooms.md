@@ -94,3 +94,45 @@ preserve new typing and files, and serialize rooms.send per room without changin
 speaker selection. Failed delivery keeps its request identity for retry. Scene:
 room-send-while-working, both themes at 1120,720,1920x1080. Shared private
 consumers and the selected matrix are in conversation.md#durable-owner-inbox-2026-11-03.
+
+
+## Meetings and private work (2026-11-04)
+
+R-ROOM-01 through R-ROOM-07 supersede sequential-speech/normal-room-tools clauses.
+Selected speakers share one snapshot. Their private work can continue beside speech;
+status is computed per member, chief decisions are pinned, and short report cards link
+to the assignee's actual private turn. Approval content stays private. Member-to-member
+questions retain asker-only presentation. CLI members choose speak/pass themselves,
+without a dispatcher, templates, or model substitution.
+
+Offline evidence: core/tests/background/test_room_meeting.py,
+core/tests/members/test_room_meeting.py, core/tests/brain/test_room_meeting_migration.py,
+app/src/main/room-meeting.test.ts and group-chats.test.ts.
+The existing Guardian driver reads private work/report destinations and report_task_id,
+seeds meetings from actual private chief turns, and stops self-handoff work through
+the same production path. Its fake CLI listeners return their own structured choice.
+guardian_manifest.json maps the read-only work_status tool to S08.completion.
+
+Follow-up 1 authorizes the selected offline look matrix below. Network and paid APIs
+remain forbidden. The status board is a compact pending-question-style row pinned
+under the header, outside the scrolling thread. It opens the shared popover with
+member faces, current stages, shared state pills and plain decision lines. Empty
+meetings hide the row. Report cards reuse conversation-card and the shared file chip,
+never display digests, and retain the private work destination. A chip uses an opaque
+task/evidence handle through the existing native open_team_file boundary; TaskStore
+resolves only recorded artifacts inside their stored root whose bytes still match.
+Executable files retain the existing show-in-folder policy. Tests also cover
+core/tests/background/test_tasks.py and core/tests/computer/test_team_file.py.
+The existing runner and mock IPC boundary include deterministic assertions:
+
+
+```powershell
+npm run look -- room-concurrent-replies room-status-board room-report-card group-live-line room-handoff-running room-handoff-result room-handoff-failed handoff-centred-line --theme both --width 1120,720,1920x1080
+```
+
+Inspect every contact sheet and relevant full-size image. Compare with private
+owner-question-pending, card-task-result and team-file-reply scenes at the same
+themes and widths, then judge the
+same run with authorized external references. Formal subscription judge remains
+SKIP without references and network authorization. Manual image review is required
+by the follow-up; offline fixtures do not establish native file opening or live calls.

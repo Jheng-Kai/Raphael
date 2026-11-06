@@ -79,7 +79,9 @@ async def test_private_takeover_blocks_every_tool_and_resumes_once_after_explici
         with vm_scope(("turn", 1, 11), turn_id=42, private=True, task=asyncio.current_task()):
             work.task = asyncio.current_task()
             assert (await call("vm_exec", {"command": "true"})).kind == "desktop_check_required"
-            assert (await call("get_desktop_state")).ok
+            assert (await call("list_windows")).ok
+            assert (await call("vm_exec", {"command": "true"})).kind == "desktop_check_required"
+            assert (await call("get_window_state", {"pid": 7, "window_id": 9})).ok
             assert (await call("click")).ok
     finally:
         task.cancel()

@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { readFileSync } from "node:fs";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { stopOffscreenSlimes } from "./slime-offscreen";
+import { handOver, slimeSVG } from "./slime";
 
 type Entry = { target: Element; isIntersecting: boolean };
 let observers: FakeObserver[] = [];
@@ -29,7 +30,7 @@ test("a slime far outside the visible part of its scroller stops moving, and mov
   document.body.append(near, far);
   await flush();
   const [io] = observers;
-  expect(io!.options.rootMargin).toBe("300px");
+  expect(io!.options.rootMargin).toBe("0px");
   expect([...io!.observed]).toEqual([near, far]);
   io!.report([{ target: near, isIntersecting: true }, { target: far, isIntersecting: false }]);
   expect(near.hasAttribute("data-offscreen")).toBe(false);
@@ -69,4 +70,21 @@ test("slimes drawn later inside new lines are watched, and removed ones are let 
 test("the stylesheet stops every animation inside an off-screen slime, whatever rule started it", () => {
   const css = readFileSync("src/main/slime.css", "utf8");
   expect(css).toContain(".slime-surface[data-offscreen], .slime-surface[data-offscreen] * { animation: none !important; }");
+});
+
+test("an offscreen state defers its cells and visibility restores them without transition reads", async () => {
+  const line = document.createElement('div'); line.innerHTML = slimeSVG({color:'sky'});
+  document.body.append(line); await flush();
+  const surface = line.querySelector('.slime-surface')!, svg = line.querySelector<SVGElement>('svg.slime')!;
+  observers[0]!.report([{target:surface,isIntersecting:false}]);
+  handOver(svg,'working');
+  expect(surface.hasAttribute('data-slime-pending')).toBe(true);
+  expect(surface.querySelector('.slime-loop')).toBeNull();
+  const styles = vi.spyOn(globalThis,'getComputedStyle');
+  try {
+    observers[0]!.report([{target:surface,isIntersecting:true}]);
+    await vi.waitFor(() => expect(surface.querySelector('.slime-loop')).not.toBeNull());
+    expect(surface.hasAttribute('data-slime-pending')).toBe(false);
+    expect(styles).not.toHaveBeenCalled();
+  } finally { styles.mockRestore(); }
 });

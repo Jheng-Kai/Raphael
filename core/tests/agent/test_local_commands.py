@@ -22,6 +22,27 @@ def local_hub(conn):
     return LocalTools(EmptyHub(), conn, host=host), host
 
 
+async def test_imported_skill_script_uses_ordinary_local_command_approval(make_rig, client, conn, tmp_path):
+    from raphael_core.members.capabilities import MemberCapabilities
+    from raphael_core.members.store import MemberStore
+    cap = MemberCapabilities(conn, tmp_path / "local/skills", MemberStore(conn))
+    cap.skill_home = tmp_path / "synthetic-home"
+    source = cap.skill_home / ".codex/skills/check"
+    (source / "scripts").mkdir(parents=True)
+    (source / "SKILL.md").write_text("---\nname: check\ndescription: Check data\n---\nUse scripts/check.py", encoding="utf-8")
+    (source / "scripts/check.py").write_text("print('synthetic')", encoding="utf-8")
+    skill = cap.import_local(0, "local:" + str(source.resolve()))
+    command = 'python "' + str(cap._path(0, skill["id"]).parent / "scripts/check.py") + '"'
+    hub, host = local_hub(conn)
+    rig = make_rig(plugins=hub, gate=ToolGate(hub, conn=conn), permissions=PermissionCards(conn))
+    client.chats = [chat("Checking data.", ("local__local_exec", {"command": command})), chat("Checked.")]
+    asked = await typed(rig, "Run the imported check skill")
+    assert asked["status"] == "confirm"
+    host.execute.assert_not_awaited()
+    await rig.confirm(asked["confirm"]["id"])
+    host.execute.assert_awaited_once()
+
+
 @pytest.mark.parametrize("mode,command,external,waiting", [
     ("ask", "Get-Process", False, True),
     ("always", "Get-Process", False, False),

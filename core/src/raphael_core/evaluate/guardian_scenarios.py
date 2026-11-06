@@ -73,7 +73,7 @@ def cells(registry=(), catalog=(), *, servers=()):
     result.append(ScenarioCell('S07.short-wrapup','A short report ends with no summary nobody asked for',
         '請簡短回報。',('no_summary','reply_relation'),'P04','short-wrapup'))
     result.append(ScenarioCell('S08.completion','Evidence completion (P04 scope)',
-        '現在完成工作並回報證據。',('evidence','chief_last','status_only'),'P04','immediate-room-work'))
+        '現在完成工作並回報證據。',('evidence','report_card','status_only'),'P04','immediate-room-work'))
     result.append(ScenarioCell('S08.meeting-actions', 'Meeting actions start now', SCENARIOS[7].prompt,
         SCENARIOS[7].assertions, 'P03a/P04', 'meeting-actions'))
     # S14's two halves: Gmail (P08a) and Instagram publishing (P08d), which keeps the parent open until it has a driver.
@@ -152,6 +152,12 @@ def cells(registry=(), catalog=(), *, servers=()):
                                       ("production_state",), "P21a" if family in ("routines", "skills", "memory") else "P21b-c",
                                       "routine-" + operation if implemented else "diagnostic-" + operation if family == "diagnostics"
                                       else "calendar-" + operation if family == "calendar" else ""))
+    # Keep new owner contracts visible in acceptance; an unbuilt live driver is
+    # an explicit failure, never offline-test evidence masquerading as acceptance.
+    from ..management import ACTIONS, SETTINGS_TOOL, GROUPED_TOOLS
+    for action in (*ACTIONS, SETTINGS_TOOL, *GROUPED_TOOLS.values()):
+        result.append(ScenarioCell("S21.management." + action.name, action.description,
+                                  SCENARIOS[20].prompt, ("production_state", "primary_only"), "R-AG-MGMT-01/02"))
     # The current reader has extension sets and inline MIME/dispatch branches,
     # rather than a separate format registry. Inventory those production source
     # declarations; never maintain a second hand-copied list in the evaluator.

@@ -2,9 +2,12 @@ import { onLocaleChange, t } from "./i18n";
 import { describeError } from "./format";
 import { esc, ico, iconButton } from "./ui";
 
-export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement; thread: HTMLElement; scroll: HTMLElement; load(current: () => boolean): Promise<void>; changed?(open: boolean): void }) {
+export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement; thread: HTMLElement; scroll: HTMLElement; load(current: () => boolean): Promise<void>; changed?(open: boolean): void;
+  records?(): { key: string; texts: string[] }[] | undefined; reveal?(key: string): void; revealWork?(id: number): void;
+}) {
   let opened = false, query = "", index = -1, epoch = 0, complete = false, positioned = false;
   let marks: HTMLElement[] = [], timer: ReturnType<typeof setTimeout> | undefined;
+  let results: { key: string; occurrence: number }[] | undefined, resultIndex = -1, mounting = false;
   let painted: {query: string; text: string | null; marks: HTMLElement[]} | undefined;
   o.bar.className = "ra-find";
   o.bar.hidden = true;
@@ -29,11 +32,24 @@ export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement
     o.thread.normalize(); marks = [];
   }
   function position(scroll = false): void {
+    if (results) {
+      const target = results[resultIndex];
+      const matching = target ? marks.filter(mark => mark.closest<HTMLElement>("[data-key]")?.dataset.key === target.key) : [];
+      index = matching.length ? marks.indexOf(matching[Math.min(target!.occurrence, matching.length - 1)]!) : -1;
+    }
     marks.forEach((mark, at) => { mark.classList.toggle("is-current", at === index); if (at === index) mark.setAttribute("aria-current", "true"); else mark.removeAttribute("aria-current"); });
-    count.textContent = !query ? "" : marks.length ? `${index + 1}/${marks.length}` : t("chat.findEmpty");
-    for (const button of o.bar.querySelectorAll<HTMLButtonElement>('[data-find="next"], [data-find="previous"]')) button.disabled = !complete || !marks.length;
+    const total = results?.length ?? marks.length, current = results ? resultIndex : index;
+    count.textContent = !query ? "" : total ? `${current + 1}/${total}` : t("chat.findEmpty");
+    for (const button of o.bar.querySelectorAll<HTMLButtonElement>('[data-find="next"], [data-find="previous"]')) button.disabled = !complete || !total;
     if (scroll && marks[index]) {
       const mark = marks[index], message = mark.closest<HTMLElement>('.chat-message, .timeline-event, .event-group');
+      const work = mark.closest<HTMLElement>('.work-body');
+      if (work?.hidden) {
+        const section = work.closest<HTMLElement>('[data-thinking-turn]')!;
+        o.revealWork?.(Number(section.dataset.thinkingTurn));
+        work.hidden = false; section.classList.add('is-open');
+        section.closest('.tn')?.querySelectorAll('[data-act="thinking"]').forEach(button => button.setAttribute('aria-expanded', 'true'));
+      }
       for (let group = mark.closest('details'); group; group = group.parentElement?.closest('details') ?? null) {
         if (!group.open && !group.querySelector(':scope > summary')?.contains(mark)) group.open = true;
       }
@@ -43,6 +59,7 @@ export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement
     }
   }
   function refresh(newest = false): void {
+    if (mounting) return;
     if (opened && complete && painted?.query === query && painted.text === o.thread.textContent && painted.marks.every(mark => o.thread.contains(mark))) return;
     clear();
     if (!opened || !query || !complete) { if (!query) position(); return; }
@@ -53,7 +70,7 @@ export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement
       const node = walker.currentNode as Text, parent = node.parentElement;
       const hidden = parent?.closest('[hidden]');
       const event = parent?.closest('.event-line');
-      if (parent?.closest('.message-text, .message-code code, .message-table td, .message-table th, .event-line') && (!parent.closest('button, .work-section') || event) && (!hidden || !o.thread.contains(hidden))) nodes.push(node);
+      if (parent?.closest('.message-text, .message-code code, .message-table td, .message-table th, .event-line') && (!parent.closest('button, .work-section') || event) && (!hidden || !o.thread.contains(hidden) || event && hidden.classList.contains('work-body'))) nodes.push(node);
     }
     for (const node of nodes) {
       const text = node.data, lower = text.toLocaleLowerCase(), fragment = document.createDocumentFragment();
@@ -72,13 +89,27 @@ export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement
   }
   async function search(): Promise<void> {
     const mine = ++epoch;
-    query = input.value.trim(); complete = false;
+    query = input.value.trim(); complete = false; results = undefined;
     clear();
     if (!query) { complete = true; positioned = false; position(); return; }
     count.textContent = t("settings.loading");
     try {
       await o.load(() => opened && mine === epoch);
       if (!opened || mine !== epoch) return;
+      const records = o.records?.();
+      if (records) {
+        const needle = query.toLocaleLowerCase();
+        results = records.flatMap(record => {
+          let occurrence = 0;
+          return record.texts.flatMap(text => {
+            const matches = [], words = text.toLocaleLowerCase();
+            for (let at = words.indexOf(needle); at >= 0; at = words.indexOf(needle, at + needle.length)) matches.push({ key: record.key, occurrence: occurrence++ });
+            return matches;
+          });
+        });
+        resultIndex = results.length - 1;
+        revealResult();
+      }
       complete = true; refresh(!positioned); if (marks.length) positioned = true;
     } catch (error) {
       if (!opened || mine !== epoch) return;
@@ -92,13 +123,25 @@ export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement
       const box = el.getBoundingClientRect(); return box.bottom > viewport.top && box.top < viewport.bottom;
     });
     const top = anchor?.getBoundingClientRect().top;
-    epoch++; clearTimeout(timer); opened = false; positioned = false; query = ""; input.value = ""; clear();
+    epoch++; clearTimeout(timer); opened = false; positioned = false; query = ""; input.value = ""; results = undefined; clear();
     o.changed?.(false);
     o.bar.hidden = true; o.button.setAttribute('aria-expanded', 'false');
     if (anchor?.isConnected && top !== undefined) o.scroll.scrollTop += anchor.getBoundingClientRect().top - top;
     if (focus) o.button.focus({preventScroll:true});
   }
-  function move(delta: number): void { if (complete && marks.length) { index = (index + delta + marks.length) % marks.length; position(true); } }
+  function revealResult(): void {
+    const target = results?.[resultIndex];
+    if (!target) return;
+    mounting = true;
+    try { o.reveal?.(target.key); } finally { mounting = false; }
+  }
+  function move(delta: number): void {
+    if (!complete) return;
+    if (results?.length) {
+      resultIndex = (resultIndex + delta + results.length) % results.length;
+      revealResult(); refresh(); position(true);
+    } else if (marks.length) { index = (index + delta + marks.length) % marks.length; position(true); }
+  }
   o.button.addEventListener('click', () => opened ? close() : open());
   o.bar.addEventListener('click', event => {
     const action = (event.target as Element).closest<HTMLElement>('[data-find]')?.dataset.find;

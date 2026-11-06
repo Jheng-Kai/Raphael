@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, test, vi } from "vitest";
 import * as api from "./api";
-import { setLocale } from "./i18n";
+import { setLocale, t } from "./i18n";
 import { openEditMemberDialog, type MemberProfileHost } from "./member-profile";
 import { mountMemberResources } from "./member-profile-resources";
 import { memberPreset, randomMemberName } from "./member-profile-presets";
@@ -42,6 +42,41 @@ beforeEach(() => {
   vi.mocked(api.membersVoices).mockResolvedValue({ voices: [{ id: "fish:1", name: "Voice 1" }], configured: true });
   vi.mocked(api.core).mockResolvedValue({ memories: [] });
   vi.mocked(api.routinesList).mockResolvedValue({ routines: [] });
+});
+
+test("Raphael saves command templates and toggles shared skills through the ordinary resource editor", async () => {
+  const root = document.createElement("div");
+  document.body.append(root);
+  vi.mocked(api.membersCommandsSave).mockResolvedValue({ command: { id: 1, name: "review", description: "", template: "Review {input}" } });
+  const commands = mountMemberResources(root, { memberId: 0, tab: "commands", standalone: true });
+  await flush();
+  fill(root, "#mp-command-name", "review");
+  fill(root, "#mp-command-template", "Review {input}");
+  click(root, '[data-res="command-save"]'); await flush();
+  expect(api.membersCommandsSave).toHaveBeenCalledWith(0, { name: "review", description: "", template: "Review {input}" });
+  commands.destroy();
+  vi.mocked(api.membersSkillsList).mockResolvedValue({ skills: [{ id: 9, name: "writer", description: "Write", source: "local:C:/Synthetic/.claude/skills/writer", enabled: true, shared: true }] });
+  const skills = mountMemberResources(root, { memberId: 0, tab: "skills", standalone: true });
+  await flush();
+  expect(root.querySelector('[data-res="skill-menu"]')).toBeNull();
+  expect(root.textContent).toContain(t("skills.shared"));
+  expect(root.textContent).toContain(`${t("skills.shared")} · ~/.claude/skills/writer`);
+  expect(root.textContent).not.toContain("local:");
+  click(root, '[data-res="skill-toggle"]'); await flush();
+  expect(api.membersSkillsUpdate).toHaveBeenCalledWith(0, 9, false);
+  skills.destroy();
+});
+
+test("inherited plugin components show their set name and version with the ordinary grant switch", async () => {
+  const root = document.createElement("div"); document.body.append(root);
+  vi.mocked(api.membersSkillsList).mockResolvedValue({ skills: [{ id: 12, name: "review", description: "Review", source: "plugin:desk", plugin: "desk", plugin_version: "2.0.0", set_id: 1, set_kind: "command", enabled: true, shared: true }] });
+  const resources = mountMemberResources(root, { memberId: 0, tab: "skills", standalone: true }); await flush();
+  expect(root.textContent).toContain(`${t("skills.shared")} · desk · 2.0.0`);
+  expect(root.textContent).not.toContain("plugin:");
+  expect(root.querySelector('[data-res="skill-menu"]')).toBeNull();
+  click(root, '[data-res="skill-toggle"]'); await flush();
+  expect(api.membersSkillsUpdate).toHaveBeenCalledWith(0, 12, false);
+  resources.destroy();
 });
 
 test("tabs retain fields and keyboard navigation selects a visible panel", () => {
@@ -261,7 +296,7 @@ test("editing a saved routine from the profile preserves schedule end conditions
   const form = document.querySelector<HTMLElement>(".au-routine-dialog")!;
   expect(form.querySelector<HTMLInputElement>("#au-count")!.value).toBe("12");
   fill(form, "#au-title", "Updated review"); click(form, '[data-dlg="save"]'); await flush();
-  expect(api.routinesUpdate).toHaveBeenCalledWith(4, { title: "Updated review", prompt: "Review updates", schedule: routine.schedule });
+  expect(api.routinesUpdate).toHaveBeenCalledWith(4, { title: "Updated review", prompt: "Review updates", schedule: {...routine.schedule,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone} });
   expect(form.isConnected).toBe(false); dialog.close();
 });
 
@@ -276,6 +311,9 @@ test.each([["zh-TW", "2026/10/29"], ["ja", "2026/10/29"], ["en", "Oct 29, 2026"]
   const editor = mountMemberResources(root, { memberId: 7, tab: "skills", standalone: true, changed });
   await flush();
   expect(root.textContent).toContain(date);
+  expect([...root.querySelectorAll('.mp-resource p')].map(line => line.textContent)).not.toContain("learned");
+  expect(root.querySelectorAll('[data-skill-provenance]')).toHaveLength(1);
+  expect(root.querySelector('[data-skill-provenance]')!.textContent).toBe(t("skills.learnedAt", { p0: date }));
   click(root, '[data-res="skill-menu"]');
   document.querySelector<HTMLButtonElement>('#app-popover [data-pick="skill-edit"]')!.click();
   await flush();

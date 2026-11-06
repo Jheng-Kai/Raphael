@@ -88,6 +88,9 @@ class ToolGate:
         safety: SafetyGuard | None = None,
     ) -> None:
         self._plugins = plugins
+        bind_computer = getattr(plugins, "bind_computer_gate", None)
+        if bind_computer:
+            bind_computer(self)
         self._safety = safety
         from ..brain.settings import SettingsStore
         self._settings = None if conn is None else SettingsStore(conn)
@@ -97,6 +100,7 @@ class ToolGate:
             plugin_action_tier=getattr(plugins, "tier_for_call", None),
             ask_first=lambda name, tier: self.ask_first and tier > Tier.T0 and name != "ask_member",
             full_permission=lambda: self.full_permission,
+            firm_confirmation=self.firm_confirmation,
         )
         for name in (*WEB_TOOLS, *MEMORY_READ_TOOLS, *ATTACHMENT_TOOLS):
             self._registry.register(name, Tier.T0)
@@ -117,6 +121,11 @@ class ToolGate:
     def plugins(self) -> PluginHub | None:
         return self._plugins
 
+    def firm_confirmation(self, name, arguments) -> bool:
+        from ..management import destructive
+        retention = self._settings.get("history_retention_days") if self._settings else None
+        return name == "routine_delete" or destructive(name, arguments, retention)
+
     @property
     def ask_first(self) -> bool:
         return self._settings is not None and self._settings.get("action_mode") in ("ask", "plan")
@@ -128,8 +137,8 @@ class ToolGate:
 
     @property
     def full_permission(self) -> bool:
-        """The owner's 全部允許: nothing waits for a yes, and the work comes back done. What the owner forbade by a rule
-        stays forbidden, and only the owner can sign in or type a secret, so those still reach them."""
+        """Allow ordinary steps without extra questions. Firm destructive management
+        and owner-only cards still require the owner; explicit denials remain forbidden."""
         return self._settings is not None and self._settings.get("action_mode") == "bypass"
 
     # --- the registry ---------------------------------------------------------------------------

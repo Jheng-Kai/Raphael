@@ -30,7 +30,8 @@
 .card-detail[hidden] { display: none; }
 .card-detail pre { white-space: pre-wrap; overflow: visible; margin: 0; padding: 12px; }
 .card-detail .card-field { display: flex; gap: 12px; padding: 10px 12px; }
-.card-detail .card-field > span:first-child { color: var(--text-3); }
+.card-detail .card-field > span:first-child { color: var(--text-3); flex: 0 0 auto; align-self: flex-start; white-space: nowrap; }
+.card-detail .card-field > span:last-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .card-failure { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .card-failure p { margin: 0; color: var(--text-2); }
 .conversation-card input, .conversation-card textarea { min-width: 0; max-width: 100%; box-sizing: border-box; }
@@ -81,7 +82,7 @@
 @keyframes card-spin { to { rotate: 360deg; } }
 @media (prefers-reduced-motion: reduce) { .card-status.is-waiting i { animation: none; } }
 
-.page-agent .conversation-card .btn.pri, .page-agent .conversation-card .btn.pri:hover:not(:disabled), .page-agent .conversation-card .btn.pri:active:not(:disabled) { background: var(--card-primary); color: var(--card-primary-ink); border-color: var(--card-primary-edge); }
+:is(.page-agent, .cs-dialog) .conversation-card .btn.pri, :is(.page-agent, .cs-dialog) .conversation-card .btn.pri:hover:not(:disabled), :is(.page-agent, .cs-dialog) .conversation-card .btn.pri:active:not(:disabled) { background: var(--card-primary); color: var(--card-primary-ink); border-color: var(--card-primary-edge); }
 .page-agent .conversation-card .btn.pri:active:not(:disabled) { background: color-mix(in srgb, var(--card-primary) 85%, var(--card-primary-ink)); }
 .conversation-card .question-choice { border: 0 solid var(--edge); border-bottom-width: 1px; }
 .conversation-card .mail-in { font-weight: 400; }

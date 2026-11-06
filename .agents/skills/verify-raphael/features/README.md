@@ -1,5 +1,89 @@
 # Raphael feature map
 
+## Member panel tabs (2026-11-05)
+
+The owner request of 2026-11-05 introduces R-PANEL-01 through R-PANEL-04. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for Details / Library / Computer navigation, shared file/work controls, truthful local Docker recovery, the selected scene matrix and native/judge limits. [Conversation](conversation.md#member-panel-destinations-2026-11-05) and [Daily work](daily-work.md#work-and-files-in-the-member-panel-2026-11-05) map the affected consumers.
+
+## App updates, memory import and attachment limits (2026-11-05)
+
+See [Settings and appearance](settings-appearance.md#signed-updates-and-owner-memory-import-2026-11-05)
+and [Conversation](conversation.md#streaming-composer-files-2026-11-05) for the selected
+matrix, signed-version requirement and native/dependency acceptance boundaries.
+
+## Settings by purpose (2026-11-05)
+
+See [Settings and appearance](settings-appearance.md#settings-by-purpose-2026-11-05)
+for moved shared settings, member-owned voice/memory, grouped draft preferences,
+legacy agent links, computer location search and the selected offline UI matrix.
+
+## Commands, routine limits and owner output (2026-11-05)
+
+See [Daily work](daily-work.md) for R-NAV-01, R-ROUTINE-01/02 and R-OUTPUT-01,
+the selected deferred scenes, existing native journeys and remaining native/live
+acceptance. Follow-up 1 authorizes the selected look matrix and image review;
+native/live and network-backed judge remain deferred.
+
+## Plugin sets and GitHub marketplaces (2026-11-04)
+
+See [Members](members.md#plugin-sets-and-github-marketplaces-2026-11-04) for
+R-SKILL-06/07: one installed plugin entry, bounded whole-set import/update/removal,
+pinned GitHub marketplace sources, inherited member grants, commands, and explicit
+MCP setup cards. Migration 62 follows rooms 60 and shared grants 61. Offline look
+adds skills-plugin-entry, skills-marketplace, skills-plugin-set,
+skills-plugin-update and skills-plugin-details to the existing 15-scene skill scope.
+Synthetic HTTP/CLI tests do not establish GitHub, installed-CLI or live acceptance.
+
+## Primary-contact owner management (2026-11-05)
+
+See [Owner management](owner-management.md) for R-AG-MGMT-01 through 03,
+primary-only interactive offers, server authorization, firm destructive cards,
+UI RPC/settings coverage and the selected deferred card scenes. This brief allows
+fake offline core checks only and forbids look, native, network and paid APIs.
+
+## Long busy conversations (2026-11-05)
+
+See [Conversation](conversation.md#long-busy-conversations-and-bounded-mounting-2026-11-05) for R-PERF-14 through R-PERF-21, shared private/room window scenes, bounded event reads and the isolated native typing journey. Native latency, selected look and judge evidence remain separate.
+
+
+## Shared installed skills (2026-11-04)
+
+See [Members](members.md#shared-installed-skills-2026-11-04) for R-SKILL-01 through
+R-SKILL-05, shared/member scope, whole local package import, source refresh,
+one shared package row with member grants in its dialog, readable source labels,
+Raphael command parity and native CLI skill delivery. Review follow-up 3 authorizes
+the selected offline look matrix, including skills-installed-sources,
+skills-import-shared, skills-member-grants and skills-source-changed. The Members
+entry maps actions, IPC outcomes and visual comparisons. Native and live acceptance
+remain separate; judge requires external references and authorized subscription use.
+
+## Meetings and private work (2026-11-04)
+
+See [Team and rooms](team-and-rooms.md#meetings-and-private-work-2026-11-04)
+for R-ROOM-01 through R-ROOM-07, concurrent snapshots, private work/report destinations,
+status/decisions/cursors, restart close-out and the selected deferred look scenes.
+The unit brief permits offline verification only and explicitly forbids look/network.
+
+
+## Responsive member computer (2026-11-04)
+
+See [Member computer](member-computer.md#responsive-computer-tools-2026-11-04)
+for R-COMP-PERF-01 through R-COMP-PERF-06: 45-second preflight confirmation,
+bounded targeted reads, browser_open, resource/image limits, cancellable timed
+reads and the full offline offer. The brief requires fake-only checks and forbids
+Docker, network, look and native. Exact Linux 0.37.0 schema capture and real
+container timing remain unverified; compatibility definitions disclose provenance.
+
+## Pending questions and readable Composio results (2026-11-04)
+
+See [Conversation](conversation.md#pending-conversation-questions-and-readable-results-2026-11-04)
+for R-OWNER-03, R-CARD-09/10, page-independent pending questions, the existing
+bring RPC in private/room scope, one-line permission labels and readable result
+projection. The selected seven new scenes and representative shared consumers
+are listed there. Follow-up 2 authorizes the selected look matrix and visual review; native and
+live-provider acceptance remain deferred. Judge requires external references and
+authorized network access.
+
+
 ## Startup room recovery (2026-11-04)
 
 See [Startup rooms](startup-rooms.md) for R-PERF-13, failed first-read recovery,
@@ -641,3 +725,20 @@ See [Conversation](conversation.md#durable-owner-inbox-2026-11-03) for R-QUEUE-0
 through R-QUEUE-06 and refinements to R-BATCH-01/R-UI-08. See
 [Team and rooms](team-and-rooms.md#send-while-rooms-work-2026-11-03) for the shared
 room composer. The send-prompt and send-prompt-slow scenes keep their performance limits.
+
+## Speaker capability parity (2026-11-04)
+
+See [Speaker parity](speaker-parity.md) for R-AG-PARITY-01 through R-AG-PARITY-03,
+actual API/CLI/worker offer guards, private self-work, owner instructions, draft preference
+and role/coordination separation. This unit allows offline tests only: look, judge, native,
+live subscriptions and network are not authorized. The selected deferred UI scenes are
+listed in that entry.
+
+R-SKILL-08 also covers localized skill origins in member details, Connections,
+discovery and document dialogs; see [Members](members.md#localized-skill-origins-2026-11-05).
+The same selected twenty-scene skill matrix checks raw-source leakage and one learned
+origin/date line.
+
+## Calm conversations (owner, 2026-11-05)
+
+See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) for R-UI-101 and R-CLI-07, the selected eleven-scene matrix and offline/native boundaries.

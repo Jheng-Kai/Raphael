@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { scene, click, wait, waitGone, type, check, key } from "./steps.mjs";
+import { scene, click, wait, waitGone, type, check, key, scroll } from "./steps.mjs";
 
 // Settings > Connections owns the app inventory and its connected count.
 // Every scene uses the real account footer and Settings entry.
@@ -35,10 +35,28 @@ const appSwitch = state => wait(`[data-conn="enable"][data-id="github"][aria-che
 const skillDoc = (name, description, body) => `---\nname: ${name}\ndescription: ${description}\n---\n${body}`;
 const weekly = skillDoc("weekly-summary", "每週五整理本週的研究重點，用三段話寫成摘要", "# 每週摘要\n\n1. 先寫結論，一句話。\n2. 列出三個重點，每個重點附上來源。\n3. 最後寫下下週要做的事。\n");
 const skills = [
-  { id: 7, member_id: 1, name: "weekly-summary", description: "每週五整理本週的研究重點，用三段話寫成摘要", enabled: true, source: "owner/research-skills", text: weekly },
+  { id: 7, member_id: 1, name: "weekly-summary", description: "每週五整理本週的研究重點，用三段話寫成摘要", enabled: true, source: "github:owner/research-skills", text: weekly },
   { id: 8, member_id: 1, name: "source-check", description: "引用資料前先核對來源與日期", enabled: true, source: "owner/research-skills" },
   { id: 9, member_id: 2, name: "meeting-notes", description: "會議結束後整理決議與負責人", enabled: false, source: "owner/team-skills" },
 ];
+const localSources = [
+  { source: "local:C:/Synthetic/.claude/skills/weekly-summary", name: "每週摘要", description: "整理本週重點與下一步", text: skillDoc("每週摘要", "整理本週重點與下一步", "先核對來源，再寫下三個重點。") },
+  { source: "local:C:/Synthetic/.codex/skills/source-check", name: "來源核對", description: "核對引用資料與發布日期" },
+  { source: "local:C:/Synthetic/.claude/plugins/cache/market/docs/2.0.0/skills/meeting-notes", name: "會議筆記", description: "記錄決議與負責人", plugin: "文件工具" },
+];
+const sharedSkill = { id: 20, member_id: -1, name: "每週摘要", description: "整理本週重點與下一步", enabled: true, source: localSources[0].source, text: localSources[0].text };
+const privateSkill = { id: 21, member_id: 1, name: "來源核對", description: "核對引用資料與發布日期", enabled: true, source: localSources[1].source };
+const skillFixture = { managedConnectors: [notion(), google], servers: [], skills: [], skillSources: localSources };
+const skillsVisible = [wait('[data-conn="skill-discover"]'), scroll('[data-skills-section]')];
+const pluginSource = { kind: "plugin", name: "research-tools", plugin: "research-tools", version: "1.2.0", skill_count: 2, command_count: 1,
+  description: "研究、來源核對與報告整理", source: "local:C:/Synthetic/.claude/plugins/cache/sample/research-tools/1.2.0",
+  skills: [localSources[0], localSources[1]], commands: [{name:"review",description:"檢視輸入內容",set_kind:"command"}],
+  mcp_servers: [{name:"Research files",transport:"stdio",command:"python",args:["C:/Synthetic/research/server.py"],url:"",env:["RESEARCH_TOKEN"],headers:[]},
+    {name:"Research cloud",transport:"http",command:"",args:[],url:"https://research.example/mcp",env:[],headers:[]}] };
+const pluginSet = { id: 1, name: pluginSource.name, version: "1.0.0", description: pluginSource.description, source: "github:sample/workflows/research-tools", marketplace: "sample/workflows", skill_count: 2, command_count: 1, source_changed: false, mcp_servers: pluginSource.mcp_servers };
+const pluginSkills = [...pluginSource.skills, ...pluginSource.commands].map((skill, index) => ({...skill,id:30+index,member_id:-1,enabled:true,set_id:1,set_kind:skill.set_kind ?? "skill",plugin:pluginSet.name,plugin_version:pluginSet.version,source:`plugin:${pluginSet.name}`}));
+const marketplace = {repo:"sample/workflows",name:"範例技能市集",plugins:[{name:pluginSet.name,version:"2.0.0",description:pluginSet.description,installable:true},{name:"npm-workflows",version:"1.0.0",description:"其他套件來源",installable:false,reason:"僅支援 GitHub 來源"}]};
+const pluginFixture = {...skillFixture,skillSources:[pluginSource],skillSets:[],skillMarketplaces:[],skillMarketplaceCatalog:marketplace};
 
 export default [
   scene("connect-apps-categories", "Settings opens the store and every category can be focused, revealed and selected", [
@@ -49,7 +67,7 @@ export default [
     click('[data-conn="store-group"][data-id="productivity"]'), check("plugins-store-category"), check("plugins-store-rows"),
   ]),
   scene("connected-apps-skills", "The connected view: apps that can be called now, those that cannot with the reason, and the members' private skills; one count", [
-    ...open, wait('[data-k="cs-open:composio:notion"]'), wait('[data-k="cs-skill:1:7"]'), wait('[data-stagger="installed-not"] .cs-item'), check("apps-count"),
+    ...open, wait('[data-k="cs-open:composio:notion"]'), wait('[data-k="cs-skill:1:7"]'), wait('[data-stagger="installed-not"] .cs-item'), check("apps-count"), scroll('[data-skills-section]'), check("skills-section"),
   ], {
     managedConnectors: [
       notion(), google,
@@ -59,6 +77,40 @@ export default [
     servers: base.servers.slice(0, 1),
     skills,
   }),
+  scene("skills-installed-sources", "Installed synthetic skills grouped by Claude Code, Codex and plugins in the shared Connections dialog", [
+    ...open, ...skillsVisible, click('[data-conn="skill-discover"]'), wait('[data-skill-origin="2"]'), check("skills-installed-sources"),
+  ], skillFixture),
+  scene("skills-import-shared", "Import a discovered package into the shared library through the real Settings action", [
+    ...open, ...skillsVisible, click('[data-conn="skill-discover"]'), wait('[data-skill-origin="0"]'),
+    click('[data-conn="skill-import-local"][data-source="0"]'), waitGone('[data-dialog="skill-import"]'),
+    wait('[data-k="cs-skill:-1:1"]'), scroll('[data-skills-section]'), check("skills-import-shared"),
+  ], skillFixture),
+  scene("skills-member-grants", "One library row opens the existing detail dialog with Raphael first and an independent switch for every member", [
+    ...open, ...skillsVisible, click('[data-k="cs-skill:-1:20"]'), wait('[data-skill-grant="0"]'),
+    click('[data-k="cs-skill-enable:1:20"]'), wait('[data-k="cs-skill-enable:1:20"][aria-checked="false"]'),
+    click('[data-k="cs-skill-enable:2:20"]'), wait('[data-k="cs-skill-enable:2:20"][aria-checked="false"]'),
+    click('[data-k="cs-skill-enable:1:20"]'), wait('[data-k="cs-skill-enable:1:20"][aria-checked="true"]'),
+    check("skills-member-grants"),
+  ], { ...skillFixture, skills: [sharedSkill, privateSkill] }),
+  scene("skills-source-changed", "A changed source offers reimport on the existing skill row beside its member switch", [
+    ...open, ...skillsVisible, wait('[data-conn="skill-reimport"]'), check("skills-source-changed"),
+  ], { ...skillFixture, skills: [{ ...sharedSkill, source: localSources[2].source, plugin: localSources[2].plugin, source_changed: true }, privateSkill] }),
+  scene("skills-plugin-entry", "An installed plugin is one importable set with an optional list for individual skill imports", [
+    ...open, ...skillsVisible, click('[data-conn="skill-discover"]'), wait('[data-plugin-source]'), check("skills-plugin-entry"),
+  ], pluginFixture),
+  scene("skills-marketplace", "A GitHub marketplace lists pinned plugin versions and explains unsupported sources", [
+    ...open, ...skillsVisible, click('[data-conn="skill-discover"]'), wait('#skill-marketplace'), type('#skill-marketplace','sample/workflows'), click('[data-conn="marketplace-add"]'), wait('[data-market-plugin="npm-workflows"]'), check("skills-marketplace"),
+  ], {...pluginFixture,skillSources:[]}),
+  scene("skills-plugin-set", "One import installs the entire plugin set and groups its shared skills and slash command", [
+    ...open, ...skillsVisible, click('[data-conn="skill-discover"]'), wait('[data-plugin-source]'), click('[data-conn="skill-import-local"]'), waitGone('[data-dialog="skill-import"]'), wait('[data-skill-set="1"]'), scroll('[data-skills-section]'), check("skills-plugin-set"),
+  ], pluginFixture),
+  scene("skills-plugin-update", "Checking a marketplace offers one whole-set update while preserving every member grant", [
+    ...open, ...skillsVisible, click('[data-conn="skill-discover"]'), wait('#skill-marketplace'), type('#skill-marketplace','sample/workflows'), click('[data-conn="marketplace-add"]'), wait('[data-market-plugin="research-tools"]'), click('.cs-dialog [data-conn="close"]'), waitGone('[data-dialog="skill-import"]'), scroll('[data-skills-section]'), wait('[data-conn="set-update"]'), check("skills-plugin-update"),
+  ], {...pluginFixture,skillSets:[pluginSet],skills:pluginSkills}),
+  scene("skills-plugin-details", "Plugin details offer one existing add-MCP card per server without adding or running any server", [
+    ...open, ...skillsVisible, click('[data-skill-set="1"] [data-conn="set-open"]'), wait('[data-set-mcp="1"]'), check("skills-plugin-details"),
+    scroll('[data-set-mcp="1"] [data-conn="set-mcp"]'), check("skills-plugin-details-bottom"), scroll('.cs-dialog .cs-dlg-head'),
+  ], {...pluginFixture,skillSets:[pluginSet],skills:pluginSkills}),
   scene("connected-apps-unreadable", "A core that cannot list the apps: the tab says 「—」 and give no number, and the apps stay one list", [
     ...open, wait('[data-k="cs-open:composio:notion"]'), check("apps-unreadable"),
   ], { inventoryUnreadable: true, managedConnectors: [notion(), google], servers: base.servers.slice(0, 1), skills }),

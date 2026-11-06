@@ -6,12 +6,16 @@ import { esc, ico, iconBtn } from "./ui";
 import { answerFormHTML } from "./message-forms";
 import { answerFormText, isAnswerFormKind, parseAnswerForm } from "../shared/answer-forms";
 import { publicEventText } from "./public-event";
+import { composioText } from "./composio-result";
 
 // A file of the team folder is one press from opening; any other path is words the owner can use.
 const TEAM_FILE = /^\/home\/cua\/team\/[^\s<>"'`]+$/;
+export function fileChipHTML(label: string, attrs: string): string {
+  return `<button type="button" class="btn team-file"${attrs} title="${esc(t("agent.openFile"))}">${ico("file")}<span>${label}</span></button>`;
+}
 function pathHTML(path: string, query: string): string {
   if (!TEAM_FILE.test(path)) return `<code>${highlightHTML(path, query)}</code>`;
-  return `<button type="button" class="btn team-file" data-act="team-file-open" data-path="${esc(path)}" title="${esc(t("agent.openFile"))}">${ico("file")}<span>${highlightHTML(path.slice(path.lastIndexOf("/") + 1), query)}</span></button>`;
+  return fileChipHTML(highlightHTML(path.slice(path.lastIndexOf("/") + 1), query), ` data-act="team-file-open" data-path="${esc(path)}"`);
 }
 
 export function messageUrl(raw: unknown): string | null {
@@ -226,7 +230,7 @@ function blockHTML(block: MessageBlock, query: string, urls: Set<string>, stream
 
 /** `mentions` are the addresses of the owner's words, drawn as chips (a reply's `@` is just text). */
 export const messageHTML = (text: string, query = "", markdown = false, mentions: readonly MentionTarget[] = []): string => markdown
-  ? parseMessageBlocks(text).map(block => blockHTML(block, query, new Set())).join("") : inline(text, query, false, new Set(), 0, mentions);
+  ? parseMessageBlocks(composioText(text)).map(block => blockHTML(block, query, new Set())).join("") : inline(text, query, false, new Set(), 0, mentions);
 
 /** A thread is drawn again on every change, and a reply that has finished reads the same each time. */
 const finished = new Map<string, string>();
@@ -241,7 +245,7 @@ function remembered(key: string, make: () => string): string {
 
 /** Rich cards are siblings of text bubbles, including in authored multi-message replies. */
 export function replyContentHTML(text: string, query = "", streaming = false, renderText?: (source: string) => string): string {
-  const draw = (): string => parseMessageBlocks(text, streaming).map(block => block.type === "text"
+  const draw = (): string => parseMessageBlocks(composioText(text), streaming).map(block => block.type === "text"
     ? `<div class="ans"><div class="message-text">${renderText ? renderText(block.source) : textHTML(block.source, query, new Set())}</div></div>` : blockHTML(block, query, new Set(), streaming)).join("");
   // A forecast card marks today, so a kept reply lasts the day.
   return streaming || renderText ? draw() : remembered(`reply\0${new Date().toDateString()}\0${getLocale()}\0${query}\0${text}`, draw);
@@ -256,10 +260,10 @@ export const rememberedUrls = (text: string): string[] => {
 };
 
 /** Copy rendered Markdown as text, preserving full addresses even when their labels are short. */
-export function messagePlainText(text: string, markdown = false): string {
+export function messagePlainText(text: string, markdown = false, action?: string): string {
   text = publicEventText(text);
   if (!markdown) return text;
-  return parseMessageBlocks(text).map(block => {
+  return parseMessageBlocks(composioText(text, action)).map(block => {
     if (block.type === "text") return plainTextBlock(block.source);
     if (block.type === "code" && block.complete) {
       const form = parseAnswerForm(block.language, block.source);

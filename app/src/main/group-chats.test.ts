@@ -2,7 +2,8 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import type { AppContext, HandoffView, Member } from "./types";
 import * as chatComposer from "./chat-composer";
-const api=vi.hoisted(()=>({membersList:vi.fn(),roomsCreate:vi.fn(),roomsList:vi.fn(),roomMessages:vi.fn(),roomSend:vi.fn(),roomsDelete:vi.fn(),roomsUpdate:vi.fn(),roomStop:vi.fn(),core:vi.fn(),pagesOpen:vi.fn()}));
+import * as richScroll from "./message-rich";
+const api=vi.hoisted(()=>({membersList:vi.fn(),roomsCreate:vi.fn(),roomsList:vi.fn(),roomMessages:vi.fn(),roomSend:vi.fn(),roomsDelete:vi.fn(),roomsUpdate:vi.fn(),roomStop:vi.fn(),core:vi.fn(),pagesOpen:vi.fn(),ownerQuestionBring:vi.fn(),openTeamFile:vi.fn().mockResolvedValue(undefined)}));
 vi.mock("./api",()=>api);
 import { configureRooms, openNewGroupChat, openGroupChat, openRoomsMenu, createRoomsSection, createRoomPane, clearRoomSelection } from "./group-chats";
 import { setLocale } from "./i18n";
@@ -22,6 +23,21 @@ let event:(e:any)=>void;
 let app:AppContext;
 const pane=async()=>{const view=createRoomPane(app,vi.fn());document.body.append(view.el);await view.open(1);return view;};
 const draft=(text:string)=>{const input=document.querySelector<HTMLTextAreaElement>("#room-message")!;input.value=text;input.dispatchEvent(new Event("input"));return input;};
+
+test("bringing a room question releases queued scroll corrections before revealing its moved turn", async () => {
+ const question={id:'pending-room',kind:'ask_owner',state:'asked',question:'Choose a date',turn_id:10};
+ api.roomMessages.mockResolvedValue({messages:[],pending_questions:[question]});
+ const view=await pane();
+ const pending = '.pending-questions:not(.room-meeting-row) .pending-question';
+ await vi.waitFor(()=>expect(view.el.querySelector(pending)).not.toBeNull());
+ const released=vi.spyOn(richScroll,'releaseRichScroll');
+ api.ownerQuestionBring.mockResolvedValue({turn_id:99});
+ api.roomMessages.mockResolvedValue({messages:[{id:999,member_id:1,text:'Moved question',created:2,status:'done',turn_id:99}],pending_questions:[{...question,turn_id:99}]});
+ view.el.querySelector<HTMLButtonElement>(pending)!.click();
+ await vi.waitFor(()=>expect(released).toHaveBeenCalledOnce());
+ expect(view.el.querySelector('[data-room-message="999"]')).not.toBeNull();
+ released.mockRestore(); view.close();
+});
 
 test("startup rooms recover from a failed first read without a CoreReady event", async () => {
  vi.useFakeTimers();
@@ -431,6 +447,36 @@ test("a hand-off line names its assignee and opens on the request, result and fi
  expect(line.textContent).not.toMatch(/42|abc|stage-xyz/);
 });
 
+test("concurrent speech stays visible beside the board and a report opens its real private turn",async()=>{
+ const task:HandoffView={task_id:42,source_turn_id:5,work_turn_id:6,member_id:1,member_name:'Alice',from_member_id:1,
+  stage_id:'review',mode:'work',state:'done',reason:null,created_at_ms:2,ready_at_ms:2,dispatch_policy:'immediate',result:'Public result',evidence:[{id:51,kind:'artifact',uri:'out/review.txt',digest:'receipt',verdict:'verified'}]};
+ api.roomMessages.mockResolvedValue({messages:[
+  {id:1,member_id:0,text:'',created:1,status:'running'},
+  {id:2,member_id:1,text:'',created:1,status:'running'},
+  {id:3,member_id:1,text:'Public result',created:2,status:'done',kind:'report',report:task}],
+  handoffs:[task],decisions:[{id:4,member_id:0,text:'One stage owner'}]});
+ const view=await pane();
+ expect(view.el.querySelectorAll('.au-room-thinking')).toHaveLength(2);
+ const row=view.el.querySelector<HTMLElement>('.room-meeting-row')!;
+ expect(row.hidden).toBe(false);
+ expect(view.el.querySelector('.ra-scroll')!.contains(row)).toBe(false);
+ expect(view.el.querySelector('.thread [data-room-board]')).toBeNull();
+ row.querySelector<HTMLButtonElement>('button')!.click();
+ expect(document.querySelector('#app-popover [data-room-board]')?.textContent).toContain('One stage owner');
+ expect(document.querySelector('#app-popover .card-status')).not.toBeNull();
+ row.querySelector<HTMLButtonElement>('button')!.click();
+ view.el.querySelector<HTMLButtonElement>('[data-room-act="artifact-open"]')!.click();
+ expect(api.openTeamFile).toHaveBeenCalledWith('task-artifact:42:51');
+ expect(view.el.querySelectorAll('[data-room-report="42"]')).toHaveLength(1);
+ expect(view.el.querySelector('[data-handoff="42"]')).toBeNull();
+ const opened=vi.fn();window.addEventListener('raphael:open-member',opened);
+ try {
+  view.el.querySelector<HTMLButtonElement>('[data-room-act="private-work"]')!.click();
+  expect(app.go).toHaveBeenCalledWith('agent');
+  expect(opened.mock.calls[0][0].detail).toEqual({memberId:1,turnId:6});
+ } finally { window.removeEventListener('raphael:open-member',opened);view.close(); }
+});
+
 test("a closing message is what the chief wrote, escaped, with no parts imposed on it",async()=>{
  setLocale('zh-TW');
  api.membersList.mockResolvedValue({members:[{id:0,name:'拉斐爾',avatar:''},{id:1,name:'小晴',avatar:''}],groups:[]});
@@ -452,6 +498,8 @@ test("a member's question waits in the room above its composer, and its row says
  const card=document.querySelector('.au-room-pane .ra-dock .ra-bgq .permission-card')!;
  expect(card.textContent).toContain('Get-Process');
  expect(api.core).toHaveBeenCalledWith('background.questions.list',{room_id:1});
+ card.querySelector<HTMLButtonElement>('[data-act="local-settings"]')!.click();
+ expect(app.go).toHaveBeenCalledWith('settings','safety');
  api.roomsList.mockResolvedValue({rooms:[{...room,waiting:true,preview:'舊的預覽'}]});
  const section=createRoomsSection(()=>true);document.body.append(section);await flush();
  expect(section.querySelector('[data-room="1"] .mb-dot.is-wait')).not.toBeNull();
@@ -495,4 +543,30 @@ test("late room delivery retains the next draft saved while switching away", asy
  draft('Next unfinished sample');view.close();
  accept({message_id:1,duplicate:false});await flush();await view.open(1);
  expect(view.el.querySelector<HTMLTextAreaElement>('#room-message')!.value).toBe('Next unfinished sample');view.close();
+});
+
+test("empty meetings hide the pinned row and an open board refreshes in place",async()=>{
+ const view=await pane();
+ const row=view.el.querySelector<HTMLElement>('.room-meeting-row')!;
+ expect(row.hidden).toBe(true);
+ const task:HandoffView={task_id:42,source_turn_id:5,work_turn_id:6,member_id:1,member_name:'Alice',from_member_id:1,
+  stage_id:'Review',mode:'work',state:'running',reason:null,created_at_ms:2,ready_at_ms:2,dispatch_policy:'immediate',result:'',evidence:[]};
+ api.roomMessages.mockResolvedValue({messages:[],handoffs:[task],decisions:[]});
+ await view.refresh();
+ expect(row.hidden).toBe(false);
+ const anchor=row.querySelector<HTMLButtonElement>('button')!;
+ anchor.click();
+ const panel=document.querySelector('#app-popover')!;
+ expect(anchor.getAttribute('aria-expanded')).toBe('true');
+ api.roomMessages.mockResolvedValue({messages:[],handoffs:[{...task,state:'done'}],decisions:[{id:5,member_id:0,text:'Ship it'}]});
+ await view.refresh();
+ expect(row.querySelector('button')).toBe(anchor);
+ expect(document.querySelector('#app-popover')).toBe(panel);
+ expect(panel.querySelector('.card-status.is-done')).not.toBeNull();
+ expect(panel.textContent).toContain('Ship it');
+ api.roomMessages.mockResolvedValue({messages:[],handoffs:[],decisions:[]});
+ await view.refresh();
+ expect(row.hidden).toBe(true);
+ expect(document.querySelector('#app-popover')).toBeNull();
+ view.close();
 });

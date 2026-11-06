@@ -105,7 +105,7 @@ class CliLoop:
     def __init__(self, *, brains, sessions, member_id, model, ledger, language, plain,
                  system, user, tools, progress, thinking, event, execute, expire=None, spoken=False,
                  conversation_id=None, quota=None, attachments=(), wait_timeout_s=None, resume_session=True,
-                 rate_limit_waits=None, structured=None, alive=lambda: None):
+                 rate_limit_waits=None, structured=None, alive=lambda: None, skills=()):
         self.brains, self.sessions, self.member_id, self.model = brains, sessions, member_id, model
         # Told whenever the CLI does anything (a word, a tool): whoever watches for a stalled turn hears it.
         self.alive = alive
@@ -113,6 +113,7 @@ class CliLoop:
         self.quota = quota
         self.resume_session = resume_session
         self.structured = structured
+        self.skills = skills
         # The waits before running a rate-limited request again: None waits as for a turn someone is reading
         # (RATE_LIMIT_WAITS_S), () never waits.
         self.rate_limit_waits = rate_limit_waits
@@ -166,6 +167,8 @@ class CliLoop:
         self._stream_records = []
         self._usage = {}
         self._guardrails = ToolGuardrails()
+        from ...worker.computer_verification import ComputerVerification
+        self._computer_check = ComputerVerification()
         self.failure_reason = None
         # A CLI reads its tool list once, when it starts: after a change (`catalog_changed`) it starts again in the same
         # thread, and is told why.
@@ -195,6 +198,8 @@ class CliLoop:
                scope=lambda self, *args: self.activity_turn)
     async def _tool(self, identifier, name, args):
         async with self._serial:
+            if getattr(self, 'speech_only', False) and name == 'approve':
+                return ToolOutcome(False, 'room_speech_only', content='Start this as private work with handoff.')
             # Every hand-off of a turn starts now; anything else waits for the delegated work.
             if self._handoff_pending and name != "handoff":
                 return ToolOutcome(False, 'waiting_for_handoff')
@@ -215,6 +220,7 @@ class CliLoop:
                 return ToolOutcome(True, content=json.dumps(answer))
             previous_tools = list(self.tools)
             result = await self._execute(identifier, name, args)
+            self._computer_check.after(name, args, result.ok, result.kind)
             refresh = getattr(self, "refresh_tools", None)
             if refresh is not None and previous_tools != refresh() and not self.catalog_changed:
                 self.reload_note = ("The connected tools changed. Read the current tool list and continue the original task "
@@ -342,8 +348,7 @@ class CliLoop:
             failure = self.failure_reason or Failure(reason, reason)
             message = failure.sentence(name, self.language)
             message += self._unfinished()
-            self.event(message)
-            self._queue.put_nowait(Outcome("done", final=message))
+            self._queue.put_nowait(Outcome("done", final=message, detail=failure.detail))
             return
         messages = {
             "missing": f"請先安裝 {name}，再到設定 › 模型與用量登入。",
@@ -370,7 +375,6 @@ class CliLoop:
                         "quota": f"{name} has used up its subscription quota for now. Try again later or pick another model.",
                         "rate_limited": f"{name} is rate-limited right now (too many requests). Try again in a little while."}
         message = messages[reason] + self._unfinished()
-        self.event(message)
         self._queue.put_nowait(Outcome("done", final=message))
 
     def _unfinished(self):
@@ -520,6 +524,7 @@ class CliLoop:
                         elif not told:
                             told = True
                             self.progress(self._rate_limit_wait(NAMES[name], wait) if failure == "rate_limit" else
+                                          self.failure_reason.waiting(NAMES[name], self.language, wait) if failure == "cli_stopped" and self.failure_reason else
                                           Failure(failure, self.failure_reason.reason if self.failure_reason else failure).sentence(NAMES[name], self.language))
                         await asyncio.sleep(wait)
                         self.alive()
@@ -566,15 +571,19 @@ class CliLoop:
         except (EOFError, ConnectionError, asyncio.IncompleteReadError) as error:
             if self._handed_off():
                 return None
-            self.failure_reason = Failure("network", type(error).__name__)
-            return "network"
+            kind = "network" if isinstance(error, ConnectionError) else "cli_stopped"
+            self.failure_reason = Failure(kind, type(error).__name__)
+            return kind
 
     async def _stream_attempt(self, name, command, model, server, session, workspace, steps, *, user):
         """Run the CLI once for this turn: None once its answer is queued, else why it failed."""
         self._buffer = self._thought = ""
+        if getattr(self,"speech_only",False) and name == "claude":
+            command = [*command,"--max-turns",str(getattr(self,"speech_max_turns",4))]
         self.driver = Driver(name, command, model=model, effort=brain_effort(self.model), environ=self.brains.environ, quota=self.quota, home=self.brains.home)
         stream_records = {}
         async with aclosing(self.driver.run(user=user, system=self.system, endpoint=server.url,
+                **({"skills": self.skills} if self.skills else {}),
                 **({"structured": self.structured} if self.structured is not None else {}),
                 token=server.token, session=session, permission=self._native_permission,
                 **({"computer_endpoint": server.computer_url} if server.computer_url else {}),
@@ -624,25 +633,32 @@ class CliLoop:
                     if self._handed_off():
                         return None
                     self.failure_reason = classify({"kind": event.text, "message": event.data.get("reason", event.text),
-                                                    "resets_at": event.data.get("resets_at")})
+                                                    "resets_at": event.data.get("resets_at"), "detail": event.data.get("detail")})
                     return self.failure_reason.kind
                 elif event.kind == "final":
                     if self._handed_off():
                         return None
                     final = event.text.strip()
                     if final:
+                        if check := self._computer_check.finishing():
+                            if check == "stop":
+                                self._queue.put_nowait(Outcome("stopped", kind="computer_verification_required"))
+                                return None
+                            self.reload_note = check
+                            self.catalog_changed = True
+                            return "tools_changed"
                         self.owner_input.closed = True
                         self._queue.put_nowait(Outcome("done", final=final))
                         return None
                     self._progress()
                     self.failure_reason = classify("CLI ended without an answer")
-                    return "unknown"
+                    return self.failure_reason.kind
         if self._handed_off():
             return None
         if self.catalog_changed:
             return "tools_changed"
-        self.failure_reason = Failure("network", "CLI stream ended before completion")
-        return "network"
+        self.failure_reason = Failure("cli_stopped", "CLI stream ended before completion")
+        return "cli_stopped"
 
     async def _native_permission(self, args):
         async with self._serial:

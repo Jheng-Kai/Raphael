@@ -64,7 +64,7 @@ async def test_worker_and_scheduler_use_only_the_selected_persona(make_rig, conn
             if person.id != speaker_id:
                 assert person.name in system and person.role in system
         if who:
-            assert "拉斐爾" in system and "Core assistant" in system
+            assert "拉斐爾" in system and '"coordination_duty": "primary_contact"' in system
             other = coach if who.id == teacher.id else teacher
             assert who.personality in system and who.instructions in system
             assert f"OWN-{who.name}" in shown and f"THREAD-{who.name}" in shown

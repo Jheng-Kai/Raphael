@@ -2,6 +2,24 @@
 import { expect, test, vi } from "vitest";
 import { mountConversationFind } from "./conversation-find";
 
+test("find navigates unmounted records without mounting the entire history", async () => {
+  document.body.innerHTML = '<button></button><aside></aside><main></main>';
+  const thread = document.querySelector<HTMLElement>('main')!;
+  const records = Array.from({length:150}, (_, id) => ({key:`turn:${id}`, texts:[id === 5 || id === 140 ? 'needle' : 'other words']}));
+  const reveal = vi.fn((key: string) => { thread.innerHTML = `<li data-key="${key}"><div class="message-text">needle</div></li>`; });
+  const find = mountConversationFind({button:document.querySelector('button')!,bar:document.querySelector('aside')!,thread,scroll:thread,load:async()=>{},records:()=>records,reveal});
+  find.open();
+  const input = document.querySelector<HTMLInputElement>('input')!;
+  input.value='needle'; input.dispatchEvent(new Event('input'));
+  await new Promise(resolve=>setTimeout(resolve,260));
+  expect(reveal).toHaveBeenLastCalledWith('turn:140');
+  expect(document.querySelector('.ra-find-count')!.textContent).toBe('2/2');
+  input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',shiftKey:true}));
+  expect(reveal).toHaveBeenLastCalledWith('turn:5');
+  expect(document.querySelector('mark.is-current')?.closest<HTMLElement>('[data-key]')?.dataset.key).toBe('turn:5');
+  expect(thread.children).toHaveLength(1);
+});
+
 test("find starts at the newest word, wraps in both directions, and closes in place", async () => {
   document.body.innerHTML = '<button id="open"></button><div id="bar"></div><div id="scroll"><ol><li class="message-text">needle and needle</li><li class="message-text">new needle</li></ol></div>';
   const scroll = document.querySelector<HTMLElement>('#scroll')!;

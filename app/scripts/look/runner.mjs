@@ -12,10 +12,19 @@ import { checkRendered } from "./checks.mjs";
 import { contactSheets } from "./contact-sheet.mjs";
 import { requestDisposition } from "./requests.mjs";
 import { saveReport } from "./report.mjs";
+import { navigationRequests, warmupEntries } from "./navigation.mjs";
 
 /** Product, model, unit, key names and external menu paths that stay in Latin letters in every language. */
 // Docker is an installed product name, including its unavailable-engine state.
 export const LATIN_NAMES = ["Raphael", "Docker", "Docker Desktop", "Rimuru", "Google", "Gmail", "Calendar", "Composio", "OpenRouter", "OpenAI", "ChatGPT", "Anthropic", "Claude", "Codex", "Gemini", "GPT", "Grok", "Telegram", "Slack", "Discord", "Notion", "GitHub", "MCP", "API", "URL", "CLI", "STT", "PDF", "WAV", "CSV", "JSON", "US", "KB", "MB", "GB", "GMT", "AM", "PM", "Alt", "AltGr", "Ctrl", "Shift", "Space", "Esc", "Enter", "Tab", "Win", "Windows", "Fn", "Edge", "Chrome", "macOS", "Whisper", "Typeless", "Webhook", "HMAC", "SHA", "Signature", "Hermes", "Simple", "Icons", "Bearer", "mcpServers", "Ollama", "Linear", "BotFather", "newbot", "English", "MIT", "JPG", "WebP", "GIF", "UTF", "Big", "txt", "px", "token", "Claude Code", "Antigravity", "KEY=value", "Settings → Project Settings → API Keys"];
+
+/** Typed owner values are synthetic data, just like the initial fixture's values. */
+export function sceneLatinNames(scene, locale, fixture) {
+  if (locale !== "zh-TW") return null;
+  const words = value => typeof value === "string" ? value.match(/[A-Za-z]{2,}/g) ?? [] : Array.isArray(value) ? value.flatMap(words) : value && typeof value === "object" ? Object.values(value).flatMap(words) : [];
+  const typed = scene.steps.filter(step => step.action === "type").map(step => step.text);
+  return [...new Set([...words(fixture), ...words(scene.fixture), ...words(typed), ...LATIN_NAMES].map(word => word.toLowerCase()))];
+}
 
 // Agents run inside their own sandbox, where the browser cannot start a second one; the page is our
 // own app on loopback only.
@@ -82,11 +91,11 @@ export async function run(options) {
       [url, await readFile(join(import.meta.dirname, file))])));
     const translations = await readFile(join(app, "src/main/i18n/zh-TW.ts"), "utf8");
     // Words a Chinese window may show in Latin letters: the synthetic data's own, and names of products and keys.
-    const dataWords = value => typeof value === "string" ? value.match(/[A-Za-z]{2,}/g) ?? [] : Array.isArray(value) ? value.flatMap(dataWords) : value && typeof value === "object" ? Object.values(value).flatMap(dataWords) : [];
-    const latinFor = (scene, locale) => locale === "zh-TW" ? [...new Set([...dataWords(fixture), ...dataWords(scene.fixture), ...LATIN_NAMES].map(word => word.toLowerCase()))] : null;
+    const latinFor = (scene, locale) => sceneLatinNames(scene, locale, fixture);
     const namespaces = [...new Set([...translations.matchAll(/"([a-z][A-Za-z0-9]*)\.[^"\n]+"\s*:/g)].map(match => match[1]))];
     server = await createServer({ configFile: false, root: app, cacheDir: join(directory, "vite-cache"), server: { host: "127.0.0.1", port: 0, hmr: false, watch: null, fs: { allow: [app] } } });
     await server.listen();
+    await warmupEntries(server, options.selected.map(scene => scene.entry || "index.html"), entry => readFile(join(app, entry), "utf8"));
     const address = server.httpServer.address();
     const origin = `http://127.0.0.1:${address.port}`;
     browser = await puppeteer.launch({ executablePath, headless: true, userDataDir: join(directory, "browser-profile"), args: BROWSER_ARGS, timeout: 60000 });
@@ -101,7 +110,7 @@ export async function run(options) {
       page.on("pageerror", value => error("exception", value.message));
       const favicon = url => url && requestDisposition(url, origin) === "empty";
       page.on("console", message => { if ((message.type() === "error" || (message.type() === "warn" && message.text().includes("A locale listener could not refresh"))) && !favicon(message.location().url)) error("console", message.text()); });
-      page.on("requestfailed", request => { if (!favicon(request.url())) error("request", `${request.url()}: ${request.failure()?.errorText}`); });
+      const requestFailures = navigationRequests(page);
       page.on("response", response => { if (response.status() >= 400 && !favicon(response.url())) error("http", `${response.status()} ${response.url()}`); });
       try {
         await page.setViewport({ width, height: options.heights[width] ?? 900, deviceScaleFactor: 1 });
@@ -156,7 +165,9 @@ export async function run(options) {
             await profiler.send("Profiler.start");
           }
         }
-        await page.goto(`${origin}/${scene.entry ?? ""}`, { waitUntil: "networkidle0", timeout: 20000 });
+        // App readiness and decoded images gate capture. Network-idle also waits
+        // for unrelated polling and reloads, which do not establish readiness.
+        await page.goto(`${origin}/${scene.entry ?? ""}`, { waitUntil: "domcontentloaded", timeout: 20000 });
         await page.waitForSelector(scene.ready ?? (scene.entry === "overlay.html" ? "#progress:not([hidden])" : scene.fixture.onboarding ? '#ob:not([hidden]) [data-ob="next"]' : '.page-home:not([hidden]) .ho-hero'), { visible: true, timeout: 10000 });
         // Existing conversation journeys enter through the real rail after the home is ready.
         if (!scene.entry && !scene.fixture.onboarding && !scene.name.startsWith("home")) {
@@ -238,6 +249,9 @@ export async function run(options) {
           await page.screenshot({path: join(directory, columnImage), type: "png"});
           result.columnImage = columnImage;
         }
+        const failures = requestFailures();
+        result.navigationAborts = failures.filter(failure => failure.superseded);
+        for (const failure of failures) if (!failure.superseded && !favicon(failure.url)) error("request", failure.message);
         result.failed = failedChecks(result);
       } catch (value) { error("capture", value.message); }
       finally { await page.close(); }

@@ -8,7 +8,7 @@ import { btn, esc } from "./ui";
 
 const stateKeys = { draft: "mcp.draft", approval: "cards.waiting", testing: "mcp.testing", tested: "mcp.tested", enabled: "mcp.enabled", cancelled: "mcp.cancelled" } as const;
 
-export function mcpProposalHTML(card: ConnectionProposal): string {
+export function mcpProposalHTML(card: ConnectionProposal, configure?: string): string {
   const active = !["enabled", "cancelled", "testing", "approval"].includes(card.state);
   const attr = ` data-act="mcp-proposal"`;
   const action = (operation: string, text: string, primary = false, choice = ""): string =>
@@ -25,6 +25,7 @@ export function mcpProposalHTML(card: ConnectionProposal): string {
     (card.first_local ? action("test", t("perm.always"), false, "always") : "") +
     action("test", t(card.first_local ? "local.deny" : "local.skip"), false, "deny") +
     (card.first_local ? action("test", t("local.never"), false, "never") : "");
+  if (configure) actions = btn(esc(t("mcp.add")), "sm pri", configure);
   const groups = card.groups.map(group => `<section class="mcp-tools"><h4>${esc(t(group.kind === "read" ? "conn.group.read" : "conn.group.write"))}</h4><ul>${group.tools.map(name => `<li>${esc(name)}</li>`).join("")}</ul></section>`).join("");
   const settled = card.state === "enabled" || card.state === "cancelled";
   const content = `<div class="card-well mcp-fields" data-mcp-transport="${card.fields.transport}">${form}</div>${groups}`;
@@ -35,7 +36,7 @@ export function mcpProposalHTML(card: ConnectionProposal): string {
   });
 }
 
-export const mcpProposalsHTML = (turn: AgentTurn): string => (turn.connection_proposals ?? []).map(mcpProposalHTML).join("");
+export const mcpProposalsHTML = (turn: AgentTurn): string => (turn.connection_proposals ?? []).map(card => mcpProposalHTML(card)).join("");
 
 export function mountMcpProposals(thread: HTMLElement, changed: () => void): void {
   const busy = new Set<string>();

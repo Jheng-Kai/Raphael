@@ -1,5 +1,144 @@
 # Conversation
 
+## Member panel destinations (2026-11-05)
+
+The owner request of 2026-11-05 introduces R-PANEL-01/02/03/04. The conversation title opens Details first; the chat monitor opens Computer directly, and new active computer work selects Computer. One member identity line precedes the shared Details / Library / Computer tabs, with arrow-key navigation. Work results and pages navigate through the existing conversation result path; identity/resources remain behind the gear. Routines and conversation creation/search remain in Details. This supersedes the older screen/routines/conversations landing arrangement. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for the selected matrix, state-layout assertions, external references and deferred native acceptance.
+
+## Calm conversations (owner request, 2026-11-05)
+
+R-UI-101 supersedes the older centred routine/event and thirty-minute separator
+contracts in R-UI-42/75/76/79. Each private calendar day has one date-only heading,
+including pending turns. Message clocks stay in each hover action row. Routine runs
+have a muted, clickable routine name inside their first reply, including a failure
+without an ordinary reply. Terminal failures have one error sentence; the existing
+rerun action sits beside reply/copy, visible for the latest failed turn and on hover
+for older failures. The core no longer emits the same terminal CLI sentence as an
+event. Historical matching events are omitted from the rendered projection.
+
+Progress, work steps and public routine/calendar/skill/meeting receipts live in the
+reply's collapsed work detail. Inspection targets and receipt grouping stay intact;
+find reveals the enclosing work detail before visiting a receipt. Colleague exchanges
+and handoffs retain one closed line (R-UI-72); unread navigation and cards needing the
+owner remain. Groups retain their existing handoff/report/card projection, with
+message time in the shared hover actions. No additional room work engine is added.
+
+R-CLI-07 gives premature CLI completion its own cli_stopped kind, preserving
+the bounded retry contract. Only real connection errors use network guidance.
+The same foreground/background loop carries a bounded, secret-redacted original
+CLI error and last stderr lines into the persisted turn detail. A required MCP
+startup failure names its server. Fake children prove these boundaries; they do
+not establish native, subscription, provider or live recovery acceptance.
+
+Selected rendered verification (both themes, all three sizes):
+
+```powershell
+npm run look -- calm-thread calm-thread-days handoff-group-room transcript-action-list thread-new-divider-short owner-question-asked event-routine-line event-routine-find-group event-calendar-opens routine-sentence-webhook centred-system-events --theme both --width 1120,720,1920x1080
+```
+
+Also verify direct grouped-receipt disclosure with `event-lines-collapse` in the
+same theme/size matrix. Its opened group stays inside reply detail and retains
+every inspection target through roster refreshes; the obsolete 32px gap to the
+next bubble is no longer a contract. Review its look run with judge as well.
+
+calm-thread uses synthetic zh-TW words for the 07:00 failed routine and 08:00 owner
+retry. Its check counts one day heading, three messages and no other centred item,
+one failure sentence per turn, inline routine identity and action-row rerun.
+calm-thread-days requires two date-only headings. Inspect every contact sheet,
+calm-thread light 720 and dark 1120 at full size, plus representative controls.
+Run judge on this same selected evidence. Unit brief: targeted Vitest/pytest only;
+the integrator runs full verify/core. Native/live remain separate acceptance.
+
+## Streaming composer files (2026-11-05)
+
+Private and room composers share twenty-file admission, 250 MiB document limits and
+1 GiB video limits. Exact maxima are admitted and the next byte retains the existing
+localized refusal. Files above 4 MiB upload in 1 MiB chunks; draft/sent history retains
+opaque store IDs. Cancelling/navigation aborts incomplete uploads. Document readers
+retain bounded extraction; media uses the native asset range protocol rather than a
+whole-file page Blob. Saved large files restore by metadata without fetching their bytes.
+
+Selected scenes: attachment-limits, attachment-too-large and chat, plus the settings
+update/import consumers listed in settings-appearance.md. Both themes at
+1120,720,1920x1080, synthetic zh-TW fixtures. Oversize scene metadata is synthetic and
+is rejected before any read; exact upper boundaries are covered without allocating a
+gigabyte in unit tests. Actual native upload/playback and upgrades remain unverified.
+
+```powershell
+npm run look -- attachment-limits attachment-too-large --theme both --width 1120,720,1920x1080
+```
+
+## Commands and conversation shortcuts (2026-11-05)
+
+R-NAV-01 reuses the shared popover, cross-conversation search and the existing
+chief/member/room finders. Ctrl+K works while typing; other shortcuts leave
+editable fields and IME alone. The palette filters names and shortcut labels,
+restores focus on dismissal and routes selection through the existing shell.
+See [Daily work](daily-work.md) for the full behavior and native limits.
+Follow-up 1 authorizes this selected rendered matrix; native/live remain deferred.
+
+```powershell
+npm run look -- command-palette command-palette-filter command-palette-member shortcut-find-chief shortcut-find-member shortcut-find-room shortcut-search chat sidebar-rail sidebar-drawer --theme both --width 1120,720,1920x1080
+```
+
+Compare palette rows with the existing cross-conversation search popover at
+matching theme/width. Inspect all contact sheets and full-size new scenes,
+including compact focus, filtering, long names and the room finder.
+
+## Pending conversation questions and readable results (2026-11-04)
+
+R-OWNER-03, R-CARD-09 and R-CARD-10 extend the shared conversation cards.
+The existing Other/free-answer field remains in ownerQuestionHTML. A shared
+pending-questions controller mounts above each private/room scrollport and uses
+a soft filled compact button and shared menu (R-UI-98). The button has no input
+outline (R-UI-18 exception), and uses the shared chat icon, truncated title, small
+pending count and downward chevron. It observes scroll,
+resize and changed card nodes without polling. Only off-screen pending ask_owner
+questions float. A page-independent pending_questions projection on the existing
+history/messages reads keeps earlier-page questions reachable without changing
+pagination. One press calls owner_questions.bring; the existing question and task
+move together. The controller waits for the returned turn to render before it
+scrolls/focuses, and avoids pulling another conversation after navigation.
+Chief history writes member_id=0 and resolves a concrete conversation_id. The
+pending projection also accepts NULL chief member rows using IS, while retaining
+the conversation/member boundary. Tests cover both representations outside the
+loaded page; the nullable case shadows the current NOT NULL schema in a fixture.
+
+The same RPC supports room scope, preserving room/thread ownership and adding a
+room receipt with a unique per-move request ID. Repeated bringing at the newest
+turn is idempotent. Answers continue the same task. No approval is granted.
+
+Permission detail labels cannot shrink; values wrap into the remaining width.
+The permission-detail-label scene opens the existing local-permission-card
+disclosure and checks each real label's height against its computed line height.
+
+composio-result.ts projects recognized envelopes into bounded readable
+app-brand/outcome/field text with localized outcomes and field separators. Missing
+app slugs use the localized result label, and operation verbs are never expanded. Member-authored private/room replies, progress, work
+rows and turn details require a tool slug or successful with data/error; an
+action hint alone never replaces ordinary fenced/inline JSON config. Composio
+permission summaries and step details explicitly use trusted tool mode, which
+also projects unmarked JSON objects. isComposioTool shares server/tool detection
+across these consumers and composioAction. Raw model messages, persisted replies and original permission objects stay
+intact. Synthetic tests cover failure, nesting, long/incomplete output, excluded
+fields, ordinary code and owner text. This does not prove live provider behavior.
+
+Selected integration matrix (both themes; 1120,720,1920x1080):
+
+```powershell
+npm run look -- owner-question-pending owner-question-brought owner-question-pending-page owner-question-pending-room owner-question-pending-many owner-question-asked owner-question-typed owner-question-text owner-question-answered owner-question-cancelled owner-question-room permission-detail-label local-permission-card card-message-waiting composio-readable-result member-text room-text --theme both --width 1120,720,1920x1080
+```
+
+New scenes: owner-question-pending, owner-question-brought,
+owner-question-pending-page, owner-question-pending-room,
+owner-question-pending-many, permission-detail-label, composio-readable-result.
+Compare the floating compact button with conversation controls, its list with shared
+menus, and permission details with card-message-waiting at matching sizes/themes.
+Follow-up 2 authorizes the selected look matrix and visual review. Judge requires
+external references and authorized network access; native and live-provider
+acceptance remain deferred. DOM/Vitest and offline core checks alone
+do not establish visual/native/provider/design acceptance.
+
+
 ## Visible work sentences (2026-11-02)
 
 R-UI-75 and R-WORK-01/02 use one 28px avatar and one muted action line in private
@@ -1138,7 +1277,7 @@ npm run look -- busy-team-thread busy-team-up busy-team-steps busy-team-typing b
 
 R-UI-72 uses handoff-line.ts and event-line.ts for private turn groups and consecutive room receipts. A message or blocked-intent entry separates room groups. Shared thread-diff.ts retains every handoff-event disclosure and its open state, including received-message lines. Existing individual request, result and artifact controls remain inside the closed-by-default group.
 
-Selected matrix: handoff-group, handoff-group-done, handoff-group-many, handoff-group-open, handoff-group-room, centred-system-events, handoff-centred-line, room-handoff-queued, room-handoff-running, room-handoff-result, room-handoff-failed, room-workflow-blocked, room-immediate-work, room-mention-after-hop-limit, busy-team-thread, busy-team-room. Both themes at 1120,720,1920x1080. The centred-system-events assertion now checks the two original receipt labels inside the collapsed group and keeps the meeting after them.
+Selected matrix: handoff-group, handoff-group-done, handoff-group-many, handoff-group-open, handoff-group-room, centred-system-events, handoff-centred-line, room-handoff-queued, room-handoff-running, room-handoff-result, room-handoff-failed, room-workflow-blocked, room-immediate-work, room-mention-after-hop-limit, busy-team-thread, busy-team-room. Both themes at 1120,720,1920x1080. The centred-system-events assertion retains the two original handoff receipt labels; the meeting is in reply detail (owner, 2026-11-05).
 Additional R-UI-72 coverage: handoff-group-long checks long and unbroken names at all three sizes. Arriving receipts update only the event subtree; the owner question, answer and intervening room message retain their DOM nodes.
 
 
@@ -1263,7 +1402,7 @@ verify the named event opens directly in its existing calendar detail.
 npm run look -- presence-hover-action presence-sidebar-hover presence-rail-hover presence-blocked-stays presence-waiting-colleague transcript-clean transcript-working transcript-hover-detail transcript-time-gap event-routine-line event-routine-opens event-calendar-line event-calendar-opens event-lines-collapse sidebar-row-time sidebar-group-author --theme both --width 1120,720,1920x1080
 ```
 
-The notes-1 review measures 32px on both sides of event lines next to bubbles, cards and other lines; shared header hovers open below the face, stay clear of window controls, and show no pointer focus ring. Expanded sidebar hovers show the action, collapsed rails show the name then action.
+Owner 2026-11-05 supersedes the notes-1 32px between-message event gaps: receipts now live in collapsed reply detail; shared header hovers open below the face, stay clear of window controls, and show no pointer focus ring. Expanded sidebar hovers show the action, collapsed rails show the name then action.
 
 ```powershell
 npm run look -- event-routine-spacing --theme both --width 1120,720,1920x1080
@@ -1271,9 +1410,8 @@ npm run look -- event-routine-spacing --theme both --width 1120,720,1920x1080
 
 The multi-reply transcript-hover-detail fixture checks that all reply work controls
 share aria-expanded. agent-page.test.ts pins opening and closing from either reply.
-centred-system-events includes the historical receipt and the later meeting in
-message order, retaining the shared centered geometry and handoff receipt states.
-Private ordered event containers occupy the full transcript column (sidebar.test.ts)
+centred-system-events retains handoff receipt states; historical and meeting receipts now live in reply detail (owner, 2026-11-05).
+Private ordered event containers live inside collapsed reply detail (owner, 2026-11-05)
 while reply bubbles retain their reading-width limit.
 
 
@@ -1282,7 +1420,7 @@ RPCs, repaired historical indexes, model context, voice and Telegram delivery;
 test_home.py covers Home and sidebar readers. presence-transcript.test.ts covers
 find, highlight, copy and rendered thread selection for all four receipt kinds;
 message-search.test.ts covers event-only result snippets. event-lines-collapse
-checks the expanded group's 32px gap to the next bubble. Run it with
+checks the receipt group inside reply work detail; receipts add no gap between bubbles (owner, 2026-11-05). Run it with
 event-routine-line, event-routine-spacing, event-calendar-line,
 centred-system-events, transcript-clean and the existing search scenes.
 
@@ -1373,3 +1511,130 @@ The existing test_retry_turns.py::test_a_colleagues_question_is_answered_while_t
 also preserves the colleague bypass and verifies that an owner CLI turn waits
 for the held conversation lock, then answers after release. It must not wait
 for that owner turn while still holding the lock or expect the removed busy reply.
+
+## Long busy conversations and bounded mounting (2026-11-05)
+
+R-PERF-14 through R-PERF-21 separate native latency budgets from deterministic
+rendering and reading contracts. `transcript-window.ts` owns the private/room
+25/20/100-turn policy and the 300px sentinel margin. Stable keys preserve a reader
+across history prepends, capped windows and bottom arrivals. Existing history
+before/around paging remains unchanged. A turn contains owner words, reply, work
+and cards, so its cold window is smaller than a message-only transcript.
+
+Search indexes loaded wire records and mounts the selected result's surrounding
+window before highlighting. Explicit quote jumps, member links and pending-question
+bring reveal an unmounted target first; latest restores the tail. Opening an unread
+conversation reveals the unread boundary rather than dropping its divider.
+Window search and quote-source matching use the rendered Composio projection with
+action context; room multi-message parts are projected individually before indexing.
+Typing selections inside editable fields never query document selection or message
+geometry; message selections retain the existing shared quote pill. Visible slime
+occurrences for one member share old-pose reads, new-pose reads and style flushes
+instead of forcing layout separately for each avatar.
+
+Mounted finished private/room records retain HTML by wire revision and presentation
+dependencies; unmounted HTML entries are released. Roster identity ignores activity-only changes. Bounded Composio and
+mention caches avoid repeated projection and regular-expression construction.
+Event reads append new turns and refresh only invalidated/active IDs through the
+optional `agent.history.list` delta query. Legacy cores retain their ordinary page
+response. New query parameters never cross member/conversation scope.
+
+Selected local matrix (both themes; 1120,720,1920x1080):
+
+```powershell
+npm run look -- thread-window-open thread-window-earlier thread-window-find thread-window-quote room-window-open room-window-earlier room-window-find room-window-quote thread-window-composio-find room-window-composio-find busy-team-typing busy-team-follow busy-team-anchor thread-new-divider thread-new-divider-latest thread-new-divider-remount thread-new-divider-stays rich-code rich-streaming conversation-chief-up conversation-member-up conversation-room-up composio-readable-result owner-question-pending-page owner-question-brought owner-question-pending-room reply room-reply-send slime-states presence-states-sidebar --theme both --width 1120,720,1920x1080
+```
+
+The new window scenes exercise the real entry and native-boundary fixtures with
+150 records; earlier scenes retain the same DOM anchor within one pixel, and old
+search scenes reveal record 9005 while at most 100 turns remain mounted. Keep all
+existing reading scenes available. Compare private/room latest buttons and quote
+excerpts at matching themes/sizes; no second window treatment is introduced.
+
+`npm run native -- typing` seeds 150 persisted rich turns and eight isolated fake
+members, checks 25 mounted on open, 45 after one prepend and 65 across a core page, types 200 keys at
+120ms intervals while seven brains work and four authored multi-message replies
+use ordinary pacing. It retains raw Event Timing, long-animation-frame entries
+and a 1ms sampled CPU profile under its existing native report directory. This is
+offline app reply pacing, not live provider token transport. Native performance, look layout and external judge acceptance are separate; failures stay failures.
+
+Only when recording an old binary, set `RAPHAEL_NATIVE_TYPING_BASELINE=1` to retain
+its original mounting policy; remove it for the changed build's strict 25/45/100
+guards. Use the same recorder and alert observer for both measurements. The alert
+observer inspects changed alerts, coalesced to one frame, so animated slime styles
+cannot trigger a document-wide layout scan inside the measurement harness.
+
+
+Follow-up 2 records all 200 capturing-keydown `performance.now()` timestamps and
+both subsequent rAF callback times. `keyToSecondFrame` retains median, p95 and
+worst without Event Timing's 16ms censoring; do not subtract a refresh interval.
+Keep the older Event Timing fields as a cross-check. The typing raw artifact also
+logs per-call rich-scroll measurements and every `agent.history.list` /
+`rooms.messages` response's UTF-8 byte size, returned IDs and timed JSON parse.
+The recorder reads the response body once and parses it once; decoding/waiting,
+byte counting and callback/render work are outside `parseMs`. Both binaries use
+the identical instrumentation. Long-thread fixtures use synthetic zh-TW prose.
+Compare old/changed builds three times each in alternating order, retaining every
+run and the median of the three run statistics, plus per-run free memory and busy
+process count (`RAPHAEL_NATIVE_LOAD` is recorded in the native report).
+
+The rich-scroll controller initializes its container metrics at mount and scroll,
+then measures at most one retained content anchor per coalesced update. Explicit
+quote/search/bring navigation releases queued corrections before choosing its
+new destination. Latest-button visibility uses an IntersectionObserver on the
+end marker; only a viewport/stage resize measures its control position. Visible
+slime handovers retain JS clocks and finite bridge poses; presence bursts parse
+at most one visible cel strip per frame instead of blocking one IPC callback.
+Admission compensates loop delay for elapsed time and holds the vector through
+that surface's own reveal, so deferred surfaces neither go blank nor all reveal
+in the same frame after a presence burst.
+Slime mount timestamps are phase metadata, not content identity: private/room
+lines, member details, desktop panels and sidebar search must ignore them when
+comparing generated markup. Moving between children of one live tooltip target
+does not measure that target again. Regression evidence includes
+presence-transcript.test.ts, message-search.test.ts and message-tooltip.test.ts.
+The rich-scroll listener shares the end observer's cached following state, so
+automatic following does not synchronously read container geometry. The private
+page invokes forced following only for initial display or explicit follow;
+metadata-only reply updates preserve their nodes and do not write scrollTop.
+Actual content changes retain one coalesced following/reading correction.
+Pending questions measure the viewport only when an asked card is actually mounted.
+Finite slime bridges animate native translate/rotate/scale properties, avoiding
+per-tick custom-property resolution while retaining the same JS pose clock.
+Window scroll callbacks use sentinel intersections to skip position reads far
+from either edge; browsers without IntersectionObserver retain the coalesced
+position fallback. Cover pending-question bring and old-content reading in the
+selected visual consumers after changing these shared observers.
+Code highlighting tracks completed blocks; ordinary text mutations and automatic
+following do not remeasure untouched offscreen code. Newly mounted code, reading
+scrolls, container resize, disclosure and theme invalidation still refresh it.
+Diagram theme versions retain token-derived rerendering without repeated style
+reads on unrelated messages. Cover rich-code, rich-diagram and rich-source.
+Thinking/searching plain bodies and printed marks do not allocate a second body
+axis for nonexistent independent marks; animated character marks retain that
+axis. The twelve body poses, eye/blink grid, loop periods and phases are unchanged.
+Repeated state/drawing geometry uses a 16-entry LRU of inert parsed templates;
+each surface gets independent clones and per-instance colour/phase. Do not
+reparse identical strips for every member, or retain an unbounded DOM cache.
+Pending-question bring invalidates queued rich-scroll corrections immediately
+before scrolling the moved card; restoring the target window alone is insufficient.
+The native typing window observer starts before earlier-page preparation, so its
+maximum includes the 45/65-turn setup as well as typing and reply updates.
+Fixed-size clipped slime atlases establish layout/paint containment; motion
+periods, sampled poses and the existing visible clipping reserve remain unchanged.
+Finite pointer delight and press/release use native translate/rotate/scale,
+retaining their angles, durations, easing and reduced-motion cancellation.
+Slime visibility uses a zero-margin viewport observer; unseen atlases do not
+animate in a preload band. Restoring visibility uses the retained JS phase.
+The transcript's independent 300px earlier-page sentinel remains unchanged.
+Typing in a composer also closes a sibling sidebar tooltip. Animated pointer
+retargets must not reopen or remeasure it until the pointer actually moves;
+keyboard focus must still expose the tooltip. Global listeners retain no host.
+Small slime atlases keep a 1.5-avatar clipping reserve with the same SVG units
+per CSS pixel, loop samples and timing, guarded by sampled accessory-envelope
+checks. Cover slime-gallery, slime-parts and
+slime-motion-recovery when changing the reserve or cel coordinate origin.
+Eye atlases inherit typed pixel-fit scale, offsets and stroke from their shared
+parent. The 576 thinking poses must not each carry the vector face's fitting
+class. Keep the same pixel formulas, all poses and periods; cover the gallery,
+parts, presence hovers and handovers when changing this shared style boundary.

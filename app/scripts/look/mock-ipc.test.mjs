@@ -5,6 +5,47 @@ import { checkRendered } from "./checks.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixture.json", import.meta.url), "utf8"));
 describe("shared look IPC boundary", () => {
+  it("installs a plugin set once, preserves its member choice on update and removes every set capability", async () => {
+    const source = {kind:"plugin",name:"desk",version:"1.0.0",source:"local:C:/synthetic/plugin",skills:[{name:"write",description:"Write"},{name:"check",description:"Check"}],commands:[{name:"review",description:"Review",set_kind:"command"}]};
+    const target = {}, state = installMock(fixture,{fixture:{skillSources:[source]}},target);
+    const call=(method,params)=>target.__TAURI_INTERNALS__.invoke("core_call",{method,params});
+    const first=await call("members.skills.import",{member_id:0,shared:true,plugin:true,source:source.source});
+    expect(first.skills).toHaveLength(3); expect(state.data.skillSets).toHaveLength(1);
+    await call("members.skills.update",{member_id:0,id:first.skills[0].id,enabled:false});
+    await call("members.skills.import",{member_id:0,shared:true,set_id:first.set.id});
+    expect((await call("members.skills.list",{member_id:0})).skills[0].enabled).toBe(false);
+    await call("members.skills.delete",{member_id:0,shared:true,set_id:first.set.id});
+    expect((await call("members.skills.list",{member_id:0})).skills).toEqual([]);
+    expect(state.data.skillSets).toEqual([]); expect(state.errors).toEqual([]);
+  });
+  it("keeps shared imports distinct from Raphael's own skills and grants each member independently", async () => {
+    const target = {}, state = installMock(fixture, { fixture: { skillSources: [{ source: "local:C:/synthetic/writer", name: "writer", description: "Write" }] } }, target);
+    const call = (method, params) => target.__TAURI_INTERNALS__.invoke("core_call", { method, params });
+    state.data.skills = [{ id: 20, member_id: 0, name: "private", description: "Own", source: "owner", enabled: true }];
+    expect((await call("members.skills.list", {member_id:0,shared:true})).skills).toEqual([]);
+    expect((await call("members.skills.list", {member_id:0,discover:true})).sources).toHaveLength(1);
+    const {skill} = await call("members.skills.import", {member_id:0,shared:true,source:state.data.skillSources[0].source});
+    expect((await call("members.skills.list", {member_id:0})).skills).toHaveLength(2);
+    await call("members.skills.update", {member_id:0,id:skill.id,enabled:false});
+    expect((await call("members.skills.list", {member_id:0})).skills.find(s=>s.id===skill.id).enabled).toBe(false);
+    expect((await call("members.skills.list", {member_id:1})).skills[0]).toMatchObject({id:skill.id,shared:true,enabled:true});
+    await expect(call("members.skills.update", {member_id:0,id:skill.id,text:"Changed"})).rejects.toThrow("shared library");
+  });
+  it("keeps room message timestamps renderable before and after bringing a pending question", async () => {
+    const target = {}, state = installMock(fixture, {fixture:{ownerQuestion:"pending-room"}}, target);
+    const invoke = (method, params) => target.__TAURI_INTERNALS__.invoke("core_call", {method, params});
+    const checkTimes = async () => {
+      const { messages } = await invoke("rooms.messages", {room_id:1});
+      expect(messages.length).toBeGreaterThan(12);
+      for (const message of messages) expect(Number.isFinite(new Date(message.created).getTime())).toBe(true);
+      return messages;
+    };
+    const before = await checkTimes();
+    const question = before.flatMap(message => message.turn?.owner_questions ?? [])[0];
+    const moved = await invoke("owner_questions.bring", {id:question.id});
+    expect((await checkTimes()).at(-1).turn_id).toBe(moved.turn_id);
+    expect(state.errors).toEqual([]);
+  });
   it("offers connected event choices and returns ordinary detected conditions without creating", async () => {
     const target = {}, state=installMock(fixture, {}, target);
     const call=(params={})=>target.__TAURI_INTERNALS__.invoke("core_call",{method:"routines.list",params});

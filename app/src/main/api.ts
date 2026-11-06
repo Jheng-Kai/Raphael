@@ -2,7 +2,7 @@
 // commands of commands.rs. Every function rejects with the reason as a string (`describeError`
 // makes it fit to show).
 
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { withWindowHotkeyPause } from "./window-hotkeys";
 import type { DesktopState, DesktopSession } from "./desktop-viewer";
 import type { LanguageGroup } from "./languages";
@@ -14,6 +14,7 @@ import type { CliAllowances, RunReport, RunRequest } from "./run-analytics-types
 import type {
   AgentQuestion,
   AgentTurn,
+  OwnerQuestion,
   AppsInventory,
   AuditEntry,
   ConnectResult,
@@ -65,6 +66,8 @@ export function core<T>(method: string, params: object = {}): Promise<T> {
 
 export const ownerQuestionAnswer = (id: string, answer: string | null): Promise<{ status: string }> =>
   core("owner_questions.answer", { id, answer });
+export const ownerQuestionBring = (id: string): Promise<{ turn_id: number }> =>
+  core("owner_questions.bring", { id });
 
 // ---------- status ----------
 
@@ -86,6 +89,8 @@ export const desktopRenew = (session: string): Promise<DesktopState> => core("co
 export const desktopControl = (session: string, held: boolean, takeover?: string): Promise<DesktopState> => core("computer.viewer_control", { session, held, takeover });
 export const desktopClose = (session: string): Promise<unknown> => core("computer.viewer_close", { session });
 export const desktopRevoke = (member_id: number): Promise<{ granted: boolean }> => core("computer.revoke", { member_id });
+export const desktopMaintain = (member_id: number, action: import('./computer-lifecycle').ComputerMaintenance, captured: DesktopState, confirmed = false): Promise<DesktopState> =>
+  core('computer.lifecycle', { member_id, action, host: captured.host, target: captured.target, confirmed });
 export interface TeachingDraft { id: string; state: string; text: string; conversation_id?: number }
 export const desktopTeach = (params: { action: string; session?: string; member_id?: number; id?: string; text?: string }): Promise<TeachingDraft & { skill?: import("./types").MemberSkill }> => core("computer.teach", params);
 
@@ -143,6 +148,9 @@ export const historyClear = (): Promise<{ deleted: number }> => core("history.cl
 // ---------- conversations with Raphael ----------
 
 export interface AgentHistoryQuery {
+  /** Bounded new arrivals and only the loaded records invalidated by events. */
+  after_id?: number;
+  turn_ids?: number[];
   conversation_id?: number;
   around_id?: number;
   limit?: number;
@@ -153,7 +161,7 @@ export interface AgentHistoryQuery {
 }
 
 /** The turns of the conversations, newest first. */
-export const agentHistoryList = (q: AgentHistoryQuery = {}): Promise<{ turns: AgentTurn[] }> => core("agent.history.list", q);
+export const agentHistoryList = (q: AgentHistoryQuery = {}): Promise<{ turns: AgentTurn[]; pending_questions?: OwnerQuestion[]; delta?: boolean; removed_ids?: number[]; has_more?: boolean; next_after_id?: number }> => core("agent.history.list", q);
 /** What the owner typed into a composer, newest first, whichever conversation or room it went to (the arrow keys of a composer walk it). */
 export const agentSent = async (limit = 50): Promise<string[]> => (await core<{ texts: string[] }>("agent.history.sent", { limit })).texts;
 /** Forgets Raphael conversation turns; says how many there were. */
@@ -227,7 +235,10 @@ export const membersCreate = (member: NewMember): Promise<{ member: Member; rout
 /** Changes a member (never Raphael: the core refuses id 0 with the kind `raphael`). */
 export const membersUpdate = (id: number, patch: MemberPatch): Promise<{ member: Member }> => core("members.update", { id, ...patch });
 /** Deletes a member with its conversation, its memory and its routines. The page asks the owner first. */
-export const membersDelete = (id: number): Promise<{ deleted: boolean }> => core("members.delete", { id });
+export const membersDelete = (id: number, remove_computer_data = false, computer_host?: string): Promise<{ deleted: boolean }> => core("members.delete", { id, remove_computer_data, ...(remove_computer_data ? { computer_host } : {}) });
+
+export interface ComputerHostHealth { host: string; ok: boolean; checks: { kind: string; ok: boolean; architecture?: string }[] }
+export const desktopHostCheck = (alias: string): Promise<ComputerHostHealth> => core("computer.viewer_status", { check_host: true, alias });
 
 /** Makes member `id` the owner's primary contact (0 is Raphael). Only that choice changes; the roster of `membersList` says who it is. */
 export const membersSetPrimary = (id: number): Promise<{ primary_id: number }> => core("members.set_primary", { id });
@@ -236,7 +247,7 @@ export const membersSetAvatar = (id: number, file: WireAttachment): Promise<{ me
 /** The owner read the thread of member `id`: it is no longer unread. */
 export const membersRead = (id: number): Promise<unknown> => core("members.read", { id });
 /** The thread on screen now (null for none): what arrives there is no news. */
-export const membersViewing = (id: number | null): Promise<unknown> => core("members.viewing", { id });
+export const membersViewing = (id: number | null): Promise<unknown> => core("members.viewing", { id, tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
 /** Raphael's own tools a member may be given, by id, and the connections. */
 export const membersToolChoices = (): Promise<{ tools: string[]; connections: { id: string; name: string; enabled: boolean }[] }> =>
   core("members.tool_choices");
@@ -250,7 +261,7 @@ export const groupsDelete = (id: number): Promise<{ deleted: boolean }> => core(
 export interface RoutineEventChoice {
   id: string; toolkit: string; slug: string; input: "" | "repository" | "channel"; label: string; app: string; app_name: string;
 }
-export const routinesList = (memberId?: number, pick?: {event:string;value:string}): Promise<{ routines: Routine[]; events?: RoutineEventChoice[]; event_apps?: string[]; when?: Routine["when"]; event_error?: string }> => core("routines.list", { ...(memberId === undefined ? {} : {member_id:memberId}), ...pick });
+export const routinesList = (memberId?: number, pick?: {event:string;value:string;contains?:string}): Promise<{ routines: Routine[]; events?: RoutineEventChoice[]; event_apps?: string[]; when?: Routine["when"]; event_error?: string }> => core("routines.list", { ...(memberId === undefined ? {} : {member_id:memberId}), ...pick });
 export const routinesCreate = (
   routine: Pick<Routine, "member_id" | "title" | "prompt" | "schedule" | "when"> & { enabled?: boolean },
 ): Promise<{ routine: Routine }> => core("routines.create", routine);
@@ -259,6 +270,7 @@ export const routinesUpdate = (
   patch: Partial<Pick<Routine, "title" | "prompt" | "schedule" | "when" | "enabled">>,
 ): Promise<{ routine: Routine }> => core("routines.update", { id, ...patch });
 export const routineWebhook = (id: number, reveal = false): Promise<{address:string;secret?:string;address_changed?:boolean}> => core("routines.webhook", {id,reveal});
+export const routinesRun = (id: number): Promise<{run_id?:number;turn_id?:number;status?:string;reason?:string}> => core("routines.run", {id});
 export const routinesDelete = (id: number): Promise<{ deleted: boolean }> => core("routines.delete", { id });
 /** The routine the core would offer member `memberId` now (its group's places), in `uiLanguage`; null for none. */
 export const routinesTemplate = (memberId: number, uiLanguage?: string): Promise<{ offer: RoutineOffer | null }> =>
@@ -493,6 +505,12 @@ export async function subscribeMainEvents(handler: (event: MainEvent) => void): 
 
 /** Open only an opaque stored attachment, never a path supplied by a page. */
 export const openAttachment = (id: string): Promise<void> => invoke("open_attachment", { id });
+export const attachmentSource = async (id: string): Promise<string> => convertFileSrc(await invoke<string>("attachment_source", { id }));
+
+export interface UpdateView { state: "idle" | "checking" | "found" | "downloading" | "ready" | "installing" | "error"; version: string; notes: string; error: string; installed?: string; }
+export const updateControl = (action: "status" | "check" | "install"): Promise<UpdateView> => invoke("update_control", { action });
+export interface MemoryImportResult { kept: string[]; refused: { index: number; reason: string }[]; }
+export const importMemory = (text: string): Promise<MemoryImportResult> => core("memory.import", { text });
 export const openTeamFile = (path: string): Promise<void> => invoke("open_team_file", { path });
 
 // Retained execution metrics; exporting always requests the entire selected period.
@@ -513,20 +531,21 @@ export const roomsCreate = (room: { name?: string; member_ids: number[]; group_i
 export const roomsDelete = (roomId: number): Promise<{ deleted: boolean }> => core("rooms.delete", { room_id: roomId });
 export const roomsUpdate = (roomId: number, patch: { name?: string; member_ids?: number[]; default_responder?: string; roles?: Record<string, string>; pinned?: boolean; hidden?: boolean; read?: boolean; read_through?: number }): Promise<{ room: Room }> => core("rooms.update", { room_id: roomId, ...patch });
 export const roomTranscribe = (data: string, uiLanguage: string): Promise<{ text: string }> => core("rooms.transcribe", { data, ui_language: uiLanguage });
-export const roomMessages = (roomId: number, before?: number): Promise<{ messages: RoomMessage[]; exchange?: import("./types").RoomExchange | null; handoffs?: import("./types").HandoffView[] }> => core("rooms.messages", { room_id: roomId, before });
+export const roomMessages = (roomId: number, before?: number): Promise<{ messages: RoomMessage[]; decisions?: import("./types").RoomDecision[]; pending_questions?: OwnerQuestion[]; exchange?: import("./types").RoomExchange | null; handoffs?: import("./types").HandoffView[] }> => core("rooms.messages", { room_id: roomId, before });
 export const roomSend = (roomId: number, text: string, requestId: string, uiLanguage: string, attachments: WireAttachment[] = [], replyTo?: number): Promise<{ message_id: number; duplicate: boolean }> => core("rooms.send", { room_id: roomId, text, request_id: requestId, ui_language: uiLanguage, ...(attachments.length ? { attachments } : {}), ...(replyTo !== undefined ? { reply_to: replyTo } : {}) });
 export const roomStop = (roomId: number): Promise<{ stopped: boolean }> => core("rooms.stop", { room_id: roomId });
 export const keepAwakeGet = (): Promise<boolean> => invoke("schedule_keep_awake_get");
 export const keepAwakeSet = (enabled: boolean): Promise<boolean> => invoke("schedule_keep_awake_set", { enabled });
 // Member profile resources use the same member boundary as conversations.
-export const membersSkillsList = (memberId: number): Promise<{ skills: import("./types").MemberSkill[]; undo?: string | null }> => core("members.skills.list", { member_id: memberId });
-export const membersSkillsImport = (memberId: number, source: string): Promise<{ skill: import("./types").MemberSkill; skills?: import("./types").MemberSkill[] }> => core("members.skills.import", { member_id: memberId, source });
-export const membersSkillsUpdate = (memberId: number, id: number, enabled: boolean): Promise<unknown> => core("members.skills.update", { member_id: memberId, id, enabled });
+const skillScope = (memberId: number): { member_id: number; shared?: boolean } => memberId === -1 ? { member_id: 0, shared: true } : { member_id: memberId };
+export const membersSkillsList = (memberId: number): Promise<{ skills: import("./types").MemberSkill[]; sets?: import("./skill-sets").SkillSet[]; undo?: string | null }> => core("members.skills.list", { ...skillScope(memberId) });
+export const membersSkillsImport = (memberId: number, source: string): Promise<{ skill: import("./types").MemberSkill; skills?: import("./types").MemberSkill[] }> => core("members.skills.import", { ...skillScope(memberId), source });
+export const membersSkillsUpdate = (memberId: number, id: number, enabled: boolean): Promise<unknown> => core("members.skills.update", { ...skillScope(memberId), id, enabled });
 /** A skill and its whole Markdown document, for its page (one that is switched off too). */
-export const membersSkillsRead = (memberId: number, id: number): Promise<{ skill: import("./types").MemberSkill; text: string }> => core("members.skills.read", { member_id: memberId, id });
+export const membersSkillsRead = (memberId: number, id: number): Promise<{ skill: import("./types").MemberSkill; text: string }> => core("members.skills.read", { ...skillScope(memberId), id });
 /** Replaces the document of a skill; its name and description (when the model should use it) are read from the new one. */
-export const membersSkillsEdit = (memberId: number, id: number, text: string): Promise<{ skill: import("./types").MemberSkill }> => core("members.skills.update", { member_id: memberId, id, text });
-export const membersSkillsDelete = (memberId: number, id: number): Promise<unknown> => core("members.skills.delete", { member_id: memberId, id });
+export const membersSkillsEdit = (memberId: number, id: number, text: string): Promise<{ skill: import("./types").MemberSkill }> => core("members.skills.update", { ...skillScope(memberId), id, text });
+export const membersSkillsDelete = (memberId: number, id: number): Promise<unknown> => core("members.skills.delete", { ...skillScope(memberId), id });
 export const membersCommandsList = (memberId: number): Promise<{ commands: import("./types").MemberCommand[] }> => core("members.commands.list", { member_id: memberId });
 export const membersCommandsSave = (memberId: number, command: Omit<import("./types").MemberCommand, "id"> & { id?: number }): Promise<unknown> => core("members.commands.save", { member_id: memberId, ...command });
 export const membersCommandsDelete = (memberId: number, id: number): Promise<unknown> => core("members.commands.delete", { member_id: memberId, id });

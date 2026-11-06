@@ -36,7 +36,7 @@ _TRAILING_PASS = re.compile(r'(\S[\s\S]*?)\s*[(（]\s*pass\s*[)）][.。]?\s*$',
 _OWNER_STOPS = ('owner', 'interjection')
 # An unfinished reply in words, by the reason its intent was blocked for; any other reason is an error.
 _UNFINISHED = {'cli_rate_limited':'rate_limit', 'cli_quota':'quota', 'cli_login':'login', 'cli_missing':'login',
-               'cost':'budget', 'revoked':'removed', 'restart':'restart'}
+               'cost':'budget', 'reply_budget':'budget', 'revoked':'removed', 'restart':'restart'}
 _UNFINISHED_WORDS = {
     'zh-TW':{'rate_limit':'請求太頻繁而被限流', 'quota':'訂閱額度已用完', 'login':'需要登入 CLI', 'budget':'預算已用完',
              'removed':'已不在房間', 'restart':'重新啟動後中斷', 'error':'發生錯誤'},
@@ -63,6 +63,15 @@ class RoomsService:
         members.rooms = self
 
     def start(self):
+        # Publish restart close-out even when no later owner input arrives.
+        for row in self._conn.execute("SELECT DISTINCT room_id FROM room_exchanges WHERE state='stopped' AND wrapup_sent=0").fetchall():
+            self._close_stopped(row[0])
+        with self._conn:
+            self._conn.execute("UPDATE room_reply_intents SET state='queued',turn_id=NULL,restart_count=restart_count+1 "
+                               "WHERE state='blocked' AND reason='restart' AND restart_count=0")
+            self._conn.execute("UPDATE room_exchanges SET state='queued',pending='[]',stop_requested=0,reason='restart_retry' "
+                               "WHERE reason='restart' AND origin_message_id IN "
+                               "(SELECT origin_message_id FROM room_reply_intents WHERE state='queued' AND restart_count=1)")
         for row in self._conn.execute("SELECT DISTINCT room_id FROM room_exchanges WHERE state IN ('queued','running')"):
             self._exchanges.schedule(row[0])
 
@@ -244,7 +253,7 @@ class RoomsService:
                           for row in self._conn.execute("SELECT * FROM rooms ORDER BY id")
                           if member_id in (room := self._view(row))["member_ids"]]}
 
-    def post(self, member_id, arguments, source_turn_id):
+    def post(self, member_id, arguments, source_turn_id, language='en'):
         import hashlib
         room = self._room(arguments)
         if member_id not in self._ids(room):
@@ -256,14 +265,24 @@ class RoomsService:
         if not isinstance(text, str) or not text.strip() or len(text) > MAX_MESSAGE:
             raise invalid_params("text must contain 1 to 10000 characters")
         source = self._history.get(source_turn_id) if source_turn_id else None
-        if source is None or source.member_id != member_id:
+        if source is None or source.member_id != member_id or source.scope not in ('private','room','exchange'):
             raise invalid_params("a source turn is required")
         # A tool retry publishes once; distinct summaries from the same turn remain distinct.
         request = f"post_{source_turn_id}_{hashlib.sha256(text.strip().encode()).hexdigest()[:24]}"
-        thread = self._thread(room)
+        kind = arguments.get('kind', 'message')
+        if kind not in ('message','decision'):
+            raise invalid_params('kind must be message or decision')
+        if kind == 'decision' and not self._members.speaker(member_id).is_chief:
+            raise invalid_params('only the chief may pin a decision')
+        request += '_' + kind
+        thread = source.thread_id if source.scope == 'room' and source.room_id == room['id'] else self._thread(room)
         existing = self._conn.execute("SELECT id FROM room_messages WHERE room_id=? AND request_id=?", (room["id"], request)).fetchone()
         if existing:
             return {"room_id": room["id"], "message_id": existing[0], "member_id": member_id, "duplicate": True}
+        recent = self._conn.execute('SELECT member_id,text FROM room_messages WHERE room_id=? AND created>? AND member_id IS NOT NULL ORDER BY id DESC',
+                                    (room['id'], self._now()-60000)).fetchall()
+        if len(recent) >= 12 or sum(row['member_id']==member_id for row in recent) >= 4 or any(row['member_id']==member_id and row['text']==text.strip() for row in recent):
+            raise invalid_params('room post budget reached; wait for new information')
         with self._conn:
             turn = self._history.add(session_id=request, question="", route="exchange", source="member", prefix="",
                 text=text.strip(), status="done", member_id=member_id, scope="room", room_id=room["id"],
@@ -272,25 +291,41 @@ class RoomsService:
                 "INSERT INTO room_messages(room_id,thread_id,member_id,text,created,request_id,turn_id) VALUES(?,?,?,?,?,?,?)",
                 (room["id"], thread, member_id, text.strip(), self._now(), request, turn))
             row = self._conn.execute("SELECT id FROM room_messages WHERE room_id=? AND request_id=?", (room["id"], request)).fetchone()
+        with self._conn:
+            self._conn.execute('UPDATE room_messages SET kind=? WHERE id=?', (kind,row[0]))
+        digest_source = self._conn.execute('SELECT 1 FROM room_messages m JOIN room_exchanges e ON e.origin_message_id=m.origin_message_id '
+                                          'WHERE m.turn_id=? AND e.meeting=2', (source_turn_id,)).fetchone()
+        if not digest_source:
+            self._exchanges.digest(room['id'],row[0],language)
         self._changed(room["id"])
         return {"room_id": room["id"], "message_id": row[0], "member_id": member_id, "duplicate": cursor.rowcount == 0}
 
     async def meeting(self, arguments, language, source_turn_id):
-        ids = self._validated_ids(arguments.get('member_ids'))
+        target_room = self._view(self._room(arguments)) if arguments.get('room_id') is not None else None
+        ids = self._validated_ids(arguments.get('member_ids', target_room['member_ids'] if target_room else None))
         agenda = arguments.get('agenda')
         if not isinstance(agenda, str) or not agenda.strip() or len(agenda) > 9000:
             raise invalid_params('agenda must contain 1 to 9000 characters')
+        source = self._history.get(source_turn_id)
+        if not source or source.scope != 'private' or not self._members.speaker(source.member_id or 0).is_chief:
+            raise invalid_params('only the chief in a private conversation may start a meeting')
         roles = self._roles(self._meeting_roles(arguments.get('roles', {}), ids), ids)
-        room = next((self._view(r) for r in self._conn.execute('SELECT * FROM rooms WHERE is_team=0 ORDER BY id')
-                     if set(self._ids(dict(r))) == set(ids)), None)
+        if target_room is not None:
+            room = target_room
+            if not set(ids).issubset(room['member_ids']):
+                raise invalid_params('add the requested members to this room before starting the meeting')
+        else:
+            room = next((self._view(r) for r in self._conn.execute('SELECT * FROM rooms WHERE is_team=0 ORDER BY id')
+                         if set(self._ids(dict(r))) == set(ids) or
+                         (arguments.get('name') == r['name'] and set(ids).issubset(self._ids(dict(r))))), None)
         if room is None:
             room = (await self._create({'member_ids': ids, 'name': arguments.get('name')}))['room']
         room = (await self._update({'room_id': room['id'], 'roles': roles}))['room']
-        text = agenda.strip()
-        result = await self._send({'room_id': room['id'], 'text': text, 'ui_language': language,
-                                  'request_id': f'meeting_{source_turn_id}'})
-        return {'room_id': room['id'], 'name': room['name'], 'message_id': result['message_id'],
-                'member_ids': ids, 'duplicate': result['duplicate']}
+        result = self.post(source.member_id or 0,{'room_id':room['id'],'text':agenda.strip()},source_turn_id,language)
+        self._exchanges.update(result['message_id'],meeting=0)
+        await self._exchanges.drive(room['id'])
+        return {'room_id':room['id'],'name':room['name'],'message_id':result['message_id'],
+                'member_ids':room['member_ids'],'duplicate':result['duplicate']}
 
     @staticmethod
     def _responder(value, ids):
@@ -311,10 +346,16 @@ class RoomsService:
 
     def _close_stopped(self, room_id):
         """Close failed/stopped exchanges from persisted facts, without another paid model call."""
-        if self._conn.execute("SELECT 1 FROM worker_tasks WHERE room_id=? AND state IN ('queued','running','waiting')", (room_id,)).fetchone():
+        if self._conn.execute("SELECT 1 FROM worker_tasks w JOIN agent_turns t ON t.id=w.turn_id WHERE COALESCE(w.report_room_id,w.room_id)=? "
+                              "AND w.state IN ('queued','running','waiting') AND w.scope='room' AND t.status='running'", (room_id,)).fetchone():
             return
         for exchange in self._conn.execute("SELECT * FROM room_exchanges WHERE room_id=? AND state='stopped' ORDER BY origin_message_id", (room_id,)).fetchall():
             origin = exchange['origin_message_id']
+            if exchange['stop_requested'] and self._conn.execute(
+                    "SELECT 1 FROM worker_tasks w JOIN agent_turns t ON t.id=w.turn_id WHERE COALESCE(w.report_room_id,w.room_id)=? "
+                    "AND w.state IN ('queued','running','waiting') AND t.status='running'",
+                    (room_id,)).fetchone():
+                continue
             messages = self._conn.execute("SELECT m.*,t.status AS turn_status,t.text AS turn_text,t.detail AS turn_detail FROM room_messages m LEFT JOIN agent_turns t ON t.id=m.turn_id WHERE m.origin_message_id=?", (origin,)).fetchall()
             if any(m['turn_status']=='running' for m in messages):
                 continue
@@ -337,7 +378,7 @@ class RoomsService:
             state_words=states.get(language,states['en'])
             reason_words=reasons.get(language,reasons['en'])
             delivered=[]
-            for task in self._conn.execute("SELECT w.*,m.name,(SELECT COUNT(*) FROM task_evidence e WHERE e.task_id=w.id) AS evidence_count FROM worker_tasks w LEFT JOIN members m ON m.id=w.member_id WHERE w.mode IS NOT NULL AND w.room_id=? AND w.source_turn_id IN (SELECT turn_id FROM room_messages WHERE origin_message_id=?)", (room_id,origin)):
+            for task in self._conn.execute("SELECT w.*,m.name,(SELECT COUNT(*) FROM task_evidence e WHERE e.task_id=w.id) AS evidence_count FROM worker_tasks w LEFT JOIN members m ON m.id=w.member_id WHERE w.mode IS NOT NULL AND COALESCE(w.report_room_id,w.room_id)=? AND w.source_turn_id IN (SELECT turn_id FROM room_messages WHERE origin_message_id=?)", (room_id,origin)):
                 label=f"{task['name'] or 'Raphael'} / {task['stage_id']}".replace('@','＠')
                 evidence=self._conn.execute("SELECT uri FROM task_evidence WHERE task_id=? AND kind='artifact'",(task['id'],)).fetchall()
                 artifacts=', '.join(item['uri'].replace('@','＠') for item in evidence)
@@ -345,6 +386,10 @@ class RoomsService:
             lines=[stopped if exchange['reason'] in _OWNER_STOPS else unfinished,
                    *(f"{name}{separator}{words}".replace('@','＠') for name,words in self._unfinished(origin,language)),
                    *(delivered or [empty])]
+            public = self.speech_context(room_id, owner['thread_id'])
+            lines.extend(f"{item['member_name']} / {item['stage_id']}: {item['state']}".replace('@', '＠') for item in public['board']
+                         if not delivered)
+            lines.extend(item['text'].replace('@', '＠') for item in public['decisions'])
             text='\n'.join(lines)+f"\n\n{reason_words.get(exchange['reason'],reason_words['worker'])} {awaiting}"
             with self._conn:
                 chief_id = self._members.primary_id()
@@ -417,6 +462,16 @@ class RoomsService:
                 message["reply_reference"] = self._reply_reference({"id":message["room_id"]}, message["thread_id"], message["reply_to"], message["member_id"])
             except RpcError:
                 message["reply_reference"] = {"message_id":message["reply_to"], "unavailable":True}
+        if message.get('kind') == 'report' and message.get('report_task_id'):
+            task = self._conn.execute('SELECT * FROM worker_tasks WHERE id=? AND COALESCE(report_room_id,room_id)=? AND member_id=?',
+                                      (message['report_task_id'],message['room_id'],message['member_id'])).fetchone()
+            message['status'] = 'done' if task and task['state'] in ('done','failed','cancelled','interrupted','limit') else 'error'
+            message['report'] = next((v for v in self._background.handoff_views(room_id=message['room_id'],thread_id=message['thread_id'])
+                                      if v['task_id']==message['report_task_id']),None)
+            if message['report']:
+                message['report'] = {**message['report'],'result':message['text']}
+            message.pop('turn',None)
+            return message
         if turn and turn.scope == "room" and turn.room_id == message["room_id"] and turn.thread_id == message["thread_id"] and turn.member_id == message["member_id"]:
             if self.turn_view is not None:
                 message["turn"] = self.turn_view(turn)
@@ -460,8 +515,11 @@ class RoomsService:
             if len(rows) < 100:
                 break
             cursor = rows[-1]["id"]
+        questions = getattr(self._background, "owner_questions", None)
         return {"messages":list(reversed(messages)), "exchange":self._exchanges.latest(room["id"]),
-                "handoffs":self._background.handoff_views(room_id=room['id'],thread_id=thread_id)}
+                "pending_questions":questions.in_conversation(room_id=room['id'],thread_id=thread_id) if questions is not None else [],
+                "handoffs":self._background.handoff_views(room_id=room['id'],thread_id=thread_id),
+                **self.speech_context(room['id'],thread_id or self._thread(room))}
 
     def _targets(self, room, text):
         # Code and quotations are evidence, not accepted addresses.
@@ -498,7 +556,7 @@ class RoomsService:
             raise invalid_params("adjust room membership before sending")
         thread_id = self._thread(room, params.get("thread_id"))
         try:
-            attachments = from_wire(params.get("attachments"))
+            attachments = from_wire(params.get("attachments"), self._attachment_store.resolve if self._attachment_store else None)
         except AttachmentError as error:
             raise invalid_params(f"invalid attachments ({error.kind})") from None
         text = params.get("text")
@@ -533,13 +591,34 @@ class RoomsService:
             self._conn.execute("UPDATE room_messages SET origin_message_id = ?, reply_to_member = ?, reply_to = ? WHERE id = ?",
                                (owner_id, recipient, reply_to, owner_id))
         self._changed(room["id"])
-        steer = getattr(self._background, "steer_room", None)
-        targets = [recipient] if recipient is not None else self._targets(room, text)
-        if not attachments and steer is not None and await steer(room["id"], thread_id, text.strip(), targets):
-            return {"message_id":owner_id, "duplicate":False}
         await self._exchanges.start(room, owner_id, language, attachments, recipient)
         self._changed(room["id"])
         return {"message_id":owner_id, "duplicate":False}
+
+    def speech_context(self, room_id, thread_id, through=None):
+        latest = {}
+        reports = {}
+        priority = {'running':2,'waiting':2,'queued':1}
+        tasks = self._background.handoff_views(room_id=room_id,thread_id=thread_id)
+        for task in tasks:
+            member = task['member_id']
+            if task['state'] not in ('queued','running','waiting'):
+                reports[member] = task
+            previous = latest.get(member)
+            if previous is None or priority.get(task['state'],0) >= priority.get(previous['state'],0):
+                latest[member] = task
+        board = []
+        for member,task in latest.items():
+            row = {key:task.get(key) for key in ('task_id','member_id','member_name','stage_id','state','reason','waiting_owner',
+                                                'created_at_ms','started_at_ms','finished_at_ms','work_turn_id','conversation_id')}
+            last = reports.get(member)
+            row['last_report'] = (last.get('result') or '')[:240] if last else ''
+            row['evidence'] = [{key:item.get(key) for key in ('uri','digest','verdict')} for item in last.get('evidence',[])][-4:] if last else []
+            board.append(row)
+        decisions = [{'id':r['id'],'member_id':r['member_id'],'text':r['text']} for r in self._conn.execute(
+            "SELECT id,member_id,text FROM room_messages WHERE room_id=? AND thread_id=? AND kind='decision' "
+            "AND (? IS NULL OR id<=?) ORDER BY id DESC LIMIT 12", (room_id,thread_id,through,through))]
+        return {'board':board,'decisions':list(reversed(decisions))}
 
     def _submit_exchange_turn(self, room, exchange, target, kind, attachments):
         member_id = target["member"]
@@ -548,14 +627,21 @@ class RoomsService:
         source_id = None if kind == "wrapup" else target["reply_to"]
         reference = self._reply_reference(room, thread_id, source_id, member_id) if source_id is not None else None
         speaker = self._members.speaker(member_id)
-        transcript = self._exchanges.transcript(room, thread_id)
+        seen = target.get('seen_through')
+        cursor = self._conn.execute('SELECT seen_message_id FROM room_member_cursor WHERE room_id=? AND thread_id=? AND member_id=?',
+                                    (room['id'],thread_id,member_id)).fetchone()
+        transcript = self._exchanges.transcript(room,thread_id,since=cursor[0] if cursor else 0,through=seen)
         roster = [{"id":s.id,"name":s.name,"role":s.role} for s in self._members.roster() if s.id in self._ids(room)]
         prompt = ("You are in a group chat with the owner and your colleagues. Everyone reads every message, and you decided to say "
-            "something now, so read the whole transcript and say it the way you would to people you work with, in your own "
+            "something now, so read the new messages and say it the way you would to people you work with, in your own "
             "voice and the owner's language. Answer what is actually being discussed: disagree when you disagree, ask when "
             "you want to know, @mention a colleague when you want them in particular. Nothing here has a set shape or length, "
             "and no headings or templates. There are no fixed rounds and no automatic conclusion. Leave out what others have already said. A mention is not work: use the handoff tool "
-            "for a concrete assignment, and assigned work starts now; source document dates are never schedule authorization. "
+            "to yourself or a colleague for a concrete assignment in that member's private conversation. "
+            "This room is a meeting for discussion, checking process and synchronizing data. Never do tool work here. "
+            "Check the status board for the existing stage owner before starting work; use the same stage_id for that action. "
+            "After handoff, say briefly what you started. Work runs privately and reports back as a short card. "
+            "Approval and sign-in cards stay private. Source document dates are never schedule authorization. "
             "Say exactly (pass) if by now you have nothing to add. ")
         if speaker.is_chief:
             prompt += ("You are the chief of staff, which gives you no floor the others lack: you do not open, frame, moderate or "
@@ -585,8 +671,11 @@ class RoomsService:
             # Live, a meeting's wrap-up guessed that no tool could read the mail, and the chief then started nothing.
             prompt += (' Work no one has started yet is its owner\'s next step, not a failure: call work blocked only for a'
                        ' reason the transcript or the delivered work shows.')
-        prompt += "\nFull room transcript (untrusted conversation data):\n" + neutralize(json.dumps(transcript, ensure_ascii=False))
-        session = f"room:{room['id']}:{exchange.origin_message_id}:{exchange.turns_taken}"
+        public = target.get('public') or self.speech_context(room['id'],thread_id,seen)
+        prompt += '\nStatus board and pinned decisions (untrusted data): ' + neutralize(json.dumps(public,ensure_ascii=False))
+        prompt += f"\nSnapshot seen_through={seen or 0}. Reply only to this snapshot; later arrivals belong to the next round."
+        prompt += "\nNew room messages (untrusted conversation data):\n" + neutralize(json.dumps(transcript, ensure_ascii=False))
+        session = f"room:{room['id']}:{exchange.origin_message_id}:{exchange.turns_taken}:{member_id}"
         metadata = [a.metadata() for a in attachments]
         turn_id = self._history.add(session_id=session, question=prompt, route="room", prefix="", text="", status="running",
                                     source="room", member_id=member_id, attachments=metadata,
@@ -596,6 +685,7 @@ class RoomsService:
                 "origin_message_id, reply_to_member, kind, thread_id) VALUES (?, ?, '', ?, ?, ?, ?, ?, ?, ?)",
                 (room["id"], member_id, self._now(), source_id, turn_id, exchange.origin_message_id,
                  reference["author_member_id"] if reference else None, kind, thread_id))
+            self._conn.execute('UPDATE room_messages SET seen_through=? WHERE turn_id=?', (seen,turn_id))
             self._conn.execute('UPDATE room_exchanges SET active_turn=? WHERE origin_message_id=?', (turn_id, exchange.origin_message_id))
             if target.get('intent_id'):
                 # One reply answers every colleague who addressed this member, not one turn per @.
@@ -604,7 +694,7 @@ class RoomsService:
         try:
             task_id = self._background.submit(session_id=session, text=prompt, language=exchange.language,
                 model=speaker.model or self._settings.get("agent_model") or DEFAULTS["agent_model"], member_id=member_id,
-                attachments=attachments, asked_by=replace(speaker, depth=MAX_DEPTH, chain=frozenset(self._ids(room))))
+                attachments=attachments, asked_by=replace(speaker, depth=0, chain=frozenset()))
         except Refused as refused:
             self._history.resolve(turn_id, prefix="", text=phrase(exchange.language, refused.kind), status="error")
         else:

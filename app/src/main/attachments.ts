@@ -2,17 +2,37 @@
 import { t } from "./i18n";
 import type { TurnAttachment } from "./types";
 import { esc, ico, iconButton } from "./ui";
+import * as api from "./api";
 
-/** Shared with the core: four files, 50 MB each and 100 MB in total. */
-export const ATTACH_MAX = 4;
-export const FILE_MAX_BYTES = 50 * 1024 * 1024;
-export const TOTAL_MAX_BYTES = 100 * 1024 * 1024;
-export function attachRefusal(count: number, _mime: string, size: number, total = 0): "count" | "size" | "total" | "empty" | null {
+/** Shared with the core. Large files cross IPC only as bounded chunks and stored IDs. */
+export const ATTACH_MAX = 20;
+export const FILE_MAX_BYTES = 250 * 1024 * 1024;
+export const VIDEO_MAX_BYTES = 1024 * 1024 * 1024;
+export const TOTAL_MAX_BYTES = ATTACH_MAX * VIDEO_MAX_BYTES;
+export const attachmentLimit = (mime: string): number => mime.startsWith("video/") ? VIDEO_MAX_BYTES : FILE_MAX_BYTES;
+export function attachRefusal(count: number, mime: string, size: number, total = 0): "count" | "size" | "total" | "empty" | null {
   if (count >= ATTACH_MAX) return "count";
   if (size <= 0) return "empty";
-  if (size > FILE_MAX_BYTES) return "size";
+  if (size > attachmentLimit(mime)) return "size";
   if (size + total > TOTAL_MAX_BYTES) return "total";
   return null;
+}
+
+export async function readComposerFile(file: File, mime: string, current: () => boolean = () => true): Promise<import("./types").WireAttachment> {
+  if (file.size <= 4 * 1024 * 1024) return { name: file.name, mime, data: base64Of(new Uint8Array(await file.arrayBuffer())) };
+  const { token } = await api.core<{ token: string }>("attachments.upload", { action: "begin", name: file.name, mime, size: file.size });
+  try {
+    for (let offset = 0; offset < file.size; offset += 1024 * 1024) {
+      if (!current()) throw new Error("cancelled");
+      const data = base64Of(new Uint8Array(await file.slice(offset, offset + 1024 * 1024).arrayBuffer()));
+      await api.core("attachments.upload", { action: "append", token, offset, data });
+    }
+    if (!current()) throw new Error("cancelled");
+    return await api.core<import("./types").WireAttachment>("attachments.upload", { action: "finish", token });
+  } catch (error) {
+    await api.core("attachments.upload", { action: "abort", token }).catch(() => {});
+    throw error;
+  }
 }
 
 /** `bytes` in base64, a slice at a time (a whole PDF at once is too long an argument list). */
@@ -61,7 +81,7 @@ export function sentFileHTML(file: TurnAttachment): string {
   const kind = fileKind(file.mime);
   const id = typeof file.id === "string" && /^[a-f0-9]{32}\.[a-z0-9]{1,12}$/.test(file.id) ? file.id : "";
   const source = file.preview && /^data:(image\/(png|jpeg|webp|gif|avif|bmp)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+);base64,[A-Za-z0-9+/=]*$/.test(file.preview) ? file.preview : "";
-  const attrs = id ? ` data-attachment="${esc(id)}"` : "";
+  const attrs = id ? ` data-attachment="${esc(id)}"${(file.size ?? 0) > 4 * 1024 * 1024 ? ' data-stream-file="true"' : ""}` : "";
   const src = source ? ` src="${esc(source)}"` : "";
   const open = id ? iconButton("external", t("agent.openFile"), ` data-act="attachment-open" data-id="${esc(id)}"`, "attachment-open") : "";
   if ((id || source) && kind === "image") return `<div class="me-file attachment-image"><button type="button" class="btn attachment-picture" data-act="attachment-image"${attrs} aria-label="${esc(file.name)}"><img${src} alt="${esc(file.name)}"${attrs}></button></div>`;

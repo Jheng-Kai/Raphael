@@ -22,10 +22,11 @@ class Writer:
     async def wait_closed(self): pass
 
 
-async def request(hooks, identifier, body, secret=None, size=None):
+async def request(hooks, identifier, body, secret=None, size=None, bearer=None):
     signature = hmac.new((secret or "wrong").encode(), body, hashlib.sha256).hexdigest()
     reader = asyncio.StreamReader()
-    reader.feed_data(f"POST /routines/{identifier} HTTP/1.1\r\nContent-Length: {len(body) if size is None else size}\r\nX-Raphael-Signature: sha256={signature}\r\n\r\n".encode() + body)
+    auth = f"Authorization: Bearer {bearer}\r\n" if bearer is not None else ""
+    reader.feed_data(f"POST /routines/{identifier} HTTP/1.1\r\nContent-Length: {len(body) if size is None else size}\r\nX-Raphael-Signature: sha256={signature}\r\n{auth}\r\n".encode() + body)
     reader.feed_eof()
     writer = Writer()
     await hooks.handle(reader, writer)
@@ -40,6 +41,31 @@ async def setup(rig, monkeypatch):
     rig.service.webhooks = hooks
     routine = (await rig.call("routines.create", {"member_id": 0, "title": "Sample hook", "prompt": "Summarize the sample", "when": {"webhook": True}}))["routine"]
     return hooks, routine, start
+
+
+@pytest.mark.parametrize("payload", [
+    {"action": "created", "data": {"issue": {"id": "S001", "title": "Synthetic issue", "permalink": "https://example.test/issues/S001"}}},
+    {"event": {"id": "PD001", "event_type": "incident.triggered", "occurred_at": "2026-11-05T08:00:00Z", "data": {"id": "I001", "title": "Synthetic incident", "html_url": "https://example.test/incidents/I001", "urgency": "high"}}},
+])
+async def test_recipe_payloads_use_bearer_and_enter_the_same_untrusted_worker_boundary(rig, monkeypatch, payload, caplog):
+    hooks, routine, _ = await setup(rig, monkeypatch)
+    key = (await hooks.details(routine["id"], reveal=True))["secret"]
+    body = json.dumps(payload).encode()
+    assert b"401" in await request(hooks, routine["id"], body, bearer="wrong")
+    assert not rig.background.submitted
+    assert b"202" in await request(hooks, routine["id"], body, bearer=key)
+    assert "untrusted" in rig.background.submitted[0]["text"]
+    assert "Synthetic" in rig.background.submitted[0]["text"]
+    assert key not in caplog.text
+
+
+async def test_hourly_cap_returns_429_before_creating_work(rig, monkeypatch):
+    hooks, routine, _ = await setup(rig, monkeypatch)
+    details = await rig.call("routines.webhook", {"id": routine["id"], "reveal": True})
+    rig.service._settings.set("routine_run_window", [[0, rig.wall.now]] * 200)
+    assert b"429" in await request(hooks, routine["id"], b"sample", details["secret"])
+    assert rig.background.submitted == []
+    assert "200" in rig.service.store.routine(routine["id"]).last_error
 
 
 async def test_signature_untrusted_body_overlap_rate_limit_and_no_secret_log(rig, monkeypatch, caplog):

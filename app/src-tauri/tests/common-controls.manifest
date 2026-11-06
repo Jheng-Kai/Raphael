@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<!-- Embedded in the test executables only (see build.rs); the app gets its manifest from Tauri. -->
+<!-- Shared MSVC manifest for the app and unit-test executables (see build.rs). -->
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <dependency>
     <dependentAssembly>

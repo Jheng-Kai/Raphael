@@ -19,7 +19,7 @@ from pathlib import Path
 from .process import Child, PrivateFiles, secure_directory
 from .native_diagnostics import capture as native_capture, directory as native_directory, enabled as native_enabled
 from ..quota import parse_quota
-from ...failures import classify
+from ...failures import classify, redact
 from ...clock import wall_clock_ms
 
 logger = logging.getLogger(__name__)
@@ -100,10 +100,18 @@ class Driver:
     def _event(self, kind, text):
         if kind == "error":
             failure = classify(text, secrets=self._diagnostic_secrets)
+            tail = getattr(self.child, "stderr_tail", b"") or b""
+            original = failure.detail.split("\n\nstderr:\n", 1)[0] if failure.detail else (text.get("error", text) if isinstance(text, dict) else str(text))
+            if isinstance(original, dict):
+                original = original.get("message") or original.get("reason") or json.dumps(original, ensure_ascii=False, default=str)
+            detail = "\n".join(redact(line, secrets=self._diagnostic_secrets, limit=1800) for line in str(original).splitlines())[:1800]
+            if tail:
+                detail += "\n\nstderr:\n" + "\n".join(redact(line, secrets=self._diagnostic_secrets, limit=160) for line in tail.decode("utf-8", errors="replace").splitlines()[-12:])
+            failure = classify({**failure.wire(), "detail": detail[:4000]}, secrets=self._diagnostic_secrets, record=False)
             if self.exhausted and failure.kind not in ("credits", "auth_expired", "refused"):
-                failure = classify({"kind": "usage_limit", "message": failure.reason})
+                failure = classify({**failure.wire(), "kind": "usage_limit", "message": failure.reason})
             if failure.kind == "usage_limit" and self.reset_at_ms:
-                failure = classify({"kind": failure.kind, "message": failure.reason, "resets_at": self.reset_at_ms / 1000})
+                failure = classify({**failure.wire(), "message": failure.reason, "resets_at": self.reset_at_ms / 1000})
             return Event(kind, failure.kind, failure.wire())
         elif kind == "final" and self.quota and not self.exhausted:
             self.quota(self.name, {"exhausted": False})
@@ -121,7 +129,7 @@ class Driver:
             await self.child.kill()
         self._close_steers()
 
-    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=(), computer_endpoint=None, structured=None):
+    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=(), computer_endpoint=None, structured=None, skills=()):
         files = PrivateFiles()
         codex_auth = None
         self._diagnostic_secrets = [token]
@@ -138,12 +146,36 @@ class Driver:
             command = list(self.command)
             environ = dict(os.environ if self.environ is None else self.environ)
             child_cwd = cwd or str(files.path)
+            # Only Raphael's enabled packages enter native discovery. No plugin hooks/config are copied.
+            skill_paths = []
+            if skills and structured is None:
+                from ...members.skill_library import package
+                plugin = files.path / "raphael-skills"
+                manifest = plugin / ".claude-plugin/plugin.json"
+                manifest.parent.mkdir(parents=True)
+                manifest.write_text(json.dumps({"name": "raphael-skills", "version": "1.0.0"}), encoding="utf-8")
+                for index, skill in enumerate(skills):
+                    folder = plugin / "skills" / f"skill-{index}"
+                    for relative, data in package(Path(skill["path"]).parent).items():
+                        if relative == "SKILL.md":
+                            # Native expansion must not execute command substitutions outside our approval path.
+                            data = data.replace(b"!`", b"\\!`")
+                            if skill.get("plugin_root"):
+                                data = data.replace(b"${CLAUDE_PLUGIN_ROOT}", skill["plugin_root"].replace("\\", "/").encode())
+                        target = folder / relative
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_bytes(data)
+                    skill_paths.append(str(folder / "SKILL.md"))
             if self.name == "claude":
                 command += ["-p", "--output-format", "stream-json", "--input-format", "stream-json", "--verbose",
-                            "--setting-sources", "", "--disable-slash-commands",
+                            "--setting-sources", "",
                             "--include-partial-messages", "--append-system-prompt-file", prompt_file,
-                            "--mcp-config", config, "--strict-mcp-config", "--tools", "",
-                            "--allowedTools", "mcp__raphael__*,mcp__computer__*" if computer_endpoint else "mcp__raphael__*"]
+                            "--mcp-config", config, "--strict-mcp-config", "--tools", "Skill" if skill_paths else "",
+                            "--allowedTools", ("Skill," if skill_paths else "") + ("mcp__raphael__*,mcp__computer__*" if computer_endpoint else "mcp__raphael__*")]
+                if skill_paths:
+                    command += ["--plugin-dir", str(plugin), "--settings", '{"disableAllHooks":true}']
+                else:
+                    command += ["--disable-slash-commands"]
                 if structured is not None:
                     command += ["--json-schema", json.dumps(structured)]
                 else:
@@ -170,6 +202,9 @@ class Driver:
                 session = session.removeprefix(CODEX_SESSION_PREFIX) if session and session.startswith(CODEX_SESSION_PREFIX) else None
                 overrides = {**CODEX_ISOLATION, "mcp_servers.raphael.url": endpoint,
                              "mcp_servers.raphael.bearer_token_env_var": "RAPHAEL_MCP_TOKEN"}
+                if skill_paths:
+                    overrides["skills.include_instructions"] = True
+                    overrides["skills.config"] = [{"path": path, "enabled": True} for path in skill_paths]
                 if computer_endpoint:
                     overrides.update({"mcp_servers.computer.url": computer_endpoint,
                         "mcp_servers.computer.bearer_token_env_var": "RAPHAEL_MCP_TOKEN",
@@ -192,6 +227,8 @@ class Driver:
             else:
                 raise ValueError("unknown_cli")
             if self.name == "codex":
+                self.native_skills = [{"type": "skill", "name": skill["name"], "path": path}
+                                      for skill, path in zip(skills, skill_paths)]
                 environ["RAPHAEL_MCP_TOKEN"] = token
             elif self.name == "gemini":
                 environ["USERPROFILE"] = environ["HOME"] = str(home)
@@ -208,11 +245,17 @@ class Driver:
                 await self.child.send({"type": "user", "message": {"role": "user", "content": content}})
                 self.child.process.stdin.close()
                 async for event in self._claude():
+                    if event.kind == "error":
+                        await self.interrupt()
+                        event = self._event("error", event.data)
                     yield event
             elif self.name == "gemini":
                 await self.child.send({"event": "user", "message": {"role": "user", "content": user}})
                 self.child.process.stdin.close()
                 async for event in self._antigravity():
+                    if event.kind == "error":
+                        await self.interrupt()
+                        event = self._event("error", event.data)
                     yield event
             else:
                 image_paths = []
@@ -223,11 +266,15 @@ class Driver:
                     path.write_bytes(image.data)
                     image_paths.append(str(path.resolve()))
                 async for event in self._rpc(user, system, endpoint, token, session, permission, image_paths):
+                    if event.kind == "error":
+                        await self.interrupt()
+                        event = self._event("error", event.data)
                     yield Event("session", CODEX_SESSION_PREFIX + event.text) if event.kind == "session" else event
         except (OSError, ValueError, TimeoutError, EOFError, asyncio.IncompleteReadError) as error:
             self.native_diagnostic("transport", {"type": type(error).__name__, "message": str(error)})
             logger.warning("CLI transport failed: %s", type(error).__name__)
-            yield self._event("error", {"kind": "network", "message": "CLI process ended before completion"}
+            await self.interrupt()
+            yield self._event("error", {"kind": "cli_stopped", "message": "CLI process ended before completion"}
                               if isinstance(error, (EOFError, asyncio.IncompleteReadError)) else error)
         finally:
             try:
@@ -405,6 +452,7 @@ class Driver:
                         raise ValueError("missing_session")
                     yield Event("session", self.session)
                     inputs = [{"type": "text", "text": user}] + [{"type": "localImage", "path": path} for path in image_paths]
+                    inputs += getattr(self, "native_skills", [])
                     await request("turn/start", {"threadId": self.session, "input": inputs,
                                   **({"effort": self.effort} if self.effort else {})}, "turn")
                 elif label == "turn":

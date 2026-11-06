@@ -8,3 +8,8 @@
 .appearance-settings { width: min(100%, var(--layout-reading-max)); margin-inline: auto; }
 .appearance-settings .slist { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel); }
 .appearance-settings .slist > .row { padding: var(--sp-4); }
+
+.memory-import .import-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin-block: var(--sp-3); font-size: var(--fs-sm); }
+.memory-import textarea { width: 100%; min-width: 0; height: auto; min-height: 140px; padding: var(--sp-3); resize: vertical; }
+.import-result { overflow-wrap: anywhere; }
+.update-notes { white-space: pre-wrap; overflow-wrap: anywhere; }

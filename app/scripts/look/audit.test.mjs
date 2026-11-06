@@ -7,10 +7,68 @@ import { slimeCharactersHTML, slimeColorOf, slimeColorsHTML } from "../../src/ma
 import { auditDocument, failedChecks } from "./audit.mjs";
 import { checkRendered } from "./checks.mjs";
 import { scenes } from "./scenes/index.mjs";
-import { LATIN_NAMES, needsDesktopFixture } from "./runner.mjs";
+import { LATIN_NAMES, needsDesktopFixture, sceneLatinNames } from "./runner.mjs";
 import { slimeParts } from "./slime-board.mjs";
 
 describe("rendered look checks", () => {
+  it("rejects split text edges, mismatched controls and centered location values", () => {
+    const browser = new Window();
+    browser.document.body.innerHTML = '<div class="computer-location-popover"><p class="computer-location-purpose">Shared scope</p><div class="lbl"><div class="t">Computer location</div></div><button class="sel"><span>Local</span></button><label class="field"><input></label></div>';
+    let lineLeft = 100, fieldLeft = 100, fieldRight = 300, textInset = 13, textAlign = "left";
+    const rect = (left = 100, right = 300) => ({ left, right, width: right - left, height: 34 });
+    for (const element of browser.document.querySelectorAll("*")) { element.checkVisibility = () => true; element.getBoundingClientRect = () => element.matches('.field') ? rect(fieldLeft, fieldRight) : rect(); }
+    browser.document.createRange = () => {
+      let element;
+      return { selectNodeContents(node) { element = node; }, getClientRects: () => [rect(), rect(element.matches('.t') ? lineLeft : 100)], getBoundingClientRect: () => rect(100 + textInset) };
+    };
+    vi.stubGlobal("document", browser.document);
+    vi.stubGlobal("getComputedStyle", () => ({ textAlign, borderLeftWidth: "1px", paddingLeft: "12px" }));
+    try {
+      expect(() => checkRendered("host-settings-layout")).not.toThrow();
+      lineLeft = 118; expect(() => checkRendered("host-settings-layout")).toThrow("one left edge"); lineLeft = 100;
+      fieldLeft = 102; expect(() => checkRendered("host-settings-layout")).toThrow("one left edge"); fieldLeft = 100;
+      fieldRight = 290; expect(() => checkRendered("host-settings-layout")).toThrow("right edge"); fieldRight = 300;
+      textAlign = "center"; expect(() => checkRendered("host-settings-layout")).toThrow("left-aligned"); textAlign = "left";
+      textInset = 50; expect(() => checkRendered("host-settings-layout")).toThrow("left-aligned");
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
+  it("rejects a low-contrast Docker download on the desktop wallpaper", () => {
+    const browser = new Window();
+    browser.document.body.innerHTML = '<section class="desktop-panel"><div class="desktop-message">Docker Desktop</div><button data-act="docker-download">Download Docker Desktop</button></section>';
+    browser.__look = { calls: [] };
+    for (const element of browser.document.querySelectorAll("*")) { element.checkVisibility = () => true; element.getBoundingClientRect = () => ({ width: 120, height: 32 }); }
+    let backgroundColor = "rgb(255, 255, 255)";
+    vi.stubGlobal("window", browser); vi.stubGlobal("document", browser.document);
+    vi.stubGlobal("getComputedStyle", () => ({ color: "rgb(240, 240, 240)", backgroundColor }));
+    try {
+      expect(() => checkRendered("desktop-absent")).toThrow("readable contrast");
+      backgroundColor = "rgb(23, 23, 23)";
+      expect(() => checkRendered("desktop-absent")).not.toThrow();
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
+  it("accepts a typed host name as data while still rejecting untranslated controls", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<button data-computer-location><span>studio-mini</span></button><button>Save</button>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 120, bottom: 32, width: 120, height: 32 });
+    const scene = { fixture: {}, steps: [{ action: "type", selector: "#computer-ssh-alias", text: "studio-mini" }] };
+    const result = auditDocument(window.document, { width: 1120, height: 900 }, [], sceneLatinNames(scene, "zh-TW", {}));
+    expect(result.mixedLanguage.map(item => item.word)).toEqual(["Save"]);
+  });
+  it("rejects permission field labels taller than one line", () => {
+    const browser = new Window();
+    browser.document.body.innerHTML = '<div class="permission-card"><div class="card-field"><span>Connected app</span><span>Long action details</span></div></div>';
+    const label = browser.document.querySelector('.card-field > span');
+    label.checkVisibility = () => true;
+    let height = 20;
+    label.getBoundingClientRect = () => ({ width: 100, height });
+    vi.stubGlobal("document", browser.document);
+    vi.stubGlobal("getComputedStyle", () => ({ lineHeight: "20px" }));
+    try {
+      expect(checkRendered("permission-detail-label")).toEqual({ check: "permission-detail-label", labels: 1 });
+      height = 40;
+      expect(() => checkRendered("permission-detail-label")).toThrow("one line");
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
   it.each(["idle", "sleeping"])("rejects detached props and animations on a resting %s slime", state => {
     const browser = new Window();
     browser.document.body.innerHTML = `<div class="look-slime-board"><span><span class="slime-surface"><svg class="slime" data-state="${state}"><path class="slime-body"/><path class="slime-eyes"/></svg></span></span></div>`;
@@ -498,24 +556,26 @@ describe("rendered look checks", () => {
     vi.stubGlobal("document", window.document);
     vi.stubGlobal("Element", window.Element);
     try {
-      for (const colour of colours) {
-        const chat = window.document.createElement("div");
-        chat.className = "page-agent mb-chat";
-        chat.dataset.memberBubble = theme;
-        chat.style.setProperty("--member-accent", memberAccent(colour));
-        chat.innerHTML = '<div data-desktop-slot="2"></div>';
-        window.document.body.append(chat);
-        mountDesktopTimeline(chat, () => "Member").update({ state: "running", ready: true, control: "member", works: [{ id: "private-computer-task", turn_id: 2, state: "waiting_control", tool: "get_desktop_state", reason: "sign_in" }] });
-        chat.replaceChildren(chat.querySelector("[data-card-desktop-screen]"));
-        chat.firstElementChild.style.backgroundImage = "none";
-        const button = chat.querySelector('[data-card-desktop-screen] > button[data-card-desktop="take"]');
-        expect(button.className).toBe("btn");
-        expect(button.textContent).toBe("");
-        expect(window.getComputedStyle(button.querySelector("svg.i")).color, colour).toBe("rgb(240, 240, 240)");
-      }
+      // Reuse one real preview: accumulating every colour in the document makes
+      // each style invalidation and hover-selector audit revisit all earlier previews.
+      const chat = window.document.createElement("div");
+      chat.className = "page-agent mb-chat";
+      chat.dataset.memberBubble = theme;
+      chat.innerHTML = '<div data-desktop-slot="2"></div>';
+      window.document.body.append(chat);
+      mountDesktopTimeline(chat, () => "Member").update({ state: "running", ready: true, control: "member", works: [{ id: "private-computer-task", turn_id: 2, state: "waiting_control", tool: "get_desktop_state", reason: "sign_in" }] });
+      chat.replaceChildren(chat.querySelector("[data-card-desktop-screen]"));
+      chat.firstElementChild.style.backgroundImage = "none";
       for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 110, bottom: 40, width: 100, height: 30 });
-      const failures = auditDocument(window.document, { width: 1120, height: 900 }, []).productRules.filter(item => item.rule === "R-UI-52" && item.class === "btn");
-      expect(failures).toEqual([]);
+      const button = chat.querySelector('[data-card-desktop-screen] > button[data-card-desktop="take"]');
+      expect(button.className).toBe("btn");
+      expect(button.textContent).toBe("");
+      for (const colour of colours) {
+        chat.style.setProperty("--member-accent", memberAccent(colour));
+        expect(window.getComputedStyle(button.querySelector("svg.i")).color, colour).toBe("rgb(240, 240, 240)");
+        const failures = auditDocument(window.document, { width: 1120, height: 900 }, []).productRules.filter(item => item.rule === "R-UI-52" && item.class === "btn");
+        expect(failures, colour).toEqual([]);
+      }
     } finally { vi.unstubAllGlobals(); window.happyDOM.abort(); }
   });
   it("rejects a disabled control whose reason exists only in a title (R-UI-69)", () => {
@@ -741,6 +801,14 @@ describe("rendered look checks", () => {
     const { audit } = productAudit('<button class="btn" style="border: none">Save</button><button class="btn icon" style="border: 1px solid red">X</button><button class="btn" style="border: 1px solid red">Cancel</button>');
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-18', 'R-UI-18']);
   });
+  it("allows a quiet routine inspection link only inside its reply origin", () => {
+    const { audit } = productAudit('<div class="chat-message"><div class="routine-origin"><button class="btn routine-run-link" data-act="open-routine" style="border:0">Sample routine</button></div></div><button class="btn routine-run-link" data-act="open-routine" style="border:0">Save</button>');
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-18').map(item => item.text)).toEqual(['Save']);
+  });
+  it("allows a soft pending-question row only in its conversation container", () => {
+    const { audit } = productAudit('<div class="pending-questions"><button class="btn sm pending-question" style="border:0">待回答</button></div><button class="btn pending-question" style="border:0">Save</button>');
+    expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-18']);
+  });
   it("allows the owner's quiet Today navigation only inside its arrow group", () => {
     const { audit } = productAudit('<div class="au-date-nav"><button class="btn au-today" style="border:0">Today</button></div><button class="btn au-today" style="border:0">Save</button>');
     expect(audit().productRules.map(item=>item.rule)).toEqual(['R-UI-18']);
@@ -843,6 +911,13 @@ describe("rendered look checks", () => {
     expect(result.missingI18nKeys.map(item => item.key)).toEqual(["members.missingLabel"]);
     expect(result.nativeControls.map(item => item.tag)).toEqual(["select", "input"]);
   });
+
+  it("distinguishes explicit provider JSON paths from untranslated keys elsewhere", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<code data-json-paths>data.issue.id · event.data.title · members.missingLabel</code><p>data.issue.id</p>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
+    expect(auditDocument(window.document, { width: 1120, height: 900 }, ["data", "event", "members"]).missingI18nKeys.map(item => item.key)).toEqual(["members.missingLabel", "data.issue.id"]);
+  });
   it("fails horizontal overflow and reports controls outside the viewport", () => {
     const window = new Window();
     window.document.body.innerHTML = '<button id="outside">Save</button>';
@@ -921,12 +996,16 @@ it("allows only the shared card quiet exit to be frameless while rejecting ordin
  const frames=result.productRules.filter(rule=>rule.rule==='R-UI-18'); expect(frames.map(rule=>rule.text)).toEqual(['Delete']); browser.happyDOM.abort();
 });
 
-it("waits for card takeover on the expanded existing stream", () => {
+it("waits for interactive inline takeover and returns through the private card", () => {
   for (const name of ['desktop-takeover-owner', 'desktop-takeover-done']) {
     const scene = scenes.find(scene => scene.name === name);
-    expect(scene.steps.some(step => step.action === 'wait' && step.selector === '.desktop-panel[data-expanded][data-interactive="true"]')).toBe(true);
+    expect(scene.steps.some(step => step.action === 'wait' && step.selector === '[data-card-desktop-screen][data-owner-control] iframe')).toBe(true);
     expect(scene.steps.some(step => step.selector?.includes('data-desktop="expand"'))).toBe(false);
   }
+  const typing = scenes.find(scene => scene.name === 'desktop-takeover-owner');
+  expect(typing.steps.some(step => step.action === 'desktop-owner-typing')).toBe(true);
+  const done = scenes.find(scene => scene.name === 'desktop-takeover-done');
+  expect(done.steps.some(step => step.selector === '[data-card-desktop="return"]')).toBe(true);
 });
 
 it("dispatches task room, file-view and restore assertions through the shared rendered check", () => {

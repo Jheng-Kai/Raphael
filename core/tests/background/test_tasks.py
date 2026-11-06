@@ -132,3 +132,33 @@ def test_the_task_of_each_turn_is_found_by_the_turn(store):
     assert {turn: task.id for turn, task in found.items()} == {11: first, 12: second}
     assert store.for_turns([]) == {}
     assert alone not in {task.id for task in found.values()}
+
+
+def test_artifact_opening_uses_the_recorded_root_and_unchanged_bytes(store, tmp_path):
+    task = make(store)
+    root = tmp_path / "workspace"
+    root.mkdir()
+    file = root / "review.txt"
+    file.write_text("review", encoding="utf-8")
+    store.verify_artifact(task, "receipt", file, workspace=root, mime="text/plain")
+    evidence = store.evidence(task)[0]['id']
+    assert store.artifact_path(task, evidence) == file.resolve()
+    assert store.artifact_path(make(store), evidence) is None
+    assert store.artifact_path(task, evidence + 1) is None
+    file.write_text("changed", encoding="utf-8")
+    assert store.artifact_path(task, evidence) is None
+    file.unlink()
+    assert store.artifact_path(task, evidence) is None
+
+
+def test_artifact_opening_refuses_receipts_that_escape_their_workspace(store, tmp_path):
+    task = make(store)
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside", encoding="utf-8")
+    root = tmp_path / "workspace"
+    root.mkdir()
+    store.verify_artifact(task, "receipt", outside, workspace=tmp_path, mime="text/plain")
+    evidence = store.evidence(task)[0]['id']
+    with store._conn:
+        store._conn.execute("UPDATE task_evidence SET workspace=?,uri=? WHERE id=?", (str(root), "../outside.txt", evidence))
+    assert store.artifact_path(task, evidence) is None

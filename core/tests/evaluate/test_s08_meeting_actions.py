@@ -71,6 +71,9 @@ def cli_brain(monkeypatch):
 
         async def run(self, *, system, user, endpoint, token, **kwargs):
             yield Event("model", "owner-model")
+            if "Return only your speak choice" in system:
+                yield Event("final", '{"speak":false,"urgency":0}')
+                return
             results = []
             while True:
                 text, calls = act(system, user, results)

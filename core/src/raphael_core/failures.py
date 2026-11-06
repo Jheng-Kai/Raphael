@@ -15,11 +15,11 @@ from datetime import datetime
 from .retry_utils import RETRY_AFTER_CAP_S, reset_delay_from_message
 
 KINDS = frozenset(("credits", "usage_limit", "rate_limit", "overloaded", "server", "auth_expired",
-                   "network", "permission_denied", "not_found", "tool_broken", "invalid_request", "timeout", "refused", "unknown",
+                   "network", "cli_stopped", "permission_denied", "not_found", "tool_broken", "invalid_request", "timeout", "refused", "unknown",
                    "chatgpt_unavailable", "chatgpt_plan_unavailable", "chatgpt_scope",
                    "context_overflow", "payload_too_large", "content_policy"))
 # What is worth asking again. A spent quota (`credits`, `usage_limit`) is not: waiting does not refill it.
-TRANSIENT = frozenset(("rate_limit", "overloaded", "server", "network", "timeout"))
+TRANSIENT = frozenset(("rate_limit", "overloaded", "server", "network", "timeout", "cli_stopped"))
 # A failed model call is made again after these waits, which are all a question gets before the owner is told: nothing
 # was done yet, and he learns in seconds. After something was done it goes on at the patient pace until he stops it.
 RETRY_WAITS = (1.0, 3.0, 8.0)
@@ -38,6 +38,7 @@ _OWNER_MESSAGES = {
         "server": "{name} 的服務暫時出問題了，請稍後再試。",
         "auth_expired": "{name} 還沒登入或缺少金鑰，請到設定 › 連接完成連線。",
         "network": "{name} 目前無法連線，請確認網路後再試。",
+        "cli_stopped": "{name} 在回答完成前停止了。",
         "permission_denied": "{name} 尚未取得執行此操作的權限，請到「設定 › 連接」檢查它的讀寫工具，並在需要時重新登入授權。",
         "not_found": "找不到 {name} 這次工作需要的項目，請重新選擇原檔、連結或模型，若是連接工具請先重新讀取工具。",
         "tool_broken": "目前無法確認 {name} 這次失敗的原因，請保留原對話並重新嘗試一次，若仍失敗請回報問題。",
@@ -54,6 +55,7 @@ _OWNER_MESSAGES = {
         "server": "{name} のサービスで一時的な問題が起きています。しばらくしてから再試行してください。",
         "auth_expired": "{name} にログインしていないか、必要なキーがありません。設定の「接続」で接続を完了してください。",
         "network": "{name} に接続できません。ネットワークを確認してから再試行してください。",
+        "cli_stopped": "{name} は回答を完了する前に停止しました。",
         "permission_denied": "{name} には操作の権限がありません。「設定 › 接続」で読み書きツールを確認し、必要なら再ログインして許可してください。",
         "not_found": "{name} の作業に必要な項目がありません。元のファイル、リンク、モデルを選び直し、接続ツールなら再読み込みしてください。",
         "tool_broken": "{name} の失敗原因を確認できません。この会話を残して一度再試行し、続く場合は問題を報告してください。",
@@ -70,6 +72,7 @@ _OWNER_MESSAGES = {
         "server": "{name} is having a temporary service problem. Try again later.",
         "auth_expired": "{name} is signed out or missing a required key. Complete the connection in Settings > Connections.",
         "network": "{name} cannot connect right now. Check your network and try again.",
+        "cli_stopped": "{name} stopped before finishing its answer.",
         "permission_denied": "{name} lacks permission for this action. Check its read and write tools in Settings > Connections and sign in again if authorization is needed.",
         "not_found": "{name} could not find an item this task needs. Reselect the original file, link or model. Reload tools for a connected app.",
         "tool_broken": "The cause of this failure in {name} is unknown. Keep this conversation and try once more. Report the problem if it continues.",
@@ -263,6 +266,7 @@ class Failure:
     # When the provider says a limit lifts or a new try can work: seconds since the epoch. None when it said nothing.
     resets_at: float | None = field(default=None, compare=False)
     missing: Missing | None = None
+    detail: str | None = field(default=None, compare=False)
 
     @property
     def transient(self):
@@ -275,6 +279,8 @@ class Failure:
 
     def wire(self):
         wire = {"kind": self.kind, "reason": self.reason}
+        if self.detail:
+            wire["detail"] = self.detail
         if self.missing is not None:
             wire["missing"] = self.missing.wire()
         if self.resets_at is not None:
@@ -283,6 +289,9 @@ class Failure:
 
     def sentence(self, name, language="en", *, now=None):
         language = _language(language)
+        if self.kind == "cli_stopped" and (server := re.search(r"required MCP servers failed to initialize:\s*([\w., -]+)", self.reason, re.I)):
+            servers = server[1].strip()[:100]
+            return {"zh-TW": "{name} 無法啟動必要的 MCP 伺服器：{servers}。", "en": "{name} could not start the required MCP server: {servers}.", "ja": "{name} は必須の MCP サーバーを起動できませんでした：{servers}。"}[language].format(name=name, servers=servers)
         if self.missing is not None:
             text = _OWNER_MESSAGES[language][self.kind].format(name=name) if self.kind.startswith("chatgpt_") else self.missing.sentence(language)
             return f"{name}: {text}" if self.missing.requirement == "provider" and not self.kind.startswith("chatgpt_") else text
@@ -393,6 +402,7 @@ def classify(value: object, *, secrets=(), record=True) -> Failure:
     if kind not in KINDS or kind in ("unknown", "tool_broken", "server"):
         fallback = kind if kind in KINDS else "unknown"
         patterns = (
+            ("cli_stopped", r"CLI (?:process|stream) ended before completion|CLI ended without an answer|required MCP servers failed to initialize"),
             ("credits", _CREDITS),
             ("usage_limit", _QUOTA),
             ("refused", r"safety|policy violation|refusal|owner.{0,20}(?:denied|said no)"),
@@ -410,7 +420,9 @@ def classify(value: object, *, secrets=(), record=True) -> Failure:
     if isinstance(value, BaseException) and kind == "unknown":
         reason = type(value).__name__
     missing = Missing.read(value.get("missing")) if isinstance(value, dict) else None
-    failure = Failure(kind, redact(reason, secrets=secrets) or kind, time.time() + wait if wait else None, missing)
+    detail = value.get("detail") if isinstance(value, dict) else None
+    safe_detail = "\n".join(redact(line, secrets=secrets, limit=500) for line in str(detail).splitlines())[:4000] if detail else None
+    failure = Failure(kind, redact(reason, secrets=secrets) or kind, time.time() + wait if wait else None, missing, safe_detail)
     if record:
         line = f"{failure.kind}: {failure.reason}"
         RECENT.append(line)

@@ -1,4 +1,4 @@
-"""Host-owned skill revisions and bounded generated Markdown, never executable packages."""
+"""Host-owned skill revisions and bounded generated Markdown; guidance grants no execution."""
 
 import json
 import re
@@ -12,6 +12,11 @@ def skill_plugin(text, source=""):
     """Packaging is metadata, never a capability or authority."""
     if source.startswith("plugin:"):
         return source[7:].strip()[:100]
+    if source.startswith("local:"):
+        parts = source[6:].replace("\\", "/").split("/")
+        for index in range(len(parts) - 3):
+            if parts[index:index + 2] == ["plugins", "cache"]:
+                return parts[index + 3][:100]
     front = text[:4096].split("---", 2)
     match = re.search(r"^plugin:[ \t]*([^\r\n]+)$", front[1], re.M) if len(front) == 3 and not front[0].strip() else None
     return match[1].strip().strip("\"'")[:100] if match else ""
@@ -72,7 +77,7 @@ class GrowingSkills:
         return {**skill, "name": name, **({"plugin": plugin} if plugin else {}), "provenance": provenance,
                 "revision": revision,
                 "learned_at": previous.get("learned_at") or (updated if provenance == "learned" else None),
-                "updated_at": updated}
+                "updated_at": updated, **self.source_details(member_id, skill["id"])}
 
     def validate_skill(self, member_id, args):
         """Bot writes always validate the structure and use optimistic document revisions."""
@@ -98,7 +103,9 @@ class GrowingSkills:
             raise HomeError("skill must be bounded UTF-8 text")
         name, _ = skill_metadata(redact_secrets(text))
         identifier = args.get("id")
-        skills = self.skills(member_id)
+        if identifier is not None:
+            self.require_owned(member_id, identifier)
+        skills = self.owned_skills(member_id)
         source = next((s["source"] for s in skills if s["id"] == identifier), "")
         if any(s["id"] != identifier and s["name"].casefold() == name.casefold() and s.get("plugin", "").casefold() == skill_plugin(text, source).casefold() for s in skills):
             raise HomeError("a skill with that name already exists")
@@ -176,8 +183,8 @@ class GrowingSkills:
                 if previous is None:
                     raise HomeError("skill document revision is unavailable")
                 documents[relative] = previous
-        current_paths = {f"skills/{s['id']}/SKILL.md" for s in self.skills(member_id)}
-        for skill in self.skills(member_id):
+        current_paths = {f"skills/{s['id']}/SKILL.md" for s in self.owned_skills(member_id)}
+        for skill in self.owned_skills(member_id):
             current_paths.update(self.reference_hashes(member_id, skill["id"]))
         for relative in current_paths - documents.keys():
             self.homes.delete(member_id, relative, expected_hash=current_hashes[relative])
@@ -191,5 +198,6 @@ class GrowingSkills:
 
     def reference_hashes(self, member_id, identifier):
         folder = self._path(member_id, identifier).parent / "references"
-        return {str(path.relative_to(self.homes.home(member_id))).replace("\\", "/"): digest(self.homes.safe(path).read_bytes())
-                for path in sorted(folder.glob("*")) if path.is_file()}
+        owner = self.skill_owner(member_id, identifier)
+        return {str(path.relative_to(self.homes.home(owner))).replace("\\", "/"): digest(self.homes.safe(path).read_bytes())
+                for path in sorted(folder.rglob("*")) if path.is_file()}

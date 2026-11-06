@@ -19,6 +19,10 @@ const windowDialog = [...rhythmDetail, click('[data-pop="open-routine"]'), wait(
 const sentenceRoundTrip = [member(1),wait('[data-act="open-routine"]'),check('moving-sentence'),click('[data-act="open-routine"]'),wait('.au-routine-dialog'),click('.au-routine-dialog [data-dlg="close"]'),waitGone('.au-routine-dialog')];
 const pickedEvent = (id,title,prompt,createdCheck) => [...dialog,type('#au-title',title),type('#au-prompt',prompt),click('[data-dlg="trigger"]'),click('#app-popover [data-value="event"]'),wait('[data-dlg="event"]'),click('[data-dlg="event"]'),click(`#app-popover [data-value="${id}"]`),wait('.au-event-status[role="status"]'),check('moving-event'),click('[data-dlg="save"]'),waitGone('.au-routine-dialog'),check(createdCheck),member(0),{action:'open-details'},wait('[data-routine="1"]'),hover('[data-routine="1"]'),click('[data-det="routine-open"][data-id="1"]'),wait('.au-event')];
 export default [
+  scene("room-concurrent-replies", "Two members speak on one snapshot beside private work", [room(1), wait(".au-room-thinking"), check("room-meeting")], {roomMeeting: "concurrent"}),
+  scene("room-status-board", "Computed work and pinned decisions use the shared disclosure", [room(1), wait("[data-room-board-toggle]"), click("[data-room-board-toggle]"), wait("[data-room-board]"), check("room-meeting-board")], {roomMeeting: "reports"}),
+  scene("room-report-card", "A short report opens the member's private work", [room(1), wait("[data-room-report]"), check("room-meeting-report")], {roomMeeting: "reports"}),
+
   scene("automation-monthly", "Monthly dates use the existing editor and clamp at month end", [...dialog, click('[data-kind="monthly"]'), type('#au-month-day','31'), check('moving-monthly')]),
   scene("automation-minutes", "Short rhythms keep the existing daily window controls", [...dialog,click('[data-kind="every"]'),click('[data-dlg="hours"]'),click('#app-popover [data-value="m30"]'),check('moving-minutes')]),
   scene("automation-event-pick", "An observed read condition is picked, created and reopened", pickedEvent('gmail-mail','郵件待辦','整理新郵件並準備草稿','moving-event-created'),{routines:[]}),

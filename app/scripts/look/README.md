@@ -31,6 +31,19 @@ When dependencies are shared read-only via a `node_modules` junction, Vite needs
 `--configLoader runner`: put `{"build":{"beforeBuildCommand":"npm run build -- --configLoader runner"}}`
 in `.native/build.json` and pass `--config .native/build.json` to the build command.
 
+`npm run native -- typing` seeds 150 rich turns and eight offline fake members,
+checks the shared 25/20/100-turn window (including a prepend across a core page),
+then types 200 keys at 120ms intervals while seven members work and authored
+multi-message replies use normal reply pacing. This exercises offline pacing,
+not live provider token streaming. The report retains Event Timing, frames over
+50ms, per-key second-rAF timings and CPU self time; raw entries and the 1ms sampled `typing.cpuprofile` live
+under `typing/`. Events omitted below the 16ms reporting floor remain censored,
+never zero. A second-rAF median >=16ms, worst >=50ms or a frame >100ms fails the journey.
+For an old binary only, `RAPHAEL_NATIVE_TYPING_BASELINE=1` pages through the full
+history before typing and records the old mount count without the 25/45/65 setup
+guards. Remove that flag for the changed binary. Use the same runner for both;
+neither mode touches an installed session or uses paid providers.
+
 `npm run native -- bot-homes` seeds three synthetic copied memories and an imported skill,
 checks their migration hashes, then answers as a member on `cli:codex` through an offline
 Python child at the CLI protocol boundary. The child verifies that its prompt contains
@@ -282,6 +295,14 @@ Look needs an installed Edge/Chrome and the pinned **puppeteer-core@25.13.0** de
 It never downloads a browser or installs packages. Preserve the package/lockfile pin.
 `LOOK_BROWSER` optionally selects an executable. Node 22 or later is required.
 
+Before opening the browser, look transforms each selected HTML entry and waits for
+Vite's static import crawl. Navigation waits for DOM content, then the scene's real
+readiness selector; unrelated network activity does not gate that readiness.
+Request failures still fail the scene. Only `net::ERR_ABORTED` requests from a
+document superseded by a committed main-frame navigation are retained separately
+as `navigationAborts`; current-document aborts, other network failures and HTTP
+errors remain failures. Closing the captured page is outside the capture window.
+
 `--width` accepts widths (900px height) and explicit `WIDTHxHEIGHT` viewports.
 Each run creates `.look/run-*/` with viewport PNGs, paginated PNG contact sheets,
 `contacts.json` and `report.json`. `--out` changes the parent directory. A nonzero exit
@@ -447,3 +468,26 @@ into this worktree immediately after its build and set RAPHAEL_NATIVE_BINARY to
 that copy. The native runner records the selected executable, so a later build
 from another worktree cannot replace the binary under test. CARGO_TARGET_DIR
 continues to select the shared build cache.
+
+Follow-up 2 records all 200 capturing-keydown `performance.now()` timestamps and
+both subsequent rAF callback times. `keyToSecondFrame` retains median, p95 and
+worst without Event Timing's 16ms censoring; do not subtract a refresh interval.
+Keep the older Event Timing fields as a cross-check. The typing raw artifact also
+logs per-call rich-scroll measurements and every `agent.history.list` /
+`rooms.messages` response's UTF-8 byte size, returned IDs and timed JSON parse.
+The recorder reads the response body once and parses it once; decoding/waiting,
+byte counting and callback/render work are outside `parseMs`. Both binaries use
+the identical instrumentation. Long-thread fixtures use synthetic zh-TW prose.
+Compare old/changed builds three times each in alternating order, retaining every
+run and the median of the three run statistics, plus per-run free memory and busy
+process count (`RAPHAEL_NATIVE_LOAD` is recorded in the native report).
+
+CPU profiling defaults to a 1000-microsecond sampling interval. For a separate
+observer-overhead sensitivity comparison, set
+`RAPHAEL_NATIVE_TYPING_PROFILE_INTERVAL_US=5000` for both binaries. The report
+records the interval; retain the default results separately. This changes only
+CPU sampling resolution, never the key/rAF/event/frame samples or budgets.
+
+For an attribution-only diagnostic, `RAPHAEL_NATIVE_TYPING_TRACE=1` adds a local
+Chromium timeline `typing-trace.json`. Keep this traced run separate from paired
+performance comparisons: the additional timeline recording changes overhead.

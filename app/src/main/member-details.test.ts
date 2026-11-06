@@ -7,7 +7,11 @@ import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./ty
 
 const api = vi.hoisted(() => ({
   core: vi.fn(),
+  workerCancel: vi.fn().mockResolvedValue({}),
+  workerRerun: vi.fn().mockResolvedValue({}),
+  openTeamFile: vi.fn().mockResolvedValue(undefined),
   routinesList: vi.fn(),
+  routineRuns: vi.fn(),
   routinesCreate: vi.fn(),
   routinesUpdate: vi.fn(),
   routinesDelete: vi.fn(),
@@ -59,6 +63,7 @@ beforeEach(() => {
   current = 3;
   for (const fn of Object.values(api)) fn.mockReset();
   api.routinesList.mockResolvedValue({ routines: [ROUTINE] });
+  api.routineRuns.mockResolvedValue({ runs: [] });
   api.routinesCreate.mockResolvedValue({});
   api.routinesUpdate.mockResolvedValue({});
   api.core.mockImplementation(async (method: string, params: { space?: string }) => {
@@ -71,6 +76,61 @@ beforeEach(() => {
 });
 
 describe("a member's panel", () => {
+  test('the main tab keyboard handler leaves resource tabs inside Settings alone', async () => {
+    const panel = mount(); await flush();
+    const resourceTab = document.createElement('button'); resourceTab.setAttribute('role','tab');
+    panel.el.querySelector('.mb-tab-body')!.append(resourceTab);
+    resourceTab.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
+    expect(panel.el.dataset.detailsTab).toBe('settings');
+  });
+  test.each(['running', 'done'])('work in state %s opens its existing result and exposes the matching action', async state => {
+    api.core.mockImplementation(async method => method === 'members.list' ? {tasks:[{id:99,turn_id:42,conversation_id:7,title:'Sample work',state,created_at_ms:1}],files:[],has_more:false} : {});
+    api.workerCancel.mockResolvedValue({}); api.workerRerun.mockResolvedValue({});
+    const panel = mount(false); host.openTurn = vi.fn(); await flush();
+    panel.el.querySelector<HTMLButtonElement>('[data-panel-task="99"]')!.click();
+    expect(host.openTurn).toHaveBeenCalledExactlyOnceWith(3,7,42);
+    panel.el.querySelector<HTMLButtonElement>('[data-panel-task-menu="99"]')!.click();
+    const action = document.querySelector<HTMLButtonElement>('.menu [role="menuitem"]')!;
+    expect(action.textContent).toContain(t(state === 'running' ? 'agent.stop' : 'members.panelRerun'));
+    action.click(); await flush();
+    expect(state === 'running' ? api.workerCancel : api.workerRerun).toHaveBeenCalledExactlyOnceWith(99);
+  });
+  test('the shared three tabs support arrow navigation and reset for another member', async () => {
+    const panel = mount(false); await flush();
+    const selected = () => panel.el.querySelector<HTMLElement>('.mb-tabs [aria-selected="true"]')!;
+    expect(selected().dataset.tab).toBe('details');
+    selected().focus(); selected().dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowRight',bubbles:true}));
+    expect(selected().dataset.tab).toBe('library');
+    expect(document.activeElement).toBe(selected());
+    selected().dispatchEvent(new KeyboardEvent('keydown', {key:'End',bubbles:true}));
+    expect(selected().dataset.tab).toBe('computer');
+    current = 4; panel.showMember(); await flush();
+    expect(selected().dataset.tab).toBe('details');
+  });
+  test('a late library read cannot put another member files into the selected panel', async () => {
+    let resolve!: (value: unknown) => void;
+    api.core.mockImplementation(async (method, params) => method === 'members.list'
+      ? params.panel_member_id === 3 ? new Promise(done => {resolve = done;}) : {tasks:[],files:[],has_more:false}
+      : {});
+    const panel = mount(false); await flush();
+    current = 4; panel.showMember(); panel.select('library'); await flush();
+    resolve({tasks:[],files:[{id:'stale',name:'Stale file',kind:'file',at_ms:1}],has_more:false}); await flush();
+    expect(panel.el.textContent).not.toContain('Stale file');
+    expect(panel.el.querySelector('.mb-tab-body')?.textContent).toBe(t('members.panelNoFiles'));
+  });
+  test.each([0, 3])("member %s uses the shared draft preference switch", async id => {
+    current = id;
+    const panel = mount(); await flush();
+    const toggle = panel.el.querySelector<HTMLButtonElement>('[data-det="draft"]')!;
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    toggle.click(); await flush();
+    expect(toggle.closest(".mb-panel-pages")).not.toBeNull();
+    expect(host.update).toHaveBeenCalledWith(id, { draft_first: false });
+    host.member().draft_first = false; panel.draw();
+    panel.el.querySelector<HTMLButtonElement>('[data-det="draft"]')!.click(); await flush();
+    expect(host.update).toHaveBeenLastCalledWith(id, { draft_first: true });
+    delete host.member().draft_first;
+  });
   test("the gear Back button follows a locale change", async () => {
     const panel=mount(); await flush(); setLocale('en'); panel.draw();
     expect(panel.el.querySelector('[data-det="back"]')?.getAttribute('aria-label')).toBe(t('members.panelBack'));
@@ -99,7 +159,8 @@ describe("a member's panel", () => {
     expect(panel.el.querySelector('[data-det="tab"][data-tab="routines"]')).toBeNull();
     expect(panel.el.querySelector('button.mb-rt[data-det="routine-open"]')?.textContent).toContain(ROUTINE.title);
     expect(panel.el.querySelector('.mb-rt [role="switch"]')).toBeNull();
-    expect(panel.el.querySelector<HTMLElement>('.mb-who')!.hidden).toBe(true);
+    expect(panel.el.querySelector<HTMLElement>('.mb-who')!.hidden).toBe(false);
+    expect(panel.el.querySelectorAll('.mb-tabs [role="tab"]')).toHaveLength(3);
     panel.el.querySelector<HTMLButtonElement>('[data-det="gear"]')!.click();
     expect(panel.el.querySelector<HTMLElement>('.mb-who')!.hidden).toBe(false);
     expect(panel.el.querySelector('[data-det="back"]:not([hidden])')).not.toBeNull();
@@ -131,6 +192,7 @@ describe("a member's panel", () => {
       : original(method, params));
     panel.draw(); await flush();
     const slot = panel.el.querySelector<HTMLElement>('[data-slot="conversations"]')!;
+    expect([...panel.el.querySelectorAll('.mb-dh')].filter(node => node.textContent === t('conversations.heading'))).toHaveLength(1);
     const input = slot.querySelector<HTMLInputElement>('input')!;
     input.value = "Research"; input.dispatchEvent(new Event("input"));
     panel.draw(); await flush();
@@ -152,7 +214,7 @@ describe("a member's panel", () => {
     expect(panel.el.querySelector('.mb-det-head [data-det="gear"]')).not.toBeNull();
     expect(edit.textContent).toContain("編輯成員");
 
-    expect(panel.el.querySelector(".mb-tabs")!.childElementCount).toBe(0);
+    expect(panel.el.querySelector<HTMLElement>(".mb-tabs")!.hidden).toBe(true);
     edit.click();
     expect(host.edit).toHaveBeenCalledWith(LIST.members[1]);
     const hide = panel.el.querySelector<HTMLButtonElement>('[data-det="hide"]')!;
@@ -238,7 +300,7 @@ describe("a member's panel", () => {
     expect(panel.el.querySelector(".mb-avbtn .mb-av-slime svg")).not.toBeNull();
     expect([...panel.el.querySelectorAll<HTMLElement>(".mb-panel-pages [data-tab]")].map(b => b.dataset.tab)).toEqual(["memory", "skills", "commands", "voice"]);
     panel.el.querySelector<HTMLElement>('[data-tab="skills"]')!.click();
-    expect(panel.el.querySelector<HTMLElement>(".mb-who")!.hidden).toBe(true);
+    expect(panel.el.querySelector<HTMLElement>(".mb-who")!.hidden).toBe(false);
     panel.el.querySelector<HTMLElement>('[data-det="back"]')!.click();
     expect(panel.el.querySelector<HTMLElement>(".mb-who")!.hidden).toBe(false);
   });
@@ -464,7 +526,8 @@ describe("Raphael's panel", () => {
     expect(panel.el.querySelector(".mb-avbtn .av")!.innerHTML).toContain("app-emblem");
     expect(panel.el.querySelector("#mb-det-instr")).toBeNull();
     expect(panel.el.querySelector('[data-det="group"]')).toBeNull();
-    expect([...panel.el.querySelectorAll<HTMLElement>(".mb-panel-pages [data-tab]")].map(row => row.dataset.tab)).toEqual(["memory", "skills"]);
+    expect([...panel.el.querySelectorAll<HTMLElement>(".mb-panel-pages [data-tab]")].map(row => row.dataset.tab)).toEqual(["memory", "skills", "commands", "voice"]);
+    expect(api.core).toHaveBeenCalledWith("members.commands.list", { member_id: 0 });
     expect(api.routinesList).toHaveBeenCalledWith(0);
   });
 
@@ -595,4 +658,21 @@ describe("primary changes do not add face badges", () => {
     }
     if (id === 0) expect(panel.el.querySelector('.mb-who-face .mb-av')).toBeNull();
   });
+});
+
+
+test("the details routine editor uses the same relative history timestamp", async () => {
+  const now = new Date(2026, 10, 5, 12).getTime();
+  const started = new Date(2026, 10, 4, 8, 0, 37).getTime();
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+  api.routineRuns.mockResolvedValue({ runs: [{ id: 1, routine_id: ROUTINE.id, started, finished: started + 1000, status: "done", summary: "Completed", cost: 0, turn_id: 1 }] });
+  try {
+    const panel = mount(false);
+    await flush();
+    panel.el.querySelector<HTMLElement>('[data-det="routine-open"]')!.click();
+    await flush();
+    expect(document.querySelector('[data-run-status="done"]')?.textContent).toBe("成功 · 昨天 08:00Completed");
+    expect(document.querySelector('.au-run-history')?.textContent).not.toContain("08:00:37");
+    document.querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();
+  } finally { clock.mockRestore(); }
 });

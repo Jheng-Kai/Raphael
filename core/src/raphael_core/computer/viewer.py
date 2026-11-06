@@ -87,7 +87,7 @@ screen.addEventListener('mousedown', () => {
 // The last picture of the screen: the window shows it at once when it comes back.
 setInterval(() => {
   const canvas = screen.querySelector('canvas');
-  if (!rfb || !canvas?.width) return;
+  if (!rfb || !rfb.viewOnly || !canvas?.width) return;
   const small = document.createElement('canvas'), scale = Math.min(1, 480 / canvas.width);
   small.width = Math.round(canvas.width * scale); small.height = Math.round(canvas.height * scale);
   small.getContext('2d').drawImage(canvas, 0, 0, small.width, small.height);
@@ -142,6 +142,7 @@ class DesktopViewer:
         self.tasks = set()
         self.control_lock = asyncio.Lock()
         self.teaching = None
+        self.task_artifact = lambda task, evidence: None
         self.open_lock = asyncio.Lock()
         self.client = httpx.AsyncClient(trust_env=False, timeout=10)
 
@@ -150,6 +151,7 @@ class DesktopViewer:
                               ("control", self.control), ("close", self.close)):
             router.register(f"computer.viewer_{name}", handler)
         router.register("computer.revoke", self.revoke)
+        router.register("computer.lifecycle", self.lifecycle)
         router.register("computer.team_file", self.team_file)
         router.register("computer.wallpaper", self.wallpaper)
 
@@ -166,6 +168,23 @@ class DesktopViewer:
     async def team_file(self, params):
         """Where a file of the team folder is on this PC, for the owner's own press. A folder on another computer has no such place."""
         path = params.get("path")
+        member_file = re.fullmatch(r"member-file:(0|[1-9][0-9]*):(workspace|team):(.+)", path) if isinstance(path, str) else None
+        if member_file:
+            member, area, relative = member_file.groups()
+            target = self.target({"member_id": int(member)})
+            if target.remote or Path(relative).is_absolute() or "\\" in relative:
+                raise invalid_params("not a member file on this computer")
+            root = Path(target.workspace if area == "workspace" else target.shared).resolve()
+            found = (root / relative).resolve()
+            if not found.is_relative_to(root) or not found.is_file():
+                raise invalid_params("no such member file")
+            return {"path": str(found), "reads": found.suffix.lower() in READABLE}
+        artifact = re.fullmatch(r"task-artifact:([1-9][0-9]*):([1-9][0-9]*)", path) if isinstance(path, str) else None
+        if artifact:
+            found = self.task_artifact(*(int(value) for value in artifact.groups()))
+            if found is None:
+                raise invalid_params("artifact unavailable")
+            return {"path": str(found), "reads": found.suffix.lower() in READABLE}
         target = self.vm.target(0)
         if type(path) is not str or not path.startswith(SHARED + "/") or target.remote or target.shared is None:
             raise invalid_params("not a team file on this computer")
@@ -180,6 +199,16 @@ class DesktopViewer:
         self.vm.grants.set(params.get("member_id", 0), False)
         return {"granted": False}
 
+    async def lifecycle(self, params):
+        from .lifecycle import maintain
+        target = self.target(params)
+        if params.get("host") != target.remote or params.get("target") != target.key:
+            raise invalid_params("Computer changed; review maintenance again")
+        if not self.vm.grants.allowed(params.get("member_id", 0)):
+            raise invalid_params("Computer access is not granted")
+        await maintain(self.vm, target, params.get("action"), confirmed=params.get("confirmed", False))
+        return await self.status(params)
+
     def target(self, params):
         member = params.get("member_id", 0)
         if type(member) is not int or member < 0 or not self.member_exists(member):
@@ -187,12 +216,32 @@ class DesktopViewer:
         return self.vm.target(member)
 
     async def status(self, params):
+        if params.get("check_host") is True:
+            from .remote_host import host_health
+            try:
+                return await host_health(params.get("alias", self.vm.remote))
+            except ValueError:
+                raise invalid_params("Invalid SSH config alias") from None
         target = self.target(params)
+        if params.get("start_docker") is True:
+            # Only an explicit owner-window press may start this PC's engine.
+            if target.remote or params.get("host") != target.remote:
+                raise invalid_params("Docker Desktop can only be started on this PC")
+            try:
+                await self.vm.ensure_engine(target, start_desktop=True)
+            finally:
+                self.vm.preparation.pop(target.key, None)
+            self.vm.changes += 1
         if not await self.vm.installed():
             return {"state": "absent", "control": "member", "ready": False, "error": "disabled" if not self.vm.enabled else "docker_missing"}
         state = await self.unwatched_status(target)
         works = self.vm.work.views(params.get("member_id", 0), params.get("conversation_id"))
-        return {**state, "granted": self.vm.grants.allowed(params.get("member_id", 0)), **({"works": works} if works else {}),
+        return {**state, "host": target.remote, "target": target.key,
+                "mode": "shared" if target.key == "shared" else "per-bot",
+                "idle_minutes": self.vm.settings.get("computer_vm_idle_minutes") if self.vm.settings else 15,
+                "lifecycle": self.vm.lifecycle.get(target.key),
+                **({"repair_revision": self.vm.repair_revisions[target.key]} if target.key in self.vm.repair_revisions else {}),
+                "granted": self.vm.grants.allowed(params.get("member_id", 0)), **({"works": works} if works else {}),
                 **(self.teaching.status(params.get("member_id", 0), params.get("conversation_id"), target) if self.teaching else {})}
 
     async def open(self, params):
@@ -239,7 +288,12 @@ class DesktopViewer:
         state = await self.status_for(session.target) if read else {"state": "running", "ready": True}
         works = self.vm.work.views(session.member_id, session.conversation_id)
         token = self.owners.get(session.target.key)
-        return {**state, "control": "owner" if self.sessions.get(token) is session else "member",
+        return {**state, "host": session.target.remote, "target": session.target.key,
+                "mode": "shared" if session.target.key == "shared" else "per-bot",
+                "idle_minutes": self.vm.settings.get("computer_vm_idle_minutes") if self.vm.settings else 15,
+                "lifecycle": self.vm.lifecycle.get(session.target.key),
+                **({"repair_revision": self.vm.repair_revisions[session.target.key]} if session.target.key in self.vm.repair_revisions else {}),
+                "control": "owner" if self.sessions.get(token) is session else "member",
                 "preview_allowed": session.target.key not in self.vm.held, "granted": self.vm.grants.allowed(session.member_id),
                 **({"works": works} if works else {}),
                 **(self.teaching.status(session.member_id, session.conversation_id, session.target) if self.teaching else {})}
@@ -282,6 +336,7 @@ class DesktopViewer:
         except (VmError, OSError, TimeoutError):
             state = {"state": "unavailable"}
         return {"state": state["state"], "ready": state["state"] == "running",
+                **({"image": state["image"]} if "image" in state else {}),
                 **({"progress": state["progress"]} if state.get("progress") else {}),
                 **({"error": state["error"]} if state.get("error") else {})}
 

@@ -25,6 +25,10 @@
       "scenario_ids": ["S21.meetings.post"],
       "expected_assertions": ["production_state"]
     },
+    "raphael/core/work_status": {
+      "scenario_ids": ["S08.completion"],
+      "expected_assertions": ["status_only"]
+    },
     "raphael/core/approve": {
       "scenario_ids": [
         "S21.settings-quick.approve"
@@ -452,6 +456,32 @@
     "raphael/core/manage_connection": {
       "scenario_ids": ["S20.connector-off", "S20.connector-on", "S20.tool-off", "S20.tool-on", "S20.login", "S20.disconnect", "S20.revoke-in-flight"],
       "expected_assertions": ["live_grants", "stale_alias_denied", "no_action_replay", "ui_roster_sync"]
-    }
+    },
+    "raphael/core/members_mark_all_read": {"scenario_ids": ["S21.management.members_mark_all_read"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/group_update": {"scenario_ids": ["S21.management.group_update"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/group_delete": {"scenario_ids": ["S21.management.group_delete"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/conversation_create": {"scenario_ids": ["S21.management.conversation_create"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/conversation_rename": {"scenario_ids": ["S21.management.conversation_rename"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/conversation_delete": {"scenario_ids": ["S21.management.conversation_delete"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/conversation_clear": {"scenario_ids": ["S21.management.conversation_clear"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/conversation_list": {"scenario_ids": ["S21.management.conversation_list"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/settings_read": {"scenario_ids": ["S21.management.settings_read"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/memory_document_read": {"scenario_ids": ["S21.management.memory_document_read"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/connection_enable": {"scenario_ids": ["S21.management.connection_enable"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/connection_tool": {"scenario_ids": ["S21.management.connection_tool"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/connection_tools": {"scenario_ids": ["S21.management.connection_tools"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/connection_disconnect": {"scenario_ids": ["S21.management.connection_disconnect"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/connection_refresh": {"scenario_ids": ["S21.management.connection_refresh"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/connector_update": {"scenario_ids": ["S21.management.connector_update"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/connector_disconnect": {"scenario_ids": ["S21.management.connector_disconnect"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/dictation_delete": {"scenario_ids": ["S21.management.dictation_delete"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/dictation_clear": {"scenario_ids": ["S21.management.dictation_clear"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/memory_document_update": {"scenario_ids": ["S21.management.memory_document_update"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/memory_clear": {"scenario_ids": ["S21.management.memory_clear"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/memory_summary_clear": {"scenario_ids": ["S21.management.memory_summary_clear"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/settings_update": {"scenario_ids": ["S21.management.settings_update"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/member_manage": {"scenario_ids": ["S21.management.member_manage"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/room_manage": {"scenario_ids": ["S21.management.room_manage"], "expected_assertions": ["production_state", "primary_only"]},
+    "raphael/core/dictionary_manage": {"scenario_ids": ["S21.management.dictionary_manage"], "expected_assertions": ["production_state", "primary_only"]}
   }
 }

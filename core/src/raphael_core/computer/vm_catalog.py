@@ -10,8 +10,8 @@ server/drivers/agents-catalog.ts and server/mcp-bridge.ts.
 
 DRIVER_TOOLS = {
     "get_guide": "Read the driver's bundled guidance for exact targeting and recovery.",
-    "get_desktop_state": "Capture the full sandbox display before acting.",
-    "get_window_state": "Read one window's screenshot and accessibility state.",
+    "get_desktop_state": "Capture whole-screen pixels only when the entire display is needed.",
+    "get_window_state": "Read one window with max_elements 200, query and no screenshot unless needed.",
     "get_cursor_position": "Read the pointer position for the next gesture.",
     "click": "Activate a visible desktop target.",
     "double_click": "Open desktop items that require a double click.",
@@ -49,11 +49,23 @@ NOTICES = ("computer_busy", "screen_changed")
 
 # Everything else is excluded: updates/installs/configuration, recording/replay,
 # escalation, lifecycle, cosmetic cursor settings and redundant primitives. In
-# particular page/run_script/run_steps never bypass the single vm_exec path.
+# particular page/run_script are never forwarded. Raphael's run_steps composite
+# recursively uses the ordinary gate instead of forwarding the driver's batch tool.
 READS = frozenset({
     "get_guide", "get_desktop_state", "get_window_state", "get_cursor_position",
     "list_apps", "list_windows", "clipboard_read", "verify_state", "get_browser_state",
 })
+
+SCREEN_READS = frozenset({"get_desktop_state", "get_window_state", "get_browser_state", "list_windows"})
+FRESH_READS = frozenset({"get_desktop_state", "get_window_state", "get_browser_state", "browser_open"})
+
+
+def offline_catalog():
+    import json
+    from pathlib import Path
+    snapshot = json.loads(Path(__file__).with_name("driver_schemas.json").read_text(encoding="utf-8"))
+    return {name: {"description": description, "parameters": without_session(snapshot["tools"][name])}
+            for name, description in DRIVER_TOOLS.items()}
 
 
 def without_session(schema):

@@ -21,7 +21,7 @@ import {
   sourceLabel,
 } from "./members";
 import type { MemberGroup, MemberSource, RoutineOffer, WireAttachment } from "./types";
-import { type ActionRowOptions, actionRow, btn, closeMenu, esc, ico, iconButton, openPopover, toaster } from "./ui";
+import { type ActionRowOptions, actionRow, btn, closeMenu, esc, ico, iconButton, openPopover, row, tg, toaster } from "./ui";
 
 // ---------- the dialog ----------
 
@@ -141,17 +141,23 @@ export function openDialog(o: DialogOptions): Dialog {
 }
 
 /** Confirms deletion or history clearing with the shared compact destructive dialog. */
-export function confirmDelete(name: string, options: { clearHistory?: boolean } = {}): Promise<boolean> {
+export function confirmDelete(name: string, options: { clearHistory?: boolean; computerHost?: string; removeComputer?(remove: boolean): void } = {}): Promise<boolean> {
   return new Promise((resolve) => {
-    let answer = false;
+    let answer = false, removeComputer = false;
     openDialog({
       title: options.clearHistory ? t("conversations.clearConfirm", { p0: name }) : t("members.deleteConfirm", { p0: name }),
-      body: `<p>${esc(t("members.deleteHint"))}</p>`,
+      body: `<p>${esc(t("members.deleteHint"))}</p>` + (options.computerHost !== undefined ? row(esc(t('desktop.deleteData', { p0: name })), options.computerHost ? esc(t('desktop.dataHostRemote', { p0: options.computerHost })) : '', tg(false, t('desktop.deleteData', { p0: name }), ' data-dlg="remove-computer" data-remove-computer')) : ''),
       describedByBody: true,
       cls: "mb-confirm",
       actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(options.clearHistory ? t("conversations.clear") : t("members.delete")), attrs: ' data-dlg="delete"' } },
-      onAct(act, _target, dialog) {
+      onAct(act, target, dialog) {
+        if (act === 'remove-computer') {
+          removeComputer = !removeComputer;
+          target.closest('[data-remove-computer]')?.setAttribute('aria-checked', String(removeComputer));
+          return;
+        }
         answer = act === "delete";
+        if (answer) options.removeComputer?.(removeComputer);
         dialog.close();
       },
       onClose: () => resolve(answer),

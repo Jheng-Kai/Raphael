@@ -26,7 +26,7 @@ test("an unchanged member column parses nothing, and leaving a search draws it a
   vi.mocked(api.core).mockResolvedValue({ turns: [] });
   const host = document.createElement("div");
   const search = createMessageSearch(host, { face: () => "", name: () => "Sample", open: vi.fn() });
-  const face = (delay: number): string => `<span style="--slime-delay:${delay}ms;">Sample row</span>`;
+  const face = (delay: number): string => `<span data-slime-mounted="${Math.abs(delay)}" style="--slime-delay:${delay}ms;">Sample row</span>`;
   search.draw("", face(10));
   const parsed = vi.spyOn(document, "createElement");
   search.draw("", face(-250));

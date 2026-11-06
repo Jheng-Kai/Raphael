@@ -26,6 +26,7 @@ const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { st
   membersUpdate: vi.fn(),
   membersCreate: vi.fn(),
   membersDelete: vi.fn(),
+  settingsGet: vi.fn(async () => ({settings:{computer_ssh_alias:''}})),
   membersSetAvatar: vi.fn(),
   routinesCreate: vi.fn(),
   toolsetsList: vi.fn(),
@@ -519,6 +520,7 @@ test("a routine run link selects its member and loads the linked older turn", as
 beforeEach(() => { localStorage.clear();
   document.body.innerHTML = "";
   for (const fn of Object.values(api)) fn.mockReset();
+  api.core.mockResolvedValue({ questions: [] });
   api.roomsList.mockResolvedValue({rooms:[{id:1,name:"Launch",member_ids:[0,3],is_team:0}]});
   api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:3,text:"Ready",created:1,status:"done",turn_id:31}]});
   api.brainsCli.mockResolvedValue({ clis: [] });
@@ -535,6 +537,7 @@ beforeEach(() => { localStorage.clear();
   api.agentRetract.mockResolvedValue(undefined);
   api.agentVoice.mockResolvedValue(undefined);
   api.cancelSession.mockResolvedValue(undefined);
+  api.core.mockResolvedValue({});
   api.agentHistoryList.mockImplementation(async (q: { member_id?: number; limit?: number }) => ({ turns: THREADS[q.member_id ?? 0].slice(0, q.limit) }));
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -717,6 +720,14 @@ test.each(["finish", "switch", "search", "reduced"])("a finished member burst re
   agent.hide();
 });
 
+test("rerunning an older failed reply asks its original question in the same member thread", async () => {
+  api.agentHistoryList.mockResolvedValue({turns:[turn(33,{member_id:3}),turn(32,{member_id:3,status:"error",text:"CLI stopped"})]});
+  const agent = mount(); await flush(); await pick(3);
+  $('[data-id="32"] .message-actions .rerun').click(); await flush();
+  expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("問題 32", [], 3, expect.objectContaining({requestId:expect.any(String)}));
+  agent.hide();
+});
+
 test("regenerating the latest member reply asks the same question in that member's thread", async () => {
   const agent = mount(); await flush(); await pick(3);
   document.querySelector<HTMLButtonElement>('.tn[data-id="30"] [data-act="more-message"]')!.click();
@@ -776,6 +787,7 @@ test("member notifications refresh names, groups, unread dots and the open heade
   await flush();
   await pick(3);
   await openDetails();
+  $('[data-det="gear"]').click();
   const next = structuredClone(LIST);
   next.members[1] = { ...next.members[1], name: "Updated name", role: "Updated role", group_id: 5 };
   next.members[2] = { ...next.members[2], waiting: true, unread: true, preview: "New preview" };
@@ -867,7 +879,7 @@ describe("a member's thread", () => {
     expect(thread.textContent).toContain("今天的單字");
     expect(thread.textContent).not.toContain("《");
     expect(thread.querySelector(".tn .ans")!.textContent).toBe("10 題已送出");
-    expect(thread.querySelector(".sys")!.textContent).toBe("例行任務每天的單字");
+    expect(thread.querySelector(".chat-message .routine-origin")!.textContent).toBe("例行任務 · 每天的單字");
     // a routine's prompt is no bubble of the owner's
     expect(thread.querySelector('[data-id="30"] .bubble')).toBeNull();
     expect($('.mb-col [data-member="3"]').getAttribute("aria-current")).toBe("true");
@@ -1112,13 +1124,13 @@ describe("a member's thread", () => {
     expect(api.agentHistoryList).toHaveBeenCalledWith(expect.objectContaining({ member_id: 3 }));
   });
 
-  test("a routine's run that has not reported yet shows the dots under its line", async () => {
+  test("a routine's unfinished run shows only live work until its reply arrives", async () => {
     THREADS[3] = [turn(32, { member_id: 3, source: "routine", route: "routine", prefix: "", question: "每天的單字", text: "", status: "running" })];
     mount();
     await flush();
     await pick(3);
     const run = $('.tn[data-id="32"]');
-    expect(run.querySelector(".sys")!.textContent).toBe("例行任務每天的單字");
+    expect(run.querySelector(".sys,.routine-origin")).toBeNull();
     expect(run.querySelector(".live-presence")).not.toBeNull();
     expect(run.querySelector(".me")).toBeNull();
     THREADS[3] = [turn(31, { member_id: 3, text: "今天的單字" })];
@@ -1307,6 +1319,7 @@ describe("the details panel", () => {
     await flush();
     await pick(3);
     if ($(".mb-det").hidden) $(".conversation-trigger").click();
+    $('[data-det="gear"]').click();
     api.membersUpdate.mockResolvedValue({ member: { ...LIST.members[1], name: "嚴格老師" } });
     api.membersList.mockResolvedValue({
       ...structuredClone(LIST),
@@ -1390,8 +1403,29 @@ test("a burst of turn events while typing makes one history request and preserve
   expect(api.agentHistoryList).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(500); await flush();
   expect(api.agentHistoryList).toHaveBeenCalledTimes(1);
+  expect(api.agentHistoryList.mock.calls[0]![0]).toMatchObject({after_id:expect.any(Number),turn_ids:[31]});
   expect(input.value).toBe("Keep typing this draft");
   expect($('.tn[data-id="31"]')).toBe(node);
+  agent.hide();
+});
+
+test("finding a folded work receipt preserves the reply and its match through a roster refresh", async () => {
+  vi.useFakeTimers();
+  const history = structuredClone(THREADS[3]!);
+  history[0]!.messages = [{ seq: 1, kind: "event", text: "Sample briefing ready", at_ms: history[0]!.created_at_ms }, { seq: 2, kind: "reply", text: history[0]!.text, at_ms: history[0]!.created_at_ms }];
+  api.agentHistoryList.mockImplementation(async (q: {member_id?: number}) => ({ turns: q.member_id === 3 ? structuredClone(history) : THREADS[0] }));
+  const agent = mount(); await flush(); await pick(3);
+  $('[data-act="search"]').click();
+  const input = $<HTMLInputElement>('.ra-find-input');
+  input.value = "Sample briefing"; input.dispatchEvent(new Event("input"));
+  await vi.advanceTimersByTimeAsync(250); await flush();
+  const node = $('.tn[data-id="31"]'), mark = $('mark.is-current');
+  expect(mark.textContent).toBe("Sample briefing");
+  expect(node.querySelector<HTMLElement>('.work-body')!.hidden).toBe(false);
+  send({ type: "MembersChanged" });
+  await vi.advanceTimersByTimeAsync(500); await flush();
+  expect($('.tn[data-id="31"]')).toBe(node);
+  expect($('mark.is-current')).toBe(mark);
   agent.hide();
 });
 
@@ -1405,5 +1439,38 @@ test("a same-length reply edit still refreshes without serializing the full hist
   send({ type: "AgentTurn", turn_id: 31, member_id: 3 });
   await vi.advanceTimersByTimeAsync(500); await flush();
   expect($('.tn[data-id="31"]').textContent).toContain(edited);
+  agent.hide();
+});
+
+
+test("computer search navigation leaves a room and restores the computer landing panel", async () => {
+  api.settingsGet.mockResolvedValue({settings:{computer_ssh_alias:""}});
+  const agent = mount(); await flush();
+  window.dispatchEvent(new CustomEvent("raphael:open-room", {detail:{roomId:1}})); await flush();
+  agent.show("computer"); await flush();
+  expect(agent.el.querySelector<HTMLElement>(".au-room-pane")!.hidden).toBe(true);
+  expect(agent.el.querySelector<HTMLElement>(".mb-det")!.hidden).toBe(false);
+  expect(agent.el.querySelector<HTMLElement>(".mb-det")!.dataset.detailsTab).toBe("computer");
+  expect(agent.el.querySelector(".mb-det [data-computer-location]")).not.toBeNull();
+  agent.el.querySelector<HTMLButtonElement>('[data-det="gear"]')!.click();
+  agent.show("computer"); await flush();
+  expect(agent.el.querySelector<HTMLElement>(".mb-det")!.dataset.detailsTab).toBe("computer");
+  agent.hide();
+});
+
+test("a metadata-only reply update does not force latest again", async () => {
+  vi.useFakeTimers();
+  const agent = mount(); await flush(); await pick(3);
+  await vi.advanceTimersByTimeAsync(100); await flush();
+  const scroll = $('.mb-chat .ra-scroll'), write = vi.fn();
+  Object.defineProperty(scroll, 'scrollTop', { get: () => 0, set: write });
+  const node = $('.tn[data-id="31"]');
+  const changed = structuredClone(THREADS[3]!);
+  changed[0]!.session_id = 'updated-session';
+  api.agentHistoryList.mockResolvedValueOnce({ turns: changed });
+  send({ type: "AgentTurn", turn_id: 31, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(500); await flush();
+  expect($('.tn[data-id="31"]')).toBe(node);
+  expect(write).not.toHaveBeenCalled();
   agent.hide();
 });

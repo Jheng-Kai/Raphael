@@ -36,12 +36,13 @@ async def test_background_discovers_app_then_owner_signs_in_and_same_task_resume
         with agent.conn:
             room_id = agent.conn.execute("INSERT INTO rooms(name,created) VALUES ('Review room',0)").lastrowid
     origin = agent.history.add(session_id="discovery", question="Read mail", route="delegate", prefix="", text="",
-        status="running", scope=scope, room_id=room_id, thread_id=room_id,
-        conversation_id=agent.service.conversations.main() if scope == "private" else None)
+        status="running", scope="private", conversation_id=agent.service.conversations.main())
     background.client.replies = [turn("", [call("find_app", {"query": "gmail"}, "discovery")]),
                                  turn("Please sign in.", [call("connect_app", {"app": "gmail"}, "connect")])]
     task_id = background.submit("Read mail", session="discovery")
     background.service.attach_turn(task_id, origin)
+    with agent.conn:
+        agent.conn.execute("UPDATE worker_tasks SET report_room_id=?,report_thread_id=? WHERE id=?", (room_id,room_id,task_id))
     try:
         await until(lambda: background.task(task_id).state in ("waiting", "done", "failed", "limit"))
         first = background.client.chat_calls[0]
@@ -64,7 +65,7 @@ async def test_background_discovers_app_then_owner_signs_in_and_same_task_resume
         assert card.state == "pending" and connector.fixture.opened == 0
         [view] = agent.service._turn_views([agent.history.get(origin)])
         assert view["connectors"][0]["id"] == card.id
-        assert view["scope"] == scope
+        assert view["scope"] == "private"
         def read_mail(**request):
             tools = {item["function"]["name"] for item in request["tools"]}
             alias = next(name for name in tools if name.endswith("gmail_search"))
@@ -74,7 +75,7 @@ async def test_background_discovers_app_then_owner_signs_in_and_same_task_resume
         await until(lambda: background.task(task_id).state in ("done", "failed", "limit"))
         task = background.task(task_id)
         assert task.state == "done" and task.turn_id == origin
-        assert task.scope == scope and task.room_id == room_id
+        assert task.scope == "private" and task.room_id is None and task.report_room_id == room_id
         assert connector.fixture.opened == 1
         read_result = next(message for message in background.client.chat_calls[-1]["messages"]
                            if message.get("tool_call_id") == "read-after-sign-in")
@@ -170,6 +171,10 @@ async def test_a_question_answered_after_the_owner_said_more_continues_at_the_en
     [asked] = await agent.turns()
     [question] = asked["owner_questions"]
     await typed(agent, "When is lunch?")
+    page = await agent.rpc.call("agent.history.list", {"limit": 1})
+    assert len(page["turns"]) == 1 and page["turns"][0]["id"] != asked["id"]
+    assert [item["id"] for item in page["pending_questions"]] == [question["id"]]
+    assert not background.service.owner_questions.in_conversation(conversation_id=99999, member_id=0)
     if how == "bring":
         moved = (await background.rpc.call("owner_questions.bring", {"id": question["id"]}))["turn_id"]
         assert moved != asked["id"]
@@ -187,6 +192,30 @@ async def test_a_question_answered_after_the_owner_said_more_continues_at_the_en
     assert "Scheduled for Tuesday" in background.task(question["task_id"]).report_text
 
 
+@pytest.mark.parametrize("stored_member", [0, None])
+async def test_the_chiefs_pending_question_is_available_outside_the_loaded_page(wired, client, stored_member):
+    agent, background = wired
+    client.chats = [chat("Choose a day.", ("ask_owner", {"question": "Which day?", "options": ["Tuesday"]})),
+                    chat("Lunch is at noon.")]
+    await typed(agent, "Arrange a visit")
+    [asked] = await agent.turns()
+    [question] = asked["owner_questions"]
+    conversation_id = agent.service.conversations.main(0)
+    saved = agent.conn.execute("SELECT member_id, conversation_id FROM agent_turns WHERE id=?", (asked["id"],)).fetchone()
+    assert tuple(saved) == (0, conversation_id)
+    await typed(agent, "When is lunch?")
+    if stored_member is None:
+        # The current schema writes chief turns as 0; shadow it to exercise nullable compatibility rows.
+        agent.conn.execute("CREATE TEMP TABLE agent_turns AS SELECT * FROM main.agent_turns")
+        agent.conn.execute("UPDATE agent_turns SET member_id=NULL WHERE id=?", (asked["id"],))
+    page = await agent.rpc.call("agent.history.list", {"limit": 1, "member_id": 0, "conversation_id": conversation_id})
+    assert [item["id"] for item in page["turns"]] != [asked["id"]]
+    assert len(page["turns"]) == 1
+    assert [item["id"] for item in page["pending_questions"]] == [question["id"]]
+    assert not background.service.owner_questions.in_conversation(conversation_id=conversation_id + 1, member_id=0)
+    assert not background.service.owner_questions.in_conversation(conversation_id=conversation_id, member_id=1)
+
+
 async def test_a_dismissed_or_latest_question_stays_where_it_is(wired, client):
     agent, background = wired
     client.chats = [chat("I need your date.", ("ask_owner", {"question": "Which day?", "options": ["Monday"]}))]
@@ -200,6 +229,23 @@ async def test_a_dismissed_or_latest_question_stays_where_it_is(wired, client):
     assert [item["id"] for item in await agent.turns()] == [asked["id"]]
     with pytest.raises(Exception):
         await background.rpc.call("owner_questions.bring", {"id": question["id"]})
+
+
+async def test_room_speech_cannot_open_an_owner_question(wired):
+    agent, background = wired
+    with agent.conn:
+        room_id = agent.conn.execute("INSERT INTO rooms(name,created) VALUES ('Scheduling',0)").lastrowid
+    origin = agent.history.add(session_id="room-question", question="Arrange a visit", route="room", prefix="", text="",
+        status="running", scope="room", room_id=room_id, thread_id=room_id)
+    background.client.replies = [turn("", [call("ask_owner", {"question": "Which day?"}, "ask-day")]), report("Discuss the next step privately.")]
+    task_id = background.submit()
+    background.service.attach_turn(task_id, origin)
+    await until(lambda: background.task(task_id).state in ("done", "failed", "limit"))
+    assert not background.service.owner_questions.for_turn(origin)
+    assert not background.service.owner_questions.in_conversation(room_id=room_id)
+    offered = {item["function"]["name"] for item in background.client.chat_calls[0]["tools"]}
+    assert "ask_owner" not in offered
+
 
 async def test_background_page_uses_existing_store_and_foreign_routines_stay_closed(wired):
     agent, background = wired
@@ -249,12 +295,14 @@ async def test_real_background_cards_reach_history_and_return_only_the_outcome(w
         with agent.conn:
             room_id = agent.conn.execute("INSERT INTO rooms(name,created) VALUES ('Report room',0)").lastrowid
     origin = agent.history.add(session_id="job", question="Prepare report", route="delegate", prefix="", text="",
-                               status="running", source="routine", scope=scope, room_id=room_id, thread_id=room_id,
-                               conversation_id=agent.service.conversations.main() if scope == "private" else None)
+                               status="running", source="routine", scope="private", conversation_id=agent.service.conversations.main())
     background.client.replies = [turn("Your card is ready.", [call(name, arguments, "actual-card")])]
     task_id = background.submit()
     background.service.attach_turn(task_id, origin)
+    with agent.conn:
+        agent.conn.execute("UPDATE worker_tasks SET report_room_id=?,report_thread_id=? WHERE id=?", (room_id,room_id,task_id))
     await until(lambda: background.task(task_id).state == "waiting")
+    assert not background.service.owner_questions.in_conversation(room_id=room_id) if room_id else True
     [view] = agent.service._turn_views([agent.history.get(origin)])
     assert view[{"connect_app": "connectors", "request_secret": "secrets", "email_draft": "drafts", "show_page": "pages"}[name]]
     [question] = view["owner_questions"]

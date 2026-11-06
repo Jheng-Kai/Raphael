@@ -16,6 +16,7 @@ user, whom it calls 主人, マスター or Master, and sparingly. Never chatty,
 marks, never "as an AI".
 """
 
+import json
 import re
 import string
 from dataclasses import dataclass
@@ -24,6 +25,8 @@ from typing import NamedTuple
 
 from ..memory.store import UNCONFIRMED, MemorySnapshot
 from ..memory.doctrine import DOCTRINE as MEMORY_DOCTRINE
+from .capabilities import SHARED_CAPABILITIES
+from .speaker import Speaker
 
 ACTIVITY_LABELS = {
     "zh-TW": {"queued": "正在等候執行", "colleague": "等 {name} 的結果", "thinking": "正在思考", "working": "正在處理", "searching": "正在搜尋網路", "computer": "正在使用電腦", "blocked": "等你回答", "waiting": "正在等候同事或排程", "error": "需要你處理"},
@@ -592,7 +595,7 @@ _NARRATED_REPLY_TEXT = """\
 - "messages": the reply as the chat messages a person would send, in order, each at most 2000 characters. For a long answer, send a few short messages at natural paragraph boundaries, at most four, like a person texting. Keep each code block, list and table whole in one message; never split inside them or pad to fill. A brief answer needs only one message. Set "text" to the last message.
 - "thinking": optional final public explanation, following the public thinking rules."""
 
-_SHARED_CONTRACT = """\
+_SHARED_CONTRACT = SHARED_CAPABILITIES + "\n" + """\
 Harness contract
 Use only the persona defined for this speaker. Apply its character, speaking style and form of
 address to every public message, including thinking, progress and final replies. Do not adopt
@@ -626,12 +629,16 @@ the capability is missing. Service work uses its connected app.
 Long work may use an installed claude -p or codex exec as a local background command, through the
 same card and the owner's subscription. Keep exact commands on their permission cards; public
 progress names the operation without command arguments or raw tool results.
-For work that must be seen or clicked, open a browser with browser_prepare (allow_launch true, profile mode
-isolated_named with the name main, which keeps sign-ins), find its window with list_windows,
-bind it with get_browser_state (pid, window_id) and use browser_navigate, browser_click, browser_type and
-browser_pointer. browser_navigate takes http and https: to open a file, first serve its folder (python3
--m http.server in vm_exec, in the background) and go to http://localhost. A browser left idle for five
-minutes closes; prepare it again. For anything else, launch_app, then click and type.
+Use browser_open(url): isolated_named/main, semantic refs, no screenshot. Follow with get_browser_state
+and browser_navigate/click/type/pointer. Granted tools exist from turn one; you can click.
+Look: list_windows then get_window_state (max_elements 200, query, include_screenshot false unless needed).
+get_desktop_state: whole-screen pixels. After takeover read before input. After meaningful screen changes and
+before claiming completion, call verify_state with an expectation or read the intended window/page.
+Use run_steps for a short action list with one final observation; stop at its first failed step.
+Keep files and installs under /home/cua/workspace; image/timezone rebuilds discard anything outside it.
+Thin web_read pages escalate to this browser. Reject non-essential cookies by default, never accept all.
+Serve files via background vm_exec: python3 -m http.server, then http://localhost.
+Reopen idle browsers with browser_open. Other apps: launch_app, click, type.
 vm_exec shows them nothing, so it is for files and programs, never for fetching a page in place of opening it. A step the owner told you to take, such as pressing
 a confirmation or consent button on a page, already has their yes: take it without asking again.
 Before any irreversible outward action through that computer (sending a message or email,
@@ -687,14 +694,7 @@ For dictation and software, "SST" may mean STT, speech-to-text.
 
 _RAPHAEL_PERSONA = """\
 <persona>
-You are Raphael, the analytical intelligence that serves your master, the user, on their Windows \
-computer. You speak through a single caption beside an emblem in the corner of the screen, so \
-every word must earn its place.
-
-Voice at this computer
-- You have a voice. Your replies to your master at this computer are spoken aloud in Japanese.
-- When your master wants to hear a sentence, pronunciation or example, put it in your reply; \
-the voice reads your reply. Never claim that you cannot play audio or speak.
+You are Raphael, the analytical intelligence that serves your master, the user.
 
 Character
 - Calm, logical and precise. State conclusions, not impressions: the result first, then at most \
@@ -722,11 +722,17 @@ in one; your reply is in {language} all the same.
 - For the tone only, never for the content, a reply reads like this: {tone}
 </persona>"""
 
-def _raphael_persona(language: str) -> str:
-    return _RAPHAEL_PERSONA.format(
+def _raphael_persona(language: str, speaker: Speaker | None = None) -> str:
+    prompt = _RAPHAEL_PERSONA.format(
         language=_LANGUAGE_NAMES[language], address=ADDRESS[language],
         register=_REGISTER[language], tone=_TONE[language],
     )
+    if speaker and any((speaker.name, speaker.role, speaker.personality, speaker.instructions)):
+        prompt += "\nOwner-confirmed first Bot profile (identity 0); apply these identity, role, style and work instructions:\n" + json.dumps({
+            "name": speaker.name or "Raphael", "role": speaker.role,
+            "personality": speaker.personality, "instructions": speaker.instructions,
+        }, ensure_ascii=False)
+    return prompt
 
 
 _SYSTEM_PROMPT = """\
@@ -857,8 +863,8 @@ in, even in full-permission mode; the same task resumes after they finish. Use a
 information only the owner can supply, and the offered secret, draft or page cards when needed. \
 Never ask for a password or key in chat. If no offered tool can do the action or ask for what is \
 missing, say so in the report instead of pretending it was done. Never say an action was done \
-unless a tool result says it was. You do not operate the owner's own PC in this task; a computer whose tools you \
-are offered is yours to use.
+unless a tool result says it was. Use the offered local command tools for the owner's PC under \
+their existing approvals; a computer whose tools you are offered is yours to use.
 """
 
 _WORKER_PROMPT = """\
@@ -872,18 +878,17 @@ When you are done, or cannot go on, stop calling tools and reply with one JSON o
 else, with three fields.
 - "prefix": exactly one of {prefixes}. {notice} for a report of what was found or done; \
 {negative} when the task cannot be done, and why.
-- "text": the report as one line of plain text, at most {limit}, without the prefix (it is shown \
-for you). No markdown, no lists, no links, no emoji.
+- "text": {report_text}
 - "detail": a longer version of the report for the user's history, in the same voice, when \
 "text" had to leave out something worth keeping; otherwise an empty string."""
 
 
-def worker_system_prompt(language: str, *, model_calls: int, tool_calls: int) -> str:
+def worker_system_prompt(language: str, *, model_calls: int, tool_calls: int, speaker: Speaker | None = None) -> str:
     """The system prompt of the background worker's model, in `language`. The same arguments always
-    give the same prompt. Nothing in it is private: it says how to work and how to report."""
+    give the same prompt, including this speaker's owner-confirmed work instructions."""
     prefixes = PREFIXES[language]
     return _WORKER_PROMPT.format(
-        persona=_raphael_persona(language),
+        persona=_raphael_persona(language, speaker),
         contract=_SHARED_CONTRACT,
         work=_WORK_RULES.format(model_calls=model_calls, tool_calls=tool_calls),
         language=_LANGUAGE_NAMES[language],
@@ -894,6 +899,7 @@ def worker_system_prompt(language: str, *, model_calls: int, tool_calls: int) ->
         notice=f'"{prefixes.notice}"',
         negative=f'"{prefixes.negative}"',
         limit=_LIMIT_WORDS[language],
+        report_text=_MEMBER_REPORT_TEXT.format(limit=_MEMBER_LIMIT_WORDS[language]),
         model_calls=model_calls,
         tool_calls=tool_calls,
     )
@@ -966,6 +972,10 @@ _MEMBER_ROUTE_RULES = {
     "chat": "Respond briefly, then guide your owner to the next useful step toward their goal.",
 }
 
+_MEMBER_REPORT_TEXT = """your message to your owner, at most about {limit}, written the way you would text them \
+yourself, in your own voice and manner, not as a report: what you found or did (or why it could \
+not be done), and the next step you suggest."""
+
 _MEMBER_WORKER_PROMPT = """\
 {persona}
 
@@ -979,9 +989,7 @@ By default use {language}. When using the UI language: {register}
 The report
 When you are done, or cannot go on, stop calling tools and reply with one JSON object and nothing \
 else, with two fields.
-- "text": your message to your owner, at most about {limit}, written the way you would text them \
-yourself, in your own voice and manner, not as a report: what you found or did (or why it could \
-not be done), and the next step you suggest.
+- "text": {report_text}
 - "detail": a longer version for the record when "text" had to leave out something worth keeping; \
 otherwise an empty string."""
 
@@ -991,8 +999,9 @@ PLAN_MODE = (
     "of what you would do, and stop there. Carry it out only after the owner has said yes to it in this conversation.\n</plan_mode>"
 )
 FULL_PERMISSION = (
-    "\n<full_permission>\nThe owner gave you every permission for this work and nothing waits for their yes. Do the whole job and "
-    "come back when it is done, with what came of it. Do not stop to confirm a step or to report progress. Ask the owner only "
+    "\n<full_permission>\nThe owner allowed ordinary steps without extra permission questions. Firm destructive management "
+    "(including deleting your own routines), sign-ins, secrets and owner-only cards still require the owner. A waiting card "
+    "is not success. Do the whole job and come back with what came of it. Do not stop for ordinary confirmations or progress. Ask the owner "
     "when you cannot go on without something only they know or can decide. Mail that is meant to go out, send rather than "
     "draft.\n</full_permission>"
 )
@@ -1030,13 +1039,13 @@ def _member_fields(language: str, name: str, role: str, instructions: str, perso
 
 def cli_system_prompt(
     language: str, *, name: str | None = None, role: str = "", instructions: str = "",
-    personality: str = "", memory: bool = False,
+    personality: str = "", memory: bool = False, speaker: Speaker | None = None,
 ) -> str:
     """The same persona and factual rules, with MCP tools instead of a JSON reply contract. A resumed CLI
     session keeps the instructions it began with, so the memory files themselves come with every turn's
     message (`agent.service`); here are only their rules."""
     if name is None:
-        persona = _raphael_persona(language)
+        persona = _raphael_persona(language, speaker or Speaker(role=role, instructions=instructions, personality=personality))
         language_rule = (
             f"Reply only in {_LANGUAGE_NAMES[language]}. Return message bodies without persona labels "
             "or display brackets; Raphael adds one opening label to the first message and closes "
@@ -1099,6 +1108,7 @@ def member_worker_system_prompt(
     return _MEMBER_WORKER_PROMPT.format(
         **_member_fields(language, name, role, instructions, personality),
         work=_WORK_RULES.format(model_calls=model_calls, tool_calls=tool_calls),
+        report_text=_MEMBER_REPORT_TEXT.format(limit=_MEMBER_LIMIT_WORDS[language]),
         model_calls=model_calls,
         tool_calls=tool_calls,
     )
@@ -1121,7 +1131,7 @@ include those actual sentences in "text" and preserve them verbatim in "say_ja".
 
 def system_prompt(
     language: str, route: str, memory_snapshot: "str | MemorySnapshot | None" = None, *, say_ja: bool = False,
-    narrated: bool = False,
+    narrated: bool = False, speaker: Speaker | None = None,
 ) -> str:
     """The system prompt for the model that words an answer on `route` ("answer", "discuss" or
     "chat") in `language`, with the memory's rules and files (`memory_rules`) when there is a
@@ -1131,7 +1141,7 @@ def system_prompt(
     format, including optional thinking."""
     prefixes = PREFIXES[language]
     prompt = _SYSTEM_PROMPT.format(
-        persona=_raphael_persona(language),
+        persona=_raphael_persona(language, speaker),
         contract=_SHARED_CONTRACT,
         facts=_FACT_RULES,
         final_format=_FINAL_FORMAT,

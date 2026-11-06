@@ -7,6 +7,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 static MAIN_ACTIVE: AtomicBool = AtomicBool::new(true);
 static MAIN_SHOWN: AtomicBool = AtomicBool::new(false);
 
+/// Debug native journeys only: refuse one named step the way WebView2 can (0x8007139F).
+#[cfg(windows)]
+fn refused(step: &str) -> bool {
+    crate::native_journey()
+        && std::env::var("RAPHAEL_TEST_NATIVE_POWER_REFUSE").is_ok_and(|value| value == step)
+}
+
 fn main_power_allowed(shown: bool, active: bool, manual_launch: bool) -> bool {
     active || shown || !manual_launch
 }
@@ -55,17 +62,44 @@ pub(crate) fn main_active<R: Runtime>(window: &WebviewWindow<R>, active: bool) {
                     let suspend: ICoreWebView2_3 = core.cast()?;
                     let memory: ICoreWebView2_19 = core.cast()?;
                     let active = MAIN_ACTIVE.load(Ordering::SeqCst);
+                    // Each step stands alone. WebView2 can refuse one (0x8007139F while a suspension
+                    // is still settling); aborting the rest left a returning window hidden and frozen.
+                    let step = |name: &str, result: windows_core::Result<()>| {
+                        if let Err(error) = result {
+                            log::warn!("main webview {name} failed: {error}");
+                        }
+                    };
+                    let mut suspended = windows_core::BOOL::default();
+                    let is_suspended =
+                        suspend.IsSuspended(&mut suspended).is_ok() && suspended.as_bool();
                     if active {
-                        suspend.Resume()?;
-                        memory.SetMemoryUsageTargetLevel(
-                            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
-                        )?;
-                        controller.SetIsVisible(true)?;
+                        if is_suspended {
+                            step("resume", suspend.Resume());
+                        }
+                        step(
+                            "normal memory",
+                            if refused("normal memory") {
+                                Err(windows_core::Error::from(windows_core::HRESULT(
+                                    0x8007139Fu32 as i32,
+                                )))
+                            } else {
+                                memory.SetMemoryUsageTargetLevel(
+                                    COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+                                )
+                            },
+                        );
+                        step("show", controller.SetIsVisible(true));
                     } else {
-                        controller.SetIsVisible(false)?;
-                        memory.SetMemoryUsageTargetLevel(
-                            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
-                        )?;
+                        step("hide", controller.SetIsVisible(false));
+                        if is_suspended {
+                            return Ok(());
+                        }
+                        step(
+                            "low memory",
+                            memory.SetMemoryUsageTargetLevel(
+                                COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
+                            ),
+                        );
                         let resume = suspend.clone();
                         let done = TrySuspendCompletedHandler::create(Box::new(
                             move |error, suspended| {
@@ -88,7 +122,7 @@ pub(crate) fn main_active<R: Runtime>(window: &WebviewWindow<R>, active: bool) {
                             },
                         ));
                         startup_trace("suspend_requested");
-                        suspend.TrySuspend(&done)?;
+                        step("suspend", suspend.TrySuspend(&done));
                     }
                     Ok(())
                 })()

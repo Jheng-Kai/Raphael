@@ -22,6 +22,7 @@ import {
   keyInputId,
   serviceRows,
   servicesHTML,
+  voiceLineHTML,
 } from "./services";
 import type { BrainSettings, ServicesStatus } from "./types";
 import { ico, toaster } from "./ui";
@@ -154,7 +155,7 @@ describe("the list", () => {
     expect(html).toMatch(/^<section class="sgroup svc" data-svc-section><h2>服務<\/h2><div class="cs-list" data-stagger="svc">/);
     expect(rows(html)).toHaveLength(5);
     const names = [...html.matchAll(/<span class="nm">(.*?)<\/span>/g)].map((m) => m[1]);
-    expect(names).toEqual(["搜尋網路", "讀網頁", "看圖片", "讀 PDF", "拉斐爾的聲音"]);
+    expect(names).toEqual(["搜尋網路", "讀網頁", "看圖片", "讀 PDF", "語音服務"]);
   });
 
   test("a row is an icon, the name and a muted line, the service in use, a switch and a chevron; the row opens the dialog", () => {
@@ -207,11 +208,11 @@ describe("the list", () => {
   test("is named in the three languages", () => {
     setLocale("en");
     expect(draw()).toContain("<h2>Services</h2>");
-    expect([...draw().matchAll(/<span class="nm">(.*?)<\/span>/g)].map((m) => m[1])).toEqual(["Web search", "Read web pages", "Images", "PDFs", "Raphael&#39;s voice"]);
+    expect([...draw().matchAll(/<span class="nm">(.*?)<\/span>/g)].map((m) => m[1])).toEqual(["Web search", "Read web pages", "Images", "PDFs", "Speech service"]);
     expect(draw()).toContain('aria-label="Turn on Web search"');
     setLocale("ja");
     expect(draw()).toContain("<h2>サービス</h2>");
-    expect(draw()).toContain('aria-label="ラファエルの声 をオンにする"');
+    expect(draw()).toContain('aria-label="音声サービス をオンにする"');
   });
 
   test("never shows a key: whatever the status holds besides, no key is drawn", () => {
@@ -361,29 +362,19 @@ describe("the page of one service", () => {
     expect(searx).not.toContain('type="password"');
   });
 
-  test("Fish Audio: key and voice fields, then a sticky footer with Try it before the primary Use", () => {
-    const d = inDialog(dialog("voice", "fish"));
-    expect(d).toContain(`id="${keyInputId("fish")}" type="password"`);
-    expect(d).toContain(`id="svc-voice-id" type="text" value="${VOICE_ID}" placeholder="聲音模型 ID"`);
-    expect(d.indexOf('data-svc-line="fish"')).toBeLessThan(d.indexOf('data-svc-line="voice"'));
-    expect(d).toContain('<button type="button" class="btn" data-svc="try" data-service="fish" data-k="svc-try">試用</button>');
-    expect(d).toMatch(/<button type="button" class="btn pri" data-svc="use" data-service="fish" data-k="svc-use"[^>]*>使用<\/button>/);
-    expect(d).toContain('class="action-row svc-acts is-sticky"');
-    expect(d.indexOf('data-svc="try"')).toBeLessThan(d.indexOf('data-svc="use"'));
-    expect(d).not.toMatch(/data-svc="try"[^>]*><svg/);
+  test("Fish Audio service setup retains only its shared key and Use action", () => {
+    const html = inDialog(dialog("voice", "fish"));
+    expect(html).toContain(`id="${keyInputId("fish")}" type="password"`);
+    expect(html).not.toContain('id="svc-voice-id"');
+    expect(html).not.toContain('data-svc="try"');
+    expect(html).toContain('data-svc="use"');
   });
 
-  test("the try action is localized in Chinese; 「使用」 is Use in English", () => {
-    for (const locale of ["en", "ja", "zh-TW"] as const) {
-      setLocale(locale);
-      expect(inDialog(dialog("voice", "fish"))).toContain(locale === "zh-TW" ? ">試用</button>" : ">Try it</button>");
-    }
-    setLocale("en");
-    expect(inDialog(dialog("search", "brave"))).toContain(">Use</button>");
-  });
-
-  test("the voice model id is a setting, not a secret: it is drawn from the settings", () => {
-    expect(inDialog(dialog("voice", "fish", {}, { ...BRAIN, tts_fish_voice: "" }))).toContain('id="svc-voice-id" type="text" value=""');
+  test("the member voice controls retain the existing setting and preview actions", () => {
+    const html = voiceLineHTML(emptyServicesView(), VOICE_ID);
+    expect(html).toContain(`value="${VOICE_ID}"`);
+    expect(html).toContain('data-svc="voice"');
+    expect(html).toContain('data-svc="try"');
   });
 
   test("「使用」 is disabled while the service is in use (and the capability on) or cannot be used", () => {
@@ -432,7 +423,7 @@ describe("what the section does", () => {
       visible: () => true,
       redraw: () => {
         // the panel's drawing, as settings.ts does it: the HTML anew (a field's draft is not kept here)
-        host.innerHTML = servicesHTML(panel.view(), PICKER, brain);
+        host.innerHTML = servicesHTML(panel.view(), PICKER, brain) + voiceLineHTML(panel.view(), brain.tts_fish_voice ?? "");
       },
       brain: () => brain,
       changeSetting: change,
@@ -755,9 +746,15 @@ describe("what the section does", () => {
     expect(host.innerHTML).not.toContain("fish-typed-key");
   });
 
+  async function voiceDetails(over: Over = {}) {
+    api.servicesStatus.mockResolvedValue(status(over));
+    const mounted = mount();
+    await mounted.panel.load();
+    return mounted;
+  }
+
   test("the voice model id is saved with settings.set tts_fish_voice, and only 32 hexadecimal characters or none", async () => {
-    const { host, changeSetting } = await opened("voice");
-    press(host, '[data-k="svc-svc:fish"]');
+    const { host, changeSetting } = await voiceDetails();
     const field = (): HTMLInputElement => host.querySelector<HTMLInputElement>("#svc-voice-id")!;
     field().value = "not-an-id";
     press(host, '[data-svc="voice"]');
@@ -775,8 +772,7 @@ describe("what the section does", () => {
   });
 
   test("「Try it」 saves the id, then has Raphael say the sample line of the window's language", async () => {
-    const { host, changeSetting } = await opened("voice", { fishKey: true, voiceSet: true });
-    press(host, '[data-k="svc-svc:fish"]');
+    const { host, changeSetting } = await voiceDetails({ fishKey: true, voiceSet: true });
     api.ttsPreview.mockResolvedValue({ ok: true });
     press(host, '[data-svc="try"]');
     await flush();
@@ -793,9 +789,18 @@ describe("what the section does", () => {
     expect(api.ttsPreview).toHaveBeenLastCalledWith("告。マスター、ご指示をお願いします。");
   });
 
+  test("a refused voice save releases busy state and never previews", async () => {
+    const { host, panel } = mount({}, async () => { throw new Error("Synthetic save refusal"); });
+    await panel.load();
+    api.ttsPreview.mockResolvedValue({ ok: true });
+    press(host, '[data-svc="try"]'); await flush();
+    expect(api.ttsPreview).not.toHaveBeenCalled();
+    expect(panel.view().busy).toBeNull();
+    expect(host.querySelector<HTMLButtonElement>('[data-svc="try"]')!.disabled).toBe(false);
+  });
+
   test("「Try it」 with a bad id previews nothing", async () => {
-    const { host } = await opened("voice");
-    press(host, '[data-k="svc-svc:fish"]');
+    const { host } = await voiceDetails();
     host.querySelector<HTMLInputElement>("#svc-voice-id")!.value = "zzz";
     press(host, '[data-svc="try"]');
     await flush();
@@ -809,8 +814,7 @@ describe("what the section does", () => {
     ["network", "Fish Audio 試聽未成功，無法確認原因，請確認音訊輸出後再試，仍失敗時檢查服務狀態。"],
     [undefined, "Fish Audio 試聽未成功，無法確認原因，請確認音訊輸出後再試，仍失敗時檢查服務狀態。"],
   ])("a voice that could not be played (%s) is said in a few words", async (kind, words) => {
-    const { host } = await opened("voice");
-    press(host, '[data-k="svc-svc:fish"]');
+    const { host } = await voiceDetails();
     api.ttsPreview.mockResolvedValue({ ok: false, kind });
     press(host, '[data-svc="try"]');
     await flush();
@@ -818,8 +822,7 @@ describe("what the section does", () => {
   });
 
   test("a call that fails is told by the error", async () => {
-    const { host } = await opened("voice");
-    press(host, '[data-k="svc-svc:fish"]');
+    const { host } = await voiceDetails();
     api.ttsPreview.mockRejectedValue("the core is not running");
     press(host, '[data-svc="try"]');
     await flush();

@@ -14,7 +14,7 @@ from .conftest import Rig
 from .test_answering import client, setup, member, typed, live_said  # noqa: F401
 from .test_answering import decision
 from .test_cli_brains import fake_brain
-from .test_exchanges import exchange, finish, history, send, team  # noqa: F401
+from .test_exchanges import exchange, finish, history, send, team, meeting_source  # noqa: F401
 
 
 async def make(rig, name, **fields):
@@ -198,7 +198,7 @@ async def test_new_room_membership_requires_the_current_chief(rig, exchange):
     # a room made by the primary's own choice, or by a meeting, has him as well
     with pytest.raises(RpcError):
         await rig.call("rooms.create", {"name": "No chief", "member_ids": [0, ids[1]]})
-    assert (await exchange.meeting({"member_ids": [0, *ids], "agenda": "Plan"}, "en", 7))["member_ids"] == [0, *ids]
+    assert (await exchange.meeting({"member_ids": [0, *ids], "agenda": "Plan"}, "en", meeting_source(rig, 7)))["member_ids"] == [0, *ids]
     # and he is still there once the primary has been deleted
     await rig.call("members.delete", {"id": ids[0]})
     assert rig.service.primary_id() == 0
@@ -253,8 +253,10 @@ async def test_every_room_turn_carries_the_current_primary_and_chief(rig, exchan
     seen.append(snapshot_of(rig.background.submitted[-1]["text"]))
     await finish(rig, exchange, "Bob owns release")
     seen.append(snapshot_of(rig.background.submitted[-1]["text"]))
-    assert [(s["primary_id"], s["chief_id"]) for s in seen] == [(alice, alice), (bob, bob), (bob, bob)]
-    assert len({s["revision"] for s in seen}) == 2
+    assert [(s["primary_id"], s["chief_id"]) for s in seen] == [(alice, alice)] * 3
+    assert len({s["revision"] for s in seen}) == 1
+    await send(rig, room, "@Bob next snapshot", "two")
+    assert snapshot_of(rig.background.submitted[-1]["text"])["chief_id"] == bob
 
 
 # --- every Bot and every brain is told the primary, from the roster alone -----------------------------------

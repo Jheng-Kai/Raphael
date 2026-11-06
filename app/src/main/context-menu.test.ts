@@ -16,6 +16,15 @@ function openFor(button: HTMLElement): void {
 const picks = (): string[] => [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map((item) => item.dataset.pick!);
 const popover = (): HTMLElement | null => document.querySelector<HTMLElement>("#app-popover");
 
+test('the member computer header overflow has the same right-click entry', () => {
+  const header = document.createElement('div'); header.className = 'desktop-location-header';
+  header.innerHTML = `<span>Computer</span>${iconButton('more','More',' data-computer-menu')}`;
+  document.body.append(header);
+  const button = header.querySelector<HTMLButtonElement>('[data-computer-menu]')!;
+  expect(overflowAt(header.querySelector('span'))?.button).toBe(button);
+  expect(uncoveredOverflows(header)).toEqual([]);
+});
+
 const press = (target: Element, x: number, y: number): void => {
   target.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 2, clientX: x, clientY: y }));
 };

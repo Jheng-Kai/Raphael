@@ -11,7 +11,7 @@ the app says it is larger than `services.attachments` allows), checked by
 `services.attachments.checked`, and handed to the assistant with the caption as the request's text;
 without a caption the text is empty and the assistant takes it as "look at this". An album arrives
 as one message per photo; the switchboard waits ALBUM_WAIT_SECONDS after the latest of them and asks
-once, with at most MAX_ATTACHMENTS files. The bytes live for that one request and are never written
+once, with at most MAX_ALBUM_FILES files. The bytes live for that one request and are never written
 anywhere.
 
 What goes in the log: counts, kinds and a short hash of a chat id. Never a message, a caption, a
@@ -26,7 +26,6 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from ..services.attachments import (
-    MAX_ATTACHMENTS,
     MAX_IMAGE_BYTES,
     MAX_PDF_BYTES,
     MAX_FILE_BYTES,
@@ -53,6 +52,8 @@ FILE_KINDS = ("image", "pdf")
 ALBUM_WAIT_SECONDS = 1.5
 # The most messages of one album that are kept track of (Telegram's albums have up to ten).
 MAX_ALBUM_ITEMS = 10
+# Messaging albums keep their own limit, independent of the desktop composer.
+MAX_ALBUM_FILES = 4
 _MB = 1024 * 1024
 
 
@@ -329,10 +330,10 @@ class Switchboard:
                         text = await self._hear(voice, language)
                         prefix = heard(language, text) + "\n\n"
                     if files:
-                        if len(files) > MAX_ATTACHMENTS:
-                            count = str(MAX_ATTACHMENTS)
+                        if len(files) > MAX_ALBUM_FILES:
+                            count = str(MAX_ALBUM_FILES)
                             prefix = words(language, "files_first", count=count) + "\n\n"
-                        taken = await self._fetch_files(files[:MAX_ATTACHMENTS], language)
+                        taken = await self._fetch_files(files[:MAX_ALBUM_FILES], language)
                         logger.info(
                             "%s: a request with %d file(s), chat=%s",
                             source,

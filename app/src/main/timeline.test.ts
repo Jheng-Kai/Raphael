@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { setLocale } from "./i18n";
+import { setLocale, t } from "./i18n";
 import type { MentionTarget } from "./mention-text";
 import { ico } from "./ui";
 import {
@@ -63,12 +63,13 @@ test("a pending permission card replaces duplicate running and waiting task cont
   }
 });
 
-test("a finished task's reply stands alone, and only an unfinished one says how it ended", () => {
+test("terminal tasks add no centred status row, and failed replies own their rerun", () => {
   const draw = (over: Partial<AgentTurn>) => { document.body.innerHTML = turnHTML(turn(74, over), emptyTimelineState(), false, LOOK); return document.querySelector(".task-actions"); };
   expect(draw({ text: "The sample report is ready.", task: { id: 74, state: "done" } as AgentTask })).toBeNull();
   expect(draw({ text: "", messages: [{ seq: 1, kind: "reply", text: "The sample report is ready.", at_ms: 1 }], task: { id: 74, state: "done" } as AgentTask })).toBeNull();
-  expect(draw({ text: "", messages: [], task: { id: 74, state: "done" } as AgentTask })).not.toBeNull();
-  expect(draw({ text: "The sample report is ready.", task: { id: 74, state: "failed" } as AgentTask })?.querySelector('[data-act="rerun"]')).not.toBeNull();
+  expect(draw({ text: "", messages: [], task: { id: 74, state: "done" } as AgentTask })).toBeNull();
+  expect(draw({ text: "The sample report is ready.", task: { id: 74, state: "failed" } as AgentTask })).toBeNull();
+  expect(document.querySelector('.chat-message .message-actions [data-act="rerun"]')).not.toBeNull();
 });
 
 test("a settled permission card also owns its task's completed state", () => {
@@ -148,6 +149,30 @@ const THREE = [
   step({ tool: "create-event", server: "Google Calendar", outcome: "error", reason: "auth", ms: 600, at_ms: T0 + 2_900 }),
 ];
 
+test.each(["zh-TW", "en", "ja"] as const)("completed work preserves the exact missing-service repair in %s", locale => {
+  setLocale(locale);
+  for (const missing of [
+    { resource: "searxng", requirement: "url", state: "missing", repair: "search" },
+    { resource: "pdf", requirement: "no_text", state: "broken", repair: "vision" },
+    { resource: "fish", requirement: "setup", state: "missing", repair: "voice" },
+  ] as const) {
+    for (const withActions of [false, true]) {
+      const state = emptyTimelineState(); state.thinkingOpen.set(1, true);
+      const item = turn(1, {
+        status: "error", steps: [step({ tool: "web_search", outcome: "error", reason: "not_configured", missing })],
+        messages: withActions ? [{ seq: 1, kind: "event", text: JSON.stringify({ type: "action", id: "search", state: "done", present: "Search", past: "Searched", outcome: "error", reason: "not_configured" }), at_ms: T0 }] : [],
+      });
+      const root = document.createElement("div"); root.innerHTML = turnHTML(item, state, false, LOOK);
+      const work = root.querySelector(".work-section.is-open")!;
+      expect(work.querySelectorAll("[data-missing-repair]")).toHaveLength(1);
+      expect(work.querySelector(`[data-missing-resource="${missing.resource}"]`)?.getAttribute("data-missing-repair")).toBe(missing.repair);
+      expect(work.closest(".ra-body")).not.toBeNull();
+      expect(root.querySelector(".sys [data-missing-repair],.task-actions [data-missing-repair]")).toBeNull();
+      if (missing.repair === "search") expect(work.textContent).toContain(t("missing.url"));
+    }
+  }
+});
+
 /** What a sighted reader sees: the text outside the tags, without what only a screen reader hears. */
 const visible = (html: string): string =>
   html.replace(/<span class="sr">.*?<\/span>/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -164,15 +189,15 @@ test("a spoken quick answer with public progress shows its answer after the work
   expect(stopped).not.toContain('class="ans"');
 });
 
-test("a live turn renders ordered public bubbles and event chips without raw steps", () => {
+test("a live turn renders public replies while unfinished work receipts stay out of the thread", () => {
   const html = turnHTML(turn(1, { status: "running", text: "", steps: THREE, messages: [
     { seq: 1, kind: "progress", text: "I will check the examples.", at_ms: T0 },
     { seq: 2, kind: "event", text: "Example saved", at_ms: T0 },
     { seq: 3, kind: "reply", text: "Your turn?", at_ms: T0 },
   ] }), emptyTimelineState(), false, { face: () => "" });
   expect(html).toContain('data-tooltip="I will check the examples."');
-  expect(html.indexOf("Example saved")).toBeLessThan(html.indexOf("Your turn?"));
-  expect(html).toContain('class="sys event-line"');
+  expect(html).not.toContain("Example saved");
+  expect(html).not.toContain('class="sys event-line"');
   expect(html).not.toContain('class="work-sentences"');
   expect(html).not.toContain('class="work-time"');
   expect(html).toContain('class="live-presence"');
@@ -587,11 +612,13 @@ describe("a turn", () => {
     expect(turnHTML(turn(5, { question: " " }), emptyTimelineState(), false, LOOK)).not.toContain("bubble");
   });
 
-  test("a detail is closed behind a button that says whether it is open", () => {
+  test("a detail shares the reply's collapsed work action", () => {
     const closed = turnHTML(turn(5, { detail: "更多" }), emptyTimelineState(), false, LOOK);
-    expect(closed).toContain('class="btn sm icon tn-more" data-act="detail" aria-expanded="false" aria-controls="tn-detail-5" aria-label="詳細" title="詳細"');
-    expect(closed).toContain('<div class="tn-detail" id="tn-detail-5" hidden><p>更多</p></div>');
-    expect(turnHTML(turn(5, { detail: "更多" }), emptyTimelineState(), true, LOOK)).toContain('<div class="tn-detail" id="tn-detail-5"><p>更多</p></div>');
+    expect(closed).toContain('data-act="thinking" aria-expanded="false" aria-controls="work-5"');
+    expect(closed).toContain('id="work-5" hidden');
+    expect(closed).toContain('<pre class="failure-detail">更多</pre>');
+    const state = emptyTimelineState(); state.thinkingOpen.set(5, true);
+    expect(turnHTML(turn(5, {detail:"更多"}), state, false, LOOK)).toContain('id="work-5"><');
   });
 
   test("the words looked for are marked in the question, the answer and the detail", () => {

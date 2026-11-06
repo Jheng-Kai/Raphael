@@ -45,6 +45,40 @@ async def setup(rig):
     return hub, routine
 
 
+@pytest.mark.parametrize("needle,text", [("needs repro", "This needs repro today"), ("<@U012345>", "Hi <@U012345> please review")])
+async def test_phrase_and_literal_mention_only_match_new_text_in_the_selected_channel(rig, needle, text):
+    hub, routine = await setup(rig)
+    when = {**routine["when"], "filter": {"field": "text", "equals": needle, "operator": "contains"}}
+    when["event"]["arguments"] = {"channel": "C012345"}
+    await rig.call("routines.update", {"id": routine["id"], "when": when})
+    hub.items = [{"id": "old", "text": text}]
+    await rig.service.poll_events()
+    assert not rig.background.submitted
+    hub.items += [{"id": "hit", "text": text}, {"id": "miss", "text": "unrelated"}, {"id": "missing"}, {"id": "object", "text": {"text": text}}]
+    rig.wall.now += POLL_MS
+    await rig.service.poll_events()
+    assert len(rig.background.submitted) == 1
+    assert "hit" in rig.background.submitted[0]["text"]
+    assert all(call[1] == {"channel": "C012345"} for call in hub.calls)
+
+
+async def test_hourly_cap_keeps_event_receipt_pending_until_capacity_returns(rig):
+    hub, routine = await setup(rig)
+    await rig.service.poll_events()
+    hub.items = [{"id": "limited-event", "sender": "client@example.com"}]
+    rig.wall.now += 300_000
+    rig.service._settings.set("routine_run_window", [[0, rig.wall.now]] * 200)
+    await rig.service.poll_events()
+    assert rig.background.submitted == []
+    receipt = rig.conn.execute("SELECT state FROM routine_receipts WHERE routine_id=? AND item_id=?", (routine["id"], "limited-event")).fetchone()
+    assert receipt[0] == "pending"
+    assert "200" in rig.service.store.routine(routine["id"]).last_error
+    rig.wall.now += 3_600_000
+    await rig.service.poll_events()
+    assert len(rig.background.submitted) == 1
+    assert rig.conn.execute("SELECT state FROM routine_receipts WHERE routine_id=? AND item_id=?", (routine["id"], "limited-event")).fetchone()[0] == "fired"
+
+
 async def test_non_composio_poll_does_not_request_catalogue(rig):
     hub, routine = await setup(rig)
 

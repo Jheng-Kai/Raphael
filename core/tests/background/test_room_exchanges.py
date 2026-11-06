@@ -36,27 +36,26 @@ async def test_api_room_team_talks_through_shared_worker_and_ends_by_itself(make
     memory.shared.edit_document("BRAND-GOLD\n", None)
     memory.own(alice.id).edit_document("ALICE-PRIVATE\n", None)
     rig.client.replies.extend(report(text) for text in (
-        "@Alice lead the release plan", "@Bob I propose shipping today", "@Alice I disagree: test first",
-        "Agreed, I own testing",
+        "@Alice lead the release plan", "@Bob I propose shipping today", "I disagree: test first",
     ))
     try:
         room = (await rig.rpc.call("rooms.create", {"name":"Release", "member_ids":[0,alice.id,bob.id]}))["room"]
-        await rig.rpc.call("rooms.send", {"room_id":room["id"], "text":"Discuss a release plan", "request_id":"team", "language":"en"})
+        await rig.rpc.call("rooms.send", {"room_id":room["id"], "text":"@Raphael discuss a release plan", "request_id":"team", "language":"en"})
         await until(lambda: rooms._exchanges.latest(room["id"])["state"] == "done", timeout=10)
         messages = (await rig.rpc.call("rooms.messages", {"room_id":room["id"]}))["messages"]
-        assert [m["member_id"] for m in messages] == [None,0,alice.id,bob.id,alice.id]
-        assert [m["reply_to_member"] for m in messages[2:]] == [0,alice.id,bob.id]
+        assert [m["member_id"] for m in messages] == [None,0,alice.id,bob.id]
+        assert [m["reply_to_member"] for m in messages[2:]] == [0,alice.id]
         assert all(m["kind"] == "message" for m in messages)
-        assert len(rig.client.chat_calls) == 4 and not rig.client.replies and rig.reports() == []
+        assert len(rig.client.chat_calls) == 3 and not rig.client.replies and rig.reports() == []
         await until(lambda: not rig.service.activity.running)
         for identifier in (0, alice.id, bob.id):
             activity = [data['state'] for method, data in rig.notifications
                         if method == 'member.activity' and data['member_id'] == identifier]
             assert activity[:2] == ['waiting', 'thinking'] and activity[-2:] == ['done', 'idle']
-        assert rig.client.chat_calls[3]["tools"]
+        assert rig.client.chat_calls[2]["tools"]
         assert "PRECISE-PLANNER" in rig.client.chat_calls[1]["messages"][0]["content"]
         assert "CAUTIOUS-ENGINEER" in rig.client.chat_calls[2]["messages"][0]["content"]
-        assert "I disagree: test first" in str(rig.client.chat_calls[3]["messages"])
+        assert "I propose shipping today" in str(rig.client.chat_calls[2]["messages"])
         # A room reads the team's shared notes; what the owner told Alice alone stays out of it.
         alice_turn = str(rig.client.chat_calls[1]["messages"])
         assert "BRAND-GOLD" in alice_turn and "ALICE-PRIVATE" not in alice_turn
@@ -95,16 +94,17 @@ async def test_room_roles_keep_shared_notes_and_normal_tools_without_rounds(make
         "Who reads today's mail? @Bob", "I can read it.",
     ))
     try:
+        source = rooms._history.add(session_id="meeting",question="Meet",route="answer",prefix="",text="",status="running")
         room = await rooms.meeting({"member_ids": [0, alice.id, bob.id], "agenda": "@Alice who reads today's mail?",
-                                    "roles": {str(alice.id): "moderator", str(bob.id): "participant"}}, "en", 2**50 - 1)
+                                    "roles": {str(alice.id): "moderator", str(bob.id): "participant"}}, "en", source)
         await until(lambda: rooms._exchanges.latest(room["room_id"])["state"] in ("done", "stopped"), timeout=10)
         messages = (await rig.rpc.call("rooms.messages", {"room_id": room["room_id"]}))["messages"]
-        assert [message["member_id"] for message in messages] == [None, alice.id, bob.id]
+        assert [message["member_id"] for message in messages] == [0, alice.id, bob.id]
         assert all(message["kind"] == "message" for message in messages)
         assert len(rig.client.chat_calls) == 2 and not rig.client.replies
         for request in rig.client.chat_calls:
             tools = {tool["function"]["name"] for tool in request["tools"]}
-            assert {"find_app", "connect_app", "ask_owner", "handoff"} <= tools
+            assert tools == {"handoff","room_post","ask_member","work_status"}
             assert "history_search" not in tools
             given = str(request["messages"])
             assert "SHARED-REPORT" in given and "PRIVATE-REPORT" not in given

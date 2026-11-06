@@ -327,7 +327,7 @@ async def test_child_results_say_completed_error_or_cancelled(make_rig, conn):
 
 async def test_the_parent_is_told_to_check_handles_and_not_to_take_a_colleagues_word(make_rig):
     rig = make_rig()
-    target, source = setup(rig)
+    target, source = setup(rig, room=False)
     seen = {}
 
     def resumed(**kwargs):

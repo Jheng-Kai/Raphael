@@ -607,3 +607,23 @@ npm run look -- mcp-proposal-edit mcp-proposal-tested mcp-proposal-enabled mcp-p
 ```
 
 Offline contracts: core/tests/integrations/test_chat_connections.py, core/tests/agent/test_connection_management.py, core/tests/background/test_connection_offers.py, core/tests/test_connect_cards.py, core/tests/test_secret_cards.py, core/tests/brain/test_db.py, app/src/main/mcp-proposal.test.ts. Native provider/OAuth/stdio processes, Rust, live and judge remain separately authorized checks.
+
+## Primary management intent regression (2026-11-05)
+
+Connection management is offered only to the current primary in an interactive
+owner private chat. Connect, enable/disable and turn on/off requests select the
+connection area, alongside disconnect/reconnect and explicit connection/MCP terms.
+Other requests keep management hidden until find_tools; the default primary
+snapshot remains at most 49 tools. Discovery never widens nonprimary or worker
+access, and execution rechecks the live primary and exact-action owner approval.
+Disconnect asks even under bypass. Local reconnect still requires proposal testing
+and the existing local-command consent before launching a server; ask mode also
+shows the ordinary management confirmation.
+
+Core-only regression evidence: core/tests/members/test_management.py (intent,
+primary transfer, default count, discovery and server-side rejection),
+core/tests/integrations/test_chat_connections.py (offer changes, stale aliases,
+secret/test/enable ordering and local reconnect), and
+core/tests/evaluate/test_guardian.py (scenario intent reaches the shared snapshot,
+recorded creates without side effects and approval pause/resume). No UI changes;
+look, judge, native providers and live models are outside this offline repair.

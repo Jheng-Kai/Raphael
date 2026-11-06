@@ -127,13 +127,16 @@ class Webhooks:
         body = await reader.readexactly(length)
         expected = "sha256=" + hmac.new((secret or "").encode(), body, hashlib.sha256).hexdigest()
         signed = hmac.compare_digest(expected, fields.get("x-raphael-signature", ""))
-        if not secret or not signed:
+        bearer = hmac.compare_digest("Bearer " + (secret or ""), fields.get("authorization", ""))
+        if not secret or not (signed or bearer):
             return 401
         current = self.service.store.routine(identifier)
         if current is None or not current.enabled or current.when != routine.when or current.prompt != routine.prompt:
             return 401
         now = self.service._now_ms()
         if now - self.last_fire.get(identifier, -RATE_MS) < RATE_MS:
+            return 429
+        if not self.service.admit_routine(routine):
             return 429
         self.last_fire[identifier] = now
         # A skipped slot is consumed; other routines still use the member's queue.

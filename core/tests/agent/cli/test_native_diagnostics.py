@@ -5,6 +5,8 @@ import json
 import sys
 from types import SimpleNamespace
 
+import pytest
+
 from raphael_core.agent.cli import native_diagnostics as diagnostics
 from raphael_core.agent.cli.drivers import Driver, codex_home
 from raphael_core.agent.cli.process import Child
@@ -16,17 +18,32 @@ def opt_in(monkeypatch, tmp_path):
     monkeypatch.setenv("RAPHAEL_DATA_DIR", str(tmp_path / "data"))
 
 
-def test_diagnostics_are_absent_without_native_opt_in_and_in_packaged_core(monkeypatch, tmp_path, caplog):
+@pytest.mark.parametrize("packaged", [False, True])
+async def test_diagnostics_are_absent_without_native_opt_in_and_in_packaged_core(monkeypatch, tmp_path, caplog, packaged):
     opt_in(monkeypatch, tmp_path)
-    monkeypatch.delenv("RAPHAEL_TEST_NATIVE")
+    if packaged:
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+    else:
+        monkeypatch.delenv("RAPHAEL_TEST_NATIVE")
     diagnostics.capture("error", "private diagnostic")
-    assert Child(["unused"]).stderr_tail is None
     assert diagnostics.directory("workspaces") is None
-    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
-    monkeypatch.setattr(sys, "frozen", True, raising=False)
-    diagnostics.capture("error", "private diagnostic")
-    assert Child(["unused"]).stderr_tail is None
-    assert "private diagnostic" not in caplog.text
+    child = Child(["unused"])
+    stream = asyncio.StreamReader()
+    stream.feed_data(b"x" * 20000 + b"\nprivate diagnostic; Bearer synthetic-token\n")
+    stream.feed_eof()
+    child.process = SimpleNamespace(stderr=stream)
+    await child._drain()
+    assert len(child.stderr_tail) <= 16384
+    driver = Driver("codex", ["unused"])
+    driver.child = child
+    driver.native_diagnostic("stderr-tail", child.stderr_tail.decode())
+    event = driver._event("error", "CLI stopped")
+    assert "private diagnostic" in event.data["detail"]
+    assert len(event.data["detail"]) <= 4000
+    assert "synthetic-token" not in event.data["detail"]
+    assert not any(record.name == diagnostics.logger.name for record in caplog.records)
+    assert "private diagnostic" not in caplog.text and "synthetic-token" not in caplog.text
+    assert not (tmp_path / "data").exists()
 
 
 def test_redaction_preserves_cause_but_never_credentials(monkeypatch, tmp_path, caplog):

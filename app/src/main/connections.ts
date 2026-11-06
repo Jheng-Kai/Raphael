@@ -9,12 +9,13 @@ import { noticeHTML } from "./missing";
 import * as api from "./api";
 import { type InventoryView, appOf, countText, isConnected, whyNot } from "./apps-inventory";
 import {
-  type SkillItem, type SkillPage, loadSkillItems, sameSkill, skillChanged, skillDialogHTML, skillErrorText, skillPage, skillsSectionHTML,
+  type SkillItem, type SkillPage, type LocalSkillSource, skillImportsHTML, loadSkillItems, skillListItems, sameSkill, skillChanged, skillDialogHTML, skillErrorText, skillPage, skillsSectionHTML,
 } from "./connection-skills";
 import { openConnectionSetup } from "./connection-setup";
 import { confirmDelete } from "./member-dialogs";
 import { managedGroup, pluginTool, storePlugin, type ManagedConnector } from "./plugins-data";
 import { openMcpImport } from "./mcp-import";
+import { type SkillSet, type SkillMarketplace, skillSetDialogHTML } from "./skill-sets";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { dayLabel, describeError, formatClock } from "./format";
 import { getLocale, t } from "./i18n";
@@ -118,6 +119,11 @@ export interface ConnectionsView {
   skills: SkillItem[] | "loading" | "failed";
   /** The page of a skill that is open over the list. */
   skill: SkillPage | null;
+  skillSources?: LocalSkillSource[] | "loading" | "failed";
+  skillSets?: SkillSet[];
+  skillSet?: number | null;
+  skillMarketplaces?: SkillMarketplace[];
+  skillActionBusy?: boolean;
   audit: AuditEntry[];
   tab: Tab;
   /** What was typed in the search box. */
@@ -311,7 +317,7 @@ function itemHTML(g: ConnectionGroup, v: ConnectionsView): string {
 
 /** The private skills the search leaves: none while they are read, and the failure to read them is told where they would be. */
 function skillItems(v: ConnectionsView): SkillItem[] {
-  return Array.isArray(v.skills) ? v.skills.filter(({ member, skill }) => matches(v.search, skill.name, skill.description, member.name)) : [];
+  return Array.isArray(v.skills) ? skillListItems(v.skills).filter(({ member, skill, grants }) => matches(v.search, skill.name, skill.description, member.name, ...(grants ?? []).map(each => each.member.name))) : [];
 }
 
 function installedHTML(v: ConnectionsView): string {
@@ -320,8 +326,8 @@ function installedHTML(v: ConnectionsView): string {
   const shown = v.groups.filter((g) => matches(v.search, g.name, g.description ?? "", entryOf(g, v) ? words(entryOf(g, v)!.summary) : where(g)));
   const skills = skillItems(v);
   const skillsFailed = v.skills === "failed";
-  if (!v.groups.length && !skillsFailed && !(Array.isArray(v.skills) && v.skills.length)) return noticeHTML("emptyApps", "store", "apps");
-  if (!shown.length && !skills.length && !skillsFailed) return `<p class="cs-none">${esc(t("conn.noMatch"))}</p>`;
+  if (!v.groups.length && !skillsFailed && !(Array.isArray(v.skills) && v.skills.length) && !v.skillSets?.length) return noticeHTML("emptyApps", "store", "apps") + skillsSectionHTML([]);
+  if (!shown.length && !skills.length && !skillsFailed && !v.skillSets?.length) return `<p class="cs-none">${esc(t("conn.noMatch"))}</p>` + skillsSectionHTML([]);
   // The apps that can be called now first, then the ones that cannot (waiting for a sign-in, failed, off, a second way to an app already
   // counted): each still has its switch and its dialog. While the inventory is not read, or cannot be, they are one list as before.
   // A row keeps its section for the whole visit: flipping its switch must not move it from under the pointer.
@@ -334,8 +340,7 @@ function installedHTML(v: ConnectionsView): string {
   return (
     (counted.length ? (named ? section(t("conn.apps"), list(counted, "installed")) : list(counted, "installed")) : "") +
     (others.length ? section(t("conn.notConnected"), list(others, "installed-not")) : "") +
-    (skills.length ? skillsSectionHTML(skills) : "") +
-    (skillsFailed ? `<section class="cs-sec"><h2>${esc(t("conn.skills"))}</h2><div class="alert core-note">${st("err", t("conn.skills.failed"))}${btn(esc(t("plugins.retry")), "sm", ' data-conn="retry-skills"')}</div></section>` : "")
+    skillsSectionHTML(skills, skillsFailed, v.skillSets)
   );
 }
 
@@ -738,14 +743,15 @@ export function connectionsHTML(v: ConnectionsView): string {
   // A device login started from a service's dialog shows its code there instead.
   const device = g && v.login?.target === g.id ? "" : deviceHTML(v);
   const skill = openSkill(v);
+  const set = v.skillSets?.find(item => item.id === v.skillSet);
   const entries = storeEntries(v);
-  return `<div class="cs${v.tab === "store" ? " cs-store" : ""}">${device}${barHTML(v, entries)}<div class="cs-body" data-cs-body>${bodyHTML(v, entries)}</div></div>` + (v.keyOpen ? keyDialogHTML(v) : g ? dialogHTML(g, v) : skill ? skillScrimHTML(skill.item, skill.page, dialogNoticeHTML(v)) : "");
+  return `<div class="cs${v.tab === "store" ? " cs-store" : ""}">${device}${barHTML(v, entries)}<div class="cs-body" data-cs-body>${bodyHTML(v, entries)}</div></div>` + (v.skillSources !== undefined ? `<div class="cs-scrim" data-conn="scrim" data-dialog="skill-import"><div class="cs-dialog wide cs-skill-import" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>${skillImportsHTML(v.skillSources, closeButton(), dialogNoticeHTML(v), v.skillMarketplaces, v.skillActionBusy)}</div></div>` : set ? `<div class="cs-scrim" data-conn="scrim" data-dialog="skill-set:${set.id}"><div class="cs-dialog wide" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>${skillSetDialogHTML(set, closeButton(), dialogNoticeHTML(v), !!v.skillActionBusy)}</div></div>` : v.keyOpen ? keyDialogHTML(v) : g ? dialogHTML(g, v) : skill ? skillScrimHTML(skill.item, skill.page, dialogNoticeHTML(v)) : "");
 }
 
 /** The skill whose page is open, if it is still there. */
 const openSkill = (v: ConnectionsView): { item: SkillItem; page: SkillPage } | undefined => {
   const page = v.skill;
-  const item = page && Array.isArray(v.skills) ? v.skills.find((each) => sameSkill(each, page.memberId, page.id)) : undefined;
+  const item = page && Array.isArray(v.skills) ? skillListItems(v.skills).find((each) => sameSkill(each, page.memberId, page.id)) : undefined;
   return page && item ? { item, page } : undefined;
 };
 
@@ -814,6 +820,9 @@ export function createConnections(host: ConnectionsHost): Connections {
   const placed = new Map<string, boolean | null>();
   let skills: ConnectionsView["skills"] = "loading";
   let skill: SkillPage | null = null;
+  let skillSources: ConnectionsView["skillSources"];
+  let skillSets: SkillSet[] = [], skillMarketplaces: SkillMarketplace[] = [];
+  let skillSet: number | null = null, skillActionBusy = false, skillRequest = 0;
   let skillLoads = 0;
   let audit: AuditEntry[] = [];
   let tab: Tab = "installed";
@@ -840,7 +849,7 @@ export function createConnections(host: ConnectionsHost): Connections {
   let stopOutside: (() => void) | null = null;
 
   /** A dialog is over the list: an app's, or a skill's. */
-  const dialogOpen = (): boolean => keyOpen || open?.tab === "installed" || skill !== null;
+  const dialogOpen = (): boolean => skillSources !== undefined || skillSet !== null || keyOpen || open?.tab === "installed" || skill !== null;
 
   const redraw = (): void => {
     storePaint++;
@@ -866,7 +875,7 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   const view = (): ConnectionsView => ({
     configured, categories, category, keyOpen, keyBusy, keyError,
-    groups, catalog, composioCatalog, inventory, placed, skills, skill, audit, tab, search, storePage, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, device, loginError, dialogNotice, form, now: Date.now(),
+    groups, catalog, composioCatalog, inventory, placed, skills, skill, skillSources, skillSets, skillSet, skillMarketplaces, skillActionBusy, audit, tab, search, storePage, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, device, loginError, dialogNotice, form, now: Date.now(),
   });
 
   /** Prepare the default first screen while the installed catalog is being read. */
@@ -943,9 +952,11 @@ export function createConnections(host: ConnectionsHost): Connections {
   async function loadSkills(): Promise<void> {
     const mine = ++skillLoads;
     try {
-      const items = await loadSkillItems();
+      const { items, sets } = await loadSkillItems();
       if (mine !== skillLoads) return;
       skills = items;
+      skillSets = sets;
+      if (skillSet !== null && !sets.some(set => set.id === skillSet)) skillSet = null;
     } catch {
       if (mine !== skillLoads) return;
       if (!Array.isArray(skills)) skills = "failed";
@@ -1055,6 +1066,15 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (closing) return;
     loginError = null;
     dialogNotice = null;
+    if (skillSources !== undefined) {
+      skillSources = undefined;
+      skillRequest++; skillActionBusy = false;
+      redraw(); focusOn('[data-conn="skill-discover"]'); return;
+    }
+    if (skillSet !== null) {
+      skillSet = null; skillRequest++; skillActionBusy = false;
+      redraw(); return;
+    }
     if (keyOpen) {
       keyOpen = false; keyError = ""; keySaves++; keyBusy = false;
       redraw(); focusOn('[data-conn="configure-composio"]'); return;
@@ -1093,6 +1113,34 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   const skillOf = (memberId: number, id: number): SkillItem | undefined =>
     Array.isArray(skills) ? skills.find((each) => sameSkill(each, memberId, id)) : undefined;
+
+  async function skillAction(work: () => Promise<void>): Promise<void> {
+    if (skillActionBusy) return;
+    const request = skillRequest;
+    skillActionBusy = true; dialogNotice = null; redraw();
+    try { await work(); }
+    catch (error) { if (request === skillRequest) dialogNotice = { text: skillErrorText(error), kind: "err" }; }
+    finally { if (request === skillRequest) { skillActionBusy = false; redraw(); } }
+  }
+
+  async function readMarketplace(repo: string): Promise<void> {
+    const request = skillRequest;
+    await skillAction(async () => {
+      const result = await api.core<{ marketplace: SkillMarketplace; sets: SkillSet[] }>("members.skills.list", { member_id: 0, marketplace: repo });
+      if (request !== skillRequest) return;
+      skillMarketplaces = [...skillMarketplaces.filter(m => m.repo !== result.marketplace.repo), result.marketplace];
+      skillSets = result.sets;
+    });
+  }
+
+  async function importSet(params: Record<string, unknown>): Promise<void> {
+    const request = skillRequest;
+    await skillAction(async () => {
+      await api.core("members.skills.import", { member_id: 0, shared: true, ...params });
+      await loadSkills();
+      if (request === skillRequest && skillSources !== undefined) closeDialog();
+    });
+  }
 
   /** Opens the page of a skill, with the focus in it; its document is read for it. */
   function openSkillPage(memberId: number, id: number): void {
@@ -1548,6 +1596,50 @@ export function createConnections(host: ConnectionsHost): Connections {
         break;
       case "configure-composio": keyOpen = true; keyError = ""; redraw(); focusOn("#conn-key"); break;
       case "save-key": void saveKey(); break;
+      case "skill-discover":
+        skillRequest++; skillActionBusy = false; dialogNotice = null; skillSet = null;
+        skillSources = "loading"; redraw(); focusOn("#cs-dialog");
+        { const request = skillRequest; void api.core<{ sources: LocalSkillSource[]; marketplaces?: SkillMarketplace[] }>("members.skills.list", { member_id: 0, discover: true }).then(result => { if (request === skillRequest && skillSources === "loading") { skillSources = result.sources; skillMarketplaces = result.marketplaces ?? []; redraw(); } }, () => { if (request === skillRequest && skillSources === "loading") { skillSources = "failed"; redraw(); } }); }
+        break;
+      case "marketplace-add": void readMarketplace(document.querySelector<HTMLInputElement>("#skill-marketplace")?.value.trim() ?? ""); break;
+      case "marketplace-refresh": { const repo = skillMarketplaces[Number(button.dataset.market)]?.repo; if (repo) void readMarketplace(repo); break; }
+      case "marketplace-install": {
+        const market = skillMarketplaces[Number(button.dataset.market)];
+        const plugin = market?.plugins[Number(button.dataset.plugin)];
+        if (market && plugin?.installable) void importSet({ marketplace: market.repo, name: plugin.name });
+        break;
+      }
+      case "set-open": skillSet = Number(id); skill = null; skillSources = undefined; skillRequest++; dialogNotice = null; redraw(); focusOn("#cs-dialog"); break;
+      case "set-update": void importSet({ set_id: Number(id) }); break;
+      case "set-delete": {
+        const set = skillSets.find(item => item.id === Number(id));
+        if (set) void (async () => { if (await confirmDelete(set.name)) await skillAction(async () => { await api.core("members.skills.delete", { member_id: 0, shared: true, set_id: set.id }); skillSet = null; await loadSkills(); }); })();
+        break;
+      }
+      case "set-mcp": {
+        const server = skillSets.find(item => item.id === Number(id))?.mcp_servers[Number(button.dataset.server)];
+        if (!server) break;
+        const card = button.closest("[data-set-mcp]");
+        const field = (name: string, fallback: string): string => card?.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-mcp-field="${name}"]`)?.value ?? fallback;
+        form = { ...emptyForm(), type: server.transport, name: field("name", server.name), command: field("command", server.command), args: field("args", server.args.join("\n")), url: field("url", server.url), pairLines: field(server.transport === "http" ? "headers" : "env", (server.transport === "http" ? server.headers : server.env).join(", ")).split(",").map(name => name.trim()).filter(Boolean).map(name => `${name}=`).join("\n") };
+        skillSet = null; redraw(); focusOn("#conn-name"); break;
+      }
+      case "skill-import-alone": {
+        const source = Array.isArray(skillSources) ? skillSources[Number(button.dataset.source)]?.skills?.[Number(button.dataset.child)]?.source : undefined;
+        if (source) void skillAction(async () => { await api.membersSkillsImport(-1, source); await loadSkills(); closeDialog(); });
+        break;
+      }
+      case "skill-import-local": {
+        const source = Array.isArray(skillSources) ? skillSources[Number(button.dataset.source)] : undefined;
+        if (source?.kind === "plugin") void importSet({ source: source.source, plugin: true });
+        else if (source) void skillAction(async () => { await api.membersSkillsImport(-1, source.source); await loadSkills(); closeDialog(); });
+        break;
+      }
+      case "skill-reimport": {
+        const item = skillOf(Number(button.dataset.member), Number(id));
+        if (item) void api.membersSkillsImport(item.member.id, item.skill.source).then(() => loadSkills()).catch(error => notify(skillErrorText(error)));
+        break;
+      }
       case "skill-open": openSkillPage(Number(button.dataset.member), Number(id)); break;
       case "skill-enable": void toggleSkill(Number(button.dataset.member), Number(id)); break;
       case "skill-save": void saveSkill(); break;

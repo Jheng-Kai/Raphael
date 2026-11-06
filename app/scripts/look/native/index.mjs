@@ -33,6 +33,7 @@ async function run(options) {
   await mkdir(options.out, { recursive: true });
   const directory = await mkdtemp(join(options.out, "run-"));
   const report = { mode: "native", startedAt: new Date().toISOString(), directory, keep: options.keep, status: "running", errors: [], results: [], captures: [] };
+  if (process.env.RAPHAEL_NATIVE_LOAD) report.hostLoad = JSON.parse(process.env.RAPHAEL_NATIVE_LOAD);
   const save = () => saveReport(directory, report);
   const python = process.env.RAPHAEL_CORE_PYTHON || join(root, "core/.venv/Scripts/python.exe");
   const target = process.env.CARGO_TARGET_DIR || resolve(root, "../.target");
@@ -68,14 +69,18 @@ async function run(options) {
         env.RAPHAEL_TEST_NATIVE_CORE_DELAY_MS = String(journey.startup.delayMs);
         if (journey.startup.variant === "slow") env.RAPHAEL_TEST_NATIVE_ROOMS_FAIL_FIRST = "1";
       }
-      if (journey.name === "hidden-window") {
+      delete env.RAPHAEL_TEST_NATIVE_POWER_REFUSE;
+      if (journey.name === "hidden-window" || journey.name === "hidden-window-refused") {
         env.RAPHAEL_TEST_NATIVE_WINDOW_LIFECYCLE = "1";
         env.RAPHAEL_NATIVE_THINK_S = "4";
       }
+      // The owner's frozen return: WebView2 refused one power step and the rest never ran.
+      if (journey.name === "hidden-window-refused") env.RAPHAEL_TEST_NATIVE_POWER_REFUSE = "normal memory";
       if (journey.name === "home-timing") env.RAPHAEL_TEST_NATIVE_HOME = "1";
       if (journey.name === "openrouter-turn") delete env.RAPHAEL_FAKE_LLM;
       if (journey.name === "owner-words") env.RAPHAEL_TEST_NATIVE_LOCAL = "1";
       if (journey.name === "long-think") env.RAPHAEL_NATIVE_THINK_S = "75";
+      if (journey.name === "typing") env.RAPHAEL_NATIVE_THINK_S = "35";
       if (journey.name === "gmail-connect") env.RAPHAEL_TEST_NATIVE_GMAIL = "1";
       if (journey.name === "bot-homes") env.RAPHAEL_TEST_NATIVE_HOMES = "1";
       delete env.RAPHAEL_TEST_NATIVE_CATALOG;
@@ -93,6 +98,7 @@ async function run(options) {
           if (!process.env.RAPHAEL_NATIVE_UPGRADE_FROM) throw new Error("Set RAPHAEL_NATIVE_UPGRADE_FROM to a copy of an older data folder");
           await cp(process.env.RAPHAEL_NATIVE_UPGRADE_FROM, data, { recursive: true });
         } else await database("init", journey.name);
+        if (journey.name === "computer-speed") result.computer = await database("computer-speed");
         if (journey.name === "member-computer") {
           result.computer = await database("vm-smoke");
           const image = "member-computer-tool.png";
@@ -124,7 +130,7 @@ async function run(options) {
         owned = launch(executable, [], { cwd: app, env, log: value => { log += value.toString(); } });
         result.pid = owned.pid;
         await save();
-        browser = await connectWebView(puppeteer, port, owned);
+        browser = await connectWebView(puppeteer, port, owned, 90000, journey.name === "typing" ? 30000 : 5000);
         let page;
         for (let i = 0; i < 100; i++) {
           result.targets = browser.targets().map(target => ({ type: target.type(), url: target.url() }));
@@ -152,7 +158,13 @@ async function run(options) {
         });
         if (!journey.startup) {
           await page.reload({ waitUntil: "domcontentloaded" });
-          await page.waitForSelector(".page-home:not([hidden]) .ho-hero", { visible: true, timeout: 90000 });
+          // Keep every CDP call bounded while the real core imports and starts its workers.
+          const readyBy = Date.now() + 90000;
+          for (;;) {
+            if (await page.$eval("body", body => !!body.querySelector(".page-home:not([hidden]) .ho-hero"))) break;
+            if (Date.now() >= readyBy) throw new Error("Native Home did not become ready within 90000ms");
+            await pause(200);
+          }
         }
         const capture = async (label, target = page) => {
           try { await settleMotion(target); }
@@ -165,7 +177,8 @@ async function run(options) {
           report.captures.push({ scene: `${scene}/${label}`, theme: "native", ...viewport, image, failed: !!(result.runtimeErrors.length || result.failures.length) });
         };
         const rpc = (method, params) => page.evaluate(({ method, params }) => window.__TAURI_INTERNALS__.invoke("core_call", { method, params }), { method, params });
-        await drive(journey.name, { page, result, capture, learnedPage: async () => (await browser.pages()).find(page => /\/learned\.html/.test(page.url())), windows: () => database("windows", String(owned.pid)), computerOffset: () => database("vm-offset"), computerSignin: member => database("vm-signin", String(member)), snapshot: () => database("snapshot"), nativeLog: () => readFile(join(data, "logs/raphael.log"), "utf8").catch(() => ""), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases, catalogApp: process.env.RAPHAEL_NATIVE_APP || "slack",
+        await drive(journey.name, { page, result, capture, artifacts: journeyDir, learnedPage: async () => (await browser.pages()).find(page => /\/learned\.html/.test(page.url())), windows: () => database("windows", String(owned.pid)), computerOffset: () => database("vm-offset"), computerSignin: member => database("vm-signin", String(member)), snapshot: () => database("snapshot"), nativeLog: () => readFile(join(data, "logs/raphael.log"), "utf8").catch(() => ""), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases, catalogApp: process.env.RAPHAEL_NATIVE_APP || "slack",
+          typingBaseline: process.env.RAPHAEL_NATIVE_TYPING_BASELINE === "1",
           windowAction: action => database("window-action", String(owned.pid), action),
           modelRequests: async () => (await readFile(join(data, "model-requests.jsonl"), "utf8")).trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)) });
         await capture("final");
@@ -181,7 +194,7 @@ async function run(options) {
         }
       } finally {
         // The lifecycle journey keeps CloseRequested's real hide path; terminate only its owned PID below.
-        if (activePage && journey.name !== "hidden-window") {
+        if (activePage && !journey.name.startsWith("hidden-window")) {
           try {
             await activePage.evaluate(() => window.__TAURI_INTERNALS__.invoke("plugin:window|close", { label: "main" }));
             await Promise.race([owned.closed, pause(2000)]);

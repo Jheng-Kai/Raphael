@@ -537,6 +537,8 @@ export interface WireAttachment {
   name: string;
   mime: string;
   data: string;
+  stored_id?: string;
+  size?: number;
 }
 
 /** One thing Raphael did for a turn. Never what a tool was given or what it returned. */
@@ -593,9 +595,13 @@ export interface BrainSettings {
   image_model?: string;
   video_model?: string;
   computer_ssh_alias?: string;
+  computer_vm_idle_minutes?: number;
   chief_pinned?: boolean;
   owner_name?: string;
   owner_about?: string;
+  owner_output_folder?: string;
+  routine_timezone?: string;
+  routine_detected_timezone?: string;
   owner_photo?: string;
   action_mode?: "ask" | "direct" | "plan" | "bypass";
   local_commands_mode?: "ask" | "always" | "never";
@@ -754,6 +760,7 @@ export interface DeviceSettings {
   appearance: "system" | "light" | "dark";
   ui_language: "zh-TW" | "en" | "ja";
   autostart: boolean;
+  auto_update?: boolean;
   onboarded: boolean;
   /**
    * The apps Raphael may always operate on this PC (the 一律允許 answer of a question), by the
@@ -990,7 +997,7 @@ export type RoutineSchedule = (
   | { kind: "weekly"; days: number[]; time: string }
   | { kind: "monthly"; day: number; time: string }
   | { kind: "every"; hours?: number; minutes?: number; time?: string; from?: string; to?: string }
-) & { start_date?: string; max_runs?: number; until?: string };
+) & { start_date?: string; max_runs?: number; until?: string; timezone?: string };
 
 export interface RoutineRun {
   id: number; routine_id: number; scheduled?: number; started: number; finished: number | null;
@@ -1007,13 +1014,18 @@ export interface RoomMessage {
   turn?: AgentTurn;
   id: number; room_id: number; member_id: number | null; text: string; created: number;
   request_id: string | null; reply_to: number | null; turn_id: number | null;
-  reply_to_member?: number | null; origin_message_id?: number | null; kind?: "message" | "wrapup";
+  reply_to_member?: number | null; origin_message_id?: number | null; kind?: "message" | "wrapup" | "report" | "decision";
+  seen_through?: number | null;
+  report?: HandoffView | null;
   status: string; cost?: number; attachments?: TurnAttachment[];
   scope?: "room"; thread_id?: number;
   reply_reference?: { message_id: number; author_kind?: "owner" | "member"; author_member_id?: number | null; unavailable?: boolean } | null;
 }
 
 export interface HandoffView {
+  started_at_ms?: number | null;
+  finished_at_ms?: number | null;
+  conversation_id?: number | null;
   waiting_owner?: number;
   /** Null for a quick question (`ask_member`), which has no task: `work_turn_id` is its record. */
   task_id: number | null; source_turn_id: number; work_turn_id: number; member_id: number;
@@ -1023,10 +1035,11 @@ export interface HandoffView {
   /** What was sent to the colleague: a consultation's question. */
   request?: string;
   /** An artifact's `uri` is its path inside the task's workspace. */
-  evidence: { kind: string; digest: string; verdict: string; uri?: string; mime?: string }[];
+  evidence: { id?: number; kind: string; digest: string; verdict: string; uri?: string; mime?: string }[];
 }
 
 export interface RoomExchange {
+  active_turns?: { turn_id: number; member_id: number; round: number; seen_through: number; state: string }[];
   origin_message_id: number; room_id: number; state: "queued" | "running" | "done" | "stopped";
   turns_taken: number; hops: number; chime_ins: number; cost: number; stop_requested: number;
   routing?: { fallback?: string; model?: string };
@@ -1034,13 +1047,15 @@ export interface RoomExchange {
   reply_intents?: { id: number; origin_message_id: number; source_message_id: number; recipient_id: number; recipient_name: string; state: string; reason: string }[];
 }
 
+export interface RoomDecision { id: number; member_id: number; text: string }
+
 /** A routine of `routines.list`. Times are ms; null for never. */
 export type RoutineWhen = RoutineEventWhen | { webhook: true; app?: never; event?: never; filter?: never };
 export interface RoutineEventWhen {
   webhook?: never;
   app: string;
   event: { tool: string; arguments: Record<string, unknown>; items: string; id: string; since?: { arg: string; format: "iso" } };
-  filter: { field: string; equals: string };
+  filter: { field: string; equals: string; operator?: "equals" | "contains" };
 }
 
 export interface Routine {
@@ -1081,7 +1096,7 @@ export type MainPageId = Exclude<PageId, "settings" | "history" | "dictionary">;
 export type DictationTab = "overview" | "history" | "dictionary";
 
 /** The tabs of the settings panel. */
-export type SettingsPane = "general" | "appearance" | "dictation" | "agent" | "connections" | "messaging" | "models" | "usage" | "data" | "about";
+export type SettingsPane = "general" | "appearance" | "dictation" | "agent" | "tools" | "safety" | "connections" | "messaging" | "models" | "usage" | "data" | "about";
 
 /**
  * What the 拉斐爾 page is to put in its composer when it opens, ready to be sent or changed: the
@@ -1094,7 +1109,7 @@ export type CalendarEventFocus = `calendar:${CalendarDate}:${string}`;
 export type CalendarCreate = `calendar-new:${CalendarDate}`;
 /** Calendar on the week of that day, its usual view. */
 export type CalendarWeek = `calendar-week:${CalendarDate}`;
-export type PageArgument = SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}`;
+export type PageArgument = "computer" | SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}`;
 
 /** One of the five pages of the main window. */
 export interface Page {
@@ -1250,6 +1265,6 @@ export interface McpCandidate {
 export interface McpPreview { candidates: McpCandidate[]; rejected: number }
 export interface McpTest { ok: boolean; tools: string[]; error?: string }
 /** Member-owned resources; command templates expand only in the core. */
-export interface MemberSkill { id: number; name: string; description: string; enabled: boolean; source: string; plugin?: string; slash_name?: string; provenance?: "learned" | "imported" | "owner"; revision?: string; learned_at?: string | null; updated_at?: string | null }
+export interface MemberSkill { set_id?: number; set_kind?: "skill" | "command"; plugin_version?: string; shared?: boolean; source_changed?: boolean | null; id: number; name: string; description: string; enabled: boolean; source: string; plugin?: string; slash_name?: string; provenance?: "learned" | "imported" | "owner"; revision?: string; learned_at?: string | null; updated_at?: string | null }
 export interface MemberCommand { id: number; name: string; description: string; template: string }
 export interface MemberVoice { id: string; name: string }

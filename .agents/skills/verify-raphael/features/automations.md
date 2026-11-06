@@ -1,5 +1,25 @@
 # Calendar and automations
 
+## Calm conversations (owner, 2026-11-05)
+
+See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) for R-UI-101/R-CLI-07 and the selected matrix. Routine origins now name the routine inside its reply, with the existing editor target. Failures appear once; rerun shares reply/copy actions. Public work receipts collapse into reply detail; calendars and owner cards retain their behavior. This supersedes older transcript trigger-chip and between-message receipt descriptions.
+
+
+## Routine guard reasons (2026-11-05)
+
+R-ROUTINE-01/02 share admission across schedule, event and webhook execution.
+The existing member details row shows the localized rate/absence reason for
+scheduled routines too. A 30-day absence pauses work until explicit re-enable.
+See [Daily work](daily-work.md) for limits, receipts and offline/native boundaries.
+Follow-up 1 authorizes this representative row/editor rendering:
+
+```powershell
+npm run look -- routine-guard-reason automation-edit --theme both --width 1120,720,1920x1080
+```
+
+Inspect the full-size paused reason in both themes/all sizes, comparing its
+existing row, icon and typography with ordinary routines and event error rows.
+
 ## Calendar navigation review (2026-11-01)
 
 The general Home calendar entrance resumes its in-memory date and view. Explicit date/event links still jump. View choice persists in guarded browser storage across reload; the date starts on today in a fresh launch. Week uses all seven columns at content widths of at least 520px, otherwise a short range with an explicit date title. All-day and rhythm bars align with the hour columns. Previous/Today/next share a quiet borderless group; Today dims in its current range without moving.
@@ -232,3 +252,51 @@ npm run look -- automation-event-pick automation-event-calendar automation-event
 R-RT-06: event discovery and polling ensure the connected Composio toolkit's cached catalogue before classifying its read. The fake HTTP integration uses GOOGLECALENDAR_EVENTS_LIST with readOnlyHint from a cold cache and after clearing process caches to model restart. Startup catalogue failures back off without disabling or adding error turns, then recover. Loaded createHint and missing tools still stop with the existing localized message. A shared deadline includes catalogue loading and reading; other connection kinds never fetch a toolkit catalogue. The separate fixed Calendar reader's exception remains limited to its own slug and async context.
 
 Rerun the six automation-event-* scenes in the Real-account review fixes matrix above. These UI fixtures prove the shared pick/create/reopen and retry presentation; only the production-gate core tests prove cold-catalogue ordering.
+
+
+## Manual tests, saved zones and trigger recipes (2026-11-05)
+
+The shared routine editor and both existing member row menus offer Test once.
+`routines.run` sends the saved instruction through the existing worker and history
+of the owning member. It shares R-ROUTINE-01 admission and normal worker spend.
+An explicit test can run a paused routine without enabling it or advancing its
+next scheduled occurrence. Pending state survives closing/reopening the editor;
+confirmation remains running until the history row has a finished timestamp.
+Readable refusal and recent running/success/failure rows stay in the editor.
+The empty list asks the owner to create a routine in the conversation, retaining
+its existing add button.
+
+Schedule JSON stores an IANA `timezone`. New editor schedules use General's
+preference or browser detection. Member owner-viewing reports pin legacy unzoned
+schedules before following a changed PC zone. Existing saved zones survive
+preference changes, edits and restart. Calendar occurrences and the scheduler
+both use that saved zone. Nonexistent DST wall times are skipped; ambiguous wall
+times use the earlier occurrence once. Test spring/fall, sparse weekly/monthly
+DST gaps, preference changes and later owner zone reports.
+
+Sentry and PagerDuty recipes show their respective JSON paths and URL/key setup.
+The existing loopback listener also accepts Authorization: Bearer with its vault
+key, retaining HMAC compatibility and existing admission/untrusted-data gates.
+A user-managed HTTPS forwarder is required for external delivery. Sentry signature
+verification belongs at that forwarder; no tunnel or cloud endpoint is provisioned.
+Slack's existing selected-channel read optionally adds a literal text substring
+(including a raw <@USER_ID> mention); it retains baseline, deduplication and gates.
+
+Selected rendered matrix (synthetic fixtures and IPC, real app entry):
+
+```powershell
+npm run look -- routine-test-running routine-test-done routine-test-refused routine-test-row-menu routine-test-conversation routine-when-words routine-when-editor routine-empty-words routine-run-history routine-trigger-recipes routine-trigger-pagerduty routine-trigger-slack routine-zone routine-zone-search routine-zone-saved automation-edit details-routines --theme both --width 1120,720,1920x1080
+```
+
+Inspect every contact sheet and relevant full-size editor, row menu, conversation,
+settings/search, history and recipe image. Compare editor controls with automation-edit,
+member rows with details-routines, and General's timezone control with its existing
+size control at matching theme/width. Run judge on the same selected run, or record
+missing external references as blocked/SKIP. The brief skips full verify/core suites;
+fake acceptance does not prove native, live brain or provider delivery.
+
+Targeted contracts: test_routine_test_run.py, test_schedule.py, test_routine_guards.py,
+test_events.py, test_event_catalog.py, test_event_harness.py, test_webhooks.py,
+test_settings.py; routine-run.test.ts, timezones.test.ts, automations.test.ts,
+member-profile.test.ts, member-details.test.ts, routine-sentence.test.ts,
+settings-view.test.ts, agent-members.test.ts and look audit/app tests.

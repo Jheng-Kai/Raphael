@@ -65,6 +65,7 @@ async def test_api_records_two_creates_without_side_effects(conn, tmp_path):
     assert conn.execute("SELECT COUNT(*) FROM members").fetchone()[0] == before
     assert all(request["fallbacks"] == [] for request in client.requests)
     assert result["cost_usd"] == .002
+    assert "member_create" in {tool["function"]["name"] for tool in client.requests[0]["tools"]}
 
 
 @pytest.mark.parametrize("approved", [True, False])
@@ -74,6 +75,7 @@ async def test_approval_pauses_and_resumes_without_deleting(conn, tmp_path, appr
     assert result["status"] == "PASS", result
     assert result["approvals"] == [{"tool": "member_delete", "language": "zh-TW", "choices": ["YES", "NO"], "executed": False, "decision": "YES" if approved else "NO"}]
     assert client.requests[-1]["messages"][-1]["role"] == "tool"
+    assert "member_delete" in {tool["function"]["name"] for tool in client.requests[0]["tools"]}
 
 
 async def test_missing_calls_and_empty_or_english_replies_fail(conn, tmp_path):
@@ -90,7 +92,8 @@ async def test_html_reaches_member_without_tool_selection(conn, tmp_path):
     assert result["status"] == "PASS", result
     assert "守護星光" in client.requests[0]["messages"][1]["content"]
     offered = {tool["function"]["name"] for tool in client.requests[0]["tools"]}
-    assert {"member_create", "member_delete"} <= offered  # a member has the tools Raphael has
+    assert {"routine_create", "routine_list", "routine_delete"} <= offered
+    assert not {"member_create", "member_delete"} & offered
 
 
 async def test_turn_cap_blocks_before_next_api_request(conn, tmp_path):
@@ -113,7 +116,7 @@ async def test_cli_fake_brain_calls_real_authenticated_mcp(conn, tmp_path, monke
                 headers = {"Authorization": "Bearer " + token}
                 listing = await http.post(endpoint, headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
                 names = {tool["name"] for tool in listing.json()["result"]["tools"]}
-                assert "routine_list" in names and "member_create" in names
+                assert "routine_list" in names and "member_create" not in names
                 response = await http.post(endpoint, headers=headers, json={"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "routine_list", "arguments": {}}})
                 assert response.status_code == 200
                 assert "寫作" in response.text

@@ -1,7 +1,7 @@
 """Cua stdio MCP client, with OpenMausBot's ping/schema/control adaptations.
 
 The trusted caller supplies the approval gate. No standalone unauthenticated proxy
-or model loop is created here. All calls are serialized and refused during a hold.
+or model loop is created here. Writes are serialized and calls refused during a hold.
 """
 
 import asyncio
@@ -10,6 +10,7 @@ import json
 from .. import __version__
 from .vm import DRIVER, SOCKET, VmError, exec_args
 from .desktop_host import NO_WINDOW
+from .vm_catalog import SCREEN_READS
 
 
 def normalize_schema(value):
@@ -43,11 +44,16 @@ def normalize_schema(value):
 
 
 class CuaBridge:
+    read_timeout_s = 120.0
+    action_timeout_s = 60.0
+
     def __init__(self, vm, target):
         self.vm, self.target = vm, target
         self.process = None
         self.sequence = 0
         self.lock = asyncio.Lock()
+        self.pending = {}
+        self.reader = None
 
     @property
     def alive(self):
@@ -55,7 +61,7 @@ class CuaBridge:
 
     async def __aenter__(self):
         self.process = await asyncio.create_subprocess_exec(
-            *self.vm.command(self.target, exec_args(self.target, [DRIVER, "mcp", "--socket", SOCKET], interactive=True)),
+            *await self.vm.bridge_command(self.target, exec_args(self.target, [DRIVER, "mcp", "--socket", SOCKET], interactive=True)),
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL, limit=16 * 1024 * 1024, creationflags=NO_WINDOW,
         )
@@ -69,6 +75,14 @@ class CuaBridge:
             raise
 
     async def __aexit__(self, *exc):
+        if self.reader:
+            self.reader.cancel()
+            await asyncio.gather(self.reader, return_exceptions=True)
+            self.reader = None
+        for future in self.pending.values():
+            if not future.done():
+                future.set_exception(ConnectionError("Driver closed"))
+        self.pending.clear()
         if self.process:
             if self.process.returncode is None:
                 self.process.kill()
@@ -82,37 +96,66 @@ class CuaBridge:
     async def request(self, method, params=None, *, owner_observation=False):
         if method == "ping":
             return {}
-        async with self.lock:
-            observing = owner_observation and method == "tools/call" and params in (
-                {"name": "get_desktop_state", "arguments": {}}, {"name": "get_accessibility_tree", "arguments": {}})
-            if method == "tools/call" and self.target.key in self.vm.held and not observing:
-                return {"content": [{"type": "text", "text": "owner_holds_control"}], "isError": True}
-            self.sequence += 1
-            identifier = self.sequence
-            async with asyncio.timeout(60):
-                await self._write({"jsonrpc": "2.0", "id": identifier, "method": method, "params": params or {}})
-                while line := await self.process.stdout.readline():
-                    try:
-                        packet = json.loads(line)
-                    except ValueError:
-                        raise VmError("protocol") from None
-                    if packet.get("method") == "ping":
-                        if "id" in packet:
-                            await self._write({"jsonrpc": "2.0", "id": packet["id"], "result": {}})
-                        continue
-                    if "method" in packet and "id" in packet:
-                        await self._write({"jsonrpc": "2.0", "id": packet["id"], "error": {"code": -32601, "message": "Unsupported method"}})
-                        continue
-                    if packet.get("id") != identifier or "method" in packet:
-                        continue
-                    if not isinstance(packet.get("result"), dict):
-                        raise VmError("protocol")
-                    result = packet["result"]
-                    if method == "tools/list":
-                        for tool in result.get("tools", []):
-                            tool["originalInputSchema"] = tool.get("inputSchema") or {"type": "object"}
-                            tool["inputSchema"] = normalize_schema(tool.get("inputSchema") or {"type": "object"})
-                    if result.get("isError"):
-                        result["content"] = [block for block in result.get("content", []) if block.get("type") == "text"]
-                    return result
-            raise VmError("transport_closed")
+        observing = owner_observation and method == "tools/call" and params in (
+            {"name": "get_desktop_state", "arguments": {}}, {"name": "get_accessibility_tree", "arguments": {}})
+        if method == "tools/call" and self.target.key in self.vm.held and not observing:
+            return {"content": [{"type": "text", "text": "owner_holds_control"}], "isError": True}
+        self.sequence += 1
+        identifier = self.sequence
+        future = asyncio.get_running_loop().create_future()
+        self.pending[identifier] = future
+        reading = method == "tools/call" and (params or {}).get("name") in SCREEN_READS
+        timeout = self.read_timeout_s if reading else self.action_timeout_s
+        try:
+            async with asyncio.timeout(timeout):
+                async with self.lock:
+                    if method == "tools/call" and self.target.key in self.vm.held and not observing:
+                        return {"content": [{"type": "text", "text": "owner_holds_control"}], "isError": True}
+                    await self._write({"jsonrpc": "2.0", "id": identifier, "method": method, "params": params or {}})
+                if self.reader is None or self.reader.done():
+                    self.reader = asyncio.create_task(self._read())
+                result = await future
+            if method == "tools/list":
+                for tool in result.get("tools", []):
+                    tool["originalInputSchema"] = tool.get("inputSchema") or {"type": "object"}
+                    tool["inputSchema"] = normalize_schema(tool.get("inputSchema") or {"type": "object"})
+            if result.get("isError"):
+                result["content"] = [block for block in result.get("content", []) if block.get("type") == "text"]
+            return result
+        except (TimeoutError, asyncio.CancelledError):
+            self.vm.invalidate(self.target)
+            # Closing this owned connection abandons uncertain input; it must never be replayed.
+            await self.__aexit__(None, None, None)
+            raise
+        except (VmError, ConnectionError):
+            self.vm.invalidate(self.target)
+            raise
+        finally:
+            self.pending.pop(identifier, None)
+
+    async def _read(self):
+        try:
+            while any(not future.done() for future in self.pending.values()):
+                line = await self.process.stdout.readline()
+                if not line:
+                    raise VmError("transport_closed")
+                try:
+                    packet = json.loads(line)
+                except ValueError:
+                    raise VmError("protocol") from None
+                if "method" in packet:
+                    if "id" in packet:
+                        reply = {"result": {}} if packet["method"] == "ping" else {"error": {"code": -32601, "message": "Unsupported method"}}
+                        async with self.lock:
+                            await self._write({"jsonrpc": "2.0", "id": packet["id"], **reply})
+                    continue
+                future = self.pending.get(packet.get("id"))
+                if future is None or future.done():
+                    continue
+                if not isinstance(packet.get("result"), dict):
+                    raise VmError("protocol")
+                future.set_result(packet["result"])
+        except Exception as error:
+            for future in self.pending.values():
+                if not future.done():
+                    future.set_exception(error)

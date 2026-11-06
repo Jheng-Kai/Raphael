@@ -2,6 +2,43 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  if (variant.calmThread) {
+    const sample = data.calmSample, base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
+    const start = new Date(data.now); start.setHours(7, 0, 0, 0);
+    data.members.forEach(member => Object.assign(member, {unread:false, unread_from:null, activity:"idle", waiting:false}));
+    const make = (id, time) => ({...base, id, created_at_ms:time, session_id:`calm-${id}`, status:"error", route:"answer", source:"app", question:sample.question, text:sample.failure,
+      prefix:"", detail:null, model:"cli:codex", steps:[], messages:[{seq:1,kind:"event",text:sample.failure,at_ms:time}], attachments:[], handoffs:[], permissions:[], drafts:[], computers:[], connectors:[], secrets:[], pages:[], owner_questions:[],
+      task:{id,state:"failed",started_at_ms:time,finished_at_ms:time+1000}});
+    const first = make(8101, start.getTime()), last = make(8102, start.getTime() + (variant.calmThread === "days" ? 86400000 : 3600000));
+    first.source = "routine"; first.question = sample.routine; first.messages = []; first.routine = {...data.routines.find(routine => routine.member_id === 1),title:sample.routine};
+    last.task = null;
+    data.turns = data.turns.filter(turn => turn.member_id !== 1).concat(first, last);
+  }
+  if (variant.raphaelVoice) data.settings.tts_fish_voice = "0123456789abcdef0123456789abcdef";
+  if (variant.computerHost) data.settings.computer_ssh_alias = variant.computerHost;
+  if (variant.routineEmpty) data.routines = [];
+
+  if (variant.ownerOutputFolder) data.settings.owner_output_folder = "C:\\Owner\\Deliveries";
+  if (variant.routineGuard) for (const routine of data.routines.filter(item => item.member_id === 1)) {
+    Object.assign(routine, { enabled: false, next_run: null, last_error: "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。" });
+  }
+  if (variant.threadWindow) {
+    const sample = data.windowSample, base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
+    const words = index => index === 5 && variant.windowComposio ? JSON.stringify({tool_slug:"GMAIL_FETCH_EMAILS",successful:true,data:{subject:data.windowSample.needle}})
+      : `${sample.answer}\n\n${sample.paragraph}\n\n${index === 5 ? data.windowSample.needle : ""}\n\n\`\`\`python\nresult = ${index}\n\`\`\``;
+    data.members.forEach(member => { member.unread = false; member.unread_from = null; member.activity = "idle"; });
+    data.turns = data.turns.filter(turn => turn.member_id !== 1);
+    for (let index = 0; index < 150; index++) data.turns.push({ ...base, id:9000+index, session_id:`window-${index}`,
+      created_at_ms:data.now-(150-index)*1000, source:"app", route:"answer", question:`${sample.question} ${index}`, text:words(index), detail:null,
+      status:"done", task:null, steps:[], messages:[], attachments:[], handoffs:[], permissions:[], drafts:[], computers:[], connectors:[], secrets:[], pages:[] });
+    data.turns.find(turn => turn.id === 9149).quote = {text:data.windowSample.needle,author:data.members.find(member=>member.id===1).name};
+    if (variant.threadWindow === "room") {
+      const base = structuredClone(data.messages.find(message => message.room_id === 1));
+      data.messages = Array.from({length:150}, (_,index) => ({...base,id:9000+index,room_id:1,member_id:1,text:words(index),created:data.now-(150-index)*1000,status:"done",kind:"reply",turn:null,turn_id:null}));
+      data.messages[149].reply_reference = {message_id:9005,author_kind:"member",author_member_id:1};
+      data.roomHandoffs = []; data.roomExchanges = [];
+    }
+  }
   if (variant.unreadDivider) {
     const base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
     const sample = data.unreadSample;
@@ -90,6 +127,15 @@ export function installMock(fixture, config = {}, target = window) {
   let desktopSequence = 0;
   let teaching;
   for (const [key, value] of Object.entries(variant)) if (key in data) data[key] = structuredClone(value);
+  if (variant.routineWorkflow) {
+    const sample = data.routineWorkflowSample;
+    data.routines = [{id:91,member_id:1,title:sample.title,prompt:sample.prompt,enabled:true,last_run:null,next_run:data.now+86400000,schedule:{kind:"weekdays",time:"08:00",timezone:"Asia/Taipei"}}];
+    data.routineRuns = variant.routineWorkflow === "history" ? [
+      {id:93,routine_id:91,started:data.now,finished:null,status:"running",summary:"",cost:0},
+      {id:92,routine_id:91,started:data.now-3600000,finished:data.now-3500000,status:"error",summary:sample.failed,cost:0},
+      {id:91,routine_id:91,started:data.now-7200000,finished:data.now-7100000,status:"done",summary:sample.done,cost:0.001},
+    ] : [];
+  }
   if (variant.routineSentence && variant.routineSentence !== "waiting") {
     const routine = data.routines.find(r => r.member_id === 1);
     const template = data.turns.find(t => t.member_id === 1);
@@ -175,6 +221,9 @@ export function installMock(fixture, config = {}, target = window) {
     runningTurn.messages = variant.running === "fresh" ? [] : runningTurn.messages.filter(message => message.kind !== "reply");
     if (variant.running === "fresh") runningTurn.steps = [];
     runningTurn.text = "";
+    if (variant.lowDisk) {
+      runningTurn.messages = [{seq:1,kind:'reply',text:data.lowDiskSample,at_ms:data.now-1000}];
+    }
     if (variant.generatedProgress) {
       runningTurn.question = "請製作辦公室宣傳影片。";
       runningTurn.messages = [{seq:1,kind:"progress",text:"正在製作影片 · 40%",at_ms:data.now - 1000}];
@@ -213,6 +262,21 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.p04Short) {
     data.messages=[data.messages[0],{...data.messages[1],text:"目前沒有交付成果，需要先取得來源權限。"},
       {...data.roomWrapupMessage,reply_to:null,reply_to_member:null,text:"目前沒有可驗收的成果。小晴還需要來源的權限，取得後就會處理。"}];
+  }
+  if (variant.roomMeeting) {
+    const task = {...data.roomHandoff, state: "done", member_id: 1, member_name: "小晴", stage_id: "成果檢查",
+      evidence: data.roomHandoff.evidence.map((item, index) => ({...item, id: 501 + index})),
+      result: "已完成成果檢查，驗收報告與私人工作紀錄都已保留。", started_at_ms: data.now - 120000};
+    const decision = {...data.messages[1], id: 800, kind: "decision", member_id: 0, text: "每個階段由一位成員負責，完成後再交接。", created: data.now - 60000};
+    data.roomHandoffs = [task];
+    data.messages = [data.messages[0], decision, {...data.messages[1], id: 801, kind: "report", member_id: 1,
+      text: task.result, report: task, turn: undefined, created: data.now - 30000}];
+    if (variant.roomMeeting === "concurrent") {
+      data.messages.push(...[0, 1].map((member, index) => ({...data.roomThinkingMessages[0], id: 802 + index,
+        member_id: member, turn_id: 900 + index, text: "", status: "running", seen_through: 801})));
+      data.roomExchanges.push({...data.roomActiveExchange, active_turns: [0, 1].map((member, index) =>
+        ({turn_id: 900 + index, member_id: member, round: 1, seen_through: 801, state: "running"}))});
+    }
   }
   if (variant.roomThinking) { data.messages.push(...data.roomThinkingMessages); data.roomExchanges.push(data.roomActiveExchange); }
   if (variant.p03Handoff) {
@@ -300,9 +364,26 @@ export function installMock(fixture, config = {}, target = window) {
       Object.assign(turn, {routine:structuredClone(routine),route:"routine",question:routine.title,session_id:`routine:${routine.id}`});
     }
     data.turns = [turn];
-    if (variant.ownerQuestion === "room") data.messages.push({ ...structuredClone(data.messages.find(message => message.member_id === 1)), id: 940, room_id: 1, text: turn.text, status: "done", turn_id: turn.id, turn });
+    if (["room", "pending-room"].includes(variant.ownerQuestion)) data.messages.push({ ...structuredClone(data.messages.find(message => message.member_id === 1)), id: 940, room_id: 1, text: turn.text, status: "done", turn_id: turn.id, turn });
+    if (variant.ownerQuestion.startsWith("pending")) {
+      if (variant.ownerQuestion === "pending-many") turn.owner_questions.push({ ...question, id: "owner-place", question: "範例會議要在哪裡舉行？" });
+      for (let index = 1; index <= (variant.ownerQuestion === "pending-page" ? 65 : 12); index++) {
+        const later = { ...structuredClone(turn), id: turn.id + index, session_id: `later-${index}`, owner_questions: [], task: null,
+          question: `範例話題 ${index}`, text: "這是另一個範例話題。\n\n排程可以等你準備好後再決定。", status: "done" };
+        data.turns.push(later);
+        if (variant.ownerQuestion === "pending-room") data.messages.push({ id: 940 + index, room_id: 1, thread_id: 1, member_id: 1, text: later.text, status: "done", created: data.now + index, turn_id: later.id, turn: later });
+      }
+    }
   }
   if (variant.computerCard) data.turns.push(structuredClone(data.computerTurns[variant.computerCard]));
+  if (variant.composioResults) {
+    const turn = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
+    const raw = JSON.stringify({data:{results:[{tool_slug:"GMAIL_FETCH_EMAILS",response:{successful:true,data:{subject:"範例排程",snippet:"下週有兩場範例會議",access_token:"synthetic-hidden-value"}}}]}});
+    Object.assign(turn, {id:980,question:"請整理範例排程。",text:raw,detail:raw,status:"done",task:null,
+      messages:[{seq:1,kind:"reply",text:`\`\`\`json\n${raw}\n\`\`\``,at_ms:data.now}],
+      steps:[{kind:"tool",server:"Composio",tool:"COMPOSIO_MULTI_EXECUTE_TOOL",outcome:"ok",ms:100,at_ms:data.now,detail:raw}]});
+    data.turns = [turn];
+  }
   // A step that needs the owner's yes shows its permission card, and the question it follows is the one the window holds
   // (`agent_question_open`), answered with `agent_question_answer`; the card follows the answer as the core reports it.
   // `memberDraftFirst` sets whether 小晴 writes mail as a draft first.
@@ -613,8 +694,12 @@ export function installMock(fixture, config = {}, target = window) {
   const skillUndo = new Map();
   const saveSkills = member => skillUndo.set(member, { revision: `skill-${Date.now()}`, skills: structuredClone(data.skills.filter(s => s.member_id === member)) });
   const skillRow = ({ text, ...skill }) => skill;
+  const skillGrants = new Map();
+  const skillMember = p => p.shared ? -1 : p.member_id;
+  const visibleSkills = p => data.skills.filter(s => s.member_id === skillMember(p) || (!p.shared && s.member_id === -1))
+    .map(s => ({ ...skillRow(s), ...(!p.shared && s.member_id === -1 ? { shared: true, enabled: s.enabled && (skillGrants.get(`${p.member_id}:${s.id}`) ?? true) } : {}) }));
   const skillOf = p => {
-    const skill = data.skills.find(item => item.id === p.id && item.member_id === p.member_id);
+    const skill = data.skills.find(item => item.id === p.id && (item.member_id === skillMember(p) || (!p.shared && item.member_id === -1)));
     if (!skill) throw new Error("Invalid params: no such member skill");
     return skill;
   };
@@ -631,7 +716,15 @@ export function installMock(fixture, config = {}, target = window) {
         // Not a file of the dev server, which would write its own client into the page.
         return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml)}`, title: "輕量後背包", rev: 1, height: 320, source: "html", server: null };
       case "computer.wallpaper": return variant.ownWallpaper ? { image: variant.ownWallpaper } : {};
-      case "computer.viewer_status": return data.desktop ?? { state: "absent", ready: false, control: "member" };
+      case "computer.lifecycle": {
+        if (p.target !== data.desktop.target || p.host !== data.desktop.host || p.action === 'reset' && p.confirmed !== true) throw new Error('Maintenance confirmation or target missing');
+        data.desktop = { ...data.desktop, state:'running', ready:true, lifecycle:null };
+        return copy(data.desktop);
+      }
+      case "computer.viewer_status": {
+        if (p.start_docker) data.desktop = {state:'stopped',ready:false,control:'member',host:'',target:'synthetic-member'};
+        return p.check_host ? {host:p.alias,ok:false,checks:[{kind:'ssh',ok:true},{kind:'docker_path',ok:false}]} : data.desktop ?? { state: "absent", ready: false, control: "member" };
+      }
       case "computer.viewer_open": {
         if (variant.desktopStarts) data.desktop = { ...data.desktop, state: "running", ready: true };
         const session = `look-desktop-${++desktopSequence}`;
@@ -673,9 +766,11 @@ export function installMock(fixture, config = {}, target = window) {
         if (desktopSessions.get(p.session)?.held && data.desktop) data.desktop.control = "member";
         desktopSessions.delete(p.session); return {};
       }
+      case "tts.preview": return {ok:true};
       case "settings.get": return { settings: data.settings };
       // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
       case "background.waiting.list": { data.waitingReads = (data.waitingReads ?? 0) + 1; return { waiting: variant.roomQuestion && (!variant.roomQuestionLate || data.waitingReads > 1) ? [{ id: "room-q", member_id: 1, member_name: "小晴", room_id: 1 }] : [] }; }
+      case "memory.import": return { kept: [data.memoryImportSample.kept], refused: [{index:2,reason:"secret"}] };
       case "attachments.get": {
         if (variant.generatedFile?.id === p.id) return {mime:variant.generatedFile.mime,data:variant.generatedData};
         if (data.keptFiles?.[p.id]) return data.keptFiles[p.id];
@@ -723,6 +818,12 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "dictionary.delete": data.dictionary = data.dictionary.filter(item => item.id !== p.id); return { deleted: true };
       case "members.list": {
+        if ('panel_member_id' in p) {
+          const sample = data.memberPanelSample, now = Date.now();
+          const tasks = variant.memberPanelWork ? sample.tasks.map((title, index) => ({id:701+index, turn_id:2, conversation_id:11, title, state:['running','waiting_owner','done','failed'][index],created_at_ms:now-index*3600000,started_at_ms:now-index*3600000,finished_at_ms:index>1?now-index*3600000:null})) : [];
+          const files = variant.memberPanelFiles ? Array.from({length:15}, (_,index) => ({id:`sample-${index}`,name:index===1?sample.page:sample.files[index%3],path:`/home/cua/team/sample-${index}.md`,kind:index===1?'page':'file',turn_id:2,conversation_id:11,at_ms:index<7?now:now-10*86400000})) : [];
+          return {tasks, files:files.slice(0,p.panel_limit??12), has_more:files.length>(p.panel_limit??12)};
+        }
         // the roster of every model carries the same inventory and the same count as the sidebar and the connections page
         const counted = inventory();
         return { members: data.members.map(m => ({ ...m, chief: m.id === data.primaryId, pinned: m.id === 0 ? !!data.settings.chief_pinned : m.pinned })), groups: data.groups, team_context: {
@@ -758,9 +859,62 @@ export function installMock(fixture, config = {}, target = window) {
         return { member, routine_offer: variant.routineOffer ? {title:"範例摘要",prompt:"整理範例資料。",schedule:{kind:"daily",time:"09:00"}} : null };
       }
       case "members.delete": data.members = data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
-      case "members.skills.list": return { skills: byMember(data.skills, p).map(skillRow), undo: skillUndo.get(p.member_id)?.revision ?? null };
+      case "members.skills.list": {
+        if (p.marketplace) {
+          const marketplace = structuredClone(data.skillMarketplaceCatalog);
+          if (!marketplace || p.marketplace !== marketplace.repo) throw new Error("Invalid params: unknown synthetic marketplace");
+          data.skillMarketplaces = [...data.skillMarketplaces.filter(m => m.repo !== marketplace.repo), marketplace];
+          for (const set of data.skillSets) {
+            const latest = marketplace.plugins.find(plugin => plugin.name === set.name);
+            if (set.marketplace === marketplace.repo && latest?.version !== set.version) set.source_changed = true;
+          }
+          return { marketplace, sets: data.skillSets, skills: visibleSkills(p) };
+        }
+        return { skills: visibleSkills(p), sets: data.skillSets, undo: skillUndo.get(skillMember(p))?.revision ?? null,
+          ...(p.discover ? { sources: data.skillSources ?? [], marketplaces: data.skillMarketplaces } : {}) };
+      }
+      case "members.skills.import": {
+        if (p.plugin || p.marketplace || p.set_id) {
+          if (!p.shared) throw new Error("Invalid params: plugin sets belong to the shared library");
+          const previous = data.skillSets.find(set => set.id === p.set_id);
+          const market = data.skillMarketplaces.find(m => m.repo === (p.marketplace || previous?.marketplace));
+          const plugin = market?.plugins.find(item => item.name === (p.name || previous?.name));
+          const source = data.skillSources.find(item => item.source === p.source && item.kind === "plugin");
+          if (!previous && !source && !plugin?.installable) throw new Error("Invalid params: unknown plugin");
+          const set = { ...(previous ?? source ?? plugin), id: previous?.id ?? nextId(data.skillSets), source: source?.source ?? previous?.source ?? `github:${p.marketplace}/${p.name}`, version: plugin?.version ?? previous?.version ?? source.version,
+            marketplace: market?.repo ?? "", skill_count: 2, command_count: 1, source_changed: false, mcp_servers: source?.mcp_servers ?? previous?.mcp_servers ?? [] };
+          data.skillSets = [...data.skillSets.filter(item => item.id !== set.id), set];
+          const parts = source ? [...source.skills, ...(source.commands ?? [])] : previous ? data.skills.filter(skill => skill.set_id === set.id) : [{name:"每週摘要",description:"整理本週重點與下一步"},{name:"來源核對",description:"核對引用資料與發布日期"},{name:"review",description:"檢視輸入內容",set_kind:"command"}];
+          for (const item of parts) {
+            const existing = data.skills.find(s => s.set_id === set.id && s.name === item.name);
+            const values = {...item, set_id:set.id, set_kind:item.set_kind ?? "skill", plugin:set.name, plugin_version:set.version, source:`plugin:${set.name}`, member_id:-1};
+            if (existing) Object.assign(existing, values);
+            else data.skills.push({...values,id:nextId(data.skills),enabled:true});
+          }
+          notify("MembersChanged", {member_id:0});
+          return {set,skills:visibleSkills({shared:true})};
+        }
+        const source = (data.skillSources ?? []).flatMap(item => [item, ...(item.skills ?? [])]).find(item => item.source === p.source);
+        if (!source) throw new Error("Invalid params: choose an installed skill from the local source list");
+        const member_id = skillMember(p);
+        let skill = data.skills.find(s => s.member_id === member_id && s.source === p.source);
+        const values = { name: source.name, description: source.description, source: source.source,
+          text: source.text ?? `---\nname: ${source.name}\ndescription: ${source.description}\n---\n`, source_changed: false };
+        if (skill) Object.assign(skill, values);
+        else { skill = { ...values, id: nextId(data.skills), member_id, enabled: true }; data.skills.push(skill); }
+        notify("MembersChanged", { member_id: p.member_id });
+        return { skill: skillRow(skill), skills: [skillRow(skill)] };
+      }
       case "members.skills.read": { const skill = skillOf(p); return { skill: skillRow(skill), text: skillText(skill) }; }
       case "members.skills.update": {
+        const inherited = !p.shared && data.skills.find(s => s.id === p.id && s.member_id === -1);
+        if (inherited) {
+          if (p.text !== undefined || typeof p.enabled !== "boolean") throw new Error("Invalid params: edit shared skills in the shared library");
+          skillGrants.set(`${p.member_id}:${p.id}`, p.enabled);
+          notify("MembersChanged", { member_id: p.member_id });
+          return { skill: visibleSkills(p).find(s => s.id === p.id) };
+        }
+        p = { ...p, member_id: skillMember(p) };
         if (p.undo) {
           const previous = skillUndo.get(p.member_id);
           if (!previous || previous.revision !== p.undo) throw new Error("Invalid params: skill revision is no longer current");
@@ -785,6 +939,16 @@ export function installMock(fixture, config = {}, target = window) {
         return { skill: skillRow(skill) };
       }
       case "members.skills.delete": {
+        if (p.set_id) {
+          if (!p.shared) throw new Error("Invalid params: plugin sets belong to the shared library");
+          const removed = data.skills.filter(s => s.set_id === p.set_id).map(s => s.id);
+          data.skills = data.skills.filter(s => s.set_id !== p.set_id);
+          data.skillSets = data.skillSets.filter(s => s.id !== p.set_id);
+          for (const key of skillGrants.keys()) if (removed.includes(Number(key.split(":")[1]))) skillGrants.delete(key);
+          notify("MembersChanged",{member_id:0}); return {deleted:true};
+        }
+        if (!p.shared && data.skills.some(s => s.id === p.id && s.member_id === -1)) throw new Error("Invalid params: edit shared skills in the shared library");
+        p = { ...p, member_id: skillMember(p) };
         saveSkills(p.member_id);
         const deleted = data.skills.some(item => item.id === p.id && item.member_id === p.member_id);
         data.skills = data.skills.filter(item => !(item.id === p.id && item.member_id === p.member_id));
@@ -802,7 +966,15 @@ export function installMock(fixture, config = {}, target = window) {
       case "conversations.clear": { const member = data.conversations.find(item => item.id === p.id).member_id; data.turns = data.turns.filter(item => item.conversation_id !== p.id); notify("ConversationsChanged", { member_id: member }); notify("AgentTurn", { turn_id: 0, member_id: member }); return { cleared: 1 }; }
       case "conversations.delete": { const gone = data.conversations.find(item => item.id === p.id); data.turns = data.turns.filter(item => item.conversation_id !== p.id); data.conversations = data.conversations.filter(item => item.id !== p.id); if (gone) mainConversation(gone.member_id); return { deleted: 1 }; }
       case "agent.history.list": {
-        return { turns: byMember(data.turns, p).filter(turn => p.conversation_id === undefined || turn.conversation_id === p.conversation_id).filter(turn=>!p.before_id||turn.id<p.before_id).sort((a,b)=>b.id-a.id).slice(0,p.limit??50) };
+        const turns = byMember(data.turns, p).filter(turn => p.conversation_id === undefined || turn.conversation_id === p.conversation_id);
+          if (p.after_id !== undefined) {
+            const fresh = turns.filter(turn => turn.id > p.after_id).sort((a,b) => a.id-b.id), limit = Math.min(p.limit ?? 50, 50);
+            const ids = p.turn_ids ?? [], changed = turns.filter(turn => ids.includes(turn.id));
+            return { turns: [...new Map([...fresh.slice(0,limit), ...changed].map(turn => [turn.id,turn])).values()].sort((a,b) => b.id-a.id), delta: true,
+              has_more: fresh.length > limit, next_after_id: fresh.slice(0,limit).at(-1)?.id ?? p.after_id, removed_ids: ids.filter(id => !turns.some(turn => turn.id === id)),
+              pending_questions: turns.flatMap(turn => turn.owner_questions ?? []).filter(question => question.kind === "ask_owner" && question.state === "asked") };
+          }
+        return { turns: turns.filter(turn=>!p.before_id||turn.id<p.before_id).sort((a,b)=>b.id-a.id).slice(0,p.limit??50), pending_questions: turns.flatMap(turn => turn.owner_questions ?? []).filter(question => question.kind === "ask_owner" && question.state === "asked") };
       }
       // What the owner typed, newest first (the core's rule: typed turns of the private conversations, repeats in a row once); a scene may state it.
       case "agent.history.sent": {
@@ -837,6 +1009,23 @@ export function installMock(fixture, config = {}, target = window) {
           permission: { id: "room-q", source: "background", kind: "local_command", service: "小晴", tool: "local_exec", summary: "Get-ChildItem -LiteralPath app -Force", reason: "D:\\專案", digest: "room-digest", always: false, state: "pending", expires_at_ms: data.now + 1800000 } }] };
         return { questions: localQuestion && p.member_id === 1 ? [localQuestion] : [] };
       }
+      case "owner_questions.bring": {
+        const turn = data.turns.find(turn => turn.owner_questions?.some(question => question.id === p.id));
+        const question = turn?.owner_questions.find(question => question.id === p.id);
+        if (!question || question.state !== "asked") throw new Error("Unknown owner question");
+        const latest = data.turns.filter(item => item.conversation_id === turn.conversation_id && item.member_id === turn.member_id).sort((a,b) => b.id-a.id)[0];
+        if (latest.id === turn.id && variant.ownerQuestion !== "pending-room") return { turn_id: turn.id };
+        const moved = { ...structuredClone(turn), id: Math.max(...data.turns.map(item => item.id)) + 1, question: "", text: "", messages: [], owner_questions: [question] };
+        question.turn_id = moved.id;
+        turn.owner_questions = turn.owner_questions.filter(item => item.id !== p.id);
+        turn.task = null;
+        data.turns.push(moved);
+        if (variant.ownerQuestion === "pending-room") data.messages.push({ id: Math.max(...data.messages.map(item => item.id)) + 1, room_id: 1, thread_id: 1, member_id: 1, text: "", status: "done", created: data.now, turn_id: moved.id, turn: moved });
+        notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+        notify("AgentTurn", { turn_id: moved.id, member_id: turn.member_id });
+        notify("RoomsChanged", { room_id: 1 });
+        return { turn_id: moved.id };
+      }
       case "owner_questions.answer": {
         const turn = data.turns.find(turn => turn.owner_questions?.some(question => question.id === p.id));
         const question = turn?.owner_questions.find(question => question.id === p.id);
@@ -870,10 +1059,20 @@ export function installMock(fixture, config = {}, target = window) {
         const calendar=choice?.id==='calendar-event';
         const args=calendar ? {calendarId:'primary',maxResults:50,singleEvents:true,orderBy:'updated'} : choice?.input==='repository' ? {owner,repo,per_page:20,status:'failure'} : choice?.input==='channel' ? {channel:value,limit:20} : {max_results:20,include_payload:false,verbose:false};
         const path=calendar ? 'items' : choice?.input==='repository' ? 'workflow_runs' : 'messages';
-        const detected=!p.event ? {} : variant.eventUndetectable || !choice ? {event_error:'目前沒有可用的 Gmail 項目。出現新項目後，請再試一次。'} : {when:{app:choice.app,event:{tool:'mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL',arguments:{tools:[{tool_slug:choice.slug,arguments:args}]},items:`data.results.0.response.data.${path}`,id:choice.id==='gmail-mail' ? 'messageId' : choice.input==='channel' ? 'ts' : 'id',...(calendar ? {since:{arg:'updatedMin',format:'iso'}} : {})},filter:{field:'',equals:''}}};
+        const detected=!p.event ? {} : variant.eventUndetectable || !choice ? {event_error:'目前沒有可用的 Gmail 項目。出現新項目後，請再試一次。'} : {when:{app:choice.app,event:{tool:'mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL',arguments:{tools:[{tool_slug:choice.slug,arguments:args}]},items:`data.results.0.response.data.${path}`,id:choice.id==='gmail-mail' ? 'messageId' : choice.input==='channel' ? 'ts' : 'id',...(calendar ? {since:{arg:'updatedMin',format:'iso'}} : {})},filter:p.contains ? {field:'text',equals:p.contains,operator:'contains'} : {field:'',equals:''}}};
         return {routines:p.member_id===undefined ? data.routines : byMember(data.routines,p),events,event_apps:variant.noEventApps ? [] : ['Gmail','Google 日曆','GitHub','Slack'],...detected};
       }
       case "routines.webhook": return {address:`http://127.0.0.1:43210/routines/${p.id}`, address_changed:!!variant.hookAddressChanged, ...(p.reveal ? {secret:'sample-fake-secret-for-visual-checks'} : {})};
+      case "routines.run": {
+        const sample = data.routineWorkflowSample;
+        if (variant.routineWorkflow === "refused") return {status:"refused",reason:sample.refused};
+        const routine = data.routines.find(item=>item.id===p.id), done=variant.routineWorkflow === "done", runId=nextId(data.routineRuns);
+        const turn = {...structuredClone(data.turns.find(item=>item.member_id===routine.member_id)),id:nextId(data.turns),source:"routine",route:"routine",routine:structuredClone(routine),question:routine.title,text:done?sample.done:"",status:done?"done":"running",messages:[],steps:[],task:null};
+        data.turns.push(turn);
+        data.routineRuns.unshift({id:runId,routine_id:p.id,started:data.now,finished:done?data.now+1000:null,status:done?"done":"running",summary:done?sample.done:"",turn_id:turn.id,cost:0});
+        notify("AgentTurn",{turn_id:turn.id,member_id:routine.member_id});
+        return {run_id:runId,turn_id:turn.id};
+      }
       case "routines.runs": return { runs: data.routineRuns.filter(run => run.routine_id === p.routine_id), total: data.routineRuns.filter(run => run.routine_id === p.routine_id).length };
       case "routines.create": { const routine = { ...p, ...(p.when ? { schedule: null, last_checked: null, last_error: "", app_name:routineEventChoices.find(e=>e.app===p.when.app)?.app_name ?? p.when.app ?? "" } : {}), id: nextId(data.routines), enabled: p.enabled ?? true, last_run: null, next_run: p.when ? data.now : data.now + 86400000 }; data.routines.push(routine); notify("RoutinesChanged", { member_id: routine.member_id }); return { routine }; }
       case "routines.update": {
@@ -904,7 +1103,10 @@ export function installMock(fixture, config = {}, target = window) {
         return { ...room, preview: latest?.text.slice(0, 300) ?? "", last_at: latest?.created ?? null, waiting: !!variant.roomQuestion && room.id === 1,
           unread: messages.some(message => message.member_id != null && message.id > (room.read_message_id ?? 0)) };
       }) };
-      case "rooms.messages": return { messages: data.messages.filter(item => item.room_id === p.room_id && (!p.before || item.id < p.before)).sort((a,b)=>a.id-b.id).slice(-100), exchange: data.roomExchanges.filter(item => item.room_id === p.room_id).at(-1) ?? null, handoffs: data.roomHandoffs };
+      case "rooms.messages": {
+        const messages = data.messages.filter(item => item.room_id === p.room_id);
+        return { messages: messages.filter(item => !p.before || item.id < p.before).sort((a,b)=>a.id-b.id).slice(-100), decisions: messages.filter(item => item.kind === "decision"), pending_questions: messages.flatMap(item => item.turn?.owner_questions ?? []).filter(question => question.kind === "ask_owner" && question.state === "asked"), exchange: data.roomExchanges.filter(item => item.room_id === p.room_id).at(-1) ?? null, handoffs: data.roomHandoffs };
+      }
       case "rooms.create": { const room = { ...p, member_ids: p.is_team ? data.members.map(m => m.id) : p.member_ids, id: nextId(data.rooms), created: data.now, group_id: p.group_id ?? null, is_team: Number(p.is_team ?? false), default_responder: p.default_responder ?? "auto" }; data.rooms.push(room); return { room }; }
       case "rooms.update": {
         const room = data.rooms.find(room => room.id === p.room_id), previous = room.read_message_id ?? 0;
@@ -1268,6 +1470,12 @@ export function installMock(fixture, config = {}, target = window) {
         return null;
       }
       if (command === "core_call") return copy(await core(args.method, args.params));
+      if (command === "update_control") {
+        if (variant.appUpdate === "not_configured") return { state: "error", version: "", notes: "", error: "not_configured" };
+        const sample = data.appUpdateSample;
+        return { state: variant.appUpdate === "ready" || data.device.auto_update ? "ready" : variant.appUpdate ? "found" : "idle", version: variant.appUpdate ? sample.version : "", notes: variant.appUpdate ? sample.notes : "", error: "" };
+      }
+      if (command === "attachment_source") return `C:\\synthetic\\${args.id}`;
       if (command === "device_settings_get") return copy(data.device);
       if (command === "device_settings_set") { Object.assign(data.device, args.patch); notify("DeviceSettings", { settings: copy(data.device) }); return copy(data.device); }
       if (command === "avatar_get") return copy(data.avatar);
@@ -1364,6 +1572,7 @@ export function installMock(fixture, config = {}, target = window) {
         if (variant.cardLinkFailure && !variant.cardLinkRetried) { variant.cardLinkRetried = true; throw new Error("Unavailable"); }
         state.urls.push(args.url); return;
       }
+      if (command === "open_team_file") { state.openedTeamFile = args.path; return; }
       if (command === "save_usage_csv") { state.exported = args.csv; return true; }
       if (["agent_page_shown", "hotkeys_pause", "hotkeys_practice", "plugin:event|unlisten", "plugin:window|set_focus", "plugin:window|minimize", "plugin:window|close", "plugin:window|start_dragging", "plugin:webview|set_webview_zoom"].includes(command)) return;
       return unsupported(command);

@@ -4,7 +4,7 @@ const details = [{ action: "open-details" }, wait('.mb-det:not([hidden])')];
 const open = id => [...details, click(`[data-conversation-open="${id}"]`)];
 const voice = [click('.mb-det [data-det="close"]'), wait('.conversation-trigger[aria-expanded="false"]'), click('.cmp-voice')];
 const language = locale => [click('[data-k="ui-language"]'), click(`#app-popover [data-value="${locale}"]`), wait(`html[lang="${locale}"]`), check(`locale-${locale}`)];
-const panes = ["general", "appearance", "connections", "models", "dictation", "agent", "messaging", "data", "about"];
+const panes = ["general", "appearance", "connections", "models", "dictation", "tools", "safety", "messaging", "data", "about"];
 
 export default [
   ...["en", "ja", "zh-TW"].map(locale => scene(`settings-language-${locale}`, `Switch to ${locale} in Settings and walk every page and section`, [

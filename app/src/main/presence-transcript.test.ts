@@ -9,6 +9,15 @@ import { memberRowHTML } from "./member-column";
 import { messageTooltip } from "./message-tooltip";
 import { faceHTML, RAPHAEL_ID } from "./members";
 import { patchThread } from "./thread-diff";
+
+test("a changing slime mount timestamp does not rebuild the same live turn", () => {
+  const thread = document.createElement("ol"), drawn = new WeakMap<Element,string>();
+  const line = (time: number) => ({key:"sample", html:`<li><svg class="slime" data-slime-mounted="${time}"></svg><span>Working</span></li>`});
+  expect(patchThread(thread, [line(10)], drawn)).toBe(true);
+  const node = thread.firstElementChild;
+  expect(patchThread(thread, [line(20.5)], drawn)).toBe(false);
+  expect(thread.firstElementChild).toBe(node);
+});
 import type { AgentTurn, Member } from "./types";
 
 const time = Date.UTC(2026, 10, 2, 9);
@@ -101,17 +110,18 @@ test("live and pending private work shows only a 28px avatar with the public pro
   expect(dom(pendingTurnHTML("Sample", "app", look, [], { time })).querySelector(".live-presence")).not.toBeNull();
 });
 
-test("time separators appear at the first message and at thirty-minute gaps", () => {
+test("time separators appear once per calendar day despite thirty-minute gaps", () => {
   const items = threadItems([turn(), turn({id: 52, created_at_ms: time + 60_000}), turn({id: 53, created_at_ms: time + 31 * 60_000})], time);
-  expect(items.filter(item => item.kind === "day")).toHaveLength(2);
+  expect(items.filter(item => item.kind === "day")).toHaveLength(1);
   expect(items.filter(item => item.kind === "day").every(item => item.key.startsWith("time:"))).toBe(true);
 });
 
-test("routine events leave the closed work body, open their routine and group consecutive receipts", () => {
+test("routine events stay inside closed work detail with their targets and grouped receipts", () => {
   const messages = [1,2].map(seq => ({ seq, kind: "event" as const, text: JSON.stringify({type: "routine", action: "created", id: seq, name: `Sample ${seq}`}), at_ms: time }));
   const html = turnHTML(turn({messages}), emptyTimelineState(), false, look), root = dom(html);
   expect(root.querySelector("[data-event-group]")).not.toBeNull();
   expect(root.querySelectorAll('[data-act="open-routine"]')).toHaveLength(2);
+  expect(root.querySelector('.work-body[hidden] [data-event-group]')).not.toBeNull();
   expect(root.querySelector(".work-body .turn-event")).toBeNull();
   const thread = document.createElement("ol"), drawn = new WeakMap<Element,string>();
   const patch = (value: string) => patchThread(thread, [{key: "sample", html: value}], drawn);

@@ -2,12 +2,440 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "about-no-updater-key" || name === "about-release-page-opened") {
+    const section = document.querySelector("[data-updates]");
+    require(visible(section) && section.textContent.includes("0.2.0"), "the current app version is visible");
+    require(section.textContent.includes("新版本請到發布頁查看"), "release-page guidance is quiet and explicit");
+    require(visible(section.querySelector('[data-act="update-releases"]')), "the shared release-page button is visible");
+    require(!section.querySelector('[data-act="update-check"], [data-act="update-install"], [data-k="auto-update"], [role="alert"], .error'), "unavailable update controls and error tone are absent");
+    if (name === "about-release-page-opened") {
+      require(window.__look.urls.filter(url => url === "https://github.com/Jheng-Kai/Raphael/releases").length === 1, "one click opens the release page through the native opener boundary");
+      require(window.__look.calls.filter(call => call.command === "update_control" && call.action === "check").length === 1, "opening the release page does not check for updates again");
+    }
+    return {check:name};
+  }
+  if (name.startsWith('member-panel-')) {
+    const panel = document.querySelector('.mb-det'), selected = panel.querySelector('.mb-tabs [aria-selected="true"]');
+    const tab = name.includes('library') ? 'library' : name.includes('details') || name.includes('task-') ? 'details' : 'computer';
+    require([...panel.querySelectorAll('.mb-tabs [role="tab"]')].map(node => node.textContent).join('/') === '詳細資料/檔案庫/電腦', 'the shared tabs name the three destinations');
+    require(selected?.dataset.tab === tab, 'the intended tab is selected');
+    require(visible(panel.querySelector('.mb-panel-identity')), 'member face, name and role stay above the tabs');
+    if (tab === 'computer') {
+      const live = visible(panel.querySelector('.desktop-screen iframe'));
+      require(!!visible(panel.querySelector('[data-desktop="enlarge"]')) === !!live, 'Enlarge is offered only with a live screen');
+      if (!live) require(!visible(panel.querySelector('[data-desktop="take"]')), 'an offline screen offers no Take control');
+      else require(panel.querySelector('[data-computer-state-text]')?.textContent === '執行中', 'the live header names the running state');
+    }
+    if (tab === 'details') require([...panel.querySelectorAll('.mb-dh')].filter(node => visible(node) && node.textContent === '對話').length === 1, 'Details names the conversation section only once');
+    if (name === 'member-panel-task-stop' || name === 'member-panel-task-rerun') {
+      const items = document.querySelectorAll('.menu [role="menuitem"]');
+      require(items.length === 1 && items[0].textContent.trim() === (name.endsWith('stop') ? '停止' : '重新執行'), 'work exposes only the action for its current state');
+      require(!window.__look.calls.some(call => ['worker.cancel','worker.rerun'].includes(call.method)), 'opening a menu does not mutate work');
+    } else if (name === 'member-panel-details') {
+      const rows = [...panel.querySelectorAll('.mb-task-row')];
+      require(rows.length === 4 && rows.map(row => row.querySelector('small').textContent).join('/') === '進行中/等你/完成/失敗', 'work names all four states newest first');
+      require(rows.every(row => row.querySelector('time') && row.querySelector('[data-panel-task-menu]')), 'each work row has time and its menu');
+      require(!!panel.querySelector('.mb-panel-routines') && !!panel.querySelector('[data-slot="conversations"]'), 'routines and conversations follow work');
+    } else if (name === 'member-panel-details-empty') {
+      require(panel.querySelector('.mb-panel-tasks').textContent.includes('還沒有工作'), 'work has a one-line empty state');
+    } else if (name === 'member-panel-library' || name === 'member-panel-library-more') {
+      require(panel.querySelectorAll('.team-file[data-panel-file]').length === (name.endsWith('-more') ? 15 : 12), 'library reuses file chips and its bounded next page');
+      require(panel.querySelector('.mb-tab-body').textContent.includes('本週') && panel.querySelector('.mb-tab-body').textContent.includes('更早'), 'library groups recent and earlier files/pages');
+    } else if (name === 'member-panel-library-empty') {
+      require(panel.querySelector('.mb-tab-body').textContent === '還沒有檔案或頁面', 'library has one empty sentence');
+    } else if (name === 'member-panel-computer-live') {
+      require(visible(panel.querySelector('iframe')), 'the existing stream is visible');
+      require(visible(panel.querySelector('[data-desktop="enlarge"]')) && visible(panel.querySelector('[data-desktop="take"]')), 'Enlarge and Take control share the row below the screen');
+      require(!visible(panel.querySelector('.desktop-caption')), 'no caption repeats the member name under the screen');
+    } else if (name === 'member-panel-computer-docker-stopped') {
+      require(panel.querySelector('.desktop-message').textContent.includes('Docker Desktop'), 'the real local engine failure names Docker Desktop');
+      require(panel.querySelector('[data-desktop="retry"]').textContent === '啟動 Docker Desktop' && panel.querySelector('[data-desktop-location]').textContent === '改用遠端電腦', 'both contextual recovery actions are offered');
+      require(!window.__look.calls.some(call => call.params?.start_docker), 'reading never starts Docker');
+    } else if (name === 'member-panel-computer-docker-missing') {
+      require(visible(panel.querySelector('[data-act="docker-download"]')), 'missing installation retains the download action');
+    } else if (name === 'member-panel-computer-remote') {
+      require(panel.querySelector('.desktop-message').textContent.includes('studio-mini'), 'remote failure names the configured host');
+    } else if (name === 'member-panel-docker-start') {
+      const calls = window.__look.calls.filter(call => call.params?.start_docker);
+      require(calls.length === 1 && calls[0].params.host === '' && calls[0].params.member_id === 1, 'one explicit press starts only the captured local engine');
+      require(panel.querySelector('.desktop-error').getAttribute('role') === 'status', 'engine readiness is a status notice');
+      require(panel.querySelector('.desktop-error').textContent === 'Docker Desktop 已準備好', 'engine readiness is reported beside its screen');
+    } else if (name === 'member-panel-remote-location') {
+      require(visible(document.querySelector('.computer-location-popover')), 'recovery opens the existing location control');
+    }
+    return {check:name, tab};
+  }
+  if (name === 'panel-state-layout') {
+    const screen = document.querySelector('.desktop-panel .desktop-screen');
+    const sentence = screen?.querySelector('.desktop-message, .missing-note, .desktop-stage');
+    require(visible(screen) && visible(sentence), 'the screen contains its state sentence');
+    const bounds = screen.getBoundingClientRect(), text = sentence.getBoundingClientRect();
+    const inside = box => box.left >= bounds.left - 1 && box.right <= bounds.right + 1 && box.top >= bounds.top - 1 && box.bottom <= bounds.bottom + 1;
+    require(inside(text), 'the state sentence stays inside the screen');
+    const state = window.__look.data.desktop;
+    const phase = state.lifecycle ?? (['docker_stopped', 'remote_unavailable'].includes(state.error) || ['absent','unavailable','incompatible'].includes(state.state) || state.state === 'missing' && state.image === false ? 'unavailable'
+      : ['stopped','missing'].includes(state.state) ? 'sleeping' : state.state === 'building' ? 'updating' : 'starting');
+    const words = {sleeping:'休眠中',starting:'啟動中',waking:'喚醒中',updating:'更新中',repairing:'修復中',unavailable:'無法使用'};
+    const header = document.querySelector('[data-computer-state-text]');
+    require(visible(header) && header.textContent === words[phase], 'the short header word agrees with the screen state');
+    const walker = document.createTreeWalker(document.querySelector('.mb-det'), NodeFilter.SHOW_TEXT);
+    let occurrences = 0;
+    while (walker.nextNode()) if (visible(walker.currentNode.parentElement)) occurrences += walker.currentNode.textContent.split(sentence.textContent).length - 1;
+    require(occurrences === 1, 'the full state sentence appears only once');
+    const location = document.querySelector('.desktop-location-header [data-computer-location]').getBoundingClientRect();
+    const word = header.getBoundingClientRect();
+    require(word.top < location.bottom && word.bottom > location.top, 'the short state stays on the location control row');
+    require(visible(screen.querySelector('.desktop-boot-face')), 'each offline state uses the member face');
+    const buttons = [...screen.querySelectorAll('button')].filter(visible);
+    for (const button of buttons) {
+      const box = button.getBoundingClientRect();
+      require(inside(box), 'each state button stays inside the screen');
+      require(box.right <= text.left || box.left >= text.right || box.bottom <= text.top || box.top >= text.bottom, 'the state sentence and buttons never overlap');
+      require(box.top >= text.bottom, 'state actions follow the sentence');
+      for (const other of buttons.filter(other => other !== button)) {
+        const next = other.getBoundingClientRect();
+        require(box.right <= next.left || box.left >= next.right || box.bottom <= next.top || box.top >= next.bottom, 'state buttons never overlap one another');
+      }
+    }
+    return {check:name};
+  }
+  if (name.startsWith("app-update-")) {
+    const section = document.querySelector("[data-updates]");
+    require(visible(section) && section.textContent.includes("1.1.0"), "new version is visible");
+    require(section.textContent.includes("改善更新安裝"), "release notes remain readable");
+    require(visible(section.querySelector('[data-act="update-install"]')), "a framed install action is visible");
+    if (name === "app-update-ready") require(section.textContent.includes("更新已驗證"), "verified state is explicit");
+    require(section.querySelector('[data-k="auto-update"]').getAttribute("aria-checked") === (name === "app-update-auto" ? "true" : "false"), "auto updates are opt-in");
+    return {check:name};
+  }
+  if (name === "app-memory-import" || name === "app-memory-result") {
+    const imported = document.querySelector("[data-memory-import]");
+    const owner = imported?.parentElement;
+    const shared = owner?.querySelector('[data-mem-space="shared"]');
+    require(owner?.querySelector("h2")?.textContent === "關於你" && shared && !!(shared.compareDocumentPosition(imported) & Node.DOCUMENT_POSITION_FOLLOWING), "memory import follows shared memory inside About you");
+    require(visible(document.querySelector("[data-import-prompt]")), "handover prompt is visible");
+    require(visible(document.querySelector("[data-import-answer]")), "owner answer field is visible");
+    for (const field of document.querySelectorAll(".memory-import textarea")) {
+      require(field.getBoundingClientRect().height >= 140, "memory import fields retain room for multiple lines");
+    }
+    if (name === "app-memory-result") {
+      const result = document.querySelector(".import-result");
+      require(visible(result) && result.textContent.includes("已保留 1 項") && result.textContent.includes("未加入 1 項"), "kept and refused items are listed");
+      require(!result.textContent.includes("synthetic123"), "refused secrets are not echoed");
+    }
+    return {check:name};
+  }
+  if (name === "app-attachment-count") {
+    require(document.querySelectorAll(".cmp-chip").length === 20, "exactly twenty files remain");
+    require(!document.querySelector(".cmp-file").textContent.includes("超過數量"), "the twenty-first file is refused");
+    return {check:name};
+  }
+  if (name === "app-attachment-size") {
+    require(document.querySelectorAll(".cmp-chip").length === 0, "oversized files never reach the tray");
+    require(!window.__look.calls.some(call => call.method === "attachments.upload"), "oversized files are refused before streaming");
+    return {check:name};
+  }
+  if (name.startsWith('routine-test-')) {
+    if (name === 'routine-test-menu') {
+      require(document.querySelector('.mb-det')?.dataset.detailsTab === 'details' && visible(document.querySelector('.mb-panel-routines [data-routine="91"]')), 'the routine row stays in the Details routine section');
+      require(document.querySelector('[data-routine="91"]')?.textContent.includes('台北'), 'the Details routine row retains the saved schedule zone');
+      require(visible(document.querySelector('#app-popover [data-pick="test"]')), 'the row offers the shared test action');
+    } else {
+      const calls = window.__look.calls.filter(call=>call.method==='routines.run');
+      require(calls.length === 1 && calls[0].params.id === 91, 'one real-boundary manual action targets the saved routine');
+      if (name === 'routine-test-conversation') {
+        require([...document.querySelectorAll('.mb-chat:not([hidden]) .ans')].some(node=>node.textContent.includes('已整理三則範例筆記')), 'the result appears in the owning member conversation');
+      } else {
+        const button = document.querySelector('[data-dlg="test"]'), status = document.querySelector('.au-test-status');
+        require(visible(button) && button.disabled === (name === 'routine-test-running'), 'pending lasts until the recorded run finishes');
+        if (name === 'routine-test-refused') require(status.textContent.includes('200') && status.getAttribute('role')==='alert', 'a refusal states the hourly reason');
+        if (name === 'routine-test-done') require(status.textContent.includes('成功') && status.textContent.includes('範例筆記'), 'a completed run has its actual result');
+        if (name !== 'routine-test-refused') require(/ · 今天 \d{2}:\d{2}(?: · |$)/.test(status.textContent), 'test results use the shared relative day and minute clock');
+      }
+    }
+    return {check:name};
+  }
+  if (name === 'routine-when-words' || name === 'routine-when-editor') {
+    const node = document.querySelector(name === 'routine-when-editor' ? '.au-trigger-preview' : '[data-routine="91"]');
+    require(visible(node) && node.textContent.includes('08:00') && node.textContent.includes('台北') && node.textContent.includes('工作日'), 'schedule words include the saved time and zone');
+    return {check:name};
+  }
+  if (name === 'routine-empty-words') {
+    require(document.querySelector('.mb-panel-routines .mp-empty')?.textContent === '在對話中請成員建立例行任務', 'the empty state tells the owner to ask in chat');
+    require(visible(document.querySelector('[data-det="routine-add"]')), 'the existing add button remains');
+    return {check:name};
+  }
+  if (name === 'routine-run-history') {
+    const history = document.querySelector('.au-run-history');
+    require(visible(history) && ['執行中','成功','失敗','未使用舊資料'].every(word=>history.textContent.includes(word)), 'history has readable statuses and the failure reason');
+    require([...history.querySelectorAll('[data-run-status]')].every(row => / · (今天|昨天) \d{2}:\d{2}(?!:)/.test(row.textContent)), 'each recent run uses a relative day and omits seconds');
+    return {check:name};
+  }
+  if (name.startsWith('routine-recipe-')) {
+    const fields = document.querySelector('.au-recipe-fields');
+    require(visible(fields) && fields.textContent.includes(name.endsWith('sentry') ? 'data.issue.id' : 'event.data.id'), 'the recipe names real provider payload paths');
+    require(document.querySelector('.au-webhook').textContent.includes('HTTPS'), 'the public relay prerequisite is explicit');
+    require(document.querySelector('[data-dlg="hook-header"]') && document.querySelector('[data-dlg="hook-url"]'), 'the local URL and Bearer header have shared copy buttons');
+    require(document.querySelector('.au-hook-secret').type === 'password', 'the key remains masked until requested');
+    return {check:name};
+  }
+  if (name === 'routine-trigger-slack') {
+    require(window.__look.calls.some(call=>call.method==='routines.list' && call.params.contains==='<@U012345>' && call.params.value==='C012345'), 'the phrase and selected channel reach the existing event boundary');
+    require(document.querySelector('#au-event-contains').value==='<@U012345>', 'the mention is retained in the editor');
+    return {check:name};
+  }
+  if (name === 'routine-zone' || name === 'routine-zone-search') {
+    require(visible(document.querySelector('[data-k="routine-timezone"]')), 'General contains a shared time-zone dropdown');
+    if (name.endsWith('search')) require(document.querySelectorAll('[data-zone]').length === 1 && document.querySelector('[data-zone="Asia/Taipei"]'), 'city search narrows to the saved IANA zone');
+    return {check:name};
+  }
+  if (name === 'routine-zone-saved' || name === 'routine-zone-reset') {
+    const expected = name.endsWith('saved') ? 'America/New_York' : '';
+    require(window.__look.data.settings.routine_timezone === expected, 'the real settings action persists the zone choice');
+    require(window.__look.calls.some(call=>call.method==='settings.set' && call.params.key==='routine_timezone' && call.params.value===expected), 'the existing settings boundary owns persistence');
+    return {check:name};
+  }
+  if (name === 'calm-thread' || name === 'calm-thread-days') {
+    const thread = document.querySelector('.tn[data-id="8101"]').parentElement;
+    const days = thread.querySelectorAll('.day');
+    const extras = [...thread.querySelectorAll('.sys,.task-actions,.timeline-event,.event-group')].filter(node => !node.closest('.work-body') && !node.parentElement.closest('.sys,.task-actions,.timeline-event,.event-group'));
+    const count = {days:days.length, centredExtras:extras.length, verticalItems:days.length + extras.length + thread.querySelectorAll('.chat-message').length};
+    require(days.length === (name === 'calm-thread-days' ? 2 : 1), `one divider per day: ${JSON.stringify(count)}`);
+    require([...days].every(day => !/\d{2}:\d{2}/.test(day.textContent)), 'day dividers contain no clock');
+    require(extras.length === 0, `no centred extras: ${JSON.stringify(count)}`);
+    for (const id of [8101,8102]) {
+      const turn = thread.querySelector(`[data-id="${id}"]`), reply = turn.querySelector('[data-reply="true"]');
+      require(turn.textContent.split('Codex CLI 在回答完成前停止了。').length === 2, 'failure occurs once per turn');
+      require(reply?.querySelector('.message-actions .rerun'), 'rerun belongs to the failed reply action row');
+    }
+    require(thread.querySelector('[data-id="8101"] .chat-message .routine-run-link')?.textContent.includes('NHK Easy News'), 'routine name belongs to the reply');
+    require(getComputedStyle(thread.querySelector('[data-id="8102"] .message-actions:has(.rerun)')).opacity === '1', 'latest failed action is visible without hover');
+    return {check:name,...count};
+  }
+  if (name === 'computer-header-layout') {
+    const header = document.querySelector('.desktop-location-header');
+    require(visible(header), 'the member panel header is visible');
+    const selectors = ['.computer-lifecycle-state', '[data-computer-location]', '[data-computer-menu]'];
+    const nodes = selectors.map(selector => header.querySelector(selector)).filter(node => visible(node) && (node.matches('button') || node.textContent.trim()));
+    require(nodes.length === 3 && visible(document.querySelector('[data-det="gear"]')) && visible(document.querySelector('[data-det="close"]')), 'computer controls stay in their tab while gear and close remain available');
+    const bounds = header.getBoundingClientRect(), boxes = nodes.map(node => node.getBoundingClientRect());
+    for (let i = 0; i < boxes.length; i++) {
+      const box = boxes[i];
+      require(box.left >= bounds.left - 1 && box.right <= bounds.right + 1, 'every header control stays inside the panel');
+      if (!i) continue;
+      require(!!(nodes[i - 1].compareDocumentPosition(nodes[i]) & Node.DOCUMENT_POSITION_FOLLOWING), 'header order is state, location, overflow, gear, close');
+      const before = boxes[i - 1];
+      require(box.top >= before.bottom - 1 || box.left >= before.right - 1, 'header controls retain reading order without overlap');
+    }
+    return {check:name, controls:nodes.map(node => node.getAttribute('data-det') || node.className || node.textContent)};
+  }
+  if (name.startsWith('computer-maintenance-')) {
+    const calls = window.__look.calls.filter(call => call.method === 'computer.lifecycle');
+    if (name === 'computer-maintenance-menu') {
+      const menu = document.querySelector('.menu');
+      require(visible(menu) && menu.querySelectorAll('.mdesc').length === 6, 'each maintenance action explains preservation and removal');
+      require([...menu.querySelectorAll('.mt')].slice(0,5).map(node=>node.textContent).join('/') === '稍候/重新啟動/更新/修復/重設', 'escalation order is fixed');
+      require(!calls.length, 'opening the menu has no maintenance effect');
+    } else if (name === 'computer-maintenance-reset') {
+      require(visible(document.querySelector('.mb-confirm')) && document.querySelector('.mb-confirm').textContent.includes('成員共用'), 'reset names shared scope in the shared confirmation');
+      require(!calls.length, 'reset has not been sent before yes');
+    } else {
+      const action = name === 'computer-maintenance-reset-done' ? 'reset' : name.split('-').at(-1);
+      require(calls.length === 1 && calls[0].params.action === action && calls[0].params.target === 'synthetic-member' && calls[0].params.host === '', 'one action pins the captured computer');
+      require(action !== 'reset' || calls[0].params.confirmed === true, 'reset carries explicit confirmation');
+    }
+    return {check:name};
+  }
+  if (name === 'computer-sleep-menu') {
+    require([...document.querySelectorAll('.menu [data-value]')].map(node=>node.dataset.value).join(',') === '5,15,60,0', 'all four idle choices use the shared dropdown');
+    return {check:name};
+  }
+  if (name.startsWith('computer-state-')) {
+    const phase = name.slice('computer-state-'.length), status = document.querySelector('.computer-lifecycle-state');
+    const words = {sleeping:'電腦在休眠',waking:'正在喚醒',updating:'正在更新',repairing:'正在修復'};
+    require(visible(status) && status.textContent.includes(words[phase]), 'the header names the computer state');
+    require(status.querySelector(`svg.slime[data-state="${phase === 'sleeping' ? 'sleeping' : 'working'}"]`), 'the existing body state conveys sleeping or waking');
+    return {check:name};
+  }
+  if (name === 'computer-low-disk') {
+    const message = document.querySelector('.chat-message[data-reply="true"]');
+    const text = message?.textContent ?? '';
+    require(text.includes('downloads (200 MiB)') && text.includes('刪除前會先徵求你的同意'), 'conversation names largest folders and asks before deleting');
+    require(visible(message) && message.scrollWidth <= message.clientWidth + 1, 'the full disk question wraps in a normal member message');
+    require(!window.__look.calls.some(call => call.method === 'computer.lifecycle'), 'the disk warning performs no maintenance or deletion');
+    return {check:name};
+  }
+  if (name === 'desktop-host-repair') {
+    const repair = document.querySelector('[data-computer-host-repair]'), code = repair.querySelector('.message-code'), button = code.querySelector('[data-act="copy-code"]');
+    const bounds = code.getBoundingClientRect(), dialog = repair.closest('[role="dialog"]').getBoundingClientRect();
+    require(bounds.top >= dialog.top && bounds.bottom <= dialog.bottom && bounds.left >= dialog.left && bounds.right <= dialog.right, 'the entire command is readable after scrolling');
+    require(code.querySelector('pre').scrollWidth <= code.clientWidth + 1, 'the command wraps at narrow widths');
+    require(button.getAttribute('aria-label') === '已複製', 'the shared copy action completes inside Settings');
+    return {check:name};
+  }
+  if (name === 'desktop-host-health') {
+    const note = document.querySelector('[data-computer-host-health]');
+    require(visible(note) && note.textContent.includes('正常'), 'each check has its own clear state');
+    const repair = document.querySelector('[data-computer-host-repair]');
+    require(visible(repair) && repair.textContent.includes('終端機') && repair.querySelector('code')?.textContent.includes('~/.zshenv'), 'host health says where to run the exact repair command');
+    require(visible(repair.querySelector('[data-act="copy-code"]')), 'repair command uses the shared copy control');
+    require(window.__look.calls.some(call => call.method === 'computer.viewer_status' && call.params.check_host && call.params.alias === 'studio-mini'), 'checks the selected alias through the existing owner RPC');
+    return {check:name};
+  }
+  if (name === 'delete-member-computer') {
+    const checkbox = document.querySelector('[data-remove-computer]');
+    require(visible(checkbox) && checkbox.matches('.tg[role="switch"][aria-checked="false"]'), 'computer cleanup uses the shared switch and defaults to unchecked');
+    require(checkbox.closest('.row').textContent.includes('小晴的電腦'), 'deletion names the member computer');
+    require(!window.__look.calls.some(call => call.method === 'members.delete'), 'showing the option performs no deletion');
+    return {check:name};
+  }
+  if (name === 'desktop-stream') {
+    const frame = document.querySelector('iframe[data-desktop-stream]');
+    require(visible(frame) && frame.contentDocument?.defaultView.__desktopConnections === 1, 'the existing viewer is connected before enlargement');
+    window.__look.desktopStream = { frame, document: frame.contentDocument, opens: window.__look.calls.filter(call => call.method === 'computer.viewer_open').length, closes: window.__look.calls.filter(call => call.method === 'computer.viewer_close').length };
+    return {check:name};
+  }
+  if (name === 'desktop-watch' || name === 'desktop-watch-collapse') {
+    const panel = document.querySelector('.desktop-panel'), calls = window.__look.calls;
+    require(!calls.some(call => call.method === 'computer.viewer_control'), 'watching never changes owner control');
+    if (name === 'desktop-watch-collapse') {
+      require(!panel.hasAttribute('data-expanded'), 'Esc returns to conversation');
+      const before = window.__look.desktopStream, frame = document.querySelector('iframe[data-desktop-stream]');
+      require(before && calls.filter(call => call.method === 'computer.viewer_open').length === before.opens && calls.filter(call => call.method === 'computer.viewer_close').length === before.closes && frame === before.frame && frame.contentDocument === before.document, 'collapse keeps the same stream without opening, closing or reloading');
+    } else {
+      require(document.documentElement.hasAttribute('data-desktop-watch'), 'watch mode is enlarged');
+      const bounds = panel.getBoundingClientRect();
+      const sidebar = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width'));
+      require(Math.abs(bounds.right - innerWidth) <= 2 && Math.abs(bounds.left - sidebar) <= 2, 'watch fills the area beside the sidebar');
+      require(visible(panel.querySelector('[data-desktop="collapse"]')), 'collapse remains available');
+      require(innerWidth >= 860 || getComputedStyle(document.querySelector('#nav')).visibility === 'hidden', 'off-canvas navigation stays hidden at narrow widths');
+      if (name === 'desktop-watch' && window.__look.data.desktop.works?.some(work => work.state === 'running')) {
+        require(visible(panel.querySelector('.desktop-live')) && panel.querySelector('.desktop-live').textContent.trim(), 'the current action remains visible');
+        const stop = panel.querySelector('[data-desktop="stop"]');
+        require(visible(stop) && stop.title === stop.getAttribute('aria-label') && stop.title.trim(), 'Stop has its translated tooltip');
+      }
+      const frame = panel.querySelector('iframe');
+      if (frame && visible(frame)) require(getComputedStyle(frame).pointerEvents === 'none', 'watch stays view-only');
+    }
+    return {check:name};
+  }
+  if (name === "owner-output-folder") {
+    const input = document.querySelector('#owner-output-folder');
+    const reference = document.querySelector('.owner-profile input.field');
+    require(visible(input) && visible(reference), "General shows the output folder beside the existing owner fields");
+    const control = input.closest('.field') ?? input;
+    const box = control.getBoundingClientRect(), referenceBox = reference.getBoundingClientRect();
+    const inset = input.getBoundingClientRect().left - box.left;
+    require(Math.abs(box.height - referenceBox.height) <= 1, "the folder uses the same control height as the General owner field");
+    require(inset >= 7, "the folder text retains the shared settings field inset");
+    require(input.value === 'C:\\Owner\\Deliveries', "the saved output path remains visible");
+    return { check: name, height: box.height, inset };
+  }
+  if (name.startsWith("skills-") || ["growing-skills", "member-shared-source", "skill-page"].includes(name)) {
+    for (const label of document.querySelectorAll('[data-skill-provenance], .mp-resource p, .cs-item .ds, .cs-dialog > .cs-desc')) {
+      const text = label.textContent.trim(), title = label.getAttribute('title') ?? '';
+      require(!/^(learned|owner|imported)$/i.test(text) && !/(?:local:|github:|plugin:|[/\\]plugins[/\\]cache[/\\])/i.test(text + title), "R-SKILL-08: skill origins never show raw source values or plugin cache paths");
+    }
+  }
+  if (name.startsWith("thread-window-")) {
+    const pane = [...document.querySelectorAll('.mb-chat')].find(visible), scroll = pane?.querySelector('.ra-scroll');
+    require(scroll, "the real conversation is open");
+    const mounted = [...scroll.querySelectorAll('.tn[data-id], .tn[data-room-message]')];
+    require(mounted.length <= 100, "no more than 100 turns are mounted");
+    if (name === "thread-window-open") {
+      require(mounted.length === 25, "only the newest 25 turns open");
+      const quote = scroll.querySelector('button.message-quote, button.au-room-reply');
+      require(quote, "the newest turn retains its actionable quote");
+      const style = getComputedStyle(quote);
+      require(style.borderTopWidth === "0px" && style.borderBottomWidth === "0px" && style.borderInlineEndWidth === "0px", "quote jumps retain the shared excerpt style without browser button borders");
+    }
+    if (name === "thread-window-earlier") {
+      require(mounted.length === 45, "one earlier step mounts 20 more turns");
+      const anchor = window.__windowAnchor;
+      require(anchor.node.isConnected && Math.abs(anchor.node.getBoundingClientRect().top-anchor.top) <= 1, "the same reading anchor stays within one pixel");
+    }
+    if (name === "thread-window-find") {
+      const mark = scroll.querySelector('mark.is-current'), turn = mark?.closest('[data-id], [data-room-message]');
+      require(turn && (turn.dataset.id ?? turn.dataset.roomMessage) === "9005", "the old result is mounted before it is selected");
+      require(visible(mark), "the selected result is visible");
+    }
+    if (name === "thread-window-quote") {
+      const target = scroll.querySelector('.tn[data-id="9005"], .tn[data-room-message="9005"]');
+      require(target && target.getBoundingClientRect().bottom > scroll.getBoundingClientRect().top && target.getBoundingClientRect().top < scroll.getBoundingClientRect().bottom, "the unmounted quote source is revealed in the scrollport");
+    }
+    return {check:name,mounted:mounted.length,total:Number(scroll.dataset.windowTotal)};
+  }
+  if (["room-meeting", "room-meeting-board", "room-meeting-report"].includes(name)) {
+    const pane = document.querySelector('.au-room-pane:not([hidden])');
+    require(pane, "the real group conversation is open");
+    const reports = [...pane.querySelectorAll('[data-room-report]')];
+    require(reports.length === 1, "the completed task has one public report card");
+    require(pane.querySelector('[data-room-act="private-work"][data-turn]'), "the report links to private work");
+    require(!reports[0].querySelector('[data-owner-question], .permission-card'), "private approvals never enter the report");
+    if (name === "room-meeting") require(pane.querySelectorAll('.au-room-thinking').length === 2, "two members can speak at once");
+    const row = pane.querySelector('.room-meeting-row');
+    require(visible(row) && !pane.querySelector('.ra-scroll').contains(row), "the compact work row is pinned outside the scrolling thread");
+    const scroller = pane.querySelector('.ra-scroll'), beforeTop = scroller.scrollTop, rowTop = row.getBoundingClientRect().top;
+    scroller.scrollTop += 100;
+    require(row.getBoundingClientRect().top === rowTop, "the status row stays in place as the thread scrolls");
+    scroller.scrollTop = beforeTop;
+    require(row.textContent.includes('工作 1 · 決議 1'), "the row names work and decisions in the screen language");
+    require(reports[0].querySelector('.team-file[data-room-act="artifact-open"]:not([disabled])'), "produced files use the shared actionable file chip");
+    require(!reports[0].textContent.includes('fixture-repo') && !reports[0].querySelector('code,ul'), "the report never prints a digest or raw evidence list");
+    if (name === "room-meeting-report") {
+      reports[0].querySelector('[data-room-act="artifact-open"]').click();
+      require(window.__look.openedTeamFile === 'task-artifact:42:501', "the file press reaches the native artifact resolver");
+    }
+    if (name === "room-meeting-board") {
+      const board = document.querySelector('#app-popover [data-room-board]');
+      require(board && board.textContent.includes('成果檢查') && board.textContent.includes('每個階段由一位成員負責'), "the board retains status and pinned decisions");
+      require(board.querySelector('.room-board-member .card-status') && board.querySelector('.room-board-member .av'), "each member has their shared face and state pill");
+      require(!board.querySelector('ul'), "pinned decisions are plain lines");
+    }
+    return {check:name,reports:reports.length};
+  }
+  if (name === "composio-readable-result") {
+    const reply = [...document.querySelectorAll('.chat-message')].find(element => visible(element) && element.textContent.includes('Gmail'));
+    require(reply && reply.textContent.includes('Gmail · 已完成：範例排程'), "the result names its app and localized outcome with useful fields");
+    require(!reply.querySelector('.message-code') && !/tool_slug|successful|synthetic-hidden-value/.test(reply.textContent), "raw envelopes and hidden fields never enter the reply");
+    return { check: name };
+  }
+  if (name === "permission-detail-label") {
+    const labels = [...document.querySelectorAll('.permission-card .card-field > span:first-child')].filter(visible);
+    require(labels.length > 0, "permission details expose real field labels");
+    for (const label of labels) require(label.getBoundingClientRect().height <= parseFloat(getComputedStyle(label).lineHeight) + 1, "a detail label stays on one line at every viewport width");
+    return { check: name, labels: labels.length };
+  }
+  if (["owner-question-pending", "owner-question-brought", "owner-question-pending-many"].includes(name)) {
+    const host = [...document.querySelectorAll('.mb-chat')].find(element => visible(element.querySelector('.ra-scroll')) && element.querySelector('.pending-questions:not(.room-meeting-row)'));
+    const row = host?.querySelector('.pending-questions:not(.room-meeting-row)'), scroll = host?.querySelector('.ra-scroll');
+    require(host && scroll && row, "the open conversation owns the floating row");
+    const cards = [...host.querySelectorAll('[data-owner-kind="ask_owner"][data-card-state="asked"]')];
+    if (name === "owner-question-brought") {
+      const call = window.__look.calls.find(call => call.method === 'owner_questions.bring');
+      require(call, "one press calls the existing bring RPC");
+      require(cards.some(card => visible(card) && card.getBoundingClientRect().bottom <= scroll.getBoundingClientRect().bottom + 2 && card.getBoundingClientRect().bottom > scroll.getBoundingClientRect().top), "the moved card is at the newest visible turn");
+      require(!visible(row), "the floating row disappears when its question is visible");
+    } else {
+      require(visible(row) && row.querySelectorAll('button').length === 1, "one compact row holds pending questions");
+      require(row.getBoundingClientRect().bottom <= scroll.getBoundingClientRect().top + 1, "the row sits above the scrollport");
+      require(row.getBoundingClientRect().bottom < host.querySelector('.composer').getBoundingClientRect().top, "the floating row never covers the composer");
+      if (name === "owner-question-pending-many") require(visible(document.querySelector('[role="menu"]')) && row.textContent.includes('2'), "a counted row opens the shared question list");
+    }
+    return { check: name, cards: cards.length };
+  }
   if (name.startsWith("thread-new-divider")) {
     const scroller = document.querySelector('.mb-chat .ra-scroll');
     const divider = scroller.querySelector('.thread-new');
     if (name === "thread-new-divider-return") {
       require(!divider, "returning to a read thread has no divider");
       return { check: name };
+    }
+    if (name === "thread-new-divider-bottom" && !divider) {
+      const bottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      require(Number(scroller.dataset.windowBefore) > 0 && Number(scroller.dataset.windowLater) === 0, "only the older window containing the boundary is unmounted");
+      require(Number(scroller.dataset.windowMounted) <= 100 && bottom <= 2, "latest reveals a capped tail at the bottom");
+      return {check:name,bottom,boundaryUnmounted:true};
     }
     require(divider && scroller.querySelectorAll('.thread-new').length === 1, "one independent divider is present");
     require(divider.nextElementSibling?.dataset.id === "7001", "the line precedes the first unseen turn");
@@ -129,26 +557,14 @@ export function checkRendered(name, context = {}) {
       require([...turn.querySelectorAll('.message-work')].every(button=>button.textContent === '' && button.dataset.tooltip.startsWith('查看過程')), 'process controls match adjacent icon buttons');
       require(body.lastElementChild.classList.contains('work-meta'), 'model and cost stay at the bottom');
     }
-    if (name === "transcript-time-gap") require(document.querySelectorAll('.tns > .day, .thread > .day, .ra-thread > .day').length === 2 || [...turn.parentElement.children].filter(line => line.classList.contains('day')).length === 2, "thirty-minute gaps have two centred separators");
+    if (name === "transcript-time-gap") require([...turn.parentElement.children].filter(line => line.classList.contains('day')).length === 1, "hour gaps within one day have one date separator");
     if (name === "event-routine-line") {
-      require(visible(turn.querySelector('.conversation-event-line [data-routine="2"]')) && !turn.querySelector('.work-body .turn-event'), "the routine is outside closed work");
-      const line = turn.querySelector('.timeline-event').getBoundingClientRect();
-      const before = turn.querySelector('.owner-message .bubble').getBoundingClientRect();
-      const after = turn.querySelector('.ra-body .chat-message .ans').getBoundingClientRect();
-      const above = line.top - before.bottom, below = after.top - line.bottom;
-      require(Math.abs(above - below) <= 1 && above >= 12, `event gaps are even (${above}px above, ${below}px below)`);
+      require(turn.querySelector('.work-body[hidden] [data-routine="2"]') && !visible(turn.querySelector('[data-routine="2"]')), "the routine receipt is in closed reply detail");
+      require(!turn.querySelector('.ra-body > .timeline-event'), "no separate event row interrupts the conversation");
     }
     if (name === "event-routine-spacing") {
-      const items = [...turn.querySelector('.ra-body').children].filter(node => node.matches('.timeline-event, [data-seq], .chat-message'));
-      const visual = node => node.matches('.timeline-event') ? node : node.querySelector('.ans, .media-card');
-      for (let i = 0; i < items.length; i++) {
-        if (!items[i].matches('.timeline-event')) continue;
-        const line = items[i].getBoundingClientRect();
-        const before = (i ? visual(items[i - 1]) : turn.querySelector('.owner-message .bubble')).getBoundingClientRect();
-        const after = visual(items[i + 1]).getBoundingClientRect();
-        const above = line.top - before.bottom, below = after.top - line.bottom;
-        require(Math.abs(above - 32) <= 1 && Math.abs(below - 32) <= 1, `bubble/card/line gaps stay even (${above}px above, ${below}px below)`);
-      }
+      require(!turn.querySelector('.ra-body > .timeline-event,.ra-body > .event-group'), 'receipts add no rows between replies and cards');
+      require(turn.querySelector('.work-body[hidden] .timeline-event'), 'the full receipt remains available in collapsed detail');
     }
     if (name === "event-routine-opens") require(visible(document.querySelector('.au-routine-dialog')) && document.querySelector('#au-title')?.value === window.__look.data.presenceSample.routine, "the named routine opens");
     if (name === "event-routine-find") {
@@ -156,13 +572,12 @@ export function checkRendered(name, context = {}) {
       require(!turn.textContent.includes('"type"') && !turn.textContent.includes('"created"'), "transport metadata stays out of thread selection");
     }
     if (name === "event-routine-find-group") require(turn.querySelector('[data-event-group]')?.open && visible(turn.querySelector('.handoff-detail mark.is-current')), "the selected receipt is visible in the retained open group");
-    if (name === "event-calendar-line") require(visible(turn.querySelector('[data-act="open-calendar-event"][data-event="1"][data-date="2026-10-24"]')), "the calendar receipt keeps its inspection target");
+    if (name === "event-calendar-line") require(turn.querySelector('.work-body[hidden] [data-act="open-calendar-event"][data-event="1"][data-date="2026-10-24"]'), "the collapsed calendar receipt keeps its inspection target");
     if (name === "event-calendar-opens") require(visible(document.querySelector('.au-pop-detail')) && document.querySelector('.au-pop-detail h2')?.textContent === window.__look.data.presenceSample.calendar, "the named calendar event detail opens");
     if (name === "event-lines-collapse") {
       const group = turn.querySelector('[data-event-group]');
       require(group?.open && turn.querySelectorAll('[data-event-group] [data-routine="2"]').length === 3, "every receipt stays in the open group");
-      const gap = group.nextElementSibling.querySelector('.ans').getBoundingClientRect().top - group.getBoundingClientRect().bottom;
-      require(Math.abs(gap - 32) <= 1, `an opened event group keeps the same 32px gap (${gap}px)`);
+      require(visible(group.closest('.work-body')) && !turn.querySelector('.ra-body > .event-group'), 'the opened receipt group stays in reply detail without adding a transcript row');
     }
     if (name === "sidebar-row-time") {
       const row = document.querySelector('.side [data-member="1"]');
@@ -186,8 +601,8 @@ export function checkRendered(name, context = {}) {
       if (active) require(getComputedStyle(monitor).color !== getComputedStyle(document.querySelector('.conversation-trigger')).color, 'active status uses the purple token');
     } else if (name === 'level-panel' || name === 'level-off' || name === 'level-no-computer') {
       require(visible(panel.querySelector('.mb-panel-routines')) && !visible(panel.querySelector('.mb-who')), 'routines live on the landing view, identity lives behind the gear');
-      require(!panel.querySelector('[data-tab="routines"], .mb-rt [role="switch"], [data-desktop="expand"], [data-desktop="collapse"]'), 'there is no routines page, row switch or window control');
-      if (name === 'level-no-computer') require(!visible(desktop), 'a member without a computer has no screen block');
+      require(!panel.querySelector('[data-tab="routines"], .mb-rt [role="switch"], [data-desktop="expand"]') && !visible(panel.querySelector('[data-desktop="collapse"]')), 'there is no routines page, row switch or visible collapse control');
+      if (name === 'level-no-computer') require(visible(desktop) && visible(panel.querySelector('[data-computer-location]')), 'an empty computer panel retains its shared location control');
       else {
         require(visible(desktop) && visible(desktop.querySelector('.desktop-caption')), 'the screen has its centered member caption');
         require(desktop.getBoundingClientRect().bottom <= panel.querySelector('.mb-panel-routines').getBoundingClientRect().top, 'the screen precedes routines');
@@ -360,7 +775,7 @@ export function checkRendered(name, context = {}) {
     const form = document.querySelector('.au-routine-dialog');
     if (name === 'moving-sentence') {
       const line = document.querySelector('button[data-act="open-routine"]');
-      require(visible(line) && line.querySelector('.routine-sentence strong') && line.querySelector('.routine-object'), 'a real button shares the trigger sentence');
+      require(visible(line) && line.closest('.chat-message .routine-origin') && line.textContent.trim(), 'the routine name is a real button inside its reply');
       return {check:name};
     }
     require(visible(form) && visible(form.querySelector('[data-dlg="trigger"]')), 'all triggers share the existing editor');
@@ -851,7 +1266,8 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name.startsWith("missing-")) {
-    const note = [...document.querySelectorAll('.missing-note')].find(visible);
+    const noteScope = name === 'missing-vision' ? '#svc-dialog .missing-note' : name === 'missing-search' ? '.work-section .missing-note' : name === 'missing-voice' ? '.toast .missing-note' : '.missing-note';
+    const note = [...document.querySelectorAll(noteScope)].find(visible);
     if (name === 'missing-onboarding-repair') {
       require(visible(document.querySelector('[data-act="rerun-guide"]')), 'repair reaches the existing Start tour action');
     } else if (name === 'missing-store-repair') {
@@ -863,9 +1279,9 @@ export function checkRendered(name, context = {}) {
       require(visible(document.querySelector('#conn-key')), 'the shared card opens the existing Composio key field');
       require(document.querySelector('.cs-key-form .note')?.textContent.includes('專案設定 › API 金鑰'), 'the form says where to obtain the project key before typing it');
     } else if (name.endsWith('-repair')) {
-      const field = document.querySelector(name === 'missing-search-repair' ? '#svc-url' : '#svc-voice-id');
+      const field = document.querySelector(name === 'missing-search-repair' ? '#svc-url' : '#svc-key-fish');
       require(visible(field), 'repair reaches the existing exact field');
-      require(document.querySelector('[data-pane="agent"][aria-current="page"]'), 'services stay in their existing Raphael pane');
+      require(document.querySelector('[data-pane="tools"][aria-current="page"]'), 'service repairs open the shared Tools pane');
     } else if (name === 'missing-model-list') {
       require(visible(document.querySelector('[data-dlg="reload"]')), 'the empty account offers a real reload');
       require(document.querySelector('.mc-list').textContent.includes('重新讀取'), 'the reason names reloading in visible words');
@@ -1439,8 +1855,13 @@ export function checkRendered(name, context = {}) {
   if (name.startsWith("computer-") || ['desktop-owner','desktop-handback','desktop-viewer','desktop-offline','desktop-absent'].includes(name)) {
     const panel=document.querySelector('.desktop-panel'), frame=document.querySelector('iframe[data-desktop-stream]'), calls=window.__look.calls;
     if(name==='desktop-absent'){
-      require(visible(panel)&&visible(panel.querySelector('.missing-note')),'absent Docker says what is missing in the existing panel');
-      require(visible(panel.querySelector('[data-missing-repair="computer"]')),'absent Docker offers its installation settings');
+      require(visible(panel)&&visible(panel.querySelector('.desktop-message')),'absent Docker says what is missing in the existing panel');
+      require(visible(panel.querySelector('[data-act="docker-download"]')),'absent Docker offers its download in the computer panel');
+      const downloadStyle = getComputedStyle(panel.querySelector('[data-act="docker-download"]'));
+      const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(Number).map(channel => channel / 255).map(channel => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4).reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+      const ink = luminance(downloadStyle.color), surface = luminance(downloadStyle.backgroundColor);
+      require((Math.max(ink, surface) + 0.05) / (Math.min(ink, surface) + 0.05) >= 4.5, 'Docker download text retains readable contrast over the desktop frame');
+      require(!panel.querySelector('.desktop-message').textContent.includes('設定 › 拉斐爾'),'Docker recovery never points to the removed Settings pane');
       require(!calls.some(call=>call.method==='computer.viewer_open'),'reading the missing state never starts a computer');
       return {check:name};
     }
@@ -1450,7 +1871,12 @@ export function checkRendered(name, context = {}) {
     const events=document.querySelectorAll('[data-desktop-work]');
     if(name.startsWith('computer-'))require(events.length===1&&events[0].matches(name==='computer-panel'?'.conversation-event-line':'.conversation-card')&&events[0].closest('.tn')?.dataset.id==='2','one work presentation belongs to the private turn');
     if(name==='computer-takeover')require(panel.querySelector('.desktop-request').textContent.includes('登入'),'request sits above the live screen');
-    if(name==='computer-takeover-owner')require(panel.querySelector('[data-desktop="return"]').textContent==='我完成了','one explicit done action');
+    if(name==='computer-takeover-owner') {
+      require(visible(document.querySelector('[data-card-desktop="return"]')), 'one explicit done action in the card');
+      require(!panel.hasAttribute('data-expanded') && frame.closest('[data-card-desktop-screen]'), 'owner input stays in the conversation card');
+      require(frame.contentDocument.defaultView.__desktopAcceptedKeys > 0, 'synthetic keyboard input reaches the RFB surface');
+      require(!calls.some(call => JSON.stringify(call.params ?? {}).includes('synthetic-owner-input')), 'owner input never enters an RPC');
+    }
     if(name==='computer-takeover-done')require(calls.filter(call=>call.method==='computer.viewer_control'&&!call.params.held&&call.params.takeover==='private-takeover-request').length===1,'one explicit handback with the current nonce');
     if(name==='computer-takeover-owner'||name==='desktop-owner'){
       require(panel.dataset.interactive==='true'&&getComputedStyle(frame).pointerEvents==='auto','click enables input in place');
@@ -1483,6 +1909,43 @@ export function checkRendered(name, context = {}) {
     }else require(visible(frame)||name==='computer-takeover-done','the active view streams the live screen or retains its settled card');
     return {check:name};
   }
+  if (name === "host-settings-layout") {
+    const panel = document.querySelector('.computer-location-popover');
+    require(visible(panel), 'the shared location popover is visible');
+    const lines = [...panel.querySelectorAll('p, .lbl .t')].filter(visible).flatMap(element => {
+      const range = document.createRange(); range.selectNodeContents(element);
+      return [...range.getClientRects()].filter(rect => rect.width > 0).map(rect => rect.left);
+    });
+    const controls = [...panel.querySelectorAll('.sel, .field')].filter(visible).map(element => element.getBoundingClientRect());
+    const left = panel.querySelector('.computer-location-purpose').getBoundingClientRect().left;
+    const trigger = panel.querySelector('.sel'), span = trigger.querySelector('span'), style = getComputedStyle(trigger);
+    const text = document.createRange(); text.selectNodeContents(span);
+    const textLeft = text.getBoundingClientRect().left, contentLeft = trigger.getBoundingClientRect().left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+    const failures = [];
+    if (!lines.length || !controls.length || [...lines, ...controls.map(rect => rect.left)].some(x => Math.abs(x - left) > 1)) failures.push('all visible text lines and controls share one left edge within 1px');
+    if (controls.some(rect => Math.abs(rect.right - controls[0].right) > 1)) failures.push('the select and SSH field share their right edge within 1px');
+    if (getComputedStyle(span).textAlign !== 'left' || Math.abs(textLeft - contentLeft) > 1) failures.push('select trigger text is left-aligned inside its standard padding');
+    require(!failures.length, failures.join('; '));
+    return { check: name, left, lines, controls: controls.map(rect => ({ left: rect.left, right: rect.right })), textLeft, contentLeft };
+  }
+  if (name === "host-settings-local" || name === "host-settings-error") {
+    const panel = document.querySelector('.computer-location-popover');
+    require(visible(panel) && panel.textContent.includes('每位成員'), "the popover explains the shared scope");
+    if (name.endsWith('local')) require(!panel.querySelector('input') && document.querySelector('[data-computer-location]').textContent.includes('本機'), "the header names the local host without repeating it in the popover");
+    else require(panel.querySelector('input')?.value === 'studio-mini' && visible(panel.querySelector('[role="alert"]')), "remote failure stays in its host popover");
+    return {check:name};
+  }
+  if (["settings-computer-result", "settings-computer-open", "settings-owner", "settings-tools", "settings-raphael-memory", "settings-raphael-voice", "settings-draft-grouped", "settings-speech-service"].includes(name)) {
+    if (name === 'settings-computer-result') require(document.querySelectorAll('.set-hit').length === 1, "computer location has one search result");
+    else if (name === 'settings-computer-open') require(!!document.querySelector('.modal-scrim[hidden]') && visible(document.querySelector('.mb-det [data-computer-location]')), "search closes Settings and opens the computer panel");
+    else if (name === 'settings-owner') require(visible(document.querySelector('[data-owner="owner_name"]')) && !!document.querySelector('#agent-city') && !!document.querySelector('[data-mem-space="shared"]'), "owner profile retains weather and shared memory");
+    else if (name === 'settings-tools') require(document.querySelector('[data-pane="tools"]')?.getAttribute('aria-current') === 'page' && !document.querySelector('[data-pane="agent"]'), "legacy agent pane resolves to Tools");
+    else if (name === 'settings-raphael-memory') require(visible(document.querySelector('.mb-det [data-mem-space="own"]')) && document.querySelector('.mb-det [data-mem-space="own"]').textContent.includes('拉斐爾'), "Raphael memory belongs to the member panel");
+    else if (name === 'settings-raphael-voice') { require(visible(document.querySelector('.mb-det #svc-voice-id')), "Raphael voice uses the member resource controls"); require(window.__look.calls.some(call => call.method === 'tts.preview') && window.__look.calls.some(call => call.method === 'settings.set' && call.params.key === 'tts_fish_voice'), 'preview retains its existing settings and RPC boundaries'); }
+    else if (name === 'settings-speech-service') { require(visible(document.querySelector('#svc-dialog [type="password"]')) && !document.querySelector('#svc-voice-id, #svc-dialog [data-svc="try"]'), 'shared speech setup retains its key and leaves personal voice controls in details'); }
+    else if (name === 'settings-draft-grouped') require(!!document.querySelector('.mb-panel-pages [data-det="draft"]') && document.querySelectorAll('.mb-panel-pages').length === 1, 'the draft switch belongs to the same resource list');
+    return {check:name};
+  }
   if (name === "host-settings-remote") {
     const input = document.querySelector('#computer-ssh-alias');
     require(visible(input) && input.value === 'studio-mini', "remote alias stays in its field");
@@ -1499,7 +1962,7 @@ export function checkRendered(name, context = {}) {
   if (name === "host-settings-invalid") {
     const input = document.querySelector('#computer-ssh-alias'), error = document.querySelector('[data-computer-host-error]');
     require(input?.value === '-oBad' && input.getAttribute('aria-invalid') === 'true' && visible(error), "invalid aliases remain in the field with a contextual error");
-    require(getComputedStyle(error.querySelector('.st')).whiteSpace === 'normal' && error.scrollWidth <= error.clientWidth + 1, "the complete alias error wraps inside its settings column");
+    require(getComputedStyle(error).whiteSpace === 'normal' && error.scrollWidth <= error.clientWidth + 1, "the complete alias error wraps inside its settings column");
     require(!window.__look.calls.some(call => call.method === 'settings.set' && call.params.key === 'computer_ssh_alias'), "invalid aliases never reach settings storage");
     return { check: name };
   }
@@ -1547,11 +2010,20 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.work-section')?.textContent.includes('skill_learned'), "internal skill payload never enters public work");
     return { check: name };
   }
+  if (name === "member-shared-source") {
+    const control = document.querySelector('[data-res="skill-toggle"][data-id="32"]'), row = control?.closest('.mp-resource');
+    require(visible(control) && control.getAttribute('aria-checked') === 'true', "member details retain the enabled shared skill switch");
+    require(row.textContent.includes('共享 · ~/.codex/skills/source-check') && !row.textContent.includes('local:'), "member details use the same readable source label");
+    require(!row.querySelector('[data-res="skill-menu"]'), "inherited skills remain editable only in the library");
+    return { check: name };
+  }
   if (name === "growing-skills") {
     require(document.querySelector('.mb-det').textContent.includes("2026/10/29"), "skill dates follow the Chinese UI rather than the browser locale");
     const editor = document.querySelector('#mp-skill-text');
     require(visible(editor) && editor.value.includes("## Verification"), "the actual saved skill opens in the existing member pane");
     require(document.querySelector('.mb-det').textContent.includes("自行學會"), "learned provenance and date are shown");
+    const learned = [...document.querySelectorAll('.mb-det .mp-resource')].find(row => row.querySelector('b')?.textContent === 'research-summary');
+    require(learned?.querySelectorAll('[data-skill-provenance]').length === 1 && learned.querySelector('[data-skill-provenance]').textContent === '自行學會 · 2026/10/29', "a learned skill has exactly one localized origin and date line");
     const calls = window.__look.calls;
     require(calls.some(c => c.method === "members.skills.read"), "opening reads the real skill boundary");
     if (window.__look.data.skills[0].member_id === 1) require(!calls.some(c => c.method === "members.skills.update" || c.method === "members.skills.delete"), "reading the editor never mutates skills");
@@ -1629,9 +2101,8 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "settings-memory") {
-    const shared = document.querySelector('[data-mem-space="shared"]'), own = document.querySelector('[data-mem-space="own"]');
-    require(visible(shared) && visible(own) && shared.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING, "共同記憶, then Raphael's own");
-    require(own.querySelectorAll(".mem-entry").length >= 2 && !own.querySelector(".mem-sub, .mem-type"), "the memory reads as a document");
+    const shared = document.querySelector('[data-mem-space="shared"]');
+    require(visible(shared) && !document.querySelector('[data-mem-space="own"]'), "General contains only shared owner memory");
     require(shared.querySelector(".mem-from")?.textContent.startsWith("拉斐爾 · "), "a shared entry says whom the owner told");
     return { check: name };
   }
@@ -2170,7 +2641,9 @@ export function checkRendered(name, context = {}) {
     const host = document.querySelector('.mb-det .conversation-list');
     require(visible(host), "the conversation list is visible");
     const quick = host.querySelector('[data-conversation-section="quick"]'), standard = host.querySelector('[data-conversation-section="standard"]');
-    require(visible(standard) && standard.querySelector('.mb-dh').textContent === "對話", "ordinary conversations use the existing small heading");
+    // Since the panel tabs the 詳細資料 section names the list once, above it.
+    const heading = host.closest('section')?.querySelector(':scope > .mb-dh') ?? standard?.querySelector('.mb-dh');
+    require(visible(standard) && heading?.textContent === "對話", "ordinary conversations use the existing small heading");
     if (quick) {
       require(!quick.querySelector('.mb-dh') && quick.querySelector('[data-conversation-open]').textContent.includes("快速提問"), "quick questions are named once on their row");
       require(standard.getBoundingClientRect().top - quick.getBoundingClientRect().bottom >= 8, "the two sections have breathing room");
@@ -2340,13 +2813,12 @@ export function checkRendered(name, context = {}) {
     return { check: name, words: plainWords() };
   }
   if (name === "centred-system-events") {
-    const nodes = eventLines(3), lines = nodes.map(line => line.textContent);
+    const nodes = eventLines(1), lines = nodes.map(line => line.textContent);
     const historic = window.__look.data.turns.find(turn => turn.id === 1).messages.find(message => message.kind === 'event' && message.seq !== 99);
-    require(lines[0].includes("2 則訊息") && lines[1] === historic.text && lines[2] === "已開啟會議 產品方向討論", `exchanges and historical receipts retain their sequence: ${lines.join("|")}`);
+    const body = document.querySelector('.tn[data-id="1"] .work-body[hidden]');
+    require(lines[0].includes("2 則訊息") && body?.textContent.includes(historic.text) && body.textContent.includes("已開啟會議 產品方向討論"), 'only colleague exchanges stay outside collapsed work');
     const receipts = [...document.querySelectorAll('[data-handoff-group] [data-handoff] > summary')].map(line => line.textContent);
     require(receipts.join("|") === "已轉交給 小晴已完成|和 小森 討論執行中", "folded receipts retain their individual words and states");
-    const answer = document.querySelector('.tn[data-id="1"] .ra [data-reply] .ans').getBoundingClientRect();
-    require(nodes[1].getBoundingClientRect().bottom <= answer.top && nodes[2].getBoundingClientRect().top >= answer.bottom, "the historical receipt precedes the reply and the later meeting follows it");
     return { check: name, lines };
   }
   if (name.startsWith("handoff-group")) {
@@ -3642,6 +4114,122 @@ export function checkRendered(name, context = {}) {
     const button = list.querySelector("[data-conversation-new]"), box = button.getBoundingClientRect(), parent = list.getBoundingClientRect();
     require(box.left >= parent.left && box.right <= parent.right + 1, "new conversation button fits inside the list");
     return { check: name, width: list.clientWidth, scrollWidth: list.scrollWidth };
+  }
+  if (name === "skills-plugin-details-bottom") {
+    const button = document.querySelector('[data-set-mcp="1"] [data-conn="set-mcp"]');
+    require(visible(button), "the second MCP server's setup action can be reached by scrolling");
+    const box = button.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    require(hit && button.contains(hit), "the sticky set footer never covers the reached MCP setup action");
+    return { check: name };
+  }
+  if (["skills-plugin-entry", "skills-marketplace", "skills-plugin-set", "skills-plugin-update", "skills-plugin-details"].includes(name)) {
+    const section = document.querySelector('[data-skills-section]');
+    require(section && document.querySelectorAll('[data-skills-section]').length === 1, "plugin sets stay in the one existing Skills section");
+    if (name === "skills-plugin-entry") {
+      const entries = [...document.querySelectorAll('[data-plugin-source]')];
+      require(entries.length === 1 && entries[0].textContent.includes('research-tools · 1.2.0') && entries[0].textContent.includes('2 個技能'), "one plugin entry shows its name, version and skill count");
+      require(document.querySelectorAll('.cs-dialog [data-conn="skill-import-local"]').length === 1, "one import action installs the entire plugin");
+      require(document.querySelectorAll('.cs-dialog [data-conn="skill-import-alone"]').length === 2, "individual skill imports remain available in the disclosure");
+      require(!document.querySelector('.cs-dialog').textContent.includes('local:'), "plugin entries hide internal source prefixes");
+    }
+    if (name === "skills-marketplace") {
+      const supported = document.querySelector('[data-market-plugin="research-tools"]'), unsupported = document.querySelector('[data-market-plugin="npm-workflows"]');
+      require(supported.textContent.includes('2.0.0') && !supported.querySelector('button').disabled, "a marketplace plugin shows the listed version and install action");
+      require(unsupported.querySelector('button').disabled && unsupported.textContent.includes('僅支援 GitHub 來源'), "unsupported plugin sources explain why they cannot be installed");
+      require(window.__look.calls.some(call => call.method === 'members.skills.list' && call.params.marketplace === 'sample/workflows'), "the owner adds the marketplace through the existing skill boundary");
+    }
+    if (name === "skills-plugin-set" || name === "skills-plugin-update") {
+      const groups = [...section.querySelectorAll('[data-skill-set]')], rows = [...section.querySelectorAll('.cs-set .cs-skill')];
+      require(groups.length === 1 && rows.length === 3 && rows.every(row => row.hasAttribute('data-library-skill')), "the set groups each shared skill and command exactly once");
+      require(groups[0].textContent.includes('2 個技能 · 1 個指令'), "the installed set counts skills and slash commands separately");
+      require(section.querySelectorAll('[data-conn="set-update"]').length === (name === 'skills-plugin-update' ? 1 : 0), "an update offer appears once for the complete set");
+      require(section.querySelectorAll('[data-conn="skill-reimport"]').length === 0, "set members have no duplicate per-skill reimport action");
+      if (name === 'skills-plugin-set') {
+        const calls = window.__look.calls.filter(call => call.method === 'members.skills.import');
+        require(calls.length === 1 && calls[0].params.plugin && calls[0].params.shared, "one owner action installs all plugin capabilities");
+      }
+      for (const button of section.querySelectorAll('[data-conn="set-update"]')) {
+        const box = button.getBoundingClientRect(), parent = button.parentElement.getBoundingClientRect();
+        require(box.left >= parent.left && box.right <= parent.right + 1, "the whole-set update fits its heading at every width");
+      }
+    }
+    if (name === "skills-plugin-details") {
+      const dialog = document.querySelector('[data-dialog="skill-set:1"]');
+      require(visible(dialog) && dialog.querySelectorAll('.conversation-card.mcp-proposal').length === 2, "the set detail reuses one existing MCP card per declared server");
+      require(dialog.querySelectorAll('[data-conn="set-mcp"]').length === 2 && !dialog.querySelector('[data-mcp-operation="enable"]'), "each server needs explicit setup before it can be added");
+      require(dialog.textContent.includes('不執行事件鉤子、代理定義或其他外掛功能'), "the set states which plugin parts Raphael does not run");
+      require(dialog.querySelector('[data-conn="set-delete"]') && dialog.querySelector('[data-conn="set-update"]'), "the set reuses the existing action row for removal and reimport");
+    }
+    require(!window.__look.calls.some(call => ['integrations.add','integrations.import','integrations.test','integrations.proposal'].includes(call.method)), "skill discovery, install and details never add or run MCP servers");
+    return {check:name,sets:window.__look.data.skillSets.length};
+  }
+  if (["skills-section", "skills-installed-sources", "skills-import-shared", "skills-member-grants", "skills-source-changed"].includes(name)) {
+    const sections = [...document.querySelectorAll('.cs-body [data-skills-section]')];
+    require(sections.length === 1 && ![...document.querySelectorAll('.cs-body h2')].some(node => node.textContent === '技能庫'), "one skills section replaces the old split headings");
+    const section = sections[0], heading = section.querySelector('.data-heading'), action = heading.querySelector('[data-conn="skill-discover"]');
+    require(heading.querySelector('h2').textContent === '技能' && action.textContent.trim() === '匯入' && action.querySelector('svg'), "the skills header has one short icon action");
+    const titleBox = heading.querySelector('h2').getBoundingClientRect(), actionBox = action.getBoundingClientRect();
+    require(actionBox.left > titleBox.right && Math.abs((titleBox.top + titleBox.bottom - actionBox.top - actionBox.bottom) / 2) < 2, "import is aligned at the right of the skills heading");
+    const firstApp = document.querySelector('.cs-body [data-stagger="installed"]');
+    if (firstApp) require(Boolean(firstApp.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING), "skills follow the existing app section");
+    const rows = [...section.querySelectorAll('.cs-skill')];
+    const appSwitch = document.querySelector('.cs-item [data-conn="enable"]');
+    for (const row of rows) {
+      const control = row.querySelector('[data-conn="skill-enable"]'), open = row.querySelector('.cs-open');
+      require(open && row.querySelector('.chev') && open.querySelectorAll('.ds').length === 2, "skill rows retain source, owner and document trigger");
+      require(!open.textContent.includes('local:') && !open.textContent.includes('plugins/cache') && !open.textContent.includes('\\'), "skill source copy hides internal prefixes and cache paths");
+      if (row.hasAttribute('data-library-skill')) {
+        require(!control && open.querySelector('.cs-library-icon svg') && !open.querySelector('.slime'), "one neutral library row replaces inherited member rows");
+        const iconBox = open.querySelector('.cs-library-icon svg').getBoundingClientRect();
+        require(iconBox.width === 20 && iconBox.height === 20, "the library icon keeps the app icon size");
+        const iconSlot = open.querySelector('.cs-library-icon').getBoundingClientRect();
+        require(iconSlot.width === 28 && iconSlot.height === 28, "the library icon slot aligns with member faces");
+        const members = window.__look.data.members.length;
+        require(open.textContent.includes(`共享 · 已給 ${name === 'skills-member-grants' ? members - 1 : members} 位成員`), "the library row summarizes enabled member access");
+      } else require(control, "private skill rows retain their member switch");
+      require(!row.querySelector('button button'), "row actions are siblings rather than nested controls");
+      if (appSwitch && control) require(Math.abs(control.getBoundingClientRect().height - appSwitch.getBoundingClientRect().height) < 1, "skill and neighbouring app switches share their size");
+    }
+    const library = rows.filter(row => row.hasAttribute('data-library-skill'));
+    require(library.length === window.__look.data.skills.filter(skill => skill.member_id === -1).length, "each shared skill has exactly one Connections row");
+    if (name === "skills-installed-sources") {
+      const dialog = document.querySelector('[data-dialog="skill-import"] .cs-dialog');
+      require(visible(dialog) && ['Claude Code', 'Codex', '外掛'].every((title, index) => dialog.querySelector(`[data-skill-origin="${index}"] h3`)?.textContent === title), "installed sources are grouped by origin");
+      require(dialog.querySelectorAll('[data-conn="skill-import-local"]').length === 3, "each synthetic installed source offers import");
+      require(dialog.textContent.includes('~/.claude/skills/weekly-summary') && dialog.textContent.includes('~/.codex/skills/source-check') && dialog.textContent.includes('文件工具 · 2.0.0'), "source groups show recognizable folders and plugin versions");
+      require(!dialog.textContent.includes('local:') && !dialog.textContent.includes('plugins/cache'), "discovery hides internal source encodings too");
+      require(window.__look.calls.some(call => call.method === 'members.skills.list' && call.params.discover), "the real discovery action crosses IPC");
+    }
+    if (name === "skills-import-shared") {
+      require(!document.querySelector('[data-dialog="skill-import"]'), "successful import returns to the skills list");
+      const calls = window.__look.calls.filter(call => call.method === 'members.skills.import');
+      require(calls.length === 1 && calls[0].params.shared === true && calls[0].params.member_id === 0, "one package is imported through the shared owner scope");
+      require(rows.length === 1 && library.length === 1 && library[0].textContent.includes('~/.claude/skills/weekly-summary'), "import creates a single attributed library row");
+    }
+    if (name === "skills-member-grants") {
+      const dialog = document.querySelector('[data-dialog="skill:-1:20"]'), grants = [...dialog.querySelectorAll('[data-skill-grant]')];
+      require(visible(dialog) && grants.length === window.__look.data.members.length && grants[0].dataset.skillGrant === '0', "the existing detail dialog lists every member with Raphael first");
+      require(rows.length === 2 && section.querySelector('[data-k="cs-skill:1:21"]'), "the private skill keeps its separate member row");
+      const on = dialog.querySelector('[data-k="cs-skill-enable:1:20"]'), off = dialog.querySelector('[data-k="cs-skill-enable:2:20"]');
+      require(on?.getAttribute('aria-checked') === 'true' && off?.getAttribute('aria-checked') === 'false', "one member has the shared skill while another does not");
+      for (const grant of grants) {
+        const control = grant.querySelector('[role="switch"]'), box = control.getBoundingClientRect(), row = grant.getBoundingClientRect();
+        require(visible(control) && box.right <= row.right + 1 && Math.abs(box.height - appSwitch.getBoundingClientRect().height) < 1, "grant switches use the existing control and fit their member rows");
+      }
+      const calls = window.__look.calls.filter(call => call.method === 'members.skills.update');
+      require(calls.length === 3 && calls.map(call => `${call.params.member_id}:${call.params.enabled}`).join(',') === '1:false,2:false,1:true', "individual grants use ordinary member switches");
+      require(window.__look.data.skills.find(skill => skill.id === 20).enabled, "individual choices never disable the library original");
+    }
+    if (name === "skills-source-changed") {
+      const actions = [...section.querySelectorAll('[data-conn="skill-reimport"]')];
+      require(actions.length === 1 && actions[0].parentElement.hasAttribute('data-library-skill') && actions[0].textContent.trim() === '重新匯入', "a changed shared source has one reimport action on its library row");
+      require(library[0].textContent.includes('文件工具 · 2.0.0'), "imported plugins show their name and version");
+      for (const button of actions) {
+        const box = button.getBoundingClientRect(), chevron = button.parentElement.querySelector('.chev').getBoundingClientRect();
+        require(box.right <= chevron.left && box.width > 0, "the single reimport action fits before the library chevron");
+      }
+    }
+    return { check: name, rows: rows.length };
   }
   if (name === "apps-count") {
     const tab = document.querySelector('.modal-scrim [data-conn="tab"][data-id="installed"] .n');

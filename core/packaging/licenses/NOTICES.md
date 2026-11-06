@@ -1,5 +1,9 @@
 # Third-party notices
 
+The member panel's Details / Library / Computer layout and sleeping-screen presentation were informed by Grok Bot's public product video (https://www.youtube.com/watch?v=nnTqbMhKr3E, 04:35-05:00 and 10:00-11:00) and documentation reviewed on 2026-11-05; this is a visual reference only, and no Grok Bot code, artwork or marks are copied or bundled.
+
+`app/src/main/transcript-window.ts` adapts the centered focus range from OpenMausBot `src/lib/transcript-window.ts` (Apache-2.0; license retained in `Apache-2.0.txt`).
+
 ## OpenBot demonstrations (MIT)
 
 The owner demonstration lifecycle in `computer/teaching.py` was informed by
@@ -80,6 +84,12 @@ Modified ports and adaptations, with upstream file names:
   owner-control bridge concepts from `server/container-mcp.ts` and
   `server/mcp-bridge.ts`. Python implementation for Raphael's existing gate.
   Root-schema normalization follows `server/mcp-tool-schema.ts`.
+- `core/src/raphael_core/computer/driver_schemas.json`: compatibility offer adapted from
+  `electron/fixtures/cua-driver-lent-tool-schemas.json` (macOS 0.12.6) and the
+  browser preparation contract in `server/mcp-tool-schema.test.ts` (0.22.1).
+  Additional Linux definitions are reconstructed by Raphael; this is not a captured
+  Linux 0.37.0 catalog. Authorized driver discovery replaces this offer in memory.
+
 - `core/src/raphael_core/computer/vm_tools.py`: Python adaptation of the desktop
   lease and workspace-file tool contracts from `server/local-vm-lease.ts` and
   `server/drivers/agents-catalog.ts`, integrated with Raphael's tool gate.
@@ -362,6 +372,10 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Grok Bot conversation reference
+
+Raphael's calm conversation presentation was informed by the owner's Grok Bot walkthrough notes and message-and-collaboration research of 2026-11-05; this implementation copies no Grok Bot code, text or assets and implies no endorsement.
 
 ## Simple Icons (CC0-1.0)
 

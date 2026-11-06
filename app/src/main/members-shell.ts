@@ -14,6 +14,7 @@
 // leaves Raphael alone in the column: the page works as it did before.
 
 import * as api from "./api";
+import { shortcut, openCommandPalette, type Command } from "./shortcuts";
 import { eventRead } from './event-read';
 import { describeError } from "./format";
 import { currentRoomId, openNewGroupChat, openRoomsMenu } from "./group-chats";
@@ -62,6 +63,7 @@ export interface MembersShell {
   readonly column: HTMLElement;
   /** The details panel. */
   readonly details: HTMLElement;
+  computer(): void;
   /** The narrow windows' dropdown of members, for the left of the chat's top row. */
   readonly picker: HTMLElement;
   /** The pill with the open member, for the middle of the chat's top row. */
@@ -92,7 +94,7 @@ export interface MembersShell {
   refreshRoutines(memberId: number): void;
   /** Whether the details panel is open. */
   detailsOpen(): boolean;
-  setDetails(open: boolean): void;
+  setDetails(open: boolean, overview?: boolean): void;
   /** The page went off screen. */
   hide(): void;
 }
@@ -162,6 +164,7 @@ export function createMembers(host: MembersHost): MembersShell {
     hide: m => void memberAction(m.id, "hide"),
     openConversation: host.onOpenConversation ? (member, conversation) => host.onOpenConversation!(member, conversation) : undefined,
     conversationOf: member => host.conversationOf?.(member),
+    openTurn: (member, conversation, turn) => host.onOpenConversation?.(member, conversation!, turn),
   });
 
   const pill = document.createElement("span");
@@ -293,8 +296,8 @@ export function createMembers(host: MembersHost): MembersShell {
     void readThread();
   }
 
-  function setDetails(next: boolean): void {
-    if (next === open) return;
+  function setDetails(next: boolean, overview = false): void {
+    if (next === open) { if (next && overview) details.overview(); return; }
     open = next;
     host.onDetailsChange?.(open);
     const page = details.el.parentElement;
@@ -394,11 +397,43 @@ export function createMembers(host: MembersHost): MembersShell {
     });
   }
 
+  const command = (id: string): void => {
+    if (id === "search") column.openSearch(picker);
+    else if (id === "sidebar") window.dispatchEvent(new Event("raphael:toggle-sidebar"));
+    else if (id === "new") newMember(null);
+    else if (id.startsWith("member:")) { const member = orderedMembers(list)[Number(id.slice(7)) - 1]; if (member) select(member.id); }
+    else if (host.visible()) window.dispatchEvent(new CustomEvent("raphael:conversation-shortcut", { detail: id }));
+  };
   window.addEventListener("keydown", event => {
-    if (event.ctrlKey && !event.altKey && !event.metaKey && event.key.toLowerCase() === "n" && host.visible() && !document.querySelector(".mb-scrim")) {
-      event.preventDefault(); newMember(null);
-    }
+    const id = shortcut(event);
+    if (!id) return;
+    if (["find", "previous", "next", "new"].includes(id) && !host.visible()) return;
+    event.preventDefault();
+    if (id !== "palette") { command(id); return; }
+    const commands: Command[] = [
+      { id: "search", label: t("chat.searchAll"), keys: "Ctrl+Shift+F", run: () => command("search") },
+      { id: "sidebar", label: t("shortcuts.sidebar"), keys: "Ctrl+B", run: () => command("sidebar") },
+      { id: "home", label: t("nav.home"), run: () => host.app.go("home") },
+      { id: "settings", label: t("nav.settings"), run: () => host.app.go("settings", "general") },
+      ...orderedMembers(list).map((member, index) => ({ id: "person:" + member.id, label: member.name, keys: index < 9 ? "Ctrl+" + (index + 1) : undefined, run: () => select(member.id) })),
+    ];
+    if (host.visible()) commands.unshift(
+      { id: "find", label: t("agent.search"), keys: "Ctrl+F", run: () => command("find") },
+      { id: "previous", label: t("shortcuts.previous"), keys: "Alt+↑", run: () => command("previous") },
+      { id: "next", label: t("shortcuts.next"), keys: "Alt+↓", run: () => command("next") },
+      { id: "new", label: t("members.newMember"), keys: "Ctrl+N", run: () => command("new") },
+    );
+    openCommandPalette(picker, commands);
   });
+  // Report real owner interaction, rather than background refreshes, at most once a minute.
+  let lastActivity = 0;
+  const ownerActivity = (): void => {
+    if (document.hidden || Date.now() - lastActivity < 60_000) return;
+    lastActivity = Date.now();
+    void api.core("members.viewing", { activity_only: true, tz: Intl.DateTimeFormat().resolvedOptions().timeZone }).catch(() => {});
+  };
+  window.addEventListener("pointerdown", ownerActivity);
+  window.addEventListener("keydown", ownerActivity);
 
   /** Runs a change of the groups, says why it failed if it did, and reads the list again. */
   async function groupChange(work: () => Promise<unknown>): Promise<void> {
@@ -443,6 +478,7 @@ export function createMembers(host: MembersHost): MembersShell {
   return {
     column: column.el,
     details: details.el,
+    computer() { setDetails(true); details.select('computer'); },
     picker,
     pill,
     current: () => current,
@@ -478,6 +514,8 @@ export function createMembers(host: MembersHost): MembersShell {
         details.refreshMemory(event.member_id, event.space);
       } else if (event.type === "MemberActivity") {
         setSlimeState(event.member_id, event.state, event.label);
+      } else if (event.type === 'AgentTurn' && (event.member_id ?? 0) === current && open) {
+        details.refreshResources();
       }
     },
     hide() {

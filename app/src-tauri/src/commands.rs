@@ -430,6 +430,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "computer.viewer_control",
     "computer.viewer_close",
     "computer.revoke",
+    "computer.lifecycle",
     "computer.wallpaper",
     "pages.open",
     "owner_questions.answer",
@@ -508,6 +509,7 @@ const ALLOWED_METHODS: &[&str] = &[
     // one by one, like the messaging methods: a method added to the memory later stays closed.
     "memory.get",
     "memory.update",
+    "memory.import",
     "memory.clear",
     "memory.summary_clear",
     // The services of the tools, in the settings: what is chosen and whether each key is stored
@@ -515,6 +517,8 @@ const ALLOWED_METHODS: &[&str] = &[
     "services.status",
     "links.preview",
     "attachments.get",
+    "attachments.upload",
+    "attachments.info",
     "services.set_key",
     "services.clear_key",
     // The members of the owner's team, their groups and their routines (the 拉斐爾 page's member
@@ -561,6 +565,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "routines.delete",
     "routines.template",
     "routines.runs",
+    "routines.run",
     "calendar.add",
     "calendar.update",
     "calendar.delete",
@@ -615,7 +620,7 @@ fn validate_history_search(params: &Value) -> Result<(), String> {
 /// The params of a memory method: for `memory.update`, the `text` of the document within the limit
 /// and the `revision` of the copy it was made from, if given.
 fn validate_memory_call(method: &str, params: &Value) -> Result<(), String> {
-    if method != "memory.update" {
+    if method != "memory.update" && method != "memory.import" {
         return Ok(());
     }
     match params.get("text").and_then(Value::as_str) {
@@ -859,7 +864,7 @@ const AGENT_OFF: &str = "拉斐爾現在無法回答問題";
 
 /// The most images and PDFs one typed question may take (`MAX_ATTACHMENTS` of the core's
 /// services/attachments.py, and `ATTACH_MAX` of pages/agent.ts).
-pub const TYPED_MAX_ATTACHMENTS: usize = 4;
+pub const TYPED_MAX_ATTACHMENTS: usize = 20;
 
 /// A typed question as it is asked: its words without the blanks around them, or why it is not
 /// asked (nothing to ask, or too long). With files (`with_files`), no words at all is a question
@@ -896,6 +901,14 @@ pub fn typed_attachments(attachments: Option<Vec<Value>>) -> Result<Vec<Value>, 
         ["name", "mime", "data"]
             .iter()
             .all(|key| item.get(key).is_some_and(Value::is_string))
+            && item.get("stored_id").is_none_or(|id| {
+                id.as_str().is_some_and(|id| {
+                    id.len() <= 45
+                        && id.bytes().all(|byte| {
+                            byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'.'
+                        })
+                })
+            })
     };
     if !attachments.iter().all(whole) {
         return Err("附加的檔案無法讀取".to_owned());
@@ -1764,6 +1777,31 @@ pub async fn open_attachment(app: AppHandle, webview: Webview, id: String) -> Re
     launch_link(path)
 }
 
+/// Resolve an opaque stored ID before granting read access to this exact asset file.
+#[tauri::command]
+pub async fn attachment_source(
+    app: AppHandle,
+    webview: Webview,
+    id: String,
+) -> Result<String, String> {
+    require_main(&webview)?;
+    let core = app
+        .try_state::<Arc<CoreProcess>>()
+        .ok_or(CORE_NOT_RUNNING)?;
+    let result = core
+        .call("attachments.path", json!({"id": id}))
+        .await
+        .map_err(|_| "attachment unavailable")?;
+    let path = result
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or("attachment unavailable")?;
+    app.asset_protocol_scope()
+        .allow_file(path)
+        .map_err(|_| "attachment unavailable")?;
+    Ok(path.to_owned())
+}
+
 /// Open a file of the team folder at the owner's press. The core says where it is and whether it reads;
 /// anything else is only shown in its folder, so a press never runs a program a member wrote.
 #[tauri::command]
@@ -2152,6 +2190,7 @@ mod tests {
                 "agent_question_answer",
                 "agent_question_open",
                 "agent_retract",
+                "attachment_source",
                 "core_call",
                 "device_computer_app_remove",
                 "device_settings_get",
@@ -2218,14 +2257,14 @@ mod tests {
     }
 
     #[test]
-    fn a_typed_question_takes_at_most_four_whole_attachments() {
+    fn a_typed_question_takes_at_most_twenty_whole_attachments() {
         let file = json!({"name": "a.png", "mime": "image/png", "data": "iVBORw0KGgo="});
         assert_eq!(typed_attachments(None), Ok(vec![]));
         assert_eq!(
-            typed_attachments(Some(vec![file.clone(); 4])),
-            Ok(vec![file.clone(); 4])
+            typed_attachments(Some(vec![file.clone(); 20])),
+            Ok(vec![file.clone(); 20])
         );
-        assert!(typed_attachments(Some(vec![file.clone(); 5])).is_err());
+        assert!(typed_attachments(Some(vec![file.clone(); 21])).is_err());
         assert!(
             typed_attachments(Some(vec![json!({"name": "a.png", "mime": "image/png"})])).is_err()
         );
@@ -2358,6 +2397,7 @@ mod tests {
             "routines.update",
             "routines.delete",
             "routines.template",
+            "routines.run",
         ] {
             assert!(is_allowed_method(method), "{method}");
         }
@@ -2369,7 +2409,7 @@ mod tests {
             "member.notice",
             "members.ask",
             "groups.",
-            "routines.run",
+            "routines.execute",
             "Members.list",
         ] {
             assert!(!is_allowed_method(method), "{method}");
@@ -2461,6 +2501,7 @@ mod tests {
             "computer.viewer_control",
             "computer.viewer_close",
             "computer.revoke",
+            "computer.lifecycle",
             "computer.wallpaper",
         ] {
             assert!(is_allowed_method(method));

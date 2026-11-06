@@ -32,6 +32,7 @@ def required_files() -> list[str]:
         "_internal/_soundfile_data/libsndfile_x64.dll",
         "_internal/raphael_core/brain/prompts/cleanup_system.md",
         "_internal/raphael_core/connectors/finder-data.json",
+        "_internal/raphael_core/computer/driver_schemas.json",
         "_internal/licenses/python/LICENSE.txt",
         "_internal/licenses/pyinstaller/pyinstaller-6.22.3.dist-info/licenses/COPYING.txt",
         *(f"_internal/licenses/{name}" for name in ADAPTED_LICENSE_FILES),
