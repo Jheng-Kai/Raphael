@@ -1989,7 +1989,7 @@ export const zhTW = {
   "trigger.weekdays": "每個工作日",
   "trigger.monthVerb": "每月",
   "trigger.once": "單次",
-  "trigger.every": "每",
+  "trigger.every": "每隔",
   "trigger.hours": "{p0} 小時",
   "trigger.minuteObject": "{p0} 分鐘",
   "trigger.eventVerb": "收到新項目時",

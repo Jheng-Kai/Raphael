@@ -1990,7 +1990,7 @@ export const ja = {
   "trigger.weekdays": "平日",
   "trigger.monthVerb": "毎月",
   "trigger.once": "一度",
-  "trigger.every": "毎",
+  "trigger.every": "間隔",
   "trigger.hours": "{p0} 時間",
   "trigger.minuteObject": "{p0} 分",
   "trigger.eventVerb": "新しい項目を受信",

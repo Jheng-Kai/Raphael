@@ -21,6 +21,8 @@
 .au-event label { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .au-start { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-xs); }
 .au-time.mb-fin { width: 90px; font-variant-numeric: tabular-nums; }
+/* The start date and time are one pair: the same surface and frame (R-UI-17). */
+.au-start .au-time.mb-fin:not(:disabled) { border-color: var(--btn-edge); background: var(--panel); }
 .au-repeat-options { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: var(--sp-2); min-height: var(--h-ctl); }
 .au-repeat-options.is-reserved { visibility: hidden; }
 .au-repeat-options > .sel { width: 100%; }
