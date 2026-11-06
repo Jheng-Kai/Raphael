@@ -6,7 +6,11 @@ export const reactionControlHTML = (): string => iconButton("smile", t("chat.rea
 export function reactionRowHTML(reactions: readonly string[] = []): string {
   return reactions.length ? `<div class="message-reactions" aria-label="${esc(t("chat.reactions"))}">${REACTIONS.filter(emoji => reactions.includes(emoji)).map(emoji => `<button type="button" class="btn sm reaction" data-reaction="${esc(emoji)}" aria-pressed="true" aria-label="${esc(t("chat.reactionToggle", { p0: emoji }))}">${esc(emoji)}</button>`).join("")}</div>` : "";
 }
-export const memoActionHTML = (playing = false): string => iconButton(playing ? "pause" : "play", t(playing ? "chat.memoPause" : "chat.memoPlay"), ` data-act="memo-play" aria-pressed="${playing}"`).replace(" title=", " data-tooltip=");
+/** The reactions above a message menu: each toggles, and the ones already given read as pressed. */
+export function menuReactionsHTML(reactions: readonly string[]): string {
+  return `<div class="menu-reactions" role="group" aria-label="${esc(t("chat.react"))}">${REACTIONS.map(emoji => `<button type="button" class="btn sm reaction" tabindex="-1" data-lead="${esc(emoji)}" aria-pressed="${reactions.includes(emoji)}" aria-label="${esc(t("chat.reactionToggle", { p0: emoji }))}">${esc(emoji)}</button>`).join("")}</div>`;
+}
+export const memoActionHTML =(playing = false): string => iconButton(playing ? "pause" : "play", t(playing ? "chat.memoPause" : "chat.memoPlay"), ` data-act="memo-play" aria-pressed="${playing}"`).replace(" title=", " data-tooltip=");
 export const memoTranscriptHTML = (text: string): string => `<details class="memo-transcript"><summary>${esc(t("chat.memoTranscript"))}</summary><p>${esc(text)}</p></details>`;
 
 /** Keep the owner's expanded transcript when playback or reactions redraw a line. */

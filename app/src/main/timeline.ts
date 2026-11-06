@@ -619,7 +619,7 @@ export function messageActionsHTML(time: number, regenerate = false, owner?: "ed
     (actionable ? action("reply", t("chat.reply"), "reply-message") : "") +
     action("copy", t("chat.copy"), "copy-message") +
     (owner ? action(owner === "edit" ? "pencil" : "x", t(owner === "edit" ? "chat.edit" : "common.cancel"), `${owner}-message`) : "") +
-    (!owner && actionable ? action("more", t("chat.more"), "more-message").replace('data-act="more-message"', `data-act="more-message" data-regenerate="${regenerate}" aria-haspopup="menu"`) : "") + `</div>`;
+    (actionable ? action("more", t("chat.more"), "more-message").replace('data-act="more-message"', `data-act="more-message" data-regenerate="${regenerate}" aria-haspopup="menu"`) : "") + `</div>`;
 }
 
 function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: number, query: string, state: TimelineState, reply: boolean, regenerate = false, origin = true, last = true): string {

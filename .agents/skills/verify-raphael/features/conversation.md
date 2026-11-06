@@ -11,8 +11,7 @@ line. Typed words/files retain Send, Raphael retains dictation, and rooms retain
 their existing recording path without offering calls. The background questions
 slot stays directly above the composer; transient call failures live inside the
 composer and durable failures keep their existing receipt repair entry.
-This follow-up selects voice-call-idle-button and voice-call-no-mic in both themes
-at 1120 and 720; the complete voice-call matrix below remains the broader scope.
+Not released yet (owner, 2026-11-06, R-UI-106); its scenes return with it.
 One call owns the microphone across navigation. Another start opens the shared
 confirmation dialog; only End and start ends the previous call. The panel replaces
 the composer and exposes Mute, Hang up, a transcript disclosure and shared Voice /
@@ -36,9 +35,7 @@ entry; network failure ends the call and retains its already admitted turns.
 Migration 67 stores call metadata and links to existing turns, with scoped cascading
 deletion. Restart closes interrupted calls and retains their transcript.
 
-```powershell
-npm run look -- voice-call-idle-button voice-call-connecting voice-call-listening voice-call-speaking voice-call-transcript voice-call-settings voice-call-ended-card voice-call-no-mic voice-call-busy-confirm --theme both --width 1120,720,1920x1080
-```
+Voice chat is not released yet (owner, 2026-11-06, R-UI-106): the voice button records voice messages only, and the call scenes come back with the feature.
 
 Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
 the busy dialog with dialog-caption-confirm, the settings controls with details-voice, the
@@ -445,7 +442,7 @@ the compact picker's search action, for messages.
 ## Driving it with look
 
 ```powershell
-npm run look -- composer-task-stop chat running running-motion empty details raphael-details details-closed conversation-filter new-conversation row-menu rename delete --theme both --width 1120,720,1920x1080
+npm run look -- composer-task-stop chat running running-motion empty details raphael-details details-closed --theme both --width 1120,720,1920x1080
 npm run look -- quick-conversation-list quick-conversation quick-question-result quick-formal-isolation quick-stop --theme both --width 1120,720,1920x1080
 npm run look -- live-scenario-owner-view --theme both --width 1120,720,1920x1080
 npm run look -- work work-member-builtin composer mode actions reply search search-target tooltip slash-commands --theme both --width 1120,720,1920x1080
@@ -773,7 +770,7 @@ legacy rows use their existing default or are removed if none exists. Empty fini
 records never create an exchange line or a date separator. Reopening the database is idempotent.
 
 ```powershell
-npm run look -- conversation-sections member-conversation-sections quick-clear-confirm quick-cleared new-conversation-empty composer-voice-pending-0 composer-voice-answer-0 composer-voice-pending-1 composer-voice-answer-1 --theme both --width 1120,720,1920x1080
+npm run look -- conversation-sections member-conversation-sections quick-clear-confirm quick-cleared composer-voice-pending-0 composer-voice-answer-0 composer-voice-pending-1 composer-voice-answer-1 --theme both --width 1120,720,1920x1080
 ```
 
 Regression coverage: `conversation-list.test.ts`, `conversation.test.ts`,
@@ -800,7 +797,7 @@ existing retract-and-restore behavior after the second Escape.
 
 ```powershell
 npm run look -- esc-main-armed esc-member-armed esc-recording-cancel composer-stop-pending-result composer-stop-background-result composer-stop-voice-result composer-stop-navigation composer-stop-roster chat --theme both --width 1120,720,1920x1080
-npm run look -- conversation-delete-main delete member-delete --theme both --width 1120,720,1920x1080
+npm run look -- member-delete --theme both --width 1120,720,1920x1080
 npm run look -- page-product page-buy page-expand page-gone --theme both --width 1120,720,1920x1080
 npm run look -- composer-model-small composer-model-favorites composer-model-sources composer-model-same composer-model-fold composer-quick-model composer-model-menu model-sync model-sync-member settings-chatgpt-row composer-model-arrives member-brain-saved --theme both --width 1120,720,1920x1080
 ```
@@ -1309,7 +1306,7 @@ core/tests/agent/test_routine_event.py and core/tests/members/test_harness.py.
 
 ```powershell
 npm run look -- composer-long-link composer-long-link-sent room-long-link room-composer-files room-composer-drop-sign room-files-sent --theme both --width 1120,720,1920x1080
-npm run look -- new-conversation-recording new-conversation-hearing composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
+npm run look -- empty-conversation-recording empty-conversation-hearing composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
 npm run look -- team-file-reply rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
@@ -1367,7 +1364,7 @@ Animation clocks are not content identity: retained slimes keep their phase, del
 
 The prompt, empty-page hero and active voice flyer also patch their unchanged faces during roster updates. Evidence: pages/agent-members.test.ts::a changed roster preview retains the prompt and empty-page faces and voice-mode.test.ts::an unchanged voice redraw retains the listening picture. Voice consumers:
 ```powershell
-npm run look -- composer-voice-recording new-conversation-recording --theme both --width 1120,720,1920x1080
+npm run look -- composer-voice-recording empty-conversation-recording --theme both --width 1120,720,1920x1080
 ```
 
 

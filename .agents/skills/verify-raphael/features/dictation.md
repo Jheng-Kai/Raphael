@@ -95,8 +95,7 @@ line. Typed words/files retain Send, Raphael retains dictation, and rooms retain
 their existing recording path without offering calls. The background questions
 slot stays directly above the composer; transient call failures live inside the
 composer and durable failures keep their existing receipt repair entry.
-This follow-up selects voice-call-idle-button and voice-call-no-mic in both themes
-at 1120 and 720; the complete voice-call matrix below remains the broader scope.
+Not released yet (owner, 2026-11-06, R-UI-106); its scenes return with it.
 One call owns the microphone across navigation. Another start opens the shared
 confirmation dialog; only End and start ends the previous call. The panel replaces
 the composer and exposes Mute, Hang up, a transcript disclosure and shared Voice /
@@ -120,9 +119,7 @@ entry; network failure ends the call and retains its already admitted turns.
 Migration 67 stores call metadata and links to existing turns, with scoped cascading
 deletion. Restart closes interrupted calls and retains their transcript.
 
-```powershell
-npm run look -- voice-call-idle-button voice-call-connecting voice-call-listening voice-call-speaking voice-call-transcript voice-call-settings voice-call-ended-card voice-call-no-mic voice-call-busy-confirm --theme both --width 1120,720,1920x1080
-```
+Voice chat is not released yet (owner, 2026-11-06, R-UI-106): the voice button records voice messages only, and the call scenes come back with the feature.
 
 Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
 the busy dialog with dialog-caption-confirm, the settings controls with details-voice, the

@@ -8,155 +8,54 @@ import { installContextMenus } from "./context-menu";
 
 afterEach(() => { closeMenu(); document.body.replaceChildren(); vi.clearAllMocks(); });
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+const RAPHAEL = [
+  { id: 2, member_id: 0, title: "Project", is_default: 1, kind: "standard", updated_at_ms: Date.now() },
+  { id: 9, member_id: 0, title: "", kind: "quick", updated_at_ms: 1 },
+];
 
-test("window entry uses standard activity, default only for a tie, and quick only as a last resort", () => {
-  const rows = [
-    {id:1,kind:'standard',is_default:1,updated_at_ms:10},
-    {id:2,kind:'standard',is_default:0,updated_at_ms:10},
-    {id:3,kind:'quick',updated_at_ms:100},
-  ] as ConversationInfo[];
+test("a window opens the one conversation, and the quick one only when nothing else is there", () => {
+  const rows = [{id:3,kind:'quick',updated_at_ms:100},{id:1,kind:'standard',is_default:1,updated_at_ms:10}] as ConversationInfo[];
   expect(newestConversation(rows)?.id).toBe(1);
-  expect(newestConversation([{...rows[1],updated_at_ms:20},...rows])?.id).toBe(2);
-  expect(newestConversation([rows[2]])?.id).toBe(3);
+  expect(newestConversation([rows[0]!])?.id).toBe(3);
   expect(newestConversation([])).toBeUndefined();
-  expect(rows.map(row=>row.id)).toEqual([1,2,3]);
+  expect(rows.map(row=>row.id)).toEqual([3,1]);
 });
 
-test("quick questions stay first with their localized title and open the persistent conversation", async () => {
-  core.mockResolvedValue({ conversations: [
-    { id: 2, member_id: 0, title: "Project", updated_at_ms: Date.now() },
-    { id: 9, member_id: 0, title: "An old question", kind: "quick", updated_at_ms: 1 },
-  ] });
+test("Raphael's panel has two rows, his conversation and quick questions, with no search, new or rename", async () => {
+  core.mockResolvedValue({ conversations: RAPHAEL });
   const host = document.createElement("div"); document.body.append(host);
   const onOpen = vi.fn();
-  const list = mountConversationList(host, { memberId: 0, onOpen }); await flush();
-  const first = host.querySelector<HTMLButtonElement>("[data-conversation-open]")!;
-  expect(first.dataset.conversationOpen).toBe("9");
-  expect(first.textContent).toContain("快速提問");
-  expect(first.closest(".conversation-row")!.querySelector("[data-conversation-more]")).not.toBeNull();
-  expect([...host.querySelectorAll(".conversation-section > .mb-dh")].map(node => node.textContent)).toEqual(["對話"]);
-  expect(host.querySelector('[data-conversation-section="quick"]')!.textContent!.match(/快速提問/g)).toHaveLength(1);
-  first.click(); expect(onOpen).toHaveBeenCalledWith(9);
+  let current = 2;
+  const list = mountConversationList(host, { memberId: 0, onOpen, current: () => current }); await flush();
+  const rows = [...host.querySelectorAll<HTMLButtonElement>("[data-conversation-open]")];
+  expect(rows.map(row => [row.dataset.conversationOpen, row.querySelector("span")!.textContent, row.getAttribute("aria-current")]))
+    .toEqual([["2", "主要對話", "true"], ["9", "快速提問", "false"]]);
+  expect(host.querySelector("input, [data-conversation-new]")).toBeNull();
+  expect(rows[0]!.closest(".conversation-row")!.querySelector("[data-conversation-more]")).toBeNull();
+  rows[1]!.click(); expect(onOpen).toHaveBeenCalledWith(9);
+  current = 9; window.dispatchEvent(new CustomEvent("conversation-opened", { detail: 0 }));
+  expect(host.querySelector('[data-conversation-open="9"]')!.getAttribute("aria-current")).toBe("true");
   list.destroy();
 });
 
-test("searching and opening a conversation keeps its identity; plus creates for this member", async () => {
-  core.mockImplementation(async (method: string) => method === "conversations.create" ? { conversation: { id: 9 } } : {
-    conversations: [{ id: 2, member_id: 7, title: "Cobalt notes", created_at_ms: 1, updated_at_ms: Date.now() },
-                    { id: 3, member_id: 7, title: "Travel", created_at_ms: 2, updated_at_ms: Date.now() }],
-  });
-  const host = document.createElement("div"); document.body.append(host);
-  const onOpen = vi.fn();
-  const list = mountConversationList(host, { memberId: 7, onOpen });
-  await flush();
-  const input = host.querySelector<HTMLInputElement>('input[type="search"]')!;
-  input.value = "Cobalt"; input.dispatchEvent(new Event("input"));
-  expect(host.querySelectorAll("[data-conversation-open]")).toHaveLength(1);
-  host.querySelector<HTMLButtonElement>("[data-conversation-open]")!.click();
-  expect(onOpen).toHaveBeenCalledWith(2);
-  host.querySelector<HTMLButtonElement>("[data-conversation-new]")!.click();
-  await flush();
-  expect(core).toHaveBeenCalledWith("conversations.create", { member_id: 7 });
-  expect(onOpen).toHaveBeenLastCalledWith(9);
-  list.destroy();
-});
-
-test("the new-conversation button rests while the open conversation is unwritten, and an unwritten one elsewhere is opened, not doubled", async () => {
-  let current: number | undefined = 3;
-  core.mockImplementation(async () => ({ conversations: [
-    { id: 2, member_id: 7, title: "", created_at_ms: 1, updated_at_ms: 1 },
-    { id: 3, member_id: 7, title: "Cobalt notes", created_at_ms: 2, updated_at_ms: 2, is_default: 1 },
-  ] }));
-  const host = document.createElement("div"); document.body.append(host);
-  const onOpen = vi.fn();
-  const list = mountConversationList(host, { memberId: 7, onOpen, current: () => current }); await flush();
-  const button = host.querySelector<HTMLButtonElement>("[data-conversation-new]")!;
-  expect(button.disabled).toBe(false);
-  button.click();
-  expect(onOpen).toHaveBeenCalledWith(2);
-  expect(core).not.toHaveBeenCalledWith("conversations.create", expect.anything());
-  current = 2;
-  window.dispatchEvent(new CustomEvent("conversation-opened", { detail: 7 }));
-  expect(button.disabled).toBe(true);
-  list.destroy();
-});
-
-test("rename saves the selected row and delete waits for confirmation", async () => {
-  core.mockResolvedValue({ conversations: [{ id: 2, member_id: 7, title: "Cobalt notes", created_at_ms: 1, updated_at_ms: Date.now() }] });
-  const host = document.createElement("div"); document.body.append(host);
-  const list = mountConversationList(host, { memberId: 7, onOpen() {} });
-  await flush();
-  host.querySelector<HTMLButtonElement>("[data-conversation-more]")!.click();
-  document.querySelector<HTMLButtonElement>('[data-pick="rename"]')!.click();
-  const input = document.querySelector<HTMLInputElement>(".conversation-name")!; input.value = "Renamed";
-  document.querySelector<HTMLButtonElement>('[data-dlg="save"]')!.click(); await flush();
-  expect(core).toHaveBeenCalledWith("conversations.rename", { id: 2, title: "Renamed" });
-  expect(document.querySelector(".mb-dialog")).toBeNull();
-  host.querySelector<HTMLButtonElement>("[data-conversation-more]")!.click();
-  document.querySelector<HTMLButtonElement>('[data-pick="delete"]')!.click();
-  expect(core).not.toHaveBeenCalledWith("conversations.delete", expect.anything());
-  document.querySelector<HTMLButtonElement>('[data-dlg="delete"]')!.click(); await flush();
-  expect(core).toHaveBeenCalledWith("conversations.delete", { id: 2 });
-  expect(document.querySelector(".toasts")?.textContent).toContain("已刪除「Cobalt notes」");
-  list.destroy();
-});
-
-test("a right click on a conversation row opens the same rename and delete menu as its ⋯, at the pointer; a click still opens the conversation", async () => {
-  core.mockResolvedValue({ conversations: [
-    { id: 2, member_id: 7, title: "Cobalt notes", created_at_ms: 1, updated_at_ms: Date.now() },
-    { id: 9, member_id: 7, title: "An old question", kind: "quick", updated_at_ms: 1 },
-  ] });
-  const host = document.createElement("div"); document.body.append(host);
-  const onOpen = vi.fn();
-  const list = mountConversationList(host, { memberId: 7, onOpen });
-  await flush();
-  const stop = installContextMenus(document);
-  const items = (): (string | undefined)[] => [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(item => item.dataset.pick);
-  const rightClick = (target: Element, x: number, y: number): void => {
-    target.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 2, clientX: x, clientY: y }));
-    target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: x, clientY: y }));
-  };
-  try {
-    const row = host.querySelector('[data-conversation-open="2"]')!;
-    rightClick(row, 120, 90);
-    expect(items()).toEqual(["rename", "delete"]);
-    expect(document.querySelector<HTMLElement>("#app-popover")!.style.left).toBe("120px");
-    closeMenu();
-    host.querySelector<HTMLButtonElement>('[data-conversation-more="2"]')!.click();
-    expect(items()).toEqual(["rename", "delete"]);
-    closeMenu();
-    rightClick(row.closest(".conversation-row")!, 40, 40);
-    document.querySelector<HTMLButtonElement>('[data-pick="rename"]')!.click();
-    expect(document.querySelector(".conversation-name")).not.toBeNull();
-    expect(onOpen).not.toHaveBeenCalled();
-    document.querySelector<HTMLButtonElement>('[data-dlg="cancel"]')!.click();
-    // The permanent quick row offers clearing rather than deleting its identity.
-    rightClick(host.querySelector('[data-conversation-open="9"]')!, 10, 10);
-    expect(items()).toEqual(["clear"]);
-    closeMenu();
-    row.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    expect(onOpen).toHaveBeenCalledWith(2);
-  } finally { stop(); list.destroy(); }
-});
-
-test("quick history clears only after the shared confirmation and keeps its row", async () => {
-  core.mockResolvedValue({ conversations: [{ id: 9, member_id: 0, kind: "quick", title: "", updated_at_ms: 1 }] });
+test("quick history clears only after the shared confirmation and keeps its row; right click offers the same", async () => {
+  core.mockResolvedValue({ conversations: RAPHAEL });
   const host = document.createElement("div"); document.body.append(host);
   const list = mountConversationList(host, { memberId: 0, onOpen() {} }); await flush();
-  host.querySelector<HTMLButtonElement>('[data-conversation-more="9"]')!.click();
-  document.querySelector<HTMLButtonElement>('[data-pick="clear"]')!.click();
-  expect(document.querySelector(".mb-confirm h2")?.textContent).toBe("清除「快速提問」的紀錄？");
-  expect(core).not.toHaveBeenCalledWith("conversations.clear", expect.anything());
-  document.querySelector<HTMLButtonElement>('[data-dlg="delete"]')!.click(); await flush();
-  expect(core).toHaveBeenCalledWith("conversations.clear", { id: 9 });
-  expect(host.querySelector('[data-conversation-open="9"]')).not.toBeNull();
-  list.destroy();
-});
-
-test("a member without quick questions has only the ordinary conversation heading", async () => {
-  core.mockResolvedValue({ conversations: [{ id: 2, member_id: 7, title: "Project", updated_at_ms: 1 }] });
-  const host = document.createElement("div"); document.body.append(host);
-  const list = mountConversationList(host, { memberId: 7, onOpen() {} }); await flush();
-  expect([...host.querySelectorAll(".conversation-section > .mb-dh")].map(node => node.textContent)).toEqual(["對話"]);
-  list.destroy();
+  const stop = installContextMenus(document);
+  try {
+    const quick = host.querySelector('[data-conversation-open="9"]')!;
+    quick.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 2, clientX: 10, clientY: 10 }));
+    quick.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 10, clientY: 10 }));
+    expect([...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(item => item.dataset.pick)).toEqual(["clear"]);
+    closeMenu();
+    host.querySelector<HTMLButtonElement>('[data-conversation-more="9"]')!.click();
+    document.querySelector<HTMLButtonElement>('[data-pick="clear"]')!.click();
+    expect(document.querySelector(".mb-confirm h2")?.textContent).toBe("清除「快速提問」的紀錄？");
+    expect(core).not.toHaveBeenCalledWith("conversations.clear", expect.anything());
+    document.querySelector<HTMLButtonElement>('[data-dlg="delete"]')!.click(); await flush();
+    expect(core).toHaveBeenCalledWith("conversations.clear", { id: 9 });
+    expect(core).not.toHaveBeenCalledWith("conversations.delete", expect.anything());
+    expect(host.querySelector('[data-conversation-open="9"]')).not.toBeNull();
+  } finally { stop(); list.destroy(); }
 });

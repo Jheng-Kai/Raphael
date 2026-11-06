@@ -128,10 +128,12 @@ export interface MemberColumn {
 }
 
 /** A menu of plain items under `anchor`; `onPick` gets the chosen item's `id`. */
-export function openActions(anchor: HTMLElement, items: readonly { id: string; label: string; icon?: Parameters<typeof ico>[0]; submenu?: boolean }[], onPick: (id: string, row: HTMLElement) => void): void {
+/** `lead` is a row above the items, such as a message's reactions; its buttons carry `data-lead`. */
+export function openActions(anchor: HTMLElement, items: readonly { id: string; label: string; icon?: Parameters<typeof ico>[0]; submenu?: boolean }[], onPick: (id: string, row: HTMLElement) => void,
+  lead?: { html: string; onPick(value: string): void }): void {
   const el = openPopover(
     anchor,
-    items
+    (lead?.html ?? "") + items
       .map(
         (item) =>
           `<button type="button" role="menuitem"${item.icon === "trash" ? ' class="danger"' : ""} tabindex="-1" data-pick="${esc(item.id)}"${item.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
@@ -141,6 +143,8 @@ export function openActions(anchor: HTMLElement, items: readonly { id: string; l
     { className: "menu mb-menu", role: "menu", label: anchor.getAttribute("aria-label") ?? undefined },
   );
   el.addEventListener("click", (e) => {
+    const led = lead && (e.target as Element).closest<HTMLElement>("[data-lead]");
+    if (led) { closeMenu(); anchor.focus({ preventScroll: true }); lead.onPick(led.dataset.lead ?? ""); return; }
     const pick = (e.target as Element).closest<HTMLElement>("[data-pick]");
     if (!pick) return;
     const id = pick.dataset.pick ?? "";

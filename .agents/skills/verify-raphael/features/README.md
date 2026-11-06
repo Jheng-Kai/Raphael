@@ -345,8 +345,8 @@ from format.ts, with explicit zh-TW, ja and en expectations.
 
 The existing details-alignment, conversation-scroll-edge, home-lead-width,
 dictation-overview, dictation-layout, skill-learned-notice and growing-skills checks
-cover these contracts. toast-clearance covers quick-cleared, composer-learn,
-conversation-delete-main and member-delete. Native deletion audit uses the same
+cover these contracts. toast-clearance covers quick-cleared, composer-learn
+and member-delete. Native deletion audit uses the same
 rendered clearance check at every member checkpoint. Native skill-growth rejects a
 notice before its producing reply and checks the learned skill's Chinese date.
 No brain, tool, core or Rust behavior changed.

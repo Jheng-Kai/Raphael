@@ -44,7 +44,6 @@ import { eventRead } from '../event-read';
 import { cancelGesture } from "../../shared/cancel-gesture";
 import { openActions } from "../member-column";
 import { mountConversationFind } from "../conversation-find";
-import { confirmDelete } from "../member-dialogs";
 import { openRoutineDialog } from "../routine-dialog";
 import { createAttachmentMedia } from "../attachment-media";
 import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachmentLimit, readComposerFile, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
@@ -77,7 +76,7 @@ import { carryTyped } from "../secret-card";
 import { carryInlineSetup, mountInlineConnectionSetup } from "../connection-setup";
 import { carryMail } from "../mail-card";
 import { mountPages } from "../page-card";
-import { carryMessageMetadata, mountMessageMetadata } from "../message-metadata";
+import { carryMessageMetadata, menuReactionsHTML, mountMessageMetadata } from "../message-metadata";
 import { mountMailActions } from "../mail-actions";
 import { mountGreeting } from "../member-greeting";
 import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
@@ -360,12 +359,15 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     conversation === undefined ? {} : { conversationId: conversation,
       ...(conversationCache.get(member)?.find(c => c.id === conversation)?.kind === "quick" ? { destination: "quick" as const } : {}) };
 
+  /** The header names only the member; Raphael's quick questions say so under it. */
   function drawConversation(): void {
     const selected = conversationCache.get(memberId())?.find(c => c.id === conversationId());
-    const title = conversationTitle(selected);
+    const title = selected?.kind === "quick" ? conversationTitle(selected) : "";
     composerBrain?.draw();
     caption.textContent = title;
-    conversationButton.setAttribute("aria-label", `${members.member().name}: ${title}`); conversationButton.title = title;
+    caption.hidden = !title;
+    const name = members.member().name;
+    conversationButton.setAttribute("aria-label", title ? `${name}: ${title}` : name); conversationButton.title = title || name;
   }
 
   const conversationsDirty = new Set<number>();
@@ -418,18 +420,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     window.dispatchEvent(new CustomEvent("conversation-opened", { detail: member }));
   }
 
-  window.addEventListener("conversation-deleted", event => {
-    const {member,id}=(event as CustomEvent<{member:number;id:number}>).detail;
-    discardComposerDraft(draftKey(member, id));
-    const remaining=(conversationCache.get(member)??[]).filter(c=>c.id!==id);
-    conversationCache.set(member,remaining);
-    conversationsDirty.add(member);
-    if(chosenConversations.get(member)!==id)return;
-    if (composerKey === draftKey(member, id)) { composerKey = "deleted"; clearTimeout(draftTimer); }
-    // Read activity again before history; the core's stable default is not the window's selection.
-    chosenConversations.delete(member);
-    if(member===memberId())switchThread();
-  });
   conversationButton.addEventListener("click", () => {
     members.setDetails(!members.detailsOpen());
   });
@@ -503,7 +493,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const voiceButton = composer.querySelector<HTMLButtonElement>(".cmp-voice")!;
   const sendButton = composer.querySelector<HTMLButtonElement>(".cmp-send")!;
   input.addEventListener("input", () => voiceChat.draw());
-  const callEligible = (): boolean => !roomPane.active && memberId() > 0 && conversationId() !== undefined &&
+  // Voice chat waits for a later release (owner, 2026-11-06): the voice button records voice messages only.
+  const VOICE_CALLS = false;
+  const callEligible = (): boolean => VOICE_CALLS && !roomPane.active && memberId() > 0 && conversationId() !== undefined &&
     !input.value.trim() && !files.length && !missingFiles.length && !composerQuote && replacing === undefined && !composerTask();
   const voiceChat = mountVoiceChat({ composer, button: voiceButton, root: el,
     target: () => ({ member: roomPane.active ? -1 : memberId(), conversation: conversationId(), name: members.member().name }),
@@ -1819,28 +1811,27 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     drawQuote(); focusComposer();
   }
 
-  async function messageMenu(control: HTMLElement): Promise<void> {
+  /**
+   * The ⋯ of a message and a right click on it open one menu, as Grok Bot does: a colleague's message has its reactions
+   * above Reply and Copy (and Regenerate on the latest answer); the owner's has Reply and Copy.
+   */
+  function messageMenu(control: HTMLElement): void {
     const source = messageSource(control);
     if (!source) return;
-    const member = memberId(), conversation = conversationId();
-    let speaks = false;
-    try { speaks = (await api.core<{ ready: boolean }>("agent.speech.status")).ready; } catch { /* Reading and deletion remain available without speech. */ }
-    if (!control.isConnected || member !== memberId() || conversation !== conversationId()) return;
-    const items: Parameters<typeof openActions>[1][number][] = [];
-    if (control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id) items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
-    if (speaks) items.push({ id: "speak", label: t("chat.readAloud"), icon: "voice" });
-    items.push({ id: "delete", label: t("chat.deleteTurn"), icon: "trash" });
+    const owner = source.key === "question";
+    const items: Parameters<typeof openActions>[1][number][] = [{ id: "reply", label: t("chat.reply"), icon: "reply" }, { id: "copy", label: t("chat.copy"), icon: "copy" }];
+    if (!owner && control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id) items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
+    const message = control.closest<HTMLElement>(".chat-message");
+    const reactions = !owner && message?.querySelector('[data-act="react-message"]') ? source.turn.reactions?.[source.key] ?? [] : null;
     openActions(control, items, pick => {
-      if (pick === "regenerate") { void regenerate(control); return; }
-      const params = { member_id: member, conversation_id: conversation, turn_id: source.turn.id };
-      if (pick === "speak") {
-        void api.core("agent.speak", { ...params, ...(source.key !== "reply" ? { message_seq: Number(source.key) } : {}) }).catch(err => toaster.info(describeError(err)));
-      } else void confirmDelete(t("chat.deleteTurn")).then(async yes => {
-        if (!yes) return;
-        await api.core("agent.history.delete", params);
-        if (member === memberId() && conversation === conversationId()) await load(false);
-      }).catch(err => toaster.info(describeError(err)));
-    });
+      if (pick === "regenerate") void regenerate(control);
+      else if (pick === "reply") replyMessage(control);
+      else void copyMessage(message?.querySelector<HTMLElement>('[data-act="copy-message"]') ?? control);
+    }, reactions ? { html: menuReactionsHTML(reactions), onPick: emoji => {
+      const scope = { member_id: source.turn.member_id ?? 0, conversation_id: source.turn.conversation_id, turn_id: source.turn.id };
+      void api.core("agent.react", { ...scope, message_key: source.key, emoji, active: !reactions.includes(emoji) })
+        .then(() => { if (visible) void load(false); }).catch(err => toaster.info(describeError(err)));
+    } } : undefined);
   }
 
   async function regenerate(control: HTMLElement): Promise<void> {
@@ -2319,8 +2310,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
   bindFilePaste(input, pasted => { void attachAll(pasted); }, fit, () => files.map(file => file.name));
 
-  // Empty member composers share one button: a short click calls, a 300 ms hold records.
-  // Capture the destination on press, before either the timer or navigation can change it.
+  // The voice button records while held. When calls return, an empty member composer's short click calls and a
+  // 300 ms hold records. Capture the destination on press, before either the timer or navigation can change it.
   let voicePointer: { id: number; member: number; conversation?: number; recording: boolean; timer?: ReturnType<typeof setTimeout> } | null = null;
   let suppressVoiceClick = false;
   voiceButton.addEventListener("pointerdown", (e) => {

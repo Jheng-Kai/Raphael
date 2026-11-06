@@ -122,15 +122,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   const conversationHost = document.createElement("div");
   let conversationMember: number | null = null;
   let conversationList: ReturnType<typeof mountConversationList> | null = null;
-  let conversationCreatable = true;
-  /** New conversation is a + beside the 對話 heading, as routines have theirs; it rests while the open one is unwritten. */
-  function drawNewConversation(): void {
-    const button = body.querySelector<HTMLButtonElement>('[data-conversation-new]');
-    if (!button) return;
-    if (button.disabled !== !conversationCreatable) button.disabled = !conversationCreatable;
-    const label = t('conversations.new');
-    if (button.title !== label) { button.title = label; button.setAttribute('aria-label', label); }
-  }
+  /** Only Raphael has a choice of conversation: its main one and its quick questions. */
   function drawConversations(): void {
     const memberId = host.member().id;
     if (conversationMember !== memberId) {
@@ -142,13 +134,10 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     if (!conversationList) conversationList = mountConversationList(conversationHost, {
       scope: host.app,
       active: () => host.visible?.() ?? true,
-      memberId, collapseWhenEmpty: true, showHeading: false, externalNew: true,
-      onCreatable(can) { conversationCreatable = can; drawNewConversation(); },
-      onVisibility(visible) { const current = body.querySelector<HTMLElement>('[data-slot="conversations"]'); if (current && current.hidden !== !visible) current.hidden = !visible; },
+      memberId,
       onOpen(id) { host.openConversation?.(memberId, id); },
       current: () => host.conversationOf?.(memberId),
     });
-    slot.hidden = conversationHost.hidden;
   }
   async function loadCounts(fromEvent = false): Promise<void> {
     if (el.hidden) { countsStale = true; return; }
@@ -338,11 +327,15 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       }
     } else {
       if (tab === "details") {
-        if (!body.querySelector('.mb-panel-routines')) patchHTML(body, `<section class="mb-panel-tasks" data-k="panel-tasks"></section><section class="mb-panel-routines" data-k="panel-routines"></section><section><div class="mb-dh"><span data-panel-conversations-heading>${esc(t('members.panelConversations'))}</span>${iconButton('plus', t('conversations.new'), ' data-conversation-new data-k="panel-conversation-new"', 'row mb-tool')}</div><div data-slot="conversations" data-k="panel-conversations"></div></section>`);
+        const chief = member.id === RAPHAEL_ID;
+        if (!body.querySelector('.mb-panel-routines') || !!body.querySelector('[data-slot="conversations"]') !== chief) {
+          conversationHost.remove();
+          patchHTML(body, `<section class="mb-panel-tasks" data-k="panel-tasks"></section><section class="mb-panel-routines" data-k="panel-routines"></section>` +
+            (chief ? `<section><div class="mb-dh"><span data-panel-conversations-heading>${esc(t('members.panelConversations'))}</span></div><div data-slot="conversations" data-k="panel-conversations"></div></section>` : ''));
+        }
         // The skeleton is kept across draws, so its heading follows a language change here.
         const heading = body.querySelector<HTMLElement>('[data-panel-conversations-heading]');
         if (heading && heading.textContent !== t('members.panelConversations')) heading.textContent = t('members.panelConversations');
-        drawNewConversation();
         patchHTML(body.querySelector('.mb-panel-tasks')!, panelTasksHTML(work, workFailed, allTasks));
         patchHTML(body.querySelector('.mb-panel-routines')!, routinesHTML());
       } else if (tab === 'library') {
@@ -437,7 +430,6 @@ export function createDetails(host: DetailsHost): DetailsPanel {
 
   el.addEventListener("click", (e) => {
     const target = e.target as Element;
-    if (target.closest('.mb-dh [data-conversation-new]')) { conversationList?.create(); return; }
     const taskButton = target.closest<HTMLElement>('[data-panel-task],[data-panel-task-menu]');
     if (taskButton) {
       const task = work?.tasks.find(task => task.id === Number(taskButton.dataset.panelTask ?? taskButton.dataset.panelTaskMenu));

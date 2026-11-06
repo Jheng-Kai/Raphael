@@ -182,26 +182,28 @@ describe("a member's panel", () => {
     expect(hide.querySelectorAll('svg')).toHaveLength(1);
     expect(hide.hasAttribute('aria-haspopup')).toBe(false);
   });
-  test("conversation slot loads the selected member, preserves search on redraw, navigates and collapses when empty", async () => {
+  test("a member has no conversation list, and Raphael's panel switches between its conversation and quick questions", async () => {
     const panel = mount(false);
     const open = vi.fn();
     host.openConversation = open;
     const original = api.core.getMockImplementation()!;
     api.core.mockImplementation(async (method, params) => method === "conversations.list"
-      ? { conversations: params.member_id === 3 ? [{ id: 91, member_id: 3, title: "Research", updated_at_ms: Date.now() }] : [] }
+      ? { conversations: params.member_id === 0
+        ? [{ id: 1, member_id: 0, title: "Weekly plan", updated_at_ms: Date.now(), is_default: 1, kind: "standard" }, { id: 2, member_id: 0, title: "", updated_at_ms: Date.now(), kind: "quick" }]
+        : [{ id: 91, member_id: params.member_id, title: "Research", updated_at_ms: Date.now(), is_default: 1, kind: "standard" }] }
       : original(method, params));
     panel.draw(); await flush();
-    const slot = panel.el.querySelector<HTMLElement>('[data-slot="conversations"]')!;
-    expect([...panel.el.querySelectorAll('.mb-dh')].filter(node => node.textContent === t('conversations.heading'))).toHaveLength(1);
-    const input = slot.querySelector<HTMLInputElement>('input')!;
-    input.value = "Research"; input.dispatchEvent(new Event("input"));
-    panel.draw(); await flush();
-    expect(panel.el.querySelector('[data-slot="conversations"] input')).toBe(input);
-    panel.el.querySelector<HTMLButtonElement>('[data-conversation-open="91"]')!.click();
-    expect(open).toHaveBeenCalledWith(3, 91);
-    current = 4; panel.showMember(); await flush();
-    expect(panel.el.querySelector<HTMLElement>('[data-slot="conversations"]')!.hidden).toBe(true);
+    expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
+    expect(panel.el.querySelector('[data-conversation-new]')).toBeNull();
     expect(panel.el.textContent).not.toContain("Research");
+    current = 0; panel.showMember(); await flush();
+    const rows = [...panel.el.querySelectorAll<HTMLButtonElement>('[data-slot="conversations"] [data-conversation-open]')];
+    expect(rows.map(row => row.querySelector('span')!.textContent)).toEqual([t('conversations.main'), t('conversations.quick')]);
+    expect(panel.el.querySelector('[data-slot="conversations"] input')).toBeNull();
+    rows[1]!.click();
+    expect(open).toHaveBeenCalledWith(0, 2);
+    current = 4; panel.showMember(); await flush();
+    expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
   });
 
   test("editing and hiding belong to settings behind the gear", async () => {

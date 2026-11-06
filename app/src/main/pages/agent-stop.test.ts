@@ -15,10 +15,8 @@ import { createAgent } from "./agent";
 
 const conversations = [
   { id: 1, member_id: 0, is_default: 1, kind: "main", title: "", created_at_ms: 1, updated_at_ms: 1 },
-  { id: 2, member_id: 0, is_default: 0, kind: "standard", title: "Project", created_at_ms: 1, updated_at_ms: 1 },
   { id: 4, member_id: 0, is_default: 0, kind: "quick", title: "", created_at_ms: 1, updated_at_ms: 1 },
   { id: 31, member_id: 3, is_default: 1, kind: "main", title: "", created_at_ms: 1, updated_at_ms: 1 },
-  { id: 32, member_id: 3, is_default: 0, kind: "standard", title: "Project", created_at_ms: 1, updated_at_ms: 1 },
 ];
 let turns: AgentTurn[];
 let emit: (event: MainEvent) => void;
@@ -29,6 +27,8 @@ const refresh = async (event: MainEvent = { type: "MembersChanged" }) => { emit(
 const choose = async (member: number, conversation: number) => {
   $(`.mb-col [data-member="${member}"]`).click();
   await flush();
+  // A member has one conversation; only Raphael's panel switches between his and the quick questions.
+  if (member !== 0) return;
   if ($<HTMLElement>(".mb-det").hidden) $(".conversation-trigger").click();
   await flush();
   $(`[data-conversation-open="${conversation}"]`).click();
@@ -78,7 +78,7 @@ test("while work runs the field sends message after message and stops nothing", 
   expectStop();
 });
 
-test.each([[0, 1], [0, 2], [3, 31], [3, 32]])("the composer voice press stays in member %s conversation %s through navigation", async (member, conversation) => {
+test.each([[0, 1], [3, 31]])("the composer voice press stays in member %s conversation %s through navigation", async (member, conversation) => {
   mount(); await flush(); await choose(member, conversation);
   const button = $(".cmp-voice");
   pointer(button, "pointerdown");
@@ -98,51 +98,26 @@ test.each([[0, 1], [0, 2], [3, 31], [3, 32]])("the composer voice press stays in
   expect(document.body.textContent).toContain("Report ready");
 });
 
-test.each([0, 299])("a member pointer click shorter than 300 ms starts one call without a voice message (%s ms)", async delay => {
+test("voice chat is not released: a member's voice button records a voice message on a click, a hold and a key", async () => {
   mount(); await flush(); await choose(3, 31);
   const button = $(".cmp-voice");
-  pointer(button, "pointerdown"); await vi.advanceTimersByTimeAsync(delay);
-  expect(api.agentVoice).not.toHaveBeenCalled(); expect(api.voiceCallStart).not.toHaveBeenCalled();
+  pointer(button, "pointerdown");
+  expect(api.agentVoice.mock.calls).toEqual([["down", 3, 31]]);
   pointer(button, "pointerup"); pointerClick(button); await flush();
-  expect(api.voiceCallStart).toHaveBeenCalledExactlyOnceWith(3, 31, "zh-TW");
-  expect(api.agentVoice).not.toHaveBeenCalled();
-});
-
-test.each(["Enter", " "])("%j starts a member call without voice-message edges, even after navigation", async key => {
-  mount(); await flush(); await choose(3, 31);
-  $(".cmp-voice").dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })); await flush();
-  await choose(0, 4);
-  document.body.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true })); await flush();
-  expect(api.voiceCallStart).toHaveBeenCalledExactlyOnceWith(3, 31, "zh-TW");
-  expect(api.agentVoice).not.toHaveBeenCalled();
-});
-
-test("a held member pointer keeps its press destination when navigation precedes the threshold", async () => {
-  mount(); await flush(); await choose(3, 31);
-  const button = $(".cmp-voice"); pointer(button, "pointerdown");
-  await vi.advanceTimersByTimeAsync(200); await choose(0, 4);
-  await vi.advanceTimersByTimeAsync(100);
+  pointer(button, "pointerdown"); await vi.advanceTimersByTimeAsync(600);
   pointer(button, "pointerup"); pointerClick(button); await flush();
-  expect(api.agentVoice.mock.calls).toEqual([["down", 3, 31], ["up", 3, 31]]);
+  button.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); await flush();
+  document.body.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", bubbles: true })); await flush();
+  expect(api.agentVoice.mock.calls).toEqual([["down", 3, 31], ["up", 3, 31], ["down", 3, 31], ["up", 3, 31], ["down", 3, 31], ["up", 3, 31]]);
   expect(api.voiceCallStart).not.toHaveBeenCalled();
 });
 
-test.each(["pointercancel", "lostpointercapture"])("%s releases a hold once and cancels a pending short click", async event => {
+test.each(["pointercancel", "lostpointercapture"])("%s ends a member's voice message once", async event => {
   mount(); await flush(); await choose(3, 31);
   const button = $(".cmp-voice"); pointer(button, "pointerdown");
-  pointer(button, event); await vi.advanceTimersByTimeAsync(300); pointerClick(button); await flush();
-  expect(api.agentVoice).not.toHaveBeenCalled(); expect(api.voiceCallStart).not.toHaveBeenCalled();
-  pointer(button, "pointerdown"); await vi.advanceTimersByTimeAsync(300);
   pointer(button, event); pointer(button, "pointerup"); pointerClick(button); await flush();
   expect(api.agentVoice.mock.calls).toEqual([["down", 3, 31], ["up", 3, 31]]);
   expect(api.voiceCallStart).not.toHaveBeenCalled();
-});
-
-test("leaving the page cancels a pending member hold", async () => {
-  mount(); await flush(); await choose(3, 31);
-  pointer($(".cmp-voice"), "pointerdown"); agent.hide();
-  await vi.advanceTimersByTimeAsync(300); await flush();
-  expect(api.agentVoice).not.toHaveBeenCalled(); expect(api.voiceCallStart).not.toHaveBeenCalled();
 });
 
 beforeEach(() => {

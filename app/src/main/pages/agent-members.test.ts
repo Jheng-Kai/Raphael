@@ -207,29 +207,26 @@ test("member drafts follow the composer owner through switching and page return"
   agent.hide();
 });
 
-test("explicit conversation choices and their drafts survive later activity and sending elsewhere", async () => {
+test("Raphael's conversation and his quick questions keep their own drafts through activity, sending and other members", async () => {
   const conversations = [
     {id:1,member_id:0,title:'First sample',kind:'standard',is_default:1,updated_at_ms:1},
-    {id:2,member_id:0,title:'Recent sample',kind:'standard',is_default:0,updated_at_ms:20},
+    {id:9,member_id:0,title:'',kind:'quick',is_default:0,updated_at_ms:20},
   ];
   api.core.mockImplementation(async (method:string)=>method==='conversations.list'?{conversations:structuredClone(conversations)}:{questions:[]});
   const agent=mount();await flush();
-  $('.conversation-trigger').click();await flush();
-  $('[data-conversation-open="1"]').click();await flush();
   const input=agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
   input.value='First unfinished';input.dispatchEvent(new Event('input'));
   conversations[1].updated_at_ms=100;
   window.dispatchEvent(new CustomEvent('conversations-changed',{detail:0}));await flush();
-  expect($('.conversation-caption').textContent).toBe('First sample');
+  expect($<HTMLElement>('.conversation-caption').hidden).toBe(true);
   if($('.mb-det').hidden)$('.conversation-trigger').click();await flush();
-  $('[data-conversation-open="2"]').click();await flush();
-  expect(input.value).toBe('');input.value='Send second';input.dispatchEvent(new Event('input'));
+  $('[data-conversation-open="9"]').click();await flush();
+  expect($('.conversation-caption').textContent).toBe('快速提問');
+  expect(input.value).toBe('');input.value='Send quick';input.dispatchEvent(new Event('input'));
   agent.el.querySelector<HTMLFormElement>('.composer')!.requestSubmit();await flush();
-  if($('.mb-det').hidden)$('.conversation-trigger').click();await flush();
   $('[data-conversation-open="1"]').click();await flush();
   expect(input.value).toBe('First unfinished');
   await pick(3);input.value='Other member draft';input.dispatchEvent(new Event('input'));
-  window.dispatchEvent(new CustomEvent('conversation-deleted',{detail:{member:0,id:1}}));await flush();
   await pick(4);await pick(3);expect(input.value).toBe('Other member draft');agent.hide();
 });
 
@@ -251,20 +248,19 @@ test("typing defers storage work until the pause and a new page restores the sav
   next.hide();
 });
 
-test.each([true, false])("an authoritative missing conversation removes its saved draft (open: %s)", async (open) => {
+test("a conversation the core folded into the member's one conversation drops its saved draft", async () => {
   let conversations = [
     {id:1,member_id:0,title:'First sample',kind:'standard',is_default:1,updated_at_ms:1},
     {id:2,member_id:0,title:'Recent sample',kind:'standard',is_default:0,updated_at_ms:20},
   ];
   api.core.mockImplementation(async (method:string)=>method==='conversations.list'?{conversations:structuredClone(conversations)}:{questions:[]});
-  const agent=mount();await flush();$('.conversation-trigger').click();await flush();$('[data-conversation-open="1"]').click();await flush();
+  const agent=mount();await flush();
   const input=agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
-  input.value='Removed conversation draft';input.dispatchEvent(new Event('input'));agent.hide();agent.show();await flush();
-  if (!open) { if ($('.mb-det').hidden) $('.conversation-trigger').click(); await flush(); $('[data-conversation-open="2"]').click(); await flush(); }
-  conversations=conversations.filter(item=>item.id!==1);
+  input.value='Folded conversation draft';input.dispatchEvent(new Event('input'));agent.hide();agent.show();await flush();
+  conversations=conversations.filter(item=>item.id!==2);
   window.dispatchEvent(new CustomEvent('conversations-changed',{detail:0}));await flush();
-  expect($('.conversation-caption').textContent).toBe('Recent sample');expect(input.value).toBe('');
-  expect(JSON.parse(localStorage.getItem('raphael.composer.drafts')??'{}')['member:0:1']).toBeUndefined();agent.hide();
+  expect(input.value).toBe('');
+  expect(JSON.parse(localStorage.getItem('raphael.composer.drafts')??'{}')['member:0:2']).toBeUndefined();agent.hide();
 });
 
 test("a long draft keeps its words without repeated full-text height measurements", async () => {
@@ -288,17 +284,22 @@ test('work events refresh the visible preview without rereading skills or comman
   agent.hide();
 });
 
-test('hidden thread metadata waits until the thread is shown and returns with its latest title', async () => {
+test('hidden thread metadata waits until the thread is shown, and the header names only the member', async () => {
   vi.useFakeTimers();
   let title='Original sample';
-  api.core.mockImplementation(async (method:string)=>method==='conversations.list' ? {conversations:[{id:701,member_id:0,is_default:1,kind:'main',title,created_at_ms:1,updated_at_ms:1}]} : {questions:[]});
+  api.core.mockImplementation(async (method:string)=>method==='conversations.list' ? {conversations:[{id:701,member_id:0,is_default:1,kind:'standard',title,created_at_ms:1,updated_at_ms:1},{id:702,member_id:0,is_default:0,kind:'quick',title:'',created_at_ms:1,updated_at_ms:1}]} : {questions:[]});
   const agent=mount(); await flush(); agent.hide();
   api.core.mockClear(); title='Updated sample';
   send({type:'AgentTurn',turn_id:1,member_id:0});
   await vi.advanceTimersByTimeAsync(400); await flush();
   expect(api.core.mock.calls.filter(call=>call[0]==='conversations.list')).toHaveLength(0);
   agent.show(); await flush();
-  expect(document.querySelector('.conversation-trigger')?.textContent).toContain('Updated sample');
+  expect(api.core.mock.calls.filter(call=>call[0]==='conversations.list').length).toBeGreaterThan(0);
+  expect($('.conversation-trigger').textContent).toBe('拉斐爾');
+  expect($<HTMLElement>('.conversation-caption').hidden).toBe(true);
+  if ($<HTMLElement>('.mb-det').hidden) $('.conversation-trigger').click(); await flush();
+  $('[data-conversation-open="702"]').click(); await flush();
+  expect($('.conversation-caption').textContent).toBe('快速提問');
   agent.hide();
 });
 
@@ -442,20 +443,15 @@ test("clearing conversations requires confirmation and scopes the request to tha
   expect(document.querySelector(".mb-confirm")).toBeNull(); agent.hide();
 });
 
-test("a fresh window opens the newest standard conversation and deletion opens the newest remaining", async () => {
-  let conversations = [
-    {id:4,member_id:0,title:"Quick",kind:"quick",is_default:0,updated_at_ms:100},
-    {id:1,member_id:0,title:"Old default",kind:"standard",is_default:1,updated_at_ms:1},
-    {id:2,member_id:0,title:"Newest",kind:"standard",is_default:0,updated_at_ms:20},
-    {id:3,member_id:0,title:"Remaining newest",kind:"standard",is_default:0,updated_at_ms:10},
+test("a fresh window opens the member's one conversation, never the quick questions", async () => {
+  const conversations = [
+    {id:4,member_id:0,title:"",kind:"quick",is_default:0,updated_at_ms:100},
+    {id:1,member_id:0,title:"Main sample",kind:"standard",is_default:1,updated_at_ms:1},
   ];
   api.core.mockImplementation(async (method:string) => method === "conversations.list" ? {conversations:structuredClone(conversations)} : {questions:[]});
   const agent=mount();await flush();
-  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({conversation_id:2}));
-  conversations=conversations.filter(c=>c.id!==2);
-  window.dispatchEvent(new CustomEvent("conversation-deleted",{detail:{member:0,id:2}}));await flush();
-  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({conversation_id:3}));
-  expect($(".conversation-caption").textContent).toBe("Remaining newest");agent.hide();
+  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({conversation_id:1}));
+  expect($<HTMLElement>(".conversation-caption").hidden).toBe(true);agent.hide();
 });
 
 test("a member is deleted from its ⋯ menu only after the confirmation, and its open thread returns to Raphael", async () => {
@@ -469,25 +465,17 @@ test("a member is deleted from its ⋯ menu only after the confirmation, and its
   agent.hide();
 });
 
-test("the sidebar's plus makes no conversation, and 新對話 in a member's details opens the new one", async () => {
-  const conversations = [{ id: 31, member_id: 3, title: "Cobalt", is_default: 1, created_at_ms: 1, updated_at_ms: 1 }];
-  api.core.mockImplementation(async (method: string, params: { member_id?: number }) => {
-    if (method === "conversations.list") return { conversations: conversations.filter(c => c.member_id === params.member_id) };
-    if (method !== "conversations.create") return undefined;
-    const made = { id: 100 + conversations.length, member_id: params.member_id!, title: "", is_default: 0, created_at_ms: 2, updated_at_ms: 2 };
-    conversations.push(made);
-    return { conversation: made };
-  });
+test("nobody makes a conversation: neither the sidebar's plus nor a member's details offers one", async () => {
+  const conversations = [{ id: 31, member_id: 3, title: "Cobalt", is_default: 1, kind: "standard", created_at_ms: 1, updated_at_ms: 1 }];
+  api.core.mockImplementation(async (method: string, params: { member_id?: number }) =>
+    method === "conversations.list" ? { conversations: conversations.filter(c => c.member_id === params.member_id) } : undefined);
   const agent = mount(); await flush(); await pick(3); await openDetails();
   $('[data-col="add"]').click();
   expect(document.querySelector('#app-popover [data-pick="conversation"]')).toBeNull();
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  const button = $<HTMLButtonElement>(".mb-det [data-conversation-new]");
-  expect(button.disabled).toBe(false);
-  button.click(); await flush();
-  expect(api.core).toHaveBeenCalledWith("conversations.create", { member_id: 3 });
-  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({ member_id: 3, conversation_id: 101 }));
-  expect($<HTMLButtonElement>(".mb-det [data-conversation-new]").disabled).toBe(true);
+  expect(document.querySelector(".mb-det [data-conversation-new], .mb-det [data-slot=\"conversations\"]")).toBeNull();
+  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({ member_id: 3, conversation_id: 31 }));
+  expect(api.core).not.toHaveBeenCalledWith("conversations.create", expect.anything());
   agent.hide();
 });
 
@@ -503,6 +491,7 @@ test.each([undefined, 0, 4])("primary %s swaps the member picker without changin
   expect(document.querySelector('.mb-col [data-member="0"][aria-current="true"]')).not.toBeNull();
   agent.hide();
 });
+
 
 test("files dropped into a member's thread are sent only to that member", async () => {
   const agent = mount(); await flush(); await pick(3);
@@ -636,7 +625,7 @@ test.each(["edit", "cancel", "regenerate"])("%s after reload retrieves stored fi
   api.agentHistoryList.mockImplementation(async ({ member_id }: { member_id?: number }) => ({ turns: member_id === 3 ? [original] : [] }));
   api.core.mockImplementation(async (method: string) => method === "attachments.get" ? { mime: "text/csv", data: btoa("report") } : { questions: [] });
   const agent = mount(); await flush(); await pick(3);
-  $(`[data-id="8"] [data-act="${action === "regenerate" ? "more-message" : `${action}-message`}"]`).click(); await flush();
+  $(`[data-id="8"] ${action === "regenerate" ? ".ra " : ""}[data-act="${action === "regenerate" ? "more-message" : `${action}-message`}"]`).click(); await flush();
   if (action === "regenerate") { $('[data-pick="regenerate"]').click(); await flush(); }
   expect(api.core).toHaveBeenCalledWith("attachments.get", { id });
   if (action !== "regenerate") {
@@ -740,10 +729,10 @@ test("rerunning an older failed reply asks its original question in the same mem
 
 test("regenerating the latest member reply asks the same question in that member's thread", async () => {
   const agent = mount(); await flush(); await pick(3);
-  document.querySelector<HTMLButtonElement>('.tn[data-id="30"] [data-act="more-message"]')!.click();
+  document.querySelector<HTMLButtonElement>('.tn[data-id="30"] .ra [data-act="more-message"]')!.click();
   await flush(); expect(document.querySelector('[data-pick="regenerate"]')).toBeNull();
   document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
-  document.querySelector<HTMLButtonElement>('.tn[data-id="31"] [data-act="more-message"]')!.click();
+  document.querySelector<HTMLButtonElement>('.tn[data-id="31"] .ra [data-act="more-message"]')!.click();
   await flush(); document.querySelector<HTMLButtonElement>('[data-pick="regenerate"]')!.click();
   await flush();
   expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("問題 31", [], 3, expect.objectContaining({ requestId: expect.any(String) }));

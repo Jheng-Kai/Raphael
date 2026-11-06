@@ -182,15 +182,17 @@ describe("rendered look checks", () => {
       expect(() => checkRendered("slime-marks-at-rest")).toThrow("idle has no running animation");
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });
-  it("requires a rounded square latest button with its own opaque surface (R-UI-98)", () => {
+  it("requires a rounded square latest button with its own opaque surface, centred just above the composer (R-UI-98, R-UI-105)", () => {
     const browser = new Window();
-    browser.document.body.innerHTML = '<div><div class="ra-scroll" style="scrollbar-width:none"></div><button class="conversation-latest" style="border:1px solid gray;border-radius:8px;background:white"></button></div>';
-    const scroll = browser.document.querySelector(".ra-scroll"), latest = browser.document.querySelector("button");
-    let width = 32;
+    browser.document.body.innerHTML = '<div><div class="ra-scroll" style="scrollbar-width:none"></div><button class="conversation-latest" style="border:1px solid gray;border-radius:8px;background:white"></button></div><form class="composer"></form>';
+    const scroll = browser.document.querySelector(".ra-scroll"), latest = browser.document.querySelector("button"), composer = browser.document.querySelector(".composer");
+    let width = 32, left = 84;
     for (const element of [scroll, latest]) {
       element.checkVisibility = () => true;
-      element.getBoundingClientRect = () => ({ width, height: 32 });
+      element.getBoundingClientRect = () => ({ width, height: 32, left, top: 520, bottom: 552 });
     }
+    composer.checkVisibility = () => true;
+    composer.getBoundingClientRect = () => ({ width: 200, height: 80, left: 0, top: 564, bottom: 644 });
     vi.stubGlobal("document", browser.document);
     vi.stubGlobal("getComputedStyle", element => browser.getComputedStyle(element));
     try {
@@ -203,6 +205,8 @@ describe("rendered look checks", () => {
       expect(() => checkRendered("conversation-up")).toThrow("rounded square button (R-UI-98)");
       width = 32; latest.style.backgroundColor = "rgba(0, 0, 0, 0)";
       expect(() => checkRendered("conversation-up")).toThrow("latest has its own opaque surface");
+      latest.style.backgroundColor = "white"; left = 150;
+      expect(() => checkRendered("conversation-up")).toThrow("latest sits centred just above the composer");
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });
   it("requires an event check button to match the scope control height and baseline", () => {

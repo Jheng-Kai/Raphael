@@ -27,9 +27,7 @@ entry; network failure ends the call and retains its already admitted turns.
 Migration 67 stores call metadata and links to existing turns, with scoped cascading
 deletion. Restart closes interrupted calls and retains their transcript.
 
-```powershell
-npm run look -- voice-call-idle-button voice-call-connecting voice-call-listening voice-call-speaking voice-call-transcript voice-call-settings voice-call-ended-card voice-call-no-mic voice-call-busy-confirm --theme both --width 1120,720,1920x1080
-```
+Voice chat is not released yet (owner, 2026-11-06, R-UI-106): the voice button records voice messages only, and the call scenes come back with the feature.
 
 Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
 the busy dialog with dialog-caption-confirm, the settings controls with details-voice, the
@@ -116,25 +114,24 @@ complete flow for creation changes.
 npm run look -- members-expanded sidebar-folders --theme both --width 1120,720,1920x1080
 npm run look -- details member-avatar member-edit details-memory details-routines details-skills details-commands details-voice --theme both --width 1120,720,1920x1080
 npm run look -- sidebar-folders member-text --theme both --width 1120,720,1920x1080
-npm run look -- member-delete new-conversation-rests conversation-delete-main --theme both --width 1120,720,1920x1080
+npm run look -- member-delete member-conversation-sections --theme both --width 1120,720,1920x1080
 npm run look -- member-maker member-maker-chosen member-maker-made --theme both --width 1120,720,1920x1080
 npm run look -- slime-states slime-picker slime-sizes slime-gallery slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-sharp slime-pointer slime-cost --theme both --width 1120,720,1920x1080
 ```
 
 These walk the owner's flows to their end: `member-delete`
 deletes 小森 from the row's ⋯ menu after the confirmation (the menu had lost 刪除 on
-10/24); `new-conversation-rests` presses 新對話 in the details and the button must rest
-while that conversation is unwritten (owner, 10/31: a new conversation is made only from
-a member's details, never the sidebar's ＋, and never beside one still empty);
+10/24); `member-conversation-sections` checks that a member's details have no
+conversation list and nothing that makes one (owner, 2026-11-06: one conversation per
+member, like Grok Bot, R-UI-103);
 `member-maker*` is 新增成員 as a character maker where the conversation stands, slimes
 only (owner, 10/31: no pictures, for copyright; Grok Bot's create page is the reference
 at bots/research/grokbot/12-flaviocopes-create-first-bot.jpg, without its suggestions: other
 people's bots will come from a library later). It asks only for a name; the
 member opens and speaks first (the core's greeting, no model), and the owner's answer
-becomes its job through `set_my_job`, offered only while it has none;
-`conversation-delete-main` deletes Raphael's main conversation, and the
-latest one must take over with no empty 新對話 in its place (the look mock keeps the main
-conversation as the core's `Conversations.main` does).
+becomes its job through `set_my_job`, offered only while it has none. Conversations are
+never deleted; only Raphael's quick questions can be cleared (`quick-clear-confirm`,
+`quick-cleared`).
 
 Keep details/resource-pane/avatar-menu/edit-dialog PNGs; check layering, focus and
 scroll access. Current scenes open editing but do not save. For creation work extend

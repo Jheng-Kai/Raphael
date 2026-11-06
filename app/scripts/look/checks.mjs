@@ -240,7 +240,7 @@ export function checkRendered(name, context = {}) {
       if (!live) require(!visible(panel.querySelector('[data-desktop="take"]')), 'an offline screen offers no Take control');
       else require(panel.querySelector('[data-computer-state-text]')?.textContent === '執行中', 'the live header names the running state');
     }
-    if (tab === 'details') require([...panel.querySelectorAll('.mb-dh')].filter(node => visible(node) && node.textContent === '對話').length === 1, 'Details names the conversation section only once');
+    if (tab === 'details') require([...panel.querySelectorAll('.mb-dh')].filter(node => visible(node) && node.textContent === '對話').length === (panel.querySelector('[data-slot="conversations"]') ? 1 : 0), 'Details names the conversation section once, and only for Raphael');
     if (name === 'member-panel-task-stop' || name === 'member-panel-task-rerun') {
       const items = document.querySelectorAll('.menu [role="menuitem"]');
       require(items.length === 1 && items[0].textContent.trim() === (name.endsWith('stop') ? '停止' : '重新執行'), 'work exposes only the action for its current state');
@@ -254,7 +254,7 @@ export function checkRendered(name, context = {}) {
       const closeRight = panel.querySelector('[data-det="close"]').getBoundingClientRect().right, listBox = panel.querySelector('.mb-task-list').getBoundingClientRect(), tabBar = panel.querySelector('.mb-tabs .tabs').getBoundingClientRect();
       require(Math.abs(closeRight - listBox.right) < 1, `close stands on the content's right edge (${Math.round(closeRight)} vs ${Math.round(listBox.right)})`);
       require(Math.abs((tabBar.left + tabBar.right) / 2 - (listBox.left + listBox.right) / 2) < 1, 'the tabs sit in the middle of the content');
-      require(!!panel.querySelector('.mb-panel-routines') && !!panel.querySelector('[data-slot="conversations"]'), 'routines and conversations follow work');
+      require(!!panel.querySelector('.mb-panel-routines') && !panel.querySelector('[data-slot="conversations"]'), 'routines follow work, and a member has no conversation list');
     } else if (name === 'member-panel-details-empty') {
       require(panel.querySelector('.mb-panel-tasks').textContent.includes('還沒有工作'), 'work has a one-line empty state');
     } else if (name === 'member-panel-library' || name === 'member-panel-library-more') {
@@ -2422,6 +2422,8 @@ export function checkRendered(name, context = {}) {
       const box = latest.getBoundingClientRect(), style = getComputedStyle(latest);
       require(Math.abs(box.width - box.height) <= 1 && parseFloat(style.borderRadius) > 0 && parseFloat(style.borderRadius) < box.width / 2, "latest is a rounded square button (R-UI-98)");
       require(style.backgroundColor !== 'rgba(0, 0, 0, 0)' && parseFloat(style.borderWidth) >= 1, "latest has its own opaque surface above message content");
+      const composer = [...scroll.parentElement.parentElement.querySelectorAll('.composer')].find(visible)?.getBoundingClientRect();
+      require(composer && Math.abs(box.left + box.width / 2 - (composer.left + composer.width / 2)) <= 2 && box.bottom <= composer.top && composer.top - box.bottom <= 24, "latest sits centred just above the composer");
     }
     return { check: name, top: scroll.scrollTop, height: scroll.scrollHeight };
   }
@@ -2477,8 +2479,8 @@ export function checkRendered(name, context = {}) {
     return { check: name, fontSize: getComputedStyle(title).fontSize };
   }
   if (name === "details-quick-once") {
-    const section = document.querySelector('[data-conversation-section="quick"]');
-    require(visible(section) && !section.querySelector('.mb-dh') && section.querySelectorAll('[data-conversation-open]').length === 1, "quick questions appear once as the accessible conversation item");
+    const quick = [...document.querySelectorAll('.mb-det [data-conversation-open]')].filter(row => visible(row) && row.textContent.includes('快速提問'));
+    require(quick.length === 1, "quick questions appear once as the accessible conversation item");
     return { check: name };
   }
   if (name === "conversation-scroll-edge") {
@@ -2623,13 +2625,13 @@ export function checkRendered(name, context = {}) {
   if (name === "details-alignment") {
     const panel=document.querySelector('.mb-det:not([hidden])');
     if (!visible(panel)) return {check:name,open:false};
-    const blocks=[...panel.querySelectorAll('.conversation-tools, .mb-panel-pages, .mb-field > .sel, [data-member-brain] .mp-trigger')].filter(visible);
-    // New conversation is a + beside the 對話 heading (2026-11-05); the search field sets the inset now.
-    const reference=panel.querySelector('.conversation-tools input').getBoundingClientRect();
+    // Conversations have no search field since each member has one (2026-11-06); the first block sets the inset.
+    const blocks=[...panel.querySelectorAll('.mb-task-list, .mb-panel-pages, .mb-field > .sel, [data-member-brain] .mp-trigger')].filter(visible);
+    if (!blocks.length) return {check:name,blocks:0};
+    const reference=blocks[0].getBoundingClientRect();
     for (const block of blocks) {
       const box=block.getBoundingClientRect();
-      const field=block.matches('.conversation-tools') ? block.querySelector('input').getBoundingClientRect() : box;
-      require(Math.abs(field.left-reference.left)<1 && Math.abs(field.right-reference.right)<1,"every details block shares the New conversation field inset");
+      require(Math.abs(box.left-reference.left)<1 && Math.abs(box.right-reference.right)<1,"every details block shares one inset");
     }
     return {check:name,blocks:blocks.length};
   }
@@ -2904,18 +2906,32 @@ export function checkRendered(name, context = {}) {
     return { check: name, locale, surface: pane ? `settings:${pane}` : tab ? `dictation:${tab}` : page, stale };
   })();
   if (name === "conversation-sections") {
+    // One conversation per member (owner, 2026-11-06): Raphael's panel has his conversation and his quick questions, nothing to add.
     const host = document.querySelector('.mb-det .conversation-list');
     require(visible(host), "the conversation list is visible");
-    const quick = host.querySelector('[data-conversation-section="quick"]'), standard = host.querySelector('[data-conversation-section="standard"]');
-    // Since the panel tabs the 詳細資料 section names the list once, above it.
-    const heading = host.closest('section')?.querySelector(':scope > .mb-dh') ?? standard?.querySelector('.mb-dh');
-    require(visible(standard) && heading?.textContent === "對話", "ordinary conversations use the existing small heading");
-    if (quick) {
-      require(!quick.querySelector('.mb-dh') && quick.querySelector('[data-conversation-open]').textContent.includes("快速提問"), "quick questions are named once on their row");
-      require(standard.getBoundingClientRect().top - quick.getBoundingClientRect().bottom >= 8, "the two sections have breathing room");
-      require(!!quick.querySelector('[data-conversation-more]'), "the quick row has its overflow menu");
-    }
-    return { check: name, quick: !!quick, headings: [...host.querySelectorAll('.mb-dh')].map(node => node.textContent) };
+    const heading = host.closest('section')?.querySelector(':scope > .mb-dh');
+    require(heading?.textContent === "對話" && !heading.querySelector('button'), "one small heading names the rows, with no button beside it");
+    const rows = [...host.querySelectorAll('[data-conversation-open]')];
+    require(rows.map(row => row.querySelector('span')?.textContent).join("|") === "主要對話|快速提問", "the rows are his conversation and his quick questions");
+    require(rows.filter(row => row.getAttribute('aria-current') === 'true').length === 1, "the open one is marked");
+    require(!rows[0].closest('.conversation-row').querySelector('[data-conversation-more]') && !!rows[1].closest('.conversation-row').querySelector('[data-conversation-more]'), "only quick questions have a menu, to clear them");
+    require(!document.querySelector('.mb-det [data-conversation-new], .mb-det .conversation-tools'), "nothing makes or searches conversations");
+    return { check: name, rows: rows.length };
+  }
+  if (name === "message-menu") {
+    const menu = document.querySelector('#app-popover');
+    const picks = [...menu.querySelectorAll('[data-pick]')].map(item => item.dataset.pick).filter(pick => pick !== "regenerate");
+    require(picks.join("|") === "reply|copy", "the menu is Reply and Copy, with no read aloud or delete");
+    const reactions = [...menu.querySelectorAll('.menu-reactions [data-lead]')];
+    require(reactions.length === 4 && reactions.every(visible), "its reactions stand above the items");
+    require(reactions[0].getBoundingClientRect().bottom <= menu.querySelector('[data-pick]').getBoundingClientRect().top + 1, "the reactions come first");
+    return { check: name, picks };
+  }
+  if (name === "member-no-conversations") {
+    const panel = document.querySelector('.mb-det:not([hidden])');
+    require(panel && visible(panel), "the details are open");
+    require(!document.querySelector('.mb-det [data-slot="conversations"], .mb-det [data-conversation-new]'), "a member has no conversation list and nothing to add one");
+    return { check: name };
   }
   if (name === "quick-clear-confirm") {
     const dialog = document.querySelector('.mb-confirm');
@@ -2938,8 +2954,8 @@ export function checkRendered(name, context = {}) {
   if (["composer-voice-destination", "composer-voice-answer"].includes(name)) {
     const calls = window.__look.calls.filter(call => call.command === "window_hotkey" && ["agent_down", "agent_up"].includes(call.kind));
     require(calls.length === 2, "one press and release crossed the native boundary");
-    const args = calls[0], expected = args.memberId === 1 ? 12 : 2;
-    require(args.conversationId === expected && calls[1].conversationId === expected && !args.destination, "voice names the selected non-default conversation");
+    const args = calls[0], expected = args.memberId === 1 ? 11 : 1;
+    require(args.conversationId === expected && calls[1].conversationId === expected && !args.destination, "voice names the member's one conversation");
     const slot = document.querySelector('.cmp-voice'), box = slot.getBoundingClientRect();
     require(slot.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)), "the composer's voice or Stop control is unobscured");
     if (name === "composer-voice-destination") require(visible(document.querySelector('[data-key="hearing"]')) && document.querySelector('.composer').dataset.taskState === "ack", "the original thread has a waiting line and Stop");
@@ -4263,20 +4279,6 @@ export function checkRendered(name, context = {}) {
     require(!/跟隨|連接其他來源/.test(menu.textContent), "nothing about following a default or adding a source");
     return { check: name };
   }
-  if (name === "conversation-deleted") {
-      const next=window.__look.data.conversations.find(item=>item.member_id===0&&item.is_default&&item.kind!=="quick");
-      require(next && window.__look.calls.filter(call => call.method === "agent.history.list").at(-1)?.params?.conversation_id === next.id, "deletion opens the new server default instead of cached quick history");
-    const rows = [...document.querySelectorAll(".mb-det [data-conversation-open]")].map(row => row.textContent);
-    require(!rows.some(text => text.includes("這週的研究與安排")), "the deleted conversation is gone");
-    require(!rows.some(text => text.includes("新對話")), "no empty 新對話 takes its place");
-    require(window.__look.data.conversations.filter(item => item.member_id === 0 && item.is_default).length === 1, "another conversation became the main one");
-    require(document.querySelector(".toast")?.textContent.includes("已刪除「這週的研究與安排」"), "a notice names what was deleted");
-    return { check: name, rows };
-  }
-  if (name === "new-conversation-rests") {
-    require(document.querySelector(".mb-det [data-conversation-new]").disabled, "it rests while the open conversation is unwritten");
-    return { check: name };
-  }
   if (name === "member-maker" || name === "member-maker-chosen") {
     const dialog = document.querySelector(".cr-dialog"), box = dialog.closest(".mb-scrim").getBoundingClientRect(), side = document.getElementById("nav").getBoundingClientRect();
     if (!matchMedia("(max-width: 859px)").matches) require(box.left >= side.right - 1 && visible(document.getElementById("nav")), "it stands where the conversation stands, the sidebar beside it");
@@ -4983,8 +4985,9 @@ export function checkRendered(name, context = {}) {
     require(title.getAttribute("aria-expanded") === "true", "title reflects the panel state");
     require(title.getAttribute("aria-controls") === panel.id && !title.hasAttribute("aria-haspopup"), "title controls details without a popup");
     require([...title.querySelectorAll(".i")].every(icon => icon.closest(".mb-pill-face")), "title has no dropdown glyph outside its member avatar");
+    // Only Raphael has conversation rows (his and quick questions); a member has none.
     const list = panel.querySelector(".conversation-list");
-    require(visible(list) && list.scrollWidth <= list.clientWidth + 1, "conversation management fits the panel");
+    require(!list || (visible(list) && list.scrollWidth <= list.clientWidth + 1), "Raphael's conversation rows fit the panel");
     const picker = panel.querySelector('[data-member-brain] .mp-trigger');
     if (picker) {
       require(panel.querySelectorAll('.mp-trigger').length === 1, "member details has one shared brain control");
@@ -4995,7 +4998,7 @@ export function checkRendered(name, context = {}) {
       }
       require(source.scrollWidth <= source.clientWidth + 1, "the complete brain source remains readable");
     }
-    return { check: name, width: list.clientWidth, scrollWidth: list.scrollWidth };
+    return { check: name, rows: list ? list.querySelectorAll('[data-conversation-open]').length : 0 };
   }
   if (name === "composer-pair") {
     const form = [...document.querySelectorAll(".composer")].find(visible);

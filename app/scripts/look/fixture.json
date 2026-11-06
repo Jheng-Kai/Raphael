@@ -1796,22 +1796,6 @@
       "updated_at_ms": 1792807140000
     },
     {
-      "id": 2,
-      "member_id": 0,
-      "title": "專案規劃與會議記錄",
-      "is_default": false,
-      "created_at_ms": 1792720800000,
-      "updated_at_ms": 1792807140000
-    },
-    {
-      "id": 3,
-      "member_id": 0,
-      "title": "日本旅行行程",
-      "is_default": false,
-      "created_at_ms": 1792720800000,
-      "updated_at_ms": 1792807140000
-    },
-    {
       "id": 11,
       "member_id": 1,
       "title": "研究資料整理",

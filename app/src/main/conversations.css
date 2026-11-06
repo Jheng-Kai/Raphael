@@ -9,24 +9,21 @@
 .pending-questions [role=alert] { margin: var(--sp-1) 0 0; color: var(--err); }
 .mb-det .conversation-list { border: 0; border-radius: 0; overflow: hidden; }
 .mb-det .conversation-open { border: 0; background: transparent; }
-.mb-det .conversation-open:hover, .mb-det .conversation-new:hover { background: var(--hover); }
+.mb-det .conversation-open:hover { background: var(--hover); }
+/* The open one of Raphael's two rows carries a quiet fill, as the sidebar's selected row does. */
+.mb-det .conversation-open[aria-current="true"] { background: color-mix(in srgb, var(--text) 6%, transparent); }
 .conversation-tools { display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-2) 0; }
-.conversation-tools input, .conversation-name { min-width: 0; min-height: var(--h-ctl); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--panel); color: var(--text); outline: none; }
+.conversation-tools input { min-width: 0; min-height: var(--h-ctl); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--panel); color: var(--text); outline: none; }
 .conversation-tools input { width: 0; flex: 1; }
-.conversation-name { width: 100%; }
-:root[data-keys] .conversation-tools input:focus, :root[data-keys] .conversation-name:focus { border-color: var(--focus); box-shadow: 0 0 0 2px var(--accent-ring); }
+:root[data-keys] .conversation-tools input:focus { border-color: var(--focus); box-shadow: 0 0 0 2px var(--accent-ring); }
 .conversation-rows { max-height: 340px; overflow-y: auto; padding: var(--sp-1) 0; }
-.conversation-section > .mb-dh { padding: 0 var(--sp-2); }
-.conversation-section + .conversation-section { margin-top: var(--sp-3); }
 .conversation-row { display: flex; align-items: center; border-radius: var(--r-sm); }
 .conversation-row:hover { background: var(--hover); }
 .conversation-row .conversation-open { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1); text-align: left; padding: var(--sp-2) var(--sp-2); }
 .conversation-open span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .conversation-open small { color: var(--text-3); font-size: var(--fs-2xs); }
 .conversation-more { flex: 0 0 auto; margin-right: var(--sp-1); }
-.conversation-empty { padding: var(--sp-4); text-align: center; color: var(--text-3); }
 .conversation-search { width: min(390px, calc(100vw - 24px)); max-width: calc(100vw - 24px); }
-.conversation-list .conversation-new { width: 100%; margin-block: var(--sp-2); justify-content: flex-start; gap: var(--sp-2); }
 .conversation-head { display: flex; justify-content: center; min-width: 0; }
 .page.page-agent .page-head.mb-head { grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr); }
 .mb-head-l { display: flex; align-items: center; gap: var(--sp-1); }
@@ -92,8 +89,7 @@
 .message-search-main { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
 .message-search-title { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
 .message-search-title b { flex-shrink: 0; max-width: 60%; font-size: var(--pa-row-name); font-weight: 600; }
-.message-search-title b, .message-search-title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.message-search-title > span { font-size: var(--pa-row-role); color: var(--text-3); }
+.message-search-title b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .message-search-snippet { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; font-size: var(--pa-row-pv); }
 .message-search-result small { color: var(--text-3); font-size: var(--fs-2xs); }
 .message-search-result mark { color: var(--on-selection); background: var(--selection); border-radius: var(--r-sm); font-weight: 600; }
