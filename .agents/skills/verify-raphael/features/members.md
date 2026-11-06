@@ -115,7 +115,7 @@ npm run look -- members-expanded sidebar-folders --theme both --width 1120,720,1
 npm run look -- details member-avatar member-edit details-memory details-routines details-skills details-commands details-voice --theme both --width 1120,720,1920x1080
 npm run look -- sidebar-folders member-text --theme both --width 1120,720,1920x1080
 npm run look -- member-delete member-conversation-sections --theme both --width 1120,720,1920x1080
-npm run look -- member-maker member-maker-chosen member-maker-made --theme both --width 1120,720,1920x1080
+npm run look -- member-maker member-maker-chosen member-maker-greeting member-maker-made --theme both --width 1120,720,1920x1080
 npm run look -- slime-states slime-picker slime-sizes slime-gallery slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-sharp slime-pointer slime-cost --theme both --width 1120,720,1920x1080
 ```
 
@@ -128,8 +128,10 @@ member, like Grok Bot, R-UI-103);
 only (owner, 10/31: no pictures, for copyright; Grok Bot's create page is the reference
 at bots/research/grokbot/12-flaviocopes-create-first-bot.jpg, without its suggestions: other
 people's bots will come from a library later). It asks only for a name; the
-member opens and speaks first (the core's greeting, no model), and the owner's answer
-becomes its job through `set_my_job`, offered only while it has none. Conversations are
+member opens and speaks first, typing while its own model writes the greeting (since
+2026-11-06, R-COLLEAGUE-02: no tools, at most two sentences, only known owner context; a
+failed one is an ordinary failure line whose 重新產生 calls `members.greet`), and the
+owner's answer becomes its job through `set_my_job`, offered only while it has none. Conversations are
 never deleted; only Raphael's quick questions can be cleared (`quick-clear-confirm`,
 `quick-cleared`).
 
@@ -922,7 +924,7 @@ member-profile.test.ts. This presentation change adds no migration or RPC.
 
 R-COLLEAGUE-01..03: New member > Start from a template opens eight shipped slime roles; Open template file uses the system file picker and previews profile, skill names, paused routines and one disabled connect card per app. Import creates the colleague without grants; only subsequent per-app Connect requests sign-in and member access. The member row menu exports one .raphael-member file without memory, pictures, credentials or model choices.
 
-An ordinary new member's first shared answer form offers locally computed ready-app/role suggestions and free text. Sending a choice uses the existing composer words and task route. The shared API/CLI prompt puts the one outcome question rule beside owner input before set_my_job saves the goal. Fake-brain tests prove routing and persistence, not a real model's judgment.
+Since 2026-11-06 a new member's greeting is written by its own model (see above) and carries no choice form; greetings stored earlier with locally computed suggestions still show them, and sending a choice uses the existing composer words and task route. The shared API/CLI prompt puts the one outcome question rule beside owner input before set_my_job saves the goal. Fake-brain tests prove routing and persistence, not a real model's judgment.
 
 The shared team mount /home/cua/team creates context/, meetings/ and projects/ on first computer use. Existing contents survive. Handoffs and requested wrap-ups may cite successful file writes there.
 

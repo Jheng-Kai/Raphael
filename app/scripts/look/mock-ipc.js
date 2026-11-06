@@ -952,9 +952,15 @@ export function installMock(fixture, config = {}, target = window) {
         const member = { ...data.members[1], role: "", blurb: "", ...p, id: nextId(data.members) };
         data.members.push(member);
         if (p.greet) {
+          // As the core does since 2026-11-06: the member types while its own model writes the greeting, with no choices.
           mainConversation(member.id);
           const conversation = data.conversations.find(item => item.member_id === member.id);
-          data.turns.push({ id: nextId(data.turns), session_id: `greeting-${member.id}`, question: "", route: "greeting", prefix: "", text: `你好，我是${member.name}。你想請我幫你做什麼？`, detail: JSON.stringify({kind:"greeting",options:data.colleagueSample.options}), status: "done", cost_usd: 0, source: "greeting", model: null, steps: [], messages: [], attachments: [], member_id: member.id, conversation_id: conversation.id, created_at_ms: data.now, created_at: new Date(data.now).toISOString() });
+          const greeting = { id: nextId(data.turns), session_id: `greeting-${member.id}`, question: "", route: "greeting", prefix: "", text: "", detail: null, status: "running", cost_usd: 0, source: "greeting", model: null, steps: [], messages: [], attachments: [], member_id: member.id, conversation_id: conversation.id, created_at_ms: data.now, created_at: new Date(data.now).toISOString() };
+          data.turns.push(greeting);
+          if (!variant.greetingPending) setTimeout(() => {
+            Object.assign(greeting, { status: "done", text: `嗨，我是${member.name} 👋 想讓我先幫你分擔哪件事？可以是手上的專案，或其他成員還沒顧到的事。` });
+            notify("AgentTurn", { turn_id: greeting.id, member_id: member.id });
+          }, 600);
         }
         notify("MembersChanged", { member_id: member.id });
         return { member, routine_offer: variant.routineOffer ? {title:"範例摘要",prompt:"整理範例資料。",schedule:{kind:"daily",time:"09:00"}} : null };

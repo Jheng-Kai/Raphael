@@ -25,6 +25,7 @@ const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { st
   membersToolChoices: vi.fn(),
   membersUpdate: vi.fn(),
   membersCreate: vi.fn(),
+  membersGreet: vi.fn(async () => ({ turn_id: 99 })),
   membersDelete: vi.fn(),
   settingsGet: vi.fn(async () => ({settings:{computer_ssh_alias:''}})),
   membersSetAvatar: vi.fn(),
@@ -714,6 +715,20 @@ test("rerunning an older failed reply asks its original question in the same mem
   const agent = mount(); await flush(); await pick(3);
   $('[data-id="32"] .message-actions .rerun').click(); await flush();
   expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("問題 32", [], 3, expect.objectContaining({requestId:expect.any(String)}));
+  agent.hide();
+});
+
+test("a failed greeting is written again by the member's own model, and a greeting that came through is never written twice", async () => {
+  const greeting = (status: string, text: string) => turn(34, { member_id: 3, question: "", route: "greeting", source: "greeting", prefix: "", status, text });
+  api.agentHistoryList.mockResolvedValue({ turns: [greeting("error", "CLI stopped")] });
+  const agent = mount(); await flush(); await pick(3);
+  $('[data-id="34"] .rerun').click(); await flush();
+  expect(api.membersGreet).toHaveBeenCalledExactlyOnceWith(3);
+  expect(api.agentAskText).not.toHaveBeenCalled();
+  api.agentHistoryList.mockResolvedValue({ turns: [greeting("done", "嗨，我是日文老師。想讓我幫你分擔什麼？")] });
+  await pick(0); await pick(3);
+  document.querySelector<HTMLButtonElement>('.tn[data-id="34"] .ra [data-act="more-message"]')!.click(); await flush();
+  expect([...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(item => item.dataset.pick)).toEqual(["reply", "copy"]);
   agent.hide();
 });
 

@@ -958,7 +958,8 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   const waitingForOwner = look.waitingForOwner?.(turn.id) ?? false;
   const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
   const revealing = look.revealing?.(turn.id) ?? false;
-  const regenerate = !live && said && turn.id === look.regenerateTurnId;
+  // A greeting has no words of the owner's, yet a failed one is written again (the core's members.greet).
+  const regenerate = !live && (said || turn.route === "greeting") && turn.id === look.regenerateTurnId;
   // A turn without reply messages answers in its text: a question spoken to Raphael with public progress has no other.
   // A draft handed to this chat (`route` "draft") is a card, and what it is told is for the model, not for the page.
   const textAnswer = turn.status === "confirm" || settledDraft || turn.route === "draft" || (turn.route === "greeting" && !!greetingHTML(turn, look.greetingOpen ?? true)) || !turn.text.trim()

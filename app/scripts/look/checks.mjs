@@ -4352,6 +4352,17 @@ export function checkRendered(name, context = {}) {
     require(greeting.length === 1 && greeting[0].textContent.includes("哥布達") && greeting[0].textContent.includes("？"), "it speaks first and asks what it is for");
     require(![...document.querySelectorAll(".page-agent .owner-message")].some(visible), "nothing is put in the owner's mouth");
     require(!visible(document.querySelector(".page-agent .work-toggle")), "no steps are claimed for what it said");
+    require(!document.querySelector(".page-agent [data-greeting-question]"), "a model-written greeting carries no choice form");
+    return { check: name };
+  }
+  if (name === "member-maker-greeting") {
+    const turn = window.__look.data.turns.find(item => item.route === "greeting" && item.status === "running");
+    require(turn && turn.question === "", "the greeting is a turn with no words of the owner's");
+    const row = document.querySelector(`.page-agent .tn[data-id="${turn.id}"]`);
+    require(visible(row) && row.dataset.live === "true", "the new member's greeting is under way in its conversation");
+    require(visible(row.querySelector(".presence, .thinking, .live-presence, [data-presence]")), "the member shows it is typing");
+    require(![...document.querySelectorAll(".page-agent .owner-message")].some(visible), "nothing is put in the owner's mouth");
+    require(visible(document.querySelector(".composer .cmp-input")), "the owner can already write");
     return { check: name };
   }
   if (name === "composer-model-menu" || name === "composer-model-depth") {

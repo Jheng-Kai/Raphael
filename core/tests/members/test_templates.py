@@ -55,8 +55,7 @@ async def test_template_refuses_extra_fields_secrets_and_invalid_recipes_without
         assert len(rig.service.store.members()) == 1
 
 
-async def test_greeting_choices_use_only_connected_apps_and_the_role_without_a_brain(rig):
-    # Keep the historical contract name: stored local choices remain readable without a model call.
+async def test_a_stored_greeting_with_old_choices_still_loads(rig):
     new = (await rig.call("members.create", {"name": "Writer"}))["member"]
     detail = json.dumps({"kind": "greeting", "options": ["An old suggestion"]})
     rig.service._history.add(session_id="legacy", question="", route="greeting", prefix="",

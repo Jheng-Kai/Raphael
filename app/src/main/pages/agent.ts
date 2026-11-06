@@ -1821,7 +1821,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (!source) return;
     const owner = source.key === "question";
     const items: Parameters<typeof openActions>[1][number][] = [{ id: "reply", label: t("chat.reply"), icon: "reply" }, { id: "copy", label: t("chat.copy"), icon: "copy" }];
-    if (!owner && control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id) items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
+    // A greeting that came through stays: only a failed one is written again (its rerun button), never a second.
+    if (!owner && control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id && source.turn.route !== "greeting") items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
     const message = control.closest<HTMLElement>(".chat-message");
     const reactions = !owner && message?.querySelector('[data-act="react-message"]') ? source.turn.reactions?.[source.key] ?? [] : null;
     openActions(control, items, pick => {
@@ -1844,6 +1845,17 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const latest = look().regenerateTurnId;
     if (!source || latest === undefined || latest !== source.turn.id && !(source.turn.status === "error" && control.classList.contains("rerun"))) return;
     const member = memberId(), turn = source.turn;
+    // A greeting has no question to send again: the core writes it again with the member's own model.
+    if (turn.route === "greeting") {
+      if (turn.status !== "error") return;
+      regenerating.add(turn.id); render(true);
+      try {
+        await api.membersGreet(member);
+        if (visible && memberId() === member) await load(false);
+      } catch (err) { toaster.info(describeError(err)); }
+      finally { regenerating.delete(turn.id); render(true); }
+      return;
+    }
     const sentConversation = conversationId();
     const requestId = crypto.randomUUID();
     const epoch = attachmentEpoch;
