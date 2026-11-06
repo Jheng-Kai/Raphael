@@ -249,7 +249,7 @@ async def test_stop_selects_inflight_scope_instead_of_a_later_terminal_row(make_
     try:
         conversation = rig.service.conversations.main(0)
         queued = await typed(rig, 'Return this queued message')
-        other = rig.service.conversations.create(0)['id']
+        other = rig.service.conversations.quick()
         terminal = rig.service._history.add(
             session_id='live', question='Finished elsewhere', route='answer', prefix='', text='Old answer',
             status='done', source='app', conversation_id=other,
@@ -279,7 +279,7 @@ async def test_stop_ignores_terminal_history_owned_by_another_member(make_rig, c
     ask = _Ask(session_id='shared-session', text='Return my draft', language='en', source='app', conversation_id=conversation)
     queued, _ = rig.service._inbox.admit(ask, dict(text=ask.text, language='en', source='app'))
     member = MemberStore(rig.conn).create_member(name='Example')
-    other = rig.service.conversations.create(member.id)['id']
+    other = rig.service.conversations.main(member.id)
     terminal = rig.service._history.add(
         session_id=ask.session_id, question='Finished for another member', route='answer', prefix='', text='Kept answer',
         status='done', source='app', member_id=member.id, conversation_id=other,

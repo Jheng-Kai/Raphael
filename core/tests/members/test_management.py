@@ -201,10 +201,9 @@ async def test_registry_routes_rooms_conversations_skills_dictionary_and_setting
         assert "Edited review" in card and "Reader" in card
         room = (await run("room_members", room_id=room["id"], member_ids=[0, person["id"]]))["room"]
         assert other["id"] not in room["member_ids"]
-        conversation = (await run("conversation_create", member_id=person["id"]))["conversation"]
-        await run("conversation_rename", id=conversation["id"], title="Notes")
-        await run("conversation_delete", id=conversation["id"])
-        assert all(item["id"] != conversation["id"] for item in (await app.call("conversations.list", {"member_id": person["id"]}))["conversations"])
+        conversation = (await run("conversation_list", member_id=person["id"]))["conversations"][0]
+        await run("conversation_clear", id=conversation["id"])
+        assert [item["id"] for item in (await app.call("conversations.list", {"member_id": person["id"]}))["conversations"]] == [conversation["id"]]
         skill = app.members.capabilities.keep_skill(person["id"], "local-test", "---\nname: Review\ndescription: Read reports\n---\nRead carefully.")
         await run("member_skill_update", member_id=person["id"], id=skill["id"], text="---\nname: Review\ndescription: Read reports\n---\nCheck evidence.", expected_hash=skill["revision"], enabled=False)
         assert not app.members.capabilities.skills(person["id"])[0]["enabled"]
@@ -285,7 +284,7 @@ async def test_server_approval_cannot_be_reused_or_redirected(rig):
         await rig.service.admin_tool(0, action.tool, action.args, interactive=True, approval=approval)
 
 
-@pytest.mark.parametrize("tool", ["member_history_clear", "conversation_clear", "conversation_delete"])
+@pytest.mark.parametrize("tool", ["member_history_clear", "conversation_clear"])
 async def test_deleting_the_requesting_chat_finishes_without_cancelling_itself(setup, client, tool):
     rig, team = setup
     team.members.register(rig.rpc)

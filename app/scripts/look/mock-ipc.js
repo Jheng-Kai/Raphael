@@ -1082,10 +1082,7 @@ export function installMock(fixture, config = {}, target = window) {
       case "groups.update": { const group = update(data.groups, p.id, p); notify("MembersChanged", { member_id: 0 }); return { group }; }
       case "groups.delete": data.groups = data.groups.filter(item => item.id !== p.id); notify("MembersChanged", { member_id: 0 }); return { deleted: true };
       case "conversations.list": mainConversation(p.member_id ?? 0); return { conversations: byMember(data.conversations, p).map(c=>({...c,turn_count:data.turns.filter(t=>t.conversation_id===c.id).length})) };
-      case "conversations.create": { mainConversation(p.member_id ?? 0); const conversation = { id: nextId(data.conversations), member_id: p.member_id ?? 0, title: p.title ?? "", is_default: false, kind: "standard", created_at_ms: data.now, updated_at_ms: data.now }; data.conversations.push(conversation); return { conversation }; }
-      case "conversations.rename": update(data.conversations, p.id, { title: p.title }); return {};
       case "conversations.clear": { const member = data.conversations.find(item => item.id === p.id).member_id; data.turns = data.turns.filter(item => item.conversation_id !== p.id); notify("ConversationsChanged", { member_id: member }); notify("AgentTurn", { turn_id: 0, member_id: member }); return { cleared: 1 }; }
-      case "conversations.delete": { const gone = data.conversations.find(item => item.id === p.id); data.turns = data.turns.filter(item => item.conversation_id !== p.id); data.conversations = data.conversations.filter(item => item.id !== p.id); if (gone) mainConversation(gone.member_id); return { deleted: 1 }; }
       case "agent.history.list": {
         const turns = byMember(data.turns, p).filter(turn => p.conversation_id === undefined || turn.conversation_id === p.conversation_id);
           if (p.after_id !== undefined) {

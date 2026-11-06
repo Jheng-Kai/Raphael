@@ -26,7 +26,7 @@ from .test_service import make_rig  # noqa: F401
 
 def stored(conn, **overrides):
     conversation = conn.execute("SELECT id FROM conversations LIMIT 1").fetchone()
-    conversation_id = conversation[0] if conversation else None
+    conversation_id = overrides.get("conversation_id", conversation[0] if conversation else None)
     turn = AgentHistory(conn).add(session_id="page", question="show", route="answer", prefix="", text="shown",
                                   status="done", source="app", conversation_id=conversation_id)
     values = dict(turn_id=turn, member_id=0, conversation_id=conversation_id, title="Product", html="<button>Choose</button>")
@@ -266,8 +266,8 @@ async def test_pages_open_reports_typed_gone_error(make_rig):
 
 async def test_update_cannot_replace_a_page_from_another_conversation(make_rig, client):
     rig = make_rig()
-    page = stored(rig.conn)
-    other = rig.service.conversations.create(0)["id"]
+    page = stored(rig.conn, conversation_id=rig.service.conversations.quick())
+    other = rig.service.conversations.main()
     client.chats = [chat("Updating.", ("update_page", {"page_id": page["id"], "html": "Changed"})),
                     chat('{"text":"Please choose a page in this conversation."}')]
     await rig.call("agent.ask", {"session_id": "foreign", "text": "Change the page", "source": "app",

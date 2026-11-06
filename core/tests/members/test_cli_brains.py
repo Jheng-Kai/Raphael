@@ -199,7 +199,7 @@ print(json.dumps({"type":"result","subtype":"success","session_id":"thread-one",
     assert client.calls == 0 and not client.chat_calls
 
 
-async def test_named_cli_conversations_resume_only_their_own_native_session(setup, tmp_path):
+async def test_members_main_cli_conversations_resume_only_their_own_native_session(setup, tmp_path):
     rig, team = setup
     teacher = member(team, model="cli:claude")
     record = tmp_path / "native-sessions.jsonl"
@@ -214,18 +214,19 @@ with Path(RECORD).open("a", encoding="utf-8") as stream:
     stream.write(json.dumps({"workspace":str(workspace), "resume":resume, "native":native}) + "\\n")
 print(json.dumps({"type":"result", "subtype":"success", "session_id":native, "result":"Finished."}), flush=True)
 '''.replace("RECORD", repr(str(record))))
-    first = (await rig.call("conversations.create", {"member_id": teacher.id}))["conversation"]["id"]
-    second = (await rig.call("conversations.create", {"member_id": teacher.id}))["conversation"]["id"]
-    for number, conversation in enumerate([first, second, first]):
+    other = member(team, name="Researcher", model="cli:claude")
+    first = rig.service.conversations.main(teacher.id)
+    second = rig.service.conversations.main(other.id)
+    for number, (who, conversation) in enumerate([(teacher.id, first), (other.id, second), (teacher.id, first)]):
         result = await rig.call("agent.ask", {"session_id": f"named-{number}", "text": "Teach me",
-                                             "source": "app", "ui_language": "en", "member_id": teacher.id,
+                                             "source": "app", "ui_language": "en", "member_id": who,
                                              "conversation_id": conversation})
         assert result["text"] == "Finished."
     assert (await typed(rig, "Hello", teacher.id))["text"] == "Finished."
     rows = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
-    assert [row["resume"] for row in rows] == [None, None, f"native-{first}", None]
+    assert [row["resume"] for row in rows] == [None, None, f"native-{first}", f"native-{first}"]
     assert rows[0]["workspace"] == rows[2]["workspace"]
-    assert len({row["workspace"] for row in rows}) == 3
+    assert len({row["workspace"] for row in rows}) == 2
 
 
 async def test_a_cli_reply_is_one_message_unless_the_model_breaks_it(setup, tmp_path, client):

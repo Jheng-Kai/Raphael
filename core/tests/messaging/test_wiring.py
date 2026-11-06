@@ -56,6 +56,33 @@ async def test_a_message_is_asked_like_a_spoken_question_and_lands_in_the_histor
 
 
 @pytest.mark.parametrize("kind", ["telegram", "slack", "discord"])
+async def test_private_messaging_after_fold_appends_to_main(tmp_path, monkeypatch, kind):
+    from raphael_core import paths
+    from raphael_core.agent.conversations import Conversations
+    from raphael_core.agent.history import AgentHistory
+    from raphael_core.brain import db
+
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 67)
+        connection = db.connect(paths.db_path(tmp_path))
+    main = Conversations(connection).main()
+    extra = connection.execute("INSERT INTO conversations(member_id,title,created_at_ms,updated_at_ms) VALUES(0,'Old',1,2)").lastrowid
+    previous = AgentHistory(connection).add(session_id="previous-message", question="Earlier message", route="answer", prefix="", text="Saved answer", status="done", conversation_id=extra)
+    connection.commit()
+    connection.close()
+    app = App(data_dir=tmp_path, fake_llm=True, load_kit=lambda: SimpleNamespace())
+    try:
+        answer = await app._ask_from_messaging(f"{kind}:42", "Continue reviewing", "en", kind)
+        assert answer.strip()
+        turns = (await app.call("agent.history.list"))["turns"]
+        assert len(turns) == 2 and {t["conversation_id"] for t in turns} == {main}
+        assert next(t for t in turns if t["id"] == previous)["text"] == "Saved answer"
+        assert next(t for t in turns if t["id"] != previous)["source"] == kind
+    finally:
+        await app.aclose()
+
+
+@pytest.mark.parametrize("kind", ["telegram", "slack", "discord"])
 async def test_a_question_that_needs_a_yes_is_refused_not_left_open(app, monkeypatch, kind):
     calls = []
     real = app.call

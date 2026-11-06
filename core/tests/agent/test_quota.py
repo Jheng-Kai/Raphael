@@ -160,7 +160,7 @@ def test_native_resume_ids_are_isolated_and_legacy_sessions_go_only_to_main(conn
     with conn:
         conn.execute("INSERT INTO agent_cli_sessions VALUES (?, ?, ?)", (0, "cli:codex", "old-session"))
     sessions = Sessions(conn)
-    other = conversations.create(0)["id"]
+    other = conversations.quick()
     assert sessions.get(0, "cli:codex", main) == "old-session"
     assert sessions.get(0, "cli:codex", other) is None
     sessions.put(0, "cli:codex", "new-session", other)
@@ -173,7 +173,7 @@ def test_native_resume_ids_are_isolated_and_legacy_sessions_go_only_to_main(conn
 def test_late_native_session_cannot_restore_a_deleted_conversation(conn):
     from raphael_core.agent.cli.loop import Sessions
     sessions = Sessions(conn)
-    conversation = sessions.conversations.create(0)["id"]
+    conversation = sessions.conversations.main()
     with conn:
         conn.execute("DELETE FROM conversations WHERE id=?", (conversation,))
     sessions.put(0, "cli:codex", "late-session", conversation)
@@ -183,7 +183,7 @@ def test_late_native_session_cannot_restore_a_deleted_conversation(conn):
 def test_native_sessions_reject_another_members_conversation(conn):
     from raphael_core.agent.cli.loop import Sessions
     sessions = Sessions(conn)
-    conversation = sessions.conversations.create(0)["id"]
+    conversation = sessions.conversations.main()
     sessions.put(1, "cli:codex", "wrong-member", conversation)
     assert sessions.get(0, "cli:codex", conversation) is None
     sessions.put(0, "cli:codex", "right-member", conversation)

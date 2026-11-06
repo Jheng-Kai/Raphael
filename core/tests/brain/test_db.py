@@ -361,7 +361,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 67
+LATEST = 68
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -617,9 +617,9 @@ SCHEMA_V67 = {
 }
 
 
-@pytest.mark.parametrize("start_version, expected_steps", [(62, [63, 64, 67]), (63, [64, 67]), (64, [67])])
-def test_v67_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(monkeypatch, tmp_path, start_version, expected_steps):
-    path = tmp_path / f"v{start_version}-to-v67.db"
+@pytest.mark.parametrize("start_version, expected_steps", [(62, [63, 64, 67, 68]), (63, [64, 67, 68]), (64, [67, 68]), (67, [68])])
+def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(monkeypatch, tmp_path, start_version, expected_steps):
+    path = tmp_path / f"v{start_version}-to-latest.db"
     with monkeypatch.context() as old:
         old.setattr(db, "LATEST_VERSION", 62)
         conn = db.connect(path)
@@ -638,7 +638,7 @@ def test_v67_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(mo
                             if sql.strip().startswith('PRAGMA user_version =') else None)
     db.migrate(conn)
     assert steps == expected_steps
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 67
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
     for table, columns in SCHEMA_V67.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
@@ -650,7 +650,7 @@ def test_v67_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(mo
     assert steps == expected_steps
     conn.close()
     reopened = db.connect(path)
-    assert reopened.execute("PRAGMA user_version").fetchone()[0] == 67
+    assert reopened.execute("PRAGMA user_version").fetchone()[0] == LATEST
     assert reopened.execute("SELECT COUNT(*) FROM vault_entries").fetchone()[0] == 1
     reopened.close()
 
@@ -827,6 +827,7 @@ def test_connect_creates_the_latest_schema(conn):
         "owner_question_turn",
         "agent_inbox_scope",
         "agent_inbox_started",
+        "one_standard_conversation",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
     for table, columns in SCHEMA_V67.items():
