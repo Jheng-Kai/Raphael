@@ -35,8 +35,8 @@ export function allowanceCardsHTML(allowance: CliAllowances): string {
     const cli = CLIS.find((c) => c.id === brain.id), name = brain.id === "claude" ? "Claude" : cli?.name ?? brain.name;
     const quota = allowance.quotas?.find((q) => q.provider === brain.id);
     const reported = brain.source === "reported";
-    return `<article class="run-subscription"><header><h4>${providerMark(cli?.mark ?? brain.id)}${esc(name)}</h4>` +
-      (brain.windows.length ? `<span class="run-allowance-source">${t(reported ? "runs.lastReported" : "runs.liveAllowance")}</span>` : "") + `</header>` +
+    // A number from the last run says when it was read, on its own line; a live one needs no word.
+    return `<article class="run-subscription"><header><h4>${providerMark(cli?.mark ?? brain.id)}${esc(name)}</h4></header>` +
       (quota ? `<p class="run-quota"><strong>${t("runs.exhausted")}</strong><small>${quota.reset_at_ms ? `${t("runs.resets")} ${esc(time(quota.reset_at_ms))}` : t("runs.resetUnknown")}</small></p>` : "") +
       (!brain.windows.length ? `<p class="run-allowance-unavailable">${t("missing.allowanceUnknown")}</p>` : brain.windows.map((w) => {
         const known = typeof w.remaining_percent === "number" && Number.isFinite(w.remaining_percent);

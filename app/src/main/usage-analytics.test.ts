@@ -56,7 +56,8 @@ it("renders and refreshes all allowance sources with maker marks and honest unkn
   host.querySelector<HTMLButtonElement>('[data-run-act="allowance"]')!.click();
   await vi.waitFor(() => expect(host.querySelector(".run-allowance")!.textContent).toContain("12%"));
   expect(host.querySelectorAll(".run-subscription")).toHaveLength(1);
-  setLocale("en"); expect(host.querySelector(".run-allowance")!.textContent).toContain("Last run report");
+  expect(host.querySelector(".run-subscription header")!.textContent).toBe("Claude");
+  setLocale("en"); expect(host.querySelector(".run-allowance")!.textContent).toContain("Updated");
   setLocale("ja"); expect(host.querySelector(".run-allowance")!.textContent).toContain("更新日時");
   view.destroy();
 });

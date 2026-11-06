@@ -7,10 +7,11 @@
 .run-subscription > header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; }
 .run-subscription h4 { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--fs-xs); }
 .run-subscription h4 .mono { width: 22px; height: 22px; flex: none; }
-.run-allowance-source, .run-allowance-unavailable, .run-quota small { font-size: var(--fs-2xs); color: var(--text-3); }
+.run-allowance-unavailable, .run-quota small { font-size: var(--fs-2xs); color: var(--text-3); }
 .run-allowance-unavailable { margin: var(--sp-3) 0 0; }
 .run-quota { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; font-size: var(--fs-2xs); }
 .run-window { display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap; margin: var(--sp-3) 0; font-size: var(--fs-2xs); }
+.run-window:last-child { margin-bottom: 0; }
 .run-window small { color: var(--text-3); font-size: var(--fs-2xs); }
 .run-window .run-bar-track { width: 100%; }
 .run-bar-track { background: var(--hover); height: 7px; border-radius: var(--r-sm); overflow: hidden; }

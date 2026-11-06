@@ -2,7 +2,7 @@
 export const navZh = {
   "runs.allowancePercentUnknown": "未提供剩餘百分比",
   "runs.allowanceUpdated": "更新於 {time}",
-  "runs.lastReported": "上次執行回報", "runs.liveAllowance": "即時查詢", "runs.allowanceAllowed": "可使用", "runs.allowanceWarning": "接近額度上限",
+  "runs.allowanceAllowed": "可使用", "runs.allowanceWarning": "接近額度上限",
   "runs.allowanceExpired": "此回報的重設時間已過，請等待下次執行更新", "runs.weeklyOpus": "每週 · Opus", "runs.weeklySonnet": "每週 · Sonnet",
   "runs.exhausted": "額度已用完", "runs.resetUnknown": "重設時間未提供",
   "mcp.actions": "更多動作", "mcp.delete": "刪除",
@@ -21,7 +21,7 @@ export const navZh = {
 export const navEn: Record<keyof typeof navZh, string> = {
   "runs.allowancePercentUnknown": "Remaining percentage not provided",
   "runs.allowanceUpdated": "Updated {time}",
-  "runs.lastReported": "Last run report", "runs.liveAllowance": "Live query", "runs.allowanceAllowed": "Available", "runs.allowanceWarning": "Approaching limit",
+  "runs.allowanceAllowed": "Available", "runs.allowanceWarning": "Approaching limit",
   "runs.allowanceExpired": "Reported reset has passed; awaiting the next run", "runs.weeklyOpus": "Weekly · Opus", "runs.weeklySonnet": "Weekly · Sonnet",
   "runs.exhausted": "Allowance exhausted", "runs.resetUnknown": "Reset time unavailable",
   "mcp.actions": "More actions", "mcp.delete": "Delete",
@@ -40,7 +40,7 @@ export const navEn: Record<keyof typeof navZh, string> = {
 export const navJa: Record<keyof typeof navZh, string> = {
   "runs.allowancePercentUnknown": "残りの割合は未提供です",
   "runs.allowanceUpdated": "更新日時 {time}",
-  "runs.lastReported": "前回の実行から", "runs.liveAllowance": "現在の照会", "runs.allowanceAllowed": "利用可能", "runs.allowanceWarning": "上限に近づいています",
+  "runs.allowanceAllowed": "利用可能", "runs.allowanceWarning": "上限に近づいています",
   "runs.allowanceExpired": "報告されたリセット時刻を過ぎています。次の実行で更新されます", "runs.weeklyOpus": "週間 · Opus", "runs.weeklySonnet": "週間 · Sonnet",
   "runs.exhausted": "上限に到達", "runs.resetUnknown": "リセット時刻は未提供",
   "mcp.actions": "その他の操作", "mcp.delete": "削除",
