@@ -10,7 +10,7 @@
 .mb-det .conversation-list { border: 0; border-radius: 0; overflow: hidden; }
 .mb-det .conversation-open { border: 0; background: transparent; }
 .mb-det .conversation-open:hover { background: var(--hover); }
-/* The open one of Raphael's two rows carries a quiet fill, as the sidebar's selected row does. */
+/* The open row of the two carries a soft fill, like the selected row in the sidebar. */
 .mb-det .conversation-open[aria-current="true"] { background: color-mix(in srgb, var(--text) 6%, transparent); }
 .conversation-tools { display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-2) 0; }
 .conversation-tools input { min-width: 0; min-height: var(--h-ctl); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--panel); color: var(--text); outline: none; }
