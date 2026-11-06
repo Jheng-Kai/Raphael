@@ -81,7 +81,6 @@
   /* the details panel */
   --pa-dpad: var(--sp-4);
   --pa-dgap: var(--sp-5);
-  --pa-dclose: calc(34px + 14 * var(--pa-u));
   --pa-det-av: calc(64px + 32 * var(--pa-u));
   --pa-dname: var(--fs-lg);
   --pa-drole: var(--fs-xs);

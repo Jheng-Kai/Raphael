@@ -610,6 +610,10 @@ describe("rendered look checks", () => {
     window.document.querySelector('style').textContent = '.vanish:hover{background-color:rgba(245,245,245,.14)}';
     expect(audit().productRules.filter(item => item.rule === 'R-UI-52')).toEqual([]);
   });
+  it("reads a hover inside :is() as a hover, so a later clear fill overrides a general one (R-UI-52)", () => {
+    const { audit } = productAudit('<div style="background-color:rgb(255,255,255)"><button class="btn stop" style="color:rgb(120,90,250)">Stop</button></div><style>.btn:hover:not(:disabled){background-color:rgb(120,90,250)}.btn.stop:is(:hover, :active):not(:disabled){background-color:transparent}</style>');
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-52')).toEqual([]);
+  });
   it.each(["light", "dark"])("keeps the computer takeover preview icon readable on hover for every member colour in %s (R-UI-52)", theme => {
     const window = new Window();
     // happy-dom leaves colours and background-image: initial authored; the browser resolves RGB and none.

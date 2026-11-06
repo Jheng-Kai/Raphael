@@ -236,6 +236,10 @@ export function checkRendered(name, context = {}) {
     require(visible(panel.querySelector('.mb-panel-identity')), 'member face, name and role stay above the tabs');
     const face = panel.querySelector('.mb-panel-identity > .av').getBoundingClientRect(), named = panel.querySelector('.mb-panel-identity > b').getBoundingClientRect();
     require(face.width >= 56 && face.bottom <= named.top + 1 && Math.abs(face.left + face.width / 2 - (named.left + named.width / 2)) <= 1, 'a large face stands centred above the name, as Grok Bot\'s');
+    for (const button of [...panel.querySelectorAll('.mb-det-head .btn.icon'), ...document.querySelectorAll('.page-agent .mb-head .btn.icon, .page-agent .cmp-bar .cmp-attach')].filter(visible)) {
+      const style = getComputedStyle(button), box = button.getBoundingClientRect();
+      require(parseFloat(style.borderRadius) >= box.width / 2 - 0.5 && Math.abs(box.width - box.height) < 1 && style.backgroundColor !== 'rgba(0, 0, 0, 0)', `the buttons on the window's edges are Grok Bot's soft round buttons (${button.getAttribute('aria-label') ?? button.dataset.act})`);
+    }
     if (tab === 'details') for (const section of panel.querySelectorAll('.mb-tab-body > section')) {
       const head = section.querySelector(':scope > .mb-dh'), list = section.querySelector('.mb-task-list, .mb-rts, .conversation-rows, :scope > .mp-empty');
       if (!visible(head) || !visible(list)) continue;

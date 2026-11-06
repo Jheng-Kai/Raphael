@@ -43,7 +43,7 @@ describe("the page's responsive sizes", () => {
     const wanted: Record<string, [number, number]> = {
       "pa-tool": [30, 48], "pa-pill-h": [32, 52], "pa-pill-av": [22, 36],
       "pa-cmp-btn": [36, 44], "pa-cmp-fs": [15.5, 17],
-      "pa-dclose": [34, 48], "pa-det-av": [64, 96],
+      "pa-det-av": [64, 96],
     };
     for (const [name, [small, big]] of Object.entries(wanted)) expect(ends(name), name).toEqual([small, big]);
   });

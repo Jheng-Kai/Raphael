@@ -127,8 +127,13 @@ describe("buttons", () => {
       // Daily sidebar controls share the owner's requested round soft press surface.
       'sidebar.css: .side .side-foot .btn.icon[aria-current="page"]:active:not(:disabled)',
       "sidebar.css: .side .btn.icon:hover:not(:disabled)", "sidebar.css: .side .btn.icon:active:not(:disabled)",
-      // Search and plus are Grok Bot's two soft round buttons (owner, 2026-11-06).
+      // Search and plus, and the buttons on the window's edges, are Grok Bot's soft round buttons (owner, 2026-11-06).
       "sidebar.css: .side .btn.icon.mb-tool[data-col]:hover:not(:disabled)", "sidebar.css: .side .btn.icon.mb-tool[data-col]:active:not(:disabled)",
+      ...[':is(:hover, [aria-expanded="true"]):not(:disabled)', ":active:not(:disabled)"].flatMap(state => [
+        `styles.css: :is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header) .btn.icon${state}`,
+        `styles.css: .page-agent .cmp-bar .btn.cmp-attach${state}`,
+      ]),
+      "styles.css: .btn.icon.modal-x:hover:not(:disabled)", "styles.css: .btn.icon.modal-x:active:not(:disabled)",
       "styles.css: .window-button:hover", "styles.css: .window-button:active",
       "styles.css: .window-close:hover", "styles.css: .window-close:active",
       // R-UI-50: the contextual latest action floats over messages and needs an opaque surface.

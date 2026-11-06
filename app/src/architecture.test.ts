@@ -65,7 +65,8 @@ it("core IPC has one frontend boundary", () => {
     visit(tree);
   }
   expect(violations).toEqual([]);
-});
+  // Parsing every source takes seconds under the whole suite's load (timed out twice on 2026-11-06).
+}, 60_000);
 
 it("main templates never introduce native selects", () => {
   expect(sources.filter(path => /<select(?:\s|>)/i.test(read(path)))).toEqual([]);
@@ -97,4 +98,4 @@ it("literal frontend RPC calls are allowed by the shell", () => {
   }
   expect(checked).toBeGreaterThan(100);
   expect(rejected).toEqual([]);
-});
+}, 60_000);

@@ -73,7 +73,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       horizontalOverflow.push({ ...description, width: element.clientWidth, scrollWidth: element.scrollWidth });
     if (!onScreen(element)) continue;
     const floatingLatest = element.matches(".page-agent .ra-stage > button.conversation-latest");
-    const sidebarAction = element.matches(".side .btn.icon");
+    // The sidebar's icons and the buttons on the window's edges are Grok Bot's soft round buttons (owner, 2026-11-06).
+    const sidebarAction = element.matches(".side .btn.icon, .page-agent .mb-det-head .btn.icon, .page-agent .mb-head :is(.ra-tools, .mb-head-l) .btn.icon, :is(.mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header) .btn.icon, .btn.icon.modal-x");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
     if (element.matches('button:disabled[title], [aria-disabled="true"][title]')) {
       const title = element.getAttribute('title')?.trim();
@@ -267,7 +268,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       for (const selector of rule.selectorText.split(/,(?![^(]*\))/)) {
         if (!selector.includes(":hover")) continue;
         let matches;
-        try { matches = doc.querySelectorAll(selector.replace(/:hover/g, "").trim() || "*"); } catch { continue; }
+        // `:is(*)` stands where `:hover` was, so `x:is(:hover, :active)` stays a valid selector for x.
+        try { matches = doc.querySelectorAll(selector.replace(/:hover/g, ":is(*)").trim()); } catch { continue; }
         const weight = specificity(selector);
         for (const element of matches) {
           const entry = hovered.get(element) ?? {};

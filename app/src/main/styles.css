@@ -748,6 +748,15 @@ kbd.ob-cap { white-space: nowrap; }
 :is(.btn.icon, .cmp-attach, .cmp-voice, .mp-star, .chip-x):is(:hover, :active) { background: transparent; color: var(--text); filter: none; }
 :is(.btn.icon, .cmp-attach, .cmp-voice, .mp-star, .chip-x):is([aria-pressed="true"], [aria-expanded="true"], [aria-selected="true"]):not(:disabled) { background: transparent; color: var(--accent-icon); }
 :is(.btn.icon, .cmp-attach, .cmp-voice, .mp-star, .chip-x):active:not(:disabled) { background: transparent; color: color-mix(in srgb, var(--text) 85%, transparent); }
+/* Grok Bot's edge buttons (owner, 2026-11-06): the panel's back, settings and close, the icons of a conversation's
+   header, a dialog's close and the composer's attach are an icon in a soft round button, a little lighter under the
+   pointer. Small actions beside a message or inside a bar stay bare icons, as Grok Bot's; the sidebar's search and plus
+   are the same buttons (sidebar.css). */
+:is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header) .btn.icon, .btn.icon.modal-x, .page-agent .cmp-bar .btn.cmp-attach { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-color: transparent; border-radius: var(--r-pill); background: var(--surface-2); color: var(--text); }
+.page-agent .cmp-bar .btn.cmp-attach { width: 32px; min-width: 32px; height: 32px; min-height: 32px; }
+:is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header) .btn.icon:is(:hover, [aria-expanded="true"]):not(:disabled), .btn.icon.modal-x:hover:not(:disabled), .page-agent .cmp-bar .btn.cmp-attach:is(:hover, [aria-expanded="true"]):not(:disabled) { border-color: transparent; background: var(--hover); color: var(--text); }
+:is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header) .btn.icon:active:not(:disabled), .btn.icon.modal-x:active:not(:disabled), .page-agent .cmp-bar .btn.cmp-attach:active:not(:disabled) { background: var(--pressed); color: var(--text); }
+:is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header) .btn.icon .i, .btn.icon.modal-x .i, .page-agent .cmp-bar .btn.cmp-attach .i { width: 20px; height: 20px; }
 :where(:root[data-keys]) .btn.icon:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 :where(:root[data-keys]) .cmp-attach:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 :where(:root[data-keys]) .cmp-voice:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
