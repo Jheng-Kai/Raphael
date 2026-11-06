@@ -209,7 +209,8 @@ export function createMembers(host: MembersHost): MembersShell {
   /** The pill and the narrow dropdown, for the open member. */
   function drawHead(): void {
     const m = member();
-    patchHTML(pill, faceHTML(m, 22, { cls: "mb-pill-face" }) + `<span class="mb-pill-t">${esc(m.name)}</span>`);
+    // As Grok Bot's header pill: the face and name, and a › that slides in under the pointer (the pill opens the panel).
+    patchHTML(pill, faceHTML(m, 22, { cls: "mb-pill-face" }) + `<span class="mb-pill-t">${esc(m.name)}</span><span class="mb-pill-go" aria-hidden="true">${ico("right")}</span>`);
     const waiting = list?.members.some((other) => other.id !== current && (other.waiting || other.unread)) ?? false;
     patchHTML(picker, `<span>${esc(m.name)}</span>${waiting ? `<i class="mb-dot is-wait" aria-hidden="true"></i>` : ""}${ico("down")}`);
     picker.setAttribute("aria-label", `${t("members.pick")}: ${m.name}`);

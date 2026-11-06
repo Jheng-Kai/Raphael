@@ -29,11 +29,19 @@
 .mb-head-l { display: flex; align-items: center; gap: var(--sp-1); }
 .mb-head-c { width: 100%; }
 .page-agent .btn.conversation-trigger { display: flex; flex-direction: column; align-items: center; gap: var(--sp-1); min-width: 0; width: 100%; max-width: min(320px, 100%); height: auto; min-height: 52px; padding: var(--sp-1) var(--sp-3); border-color: transparent; background: transparent; box-shadow: none; border-radius: var(--r-sm); }
-.page-agent .conversation-trigger:hover { background: var(--hover); }
+/* As Grok Bot's header (owner, 2026-11-06): the face and name are one soft pill, a step lighter under the pointer, where a ›
+   slides in; the button around it stays clear. */
+.page-agent .btn.conversation-trigger:is(:hover, :active):not(:disabled) { background: transparent; }
 .page-agent .btn.conversation-trigger:is(:hover, :active):not(:disabled) { border-color: transparent; box-shadow: none; }
-.page-agent .btn.conversation-trigger:active:not(:disabled) { background: var(--pressed); }
-.conversation-trigger .mb-pill { flex: none; display: flex; align-items: center; justify-content: center; gap: var(--sp-2); max-width: 100%; font-size: var(--pa-pill-fs); font-weight: 600; line-height: 1.5; }
+.page-agent .btn.conversation-trigger:hover .mb-pill { background: var(--hover); }
+.page-agent .btn.conversation-trigger:active .mb-pill { background: var(--pressed); }
+.mb-pill-go { display: inline-grid; place-items: center; width: 0; margin-left: calc(-1 * var(--sp-2)); overflow: hidden; color: var(--text-3); opacity: 0; transition: width 140ms ease, margin 140ms ease, opacity 140ms ease; }
+.mb-pill-go .i { width: 16px; height: 16px; }
+.page-agent .btn.conversation-trigger:is(:hover, :focus-visible) .mb-pill-go { width: 16px; margin-left: 0; opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .mb-pill-go { transition: none; } }
+.conversation-trigger .mb-pill { flex: none; display: flex; align-items: center; justify-content: center; gap: var(--sp-2); max-width: 100%; height: 40px; padding: 0 var(--sp-3) 0 var(--sp-2); border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); font-size: var(--pa-pill-fs); font-weight: 600; line-height: 1.5; transition: background-color 120ms ease; }
 .conversation-trigger .mb-pill .av { --av: var(--pa-pill-av) !important; flex-shrink: 0; }
+.conversation-trigger .conversation-caption:empty { display: none; }
 .conversation-trigger .conversation-caption { flex: none; min-height: 1.5em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: var(--fs-xs); font-weight: 400; line-height: 1.5; }
 .mb-chat { position: relative; }
 /* Fade the scroll boundary so partial message lines never meet the fixed header. */

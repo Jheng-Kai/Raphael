@@ -1908,7 +1908,7 @@ export function checkRendered(name, context = {}) {
     require(pair.map(button=>button.dataset.col).join()==='search,add'&&!column.querySelector('input'),'search then plus, as Grok Bot\'s, with no field standing in the list');
     for(const button of pair.filter(visible)){const box=button.getBoundingClientRect(),style=getComputedStyle(button);require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&parseFloat(style.borderRadius)>=18&&style.backgroundColor!=='rgba(0, 0, 0, 0)'&&style.borderTopColor==='rgba(0, 0, 0, 0)','search and plus are 36px soft round buttons with no frame');}
     if(!rail&&pair.every(visible))require(pair.every(button=>button.parentElement===header)&&Math.abs(pair[0].getBoundingClientRect().top-pair[1].getBoundingClientRect().top)<1&&pair[1].getBoundingClientRect().right>pair[0].getBoundingClientRect().right,'search and plus stand side by side in the top row');
-    require([...nav.querySelectorAll('.side-foot [data-go]')].map(el=>el.dataset.go).join()==='settings,settings,dictation,home','footer opens Connections above account, dictation and Home');
+    require(nav.querySelector('.side-foot > .sidebar-apps[data-connect-apps]')&&[...nav.querySelectorAll('.side-foot [data-go]')].map(el=>el.dataset.go).join()==='settings,dictation,home','footer opens Connect apps (its own dialog, R-UI-111) above account, dictation and Home');
     if(!document.documentElement.hasAttribute('data-sidebar-collapsed')){const home=nav.querySelector('.sidebar-home'),box=home.getBoundingClientRect();require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&getComputedStyle(home).borderRadius===getComputedStyle(nav.querySelector('.sidebar-dictation')).borderRadius,'Home keeps the shared icon surface');}
     for(const button of nav.querySelectorAll('.btn.icon:not([data-col]), .side-foot .nav'))if(visible(button)&&!visible(button.querySelector('.nav-t'))){const box=button.getBoundingClientRect(),corner=parseFloat(getComputedStyle(button).borderRadius);require(corner>0&&corner<Math.min(box.width,box.height)/2,`sidebar buttons are rounded squares, never circles (${button.className})`);}
     require(nav.querySelector('.side-foot [data-go="dictation"]').getAttribute('aria-label')&&!nav.querySelector('.side-foot [data-go="dictation"] .nav-t'),'dictation is a named icon button');
@@ -4745,6 +4745,14 @@ export function checkRendered(name, context = {}) {
     const box = close.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
     require(close === hit || close.contains(hit), "rounded corners do not clip the close control");
     return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius };
+  }
+  if (name === "header-pill") {
+    const trigger = document.querySelector('.mb-chat .conversation-trigger'), pill = trigger.querySelector('.mb-pill'), go = pill.querySelector('.mb-pill-go');
+    const style = getComputedStyle(pill), box = pill.getBoundingClientRect();
+    require(Math.abs(box.height - 40) <= 1 && parseFloat(style.borderTopLeftRadius) >= 20, 'the face and name sit in one 40 px pill');
+    require(style.backgroundColor !== 'rgba(0, 0, 0, 0)' && getComputedStyle(trigger).backgroundColor === 'rgba(0, 0, 0, 0)', 'the pill lights under the pointer, not the button around it');
+    require(Math.abs(go.getBoundingClientRect().width - 16) <= 1 && getComputedStyle(go).opacity === '1', 'a › shows in the pill under the pointer');
+    return { check: name, pill: Math.round(box.width) };
   }
   if (name === "message-hugs-bubble") {
     // R-UI-104: as Grok Bot's, a message is its bubble and the actions beside it; the room to their side is the thread's.
