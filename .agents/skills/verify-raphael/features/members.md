@@ -574,7 +574,7 @@ presence-blocked-stays and presence-waiting-colleague. The same SVG parts serve 
 sidebar, header and 28px live thread. Reduced motion keeps the thinking dots,
 attention mark, lidded waiting eyes and static working ribbons recognizable.
 
-sidebar-row-time checks the reserved time/overflow slot and absence of role pills;
+sidebar-row-time checks that rows carry no time or role pill, sit 58 px apart as Grok Bot's, and show overflow under the pointer;
 sidebar-group-author checks the latest public author prefix, while owner waiting
 keeps its existing preview. Names stay on pinned tiles and roles remain in the
 header/details panel. Run both themes at 1120,720,1920x1080. See conversation.md's

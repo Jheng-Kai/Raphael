@@ -26,6 +26,6 @@ export default [
   conversation("event-calendar-line", "A calendar receipt keeps the event name and date", "calendar"),
   conversation("event-calendar-opens", "A calendar receipt opens that event's detail", "calendar", [click('[data-id="651"] [data-act="open-calendar-event"]'), wait('.au-pop-detail')]),
   conversation("event-lines-collapse", "Consecutive routine receipts fold and keep their disclosure", "collapse", [click('[data-event-group] > summary'), {action: "event-storm", selector: ".mb-chat:not([hidden]) .ra-scroll", roster: true, wheelBy: 0, measure: {name: "event-presence", enforce: false}, limits: {replacedFaces: 0, longTaskMs: 600}}]),
-  scene("sidebar-row-time", "Name and time retain their positions under hover", [{action: "member-column", collapsed: false}, hover('[data-member="1"]'), check("sidebar-row-time")], {presence: "clean"}),
+  scene("sidebar-row-time", "A row shows the name and one line with no time, and its overflow appears under the pointer", [{action: "member-column", collapsed: false}, hover('[data-member="1"]'), check("sidebar-row-time")], {presence: "clean"}),
   scene("sidebar-group-author", "The group preview names its author", [{action: "member-column", collapsed: false}, check("sidebar-group-author")], {presence: "clean"}),
 ];

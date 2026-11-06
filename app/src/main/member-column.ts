@@ -10,7 +10,6 @@
 
 import { createRoomsSection, openNewGroupChat } from "./group-chats";
 import { t } from "./i18n";
-import { formatClock } from "./format";
 import { createMessageSearch } from "./message-search";
 import { type MemberSection, faceHTML, memberMatches, memberSections, memberDisplayList, memberRole, previewOf, primaryIdOf, raphaelOf } from "./members";
 import type { Member, MembersList } from "./types";
@@ -49,17 +48,16 @@ function pinnedTileHTML(member: Member, v: ColumnView, top: boolean): string {
   );
 }
 
-/** A member's row: its picture, name, time, preview and dot; then its protected member actions. */
+/** A member's row, as Grok Bot's: its picture, name, last line and dot, with no time (R-UI-77); then its protected member
+ *  actions. */
 export function memberRowHTML(member: Member, v: Pick<ColumnView, "current" | "active" | "previews" | "fresh"> & { list?: ColumnView["list"] }): string {
-  const lastAt = new Date(member.last_at ?? NaN);
   const preview = previewOf(member, v.previews.get(member.id));
   const dot = memberDot(member);
   return (
     `<div class="mb-item${v.fresh.has(member.id) ? " is-new" : ""}" data-member-item="${member.id}"${member.id ? ' draggable="true"' : ""}>` +
     `<button type="button" class="nav mb-row" data-member="${member.id}" aria-current="${v.active !== false && member.id === v.current}" data-k="member:${member.id}">` +
     faceHTML(member, 40) +
-    `<span class="mb-row-main"><span class="mb-row-t"><b>${esc(member.name)}</b>` +
-    (Number.isFinite(lastAt.getTime()) ? `<time class="mb-row-time" datetime="${lastAt.toISOString()}">${formatClock(lastAt.getTime())}</time>` : "") + `</span>` +
+    `<span class="mb-row-main"><span class="mb-row-t"><b>${esc(member.name)}</b></span>` +
     (preview.text ? `<span class="mb-row-p${preview.waiting ? " is-wait" : ""}">${esc(preview.text)}</span>` : "") +
     `</span>${dot}</button>` +
     iconButton("more", t("members.more", { p0: member.name }), ` data-member-more="${member.id}" aria-haspopup="menu" aria-expanded="false" data-k="member-more:${member.id}"`, "mb-more") +

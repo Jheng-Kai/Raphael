@@ -177,7 +177,7 @@ test("room rows render the RPC summary and select only the visible conversation 
  api.roomsList.mockResolvedValue({rooms:[{...room,preview:"Latest room reply",last_at,unread:true}]});
  const section=createRoomsSection(() => active);document.body.append(section);await flush();
  expect(section.querySelector('[data-room="1"] .mb-row-p')?.textContent).toBe('Latest room reply');
- expect(section.querySelector('time')?.dateTime).toBe(new Date(last_at).toISOString());
+ expect(section.querySelector('time')).toBeNull();
  expect(section.querySelector('[data-room="1"] .is-unread')).not.toBeNull();
  openGroupChat(1);await flush();
  expect(section.querySelector('[data-room="1"]')?.getAttribute('aria-current')).toBe('true');

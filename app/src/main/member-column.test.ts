@@ -43,12 +43,8 @@ describe("the column, drawn", () => {
     expect(el.querySelector('[aria-current="true"]')).toBeNull();
     expect(dom(columnHTML(view({active:true}))).querySelector('[aria-current="true"]')?.getAttribute('data-member')).toBe('0');
   });
-  test("rows show valid last-message times and omit missing or invalid timestamps", () => {
-    const time = new Date(2026, 9, 24, 13, 45).getTime();
-    const row = dom(memberRowHTML(member(1, { last_at: time }), view()));
-    expect(row.querySelector("time")?.textContent).toBe("13:45");
-    expect(row.querySelector("time")?.getAttribute("datetime")).toBe(new Date(time).toISOString());
-    for (const last_at of [null, NaN, 1e20]) expect(dom(memberRowHTML(member(1, { last_at }), view())).querySelector("time")).toBeNull();
+  test("rows show no time, whatever the last message's timestamp, as Grok Bot's", () => {
+    for (const last_at of [new Date(2026, 9, 24, 13, 45).getTime(), null, NaN, 1e20]) expect(dom(memberRowHTML(member(1, { last_at }), view())).querySelector("time")).toBeNull();
   });
 
   test("Raphael leads the column as an ordinary row with his bare emblem", () => {

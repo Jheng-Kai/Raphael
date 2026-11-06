@@ -872,8 +872,11 @@ export function checkRendered(name, context = {}) {
     }
     if (name === "sidebar-row-time") {
       const row = document.querySelector('.side [data-member="1"]');
-      require(!row.querySelector('.mb-row-t i') && row.querySelector('time'), "name and time without a role pill");
-      require(getComputedStyle(row.querySelector('time')).opacity === '0' && visible(row.parentElement.querySelector('.mb-more')), "overflow replaces time in its reserved slot");
+      require(!row.querySelector('.mb-row-t i') && !row.querySelector('time'), "the name and one line, without a role pill or a time, as Grok Bot's rows");
+      require(visible(row.parentElement.querySelector('.mb-more')), "overflow appears under the pointer");
+      const pair = [...document.querySelectorAll('.side .mb-item')].find(item => visible(item) && item.nextElementSibling?.matches('.mb-item') && !item.querySelector('.mb-tile'));
+      const rows = pair ? [pair, pair.nextElementSibling].map(item => item.querySelector('.nav.mb-row').getBoundingClientRect()) : [];
+      require(rows.length < 2 || (Math.abs(rows[0].height - 54) <= 1 && Math.abs(rows[1].top - rows[0].top - 58) <= 1), `rows are 54 px tall and 58 px apart, as Grok Bot's (${rows.map(box => Math.round(box.top) + '/' + Math.round(box.height)).join(' ')})`);
     }
     if (name === "sidebar-group-author") require([...document.querySelectorAll('.au-room-row .mb-row-p')].some(line => line.textContent.startsWith(`${window.__look.data.members.find(m => m.id === 1).name}：`)), "group preview starts with its author");
     return { check: name };
