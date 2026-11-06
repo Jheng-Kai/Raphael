@@ -105,7 +105,7 @@ async function keepFocus(page) {
 async function details(page) {
   if (await page.$('.conversation-trigger[aria-expanded="false"]')) await click(page, ".conversation-trigger");
   for (let back; (back = await page.$('.mb-det [data-det="back"]:not([hidden])')); await pause(50)) { await back.click(); await back.dispose(); }
-  await wait(page, "[data-conversation-new]");
+  await wait(page, '.mb-det[data-details-tab="details"] [data-det="gear"]');
 }
 async function chat(page) {
   await click(page, '.mb-chief');
@@ -758,13 +758,23 @@ export async function drive(name, context) {
     const member = (await context.rpc("members.list", {})).members.find(row => row.name === "NativeJob");
     if (!member) throw new Error("The member was not made");
     if (member.avatar !== "slime:gobta") throw new Error(`The member lost its slime: ${member.avatar}`);
-    const greeting = await page.$eval(".page-agent .ra-body", el => el.textContent);
-    result.greeting = greeting;
-    if (!greeting.includes("NativeJob") || !greeting.includes("？")) throw new Error(`It did not speak first: ${greeting}`);
+    const conversation = (await snapshot()).conversations.find(row => row.member_id === member.id);
+    if (!conversation) throw new Error("The member has no conversation");
+    // The member's own model writes its first words (R-COLLEAGUE-02), so the greeting is a hidden turn to wait for.
+    let greet;
+    for (let i = 0; i < 900 && !greet; i++) {
+      greet = (await snapshot()).agent_turns.find(row => row.conversation_id === conversation.id && row.question === "" && ["done", "error"].includes(row.status));
+      if (!greet) await pause(200);
+    }
+    if (!greet) throw new Error("The greeting on the real Codex did not finish");
+    result.greeting = { status: greet.status, model: greet.model, text: greet.text.slice(0, 200) };
+    if (greet.status !== "done" || !greet.text.trim()) throw new Error(`It did not speak first: ${JSON.stringify(result.greeting)}`);
+    const opening = greet.text.replace(/[*_`#>[\]]/g, "").trim().slice(0, 8);
+    await page.waitForFunction(text => document.querySelector(".page-agent .ra-body")?.textContent.includes(text), { timeout: 15000 }, opening)
+      .catch(() => { throw new Error(`The greeting is not on the page: ${opening}`); });
     if (await page.$(".page-agent .owner-message")) throw new Error("A message was put in the owner's mouth");
     if (member.role || member.instructions) throw new Error("A job was made up before the owner said one");
     await capture("greeting");
-    const conversation = (await snapshot()).conversations.find(row => row.member_id === member.id);
     const text = "幫我看我貼給你的發布說明，每次都整理成三行重點。";
     await type(page, ".composer .cmp-input", text);
     await click(page, ".cmp-send");
