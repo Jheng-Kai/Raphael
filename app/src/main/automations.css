@@ -195,6 +195,8 @@ button.au-room-reply { border: 0; font-family: inherit; cursor: pointer; }
 .is-movable .cal-chip.btn, .au-bar .cal-chip.is-own.btn { cursor: grab; }
 .btn.au-event-more { display: none; }
 .au-event.is-tight .cal-chip > .av, .au-event.is-tight .cal-chip > .cal-mark { display: none; }
+/* With its face hidden, a tight chip's run mark takes the top corner beside the time. */
+.au-event.is-tight .cal-chip > .cal-run-mark { top: 2px; bottom: auto; }
 .au-event-edge { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
 .au-bar-edge { position: absolute; top: 0; right: 0; bottom: 0; width: 6px; cursor: ew-resize; }
 .au-event.is-dragging { z-index: 5; opacity: 0.88; }
@@ -204,7 +206,9 @@ button.au-room-reply { border: 0; font-family: inherit; cursor: pointer; }
 .cal-chip.btn.is-past { opacity: 0.6; }
 .cal-chip.is-own.btn.is-past, .cal-chip.is-own.btn.is-past:hover:not(:disabled) { opacity: 1; background: var(--surface-2); color: var(--text-2); }
 .cal-chip.is-own.btn.is-past:active:not(:disabled) { background: var(--pressed); }
-.cal-chip.is-home-focus, .cal-chip[aria-current="true"] { outline: 2px solid var(--focus); outline-offset: 1px; }
+/* The event whose panel is open, or that Home opened, lifts as Google Calendar's does; a ring stays keyboard focus's (R-UI-31). */
+.cal-chip.is-home-focus, .cal-chip[aria-current="true"] { z-index: 2; box-shadow: var(--pop); }
+.cal-chip.is-event.is-home-focus, .cal-chip.is-event[aria-current="true"] { box-shadow: inset 0 0 0 1px var(--btn-edge), var(--pop); }
 .au-history-mark { position: absolute; right: var(--sp-1); bottom: var(--sp-1); width: 6px; height: 6px; border-radius: var(--r-pill); background: var(--err); pointer-events: none; }
 .au-history-mark[data-status="done"] { background: var(--ok); }
 .au-history-mark[data-status="skipped"] { background: var(--text-3); }
@@ -245,7 +249,8 @@ button.au-room-reply { border: 0; font-family: inherit; cursor: pointer; }
 .au-pop-when .btn { justify-content: flex-start; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .au-pop-when .sel { justify-content: space-between; width: 100%; padding-inline: var(--sp-2) var(--sp-1); font-variant-numeric: tabular-nums; }
 .au-pop-allday { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); font-size: var(--fs-sm); color: var(--text-2); }
-.au-pop .mb-ta { width: 100%; min-height: 56px; box-sizing: border-box; }
+/* The notes grow with what is written, up to six lines, with no drag grip of the browser's own. */
+.au-pop .mb-ta { width: 100%; min-height: 56px; max-height: calc(6lh + var(--sp-4)); box-sizing: border-box; resize: none; field-sizing: content; }
 .au-pop .action-row { margin: 0; padding: 0; border: 0; background: transparent; }
 .au-pop .btn.au-pop-routine { margin-right: auto; gap: var(--sp-1); padding-inline: var(--sp-2); font-size: var(--fs-xs); }
 .au-pop-detail { gap: var(--sp-2); padding-top: var(--sp-2); }

@@ -82,8 +82,8 @@
 .quota-chip .i { width: 16px; height: 16px; }
 /* The turn a search or a report opened: a soft tint that fades, never a ring that reads as keyboard focus (R-UI-31). */
 .tn.is-search-target { border-radius: var(--r-lg); animation: tn-found 2400ms ease-out both; }
-@keyframes tn-found { from, 40% { background-color: var(--selected); } to { background-color: transparent; } }
-@media (prefers-reduced-motion: reduce) { .tn.is-search-target { animation: none; background-color: var(--selected); } }
+@keyframes tn-found { from, 40% { background-color: var(--hover); } to { background-color: transparent; } }
+@media (prefers-reduced-motion: reduce) { .tn.is-search-target { animation: none; background-color: color-mix(in srgb, var(--hover) 60%, transparent); } }
 .work-section { margin: var(--sp-1) 0 var(--sp-2); }
 /* Work is a muted one-line state above the answer, not a framed control. */
 .page-agent .btn.work-toggle { display: inline-flex; justify-self: start; align-items: center; gap: var(--sp-1); min-height: 0; max-width: 100%; padding: 2px 0; border-color: transparent; border-radius: var(--r-sm); background: transparent; font-size: var(--fs-xs); color: var(--text-3); }

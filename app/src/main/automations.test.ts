@@ -478,7 +478,10 @@ test("a panel stands beside what it is about and inside the window",()=>{
  expect(besidePlacement({left:300,right:380,top:200},{width:344,height:300},viewport)).toEqual({left:388,top:200});
  expect(besidePlacement({left:800,right:900,top:200},{width:344,height:300},viewport)).toEqual({left:448,top:200});
  expect(besidePlacement({left:300,right:380,top:700},{width:344,height:300},viewport).top).toBe(492);
- expect(besidePlacement({left:10,right:700,top:5},{width:344,height:300},{...viewport,width:720})).toEqual({left:368,top:40});
+ expect(besidePlacement({left:10,right:700,top:5},{width:344,height:300},{...viewport,width:720})).toEqual({left:183,top:40});
+ // A wide event of the day view: neither side fits on the calendar, so the panel stands centred over it, never over the rail.
+ expect(besidePlacement({left:567,right:1890,top:300},{width:344,height:300},{...viewport,width:1920},{left:513})).toEqual({left:1056.5,top:300});
+ expect(besidePlacement({left:600,right:700,top:300},{width:344,height:300},{...viewport,width:900},{left:513}).left).toBe(521);
 });
 
 test("an own event keeps who added it and is one entry from its item",()=>{

@@ -1,5 +1,5 @@
 /* Raphael as a secretary: his emblem and greeting in the middle, one health line, then three plain sections, no boxes. */
-.page.page-home { container: home / inline-size; max-width: 1080px; min-height: 100%; margin: 0 auto; padding: var(--sp-5) 40px; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr); align-content: safe center; gap: var(--sp-6); }
+.page.page-home { container: home / inline-size; max-width: var(--layout-page-max); min-height: 100%; margin: 0 auto; padding: var(--sp-5) 40px; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr); align-content: safe center; gap: var(--sp-6); }
 .page-home .btn { line-height: inherit; }
 .ho-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--sp-1); min-width: 0; }
 /* His arrival's rings paint around the emblem; the clip margin holds them, so they never widen the page. */

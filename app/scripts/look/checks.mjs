@@ -3952,8 +3952,12 @@ export function checkRendered(name, context = {}) {
     require(panel.querySelectorAll('input[type="time"], select').length === 0, "times are the shared dropdown");
     const draft = document.querySelector('.au-draft');
     if (draft && visible(draft) && innerWidth > 800) {
-      const near = draft.getBoundingClientRect();
-      require(box.left >= near.right - 1 || box.right <= near.left + 1, "it stands beside the slot, not over it");
+      const near = draft.getBoundingClientRect(), grid = document.querySelector('.au-page:not([hidden]) .au-calendar-scroll').getBoundingClientRect();
+      // A slot of the day view can be too wide for either side on the calendar: then the form stands over its start, as Google
+      // Calendar's does, and never over the rail or the sidebar.
+      const sideFits = near.right + 8 + box.width <= innerWidth - 8 || near.left - 8 - box.width >= grid.left;
+      if (sideFits) require(box.left >= near.right - 1 || box.right <= near.left + 1, "it stands beside the slot, not over it");
+      else require(box.left >= grid.left - 1, "a slot too wide for a side keeps the form over its start, on the calendar, never over the rail or the sidebar");
     }
     return { check: name, width: box.width };
   }
