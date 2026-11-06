@@ -867,10 +867,15 @@ export function checkRendered(name, context = {}) {
       if (name === 'level-start-before') window.__look.desktopWidths = widths;
       else require(widths.every((width, index) => Math.abs(width - window.__look.desktopWidths[index]) < 1), 'starting the computer preserves panel and screen widths');
     } else if (name.startsWith('level-status-')) {
-      const monitor = document.querySelector('[data-act="computer"]'), active = name.endsWith('active');
-      require(visible(monitor) && monitor.classList.contains('is-computer-active') === active, 'the monitor reflects running status without a label');
-      require(!monitor.textContent.trim() && getComputedStyle(monitor).animationName === 'none', 'the monitor remains one still icon');
-      if (active) require(getComputedStyle(monitor).color !== getComputedStyle(document.querySelector('.conversation-trigger')).color, 'active status uses the purple token');
+      // No computer button in the header since 2026-11-06 (as Grok Bot's): a still dot beside the name says the computer works.
+      const trigger = document.querySelector('.mb-chat .conversation-trigger'), active = name.endsWith('active');
+      require(!document.querySelector('.mb-head [data-act="computer"]'), 'the header has no computer button');
+      require(visible(trigger) && trigger.classList.contains('is-computer-active') === active, 'the name reflects running status');
+      const dot = getComputedStyle(trigger.querySelector('.mb-pill'), '::after');
+      if (active) {
+        require(dot.content !== 'none' && parseFloat(dot.width) === 8 && dot.backgroundColor !== 'rgba(0, 0, 0, 0)' && dot.animationName === 'none', 'one still purple dot follows the name');
+        require(trigger.getAttribute('aria-label').includes(' · ') && trigger.title.includes(' · '), 'the name says the computer is working, to a screen reader and on hover');
+      } else require(dot.content === 'none' || dot.content === 'normal', 'an idle computer adds nothing to the name');
     } else if (name === 'level-panel' || name === 'level-off' || name === 'level-no-computer') {
       // Since the panel tabs the computer has its own tab, headed by its state and shared location control.
       require(panel.dataset.detailsTab === 'computer' && visible(panel.querySelector('[data-computer-location]')), 'the computer tab keeps its state header and shared location control');

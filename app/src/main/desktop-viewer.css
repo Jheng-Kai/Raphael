@@ -1,6 +1,7 @@
 /* The panel previews the member's workspace; takeover carries that same stream. */
 .mb-det:not([data-details-tab="computer"]) .desktop-panel:not([data-expanded]) { display: none; }
-.is-computer-active.btn.icon { color: var(--computer-active); }
+/* While the member's computer works, a small dot follows its name in the header: no button, as Grok Bot's header. */
+.conversation-trigger.is-computer-active .mb-pill::after { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--computer-active); }
 .desktop-wallpaper { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center bottom; }
 /* xfdesktop zooms the owner's picture from its centre, and its subject sits in the middle rather than along the bottom. */
 .desktop-wallpaper[data-own] { object-position: center; }

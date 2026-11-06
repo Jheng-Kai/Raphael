@@ -113,19 +113,17 @@ test("a sure page gesture appends a draft and sends nothing until the owner subm
   agent.hide(); Reflect.deleteProperty(navigator, "userActivation");
 });
 
-test("the header computer button updates its accessible label and title when the locale changes", async () => {
+test("the header has no computer button, and an idle computer adds nothing to the name", async () => {
   const previous = getLocale();
   setLocale("zh-TW");
   api.agentHistoryList.mockResolvedValue({ turns: [] });
   const agent = mount();
   try {
     await flush();
-    const button = agent.el.querySelector<HTMLButtonElement>('.mb-head [data-act="computer"]')!;
-    for (const [locale, label] of [["zh-TW", "電腦"], ["en", "Computer"], ["ja", "コンピューター"], ["zh-TW", "電腦"]] as const) {
-      setLocale(locale);
-      expect(button.getAttribute("aria-label"), locale).toBe(label);
-      expect(button.title, locale).toBe(label);
-    }
+    expect(agent.el.querySelector('.mb-head [data-act="computer"], .mb-head .btn.ra-tool:not([hidden])')).toBeNull();
+    const title = agent.el.querySelector<HTMLElement>(".conversation-trigger")!;
+    expect(title.classList.contains("is-computer-active")).toBe(false);
+    expect(title.getAttribute("aria-label")).not.toContain("正在使用電腦");
   } finally {
     agent.hide();
     setLocale(previous);

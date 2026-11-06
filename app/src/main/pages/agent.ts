@@ -239,9 +239,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     `<section class="mb-chat">` +
     `<div class="page-head mb-head"><h1 class="mb-h1">${esc(t("agent.title"))}</h1><span class="mb-head-l">` +
     iconButton("search", t("agent.search"), ' data-act="search" aria-expanded="false" hidden', "ra-tool") +
-    `</span><span class="mb-head-c"></span><div class="ra-tools">` +
-    iconButton("monitor", t("card.pcTitle"), ' data-act="computer"', "ra-tool") +
-    `</div></div>` +
+    // Nothing at the right end, as Grok Bot's header (owner, 2026-11-06): the computer is a tab of the panel the name opens.
+    `</span><span class="mb-head-c"></span><div class="ra-tools"></div></div>` +
     `<div class="ra-find" hidden></div>` +
     `<div class="ra-stage">` +
     `<div class="ra-scroll"><div class="ra-col"><div class="ra-older" hidden></div><ol class="thread"></ol><p class="ra-none" hidden></p></div></div>` +
@@ -252,7 +251,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     `</section>`;
   const heading = el.querySelector<HTMLElement>("h1")!;
   const searchButton = el.querySelector<HTMLElement>('[data-act="search"]')!;
-  const computerButton = el.querySelector<HTMLElement>('[data-act="computer"]')!;
+  /** Whether the open member's computer is working now: a dot beside its name in the header says so. */
+  let computerActive = false;
   const find = el.querySelector<HTMLElement>(".ra-find")!;
 
   const stage = el.querySelector<HTMLElement>(".ra-stage")!;
@@ -323,7 +323,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     face: () => members.faceOf(members.current(), 22),
     closePanel: () => members.setDetails(false),
     openPanel: () => members.computer(), panelVisible: () => members.detailsOpen() && members.details.dataset.detailsTab === 'computer',
-    status: active => el.querySelector('[data-act="computer"]')!.classList.toggle('is-computer-active', active),
+    status: active => {
+      computerActive = active;
+      const trigger = el.querySelector<HTMLElement>(".mb-chat .conversation-trigger");
+      if (trigger) { trigger.classList.toggle("is-computer-active", active); drawConversation(); }
+    },
     changed: () => { if (visible && !scroller.hidden) drawThread(); },
     trySkill: text => sendFromPage(text),
     stop: turnId => { const turn = turns.find(turn => turn.id === turnId); return turn?.task ? api.workerCancel(turn.task.id) : turn?.session_id ? api.agentStop(turn.session_id, memberId()) : Promise.resolve(); },
@@ -368,7 +372,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     caption.textContent = title;
     caption.hidden = !title;
     const name = members.member().name;
-    conversationButton.setAttribute("aria-label", title ? `${name}: ${title}` : name); conversationButton.title = title || name;
+    const working = computerActive ? ` · ${t("desktop.working")}` : "";
+    conversationButton.setAttribute("aria-label", (title ? `${name}: ${title}` : name) + working); conversationButton.title = (title || name) + working;
+    conversationButton.classList.toggle("is-computer-active", computerActive);
   }
 
   const conversationsDirty = new Set<number>();
@@ -423,9 +429,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   conversationButton.addEventListener("click", () => {
     members.setDetails(!members.detailsOpen());
-  });
-  el.querySelector('[data-act="computer"]')!.addEventListener("click", () => {
-    members.computer();
   });
   window.addEventListener("conversations-changed", (event) => {
     const member = (event as CustomEvent<number>).detail;
@@ -722,7 +725,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     // The voice slot's tooltip is the custom one drawTaskSlot keeps (voice or Stop); a native title would double it.
     voiceButton.setAttribute("aria-label", t("agent.voice"));
     for (const [button, label] of [
-      [computerButton, t("card.pcTitle")],
       [searchButton, t("agent.search")],
       [attachButton, t("agent.attach")],
     ] as const) {

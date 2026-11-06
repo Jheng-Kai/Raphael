@@ -1006,7 +1006,9 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     result.computer.timezone = { ...clock, ownerZone, expected, checks: timezoneChecks };
     if (clock?.offset !== expected) throw new Error(`VM UTC offset ${clock?.offset ?? "unavailable"} differs from host ${expected}`);
     await chat(page);
-    await click(page, '[data-act="computer"]');  // the panel shows the computer on demand, until something is at work on it
+    // The panel's Computer tab shows the computer on demand (no header button since 2026-11-06), until something is at work on it.
+    if (await page.$eval('.mb-chat .conversation-trigger', button => button.getAttribute('aria-expanded') !== 'true')) await click(page, '.mb-chat .conversation-trigger');
+    await click(page, '#member-tab-computer');
     await wait(page, ' .desktop-panel:not([hidden])');
     await capture("entry");
     await page.waitForSelector('.desktop-panel[data-desktop-state="member"]', { visible: true, timeout: 60000 });

@@ -1398,7 +1398,7 @@ test.each(['room','hidden'])("opening member details in a %s page never polls or
  else agent.hide();
  await flush();
  api.desktopOpen.mockClear(); api.desktopStatus.mockClear();
- agent.el.querySelector<HTMLButtonElement>('[data-act="computer"]')!.click(); await flush();
+ agent.el.querySelector<HTMLButtonElement>('#member-tab-computer')?.click(); await flush();
  expect(api.desktopStatus).not.toHaveBeenCalled(); expect(api.desktopOpen).not.toHaveBeenCalled();
  agent.hide();
 });

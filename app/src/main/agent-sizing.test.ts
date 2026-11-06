@@ -107,6 +107,6 @@ test("the composer field sizes itself to its text, so a keystroke never lays out
 test("a member's conversation wears its colour on selected words in the owner's bubble, send, stop and its computer", () => {
   const css = read("agent.css");
   expect(css).toContain(".mb-chat[data-member-bubble] .owner-message :is(.bubble, .bubble *)::selection { background: var(--on-bubble); color: var(--member-bubble); }");
-  expect(css).toContain('.mb-chat[data-member-bubble] :is(.composer .cmp-pair, .btn.ra-tool[data-act="computer"]) { --accent-icon: var(--member-accent); --accent-text: var(--member-accent); }');
+  expect(css).toContain('.mb-chat[data-member-bubble] .composer .cmp-pair { --accent-icon: var(--member-accent); --accent-text: var(--member-accent); }');
   expect(read("pages/agent.ts")).toContain('memberChat.style.setProperty("--member-accent", memberAccent(slimeColorOf(member)));');
 });

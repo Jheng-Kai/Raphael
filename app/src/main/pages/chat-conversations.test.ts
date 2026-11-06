@@ -10,7 +10,7 @@ import type { AppContext, MainEvent } from "../types";
 const flush = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
 afterEach(() => { closeMenu(); document.body.replaceChildren(); vi.clearAllMocks(); vi.useRealTimers(); });
 
-test("the stacked member and conversation title toggles details with one state, and the header has only the computer", async () => {
+test("the stacked member and conversation title toggles details with one state, and the header holds nothing else", async () => {
   api.agentQuestionOpen.mockResolvedValue(null);
   api.agentHistoryList.mockResolvedValue({ turns: [] });
   api.core.mockImplementation(async method => method === "conversations.list" ? { conversations: [{ id: 1, member_id: 0, is_default: 1, title: "Research" }] } : method === "background.questions.list" ? { questions: [] } : {});
@@ -23,7 +23,7 @@ test("the stacked member and conversation title toggles details with one state, 
   expect(title.querySelector<HTMLElement>(".conversation-caption")!.hidden).toBe(true);
   expect(title.querySelector("button")).toBeNull();
   expect(page.el.querySelector(".conversation-head")?.textContent).not.toContain(" / ");
-  expect([...page.el.querySelectorAll<HTMLElement>('.mb-head .ra-tools [data-act]')].map(button => button.dataset.act)).toEqual(["computer"]);
+  expect(page.el.querySelector('.mb-head .ra-tools')!.children).toHaveLength(0);
   expect(page.el.querySelector('.desktop-panel')?.closest('.mb-det')).not.toBeNull();
   expect(page.el.querySelector('[data-act="clear"]')).toBeNull();
   expect(title.hasAttribute("aria-haspopup")).toBe(false);
@@ -158,7 +158,7 @@ test("rooms close the private desktop lease, hide the member picker and keep rep
   document.body.append(page.el); page.show(); await flush();
   if (page.el.querySelector('.conversation-trigger')!.getAttribute('aria-expanded') !== 'true') page.el.querySelector<HTMLButtonElement>('.conversation-trigger')!.click();
   await flush();
-  page.el.querySelector<HTMLButtonElement>('[data-act="computer"]')!.click(); await flush();
+  page.el.querySelector<HTMLButtonElement>('#member-tab-computer')!.click(); await flush();
   expect(page.el.querySelector('.desktop-panel iframe')).not.toBeNull();
   window.dispatchEvent(new CustomEvent("raphael:open-room", { detail: { roomId: 7 } })); await flush();
   expect(page.el.querySelector('.desktop-panel iframe')).toBeNull();
