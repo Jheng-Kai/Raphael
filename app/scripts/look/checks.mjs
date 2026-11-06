@@ -2124,7 +2124,8 @@ export function checkRendered(name, context = {}) {
     const channel = value => value / 255 <= 0.03928 ? value / 255 / 12.92 : ((value / 255 + 0.055) / 1.055) ** 2.4;
     const light = color => { const [r, g, b] = color.match(/[\d.]+/g).map(Number); return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b); };
     const [a, b] = [light(style.backgroundColor), light(style.color)], ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
-    require(ratio >= 4.5, `the words read on the bubble: ${ratio}`);
+    // R-UI-81: white words hold Grok Bot's 3.4:1 on a coloured bubble; dark words read at 4.5:1.
+    require(ratio >= (b > a ? 3.39 : 4.5), `the words read on the bubble: ${ratio}`);
     const probe = document.createElement('i'); probe.style.background = 'var(--bubble)'; document.documentElement.append(probe);
     const neutral = getComputedStyle(probe).backgroundColor; probe.remove();
     if (name === "owner-bubble-neutral") {
@@ -2133,6 +2134,7 @@ export function checkRendered(name, context = {}) {
       require(style.backgroundColor !== neutral, "the owner's bubble wears the member's colour");
       for (const link of bubble.querySelectorAll('.message-link, .btn.message-expand')) require(getComputedStyle(link).color === style.color, "a link and the expand control take the bubble's words colour");
       require(chat && chat.dataset.memberBubble !== undefined, "the colour comes from the member's conversation");
+      if (document.querySelector('.mb-chat [data-member="0"][aria-current="true"], .side .mb-chief[aria-current="true"]')) require(style.backgroundColor === "rgb(217, 165, 43)", `Raphael's own conversation wears his gold: ${style.backgroundColor}`);
     }
     return {check:name,background:style.backgroundColor,ratio:Number(ratio.toFixed(2))};
   }
@@ -4743,6 +4745,17 @@ export function checkRendered(name, context = {}) {
     const box = close.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
     require(close === hit || close.contains(hit), "rounded corners do not clip the close control");
     return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius };
+  }
+  if (name === "message-hugs-bubble") {
+    // R-UI-104: as Grok Bot's, a message is its bubble and the actions beside it; the room to their side is the thread's.
+    const message = document.querySelector('.tn[data-id="8201"] .chat-message[data-reply]'), bubble = message.querySelector(':scope > .ans'), actions = message.querySelector(':scope > .message-actions');
+    const box = message.getBoundingClientRect(), b = bubble.getBoundingClientRect(), a = actions.getBoundingClientRect();
+    require(b.height > 120, 'the fixture reply runs over several lines');
+    require(a.left - b.right >= 0 && a.left - b.right <= 8, `the actions stand against the bubble (${Math.round(a.left - b.right)} px away)`);
+    require(box.right <= a.right + 1, `the message ends with its actions (${Math.round(box.right)} vs ${Math.round(a.right)})`);
+    const room = document.elementFromPoint(Math.min(innerWidth - 24, a.right + 120), b.top + b.height / 2);
+    require(!room || !message.contains(room), 'the room beside the message is not part of it');
+    return { check: name, message: Math.round(box.width), bubble: Math.round(b.width) };
   }
   if (name === "dictation-heat-day") {
     const said = document.querySelector('.heat-said');

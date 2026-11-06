@@ -98,7 +98,7 @@ test("every character is the one slime: the same body, and only its marks differ
 
 test("Shion is lavender and a horn, and no hair", () => {
   const shion = slimeSVG({ character: "shion" }, plain);
-  expect(shion).toContain("--slime-color:#9270CB");
+  expect(shion).toContain("--slime-color:#905AFB");
   expect(shion).toContain("#363140");
   const bare = slimeSVG({ character: "rimuru" }, plain);
   // The resting vector carries the horn once.

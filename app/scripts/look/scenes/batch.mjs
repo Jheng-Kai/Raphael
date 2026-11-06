@@ -44,6 +44,6 @@ export default [
   scene("owner-bubble-light-character", "A light character keeps its colour and takes dark words", [member(1), wait('.owner-message .bubble'), check("owner-bubble-tinted")],
     {turns: [plain(1)], members: fixture.members.map(item => item.id === 1 ? {...item, avatar: "slime:rimuru"} : item)}),
   scene("owner-bubble-long", "A long tinted bubble keeps its link and expand control readable", [member(1), wait('.owner-message .bubble'), check("owner-bubble-tinted")], {turns: [plain(1, {question: `請看這個連結 https://example.com/a\n${"這是一段很長的需求說明，要確定展開按鈕和連結在角色顏色上都看得清楚。".repeat(14)}`})]}),
-  scene("owner-bubble-chief", "Raphael's conversation stays neutral", [member(0), wait('.owner-message .bubble'), check("owner-bubble-neutral")], {turns: [plain(1), plain(0)]}),
+  scene("owner-bubble-chief", "Raphael's own conversation wears his warm gold with dark words", [member(0), wait('.owner-message .bubble'), check("owner-bubble-tinted")], {turns: [plain(1), plain(0)]}),
   scene("owner-bubble-room", "A group talks to everyone, so its bubbles stay neutral", [member(1), room(1), wait('.au-room-pane .owner-message .bubble, .au-room-pane .bubble'), check("owner-bubble-neutral")]),
 ];

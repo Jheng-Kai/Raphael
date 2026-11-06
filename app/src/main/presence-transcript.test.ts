@@ -84,7 +84,7 @@ test("thinking, blocked and working keep their own-colour slime and liquid props
     expect(root.querySelector(".slime-body")).not.toBeNull();
     expect(root.querySelector(".slime-drop")).toBeNull();
     expect(root.querySelector(".slime-dots, .slime-blocked, .slime-ribbons")).toBeNull();
-    expect(root.querySelector(".slime")?.getAttribute("style")).toContain("--slime-color:#15897E");
+    expect(root.querySelector(".slime")?.getAttribute("style")).toContain("--slime-color:#13B8A3");
   }
 });
 

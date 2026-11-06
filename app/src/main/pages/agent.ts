@@ -83,7 +83,7 @@ import { mountGreeting } from "../member-greeting";
 import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
 import { mountPendingQuestions } from "../pending-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
-import { memberAccent, ownerBubble } from "../owner-bubble";
+import { memberAccent, ownerBubble, RAPHAEL_GOLD, raphaelBubble } from "../owner-bubble";
 import { slimeColorOf } from "../slime";
 import { dayLabel, describeError } from "../format";
 import { loadingHTML } from "../loading";
@@ -694,7 +694,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     drawComposerTask();
     if (inRaphael()) {
       patchHTML(hero, avatarHTML({ size: 132, loop: true }));
-      delete memberChat.dataset.memberBubble;
+      // His own conversation wears his gold, as each member's wears its colour (R-UI-81).
+      const bubble = raphaelBubble();
+      memberChat.dataset.memberBubble = bubble.words;
+      memberChat.style.setProperty("--member-bubble", bubble.fill);
+      memberChat.style.setProperty("--member-accent", memberAccent(RAPHAEL_GOLD));
     } else {
       const member = members.member();
       patchHTML(hero, faceHTML(member, 96));

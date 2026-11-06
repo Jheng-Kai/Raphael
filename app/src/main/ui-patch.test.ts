@@ -40,7 +40,7 @@ test('generated face reuse follows keyed reorders and still updates a changed id
   patchHTML(root,row(2,'thinking','coral')+row(1,'thinking'));
   expect(root.querySelector('svg.slime')).toBe(two);
   expect(two?.getAttribute('data-state')).toBe('thinking');
-  expect((two as SVGElement).style.getPropertyValue('--slime-color')).toBe('#D4556D');
+  expect((two as SVGElement).style.getPropertyValue('--slime-color')).toBe('#FC2C3E');
   expect(root.querySelectorAll('.slime-loop-body[data-state="thinking"]')).toHaveLength(2);
 });
 
