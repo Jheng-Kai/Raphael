@@ -1,6 +1,7 @@
-"""Conversation RPCs keep context, ownership and deletion within the chosen conversation."""
+"""One main conversation per member and a separate quick conversation for Raphael."""
 
 import json
+import sqlite3
 
 import pytest
 
@@ -9,14 +10,38 @@ from .test_service import make_rig  # noqa: F401
 from .test_narration import chat
 
 
-async def test_new_conversation_starts_clean_and_switching_restores_context(make_rig, client):
+@pytest.mark.parametrize("method", ["conversations.create", "conversations.rename", "conversations.delete"])
+async def test_removed_conversation_rpcs_are_unknown(make_rig, method):
     rig = make_rig()
-    first = (await rig.call("conversations.create", {"member_id": 0}))["conversation"]
+    from raphael_core.protocol import METHOD_NOT_FOUND
+    with pytest.raises(RpcError) as error:
+        await rig.call(method, {"id": rig.service.conversations.main(), "title": "Unused"})
+    assert error.value.code == METHOD_NOT_FOUND
+
+
+def test_removed_conversation_management_tools_are_not_offered():
+    from raphael_core.management import ACTIONS
+    assert not {"conversation_create", "conversation_rename", "conversation_delete"} & {action.name for action in ACTIONS}
+
+
+def test_only_main_can_lazily_create_a_standard_conversation(conn):
+    from raphael_core.agent.conversations import Conversations
+    conversations = Conversations(conn)
+    assert not hasattr(conversations, "create")
+    assert conversations.main(1) == conversations.main(1)
+    assert len(conversations.list(1)) == 1
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO conversations(member_id,title,created_at_ms,updated_at_ms) VALUES(1,'Duplicate',1,1)")
+
+
+async def test_quick_starts_clean_and_main_preserves_context(make_rig, client):
+    rig = make_rig()
+    first = rig.service.conversations.get(rig.service.conversations.main())
     client.chats.append(chat('{"prefix":"Answer","text":"Saved secret","detail":""}'))
     await rig.call("agent.ask", {"session_id": "one", "text": "Remember the cobalt elephant", "source": "app", "ui_language": "en", "conversation_id": first["id"]})
-    second = (await rig.call("conversations.create", {"member_id": 0}))["conversation"]
+    second = rig.service.conversations.get(rig.service.conversations.quick())
     client.chats.append(chat('{"prefix":"Answer","text":"Hello","detail":""}'))
-    await rig.call("agent.ask", {"session_id": "two", "text": "Hello", "source": "app", "ui_language": "en", "conversation_id": second["id"]})
+    await rig.call("agent.ask", {"session_id": "two", "text": "Hello", "source": "app", "ui_language": "en", "conversation_id": second["id"], "destination": "quick"})
     assert "cobalt elephant" not in json.dumps(client.chat_calls[-1])
     first_turns = await rig.call("agent.history.list", {"conversation_id": first["id"]})
     assert [turn["question"] for turn in first_turns["turns"]] == ["Remember the cobalt elephant"]
@@ -27,7 +52,7 @@ async def test_new_conversation_starts_clean_and_switching_restores_context(make
 
 async def test_the_words_typed_are_listed_newest_first_across_conversations_and_never_the_rest(make_rig):
     rig = make_rig()
-    named = (await rig.call("conversations.create", {"member_id": 0}))["conversation"]
+    named = rig.service.conversations.get(rig.service.conversations.main())
 
     def say(question, *, route="answer", **more):
         rig.wall.now += 1000
@@ -62,31 +87,35 @@ async def test_data_counts_only_conversations_with_records_and_clears_only_rapha
     assert rig.history.list(member_id=1)
 
 
-async def test_rename_search_delete_and_default_entry(make_rig):
+async def test_search_clear_and_permanent_default_entry(make_rig):
     rig = make_rig()
-    default = (await rig.call("conversations.list", {"member_id": 0}))["conversations"][0]
+    default = next(c for c in (await rig.call("conversations.list", {"member_id": 0}))["conversations"] if c["kind"] == "standard")
     turn_id = rig.history.add(session_id="voice", question="cobalt elephant", route="answer", prefix="", text="hello", status="done")
     assert rig.history.get(turn_id).conversation_id == default["id"]
-    await rig.call("conversations.rename", {"id": default["id"], "title": "Cobalt notes"})
     assert len((await rig.call("conversations.list", {"member_id": 0, "query": "cobalt"}))["conversations"]) == 1
-    await rig.call("conversations.delete", {"id": default["id"]})
+    await rig.call("conversations.clear", {"id": default["id"]})
     assert rig.history.get(turn_id) is None
     assert rig.history.search("elephant") == []
-    replacement = (await rig.call("conversations.list", {"member_id": 0}))["conversations"][0]
-    assert replacement["id"] != default["id"]
+    replacement = next(c for c in (await rig.call("conversations.list", {"member_id": 0}))["conversations"] if c["kind"] == "standard")
+    assert replacement["id"] == default["id"]
 
 
-async def test_deleting_the_default_hands_over_to_the_latest_conversation_instead_of_a_new_one(make_rig):
+async def test_list_has_one_main_for_a_member_and_main_plus_quick_for_raphael(make_rig):
+    from raphael_core.members.store import MemberStore
     rig = make_rig()
-    default = (await rig.call("conversations.list", {"member_id": 0}))["conversations"][0]
-    older = (await rig.call("conversations.create", {"member_id": 0}))["conversation"]
-    latest = (await rig.call("conversations.create", {"member_id": 0}))["conversation"]
-    await rig.call("conversations.delete", {"id": default["id"]})
-    listed = [c for c in (await rig.call("conversations.list", {"member_id": 0}))["conversations"] if c["kind"] == "standard"]
-    assert sorted(c["id"] for c in listed) == sorted([older["id"], latest["id"]])
-    assert [c["id"] for c in listed if c["is_default"]] == [latest["id"]]
-    turn_id = rig.history.add(session_id="voice", question="after", route="answer", prefix="", text="ok", status="done")
-    assert rig.history.get(turn_id).conversation_id == latest["id"]
+    member = MemberStore(rig.conn).create_member(name="Researcher")
+    main = rig.service.conversations.main(member.id)
+    chief = rig.service.conversations.main()
+    quick = rig.service.conversations.quick()
+    listed = rig.service.conversations.list(member.id)
+    assert [(c["id"], c["kind"]) for c in listed] == [(main, "standard")]
+    assert {(c["id"], c["kind"]) for c in (await rig.call("conversations.list"))["conversations"]} == {(chief, "standard"), (quick, "quick")}
+
+
+async def test_listing_raphael_lazily_includes_both_permanent_conversations(make_rig):
+    rig = make_rig()
+    listed = (await rig.call("conversations.list"))["conversations"]
+    assert sorted(c["kind"] for c in listed) == ["quick", "standard"]
 
 
 @pytest.mark.parametrize("conversation_id", [True, -1, "1", 999999])
@@ -97,9 +126,9 @@ async def test_invalid_conversation_never_runs_a_model(make_rig, conversation_id
     assert await rig.turns() == []
 
 
-async def test_search_reaches_named_conversations_and_delete_clears_native_context(make_rig):
+async def test_search_reaches_quick_and_turn_delete_clears_native_context(make_rig):
     rig = make_rig()
-    conversation = (await rig.call("conversations.create", {"member_id": 0}))["conversation"]
+    conversation = rig.service.conversations.get(rig.service.conversations.quick())
     turn_id = rig.history.add(session_id="named", question="Cobalt discovery", route="answer", prefix="", text="Answer", status="done", conversation_id=conversation["id"])
     rig.service._cli_sessions.put(0, "cli:codex", "native-context", conversation["id"])
     hits = (await rig.call("messages.search", {"query": "Cobalt"}))["turns"]
@@ -113,10 +142,10 @@ async def test_search_reaches_named_conversations_and_delete_clears_native_conte
     assert (await rig.call("messages.search", {"query": "Cobalt"}))["turns"] == []
 
 
-async def test_owner_context_reaches_named_conversation_and_desktop_context(make_rig, client):
+async def test_owner_context_reaches_main_conversation_and_desktop_context(make_rig, client):
     rig = make_rig()
     rig.settings.set('owner_name', 'Named Owner')
-    conversation = (await rig.call('conversations.create', {'member_id':0}))['conversation']
+    conversation = rig.service.conversations.get(rig.service.conversations.main())
     client.chats.append(chat('{"prefix":"Answer","text":"Hello","detail":""}'))
     await rig.call('agent.ask', {'session_id':'named-owner','text':'Hello','source':'app','ui_language':'en','conversation_id':conversation['id']})
     assert 'Named Owner' in json.dumps(client.chat_calls[-1])

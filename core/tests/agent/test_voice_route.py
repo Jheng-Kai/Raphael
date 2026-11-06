@@ -93,7 +93,7 @@ async def test_a_turn_said_into_a_conversation_has_the_time_a_typed_one_has(make
 
     client.decisions.append(decision("unclear"))
     client.chats.append(slowly)
-    conversation = rig.service.conversations.create(0)["id"]
+    conversation = rig.service.conversations.main()
     result = await rig.call("agent.ask", {"session_id": "s1", "text": "Explain this sentence", "ui_language": "en",
                                           "target_app": None, "conversation_id": conversation})
     assert result["text"] == "Here is an example."

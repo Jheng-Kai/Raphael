@@ -11,7 +11,7 @@ from raphael_core.agent.conversations import Conversations
 from raphael_core.agent.history import AgentHistory
 from raphael_core.brain import db
 from raphael_core.device.dictation import DictationService
-from raphael_core.protocol import NO_MICROPHONE, NO_LOCAL_MODEL, RpcError
+from raphael_core.protocol import INVALID_PARAMS, NO_MICROPHONE, NO_LOCAL_MODEL, RpcError
 from raphael_core.router import Router
 from raphael_core.services.speaker import Speaker
 from raphael_core.services.tts import PCM_RATE
@@ -35,9 +35,36 @@ def test_v67_preserves_existing_conversation_and_rolls_back_a_failed_upgrade(mon
         connection.commit()
         db.migrate(connection)
         db.migrate(connection)
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 67
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == db.LATEST_VERSION
         assert connection.execute("SELECT question FROM agent_turns WHERE id=?", (turn,)).fetchone()[0] == "Keep this"
     finally:
+        connection.close()
+
+
+async def test_call_after_conversation_fold_uses_main_and_refuses_the_deleted_id(monkeypatch):
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 67)
+        connection = db.connect(":memory:")
+    main = Conversations(connection).main(1)
+    extra = connection.execute("INSERT INTO conversations(member_id,title,created_at_ms,updated_at_ms) VALUES(1,'Old',1,2)").lastrowid
+    history = AgentHistory(connection)
+    turn = history.add(session_id="previous-call", question="Saved call", route="answer", prefix="", text="Member reply", status="done", member_id=1, conversation_id=extra)
+    connection.execute("INSERT INTO voice_calls(id,member_id,conversation_id,started_at_ms,ended_at_ms,summary_id) VALUES('old-call',1,?,1,2,?)", (extra, turn))
+    connection.execute("INSERT INTO voice_call_turns VALUES('old-call',?)", (turn,))
+    connection.commit()
+    db.migrate(connection)
+    rig = Rig(connection)
+    try:
+        with pytest.raises(RpcError) as error:
+            await rig.rpc.call("voice_chat.start", {"member_id": 1, "conversation_id": extra})
+        assert error.value.code == INVALID_PARAMS
+        assert rig.recording is None
+        await rig.start(1)
+        assert rig.calls.current.conversation_id == main
+        assert connection.execute("SELECT conversation_id FROM voice_calls WHERE id='old-call'").fetchone()[0] == main
+        assert history.get(turn).conversation_id == main
+    finally:
+        await rig.close()
         connection.close()
 
 

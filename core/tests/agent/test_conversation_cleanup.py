@@ -18,10 +18,10 @@ def exchange(history, **overrides):
     })
 
 
-def test_exchange_is_delivered_to_one_conversation_and_never_reappears_in_a_new_one(conn):
+def test_quick_exchange_never_appears_in_main(conn):
     history, conversations = AgentHistory(conn), Conversations(conn)
     first = conversations.main()
-    other = conversations.create(0)["id"]
+    other = conversations.quick()
     turn = exchange(history, conversation_id=other)
     assert history.get(turn).conversation_id == other
     assert history.list(conversation_id=first, exchanges=True) == []
@@ -40,20 +40,20 @@ def test_a_delegated_work_turn_keeps_its_delivery_conversation(conn):
     assert turn.conversation_id == conversations.main(member.id)
     # Work handed over stays with whoever does it.
     assert [t.id for t in history.list(member_id=member.id, conversation_id=turn.conversation_id, exchanges=True)] == [turn.id]
-    other = conversations.create(member.id)["id"]
-    assert history.list(member_id=member.id, conversation_id=other, exchanges=True) == []
+    other = conversations.main()
+    assert [t.id for t in history.list(member_id=0, conversation_id=other, exchanges=True)] == [source_id]
     conn.execute("DELETE FROM conversations WHERE id=?", (turn.conversation_id,))
     assert history.get(turn.id) is None
     assert tasks.get(task_id).turn_id is None
 
 
-async def test_deleting_a_conversation_removes_its_exchanges_and_cards(make_rig):
+async def test_clearing_a_conversation_removes_its_exchanges_and_cards(make_rig):
     rig = make_rig()
     conversation = rig.service.conversations.main()
     turn = exchange(rig.history, conversation_id=conversation)
     rig.conn.execute("INSERT INTO connect_cards(id,turn_id,member_id,conversation_id,app,language,state,created_at_ms,updated_at_ms,expires_at_ms) VALUES('card',?,0,?,'notes','en','pending',1,1,2)", (turn, conversation))
     rig.conn.commit()
-    await rig.call("conversations.delete", {"id": conversation})
+    await rig.call("conversations.clear", {"id": conversation})
     assert rig.history.get(turn) is None
     assert rig.conn.execute("SELECT COUNT(*) FROM connect_cards").fetchone()[0] == 0
     assert (await rig.call("agent.history.list"))["turns"] == []

@@ -1569,6 +1569,88 @@ PRAGMA user_version = 67;
 COMMIT;
 """
 
+# Each member keeps one standard conversation; the quick conversation is independent.
+_MIGRATIONS[68] = """
+BEGIN;
+CREATE TEMP TABLE conversation_fold AS
+SELECT id AS source_id, member_id,
+       FIRST_VALUE(id) OVER (
+           PARTITION BY member_id ORDER BY is_default DESC, updated_at_ms DESC, id DESC
+       ) AS target_id
+FROM conversations WHERE kind = 'standard';
+
+-- Prefer the target's admission, then the earliest admitted folded request.
+CREATE TEMP TABLE conversation_fold_cancelled AS
+SELECT turn_id FROM (
+    SELECT i.turn_id, ROW_NUMBER() OVER (
+        PARTITION BY i.member_id, f.target_id, i.request_id
+        ORDER BY (f.source_id = f.target_id) DESC, i.turn_id
+    ) AS position
+    FROM agent_inbox i JOIN conversation_fold f ON f.source_id = i.conversation_id
+    WHERE i.state != 'terminal'
+) WHERE position > 1;
+INSERT INTO conversation_fold_cancelled
+SELECT turn_id FROM (
+    SELECT i.turn_id, ROW_NUMBER() OVER (
+        PARTITION BY i.member_id, f.target_id
+        ORDER BY (f.source_id = f.target_id) DESC, i.turn_id
+    ) AS position
+    FROM agent_inbox i JOIN conversation_fold f ON f.source_id = i.conversation_id
+    WHERE i.state = 'started' AND i.turn_id NOT IN (SELECT turn_id FROM conversation_fold_cancelled)
+) WHERE position > 1;
+UPDATE agent_turns SET status = 'denied'
+WHERE id IN (SELECT turn_id FROM conversation_fold_cancelled);
+UPDATE agent_inbox SET state = 'terminal', outcome = 'cancelled',
+    settled_at_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+WHERE turn_id IN (SELECT turn_id FROM conversation_fold_cancelled);
+
+-- Per-conversation sequence numbers overlap; retain admission order in the merged FIFO.
+CREATE TEMP TABLE conversation_fold_sequence AS
+SELECT i.turn_id, ROW_NUMBER() OVER (PARTITION BY i.member_id, f.target_id ORDER BY i.turn_id) AS seq
+FROM agent_inbox i JOIN conversation_fold f ON f.source_id = i.conversation_id
+WHERE f.target_id IN (SELECT target_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE agent_inbox SET seq = (SELECT seq FROM conversation_fold_sequence s WHERE s.turn_id = agent_inbox.turn_id)
+WHERE turn_id IN (SELECT turn_id FROM conversation_fold_sequence);
+
+UPDATE agent_turns SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE voice_calls SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE connect_cards SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE secret_cards SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE handback_cards SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE permission_cards SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE email_drafts SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE pages SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE connection_proposals SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE agent_inbox SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+
+DELETE FROM conversation_context_summaries
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+DELETE FROM agent_conversation_cli_sessions
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE conversations SET is_default = 1, updated_at_ms = (
+    SELECT MAX(c.updated_at_ms) FROM conversations c
+    JOIN conversation_fold f ON f.source_id = c.id WHERE f.target_id = conversations.id
+)
+WHERE id IN (SELECT target_id FROM conversation_fold);
+DELETE FROM conversations WHERE id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+CREATE UNIQUE INDEX one_standard_conversation ON conversations(member_id) WHERE kind = 'standard';
+DROP TABLE conversation_fold_sequence;
+DROP TABLE conversation_fold_cancelled;
+DROP TABLE conversation_fold;
+PRAGMA user_version = 68;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

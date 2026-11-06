@@ -873,9 +873,6 @@ class AgentService:
             "agent.speak": self._speak_turn,
             "agent.react": self._react,
             "messages.search": self._messages_search,
-            "conversations.create": self._conversations_create,
-            "conversations.rename": self._conversations_rename,
-            "conversations.delete": self._conversations_delete,
             "conversations.clear": self._conversations_clear,
             "brains.cli": self._list_clis,
             "usage.allowances": self._allowances,
@@ -4785,18 +4782,6 @@ class AgentService:
             raise invalid_params("query must be at most 200 characters")
         return {"conversations": self.conversations.list(member, query.strip())}
 
-    async def _conversations_create(self, params: dict) -> dict:
-        member = self._member_param(params)
-        self.conversations.main(member)
-        conversation = self.conversations.create(member)
-        self._conversations_changed(member)
-        return {"conversation": conversation}
-
-    async def _conversations_rename(self, params: dict) -> dict:
-        conversation = self.conversations.rename(_opt_int(params, "id"), params.get("title"))
-        self._conversations_changed(conversation["member_id"])
-        return {"conversation": conversation}
-
     async def _delete_turn(self, turn: Turn) -> bool:
         from ..management import ORIGIN_TURN
         origin = self._history.get(ORIGIN_TURN.get()) if ORIGIN_TURN.get() else None
@@ -4823,18 +4808,6 @@ class AgentService:
         if turn is None or turn.member_id != member or turn.conversation_id != conversation_id:
             raise invalid_params("there is no such turn in this conversation")
         return {"deleted": int(await self._delete_turn(turn))}
-
-    async def _conversations_delete(self, params: dict) -> dict:
-        conversation = self.conversations.get(_opt_int(params, "id"))
-        if conversation["kind"] == "quick":
-            raise invalid_params("the quick conversation is permanent; clear its history instead")
-        await self._clear_conversation(conversation)
-        member = conversation["member_id"]
-        with self._conn:
-            self._conn.execute("DELETE FROM conversations WHERE id = ?", (conversation["id"],))
-        self.conversations.main(member)
-        self._conversations_changed(member)
-        return {"deleted": 1}
 
     async def _conversations_clear(self, params: dict) -> dict:
         conversation = self.conversations.get(_opt_int(params, "id"))
