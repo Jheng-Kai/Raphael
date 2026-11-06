@@ -4744,6 +4744,12 @@ export function checkRendered(name, context = {}) {
     require(close === hit || close.contains(hit), "rounded corners do not clip the close control");
     return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius };
   }
+  if (name === "dictation-heat-day") {
+    const said = document.querySelector('.heat-said');
+    require(visible(said) && /字/.test(said.textContent) && said.textContent.includes('10 月 24 日'), 'the pressed day says its words beside the grid');
+    require(visible(document.querySelector('.page-overview .heat')) && !visible(document.querySelector('.day-row')), 'the grid stays, and no history opened');
+    return { check: name, said: said.textContent };
+  }
   if (name === "dictation-navigation") {
     const nav = document.querySelector(".dictation-nav"), tabs = [...nav.querySelectorAll('[role="tab"]')];
     const active = tabs.filter(tab => tab.getAttribute("aria-selected") === "true");
