@@ -1217,9 +1217,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
         await page.waitForFunction(() => !!document.querySelector('[data-connector][data-card-state="cancelled"]'));
       }
     }
-    await click(page, '#nav [data-go="settings"]');
-    await click(page, '.modal-scrim [data-pane="connections"]');
-    await click(page, '[data-conn="tab"][data-id="store"]');
+    // 連結應用程式 opens from the sidebar only, as a dialog of its own (R-UI-111).2    await click(page, '#nav .sidebar-apps');2    await click(page, '[data-conn="tab"][data-id="store"]');
     await type(page, '#conn-search', app);
     const previousAccounts = new Set((await pendingAccounts()).map(account => account.id));
     await page.waitForSelector(`[data-conn="join"][data-id="${app}"]`, { timeout: 30000 });
@@ -1238,9 +1236,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     return;
   }
   if (name === "store-finder") {
-    await click(page, '#nav [data-go="settings"]');
-    await click(page, '.modal-scrim [data-pane="connections"]');
-    await click(page, '[data-conn="tab"][data-id="store"]');
+    // 連結應用程式 opens from the sidebar only, as a dialog of its own (R-UI-111).2    await click(page, '#nav .sidebar-apps');2    await click(page, '[data-conn="tab"][data-id="store"]');
     const catalog = await context.rpc("connectors.catalog", {});
     result.catalog = catalog;
     if (catalog.ok === false) throw new Error(`Real catalog unavailable: ${catalog.error}`);

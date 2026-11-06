@@ -80,7 +80,6 @@
 :is(.page-agent, .side) .mb-item .btn.mb-more { position: absolute; top: 50%; right: 4px; width: var(--pa-more); min-height: var(--pa-more); margin-top: calc(var(--pa-more) / -2); border-radius: var(--r-sm); opacity: 0; }
 :is(.page-agent, .side) .mb-item:hover .btn.mb-more, :is(.page-agent, .side) .mb-item .btn.mb-more:focus-visible, :is(.page-agent, .side) .mb-item .btn.mb-more[aria-expanded="true"] { opacity: 1; }
 .mb-item:hover .nav.mb-row, .mb-item:has(.mb-more[aria-expanded="true"]) .nav.mb-row { padding-right: calc(var(--pa-more) + 8px); }
-.mb-item:hover .mb-row .mb-dot, .mb-item:has(.mb-more[aria-expanded="true"]) .mb-row .mb-dot { display: none; }
 .mb-item:hover .nav.mb-chief, .mb-item:has(.mb-more[aria-expanded="true"]) .nav.mb-chief { padding-right: var(--sp-2); }
 
 .mb-who-face { position: relative; display: inline-flex; }

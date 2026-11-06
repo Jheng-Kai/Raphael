@@ -16,6 +16,7 @@ import type { BrainSettings, CatalogModel, DeviceSettings, LocalModel, ModelCata
 import {
   APPEARANCES,
   PANES,
+  STANDALONE_PANE,
   canonicalPane,
   RETENTIONS,
   SEARCH_INDEX,
@@ -226,9 +227,9 @@ describe("the tabs", () => {
   test("are General, Dictation, Raphael; Connections, Messaging; Models & usage and About, in each language", () => {
     expect(IDS).toEqual(["general", "appearance", "dictation", "tools", "safety", "connections", "messaging", "models", "about"]);
     const titles = {
-      "zh-TW": ["一般", "外觀", "聽寫與快捷鍵", "工具", "安全", "連接", "訊息平台", "模型與用量", "關於"],
-      en: ["General", "Appearance", "Dictation & shortcuts", "Tools", "Safety", "Connections", "Messaging", "Models & usage", "About"],
-      ja: ["一般", "外観", "音声入力とショートカット", "ツール", "安全", "接続", "メッセージ", "モデルと使用量", "アプリ情報"],
+      "zh-TW": ["一般", "外觀", "聽寫與快捷鍵", "工具", "安全", "連結應用程式", "訊息平台", "模型與用量", "關於"],
+      en: ["General", "Appearance", "Dictation & shortcuts", "Tools", "Safety", "Connect apps", "Messaging", "Models & usage", "About"],
+      ja: ["一般", "外観", "音声入力とショートカット", "ツール", "安全", "アプリを連携", "メッセージ", "モデルと使用量", "アプリ情報"],
     };
     for (const locale of LOCALES) {
       setLocale(locale);
@@ -239,7 +240,8 @@ describe("the tabs", () => {
   test("sit in three groups: the basics with no name, then 整合 and 帳戶 in small grey words", () => {
     const list = paneListHTML();
     const order = [...list.matchAll(/class="nav-group">([^<]+)<|data-pane="(\w+)"/g)].map((m) => m[1] ?? m[2]);
-    expect(order).toEqual(["基本", "general", "appearance", "dictation", "團隊", "tools", "safety", "整合", "connections", "messaging", "帳戶", "models", "about"]);
+    // 連結應用程式 is no tab: the sidebar opens it as a dialog of its own (R-UI-111).
+    expect(order).toEqual(["基本", "general", "appearance", "dictation", "團隊", "tools", "safety", "整合", "messaging", "帳戶", "models", "about"]);
     setLocale("en");
     expect(paneListHTML()).toContain('<div class="nav-group">Integrations</div>');
     expect(paneListHTML()).toContain('<div class="nav-group">Account</div>');
@@ -248,7 +250,7 @@ describe("the tabs", () => {
   });
 
   test("every tab is a real button and legacy Raphael links resolve to Tools", () => {
-    expect(paneListHTML().match(/<button type="button" class="nav" data-pane="\w+" aria-current="false">/g)).toHaveLength(9);
+    expect(paneListHTML().match(/<button type="button" class="nav" data-pane="\w+" aria-current="false">/g)).toHaveLength(8);
     expect(paneListHTML()).not.toContain('data-pane="agent"');
     expect(canonicalPane("agent")).toBe("tools");
   });
@@ -669,7 +671,8 @@ describe("搜尋設定", () => {
   });
 
   test("finds a tab by its name, before its rows, and a brand by its name; case does not matter", () => {
-    expect(where("連接")[0]).toBe("connections:連接");
+    // 連結應用程式 is not in Settings, so the search does not offer it (R-UI-111).
+    expect(where("連結應用程式")).toEqual([]);
     expect(where("telegram")).toEqual(["messaging:訊息平台"]);
     expect(where("OPENROUTER")).toEqual(["models:新增供應商", "usage:金鑰", "usage:OpenRouter 帳號本月用量"]);
     expect(where("模型")).toEqual(["models:模型與用量", "models:語音轉文字", "models:整理文字", "models:拉斐爾的快速提問"]);
@@ -688,7 +691,7 @@ describe("搜尋設定", () => {
   });
 
   test("knows a row of every tab, and each row it knows is drawn on its tab under that name, in every language", () => {
-    expect(new Set(SEARCH_INDEX.map((e) => canonicalPane(e.pane)))).toEqual(new Set(IDS));
+    expect(new Set(SEARCH_INDEX.map((e) => canonicalPane(e.pane)))).toEqual(new Set(IDS.filter((id) => id !== STANDALONE_PANE)));
     for (const locale of LOCALES) {
       setLocale(locale);
       for (const entry of SEARCH_INDEX) {

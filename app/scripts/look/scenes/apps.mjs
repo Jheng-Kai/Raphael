@@ -5,7 +5,7 @@ import { scene, click, wait, waitGone, type, check, key, scroll } from "./steps.
 // Settings > Connections owns the app inventory and its connected count.
 // Every scene uses the real account footer and Settings entry.
 const base = JSON.parse(readFileSync(resolve(import.meta.dirname, "../fixture.json"), "utf8"));
-const open = [click('#nav [data-go="settings"]'), click('.modal-scrim [data-pane="connections"]'), wait('.modal-scrim [data-pane="connections"][aria-current="page"]'), check("settings-shell")];
+const open = [click("#nav .sidebar-apps"), wait('.modal-scrim[data-standalone="connections"] .modal-body .cs'), check("settings-shell")];
 
 const tool = (slug, name, kind, description) => ({ slug, name, description, kind, enabled: true });
 const notionTools = [

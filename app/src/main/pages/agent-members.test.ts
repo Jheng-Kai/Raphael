@@ -90,6 +90,8 @@ function mount(mode: "hold" | "toggle" = "hold") {
   return agent;
 }
 const $ = <T extends HTMLElement>(q: string) => document.querySelector<T>(q)!;
+/** As Grok Bot's, Edit and Cancel live in a message's ⋯ menu (agent.ts messageMenu), not beside it. */
+const pickMessage = (scope: string, pick: "edit" | "cancel"): void => { $(`${scope} [data-act="more-message"]`).click(); $(`#app-popover [data-pick="${pick}"]`).click(); };
 const pick = async (id: number) => {
   $(`.mb-col [data-member="${id}"]`).click();
   await flush();
@@ -566,7 +568,7 @@ test("pending owner questions can be cancelled into the same member's composer, 
   $(".cmp-send").click(); await flush();
   const options = api.agentAskText.mock.calls[0][3];
   expect(options.requestId).toEqual(expect.any(String));
-  $('.is-pending [data-act="cancel-message"]').click(); await flush();
+  pickMessage('.is-pending', 'cancel'); await flush();
   expect(api.agentRetract).toHaveBeenCalledWith(options.requestId, 3, undefined);
   expect(input.value).toBe("fix this typo");
   expect(document.activeElement).toBe(input);
@@ -578,7 +580,7 @@ test("pending owner questions can be cancelled into the same member's composer, 
 
 test("editing preserves the old turn until resending the replacement in its own thread", async () => {
   const agent = mount(); await flush(); await pick(3);
-  $('[data-id="31"] [data-act="edit-message"]').click(); await flush();
+  pickMessage('[data-id="31"]', 'edit'); await flush();
   const input = $<HTMLTextAreaElement>(".cmp-input");
   expect(input.value).toBe("問題 31");
   expect(document.querySelector('[data-id="31"]')).not.toBeNull();
@@ -590,10 +592,10 @@ test("editing preserves the old turn until resending the replacement in its own 
 
 test("message actions show an app tooltip on keyboard focus, with no native title", async () => {
   const agent = mount(); await flush();
-  const edit = $('[data-id="2"] [data-act="edit-message"]');
-  expect(edit.hasAttribute("title")).toBe(false);
-  edit.focus();
-  expect($('[role="tooltip"]').textContent).toBe("編輯");
+  const reply = $('[data-id="2"] [data-act="reply-message"]');
+  expect(reply.hasAttribute("title")).toBe(false);
+  reply.focus();
+  expect($('[role="tooltip"]').textContent).toBe("回覆");
   expect($('[role="tooltip"]').hidden).toBe(false);
   $<HTMLTextAreaElement>(".cmp-input").focus();
   expect($('[role="tooltip"]').hidden).toBe(true);
@@ -623,7 +625,7 @@ test("editing a legacy attachment without a stored copy requires reattachment, w
   const original = turn(8, { session_id: "saved", attachments: [{ name: "original.pdf", mime: "application/pdf" }], quote: { text: "Saved passage", author: "You" } });
   api.agentHistoryList.mockResolvedValue({ turns: [original] });
   const agent = mount(); await flush();
-  $('[data-id="8"] [data-act="edit-message"]').click(); await flush();
+  pickMessage('[data-id="8"]', 'edit'); await flush();
   expect($(".cmp-quote .quote-text").textContent).toBe("Saved passage");
   expect($<HTMLButtonElement>(".cmp-send").disabled).toBe(true);
   $('[data-act="drop-missing"]').click();
@@ -641,8 +643,9 @@ test.each(["edit", "cancel", "regenerate"])("%s after reload retrieves stored fi
   api.agentHistoryList.mockImplementation(async ({ member_id }: { member_id?: number }) => ({ turns: member_id === 3 ? [original] : [] }));
   api.core.mockImplementation(async (method: string) => method === "attachments.get" ? { mime: "text/csv", data: btoa("report") } : { questions: [] });
   const agent = mount(); await flush(); await pick(3);
-  $(`[data-id="8"] ${action === "regenerate" ? ".ra " : ""}[data-act="${action === "regenerate" ? "more-message" : `${action}-message`}"]`).click(); await flush();
-  if (action === "regenerate") { $('[data-pick="regenerate"]').click(); await flush(); }
+  // Edit, Cancel and Regenerate all live in the message's ⋯ menu, as Grok Bot's.
+  $(`[data-id="8"] ${action === "regenerate" ? ".ra" : ".me"} [data-act="more-message"]`).click(); await flush();
+  $(`[data-pick="${action}"]`).click(); await flush();
   expect(api.core).toHaveBeenCalledWith("attachments.get", { id });
   if (action !== "regenerate") {
     expect($<HTMLTextAreaElement>(".cmp-input").value).toBe("問題 8");
@@ -663,7 +666,7 @@ test("an unavailable stored copy falls back to reattachment", async () => {
   api.agentHistoryList.mockResolvedValue({ turns: [turn(8, { attachments: [{ id, name: "lost.pdf", mime: "application/pdf" }] })] });
   api.core.mockImplementation(async (method: string) => { if (method === "attachments.get") throw new Error("unavailable"); return { questions: [] }; });
   const agent = mount(); await flush();
-  $('[data-id="8"] [data-act="edit-message"]').click(); await flush();
+  pickMessage('[data-id="8"]', 'edit'); await flush();
   expect(api.core).toHaveBeenCalledWith("attachments.get", { id });
   expect($("[data-missing]").textContent).toContain("lost.pdf");
   expect($<HTMLButtonElement>(".cmp-send").disabled).toBe(true);
@@ -675,7 +678,7 @@ test("a stored-file read finishing after a thread switch cannot fill the new com
   api.agentHistoryList.mockResolvedValue({ turns: [turn(8, { attachments: [{ id: `${"c".repeat(32)}.csv`, name: "old.csv", mime: "text/csv" }] })] });
   api.core.mockImplementation((method: string) => method === "attachments.get" ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ questions: [] }));
   const agent = mount(); await flush();
-  $('[data-id="8"] [data-act="edit-message"]').click(); await flush();
+  pickMessage('[data-id="8"]', 'edit'); await flush();
   await pick(3);
   finish({ mime: "text/csv", data: btoa("old") }); await flush();
   expect($<HTMLTextAreaElement>(".cmp-input").value).toBe("");
@@ -699,7 +702,7 @@ test("a selected member reply travels separately, renders on the pending bubble,
   expect(api.agentAskText).toHaveBeenCalledWith("Explain", [], 3, expect.objectContaining({ quote: { text: "今天的單字", author: "日文老師" } }));
   expect($(".is-pending .quote-text").textContent).toBe("今天的單字");
   expect($(".cmp-quote").hidden).toBe(true);
-  $('.is-pending [data-act="cancel-message"]').click(); await flush();
+  pickMessage('.is-pending', 'cancel'); await flush();
   expect($(".cmp-quote .quote-text").textContent).toBe("今天的單字");
   $('[data-act="remove-quote"]').click();
   expect($(".cmp-quote").hidden).toBe(true);

@@ -1815,23 +1815,35 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
 
   /**
-   * The ⋯ of a message and a right click on it open one menu, as Grok Bot does: a colleague's message has its reactions
-   * above Reply and Copy (and Regenerate on the latest answer); the owner's has Reply and Copy.
+   * The ⋯ of a message and a right click on it open one menu, as Grok Bot does: beside the bubble only react, reply and ⋯
+   * show, so everything else is here. A colleague's message has its reactions above Reply, Copy, its work and Regenerate
+   * on the latest answer; the owner's has Reply, Copy and Edit or Cancel; a message still being sent has Copy and Cancel.
    */
   function messageMenu(control: HTMLElement): void {
     const source = messageSource(control);
-    if (!source) return;
-    const owner = source.key === "question";
-    const items: Parameters<typeof openActions>[1][number][] = [{ id: "reply", label: t("chat.reply"), icon: "reply" }, { id: "copy", label: t("chat.copy"), icon: "copy" }];
-    // A greeting that came through stays: only a failed one is written again (its rerun button), never a second.
-    if (!owner && control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id && source.turn.route !== "greeting") items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
+    const pending = !source && outgoing.some(item => item.requestId === control.closest<HTMLElement>("[data-session]")?.dataset.session);
+    if (!source && !pending) return;
+    const owner = !source || source.key === "question";
     const message = control.closest<HTMLElement>(".chat-message");
-    const reactions = !owner && message?.querySelector('[data-act="react-message"]') ? source.turn.reactions?.[source.key] ?? [] : null;
+    const work = message?.querySelector<HTMLElement>('[data-act="thinking"]');
+    const items: Parameters<typeof openActions>[1][number][] = [];
+    if (source) items.push({ id: "reply", label: t("chat.reply"), icon: "reply" });
+    items.push({ id: "copy", label: t("chat.copy"), icon: "copy" });
+    if (work) items.push({ id: "work", label: work.getAttribute("aria-label") ?? t("work.inspect"), icon: "steps" });
+    // A greeting that came through stays: only a failed one is written again (its rerun button), never a second.
+    if (source && !owner && control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id && source.turn.route !== "greeting") items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
+    const ownerAct = pending ? "cancel" : control.dataset.ownerAct;
+    if (ownerAct === "edit") items.push({ id: "edit", label: t("chat.edit"), icon: "pencil" });
+    if (ownerAct === "cancel") items.push({ id: "cancel", label: t("common.cancel"), icon: "x" });
+    const reactions = source && !owner && message?.querySelector('[data-act="react-message"]') ? source.turn.reactions?.[source.key] ?? [] : null;
     openActions(control, items, pick => {
       if (pick === "regenerate") void regenerate(control);
       else if (pick === "reply") replyMessage(control);
+      else if (pick === "work" && work) toggleThinking(work);
+      else if (pick === "edit") void editMessage(control);
+      else if (pick === "cancel") void cancelMessage(control);
       else void copyMessage(message?.querySelector<HTMLElement>('[data-act="copy-message"]') ?? control);
-    }, reactions ? { html: menuReactionsHTML(reactions), onPick: lead => {
+    }, reactions && source ? { html: menuReactionsHTML(reactions), onPick: lead => {
       const react = (emoji: string): void => {
         const scope = { member_id: source.turn.member_id ?? 0, conversation_id: source.turn.conversation_id, turn_id: source.turn.id };
         void api.core("agent.react", { ...scope, message_key: source.key, emoji, active: !reactions.includes(emoji) })

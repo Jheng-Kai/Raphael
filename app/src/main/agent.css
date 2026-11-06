@@ -154,9 +154,16 @@
 .ans { margin: 0; font: var(--pa-fs-a)/var(--pa-lh-a) var(--voice); color: var(--text); overflow-wrap: anywhere; user-select: text; }
 .ra-body > .ans { justify-self: start; max-width: 100%; padding: var(--pa-bpy) var(--pa-bpx); border: 0; border-radius: var(--r-lg); background: var(--panel); white-space: pre-wrap; }
 .ans.progress { color: var(--text-2); }
-.chat-message { display: flex; flex-direction: column; align-items: flex-start; width: fit-content; min-width: 0; max-width: 100%; position: relative; }
+/* As Grok Bot's, a message's actions sit beside its bubble, centred on it: the message is one column of its parts with
+   the actions in a second (a first, for the owner's), on the bubble's row. */
+.chat-message { display: grid; grid-template-columns: minmax(0, auto) auto; column-gap: var(--sp-1); justify-items: start; align-items: start; width: fit-content; min-width: 0; max-width: 100%; position: relative; }
+.chat-message > * { grid-column: 1; min-width: 0; max-width: 100%; }
+.chat-message > .message-actions { grid-column: 2; grid-row: 1; align-self: center; }
+.chat-message:has(> .routine-origin) > .message-actions { grid-row: 2; }
 .chat-message > .turn-event { width: fit-content; max-width: 100%; margin-inline: auto; }
-.owner-message { align-items: flex-end; margin-inline-start: auto; max-width: min(var(--pa-bw), 78%); }
+.owner-message { grid-template-columns: auto minmax(0, auto); justify-items: end; margin-inline-start: auto; max-width: min(var(--pa-bw), 78%); }
+.owner-message > * { grid-column: 2; }
+.owner-message > .message-actions { grid-column: 1; }
 .owner-message .bubble { box-sizing: border-box; max-width: 100%; }
 .mb-chat[data-member-bubble] .owner-message { --bubble: var(--member-bubble); }
 .mb-chat[data-member-bubble="light"] .owner-message { --on-bubble: var(--on-tint-light); }
@@ -185,7 +192,6 @@
 .message-link { overflow-wrap: anywhere; color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 :root[data-keys] .message-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: var(--r-sm); }
 .message-actions { display: flex; flex: none; align-items: center; justify-content: flex-start; gap: var(--sp-1); height: 28px; opacity: 0; }
-.owner-message > .message-actions { align-self: flex-end; }
 .message-tooltip { position: fixed; z-index: 100; pointer-events: none; max-width: calc(100vw - 16px); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--panel); color: var(--text); box-shadow: var(--pop); font: var(--fs-2xs)/1.5 var(--ui); }
 .message-tooltip { white-space: pre-line; overflow-wrap: anywhere; }
 .message-tooltip[hidden], :has([data-cancel-armed="true"]) > .message-tooltip { display: none; }
@@ -198,8 +204,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .cmp-quote { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3) 0; }
 .cmp-quote > .message-quote { flex: 1; margin: 0; }
 .cmp-quote > .btn { flex: none; }
-.message-actions time { color: var(--text-3); font: var(--fs-2xs)/1.4 var(--ui); margin-inline-end: 5px; }
-.message-actions .btn.icon { width: 28px; height: 28px; min-height: 28px; padding: var(--sp-1); }
+.message-actions .btn.icon { width: 28px; height: 28px; min-height: 28px; padding: var(--sp-1); color: var(--text-3); }
 .message-actions .i, .message-code .i { width: 16px; height: 16px; }
 .chat-message:hover > .message-actions, .chat-message:focus-within > .message-actions { opacity: 1; }
 .ra-scroll::-webkit-scrollbar { display: none; }

@@ -15,7 +15,10 @@ export const scroll = selector => ({ action: "scroll", selector });
 export const waitScrollEnd = selector => ({ action: "wait-scroll-end", selector });
 export const rightClick = selector => ({ action: "right-click", selector });
 export const page = name => click(name === "agent" ? ".mb-chief" : `#nav [data-go="${name}"]`);
-export const settings = pane => [page("settings"), wait(".modal-scrim [data-pane]"), check("settings-shell"), click(`.modal-scrim [data-pane="${pane}"]`), wait(`.modal-scrim [data-pane="${pane}"][aria-current="page"]`)];
+// 連結應用程式 is no tab of Settings: its one way in is the sidebar's button, which opens it as a dialog of its own (R-UI-111).
+export const settings = pane => pane === "connections"
+  ? [click("#nav .sidebar-apps"), wait(".modal-scrim[data-standalone=\"connections\"] .modal-body .cs"), check("settings-shell")]
+  : [page("settings"), wait(".modal-scrim [data-pane]"), check("settings-shell"), click(`.modal-scrim [data-pane="${pane}"]`), wait(`.modal-scrim [data-pane="${pane}"][aria-current="page"]`)];
 export const scene = (name, description, steps = [], fixture = {}) => ({ name, description, steps, fixture });
 
 // The compact member/room picker exposes the same destinations as the wide sidebar.

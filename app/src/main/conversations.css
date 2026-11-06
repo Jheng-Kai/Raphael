@@ -70,8 +70,6 @@
 /* The event gap also houses the preceding message's hover actions. */
 .page-agent .ra-body > :is(.timeline-event, .event-group) { margin-block: calc(var(--sp-6) - var(--sp-1)); }
 .page-agent .ra-body > :is(.timeline-event, .event-group) + :is(.timeline-event, .event-group) { margin-top: 0; }
-.page-agent .tn > .me:has(+ .ra > .ra-body > :is(.timeline-event, .event-group):first-child) .message-actions,
-.page-agent .ra-body > [data-seq]:has(+ :is(.timeline-event, .event-group)) .message-actions { margin-bottom: -28px; }
 .page-agent .tn > .me + .ra > .ra-body > :is(.timeline-event, .event-group):first-child { margin-top: calc(var(--sp-6) - var(--pa-gap-in)); }
 .work-body .chat-message { margin-bottom: var(--sp-2); }
 .work-body .message-actions { display: none; }

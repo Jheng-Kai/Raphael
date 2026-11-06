@@ -55,7 +55,7 @@ export async function decodeVisibleImages() {
 }
 
 export function findVisibleElement(selector) {
-  return [...document.querySelectorAll(selector)].find(element => {
+  const shown = element => {
     const box = element.getBoundingClientRect();
     if (box.width <= 0 || box.height <= 0) return false;
     for (let parent = element; parent; parent = parent.parentElement) {
@@ -63,7 +63,22 @@ export function findVisibleElement(selector) {
       if (parent.hidden || style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") return false;
     }
     return true;
-  }) ?? null;
+  };
+  const found = [...document.querySelectorAll(selector)].find(shown);
+  if (found) return found;
+  // A row draws no ⋯, as Grok Bot's (styles.css): a step that waits for one, or hovers it, has the row it sits in. A
+  // message's work is in its ⋯ menu (timeline.ts): a step that waits for the work control has that ⋯.
+  for (const element of document.querySelectorAll(selector)) {
+    if (element.matches("[data-overflow]") && getComputedStyle(element).display === "none") {
+      // A wrapper that held only the ⋯ has no size now: the row is the first box out from it, unless that row is hidden.
+      let row = element.parentElement;
+      while (row && !(row.getBoundingClientRect().width > 0 && row.getBoundingClientRect().height > 0) && getComputedStyle(row).display !== "none" && !row.hidden) row = row.parentElement;
+      if (row && shown(row)) return row;
+    }
+    const more = element.matches('[data-act="thinking"][hidden]') ? element.closest(".chat-message")?.querySelector('[data-act="more-message"]') : null;
+    if (more && shown(more.closest(".chat-message"))) return more;
+  }
+  return null;
 }
 
 export async function perform(page, step, evidenceDirectory) {
@@ -76,6 +91,41 @@ export async function perform(page, step, evidenceDirectory) {
     catch (error) { throw new Error(`No visible match: ${selector}`, { cause: error }); }
   };
   const click = async selector => {
+    // Rows keep their ⋯ out of sight, as Grok Bot's (owner, 2026-11-06): a step that names one presses it the way the
+    // owner does, with a right click on its row (context-menu.ts), which presses the very same button.
+    if (await page.evaluate(selector => matchMedia("(max-width: 859px)").matches && !document.documentElement.hasAttribute("data-sidebar-open") && !!document.querySelector(selector)?.matches("[data-overflow]") && !!document.querySelector(selector)?.closest("#nav"), selector)) await page.click('[data-sidebar="open"]');
+    const row = await page.evaluate(selector => {
+      const button = document.querySelector(selector);
+      if (!button?.matches("[data-overflow]") || button.getClientRects().length) return null;
+      for (let node = button.parentElement; node; node = node.parentElement) {
+        if (!(node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0)) continue;
+        node.scrollIntoView({ block: "nearest", inline: "nearest" });
+        const box = node.getBoundingClientRect();
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      }
+      return null;
+    }, selector);
+    if (row) {
+      await page.mouse.click(row.x, row.y, { button: "right" });
+      await page.evaluate(at => { window.__look.pointer = at; }, row);
+      return;
+    }
+    // A message's work opens from its ⋯ menu, as Grok Bot's keeps only react, reply and ⋯ beside the bubble.
+    const work = await page.evaluate(selector => {
+      const control = [...document.querySelectorAll(selector)].find(node => node.matches('[data-act="thinking"][hidden]') && node.closest(".chat-message")?.getClientRects().length);
+      if (!control) return null;
+      const message = control.closest(".chat-message"), id = `look-work-${Math.random().toString(36).slice(2)}`;
+      message.querySelector('[data-act="more-message"]')?.setAttribute("data-look-more", id);
+      message.scrollIntoView({ block: "nearest" });
+      return id;
+    }, selector);
+    if (work) {
+      await page.hover(`[data-look-more="${work}"]`);
+      await page.click(`[data-look-more="${work}"]`);
+      await page.waitForSelector('#app-popover [data-pick="work"]', { visible: true, timeout: 6000 });
+      await page.click('#app-popover [data-pick="work"]');
+      return;
+    }
     for (let attempt = 0; ; attempt++) {
       const element = await visible(selector);
       try { await element.click(); return; }

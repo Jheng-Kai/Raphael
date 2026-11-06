@@ -91,7 +91,8 @@ test("quick questions scope history, quote the entire answer, send their ID, and
   expect(api.core).toHaveBeenCalledWith("agent.react", { member_id: 0, conversation_id: 2, turn_id: 2, message_key: "reply", emoji: "🚀", active: true });
   expect(api.core).not.toHaveBeenCalledWith("agent.speak", expect.anything());
   page.el.querySelector<HTMLButtonElement>('.owner-message [data-act="more-message"]')!.click(); await flush();
-  expect([...document.querySelectorAll<HTMLElement>('#app-popover [data-pick]')].map(item => item.dataset.pick)).toEqual(["reply", "copy"]);
+  // The owner's own message adds Edit, which no longer stands beside the bubble (R-UI-104).
+  expect([...document.querySelectorAll<HTMLElement>('#app-popover [data-pick]')].map(item => item.dataset.pick)).toEqual(["reply", "copy", "edit"]);
   expect(document.querySelector('#app-popover .menu-reactions')).toBeNull();
   page.hide();
 });

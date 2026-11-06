@@ -21,7 +21,7 @@ const pairedUser = [...settings("messaging"), click('[data-msg="expand"]'), wait
 
 export default [
   scene("context-menu-member", "A right click on a member's row opens the menu of its ⋯ at the pointer", rightClicked('.mb-col [data-member-item="2"]', [column])),
-  scene("context-menu-conversation", "A right click on a conversation in the member's details opens its rename and delete menu", rightClicked(".mb-det .conversation-row", details)),
+  scene("context-menu-conversation", "A right click on one of Raphael's conversations in his details opens its rename and delete menu", rightClicked(".mb-det .conversation-row:has([data-conversation-more])", [member(0), { action: "open-details" }])),
   scene("context-menu-routine", "A direct routine row opens its editor without another menu", [...details, click(".mb-det .mb-rt"), wait(".au-routine-dialog"), check("level-routine")]),
   scene("context-menu-connection", "A right click on a custom server's header opens the menu of its ⋯: test, edit and delete", rightClicked(".cs-dlg-head", [
     ...settings("connections"), click('[data-conn="open"][data-id="notes"]'), wait(".cs-dlg-head"),

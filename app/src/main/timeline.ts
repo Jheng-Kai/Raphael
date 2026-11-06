@@ -35,7 +35,7 @@ import { messageHTML, replyContentHTML } from "./message-content";
 import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
 import { previewCardsHTML } from "./link-previews";
-import { formatClock, formatUsd } from "./format";
+import { formatUsd } from "./format";
 import { formatPerMtok } from "./pricing";
 import { SERVICE_ICONS, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
 import type { AgentStep, AgentTask, AgentTurn, MainEvent, MediaPayload, MessageQuote, TurnAttachment } from "./types";
@@ -611,15 +611,20 @@ function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined,
   return files?.length ? `<div class="owner-content">${filesHTML(files)}${bubble}</div>` : bubble;
 }
 
-export function messageActionsHTML(time: number, regenerate = false, owner?: "edit" | "cancel", actionable = true, work = "", queued = false): string {
+/**
+ * As Grok Bot's: beside the bubble, under the pointer, only react, reply and ⋯; Copy, the work, Edit and Cancel live in
+ * the ⋯ menu and the right-click menu (agent.ts messageMenu), and the time lives in the thread's dividers. `extra` holds
+ * the few controls a message needs in sight: a failed reply's Run again and a voice memo's play. A message with no menu
+ * (a group's or a side thread's) keeps Copy in sight instead.
+ */
+export function messageActionsHTML(_time: number, regenerate = false, owner?: "edit" | "cancel", actionable = true, extra = "", queued = false): string {
   const action = (icon: Parameters<typeof iconBtn>[0], label: string, act: string): string =>
     iconBtn(icon, label, ` data-act="${act}"`).replace(" title=", " data-tooltip=");
-  return `<div class="message-actions">${queued ? `<span class="queued-mark">${esc(t("agent.queued"))}</span>` : ""}<time tabindex="0" data-tooltip="${esc(new Date(time).toLocaleString())}" datetime="${esc(new Date(time).toISOString())}">${esc(formatClock(time))}</time>` + work +
+  return `<div class="message-actions">${queued ? `<span class="queued-mark">${esc(t("agent.queued"))}</span>` : ""}` + extra +
     (actionable ? reactionControlHTML() : "") +
     (actionable ? action("reply", t("chat.reply"), "reply-message") : "") +
-    action("copy", t("chat.copy"), "copy-message") +
-    (owner ? action(owner === "edit" ? "pencil" : "x", t(owner === "edit" ? "chat.edit" : "common.cancel"), `${owner}-message`) : "") +
-    (actionable ? action("more", t("chat.more"), "more-message").replace('data-act="more-message"', `data-act="more-message" data-regenerate="${regenerate}" aria-haspopup="menu"`) : "") + `</div>`;
+    (actionable ? "" : action("copy", t("chat.copy"), "copy-message")) +
+    (actionable ? action("more", t("chat.more"), "more-message").replace('data-act="more-message"', `data-act="more-message" data-regenerate="${regenerate}"${owner ? ` data-owner-act="${owner}"` : ""} aria-haspopup="menu"`) : "") + `</div>`;
 }
 
 function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: number, query: string, state: TimelineState, reply: boolean, regenerate = false, origin = true, last = true): string {
@@ -633,9 +638,11 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
     reactionRowHTML(turn.reactions?.[key]) + messageActionsHTML(time, regenerate, undefined, reply, reply ? workActionHTML(turn, state) + retry + (turn.voice_memo ? memoActionHTML(turn.voice_memo_state === "playing") : "") : "") + (reply && turn.voice_memo ? memoTranscriptHTML(text) : "") + (reply ? previewCardsHTML(text) : "") + `</div>`;
 }
 
+/** A failed reply's Run again: a bare icon first among its actions, which stay in sight on the latest failure. */
 function rerunActionHTML(turn: AgentTurn, state: TimelineState, regenerate: boolean): string {
-  if (turn.task && RERUNNABLE.has(turn.task.state)) return btn(esc(t("agent.rerun")), "sm rerun", ` data-act="rerun" data-task="${turn.task.id}"${state.rerunning.has(turn.task.id) ? " disabled" : ""}`);
-  return turn.status === "error" && regenerate ? btn(esc(t("agent.rerun")), "sm rerun", ' data-act="regenerate"') : "";
+  const rerun = (attrs: string): string => iconBtn("refresh", t("agent.rerun"), attrs, "rerun").replace(" title=", " data-tooltip=");
+  if (turn.task && RERUNNABLE.has(turn.task.state)) return rerun(` data-act="rerun" data-task="${turn.task.id}"${state.rerunning.has(turn.task.id) ? " disabled" : ""}`);
+  return turn.status === "error" && regenerate ? rerun(' data-act="regenerate"') : "";
 }
 
 function workActionHTML(turn: AgentTurn, state: TimelineState): string {
@@ -643,7 +650,8 @@ function workActionHTML(turn: AgentTurn, state: TimelineState): string {
   if (!(shownSteps(turn).length || workActions(turn).length || turn.messages?.some(m => m.kind !== "reply" && m.kind !== "media") || hasDetail(turn) || turn.model)) return "";
   const end = turn.task?.finished_at_ms ?? Math.max(turn.created_at_ms, ...(turn.messages ?? []).filter(message => message.kind === "reply").map(message => message.at_ms), ...(turn.steps ?? []).map(step => step.at_ms || turn.created_at_ms));
   const label = t("work.inspect") + ` · ${formatDuration(Math.max(0, end - turn.created_at_ms))}`;
-  return btn(ico("steps"), "sm icon message-work", ` data-act="thinking" aria-expanded="${state.thinkingOpen.get(turn.id) ?? false}" aria-controls="work-${turn.id}" aria-label="${esc(label)}" data-tooltip="${esc(label)}"`);
+  // Out of sight: the ⋯ menu offers the work and presses this control, which keeps the open state for assistive tech.
+  return btn(ico("steps"), "sm icon message-work", ` data-act="thinking" aria-expanded="${state.thinkingOpen.get(turn.id) ?? false}" aria-controls="work-${turn.id}" aria-label="${esc(label)}" data-tooltip="${esc(label)}" hidden`);
 }
 
 export function livePresenceHTML(look: TurnLook, progress?: string, showAction = true): string {

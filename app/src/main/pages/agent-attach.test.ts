@@ -245,7 +245,9 @@ describe("the composer with images and PDFs", () => {
     expect(agent.el.querySelector<HTMLButtonElement>(".cmp-send")!.disabled).toBe(false);
     field().value = "original draft";
     agent.el.querySelector<HTMLFormElement>(".composer")!.requestSubmit(); await flush();
-    agent.el.querySelector<HTMLButtonElement>('[data-act="cancel-message"]')!.click(); await flush();
+    // Cancel lives in the sending message's ⋯ menu (R-UI-104).
+    agent.el.querySelector<HTMLButtonElement>('.is-pending [data-act="more-message"]')!.click(); await flush();
+    document.querySelector<HTMLButtonElement>('#app-popover [data-pick="cancel"]')!.click(); await flush();
     expect(field().value).toBe("original draft");
     expect(chips()).toEqual(["photo.png", "report.pdf"]);
     expect(field().selectionStart).toBe(field().value.length);

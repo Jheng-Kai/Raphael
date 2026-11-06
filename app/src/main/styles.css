@@ -412,6 +412,9 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .modal-scrim { --modal-gap: 24px; --set-nav: 196px; position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: calc(var(--window-controls-height) + var(--modal-gap)) var(--modal-gap) var(--modal-gap); background: var(--scrim); }
 .modal { position: relative; display: grid; grid-template-columns: var(--set-nav) minmax(0, 1fr); width: min(1000px, 100%); height: min(760px, 100%); border-radius: var(--r-lg); overflow: hidden; background: var(--content); border: 1px solid var(--edge); box-shadow: var(--pop); }
 .modal-nav { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-4) var(--sp-2); background: var(--side); border-right: 0; overflow-x: hidden; overflow-y: auto; min-height: 0; }
+/* 連結應用程式 opens alone, as Grok Bot's Connect apps: one column, no list of Settings (R-UI-111). */
+.modal-scrim[data-standalone] > .modal { grid-template-columns: minmax(0, 1fr); width: min(900px, 100%); }
+.modal-scrim[data-standalone] .modal-nav { display: none; }
 .modal-nav .nav { min-height: 34px; padding: var(--sp-1) var(--sp-2); }
 /* 搜尋設定: a pill at the top of the tabs; while it holds text the tabs give way to what it found. */
 .set-search { flex: none; width: 100%; height: 32px; margin-bottom: var(--sp-2); padding: 0 var(--sp-3); border-color: transparent; border-radius: var(--r-pill); background: var(--surface-2); }
@@ -748,6 +751,10 @@ kbd.ob-cap { white-space: nowrap; }
 :is(.btn.icon, .cmp-attach, .cmp-voice, .mp-star, .chip-x):is(:hover, :active) { background: transparent; color: var(--text); filter: none; }
 :is(.btn.icon, .cmp-attach, .cmp-voice, .mp-star, .chip-x):is([aria-pressed="true"], [aria-expanded="true"], [aria-selected="true"]):not(:disabled) { background: transparent; color: var(--accent-icon); }
 :is(.btn.icon, .cmp-attach, .cmp-voice, .mp-star, .chip-x):active:not(:disabled) { background: transparent; color: color-mix(in srgb, var(--text) 85%, transparent); }
+/* As Grok Bot's (owner, 2026-11-06), no row, list item or card draws a ⋯: a right click on it, or Shift+F10 and the Menu key,
+   opens its menu (context-menu.ts presses the button, which stays in the page for that). A message keeps its ⋯ beside the
+   bubble, as Grok Bot's does; a dialog's or the computer's header keeps its own. */
+:is([data-member-more], [data-group-more], [data-conversation-more], [data-room-more], [data-room-menu], [data-panel-task-menu], [data-det="routine-menu"], [data-dlg="routine-menu"], [data-res="skill-menu"], [data-res="command-menu"], [data-mem="section-more"], [data-mem="summary-more"], [data-act="key-menu"], [data-act="local-menu"], [data-rule="more"], [data-vault="menu"], [data-act="word-menu"], [data-act="history-menu"], [data-act="computer-menu"], [data-cli-menu], [data-chatgpt-menu], [data-au="event-more"], [data-msg="user-menu"])[data-overflow] { display: none; }
 /* Grok Bot's edge buttons (owner, 2026-11-06): the panel's back, settings and close, the icons of a conversation's
    header, a dialog's close and the composer's attach are an icon in a soft round button, a little lighter under the
    pointer. Small actions beside a message or inside a bar stay bare icons, as Grok Bot's; the sidebar's search and plus

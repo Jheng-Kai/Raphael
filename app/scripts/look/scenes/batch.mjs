@@ -28,7 +28,7 @@ export default [
     {running: true, runningMember: 1, ownerAddition: true}),
   scene("composer-queued", "Queued bubbles retain sent order, real withdraw controls and one live presence below the newest", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-mark'), type('.cmp-input', "第三個範例請求"), key("Enter"), wait('.tn[data-id="902"] .queued-mark'), check("composer-queued")],
     {running: "fresh", runningMember: 1, queuedOwner: true}),
-  scene("composer-queued-withdraw", "Withdrawing one queued bubble keeps the running work and returns the words", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-mark'), click('.tn[data-id="901"] [data-act="cancel-message"]'), waitGone('.tn[data-id="901"]'), check("composer-queued-withdraw")],
+  scene("composer-queued-withdraw", "Withdrawing one queued bubble keeps the running work and returns the words", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-mark'), click('.tn[data-id="901"] [data-act="more-message"]'), click('#app-popover [data-pick="cancel"]'), waitGone('.tn[data-id="901"]'), check("composer-queued-withdraw")],
     {running: "fresh", runningMember: 1, queuedOwner: true}),
   scene("composer-queued-stop", "Stop cancels the running turn and returns queued words after the existing draft", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-mark'), type('.cmp-input', "第三個範例請求"), key("Enter"), wait('.tn[data-id="902"] .queued-mark'), type('.cmp-input', "目前草稿"), key("Escape"), key("Escape"), waitGone('.queued-mark'), check("composer-queued-stop")],
     {running: "fresh", runningMember: 1, queuedOwner: true}),

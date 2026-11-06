@@ -48,8 +48,8 @@ test("queued owner bubbles show a muted mark and withdraw instead of edit or liv
   setLocale("en");
   document.body.innerHTML = turnHTML(turn(91, { status: "queued", text: "", messages: [], model: null }), emptyTimelineState(), false, LOOK);
   expect(document.querySelector(".queued-mark")?.textContent).toBe("Queued");
-  expect(document.querySelector('button[data-act="cancel-message"]')).not.toBeNull();
-  expect(document.querySelector('[data-act="edit-message"],.live-presence,.work-section')).toBeNull();
+  expect(document.querySelector('button[data-act="more-message"][data-owner-act="cancel"]')).not.toBeNull();
+  expect(document.querySelector('[data-owner-act="edit"],.live-presence,.work-section')).toBeNull();
 });
 
 test("a pending permission card replaces duplicate running and waiting task controls", () => {
@@ -608,7 +608,7 @@ describe("a turn", () => {
   test("the person on the right without 「」 with where and when; Raphael on the left with his face and plain words", () => {
     const html = turnHTML(turn(5), emptyTimelineState(), false, LOOK);
     expect(html).not.toContain('class="me-src"');
-    expect(html).toContain('data-act="edit-message"');
+    expect(html).toContain('data-owner-act="edit"');
     expect(html).toContain('<div class="bubble"><div class="message-text">台北天氣如何，順便記到行事曆</div><button');
     expect(html).not.toContain('class="ra-face"');
     expect(html).toContain('data-tooltip="查看過程 ·');

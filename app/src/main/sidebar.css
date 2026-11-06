@@ -24,7 +24,6 @@
 .side .mb-row-p { line-height: 1.35; }
 .side .mb-row > .av, .side .mb-row > .room-avatar { --av: 40px !important; }
 .side :is(.mb-item, .au-room-row) .btn:is(.mb-more, .au-room-more) { top: 4px; margin-top: 0; }
-.side .mb-item:hover .nav.mb-row, .side .mb-item:has(.mb-more[aria-expanded="true"]) .nav.mb-row { padding-right: var(--sp-2); }
 /* Only a pinned member leaves the rows: a larger face centered above its name, side by side when there are several. */
 .side .mb-pinned { display: grid; grid-template-columns: minmax(0, 136px); justify-content: center; gap: var(--sp-1); padding: 0 0 var(--sp-2); }
 .side .mb-pinned[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 120px)); }

@@ -83,6 +83,7 @@ import {
   mediaRowPrice,
   canonicalPane,
   PANES,
+  STANDALONE_PANE,
   type SearchHit,
   SIZES,
   type SettingsView,
@@ -455,6 +456,10 @@ export function createSettings(app: AppContext): SettingsPage {
     }
     body.scrollTop = scroll;
     el.querySelectorAll<HTMLElement>("[data-pane]").forEach((b) => b.setAttribute("aria-current", b.dataset.pane === pane ? "page" : "false"));
+    // 連結應用程式 is a dialog of its own, as Grok Bot's Connect apps: no list of Settings beside it (R-UI-111).
+    if ((el.dataset.standalone ?? "") !== (pane === STANDALONE_PANE ? pane : "")) {
+      if (pane === STANDALONE_PANE) el.dataset.standalone = pane; else delete el.dataset.standalone;
+    }
 
     if (focused) el.querySelector<HTMLElement>(`[data-k="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
     else if (focusedId) el.querySelector<HTMLElement>(`#${CSS.escape(focusedId)}`)?.focus({ preventScroll: true });

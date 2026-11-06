@@ -451,11 +451,11 @@ export function checkRendered(name, context = {}) {
     require([...document.querySelectorAll('[data-reaction]')].every(button => button.getAttribute('aria-pressed') === 'true' && button.getAttribute('aria-label')?.includes(button.dataset.reaction)), 'selected reactions are named pressed toggles');
     if (name === 'reaction-picker') {
       const menu = document.querySelector('#app-popover');
-      require(visible(menu) && ['👍','❤','✓','?'].every(emoji=>menu.textContent.includes(emoji)), 'one compact four-reaction menu');
+      require(visible(menu) && ['👍','😂','👎','❤','🎉'].every(emoji=>menu.textContent.includes(emoji)), 'one compact pill of the five reactions Grok Bot offers');
     }
     if (name === 'reaction-row') require(document.querySelector('.tn[data-id="8201"] [data-reaction="👍"]') && document.querySelector('.tn[data-id="8201"] [data-reaction="❤"]'), 'saved reactions appear below their message');
     if (name === 'reaction-not-approval') {
-      require(calls.some(call=>call.method==='agent.react' && call.params.emoji==='✓'), 'the actual reaction action reached core');
+      require(calls.some(call=>call.method==='agent.react' && call.params.emoji==='😂'), 'the actual reaction action reached core');
       require(!calls.some(call=>['agent.confirm','owner_questions.answer','integrations.draft_send'].includes(call.method)), 'a reaction never approves, answers or sends');
       const turn=data.turns.find(turn=>turn.id===8201);
       require(turn.drafts[0].state==='draft' && turn.owner_questions[0].state==='asked', 'draft and owner question remain pending');
@@ -873,7 +873,7 @@ export function checkRendered(name, context = {}) {
     if (name === "sidebar-row-time") {
       const row = document.querySelector('.side [data-member="1"]');
       require(!row.querySelector('.mb-row-t i') && !row.querySelector('time'), "the name and one line, without a role pill or a time, as Grok Bot's rows");
-      require(visible(row.parentElement.querySelector('.mb-more')), "overflow appears under the pointer");
+      require(!visible(row.parentElement.querySelector('.mb-more')), "no ⋯ shows under the pointer: a right click opens the row's menu, as Grok Bot's");
       const pair = [...document.querySelectorAll('.side .mb-item')].find(item => visible(item) && item.nextElementSibling?.matches('.mb-item') && !item.querySelector('.mb-tile'));
       const rows = pair ? [pair, pair.nextElementSibling].map(item => item.querySelector('.nav.mb-row').getBoundingClientRect()) : [];
       require(rows.length < 2 || (Math.abs(rows[0].height - 54) <= 1 && Math.abs(rows[1].top - rows[0].top - 58) <= 1), `rows are 54 px tall and 58 px apart, as Grok Bot's (${rows.map(box => Math.round(box.top) + '/' + Math.round(box.height)).join(' ')})`);
@@ -2069,7 +2069,7 @@ export function checkRendered(name, context = {}) {
       const queued = [...document.querySelectorAll('.tn[data-status="queued"]')];
       require(queued.length === 2, "both queued messages are visible");
       require(queued.map(node => node.querySelector('.message-text').textContent).join('|') === "第二個範例請求|第三個範例請求", "the bubbles retain send order");
-      require(queued.every(node => node.querySelector('button[data-act="cancel-message"]') && !node.querySelector('[data-act="edit-message"]')), "queued bubbles have withdraw instead of edit");
+      require(queued.every(node => node.querySelector('button[data-act="more-message"][data-owner-act="cancel"]') && !node.querySelector('[data-owner-act="edit"]')), "queued bubbles offer withdraw instead of edit in their menu");
       require(queued.every(node => visible(node.querySelector('.queued-mark'))), "each queued mark is visible");
       const presence = [...document.querySelectorAll('.thread .live-presence')];
       require(presence.length === 1 && presence[0].getBoundingClientRect().top >= queued[1].getBoundingClientRect().bottom, "one live presence follows the newest message");
@@ -3490,7 +3490,7 @@ export function checkRendered(name, context = {}) {
         require(visible(row.querySelector('[data-cli="codex"]')), "reconnection stays on the card");
         require(!row.querySelector('[data-cli-menu]'), "a disconnected card has no connected menu");
       } else {
-        require(visible(row.querySelector('[data-cli-menu="codex"]')) && cli.available && !cli.disconnected, "reconnection restores the connected card");
+        require(row.querySelector('[data-cli-menu="codex"]') && cli.available && !cli.disconnected, "reconnection restores the connected card, whose menu a right click opens");
         require(calls.filter(call => call.method === 'brains.cli_login' && call.params.id === 'codex').length === 1, "connect reaches the core once");
       }
     }
@@ -3808,7 +3808,10 @@ export function checkRendered(name, context = {}) {
       require(box.top >= at.y || box.bottom <= at.y, "the menu does not cover the pointer");
     } else {
       const anchor = opener.getBoundingClientRect();
-      require(Math.abs(box.left - Math.max(8, Math.min(anchor.right - box.width, innerWidth - box.width - 8))) <= 2, "a menu the key opens stands under its ⋯");
+      // A row that draws no ⋯ (as Grok Bot's) has the menu in the row, 16 px in (context-menu.ts).
+      let row = opener.parentElement; while (row && !row.getClientRects().length) row = row.parentElement;
+      if (anchor.width) require(Math.abs(box.left - Math.max(8, Math.min(anchor.right - box.width, innerWidth - box.width - 8))) <= 2, "a menu the key opens stands under its ⋯");
+      else require(row && box.left >= row.getBoundingClientRect().left - 2 && box.left <= row.getBoundingClientRect().left + 24, "a menu the key opens stands in its row, which draws no ⋯");
     }
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     require(!document.querySelector('#app-popover'), "Escape closes the menu");

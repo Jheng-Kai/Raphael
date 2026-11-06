@@ -180,10 +180,13 @@ test("messages copy plain text, code copies exactly, only the latest reply regen
   document.querySelector<HTMLButtonElement>('.tn[data-id="1"] .ra [data-act="more-message"]')!.click();
   await flush(); expect(document.querySelector('[data-pick="regenerate"]')).toBeNull();
   document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
-  latest.querySelector<HTMLButtonElement>('.owner-message [data-act="copy-message"]')!.click();
-  await flush(); expect(copy).toHaveBeenLastCalledWith(expect.any(HTMLElement), "問題 2");
-  latest.querySelector<HTMLButtonElement>('.ra [data-act="copy-message"]')!.click();
-  await flush(); expect(copy.mock.lastCall?.[1]).toContain("bold\na < b\n");
+  // Copy lives in each message's ⋯ menu (R-UI-104).
+  const copyFrom = async (scope: string): Promise<void> => {
+    latest.querySelector<HTMLButtonElement>(`${scope} [data-act="more-message"]`)!.click(); await flush();
+    document.querySelector<HTMLButtonElement>('#app-popover [data-pick="copy"]')!.click(); await flush();
+  };
+  await copyFrom('.owner-message'); expect(copy).toHaveBeenLastCalledWith(expect.any(HTMLElement), "問題 2");
+  await copyFrom('.ra'); expect(copy.mock.lastCall?.[1]).toContain("bold\na < b\n");
   expect(copy.mock.lastCall?.[1]).not.toContain("**");
   latest.querySelector<HTMLButtonElement>('[data-act="copy-code"]')!.click();
   await flush(); expect(copy).toHaveBeenLastCalledWith(expect.any(HTMLElement), "a < b");

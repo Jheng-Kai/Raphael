@@ -101,11 +101,15 @@ export const PANES: { id: SettingsPane; group: PaneGroup; icon: IconName; title:
   { id: "dictation", group: "basics", icon: "mic", title: () => t("settings.paneDictation"), purpose: () => t("settings.purposeDictation") },
   { id: "tools", group: "team", icon: "steps", title: () => t("settings.paneTools"), purpose: () => t("settings.purposeTools") },
   { id: "safety", group: "team", icon: "lock", title: () => t("settings.paneSafety"), purpose: () => t("settings.purposeSafety") },
-  { id: "connections", group: "integrations", icon: "plug", title: () => t("settings.paneConnections"), purpose: () => t("settings.purposeConnections") },
+  // Not a tab: the sidebar's 連結應用程式 opens it as a dialog of its own, its only way in (owner, 2026-11-06; R-UI-111).
+  { id: "connections", group: "integrations", icon: "plug", title: () => t("nav.apps"), purpose: () => t("settings.purposeConnections") },
   { id: "messaging", group: "integrations", icon: "send", title: () => t("settings.paneMessaging"), purpose: () => t("settings.purposeMessaging") },
   { id: "models", group: "account", icon: "bot", title: () => t("settings.paneUsage"), purpose: () => t("providers.about") },
   { id: "about", group: "account", icon: "info", title: () => t("common.about"), purpose: () => t("settings.purposeAbout") },
 ];
+
+/** The pane that is not a tab of Settings but a dialog of its own, opened only from the sidebar. */
+export const STANDALONE_PANE: SettingsPane = "connections";
 
 /** The button of a tab in the list on the left. */
 const paneButton = (p: (typeof PANES)[number]): string =>
@@ -116,7 +120,7 @@ export const paneListHTML = (): string =>
   (Object.keys(PANE_GROUPS) as PaneGroup[])
     .map((group) => {
       const name = PANE_GROUPS[group]();
-      return (name ? `<div class="nav-group">${esc(name)}</div>` : "") + PANES.filter((p) => p.group === group).map(paneButton).join("");
+      return (name ? `<div class="nav-group">${esc(name)}</div>` : "") + PANES.filter((p) => p.group === group && p.id !== STANDALONE_PANE).map(paneButton).join("");
     })
     .join("");
 
@@ -147,7 +151,7 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "about", label: "update.auto" },
   { pane: "general", label: "output.folder" },
   { pane: "general", label: "zone.title" },
-  ...PANES.map((p) => ({ pane: p.id })),
+  ...PANES.filter((p) => p.id !== STANDALONE_PANE).map((p) => ({ pane: p.id })),
   { pane: "appearance", label: "settings.059" },
   { pane: "appearance", label: "settings.067", words: ["dark", "light"] },
   { pane: "general", label: "settings.069" },
