@@ -119,6 +119,44 @@ test("the sidebar has no brand and no fold button, names Home in each language, 
   document.documentElement.removeAttribute("data-sidebar-collapsed");
 });
 
+test("a slow drag through the fold point folds the list once and opens it once, never flickering between", () => {
+  localStorage.clear();
+  document.documentElement.removeAttribute("data-sidebar-collapsed");
+  document.documentElement.style.removeProperty("--sidebar-width");
+  document.body.innerHTML = '<div class="window-chrome"></div><nav id="nav"></nav><main id="main"></main>';
+  const nav = document.getElementById("nav")!;
+  const column = document.createElement("aside");
+  column.innerHTML = '<div class="mb-top"><button type="button" data-col="search"></button><button type="button" data-col="add"></button></div>';
+  createSidebar(nav, column);
+  const edge = nav.querySelector<HTMLElement>(".side-edge")!;
+  edge.setPointerCapture = vi.fn(); edge.hasPointerCapture = () => true; edge.releasePointerCapture = vi.fn();
+  let flips = 0, folded = false;
+  const count = (): void => {
+    const now = document.documentElement.hasAttribute("data-sidebar-collapsed");
+    if (now !== folded) { flips++; folded = now; }
+  };
+  const sweep = (from: number, to: number): void => {
+    edge.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerId: 1, clientX: from, bubbles: true }));
+    for (let x = from; x !== to; x += Math.sign(to - from)) {
+      edge.dispatchEvent(new PointerEvent("pointermove", { pointerId: 1, clientX: x, bubbles: true }));
+      count();
+    }
+    edge.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1, bubbles: true }));
+  };
+  sweep(296, 60);
+  expect(flips).toBe(1);
+  expect(folded).toBe(true);
+  sweep(72, 320);
+  expect(flips).toBe(2);
+  expect(folded).toBe(false);
+  // Held still near the fold point, small pointer tremors change nothing.
+  for (const x of [161, 159, 162, 158, 160]) { edge.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerId: 1, clientX: 300, bubbles: true })); edge.dispatchEvent(new PointerEvent("pointermove", { pointerId: 1, clientX: x, bubbles: true })); count(); }
+  expect(flips).toBeLessThanOrEqual(3);
+  edge.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1, bubbles: true }));
+  document.documentElement.style.removeProperty("--sidebar-width");
+  document.documentElement.removeAttribute("data-sidebar-collapsed");
+});
+
 test("closing an already closed drawer preserves the destination's focus", () => {
   vi.stubGlobal('matchMedia', () => ({matches:true,addEventListener:vi.fn()}));
   const read=vi.spyOn(api,'integrationsInventory').mockResolvedValue({state:'complete',count:0,apps:[]} as never);

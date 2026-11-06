@@ -12,8 +12,10 @@ import { mountEdge, savedWidth, saveWidth } from "./edge-drag";
 
 /** The full list's widths (px): Grok Bot's runs from about 277 to 399; ours starts at the stylesheet's 296. */
 const DEFAULT_WIDTH = 296, MIN_WIDTH = 240, MAX_WIDTH = 400;
-/** The rail of faces (sidebar.css), the width a drag folds the list at, and the width a dragged rail opens again past. */
-const RAIL_WIDTH = 72, TO_RAIL = 176, FROM_RAIL = 136;
+/** The rail of faces (sidebar.css), the width a drag folds the list below, and the width a dragged rail opens again past.
+ *  Opening needs the wider one: between the two nothing changes, so a pointer held near the fold point cannot flicker the
+ *  list between its two shapes (it did, 39 times in one slow drag, on 2026-11-06). */
+const RAIL_WIDTH = 72, TO_RAIL = 150, FROM_RAIL = 170;
 const WIDTH_KEY = "raphael.sidebar.width";
 const clampWidth = (width: number): number => Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width)));
 
