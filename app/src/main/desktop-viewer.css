@@ -114,7 +114,7 @@
 .desktop-panel[data-expanded] .desktop-actions { grid-row: 5; }
 :root[data-desktop-expanded] :is(.side, [data-sidebar="open"]) { visibility: hidden; }
 /* desktop-viewer.ts moves fold back and Back into the window's top strip, shaped as its own buttons. */
-.window-chrome > .btn.icon:is([data-desktop="collapse"], [data-desktop="back"]) { flex: none; align-self: center; width: 38px; height: calc(var(--window-controls-height) - 8px); min-height: 0; margin: 0 2px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); }
+.window-chrome > .btn.icon:is([data-desktop="collapse"], [data-desktop="back"]) { flex: none; align-self: stretch; width: 46px; height: auto; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--text); }
 .window-chrome > .btn.icon:is([data-desktop="collapse"], [data-desktop="back"]):is(:hover, :active):not(:disabled) { border-color: transparent; background: var(--hover); }
 .window-chrome > .btn.icon:is([data-desktop="collapse"], [data-desktop="back"]):active:not(:disabled) { background: var(--pressed); }
 .desktop-dock { display: none; }

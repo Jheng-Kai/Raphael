@@ -21,7 +21,7 @@ const clampWidth = (width: number): number => Math.round(Math.min(MAX_WIDTH, Mat
 
 export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<AppContext, "onEvent">): { close(): void } {
   nav.classList.add("sidebar");
-  nav.innerHTML = `<div class="sidebar-conversations"></div><div class="side-foot"><button type="button" class="nav sidebar-apps" data-go="settings" data-pane="connections">${ico("plug")}<span class="nav-t"></span><span class="sidebar-app-marks" aria-hidden="true"></span></button><div class="sidebar-foot-row"><button type="button" class="nav sidebar-account" data-go="settings" data-pane="general"></button>${iconButton("mic", t("nav.dictation"), ' data-go="dictation" aria-current="false"', "sidebar-dictation")}${iconButton("home", t("nav.home"), ' data-go="home" aria-current="false"', "sidebar-home")}</div></div>`;
+  nav.innerHTML = `<div class="sidebar-conversations"></div><div class="side-foot"><button type="button" class="nav sidebar-apps" data-connect-apps>${ico("plug")}<span class="nav-t"></span><span class="sidebar-app-marks" aria-hidden="true"></span></button><div class="sidebar-foot-row"><button type="button" class="nav sidebar-account" data-go="settings" data-pane="general"></button>${iconButton("mic", t("nav.dictation"), ' data-go="dictation" aria-current="false"', "sidebar-dictation")}${iconButton("home", t("nav.home"), ' data-go="home" aria-current="false"', "sidebar-home")}</div></div>`;
   let inventory: InventoryView = "loading";
   let lastMarks = "";
   const apps = nav.querySelector<HTMLElement>(".sidebar-apps")!;
@@ -145,7 +145,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
   };
   toggle.addEventListener("click", () => setOpen(!document.documentElement.hasAttribute("data-sidebar-open")));
   nav.addEventListener("click", event => {
-    if ((event.target as Element).closest('[data-sidebar="close"], [data-go], [data-member], [data-room]')) close();
+    if ((event.target as Element).closest('[data-sidebar="close"], [data-go], [data-connect-apps], [data-member], [data-room]')) close();
   });
   scrim.addEventListener("click", close);
   // What takes the whole window from a menu of the drawer has no use for the drawer behind it.

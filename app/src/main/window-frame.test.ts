@@ -43,8 +43,9 @@ describe("keyboard focus and the window controls", () => {
     expect(lastOf(".window-button:focus-visible", "outline-offset")).toMatch(/^-\d+px$/);
   });
 
-  test("caption hover uses rounded surfaces and close retains contrasting text and its focus ring", () => {
-    expect(lastOf(".window-button", "border-radius")).toBe("var(--r-sm)");
+  test("caption buttons are square Windows cells that fill under the pointer, and close turns red with its focus ring", () => {
+    expect(lastOf(".window-button", "border-radius")).toBe("0");
+    expect(lastOf(".window-button", "width")).toBe("46px");
     expect(lastOf(".window-button:hover", "background")).toBe("var(--hover)");
     expect(lastOf(".window-button:active", "background")).toBe("var(--pressed)");
     expect(lastOf(".window-close:hover", "background")).toBe("var(--close)");

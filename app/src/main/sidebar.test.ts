@@ -25,8 +25,10 @@ test("the footer opens Connections, keeps named icon actions and refreshes only 
   column.innerHTML = '<div class="mb-top"><button data-col="add"></button></div>';
   createSidebar(nav, column, { onEvent: handler => { event = handler; return () => {}; } } as AppContext);
   await vi.waitFor(() => expect(nav.querySelectorAll('.sidebar-app-marks .mono')).toHaveLength(3));
+  // 連結應用程式 opens its own dialog, not a page of Settings (R-UI-111).
+  expect(nav.querySelector('.side-foot .sidebar-apps')?.hasAttribute('data-connect-apps')).toBe(true);
   expect([...nav.querySelectorAll('.side-foot [data-go]')].map(el => [el.getAttribute('data-go'), el.getAttribute('data-pane')])).toEqual([
-    ['settings', 'connections'], ['settings', 'general'], ['dictation', null], ['home', null],
+    ['settings', 'general'], ['dictation', null], ['home', null],
   ]);
   expect(nav.querySelector('.sidebar-apps')?.getAttribute('aria-label')).toContain('4');
   for (const id of ['dictation', 'home']) {

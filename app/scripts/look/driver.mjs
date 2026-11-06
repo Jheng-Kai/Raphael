@@ -366,9 +366,10 @@ export async function perform(page, step, evidenceDirectory) {
       await element.hover();
       await new Promise(resolve => setTimeout(resolve, 160));
       const hovered = await measure();
-      if (hovered.background !== (step.control === 'close' ? hovered.close : hovered.hover) || hovered.radius <= 0) throw new Error('Caption hover needs a rounded token surface');
+      // Grok Bot's caption buttons are Windows cells: the token surface fills the square cell (R-UI-16).
+      if (hovered.background !== (step.control === 'close' ? hovered.close : hovered.hover) || hovered.radius !== 0) throw new Error('Caption hover needs its token surface on a square cell');
       if (Math.abs(hovered.centerX - hovered.x) > .5 || Math.abs(hovered.centerY - hovered.y) > .5 || Math.abs(rest.x - hovered.x) > .5 || Math.abs(rest.y - hovered.y) > .5) throw new Error('Caption glyph moved or is not centered');
-      if (hovered.marginTop < 3 || Math.abs(hovered.marginTop - hovered.marginBottom) > .5) throw new Error('Caption hover needs even inner margins');
+      if (hovered.marginTop > .5 || hovered.marginBottom > .5) throw new Error("A caption cell fills the strip from top to bottom, as Windows' and Grok Bot's");
       if (!hovered.label || hovered.title !== hovered.label) throw new Error('Caption tooltip and accessible label must remain');
       if (step.control === 'close') {
         const rgb = value => value.match(/[\d.]+/g).slice(0, 3).map(Number).map(c => c / 255).map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4);

@@ -179,6 +179,8 @@ watchChipRows(document.body);
   void loadAvatar(api.avatarGet);
   void agent.loadSidebar();
   nav.addEventListener("click", (e) => {
+    // 連結應用程式 is no page of Settings: it opens its own dialog (R-UI-111).
+    if ((e.target as Element).closest("[data-connect-apps]")) { go("settings", "connections"); return; }
     const target = (e.target as Element).closest<HTMLElement>("[data-go]");
     if (target) go(target.dataset.go as PageId, target.dataset.pane as SettingsPane | undefined);
   });
