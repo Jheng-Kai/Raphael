@@ -300,7 +300,7 @@ export const zhTW = {
   "cards.retained": "操作未完成，草稿與設定還在。請再試一次。",
   "cards.retry": "再試一次",
   "cards.connect": "連結 {p0}",
-  "cards.connectWhy": "連結後就能繼續這項工作。",
+  "cards.connectWhy": "連結後就能繼續這項工作，隨時可以在設定中斷連結。",
   "cards.keyWhy": "安全儲存憑證後，就能繼續這項工作。",
   "cards.vault": "加密保存在作業系統憑證庫，成員不會看到這個值。",
   "cards.answer": "輸入你自己的答案",

@@ -301,7 +301,7 @@ export const en = {
   "cards.retained": "The action could not finish. Your draft and settings are still here.",
   "cards.retry": "Try again",
   "cards.connect": "Connect {p0}",
-  "cards.connectWhy": "Connect this app to continue the task.",
+  "cards.connectWhy": "Connect this app to continue the task. Disconnect it in Settings at any time.",
   "cards.keyWhy": "Save your credentials securely to continue the task.",
   "cards.vault": "Encrypted in the operating system credential store. Members never see the value.",
   "cards.answer": "Type your own answer",

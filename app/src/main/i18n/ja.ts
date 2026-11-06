@@ -301,7 +301,7 @@ export const ja = {
   "cards.retained": "操作を完了できませんでした。下書きと設定は残っています。",
   "cards.retry": "再試行",
   "cards.connect": "{p0} に接続",
-  "cards.connectWhy": "このアプリに接続すると作業を続けられます。",
+  "cards.connectWhy": "このアプリに接続すると作業を続けられます。接続はいつでも設定で解除できます。",
   "cards.keyWhy": "認証情報を安全に保存すると作業を続けられます。",
   "cards.vault": "OSの資格情報ストアに暗号化して保存され、メンバーには表示されません。",
   "cards.answer": "自分の回答を入力",

@@ -59,7 +59,7 @@ describe("a connector card", () => {
     expect(pending).toContain(entryIcon({ name: "gmail" }, "md"));
     expect(pending).not.toContain("tile");
     expect(pending).toContain('class="btn sm pri" data-act="card-connect" data-card="c1"');
-    expect(visible(pending)).toBe("Gmail 需要你 連結後就能繼續這項工作。 連結");
+    expect(visible(pending)).toBe("Gmail 需要你 連結後就能繼續這項工作，隨時可以在設定中斷連結。 連結");
     expect(actions(connectorCardHTML(card({ state: "authorizing" })))).toEqual(["card-cancel"]);
     expect(actions(connectorCardHTML(card({ state: "cancelled" })))).toEqual(["card-connect"]);
     expect(actions(connectorCardHTML(card({ state: "failed", error: "denied" })))).toEqual(["card-connect"]);
@@ -109,7 +109,7 @@ describe("a connector card", () => {
 
   test("speaks only the window's language", () => {
     setLocale("en");
-    expect(visible(connectorCardHTML(card({ app: "googlecalendar", name: "Google Calendar" })))).toBe("Google Calendar Action needed Connect this app to continue the task. Connect");
+    expect(visible(connectorCardHTML(card({ app: "googlecalendar", name: "Google Calendar" })))).toBe("Google Calendar Action needed Connect this app to continue the task. Disconnect it in Settings at any time. Connect");
     setLocale("ja");
     expect(visible(connectorCardHTML(card({ state: "connected", tool_count: 1 })))).toContain("接続済み · ツール 1 個");
   });
@@ -117,7 +117,7 @@ describe("a connector card", () => {
 
 describe("a turn with a card", () => {
   test("a catalog app keeps its persisted display name in its card and resumed line", () => {
-    expect(visible(connectorCardHTML(card({ app: "catalog-slug", name: "Catalog App" })))).toBe("Catalog App 需要你 連結後就能繼續這項工作。 連結");
+    expect(visible(connectorCardHTML(card({ app: "catalog-slug", name: "Catalog App" })))).toBe("Catalog App 需要你 連結後就能繼續這項工作，隨時可以在設定中斷連結。 連結");
     expect(visible(resumedLineHTML(turn({ resumed_apps: ["catalog-slug"], resumed_app_names: ["Catalog App"] })))).toBe("Catalog App 已連結，繼續原本的工作");
   });
 
