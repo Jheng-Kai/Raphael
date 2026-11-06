@@ -35,7 +35,7 @@
   /* surfaces: the window (sidebar), the page, the panels on it, a recessed fill */
   --side: #f7f7f7; --content: #ffffff; --panel: #f7f7f7; --surface-2: #efefef;
   --edge: #e5e5e5; --line: #ebebeb;
-  --hover: #ededed; --pressed: #e2e2e2; --hover-edge: #8f8f8f; --edge-rim: #e3e3e3;
+  --hover: #ededed; --pressed: #e2e2e2; --hover-edge: #8f8f8f; --edge-rim: #e3e3e3; --rail-line: #ececec;
   --danger-hover: #fdf0f0; --danger-pressed: #fbe5e5;
   /* text: body, secondary, muted (all at least AA on every surface above) */
   --text: #0a0a0a; --text-2: #404040; --text-3: #595959;
@@ -68,7 +68,7 @@
 :root[data-theme="dark"] {
   --side: #000000; --content: #0a0a0a; --panel: #161616; --surface-2: #1f1f1f;
   --edge: #262626; --line: #262626;
-  --hover: #262626; --pressed: #303030; --hover-edge: #929292; --edge-rim: #2b2b2b;
+  --hover: #262626; --pressed: #303030; --hover-edge: #929292; --edge-rim: #2b2b2b; --rail-line: #1c1c1c;
   --danger-hover: #322023; --danger-pressed: #3c2429;
   --text: #f5f5f5; --text-2: #d0d0d0; --text-3: #b5b5b5;
   --accent: #f5f5f5; --accent-text: #eeeeee; --accent-icon: #eeeeee; --on-accent: #0a0a0a; --accent-soft: #262626;

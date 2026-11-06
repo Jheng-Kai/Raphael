@@ -42,6 +42,10 @@
 :root[data-sidebar-collapsed] .side .mb-top { flex-direction: column; min-height: 0; }
 :root[data-sidebar-collapsed] .side .mb-sec[data-open="false"], :root[data-sidebar-collapsed] .side .mb-ghead, :root[data-sidebar-collapsed] .side .mb-item .btn.mb-more, :root[data-sidebar-collapsed] .side .au-room-row .btn.au-room-more { display: none; }
 :root[data-sidebar-collapsed] .side .mb-pinned { grid-template-columns: minmax(0, 1fr); }
+/* As Grok Bot's rail (owner, 2026-11-06): a very faint line under the pinned faces, under Raphael's row, and between groups,
+   where the list's names would have told them apart. */
+:root[data-sidebar-collapsed] .side :is(.mb-pinned, .mb-list > .mb-item:has(> .mb-chief))::after, :root[data-sidebar-collapsed] .side :is(.mb-list > .mb-sec[data-open="true"] ~ .mb-sec[data-open="true"], .au-rooms-section:has(.au-room-row))::before { content: ""; display: block; height: 1px; margin: var(--sp-2) var(--sp-3); background: var(--rail-line); }
+:root[data-sidebar-collapsed] .side .mb-pinned::after { grid-column: 1 / -1; }
 :root[data-sidebar-collapsed] .side .mb-row-main * { overflow: hidden; }
 :root[data-sidebar-collapsed] .side .mb-item .nav.mb-row, :root[data-sidebar-collapsed] .side .au-room-row > .nav.mb-row, :root[data-sidebar-collapsed] .side .mb-pinned .mb-item .nav.mb-tile.mb-row { position: relative; display: flex; justify-content: center; min-height: 48px; padding: var(--sp-1); }
 :root[data-sidebar-collapsed] .side .mb-pinned .nav.mb-tile.mb-row > .av { --av: 40px !important; }
