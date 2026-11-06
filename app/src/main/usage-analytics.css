@@ -15,4 +15,15 @@
 .run-window small { color: var(--text-3); font-size: var(--fs-2xs); }
 .run-window .run-bar-track { width: 100%; }
 .run-bar-track { background: var(--hover); height: 7px; border-radius: var(--r-sm); overflow: hidden; }
-.run-bar-track i { display: block; background: var(--accent); height: 100%; border-radius: var(--r-sm); }
+.run-bar-track i { display: block; background: var(--meter); height: 100%; border-radius: var(--r-sm); }
+/* What the app spent this month, as Grok Bot's usage card: the amount large, the share of the monthly limit beside it, a
+   coloured bar and one quiet line (settings-view.ts `spendCardHTML`). */
+.spend-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); }
+.spend-card h2 { margin: 0; font: 600 var(--fs-sm)/1.4 var(--ui); color: var(--text); }
+.spend-value { display: flex; align-items: baseline; gap: var(--sp-2); margin: 0; }
+.spend-value strong { font: 600 var(--fs-h1)/1.2 var(--display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.spend-value small { font-size: var(--fs-xs); color: var(--text-2); }
+.spend-bar { height: 7px; border-radius: var(--r-sm); background: var(--hover); overflow: hidden; }
+.spend-bar i { display: block; height: 100%; min-width: 4px; border-radius: var(--r-sm); background: var(--meter); }
+.spend-note { margin: 0; font-size: var(--fs-2xs); color: var(--text-3); }
+.spend-note:empty { display: none; }

@@ -264,8 +264,8 @@ test.each([false, true])("a durable receipt renders outside assistant bubbles wi
     reason: null, created_at_ms: T0, ready_at_ms: T0, dispatch_policy: "immediate", result: "", evidence: [] }] }),
     emptyTimelineState(), false, { face: () => "" });
   expect(html.match(/data-handoff="42"/g)).toHaveLength(1);
-  expect(html.indexOf('class="handoff-event"')).toBeLessThan(html.indexOf('class="ra"'));
-  expect(visible(html)).toContain("已轉交給 小晴");
+  expect(html.indexOf('class="btn event-open handoff-event"')).toBeLessThan(html.indexOf('class="ra"'));
+  expect(visible(html)).toContain("與 小晴 的 1 則訊息");
 });
 
 test("an unknown tool connection has a plug with its accessible name, never an initial", () => {
@@ -590,19 +590,17 @@ describe("停止", () => {
 const LOOK: TurnLook = { face: (loop) => `<i class="face${loop ? " loop" : ""}"></i>` };
 
 describe("a turn", () => {
-  test("a question asked of a colleague is one 和 X 討論 line naming the colleague, opening on the question and its answer", () => {
+  test("a question asked of a colleague is one 與 X 的 2 則訊息 line naming the colleague, keeping what was said for their conversation", () => {
     const asked = { task_id: null, source_turn_id: 5, work_turn_id: 9, member_id: 0, member_name: "", from_member_id: 4,
       stage_id: "", mode: "consult" as const, state: "done", reason: null, created_at_ms: T0, ready_at_ms: T0,
       dispatch_policy: "immediate" as const, result: "新品代號是 NX-1。", request: "新品代號是什麼？", evidence: [] };
     const look: TurnLook = { ...LOOK, memberName: (id) => (id === 4 ? "PM" : "拉斐爾"), memberFace: () => "<i></i>" };
     const html = turnHTML(turn(5, { handoffs: [asked] }), emptyTimelineState(), false, look);
     expect(html).toContain('data-handoff="x9"');
-    expect(visible(html.slice(html.indexOf("<summary>"), html.indexOf("</summary>")))).toContain("和 拉斐爾 討論");
-    const detail = visible(html.slice(html.indexOf('class="handoff-detail"')));
-    expect(detail).toContain("PM");
-    expect(detail).toContain("新品代號是什麼？");
-    expect(detail).toContain("新品代號是 NX-1。");
-    expect(detail).not.toContain("主人");
+    expect(html).toContain('data-act="peer-chat"');
+    expect(visible(html)).toContain("與 拉斐爾 的 2 則訊息");
+    expect(visible(html)).not.toContain("新品代號是什麼？");
+    expect(visible(html)).not.toContain("主人");
   });
 
   test("the person on the right without 「」 with where and when; Raphael on the left with his face and plain words", () => {

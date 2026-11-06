@@ -36,7 +36,7 @@ it("rejects the owner's stretched dictionary and Home geometry on 97fa61bd", () 
   const browser = new Window();
   browser.document.documentElement.style.setProperty('--sp-6', '32px');
   browser.document.documentElement.style.setProperty('--sp-5', '24px');
-  browser.document.body.innerHTML = '<div class="wrow"></div><section class="ho-card"></section><div class="cs-list"></div>';
+  browser.document.body.innerHTML = '<div class="wrow"></div><section class="ho-card"></section><div class="slist"></div>';
   const [word, home, list] = browser.document.body.children;
   const measure = (element, width) => { element.getBoundingClientRect = () => ({ width, height: 64 }); };
   measure(word, 694); measure(home, 384); measure(list, 640);

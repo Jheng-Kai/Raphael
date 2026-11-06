@@ -349,6 +349,17 @@ export function installMock(fixture, config = {}, target = window) {
     turn.handoffs = [{ ...data.roomHandoff, state: "done" }, { ...data.roomHandoff, task_id: 43, member_id: 2, member_name: "小森", mode: "consult", state: "running", result: "", evidence: [] }];
     turn.messages.push({ seq: 99, kind: "event", text: JSON.stringify(data.p02MeetingEvent), at_ms: data.now });
   }
+  if (variant.peerChat) {
+    // Raphael asked 小晴 yesterday and today, and 小森 once yesterday: today's line opens only Raphael ⇄ 小晴 (R-UI-72).
+    const turn = data.turns.find(turn => turn.id === 1), sample = data.peerChatSample, DAY = 86_400_000;
+    const exchange = (id, member, name, created, request, result) => ({ ...structuredClone(data.roomHandoff), task_id: id, work_turn_id: id + 100,
+      member_id: member, member_name: name, mode: "consult", state: "done", created_at_ms: created, started_at_ms: created, finished_at_ms: created + 40_000,
+      request, result, evidence: [] });
+    data.turns.unshift({ ...structuredClone(turn), id: 3, created_at_ms: turn.created_at_ms - DAY, question: sample.earlierQuestion, text: sample.earlierAnswer,
+      messages: [], steps: [], handoffs: [exchange(60, 1, "小晴", turn.created_at_ms - DAY + 5_000, sample.earlierRequest, sample.earlierResult),
+        exchange(62, 2, "小森", turn.created_at_ms - DAY + 6_000, sample.otherRequest, sample.otherResult)] });
+    turn.handoffs = [exchange(61, 1, "小晴", turn.created_at_ms + 5_000, sample.request, sample.result)];
+  }
   if (variant.handoffGroup) {
     const many = variant.handoffGroup === "many", done = variant.handoffGroup === "done";
     const sample = data.handoffGroupSample, people = variant.handoffGroup === "long" ? sample.longPeople : sample.people;

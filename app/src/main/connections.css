@@ -1,8 +1,7 @@
 /* The 「連接」 tab of the settings, drawn like Codex's page of plugins: quiet tabs and a search, one
    rounded list of the connected services, a dialog for each over the settings, and the store as cards
    in two columns. Colours are the app's tokens. */
-.cs { width: 100%; max-width: var(--layout-reading-max); margin-top: var(--sp-4); container: connections / inline-size; }
-/* The store's column layout does not collapse margins; the purpose line alone spaces the tabs on both views. */
+.cs { width: 100%; max-width: var(--layout-reading-max); margin-top: var(--sp-4); container: connections / inline-size; }/* The store's column layout does not collapse margins; the purpose line alone spaces the tabs on both views. */
 .set-purpose + .cs { margin-top: 0; }
 .cs h2.big { margin: 0; font: 600 var(--fs-lg)/1.3 var(--display); }
 .cs h2 { margin: 0 0 var(--sp-2) var(--sp-1); font-size: var(--fs-md); font-weight: 600; }
@@ -41,12 +40,15 @@
 :root[data-theme="dark"] .logo-art .lg-d { display: block; }
 :root[data-theme="dark"] .logo-art .lg-d ~ .lg-l, :root[data-theme="dark"] .logo-art .lg-l:has(+ .lg-d) { display: none; }
 
-/* 已安裝: one rounded list; a row is the mark, the name and its line, the switch and a chevron, none of them boxed */
-.cs-list { border: 0; border-radius: 0; background: transparent; overflow: hidden; }
-.cs-item { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto 18px; align-items: center; gap: var(--sp-3); padding-right: var(--sp-3); border-radius: var(--r-md); cursor: pointer; }
+/* 已連結: two columns side by side, as Grok Bot's Connect Apps (owner, 2026-11-07), so a page holds more of them; a row is
+   the mark, the name and its line, the switch and a chevron, none of them boxed. */
+.cs-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2) var(--sp-3); border: 0; border-radius: 0; background: transparent; }
+.cs-item { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto 18px; align-items: center; gap: var(--sp-3); min-width: 0; padding-right: var(--sp-3); border-radius: var(--r-md); cursor: pointer; }
 /* Dividers are lines of their own, so a rounded hover does not bend them; they step aside for the row under the pointer. */
-.cs-item + .cs-item::before, .cs-grp > .btn.gr + .btn.gr::before { content: ""; position: absolute; top: 0; left: var(--sp-3); right: var(--sp-3); height: 1px; background: var(--line); }
-:is(.cs-item:hover, .cs-item:hover + .cs-item)::before, :is(.cs-grp > .btn.gr:hover, .cs-grp > .btn.gr:hover + .btn.gr)::before { opacity: 0; }
+.cs-item::after { content: ""; position: absolute; bottom: 0; left: var(--sp-3); right: var(--sp-3); height: 1px; background: var(--line); }
+.cs-item:hover::after { opacity: 0; }
+.cs-grp > .btn.gr + .btn.gr::before { content: ""; position: absolute; top: 0; left: var(--sp-3); right: var(--sp-3); height: 1px; background: var(--line); }
+:is(.cs-grp > .btn.gr:hover, .cs-grp > .btn.gr:hover + .btn.gr)::before { opacity: 0; }
 .cs-item:hover { background: var(--hover); }
 .cs-item .btn.cs-open { justify-content: flex-start; gap: var(--sp-3); min-width: 0; min-height: 60px; padding: var(--sp-2) 0 var(--sp-2) var(--sp-3); border: 0; border-radius: 0; background: transparent; text-align: left; white-space: normal; }
 .cs-item .btn.cs-open:hover:not(:disabled), .cs-item .btn.cs-open:active:not(:disabled) { background: transparent; }
@@ -185,6 +187,7 @@
 .cs-card .btn.cs-main:focus-visible { outline: none; }
 :where(:root[data-keys]) .cs-card:has(.cs-main:focus-visible) { box-shadow: inset 0 0 0 2px var(--focus); }
 .cs-main .nm { font-size: var(--fs-xs); }
+/* One line each, so paired rows keep one height; the columns pair only where that line has room (see the container rules). */
 .cs-main .sub { font-size: var(--fs-2xs); line-height: 1.45; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-main .sub.wait { color: var(--accent-text); }
 /* What an app asks for (its own key, or its own developer app) comes first on its row, in words, never only a title. */
@@ -222,10 +225,19 @@
 .trust > .i { color: var(--warn); margin-top: var(--sp-1); }
 .trust b { color: var(--text); font-weight: 600; }
 
-/* A single track stays within the short-card cap; wider panes fill two tracks. */
-@container connections (max-width: 384px) {
+/* Store rows are a name and at most a short need, as Grok Bot's, so they pair down to a narrow dialog; a connected row also
+   has its line and switch, so it pairs only where that line has room. */
+@container connections (max-width: 480px) {
   .cs-grid { grid-template-columns: minmax(0, 1fr); }
 }
+@container connections (max-width: 680px) {
+  .cs-list { grid-template-columns: minmax(0, 1fr); }
+}
+.cs-main .sub:empty { display: none; }
+/* Every mark in a row stands bare (R-UI-34) in one 24 px slot, and a generic plug fills it as the brand marks do, so the
+   column of marks keeps one size and weight (R-UI-19). */
+:is(.cs-item, .cs-card) .ic .mono { width: 24px; height: 24px; }
+:is(.cs-item, .cs-card) .ic .mono > .i { width: 20px; height: 20px; }
 
 @media (max-width: 720px) {
   .cs-find { margin-left: 0; width: 100%; }

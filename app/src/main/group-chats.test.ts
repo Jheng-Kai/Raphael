@@ -6,7 +6,7 @@ import * as richScroll from "./message-rich";
 const api=vi.hoisted(()=>({membersList:vi.fn(),roomsCreate:vi.fn(),roomsList:vi.fn(),roomMessages:vi.fn(),roomSend:vi.fn(),roomsDelete:vi.fn(),roomsUpdate:vi.fn(),roomStop:vi.fn(),core:vi.fn(),pagesOpen:vi.fn(),ownerQuestionBring:vi.fn(),openTeamFile:vi.fn().mockResolvedValue(undefined)}));
 vi.mock("./api",()=>api);
 import { configureRooms, openNewGroupChat, openGroupChat, openRoomsMenu, createRoomsSection, createRoomPane, clearRoomSelection } from "./group-chats";
-import { getLocale, setLocale } from "./i18n";
+import { getLocale, setLocale, t } from "./i18n";
 import { setAvatar } from './avatar';
 
 test('an avatar repaint uses the loaded room and roster without IPC reads', async () => {
@@ -155,19 +155,18 @@ test("a deleted room drops its stored words and reply target", async () => {
  expect(JSON.parse(localStorage.getItem('raphael.composer.drafts')??'{}')['room:1']).toBeUndefined();
 });
 
-test("only consecutive room receipts fold, and an arriving receipt preserves the open group and intervening message", async () => {
+test("only consecutive room receipts fold, and an arriving receipt keeps the line and the intervening message", async () => {
  const task = (id:number, created:number):HandoffView => ({task_id:id,source_turn_id:1,work_turn_id:100+id,member_id:1,member_name:"Alice",from_member_id:0,
   stage_id:"",mode:"work",state:"done",reason:null,created_at_ms:created,ready_at_ms:created,dispatch_policy:"immediate",result:"Sample result",evidence:[]});
  const history={messages:[{id:1,member_id:0,text:"A separating message",created:5,status:"done"}],handoffs:[task(1,1),task(2,2),task(3,7),task(4,8)]};
  api.roomMessages.mockResolvedValue(history);
  const view=await pane();
- const groups=view.el.querySelectorAll<HTMLDetailsElement>('[data-handoff-group]'); expect(groups).toHaveLength(2);
+ const groups=view.el.querySelectorAll<HTMLElement>('[data-handoff-group]'); expect(groups).toHaveLength(2);
  expect([...view.el.querySelectorAll('.au-room-thread > li')].map(row=>row.classList.contains('handoff-row'))).toEqual([true,false,true]);
- expect(groups[0].querySelector('summary')?.textContent).toContain('2 messages');
- groups[0].open=true; const receipt=groups[0].querySelector<HTMLDetailsElement>('[data-handoff="1"]')!; receipt.open=true;
+ expect(groups[0].textContent).toContain('2 messages');
  const message=view.el.querySelector('[data-room-message="1"]'); history.handoffs.push(task(5,3)); await view.refresh();
- expect(view.el.querySelector('[data-handoff-group]')).toBe(groups[0]); expect(groups[0].open).toBe(true); expect(receipt.open).toBe(true);
- expect(groups[0].querySelector('summary')?.textContent).toContain('3 messages'); expect(view.el.querySelector('[data-room-message="1"]')).toBe(message);
+ expect(view.el.querySelector('[data-handoff-group]')).toBe(groups[0]);
+ expect(groups[0].textContent).toContain('3 messages'); expect(view.el.querySelector('[data-room-message="1"]')).toBe(message);
  view.close();
 });
 
@@ -460,14 +459,20 @@ test("a blocked reply is a line of the thread after its exchange, with its reaso
  expect(document.querySelector('.au-room-controls')!.textContent).toBe('');
 });
 
-test("a hand-off line names its assignee and opens on the request, result and files, never its number",async()=>{
- api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:0,text:'Alice, write the report.',created:1,status:'done',turn_id:5}],exchange:null,handoffs:[{task_id:42,source_turn_id:5,work_turn_id:6,member_id:1,member_name:'Alice',from_member_id:0,stage_id:'stage-xyz',mode:'work',state:'done',reason:null,created_at_ms:2,ready_at_ms:2,dispatch_policy:'immediate',result:'Report ready.',evidence:[{kind:'artifact',uri:'out/report.html',mime:'text/html',digest:'abc',verdict:'verified'}]}]});
- await pane();
- const line=document.querySelector('[data-handoff="42"]')!;
- expect(line.querySelector('summary')!.textContent).toBe('Forwarded to AliceCompleted');
- expect(line.querySelector('.handoff-detail .message-quote')!.textContent).toBe('RaphaelAlice, write the report.');
- expect(line.querySelector('.handoff-files')!.textContent).toBe('report.html');
- expect(line.textContent).not.toMatch(/42|abc|stage-xyz/);
+test("a hand-off line names its assignee and opens their conversation with the request, result and files, never its number",async()=>{
+ api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:0,text:'Alice, write the report.',created:1,status:'done',turn_id:5}],exchange:null,handoffs:[{task_id:42,source_turn_id:5,work_turn_id:6,member_id:1,member_name:'Alice',from_member_id:0,stage_id:'stage-xyz',mode:'work',state:'done',reason:null,created_at_ms:2,ready_at_ms:2,dispatch_policy:'immediate',request:'Write the report.',result:'Report ready.',evidence:[{kind:'artifact',uri:'out/report.html',mime:'text/html',digest:'abc',verdict:'verified'}]}]});
+ const view=await pane();
+ const line=document.querySelector<HTMLElement>('[data-handoff="42"]')!;
+ expect(line.textContent).toBe('2 messages with Alice');
+ line.click();
+ const chat=view.el.querySelector<HTMLElement>(':scope > .peer-chat')!;
+ expect(chat.getAttribute('aria-label')).toBe(`${t("agent.title")} ⇄ Alice`);
+ expect([...chat.querySelectorAll('.peer-line')].map(row=>row.querySelector('.peer-who')!.textContent)).toEqual([t("agent.title"),'Alice']);
+ expect(chat.querySelector('.peer-line .message-text')!.textContent).toBe('Write the report.');
+ expect(chat.querySelector('.handoff-files')!.textContent).toBe('report.html');
+ expect(line.textContent+chat.textContent).not.toMatch(/42|abc|stage-xyz/);
+ chat.querySelector<HTMLElement>('.peer-close')!.click();
+ expect(view.el.querySelector('.peer-chat')).toBeNull();
 });
 
 test("concurrent speech stays visible beside the board and a report opens its real private turn",async()=>{

@@ -891,19 +891,16 @@ function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, 
 }
 
 /**
- * The centred event lines of a turn, outside Raphael's messages: the work it handed over (each opens on
- * what the owner asked), what it asked colleagues (each opens on the question sent and the answer)
- * and the meetings it opened, whose line opens the room.
+ * The centred event lines of a turn, outside Raphael's messages: what it sent colleagues (one line that opens
+ * their conversation, peer-chat.ts) and the meetings it opened, whose line opens the room.
  */
 function learnedSkillEvent(text: string): string | null {
   try { const event = JSON.parse(text); return event?.type === "skill_learned" && typeof event.name === "string" ? event.name : null; }
   catch { return null; }
 }
 
-function turnEventsHTML(turn: AgentTurn, look: TurnLook, said: boolean): string {
-  const owner = said ? { author: t("rooms.owner"), text: turn.question.trim() } : undefined;
+function turnEventsHTML(turn: AgentTurn, look: TurnLook): string {
   return handoffGroupHTML((turn.handoffs ?? []).map(task => ({ task, face: look.memberFace?.(task.member_id) ?? "",
-    request: task.mode === "consult" && task.request ? { author: look.memberName?.(task.from_member_id) ?? "", text: task.request } : owner,
     name: look.memberName?.(task.member_id) || task.member_name })));
 }
 
@@ -982,7 +979,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
         bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))) + reactionRowHTML(turn.reactions?.owner) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "queued" || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit", true, "", turn.status === "queued") + `</div>` +
         `</div>`
       : "") +
-    turnEventsHTML(turn, look, said) + mailHandedLinesHTML(turn, look) +
+    turnEventsHTML(turn, look) + mailHandedLinesHTML(turn, look) +
     (turn.route === "owner_input" || turn.status === "queued" ? "" : `<div class="ra${isBotRename(turn) ? " is-system-result" : ""}">` +
     `<div class="ra-body">` +
     // A question already answered came before the answer: it reads in that order, under the work and above the reply.

@@ -244,7 +244,9 @@ export function examplePrompt(s: StoreService | undefined): string | null {
 
 function groupIcon(g: ConnectionGroup, v: ConnectionsView, size: "md" | "xl"): string {
   const entry = entryOf(g, v);
-  return entryIcon({ name: g.name, logo: g.logo, icon: entry?.icon ?? serviceIconOf({ name: g.name, command: g.command, args: g.args, url: g.url }) }, size);
+  // The private Google connection is Gmail and its calendar: it wears Gmail's mark, never a generic plug (R-UI-28).
+  const icon = g.source === "google" ? "gmail" : entry?.icon ?? serviceIconOf({ name: g.name, command: g.command, args: g.args, url: g.url });
+  return entryIcon({ name: g.name, logo: g.logo, icon }, size);
 }
 
 /** The command or URL of a custom service; the row ellipsizes it and its title keeps it whole. */
@@ -524,11 +526,14 @@ function joinControl(s: StoreService, v: ConnectionsView, deferIcon = false): st
 const needWords = (s: StoreService): string => s.needs === "key" ? t("setup.needsKey") : s.needs === "own_app" ? t("setup.needsOwnApp") : "";
 const needHTML = (text: string): string => `<b class="need">${esc(text)}</b>`;
 
-/** The line under an entry's name: what adding it asks first, in words, then what it does; or the wait for its login. */
+/**
+ * The line under an entry's name, as Grok Bot's store rows carry only the name (owner, 2026-11-07): what adding it asks, in
+ * words, or the wait for its login. What the app does is on its own page and in the row's title.
+ */
 function subLine(s: StoreService, here: boolean): string {
-  const line = here ? t(s.auth === "none" ? "conn.connecting" : "conn.loggingIn") : words(s.summary);
-  const need = here ? "" : needWords(s);
-  return need ? `${needHTML(need)}${line ? ` · ${esc(line)}` : ""}` : esc(line);
+  if (here) return esc(t(s.auth === "none" ? "conn.connecting" : "conn.loggingIn"));
+  const need = needWords(s);
+  return need ? needHTML(need) : "";
 }
 
 const storeMark = (s: StoreService): string => entryIcon(s, "md").replace(/<img /g, '<img decoding="async" ');

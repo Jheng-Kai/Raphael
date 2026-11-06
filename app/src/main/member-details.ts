@@ -74,7 +74,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   const el = document.createElement("aside");
   el.className = "mb-det";
   el.innerHTML =
-    `<div class="mb-det-head">${iconButton("left", t("members.panelBack"), ' data-det="back" hidden', "mb-tool")}<span class="mb-det-fill"></span>${iconButton("gear", t("computer.settings"), ' data-det="gear"', "mb-tool")}${iconButton("x", t("members.close"), ' data-det="close"', "mb-tool")}</div>` +
+    // Settings on the left edge and close on the right, apart (owner, 2026-11-07).
+    `<div class="mb-det-head">${iconButton("left", t("members.panelBack"), ' data-det="back" hidden', "mb-tool")}${iconButton("gear", t("computer.settings"), ' data-det="gear"', "mb-tool")}<span class="mb-det-fill"></span>${iconButton("x", t("members.close"), ' data-det="close"', "mb-tool")}</div>` +
     `<div class="mb-det-scroll"><div class="mb-who"></div><div class="mb-tabs"></div><div class="mb-tab-body" role="tabpanel" id="member-panel-body"></div></div>`;
   const who = el.querySelector<HTMLElement>(".mb-who")!;
   const tabBar = el.querySelector<HTMLElement>(".mb-tabs")!;

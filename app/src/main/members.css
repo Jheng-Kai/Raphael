@@ -131,10 +131,11 @@
 .mb-det.leaving { animation: mb-det-out 0.16s ease-in forwards; pointer-events: none; }
 @keyframes mb-det-in { from { opacity: 0; transform: translateX(16px); } }
 @keyframes mb-det-out { to { opacity: 0; transform: translateX(16px); } }
-/* The gear and close stand on the content's own edges, so the top right lines up with the tabs and rows. */
-.mb-det-head { display: flex; align-items: center; width: 100%; max-width: calc(var(--layout-card-max) + 2 * var(--pa-dpad)); margin-inline: auto; padding: 4px var(--pa-dpad) 0; }
+/* As Grok Bot's panel, everything in it follows its width: the gear on the left edge, close on the right, and every
+   card and the computer's screen as wide as the panel is (owner, 2026-11-07). */
+.mb-det-head { display: flex; align-items: center; width: 100%; padding: 4px var(--pa-dpad) 0; }
 .mb-det-fill { flex: 1; }
-.mb-det-scroll { flex: 1; min-height: 0; width: 100%; max-width: calc(var(--layout-card-max) + 2 * var(--pa-dpad)); margin-inline: auto; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: var(--pa-dgap); padding: 0 var(--pa-dpad) calc(18px + 6 * var(--pa-u)); }
+.mb-det-scroll { flex: 1; min-height: 0; width: 100%; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: var(--pa-dgap); padding: 0 var(--pa-dpad) calc(18px + 6 * var(--pa-u)); }
 .mb-det-scrim { display: none; }
 .mb-who { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: calc(2px + 3 * var(--pa-u)); text-align: center; }
 /* the face is the button that changes it: no edge and no fill, so that Raphael's emblem stands bare */

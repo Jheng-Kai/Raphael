@@ -84,6 +84,7 @@ import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
 import { mountPendingQuestions } from "../pending-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
 import { memberAccent, ownerBubble, RAPHAEL_GOLD, raphaelBubble } from "../owner-bubble";
+import { openPeerChat, type PeerChatView } from "../peer-chat";
 import { slimeColorOf } from "../slime";
 import { dayLabel, describeError } from "../format";
 import { loadingHTML } from "../loading";
@@ -461,6 +462,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   drawConversation();
 
   const memberChat = el.querySelector<HTMLElement>(".mb-chat")!;
+  /** The conversation between members a centred line opened over the thread (peer-chat.ts). */
+  let peer: PeerChatView | null = null;
   const roomPane = createRoomPane(app, () => {
     el.classList.remove("is-room"); memberChat.hidden = false;
     el.querySelector(".mb-head-l")!.append(members.picker);
@@ -983,6 +986,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     [...state.stopping], [...state.rerunning], answering, searching]);
   function render(follow = false): void {
     renderedPage = pageStamp();
+    // An open conversation between members follows the turns it is read from, and closes with its conversation.
+    if (peer) queueMicrotask(() => peer?.update());
     stage.setAttribute("aria-busy", String(pending));
     // Only a thread not read yet says it is loading: a refresh of an empty one keeps its empty state (R-UI-71).
     if (pending && isEmpty() && !loadedThread) {
@@ -2206,6 +2211,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         if (url) void api.openExternalUrl(url).catch(err => toaster.info(describeError(err)));
         break;
       }
+      case "peer-chat":
+        peer?.close();
+        peer = openPeerChat(memberChat, act, () => turns.flatMap(turn => turn.handoffs ?? []),
+          (id, fallback) => ({ name: members.nameOf(id) || fallback, face: members.faceOf(id, 28), accent: members.accentOf(id) }), () => { peer = null; });
+        break;
       case "copy-message":
         void copyMessage(act);
         break;

@@ -88,11 +88,16 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     // A message hugs its bubble and the actions beside it, as Grok Bot's: empty room to its side is no part of it, so a
     // pointer or a right click there shows nothing (owner, 2026-11-06).
     if (element.matches('.chat-message') && box.width > 0) {
-      const parts = [...element.children].filter(child => !child.matches('.message-actions'));
-      const widest = Math.max(0, ...parts.map(child => child.getBoundingClientRect().width));
-      const actions = element.querySelector(':scope > .message-actions')?.getBoundingClientRect().width ?? 0;
-      const allowed = widest + (actions ? actions + parseFloat(style.columnGap || '0') : 0);
-      if (box.width > allowed + 2) violation('R-UI-104', `A message is wider than its bubble and actions: ${Math.round(box.width)} > ${Math.round(allowed)}`);
+      // The parts' margin boxes (a file card keeps a small margin) side by side with the actions and the gap between.
+      const spans = [...element.children].map(child => {
+        const rect = child.getBoundingClientRect(), own = win.getComputedStyle(child);
+        return rect.width ? [rect.left - (parseFloat(own.marginLeft) || 0), rect.right + (parseFloat(own.marginRight) || 0)] : null;
+      }).filter(Boolean);
+      // Actions with no width yet (shown on hover) still keep their track's gap.
+      const resting = element.querySelector(':scope > .message-actions')?.getBoundingClientRect().width === 0 ? parseFloat(style.columnGap) || 0 : 0;
+      const allowed = (spans.length ? Math.max(...spans.map(span => span[1])) - Math.min(...spans.map(span => span[0])) : 0) + resting;
+      const parts = [...element.children].map(child => `${child.className.split(' ')[0] || child.tagName}:${Math.round(child.getBoundingClientRect().left - box.left)}+${Math.round(child.getBoundingClientRect().width)}`).join(' ');
+      if (box.width > allowed + 2) violation('R-UI-104', `A message is wider than its bubble and actions: ${Math.round(box.width)} > ${Math.round(allowed)} (${parts})`);
     }
     const scrollbar = element.offsetWidth - element.clientWidth - (parseFloat(style.borderLeftWidth) || 0) - (parseFloat(style.borderRightWidth) || 0);
     if (['auto', 'scroll'].includes(style.overflowY) && scrollbar > 1 && !element.matches('.main, .modal-body, .cs-results, .cs-form .add-grid')) violation('R-UI-62', 'A scrollbar takes room from a narrow part; only a wide page shows one');

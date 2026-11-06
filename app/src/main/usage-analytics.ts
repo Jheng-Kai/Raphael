@@ -9,7 +9,7 @@ import { getLocale, onLocaleChange, t } from "./i18n";
 import { noticeHTML } from "./missing";
 import { providerMark } from "./provider-marks";
 import type { ChatGptStatus } from "./types";
-import { btn, esc, patchHTML, toaster } from "./ui";
+import { btn, esc, iconButton, patchHTML, toaster } from "./ui";
 import type { CliAllowances } from "./usage-analytics-types";
 
 export type { CliAllowances } from "./usage-analytics-types";
@@ -74,7 +74,8 @@ export function mountUsageAnalytics(host: HTMLElement, api: UsageAnalyticsApi): 
     root.hidden = !busy && !cards;
     root.setAttribute("aria-busy", String(busy));
     root.setAttribute("aria-label", t("runs.allowance"));
-    patchHTML(root, `<header><h2 tabindex="-1">${t("runs.allowance")}</h2>${btn(t("runs.refresh"), "sm", ` data-run-act="allowance"${busy ? " disabled" : ""}`)}</header>${cards}`);
+    // Refreshing is one plain icon, no words (owner, 2026-11-07).
+    patchHTML(root, `<header><h2 tabindex="-1">${t("runs.allowance")}</h2>${iconButton("refresh", t("runs.refresh"), ` data-run-act="allowance"${busy ? " disabled" : ""}`)}</header>${cards}`);
     if (focused) root.querySelector<HTMLElement>(`[data-run-act="${focused}"]`)?.focus({ preventScroll: true });
   }
 

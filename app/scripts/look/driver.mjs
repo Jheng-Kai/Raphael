@@ -258,14 +258,14 @@ export async function perform(page, step, evidenceDirectory) {
     case "handoff-arrival": {
       await page.evaluate(() => {
         window.__handoffGroup = document.querySelector('[data-handoff-group]');
-        window.__handoffReceipt = document.querySelector('[data-handoff="800"]');
+        window.__peerChat = document.querySelector('.peer-chat');
         window.__handoffOwner = document.querySelector('.tn[data-id="1"] .me');
         window.__handoffAnswer = document.querySelector('.tn[data-id="1"] .ra');
         const turn = window.__look.data.turns.find(turn => turn.id === 1);
         turn.handoffs.push({ ...turn.handoffs[0], task_id: 850, work_turn_id: 950 });
         for (let i = 0; i < 20; i++) window.__look.emit({ type: "WorkerChanged", task_id: 850, state: "running", running: true });
       });
-      await page.waitForFunction(() => document.querySelector('[data-handoff="850"]'), { timeout: 5000 });
+      await page.waitForFunction(() => document.querySelector('[data-peer-keys~="850"]') && (!window.__peerChat || document.querySelector('.peer-chat [data-peer-key="850"]')), { timeout: 5000 });
       break;
     }
     case "reload":

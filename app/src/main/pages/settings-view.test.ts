@@ -466,11 +466,28 @@ describe("Models", () => {
     expect(html).not.toContain("data-usage-host");
     expect(html).not.toContain("data-fallback");
     const usage = tab("usage");
-    expect(names(usage)).toEqual(["金鑰", "Raphael 本月花費", "OpenRouter 帳號本月用量"]);
+    // This month's spending of the app is Grok Bot's usage card above the allowances; an OpenRouter account's own usage is
+    // read on OpenRouter (owner, 2026-11-07).
+    expect(names(usage)).toEqual(["金鑰"]);
+    expect(usage.indexOf('data-row="raphael-spend"')).toBeLessThan(usage.indexOf("data-usage-host"));
+    expect(usage).toContain("<h2>拉斐爾本月花費</h2>");
+    expect(usage).not.toContain("OpenRouter 帳號本月用量");
     expect(usage).toContain("data-usage-host");
     expect(usage).not.toContain("data-model-picker");
     expect(usage).not.toContain("<h2>用量</h2>");
     expect(usage).not.toContain('data-pv="directory"');
+  });
+
+  test("this month's spending is Grok Bot's usage card: the amount, the share of the monthly limit as a bar, the month's end", () => {
+    const card = (over: Partial<SettingsView>): string => /<section class="spend-card"[\s\S]*?<\/section>/.exec(tab("usage", over))![0];
+    const full = card({});
+    expect(full).toContain('<strong class="num">US$1.20</strong><small>已使用 12%</small>');
+    expect(full).toContain('role="progressbar" aria-label="拉斐爾本月花費" aria-valuemin="0" aria-valuemax="100" aria-valuenow="12"><i style="width:12%">');
+    expect(full).toContain("每月上限 US$10.00 · 照目前速度，月底約 US$2.50");
+    expect(card({ spend: { ...spend, month_usd: 14 } })).toContain('aria-valuenow="100"');
+    const unknown = card({ spend: null });
+    expect(unknown).toContain("暫時無法取得");
+    expect(unknown).not.toContain("progressbar");
   });
 
   test("shows how OpenRouter took the key, with buttons to check again and to change it", () => {
@@ -670,7 +687,7 @@ describe("搜尋設定", () => {
     // 連結應用程式 is not in Settings, so the search does not offer it (R-UI-111).
     expect(where("連結應用程式")).toEqual([]);
     expect(where("telegram")).toEqual(["messaging:訊息平台"]);
-    expect(where("OPENROUTER")).toEqual(["models:新增供應商", "usage:金鑰", "usage:OpenRouter 帳號本月用量"]);
+    expect(where("OPENROUTER")).toEqual(["models:新增供應商", "usage:金鑰"]);
     expect(where("模型")).toEqual(["models:模型與用量", "models:語音轉文字", "models:整理文字", "models:拉斐爾的快速提問"]);
     expect(where("Models & usage")[0]).toBe("models:模型與用量");
   });

@@ -1,6 +1,6 @@
 // What a colleague handed a member, in that member's own chat: one centred grey line in place of the owner's words, which opens
 // on what was asked; the member's thinking and answer follow as in any turn, since this is where it works. A question a
-// colleague only asked is not here: it is the asker's record, 「和 X 討論」 (handoff-line.ts).
+// colleague only asked is not here: it is the asker's record, 「與 X 的 2 則訊息」 (handoff-line.ts).
 import { NAME, eventLineHTML } from "./event-line";
 import { t } from "./i18n";
 import { messageHTML } from "./message-content";

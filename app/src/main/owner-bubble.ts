@@ -1,4 +1,4 @@
-import { RAPHAEL_GOLD } from "./slime";
+import { RAPHAEL_GOLD, slimeColorOf } from "./slime";
 const channels = (hex: string): number[] => [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16));
 const hexOf = (rgb: number[]): string => `#${rgb.map(value => value.toString(16).padStart(2, "0")).join("")}`;
 const linear = (value: number): number => value / 255 <= 0.03928 ? value / 255 / 12.92 : ((value / 255 + 0.055) / 1.055) ** 2.4;
@@ -43,3 +43,7 @@ export function memberAccent(color: string): string {
   while (contrast(dark, DARK_PANEL) < 3) dark = dark.map(value => Math.round(value + (255 - value) * 0.06));
   return `light-dark(${hexOf(light)}, ${hexOf(dark)})`;
 }
+
+/** A member's name in its colour, as Grok Bot names each Bot in a conversation between Bots: Raphael (id 0) in his gold. */
+export const nameAccent = (member: { id: number; avatar?: string | null }): string =>
+  memberAccent(member.id === 0 ? RAPHAEL_GOLD : slimeColorOf(member));

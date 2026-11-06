@@ -104,7 +104,7 @@ export function patchThread(thread: HTMLElement, wanted: readonly ThreadLine[], 
       drawn.set(made, identity);
       if (!node && options.arrives?.(line)) made.classList.add("is-new");
       if (node) {
-        if (previous && /class="(?:handoff-event|conversation-event-line timeline-event)/.test(previous) && handoffSkeleton(previous) === handoffSkeleton(identity)) {
+        if (previous && /class="(?:[^"]*\bhandoff-event\b|conversation-event-line timeline-event)/.test(previous) && handoffSkeleton(previous) === handoffSkeleton(identity)) {
           const old = new Map(outerEvents(node).map(event => [eventKey(event), event]));
           for (const event of outerEvents(made)) updateEvent(old.get(eventKey(event))!, event);
           drawn.set(node, identity);

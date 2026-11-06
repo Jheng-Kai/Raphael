@@ -42,6 +42,8 @@ import { carryMail } from "./mail-card";
 import { plainLine, primaryFirst, primaryIdOf, memberRole, faceHTML } from "./members";
 import { NAME, eventLineHTML } from "./event-line";
 import { handoffGroupHTML } from "./handoff-line";
+import { nameAccent } from "./owner-bubble";
+import { openPeerChat, type PeerChatView } from "./peer-chat";
 import type { WireAttachment, HandoffView } from "./types";
 import type { AppContext, MembersList, Room, RoomMessage, RoomExchange, MainEvent } from "./types";
 import { btn, closeMenu, copyButton, esc, ico, iconButton, openMenu, openPopover, patchHTML, sel, toaster } from "./ui";
@@ -372,11 +374,14 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   });
   const questionSlot = document.createElement("div"); questionSlot.className = "ra-bgq"; questionSlot.append(questions.element); status.after(questionSlot);
   const person=(id:number|null)=>list.members.find(m=>m.id===id);
-  const boardHTML = (): string => roomBoardHTML(handoffs, decisions, (id, name) => faceHTML(person(id) ?? {id, name}, 28));
+  /** The conversation between members a centred line opened over the room (peer-chat.ts). */
+  let peer: PeerChatView | null = null;
+  const boardHTML =(): string => roomBoardHTML(handoffs, decisions, (id, name) => faceHTML(person(id) ?? {id, name}, 28));
   const roomStamp = (): unknown => [list, room, exchange, messages.slice(), handoffs.slice(), decisions.slice(), replyTo, sendingRooms.has(roomId!), stopping, loadingOlder];
   function draw():void {
+    if (peer) queueMicrotask(() => peer?.update());
     if(!room)return;
-    const follows = !drewOnce || (!roomWindow.after && richScrollFollows(scroll));
+    const follows =!drewOnce || (!roomWindow.after && richScrollFollows(scroll));
     snapshot = roomStamp();
     patchHTML(el.querySelector('.au-room-heading')!,`<b>${esc(room.is_team ? t("rooms.team") : room.name)}</b><div class="au-room-faces">${primaryFirst(room.member_ids.map(id => ({ id })), primaryIdOf(list)).map(({ id })=>{const m=person(id);return m?`<span class="au-room-participant" data-tooltip="${esc(memberRole(m)?`${m.name} · ${memberRole(m)}`:m.name)}">${faceHTML(m,24)}${id===primaryIdOf(list)?`<span class="au-room-crown" role="img" aria-label="${esc(t("rooms.chief"))}">${ico("crown")}</span>`:""}</span>`:"";}).join("")}</div>`);
     const active=exchange&&["queued","running"].includes(exchange.state);
@@ -423,11 +428,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
         return `<li class="tn room-intent-blocked" role="status">${eventLineHTML(t("rooms.intentBlocked",{p0:NAME,p1:t(BLOCKED[intent.reason as keyof typeof BLOCKED]??"rooms.blockedWorker")}),faceOf(intent.recipient_id,name),name)}</li>`;
       }
       if("task" in entry){
-        return `<li class="tn handoff-row">${handoffGroupHTML(tasks.map(task => {
-          const source=messages.find(m=>m.turn_id===task.source_turn_id&&m.member_id===task.from_member_id&&m.kind!=="wrapup");
-          return { task, face: faceOf(task.member_id,task.member_name), name: person(task.member_id)?.name,
-            request: source && {author:person(source.member_id)?.name??"",text:source.text} };
-        }))}</li>`;
+        return `<li class="tn handoff-row">${handoffGroupHTML(tasks.map(task => ({ task, face: faceOf(task.member_id,task.member_name), name: person(task.member_id)?.name })))}</li>`;
       }
       const m=entry.message;
       if (m.kind === "report" && m.report) return `<li class="tn" data-room-message="${m.id}">${roomReportHTML(m)}</li>`;
@@ -515,6 +516,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   el.querySelector('[data-room-menu]')!.addEventListener('click',e=>{if(room)roomActions(e.currentTarget as HTMLElement,room,()=>void refresh(),close);});
   el.addEventListener('click',e=>{const target=(e.target as Element).closest<HTMLElement>('[data-room-act],[data-act]');if(!target)return;const act=target.dataset.roomAct??target.dataset.act;if(["turn","copy-message","copy-code","attachment-open","attachment-image","older"].includes(act??""))e.stopPropagation();
     if(act==="private-work") openMemberThread(_app,Number(target.dataset.member),Number(target.dataset.turn));
+    else if(act==="peer-chat"){peer?.close();peer=openPeerChat(el,target,()=>handoffs,(id,fallback)=>{const member=person(id)??{id,name:id===0?t("agent.title"):fallback};return{name:member.name||fallback,face:faceHTML(member,28),accent:nameAccent(member)};},()=>{peer=null;});}
     else if(act==="members"&&room)void editRoomMembers(room,()=>void refresh());
     else if(act==="expand-message") {
       e.stopPropagation();

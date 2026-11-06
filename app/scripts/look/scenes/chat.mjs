@@ -201,9 +201,13 @@ export default [
   scene("primary-room-chief", "The current chief wears the room crown and writes its one wrap-up", [{ action: "member-column", collapsed: false }, room(1), wait(".au-room-wrapup"), check("primary-room-chief")], { primaryMember: 1, roomWrapup: true }),
   scene("chat", "Conversation with public progress, replies and an attachment", [wait(".ra .chat-message[data-reply]"), check("conversation-design")]),
   scene("plain-bot-chat", "Raphael's stored two-message 《答。…》 reply reads plainly", [wait(".ra .chat-message[data-reply]"), check("conversation-design"), check("plain-bot-chat")], { splitReply: true }),
-  scene("centred-system-events", "Hand-off, consultation and meeting lines centred between question and answer", [wait("[data-handoff]"), check("centred-system-events")], { systemEvents: true }),
-  scene("bot-ask-centred", "The asker's chat names the colleague it asked in one centred line that opens on the question and the answer",
-    [member(2), wait('[data-handoff="x71"]'), check("bot-ask-centred"), click('[data-handoff="x71"] summary'), wait('[data-handoff="x71"][open]'), check("bot-ask-expanded")], { colleagues: 1 }),
+  scene("centred-system-events", "Hand-off, consultation and meeting lines centred between question and answer", [wait("[data-handoff-group]"), check("centred-system-events")], { systemEvents: true }),
+  scene("bot-ask-centred", "The asker's chat names the colleague it asked in one centred line that opens their conversation on the question and the answer",
+    [member(2), wait('[data-handoff="x71"]'), check("bot-ask-centred"), click('[data-handoff="x71"]'), wait('.peer-chat'), check("bot-ask-expanded")], { colleagues: 1 }),
+  scene("peer-chat", "The line opens the real conversation between two members in place, as Grok Bot's",
+    [wait('[data-handoff="61"]'), click('[data-handoff="61"]'), wait('.peer-chat'), check("peer-chat")], { peerChat: true }),
+  scene("peer-chat-close", "Close chat returns to the thread and the line",
+    [wait('[data-handoff="61"]'), click('[data-handoff="61"]'), wait('.peer-chat'), click('.peer-close'), check("peer-chat-closed")], { peerChat: true }),
   scene("bot-message-from-centred", "A colleague's question is one centred 訊息來自 line where it came in the asked member's chat",
     [member(1), wait('[data-exchange="71"]'), check("bot-message-from")], { colleagues: 1 }),
   scene("bot-exchange-count", "Work a colleague handed over is a turn in the receiver's chat, under who it came from",
@@ -240,7 +244,8 @@ export default [
   scene("member-delete", "A member is deleted from its ⋯ menu after the confirmation: its row leaves and a notice says so", [
     member(2), { action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), click('#app-popover [data-pick="delete"]'), wait(".mb-dialog"),
     click('.mb-dialog [data-dlg="delete"]'), waitGone('.mb-col [data-member="2"]'), wait(".toast"), check("member-deleted")]),
-  scene("details", "Title opens member details", [...details, { action: "icon-interactions", selector: '.mb-det [data-det="close"]' }, click('.mb-det-head'), check("details-pointer-focus")]),
+  // The panel's close is one of the window edges' soft round buttons since 2026-11-06 (R-UI-16), so it has a surface.
+  scene("details", "Title opens member details", [...details, click('.mb-det-head'), check("details-pointer-focus")]),
   scene("raphael-details", "Title opens Raphael details", [{ action: "open-details" }, check("member-details")]),
   ...[0, 1].map(id => scene(`speaker-draft-${id ? "member" : "chief"}`, "Every speaker can turn the shared draft preference off in details settings", [
     member(id), { action: "open-details" }, click('[data-det="gear"]'), wait('[data-det="draft"][aria-checked="true"]'),

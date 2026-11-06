@@ -226,14 +226,14 @@ the short-clean-sentence shortcut, without a history row or target paste.
 
 ## How to get to it (user POV)
 
-Choose Dictation, then use the compact horizontal Overview/History/Dictionary tabs beside the title. Left/Right/Home/End change the selected tab while retaining keyboard focus; selection and legacy history/dictionary deep links remain available. Four separate stat cards form a 2 by 2 left grid above activity; shortcuts start in the right column. At 720 the order is totals, shortcuts, activity. An active heatmap day opens its
-history. Settings > Dictation configures recognition/shortcuts. Actual dictation
+Choose Dictation, then use the compact horizontal Overview/History/Dictionary tabs beside the title. Left/Right/Home/End change the selected tab while retaining keyboard focus; selection and legacy history/dictionary deep links remain available. Four separate stat cards form a 2 by 2 left grid; shortcuts stand beside them in the right column, end with them and share the header tabs' right edge, and the activity heatmap runs under both (2026-11-07). At 720 the order is totals, shortcuts, activity. A heatmap day says its words only in its title under the pointer;
+pressing it does nothing, and no history opens from the grid (owner, 2026-11-07). Settings > Dictation configures recognition/shortcuts. Actual dictation
 begins with the configured global key while a target field has focus.
 
 ## Driving it with look
 
 ```powershell
-npm run look -- dictation-overview dictation-history dictation-history-day dictation-dictionary dictation-keyboard dictation-notice dictation --theme both --width 1120,720,1920x1080
+npm run look -- dictation-overview dictation-history dictation-heat-press dictation-dictionary dictation-keyboard dictation-notice dictation --theme both --width 1120,720,1920x1080
 npm run look -- overlay-transcribing overlay-cleaning --theme both --width 1120,720,1920x1080
 npm run look -- composer-learn member-composer-learn room-composer-learn --theme both --width 1120,720,1920x1080
 ```

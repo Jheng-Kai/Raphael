@@ -162,6 +162,8 @@
 .chat-message { display: grid; grid-template-columns: fit-content(60ch) auto; column-gap: var(--sp-1); justify-items: start; align-items: start; width: fit-content; min-width: 0; max-width: 100%; position: relative; }
 .chat-message > * { grid-column: 1; min-width: 0; max-width: 100%; }
 .chat-message > .message-actions { grid-column: 2; grid-row: 1; align-self: center; }
+/* A message with no actions beside it (a conversation between members) keeps no gap for them. */
+.chat-message:not(:has(> .message-actions)) { column-gap: 0; }
 .chat-message:has(> .routine-origin) > .message-actions { grid-row: 2; }
 .chat-message > .turn-event { width: fit-content; max-width: 100%; margin-inline: auto; }
 .owner-message { grid-template-columns: auto fit-content(var(--pa-bw)); justify-items: end; margin-inline-start: auto; max-width: min(var(--pa-bw), 78%); }
@@ -512,7 +514,10 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 
 /* Media stand on their own; only the owner's words receive a text bubble. */
 .owner-content { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); min-width: 0; max-width: min(var(--pa-bw), 78%); }
+/* Files give the message its width; the content column takes what is left, so no room stays empty beyond the actions
+   at its side (R-UI-104). */
 .me > .owner-content:has(.me-files), .owner-message:has(.me-files) { width: min(420px, 78%); }
+.owner-message:has(.me-files) { grid-template-columns: auto minmax(0, 1fr); }
 .owner-message > .owner-content { max-width: 100%; }
 .owner-content > .bubble { max-width: 100%; }
 .me-files { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); width: 100%; min-width: 0; white-space: normal; }

@@ -176,8 +176,7 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "messaging", words: ["Telegram"] },
   { pane: "models", label: "providers.add", words: ["OpenAI", "Anthropic", "Gemini", "Azure", "Bedrock", "Ollama", "LM Studio", "OpenRouter", "LiteLLM", "Portkey", "Vercel", "Nebius", "Bifrost", "Groq", "DeepSeek", "Mistral"] },
   { pane: "usage", label: "common.apiKey", words: ["OpenRouter"] },
-  { pane: "usage", label: "settings.050" },
-  { pane: "usage", label: "settings.usageMonthly" },
+  { pane: "usage", label: "settings.050", words: ["budget", "spend"] },
   { pane: "models", label: "settings.031", also: "settings.searchModel" },
   { pane: "models", label: "settings.035", also: "settings.searchModel" },
   { pane: "models", label: "settings.quickModel", also: "settings.searchModel", words: ["Alt", "Space"] },
@@ -509,37 +508,22 @@ function keyRow(v: SettingsView): string {
   });
 }
 
-/** This month's recorded spend, independent of the retired spending caps. */
-function spendRow(v: SettingsView): string {
-  const attrs = ' data-row="raphael-spend"';
+/**
+ * What this app spent this month, as Grok Bot's usage card (owner, 2026-11-07): the amount, how much of the monthly limit
+ * it is, as a bar in a member's colour, and where the month ends at this pace. Only the app's own spending: an OpenRouter
+ * account's usage is the owner's to read on OpenRouter.
+ */
+function spendCardHTML(v: SettingsView): string {
   const { spend } = v;
-  if (!spend) return row(t("settings.050"), "", esc(t("settings.usageUnavailable")), { attrs });
-  return row(t("settings.050"), "", `<span class="val num">${esc(formatUsd(spend.month_usd))}</span>`, { attrs });
-}
-
-/** Key-wide usage is separate from Raphael's local spending and its editable limit. */
-function usageRow(v: SettingsView): string {
-  const { hasKey, openrouter, checkingOpenrouter } = v;
-  const usage = hasKey ? openrouter?.usage : null;
-  const monthly = usage?.monthly;
-  const available = monthly != null && Number.isFinite(monthly);
-  const state = !hasKey ? "no-key" : available ? (openrouter?.state === "error" ? "stale" : "ready") : checkingOpenrouter ? "loading" : "unavailable";
-  const details: string[] = [];
-  if (usage?.limit != null && Number.isFinite(usage.limit)) {
-    details.push(`<span data-usage="limit">${esc(t("settings.usageLimit", { p0: formatUsd(usage.limit) }))}</span>`);
-  }
-  if (usage?.limit_remaining != null && Number.isFinite(usage.limit_remaining)) {
-    details.push(`<span data-usage="remaining">${esc(t("settings.usageRemaining", { p0: formatUsd(usage.limit_remaining) }))}</span>`);
-  }
-  if (state === "stale") details.push(esc(t("settings.usageCached")));
-  const value = available ? formatUsd(monthly) : !hasKey ? t("settings.usageNoKey") : checkingOpenrouter ? t("common.loading") :
-    openrouter?.state === "unknown" ? t("settings.usageUnchecked") : t("settings.usageUnavailable");
-  return row(
-    t("settings.usageMonthly"),
-    details.join(" · "),
-    `<span class="${available ? "val num" : "val"}" data-usage="monthly">${esc(value)}</span>`,
-    { attrs: ` data-row="openrouter-usage" data-usage-state="${state}"` },
-  );
+  if (!spend) return `<section class="spend-card" data-row="raphael-spend"><h2>${esc(t("settings.050"))}</h2><p class="spend-note">${esc(t("settings.usageUnavailable"))}</p></section>`;
+  const limit = Number.isFinite(spend.limit_usd) && spend.limit_usd > 0 ? spend.limit_usd : null;
+  const share = limit ? Math.round(Math.max(0, Math.min(100, spend.month_usd / limit * 100))) : null;
+  const forecast = Number.isFinite(spend.forecast_usd) && spend.forecast_usd > spend.month_usd ? spend.forecast_usd : null;
+  return `<section class="spend-card" data-row="raphael-spend"><h2>${esc(t("settings.050"))}</h2>` +
+    `<p class="spend-value"><strong class="num">${esc(formatUsd(spend.month_usd))}</strong>${share !== null ? `<small>${esc(t("overview.used", { p0: share }))}</small>` : ""}</p>` +
+    (share !== null ? `<div class="spend-bar" role="progressbar" aria-label="${esc(t("settings.050"))}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${share}"><i style="width:${share}%"></i></div>` : "") +
+    `<p class="spend-note">${[limit ? esc(t("settings.spendLimit", { p0: formatUsd(limit) })) : "", forecast ? esc(t("settings.spendForecast", { p0: formatUsd(forecast) })) : ""].filter(Boolean).join(" · ")}</p>` +
+    `</section>`;
 }
 
 // ---------- the parts of every tab ----------
@@ -699,11 +683,9 @@ function modelsHTML(v: SettingsView): string {
   const selected = v.modelsTab ?? (v.pane === "usage" ? "usage" : "models");
   const content = selected === "models" ? section(t("models.used"), [quickRow(v), ...MODEL_ROWS.slice(1).map(r => modelRow(v, r))], v.catalog === "failed" ? priceSpan(v, "note") : "") +
     cliBrainsHTML(v.cliBrains ?? emptyCliBrainsView()) + providersHTML(providers) + providersAddHTML(providers) :
-    `<div data-usage-host></div>` + section(t("models.spend"), [
+    spendCardHTML(v) + `<div data-usage-host></div>` + section(t("common.apiKey"), [
       keyRow(v),
       ...(v.keyError ? [note(st("err", v.keyError()), ' role="alert"')] : []),
-      spendRow(v),
-      usageRow(v),
     ]);
   return headingHTML(v) + coreNote(v) + `<div class="models-page">` +
     tabs((["models", "usage"] as const).map((id) => ({

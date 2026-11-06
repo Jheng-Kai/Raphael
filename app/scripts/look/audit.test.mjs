@@ -1026,7 +1026,8 @@ describe("rendered look checks", () => {
 
 it("rejects divergent store add classes, row markup and card styling", () => {
   const browser = new Window();
-  const row = `<div class="cs-card" style="display:grid;grid-template-columns:240px 64px;border-radius:12px;border-bottom:0px solid;border-left:0px solid"><button class="btn cs-main" data-conn="open-store"><span class="ic"></span><span class="tx"><span class="nm">App</span><span class="sub">Summary</span></span></button><button class="btn sm" data-conn="join">Add</button></div>`;
+  // As Grok Bot's store rows: a name, and under it only what the app asks for.
+  const row = `<div class="cs-card" style="display:grid;grid-template-columns:240px 64px;border-radius:12px;border-bottom:0px solid;border-left:0px solid"><button class="btn cs-main" data-conn="open-store"><span class="ic"></span><span class="tx"><span class="nm">App</span><span class="sub"><b class="need">Needs a key</b></span></span></button><button class="btn sm" data-conn="join">Add</button></div>`;
   browser.document.body.innerHTML = row + row;
   // happy-dom has no pseudo-elements, so the divider line is stood in for by a data attribute.
   const own = browser.getComputedStyle.bind(browser);
@@ -1036,6 +1037,10 @@ it("rejects divergent store add classes, row markup and card styling", () => {
   try {
     expect(checkRendered("plugins-store-rows")).toEqual({ check: "plugins-store-rows", rows: 2, addClass: "btn sm" });
     const first = browser.document.querySelector('.cs-card');
+    const line = first.querySelector('.sub'), need = line.innerHTML;
+    line.textContent = "What the app does";
+    expect(() => checkRendered("plugins-store-rows")).toThrow("only what the app asks for");
+    line.innerHTML = need;
     first.style.borderRadius = '0px';
     expect(() => checkRendered("plugins-store-rows")).toThrow("rounded hover");
     first.style.borderRadius = '12px'; first.style.borderBottom = '1px solid';

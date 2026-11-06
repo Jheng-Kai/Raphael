@@ -28,6 +28,7 @@
   "unreadSample": {"question": "Check the sample notes.", "answer": "The sample notes are ready for review.", "paragraph": "The sample comparison includes the observations, remaining questions and a suggested next step."},
   "windowSample": {"needle": "視窗搜尋標記", "question": "請檢查這份範例筆記。", "answer": "範例筆記已整理完成，可以開始檢閱。", "paragraph": "這份比較記錄了觀察結果、待釐清的問題，以及建議的下一步。"},
   "presenceSample": {"question": "Check the sample report.", "answer": "The sample report is ready.", "secondAnswer": "The sample comparison is complete.", "progress": "Checking sample sources", "nextAction": "Comparing sample sources", "routine": "Sample briefing", "calendar": "Sample review", "source": "https://example.test/sample"},
+  "peerChatSample": {"earlierQuestion": "請先整理範例專案的進度。", "earlierAnswer": "範例專案的進度已整理好。", "earlierRequest": "範例專案的進度表在哪裡？", "earlierResult": "進度表在共用資料夾的範例專案底下，最新一版是上週五更新的。", "otherRequest": "範例報告的格式確定了嗎？", "otherResult": "格式已確定，沿用上一期的範本。", "request": "今天的範例檢查做完了嗎？", "result": "做完了，三個項目都通過，只有一個標題需要再確認。"},
   "handoffGroupSample": {
     "people": ["Ada", "Ben", "Cleo", "Dara", "Eli", "Fran"],
     "longPeople": ["Ada with a deliberately long display name", "BenWithAnUnbrokenInternationalDisplayName", "Cleo with another long display name", "Dara"],
@@ -1727,6 +1728,7 @@
   "roomHandoff": {
     "task_id": 42, "source_turn_id": 1, "work_turn_id": 101, "member_id": 1,
     "member_name": "小晴", "from_member_id": 0, "stage_id": "launch-report", "mode": "work",
+    "request": "請整理上線驗收報告，列出待確認的文案。",
     "state": "queued", "reason": null, "created_at_ms": 1792807141000, "ready_at_ms": 1792807141000,
     "dispatch_policy": "immediate", "result": "已讀取來源，完成上線驗收報告。兩項待確認文案已整理。",
     "evidence": [{ "kind": "artifact", "uri": "reports/上線驗收報告.html", "mime": "text/html", "digest": "fixture-report-digest", "verdict": "verified" }]

@@ -6,7 +6,7 @@ import { onLocaleChange, t } from "../i18n";
 import { getVersion } from "@tauri-apps/api/app";
 import * as api from "../api";
 import { homeHint } from "../dictation";
-import { buildGrid, dateOfTarget, heatAction, heatmapSVG, weeksThatFit } from "../heatmap";
+import { buildGrid, heatmapSVG, weeksThatFit } from "../heatmap";
 import { bindingLabels } from "../keys";
 import { loadingHTML } from "../loading";
 import { durationParts, formatCount, hasDictations, periodSpeed } from "../stats";
@@ -63,8 +63,7 @@ function activityHTML(s: StatsSummary): string {
     `<div class="activity-head"><h2 id="activity-h">${esc(t("home.activity"))}</h2><div class="activity-sum">${activitySummary(s)}</div>` +
     `<div class="activity-nav">${iconBtn("left", t("home.023"), ' data-act="older"')}${iconBtn("right", t("home.024"), ' data-act="newer"')}</div></div>` +
     `<div class="heat-box"></div>` +
-    // A day pressed says its words here, in place: no history opens from the grid (owner, 2026-11-06).
-    `<div class="heat-foot"><p class="heat-said" role="status"></p>${legend()}</div>` +
+    `<div class="heat-foot">${legend()}</div>` +
     `</section>`
   );
 }
@@ -101,8 +100,6 @@ export function createDictationOverview(app: AppContext): Page {
   /** How many days the grid asks for, and how many weeks back from this one it shows. */
   let daysWanted = DAYS_FIRST;
   let back = 0;
-  /** The day of the grid that a Tab reaches; the newest one with a dictation until another is used. */
-  let heatStop: string | null = null;
 
   function hintHTML(): string {
     const parts = app.device().dictation_keys.map((binding) => keys(bindingLabels(binding)));
@@ -126,43 +123,22 @@ export function createDictationOverview(app: AppContext): Page {
     );
   }
 
-  /** The cell of the day, if the grid has it. */
-  const heatCell = (date: string): SVGElement | null => el.querySelector<SVGElement>(`.heat [data-date="${date}"]`);
-
   /** The activity grid alone, drawn again when the page changes width or pages back. */
   function paintGrid(): void {
     const box = el.querySelector<HTMLElement>(".heat-box");
     if (!box || !stats) return;
-    // a day that has the focus keeps it through the redraw
-    const focused = dateOfTarget(document.activeElement);
-    if (focused !== null) heatStop = focused;
     const grid = buildGrid(stats.by_day, weeksThatFit(box.clientWidth || 600), back);
-    box.innerHTML = heatmapSVG(grid, heatStop);
+    box.innerHTML = heatmapSVG(grid);
     el.querySelector<HTMLButtonElement>('[data-act="older"]')!.disabled = !(grid.older || daysWanted < DAYS_ALL);
     el.querySelector<HTMLButtonElement>('[data-act="newer"]')!.disabled = back === 0;
-    if (focused !== null) heatCell(focused)?.focus();
-  }
-
-  /** Moves the focus (and the Tab stop) from one day of the grid to another. */
-  function moveHeatFocus(date: string): void {
-    const cell = heatCell(date);
-    if (!cell) return;
-    el.querySelector(`.heat [data-date][tabindex="0"]`)?.setAttribute("tabindex", "-1");
-    cell.setAttribute("tabindex", "0");
-    heatStop = date;
-    cell.focus();
   }
 
   function paint(s: StatsSummary | null): void {
     keysCard.innerHTML = keysCardHTML();
-    // redrawing everything takes the focus from a day of the grid; it is given back below
-    const focused = dateOfTarget(document.activeElement);
-    if (focused !== null) heatStop = focused;
     stats = s;
     if (s && hasDictations(s)) {
       usage.innerHTML = usageHTML(s);
       paintGrid();
-      if (focused !== null) heatCell(focused)?.focus();
     } else if (s) {
       usage.innerHTML = t("home.025") + t("home.026") + `<p class="hint">${hintHTML()}</p></section>`;
     } else {
@@ -205,37 +181,12 @@ export function createDictationOverview(app: AppContext): Page {
     paintGrid();
   }
 
-  /** What a click or a key on a day of the grid does: says that day's words beside the grid, or moves to another day. */
-  function onHeat(event: MouseEvent | KeyboardEvent): void {
-    const dates = Array.from(el.querySelectorAll(".heat [data-date]"), (cell) => cell.getAttribute("data-date")!);
-    const action = heatAction(
-      { type: event.type === "click" ? "click" : "keydown", key: event instanceof KeyboardEvent ? event.key : undefined, target: event.target as Element | null },
-      dates,
-    );
-    if (action === null) return;
-    event.preventDefault();
-    if ("open" in action) {
-      heatStop = action.open;
-      const said = el.querySelector<HTMLElement>(".heat-said");
-      if (said) said.textContent = heatCell(action.open)?.querySelector("title")?.textContent ?? "";
-    } else {
-      moveHeatFocus(action.focus);
-    }
-  }
-
   el.addEventListener("click", (e) => {
     const target = e.target as Element;
-    if (dateOfTarget(target) !== null) {
-      onHeat(e);
-      return;
-    }
     const go = target.closest<HTMLElement>("[data-go]");
     if (go) app.go(go.dataset.go as PageId, go.dataset.pane as SettingsPane | undefined);
     const act = target.closest<HTMLElement>("[data-act]")?.dataset.act;
     if (act === "older" || act === "newer") void turn(act === "older");
-  });
-  el.addEventListener("keydown", (e) => {
-    if (dateOfTarget(e.target as Element) !== null) onHeat(e);
   });
 
   // The grid shows as many weeks as fit.

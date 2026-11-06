@@ -82,12 +82,12 @@ describe("a connector card", () => {
   test("an app that needs the owner's own key or developer app says so, and its one button opens the form", () => {
     const key = card({ app: "acme", name: "Acme", needs: "key", toolkit: "acme" });
     const pending = connectorCardHTML(key);
-    expect(visible(pending)).toBe("連結 Acme 等你填入 需要你的 API key 填入金鑰");
+    expect(visible(pending)).toBe("連結 Acme 等你填入 需要你的 API 金鑰 填入金鑰");
     expect(actions(pending)).toEqual(["card-setup"]);
     expect(pending).toContain('data-toolkit="acme" data-needs="key" data-name="Acme"');
     expect(pending).not.toContain("<input"); // the key is never asked for in the chat
     const own = connectorCardHTML(card({ app: "orbit", name: "Orbit", needs: "own_app", toolkit: "orbit" }));
-    expect(visible(own)).toBe("連結 Orbit 等你填入 需要你自己的開發者 app 設定開發者 app");
+    expect(visible(own)).toBe("連結 Orbit 等你填入 需要你自己的開發者應用程式 設定開發者應用程式");
     // A failure names what is missing and offers the form again, never a bare "retry".
     const rejected = connectorCardHTML({ ...key, state: "failed", error: "key_rejected" });
     expect(visible(rejected)).toBe("連結 Acme 未能完成 這把金鑰沒有被接受，請再填一次 填入金鑰 關閉");

@@ -15,7 +15,7 @@ const MAP = {
   plug: "plug", bell: "bell", calendar: "calendar", news: "newspaper", folder: "folder", memory: "brain", attach: "paperclip",
   voice: "audio-lines", database: "database", smile: "smile", smilePlus: "smile-plus", play: "play", pause: "pause",
   external: "external-link", minus: "minus", image: "image", file: "file", download: "download", more: "ellipsis",
-  repeat: "repeat", mail: "mail",
+  repeat: "repeat", mail: "mail", swap: "arrow-left-right",
 };
 
 const root = new URL("../../", import.meta.url);

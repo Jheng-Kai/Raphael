@@ -1153,7 +1153,7 @@ npm run look -- composer-voice-recording composer-voice-sent composer-stop-voice
 
 ## The owner's bubble and link cards (2026-11-02)
 
-The owner's bubble in a member's own conversation wears that member's colour (`owner-bubble.ts`, set in `drawFaces` so an avatar change follows at once); Raphael's conversation and group chats stay neutral. A link card under a reply is the media card's width whatever the reply says, and an address with no title reads once, in full.
+The owner's bubble in a member's own conversation wears that member's colour (`owner-bubble.ts`, set in `drawFaces` so an avatar change follows at once); since 2026-11-06 Raphael's conversation wears his warm gold with dark words (R-UI-81), and group chats stay neutral. A link card under a reply is the media card's width whatever the reply says, and an address with no title reads once, in full.
 
 ```powershell
 npm run look -- owner-bubble-member owner-bubble-other-member owner-bubble-light-character owner-bubble-long owner-bubble-chief owner-bubble-room link-card-short-reply --theme both --width 1120,720,1920x1080
@@ -1409,7 +1409,7 @@ npm run look -- busy-team-thread busy-team-up busy-team-steps busy-team-typing b
 
 ## Folded colleague exchanges (2026-11-02)
 
-R-UI-72 uses handoff-line.ts and event-line.ts for private turn groups and consecutive room receipts. A message or blocked-intent entry separates room groups. Shared thread-diff.ts retains every handoff-event disclosure and its open state, including received-message lines. Existing individual request, result and artifact controls remain inside the closed-by-default group.
+R-UI-72 uses handoff-line.ts and event-line.ts for private turn groups and consecutive room receipts. A message or blocked-intent entry separates room groups. Shared thread-diff.ts keeps every handoff line node, and the open state of received-message lines. What was said opens in the conversation between members (see below, 2026-11-07).
 
 Selected matrix: handoff-group, handoff-group-done, handoff-group-many, handoff-group-open, handoff-group-room, centred-system-events, handoff-centred-line, room-handoff-queued, room-handoff-running, room-handoff-result, room-handoff-failed, room-workflow-blocked, room-immediate-work, room-mention-after-hop-limit, busy-team-thread, busy-team-room. Both themes at 1120,720,1920x1080. The centred-system-events assertion retains the two original handoff receipt labels; the meeting is in reply detail (owner, 2026-11-05).
 Additional R-UI-72 coverage: handoff-group-long checks long and unbroken names at all three sizes. Arriving receipts update only the event subtree; the owner question, answer and intervening room message retain their DOM nodes.
@@ -1417,6 +1417,14 @@ Additional R-UI-72 coverage: handoff-group-long checks long and unbroken names a
 
 ```powershell
 npm run look -- handoff-group handoff-group-done handoff-group-many handoff-group-long handoff-group-open handoff-group-room --theme both --width 1120,720,1920x1080
+```
+
+## Conversation between members (2026-11-07)
+
+Since 2026-11-07 (owner, after Grok Bot's 「2 messages with Savio」) the line is a button 「與 X 的 N 則訊息」 with no disclosure under it: N counts each request and each answer. peer-chat.ts opens the conversation in place over the member's header, thread and composer (`.mb-chat > .peer-chat`): the pill 「A ⇄ B」, every exchange between the same members in the loaded thread (or room) oldest first under each speaker's face and coloured name (owner-bubble.ts `nameAccent`), day dividers, an unfinished answer as its state and reason, and 「關閉對話」 where the composer was. Esc and leaving the conversation close it; an arriving answer redraws it. The scenes peer-chat (two days with one member, a third member's exchange excluded) and peer-chat-close drive it; handoff-group-open keeps it open through arriving receipts; bot-ask-centred, handoff-centred-line and room-workflow-blocked read the request, result, files and reason inside it.
+
+```powershell
+npm run look -- peer-chat peer-chat-close handoff-group handoff-group-open handoff-group-room centred-system-events bot-ask-centred handoff-centred-line room-workflow-blocked room-handoff-result --theme both --width 1120,720,1920x1080
 ```
 
 ## Review: one group state and scroll intent (2026-11-02)

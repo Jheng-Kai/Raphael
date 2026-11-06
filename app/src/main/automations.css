@@ -105,7 +105,6 @@ button.au-room-reply { border: 0; font-family: inherit; cursor: pointer; }
 .event-person { display: inline; overflow-wrap: anywhere; }
 .event-person.is-word-gap { margin-inline-end: .25em; }
 .event-person > :first-child { display: inline-block; vertical-align: middle; margin-inline-end: 4px; }
-.handoff-group > .handoff-detail { width: 100%; }
 .event-line > .i { width: 16px; height: 16px; color: var(--text-3); }
 .event-state::before { content: "·"; margin-inline-end: 6px; }
 .conversation-event-line, .handoff-event > summary { display: flex; justify-content: center; }
@@ -114,6 +113,9 @@ button.au-room-reply { border: 0; font-family: inherit; cursor: pointer; }
 .page-agent .btn.event-open:hover .event-line, .handoff-event > summary:hover .event-line { color: var(--text-2); }
 .page-agent .btn.event-open:active:not(:disabled) .event-line { color: color-mix(in srgb, var(--text-2) 85%, transparent); }
 .handoff-row, .handoff-event { width: 100%; }
+/* 「與 X 的 2 則訊息」 is a button that reads as the other centred lines; their conversation opens from it (peer-chat.ts). */
+.page-agent .btn.handoff-event { display: flex; justify-content: center; width: 100%; max-width: 100%; height: auto; min-width: 0; white-space: normal; text-align: center; overflow-wrap: anywhere; }
+.page-agent .btn.handoff-event > .event-line { min-width: 0; max-width: 100%; }
 .handoff-event > summary { cursor: pointer; list-style: none; }
 .handoff-event > summary::-webkit-details-marker { display: none; }
 .handoff-detail { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); width: fit-content; max-width: min(calc(560px + 160 * var(--pa-u)), 100%); margin: var(--sp-2) auto 0; padding: calc(10px + 4 * var(--pa-u)) calc(12px + 6 * var(--pa-u)); border-radius: var(--r-lg); background: var(--surface-2); font-size: var(--pa-fs-d); line-height: 1.6; color: var(--text-2); overflow-wrap: anywhere; }

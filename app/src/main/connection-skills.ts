@@ -96,6 +96,8 @@ export function skillRowHTML(item: SkillItem): string {
 export const skillsSectionHTML = (items: SkillItem[], failed = false, sets: SkillSet[] = []): string =>
   `<section class="cs-sec" data-skills-section><div class="data-heading"><h2>${esc(t("conn.skills"))}</h2>${btn(ico("download") + esc(t("skills.import")), "sm gr", ' data-conn="skill-discover" aria-haspopup="dialog"')}</div>` +
   (failed ? `<div class="alert core-note">${st("err", t("conn.skills.failed"))}${btn(esc(t("plugins.retry")), "sm", ' data-conn="retry-skills"')}</div>` :
+    // With none yet the section says so in one line, so it never looks unfinished (R-UI-21).
+    (!items.length && !sets.length ? `<p class="cs-none" role="status">${esc(t("conn.skills.none"))}</p>` : "") +
     (items.some(item => !item.skill.set_id) ? `<div class="cs-list" data-stagger="skills">${items.filter(item => !item.skill.set_id).map(skillRowHTML).join("")}</div>` : "") +
     sets.map(set => `<section class="cs-set">${skillSetHeading(set)}<div class="cs-list">${items.filter(item => item.skill.set_id === set.id).map(skillRowHTML).join("")}</div></section>`).join("")) + `</section>`;
 

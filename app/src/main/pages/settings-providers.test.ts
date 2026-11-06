@@ -244,12 +244,15 @@ test("Models contains no spending and Usage mounts its allowances once, plainly,
   click('[data-models-tab="usage"]'); await flush();
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
   expect(api.usageAllowances).toHaveBeenCalledTimes(1);
-  expect(page.el.querySelector('[data-row="openrouter-usage"]')).not.toBeNull();
-  expect(page.el.querySelector('[data-row="raphael-spend"]')).not.toBeNull();
+  // Only what the app itself spent: an OpenRouter account's usage is read on OpenRouter (owner, 2026-11-07).
+  expect(page.el.querySelector('[data-row="openrouter-usage"]')).toBeNull();
+  const spend = page.el.querySelector('[data-row="raphael-spend"]')!;
+  expect(spend.classList.contains("spend-card")).toBe(true);
   expect(page.el.querySelector('[data-pv="directory"]')).toBeNull();
   const node = page.el.querySelector(".usage-analytics")!;
-  // The allowances stand above the rows of what was spent, and nothing else is on the page.
-  expect(node.compareDocumentPosition(page.el.querySelector('[data-row="raphael-spend"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // This month's spending leads, as Grok Bot's usage card, then the allowances, and nothing else is on the page.
+  expect(spend.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(node.querySelector('[data-run-act="allowance"]')?.classList.contains("icon")).toBe(true);
   expect(page.el.querySelector(".ua-chart, .run-tiles, .run-bill, [data-range], .foot")).toBeNull();
   setLocale("ja"); await flush();
   expect(page.el.querySelector(".usage-analytics")).toBe(node);

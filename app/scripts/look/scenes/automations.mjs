@@ -58,7 +58,7 @@ export default [
   scene("routine-event-reconnect", "The stopped trigger opens the existing Connections pane", [...eventDialog, click('[data-missing-repair="connections"]'), wait('.modal-scrim[data-standalone="connections"] .modal-body .cs'), check("settings-shell")], { routines: [{ ...eventRoutine, enabled: false, last_error: "Gmail 連接無法使用。請到設定 › 連接重新連接。" }] }),
   scene("routine-event-profile", "The member profile shares readable event rows and switches", [member(1), { action: "open-details" }, click('[data-det="gear"]'),click('[data-det="edit"]'), wait('#mp-tab-routines'), click('#mp-tab-routines'), wait('.mp-routine-list .tg'), check("routine-event-profile")], { routines: [eventRoutine] }),
 
-  scene("room-workflow-blocked", "Missing artifact has a named incomplete reason", [room(1),click('[data-handoff] summary'),check('p04-blocked')], {p04Blocked:true}),
+  scene("room-workflow-blocked", "Missing artifact has a named incomplete reason", [room(1),click('[data-handoff]'),wait('.peer-chat'),check('p04-blocked')], {p04Blocked:true}),
   scene("room-final-owner", "Chief is last after delivered work", [room(1),check('room-wrapup'),check('p04-chief-last')], {p03Handoff:'done',roomWrapup:true}),
   scene("room-progress-status-only", "Work progress stays in its status row", [room(1),check('room-thinking'),check('p04-status-only')], {roomThinking:true}),
   scene("room-no-dangling-mention", "Published final has no incomplete address", [room(1),check('p04-addresses')]),
@@ -67,7 +67,7 @@ export default [
   ...["queued", "running", "result", "failed"].map(state => scene(`room-handoff-${state}`, `Durable work ${state}`, [room(1), wait("[data-handoff]"), check("p03-handoff")], { p03Handoff: state === "result" ? "done" : state })),
   scene("room-immediate-work", "Assigned work starts immediately", [room(1), wait("[data-handoff]"), check("p03-handoff")], { p03Handoff: "running" }),
   scene("room-source-dates-not-schedule", "Document deadlines never defer assigned work", [room(1), wait("[data-handoff]"), check("p03-handoff")], { p03Handoff: "running", p03SourceDates: true }),
-  scene("handoff-centred-line", "Private receipt expands its real result without public message history", [wait("[data-handoff]"), check("p03-handoff"), click("[data-handoff] summary"), wait(".handoff-event[open]"), check("p03-handoff-expanded")], { p03Handoff: "done", p03Private: true }),
+  scene("handoff-centred-line", "A private receipt opens the members' conversation with its real result", [wait("[data-handoff]"), check("p03-handoff"), click("[data-handoff]"), wait(".peer-chat"), check("p03-handoff-expanded")], { p03Handoff: "done", p03Private: true }),
   scene("mentions-bots-apps", "Bots and connected apps share the mention inventory", [room(1), type("#room-message", "@"), wait("#app-popover"), check("p02-mentions")]),
   scene("member-mentions-bots-apps", "Private composer shares the current team and app inventory", [type(".composer .cmp-input", "@"), wait("#app-popover"), check("p02-mentions")]),
   scene("plus-create-room", "Plus opens a room picker with selected chips", [click('[data-col="add"]'), click('[data-pick="group-chat"]'), wait(".mb-dialog"), click('[data-dlg="member"][data-member="1"]'), check("p02-picker")]),
