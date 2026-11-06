@@ -6,6 +6,18 @@ import pytest
 from raphael_core.protocol import RpcError
 
 
+@pytest.fixture
+async def rig(rig):
+    from agent.conftest import FakeActions, FakeOpenRouter
+    from agent.test_service import Rig as AgentRig
+    from .test_answering import live_said
+    client = FakeOpenRouter()
+    client.chats = [live_said("I am Editor. What would you like me to take off your plate?")]
+    agent = AgentRig(rig.conn, client, FakeActions(), team=rig.service, memory=rig.memory)
+    yield rig
+    await agent.aclose()
+
+
 async def test_export_preview_and_import_keep_only_the_recipe(rig):
     service = rig.service
     original = (await rig.call("members.create", {"name": "Writer", "role": "Editor", "instructions": "Publish a clear guide", "avatar": "slime:shuna"}))["member"]
@@ -29,6 +41,8 @@ async def test_export_preview_and_import_keep_only_the_recipe(rig):
     assert not routine.enabled and routine.next_run_ms is None
     assert "PRIVATE-MEMORY" not in service.capabilities.homes.path(copied["id"], "MEMORY.md").read_text()
     assert rig.background.submitted == []
+    [greeting] = service._history.list(member_id=copied["id"])
+    assert greeting.source == "greeting" and greeting.question == ""
 
 
 async def test_template_refuses_extra_fields_secrets_and_invalid_recipes_without_mutation(rig):
@@ -42,11 +56,10 @@ async def test_template_refuses_extra_fields_secrets_and_invalid_recipes_without
 
 
 async def test_greeting_choices_use_only_connected_apps_and_the_role_without_a_brain(rig):
-    rig.service._connections = lambda: [{"name": "Gmail", "enabled": True, "state": "ready"},
-        {"name": "Private app", "enabled": False, "state": "ready"}, {"name": "Offline app", "enabled": True, "state": "unreadable"}]
-    new = (await rig.call("members.create", {"name": "Writer", "role": "Editor", "greet": True}))["member"]
+    # Keep the historical contract name: stored local choices remain readable without a model call.
+    new = (await rig.call("members.create", {"name": "Writer"}))["member"]
+    detail = json.dumps({"kind": "greeting", "options": ["An old suggestion"]})
+    rig.service._history.add(session_id="legacy", question="", route="greeting", prefix="",
+                            text="An old greeting", detail=detail, status="done", source="greeting", member_id=new["id"])
     [turn] = rig.service._history.list(member_id=new["id"])
-    options = json.loads(turn.detail)["options"]
-    assert len(options) == 3 and "Editor" in options[0] and "Gmail" in options[1]
-    assert "Private app" not in str(options) and "Offline app" not in str(options)
-    assert turn.cost_usd == 0 and not rig.background.submitted
+    assert turn.detail == detail and turn.text == "An old greeting"

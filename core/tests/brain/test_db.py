@@ -361,7 +361,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 68
+LATEST = 69
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -617,7 +617,7 @@ SCHEMA_V67 = {
 }
 
 
-@pytest.mark.parametrize("start_version, expected_steps", [(62, [63, 64, 67, 68]), (63, [64, 67, 68]), (64, [67, 68]), (67, [68])])
+@pytest.mark.parametrize("start_version, expected_steps", [(62, [63, 64, 67, 68, 69]), (63, [64, 67, 68, 69]), (64, [67, 68, 69]), (67, [68, 69]), (68, [69])])
 def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(monkeypatch, tmp_path, start_version, expected_steps):
     path = tmp_path / f"v{start_version}-to-latest.db"
     with monkeypatch.context() as old:

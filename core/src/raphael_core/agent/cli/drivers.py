@@ -140,7 +140,7 @@ class Driver:
             await self.child.kill()
         self._close_steers()
 
-    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=(), computer_endpoint=None, structured=None, skills=()):
+    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=(), computer_endpoint=None, structured=None, skills=(), no_tools=False):
         files = PrivateFiles()
         codex_auth = None
         self._diagnostic_secrets = [token]
@@ -189,7 +189,7 @@ class Driver:
                     command += ["--disable-slash-commands"]
                 if structured is not None:
                     command += ["--json-schema", json.dumps(structured)]
-                else:
+                elif not no_tools:
                     command += ["--permission-prompt-tool", "mcp__raphael__approve"]
                 if session:
                     command += ["--resume", session]
