@@ -533,9 +533,6 @@ const ALLOWED_METHODS: &[&str] = &[
     // is asked something only by `agent_ask_text`, like Raphael: `agent.ask` stays closed.
     "members.list",
     "conversations.list",
-    "conversations.create",
-    "conversations.rename",
-    "conversations.delete",
     "conversations.clear",
     "agent.history.delete",
     "messages.search",

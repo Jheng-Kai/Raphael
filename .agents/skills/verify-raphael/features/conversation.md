@@ -387,9 +387,32 @@ process at a time, Vitest --maxWorkers=2, CARGO_BUILD_JOBS=2 and the shared nati
 CARGO_TARGET_DIR apply.
 
 
+## One conversation per member (owner decision, 2026-11-06)
+
+Like Grok Bot, each member has one conversation and nobody makes, renames or deletes
+conversations (R-UI-103). Migration 68 folds each member's standard conversations into its
+default in turn order, moving turns, calls, cards, drafts, pages, proposals and inbox rows; only
+the folded summaries and CLI sessions go, and a partial unique index keeps one standard
+conversation per member. Raphael's quick conversation is untouched. `conversations.create`,
+`.rename` and `.delete` are gone from the core, the shell allowlist, the management tools and the
+look mock; `list` and `clear` remain. A member's details have no conversation list; Raphael's have
+two rows, 主要對話 and 快速提問, with a quiet fill on the open one. The header names only the
+member and says 快速提問 under it when those are open.
+
+A message's ⋯ and a right click open one menu (R-UI-104): a colleague's message has its
+reactions above 回覆 and 複製, and 重新產生 on the latest answer; the owner's has 回覆 and 複製.
+The jump-to-latest button sits centred just above the composer (R-UI-105). Voice chat waits for
+a later release (R-UI-106): the voice button records voice messages only.
+
+```powershell
+npm run look -- conversation-sections member-conversation-sections quick-conversation quick-clear-confirm quick-cleared actions thread-new-divider-latest raphael-details details member-panel-details composer-voice-pending-0 composer-voice-pending-1 empty-conversation-recording empty-conversation-hearing --theme both --width 1120,720,1920x1080
+```
+
+Core: tests/brain/test_one_conversation_migration.py and tests/agent/test_folded_conversations.py.
+
 ## Sub-features
 
-Named conversations per member; new/rename/delete; public work/event chips; answers,
+One conversation per member (Raphael also keeps his quick questions; see One conversation per member below); public work/event chips; answers,
 attachments, reply quoting, message actions, search and composer menus; connector cards for an app a
 task needs, and the one resume of that task (see Connecting an app from the chat below); a secret card for a key a
 connection needs and a computer card for the owner's turn at a sign-in (see Handing a key or the computer to the owner below);
