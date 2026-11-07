@@ -90,7 +90,9 @@ from datetime import tzinfo
 from pathlib import Path
 from typing import Any
 
-from ..agent.answers import Reply, parse_reply
+from ..agent.answers import Reply, owner_script, parse_reply
+from ..brain.textnorm import authored_chinese
+from ..languages import chinese_variant
 from ..agent.failure import KINDS, AgentFailure
 from ..agent.gate import ATTACHMENT_TOOLS, MEMORY_READ_TOOLS, WEB_TOOLS, ToolGate
 from ..agent.attribution import unfinished_note
@@ -2254,6 +2256,7 @@ class BackgroundService:
     def _progress(self, task: Task, text: str) -> None:
         if task.id in self._discarded or not self._has_linked_turn(task):
             return
+        text = authored_chinese(text, chinese_variant(self._settings.get("languages")))
         if run := self._runs.get(task.id):
             run.public_progress = text[:400]
             self._changed(task.id, RUNNING)
@@ -2295,6 +2298,7 @@ class BackgroundService:
             plain = task.member_id!=0 or task.room_id is not None
             report = report_from(str(reply.get('final') or ''),language,plain=plain,long=not plain)
             if report:
+                report = owner_script(report, chinese_variant(self._settings.get("languages")))
                 clean = lambda value: validate_terminal(value,names=names,wrapup=wrapup).text if value else value
                 report = dataclasses.replace(report,text=clean(report.text),detail=clean(report.detail),
                                              messages=[line for line in map(clean,report.messages) if line])

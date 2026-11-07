@@ -97,7 +97,7 @@ async def test_public_narration_has_hard_length_and_sentence_caps(setup, client,
     final = '{"text":"Done."}'
     client.chats = ([chat(public, ("local_time", {})), chat(final)] if before_tool
                     else [chat(public + "\n" + final)])
-    # a line not in the owner's language is never shown, so the English cases run in English
+    # Both scripts remain bounded independently of the interface language.
     await typed(rig, "Explain this", teacher.id, language="en" if content.isascii() else "zh-TW")
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     [message] = [m for m in turn["messages"] if m["kind"] == kind]
@@ -105,8 +105,8 @@ async def test_public_narration_has_hard_length_and_sentence_caps(setup, client,
 
 
 @pytest.mark.parametrize("speaker", ["member", "raphael"])
-@pytest.mark.parametrize(("language", "name"), [("zh-TW", "Traditional Chinese"), ("en", "English")])
-async def test_live_prompt_separates_ui_narration_language_and_persona_replies(setup, client, speaker, language, name):
+@pytest.mark.parametrize("language", ["zh-TW", "en"])
+async def test_live_prompt_keeps_narration_and_replies_independent_of_ui_language(setup, client, speaker, language):
     rig, team = setup
     teacher = member(team, role="Japanese teacher", instructions="Teach and reply in Japanese.")
     speaker_id = teacher.id if speaker == "member" else 0
@@ -119,15 +119,16 @@ async def test_live_prompt_separates_ui_narration_language_and_persona_replies(s
     assert system.count("Final content must be ONLY one JSON object") == 1
     assert "no code fences, no prose before or after" in system
     assert "no separate thinking object" in system
-    assert "Thinking and progress are ALWAYS in the owner's UI language" in system
-    assert "even when the persona teaches or replies in another language" in system
+    assert "Thinking, progress and replies follow the speaker's own language instructions" in system
+    assert "The interface language never selects the language of authored speech" in system
+    assert "in the owner's UI language" not in system
     assert "at most 2 sentences (about 60 CJK characters)" in system
     assert "25 CJK characters or 25 words" in system
     assert '"text": the complete reply' in system
     assert '"messages": the complete reply as chat messages in order' in system
     assert '"text": the reply as one line' not in system
-    assert name in user and "Owner's UI language:" in user
-    assert "Reply messages follow the persona's language rules" in user
+    assert "Owner's UI language:" not in user
+    assert "Use the language specified in your own persona and the owner's instructions" in user
     if speaker == "member":
         assert "Teach and reply in Japanese." in system
         assert "Reply ONLY in" not in system
@@ -135,7 +136,7 @@ async def test_live_prompt_separates_ui_narration_language_and_persona_replies(s
     assert result["text"] == "練習しましょう。"
 
 
-async def test_a_progress_line_in_another_language_is_not_shown(setup, client):
+async def test_authored_narration_is_not_filtered_by_the_interface_language(setup, client):
     rig, team = setup
     teacher = member(team)
     client.chats = [chat('{"thinking": "Let me open the page.", "progress": "我先打開頁面。"}', ("local_time", {})),
@@ -143,4 +144,4 @@ async def test_a_progress_line_in_another_language_is_not_shown(setup, client):
     await typed(rig, "Explain this", teacher.id, language="zh-TW")
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     shown = [(m["kind"], m["text"]) for m in turn["messages"] if m["kind"] in ("thinking", "progress")]
-    assert shown == [("progress", "我先打開頁面。")]
+    assert shown == [("thinking", "Let me open the page."), ("progress", "我先打開頁面。")]

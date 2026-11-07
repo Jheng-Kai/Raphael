@@ -52,7 +52,7 @@ async def test_worker_and_scheduler_use_only_the_selected_persona(make_rig, conn
             current = next(t for t in turns if t.id == rig.task(task_id).turn_id)
             progress = [m["text"] for m in history.messages([current.id])[current.id] if m["kind"] == "progress"]
             assert not progress
-            assert any(method == "worker.progress" and data["turn_id"] == current.id and "我来检查。" in data["text"] for method,data in rig.notifications)
+            assert any(method == "worker.progress" and data["turn_id"] == current.id and "我來檢查。" in data["text"] for method,data in rig.notifications)
         model_call = rig.client.chat_calls[0]
         system = model_call["messages"][0]["content"]
         shown = json.dumps(model_call["messages"], ensure_ascii=False)

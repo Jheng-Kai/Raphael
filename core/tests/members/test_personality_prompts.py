@@ -168,19 +168,21 @@ async def test_shared_harness_requires_original_quote_attribution(setup, client,
     assert "owner:" in system
 
 
-async def test_authored_public_updates_and_reply_preserve_script_and_japanese(setup, client):
+@pytest.mark.parametrize("language", ["zh-TW", "en"])
+async def test_authored_public_updates_use_owner_script_and_preserve_japanese(setup, client, language):
     rig, team = setup
+    rig.settings.set("languages", ["zh-TW"])
     teacher = member(team)
     client.chats = [
         chat('{"thinking":"这句話需要检查。","progress":"我来确认。"}', ("local_time", {})),
         live_said("这句话的意思是什麼？\n学校で会いましょう。"),
     ]
-    result = await typed(rig, "解釋這句話", teacher.id)
-    assert result["text"] == "这句话的意思是什麼？\n学校で会いましょう。"
+    result = await typed(rig, "解釋這句話", teacher.id, language=language)
+    assert result["text"] == "這句話的意思是什麼？\n学校で会いましょう。"
     turns = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     messages = turns[0]["messages"]
-    assert next(m["text"] for m in messages if m["kind"] == "thinking") == "这句話需要检查。"
-    assert next(m["text"] for m in messages if m["kind"] == "progress") == "我来确认。"
+    assert next(m["text"] for m in messages if m["kind"] == "thinking") == "這句話需要檢查。"
+    assert next(m["text"] for m in messages if m["kind"] == "progress") == "我來確認。"
 
 
 async def test_voice_fetches_the_lesson_and_speaks_the_actual_japanese_sentences(voiced, client):

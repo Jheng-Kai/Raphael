@@ -12,11 +12,12 @@ import json
 import logging
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
+from ..brain.textnorm import authored_chinese
 from ..memory.reflection import ACTIONS as MEMORY_ACTIONS
 from ..memory.reflection import TARGETS as MEMORY_TARGETS
 from ..memory.reflection import Edit as MemoryEdit
@@ -68,6 +69,13 @@ class Reply:
     @property
     def wants_lookup(self) -> bool:
         return bool(self.search)
+
+
+def owner_script(reply: Reply, chinese: str | None) -> Reply:
+    """Normalize authored prose only; memory edits and the Japanese voice stay untouched."""
+    return replace(reply, text=authored_chinese(reply.text, chinese),
+                   detail=authored_chinese(reply.detail, chinese) if reply.detail else reply.detail,
+                   messages=[authored_chinese(text, chinese) for text in reply.messages])
 
 
 MEMORY_ITEM = {
@@ -456,8 +464,8 @@ class Voice:
         reply has no `memory` and no `need`). With a `speaker` who is a member of the team, the
         member says it instead, in its persona and in plain sentences (`parse_reply`'s `plain`).
         With `say_ja`, the reply also holds the line in Japanese for the voice (`Reply.say_ja`),
-        made in this same call, never a second one; it is asked for only where the screen is not
-        in Japanese and the reply is Raphael's own.
+        made in this same call, never a second one, when Raphael's reply will be spoken.
+        The screen language does not determine the authored reply or its voice rendering.
         AgentFailure (of a kind) if the model fails or says nothing."""
         plain = not speaker.is_raphael
         say_ja = say_ja and not plain

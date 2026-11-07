@@ -79,7 +79,9 @@ async def test_the_model_is_given_the_task_the_tools_of_the_snapshot_and_the_res
     assert f"{limits.model_calls} model calls" in system["content"] and f"{limits.tool_calls} tool calls" in system["content"]
     assert "no deadline" in system["content"]
     assert user["role"] == "user" and f"<task>\n{TASK_TEXT}\n</task>" in user["content"]
-    assert "2026-10-21 14:05" in user["content"] and user["content"].rstrip().endswith("English only.")
+    assert "2026-10-21 14:05" in user["content"]
+    assert "The interface language never selects your speaking language" in user["content"]
+    assert "English only." not in user["content"]
     assert [t["function"]["name"] for t in first["tools"]] == [
         "weather", "web_search", "local_time", "web_read", "generate_audio", "self_check", "raphael_help",
         "calendar_list", "calendar_add", "calendar_update", "calendar_delete", "connections_list", "ask_owner", "connect_app", "connect_messaging", "email_draft", "find_app", "request_secret", "show_page", "update_page", "routine_create", "routine_delete", "routine_list", "routine_update", "find_tools", "Notes__look",
@@ -177,14 +179,49 @@ async def test_retracting_a_running_turn_cannot_write_its_late_report_into_a_reu
     assert history.messages([new]) == {}
 
 
-async def test_the_report_is_in_the_language_of_the_request(make_rig):
+async def test_the_report_language_follows_the_owner_request_not_the_interface(make_rig):
     rig = make_rig()
     await look_twice_then_report(rig)
     rig.client.replies[-1] = report("已整理完畢。", prefix="Notice")
-    rig.submit(language="zh-TW")
+    rig.submit(text="請整理這段內容。", language="en")
     [done] = await rig.wait_for_reports()
-    assert (done["prefix"], done["text"]) == ("告", "已整理完畢。")
-    assert "Traditional Chinese" in rig.client.chat_calls[0]["messages"][0]["content"]
+    assert (done["prefix"], done["text"]) == ("Notice", "已整理完畢。")
+    system, user = rig.client.chat_calls[0]["messages"][:2]
+    assert "請整理這段內容。" in user["content"]
+    assert "Otherwise follow the language of the owner's message or established conversation" in system["content"]
+    assert "Reply ONLY in" not in system["content"]
+
+
+@pytest.mark.parametrize(("variant", "authored", "expected"), [
+    ("zh-TW", "软件资料已检查。", "軟體資料已檢查。"),
+    ("zh-HK", "软件资料已检查。", "軟件資料已檢查。"),
+    ("zh-CN", "資料已檢查。", "资料已检查。"),
+    ("zh-TW", "日本の学校へ行きます。", "日本の学校へ行きます。"),
+    ("zh-TW", "The result is ready.", "The result is ready."),
+])
+async def test_background_report_and_progress_use_owner_script(make_rig, conn, variant, authored, expected):
+    rig = make_rig()
+    SettingsStore(conn).set("languages", [variant])
+    history = AgentHistory(conn, rig.wall)
+    turn_id = history.add(session_id="script", question="Please check", route="delegate", prefix="",
+                          text="", status="running")
+
+    async def finish(**kwargs):
+        progress = [data["text"] for method, data in rig.notifications if method == "worker.progress"]
+        assert progress == [expected]
+        assert rig.service.tasks_for_turns([turn_id])[turn_id][0]["progress"] == expected
+        return turn(json.dumps({"text": authored, "messages": [authored, "学校へ行きます。"], "detail": authored}))
+
+    rig.client.replies = [turn(authored, [call("local_time", {}, "t")]), finish]
+    task_id = rig.submit(language="en", session="script")
+    rig.service.attach_turn(task_id, turn_id)
+    [done] = await rig.wait_for_reports()
+    expected_text = expected + "\n\n学校へ行きます。"
+    assert done["text"] == expected + " 学校へ行きます。"
+    assert rig.task(task_id).report_text == history.get(turn_id).text == expected_text
+    assert rig.task(task_id).report_detail == history.get(turn_id).detail == expected
+    replies = [m["text"] for m in history.messages([turn_id])[turn_id] if m["kind"] == "reply"]
+    assert expected in replies[0] and "学校へ行きます。" in replies[1]
 
 
 async def test_public_progress_reaches_status_only_before_the_next_model_call(make_rig, conn):

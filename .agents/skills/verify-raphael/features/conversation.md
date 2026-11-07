@@ -1878,9 +1878,11 @@ Migration 71 changes the account and pairing anchors from secret-card ids to tur
 
 R-AG-LANG-01: UI locale selects fixed app labels/notices only. All authored replies, progress,
 thinking, greetings, reports, recaps and routines follow the speaker's own profile/instructions,
-otherwise the owner's words or conversation. API and CLI share this policy. Authored Chinese
-script is preserved; language filtering/conversion is not selected by UI locale. The configured
-voice language remains independent, including Japanese rendering on a Japanese interface.
+otherwise the owner's words or conversation. API, CLI, background/routine reports, greetings and
+public narration share this policy. Chinese prose without kana follows the owner's Chinese script
+chosen in settings.languages (zh-TW, zh-HK/yue-HK, zh-CN; `textnorm.authored_chinese`), never
+ui_language; kana, code and English stay unchanged. The configured voice language remains
+independent, including Japanese rendering on a Japanese interface.
 
 Offline coverage: core/tests/test_pairing_language.py, test_chat_setup_share.py,
 brain/test_db.py, agent/test_persona.py, agent/test_answers.py,

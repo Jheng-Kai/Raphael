@@ -125,6 +125,70 @@ async def test_greeting_obeys_own_language_not_app_language(rig):
     assert "Always speak Japanese." in system
     assert "app language" not in system and "The interface language never selects" in system
 
+
+@pytest.mark.parametrize("brain", ["api", "codex", "claude", "gemini"])
+@pytest.mark.parametrize("owner", [0, 1])
+@pytest.mark.parametrize(("variant", "expected"), [
+    ("zh-TW", "這個軟體已檢查。"), ("zh-HK", "這個軟件已檢查。"),
+    ("zh-CN", "这个软件已检查。"), ("en-US", "这个软件已检查。"),
+])
+async def test_owner_script_covers_api_cli_messages_and_public_narration(rig, monkeypatch, brain, owner, variant, expected):
+    import json
+    rig.agent.settings.set("languages", [variant])
+    original = "这个软件已检查。"
+    japanese = "日本の学校へ行きます。"
+    payload = json.dumps({"text": original, "messages": [original, japanese], "detail": original})
+    if brain == "api":
+        rig.brain.chats = [chat(json.dumps({"thinking": original, "progress": original}), ("local_time", {})), chat(payload)]
+    else:
+        rig.agent.settings.set("agent_model", "cli:" + brain)
+        monkeypatch.setattr(rig.agent.service._cli_brains, "command", lambda name: ["fake-only"])
+        monkeypatch.setattr(rig.agent.service._cli_brains, "available", lambda *args, **kwargs: True)
+
+        async def run(driver, **kwargs):
+            yield Event("text_delta", text=original)
+            yield Event("thinking", text=original)
+            yield Event("tool_start", data={"id": "time", "name": "local_time"})
+            yield Event("tool_end", data={"id": "time", "name": "local_time", "ok": True})
+            yield Event("final", text=payload)
+
+        monkeypatch.setattr(Driver, "run", run)
+    result = await rig.agent.call("agent.ask", {"session_id": "script", "member_id": owner, "source": "app",
+                                               "text": "Please check", "ui_language": "en"})
+    saved = rig.agent.history.get(result["turn_id"])
+    assert result["text"] == saved.text == expected + "\n\n" + japanese
+    assert result["messages"] == [expected, japanese] and saved.detail == expected
+    messages = rig.agent.history.messages([saved.id])[saved.id]
+    for kind in ("thinking", "progress"):
+        lines = [m["text"] for m in messages if m["kind"] == kind]
+        assert len(lines) == 1 and expected in lines[0]
+    replies = [m["text"] for m in messages if m["kind"] == "reply"]
+    assert expected in replies[0] and japanese in replies[1]
+
+
+@pytest.mark.parametrize("brain", ["api", "codex", "claude", "gemini"])
+@pytest.mark.parametrize(("authored", "expected"), [
+    ("软件检查。", "軟體檢查。"), ("日本の学校へ行きます。", "日本の学校へ行きます。"),
+])
+async def test_greeting_uses_owner_script_on_an_english_interface(rig, monkeypatch, brain, authored, expected):
+    rig.agent.settings.set("languages", ["zh-TW"])
+    if brain == "api":
+        rig.brain.chats = [live_said(authored)]
+    else:
+        rig.agent.settings.set("agent_model", "cli:" + brain)
+        monkeypatch.setattr(rig.agent.service._cli_brains, "command", lambda name: ["fake-only"])
+        monkeypatch.setattr(rig.agent.service._cli_brains, "available", lambda *args, **kwargs: True)
+
+        async def run(driver, **kwargs):
+            yield Event("final", text=authored)
+
+        monkeypatch.setattr(Driver, "run", run)
+    result = rig.agent.service.start_greeting(rig.member.id, "en")
+    await until(lambda: rig.agent.history.get(result["turn_id"]).status == "done")
+    saved = rig.agent.history.get(result["turn_id"])
+    assert saved.text == expected
+    assert [m["text"] for m in rig.agent.history.messages([saved.id])[saved.id]] == [expected]
+
 @pytest.mark.parametrize("state", ["approved", "rejected", "expired"])
 async def test_terminal_pairing_updates_in_place_then_next_code_adds_a_turn(rig, state):
     card, running = await connected(rig)

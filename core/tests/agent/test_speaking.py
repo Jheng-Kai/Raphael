@@ -137,7 +137,7 @@ async def test_on_a_japanese_screen_what_is_shown_is_what_is_spoken(rig, client,
     assert speaker.said == [("解", "台北は現在二十四度です。")] == [(result["prefix"], result["text"])]
 
 
-async def test_the_japanese_line_is_asked_for_in_the_same_call_when_the_screen_is_not_japanese(
+async def test_the_japanese_voice_line_is_asked_for_in_the_same_call(
     rig, client, speaker
 ):
     client.decisions.append(decision("chat"))
@@ -148,7 +148,7 @@ async def test_the_japanese_line_is_asked_for_in_the_same_call_when_the_screen_i
     assert call["schema"]["properties"]["say_ja"] == {"type": "string"}
     assert "say_ja" in call["schema"]["required"]
     assert '"say_ja"' in call["system"] and "Japanese" in call["system"]
-    assert call["user"].rstrip().endswith('except the field "say_ja", which is Japanese.')
+    assert call["user"].rstrip().endswith('in Japanese for the configured voice; this does not change the reply language.')
 
 
 @pytest.mark.parametrize("language", ["zh-TW", "en", "ja"])
@@ -165,12 +165,13 @@ async def test_the_japanese_line_is_not_asked_for_when_nothing_will_be_spoken(
     assert speaker.said == []
 
 
-async def test_the_japanese_line_is_not_asked_for_on_a_japanese_screen(rig, client, speaker):
+async def test_a_japanese_screen_still_requests_the_independent_voice_rendering(rig, client, speaker):
     client.decisions.append(decision("chat"))
     client.replies.append(spoken("解", "はい。"))
     await rig.ask("こんにちは", language="ja")
-    assert "say_ja" not in client.json_calls[0]["schema"]["properties"]
-    assert "say_ja" not in client.json_calls[0]["system"]
+    assert "say_ja" in client.json_calls[0]["schema"]["properties"]
+    assert "say_ja" in client.json_calls[0]["system"]
+    assert speaker.said == [("解", "はい。")]
 
 
 async def test_the_japanese_line_is_not_asked_for_with_no_speaker_at_all(make_rig, client):
@@ -431,7 +432,7 @@ async def test_a_quick_narrated_final_speaks_japanese_and_waits_for_voice_but_pr
     assert len(client.chat_calls) == 2 and client.json_calls == []
     first = client.chat_calls[0]["messages"]
     assert '"say_ja"' in first[0]["content"]
-    assert first[1]["content"].rstrip().endswith('except the field "say_ja", which is Japanese.')
+    assert first[1]["content"].rstrip().endswith('in Japanese for the configured voice; this does not change the reply language.')
     [turn] = await rig.turns()
     assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["progress", "reply"]
     assert japanese not in repr(result) + repr(turn) + caplog.text

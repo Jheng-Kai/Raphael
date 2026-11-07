@@ -625,6 +625,36 @@ def remove_unspoken_ma(raw: str, cleaned: str) -> str:
     return _dictation_prose(cleaned, finish)
 
 
+def authored_chinese(text: str, chinese: str | None) -> str:
+    """Use the owner's chosen Chinese script without selecting a speaking language.
+
+    Kana lines, fenced code and inline code remain byte for byte. English and whitespace
+    are unchanged. Only leftover characters are converted, so existing Traditional prose
+    does not acquire ambiguous replacements on a second pass.
+    """
+    chinese = _checked_variant(chinese)
+    if chinese is None:
+        return text
+
+    def convert(line: str, protected: set[int], offset: int) -> str:
+        if line.startswith(("    ", "\t")):
+            return line
+        pieces = []
+        start = 0
+        for end in range(1, len(line) + 1):
+            if end < len(line) and (end in protected) == (start in protected):
+                continue
+            piece = line[start:end]
+            if start not in protected:
+                piece = (convert_leftover_traditional(piece) if chinese == "zh-CN" else
+                         convert_leftover_simplified(piece, _TO_TRADITIONAL[chinese]))
+            pieces.append(piece)
+            start = end
+        return "".join(pieces)
+
+    return _dictation_prose(text, convert)
+
+
 def public_line(text: str, language: str) -> str:
     """A thinking or progress line as the owner sees it: Traditional characters for zh-TW, and
     nothing at all when the line is not written in the owner's language (a model that drifts into

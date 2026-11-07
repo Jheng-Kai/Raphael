@@ -829,12 +829,32 @@ async def test_a_tool_that_fails_does_not_stop_the_answer_which_is_told_it_is_mi
     assert "weather: unavailable (network)" in client.json_calls[0]["user"]
 
 
-async def test_an_answer_is_worded_in_the_ui_language(rig, client):
+async def test_an_answer_follows_owner_words_instead_of_the_ui_language(rig, client):
     client.decisions.append(decision("answer", time=0.9))
     client.replies.append(spoken("Answer", "It is 14:05.", ""))
-    result = await rig.ask("what time is it", language="en")
-    assert result["prefix"] == "Answer"
-    assert "Reply ONLY in English" in client.json_calls[0]["system"]
+    result = await rig.ask("what time is it", language="ja")
+    assert result["prefix"] == "解" and result["text"] == "It is 14:05."
+    system = client.json_calls[0]["system"]
+    assert "Reply ONLY in" not in system
+    assert "Otherwise follow the language of the owner's message or established conversation" in system
+    assert "The interface language never selects your speaking language" in system
+
+
+@pytest.mark.parametrize("ui", ["zh-TW", "en", "ja"])
+@pytest.mark.parametrize(("variant", "authored", "expected"), [
+    ("zh-TW", "软件资料已检查。", "軟體資料已檢查。"),
+    ("zh-HK", "软件资料已检查。", "軟件資料已檢查。"),
+    ("zh-CN", "資料已檢查。", "资料已检查。"),
+    ("zh-TW", "日本の学校へ行きます。", "日本の学校へ行きます。"),
+])
+async def test_structured_api_answer_uses_owner_script_independently_of_ui(rig, client, ui, variant, authored, expected):
+    rig.settings.set("languages", [variant])
+    client.decisions.append(decision("answer", time=0.9))
+    client.replies.append(spoken("Answer", authored, authored))
+    result = await rig.ask("Please explain", language=ui)
+    assert len(client.json_calls) == 1
+    saved = rig.history.get(result["turn_id"])
+    assert result["text"] == saved.text == expected
 
 
 async def test_an_answer_keeps_complete_history_below_half_window(rig, client):

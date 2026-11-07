@@ -149,6 +149,8 @@ from ..brain.providers.base import ModelProvider
 from ..brain.providers.registry import ProviderRouter
 from ..brain.secrets import KeyStore
 from ..brain.settings import DEFAULTS, SettingsStore, api_model, hosted_providers
+from ..brain.textnorm import authored_chinese
+from ..languages import chinese_variant
 from ..brain.spend import SpendTracker
 from ..protocol import INVALID_PARAMS, RpcError, invalid_params
 from ..router import Router as RpcRouter
@@ -164,7 +166,7 @@ from ..services.urls import SeenUrls
 from ..messaging.words import compose
 from ..worker.loop import Stop, ToolOutcome, WAITING
 from ..worker.guards import MAX_ARGUMENT_CHARS, canonical
-from .answers import Reply, Voice, build_user_message
+from .answers import Reply, Voice, build_user_message, owner_script
 from .attribution import labelled_lines, owner_lines, relayed_answer
 from .narration import NarratedLoop
 from ..members.activity import Activity, member_turn, step as activity_step, tool_step
@@ -1571,7 +1573,7 @@ class AgentService:
         memory = None if self._memory is None else self._memory.snapshot(member_id)
 
         async def word(results: list[ToolResult], looked_up: bool) -> Reply:
-            return await self._voice.reply(
+            reply = await self._voice.reply(
                 model=settings.model,
                 language=ask.language,
                 route=route,
@@ -1590,6 +1592,7 @@ class AgentService:
                 reasoning_effort=self._effort(settings),
                 recall=self._recall(ask),
             )
+            return owner_script(reply, chinese_variant(self._settings.get("languages")))
 
         reply = await word(tools, False)
         if self._memory is None or not reply.wants_lookup:
@@ -1670,6 +1673,7 @@ class AgentService:
         reply whose line is empty beside a note says what became of the note; one that wrote a
         note and said something else has the notice "remembered", which the overlay shows after
         the line."""
+        reply = owner_script(reply, chinese_variant(self._settings.get("languages")))
         language = ask.language
         if (self._gate.ask_first and reply.memory and self._memory is not None and not ask.nested
                 and not any(r.untrusted or (r.name == "web_search" and r.ok) for r in seen)):
@@ -1980,6 +1984,8 @@ class AgentService:
         """Publish only public words; each commit is visible before the next model/tool call."""
         if not ask.turn_id or not text.strip():
             return
+        if kind in ("progress", "thinking"):
+            text = authored_chinese(text, chinese_variant(self._settings.get("languages")))
         if kind == "progress" and prefix:
             opening = compose(prefix, "", None)[:-1]
             while text.strip().startswith(opening) and text.strip().endswith("\u300b"):
@@ -2420,7 +2426,8 @@ class AgentService:
         if ask.source == "greeting":
             if not reply.text.strip():
                 raise AgentFailure("error")
-            return self._finish(ask, "greeting", "", reply.text, ledger)
+            text = authored_chinese(reply.text, chinese_variant(self._settings.get("languages")))
+            return self._finish(ask, "greeting", "", text, ledger)
         if ask.admin_pending:
             asked = await self._propose_admin(ask, ledger, loop.seen)
             self._followups[asked["confirm"]["id"]].carry = loop
