@@ -21,6 +21,26 @@ async def test_the_telegram_methods_are_registered(app):
     assert (await app.call("messaging.telegram.status", {}))["connected"] is False
 
 
+@pytest.mark.parametrize("kind", ["telegram", "slack", "discord"])
+async def test_quiet_member_background_completion_returns_full_result_to_platform(app, monkeypatch, kind):
+    member = app.members.store.create_member(name="Platform member", role="Writer")
+    sent = []
+    async def report(session, text, **kwargs):
+        sent.append((session, text))
+    monkeypatch.setattr(app.messaging, "report", report)
+    store = app.background._store
+    session = f"{kind}:42"
+    identifier = store.create(session_id=session, language="en", text="Write the full result", member_id=member.id)
+    paragraphs = ["First part " + "x" * 3000, "Final result"]
+    full = "\n\n".join(paragraphs)
+    store.finish(identifier, "done", prefix="", text=full, detail="Work receipts only", reason=None)
+    assert store.get(identifier).quiet
+    # Simulate restart: the in-memory forwarding cache is empty.
+    app._worker_notice("worker.changed", {"task_id": identifier, "state": "done"})
+    await asyncio.sleep(0)
+    assert sent == [(session, full)]
+
+
 @pytest.mark.parametrize("background", [False, True])
 async def test_telegram_receives_readable_forms_from_conversation_and_background(app, monkeypatch, background):
     source = '```chart\n{"type":"line","title":"Visitors","units":"people","labels":["Mon"],"series":[{"name":"Visits","values":[3]}]}\n```'
@@ -148,7 +168,7 @@ async def test_the_report_of_a_task_from_telegram_is_sent_to_that_chat(app, monk
     app._worker_notice("worker.report", {"task_id": task_id})
     await asyncio.sleep(0)
     # With no reply written by this process, the stored detail (the whole report) is sent, unframed.
-    assert sent == [("telegram:42", "more")]
+    assert sent == [("telegram:42", "finished")]
 
 
 async def test_a_background_report_reaches_telegram_whole(app, monkeypatch):

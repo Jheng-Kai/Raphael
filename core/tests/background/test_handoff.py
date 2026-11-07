@@ -411,9 +411,9 @@ async def test_a_chat_that_handed_out_work_keeps_going_until_the_job_is_done(mak
             return reply
         return woken
     whole='頁面放在 /home/cua/team/office/index.html。\n\nWriter 做了頁面，Checker 打開頁面驗收。'+'每個按鈕都試過了。'*30
-    rig.client.replies.extend([report('頁面做好了，尚未驗收。'),
+    rig.client.replies.extend([report('頁面做好了，尚未驗收。' + 'The written page includes the requested sections and their complete contents. ' * 4),
         chief(turn(calls=[call('handoff',args(checker,stage_id='check',request='打開頁面驗收',done_when='A written check.'))])),
-        report('驗收通過 CHECK-OK。'),chief(report(whole))])
+        report('驗收通過 CHECK-OK。' + 'The check covers the required controls, visible result and acceptance conditions. ' * 4),chief(report(whole))])
     receipt=rig.service.handoff(RAPHAEL,args(target,stage_id='page',request='做頁面',done_when='A written page.'),
                                 source_turn_id=source.id,language='zh-TW')
     asker=rig.task(rig.task(receipt.data['task_id']).parent_task_id)
@@ -652,7 +652,8 @@ async def test_a_written_deliverable_is_work_done_and_says_why_when_it_is_not(ma
     await until(lambda:rig.task(result.data['task_id']).state in ('done','failed'))
     task=rig.task(result.data['task_id'])
     assert (task.state,task.reason)==('failed','work_without_action')
-    assert '只有回覆' in task.report_text and task.report_detail=='明早我會完成。'
+    assert '只有回覆' in task.report_text and '明早我會完成。' in task.report_text
+    assert task.report_detail is None
 
 
 async def test_a_file_left_in_the_team_folder_counts_as_the_work_it_was_to_leave(make_rig,tmp_path):

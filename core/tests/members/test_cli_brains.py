@@ -137,7 +137,7 @@ print(json.dumps({"type":"result","subtype":"success","result":ANSWER}),flush=Tr
     assert [message["text"] for message in turn["messages"] if message["kind"] == "reply"] == [
         f"《{prefix}First.", "Second.", "Last.》",
     ]
-    assert result["text"] == "Last."
+    assert result["text"] == "First.\n\nSecond.\n\nLast."
     # A caller that sends the answer on (a messaging chat) gets every message, unframed.
     assert result["messages"] == ["First.", "Second.", "Last."]
 
@@ -192,7 +192,7 @@ print(json.dumps({"type":"result","subtype":"success","session_id":"thread-one",
 ''')
     for _ in range(2):
         result = await typed(rig, "Teach me", teacher.id)
-        assert result["text"] == "Next lesson."
+        assert result["text"] == "Hello\n\nNext lesson."
     turns = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     assert all(turn["model"] == "cli:claude:sonnet" for turn in turns)
     assert [message["text"] for message in turns[0]["messages"] if message["kind"] == "reply"] == ["Hello", "Next lesson."]

@@ -19,12 +19,15 @@ async def test_management_moves_with_primary_and_work_tools_stay_with_everyone(r
     member = (await rig.call("members.create", {"name": "Alice"}))["member"]
     await rig.call("members.set_primary", {"id": member["id"]})
     assert rig.service.team_context(0, "en")["chief_id"] == member["id"]
-    from raphael_core.management import MANAGEMENT_TOOLS
-    # Work context remains shared; administration moves with the primary contact.
+    from raphael_core.management import MANAGEMENT_TOOLS, self_definitions
+    # Work context and self administration remain available; peer administration follows the primary.
     for speaker in (member["id"], 0):
         assert "team_overview" in dict(definitions_for(rig.service.speaker(speaker)))
         assert (await rig.service.admin_tool(speaker, "team_overview", {}))["members"]
-        assert bool(set(dict(definitions_for(rig.service.speaker(speaker)))) & MANAGEMENT_TOOLS) == (speaker == member["id"])
+        available = set(dict(definitions_for(rig.service.speaker(speaker)))) & MANAGEMENT_TOOLS
+        assert "member_manage" in available
+        if speaker == 0:
+            assert available == set(dict(self_definitions(0)))
     with pytest.raises(Exception, match="current primary contact"):
         await rig.service.admin_tool(0, "group_create", {"name": "Denied"}, interactive=True)
     assert (await rig.service.admin_tool(member["id"], "group_create", {"name": "Allowed"}, interactive=True))["group"]

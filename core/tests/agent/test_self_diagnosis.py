@@ -382,3 +382,12 @@ async def test_transient_api_retry_is_three_times_and_after_work_it_goes_on_with
     assert (await typed(rig))["text"] == "Recovered."
     assert len(sleeps) == 5 and all(step <= wait <= step * 1.2 for step, wait in zip((1, 3, 8, 30, 60), sleeps))
     assert client.chat_calls[1]["messages"] == client.chat_calls[-1]["messages"]
+
+
+def test_self_check_exposes_content_free_memory_health(make_rig):
+    from raphael_core.agent.self_check import snapshot
+    from raphael_core.agent.speaker import RAPHAEL
+    rig = make_rig()
+    rig.service._memory = SimpleNamespace(health=lambda: {"status": "attention", "consecutive_failures": 3})
+    result = snapshot(rig.service, SimpleNamespace(speaker=RAPHAEL, conversation_id=None))
+    assert result["memory"] == {"status": "attention", "consecutive_failures": 3}

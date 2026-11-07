@@ -1846,3 +1846,17 @@ and View contents on the core's snapshot; a key inside stops saving and publishi
 ```powershell
 npm run look -- chat-setup-cards chat-pairing-allowed --theme both --width 1120,720,1920x1080
 ```
+
+## Complete replies and envelope boundaries (2026-11-07)
+
+R-UI-50 wins over the old R-AG-PARITY-03 report length: every authored message and paragraph
+reaches the owner, parent, task storage, follow-up, platform chat and voice transcript.
+Long replies split at paragraph boundaries without dropping messages or cutting code blocks.
+Only a whole JSON object, or one whole fenced object, is a reply envelope; quoted JSON
+inside prose stays authored content. Detail holds receipts only. Room cards retain their
+600-character boundary (R-ROOM-07/R-AG-02); the closed colleague line remains R-UI-72.
+Offline coverage: core/tests/agent/test_full_replies.py, tests/background/test_full_results.py,
+tests/messaging/test_wiring.py, tests/members/test_events.py and tests/services/test_voice_chat.py.
+Window integration must verify full reply bubbles and the selected reply-split-bubbles,
+handoff-group-done and bot-exchange-expanded scenes in both themes at 1120,720,1920x1080,
+then judge that same run. No visual/native acceptance is claimed by the core-only brief.

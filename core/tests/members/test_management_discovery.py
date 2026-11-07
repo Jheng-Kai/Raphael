@@ -45,7 +45,9 @@ def test_shared_slack_discovery_never_grants_owner_management(primary, interacti
     assert offered.refs["slack_draft"].kind == BUILTIN
     assert not offered.find("slack_draft")[0]
     assert not offered.refs.keys() & MANAGEMENT_TOOLS
-    assert bool(offered.management) == (primary and interactive)
+    assert bool(offered.management) == interactive
+    if not primary:
+        assert "manage_connection" not in offered.management
     by_intent = take_snapshot(None, "Draft a Slack reply", speaker=speaker, interactive=interactive)
     assert "slack_draft" in by_intent.refs
 
@@ -102,7 +104,6 @@ def test_request_intent_adds_only_the_matching_management_areas(question, expect
 
 def test_management_cannot_be_discovered_outside_the_owner_primary_chat():
     for offered in (snapshot(owner_management=False),
-                    take_snapshot(None, "Delete a folder", interactive=True, speaker=Speaker(id=2)),
                     take_snapshot(None, "Delete a folder", speaker=Speaker(capabilities=frozenset({"chief"})))):
         assert not offered.management
         assert not set(offered.refs) & MANAGEMENT_TOOLS

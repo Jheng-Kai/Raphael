@@ -121,6 +121,15 @@ class Task:
     report_thread_id: int | None = None
 
     @property
+    def full_report(self) -> str:
+        """Read complete new reports and legacy rows that kept the full answer in detail."""
+        text, detail = self.report_text or "", self.report_detail or ""
+        prefix = " ".join(text.rstrip("…").split())
+        if prefix and len(detail) > len(text) and " ".join(detail.split()).startswith(prefix):
+            return detail
+        return text or detail
+
+    @property
     def quiet(self) -> bool:
         """Whether its report stays in its thread: a member's task, or a routine's run, is never
         said on the overlay (the owner reads it in the app)."""

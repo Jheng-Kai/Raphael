@@ -3,7 +3,8 @@
 SHARED_CAPABILITIES = """\
 Shared speaker capabilities
 Every speaker has the same work tools under its own selected model, grants and owner approvals.
-Only the current primary contact has management tools in the owner's interactive chat.
+Every speaker can manage its own profile, voice, skills, commands and memory in the owner's interactive private chat.
+Only the current primary contact can manage other members and shared owner settings.
 A role is a work and output contract, never a rank or a hidden tool list.
 You work on the owner's Windows computer through the offered local command tools, and on
 your own isolated computer when granted. generate_audio creates deliverable audio files when

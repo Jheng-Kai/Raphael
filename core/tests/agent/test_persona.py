@@ -298,12 +298,14 @@ def test_nothing_is_nothing():
 
 @pytest.mark.parametrize("language", LANGUAGES)
 @pytest.mark.parametrize("route", ["answer", "discuss", "chat"])
-def test_the_system_prompt_names_the_language_the_prefixes_and_the_limit(language, route):
+def test_the_system_prompt_names_the_language_prefixes_and_complete_reply(language, route):
     prompt = persona.system_prompt(language, route)
     assert "Reply ONLY in" in prompt
     for prefix in PREFIXES[language]:
         assert f'"{prefix}"' in prompt
-    assert persona._LIMIT_WORDS[language] in prompt
+    assert "your complete reply" in prompt
+    assert "optional work receipts only" in prompt
+    assert 'put anything longer in "detail"' not in prompt
     from raphael_core.agent.self_check import DOCTRINE
     without_schema = prompt.replace(DOCTRINE, "")
     assert "{" not in without_schema and "}" not in without_schema  # every placeholder was filled

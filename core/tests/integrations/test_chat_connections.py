@@ -27,7 +27,11 @@ def test_running_offer_removes_revoked_tools_and_discovers_new_ones(interactive)
     assert "sample__read" not in {d["function"]["name"] for d in snapshot.definitions}
     assert "sample__read" not in snapshot.refs
     assert "sample__write" in {d["function"]["name"] for d in snapshot.definitions}
-    assert not snapshot.find("Read sample")[0]
+    found, _ = snapshot.find("Read sample")
+    assert "sample__read" not in {item["function"]["name"] for item in found}
+    if interactive:
+        # Self-owned read tools may match the generic word even after this plugin is revoked.
+        assert "memory_document_read" in snapshot.management
 
 
 def test_refresh_never_reassigns_a_revoked_alias_to_another_connection():

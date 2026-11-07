@@ -46,7 +46,8 @@ def test_only_primary_is_offered_management_and_everyone_keeps_work_tools():
             tools = dict(definitions_for(speaker))
             assert (set(ADMIN) - {"team_overview"} <= tools.keys()) == chief
             if not chief:
-                assert not set(tools) & MANAGEMENT_TOOLS
+                from raphael_core.management import self_definitions
+                assert set(tools) & MANAGEMENT_TOOLS == self_definitions(identifier).keys()
             for name in MEMBER_ONLY_TOOLS:
                 assert (name in tools) == (identifier > 0)
             assert "member_id" not in tools["routine_create"]["parameters"]["properties"]

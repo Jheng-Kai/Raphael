@@ -146,7 +146,7 @@ async def test_cli_capture_uses_toolless_subscription_loop(growing, monkeypatch)
         def __init__(self, **kwargs):
             calls.append(kwargs)
         async def run(self):
-            return SimpleNamespace(kind="done", final='{"actions": []}')
+            return SimpleNamespace(status="done", kind=None, final='{"actions": []}')
         async def aclose(self):
             pass
     monkeypatch.setattr(cli, "CliLoop", FakeLoop)
@@ -175,7 +175,7 @@ async def test_first_bots_cli_brain_handles_background_consolidation_without_api
         def __init__(self, **kwargs):
             calls.append(kwargs)
         async def run(self):
-            return SimpleNamespace(kind="done", final='{"actions": []}')
+            return SimpleNamespace(status="done", kind=None, final='{"actions": []}')
         async def aclose(self):
             pass
 
@@ -201,7 +201,7 @@ async def test_cli_memory_failure_is_not_reported_as_an_openrouter_call(growing,
         def __init__(self, **kwargs):
             assert kwargs["tools"] == [] and kwargs["resume_session"] is False
         async def run(self):
-            return SimpleNamespace(kind=kind, final=final)
+            return SimpleNamespace(status=kind, kind=None, final=final)
         async def aclose(self):
             pass
 
@@ -245,7 +245,7 @@ async def test_a_done_cli_failure_keeps_its_kind_and_never_parses_the_owner_mess
         def __init__(self, **kwargs):
             pass
         async def run(self):
-            return SimpleNamespace(kind="done", final="A friendly quota message, not JSON")
+            return SimpleNamespace(status="done", kind=None, final="A friendly quota message, not JSON")
         async def aclose(self):
             pass
     monkeypatch.setattr(cli, "CliLoop", Loop)

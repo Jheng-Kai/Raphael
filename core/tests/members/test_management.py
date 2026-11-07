@@ -113,7 +113,8 @@ async def test_nonprimary_and_stale_primary_cannot_write_even_if_the_model_calls
         await team.members.admin_tool(other.id, "group_create", {"name": "Denied"}, interactive=True)
     await rig.call("members.set_primary", {"id": other.id})
     assert "group_create" in dict(definitions_for(old))
-    assert not set(dict(definitions_for(team.members.speaker(0)))) & MANAGEMENT_TOOLS
+    from raphael_core.management import self_definitions
+    assert set(dict(definitions_for(team.members.speaker(0)))) & MANAGEMENT_TOOLS == self_definitions(0).keys()
     assert "group_create" in dict(definitions_for(team.members.speaker(other.id)))
     with pytest.raises(RpcError, match="current primary contact"):
         await team.members.admin_tool(old.id, "group_create", {"name": "Stale"}, interactive=True)

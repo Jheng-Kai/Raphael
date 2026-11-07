@@ -200,7 +200,7 @@ class MemoryService(Growth):
         self._timer: asyncio.TimerHandle | None = None
         self._running: asyncio.Task[None] | None = None
         self._failed_at: float | None = None
-        self._failure_count = 0
+        self._failure_count = self._state("background_failures")
         # How many times the conversation was cleared: a pass that began at another count is stale.
         self._turn_clears = 0
 
@@ -548,8 +548,12 @@ class MemoryService(Growth):
             if left > 0:
                 return left
         delays: list[float] = []
-        if self.skill_review is not None and self.skill_review.due():
-            delays.append(RETRY_S if self._failed_at is not None else 0.0)
+        if self.skill_review is not None:
+            if self.skill_review.due():
+                delays.append(RETRY_S if self._failed_at is not None else 0.0)
+            retry = getattr(self.skill_review, "retry_delay_s", lambda: None)()
+            if retry is not None:
+                delays.append(retry)
         for member_id in self._agents():
             try:
                 unread = self._unread(member_id=member_id)
@@ -661,11 +665,22 @@ class MemoryService(Growth):
 
     def _record_failure(self) -> None:
         self._failure_count += 1
+        self._set_state("background_failures", self._failure_count)
         self._failed_at = self._clock()
         logger.info("Memory retry deferred: failures=%d delay_s=%d", self._failure_count, self._retry_s())
 
+    def health(self):
+        """Content-free, persisted failure counts for the existing self-check tool."""
+        failures = self._state("background_failures")
+        reviews = sum(1 for row in self._conn.execute(
+            "SELECT value FROM memory_state WHERE key LIKE 'skills:%:failures'") if int(row[0]) >= 3)
+        return {"status": "attention" if failures >= 3 or reviews else "ok",
+                "consecutive_failures": failures, "skill_reviews_repeatedly_failed": reviews,
+                "retry_delay_s": self._retry_s() if failures else 0}
+
     def _recovered(self) -> None:
         self._failure_count = 0
+        self._set_state("background_failures", 0)
         self._failed_at = None
 
     async def reflect(self, member_id: int = 0) -> Applied:

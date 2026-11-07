@@ -34,9 +34,9 @@ NOW = {
 def test_member_replies_keep_up_to_four_separate_messages_with_a_limit_per_message():
     reply = parse_reply({"messages": ["Correction", "Example", "x" * 3000, "Your turn?", "extra"], "detail": ""}, "en", plain=True)
     assert reply.messages[:2] == ["Correction", "Example"]
-    assert len(reply.messages) == 4
-    assert len(reply.messages[2]) == persona.MEMBER_TEXT_MAX
-    assert reply.text == "Your turn?"
+    assert len(reply.messages) == 5
+    assert len(reply.messages[2]) == 3000
+    assert reply.text == "\n\n".join(reply.messages)
 
 
 def test_display_frame_normalization_preserves_notice_and_ordinary_quoted_titles():
@@ -241,21 +241,21 @@ def test_the_prefix_is_made_one_of_the_language_and_defaults_to_an_answer():
     assert parse_reply(spoken(None), "en").prefix == "Answer"
 
 
-def test_the_text_is_one_line_cut_to_the_length_raphael_speaks_with_the_rest_in_the_detail():
+def test_raphael_keeps_the_full_text_and_independent_receipt():
     long = "這是一句剛好十個字的話。" * 12  # 144 characters
     result = parse_reply(spoken(text=long, detail="簡短"), "zh-TW")
-    assert result.text == "這是一句剛好十個字的話。" * 7
-    assert result.detail == long  # the whole of it, which is more than the detail it had
+    assert result.text == long
+    assert result.detail == "簡短"
 
 
-def test_a_detail_longer_than_the_text_that_was_cut_is_kept():
+def test_an_authored_receipt_longer_than_the_reply_is_kept():
     long = "這是一句剛好十個字的話。" * 12
     detail = long + "還有更多的內容。"
     assert parse_reply(spoken(text=long, detail=detail), "zh-TW").detail == detail
 
 
-def test_line_breaks_in_the_text_become_spaces():
-    assert parse_reply(spoken(text="one\ntwo", prefix="Answer"), "en").text == "one two"
+def test_line_breaks_in_the_text_are_preserved():
+    assert parse_reply(spoken(text="one\ntwo", prefix="Answer"), "en").text == "one\ntwo"
 
 
 def test_simplified_characters_in_a_traditional_reply_are_made_traditional():

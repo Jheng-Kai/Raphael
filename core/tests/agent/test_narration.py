@@ -170,4 +170,13 @@ async def test_final_json_wrapping_does_not_leak_into_the_reply(make_rig, client
     rig = make_rig()
     client.decisions.append(decision("answer"))
     client.chats = [chat(wrap.format(json.dumps({"text": "Done.", "detail": ""})))]
-    assert (await typed(rig))["text"] == "Done."
+    expected = "Done." if wrap.startswith("```") else wrap.format(json.dumps({"text": "Done.", "detail": ""}))
+    assert (await typed(rig))["text"] == expected
+
+
+@pytest.mark.parametrize("envelope", [False, True])
+async def test_authored_json_examples_survive_the_real_narrated_reply(make_rig, client, envelope):
+    rig = make_rig()
+    text = 'Here is the cleanup prompt:\n```json\n{"text": "Example only"}\n```\nKeep every instruction.'
+    client.chats = [chat(json.dumps({"text": text, "detail": ""}) if envelope else text)]
+    assert (await typed(rig))["text"] == text

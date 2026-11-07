@@ -279,12 +279,6 @@ class NarratedLoop:
             if self.last_failure is not None and outcome.kind == "failed":
                 raise AgentFailure(self.last_failure.kind, diagnostic=self.last_failure, model=self.model)
             raise AgentFailure(outcome.detail or "error")
-        objects, prose = _content(outcome.final)
-        data = next((obj for obj in reversed(objects) if "text" in obj or "messages" in obj),
-                    loose_reply(prose) or {"text": prose, "detail": ""})
-        data = dict(data)
-        for field in ("text", "detail", "say_ja"):
-            data[field] = _reply_text(data.get(field))
-        if isinstance(data.get("messages"), list):
-            data["messages"] = [_reply_text(item) for item in data["messages"]]
-        return parse_reply(data, self.language, plain=self.plain, long=True)
+        # Final authored words use the same whole-envelope boundary as CLI replies.
+        # Progress parsing must never consume JSON examples inside the answer.
+        return parse_reply(outcome.final, self.language, plain=self.plain, long=True)

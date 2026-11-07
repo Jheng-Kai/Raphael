@@ -564,7 +564,6 @@ _PROGRESS_EXAMPLE = {
     "ja": "「まず今日のニュースから、練習に合う記事を探します。」",
     "en": '"I will look through the news of today for an article that suits your practice."',
 }
-_LIMIT_WORDS = {"zh-TW": "80 characters", "ja": "80 characters", "en": "40 words"}
 # How Raphael addresses the user, in each language.
 ADDRESS = {"zh-TW": "主人", "ja": "マスター", "en": "Master"}
 # How each language is written in his voice.
@@ -591,8 +590,8 @@ _FINAL_FORMAT = (
     "no code fences, no prose before or after, and no separate thinking object."
 )
 _NARRATED_REPLY_TEXT = """\
-"text": the reply, at most 2000 characters. Replies follow the persona and the owner's instructions.
-- "messages": the reply as the chat messages a person would send, in order, each at most 2000 characters. For a long answer, send a few short messages at natural paragraph boundaries, at most four, like a person texting. Keep each code block, list and table whole in one message; never split inside them or pad to fill. A brief answer needs only one message. Set "text" to the last message.
+"text": the complete reply. Replies follow the persona and the owner's instructions.
+- "messages": the complete reply as chat messages in order. Split long replies at natural paragraph boundaries; keep code blocks, lists and tables whole. Never omit any part of the answer. Set "text" to the complete answer.
 - "thinking": optional final public explanation, following the public thinking rules."""
 
 _SHARED_CONTRACT = SHARED_CAPABILITIES + "\n" + """\
@@ -750,9 +749,7 @@ cannot, will not, or lack the data, and when you correct a mistaken premise; {un
 you only acknowledge; {question} when you ask something that can be answered with yes or no.
 Use {negative} only when there is truly nothing useful to say.
 - {reply_text}
-- "detail": a longer version of the reply for the user's history, in the same voice, when \
-"text" had to leave out something worth keeping (the other numbers, the sources); otherwise an \
-empty string.
+- "detail": optional work receipts only. Keep the complete requested answer, examples and sources in the visible reply.
 
 {facts}
 
@@ -766,7 +763,7 @@ _ROUTE_RULES = {
     "discuss": (
         "The user wants to think something through with you. Give your analysis and the option "
         "you judge optimal, name the trade-off that matters, and ask at most one question back. "
-        'Keep the line within the limit and put anything longer in "detail".'
+        'Keep the complete analysis and requested content in the visible reply.'
     ),
     "chat": (
         "This is small talk, a greeting or thanks. Answer in one short sentence, calm and "
@@ -882,8 +879,7 @@ else, with three fields.
 - "prefix": exactly one of {prefixes}. {notice} for a report of what was found or done; \
 {negative} when the task cannot be done, and why.
 - "text": {report_text}
-- "detail": a longer version of the report for the user's history, in the same voice, when \
-"text" had to leave out something worth keeping; otherwise an empty string."""
+- "detail": optional work receipts and supporting evidence only. The complete result belongs in "text"."""
 
 
 def worker_system_prompt(language: str, *, model_calls: int, tool_calls: int, speaker: Speaker | None = None) -> str:
@@ -901,8 +897,7 @@ def worker_system_prompt(language: str, *, model_calls: int, tool_calls: int, sp
         prefixes=", ".join(f'"{prefix}"' for prefix in prefixes),
         notice=f'"{prefixes.notice}"',
         negative=f'"{prefixes.negative}"',
-        limit=_LIMIT_WORDS[language],
-        report_text=_MEMBER_REPORT_TEXT.format(limit=_MEMBER_LIMIT_WORDS[language]),
+        report_text=_MEMBER_REPORT_TEXT,
         model_calls=model_calls,
         tool_calls=tool_calls,
     )
@@ -915,9 +910,8 @@ def worker_system_prompt(language: str, *, model_calls: int, tool_calls: int, sp
 # the app's thread, never on the overlay, so it may run to a few sentences. The owner's instructions
 # are the owner's own words: they shape how it works, but the rules of the facts and of the tools stay.
 
-# The longest a member's reply may run to, in characters; what it may aim for, in the prompt.
+# Soft target for splitting complete replies at paragraph boundaries; never a truncation limit.
 MEMBER_TEXT_MAX = 2000
-_MEMBER_LIMIT_WORDS = {"zh-TW": "300 characters", "ja": "300 characters", "en": "120 words"}
 _MEMBER_REGISTER = {
     "zh-TW": "Write natural, clear written Chinese in Traditional characters as used in Taiwan.",
     "ja": "Write natural, polite Japanese (です and ます).",
@@ -959,8 +953,7 @@ By default use {language}. A Japanese teacher may reply or give examples in Japa
 What you return
 {final_format}
 - {reply_text}
-- "detail": a longer version for the record when "text" had to leave out something worth keeping \
-(the other numbers, the sources); otherwise an empty string.
+- "detail": optional work receipts only; put the complete answer, requested examples and sources in the visible reply.
 
 {facts}
 
@@ -975,9 +968,8 @@ _MEMBER_ROUTE_RULES = {
     "chat": "Respond briefly, then guide your owner to the next useful step toward their goal.",
 }
 
-_MEMBER_REPORT_TEXT = """your message to your owner, at most about {limit}, written the way you would text them \
-yourself, in your own voice and manner, not as a report: what you found or did (or why it could \
-not be done), and the next step you suggest."""
+_MEMBER_REPORT_TEXT = """your complete result to your owner, in your own voice and manner. Include everything the owner asked for, \
+what you found or did, checks and anything unfinished. Never replace the result with a recap or hide it in detail."""
 
 _MEMBER_WORKER_PROMPT = """\
 {persona}
@@ -993,8 +985,7 @@ The report
 When you are done, or cannot go on, stop calling tools and reply with one JSON object and nothing \
 else, with two fields.
 - "text": {report_text}
-- "detail": a longer version for the record when "text" had to leave out something worth keeping; \
-otherwise an empty string."""
+- "detail": optional work receipts only; the complete result belongs in "text"."""
 
 
 PLAN_MODE = (
@@ -1049,7 +1040,6 @@ def _member_fields(language: str, name: str, role: str, instructions: str, perso
         "instructions": instructions.strip() or "(none)",
         "language": _LANGUAGE_NAMES[language],
         "register": _MEMBER_REGISTER[language],
-        "limit": _MEMBER_LIMIT_WORDS[language],
     }
 
 
@@ -1100,8 +1090,8 @@ def member_system_prompt(
         **_member_fields(language, name, role, instructions, personality),
         final_format=_FINAL_FORMAT,
         reply_text=_NARRATED_REPLY_TEXT if narrated else (
-            f'"text": your reply, at most about {_MEMBER_LIMIT_WORDS[language]}, in plain sentences.\n'
-            '- "messages": the reply as the chat messages a person would send, in order, each at most 2000 characters. For a long answer, send a few short messages at natural paragraph boundaries, at most four, like a person texting. Keep each code block, list and table whole in one message; never split inside them or pad to fill. A brief answer needs only one message. Set "text" to the last message.'
+            '"text": your complete reply, in plain sentences.\n'
+            '- "messages": the complete reply as chat messages in order. Split long replies at natural paragraph boundaries; keep code blocks, lists and tables whole. Never omit any part of the answer. Set "text" to the complete answer.'
         ),
         route=_MEMBER_ROUTE_RULES[route],
     )
@@ -1124,7 +1114,7 @@ def member_worker_system_prompt(
     return _MEMBER_WORKER_PROMPT.format(
         **_member_fields(language, name, role, instructions, personality),
         work=_WORK_RULES.format(model_calls=model_calls, tool_calls=tool_calls),
-        report_text=_MEMBER_REPORT_TEXT.format(limit=_MEMBER_LIMIT_WORDS[language]),
+        report_text=_MEMBER_REPORT_TEXT,
         model_calls=model_calls,
         tool_calls=tool_calls,
     )
@@ -1162,8 +1152,8 @@ def system_prompt(
         facts=_FACT_RULES,
         final_format=_FINAL_FORMAT,
         reply_text=_NARRATED_REPLY_TEXT if narrated else (
-            f'"text": the reply as one line of plain text, at most {_LIMIT_WORDS[language]}, '
-            'without the prefix (it is shown for you). No markdown, no lists, no links, no emoji.'
+            '"text": your complete reply, without the prefix (it is shown for you). '
+            'Keep every requested part; split long replies at natural paragraph boundaries.'
         ),
         language=_LANGUAGE_NAMES[language],
         address=ADDRESS[language],
@@ -1175,7 +1165,6 @@ def system_prompt(
         negative=f'"{prefixes.negative}"',
         understood=f'"{prefixes.understood}"',
         question=f'"{prefixes.question}"',
-        limit=_LIMIT_WORDS[language],
         route=_ROUTE_RULES[route],
     )
     if say_ja:

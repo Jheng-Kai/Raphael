@@ -95,9 +95,9 @@ async def test_full_article_replies_are_kept_in_order_without_the_voice_length_l
     client.chats = [chat(json.dumps({"messages": [article, "Second paragraph.", "Third.", "Fourth.", "Dropped."], "text": "Fourth.", "detail": ""}))]
     await typed(rig, "Show the full article here")
     [turn] = await rig.turns()
-    assert len(turn["messages"]) == 4
+    assert len(turn["messages"]) == 5
     assert article.strip() in turn["messages"][0]["text"]
-    assert "Dropped" not in str(turn)
+    assert "Dropped." in turn["text"]
 
 
 async def test_show_refuses_an_unseen_url_before_any_fetch(make_rig, client, monkeypatch):

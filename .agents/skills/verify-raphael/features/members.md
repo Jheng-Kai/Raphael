@@ -1032,3 +1032,16 @@ Guardian maps connect_messaging to S14.messaging.telegram/slack/discord and
 share_template to S21.templates.share. These production-loop contracts check
 panel intents, owner text, secure-card metadata and immutable snapshot read-back;
 they do not save platform credentials or prove a real platform connection.
+
+## Subscription memory recovery (2026-11-07)
+
+MemoryBrain checks Outcome.status, not its optional failure kind. Tool-less CLI reflection,
+consolidation and skill review retain the structured schema and never cross providers.
+The direct ChatGPT provider validates a single unambiguous schema-matching object, including
+fenced JSON or surrounding prose. Failure logging retains classified causes without content.
+Persisted memory failures and skill-review failures appear in self_check.memory; attention
+begins at three consecutive failures. Skill review pauses for six hours rather than stopping
+forever; pre-existing counters without a retry timestamp can recover immediately.
+Offline tests: core/tests/memory/test_subscription_passes.py, tests/members/test_skill_growth.py
+and tests/agent/test_self_diagnosis.py. Live evidence is recorded separately in the brief report;
+only that documented route is live-verified. Memory provenance and owner-only permissions remain.

@@ -1499,6 +1499,10 @@ class App(Router):
             if ended is not None and ended.turn_id:
                 self.members.turn_arrived(ended.turn_id)
                 self.rooms.turn_arrived(ended.turn_id)
+            if (ended is not None and ended.quiet and ended.member_id and ended.scope == "private"
+                    and ended.routine_id is None and ended.report_room_id is None and ended.parent_task_id is None):
+                # Quiet still means no overlay; a platform-origin task must answer its own chat.
+                method = "worker.report"
         if method != "worker.report" or type(params.get("task_id")) is not int:
             return
         task = self.background.task(params["task_id"])
@@ -1507,9 +1511,8 @@ class App(Router):
         if task.report_text is None:
             return
         from .answer_forms import forms_plain_text
-        # The chat gets what the thread shows, whole (the report's one-line `report_text` is only
-        # what the overlay says). A report this process did not write falls back to the stored one.
-        shown = self.background.final_words(task.id) or [task.report_detail or task.report_text]
+        # Cached bubbles retain their boundaries; durable reports retain the complete answer after restart.
+        shown = self.background.final_words(task.id) or [task.full_report]
         text = [part for part in map(forms_plain_text, plain_replies(shown)) if part.strip()]
         if not text:
             return

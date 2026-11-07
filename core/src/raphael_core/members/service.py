@@ -1046,7 +1046,9 @@ class MembersService:
         return {"primary_id": member_id}
 
     async def _set_avatar(self, params: dict) -> dict:
-        member_id = self._member_id(params)
+        member_id = _whole(params, "id")
+        if member_id:
+            self._member_id(params)
         name, mime, data = params.get("name"), params.get("mime"), params.get("data")
         if not isinstance(name, str) or not isinstance(mime, str) or not isinstance(data, str):
             raise invalid_params("name, mime and data must be strings")
@@ -1060,6 +1062,20 @@ class MembersService:
             raise RpcError(INVALID_PARAMS, f"Invalid params: avatar ({kind})", {"kind": kind}) from None
         if not picture.is_image:
             raise RpcError(INVALID_PARAMS, "Invalid params: avatar (type)", {"kind": "type"})
+        if member_id == 0:
+            def write_first_picture():
+                self._raphael_avatar.mkdir(parents=True, exist_ok=True)
+                for filename, content in (("picture", picture.data), ("picture.json", json.dumps({
+                        "mime": picture.mime, "crop": {"x": 0.5, "y": 0.5, "zoom": 1}}).encode("utf-8"))):
+                    pending = self._raphael_avatar / (filename + ".part")
+                    pending.write_bytes(content)
+                    pending.replace(self._raphael_avatar / filename)
+            try:
+                await asyncio.to_thread(write_first_picture)
+            except OSError:
+                raise invalid_params("avatar (io)") from None
+            self._changed()
+            return {"member": self._raphael_view(self._language(), {}, set(), {})}
         folder = self._avatars / MEMBERS_DIR
         stored = f"{member_id}-{secrets.token_hex(6)}.{_EXTENSIONS[picture.mime]}"
 
@@ -1550,12 +1566,12 @@ class MembersService:
     def authorize_management(self, member_id, name, arguments, *, interactive=False, approval=None):
         """Recheck live authority and the consumed exact-action gate token before a write."""
         from ..agent.team_admin import DEFINITIONS
-        from ..management import REGISTRY, destructive
+        from ..management import REGISTRY, destructive, self_action
         from ..agent.policy import Approval, action_digest
 
         if not self.store.exists(member_id) or name not in DEFINITIONS and name not in REGISTRY:
             raise invalid_params("unknown team administration tool")
-        if name != "team_overview" and (not self.store.is_chief(member_id) or not interactive):
+        if name != "team_overview" and (not interactive or not (self.store.is_chief(member_id) or self_action(member_id, name, arguments))):
             raise invalid_params("Only the current primary contact can manage the team in the owner's interactive private chat")
         schema = DEFINITIONS[name]["parameters"] if name in DEFINITIONS else REGISTRY[name].schema
         if (set(arguments) - set(schema["properties"]) or

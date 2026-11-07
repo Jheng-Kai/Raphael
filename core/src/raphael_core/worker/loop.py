@@ -109,7 +109,7 @@ UNLIMITED = Limits(math.inf, math.inf, math.inf)
 # What a task that reached a ceiling is asked, once and with no tools: where it stands.
 WRAP_UP = (
     "This task has reached a limit and stops here; you can use no more tools. Reply once, in plain text and in the "
-    "language of the request, with three short parts: what is done (name the files, ids or links that show it), "
+    "language of the request, with the complete work result and three parts: what is done (name the files, ids or links that show it), "
     "what is not done, and the next step to take."
 )
 # The longest that one call may take, and the most of the conversation it is shown beyond the first two messages.

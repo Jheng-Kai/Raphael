@@ -198,8 +198,8 @@ HANDED_WORK_BACK = (
     "with what you told the owner you would do. If anything is left (parts not joined, a check you promised, something "
     "a colleague could not verify), hand the next piece to the right colleague now with handoff and end your turn; you "
     "come back with its result. Speak to the owner only when nothing is left, or when something stops the work that "
-    "only the owner can settle. Then say where the result is (its absolute path), what each person did, what was checked "
-    "and what was not."
+    "only the owner can settle. Then pass the complete requested result to the owner, including colleagues' full answers when they are the deliverable. "
+    "You may add one line of your own, plus file paths, checks and anything unfinished. Never replace the result with a recap."
 )
 HANDLES_REQUEST = (
     "\nWhen you report, give handles anyone can check: the URL, the id or the absolute path of what you made or changed. "
@@ -209,10 +209,8 @@ HANDLES_REQUEST = (
 
 # The most pieces one task hands out: it comes back after each round and could otherwise go on for ever.
 MAX_HANDOFFS = 24
-# The most of a stopped task's summary that is its report line; the rest is its detail.
-SUMMARY_LINE = 400
 # The most of the delegated results that a parent is shown, in characters.
-RESULTS_CHARS = 40_000
+RESULTS_CHARS = 1_000_000
 # Where work that was to leave a file is looked for, and how much of it: folders that are not the member's own
 # work, the most files looked at, and the most kept as evidence.
 ARTIFACT_SKIP = frozenset(("node_modules", ".git", ".cache", "__pycache__", ".venv", ".raphael-jobs"))
@@ -942,7 +940,7 @@ class BackgroundService:
                     source_message = conn.execute('SELECT id,member_id,origin_message_id FROM room_messages WHERE turn_id=? AND room_id=? AND thread_id=?',
                         (task.source_turn_id,report_room,report_thread)).fetchone()
                     # Only a short public result is projected. Private history, steps and owner cards stay private.
-                    text = ' '.join((task.report_detail or task.report_text or '').split())[:600]
+                    text = ' '.join((task.full_report).split())[:600]
                     conn.execute("INSERT INTO room_messages(room_id,thread_id,member_id,text,created,turn_id,request_id,reply_to,reply_to_member,origin_message_id,kind,report_task_id) "
                         "VALUES (?,?,?,?,?,?,?,?,?,?,'report',?) ON CONFLICT(room_id,request_id) DO NOTHING",
                         (report_room,report_thread,task.member_id,text,self._now_ms(),task.turn_id,'handoff-'+str(task.id),
@@ -984,7 +982,7 @@ class BackgroundService:
                 'conversation_id':self._history.get(task.turn_id).conversation_id if task.turn_id and self._history.get(task.turn_id) else None,
                 'ready_at_ms':task.ready_at_ms,'dispatch_policy':task.dispatch_policy,'mode':task.mode,
                 'request':task.text,
-                'result':((task.report_detail or task.report_text or '')[:600] if room_id is not None else task.report_detail or task.report_text or '') if not withheld and task.state=='done' else '',
+                'result':((task.full_report)[:600] if room_id is not None else task.full_report) if not withheld and task.state=='done' else '',
                 'evidence':self._store.evidence(task.id) if not withheld else [],
                 'completion_state':(stage['state'] if (stage:=self._metrics_conn.execute('SELECT state FROM task_stage_owners WHERE owner_task_id=?',(task.id,)).fetchone()) else task.state)})
         return result
@@ -1055,7 +1053,7 @@ class BackgroundService:
                         state=task.state,
                         step=len(steps),
                         tools=tools,
-                        report=task.report_text if ended is not None else None,
+                        report=task.full_report if ended is not None else None,
                         ended_min_ago=None
                         if ended is None
                         else max(self._now_ms() - ended, 0) // 60_000,
@@ -1521,7 +1519,7 @@ class BackgroundService:
             system += HANDED_WORK_BACK
         elif answering:
             system += ('\nYou consulted colleagues for this request and their answers are in the results below. '
-                       'Answer the owner now with what they said, in your own words; do not ask them again.')
+                       'Pass their complete answers to the owner when they answer the request; you may add one line of your own. Never replace the result with a recap; do not ask them again.')
         spec = {
             "task_id": task.id,
             "skills": getattr(self._team, "native_skills", lambda member: [])(task.member_id),
@@ -1813,7 +1811,7 @@ class BackgroundService:
             child = self._store.get(row[0])
             withheld = self._metrics_conn.execute("SELECT 1 FROM task_outbox WHERE task_id=? AND disposition='withheld'",(child.id,)).fetchone()
             state = 'withheld' if withheld else RESULT_STATE.get(child.state, 'error')
-            said = '' if withheld else child.report_detail or child.report_text or ''
+            said = '' if withheld else child.full_report
             result.append({'task_id':child.id,'member_id':child.member_id,'state':state,
                 'reason':'' if withheld or state == 'completed' else child.reason or '',
                 'result':said or ('Completed without a text response.' if state == 'completed' else ''),
@@ -2312,19 +2310,18 @@ class BackgroundService:
                 return
             # What it said stays with why it does not count: the one who gave the work reads both, and the words may be most of it.
             if task.mode == 'work' and any(child['state']!='completed' for child in self._child_results(task.id)):
-                self._conclude(task,run,'failed','',phrase(language,'work_children_open'),report.text or None,'child_work_incomplete')
+                self._conclude(task,run,'failed','',phrase(language,'work_children_open') + '\n\n' + report.text,report.detail,'child_work_incomplete')
                 return
             if (task.mode == 'work' or task.requires_artifact) and (failure := self._store.completion_reason(
                     task, verifiable=self._record_artifacts(task, current.created_at_ms,
                         '\n'.join([report.text, report.detail or '', *report.messages])), said=report.text)):
                 said_why = 'work_only_words' if failure == 'work_without_action' else 'work_file_missing'
-                self._conclude(task,run,'failed','',phrase(language,said_why),report.text or None,failure)
+                self._conclude(task,run,'failed','',phrase(language,said_why) + '\n\n' + report.text,report.detail,failure)
                 return
             if plain:
                 self._conclude(task, run, "done", report.prefix, report.text, report.detail, None, replies=report.messages)
             else:
-                line, rest = fit_text(report.text, language)
-                self._conclude(task, run, "done", report.prefix, line, report.detail or (report.text if rest else None), None,
+                self._conclude(task, run, "done", report.prefix, report.text, report.detail, None,
                                replies=report.messages or [report.text])
         elif status == "cancelled":
             key = "worker_cancelled_unsure" if run.call_cut_off else "worker_cancelled"
@@ -2337,9 +2334,8 @@ class BackgroundService:
             if not said:
                 self._conclude(task, run, "limit", notice, phrase(language, f"worker_{kind}", steps=steps), None, kind)
             else:
-                short = len(said) > SUMMARY_LINE
-                self._conclude(task, run, "limit", notice, said[:SUMMARY_LINE].rstrip() + "…" if short else said,
-                               said if short else None, kind)
+                from ..agent.answers import split_messages
+                self._conclude(task, run, "limit", notice, said, None, kind, replies=split_messages(said))
         elif status == "stopped" and kind == "failed":
             detail = reply.get("detail")
             if str(detail).startswith("cli_"):  # the CLI loop's own words already say what happened
@@ -2457,8 +2453,9 @@ class BackgroundService:
             state,prefix,text,detail,reason,replies = 'failed','',phrase(task.language,'error'),None,'member_unknown_or_removed',()
         cost = (current.cost_usd if current else task.cost_usd) if run is None else run.ledger.total
         prior_cost = 0.0
-        turn_text, turn_detail = text, detail
         terminal_replies = replies or [text]
+        text = "\n\n".join(line for line in terminal_replies if line)
+        turn_text, turn_detail = text, detail
         if state == 'cancelled' and self._has_linked_turn(task):
             previous = self._history.get(task.turn_id)
             saved = [message['text'] for message in self._history.messages([task.turn_id]).get(task.turn_id, [])
@@ -2511,16 +2508,15 @@ class BackgroundService:
             current.tool_calls if run is None and current else run.tool_calls if run else task.tool_calls,
             cost,
         )
-        # A task stopped at a limit keeps its whole last word in the detail; the line is a cut of it.
-        # Otherwise these are the reply messages just published, as the app shows them.
-        self._final_words[task.id] = [detail] if state == "limit" and detail else [
+        # These are the complete reply messages just published, as the app shows them.
+        self._final_words[task.id] = [
             line for line in terminal_replies if line and line.strip()]
         while len(self._final_words) > 64:
             self._final_words.pop(next(iter(self._final_words)))
         if not task.quiet:
             self._notify(
                 "worker.report",
-                {"task_id": task.id, "state": state, "prefix": prefix, "text": text},
+                {"task_id": task.id, "state": state, "prefix": prefix, "text": fit_text(text, task.language)[0]},
             )
         self._changed(task.id, state, ending=True)
         self._deliver_handoffs()

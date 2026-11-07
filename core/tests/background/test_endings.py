@@ -200,7 +200,7 @@ async def test_waiting_tree_cancel_keeps_reply_counts_and_cancelled_status(make_
 
 @pytest.mark.parametrize("state, detail, expected", [
     ("done", "the long report", ["First message", "Second message"]),
-    ("limit", "everything it had done and what is left", ["everything it had done and what is left"]),
+    ("limit", "everything it had done and what is left", ["First message", "Second message"]),
 ])
 async def test_a_conclusion_keeps_its_whole_words_for_the_chat(make_rig, state, detail, expected):
     rig = make_rig()

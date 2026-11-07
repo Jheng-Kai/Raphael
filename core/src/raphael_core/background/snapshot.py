@@ -19,8 +19,8 @@ tool an alias is stays here in the core. The snapshot holds:
 - and, when there is a memory, `history_search`, which only reads: a task may look up what was said
   before; what it writes after reading what services return goes in marked (`memory.store`).
 - shared team work tools (`agent.team`), including `ask_member` when there is someone to ask.
-  Owner management, including `create_member`, is reserved for the primary contact's interactive
-  owner chat. A background task never receives it, including a task owned by the primary.
+  Peer/shared management, including `create_member`, is reserved for the primary contact's
+  interactive owner chat; any member may manage itself there. Background tasks never receive it.
 
 A task of a member of the owner's team is offered what Raphael's is (`Speaker.uses`,
 `Speaker.uses_plugin` say yes to everything): the same web tools and the same connections.
@@ -131,7 +131,7 @@ _DEFINITIONS: dict[str, dict[str, Any]] = {
     "find_tools": {
         "description": (
             "Find available tools by task or name (for example: search pages, delete a folder). "
-            "Owner management is available only to the primary contact in the owner's chat. "
+            "Self management is available to each member in the owner's chat; peer/shared management only to the primary contact. "
             "Found tools can then be called."
         ),
         "parameters": {
@@ -179,7 +179,7 @@ FIND_MAX = 6
 class Snapshot:
     """The tools of a task. `refs` and `definitions` are what the worker may call now. `pool` is
     every tool of the plugins that could be offered, by alias: when it holds more than the task was
-    shown, the rest can be found (`find`) and shown from then on. `management` holds the primary's
+    shown, the rest can be found (`find`) and shown from then on. `management` holds the speaker's
     eligible native actions, and `work` holds deferred shared work tools. Both use the same finder
     without plugin execution."""
 

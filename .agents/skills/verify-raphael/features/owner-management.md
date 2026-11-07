@@ -1,7 +1,9 @@
 # Owner management
 
-R-AG-MGMT-01 through 03: management belongs to the current primary contact,
-not Raphael by name. Other speakers retain the same work tools. API and CLI
+R-AG-MGMT-01 through 03: peer/shared management belongs to the current primary contact,
+not Raphael by name. Every member can manage its own profile, picture, skills, commands,
+voice and own memory in an interactive owner chat. Identity 0 can change its own voice
+settings. Other speakers retain the same work tools. API and CLI
 private owner chats use the same offer, registry, services and approval gate.
 Rooms, exchanges and background work cannot acquire administration. Quick voice
 creation retains its existing owner entry only when its speaker is the live primary.
@@ -40,8 +42,8 @@ Live/provider checks require separate authorization and prove a different bounda
 The primary's default turn hides all 35 management definitions in Snapshot.management.
 The existing find_tools exposes matching native definitions; request-intent matching
 also adds the relevant areas before either the API or CLI turn starts. CLI MCP lists
-the same selected tools. Other speakers and non-owner scopes have no management
-catalog to discover, and the existing execution/approval checks remain authoritative.
+the same selected tools. Non-primary speakers discover only the narrowed self-management catalog; non-owner
+scopes have none. Exact target/field checks and the existing approval checks remain authoritative.
 
 tests/members/test_management_discovery.py pins the default widest native offer at
 51 (the feat/members baseline is 60), pins API/CLI default prompt budgets, discovers
@@ -49,3 +51,12 @@ every management tool, and exercises folder deletion, room renaming and member-m
 changes with production API and authenticated loopback MCP paths. It also covers
 same-turn discovery/execution and non-owner refusal. Token figures use the existing
 memory.terms.estimate_tokens estimator, not provider billing or latency measurements.
+
+## Settings panel intent (2026-11-07)
+
+The window may send setup-telegram, setup-slack, setup-discord, share-template or settings.
+Settings is valid for member 0; share-template still requires a nonzero member. The trusted
+rule travels beside the owner message, never inside the visible history. Tests in
+core/tests/members/test_chat_settings.py cover API/CLI self scope, peer refusal, real
+profile/command/skill/voice/memory writes and exact-action deletion approval.
+The window-owned settings button and visual/native acceptance remain an integration handoff.

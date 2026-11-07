@@ -192,6 +192,6 @@ async def test_raphael_keeps_the_full_report_and_derives_the_overlay_caption(mak
     task_id = rig.submit(language="en")
     await until(lambda: rig.task(task_id).state == "done")
     task = rig.task(task_id)
-    assert task.report_detail == written
-    assert task.report_text != written and written.startswith(task.report_text.rstrip("…"))
-    assert rig.reports()[0]["text"] == task.report_text
+    assert task.report_text == written and task.report_detail is None
+    caption = rig.reports()[0]["text"]
+    assert caption != written and written.startswith(caption.rstrip("…"))

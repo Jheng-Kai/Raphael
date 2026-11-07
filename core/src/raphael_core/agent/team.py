@@ -58,7 +58,7 @@ TEAM_SERVER = "Raphael"
 TEAM_TIER = Tier.T1
 # The most of a request one member hands another, and of the answer that comes back, in characters.
 REQUEST_MAX_CHARS = 2000
-ANSWER_MAX_CHARS = 4000
+ANSWER_MAX_CHARS = 200_000
 
 # The words of a request for a new member: 「加一個…的成員」, "add a member who…", 「メンバーを追加」.
 _CREATE = re.compile(
@@ -297,7 +297,7 @@ def roster_prompt(team: Team | None, speaker: Speaker, language: str) -> str:
         prompt += ("\nApps: `connected` is how many apps can be called now. An app that waits for a sign-in, one that failed, "
                    "one that is switched off and one that only duplicates another are listed and never counted; "
                    "when inventory_state is not complete, say the number is unknown instead of guessing it.")
-        prompt += "\nFor meeting/discussion requests, use room_meeting with the appropriate specialists and agenda. Use ask_member only for one quick question and fold its answer into your own reply."
+        prompt += "\nFor meeting/discussion requests, use room_meeting with the appropriate specialists and agenda. Use ask_member only for one quick question and pass its complete answer to the owner when it is what they requested; you may add one line of your own."
     skills = getattr(team, "enabled_skills", lambda member_id: [])(speaker.id)
     if skills:
         listed = [{"name": skill.get("slash_name", skill["name"]), "description": skill["description"],

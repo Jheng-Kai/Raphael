@@ -1,27 +1,9 @@
-"""The answers: the language model words what Raphael says.
+"""Complete authored replies shared by interactive, CLI and background conversations.
 
-Raphael answers a question, takes part in a discussion or makes small talk by asking the model
-(`agent_model`, with no reasoning: a line is short, and every second shows) for a JSON reply: a `prefix` (one of the language's set),
-the `text` for the overlay, one line, and a `detail` for the history. The model is shown what it
-needs and no more: the summary of the earlier conversation and its latest turns (the context,
-`memory.conversation`), the time, the results of the tools (data, not instructions) and the question
-in tags. Its reply is made safe before it is used: the prefix is one of the language's, the text one
-line of about the length Raphael speaks (what had to be left out is kept in the detail), and
-Chinese in Traditional characters.
-
-With a memory (`raphael_core.memory`), the system prompt also carries the memory files and their
-rules (`persona.memory_rules`), and the reply has two more fields: `memory`, edits of those files, which
-the service checks and applies (`Edit`, the same as the tool `memory_update`), and `need`, a search of the
-past turns (`history_search`) to make before answering, after which the model is asked once more with
-what was found. The system prompt comes first and changes only when a file does; what changes every
-turn (the time, the question) comes last, so the provider's prompt cache keeps the start.
-
-A member of the owner's team (`speaker.Speaker`) is worded the same way, with a system prompt of its
-own (`persona.member_system_prompt`): its persona, plain sentences, no prefix in the schema or in the
-reply, and a text kept as it was written, its lines too (`parse_reply`'s `plain`), since it is read in
-the app's thread, not on the overlay.
-
-Nothing here logs the question, the context, the tool results or the reply.
+Visible messages retain all requested content; detail contains optional work receipts.
+Only a whole JSON envelope (optionally fenced) is parsed as an envelope. Quoted
+examples in ordinary prose remain part of the answer. Voice captions are derived
+by their consumers rather than shortening the owner's stored conversation.
 """
 
 import asyncio
@@ -48,7 +30,6 @@ from .persona import (
     MEMBER_TEXT_MAX,
     PREFIXES,
     canonical_prefix,
-    fit_text,
     language_reminder,
     member_system_prompt,
     phrase,
@@ -59,11 +40,10 @@ from .tools import DISABLED, ToolResult
 
 logger = logging.getLogger(__name__)
 
-# The longest an answer may take, and the most it may run to. The line is short and the detail is
-# not. Reasoning is off: measured live, "low" made a discussion take 7 to 10 s against 2 to 3 s,
-# for a line of 80 characters that read no better.
+# The bounded request timeout and output budget for the structured answer path.
+# Match the shared worker output budget so complete answers have room to finish.
 ANSWER_TIMEOUT_S = 10.0
-REPLY_MAX_TOKENS = 1200
+REPLY_MAX_TOKENS = 8192
 
 
 # The most edits of the memory one reply may make.
@@ -74,8 +54,8 @@ _SEARCH_CHARS = 100
 @dataclass
 class Reply:
     prefix: str
-    text: str  # one line, at most about 80 characters or 40 words; empty only beside a memory
-    detail: str | None  # the longer text for the history, if there is one
+    text: str  # the complete answer; messages retain its authored parts
+    detail: str | None  # optional work receipts, never the only copy of the answer
     # The edits of the memory files the reply asks for.
     memory: list[MemoryEdit] = field(default_factory=list)
     # The lookup the model asked for before it answers: words to search for.
@@ -125,7 +105,7 @@ def reply_schema(
     if plain:
         del properties["prefix"]
         required.remove("prefix")
-        properties["messages"] = {"type": "array", "items": {"type": "string"}, "maxItems": 4}
+        properties["messages"] = {"type": "array", "items": {"type": "string"}}
         required.append("messages")
     if say_ja:
         properties["say_ja"] = {"type": "string"}
@@ -250,12 +230,8 @@ def _need(value: Any) -> str:
 
 
 def _plain_text(value: Any) -> str:
-    """A member's reply as it is shown in its thread: its lines kept, each without the spaces
-    around and inside it doubled, no more than one empty line in a row, at most MEMBER_TEXT_MAX
-    characters."""
-    lines = [" ".join(line.split()) for line in _one_line_text(value).splitlines()]
-    text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
-    return text if len(text) <= MEMBER_TEXT_MAX else text[: MEMBER_TEXT_MAX - 1].rstrip() + "…"
+    """Preserve the complete authored message, including code indentation and spacing."""
+    return _one_line_text(value).strip()
 
 
 # The most characters of the Japanese line for the voice; a line the model made longer is cut.
@@ -307,30 +283,50 @@ def loose_reply(text: str) -> dict | None:
 MESSAGE_BREAK = "<<<next message>>>"
 
 
+def split_messages(text):
+    """Keep complete paragraphs and code blocks; a large block remains whole."""
+    if not text:
+        return []
+    chunks, current, fenced = [], [], False
+    for paragraph in text.split("\n\n"):
+        if current and not fenced and len("\n\n".join([*current, paragraph])) > MEMBER_TEXT_MAX:
+            chunks.append("\n\n".join(current))
+            current = []
+        current.append(paragraph)
+        if sum(line.lstrip().startswith(("```", "~~~")) for line in paragraph.splitlines()) % 2:
+            fenced = not fenced
+    if current:
+        chunks.append("\n\n".join(current))
+    return chunks
+
+
 def _reply_input(value: str, default_prefix: str | None = None) -> dict:
     """Accept an envelope (including a fenced one) or ordinary prose at one boundary."""
     text = value.strip()
-    decoder = json.JSONDecoder()
-    envelopes = []
-    cursor = 0
-    while (start := text.find("{", cursor)) >= 0:
-        try:
-            obj, end = decoder.raw_decode(text, start)
-        except ValueError:
-            cursor = start + 1
-            continue
-        if isinstance(obj, dict) and ("text" in obj or "messages" in obj):
-            envelopes.append(obj)
-        cursor = end
-    if envelopes:
-        return envelopes[-1]
+    envelope = text
+    fenced = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n?```", text, re.S)
+    if fenced and any(line.lstrip().startswith("```") for line in fenced[1].splitlines()):
+        fenced = None
+    if fenced:
+        envelope = fenced[1].strip()
+    try:
+        obj = json.loads(envelope)
+    except ValueError:
+        obj = None
+    if isinstance(obj, dict) and ("text" in obj or "messages" in obj):
+        return obj
     if loose := loose_reply(text):
         return loose
-    if text.startswith(("{", "[")) or re.match(r'^```(?:json)?\s*[\{\[]', text):
+    if isinstance(obj, (dict, list)) or (fenced and envelope.startswith(("{", "["))):
+        raise AgentFailure("error")
+    if text.startswith(("{", "[")):
+        try:
+            json.JSONDecoder().raw_decode(text)
+        except ValueError:
+            raise AgentFailure("error") from None
+    if re.match(r'^```(?:json)?\s*[\{\[]', text) and text.count("```") == 1:
         raise AgentFailure("error")
     parts = [part.strip() for part in re.split(rf"^\s*{re.escape(MESSAGE_BREAK)}\s*$", text, flags=re.M) if part.strip()]
-    if len(parts) > 4:
-        parts = parts[:3] + ["\n\n".join(parts[3:])]
     return {"prefix": default_prefix, "text": text, "messages": parts}
 
 
@@ -351,17 +347,8 @@ def _reply_words(value: Any) -> str:
 
 
 def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = False, default_prefix: str | None = None) -> Reply:
-    """The model's JSON as Raphael's words. AgentFailure if it says nothing (an empty text is
-    taken only beside a note to write or delete, or a lookup to make).
-
-    The prefix is turned into the language's own, or is an answer when it is none. The text is one
-    line cut to the length Raphael speaks; when it had to be cut, the detail is the whole of it (or
-    the detail the model wrote, if that is longer). Chinese is made Traditional, as the user
-    reads it.
-
-    A `plain` reply is a member's: it has no prefix (the prefix is empty), and its text is kept as
-    it was written, its lines too, up to MEMBER_TEXT_MAX characters: it is read in the app, not on
-    the overlay.
+    """Keep every authored message and the full durable text; normalize persona frames only
+    on the corresponding display path. Empty answers require memory edits or a lookup.
     """
     if isinstance(data, str):
         data = _reply_input(data, default_prefix)
@@ -371,11 +358,11 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
     search = _need(data.get("need"))
     items = data.get("messages")
     messages = (
-        [text for item in items[:4] if (text := _plain_text(_reply_words(item)))]
-        if (plain or long) and isinstance(items, list) else []
+        [text for item in items for text in split_messages(_plain_text(_reply_words(item)))]
+        if isinstance(items, list) else []
     )
     words = _reply_words(data.get("text"))
-    full = _plain_text(words) if plain or long else " ".join(words.split())
+    full = _plain_text(words)
     prefix = data.get("prefix")
     if long and not plain:
         # Some CLI models supply the display frame despite being asked for bare message bodies.
@@ -391,8 +378,10 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
         messages = [match[2].strip() if match else text for text, match in zip(messages, framed)]
         if match := _REPLY_FRAME.fullmatch(full):
             full = match[2].strip()
+    if not messages and full and (plain or long or len(split_messages(full)) > 1):
+        messages = split_messages(full)
     if messages:
-        full = messages[-1]
+        full = "\n\n".join(messages)
     if not full and not (memory or search):
         logger.warning("The model's reply said nothing")
         raise AgentFailure("error")
@@ -410,10 +399,8 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
             search=search,
             messages=messages,
         )
-    line, rest = (full, "") if long else fit_text(full, language)
+    line = full
     detail = _one_line_text(data.get("detail")).strip()
-    if rest and len(full) > len(detail):
-        detail = full
     if language == "zh-TW":
         line = convert_leftover_simplified(line)
         detail = convert_leftover_simplified(detail)

@@ -2,9 +2,13 @@
 
 import asyncio
 import json
+import logging
 
 from ..bots.homes import redact_secrets
+from ..memory.brain import failure_summary
 from ..memory.doctrine import DOCTRINE
+
+logger = logging.getLogger(__name__)
 
 SCHEMA = {"type": "object", "properties": {"changes": {"type": "array", "maxItems": 3, "items": {
     "type": "object", "properties": {"id": {"type": "integer"}, "text": {"type": "string"}}, "required": ["text"]}}}, "required": ["changes"]}
@@ -31,7 +35,8 @@ class SkillReview:
             member, conversation = row
             if not self.members.member_exists(member):
                 continue
-            if self.memory._state(self._key(member, conversation, "failures")) >= 3:
+            if (self.memory._state(self._key(member, conversation, "failures")) >= 3
+                    and self.memory._now_ms() < self.memory._state(self._key(member, conversation, "retry_at"))):
                 continue
             watermark = self.memory._state(self._key(member, conversation, "through"))
             turns = [t for t in self.members._history.after(watermark, member_id=member, conversation_id=conversation)
@@ -39,6 +44,14 @@ class SkillReview:
             steps = self.members._history.steps(t.id for t in turns)
             if sum(s.kind == "tool" for items in steps.values() for s in items) >= 10:
                 yield member, conversation, turns, steps
+
+    def retry_delay_s(self):
+        """Wake the shared memory timer when a persisted review pause ends."""
+        delays = []
+        for key, value in self.memory._conn.execute("SELECT key,value FROM memory_state WHERE key LIKE 'skills:%:retry_at'"):
+            if self.memory._state(key.rsplit(":", 1)[0] + ":failures") >= 3 and int(value) > self.memory._now_ms():
+                delays.append((int(value) - self.memory._now_ms()) / 1000)
+        return min(delays) if delays else None
 
     def due(self):
         return any(self.memory.may_spend(member) for member, *_ in self.waiting())
@@ -101,6 +114,11 @@ class SkillReview:
                     self.members.skill_learned(member, learned, turns[-1].id)
                 self.memory._set_state(self._key(member, conversation, "through"), turns[-1].id)
                 self.memory._set_state(failure_key, 0)
-            except Exception:
-                # Persist the bound across app restarts; never log conversation/model contents.
-                self.memory._set_state(failure_key, self.memory._state(failure_key) + 1)
+            except Exception as error:
+                # Persist a bounded pause, never a permanent stop, across app restarts.
+                failures = self.memory._state(failure_key) + 1
+                self.memory._set_state(failure_key, failures)
+                if failures >= 3:
+                    self.memory._set_state(self._key(member, conversation, "retry_at"), self.memory._now_ms() + 6 * 3600_000)
+                kind, reason = failure_summary(error)
+                logger.warning("Skill review failed: kind=%s reason=%s failures=%d", kind, reason, failures)

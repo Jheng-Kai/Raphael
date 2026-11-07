@@ -257,8 +257,11 @@ async def test_the_context_of_a_task_holds_the_request_that_failed_just_before(m
     [
         ('{"prefix": "告", "text": "Done.", "detail": ""}', ("Notice", "Done.", None)),
         ('```json\n{"prefix": "Answer", "text": "Fenced.", "detail": "More."}\n```', ("Answer", "Fenced.", "More.")),
-        ('Here it is: {"prefix": "否", "text": "Cannot.", "detail": ""} Bye.', ("Negative", "Cannot.", None)),
+        ('Here it is: {"prefix": "否", "text": "Cannot.", "detail": ""} Bye.', ("Notice", 'Here it is: {"prefix": "否", "text": "Cannot.", "detail": ""} Bye.', None)),
         ("A plain sentence.", ("Notice", "A plain sentence.", None)),
+        ("42", ("Notice", "42", None)),
+        ("true", ("Notice", "true", None)),
+        ('"quoted answer"', ("Notice", '"quoted answer"', None)),
         ('{"text": "No prefix."}', ("Answer", "No prefix.", None)),
         ('"text"：「收到。」\n"messages":["收到。"],"need":}', ("Answer", "收到。", None)),
     ],
@@ -276,7 +279,7 @@ def test_a_report_that_says_nothing_usable_is_none(final):
 
 def test_a_long_report_is_one_line_and_the_rest_goes_to_the_detail():
     reply = report_from(json.dumps({"prefix": "告", "text": "字" * 200, "detail": ""}), "zh-TW")
-    assert len(reply.text) <= 81 and reply.detail == "字" * 200
+    assert reply.text == "字" * 200 and reply.detail is None
 
 
 async def test_a_report_with_no_words_is_incomplete_instead_of_claiming_success(make_rig):

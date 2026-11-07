@@ -2056,6 +2056,10 @@ class AgentService:
                            "\nYou are the current primary contact. Find owner management tools with find_tools when needed. "
                            "They manage members, folders, group chats, conversations, connections, models and settings. "
                            "Destructive changes always wait for the owner's approval.")
+            if self._management_chat(ask) and not ask.speaker.is_chief:
+                system += ("\nFind your own profile, voice, skills, commands and memory tools with find_tools. "
+                           "Act only on yourself; peer and shared management belongs to the primary contact. "
+                           "Permission changes belong to the owner. Deletions always wait for the owner's yes.")
             user = build_user_message(
                 labelled_lines(ask.exchange_speakers[0], ask.text) if ask.exchange_speakers else ask.text,
                 self._moment(), context.turns, [], ask.language,
@@ -2216,7 +2220,7 @@ class AgentService:
                 screened = [screenings[call_id]] if call_id in screenings else None
                 if name in BATCH_TOOLS and ask.nested:
                     return ToolOutcome(False, "owner_confirmation_required")
-                if planned is not None and name in BATCH_TOOLS and not ask.nested:
+                if planned is not None and name in BATCH_TOOLS and ask.speaker.is_chief and not ask.nested:
                     screening = screened[0] if screened else await self._screen_call(ask, planned, ledger)
                     screened = [screening]
                     if screening.verdict == DENY:
@@ -2772,7 +2776,7 @@ class AgentService:
                                           instruction=_HARNESS_NOTES["owner_model_request_required"]))
                 continue
             tier = self._tier_now(call)
-            if call.tool.key in BATCH_TOOLS and not ask.nested and (self._gate.ask_first or screening.verdict == ASK):
+            if call.tool.key in BATCH_TOOLS and ask.speaker.is_chief and not ask.nested and (self._gate.ask_first or screening.verdict == ASK):
                 creates = sum(queued.tool.key in ("member_create", "create_member") for queued in ask.admin_pending)
                 if call.tool.key in ("member_create", "create_member") and ask.member_creates + creates >= 10:
                     results.append(ToolResult(call.tool.key, False, None, "member_create_limit"))
@@ -2965,10 +2969,10 @@ class AgentService:
         try:
             # Authorization comes before screening/approval consumption and is
             # checked again by MembersService immediately before persistence.
-            from ..management import MANAGEMENT_TOOLS
+            from ..management import MANAGEMENT_TOOLS, self_action
             if name in MANAGEMENT_TOOLS:
                 current = self._speaker(ask.speaker.id)
-                if not current or not current.is_chief or not self._management_chat(ask):
+                if not current or not self._management_chat(ask) or not (current.is_chief or self_action(current.id, name, args)):
                     raise HarnessToolError("primary_private_chat_only")
             self._gate.check_for(action or Action(name, args), name, args, approval)
             if name in ADMIN_TOOLS:
@@ -2978,7 +2982,7 @@ class AgentService:
                     raise HarnessToolError("member_create_limit")
                 from ..management import REGISTRY
                 current = self._speaker(ask.speaker.id)
-                if name != "team_overview" and (not current or not current.is_chief or not self._management_chat(ask)):
+                if name != "team_overview" and (not current or not self._management_chat(ask) or not (current.is_chief or self_action(current.id, name, args))):
                     raise HarnessToolError("primary_private_chat_only")
                 if self._changes_model(name, args) and not self._owner_requested_model(ask.text):
                     raise HarnessToolError("owner_model_request_required")
@@ -5486,7 +5490,7 @@ class AgentService:
             if said and said != text:
                 text = said + '\n\n' + text
         if ask.exchange_speakers is not None:
-            text = "\n".join(ask.replies) if ask.replies and status != 'cancelled' else text
+            text = "\n\n".join(ask.replies) if ask.replies and status != 'cancelled' else text
             ask.exchange_answer = relayed_answer(ask.exchange_speakers[1], text, ask.exchange_owner_sources)
         try:
             cost = max(ledger.total - ask.cost_base, 0.0)

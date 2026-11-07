@@ -72,7 +72,7 @@ ACTIONS = (
     row("member_duplicate", "members.duplicate", "Duplicate a member using the UI service.", {"id": ID}, ("id",)),
     row("member_read", "members.read", "Mark a member's conversation read.", {"id": MEMBER_ID}, ("id",)),
     row("members_mark_all_read", "members.mark_all_read", "Mark every member read."),
-    row("member_avatar", "members.set_avatar", "Set a member's image through the same checked image upload as the UI.", {"id": ID, "name": TEXT, "mime": TEXT, "data": TEXT}, ("id", "name", "mime", "data")),
+    row("member_avatar", "members.set_avatar", "Set a member's image through the same checked image upload as the UI.", {"id": MEMBER_ID, "name": TEXT, "mime": TEXT, "data": TEXT}, ("id", "name", "mime", "data")),
     row("member_history_clear", "agent.history.clear", "Clear all recorded conversations of the named member.", {"member_id": MEMBER_ID}, ("member_id",), destructive=True),
     row("member_history_delete", "agent.history.delete", "Delete a recorded conversation turn.", {"turn_id": ID, "member_id": MEMBER_ID, "conversation_id": ID}, ("turn_id", "member_id", "conversation_id"), destructive=True),
     row("group_create", "groups.create", "Create a sidebar folder.", {"name": TEXT}, ("name",)),
@@ -377,3 +377,65 @@ routines.runs routines.template safety.rules.list secrets.status services.status
 status.check_openrouter status.get toolsets.list usage.allowances usage.analytics usage.export usage.runs
 """.split())
 OWNER_ONLY["routines.webhook"] = "Webhook addresses and secrets are owner-only."
+
+
+SELF_ACTIONS = frozenset({
+    "member_update", "member_avatar", "member_skill_import", "member_skill_update",
+    "member_skill_delete", "member_skill_read", "member_command_save", "member_command_delete",
+    "memory_document_read", "memory_document_update", "member_skills_list", "member_commands_list",
+})
+SELF_PROFILE_FIELDS = frozenset({"id", "name", "role", "personality", "instructions", "voice"})
+VOICE_SETTINGS = frozenset({"tts_enabled", "tts_fish_voice", "tts_service", "tts_fish_model", "tts_language"})
+
+
+def self_action(member_id, name, arguments):
+    """Self administration never grants authority over peers, shared resources or permissions."""
+    item, values = resolve(name, arguments)
+    if item is None:
+        return False
+    if item.setting:
+        return member_id == 0 and item.setting in VOICE_SETTINGS
+    if item.name not in SELF_ACTIONS or values.get("shared") or values.get("space", "own") != "own":
+        return False
+    target = values.get("id") if item.name in {"member_update", "member_avatar"} else values.get("member_id", 0)
+    return (type(target) is int and target == member_id
+            and (item.name != "member_update" or not set(values) - SELF_PROFILE_FIELDS))
+
+
+def self_definitions(member_id):
+    """Offer the same generated tools with only the speaker-owned actions and fields."""
+    from copy import deepcopy
+
+    result = {}
+    for name, definition in DEFINITIONS.items():
+        if name in GROUPS:
+            items = [item for item in GROUPS[name] if item.name in SELF_ACTIONS]
+            if not items:
+                continue
+            definition = deepcopy(definition)
+            definition["parameters"]["properties"]["action"]["enum"] = [item.name for item in items]
+            definition["description"] = "Manage only your own skills, commands and picture. Deletions require the owner's yes.\n" + "\n".join(
+                item.name + ": " + item.description + " Schema: " + json.dumps(item.schema) for item in items)
+        elif name == "settings_update" and member_id == 0:
+            definition = deepcopy(definition)
+            definition["parameters"]["properties"]["key"]["enum"] = sorted(VOICE_SETTINGS)
+            definition["description"] = "Change your own voice preferences only."
+        elif name in SELF_ACTIONS:
+            definition = deepcopy(definition)
+            if name == "member_update":
+                schema = definition["parameters"]
+                schema["properties"] = {key: value for key, value in schema["properties"].items() if key in SELF_PROFILE_FIELDS}
+        else:
+            continue
+        definition = deepcopy(definition)
+        props = definition["parameters"]["properties"]
+        key = "id" if name in {"member_update", "member_avatar"} else "member_id"
+        if key in props:
+            props[key] = {"type": "integer", "enum": [member_id]}
+        if "shared" in props:
+            props["shared"] = {"type": "boolean", "enum": [False]}
+        if "space" in props:
+            props["space"] = {"type": "string", "enum": ["own"]}
+        definition["description"] += f" Target only yourself (member_id {member_id}); never another member or shared resources."
+        result[name] = definition
+    return result

@@ -323,7 +323,11 @@ class VoiceChat:
 
 def call_transcript(conn, call_id):
     rows = conn.execute("SELECT t.id,t.question,t.text,t.status FROM agent_turns t JOIN voice_call_turns v ON v.turn_id=t.id WHERE v.call_id=? ORDER BY t.id", (call_id,)).fetchall()
-    return [dict(row) for row in rows]
+    from .agent.history import AgentHistory
+    from .messaging.words import plain_replies
+    messages = AgentHistory(conn).messages(row["id"] for row in rows)
+    return [{**dict(row), "text": "\n\n".join(plain_replies([message["text"] for message in messages.get(row["id"], [])
+             if message["kind"] == "reply"])) or row["text"]} for row in rows]
 
 
 def call_views(conn, ids):

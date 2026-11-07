@@ -10,25 +10,22 @@ from .test_answering import client, setup, member, typed  # noqa: F401
 
 
 @pytest.mark.parametrize("speaker", ["member", "raphael"])
-async def test_reported_two_fenced_objects_publish_narration_then_only_final_messages(setup, client, speaker):
+async def test_tool_narration_precedes_the_complete_final_messages(setup, client, speaker):
     rig, team = setup
     speaker_id = member(team, name="紫苑", role="Japanese teacher").id if speaker == "member" else 0
-    client.chats = [chat('''```json
-{"thinking":"主人說不會這段文章，先從基礎開始。","progress":"我來逐句拆解這段新聞。"}
-```
-你需要打好基礎。我來分段教。**這是重複的說明。**
-```json
-{"text":"換你練習。","detail":"","messages":["先看第一句。","弱点是弱點。","換你練習。"],"memory":[],"need":{}}
-```''')]
+    client.chats = [
+        chat('{"thinking":"主人說不會這段文章，先從基礎開始。","progress":"我來逐句拆解這段新聞。"}', ("local_time", {})),
+        chat('{"text":"換你練習。","detail":"","messages":["先看第一句。","弱点是弱點。","換你練習。"],"memory":[],"need":{}}'),
+    ]
     result = await typed(rig, "我都不會，可以解釋一下嗎？", speaker_id)
     [turn] = (await rig.call("agent.history.list", {"member_id": speaker_id}))["turns"]
-    assert result["text"] == turn["text"] == "換你練習。"
-    assert [m["kind"] for m in turn["messages"]] == ["thinking", "progress", "reply", "reply", "reply"]
+    assert result["text"] == turn["text"] == "先看第一句。\n\n弱點是弱點。\n\n換你練習。"
+    assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["thinking", "progress", "reply", "reply", "reply"]
     assert turn["messages"][0]["text"] == "主人說不會這段文章，先從基礎開始。"
     expected = ["我來逐句拆解這段新聞。", "先看第一句。", "弱點是弱點。", "換你練習。"]
     if speaker == "raphael":
         expected = ["《告。我來逐句拆解這段新聞。》", "《答。先看第一句。", "弱點是弱點。", "換你練習。》"]
-    assert [m["text"] for m in turn["messages"][1:]] == expected
+    assert [m["text"] for m in turn["messages"][1:] if not is_action(m["text"])] == expected
 
 
 @pytest.mark.parametrize(("content", "expected"), [
@@ -36,14 +33,14 @@ async def test_reported_two_fenced_objects_publish_narration_then_only_final_mes
     ('```json\n{"text":"A clean answer."}\n```', "A clean answer."),
     ('```\n{"messages":["A clean answer."]}\n```', "A clean answer."),
     ("A clean answer.", "A clean answer."),
-    ('{"thinking":"Check the example."}\nDuplicate prose.\n{"text":"A clean answer."}', "A clean answer."),
-    ('{"thinking":"Check the example."}\nA clean answer.\n{"metadata":{"ignored":true}}', "A clean answer."),
-    ('A clean answer.\n```json\n{"text": broken, "need": {}}\n```', "A clean answer."),
-    ('```json\n{"text": "unfinished\n```\nA clean answer.', "A clean answer."),
-    ('A clean answer.\n{"text": "unfinished', "A clean answer."),
+    ('{"thinking":"Check the example."}\nDuplicate prose.\n{"text":"A clean answer."}', None),
+    ('{"thinking":"Check the example."}\nA clean answer.\n{"metadata":{"ignored":true}}', None),
+    ('A clean answer.\n```json\n{"text": broken, "need": {}}\n```', None),
+    ('```json\n{"text": "unfinished\n```\nA clean answer.', None),
+    ('A clean answer.\n{"text": "unfinished', None),
     (json.dumps({"text": 'A clean answer.\n```json\n{"progress":"Echoed protocol."}\n```',
-                 "detail": 'Details.\n{"thinking":"Echoed protocol."}'}), "A clean answer."),
-    (json.dumps({"messages": ['A clean answer.\n{"text":"Echoed protocol."}']}), "A clean answer."),
+                 "detail": 'Details.\n{"thinking":"Echoed protocol."}'}), 'A clean answer.\n```json\n{"progress":"Echoed protocol."}\n```'),
+    (json.dumps({"messages": ['A clean answer.\n{"text":"Echoed protocol."}']}), 'A clean answer.\n{"text":"Echoed protocol."}'),
     (json.dumps({"text": 'Braces in a string: } and an escaped "quote".', "memory": [], "need": {}}),
      'Braces in a string: } and an escaped "quote".'),
 ], ids=["bare", "json-fence", "plain-fence", "prose", "two-objects", "public-and-metadata",
@@ -51,14 +48,14 @@ async def test_reported_two_fenced_objects_publish_narration_then_only_final_mes
 async def test_final_content_uses_reply_objects_or_prose_without_protocol(setup, client, content, expected):
     rig, team = setup
     teacher = member(team)
+    expected = content if expected is None else expected
     client.chats = [chat(content)]
     result = await typed(rig, "Explain this", teacher.id, language="en")
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     assert result["text"] == turn["text"] == expected
     assert [m["text"] for m in turn["messages"] if m["kind"] == "reply"] == [expected]
-    assert "```" not in str(turn) and "Echoed protocol" not in str(turn)
     if "Details." in content:
-        assert turn["detail"] == "Details."
+        assert turn["detail"] == 'Details.\n{"thinking":"Echoed protocol."}'
 
 
 async def test_each_pre_tool_object_is_published_in_order_without_duplicate_prose(setup, client):
@@ -126,8 +123,8 @@ async def test_live_prompt_separates_ui_narration_language_and_persona_replies(s
     assert "even when the persona teaches or replies in another language" in system
     assert "at most 2 sentences (about 60 CJK characters)" in system
     assert "25 CJK characters or 25 words" in system
-    assert '"text": the reply, at most 2000 characters' in system
-    assert '"messages": the reply as the chat messages a person would send' in system
+    assert '"text": the complete reply' in system
+    assert '"messages": the complete reply as chat messages in order' in system
     assert '"text": the reply as one line' not in system
     assert name in user and "Owner's UI language:" in user
     assert "Reply messages follow the persona's language rules" in user

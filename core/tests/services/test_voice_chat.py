@@ -476,3 +476,19 @@ async def test_real_dictation_vad_pauses_only_calls_and_uses_selected_language(c
         await rpc.call("dictation.cancel", {"session_id": "hotkey"})
     finally:
         await service.aclose()
+
+
+def test_call_transcript_retains_all_authored_messages(conn):
+    from raphael_core.agent.history import AgentHistory
+    from raphael_core.agent.conversations import Conversations
+    from raphael_core.voice_chat import call_transcript
+
+    history = AgentHistory(conn)
+    conversation = Conversations(conn).main(0)
+    turn = history.add(session_id="call", question="Full answer", route="answer", prefix="", text="Last message", status="done", conversation_id=conversation)
+    history.add_message(turn, "reply", "First complete part")
+    history.add_message(turn, "reply", "Last message")
+    conn.execute("INSERT INTO voice_calls(id,member_id,conversation_id,started_at_ms) VALUES('fixture',0,?,1)", (conversation,))
+    conn.execute("INSERT INTO voice_call_turns VALUES('fixture',?)", (turn,))
+    conn.commit()
+    assert call_transcript(conn, "fixture")[0]["text"] == "First complete part\n\nLast message"

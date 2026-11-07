@@ -205,13 +205,21 @@ async def test_crash_after_task_submit_recovers_without_duplicate(rig, monkeypat
     assert rig.conn.execute("SELECT state FROM routine_receipts WHERE item_id='crash'").fetchone()[0] == "fired"
 
 
-async def test_crash_before_turn_attachment_repairs_the_existing_task_link(rig, monkeypatch):
+@pytest.mark.parametrize("finished", [False, True])
+async def test_crash_before_turn_attachment_repairs_the_existing_task_link(rig, monkeypatch, finished):
     hub, routine = await setup(rig)
     await rig.service.poll_events()
     hub.items += [{"id": "unattached", "sender": "client@example.com"}]
     attach = rig.background.attach_turn
+    from raphael_core.agent.answers import parse_reply
+    paragraphs = [(f"Section {n}: " + "complete finding " * 150).strip() for n in range(6)]
+    full = "\n\n".join(paragraphs)
 
     def interrupted(*args):
+        if finished:
+            report = parse_reply({"messages": paragraphs}, "en", plain=True)
+            with rig.conn:
+                rig.conn.execute("UPDATE worker_tasks SET state='done',report_text=? WHERE id=?", (report.text, args[0]))
         raise RuntimeError("simulated process loss before attachment")
 
     monkeypatch.setattr(rig.background, "attach_turn", interrupted)
@@ -223,6 +231,9 @@ async def test_crash_before_turn_attachment_repairs_the_existing_task_link(rig, 
     await rig.service.poll_events()
     assert len(rig.background.submitted) == 1
     assert rig.conn.execute("SELECT turn_id FROM worker_tasks").fetchone()[0] is not None
+    if finished:
+        turn_id = rig.conn.execute("SELECT turn_id FROM worker_tasks").fetchone()[0]
+        assert rig.service._history.get(turn_id).text == full
 
 
 def test_migration_49_preserves_clock_routines_and_cleans_receipts(tmp_path, monkeypatch):

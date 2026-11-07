@@ -142,5 +142,6 @@ def snapshot(service, ask):
             cards.append({"type": table, "state": row["state"],
                           "failure": classify(row["error"], record=False).wire() if row["error"] else None})
     return {"connections": connections, "keys_present": keys, "brains": brains, "cards": cards,
+            "memory": service._memory.health() if service._memory is not None and hasattr(service._memory, "health") else {"status": "unknown"},
             "settings": {name: service._settings.get(name) for name in SAFE_SETTINGS},
             "recent_failures": [redact(line) for line in list(RECENT)[-10:]]}

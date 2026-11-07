@@ -124,12 +124,12 @@ class CliLoop:
         self.system = system + "\n" + PUBLIC_PROGRESS_RULES + f"\nUse only {mcp_names} MCP tools for actions and lookups. "
         self.system += (
             'For the spoken reply only, return one JSON object with text, messages (usually one; several only '
-            'when naturally separate, at most four), '
+            'when naturally separate), '
             'and say_ja (the Japanese rendering for the voice). No other fields or prose.'
             if spoken else (
                 "Reply in plain text (Markdown is fine). It is one chat message unless it is naturally "
                 "several (an answer, then a separate exercise or question): then put a line with only "
-                f"{MESSAGE_BREAK} between them, at most four. Never split one thought or pad to fill. "
+                f"{MESSAGE_BREAK} between them. Preserve the complete answer. Never split one thought or pad to fill. "
                 "Never output a JSON reply envelope."
             )
         )
@@ -137,7 +137,7 @@ class CliLoop:
         # a Codex model offered it called it itself to ask for permission: a question about no action at all.
         if structured is not None:
             self.system = system + "\nThis is a tool-less memory pass. Return only JSON matching this schema:\n" + json.dumps(structured)
-        if no_tools:
+        if no_tools and structured is None:
             self.system = system
         from ...worker.owner_input import OwnerInput
         self.owner_input = OwnerInput()

@@ -36,7 +36,7 @@ def test_every_speaker_gets_the_same_tools_and_capabilities(path, primary):
                        if item["function"]["name"] not in COORDINATION_TOOLS | MEMBER_ONLY_TOOLS and item["function"]["name"] not in MANAGEMENT_TOOLS | {"find_tools"}})
         assert "owner_management" in PARITY_EXCEPTIONS
         assert not set(offered.refs) & MANAGEMENT_TOOLS
-        assert bool(offered.management) == (speaker.is_chief and path != "worker")
+        assert bool(offered.management) == (path != "worker")
         for tool, duty in COORDINATION_TOOLS.items():
             assert duty in PARITY_EXCEPTIONS
             assert (tool in offered.refs) == speaker.is_chief
@@ -70,5 +70,6 @@ def test_raphael_worker_keeps_owner_instructions_and_member_report_space():
     system, _ = _prompts("en", "Work", {}, [], RunLimits(),
                              speaker=replace(RAPHAEL, instructions="OWNER-INSTRUCTION"))
     assert "OWNER-INSTRUCTION" in system
-    assert "120 words" in system
+    assert "complete result" in system
+    assert "120 words" not in system
     assert "one line of plain text" not in system

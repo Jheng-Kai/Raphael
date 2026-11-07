@@ -189,8 +189,8 @@ class ChatGPTProvider:
         result = await self.chat_text(system=system + "\nReturn only a JSON object matching this schema: " + json.dumps(schema),
                                       user=user, **kwargs)
         try:
-            data = json.loads(result.text)
-            jsonschema.validate(data, schema)
+            from ..structured import structured_object
+            data = structured_object(result.text, schema)
             if not isinstance(data, dict):
                 raise ValueError
         except (ValueError, jsonschema.ValidationError):

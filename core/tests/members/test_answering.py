@@ -138,13 +138,13 @@ async def test_a_teacher_keeps_each_reply_and_replays_the_whole_lesson(setup, cl
     client.decisions = [decision("chat"), decision("chat")]
     client.chats = [live_said("ignored", messages=["Correction.", "Example.", "Try this.", "Your answer?", "Dropped."]), live_said("Next lesson.")]
     first = await typed(rig, "Start a lesson", one.id, language="en")
-    assert first["text"] == "Your answer?" and first["prefix"] == ""
+    assert first["text"] == "\n\n".join(["Correction.", "Example.", "Try this.", "Your answer?", "Dropped."]) and first["prefix"] == ""
     [turn] = (await rig.call("agent.history.list", {"member_id": one.id}))["turns"]
-    assert [m["text"] for m in turn["messages"]] == ["Correction.", "Example.", "Try this.", "Your answer?"]
+    assert [m["text"] for m in turn["messages"]] == ["Correction.", "Example.", "Try this.", "Your answer?", "Dropped."]
     await typed(rig, "My answer", one.id, language="en")
     context = str(client.chat_calls[1]["messages"])
     assert all(line in context for line in ["Correction.", "Example.", "Try this.", "Your answer?"])
-    assert "Dropped." not in context
+    assert "Dropped." in context
 
 
 async def test_a_member_answers_with_its_selected_model(setup, client):
@@ -163,7 +163,7 @@ async def test_a_spoken_question_reaches_the_named_member(voiced, client, source
     one = member(team, model="own/model")
     client.chats.append(live_said("Your next lesson.", messages=["Example.", "Your next lesson."]))
     result = await typed(rig, "Teach me", one.id, source=source, language="en")
-    assert result["text"] == "Your next lesson." and result["prefix"] == ""
+    assert result["text"] == "Example.\n\nYour next lesson." and result["prefix"] == ""
     [turn] = (await rig.call("agent.history.list", {"member_id": one.id}))["turns"]
     assert (turn["member_id"], turn["source"], turn["question"]) == (one.id, "voice", "Teach me")
     assert [m["text"] for m in turn["messages"] if m["kind"] == "reply"] == ["Example.", "Your next lesson."]

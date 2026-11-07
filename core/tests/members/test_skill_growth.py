@@ -101,7 +101,7 @@ async def test_review_counts_thread_tools_uses_member_brain_and_reuses_skill(rig
     assert any('"type": "skill_learned"' in m["text"] for m in messages)
 
 
-async def test_review_stops_after_three_failures_even_when_recreated(rig):
+async def test_review_pauses_after_three_failures_and_recovers_after_restart(rig, monkeypatch):
     history = rig.service._history
     history.add(session_id="skills", question="Work", route="answer", prefix="", text="Done", status="done",
                 conversation_id=Conversations(rig.conn).main(0), steps=[Step("tool", "local_time", "Raphael", "ok", 0) for _ in range(10)])
@@ -112,3 +112,45 @@ async def test_review_stops_after_three_failures_even_when_recreated(rig):
     assert not reviewer.due()
     from raphael_core.members.skill_review import SkillReview
     assert not SkillReview(rig.service, rig.memory).due()
+    assert rig.memory.health()["status"] == "attention"
+    later = rig.memory._now_ms() + 6 * 3600_000 + 1
+    monkeypatch.setattr(rig.memory, "_now_ms", lambda: later)
+    recovered = SkillReview(rig.service, rig.memory)
+    assert recovered.due()
+    class Brain:
+        async def complete_json(self, **kwargs):
+            return Completion(data={"changes": [{"text": DOCUMENT}]}, model=kwargs["model"], cost_usd=0,
+                              prompt_tokens=0, completion_tokens=0, latency_ms=0)
+    rig.memory._base_client = Brain()
+    await recovered.run_due()
+    assert not recovered.due() and rig.memory.health()["status"] == "ok"
+
+
+@pytest.mark.parametrize("reference", ["@chatgpt:gpt-6-luna?effort=high", "cli:claude", "cli:codex", "cli:gemini"])
+async def test_subscription_skill_review_writes_using_real_memory_brain(rig, monkeypatch, reference):
+    import json
+    from raphael_core.agent.cli.loop import CliLoop
+    from raphael_core.brain.openrouter import TextCompletion
+    from raphael_core.brain.providers.chatgpt import ChatGPTProvider
+    from raphael_core.worker.loop import Outcome
+
+    member = (await rig.call("members.create", {"name": "Sub writer", "model": reference}))["member"]["id"]
+    rig.service._history.add(session_id="skills", question="Check research sources", route="answer", prefix="", text="Checked sources", status="done",
+        member_id=member, conversation_id=Conversations(rig.conn).main(member),
+        steps=[Step("tool", "local_time", "Raphael", "ok", 0) for _ in range(10)])
+    class Brains:
+        def available(self, name):
+            return True
+    rig.memory._cli_brains = Brains()
+    plan = json.dumps({"changes": [{"text": DOCUMENT}]})
+    async def answer(loop):
+        loop._queue.put_nowait(Outcome("done", final=plan))
+    monkeypatch.setattr(CliLoop, "_work", answer)
+    provider = ChatGPTProvider(None)
+    async def chat(**kwargs):
+        return TextCompletion(plan, kwargs["model"], 0, 0, 0, 0, [])
+    monkeypatch.setattr(provider, "chat_text", chat)
+    rig.memory._base_client = provider
+    await rig.memory.skill_review.run_due()
+    assert len(rig.service.enabled_skills(member)) == 1
+    assert not rig.memory.skill_review.due()

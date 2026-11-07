@@ -20,7 +20,6 @@ from ..worker.guards import neutralize
 # A task that ended longer ago than this is no longer talked about.
 BRIEF_WINDOW_MS = 30 * 60 * 1000
 TEXT_CHARS = 200
-REPORT_CHARS = 300
 TOOL_NAME_CHARS = 40
 
 
@@ -100,6 +99,6 @@ def background_block(briefs: list[TaskBrief]) -> str:
         if brief.tools:
             lines.append(neutralize("   Tools: " + "; ".join(_tool_line(u) for u in brief.tools)))
         if brief.report:
-            lines.append(neutralize(f"   Report: {_short(brief.report, REPORT_CHARS)}"))
+            lines.append(neutralize(f"   Report: {brief.report}"))
     lines.append("</background_tasks>")
     return "\n".join(lines)

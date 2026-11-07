@@ -152,7 +152,7 @@ async def test_relay_keeps_all_messages_without_misidentifying_other_sources_as_
     turns = (await rig.call("agent.history.list", {"member_id": 0}))["turns"]
     assert not any(t["route"] == "exchange" for t in turns)
     exchange = AgentHistory(rig.conn).get(rig.conn.execute("SELECT id FROM agent_turns WHERE scope='exchange' ORDER BY id DESC").fetchone()[0])
-    assert exchange.text == "\n".join(("ASSISTANT-REQUEST", "ROUTINE-TITLE", "OTHER-THREAD-QUESTION", "Second."))
+    assert exchange.text == "\n\n".join(("\n".join(("ASSISTANT-REQUEST", "ROUTINE-TITLE", "OTHER-THREAD-QUESTION")), "Second."))
 
 
 @pytest.mark.parametrize("selected", ["raphael", "member"])
