@@ -21,7 +21,7 @@ import { ja } from "../main/i18n/ja";
 import { zhTW } from "../main/i18n/zh-TW";
 import { replyLine } from "../shared/anime";
 import { captionLines } from "./caption";
-import { Emblem, canvasSize, pictureStyle, useVectorGlyphs, type Mode, type Mood, type Phase, type PictureCrop } from "./emblem";
+import { Emblem, canvasSize, loadGlyphTexture, pictureStyle, type Mode, type Mood, type Phase, type PictureCrop } from "./emblem";
 import { noticeDurationMs } from "./notice";
 import type { ProgressReport, Stage } from "./progress";
 import { ProgressArc } from "./progress";
@@ -809,8 +809,12 @@ const questionLabels = (language: UiLanguage) => {
   return {more:messages["common.showAll"],less:messages["common.showLess"],stop:messages["rooms.stop"],hint:messages["common.cancelAgain"]};
 };
 
+/** The glyph ring texture (app/public/brand/glyph-ring.png). */
+const GLYPH_URL = "/brand/glyph-ring.png";
 /** Until the first Settings event arrives. */
 const DEFAULT_PX = 150;
+/** The texture is a local file; if it takes longer than this, start without it. */
+const TEXTURE_WAIT_MS = 2000;
 
 /**
  * Writes `message` to the app's log (raphael.log, as "overlay page: ..."). Never throws and never
@@ -920,8 +924,12 @@ async function start(): Promise<void> {
   });
   const entrance = new EntranceTimer(pageLog, () => document.visibilityState);
 
-  // The ring is drawn from vectors (glyph-ring.ts), crisp at every size and in every mood; nothing is loaded first.
-  useVectorGlyphs();
+  // The texture comes first, so that no event meets a half-ready emblem. Without the file the
+  // load fails and the plain vector ring is drawn.
+  await Promise.race([
+    loadGlyphTexture(GLYPH_URL),
+    new Promise((resolve) => setTimeout(resolve, TEXTURE_WAIT_MS)),
+  ]);
 
   // Raphael's picture, when the person chose one: it is drawn in the emblem's place.
   const picture = (): Promise<void> => showPicture(emblem);

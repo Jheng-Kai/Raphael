@@ -59,7 +59,7 @@ function countingCanvas() {
   const ctx = new Proxy(state, {
     get(target, prop: string) {
       if (prop in target) return target[prop];
-      if (prop === "createRadialGradient") return () => ({ addColorStop: () => {} });
+      if (prop === "createRadialGradient" || prop === "createLinearGradient") return () => ({ addColorStop: () => {} });
       if (prop === "getImageData") return () => {
         stats.reads++;
         return { data: new Uint8ClampedArray([0, 0, 0, stats.ink ? 255 : 0]) };

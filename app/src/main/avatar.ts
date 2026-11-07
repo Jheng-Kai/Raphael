@@ -9,20 +9,32 @@
 // sidebar's 拉斐爾, the composer's voice button, the approval card, the voice-mode flyer and the
 // settings row. They draw again when `onAvatarChange` says the picture changed.
 
-import { drawEmblem, params, pictureStyle, useVectorGlyphs } from "../overlay/emblem";
+import { drawEmblem, glyphTextureReady, params, pictureStyle } from "../overlay/emblem";
 import { esc } from "./ui";
 import "./avatar.css";
 
-// ---------- the emblem as a picture, drawn from vectors ----------
+// ---------- the emblem as a picture, drawn by the corner's renderer ----------
 //
-// Since 2026-11-07 (owner: the emblem was blurry) the faces are the overlay's own renderer drawn once at the size they
-// are shown, times the screen's pixel ratio, from the vector rune ring: crisp at every size, the same art as the corner.
-// Where there is no canvas (the tests) the pictures of app/public/brand stay.
+// The faces are the overlay's own renderer drawn once at the size they are shown, times the screen's pixel ratio, with
+// the same rune texture as the corner, so the sidebar, the panel and Home show the same emblem. Until the texture is
+// there (and where there is no canvas, the tests) the pictures of app/public/brand stand in.
 
 const stills = new Map<string, string | null>();
+/** The rune texture: still loading (a local file, a moment), there, or missing (the old pictures stand in). */
+let texture: "waiting" | "ready" | "missing" = "waiting";
+let drawable: boolean | undefined;
+const canDraw = (): boolean => drawable ??= typeof document !== "undefined" && !!document.createElement("canvas").getContext?.("2d");
 
-/** The emblem standing still for `theme`, `px` CSS pixels square, as a data URL; null where it cannot be drawn. */
+/** The rune texture arrived (or could not be read): every face is drawn again. */
+export function emblemTextureArrived(ok = true): void {
+  texture = ok ? "ready" : "missing";
+  stills.clear();
+  notify();
+}
+
+/** The emblem standing still for `theme`, `px` CSS pixels square, as a data URL; null where it cannot be drawn yet. */
 function emblemStill(theme: "light" | "dark", px: number): string | null {
+  if (!glyphTextureReady()) return null;
   const ratio = typeof window === "undefined" ? 1 : Math.max(1, Math.min(3, window.devicePixelRatio || 1));
   const side = Math.min(512, Math.ceil(px * ratio));
   const key = `${theme}:${side}`;
@@ -33,10 +45,10 @@ function emblemStill(theme: "light" | "dark", px: number): string | null {
     canvas.width = canvas.height = side;
     const ctx = canvas.getContext("2d");
     if (ctx) {
-      useVectorGlyphs();
       ctx.translate(side / 2, side / 2);
-      // The letters' rim reaches a little past the outer radius; a small face keeps its white ring visible.
-      drawEmblem(ctx, side / 2 / 1.04, params("steady", 0, px < 48 ? 0.3 : 0.15), { tq: 0, rot: 0.4, dim: 1, calm: 0.7, lvl: 0.15, surface: theme });
+      // The letters' rim reaches a little past the outer radius; a small face keeps its white ring visible. Unturned, the
+      // word break stands at one o'clock as in the owner's photo; a light page lays the photo's dark ground under it.
+      drawEmblem(ctx, side / 2 / 1.04, params("steady", 0, px < 48 ? 0.3 : 0.15), { tq: 0, rot: 0, dim: 1, calm: 0.7, lvl: 0.15, surface: theme });
       url = canvas.toDataURL("image/png");
     }
   } catch {
@@ -221,6 +233,8 @@ export function avatarHTML(o: AvatarOptions): string {
       `</span>`
     );
   }
+  // The moment the texture takes to load leaves the circle empty rather than fetch a picture that is replaced at once.
+  if (texture === "waiting" && canDraw()) return `<span class="${cls}" ${box} aria-hidden="true"></span>`;
   const kind = o.loop && !reduced ? "loop" : o.size > 40 ? "128" : "64";
   return (
     `<span class="${cls}" ${box} aria-hidden="true">` +

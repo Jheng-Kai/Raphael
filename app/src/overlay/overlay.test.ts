@@ -5,6 +5,7 @@ import { WAITING_LINE_MS } from "./waiting-lines";
 import {
   HOLD_MS,
   OverlayController,
+  isRefusal,
   type AskButtons,
   type EmblemControl,
   type HoldState,
@@ -13,6 +14,15 @@ import {
   type UiLanguage,
 } from "./overlay";
 import type { Mode, Mood, Phase } from "./emblem";
+
+test("a refusal is a 否 or Negative line, in any interface language; a report is not", () => {
+  expect(isRefusal("《否。未偵測到麥克風。》")).toBe(true);
+  expect(isRefusal("《Negative. No microphone was found.》")).toBe(true);
+  expect(isRefusal("否。目前無法回答。")).toBe(true);
+  expect(isRefusal("《告。一切正常。》")).toBe(false);
+  expect(isRefusal("《Notice. All is well.》")).toBe(false);
+  expect(isRefusal("我否認這件事")).toBe(false);
+});
 
 // ---- how long a notice stays ----
 
