@@ -6,7 +6,7 @@ import { dayLabel } from "./format";
 import { getLocale, t } from "./i18n";
 import { messageHTML } from "./message-content";
 import type { HandoffView } from "./types";
-import { esc, ico } from "./ui";
+import { esc, ico, iconButton } from "./ui";
 
 export interface PeerPerson { name: string; face: string; accent: string }
 /** Member `id`'s name, 28 px face and name colour; `fallback` is the name the record carries. */
@@ -76,6 +76,8 @@ export function peerChatHTML(host: number, tasks: readonly HandoffView[], people
   return `<div class="peer-head"><span class="peer-pill" role="heading" aria-level="2" aria-label="${esc(title)}">${personHTML(who(host))}` +
     `<span class="peer-swap">${ico("swap")}</span>${others.map(id => personHTML(who(id))).join("")}</span></div>` +
     `<div class="peer-scroll"><ol class="thread peer-thread">${rows}</ol></div>` +
+    // The same 「跳至最新訊息」 button the conversations have (owner, 2026-11-07); shown once the view is scrolled up.
+    iconButton("down", t("chat.latest"), ' data-peer="latest" hidden', "conversation-latest peer-latest") +
     `<div class="peer-foot"><button type="button" class="btn peer-close" data-peer="close">${esc(t("peer.close"))}</button></div>`;
 }
 
@@ -120,7 +122,13 @@ export function openPeerChat(container: HTMLElement, trigger: HTMLElement, all: 
     el.setAttribute("aria-label", el.querySelector(".peer-pill")?.getAttribute("aria-label") ?? "");
     const next = el.querySelector<HTMLElement>(".peer-scroll")!;
     if (scroll) next.scrollTop = atEnd ? next.scrollHeight : top;
+    sync();
   };
+  const sync = (): void => {
+    const scroll = el.querySelector<HTMLElement>(".peer-scroll"), latest = el.querySelector<HTMLButtonElement>("[data-peer='latest']");
+    if (scroll && latest) latest.hidden = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight <= 80;
+  };
+  el.addEventListener("scroll", sync, { capture: true, passive: true });
   let open = true;
   const close = (): void => {
     if (!open) return;
@@ -139,7 +147,14 @@ export function openPeerChat(container: HTMLElement, trigger: HTMLElement, all: 
     close();
   };
   el.addEventListener("click", event => {
-    if (!(event.target as Element).closest("[data-peer='close']")) return;
+    const target = event.target as Element;
+    if (target.closest("[data-peer='latest']")) {
+      event.stopPropagation();
+      const scroll = el.querySelector<HTMLElement>(".peer-scroll")!;
+      scroll.scrollTo({ top: scroll.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+      return;
+    }
+    if (!target.closest("[data-peer='close']")) return;
     event.stopPropagation();
     close();
   });
@@ -151,6 +166,7 @@ export function openPeerChat(container: HTMLElement, trigger: HTMLElement, all: 
   const first = el.querySelector<HTMLElement>(`[data-peer-key="${CSS.escape(focus)}"]`);
   scroll.scrollTop = scroll.scrollHeight;
   if (first && first.offsetTop < scroll.scrollTop) scroll.scrollTop = Math.max(0, first.offsetTop - 24);
+  sync();
   el.querySelector<HTMLElement>(".peer-close")!.focus({ preventScroll: true });
   return { el, update: () => { if (open) paint(); }, close };
 }

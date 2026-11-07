@@ -431,7 +431,6 @@ export const en = {
   "common.showLess": "Show less",
   "common.cancelAgain": "Press again to cancel",
   "handoff.forwarded": "Forwarded to {p0}",
-  "exchange.from": "Message from {p0}",
   "handoff.queued": "Queued", "handoff.running": "Running", "handoff.waiting": "Waiting for results",
   "card.connect": "Connect", "card.reconnect": "Reconnect", "card.retry": "Try again", "card.cancel": "Cancel",
   "card.openConnections": "Open Connections",

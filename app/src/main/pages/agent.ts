@@ -85,6 +85,7 @@ import { mountPendingQuestions } from "../pending-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
 import { memberAccent, memberColor, ownerBubble } from "../owner-bubble";
 import { openPeerChat, type PeerChatView } from "../peer-chat";
+import { exchangeView } from "../exchange-line";
 import { dayLabel, describeError } from "../format";
 import { loadingHTML } from "../loading";
 import {
@@ -2202,7 +2203,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       }
       case "peer-chat":
         peer?.close();
-        peer = openPeerChat(memberChat, act, () => turns.flatMap(turn => turn.handoffs ?? []),
+        // What this member sent colleagues, and what colleagues said to it (its exchange turns), are one conversation.
+        peer = openPeerChat(memberChat, act, () => turns.flatMap(turn => [...(turn.handoffs ?? []), ...(exchangeTurn(turn) ? [exchangeView(turn)] : [])]),
           (id, fallback) => ({ name: members.nameOf(id) || fallback, face: members.faceOf(id, 28), accent: members.accentOf(id) }), () => { peer = null; });
         break;
       case "copy-message":

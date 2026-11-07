@@ -1205,17 +1205,23 @@ describe("a member's thread", () => {
     api.core.mockReset();
   });
 
-  test("what a colleague asked a member is one closed line in its chat, holding the question and the answer", async () => {
+  test("what a colleague asked a member is one line in its chat that opens the two members' conversation", async () => {
     THREADS[4] = [turn(42, { member_id: 4, peer_id: 0, route: "exchange", source: "member", scope: "exchange", question: "主人明天幾點有空？", text: "下午兩點以後" })];
     mount();
     await flush();
     await pick(4);
-    const line = $<HTMLDetailsElement>('.exchange-event[data-exchange="42"]');
-    expect(line.querySelector("summary")!.textContent).toBe("訊息來自 拉斐爾");
-    expect(line.open).toBe(false);
+    const line = $<HTMLButtonElement>('.exchange-event[data-exchange="42"]');
+    expect(line.textContent!.replace(/\s+/g, " ").trim()).toBe("與 拉斐爾 的 2 則訊息");
+    // Neither the owner's bubble nor the answer stands in the thread: both are read in the conversation view.
     expect(document.querySelector('.tn[data-id="42"] .me')).toBeNull();
-    expect([...line.querySelectorAll(".exchange-message")].map((message) => message.textContent)).toEqual(["主人明天幾點有空？"]);
-    expect(document.querySelector('.tn[data-id="42"] .ra')!.textContent).toContain("下午兩點以後");
+    expect(document.querySelector('.tn[data-id="42"]')!.textContent).not.toContain("下午兩點以後");
+    line.click();
+    await flush();
+    const view = $<HTMLElement>(".peer-chat");
+    expect(view.querySelector(".peer-pill")!.getAttribute("aria-label")).toContain("⇄");
+    expect([...view.querySelectorAll(".peer-line .message-text")].map((text) => text.textContent)).toEqual(["主人明天幾點有空？", "下午兩點以後"]);
+    view.querySelector<HTMLButtonElement>('[data-peer="close"]')!.click();
+    expect(document.querySelector(".peer-chat")).toBeNull();
   });
 
   test("the core is told which thread is on screen, and none once the page goes", async () => {

@@ -72,6 +72,9 @@
 .peer-state { margin: 0; color: var(--text-3); font-size: var(--pa-fs-d); line-height: 1.6; }
 .peer-line .handoff-files { margin-top: var(--sp-1); }
 .peer-foot { display: flex; justify-content: center; padding: var(--sp-3) 0 calc(var(--sp-4) + 4px); }
+/* The conversations' jump-to-latest button, floating just above 「關閉對話」. */
+.peer-chat > .btn.peer-latest { position: absolute; left: 50%; bottom: calc(var(--sp-3) + 40px + var(--sp-4) + 16px); transform: translateX(-50%); z-index: 2; width: 36px; height: 36px; min-height: 36px; border-radius: var(--r-sm); background: var(--panel); border: 1px solid var(--edge); box-shadow: var(--pop); color: var(--text-2); }
+.peer-chat > .btn.peer-latest:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 .page-agent .btn.peer-close { min-width: 160px; height: 40px; padding: 0 var(--sp-5); border: 1px solid var(--edge-rim); border-radius: var(--r-pill); background: var(--surface-2); color: var(--text); font-weight: 600; }
 .page-agent .btn.peer-close:hover:not(:disabled) { border-color: var(--edge-rim); background: var(--hover); }
 .page-agent .btn.peer-close:active:not(:disabled) { background: var(--pressed); }

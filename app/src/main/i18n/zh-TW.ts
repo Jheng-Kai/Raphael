@@ -430,7 +430,6 @@ export const zhTW = {
   "common.showLess": "收合",
   "common.cancelAgain": "再按一次取消",
   "handoff.forwarded": "已轉交給 {p0}",
-  "exchange.from": "訊息來自 {p0}",
   "handoff.queued": "已排隊", "handoff.running": "執行中", "handoff.waiting": "等待結果",
   "handoff.missingArtifact": "缺少驗收所需的檔案，請執行成員補齊成果後再驗收。",
   "handoff.noAction": "尚無可驗證的執行成果",

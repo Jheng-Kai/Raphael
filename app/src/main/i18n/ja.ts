@@ -431,7 +431,6 @@ export const ja = {
   "common.showLess": "折りたたむ",
   "common.cancelAgain": "もう一度押すとキャンセル",
   "handoff.forwarded": "{p0} に引き継ぎました",
-  "exchange.from": "{p0} からのメッセージ",
   "handoff.queued": "待機中", "handoff.running": "実行中", "handoff.waiting": "結果待ち",
   "card.connect": "接続", "card.reconnect": "再接続", "card.retry": "再試行", "card.cancel": "キャンセル",
   "card.openConnections": "接続設定を開く",

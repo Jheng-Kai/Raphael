@@ -963,6 +963,15 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   const waitingForOwner = look.waitingForOwner?.(turn.id) ?? false;
   const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
   const revealing = look.revealing?.(turn.id) ?? false;
+  // What a colleague said to this member is one line that opens the two members' conversation (exchange-line.ts):
+  // the request and the answer are read there, not under the line. Only a card that waits for the owner stays here.
+  if (handed) {
+    const name = turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title");
+    const cards = permissionCardsHTML(turn, look.answerable, true, name) + connectorCardsHTML(turn) + secretCardsHTML(turn) + computerCardsHTML(turn) +
+      permissionCardsHTML(turn, look.answerable, false, name) + ownerQuestionsHTML(turn);
+    return `<li class="tn" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}>` + receivedLineHTML(turn, look) +
+      (cards ? `<div class="ra"><div class="ra-body">${cards}</div></div>` : "") + `</li>`;
+  }
   // A greeting has no words of the owner's, yet a failed one is written again (the core's members.greet).
   const regenerate = !live && (said || turn.route === "greeting") && turn.id === look.regenerateTurnId;
   // A turn without reply messages answers in its text: a question spoken to Raphael with public progress has no other.
@@ -971,7 +980,6 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     ? "" : messageBlockHTML(turn, "reply", turn.text, turn.created_at_ms, query, state, true, regenerate);
   return (
     `<li class="tn${turn.id === look.latestFailedTurnId ? " is-latest-failure" : ""}${turn.status === "queued" || turn.route === "owner_input" || (live && !hasMsgs) ? " is-owner-only" : ""}" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}>` +
-    (handed ? receivedLineHTML(turn, look) : "") +
     (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) + computerResumedLineHTML(turn) : "") +
     (asked
       ? `<div class="me">` +

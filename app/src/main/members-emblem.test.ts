@@ -89,7 +89,7 @@ describe("Raphael's emblem stands bare", () => {
     const line = document.createElement("ol");
     const turn: AgentTurn = { id: 5, created_at_ms: 0, question: "問", route: "exchange", prefix: "", text: "答", detail: null, status: "done", source: "member", scope: "exchange", member_id: 3, peer_id: 0 };
     line.innerHTML = receivedLineHTML(turn, { face: () => "", memberName: (id) => (id ? "小晴" : "拉斐爾"), memberFace: () => faceHTML(raphaelOf(null), 18, { cls: "sys-face" }) });
-    const face = line.querySelector(".event-line > .av")!;
+    const face = line.querySelector(".event-line .event-person > .av")!;
     expect(face.classList.contains("sys-face") && face.classList.contains("mb-av-slime")).toBe(true);
     expect(face.querySelector("svg.slime")).not.toBeNull();
   });
