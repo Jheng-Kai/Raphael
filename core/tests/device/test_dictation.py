@@ -2514,11 +2514,23 @@ async def test_an_engine_that_changes_model_per_segment_is_reported_in_order(rig
 #
 # A session started with purpose "agent" records and transcribes like any other, but what comes
 # back is polished text to ask the assistant, not text to paste. Cleanup and spend accounting
-# share the dictation path, while agent text never enters dictation history.
+# share the dictation path; the brain stores agent text as ask history.
 
 
 async def start_agent(router, session_id="s1"):
     return await router.call("dictation.start", {"session_id": session_id, "purpose": "agent"})
+
+
+@pytest.mark.parametrize("at_start", [False, True])
+async def test_agent_destination_is_forwarded_to_finalize(rig, router, brain, at_start):
+    rig.engine.texts = ["請幫忙"]
+    rig.recorder.chunks = [chunk(1.0)] * 2
+    recipient = {"member_id": 3, "target_name": "小晴"}
+    await router.call("dictation.start", {"session_id": "s1", "purpose": "agent", **(recipient if at_start else {})})
+    await rig.recorder.fed(2)
+    await router.call("dictation.stop", {"session_id": "s1", **({} if at_start else recipient)})
+    assert brain.finalize_params[0]["member_id"] == 3
+    assert brain.finalize_params[0]["target_app"] == "小晴"
 
 
 async def test_an_agent_session_answers_with_polished_text_and_nothing_to_paste(

@@ -1798,7 +1798,7 @@ async def test_a_dictation_goes_through_the_whole_app(make_app, notes):
     assert {level["session_id"] for level in notes.methods("audio.level")} == {"s1"}
 
 
-async def test_an_agent_dictation_goes_through_shared_cleanup_without_history(make_app):
+async def test_an_agent_dictation_goes_through_shared_cleanup_with_ask_history(make_app):
     kit = make_kit()
     app = make_app(kit)
     await app.call("dictionary.add", {"word": "哈囉", "misheard": ["你好"]})
@@ -1807,11 +1807,13 @@ async def test_an_agent_dictation_goes_through_shared_cleanup_without_history(ma
 
     async def spy(**kwargs):
         asked.append(kwargs)
-        return await echo(**kwargs)
+        reply = await echo(**kwargs)
+        reply.data["text"] += "。"
+        return reply
 
     app.client.openrouter.complete_json = spy
     assert await app.call("dictation.start", {"session_id": "a1", "purpose": "agent"}) == {}
-    result = await app.call("dictation.stop", {"session_id": "a1", "target_app": "notepad.exe"})
+    result = await app.call("dictation.stop", {"session_id": "a1", "target_app": "notepad.exe", "member_id": 0})
     assert result == {
         "purpose": "agent",
         "text": "哈囉世界哈囉世界",  # the dictionary's replacement, joined as a dictation is
@@ -1820,7 +1822,10 @@ async def test_an_agent_dictation_goes_through_shared_cleanup_without_history(ma
         "silent": False,
     }
     assert len(asked) == 1  # the same cleanup request as dictation
-    assert (await app.call("history.list"))["items"] == []  # no history row
+    [history] = (await app.call("history.list"))["items"]
+    assert history["kind"] == "ask" and history["target_app"] == "拉斐爾"
+    assert history["text"] == history["raw_text"] == result["text"]
+    assert "。" not in history["text"]
     assert (await app.call("history.latest"))["item"] is None  # nothing for "paste last"
     assert (await app.call("status.get"))["spend"]["month_usd"] == 0
     # The next one is a dictation as ever.
@@ -2114,10 +2119,13 @@ async def test_a_dictation_for_the_assistant_and_its_question_go_together(make_a
     kit = make_kit()
     app = make_app(kit)
     await app.call("dictation.start", {"session_id": "a1", "purpose": "agent"})
-    heard = await app.call("dictation.stop", {"session_id": "a1", "target_app": None})
+    heard = await app.call("dictation.stop", {"session_id": "a1", "target_app": None, "member_id": 0})
     result = await app.call("agent.ask", ask_params(heard["text"]))
     assert result == {"status": "done", "turn_id": 1, "prefix": "答", "text": WORDS + WORDS}
-    assert (await app.call("history.list"))["items"] == []  # the dictation history is not touched
+    [history] = (await app.call("history.list"))["items"]
+    assert history["kind"] == "ask" and history["target_app"] == "拉斐爾"
+    assert history["text"] == heard["text"]
+    assert (await app.call("history.latest"))["item"] is None  # ask is not a paste-last source
 
 
 async def test_closing_the_app_ends_the_assistants_requests_before_closing_the_client(make_app):

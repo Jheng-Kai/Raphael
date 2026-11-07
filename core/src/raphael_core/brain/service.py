@@ -12,7 +12,7 @@ handler below; what a handler alone does not show is here:
   int and a bool is no number.
 - If history cannot be written, cleaned text still comes back (with id None). Cleanup failures
   retain recovery text and a reason; the device refuses automatic delivery of those results.
-- Voice questions share dictation cleanup and spend accounting but never write a history row.
+- Voice questions share cleanup and spend accounting, and enter history as recipient-labelled asks.
   Transcript-only consumers still use `brain.normalize_transcript` for dictionary and script
   normalization without model calls, history or cost.
 - A dictation that is cancelled while its text is being cleaned (`brain.cancel_dictation`, for the
@@ -78,6 +78,8 @@ from .usage import UsageAnalytics
 from .textnorm import (
     apply_replacements,
     finish_cleaned_text,
+    finish_chinese_dictation,
+    remove_unspoken_ma,
     normalize_transcript,
     remove_stutters,
 )
@@ -231,6 +233,7 @@ class Brain:
         tz: tzinfo | None = None,
         providers: ProviderRegistry | None = None,
     ) -> None:
+        self._conn = conn
         self._client = client
         self._providers = providers
         self._notify_providers = lambda: None
@@ -349,8 +352,16 @@ class Brain:
         incomplete = params.get("incomplete", False)
         if not isinstance(incomplete, bool):
             raise invalid_params("incomplete must be a boolean")
-        if purpose == "dictation":
-            self._prune_history_if_due()
+        if purpose == "agent":
+            member = _opt_int(params, "member_id")
+            if member is not None:
+                if type(member) is not int or member < 0:
+                    raise invalid_params("member_id must be a nonnegative integer")
+                recipient = self._conn.execute("SELECT name FROM members WHERE id = ?", (member,)).fetchone() if member else None
+                if member and recipient is None:
+                    raise invalid_params("member_id must name an existing member")
+                target_app = recipient[0] if member else "拉斐爾"
+        self._prune_history_if_due()
 
         rules = self._dictionary.replacements()
         # The Chinese written form the user chose decides the script of the text (or none).
@@ -415,28 +426,34 @@ class Brain:
             self._openrouter.latency_ms = result.llm_ms
         if result.parts:
             # All pieces succeeded. Finish each and retain its sentence/paragraph boundary.
+            def finish_part(index, part):
+                if not part.cleaned:
+                    return remove_stutters(part.text)
+                finished = finish_cleaned_text(part.text, rules, chinese=chinese)
+                return remove_unspoken_ma(chunks[index][0] if chunks else normalized, finished) if chinese is not None else finished
+
             text = join_parts(
                 [
-                    replace(
-                        part,
-                        text=finish_cleaned_text(part.text, rules, chinese=chinese)
-                        if part.cleaned
-                        else remove_stutters(part.text),
-                    )
-                    for part in result.parts
+                    replace(part, text=finish_part(index, part))
+                    for index, part in enumerate(result.parts)
                 ]
             )
         elif result.cleaned:
             text = finish_cleaned_text(result.text, rules, chinese=chinese)
+            if chinese is not None:
+                text = remove_unspoken_ma(normalized, text)
         else:
             # A fallback is the normalized text already; doing it twice could repeat a replacement.
             # Nobody has tidied it, so its obvious stutters go; the history keeps it as it was.
             text = remove_stutters(result.text)
 
+        if chinese is not None:
+            text = finish_chinese_dictation(text)
+
         item = HistoryItem(
             id=None,
             created_at_ms=self._now_ms(),
-            kind="dictation",
+            kind="ask" if purpose == "agent" else "dictation",
             raw_text=normalized,
             text=text,
             cleaned=result.cleaned,
@@ -451,8 +468,6 @@ class Brain:
         )
         if cancelled:
             logger.info("A dictation was cancelled while its text was cleaned; not keeping it")
-            entry_id = None
-        elif purpose == "agent":
             entry_id = None
         else:
             entry_id = self._save(item)
@@ -509,7 +524,8 @@ class Brain:
         return {"items": [asdict(item) for item in items], "total": self._history.count()}
 
     async def _history_latest(self, params: dict) -> dict:
-        latest = self._history.latest()
+        """The latest pasted dictation; ask history must never replace the paste-last source."""
+        latest = self._history.latest(kind="dictation")
         return {"item": None if latest is None else asdict(latest)}
 
     async def _history_delete(self, params: dict) -> dict:
@@ -574,10 +590,18 @@ class Brain:
         optional fields are left out when empty: `rules`, the words of `learned` that gained a
         replacement rule, and `reverted`, the words of which a learned rule was withdrawn
         because the user changed the text back (those are not in `learned`). The words are never
-        logged, only how many."""
+        logged, only how many. An optional `history_id` must name a plain dictation;
+        ask history and explicit ask/agent origins never supply learning evidence."""
         corrections = _required(params, "corrections")
         if not isinstance(corrections, list):
             raise invalid_params("corrections must be a list")
+        if "history_id" in params:
+            history_id = _int(params, "history_id")
+            source = self._history.get(history_id)
+            if source is None or source.kind != "dictation":
+                return {"learned": []}
+        if params.get("kind") == "ask" or params.get("purpose") == "agent":
+            return {"learned": []}
         pairs: list[tuple[str, str]] = []
         for correction in corrections:
             if not isinstance(correction, dict):
@@ -852,7 +876,7 @@ class Brain:
         has_key = self._has_key_or_none()
         if has_key:
             self._refresh_key_usage_if_due()
-        latest = self._history.latest()
+        latest = self._history.latest(kind="dictation")
         return {
             "openrouter": self._openrouter_view(has_key),
             "spend": {

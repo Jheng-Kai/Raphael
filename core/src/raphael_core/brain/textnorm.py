@@ -18,7 +18,7 @@ import functools
 import json
 import re
 import string
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 import opencc
 
@@ -448,6 +448,108 @@ def remove_stutters(text: str) -> str:
 
 _HAN = re.compile(r"[㐀-鿿豈-﫿]")
 _KANA = re.compile(r"[぀-ヿ]")
+
+
+def _dictation_prose(text: str, change: Callable[[str, set[int], int], str]) -> str:
+    """Edit prose lines only, retaining kana lines, code fences and inline code byte for byte."""
+    fence = ""
+    size = 0
+    result = []
+    offset = 0
+    prose: list[tuple[str, int]] = []
+
+    def flush() -> None:
+        if not prose:
+            return
+        block = "".join(line for line, _ in prose)
+        protected = set()
+        for span in re.finditer(r"(?<![`\\])(`+)(?!`)(.*?)(?<!`)\1(?!`)", block, re.DOTALL):
+            protected.update(range(span.start(), span.end()))
+        base = prose[0][1]
+        for line, start in prose:
+            if re.search(r"[\u3040-\u30ff\u31f0-\u31ff\uff66-\uff9f]", line):
+                result.append(line)
+            else:
+                begin = start - base
+                local = {index - begin for index in range(begin, begin + len(line)) if index in protected}
+                result.append(change(line, local, start))
+        prose.clear()
+
+    for line in text.splitlines(keepends=True):
+        start = offset
+        offset += len(line)
+        marker = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line.rstrip("\r\n"))
+        if fence:
+            if marker and marker[1][0] == fence and len(marker[1]) >= size and not marker[2].strip():
+                fence = ""
+            result.append(line)
+            continue
+        if marker:
+            flush()
+            fence, size = marker[1][0], len(marker[1])
+            result.append(line)
+            continue
+        prose.append((line, start))
+    flush()
+    return "".join(result)
+
+
+def finish_chinese_dictation(text: str) -> str:
+    """Replace Chinese full stops in prose with commas, omitting line-final punctuation."""
+    def finish(line: str, protected: set[int], offset: int) -> str:
+        output: list[tuple[str, bool]] = []
+        for index, char in enumerate(line):
+            keep = index in protected
+            if char == "。" and not keep:
+                if not line[index + 1:].strip() or line[index + 1:index + 2] in ("」", "』", "）", ")"):
+                    continue
+                char = "，"
+            if char == "，" and not keep and output and output[-1] == ("，", False):
+                continue
+            output.append((char, keep))
+        end = len(output) - 1
+        while end >= 0 and output[end][0].isspace():
+            end -= 1
+        while end >= 0 and output[end] == ("，", False):
+            del output[end]
+            end -= 1
+        return "".join(char for char, _ in output)
+    return _dictation_prose(text, finish)
+
+
+def remove_unspoken_ma(raw: str, cleaned: str) -> str:
+    """Remove only excess question particles whose local context was not spoken."""
+    extra = cleaned.count("嗎") - raw.count("嗎")
+    if extra <= 0:
+        return cleaned
+    compact_raw = re.sub(r"[\s,，、]", "", raw)
+    positions = [index for index, char in enumerate(cleaned) if not re.fullmatch(r"[\s,，、]", char)]
+    compact_cleaned = "".join(cleaned[index] for index in positions)
+    spoken = set()
+    for block in difflib.SequenceMatcher(None, compact_raw, compact_cleaned, autojunk=False).get_matching_blocks():
+        for index in range(block.size):
+            if compact_raw[block.a + index] == "嗎":
+                spoken.add(positions[block.b + index])
+
+    def finish(line: str, protected: set[int], offset: int) -> str:
+        nonlocal extra
+        output = []
+        skip = -1
+        for index, char in enumerate(line):
+            if index == skip:
+                continue
+            if char == "嗎" and index not in protected and offset + index not in spoken and extra > 0:
+                context = re.sub(r"[\s,，、]", "", line[:index])[-2:] + "嗎"
+                if context not in compact_raw:
+                    extra -= 1
+                    if line[index + 1:index + 2] == "？" and index + 1 not in protected:
+                        skip = index + 1
+                        if line[index + 2:].strip():
+                            output.append("，")
+                    continue
+            output.append(char)
+        return "".join(output)
+    return _dictation_prose(cleaned, finish)
 
 
 def public_line(text: str, language: str) -> str:

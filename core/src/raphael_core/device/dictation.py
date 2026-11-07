@@ -16,7 +16,7 @@ assistant's question. It records and transcribes in the same way, but what its s
 text to paste: `{"purpose": "agent", "text", "stt", "audio_seconds", "silent"}`, the transcript with
 dictionary replacements, Chinese script selection and the same cleanup as dictation. Cleanup
 uses the same model, prompt, safeguards and short-sentence shortcut, and records its cost. The
-agent result still has no history row or paste, and progress includes the cleaning stage.
+agent result has no paste; the brain keeps it as ask history, and progress includes cleanup.
 
 A cancel that comes while the brain is cleaning the text (the service is idle by then, and the
 cancel names the session) reaches the brain too, with `brain.cancel_dictation`. The brain finishes
@@ -166,6 +166,7 @@ class _Session:
     ) -> None:
         self.id = session_id
         self.purpose = purpose
+        self.recipient: dict[str, Any] = {}
         self.language = "auto"
         self.voice_started = False
         self.voice_paused = False
@@ -262,6 +263,22 @@ def _target_app(params: dict) -> str | None:
     if value is not None and not isinstance(value, str):
         raise RpcError(INVALID_PARAMS, "target_app must be a string or null")
     return value
+
+
+def _recipient(params: dict) -> dict[str, Any]:
+    """Optional assistant destination, kept apart from the foreground paste application's name."""
+    result = {}
+    member = params.get("member_id")
+    if member is not None:
+        if type(member) is not int or not 0 <= member <= 2**63 - 1:
+            raise RpcError(INVALID_PARAMS, "member_id must be a nonnegative integer")
+        result["member_id"] = member
+    name = params.get("target_name")
+    if name is not None:
+        if not isinstance(name, str):
+            raise RpcError(INVALID_PARAMS, "target_name must be a string or null")
+        result["target_name"] = name
+    return result
 
 
 def _failure_as_error(error: Exception) -> RpcError:
@@ -372,6 +389,7 @@ class DictationService:
             session_id, asyncio.get_running_loop(), self._clock(), purpose,
             normalize_language(ui_language),
         )
+        session.recipient = _recipient(params)
         if purpose == "voice_chat":
             language = params.get("language", "auto")
             if language not in ("auto", "zh", "en", "ja"):
@@ -780,6 +798,7 @@ class DictationService:
     async def _stop(self, params: dict) -> dict:
         session_id = _session_id(params)
         target_app = _target_app(params)
+        recipient = _recipient(params)
         session = self._session
         if session is None or session.id != session_id or session.state == "stopping":
             raise RpcError(NOT_FOUND, f"There is no dictation session {session_id!r} to stop")
@@ -868,8 +887,10 @@ class DictationService:
                     "raw_text": text,
                     "audio_seconds": speech,
                     "stt_ms": stt_ms,
-                    "target_app": None if session.purpose == PURPOSE_AGENT else target_app,
+                    "target_app": {**session.recipient, **recipient}.get("target_name") if session.purpose == PURPOSE_AGENT else target_app,
                     **({"purpose": PURPOSE_AGENT} if session.purpose == PURPOSE_AGENT else {}),
+                    **({key: value for key, value in {**session.recipient, **recipient}.items() if key == "member_id"}
+                       if session.purpose == PURPOSE_AGENT else {}),
                     "stt": "+".join(session.stt_used) or None,
                     "session_id": session.id,
                     "incomplete": cut_short,

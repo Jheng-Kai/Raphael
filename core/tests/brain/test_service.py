@@ -88,7 +88,7 @@ async def test_incomplete_transcript_keeps_gap_marker_in_paste_and_history(
 async def test_short_punctuated_sentence_needs_no_model(router, fake_client, keys, text):
     keys.set(KEY)
     result = await finalize(router, raw_text=text)
-    assert result["text"] == text
+    assert result["text"] == text.removesuffix("。")
     assert result["cleaned"]
     assert result["llm_ms"] == 0
     assert fake_client.calls == []
@@ -269,7 +269,7 @@ async def test_finalize_cleans_normalizes_and_saves(router, fake_client, keys):
             "target_app": "Code.exe",
         },
     )
-    assert r["cleaned"] is True and r["text"] == "明天下午三點開會。"
+    assert r["cleaned"] is True and r["text"] == "明天下午三點開會"
     assert r["raw_text"] == "嗯 明天下午三點開會"
     items = (await router.call("history.list", {}))["items"]
     assert len(items) == 1 and items[0]["target_app"] == "Code.exe"
@@ -339,7 +339,7 @@ async def test_finalize_result_and_history_row(router, fake_client, keys):
         "created_at_ms": NOW_MS,
         "kind": "dictation",
         "raw_text": "嗯 明天下午三點開會",
-        "text": "明天下午三點開會。",
+        "text": "明天下午三點開會",
         "cleaned": True,
         "fallback_reason": None,
         "target_app": "Code.exe",
@@ -410,8 +410,8 @@ async def test_finalize_does_not_feed_the_model_opencc_errors(router, fake_clien
     r = await finalize(router, "就是只要按O S就可以触发")
     assert r["raw_text"] == "就是隻要按O S就可以觸發"
     assert fake_client.calls[0]["user"] == "<transcript>\n就是只要按O S就可以触发\n</transcript>"
-    assert r["text"] == "只要按 Alt 就可以觸發。"
-    assert (await router.call("history.latest", {}))["item"]["text"] == "只要按 Alt 就可以觸發。"
+    assert r["text"] == "只要按 Alt 就可以觸發"
+    assert (await router.call("history.latest", {}))["item"]["text"] == "只要按 Alt 就可以觸發"
 
 
 async def test_finalize_passes_the_target_app_to_the_prompt(router, fake_client, keys):
@@ -449,9 +449,10 @@ async def test_short_clean_text_pastes_and_saves_traditional_speech_as_it_is(rou
     # already, and OpenCC over the whole sentence would write 隻要, 幹擾 and 釋出 into it.
     r = await finalize(router, spoken)
     assert (r["cleaned"], r["fallback_reason"]) == (True, None)
-    assert r["text"] == r["raw_text"] == spoken
+    assert r["text"] == spoken.removesuffix("。")
+    assert r["raw_text"] == spoken
     row = (await router.call("history.latest", {}))["item"]
-    assert (row["text"], row["raw_text"]) == (spoken, spoken)
+    assert (row["text"], row["raw_text"]) == (spoken.removesuffix("。"), spoken)
 
 
 async def test_a_fallback_drops_the_obvious_stutters_but_the_history_keeps_the_raw_text(router):
@@ -479,12 +480,13 @@ async def test_a_cleaned_text_is_the_models_to_write_and_its_repeats_stay(
     keys.set(KEY)
     fake_client.next_completion = completion({"text": "Hermes, Hermes agent 好用。"})
     r = await finalize(router, "Hermes Hermes agent 好用")
-    assert (r["cleaned"], r["text"]) == (True, "Hermes, Hermes agent 好用。")
+    assert (r["cleaned"], r["text"]) == (True, "Hermes, Hermes agent 好用")
 
 
 async def test_a_fallback_converts_only_the_simplified_words_of_mixed_speech(router):
     r = await finalize(router, "就是只要按這個开關，资料我後面再发給你。")
-    assert r["text"] == r["raw_text"] == "就是只要按這個開關，資料我後面再發給你。"
+    assert r["text"] == "就是只要按這個開關，資料我後面再發給你"
+    assert r["raw_text"] == "就是只要按這個開關，資料我後面再發給你。"
 
 
 async def test_finalize_failure_falls_back_to_the_raw_text(router, fake_client, keys):
@@ -512,8 +514,8 @@ async def test_cleaned_chinese_is_converted_to_taiwan_traditional(router, fake_c
     keys.set(KEY)
     fake_client.next_completion = completion({"text": "明天下午三点开会。"})
     r = await finalize(router, "明天下午三點開會")
-    assert r["cleaned"] is True and r["text"] == "明天下午三點開會。"
-    assert (await router.call("history.latest", {}))["item"]["text"] == "明天下午三點開會。"
+    assert r["cleaned"] is True and r["text"] == "明天下午三點開會"
+    assert (await router.call("history.latest", {}))["item"]["text"] == "明天下午三點開會"
 
 
 async def test_a_cleaned_list_keeps_its_line_breaks_in_the_text_and_the_history(
@@ -527,7 +529,7 @@ async def test_a_cleaned_list_keeps_its_line_breaks_in_the_text_and_the_history(
         {"text": "有兩件事：\n\n1. 我们开会。\n2. 拉菲爾說好。"}
     )
     r = await finalize(router, "有兩件事 第一個是我们开会 第二個是拉菲爾說好")
-    expected = "有兩件事：\n\n1. 我們開會。\n2. 拉斐爾說好。"
+    expected = "有兩件事：\n\n1. 我們開會\n2. 拉斐爾說好"
     assert r["cleaned"] is True and r["text"] == expected
     assert (await router.call("history.latest", {}))["item"]["text"] == expected
 
@@ -543,7 +545,7 @@ async def test_replacements_apply_to_the_cleaned_text(router, fake_client, keys)
     keys.set(KEY)
     await router.call("dictionary.add", {"word": "拉斐爾", "misheard": ["拉菲爾"]})
     fake_client.next_completion = completion({"text": "拉菲爾說好。"})
-    assert (await finalize(router, "拉斐爾說好"))["text"] == "拉斐爾說好。"
+    assert (await finalize(router, "拉斐爾說好"))["text"] == "拉斐爾說好"
 
 
 async def test_replacements_apply_to_cleaned_text_that_has_hiragana(router, fake_client, keys):
@@ -572,7 +574,7 @@ async def test_finalize_still_answers_when_the_history_cannot_be_written(
     conn.execute("DROP TABLE history")
     caplog.set_level(logging.DEBUG)
     r = await finalize(router, "你好")
-    assert (r["id"], r["text"], r["cleaned"]) == (None, "你好。", True)
+    assert (r["id"], r["text"], r["cleaned"]) == (None, "你好", True)
     assert_no_traceback_logged(caplog)
     assert "你好" not in caplog.text
 
@@ -610,9 +612,9 @@ async def test_a_dictation_cancelled_while_it_is_cleaned_is_paid_for_and_not_kep
     assert await router.call("brain.cancel_dictation", {"session_id": "s1"}) == {}
     open_gate()
     r = await pending
-    assert (r["id"], r["text"], r["cleaned"]) == (None, "你好嗎我很好。", True)
+    assert (r["id"], r["text"], r["cleaned"]) == (None, "你好嗎我很好", True)
     latest = (await router.call("history.latest", {}))["item"]
-    assert (latest["raw_text"], latest["text"]) == ("早安你好嗎", "早安，你好嗎。")
+    assert (latest["raw_text"], latest["text"]) == ("早安你好嗎", "早安，你好嗎")
     assert len((await router.call("history.list", {}))["items"]) == 1
     status = await router.call("status.get", {})
     assert status["spend"]["month_usd"] == pytest.approx(0.0008), "both requests were made"
@@ -1125,7 +1127,7 @@ async def test_finalize_writes_mainland_simplified_for_zh_cn(router, fake_client
     fake_client.next_completion = completion({"text": "这个软件很好用，我們明天開會。"})
     r = await finalize(router, "這個軟件很好用 我们明天开会")
     assert r["raw_text"] == "这个软件很好用 我们明天开会"
-    assert r["cleaned"] is True and r["text"] == "这个软件很好用，我们明天开会。"
+    assert r["cleaned"] is True and r["text"] == "这个软件很好用，我们明天开会"
     assert "Simplified characters with Mainland usage" in fake_client.calls[0]["system"]
     assert (await router.call("history.latest", {}))["item"]["text"] == r["text"]
 
@@ -1144,7 +1146,7 @@ async def test_finalize_writes_hong_kong_traditional_for_zh_hk(router, fake_clie
     fake_client.next_completion = completion({"text": "就是只要打开這個软件。"})
     r = await finalize(router, "就是只要打开这个软件")
     assert r["raw_text"] == "就是隻要打開這個軟件"  # s2hk alone, as for Taiwan
-    assert r["text"] == "就是只要打開這個軟件。"  # 只要 stays: only the Simplified words change
+    assert r["text"] == "就是只要打開這個軟件"  # 只要 stays: only the Simplified words change
     assert "Hong Kong usage" in fake_client.calls[0]["system"]
 
 
@@ -1426,7 +1428,7 @@ async def test_status_after_a_cleanup(router, fake_client, keys):
     assert len(spend["daily"]) == 30 and spend["daily"][-1] == pytest.approx(0.0003)
     assert spend["forecast_usd"] >= spend["month_usd"]
     assert status["last"] == {
-        "text": "你好。",
+        "text": "你好",
         "created_at_ms": NOW_MS,
         "target_app": "Code.exe",
         "stt_ms": 120,
@@ -1650,7 +1652,7 @@ async def test_real_client_a_key_is_checked_over_http_then_used(real_router, key
     # The key just stored is the one the client sends from now on.
     openrouter.reply_text = "明天下午三點開會。"
     r = await finalize(router, "明天下午三点开会")
-    assert (r["cleaned"], r["text"]) == (True, "明天下午三點開會。")
+    assert (r["cleaned"], r["text"]) == (True, "明天下午三點開會")
     assert openrouter.requests[-1].headers["Authorization"] == "Bearer sk-or-v1-good"
     assert (await router.call("status.get", {}))["openrouter"]["state"] == "ok"
     checked = await router.call("status.check_openrouter", {})
@@ -1821,7 +1823,7 @@ async def test_import_refuses_bad_params(router, params):
 
 
 @pytest.mark.parametrize("purpose", ["dictation", "agent"])
-async def test_cleanup_contract_and_cost_are_shared_but_agent_keeps_paste_last(
+async def test_cleanup_contract_and_cost_are_shared_and_agent_keeps_paste_last(
     router, fake_client, keys, conn, purpose,
 ):
     seed_history(conn, 1, start_ms=NOW_MS)
@@ -1836,8 +1838,9 @@ async def test_cleanup_contract_and_cost_are_shared_but_agent_keeps_paste_last(
     assert [(row[0], row[1]) for row in spend] == [("cleanup", 0.0002)]
     latest = (await router.call("history.latest", {}))["item"]
     if purpose == "agent":
-        assert result["id"] is None
+        assert isinstance(result["id"], int)
         assert latest == previous
+        assert conn.execute("SELECT kind FROM history WHERE id=?", (result["id"],)).fetchone()[0] == "ask"
     else:
         assert latest["text"] == result["text"]
 
@@ -1846,17 +1849,17 @@ async def test_agent_cleanup_retains_the_short_sentence_shortcut(router, fake_cl
     keys.set(KEY)
     result = await finalize(router, "Hello world.", purpose="agent")
     assert result["text"] == "Hello world." and result["cleaned"]
-    assert result["llm_ms"] == 0 and result["id"] is None
+    assert result["llm_ms"] == 0 and isinstance(result["id"], int)
     assert fake_client.calls == []
     assert conn.execute("SELECT COUNT(*) FROM spend").fetchone()[0] == 0
     assert (await router.call("history.latest", {}))["item"] is None
 
 
-async def test_agent_cleanup_without_a_key_retains_normalization_without_history(router):
+async def test_agent_cleanup_without_a_key_retains_normalization_in_ask_history(router):
     await router.call("dictionary.add", {"word": "Raphael", "misheard": ["Rafael"]})
     result = await finalize(router, "Rafael \u6211\u4eec\u5f00\u4f1a", purpose="agent")
     assert result["text"] == "Raphael \u6211\u5011\u958b\u6703"
-    assert not result["cleaned"] and result["id"] is None
+    assert not result["cleaned"] and isinstance(result["id"], int)
     assert (await router.call("history.latest", {}))["item"] is None
 
 

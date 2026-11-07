@@ -1744,11 +1744,12 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
         }
         let id = session.id;
         let target_app = target.map(|target| target.process_name);
+        // Who the words go to (0 is Raphael), so the dictation history can say so.
         let transcript = self
             .core
             .call_within(
                 "dictation.stop",
-                json!({ "session_id": id, "target_app": target_app }),
+                json!({ "session_id": id, "target_app": target_app, "member_id": session.member }),
                 wait,
             )
             .await;
@@ -6191,7 +6192,7 @@ mod tests {
         run(&c, AgentUp, 900).await;
         assert_eq!(
             c.core().call_params("dictation.stop"),
-            json!({"session_id": id, "target_app": "chrome.exe"})
+            json!({"session_id": id, "target_app": "chrome.exe", "member_id": 0})
         );
         let mut ask = c.core().call_params("agent.ask");
         assert!(ask["transcript_ms"].as_f64().is_some_and(|ms| ms >= 0.0));
@@ -6554,6 +6555,7 @@ mod tests {
             "setup-slack",
             "setup-discord",
             "share-template",
+            "settings",
         ] {
             let c = agent(answer("Answer", "Ready"));
             c.ask_composed_in(TypedQuestion {

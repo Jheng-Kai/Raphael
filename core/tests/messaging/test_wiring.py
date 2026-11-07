@@ -316,4 +316,7 @@ async def test_a_voice_message_is_heard_with_the_dictation_engine_and_normalized
     assert heard == [(1600, ["Raphael"])]
     if room:
         assert any(method == "brain.finalize_dictation" and params["purpose"] == "agent" for method, params in calls)
-        assert (await app.call("history.list", {}))["items"] == []
+        [history] = (await app.call("history.list", {}))["items"]
+        assert history["kind"] == "ask" and history["target_app"] is None
+        assert history["raw_text"] == history["text"] == text
+        assert (await app.call("history.latest", {}))["item"] is None

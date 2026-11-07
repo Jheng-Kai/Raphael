@@ -222,7 +222,20 @@ into a conversation has the time a typed one has; only the overlay's quick quest
 Four separate totals, activity/shortcuts, horizontal tabs, dated history, dictionary and connection notices; native
 recording, recognition, cleanup, paste and correction learning. Conversation voice
 and Alt+Space agent questions share cleanup and cleanup spend accounting, including
-the short-clean-sentence shortcut, without a history row or target paste.
+the short-clean-sentence shortcut, without a target paste. Since 2026-11-07 (owner) they are kept
+in the history as `kind="ask"` with the recipient's name in `target_app` (Rust sends `member_id` with
+`dictation.stop`, 0 for Raphael); the row says 「傳給 拉斐爾」 (`history-sent-to` in dictation-history).
+Paste-last, the lifetime totals and dictionary learning still use dictations only.
+
+## The owner's punctuation (2026-11-07)
+
+The owner dislikes 。: every Chinese result (cleaned, cleaned in pieces, the raw fallback) goes through
+`textnorm.finish_chinese_dictation` (a line-final 。 goes, one inside a line becomes ，; kana lines and
+code stay). A cleaned result also goes through `remove_unspoken_ma`: a 嗎 the transcript does not have
+around it is removed with its ？, so a request never becomes a question. Tests:
+core/tests/brain/test_dictation_finish.py. The prompt stays the owner's version C (cleanup_system.md);
+a shorter candidate D lost paragraph breaks and a hedge and added two 嗎 on the owner's own 24 hours
+(gpt-6-luna, 30 cases), so it was not adopted.
 
 ## How to get to it (user POV)
 
