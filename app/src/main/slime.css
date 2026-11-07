@@ -27,9 +27,10 @@
 .slime-counterturn { transform-box: view-box; transform-origin: inherit; }
 .slime-settle, .slime-look, .slime-correction, .slime-counterturn { transition-property: --slime-dx, --slime-dy, --slime-angle, --slime-counterangle, --slime-wide, --slime-high; transition-duration: var(--slime-settle-time, 320ms); transition-timing-function: cubic-bezier(0.25, 0.8, 0.3, 1); }
 .slime-look { --slime-settle-time: 200ms; }
-/* The eyes turn toward the pointer near a resting slime, as Grok Bot's do (owner, 2026-11-06; slime-follow.ts). The
-   offset is in the drawing's own units and eases back when the pointer goes. */
-.slime[data-state="idle"] .slime-follow { translate: var(--slime-follow-x, 0px) var(--slime-follow-y, 0px); transition: translate 160ms cubic-bezier(0.25, 0.8, 0.3, 1); }
+/* At rest a slime glances aside (its own side, --slime-aside, in the drawing's units); with the pointer on it or its
+   row it looks back at you, as Grok Bot's bots do (owner, 2026-11-07). No wiggle. */
+.slime[data-state="idle"] .slime-follow { translate: var(--slime-aside, -3px) -0.5px; transition: translate 220ms cubic-bezier(0.25, 0.8, 0.3, 1); }
+:is(.mb-row, .mb-avbtn, .mb-preset, .mb-av-slime, .slime-surface):hover .slime[data-state="idle"] .slime-follow { translate: 0 0; }
 .slime-in-between { translate: var(--slime-dx) var(--slime-dy); rotate: var(--slime-angle); scale: var(--slime-wide) var(--slime-high); }
 .slime-in-between > .slime-counterturn { rotate: var(--slime-counterangle); }
 
@@ -321,20 +322,9 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   72%, 100% { translate: 0 0; rotate: 0deg; scale: 1 1; }
 }
 
-/* Under the pointer: a small delighted wiggle that finishes even when the pointer has gone, and a squish that follows the press and the release. */
+/* A squish that follows the press and the release; hovering only turns the eyes (above). */
 .slime-surface { translate: 0 0; rotate: 0deg; scale: 1; transform-origin: 50% 81.52%; transition: scale 480ms linear(0, 0.3 6%, 0.8 14%, 1.14 24%, 1.2 31%, 1.1 40%, 0.98 50%, 0.96 58%, 1.01 74%, 1); }
 :is(.mb-row, .mb-avbtn, .mb-preset, .mb-av-slime):active .slime-surface { scale: 1.12 0.84; transition: scale 90ms cubic-bezier(0.2, 0.8, 0.3, 1); }
-.slime-surface:has(.slime.is-delighted) { animation: slime-delight 620ms linear both; }
-.slime.is-delighted .slime-look > .slime-counterturn { animation: slime-delight-eyes 620ms cubic-bezier(0.3, 0, 0.3, 1) both; }
-@keyframes slime-delight {
-  0% { translate: 0 0; rotate: 0deg; animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1); }
-  18% { translate: 0 -2px; rotate: -6deg; animation-timing-function: cubic-bezier(0.4, 0, 0.5, 1); }
-  42% { translate: 0 -1px; rotate: 5deg; animation-timing-function: cubic-bezier(0.4, 0, 0.5, 1); }
-  64% { translate: 0 0; rotate: -3deg; animation-timing-function: cubic-bezier(0.4, 0, 0.5, 1); }
-  84% { translate: 0 0; rotate: 1.2deg; animation-timing-function: cubic-bezier(0.4, 0, 0.5, 1); }
-  100% { translate: 0 0; rotate: 0deg; }
-}
-@keyframes slime-delight-eyes { 30%, 60% { translate: 0 -1.5px; scale: 1.1; } }
 
 @container (width < 28px) { .slime[data-state] .slime-mark { animation: none; } }
 

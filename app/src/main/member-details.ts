@@ -31,8 +31,7 @@ import { esc, ico, iconButton, openMenu, patchHTML, sel, tg, toaster } from "./u
 import { eventRead } from './event-read';
 import { panelLibraryHTML, readPanelWork, type PanelWork } from './member-panel-work';
 import { tabs } from './ui';
-import { openActions } from "./member-column";
-import { routineRunState, testRoutine } from "./routine-run";
+import { describeError } from "./format";
 
 export type DetailsTab = "details" | "library" | "computer" | "settings" | "memory" | "skills" | "commands" | "voice";
 
@@ -196,12 +195,13 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     );
   }
 
+  // A routine is its title and when it runs, with its own switch on the right as Grok Bot's Upcoming rows have
+  // (owner, 2026-11-07); the row opens the editor.
   function routineRowHTML(routine: Routine): string {
     return (
       `<div class="mb-routine-row" data-k="routine-row:${routine.id}"><button type="button" class="btn mb-rt${routine.when ? " is-event" : ""}" data-det="routine-open" data-id="${routine.id}" data-routine="${routine.id}" data-k="routine:${routine.id}">` +
-      `<span class="mb-rt-state${routine.enabled ? " is-on" : ""}" aria-label="${esc(t(routine.enabled ? "computer.routineOn" : "computer.routinePaused"))}">${ico(routine.enabled ? "clock" : "pause")}</span>` +
       `<span class="mb-rt-main"><b>${esc(routine.title)}</b><span>${routineSentenceHTML(routine)}</span>${routine.when || routine.last_error ? `<span>${esc(routineStatus(routine))}</span>` : ""}</span>` +
-      `</button>${iconButton("more", t("members.more", {p0:routine.title}), ` data-det="routine-menu" data-id="${routine.id}" aria-haspopup="menu" aria-expanded="false"`, "row mb-tool")}</div>`
+      `</button>${tg(routine.enabled, t("members.routineSwitch", { p0: routine.title }), ` data-det="routine-toggle" data-id="${routine.id}" data-k="routine-toggle:${routine.id}"`)}</div>`
     );
   }
 
@@ -483,12 +483,15 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         if (routine) openRoutineDialog({ members: host.list()?.members ?? [member], routine, onSaved: () => void loadRoutines(), onDeleted: () => void loadRoutines() });
         break;
       }
-      case "routine-menu": {
+      case "routine-toggle": {
         const routine = Array.isArray(routines) ? routines.find(row => row.id === Number(act.dataset.id)) : undefined;
-        if (routine) openActions(act, [{id:"test",label:t(routineRunState(routine.id).running ? "routine.testing" : "routine.test"),icon:"play"},{id:"edit",label:t("members.profile.editResource"),icon:"pencil"}], choice => {
-          openRoutineDialog({members:host.list()?.members ?? [member],routine,onSaved:()=>void loadRoutines(),onDeleted:()=>void loadRoutines()});
-          if (choice === "test") void testRoutine(routine.id);
-        });
+        if (!routine) break;
+        const enabled = !routine.enabled;
+        routine.enabled = enabled;
+        act.setAttribute("aria-checked", String(enabled));
+        void api.routinesUpdate(routine.id, { enabled })
+          .catch((error) => { routine.enabled = !enabled; toaster.info(describeError(error)); })
+          .finally(() => void loadRoutines());
         break;
       }
     }

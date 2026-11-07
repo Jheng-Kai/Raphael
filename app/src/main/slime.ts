@@ -186,7 +186,9 @@ export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay
   let drawingId = drawingIds.get(key);
   if (!drawingId) { drawingId=String(drawings.size);drawingIds.set(key,drawingId);drawings.set(drawingId,{back:look.back ?? '',worn}); }
   const [bodyStrip,eyeStrip] = strips(state,drawings.get(drawingId)!);
-  return `<span class="slime-surface" data-slime-drawing="${drawingId}" data-slime-reuse="${drawingId}:${look.color}:${tempo}:${member ?? ''}" data-state="${state}" aria-hidden="true" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}">${bodyStrip}<svg class="slime" viewBox="4 11 92 92" data-slime-mounted="${performance.now()}" data-state="${state}"${member === undefined ? "" : ` data-slime-member="${member}"`} aria-hidden="true" focusable="false" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}${since === undefined ? "" : `;--slime-since:${since}ms`}">` +
+  // Each member glances to its own side at rest; neighbours in a list look different ways.
+  const aside = member !== undefined && Math.abs(member) % 2 === 1 ? 3 : -3;
+  return `<span class="slime-surface" data-slime-drawing="${drawingId}" data-slime-reuse="${drawingId}:${look.color}:${tempo}:${member ?? ''}" data-state="${state}" aria-hidden="true" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}">${bodyStrip}<svg class="slime" viewBox="4 11 92 92" data-slime-mounted="${performance.now()}" data-state="${state}"${member === undefined ? "" : ` data-slime-member="${member}"`} aria-hidden="true" focusable="false" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo};--slime-aside:${aside}px${since === undefined ? "" : `;--slime-since:${since}ms`}">` +
     `<g class="slime-press"><g class="slime-settle"><g class="slime-counterturn"><g class="slime-motion">` +
     (look.back ? `<g class="slime-back">${look.back}</g>` : "") + correction(`<path d="${BODY}" fill="var(--slime-color)" class="slime-body"/>`) + `<g class="slime-marks">${worn}</g>` +
     `<g class="slime-face" transform="${FACE_SCALE}"><g class="slime-follow"><g class="slime-look"><g class="slime-counterturn"><g class="slime-gaze" fill="none" stroke="#fff" stroke-linecap="round"><path class="slime-eyes" d="${EYES}"/></g></g></g></g></g>` +
@@ -197,18 +199,14 @@ export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay
 
 let hearing = false;
 
-/** A slime under the pointer wiggles, and finishes after the pointer has gone, so that a sweep down the list runs through it like a wave. */
+/**
+ * Under the pointer a slime does not wiggle any more (owner, 2026-11-07): a resting one glances aside and looks back
+ * at you while the pointer is on it or its row, as Grok Bot's bots do (slime.css). Here only the end of a handover.
+ */
 function hearThePointer(): void {
   if (hearing || typeof document === "undefined") return;
   hearing = true;
-  document.addEventListener("pointerover", event => {
-    const target = event.target as Element;
-    const host = target.closest?.(".mb-row, .mb-avbtn, .mb-preset") ?? target.closest?.(".mb-av-slime");
-    if (!host || host.contains(event.relatedTarget as Node | null)) return;
-    for (const svg of host.querySelectorAll('svg.slime')) svg.classList.add("is-delighted");
-  });
   document.addEventListener("animationend", event => {
-    if (event.animationName === "slime-delight") (event.target as Element).closest(".slime-surface")?.querySelector("svg.slime")?.classList.remove("is-delighted");
     if (event.animationName === 'slime-idle-hide') {
       const svg=(event.target as Element).closest<SVGElement>('svg.slime');
       if(!svg)return;

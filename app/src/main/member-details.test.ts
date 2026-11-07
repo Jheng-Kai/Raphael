@@ -636,7 +636,19 @@ test("resource rows count saved skills including disabled ones and only active r
   const panel = mount(); await flush();
   expect(panel.el.querySelector('[data-tab="skills"] small')!.textContent).toContain("2");
   panel.el.querySelector<HTMLButtonElement>('[data-det="back"]')!.click();
-  expect(panel.el.querySelectorAll('.mb-rt-state.is-on')).toHaveLength(1);
+  // Each routine carries its own switch, on for the active one only, and no ⋯ menu.
+  expect([...panel.el.querySelectorAll('[data-det="routine-toggle"]')].map(toggle => toggle.getAttribute("aria-checked"))).toEqual(["true", "false"]);
+  expect(panel.el.querySelector('[data-det="routine-menu"]')).toBeNull();
+});
+
+test("a routine's switch turns it on or off from the row without opening the editor", async () => {
+  api.routinesList.mockResolvedValue({ routines: [{ ...ROUTINE, enabled: true }] });
+  const panel = mount(false); await flush();
+  const toggle = panel.el.querySelector<HTMLButtonElement>('[data-det="routine-toggle"]')!;
+  toggle.click();
+  expect(api.routinesUpdate).toHaveBeenCalledWith(ROUTINE.id, { enabled: false });
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+  expect(document.querySelector(".au-routine-dialog")).toBeNull();
 });
 
 

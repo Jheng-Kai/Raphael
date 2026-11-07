@@ -32,7 +32,6 @@ import { installFocusKeys } from "./focus-keys";
 import { installContextMenus } from "./context-menu";
 import { prefetchEmojiWhenIdle } from "./emoji-data";
 import { fixedDevicePatch } from "./device-fixed";
-import { installSlimeFollow } from "./slime-follow";
 import { followTray } from "./tray-open";
 import { installWindowChrome, labelWindowControls, showMaximized } from "./window-chrome";
 import { installWindowZoom } from "./window-zoom";
@@ -142,7 +141,6 @@ async function start(): Promise<void> {
   installContextMenus(document);
   // A title that only repeats the words under it never shows (owner, 2026-11-07).
   dropEchoTitles(document);
-  installSlimeFollow(document);
   prefetchEmojiWhenIdle();
 
   const listeners = new Set<(event: MainEvent) => void>();
