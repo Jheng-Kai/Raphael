@@ -64,8 +64,8 @@
 .cs-open .ds .st { font-size: var(--fs-2xs); }
 .cs-item .chev { display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); }
 
-/* The dialog of a service: over the settings' tab, with the tab dimmed, its own close and switch at the top */
-.cs-scrim { position: absolute; top: 0; right: 0; bottom: 0; left: var(--set-nav); z-index: 5; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--sp-5); background: var(--scrim); }
+/* The dialog of a service: over the whole settings window, all of it dimmed (R-UI-111), its own close and switch at the top */
+.cs-scrim { position: absolute; inset: 0; z-index: 5; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--sp-5); background: var(--scrim); }
 .cs-scrim:not(.again) { animation: scrim-in 0.2s ease-out; }
 .cs-scrim:not(.again) > .cs-dialog { animation: dialog-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .cs-scrim.leaving { animation: scrim-out 0.14s ease-in forwards; pointer-events: none; }
