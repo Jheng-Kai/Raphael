@@ -1,9 +1,9 @@
 // Shared member actions for the column and the team board.
-import { exportMemberTemplate } from "./member-templates";
+import { askInChat } from "./chat-ask";
 import * as api from "./api";
 import { describeError } from "./format";
 import { t } from "./i18n";
-import { confirmDelete, groupChoices, groupFromValue, groupValue, openEditMemberDialog } from "./member-dialogs";
+import { confirmDelete, groupChoices, groupFromValue, groupValue } from "./member-dialogs";
 import { RAPHAEL_ID, memberOf, orderedMembers, primaryIdOf } from "./members";
 import { openPrimaryPicker } from "./primary-picker";
 import type { Member, MemberPatch, MembersList } from "./types";
@@ -19,8 +19,10 @@ interface MemberActionHost {
 }
 
 export function createMemberActions(host: MemberActionHost) {
+  /** Changing a member is done with it in its conversation (owner, 2026-11-07): the menu opens it and asks there. */
   function editMember(m: Member): void {
-    openEditMemberDialog({groups: host.list()?.groups ?? [], taken: (host.list()?.members ?? []).filter(other => other.id !== m.id).map(other => other.name), update: host.update, saved: () => void host.load()}, m);
+    host.select(m.id);
+    askInChat(m.id, "settings");
   }
 
   async function memberAction(id: number, action: string): Promise<void> {
@@ -33,7 +35,8 @@ export function createMemberActions(host: MemberActionHost) {
     }
     if (action === "edit") return editMember(m);
     try {
-      if (action === "export-template") return await exportMemberTemplate(id);
+      // Sharing is the member packaging itself in its conversation, as the panel's share does.
+      if (action === "export-template") { host.select(id); askInChat(id, "share-template"); return; }
       if (action === "pin") await host.update(id, {pinned: !m.pinned});
       else if (action === "hide") {
         // Hidden members wait in the sidebar's hidden folder, where the same item brings them back (R-UI-112).

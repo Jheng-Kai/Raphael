@@ -11,5 +11,5 @@ export default [
   scene("template-preview", "Full instructions, skills, paused schedules and individual connect cards", [...preview,scroll('.template-preview [data-dlg="connect"]'),check("store-preview")]),
   scene("template-preview-warning", "Third-party and injection notices precede explicit installation", [...preview,check("store-warning")], {storeWarning:true}),
   scene("template-skill-expanded", "The shared disclosure reveals the full skill body without frontmatter", [...preview,click('.template-skill [data-card-disclosure]'),check('template-content-expanded')]),
-  scene("template-export-review", "Review a private-state-free recipe before export or publish", [member(1),{action:"member-column",collapsed:false},click('[data-member-more="1"]'),click('#app-popover [data-pick="export-template"]'),wait(".template-export-review"),check('template-content'),check("store-export")]),
+  scene("template-export-review", "Review a private-state-free recipe from the member's template card before saving or publishing it", [member(1),wait('[data-template-card-id="tpl-1"]'),scroll('[data-template-card-id="tpl-1"]'),click('[data-template-card-id="tpl-1"] [data-act="template-view"]'),wait(".template-card-review"),check('template-content'),check("store-export")], { chatCards: true }),
 ];

@@ -56,7 +56,8 @@ export function checkRendered(name, context = {}) {
       const template = window.__look.data.colleagueSample.template;
       require(dialog.textContent.includes(template.personality) && dialog.querySelector('.template-skill .card-detail').textContent.includes('先查證來源，再完成報告。') && dialog.textContent.includes(template.routines[0].prompt), "full personality, skill body and routine text");
       if (name === "store-export") {
-        require(!window.__look.exportedTemplate && visible(dialog.querySelector('[data-dlg="export"]')), "review precedes file save");
+        // The template card (owner, 2026-11-07) reviews in this dialog and saves from the card.
+        require(!window.__look.exportedTemplate && (visible(dialog.querySelector('[data-dlg="export"]')) || visible(document.querySelector('[data-template-card-id] [data-act="template-save"]'))), "review precedes file save");
       } else {
         require(dialog.textContent.includes("加入前不會授予任何權限"), "no permissions before explicit import");
         require(dialog.querySelectorAll('[data-dlg="connect"]').length === template.connections.length && [...dialog.querySelectorAll('[data-dlg="connect"]')].every(b => b.disabled), "one disabled connect action per app");

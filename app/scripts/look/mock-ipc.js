@@ -1399,11 +1399,11 @@ export function installMock(fixture, config = {}, target = window) {
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         return { card };
       }
-      case "members.template_card": return { template: { format: "raphael-member", version: 1, name: "研究與資訊整理", role: "研究與資訊整理", personality: "", instructions: "查證來源，整理成摘要。", reply_style: "full", description: "幫人查證來源、整理成一份能直接讀的研究摘要。", skills: [], routines: [], connections: ["Gmail", "Notion"] }, findings: [] };
+      case "members.template_card": return { template: structuredClone(data.colleagueSample.template), findings: [] };
       case "members.template_card_export": {
         const turn = data.turns.find(item => item.templates?.some(card => card.id === p.id));
         turn.templates[0].state = "saved"; notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
-        return { text: "{}" };
+        return { text: JSON.stringify(data.colleagueSample.template, null, 2) };
       }
       case "integrations.card_save": {
         const turn = data.turns.find(item => item.secrets?.some(card => card.id === p.id));
