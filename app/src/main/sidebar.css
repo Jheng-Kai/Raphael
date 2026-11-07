@@ -88,6 +88,14 @@
 .side .btn.icon.mb-tool[data-col]:hover:not(:disabled) { background: var(--hover); color: var(--text); }
 .side .btn.icon.mb-tool[data-col]:active:not(:disabled) { background: var(--pressed); color: var(--text); }
 .side .btn.icon.mb-tool[data-col] .i { width: 18px; height: 18px; }
+/* A new version, above Connect apps: the same quiet row, its version on the left and 更新 on the right. */
+.side .side-foot .sidebar-update[hidden] { display: none; }
+.side .side-foot .sidebar-update-btn { width: 100%; height: 40px; border: 1px solid var(--line); border-radius: var(--r-pill); padding-inline: 12px; background: transparent; color: var(--text); }
+.side .side-foot .sidebar-update-btn:is(:hover, :active):not(:disabled) { background: var(--hover); }
+.side .side-foot .sidebar-update-btn .nav-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
+.side .side-foot .sidebar-update-act { flex: none; font-size: var(--fs-xs); font-weight: 600; color: var(--accent-text); }
+:root[data-sidebar-collapsed] .side .side-foot .sidebar-update-btn { width: 44px; height: 44px; padding: 0; justify-content: center; border-color: transparent; }
+:root[data-sidebar-collapsed] .side .side-foot .sidebar-update-act { display: none; }
 .side .side-foot .sidebar-apps { height: 40px; border: 1px solid var(--line); border-radius: var(--r-pill); padding-inline: 12px; background: transparent; }
 .side .sidebar-apps:is(:hover, :active) { color: var(--text); background: var(--hover); }
 .side .sidebar-account:is(:hover, :active) { background: transparent; color: var(--text); }

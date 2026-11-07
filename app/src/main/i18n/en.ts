@@ -157,6 +157,7 @@ export const en = {
   "update.ready": "Update verified; ready to restart.",
   "update.install": "Download and restart",
   "update.restart": "Restart to update",
+  "update.now": "Update",
   "update.auto": "Automatic updates",
   "update.autoHelp": "Download in the background; install after 10 idle minutes with no members working.",
   "update.currentVersion": "Current version {p0}",

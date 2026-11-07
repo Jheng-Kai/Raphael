@@ -9,6 +9,7 @@ import type { AppContext } from "./types";
 import { onOwnerProfile, ownerFaceHTML, ownerName } from "./owner-avatar";
 import { esc, ico, iconButton } from "./ui";
 import { mountEdge, savedWidth, saveWidth } from "./edge-drag";
+import { mountUpdateNotice } from "./update-notice";
 
 /** The full list's widths (px): Grok Bot's runs from about 277 to 399; ours starts at the stylesheet's 296. */
 const DEFAULT_WIDTH = 296, MIN_WIDTH = 240, MAX_WIDTH = 400;
@@ -21,9 +22,11 @@ const clampWidth = (width: number): number => Math.round(Math.min(MAX_WIDTH, Mat
 
 export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<AppContext, "onEvent">): { close(): void } {
   nav.classList.add("sidebar");
-  nav.innerHTML = `<div class="sidebar-conversations"></div><div class="side-foot"><button type="button" class="nav sidebar-apps" data-connect-apps>${ico("plug")}<span class="nav-t"></span><span class="sidebar-app-marks" aria-hidden="true"></span></button><div class="sidebar-foot-row"><button type="button" class="nav sidebar-account" data-go="settings" data-pane="general"></button>${iconButton("mic", t("nav.dictation"), ' data-go="dictation" aria-current="false"', "sidebar-dictation")}${iconButton("home", t("nav.home"), ' data-go="home" aria-current="false"', "sidebar-home")}</div></div>`;
+  nav.innerHTML = `<div class="sidebar-conversations"></div><div class="side-foot"><div class="sidebar-update" hidden></div><button type="button" class="nav sidebar-apps" data-connect-apps>${ico("plug")}<span class="nav-t"></span><span class="sidebar-app-marks" aria-hidden="true"></span></button><div class="sidebar-foot-row"><button type="button" class="nav sidebar-account" data-go="settings" data-pane="general"></button>${iconButton("mic", t("nav.dictation"), ' data-go="dictation" aria-current="false"', "sidebar-dictation")}${iconButton("home", t("nav.home"), ' data-go="home" aria-current="false"', "sidebar-home")}</div></div>`;
   let inventory: InventoryView = "loading";
   let lastMarks = "";
+  // The sidebar lives as long as the window: its update line is never taken down.
+  mountUpdateNotice(nav.querySelector<HTMLElement>(".sidebar-update")!);
   const apps = nav.querySelector<HTMLElement>(".sidebar-apps")!;
   const drawApps = (): void => {
     const label = entryLabel(inventory), name = t("nav.apps");

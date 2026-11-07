@@ -157,6 +157,7 @@ export const ja = {
   "update.ready": "更新の検証が完了しました。再起動できます。",
   "update.install": "ダウンロードして再起動",
   "update.restart": "再起動して更新",
+  "update.now": "更新",
   "update.auto": "自動更新",
   "update.autoHelp": "バックグラウンドでダウンロードし、10 分間操作がなく、メンバーの作業がない時にインストールします。",
   "update.currentVersion": "現在のバージョン {p0}",

@@ -60,7 +60,7 @@ const DEFAULT_DEVICE: DeviceSettings = {
   appearance: "system",
   ui_language: "zh-TW",
   autostart: true,
-  auto_update: false,
+  auto_update: true,
   onboarded: false,
   computer_apps: [],
 };

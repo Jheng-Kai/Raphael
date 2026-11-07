@@ -156,6 +156,7 @@ export const zhTW = {
   "update.ready": "更新已驗證，等待重新啟動。",
   "update.install": "下載並重新啟動",
   "update.restart": "重新啟動以更新",
+  "update.now": "更新",
   "update.auto": "自動更新",
   "update.autoHelp": "在背景下載；閒置至少 10 分鐘且沒有成員工作時才安裝。",
   "update.currentVersion": "目前版本 {p0}",
