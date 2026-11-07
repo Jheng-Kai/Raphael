@@ -162,20 +162,22 @@ describe("the list", () => {
   test("a row is an icon, the name and a muted line, the service in use, a switch and a chevron; the row opens the dialog", () => {
     const [search] = rows(html);
     expect(search).toMatch(/^[^>]*data-svc="open" data-id="search">/);
-    expect(search).toMatch(/<button type="button" class="btn cs-open" data-svc="open" data-id="search" data-k="svc-open:search" aria-haspopup="dialog" title="查看 搜尋網路">/);
+    expect(search).toMatch(/<button type="button" class="btn cs-open" data-svc="open" data-id="search" data-k="svc-open:search" aria-haspopup="dialog">/);
     expect(search).toMatch(/<span class="ic svc-ic" aria-hidden="true"><svg/);
     expect(search).toContain('<span class="ds">查詢最新的資料</span>');
-    expect(search).toContain('<span class="svc-now">Brave</span>');
+    // the service in use is a whole line under the name, never a cut label beside the switch
+    expect(search).toContain('<span class="svc-now">正在用 Brave</span>');
     expect(search).toMatch(/class="tg" role="switch" aria-checked="true" aria-label="開啟 搜尋網路" data-svc="toggle" data-id="search" data-k="svc-toggle:search"/);
     // the chevron is a picture of where the row goes, not a second button
     expect(search).toMatch(/<span class="chev" aria-hidden="true"><svg/);
     expect(search.match(/<button/g)).toHaveLength(2);
   });
 
-  test("says which service is in use for each, small and muted", () => {
+  test("says which service is in use for each; for images, the model that really reads them, never a raw brain id", () => {
     const now = [...html.matchAll(/<span class="svc-now">(.*?)<\/span>/g)].map((m) => m[1]);
-    expect(now).toEqual(["Brave", "Jina", "與拉斐爾相同", "內建", "Fish Audio"]);
-    expect(draw({ status: status({ model: "anthropic/claude-haiku-5.5" }) })).toContain('<span class="svc-now">claude-haiku-5.5</span>');
+    expect(now).toEqual(["正在用 Brave", "正在用 Jina", "正在用 gpt-6-luna", "正在用 內建", "正在用 Fish Audio"]);
+    expect(draw({ status: status({ model: "anthropic/claude-haiku-5.5" }) })).toContain('<span class="svc-now">正在用 claude-haiku-5.5</span>');
+    expect(draw({}, { ...BRAIN, agent_model: "cli:claude:opus" })).not.toContain("cli:");
   });
 
   test("is clean: no dropdown, no field, no text button, no helper paragraph, and no key or address anywhere", () => {
@@ -201,7 +203,7 @@ describe("the list", () => {
 
   test("while the core has not said, the rows are there, from the settings, and the switches wait", () => {
     const loading = servicesHTML(emptyServicesView(), PICKER, { ...BRAIN, web_search_service: "tavily", tts_enabled: true });
-    expect(loading).toContain('<span class="svc-now">Tavily</span>');
+    expect(loading).toContain('<span class="svc-now">正在用 Tavily</span>');
     expect([...loading.matchAll(/class="tg"[^>]*>/g)].every((m) => m[0].includes(" disabled"))).toBe(true);
     expect(visible(servicesHTML({ ...emptyServicesView(), status: "failed" }, PICKER, null))).toContain("無法讀取服務設定");
   });
@@ -275,12 +277,15 @@ describe("the dialog of a capability", () => {
     expect(d).toMatch(/<button type="button" class="btn icon" aria-label="關閉" title="關閉" data-svc="close" data-k="svc-close"/);
   });
 
-  test("lists the services under 「已安裝」, each a mark, a name, a note, a chevron; a check on the one in use only", () => {
+  test("lists the services under 「已安裝」, each a mark, a name with its state, what choosing it means, a chevron; a check on the one in use only", () => {
     const d = inDialog(dialog("search"));
     expect(d).toContain('<h3 class="svc-h">已安裝</h3>');
     const rows = d.split('<div class="cs-item svc-srv"').slice(1);
-    expect(rows.map((r) => /<span class="nm">(.*?)<\/span>/.exec(r)![1])).toEqual(["OpenRouter", "Brave", "Tavily", "Exa", "SearXNG"]);
-    expect(rows.map((r) => /<span class="ds">(.*?)<\/span>/.exec(r)?.[1])).toEqual(["共用金鑰", "需要金鑰", "需要金鑰", "需要金鑰", "需要網址"]);
+    expect(rows.map((r) => /<span class="nm">([^<]*)/.exec(r)![1])).toEqual(["OpenRouter", "Brave", "Tavily", "Exa", "SearXNG"]);
+    expect(rows.map((r) => /<span class="svc-tag">(.*?)<\/span>/.exec(r)?.[1])).toEqual(["共用金鑰", "需要金鑰", "需要金鑰", "需要金鑰", "需要網址"]);
+    // every choice says in one line what it costs and needs (owner, 2026-11-07)
+    expect(rows.every((r) => /<span class="ds">[^<]{8,}<\/span>/.test(r))).toBe(true);
+    expect(rows[0]).toContain("不用另外申請");
     expect(rows[0]).toMatch(/^ data-svc="service" data-service="openrouter">/);
     expect(rows[0]).toMatch(/<button type="button" class="btn cs-open" data-svc="service" data-service="openrouter" data-k="svc-svc:openrouter"/);
     expect(rows[0]).toContain('class="mono md logo-mono"');
@@ -292,19 +297,19 @@ describe("the dialog of a capability", () => {
   });
 
   test("a note says 已設定 for a service that has its key, and 免金鑰 for Jina without one", () => {
-    expect(inDialog(dialog("search", null, { status: status({ braveKey: true, urlSet: true }) }))).toMatch(/Brave<\/span><span class="ds">已設定<\/span>[\s\S]*SearXNG<\/span><span class="ds">已設定</);
+    expect(inDialog(dialog("search", null, { status: status({ braveKey: true, urlSet: true }) }))).toMatch(/Brave<span class="svc-tag">已設定<\/span>[\s\S]*SearXNG<span class="svc-tag">已設定</);
     const read = inDialog(dialog("read"));
-    expect(read).toMatch(/內建<\/span><span class="ds">本機</);
-    expect(read).toMatch(/Jina<\/span><span class="ds">免金鑰</);
+    expect(read).toMatch(/內建<span class="svc-tag">本機</);
+    expect(read).toMatch(/Jina<span class="svc-tag">免金鑰</);
   });
 
   test("the pages, PDFs and voice list their own services", () => {
-    const names = (kind: Capability): string[] => [...inDialog(dialog(kind)).matchAll(/class="cs-item svc-srv"[\s\S]*?<span class="nm">(.*?)<\/span>/g)].map((m) => m[1]);
+    const names = (kind: Capability): string[] => [...inDialog(dialog(kind)).matchAll(/class="cs-item svc-srv"[\s\S]*?<span class="nm">([^<]*)/g)].map((m) => m[1]);
     expect(names("read")).toEqual(["內建", "Jina", "Firecrawl", "Tavily"]);
     expect(names("pdf")).toEqual(["內建", "OpenRouter"]);
     expect(names("voice")).toEqual(["Fish Audio"]);
     expect(names("vision")).toEqual(["與拉斐爾相同", "指定模型"]);
-    expect(inDialog(dialog("vision"))).toMatch(/與拉斐爾相同<\/span><span class="ds">gpt-6-luna<\/span>/);
+    expect(inDialog(dialog("vision"))).toMatch(/與拉斐爾相同<span class="svc-tag">gpt-6-luna<\/span>/);
   });
 
   test("is in the three languages", () => {
@@ -392,9 +397,12 @@ describe("the page of one service", () => {
     expect(use(dialog("search", "openrouter", { busy: "switch" }))).toContain(" disabled");
   });
 
-  test("看圖片's pages: 「與拉斐爾相同」 has 「使用」; 「指定模型」 has the picker and no field", () => {
+  test("看圖片's pages: 「與拉斐爾相同」 says what it means and has 「改用 與拉斐爾相同」; 「指定模型」 has the picker and no field", () => {
     const same = inDialog(dialog("vision", "same", { status: status({ model: "anthropic/claude-haiku-5.5" }) }));
-    expect(same).toMatch(/data-svc="use" data-service="same"[^>]*>使用</);
+    expect(same).toMatch(/data-svc="use" data-service="same"[^>]*>改用 與拉斐爾相同</);
+    expect(same).toContain('<p class="cs-desc svc-why">');
+    // the one in use says so on its button
+    expect(inDialog(dialog("vision", "same"))).toMatch(/data-svc="use" data-service="same"[^>]*>使用中</);
     expect(same).not.toContain("data-model-picker");
     const model = inDialog(dialog("vision", "model"));
     expect(model).toContain(`<div class="svc-pick">${PICKER}</div>`);

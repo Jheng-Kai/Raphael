@@ -6,10 +6,15 @@
 .svc-ic { display: inline-grid; place-items: center; width: 30px; flex: none; color: var(--text-2); }
 .svc-ic .i { width: 20px; height: 20px; }
 
-/* A row of the list: the row, the service in use in small muted words, the switch, the chevron */
-.svc-item { grid-template-columns: minmax(0, 1fr) auto auto 18px; }
-.svc-now { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size:var(--fs-2xs); color: var(--text-3); }
+/* A row of the list: its name, what it does and the service it uses, whole (never cut; owner, 2026-11-07), then
+   the switch and the chevron */
+.svc-item { grid-template-columns: minmax(0, 1fr) auto 18px; }
+.svc-item .tx .ds, .svc-srv .tx .ds { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.svc-now { display: block; font-size: var(--fs-2xs); color: var(--text-3); overflow-wrap: anywhere; }
 .svc-item.off .nm { color: var(--text-2); }
+/* A service's state beside its name: 需要金鑰, 已設定, 本機 */
+.svc-tag { margin-inline-start: var(--sp-2); font-size: var(--fs-2xs); font-weight: 400; color: var(--text-3); }
+.svc-why { margin: 0; }
 /* a row the settings' search lit */
 .cs-item.found, .cs-list.found > .cs-item { background: var(--accent-soft); }
 
@@ -32,7 +37,3 @@
 .svc-pick { display: grid; grid-template-columns: minmax(0, 1fr); }
 .svc-pick .mp-slot, .svc-pick .sel { width: 100%; max-width: none; }
 
-@media (max-width: 720px) {
-  .svc-now { display: none; }
-  .svc-item { grid-template-columns: minmax(0, 1fr) auto 18px; }
-}
