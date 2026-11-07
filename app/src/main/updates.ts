@@ -11,7 +11,8 @@ export function updateHTML(view: api.UpdateView | null, automatic: boolean, curr
   const state = view?.state ?? "idle";
   const busy = ["checking", "downloading", "installing"].includes(state);
   const available = !!view?.version;
-  return `<section class="sgroup" data-updates><h2>${esc(t("update.title"))}</h2><div class="slist">` +
+  // No heading over the row that already says 應用程式更新 (owner, 2026-11-07: no title over the same words).
+  return `<section class="sgroup" data-updates aria-label="${esc(t("update.title"))}"><div class="slist">` +
     row(available ? t("update.found", {p0:view!.version}) : t("update.title"),
       state === "error" ? t(view?.error === "busy" ? "update.busy" : view?.error === "version" ? "update.versionError" : view?.error === "verification" ? "update.signatureError" : "update.feedError") : t(state === "ready" ? "update.ready" : state === "downloading" ? "update.downloading" : state === "checking" ? "update.checking" : available ? "update.available" : "update.current"),
       btn(t(available ? state === "ready" ? "update.restart" : "update.install" : "update.check"), "", ` data-act="${available ? "update-install" : "update-check"}"${busy ? " disabled" : ""}`)) +

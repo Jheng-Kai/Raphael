@@ -573,7 +573,8 @@ function aboutHTML(v: SettingsView): string {
     `<div class="about-brand">${brandIcon("about-icon")}<span class="about-name">Raphael</span></div>` +
     `<div class="slist about">` +
     row(t("settings.078"), "", `<span class="val num">${esc(v.version)}</span>`) +
-    row(t("nav.help"), "", btn(t("nav.help"), "", ' data-act="help"')) +
+    // The row names it; its button says what it does, never the same words again (R-UI flat rows, owner 2026-11-07).
+    row(t("nav.help"), "", btn(t("desktop.openShort"), "", ' data-act="help"')) +
     row(t("settings.079"), t("settings.080"), btn(t("settings.081"), "", ' data-act="license"')) +
     `</div>` +
     updateHTML(v.update ?? null, v.device.auto_update ?? false, v.version) +
