@@ -140,7 +140,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   /** A stream that has not connected this long is said to be out of reach, with a retry (owner, 2026-11-07: a remote
    *  computer's screen stayed on 「成員正在控制電腦」 with nothing behind it). */
   const STALL_MS = 20_000;
-  let stalled = false, stallTimer: ReturnType<typeof setTimeout> | undefined;
+  let stalled = false, everConnected = false, stallTimer: ReturnType<typeof setTimeout> | undefined;
   let closePending: Promise<unknown> = Promise.resolve(), clickedAt = 0;
   // Nothing is painted until the read answers, so the town never flashes under the owner's picture.
   let ownWallpaper: string | undefined, wallpaperKnown = false, wallpaperRead: Promise<void> | undefined;
@@ -254,7 +254,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     for (const node of character.content.querySelectorAll('[data-presence-member], [data-tooltip]')) { node.removeAttribute('data-presence-member'); node.removeAttribute('data-tooltip'); }
     for (const node of character.content.querySelectorAll('.slime-surface, svg.slime')) { node.setAttribute('data-state', state?.state === 'stopped' || state?.state === 'missing' ? 'sleeping' : preparing ? 'working' : 'idle'); node.removeAttribute('data-slime-member'); }
     // While a stream is on its way the screen says so, and says when it cannot be reached; never that a member works there.
-    const reaching = running && !connected && (!!session || opening);
+    const reaching = running && !connected && (!!session || opening || stalled);
     const sentence = reaching ? t(stalled ? "desktop.streamStalled" : "desktop.connecting") : computerStateText(state);
     patchHTML(stateContent, preparing ? preparationHTML(state!, face) : `<div class="desktop-boot-face" aria-hidden="true">${character.innerHTML}</div><span class="desktop-message">${esc(sentence)}</span>`);
     patchHTML(stateRecovery, state?.error === 'docker_stopped' || state?.error === 'remote_unavailable'
@@ -310,8 +310,14 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       panel.dataset.inputLatencyMs = String(event.data.latencyMs);
     } else {
       connected = event.data.state === 'connected';
-      if (connected) { clearTimeout(stallTimer); stalled = false; }
-      if (!connected) { interactive = false; closeStream(); if (state) state = { ...state, control:'member' }; }
+      if (connected) { clearTimeout(stallTimer); stalled = false; everConnected = true; }
+      if (!connected) {
+        // A stream that ends before it ever showed the screen, or says it cannot reach it, is out of reach: it waits for
+        // a retry instead of reopening on every poll.
+        const unreached = event.data.state === 'unreachable' || !everConnected;
+        interactive = false; closeStream(); if (state) state = { ...state, control:'member' };
+        if (unreached) stalled = true;
+      }
       // Only a fresh takeover click can acquire input after the new stream connects.
     }
     draw();
@@ -319,7 +325,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   }
   window.addEventListener('message', message);
   async function openStream(): Promise<void> {
-    if (session || opening || suspended || maintenance?.member === member() || !active()) return;
+    if (session || opening || suspended || stalled || maintenance?.member === member() || !active()) return;
     opening = true;
     const current = generation, id = member();
     try {
@@ -327,7 +333,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       const opened = await api.desktopOpen(id, { conversation_id: options.conversation() });
       if (current !== generation || id !== member() || !active()) { await api.desktopClose(opened.session); return; }
       session = opened; streamMember = id; streamConversation = options.conversation();
-      clearTimeout(stallTimer); stalled = false;
+      clearTimeout(stallTimer); stalled = false; everConnected = false;
       stallTimer = setTimeout(() => { if (session === opened && !connected) { stalled = true; draw(); } }, STALL_MS);
     } catch {
       if (current === generation) {
@@ -348,6 +354,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (beganWork) options.openPanel();
     const previousWaiting = waitingTurns();
     if (!next.works?.some(work => work.state === "waiting_control")) parkFrame();
+    // The core found the screen out of reach (a remote host's forward failed): wait for a retry, not the next poll.
+    if (next.state === 'running' && next.error === 'viewer_unreachable' && !stalled) { closeStream(); stalled = true; }
     // A status read taken before the wake press landed must not put the screen back to sleep.
     if (waking && next.state !== 'stopped' && next.state !== 'missing') waking = false;
     state = maintenance?.member === member() ? { ...next, lifecycle: maintenance.phase } : waking ? { ...next, lifecycle: 'waking' } : next;

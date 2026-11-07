@@ -134,9 +134,11 @@ async def test_viewer_uses_owned_ssh_pipes_without_a_socks_listener():
     class Process:
         returncode = None
         stdout, stdin = object(), Input()
+        stderr = asyncio.StreamReader()
         def kill(self): self.returncode = -1
         async def wait(self): return self.returncode
     process = Process()
+    process.stderr.feed_eof()
     async def launch(*args, **kwargs):
         launches.append((args, kwargs))
         return process

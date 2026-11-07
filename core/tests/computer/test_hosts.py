@@ -36,7 +36,7 @@ def test_ssh_transport_has_one_validated_host_argument():
 
 @pytest.mark.parametrize("alias,port,address", [
     ("-Fbad", 43123, "172.18.0.2"), ("mini", 80, "172.18.0.2"),
-    ("mini", 43123, "127.0.0.1"), ("mini", 43123, "8.8.8.8"),
+    ("mini", 43123, "127.0.0.2"), ("mini", 43123, "8.8.8.8"),
     ("mini", 43123, "172.18.0.2:22"), ("mini", 43123, "169.254.1.1"),
 ])
 def test_tunnel_rejects_nonprivate_destinations_and_invalid_argv(alias, port, address):
@@ -110,7 +110,7 @@ async def test_remote_idle_sleep_stops_only_its_container_without_removing_works
     assert not any(args[0] in ("rm", "volume") for args, _ in runtime.calls)
 
 
-async def test_remote_viewer_forwards_private_ip_and_disposes_only_its_tunnel(tmp_path, conn, monkeypatch):
+async def test_remote_viewer_forwards_host_loopback_and_disposes_only_its_tunnel(tmp_path, conn, monkeypatch):
     from raphael_core.computer import ssh_tunnel
     settings = SettingsStore(conn)
     settings.set("computer_ssh_alias", "studio-mini")
@@ -120,17 +120,19 @@ async def test_remote_viewer_forwards_private_ip_and_disposes_only_its_tunnel(tm
     runtime.raw = container(vm, target, runtime)
     calls = []
     class FakeTunnel:
-        async def open(self, alias, address):
-            calls.append((alias, address))
+        async def open(self, alias, address, remote_port):
+            calls.append((alias, address, remote_port))
             return 43123
         async def close(self):
             calls.append("close")
     monkeypatch.setattr(ssh_tunnel, "Tunnel", FakeTunnel)
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr(ssh_tunnel, "verify_viewer", AsyncMock())
     assert await vm.viewer_connection(target) == (43123, "private")
     assert "private" not in str(await vm.status(target))
     assert vm.command(target, ["exec", "-i", target.name, "driver"])[1:3] == ["--host", "ssh://studio-mini"]
     await vm.close_viewer(target)
-    assert calls == [("studio-mini", "172.18.0.2"), "close"]
+    assert calls == [("studio-mini", "127.0.0.1", 6080), "close"]
     assert not vm.tunnels
 
 
@@ -162,13 +164,13 @@ def test_default_member_computers_share_only_team_files(tmp_path, conn):
     assert args[args.index("--cpus") + 1] == "2"
 
 
-def test_remote_uses_engine_volumes_and_publishes_no_ports(tmp_path, conn):
+def test_remote_uses_engine_volumes_and_publishes_only_loopback(tmp_path, conn):
     settings = SettingsStore(conn)
     settings.set("computer_ssh_alias", "studio-mini")
     vm = LocalVm(tmp_path, settings=settings, runner=Runtime())
     target = vm.target(1)
     args = run_args(target, vm.owner, "private")
-    assert "-p" not in args
+    assert args[args.index("-p") + 1] == "127.0.0.1::6901"
     assert len([arg for arg in args if arg.startswith("type=volume,")]) == 2
     assert str(tmp_path) not in " ".join(args)
 

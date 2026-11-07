@@ -705,3 +705,16 @@ test('a stream that never connects says so after a while and offers a retry, nev
   message('connected'); await flush();
   expect(panel().querySelector<HTMLElement>('.desktop-placeholder')!.hidden).toBe(true);
 });
+
+test('a stream that ends before it ever showed the screen, or says it cannot reach it, waits for a retry instead of reopening', async () => {
+  panelOpen = true; mounted.show(); await flush();
+  message('unreachable'); await flush();
+  expect(panel().querySelector('.desktop-message')?.textContent).toBe(t('desktop.streamStalled'));
+  await vi.advanceTimersByTimeAsync(10_000); await flush();
+  expect(api.desktopOpen).toHaveBeenCalledTimes(1);
+  panel().querySelector<HTMLButtonElement>('[data-desktop="retry"]')!.click(); await flush();
+  expect(api.desktopOpen).toHaveBeenCalledTimes(2);
+  api.desktopRenew.mockResolvedValue({ ...running, error: 'viewer_unreachable' });
+  await vi.advanceTimersByTimeAsync(10_000); await flush();
+  expect(panel().querySelector('.desktop-message')?.textContent).toBe(t('desktop.streamStalled'));
+});

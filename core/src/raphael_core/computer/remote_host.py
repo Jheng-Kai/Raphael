@@ -1,13 +1,13 @@
 """Owned SSH Docker/socket and SOCKS forwards; no remote lifecycle commands."""
 
 import asyncio
-import ipaddress
 import re
 import tempfile
 import time
 from pathlib import Path
 
 from .desktop_host import NO_WINDOW
+from .ssh_tunnel import viewer_target, viewer_stderr
 from ..storage import owner_only_directory
 
 
@@ -148,14 +148,12 @@ class RemoteSession:
                 process.kill()
                 await process.wait()
 
-    async def connect_viewer(self, address):
-        ip = ipaddress.IPv4Address(address)
-        if not any(ip in ipaddress.IPv4Network(net) for net in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")):
-            raise ValueError("Invalid private viewer address")
+    async def connect_viewer(self, address, port=6901):
+        destination = viewer_target(address, port)
         args = ssh_args(self.alias)
-        args[-1:-1] = ["-W", f"{ip}:6901"]
+        args[-1:-1] = ["-W", destination]
         process = await self.launch(*args, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL, creationflags=NO_WINDOW)
+            stderr=asyncio.subprocess.PIPE, creationflags=NO_WINDOW)
         return process.stdout, _ViewerWriter(process)
 
     async def close(self):
@@ -179,13 +177,16 @@ class RemoteSession:
 class _ViewerWriter:
     def __init__(self, process):
         self.process = process
+        self.diagnostics = asyncio.create_task(viewer_stderr(process.stderr))
     def write(self, data): self.process.stdin.write(data)
     async def drain(self): await self.process.stdin.drain()
     def close(self):
         self.process.stdin.close()
         if self.process.returncode is None:
             self.process.kill()
-    async def wait_closed(self): await self.process.wait()
+    async def wait_closed(self):
+        await self.process.wait()
+        await self.diagnostics
 
 
 class SharedViewerTunnel:
@@ -193,11 +194,13 @@ class SharedViewerTunnel:
         self.session, self.server, self.tasks = session, None, set()
         self.address = None
 
-    async def open(self, alias, address):
-        if self.server and self.address == address:
+    async def open(self, alias, address, remote_port=6901):
+        viewer_target(address, remote_port)
+        destination = (address, remote_port)
+        if self.server and self.address == destination:
             return self.server.sockets[0].getsockname()[1]
         await self.close()
-        self.address = address
+        self.address = destination
         async def accept(reader, writer):
             task = asyncio.current_task()
             self.tasks.add(task)
@@ -207,7 +210,7 @@ class SharedViewerTunnel:
                     destination.write(chunk)
                     await destination.drain()
             try:
-                remote, upstream = await self.session.connect_viewer(address)
+                remote, upstream = await self.session.connect_viewer(address, remote_port)
                 copies = [asyncio.create_task(pipe(reader, upstream)), asyncio.create_task(pipe(remote, writer))]
                 try:
                     await asyncio.wait(copies, return_when=asyncio.FIRST_COMPLETED)

@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import httpx
+
 BASE = "docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b"
 VERSION = "0.37.0"
 IMAGE = "raphael/cua-local-vm:driver-0.37.0-v4"
@@ -146,7 +148,7 @@ def run_args(target, owner, password, *, tz=None):
         *(["--mount", mount_arg(target.shared, SHARED, remote=bool(target.remote))] if target.shared else []),
         "-e", f"VNC_PW={password}",
         "-e", f"TZ={zone}",
-        *([] if target.remote else ["-p", "127.0.0.1::6901"]), IMAGE,
+        "-p", "127.0.0.1::6901", IMAGE,
     ]
 
 
@@ -188,9 +190,9 @@ def compatible(raw, target, owner, image_id):
             and host.get("NanoCpus") == 2_000_000_000 and host.get("PidsLimit") == 4096
             and host.get("ShmSize") == 512 * 1024**2
             and mounts_match(mounts, configured_mounts, target)
-            and (not ports if target.remote else (
+            and (
                 set(ports) == {"6901/tcp"} and len(ports["6901/tcp"]) == 1
-                and ports["6901/tcp"][0]["HostIp"] == "127.0.0.1"))
+                and ports["6901/tcp"][0]["HostIp"] == "127.0.0.1")
         )
     except (KeyError, TypeError, AttributeError):
         return False
@@ -436,17 +438,17 @@ class LocalVm:
             self.invalidate(target)
         bindings = raw.get("NetworkSettings", {}).get("Ports", {}).get("6901/tcp") or []
         port = next((int(p["HostPort"]) for p in bindings if p.get("HostIp") == "127.0.0.1" and str(p.get("HostPort", "")).isdigit()), None)
-        url = f"http://127.0.0.1:{port}/vnc.html#autoconnect=true&resize=scale&view_only=true" if port else ""
+        url = f"http://127.0.0.1:{port}/vnc.html#autoconnect=true&resize=scale&view_only=true" if port and not target.remote else ""
         return {"state": "running" if running else "stopped", "ready": ready, "viewer_url": url}
 
     async def viewer_connection(self, target):
         try:
             return await self._viewer_connection(target)
         except VmError as error:
-            if str(error) != "viewer_tunnel_failed":
+            if str(error) not in ("viewer_tunnel_failed", "viewer_unreachable"):
                 raise
             if not self.repair_admit(target):
-                raise VmError("repair_failed")
+                raise VmError("viewer_unreachable") from None
             await self.close_viewer(target)
             result = await self._viewer_connection(target)
             self.record_repair(target)
@@ -463,17 +465,19 @@ class LocalVm:
         bindings = raw.get("NetworkSettings", {}).get("Ports", {}).get("6901/tcp") or []
         port = next((int(p["HostPort"]) for p in bindings if p.get("HostIp") == "127.0.0.1" and str(p.get("HostPort", "")).isdigit()), None)
         if target.remote:
-            from .ssh_tunnel import Tunnel
-            networks = raw.get("NetworkSettings", {}).get("Networks", {})
-            address = next((network.get("IPAddress") for network in networks.values() if network.get("IPAddress")), "")
+            from .ssh_tunnel import Tunnel, verify_viewer
+            if port is None:
+                raise VmError("viewer_unreachable")
             from .remote_host import SharedViewerTunnel
             shared = self.remote_sessions.get(target.remote)
             use_shared = shared and await shared.endpoint()
             tunnel = self.tunnels.setdefault((target.remote, target.name), SharedViewerTunnel(shared) if use_shared else Tunnel())
             try:
-                port = await tunnel.open(target.remote, address)
-            except (OSError, ValueError, TimeoutError):
-                raise VmError("viewer_tunnel_failed") from None
+                port = await tunnel.open(target.remote, "127.0.0.1", port)
+                await verify_viewer(port)
+            except (OSError, ValueError, TimeoutError, httpx.HTTPError):
+                await self.close_viewer(target)
+                raise VmError("viewer_unreachable") from None
         if port is None or not 0 < port < 65536:
             raise VmError("unavailable")
         password = next((x[7:] for x in raw["Config"].get("Env", []) if x.startswith("VNC_PW=")), "")
@@ -640,8 +644,8 @@ class LocalVm:
         import copy
         raw = await self.inspect(target)
         image_id = await self.image(target)
-        # Only an image-ID change on an otherwise exactly compatible owned computer
-        # may rebuild automatically. Mounts and workspace identities remain untouched.
+        # Only known image or remote binding upgrades on otherwise exactly compatible
+        # owned computers may rebuild. Workspace volumes are never removed.
         previous = copy.deepcopy(raw) if raw else {}
         labels = previous.get("Config", {}).get("Labels") or {}
         host = previous.get("HostConfig", {})
@@ -649,7 +653,12 @@ class LocalVm:
         if known_previous:
             labels[f"{LABEL}.layer"] = IMAGE_LABELS[f"{LABEL}.layer"]
             host.update(Memory=MEMORY_GB * 1024**3, MemorySwap=MEMORY_GB * 1024**3)
-        if not raw or not image_id or raw.get("Image") == image_id or not known_previous or not compatible(previous, target, self.owner, raw.get("Image")):
+        legacy_remote = bool(target.remote and host.get("PortBindings") in (None, {}))
+        if legacy_remote:
+            host["PortBindings"] = {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": ""}]}
+        image_upgrade = known_previous and raw.get("Image") != image_id
+        if (not raw or not image_id or not (legacy_remote and raw.get("Image") == image_id or image_upgrade)
+                or not compatible(previous, target, self.owner, raw.get("Image"))):
             raise VmError("incompatible")
         if target.key in self.held or self.active.get(target.key, 0) > 1:
             raise VmError("busy")

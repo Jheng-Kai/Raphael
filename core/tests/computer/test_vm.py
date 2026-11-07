@@ -70,11 +70,10 @@ def container(vm, target, runtime):
     if target.shared:
         raw["Mounts"].append({"Type": "bind", "Source": str(target.shared), "Destination": "/home/cua/team", "RW": True})
     if target.remote:
-        raw["HostConfig"]["PortBindings"] = {}
         for mount, source in zip(raw["Mounts"], [target.workspace, target.shared]):
             mount.update(Type="volume", Name=str(source), Source="/engine/volumes/" + str(source))
         raw["HostConfig"]["Mounts"] = [{"Type": "volume", "Source": m["Name"], "Target": m["Destination"]} for m in raw["Mounts"]]
-        raw["NetworkSettings"] = {"Ports": {}, "Networks": {"bridge": {"IPAddress": "172.18.0.2"}}}
+        raw["NetworkSettings"]["Networks"] = {"bridge": {"IPAddress": "172.18.0.2"}}
     return raw
 
 
