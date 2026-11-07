@@ -104,7 +104,7 @@ from .connectors.service import ConnectorsService
 from .integrations.vault import CredentialVault, MemoryVault, SecretVault
 from .messaging.config import MessagingStore
 from .messaging.service import MessagingService
-from .messaging.words import compose, words
+from .messaging.words import plain_replies, words
 from .protocol import (
     BUSY,
     INTERNAL_ERROR,
@@ -1388,13 +1388,14 @@ class App(Router):
         if reply.get("status") == "confirm":
             question = reply["confirm"]
             await self.call("agent.confirm", {"id": question["id"], "approved": False})
-            asked = compose(question["prefix"], question["text"], None)
-            return f"{asked}\n{words(language, 'confirm')}"
+            return f"{question['text']}\n{words(language, 'confirm')}"
         from .messaging.core import Answer
         from .services.artifacts import turn_files
         from .answer_forms import forms_plain_text
-        return Answer(forms_plain_text(compose(reply.get("prefix", ""), reply.get("text", ""), None)),
-                      list(turn_files(self.agent._history, reply.get("turn_id", 0), self.attachment_store)))
+        # Every message of the reply, unframed, as the app shows them: never only the last one.
+        shown = [m for m in (reply.get("messages") or []) if isinstance(m, str) and m.strip()]
+        parts = [forms_plain_text(m) for m in plain_replies(shown or [reply.get("text", "")])]
+        return Answer("\n\n".join(parts), list(turn_files(self.agent._history, reply.get("turn_id", 0), self.attachment_store)), parts)
 
     async def _transcribe_room(self, audio: bytes, language: str) -> str:
         return await self._transcribe_from_messaging(audio, language, cleanup=True)
@@ -1489,14 +1490,20 @@ class App(Router):
         if task.report_text is None:
             return
         from .answer_forms import forms_plain_text
-        text = forms_plain_text(compose(task.report_prefix or "", task.report_text, None))
+        # The chat gets what the thread shows, whole (the report's one-line `report_text` is only
+        # what the overlay says). A report this process did not write falls back to the stored one.
+        shown = self.background.final_words(task.id) or [task.report_detail or task.report_text]
+        text = [part for part in map(forms_plain_text, plain_replies(shown)) if part.strip()]
+        if not text:
+            return
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return
         from .services.artifacts import turn_files
         files = list(turn_files(self.agent._history, task.turn_id or 0, self.attachment_store))
-        sent = loop.create_task(self.messaging.report(task.session_id, text, **({"files": files} if files else {})))
+        sent = loop.create_task(self.messaging.report(
+            task.session_id, text[0] if len(text) == 1 else text, **({"files": files} if files else {})))
         sent.add_done_callback(lambda t: t.cancelled() or t.exception())
 
     def _tell_chat_to_answer_here(self, task_id: object) -> None:

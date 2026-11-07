@@ -443,6 +443,9 @@ class BackgroundService:
         self._workspace_of: Callable[[int], Path | None] = lambda member_id: None
         # Tasks the user cleared while they ran: they end without a report and leave no row.
         self._discarded: set[int] = set()
+        # task id -> the words a task's report ends in, whole (not the short line the overlay says),
+        # for the messaging app a chat reads them in. Read once by `final_words`.
+        self._final_words: dict[int, list[str]] = {}
         # Raphael's memory, which a task may read and search (`use_memory`); none until it is given.
         self._memory: MemoryReader | None = None
         # The owner's team (`use_team`): who a task's member is, and the team tools, which the
@@ -1164,6 +1167,11 @@ class BackgroundService:
                     self._store.delete(task.id)
         except sqlite3.Error as exc:
             logger.warning("Could not delete a member's tasks: %s", type(exc).__name__)
+
+    def final_words(self, task_id: int) -> list[str]:
+        """The whole of what a task just reported, message by message, as its thread shows it;
+        empty when this process did not write the report (then the stored report is all there is)."""
+        return self._final_words.pop(task_id, [])
 
     def task(self, task_id: int) -> Task | None:
         """A task as it is written down (for what reports it elsewhere), or None."""
@@ -2503,6 +2511,12 @@ class BackgroundService:
             current.tool_calls if run is None and current else run.tool_calls if run else task.tool_calls,
             cost,
         )
+        # A task stopped at a limit keeps its whole last word in the detail; the line is a cut of it.
+        # Otherwise these are the reply messages just published, as the app shows them.
+        self._final_words[task.id] = [detail] if state == "limit" and detail else [
+            line for line in terminal_replies if line and line.strip()]
+        while len(self._final_words) > 64:
+            self._final_words.pop(next(iter(self._final_words)))
         if not task.quiet:
             self._notify(
                 "worker.report",

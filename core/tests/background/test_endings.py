@@ -198,6 +198,19 @@ async def test_waiting_tree_cancel_keeps_reply_counts_and_cancelled_status(make_
     assert reports[-1]["text"] == stop_note
 
 
+@pytest.mark.parametrize("state, detail, expected", [
+    ("done", "the long report", ["First message", "Second message"]),
+    ("limit", "everything it had done and what is left", ["everything it had done and what is left"]),
+])
+async def test_a_conclusion_keeps_its_whole_words_for_the_chat(make_rig, state, detail, expected):
+    rig = make_rig()
+    task_id = rig.service._store.create(session_id="telegram:1", language="en", text="Review")
+    rig.service._conclude(rig.task(task_id), None, state, "", "short line…", detail, None,
+                          replies=["First message", "Second message"])
+    assert rig.service.final_words(task_id) == expected
+    assert rig.service.final_words(task_id) == []  # read once
+
+
 @pytest.mark.parametrize("has_reply", [False, True])
 async def test_cancelled_delegate_keeps_real_replies_without_the_handoff_acknowledgement(make_rig, has_reply):
     rig = make_rig()

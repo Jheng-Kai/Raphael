@@ -5329,12 +5329,17 @@ class AgentService:
         prefix: it speaks in plain sentences."""
         prefix = _prefix(ask.language, which) if ask.speaker.is_raphael else ""
         turn_id = self._record(ask, route, prefix, text, status, detail, ledger)
+        replies = []
         if (ask.source != VOICE or not ask.speaker.is_raphael) and status != "confirm":
             replies = ask.replies or [text]
             for number, line in enumerate(replies):
                 self._message(ask, "reply", line, prefix, first=number == 0, last=number == len(replies) - 1)
             ask.replies = []
-        return {"status": "done", "turn_id": turn_id, "prefix": prefix, "text": text}
+        result = {"status": "done", "turn_id": turn_id, "prefix": prefix, "text": text}
+        if len(replies) > 1:
+            # Every message written above, for a caller that sends them on (a messaging chat).
+            result["messages"] = list(replies)
+        return result
 
     @staticmethod
     def _done(turn_id: int, language: str, which: str, text: str, *, silent: bool = False) -> dict:

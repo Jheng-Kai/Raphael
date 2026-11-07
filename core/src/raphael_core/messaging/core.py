@@ -33,7 +33,7 @@ from ..services.attachments import (
     checked,
 )
 from ..services.attachments import Attachment as File
-from .channels.base import Attachment, Channel, ChannelError, Incoming
+from .channels.base import Attachment, Channel, ChannelError, Incoming, send_through_rate_limits
 from .pairing import Pairing
 from .words import heard, words
 
@@ -82,9 +82,13 @@ Transcribe = Callable[[bytes, str], Awaitable[str]]
 
 
 class Answer(str):
-    def __new__(cls, text: str, files: Sequence[File] = ()):
+    """An answer: `text` is all of it; `parts` are its messages as the app shows them, which are
+    sent one by one."""
+
+    def __new__(cls, text: str, files: Sequence[File] = (), parts: Sequence[str] = ()):
         value = super().__new__(cls, text)
         value.text, value.files = text, list(files)
+        value.parts = [part for part in parts if part.strip()] or [text]
         return value
 
 
@@ -146,7 +150,9 @@ class Switchboard:
         transcribe: Transcribe | None = None,
         pairing: Pairing | None = None,
         album_wait: float = ALBUM_WAIT_SECONDS,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
+        self._sleep = sleep
         self._channel = channel
         self._ask = ask
         self._stop = stop
@@ -365,7 +371,7 @@ class Switchboard:
                 logger.warning("%s: the assistant failed (%s)", self._channel.kind, type(exc).__name__)
                 prefix, answer = "", words(language, "failed")
             if isinstance(answer, Answer):
-                await self.tell(chat, prefix + answer.text, files=answer.files)
+                await self.tell(chat, [prefix + answer.parts[0], *answer.parts[1:]], files=answer.files)
             else:
                 await self.tell(chat, prefix + answer)
 
@@ -424,14 +430,24 @@ class Switchboard:
 
     # --- what the app and the worker ask for ---
 
-    async def tell(self, chat: str, text: str, *, files: Sequence[File] = ()) -> None:
-        """Send `text` to a chat that is allowed (a background report). A chat that is not
-        allowed, or a failure, sends nothing."""
+    async def _send(self, chat: str, text: str) -> None:
+        """One message, sent again after the pause the app asks for when it is rate limited. A
+        channel that retries its own pieces (`retries_rate_limits`) is not asked twice."""
+        if getattr(self._channel, "retries_rate_limits", False):
+            await self._reply(chat, text)
+        else:
+            await send_through_rate_limits(lambda: self._reply(chat, text), self._sleep)
+
+    async def tell(self, chat: str, text: str | Sequence[str], *, files: Sequence[File] = ()) -> None:
+        """Send `text` (or each of several messages, in order) to a chat that is allowed (a
+        background report). A chat that is not allowed, or a failure, sends nothing."""
         if not self._chat_allowed(chat):
             return
+        messages = [text] if isinstance(text, str) else list(text)
         try:
-            if text.strip():
-                await self._reply(chat, text)
+            for message in messages:
+                if message.strip():
+                    await self._send(chat, message)
             for file in files:
                 if not self._chat_allowed(chat):
                     break

@@ -23,7 +23,16 @@ from typing import Any
 import httpx
 
 from ...services.attachments import IMAGE_TYPES, PDF_TYPE
-from .base import Attachment, ChannelError, ChannelType, Deliver, Identity, Incoming
+from .base import (
+    Attachment,
+    ChannelError,
+    ChannelType,
+    Deliver,
+    Identity,
+    Incoming,
+    send_through_rate_limits,
+)
+from .telegram_format import plain_text, telegram_messages
 
 logger = logging.getLogger(__name__)
 
@@ -139,8 +148,11 @@ class TelegramApi:
         result = await self._call("getUpdates", payload, wait=timeout + REQUEST_SLACK_SECONDS)
         return [u for u in result if isinstance(u, dict)] if isinstance(result, list) else []
 
-    async def send_message(self, chat_id: int, text: str) -> None:
-        await self._call("sendMessage", {"chat_id": chat_id, "text": text})
+    async def send_message(self, chat_id: int, text: str, *, parse_mode: str | None = None) -> None:
+        payload: dict[str, Any] = {"chat_id": chat_id, "text": text}
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
+        await self._call("sendMessage", payload)
 
     async def send_file(self, chat_id: int, file) -> bool:
         if len(file.data) > 50 * 1024 * 1024:
@@ -327,11 +339,33 @@ class TelegramChannel:
                 if message is not None:
                     deliver(message)
 
+    # The pieces of a text are retried one by one here, so the switchboard must not send the whole
+    # text again when this gives up (it would repeat the pieces that went out).
+    retries_rate_limits = True
+
     async def send(self, chat: str, text: str) -> None:
-        pieces = split_message(text)
+        """`text` (Markdown) as Telegram HTML, in as many messages as it needs."""
+        chat_id = int(chat)
+        pieces = telegram_messages(text)
         for piece in pieces:
-            await self._api.send_message(int(chat), piece)
+            await self._send_piece(chat_id, piece)
         logger.info("Telegram: sent %d message(s)", len(pieces))
+
+    async def _send_piece(self, chat_id: int, piece: str) -> None:
+        async def as_html() -> None:
+            await self._api.send_message(chat_id, piece, parse_mode="HTML")
+
+        try:
+            await send_through_rate_limits(as_html, self._sleep)
+        except ChannelError as error:
+            if error.kind != "bad_request":
+                raise
+            # Telegram could not read the markup: the words go without it, none are lost.
+            for plain in split_message(plain_text(piece)):
+                async def as_text(plain: str = plain) -> None:
+                    await self._api.send_message(chat_id, plain)
+
+                await send_through_rate_limits(as_text, self._sleep)
 
     async def send_attachment(self, chat: str, file) -> bool:
         return await self._api.send_file(int(chat), file)

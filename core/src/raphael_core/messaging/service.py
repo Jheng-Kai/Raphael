@@ -9,7 +9,7 @@ change a setting.
 import asyncio
 import contextlib
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -154,8 +154,8 @@ class MessagingService:
         parts = split_session(session)
         return parts is not None and parts[0] in self._types
 
-    async def report(self, session: str, text: str, *, files=()) -> None:
-        """A background task of a chat has ended: tell that chat."""
+    async def report(self, session: str, text: "str | Sequence[str]", *, files=()) -> None:
+        """A background task of a chat has ended: tell that chat (one message, or several in order)."""
         parts = split_session(session)
         if parts is None:
             return

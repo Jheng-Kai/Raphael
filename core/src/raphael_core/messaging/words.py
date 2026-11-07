@@ -1,5 +1,8 @@
 """What Raphael says in a messaging app, in the three languages of the app."""
 
+import re
+from collections.abc import Sequence
+
 # The longest stretch of a transcript that is echoed back to show what was heard.
 HEARD_CHARS = 80
 
@@ -66,6 +69,33 @@ def heard(language: str, transcript: str) -> str:
     if len(text) > HEARD_CHARS:
         text = text[:HEARD_CHARS].rstrip() + "…"
     return words(language, "heard", text=text)
+
+
+def plain_replies(texts: Sequence[str]) -> list[str]:
+    """The stored messages of one reply without the 《prefix。…》 frame the app strips (the same
+    rule as `plainReplies` in app/src/shared/anime.ts): the first message of a line opens with
+    《prefix。 and the last one before the next opening ends with 》. Anything else, a 》 that closes
+    a book's title included, stays."""
+    from ..agent.persona import PREFIXES
+
+    names = "|".join(re.escape(p) for prefixes in PREFIXES.values() for p in prefixes)
+    opening = re.compile(rf"^《(?:{names})[。.：:]\s*", re.I)
+    plain = list(texts)
+    open_at = -1
+
+    def close(end: int) -> None:
+        if open_at >= 0 and end >= open_at and plain[end].rstrip().endswith("》"):
+            plain[end] = plain[end].rstrip()[:-1]
+
+    for index, text in enumerate(texts):
+        found = opening.match(text.lstrip())
+        if found is None:
+            continue
+        close(index - 1)
+        open_at = index
+        plain[index] = text.lstrip()[found.end():]
+    close(len(texts) - 1)
+    return plain
 
 
 def compose(prefix: str, text: str, detail: str | None) -> str:

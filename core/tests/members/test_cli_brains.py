@@ -138,6 +138,8 @@ print(json.dumps({"type":"result","subtype":"success","result":ANSWER}),flush=Tr
         f"《{prefix}First.", "Second.", "Last.》",
     ]
     assert result["text"] == "Last."
+    # A caller that sends the answer on (a messaging chat) gets every message, unframed.
+    assert result["messages"] == ["First.", "Second.", "Last."]
 
 
 def fake_brain(rig, tmp_path, script, *, name="claude"):
