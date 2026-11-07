@@ -2159,7 +2159,11 @@ export function checkRendered(name, context = {}) {
       require(style.backgroundColor !== neutral, "the owner's bubble wears the member's colour");
       for (const link of bubble.querySelectorAll('.message-link, .btn.message-expand')) require(getComputedStyle(link).color === style.color, "a link and the expand control take the bubble's words colour");
       require(chat && chat.dataset.memberBubble !== undefined, "the colour comes from the member's conversation");
-      if (document.querySelector('.mb-chat [data-member="0"][aria-current="true"], .side .mb-chief[aria-current="true"]')) require(style.backgroundColor === "rgb(217, 165, 43)", `Raphael's own conversation wears his gold: ${style.backgroundColor}`);
+      // Since 2026-11-07 Raphael is the first blue slime, and his conversation wears its blue like any member's (R-UI-81).
+      if (document.querySelector('.mb-chat [data-member="0"][aria-current="true"], .side .mb-chief[aria-current="true"]')) {
+        const [r, g, b] = style.backgroundColor.match(/\d+/g).map(Number);
+        require(b > r + 80 && b > g, `Raphael's own conversation wears his blue: ${style.backgroundColor}`);
+      }
     }
     return {check:name,background:style.backgroundColor,ratio:Number(ratio.toFixed(2))};
   }
@@ -2785,7 +2789,7 @@ export function checkRendered(name, context = {}) {
     require(page.hasAttribute('data-arrive'), "the first Home of the day flies Raphael in");
     require(getComputedStyle(orb).animationName === 'ho-fly' && getComputedStyle(orb).transform !== 'none', "his emblem is on its way from the corner");
     const ring = getComputedStyle(orb, '::before'), probe = document.createElement('i');
-    probe.style.color = 'var(--raphael-gold)'; document.body.append(probe); const gold = getComputedStyle(probe).color; probe.remove();
+    probe.style.color = 'var(--raphael-color)'; document.body.append(probe); const gold = getComputedStyle(probe).color; probe.remove();
     require(ring.animationName === 'ho-ring' && ring.borderTopColor === gold && parseFloat(ring.opacity) > 0, "a gold ring goes out around him");
     require(getComputedStyle(page.querySelector('.ho-health')).animationName === 'ho-scan', "and he reads the health line");
     require(!matchMedia('(prefers-reduced-motion: reduce)').matches, "this scene runs with motion allowed");

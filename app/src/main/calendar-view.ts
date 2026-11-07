@@ -8,7 +8,7 @@ import { faceHTML, RAPHAEL_ID, scheduleText } from "./members";
 import { dateKey, localDay, shiftDay } from "./schedule-picker";
 import { occurrences } from "./automation-calendar";
 import { iconHTML } from "./service-mark";
-import { slimeColorOf } from "./slime";
+import { RAPHAEL_COLOR, slimeColorOf } from "./slime";
 import type { Routine, RoutineRun } from "./types";
 import { btn, esc, ico, iconButton } from "./ui";
 import "./calendar-view.css";
@@ -72,9 +72,9 @@ export const ROUTINE_DRAWN_MS = HOUR;
 
 export const googleMark = (): string => `<span class="cal-mark" aria-hidden="true">${iconHTML("Google Calendar", "googlecalendar", "md")}</span>`;
 
-/** The colour of a chip that stands for someone. Raphael has his emblem and no slime: his chips stay neutral. */
+/** The colour of a chip that stands for someone: its slime's, Raphael's first blue one included (since 2026-11-07). */
 export const chipColor = (member: CalendarPerson | undefined): string =>
-  member && member.id !== RAPHAEL_ID ? ` style="--chip:${slimeColorOf(member)}"` : "";
+  member ? ` style="--chip:${member.id === RAPHAEL_ID ? RAPHAEL_COLOR : slimeColorOf(member)}"` : "";
 
 /** The time an entry shows on a chip. */
 export const chipClock = (entry: { allDay: boolean; start: number }): string => (entry.allDay ? t("auto.allDay") : formatClock(entry.start));

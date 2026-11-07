@@ -14,8 +14,8 @@ import { loopState, LOOPS, sample, easing } from "./slime-motion";
 export type SlimeState = "idle" | "thinking" | "working" | "searching" | "computer" | "waiting" | "blocked" | "done" | "error" | "sleeping" | "arriving";
 type Hat = "witch" | "santa";
 
-/** Raphael's gold: his own conversation's bubble (owner-bubble.ts), warm and quiet. */
-export const RAPHAEL_GOLD = "#D9A52B";
+/** Raphael's colour: the first blue slime's, his face since 2026-11-07 (the `rimuru` character below). */
+export const RAPHAEL_COLOR = "#3DB5FF";
 
 /** The plain slimes' colours, as clear and saturated as Grok Bot's swatches (owner, 2026-11-06: ours read a shade too dark). */
 const COLORS = {
@@ -43,7 +43,7 @@ const SASH = "M 11 68 Q 50 82 89 68 L 91 75 Q 50 91 9 75 Z";
 
 /** Each character: its colour, and the marks on the same body. A mark is never hair unless it is all there is to tell them by. */
 const CHARACTERS = {
-  rimuru: { name: "slime.rimuru", color: "#3DB5FF" },
+  rimuru: { name: "slime.rimuru", color: RAPHAEL_COLOR },
   shion: { name: "slime.shion", color: COLORS.lavender, marks: loose(fill(ONE_HORN, "#363140"), 49, 34) },
   diablo: { name: "slime.diablo", color: COLORS.charcoal,
     marks: `<path d="${COLLAR} M 48 73 L 52 73 L 53 77 L 51 83 L 49 83 L 47 77 Z" fill="#FFF6E9" fill-rule="evenodd"/>` +

@@ -51,7 +51,7 @@
   /* Usage bars: a member's lavender, as Grok Bot's coloured bar, never the black or white of the controls (owner, 2026-11-07). */
   --meter: #905afb;
   /* Raphael's gold, for the rings of his arrival on Home. */
-  --raphael-gold: #c9961f;
+  --raphael-color: #1f9fe8;
   --ans-edge: #ececec;
   --btn: #ffffff; --btn-edge: #d4d4d4; --key: #f7f7f7; --key-edge: #d4d4d4;
   --track: #e5e5e5; --menu: #ffffff; --scrim: rgba(0, 0, 0, 0.3);
@@ -87,7 +87,7 @@
   --ok: #9fd7b5; --warn: #edc677; --err: #ff9aa9; --warn-soft: #2a251c; --warn-edge: #5b4e32;
   --computer-active: #b98aff;
   --meter: #a47dff;
-  --raphael-gold: #e3b54a;
+  --raphael-color: #5cc4ff;
   --ans-edge: #232323;
   --btn: #1f1f1f; --btn-edge: #555555; --key: #1f1f1f; --key-edge: #555555;
   --track: #333333; --menu: #161616; --scrim: rgba(0, 0, 0, 0.65);

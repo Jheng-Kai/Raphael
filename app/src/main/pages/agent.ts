@@ -83,9 +83,8 @@ import { mountGreeting } from "../member-greeting";
 import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
 import { mountPendingQuestions } from "../pending-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
-import { memberAccent, ownerBubble, RAPHAEL_GOLD, raphaelBubble } from "../owner-bubble";
+import { memberAccent, memberColor, ownerBubble } from "../owner-bubble";
 import { openPeerChat, type PeerChatView } from "../peer-chat";
-import { slimeColorOf } from "../slime";
 import { dayLabel, describeError } from "../format";
 import { loadingHTML } from "../loading";
 import {
@@ -695,21 +694,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    */
   function drawFaces(): void {
     drawComposerTask();
-    if (inRaphael()) {
-      patchHTML(hero, faceHTML(members.member(), 132));
-      // His own conversation wears his gold, as each member's wears its colour (R-UI-81).
-      const bubble = raphaelBubble();
-      memberChat.dataset.memberBubble = bubble.words;
-      memberChat.style.setProperty("--member-bubble", bubble.fill);
-      memberChat.style.setProperty("--member-accent", memberAccent(RAPHAEL_GOLD));
-    } else {
-      const member = members.member();
-      patchHTML(hero, faceHTML(member, 96));
-      const bubble = ownerBubble(slimeColorOf(member));
-      memberChat.dataset.memberBubble = bubble.words;
-      memberChat.style.setProperty("--member-bubble", bubble.fill);
-      memberChat.style.setProperty("--member-accent", memberAccent(slimeColorOf(member)));
-    }
+    // Each conversation wears its member's colour, Raphael's his first blue slime's since 2026-11-07 (R-UI-81).
+    const member = members.member(), color = memberColor(member);
+    patchHTML(hero, faceHTML(member, inRaphael() ? 132 : 96));
+    const bubble = ownerBubble(color);
+    memberChat.dataset.memberBubble = bubble.words;
+    memberChat.style.setProperty("--member-bubble", bubble.fill);
+    memberChat.style.setProperty("--member-accent", memberAccent(color));
     voice.redraw();
   }
 

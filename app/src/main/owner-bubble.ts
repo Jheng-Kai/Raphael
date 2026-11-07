@@ -1,4 +1,4 @@
-import { RAPHAEL_GOLD, slimeColorOf } from "./slime";
+import { RAPHAEL_COLOR, slimeColorOf } from "./slime";
 const channels = (hex: string): number[] => [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16));
 const hexOf = (rgb: number[]): string => `#${rgb.map(value => value.toString(16).padStart(2, "0")).join("")}`;
 const linear = (value: number): number => value / 255 <= 0.03928 ? value / 255 / 12.92 : ((value / 255 + 0.055) / 1.055) ** 2.4;
@@ -28,10 +28,8 @@ export function ownerBubble(color: string): { fill: string; words: "light" | "da
   return { fill: hexOf(rgb), words: "light" };
 }
 
-/** Raphael's own conversation: his warm golden yellow (slime.ts keeps it with the mascots' colours), kept bright, with
- *  dark words (owner, 2026-11-06). */
-export { RAPHAEL_GOLD };
-export const raphaelBubble = (): { fill: string; words: "dark" } => ({ fill: RAPHAEL_GOLD.toLowerCase(), words: "dark" });
+/** A member's colour, Raphael's being his first blue slime's since 2026-11-07 (it was his gold). */
+export const memberColor = (member: { id: number; avatar?: string | null }): string => member.id === 0 ? RAPHAEL_COLOR : slimeColorOf(member);
 
 /**
  * The member's colour on the controls of its conversation (send, stop, its computer): darkened on the white
@@ -44,6 +42,5 @@ export function memberAccent(color: string): string {
   return `light-dark(${hexOf(light)}, ${hexOf(dark)})`;
 }
 
-/** A member's name in its colour, as Grok Bot names each Bot in a conversation between Bots: Raphael (id 0) in his gold. */
-export const nameAccent = (member: { id: number; avatar?: string | null }): string =>
-  memberAccent(member.id === 0 ? RAPHAEL_GOLD : slimeColorOf(member));
+/** A member's name in its colour, as Grok Bot names each Bot in a conversation between Bots. */
+export const nameAccent = (member: { id: number; avatar?: string | null }): string => memberAccent(memberColor(member));

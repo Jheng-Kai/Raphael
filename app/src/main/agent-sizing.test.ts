@@ -109,5 +109,5 @@ test("a member's conversation wears its colour on selected words in the owner's 
   const css = read("agent.css");
   expect(css).toContain(".mb-chat[data-member-bubble] .owner-message :is(.bubble, .bubble *)::selection { background: var(--on-bubble); color: var(--member-bubble); }");
   expect(css).toContain('.mb-chat[data-member-bubble] .composer .cmp-pair { --accent-icon: var(--member-accent); --accent-text: var(--member-accent); }');
-  expect(read("pages/agent.ts")).toContain('memberChat.style.setProperty("--member-accent", memberAccent(slimeColorOf(member)));');
+  expect(read("pages/agent.ts")).toContain('memberChat.style.setProperty("--member-accent", memberAccent(color));');
 });
