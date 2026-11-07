@@ -679,7 +679,7 @@ pub fn window_error(method: &str, err: &crate::rpc::RpcError) -> String {
     if method != "members.avatar_generate" {
         return text;
     }
-    let word = |value: Option<&Value>| {
+    fn word(value: Option<&Value>) -> Option<&str> {
         value.and_then(Value::as_str).filter(|word| {
             !word.is_empty()
                 && word.len() <= 64
@@ -687,7 +687,7 @@ pub fn window_error(method: &str, err: &crate::rpc::RpcError) -> String {
                     .chars()
                     .all(|c| c.is_ascii_alphanumeric() || "_-:.".contains(c))
         })
-    };
+    }
     let Some(data) = err.data.as_ref() else {
         return text;
     };
