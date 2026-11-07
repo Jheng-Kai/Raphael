@@ -437,7 +437,7 @@ export const telegramStatus = (): Promise<TelegramStatus> => core("messaging.tel
 /** Checks the bot token with Telegram and, if it works, keeps it in the vault. The token never comes back. */
 export const telegramConnect = (
   token: string,
-): Promise<{ ok: true; status: TelegramStatus } | { ok: false; reason: "invalid_token" | "network" }> =>
+): Promise<{ ok: true; status: TelegramStatus } | { ok: false; reason: "invalid_token" | "network" | "bot_in_use" }> =>
   core("messaging.telegram.connect", { token });
 export const telegramSetEnabled = (enabled: boolean): Promise<TelegramStatus> => core("messaging.telegram.set_enabled", { enabled });
 /** Allows the person who was given this code. */
@@ -447,6 +447,24 @@ export const telegramReject = (code: string): Promise<TelegramStatus> => core("m
 export const telegramRemoveUser = (user_id: string): Promise<TelegramStatus> => core("messaging.telegram.remove_user", { user_id });
 /** Deletes the token from the vault and forgets who was allowed. */
 export const telegramDisconnect = (): Promise<TelegramStatus> => core("messaging.telegram.disconnect");
+
+export interface MemberMessagingStatus extends TelegramStatus {
+  member_id: number;
+  kind: "telegram";
+  paired: boolean;
+}
+export interface MemberMessagingAccount extends MemberMessagingStatus { member_name: string }
+export type MemberMessagingConnectResult = { ok: true; status: MemberMessagingStatus } |
+  { ok: false; reason: "invalid_token" | "network" | "bot_in_use" };
+export const memberMessagingStatus = (member_id: number): Promise<MemberMessagingStatus> => core("messaging.member.status", { member_id });
+/** Validates the member's bot token and keeps it only in the existing vault. */
+export const memberMessagingConnect = (member_id: number, token: string): Promise<MemberMessagingConnectResult> => core("messaging.member.connect", { member_id, token });
+export const memberMessagingDisconnect = (member_id: number): Promise<MemberMessagingStatus> => core("messaging.member.disconnect", { member_id });
+export const memberMessagingSetEnabled = (member_id: number, enabled: boolean): Promise<MemberMessagingStatus> => core("messaging.member.set_enabled", { member_id, enabled });
+export const memberMessagingApprove = (member_id: number, code: string): Promise<{ approved: boolean; status: MemberMessagingStatus }> => core("messaging.member.approve", { member_id, code });
+export const memberMessagingReject = (member_id: number, code: string): Promise<MemberMessagingStatus> => core("messaging.member.reject", { member_id, code });
+export const memberMessagingRemoveUser = (member_id: number, user_id: string): Promise<MemberMessagingStatus> => core("messaging.member.remove_user", { member_id, user_id });
+export const messagingAccounts = (): Promise<{ accounts: MemberMessagingAccount[] }> => core("messaging.accounts");
 
 // ---------- the device side of the core ----------
 

@@ -35,6 +35,7 @@ import { type ProvidersView, providersHTML, providersAddHTML, emptyProvidersView
 import { type CliBrainsView, cliBrainsHTML, cliModels, emptyCliBrainsView } from "../cli-brains";
 import { pricingNote } from "../pricing";
 import type { HotkeyField } from "../hotkey-recording";
+import type { MemberMessagingAccount } from "../api";
 import type { AudioDevices, BrainSettings, DeviceSettings, LocalModel, ModelCatalog, ModelRole, SettingsPane, Status } from "../types";
 import { keyEntryRow, micRow } from "../setup-rows";
 import { type Choice, type IconName, actionRow, btn, esc, ico, iconBtn, iconButton, keys, note, row, sel, st, tabs } from "../ui";
@@ -143,6 +144,8 @@ export interface SettingsView {
   /** What is typed in the weather city while it is not saved, and what is wrong with it. */
   /** Telegram, in the 訊息平台 tab. */
   messaging: MessagingView;
+  /** Members with a bot of their own, set up in each member's panel. */
+  memberAccounts?: readonly MemberMessagingAccount[];
   /** The shared safety rules, in Safety (none: not drawn). */
   rules?: RulesView;
   vault?: VaultView;
@@ -439,6 +442,17 @@ function outputFolderRow(v: SettingsView): string {
  * 一般, in Grok Bot's order of sections: who you are, how the window looks, what Raphael works with (the timezone of
  * routines and the folder of what is delivered), where he can be reached (messaging), what he remembers, and the guide.
  */
+/** Who else can be messaged: each member with its own bot, one row each (the bot is set up in that member's panel). */
+function memberAccountsHTML(accounts: readonly MemberMessagingAccount[]): string {
+  const connected = accounts.filter(account => account.connected);
+  if (!connected.length) return "";
+  return `<section class="sgroup msg-accounts" aria-label="${esc(t("msg.memberAccounts"))}"><div class="slist">` +
+    `<div class="msg-accounts-label">${esc(t("msg.memberAccounts"))}</div>` +
+    connected.map(account => row(esc(account.member_name), "", `<span class="msg-bot">${esc(account.bot?.username ? `@${account.bot.username}` : "Telegram")}</span>` +
+      `<span class="dot ${!account.enabled ? "idle" : account.error ? "warn" : "ok"}" role="img" aria-label="${esc(t(!account.enabled ? "msg.tg.off" : account.error ? "msg.tg.offline" : "msg.tg.on"))}"></span>`)).join("") +
+    `</div></section>`;
+}
+
 function generalHTML(v: SettingsView): string {
   return (
     headingHTML(v) +
@@ -452,7 +466,7 @@ function generalHTML(v: SettingsView): string {
       outputFolderRow(v),
     ]) +
     // Messaging was a tab of its own until 2026-11-07: Telegram, Slack and Discord are a section of 一般 now.
-    `<section class="sgroup set-messaging" data-section="messaging"><h2>${esc(t("settings.paneMessaging"))}</h2>${messagingHTML(v.messaging)}</section>` +
+    `<section class="sgroup set-messaging" data-section="messaging"><h2>${esc(t("settings.paneMessaging"))}</h2>${messagingHTML(v.messaging)}${memberAccountsHTML(v.memberAccounts ?? [])}</section>` +
     (v.memoryShared ? memoryHTML(v.memoryShared) : "") +
     (v.memoryImportHTML ?? createMemoryImport(() => {}).html()) +
     // The emblem's size, its subtitles and starting with Windows are fixed (device-fixed.ts, owner 2026-11-06), and the

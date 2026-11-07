@@ -270,6 +270,8 @@ class MembersService:
         # Told of each member made through the tools: who made it, and which it is.
         self.member_made = lambda maker, made: None
         self.remove_computer_data = None
+        self.remove_messaging = None
+        self.deleting: set[int] = set()
         self._connections = connections
         self._now_ms = now_ms
         if not self._settings.get("routine_owner_seen_ms"):
@@ -1001,27 +1003,33 @@ class MembersService:
             await self.remove_computer_data(member_id, params.get("computer_host"))
         member = self.store.member(member_id)
         assert member is not None
-        self._background.forget_member(member_id)
+        self.deleting.add(member_id)
         try:
-            self._history.clear_member(member_id)
-        except sqlite3.Error as exc:
-            logger.warning("Could not delete a member's conversation: %s", type(exc).__name__)
-        if self._memory is not None:
-            await self._memory.forget_member(member_id)
-        for skill in self.capabilities.skills(member_id):
-            self.capabilities.delete_skill(member_id, skill["id"])
-        # Uploaded avatars can be shared by a duplicated profile.
-        if not any(other.id != member_id and other.avatar == member.avatar for other in self.store.members()):
-            self._remove_picture(member.avatar)
-        deleted = self.store.delete_member(member_id)
-        if self._viewing == member_id:
-            self._viewing = None
-        if deleted:
-            await self.webhooks.sync()
-            self._changed()
-            self._changed("routines.changed", member_id)
-        logger.info("A member was deleted")
-        return {"deleted": deleted}
+            if self.remove_messaging is not None:
+                await self.remove_messaging(member_id)
+            self._background.forget_member(member_id)
+            try:
+                self._history.clear_member(member_id)
+            except sqlite3.Error as exc:
+                logger.warning("Could not delete a member's conversation: %s", type(exc).__name__)
+            if self._memory is not None:
+                await self._memory.forget_member(member_id)
+            for skill in self.capabilities.skills(member_id):
+                self.capabilities.delete_skill(member_id, skill["id"])
+            # Uploaded avatars can be shared by a duplicated profile.
+            if not any(other.id != member_id and other.avatar == member.avatar for other in self.store.members()):
+                self._remove_picture(member.avatar)
+            deleted = self.store.delete_member(member_id)
+            if self._viewing == member_id:
+                self._viewing = None
+            if deleted:
+                await self.webhooks.sync()
+                self._changed()
+                self._changed("routines.changed", member_id)
+            logger.info("A member was deleted")
+            return {"deleted": deleted}
+        finally:
+            self.deleting.discard(member_id)
 
     async def _set_primary(self, params: dict) -> dict:
         member_id = _whole(params, "id")

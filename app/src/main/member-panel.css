@@ -47,6 +47,9 @@
 .mb-face-pencil .i { width: 16px; height: 16px; }
 .btn.mb-face-edit:hover .mb-face-pencil, :root[data-keys] .btn.mb-face-edit:focus-visible .mb-face-pencil { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .mb-face-pencil { transition: none; } }
+/* 建議: the member's own Telegram card, the Settings card in the panel's width. */
+.mb-panel-suggest { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin-top: var(--sp-4); }
+.mb-panel-suggest .member-msg .sgroup { margin: 0; }
 .mb-panel-identity > :is(b, small) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mb-panel-identity > b { font-size: var(--fs-md); font-weight: 600; }
 .mb-panel-identity > small { color: var(--text-3); font-size: var(--fs-xs); }

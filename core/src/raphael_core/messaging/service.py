@@ -1,6 +1,7 @@
 """The messaging connections as the app uses them: `messaging.<app>.*`, for each app in `channels`.
 
-What a connection needs to be secret is in the vault (`messaging:<app>:<name>`) and nowhere else;
+What a connection needs to be secret is in the vault (`messaging:<app>:<name>`, or
+`messaging:member:<id>:telegram:<name>`) and nowhere else;
 it never comes back to the window. Only the main window may call these methods (the Rust
 allowlist); the switchboard has no way to reach them, so a message cannot approve a pairing or
 change a setting.
@@ -21,7 +22,7 @@ from ..router import Router
 from .channels import CHANNEL_TYPES
 from .channels.base import ChannelError, ChannelType
 from .config import MAX_ALLOWED, AllowedUser, ChannelConfig, MessagingStore
-from .core import Ask, Stop, Switchboard, Transcribe, chat_hash, split_session
+from .core import Ask, Stop, Switchboard, Transcribe, chat_hash, session_target
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,11 @@ logger = logging.getLogger(__name__)
 def secret_name(kind: str, name: str) -> str:
     """The vault entry of a secret of a messaging app."""
     return f"messaging:{kind}:{name}"
+
+
+def member_account(member_id: int) -> str:
+    """An account key shared by the nonsecret config and the existing secret vault."""
+    return "telegram" if member_id == 0 else f"member:{member_id}:telegram"
 
 
 @dataclass
@@ -53,6 +59,7 @@ class MessagingService:
         transcribe: Transcribe | None = None,
         http: httpx.AsyncClient | None = None,
         types: dict[str, ChannelType] | None = None,
+        members: Callable[[], dict[int, str]] = lambda: {0: "Raphael"},
     ) -> None:
         self._store = store
         self._vault = vault
@@ -62,7 +69,9 @@ class MessagingService:
         self._language = language
         self._http = http
         self._owns_http = http is None
-        self._types = CHANNEL_TYPES if types is None else types
+        self._base_types = dict(CHANNEL_TYPES if types is None else types)
+        self._types = dict(self._base_types)
+        self._members = members
         self._config = store.load()
         self._running: dict[str, _Running] = {}
         self._ended = False
@@ -70,7 +79,7 @@ class MessagingService:
         self._lock = asyncio.Lock()
 
     def register(self, router: Router) -> None:
-        for kind in self._types:
+        for kind in self._base_types:
             for method, handler in {
                 "status": self._status,
                 "connect": self._connect,
@@ -81,6 +90,36 @@ class MessagingService:
                 "disconnect": self._disconnect,
             }.items():
                 router.register(f"messaging.{kind}.{method}", self._for(kind, handler))
+        for method in ("status", "connect", "disconnect", "set_enabled", "approve", "reject", "remove_user"):
+            router.register(f"messaging.member.{method}", self._member_handler(method))
+        router.register("messaging.accounts", self._accounts)
+
+    def _member_handler(self, method: str) -> Callable[[dict], Any]:
+        async def handle(params: dict) -> dict:
+            member = params.get("member_id")
+            if type(member) is not int or member < 0 or member not in self._members():
+                raise invalid_params("member_id must name an existing member")
+            kind = self._member_type(member)
+            result = await getattr(self, "_" + method)(kind, params)
+            if "status" in result:
+                return {**result, "status": self._member_view(member)}
+            return result if method == "connect" else self._member_view(member)
+        return handle
+
+    def _member_type(self, member: int) -> str:
+        if "telegram" not in self._base_types:
+            raise invalid_params("Telegram is unavailable")
+        kind = member_account(member)
+        self._types[kind] = self._base_types["telegram"]
+        return kind
+
+    def _member_view(self, member: int) -> dict[str, Any]:
+        view = self._view(self._member_type(member))
+        return {**view, "member_id": member, "kind": "telegram", "paired": bool(view["allowed"])}
+
+    async def _accounts(self, params: dict) -> dict:
+        return {"accounts": [{**self._member_view(member), "member_name": name}
+                             for member, name in self._members().items()]}
 
     @staticmethod
     def _for(kind: str, handler: Callable[..., Any]) -> Callable[[dict], Any]:
@@ -90,6 +129,9 @@ class MessagingService:
 
     def start(self) -> None:
         """Begin receiving on the connections that are on. Needs the running loop."""
+        for member in self._members():
+            if "telegram" in self._base_types:
+                self._member_type(member)
         for kind in self._types:
             if self._config.channel(kind).enabled and self._secrets(kind) is not None:
                 self._launch(kind)
@@ -128,10 +170,22 @@ class MessagingService:
         secrets = self._secrets(kind)
         if secrets is None:
             return
+        target = session_target(kind + ":chat")
+        member = target[0] if target else 0
+        if member and member not in self._members():
+            return
+
+        async def ask(session, text, language, source, **options):
+            scoped = f"member:{member}:{session}" if member else session
+            return await self._ask(scoped, text, language, source, **options)
+
+        async def stop(session):
+            return await self._stop(f"member:{member}:{session}" if member else session)
+
         switchboard = Switchboard(
             self._types[kind].make(secrets, self._client()),
-            ask=self._ask,
-            stop=self._stop,
+            ask=ask,
+            stop=stop,
             transcribe=self._transcribe,
             is_allowed=lambda user: self._config.channel(kind).is_allowed(user),
             chat_allowed=lambda chat: self._config.channel(kind).chat_allowed(chat),
@@ -151,17 +205,28 @@ class MessagingService:
 
     def handles(self, session: str) -> bool:
         """Whether a session is a conversation with a chat of one of the apps."""
-        parts = split_session(session)
-        return parts is not None and parts[0] in self._types
+        target = session_target(session)
+        return target is not None and target[1] in self._base_types and (target[0] == 0 or target[0] in self._members())
 
     async def report(self, session: str, text: "str | Sequence[str]", *, files=()) -> None:
         """A background task of a chat has ended: tell that chat (one message, or several in order)."""
-        parts = split_session(session)
-        if parts is None:
+        target = session_target(session)
+        if target is None or not self.handles(session):
             return
-        running = self._running.get(parts[0])
+        member, kind, chat = target
+        running = self._running.get(member_account(member) if member else kind)
         if running is not None:
-            await running.switchboard.tell(parts[1], text, files=files)
+            await running.switchboard.tell(chat, text, files=files)
+
+    async def remove_member(self, member: int) -> None:
+        """Stop the member's owned poller and in-flight requests before its history is removed."""
+        if member <= 0:
+            return
+        kind = self._member_type(member)
+        await self._disconnect(kind, {})
+        self._config.channels.pop(kind, None)
+        self._types.pop(kind, None)
+        self._store.save(self._config)
 
     # --- the methods ---
 
@@ -206,6 +271,15 @@ class MessagingService:
             logger.info("%s credentials check failed: %s", kind, error.kind)
             return {"ok": False, "reason": "network" if error.kind == "network" else "invalid_token"}
         async with self._lock:
+            target = session_target(kind + ":chat")
+            if target and target[0] and target[0] not in self._members():
+                raise invalid_params("member_id must name an existing member")
+            if self._types[kind].kind == "telegram" and any(
+                key != kind and config.bot_id == identity.id and
+                (key == "telegram" or key.startswith("member:") and key.endswith(":telegram"))
+                for key, config in self._config.channels.items()
+            ):
+                return {"ok": False, "reason": "bot_in_use"}
             await self._stop_receiving(kind)
             previous = self._config.channel(kind)
             for name, value in secrets.items():
@@ -294,5 +368,5 @@ class MessagingService:
                 if self._vault.get(secret_name(kind, name)) is not None:
                     return True
             except Exception:
-                continue
+                return True
         return False

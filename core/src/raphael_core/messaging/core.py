@@ -120,6 +120,18 @@ def split_session(session: str) -> tuple[str, str] | None:
     return (kind, chat) if colon and kind and chat else None
 
 
+def session_target(session: str) -> tuple[int, str, str] | None:
+    """The member, channel and chat of an owned messaging session; legacy sessions stay Raphael's."""
+    if session.startswith("member:"):
+        parts = session.split(":", 3)
+        if (len(parts) != 4 or not parts[1].isascii() or not parts[1].isdigit()
+                or len(parts[1]) > 20 or parts[1].startswith("0") or parts[2] != "telegram" or not parts[3]):
+            return None
+        return int(parts[1]), parts[2], parts[3]
+    parts = split_session(session)
+    return (0, *parts) if parts else None
+
+
 def chat_hash(chat: str) -> str:
     """What the log says about a chat."""
     return hashlib.sha256(chat.encode()).hexdigest()[:8]

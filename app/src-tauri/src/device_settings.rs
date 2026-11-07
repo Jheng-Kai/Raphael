@@ -593,7 +593,9 @@ mod tests {
         let mut settings = DeviceSettings::default();
         assert!(settings.auto_update);
         assert!(settings.update_receipt.is_empty());
-        settings.apply_patch(&json!({"auto_update": false})).unwrap();
+        settings
+            .apply_patch(&json!({"auto_update": false}))
+            .unwrap();
         assert!(!settings.auto_update);
         settings.apply_patch(&json!({"auto_update": true})).unwrap();
         assert!(settings.auto_update);

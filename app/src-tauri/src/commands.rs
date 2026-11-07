@@ -482,6 +482,14 @@ const ALLOWED_METHODS: &[&str] = &[
     "messaging.telegram.reject",
     "messaging.telegram.remove_user",
     "messaging.telegram.disconnect",
+    "messaging.member.status",
+    "messaging.member.connect",
+    "messaging.member.set_enabled",
+    "messaging.member.approve",
+    "messaging.member.reject",
+    "messaging.member.remove_user",
+    "messaging.member.disconnect",
+    "messaging.accounts",
     "messaging.slack.status",
     "messaging.slack.connect",
     "messaging.slack.set_enabled",
@@ -535,7 +543,6 @@ const ALLOWED_METHODS: &[&str] = &[
     "messages.search",
     "quota.list",
     "agent.speech.status",
-    "agent.speak",
     "voice_chat.start",
     "voice_chat.status",
     "voice_chat.mute",
@@ -2762,6 +2769,30 @@ mod tests {
             "Messaging.telegram.status",
         ] {
             assert!(!is_allowed_method(method), "{method:?}");
+        }
+    }
+
+    #[test]
+    fn member_messaging_has_only_named_owner_window_methods() {
+        for method in [
+            "status",
+            "connect",
+            "disconnect",
+            "set_enabled",
+            "approve",
+            "reject",
+            "remove_user",
+        ] {
+            assert!(is_allowed_method(&format!("messaging.member.{method}")));
+        }
+        assert!(is_allowed_method("messaging.accounts"));
+        for method in [
+            "messaging.member",
+            "messaging.member.send",
+            "messaging.member.connectx",
+            "messaging.accounts.delete",
+        ] {
+            assert!(!is_allowed_method(method));
         }
     }
 

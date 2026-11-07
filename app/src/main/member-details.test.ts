@@ -19,6 +19,8 @@ const api = vi.hoisted(() => ({
   avatarSave: vi.fn(),
   avatarClear: vi.fn(),
   avatarGet: vi.fn(),
+  memberMessagingStatus: vi.fn(),
+  memberMessagingConnect: vi.fn(),
 }));
 vi.mock("./api", () => api);
 
@@ -642,6 +644,26 @@ test("resource rows count saved skills including disabled ones and only active r
   // Each routine carries its own switch, on for the active one only, and no ⋯ menu.
   expect([...panel.el.querySelectorAll('[data-det="routine-toggle"]')].map(toggle => toggle.getAttribute("aria-checked"))).toEqual(["true", "false"]);
   expect(panel.el.querySelector('[data-det="routine-menu"]')).toBeNull();
+});
+
+test("建議 offers the member its own Telegram bot, connected with a BotFather token through the member's own calls", async () => {
+  const off = { connected: false, enabled: false, running: false, error: null, bot: null, allowed: [], pending: [], member_id: current, kind: "telegram", paired: false };
+  api.memberMessagingStatus.mockResolvedValue(off);
+  api.memberMessagingConnect.mockResolvedValue({ ok: true, status: { ...off, connected: true, enabled: true, running: true, bot: { username: "shion_bot" } } });
+  const panel = mount(false); await flush();
+  expect(api.memberMessagingStatus).toHaveBeenCalledWith(current);
+  const suggest = panel.el.querySelector<HTMLElement>(".mb-panel-suggest")!;
+  expect(suggest.querySelector(".mb-dh")!.textContent).toBe("建議");
+  const field = suggest.querySelector<HTMLInputElement>("#msg-token-member")!;
+  expect(suggest.querySelector('[data-msg="botfather"]')).not.toBeNull();
+  field.value = "123:abc"; field.dispatchEvent(new Event("input", { bubbles: true }));
+  suggest.querySelector<HTMLButtonElement>('[data-msg="connect"]')!.click();
+  await flush();
+  expect(api.memberMessagingConnect).toHaveBeenCalledWith(current, "123:abc");
+  expect(panel.el.querySelector(".mb-panel-suggest")!.textContent).toContain("@shion_bot");
+  // Raphael's own bot stays in Settings: his panel has no 建議.
+  current = 0; panel.showMember(); await flush();
+  expect(panel.el.querySelector(".mb-panel-suggest")).toBeNull();
 });
 
 test("the panel has no gear: share on the left, and the face with a pencil opens every setting", async () => {

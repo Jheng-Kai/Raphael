@@ -318,7 +318,7 @@ OWNER_ONLY = {
                      "integrations.add", "integrations.update", "integrations.import", "integrations.test"),
                    "Sign-in and custom MCP activation use the existing owner-controlled card."),
     **dict.fromkeys(("safety.rules.create", "safety.rules.update", "safety.rules.delete"), "Safety rules cannot be changed by a model."),
-    **dict.fromkeys((f"messaging.{kind}.{action}" for kind in ("telegram", "slack", "discord")
+    **dict.fromkeys((f"messaging.{kind}.{action}" for kind in ("telegram", "slack", "discord", "member")
                     for action in ("connect", "set_enabled", "approve", "reject", "remove_user", "disconnect")),
                    "Messaging authentication and access approval belong to the owner."),
     **dict.fromkeys(("computer.viewer_open", "computer.viewer_renew", "computer.viewer_control", "computer.viewer_close",
@@ -368,7 +368,7 @@ connectors.catalog connectors.categories connectors.status connectors.toolkit co
 history.list home.overview integrations.audit integrations.catalog integrations.discover
 integrations.inventory integrations.preview languages.list links.preview members.list
 members.tool_choices members.unread members.voices messages.search messaging.discord.status
-messaging.slack.status messaging.telegram.status models.catalog models.local models.status
+messaging.slack.status messaging.telegram.status messaging.member.status messaging.accounts models.catalog models.local models.status
 providers.kinds providers.list providers.models quota.list rooms.list rooms.messages
 routines.runs routines.template safety.rules.list secrets.status services.status stats.summary
 status.check_openrouter status.get toolsets.list usage.allowances usage.analytics usage.export usage.runs

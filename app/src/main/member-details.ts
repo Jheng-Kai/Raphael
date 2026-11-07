@@ -33,6 +33,7 @@ import { panelLibraryHTML, readPanelWork, type PanelWork } from './member-panel-
 import { tabs } from './ui';
 import { describeError } from "./format";
 import { exportMemberTemplate } from "./member-templates";
+import { createMemberTelegram, messagingHTML } from "./messaging";
 
 export type DetailsTab = "details" | "library" | "computer" | "settings" | "memory" | "skills" | "commands" | "voice";
 
@@ -221,6 +222,13 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     return head + `<div class="mb-rts">${routines.map(routineRowHTML).join("")}</div>`;
   }
 
+  // 建議, as Grok Bot's member panel suggests Add to Slack (owner, 2026-11-07): the member's own Telegram bot, so the
+  // owner can message this member directly; Slack and Discord come later. Raphael's own bot stays in Settings.
+  const telegram = createMemberTelegram({ visible: () => el.isConnected && !el.hidden && tab === "details", redraw: () => draw() }, () => host.member().id);
+  function suggestHTML(): string {
+    return `<div class="mb-dh"><span>${esc(t("members.suggested"))}</span></div><div class="member-msg">${messagingHTML(telegram.view())}</div>`;
+  }
+
   /**
    * A long field, closed to its name and its first line (or 「未填寫」) behind a real button; open,
    * the box under it. Open while it is being typed in, so a redraw never closes it under the owner.
@@ -267,7 +275,9 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       if (field && field !== focused && field.value !== value) field.value = value;
     }
     const face = faceHTML(member, 64).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([member, face, host.list()?.groups, counts, routines, work, workFailed, tab, [...openFields], getLocale(), !!host.openConversation, host.conversationOf?.(member.id), tab === "memory" ? memories.map(list => list.view()) : null]);
+    const signature = JSON.stringify([member, face, host.list()?.groups, counts, routines, work, workFailed, tab, [...openFields], getLocale(), !!host.openConversation, host.conversationOf?.(member.id), tab === "memory" ? memories.map(list => list.view()) : null,
+      // The bot card redraws on its own state; the token being typed never redraws it.
+      tab === "details" && member.id !== RAPHAEL_ID ? { ...telegram.view(), token: "" } : null]);
     if (drawn === signature) return;
     drawn = signature;
     el.dataset.detailsTab = tab;
@@ -339,12 +349,15 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         if (!body.querySelector('.mb-panel-routines') || !!body.querySelector('[data-slot="conversations"]') !== chief) {
           conversationHost.remove();
           patchHTML(body, `<section class="mb-panel-routines" data-k="panel-routines"></section>` +
-            (chief ? `<section><div class="mb-dh"><span data-panel-conversations-heading>${esc(t('members.panelConversations'))}</span></div><div data-slot="conversations" data-k="panel-conversations"></div></section>` : ''));
+            (chief ? `<section><div class="mb-dh"><span data-panel-conversations-heading>${esc(t('members.panelConversations'))}</span></div><div data-slot="conversations" data-k="panel-conversations"></div></section>`
+              : `<section class="mb-panel-suggest" data-k="panel-suggest"></section>`));
         }
         // The skeleton is kept across draws, so its heading follows a language change here.
         const heading = body.querySelector<HTMLElement>('[data-panel-conversations-heading]');
         if (heading && heading.textContent !== t('members.panelConversations')) heading.textContent = t('members.panelConversations');
         patchHTML(body.querySelector('.mb-panel-routines')!, routinesHTML());
+        const suggest = body.querySelector<HTMLElement>('.mb-panel-suggest');
+        if (suggest) patchHTML(suggest, suggestHTML());
       } else if (tab === 'library') {
         conversationHost.remove(); patchHTML(body, panelLibraryHTML(work, workFailed));
       } else if (tab === 'computer') {
@@ -446,6 +459,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       return;
     }
     if (memories.some((list) => list.click(target))) return;
+    if (target.closest(".member-msg") && telegram.click(target)) return;
     const act = target.closest<HTMLElement>("[data-det]");
     if (!act || (act as HTMLButtonElement).disabled) return;
     const member = host.member();
@@ -506,9 +520,11 @@ export function createDetails(host: DetailsHost): DetailsPanel {
 
   el.addEventListener("input", (e) => {
     const target = e.target as HTMLInputElement | HTMLTextAreaElement;
+    if (target instanceof HTMLInputElement && telegram.input(target)) return;
     for (const list of memories) if (list.input(target)) break;
   });
   el.addEventListener("keydown", (e) => {
+    if (telegram.key(e)) return;
     if (memories.some((list) => list.key(e))) return;
     const target = e.target as HTMLElement;
     if (tabBar.contains(target) && target.matches('[role="tab"]') && ['ArrowLeft','ArrowRight','Home','End'].includes(e.key)) {
@@ -556,6 +572,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     },
     showMember() {
       tab = "details";
+      telegram.reset();
+      if (host.member().id !== RAPHAEL_ID) void telegram.load();
       work = null; workFailed = false; fileLimit = 12; void loadWork();
       counts = {skills: 0, commands: 0, memory: 0};
       void loadCounts();

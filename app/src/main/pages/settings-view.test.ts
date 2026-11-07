@@ -330,6 +330,16 @@ describe("一般", () => {
     expect(buttons(chosen)).toHaveLength(1);
     expect(chosen).not.toMatch(/title="/);
   });
+  test("messaging lists the members that have a bot of their own, one row each, after Raphael's card", () => {
+    const account = { member_id: 4, member_name: "紫苑", kind: "telegram" as const, paired: true, connected: true, enabled: true, running: true, error: null, bot: { username: "shion_bot" }, allowed: [], pending: [] };
+    const html = tab("general", { memberAccounts: [account, { ...account, member_id: 5, member_name: "紅丸", connected: false }] });
+    const section = html.slice(html.indexOf('class="sgroup msg-accounts"'));
+    expect(section).toContain("成員的帳號");
+    expect(section).toContain("紫苑");
+    expect(section).toContain("@shion_bot");
+    expect(section).not.toContain("紅丸");
+    expect(tab("general", { memberAccounts: [] })).not.toContain("msg-accounts");
+  });
   test("General is Grok Bot's sections: you, appearance, Raphael, messaging, then memory and the guide", () => {
     const html = tab("general");
     expect(groups(html).slice(0, 4)).toEqual(["關於你", t("skin.title"), t("agent.title"), t("settings.paneMessaging")]);

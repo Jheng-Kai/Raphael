@@ -1034,8 +1034,11 @@ class App(Router):
             stop=self._stop_from_messaging,
             transcribe=self._transcribe_from_messaging,
             language=lambda: self.agent.language,
+            members=lambda: {0: self.members.name_of(0) or "Raphael", **{
+                member.id: member.name for member in self.members.store.members() if member.id not in self.members.deleting}},
         )
         self.messaging.register(self)
+        self.members.remove_messaging = self.messaging.remove_member
 
         self._speech = SpeechModels(
             self.manager, make_segmenter=self._make_segmenter, make_engine=self._make_engine
@@ -1379,6 +1382,16 @@ class App(Router):
             "ui_language": language,
             "source": source,
         }
+        from .messaging.core import session_target
+        target = session_target(session_id)
+        if session_id.startswith("member:") and target is None:
+            raise invalid_params("invalid member messaging session")
+        if target is not None and target[0]:
+            member = target[0]
+            if not self.members.member_exists(member) or member in self.members.deleting:
+                raise invalid_params("there is no such member")
+            params["member_id"] = member
+            params["conversation_id"] = self.agent.conversations.main(member)
         if attachments:
             params["attachments"] = [
                 {"name": a.name, "mime": a.mime, "data": base64.b64encode(a.data).decode("ascii")}

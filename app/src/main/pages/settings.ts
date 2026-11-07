@@ -245,6 +245,12 @@ export function createSettings(app: AppContext): SettingsPage {
   app.onEvent((event) => connections.followEvent(event));
   /** Telegram, in the 「訊息平台」 tab: it keeps its own state too. */
   const messaging = createMessaging({ visible: () => visible && pane === "general", redraw: () => render() });
+  // Which members have their own bot (each set up in its panel's 建議); Raphael's own is the card above them.
+  let memberAccounts: api.MemberMessagingAccount[] = [];
+  async function loadMemberAccounts(): Promise<void> {
+    try { memberAccounts = (await api.messagingAccounts()).accounts ?? []; } catch { memberAccounts = []; }
+    if (visible && pane === "general") render();
+  }
   const memoryHost = { visible: () => visible && pane === "general", redraw: () => render() };
   const memoryShared = createMemory({ ...memoryHost, space: "shared" });
   const memories = [memoryShared];
@@ -272,7 +278,7 @@ export function createSettings(app: AppContext): SettingsPage {
     update, memoryImportHTML: memoryImport.html(),
     pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
     replacingKey, keyBusy, keyError, limitDraft, limitError, languageGroups, now: Date.now(),
-    connections: connections.view(), messaging: messaging.view(), memoryShared: memoryShared.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
+    connections: connections.view(), messaging: messaging.view(), memberAccounts, memoryShared: memoryShared.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
 
   /** The item at the foot of the microphones' menu that looks for them again. */
@@ -478,7 +484,7 @@ export function createSettings(app: AppContext): SettingsPage {
     if (pane === "connections") void connections.load();
     else connections.reset();
     // Messaging and memory are sections of 一般 (owner, 2026-11-07).
-    if (pane === "general") { void messaging.load(); for (const list of memories) void list.load(); }
+    if (pane === "general") { void messaging.load(); void loadMemberAccounts(); for (const list of memories) void list.load(); }
     else { messaging.reset(); for (const list of memories) list.reset(); }
     if (pane === "safety") { void rules.load(); void vault.load(); }
     else { rules.reset(); vault.reset(); }

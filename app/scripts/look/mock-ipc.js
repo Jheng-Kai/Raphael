@@ -1537,6 +1537,9 @@ export function installMock(fixture, config = {}, target = window) {
       case "integrations.disconnect": update(data.servers, p.id, { enabled: false, status: "disconnected", auth: "none" }); return { disconnected: true };
       case "usage.allowances": return data.allowances;
       case "messaging.telegram.status": return data.messaging;
+      // A member's own bot (its panel's 建議) and the overview of who has one: none set up in the fixture.
+      case "messaging.accounts": return {accounts: []};
+      case "messaging.member.status": return {connected:false,enabled:false,running:false,error:null,bot:null,allowed:[],pending:[],member_id:p.member_id,kind:"telegram",paired:false};
       case "messaging.slack.status":
       case "messaging.discord.status": return variant.workMessaging?.[method.split('.')[1]] ?? {connected:false,enabled:false,running:false,error:null,bot:null,allowed:[],pending:[]};
       case "messaging.slack.connect":
