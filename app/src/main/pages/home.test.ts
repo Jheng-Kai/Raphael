@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-// Home (pages/home.ts) is Raphael as a secretary: his emblem and greeting, one health line on the team, today's
-// schedule, what is still open and what each member does. No spend, allowance or dictation figures; no boxes.
+// Home (pages/home.ts) is Raphael as a secretary: his still emblem beside the greeting and his line on today, today's
+// schedule, what is still open, what each member does, yesterday and the health check. No spend, allowance or dictation
+// figures; no boxes; no slime and no fly-in.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { HomeItem, HomeOverview } from "../home-types";
 import type { AppContext, MainEvent, Member } from "../types";
@@ -238,38 +239,127 @@ describe("the secretary's page", () => {
   });
 });
 
-describe("Raphael's arrival", () => {
-  test("he flies in once a day when motion is allowed, and the mark goes when his outer ring has gone", async () => {
-    reduce = false;
-    const { page } = await mount();
-    expect(page.el.hasAttribute("data-arrive")).toBe(true);
-    const orb = page.el.querySelector(".ho-orb")!;
-    const ended = (animationName: string, pseudoElement: string) => orb.dispatchEvent(Object.assign(new Event("animationend", { bubbles: true }), { animationName, pseudoElement }));
-    // A part that ends early (as the sections do when motion is held) leaves him arriving.
-    ended("ho-rise", ""); ended("ho-ring", "::before");
-    expect(page.el.hasAttribute("data-arrive")).toBe(true);
-    ended("ho-ring", "::after");
-    expect(page.el.hasAttribute("data-arrive")).toBe(false);
-    page.hide(); page.el.remove();
-    const again = await mount();
-    expect(again.page.el.hasAttribute("data-arrive")).toBe(false);
+describe("what Home gathers for the day (owner, 2026-11-07 night)", () => {
+  const story = (state: "ready" | "pending" | "unavailable", narrative: string | null = null, reason: string | null = null) => ({ narrative, state, reason, model: null });
+  const digest = (): HomeOverview => {
+    const sample = overview(5);
+    sample.yesterday = { date: "2026-10-26", start_ms: NOW - 86_400_000, end_ms: NOW, ...story("ready", "Ari wrote two summaries; Bo answered a Telegram message."),
+      counts: { work: 2, routines: 1, messages: 1 },
+      members: [{ member_id: 1, name: "Ari", items: [], counts: { work: 2, routines: 0, messages: 0 } }, { member_id: 2, name: "Bo", items: [], counts: { work: 0, routines: 1, messages: 1 } }] };
+    sample.today_plan = { date: "2026-10-27", items: [], ...story("ready", "今天有兩個行程。") };
+    sample.health = { reason: null, checks: [
+      { id: "key:OpenRouter", name: "OpenRouter", label_key: "health.key_presence", status: "ok", detail: null, detail_key: null },
+      { id: "connection:notion", label_key: "health.connection", status: "warn", detail: "連線尚未就緒。", detail_key: "health.connection_unavailable" },
+      { id: "memory", label_key: "health.memory", status: "ok", detail: null, detail_key: null },
+    ] };
+    sample.members = [{ id: 1, name: "Ari", current_or_last: "Wrote the weekly summary", next_routine: { id: 4, title: "Morning digest", at_ms: NOW + 3_600_000 }, waiting_for_owner: [] },
+      { id: 2, name: "Bo", current_or_last: "", next_routine: null, waiting_for_owner: [] }];
+    return sample;
+  };
+
+  test("five plain sections; his line on today in the hero; yesterday in numbers, faces and his paragraph", async () => {
+    team.members = [person(0, "Raphael"), person(1, "Ari"), person(2, "Bo", { role: "Keeps the books" })];
+    queue.splice(0, queue.length, digest());
+    const { page, app } = await mount();
+    expect([...page.el.querySelectorAll(".ho-board > .ho-sec")].map(section => section.classList[1])).toEqual(["ho-schedule", "ho-pending", "ho-team", "ho-yesterday", "ho-checks"]);
+    expect(page.el.querySelector(".ho-hero .ho-health")!.textContent).toBe("今天有兩個行程。");
+    expect([...page.el.querySelectorAll(".ho-num")].map(n => n.textContent)).toEqual(["2工作", "1例行", "1訊息"]);
+    expect([...page.el.querySelectorAll<HTMLElement>(".ho-who")].map(b => [b.dataset.homeMember, b.textContent])).toEqual([["1", "2"], ["2", "2"]]);
+    expect(page.el.querySelector(".ho-story")!.textContent).toBe("Ari wrote two summaries; Bo answered a Telegram message.");
+    // Free, a member says what it did last, else its job; its next routine stands at the end with its name for a reader.
+    expect(page.el.querySelector('.ho-member[data-home-member="1"] .ho-row-copy span')!.textContent).toBe("上次：Wrote the weekly summary");
+    expect(page.el.querySelector('.ho-member[data-home-member="2"] .ho-row-copy span')!.textContent).toBe("Keeps the books");
+    const next = page.el.querySelector('.ho-member[data-home-member="1"] .ho-next')!;
+    expect(next.textContent).toBe("11:00");
+    expect(next.getAttribute("aria-label")).toBe("下次例行：Morning digest，11:00");
+    const { openMemberThread } = await import("../team-navigation");
+    page.el.querySelector<HTMLButtonElement>('.ho-who[data-home-member="2"]')!.click();
+    expect(openMemberThread).toHaveBeenLastCalledWith(app, 2);
   });
 
-  test("under reduced motion he is simply there, and the day still counts as seen", async () => {
+  test("the health check shows what is not well as rows that open its place, and names everything that is fine", async () => {
+    queue.splice(0, queue.length, digest());
+    const { page, app } = await mount();
+    const bad = [...page.el.querySelectorAll<HTMLElement>(".ho-checks .ho-check")];
+    expect(bad.map(row => [row.tagName, row.dataset.status, row.querySelector("strong")!.textContent, row.querySelector(".ho-row-copy span")!.textContent]))
+      .toEqual([["BUTTON", "warn", "notion", "連線尚未就緒。"]]);
+    bad[0]!.click();
+    expect(app.go).toHaveBeenLastCalledWith("settings", "connections");
+    expect(page.el.querySelector(".ho-ok b")!.textContent).toBe("2 項正常");
+    expect(page.el.querySelector(".ho-ok small")!.textContent).toBe("OpenRouter、記憶");
+  });
+
+  test("a summary being written says so; without a model it says why and opens the model choice; nothing is invented", async () => {
+    const { homeHTML } = await load();
+    const pending = digest(); pending.yesterday = { ...pending.yesterday!, ...story("pending", null, "generating") };
+    pending.today_plan = { ...pending.today_plan!, ...story("pending", null, "generating") };
+    const waiting = parse(homeHTML(pending, team.members as Member[]));
+    expect(waiting.querySelector(".ho-story.is-quiet")!.textContent).toBe("正在整理昨天的紀錄…");
+    expect(waiting.querySelector(".ho-hero .ho-health")!.textContent).toBe("健康檢查完成，2 位成員都正常。");
+    const none = digest(); none.yesterday = { ...none.yesterday!, ...story("unavailable", null, "model_unavailable") };
+    queue.splice(0, queue.length, none);
+    const { page, app } = await mount();
+    const fix = page.el.querySelector<HTMLButtonElement>('.ho-story [data-home-go="models"]')!;
+    expect(fix.textContent).toBe("選模型");
+    fix.click();
+    expect(app.go).toHaveBeenLastCalledWith("settings", "models");
+    const failed = digest(); failed.yesterday = { ...failed.yesterday!, ...story("unavailable", null, "generation_failed") };
+    expect(parse(homeHTML(failed)).querySelector(".ho-story")!.textContent).toBe("今天沒能寫出摘要，數字仍是昨天的紀錄。");
+  });
+
+  test("today is every item of the day in time order, a routine due many times is one row with its count", async () => {
+    const { todaysSchedule } = await load();
+    const sample = digest();
+    const at = (h: number) => new Date(2026, 9, 27, h).getTime();
+    sample.today = [
+      item("question:1", "question", "Which source?", at(8)),
+      ...[8, 10, 12, 14].map(h => item(`routine:5:${at(h)}`, "routine", "Inbox sweep", at(h), { routine_id: 5 })),
+      item(`routine:5:${at(11)}`, "routine", "Inbox sweep", at(11), { routine_id: 5, run_status: "error" }),
+      item("routine:6:1", "routine", "Morning digest", at(9), { routine_id: 6 }),
+      item("event:x", "event", "Design review", at(16)),
+    ];
+    const rows = todaysSchedule(sample);
+    expect(rows.map(({ item: row, times }) => [row.title, times, row.rhythm === true])).toEqual([
+      ["Inbox sweep", 4, true], ["Morning digest", 1, false], ["Inbox sweep", 1, false], ["Design review", 1, false]]);
+    const { homeHTML } = await load();
+    const page = parse(homeHTML(sample, team.members as Member[]));
+    expect(page.querySelector(".ho-event.is-rhythm .ho-times")!.textContent).toBe("4 次");
+    expect(page.querySelector('.ho-schedule [data-home-event="question:1"]')).toBeNull();
+  });
+
+  test("written summaries arriving (HomeChanged) read Home again", async () => {
+    const { emit } = await mount();
+    const { homeOverview } = await import("../api");
+    const reads = vi.mocked(homeOverview).mock.calls.length;
+    emit({ type: "HomeChanged" });
+    await new Promise(resolve => setTimeout(resolve, 400));
+    await flush();
+    expect(vi.mocked(homeOverview).mock.calls.length).toBeGreaterThan(reads);
+  });
+});
+
+describe("Raphael's arrival", () => {
+  test("he is simply there on the first Home of a day, with motion allowed or not (owner, 2026-11-07 night)", async () => {
+    reduce = false;
     const { page } = await mount();
     expect(page.el.hasAttribute("data-arrive")).toBe(false);
-    expect(localStorage.getItem("raphael.home.arrived")).not.toBeNull();
+    page.hide(); page.el.remove();
+    reduce = true;
+    const again = await mount();
+    expect(again.page.el.hasAttribute("data-arrive")).toBe(false);
+    expect(localStorage.getItem("raphael.home.arrived")).toBeNull();
   });
 });
 
 describe("the emblem", () => {
-  test("is Raphael's first blue slime: his emblem shows only in voice (owner, 2026-11-07)", async () => {
+  test("is 拉斐爾大師's emblem standing still, never a slime or the owner's picture (owner, 2026-11-07 night)", async () => {
     reduce = false;
     const { homeHTML } = await load();
-    const face = parse(homeHTML(overview(5))).querySelector(".ho-orb > .av")!;
-    expect(face.classList.contains("mb-av-slime")).toBe(true);
-    expect(face.querySelector("svg.slime")?.outerHTML).toContain("#3DB5FF");
-    expect(face.querySelector("img")).toBeNull();
+    const face = parse(homeHTML(overview(5), team.members as Member[])).querySelector(".ho-orb > .av")!;
+    expect(face.classList.contains("mb-av-slime") || face.classList.contains("av-custom")).toBe(false);
+    expect(face.querySelector("svg.slime")).toBeNull();
+    expect(face.querySelector("img.em-turn")).toBeNull();
+    expect(face.querySelector("img")).not.toBeNull();
   });
 
   test("is drawn again by a refresh without starting his turn over: the emblem stays the same node", async () => {

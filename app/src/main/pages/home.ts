@@ -1,12 +1,14 @@
 import { visibilityGate } from "../window-visibility";
-// Home is Raphael as a secretary (owner, 2026-11-07): his emblem and greeting in the middle, one line of the team's
-// health, then today's schedule, what is still open and what each member is doing. No figures of spend or dictation.
+// Home is Raphael as a secretary (owner, 2026-11-07): his emblem beside the greeting and his word on today, then today's
+// schedule, what is still open, what each member does and will do next, yesterday in numbers and his words, and what the
+// health check looked at. No figures of spend or dictation, no slime and no fly-in (owner, 2026-11-07 night).
 import * as api from "../api";
 import { eventRead } from '../event-read';
-import { onAvatarChange } from "../avatar";
+import { avatarHTML, onAvatarChange } from "../avatar";
 import { chipClock, chipColor, dismissOffer, googleMark, googleNoticeHTML, runMarkHTML, type CalendarPerson, type EntryKind } from "../calendar-view";
-import type { GoogleCalendarState, HomeItem, HomeOverview } from "../home-types";
+import type { GoogleCalendarState, HomeCheck, HomeItem, HomeNarrative, HomeOverview, HomeUnfinished } from "../home-types";
 import { getLocale, onLocaleChange, t } from "../i18n";
+import type { MessageKey } from "../i18n/zh-TW";
 import { loadingHTML } from "../loading";
 import { buildReport } from "../report";
 import { dateKey } from "../schedule-picker";
@@ -19,10 +21,8 @@ import { btn, esc, ico, iconButton, patchHTML } from "../ui";
 import "../home.css";
 
 const HOUR = 3_600_000;
-/** Rows a section shows; the rest is counted below them, so Home never scrolls inside. */
-const ROWS = 4;
-/** The day Raphael last flew in: once a day, on the first Home of that day. */
-const ARRIVED_KEY = "raphael.home.arrived";
+/** Rows a section shows; the rest is counted below them (owner, 2026-11-07 night: everything of today at a glance). */
+const ROWS = 8;
 
 const clock = (at: number): string => new Date(at).toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", hour12: false });
 const faceHTML = (item: HomeItem, size: number): string => memberFaceHTML({ id: item.member_id, name: item.name, avatar: item.avatar }, size);
@@ -63,56 +63,148 @@ function entryOf(item: HomeItem): { kind: EntryKind; member?: CalendarPerson; ru
   return { kind, member, run: item.run_status ? { status: item.run_status } : undefined };
 }
 
-/** One line of today's schedule: its time, the calendar's colour as a tick, the title and who it is for. No box. */
-function eventRowHTML(item: HomeItem, now: number): string {
+/** One line of today's schedule: its time, the calendar's colour as a tick, the title and who it is for. No box.
+ * A routine due `times` times today says so after its title. */
+function eventRowHTML(item: HomeItem, now: number, times = 1): string {
   const entry = entryOf(item), mark = runMarkHTML(entry);
   // A rhythm is the calendar's quiet bar: its face and title, no time (R-CAL-03).
   const when = item.rhythm ? `<span class="ho-repeat" aria-hidden="true">${ico("repeat")}</span>` : esc(chipClock({ allDay: item.all_day === true, start: item.at_ms }));
   const lead = entry.kind === "event" ? googleMark() : entry.member ? memberFaceHTML(entry.member, 20) : "";
   const past = !mark && !item.all_day && (item.end_ms ?? item.at_ms + HOUR) <= now;
+  const count = times > 1 ? `<small class="ho-times">${esc(t("home.times", { p0: times }))}</small>` : "";
   return `<button type="button" class="btn ho-row ho-event is-${entry.kind}${item.rhythm ? " is-rhythm" : ""}${past ? " is-past" : ""}"${entry.kind === "event" ? "" : chipColor(entry.member)}` +
-    ` data-home-event="${esc(item.id)}" data-home-date="${dateKey(new Date(item.at_ms))}"><time>${when}</time><b>${esc(item.title)}</b>${mark}${lead}</button>`;
+    ` data-home-event="${esc(item.id)}" data-home-date="${dateKey(new Date(item.at_ms))}"><time>${when}</time><b>${esc(item.title)}</b>${count}${mark}${lead}</button>`;
+}
+
+/** Today's schedule as one list: the core's every item of today (calendar, own events, routine runs), questions aside.
+ * A routine due many times a day is one row with its count, as the calendar's rhythm bar (R-CAL-03). */
+export function todaysSchedule(data: HomeOverview): { item: HomeItem; times: number }[] {
+  const today = dateKey(new Date(data.generated_at_ms));
+  const all = data.yesterday ? data.today.filter(item => item.kind !== "question")
+    : (data.calendar_items ?? data.calendar).filter(item => dateKey(new Date(item.at_ms)) === today);
+  const runs = new Map<number, HomeItem[]>();
+  for (const item of all) if (item.kind === "routine" && item.routine_id !== null && !item.run_status) runs.set(item.routine_id, [...(runs.get(item.routine_id) ?? []), item]);
+  const rows: { item: HomeItem; times: number }[] = [];
+  for (const item of all) {
+    const same = item.kind === "routine" && item.routine_id !== null && !item.run_status ? runs.get(item.routine_id)! : null;
+    if (same && same.length > 2) {
+      if (same[0] === item) rows.push({ item: { ...item, rhythm: true, all_day: true }, times: same.length });
+    } else rows.push({ item, times: 1 });
+  }
+  return rows.sort((a, b) => Number(b.item.all_day === true) - Number(a.item.all_day === true) || a.item.at_ms - b.item.at_ms);
 }
 
 function scheduleHTML(data: HomeOverview): string {
   const now = data.generated_at_ms, today = dateKey(new Date(now));
-  const items = (data.calendar_items ?? data.calendar).filter(item => dateKey(new Date(item.at_ms)) === today)
-    .sort((a, b) => Number(b.all_day === true) - Number(a.all_day === true) || a.at_ms - b.at_ms);
-  // The core sends a few items a day and the day's count: what is not drawn is counted.
-  const shown = items.slice(0, ROWS), rest = Math.max(data.calendar_counts?.[today] ?? 0, items.length) - shown.length;
+  const rows = todaysSchedule(data);
+  // The core's every item of today, or (an older core) a few items a day and the day's count: what is not drawn is counted.
+  const total = data.yesterday ? rows.length : Math.max(data.calendar_counts?.[today] ?? 0, rows.length);
+  const shown = rows.slice(0, ROWS), rest = total - shown.length;
   const notice = googleNoticeHTML(data.calendar_google, { go: 'data-home-go="connections"', dismiss: "data-home-dismiss" });
-  const body = items.length
-    ? shown.map(item => eventRowHTML(item, now)).join("") +
+  const body = rows.length
+    ? shown.map(({ item, times }) => eventRowHTML(item, now, times)).join("") +
       (rest > 0 ? btn(esc(t("overview.moreEvents", { p0: rest })), "sm ho-more", ` data-home-go="calendar" data-home-date="${today}"`) : "")
     : `<p class="ho-empty">${esc(t("overview.noSchedule"))}</p>${btn(ico("plus") + esc(t("auto.create")), "sm ho-create", ` data-home-create="${today}"`)}`;
   return sectionHTML("schedule", t("home.schedule"), body + notice, iconButton("calendar", t("overview.calendar"), ' data-home-go="calendar"'));
 }
 
-function itemRowHTML(item: HomeItem): string {
+function itemRowHTML(item: HomeItem, words?: string): string {
   const report = item.kind === "report";
   return `<button type="button" class="btn ho-row" data-home-item="${esc(item.id)}">${faceHTML(item, 28)}` +
-    `<span class="ho-row-copy"><strong>${esc(report ? item.name : item.title)}</strong><span>${esc(report ? item.summary : item.name)}</span></span>` +
+    `<span class="ho-row-copy"><strong>${esc(report ? item.name : item.title)}</strong><span>${esc(words ?? (report ? item.summary : item.name))}</span></span>` +
     `<time datetime="${new Date(item.at_ms).toISOString()}">${esc(clock(item.at_ms))}</time></button>`;
 }
 
-function pendingHTML(data: HomeOverview): string {
-  const open = [...data.today.filter(item => item.kind === "question"), ...data.reports];
-  const shown = open.slice(0, ROWS), rest = data.today.filter(item => item.kind === "question").length + Math.max(data.counts.reports, data.reports.length) - shown.length;
+/** Work that stopped short and needs the owner: a failed, interrupted or limited task or turn. */
+const STOPPED: Record<string, Extract<MessageKey, `home.stop${string}`>> = { failed: "home.stopFailed", error: "home.stopFailed", interrupted: "home.stopInterrupted", limit: "home.stopLimit" };
+const COUNT_KEYS = { work: "home.countWork", routines: "home.countRoutines", messages: "home.countMessages" } as const;
+
+function pendingHTML(data: HomeOverview, members: readonly Member[]): string {
+  const questions = data.today.filter(item => item.kind === "question");
+  const stopped = (data.today_plan?.items ?? []).filter((item): item is HomeUnfinished => item.kind === "unfinished" && item.state in STOPPED)
+    .map(item => {
+      const who = members.find(m => m.id === item.member_id);
+      const turn = item.id.startsWith("turn:") ? Number(item.id.slice(5)) : null;
+      return { row: { id: item.id, kind: "question", title: item.title, summary: "", at_ms: item.at_ms, member_id: item.member_id, name: who?.name ?? "",
+        avatar: who?.avatar ?? "", turn_id: turn, conversation_id: null, routine_id: null } satisfies HomeItem, words: t(STOPPED[item.state]) };
+    });
+  const open = [...questions.map(row => ({ row, words: undefined as string | undefined })), ...stopped, ...data.reports.map(row => ({ row, words: undefined }))];
+  const shown = open.slice(0, ROWS), rest = questions.length + stopped.length + Math.max(data.counts.reports, data.reports.length) - shown.length;
   const body = open.length
-    ? shown.map(itemRowHTML).join("") + (rest > 0 ? `<p class="ho-count">${esc(t("home.moreItems", { p0: rest }))}</p>` : "")
+    ? shown.map(({ row, words }) => itemRowHTML(row, words)).join("") + (rest > 0 ? `<p class="ho-count">${esc(t("home.moreItems", { p0: rest }))}</p>` : "")
     : `<p class="ho-empty">${ico("check")}${esc(t("overview.allClear"))}</p>`;
   return sectionHTML("pending", t("home.pending"), body);
 }
 
-function teamHTML(team: readonly Member[]): string {
+/** When a routine runs next: its time today, else the weekday and time. */
+function nextAt(at: number, now: number): string {
+  return dateKey(new Date(at)) === dateKey(new Date(now)) ? clock(at)
+    : `${new Date(at).toLocaleDateString(getLocale(), { weekday: "short" })} ${clock(at)}`;
+}
+
+function teamHTML(team: readonly Member[], data: HomeOverview): string {
+  const details = new Map((data.members ?? []).map(m => [m.id, m]));
   const sorted = team.map((m, i) => ({ m, i, state: memberState(m) }))
     .sort((a, b) => ORDER.indexOf(a.state.kind) - ORDER.indexOf(b.state.kind) || a.i - b.i);
   const body = sorted.length
-    ? sorted.slice(0, ROWS).map(({ m, state }) => `<button type="button" class="btn ho-row ho-member" data-home-member="${m.id}" data-state="${state.kind}">${memberFaceHTML(m, 28)}` +
-        `<span class="ho-row-copy"><strong>${esc(m.name)}</strong><span>${esc(state.words)}</span></span></button>`).join("") +
+    ? sorted.slice(0, ROWS).map(({ m, state }) => {
+        const more = details.get(m.id);
+        // At work or waiting it says so in the core's words; free, it says what it did last, else what it is for.
+        const words = state.kind === "needs" || state.kind === "busy" ? state.words
+          : more?.current_or_last ? t("home.last", { p0: more.current_or_last }) : m.role?.trim() || state.words;
+        const next = more?.next_routine;
+        const when = next ? `<time class="ho-next" datetime="${new Date(next.at_ms).toISOString()}" aria-label="${esc(t("home.nextRoutine", { p0: next.title, p1: nextAt(next.at_ms, data.generated_at_ms) }))}">` +
+          `${ico("repeat")}${esc(nextAt(next.at_ms, data.generated_at_ms))}</time>` : "";
+        return `<button type="button" class="btn ho-row ho-member" data-home-member="${m.id}" data-state="${state.kind}">${memberFaceHTML(m, 28)}` +
+          `<span class="ho-row-copy"><strong>${esc(m.name)}</strong><span>${esc(words)}</span></span>${when}</button>`;
+      }).join("") +
       (sorted.length > ROWS ? `<p class="ho-count">${esc(t("home.moreMembers", { p0: sorted.length - ROWS }))}</p>` : "")
     : `<p class="ho-empty">${esc(t("home.teamEmpty"))}</p>`;
   return sectionHTML("team", t("members.title"), body);
+}
+
+/** A daily paragraph Raphael writes, or the plain reason it is not there; without a model, the way to choose one. */
+function narrativeHTML(story: HomeNarrative): string {
+  if (story.state === "ready" && story.narrative) return `<p class="ho-story">${esc(story.narrative)}</p>`;
+  if (story.state === "pending") return `<p class="ho-story is-quiet">${esc(t("home.storyPending"))}</p>`;
+  if (story.reason === "model_unavailable")
+    return `<p class="ho-story is-quiet">${esc(t("home.storyNoModel"))}${btn(esc(t("home.chooseModel")), "sm ho-story-fix", ' data-home-go="models"')}</p>`;
+  return `<p class="ho-story is-quiet">${esc(t("home.storyFailed"))}</p>`;
+}
+
+function yesterdayHTML(data: HomeOverview, members: readonly Member[]): string {
+  const day = data.yesterday;
+  if (!day) return "";
+  const tally = (["work", "routines", "messages"] as const).map(kind =>
+    `<span class="ho-num" data-kind="${kind}"><b>${day.counts[kind]}</b><small>${esc(t(COUNT_KEYS[kind]))}</small></span>`).join("");
+  // Who did it: each member that finished something, its face and how much; a press opens its conversation.
+  const who = day.members.map(group => ({ group, total: group.counts.work + group.counts.routines + group.counts.messages }))
+    .filter(({ total }) => total > 0).sort((a, b) => b.total - a.total)
+    .map(({ group, total }) => {
+      const m = members.find(person => person.id === group.member_id) ?? { id: group.member_id, name: group.name };
+      return `<button type="button" class="btn ho-who" data-home-member="${group.member_id}" aria-label="${esc(t("home.whoDid", { p0: group.name, p1: total }))}">${memberFaceHTML(m, 20)}<span>${total}</span></button>`;
+    }).join("");
+  return sectionHTML("yesterday", t("home.yesterday"), `<div class="ho-tally">${tally}${who ? `<span class="ho-whos">${who}</span>` : ""}</div>${narrativeHTML(day)}`);
+}
+
+/** The name a check is about: the core's, else the part of its id after the kind. */
+const checkName = (check: HomeCheck): string => check.name?.trim() || (check.id === "memory" ? t("home.checkMemory") : check.id.slice(check.id.indexOf(":") + 1).split("/")[0]);
+/** Where a check that is not well is fixed. */
+const checkPlace = (check: HomeCheck): string => check.id.startsWith("connection:") ? "connections" : check.id === "memory" ? "" : "models";
+
+function healthHTML(data: HomeOverview): string {
+  const health = data.health;
+  if (!health) return "";
+  const bad = health.checks.filter(check => check.status !== "ok"), good = health.checks.filter(check => check.status === "ok");
+  const rows = bad.map(check => {
+    const place = checkPlace(check);
+    return `<button type="button" class="btn ho-row ho-check" data-status="${check.status}"${place ? ` data-home-go="${place}"` : ""}><span class="ho-dot" aria-hidden="true"></span>` +
+      `<span class="ho-row-copy"><strong>${esc(checkName(check))}</strong><span>${esc(check.detail ?? "")}</span></span></button>`;
+  }).join("");
+  const fine = good.length ? `<p class="ho-ok">${ico("check")}<span><b>${esc(t("home.checksOk", { p0: good.length }))}</b>` +
+    `<small>${esc(good.map(checkName).join(t("home.listJoin")))}</small></span></p>` : "";
+  const body = health.checks.length ? rows + fine : `<p class="ho-empty">${esc(t("home.checksNone"))}</p>`;
+  return sectionHTML("checks", t("home.health"), body);
 }
 
 function sectionHTML(key: string, title: string, body: string, action = ""): string {
@@ -125,12 +217,13 @@ export function homeHTML(data: HomeOverview, members: readonly Member[] = []): s
   // Only a report that needs fixing speaks here, with its one fix; a well budget is no news for a secretary. The main window
   // shows his words plainly: 《告。…》 stays on the desktop's captions (R-UI-42).
   const alert = report.action ? `<p class="ho-alert">${esc(plainReplies([report.text])[0] ?? report.text)}${iconButton(report.action.target === "retry" ? "refresh" : "info", report.action.label, ' data-home-go="report"')}</p>` : "";
-  // Raphael as the first blue slime (owner, 2026-11-07): his emblem shows only in voice.
-  const raphael = members.find(member => member.id === RAPHAEL_ID) ?? { id: RAPHAEL_ID, name: "" };
-  const hero = `<section class="ho-hero"><div class="ho-orb">${memberFaceHTML(raphael, 128)}</div>` +
-    `<h1 class="ho-greet">${esc(greeting(data.generated_at_ms))}</h1><p class="ho-date">${esc(date)}</p>` +
-    `<p class="ho-health" role="status">${esc(healthText(team))}</p>${alert}</section>`;
-  return hero + `<div class="ho-board">${scheduleHTML(data)}${pendingHTML(data)}${teamHTML(team)}</div>`;
+  // Raphael's emblem, standing still (owner, 2026-11-07 night: no slime and no fly-in on Home), beside the greeting.
+  // His line is the short word on today he wrote, else the team's health in one sentence.
+  const plan = data.today_plan?.state === "ready" && data.today_plan.narrative ? data.today_plan.narrative : healthText(team);
+  const hero = `<section class="ho-hero"><div class="ho-orb">${avatarHTML({ size: 96, avatar: null })}</div><div class="ho-hero-copy">` +
+    `<p class="ho-date">${esc(date)}</p><h1 class="ho-greet">${esc(greeting(data.generated_at_ms))}</h1>` +
+    `<p class="ho-health" role="status">${esc(plan)}</p>${alert}</div></section>`;
+  return hero + `<div class="ho-board">${scheduleHTML(data)}${pendingHTML(data, members)}${teamHTML(team, data)}${yesterdayHTML(data, members)}${healthHTML(data)}</div>`;
 }
 
 export function createHome(app: AppContext): Page {
@@ -145,26 +238,11 @@ export function createHome(app: AppContext): Page {
   let liveAt = -Infinity;
   const poll = visibilityGate(() => void load(), () => visible);
   let timer: ReturnType<typeof setInterval> | undefined;
-  /** Raphael flies in from his corner once a day; the page drops the mark when his outer ring, the last of it, has gone. */
-  const arrive = (): void => {
-    const day = dateKey(new Date());
-    let seen: string | null = null;
-    try { seen = localStorage.getItem(ARRIVED_KEY); } catch { /* No storage: he flies in every time, which is harmless. */ }
-    if (seen === day) return;
-    try { localStorage.setItem(ARRIVED_KEY, day); } catch { /* As above. */ }
-    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) el.dataset.arrive = "";
-  };
-  el.addEventListener("animationend", event => {
-    if (event.animationName === "ho-ring" && event.pseudoElement === "::after") delete el.dataset.arrive;
-  });
-  // Drawn again on every refresh, but the emblem stays the node it is while its picture is the same: a new <img> would start its turn over.
+  // Drawn again on every refresh, but a refresh that changes nothing touches nothing.
   let paintedHTML = "";
-  /** Set by show(): the first paint of this showing flies him in if the day has not seen it yet. */
-  let showing = false;
   const paint = (): void => {
     if (!data) return;
     const html = homeHTML(data, members);
-    if (showing && visible) { showing = false; arrive(); }
     if (html === paintedHTML) return;
     paintedHTML = html;
     patchHTML(el, html);
@@ -221,6 +299,7 @@ export function createHome(app: AppContext): Page {
     switch (target.dataset.homeGo) {
       case "reload": void load(); break;
       case "connections": app.go("settings", "connections"); break;
+      case "models": app.go("settings", "models"); break;
       case "calendar":
         if (target.dataset.homeDate) app.go("automations", target.dataset.homeDate as CalendarDate);
         else app.go("automations");
@@ -246,9 +325,9 @@ export function createHome(app: AppContext): Page {
       return;
     }
     if (["MembersChanged", "AgentQuestion", "AgentQuestionClosed", "ConversationsChanged"].includes(event.type)) void load(true);
-    else if (["AgentTurn", "RoutinesChanged", "CalendarChanged", "SettingsChanged", "ConnectionsChanged"].includes(event.type)) void load(true, false);
+    else if (["AgentTurn", "RoutinesChanged", "CalendarChanged", "SettingsChanged", "ConnectionsChanged", "HomeChanged"].includes(event.type)) void load(true, false);
   });
   app.cleared.on("conversation", () => { if (visible) void load(); });
-  return { id: "home", el, show() { visible = true; showing = true; void load(); clearInterval(timer); timer = setInterval(() => { poll.run(); }, 30_000); },
-    hide() { visible = false; generation++; clearInterval(timer); delete el.dataset.arrive; } };
+  return { id: "home", el, show() { visible = true; void load(); clearInterval(timer); timer = setInterval(() => { poll.run(); }, 30_000); },
+    hide() { visible = false; generation++; clearInterval(timer); } };
 }

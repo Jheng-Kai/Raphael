@@ -1836,20 +1836,18 @@ export function checkRendered(name, context = {}) {
     return {check:name, surfaces, tokens};
   }
   if(name==='home-hero'){
-    // Raphael as a secretary (owner, 2026-11-07): his emblem in the middle, the greeting, the date and his health line under it.
-    const page=document.querySelector('.page-home:not([hidden])'), hero=page.querySelector('.ho-hero'), emblem=hero.querySelector('.ho-orb > .av'), heading=hero.querySelector('h1'), health=hero.querySelector('.ho-health');
-    const main=document.querySelector('.main'), expected=main.clientWidth<=760?96:128, root=getComputedStyle(document.documentElement);
+    // Raphael as a secretary (owner, 2026-11-07 night): his still emblem at the left, then the date, the greeting and his line on today.
+    const page=document.querySelector('.page-home:not([hidden])'), hero=page.querySelector('.ho-hero'), emblem=hero.querySelector('.ho-orb > .av'), heading=hero.querySelector('h1'), health=hero.querySelector('.ho-health'), date=hero.querySelector('.ho-date');
+    const main=document.querySelector('.main'), expected=main.clientWidth<=760?72:96, root=getComputedStyle(document.documentElement);
     require(Math.abs(emblem.offsetWidth-expected)<1,`Raphael's emblem is ${expected}px on Home (${emblem.offsetWidth})`);
-    const style=getComputedStyle(page), box=page.getBoundingClientRect();
-    const middle=box.left+parseFloat(style.paddingLeft)+(box.width-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight))/2;
-    const centre=element=>{const r=element.getBoundingClientRect();return r.left+r.width/2;};
-    for (const [element,what] of [[emblem,'emblem'],[heading,'greeting'],[health,'health line']]) require(Math.abs(centre(element)-middle)<=2,`the ${what} stands in the middle (${Math.round(centre(element)-middle)}px off)`);
+    const e=emblem.getBoundingClientRect(), h=heading.getBoundingClientRect(), d=date.getBoundingClientRect(), l=health.getBoundingClientRect();
+    require(h.left>=e.right-1 && d.left>=e.right-1 && l.left>=e.right-1,'the date, greeting and his line stand beside the emblem, read from the left');
+    require(d.bottom<=h.top+1 && l.top>=h.bottom-1,'date, greeting and his line stack in that order');
     require(/^(早安|午安|晚上好)，主人$/.test(heading.textContent.trim()),`a greeting by the time of day: ${heading.textContent}`);
     require(getComputedStyle(heading).fontSize===root.getPropertyValue('--fs-h1').trim(),'the greeting uses the heading token');
-    require(/^健康檢查完成，.+。$/.test(health.textContent.trim()),`Raphael reports the team's health in plain words: ${health.textContent}`);
+    require(/^.{6,}。$/.test(health.textContent.trim()),`Raphael's line on today, or the team's health, in plain words: ${health.textContent}`);
     require(!/[《》]/.test(hero.textContent),"the main window shows his words plainly; 《告。…》 is the desktop caption's (R-UI-42)");
-    require(heading.getBoundingClientRect().top>=emblem.getBoundingClientRect().bottom-1 && health.getBoundingClientRect().top>=heading.getBoundingClientRect().bottom-1,'emblem, greeting and health line stack in that order');
-    require(health.getBoundingClientRect().height<=parseFloat(getComputedStyle(health).lineHeight)*2+1,'the health line keeps to one or two lines');
+    require(l.height<=parseFloat(getComputedStyle(health).lineHeight)*3+1,'his line keeps to three lines at most');
     return {check:name,emblem:expected,heading:getComputedStyle(heading).fontSize};
   }
   if (name.startsWith("rich-")) {
@@ -2954,15 +2952,45 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "home-team") {
     const rows = [...document.querySelectorAll('.page-home .ho-team .ho-member')];
-    require(rows.length === 4, `Home shows four members and counts the rest (${rows.length})`);
-    require(rows.map(row => row.dataset.state).join() === "needs,busy,idle,idle", `the one waiting for the owner first, then the one at work: ${rows.map(row => row.dataset.state)}`);
-    require(/還有 1 位成員/.test(document.querySelector('.ho-team .ho-count')?.textContent ?? ""), "the fifth member is counted under the rows");
-    require(/小晴 在等你/.test(document.querySelector('.ho-health').textContent), "the health line names who waits for the owner");
+    require(rows.length === 5 && !document.querySelector('.ho-team .ho-count'), `Home shows all five members, up to eight (${rows.length})`);
+    require(rows.map(row => row.dataset.state).join() === "needs,busy,idle,idle,idle", `the one waiting for the owner first, then the one at work: ${rows.map(row => row.dataset.state)}`);
+    require(/小晴 在等你|等你回答/.test(document.querySelector('.ho-hero .ho-health').textContent), "Raphael's line says the owner is waited for");
     const words = rows[0].querySelector('.ho-row-copy span'), probe = document.createElement('i');
     probe.style.color = 'var(--warn)'; document.body.append(probe); const warn = getComputedStyle(probe).color; probe.remove();
     require(getComputedStyle(words).color === warn && words.textContent === '等你回答', "waiting reads in the warning colour, in the core's words");
     require(rows[1].querySelector('.ho-row-copy span').textContent === '正在搜尋網路', "a member at work says what it does");
+    // Free, a member says what it did last, else what it is for (its role); its next routine stands at the end of the row.
+    const free = rows.slice(2).map(row => row.querySelector('.ho-row-copy span').textContent);
+    require(free.every(text => text === '日文老師'), `a free member with no recorded work names its job: ${free}`);
+    const next = rows[0].querySelector('.ho-next');
+    require(visible(next) && /\d{2}:\d{2}/.test(next.textContent) && visible(next.querySelector('.i')) && /午間資訊摘要/.test(next.getAttribute('aria-label') ?? ''), "a member's next routine shows its time with the repeat icon and names it");
     for (const row of rows) require(visible(row.querySelector('.av, .slime-surface, svg.slime')), "every member row has its face");
+    return { check: name };
+  }
+  if (name === "home-digest") {
+    // Yesterday in three numbers with the faces of who did the work, then Raphael's few sentences; the health check names
+    // everything it looked at (owner, 2026-11-07 night).
+    const page = document.querySelector('.page-home:not([hidden])'), day = page.querySelector('.ho-yesterday');
+    const numbers = [...day.querySelectorAll('.ho-num')].map(n => `${n.querySelector('b').textContent}${n.querySelector('small').textContent}`);
+    require(numbers.join() === "4工作,3例行,2訊息", `yesterday's work, routines and messages as numbers: ${numbers}`);
+    const who = [...day.querySelectorAll('.ho-who')];
+    require(who.length === 2 && who.every(b => b.tagName === 'BUTTON' && visible(b.querySelector('.av, .slime-surface, svg.slime'))) && who.map(b => b.dataset.homeMember).join() === "2,1", "the faces of who did the work, the busiest first, each a button");
+    const story = day.querySelector('.ho-story');
+    require(visible(story) && !story.classList.contains('is-quiet') && /小晴/.test(story.textContent) && story.getBoundingClientRect().top >= day.querySelector('.ho-tally').getBoundingClientRect().bottom - 1, "his paragraph on yesterday follows the numbers");
+    require(day.querySelectorAll('.ho-story li, .ho-story h3').length === 0, "a paragraph, not a list");
+    const checks = page.querySelector('.ho-checks'), ok = checks.querySelector('.ho-ok');
+    require(!checks.querySelector('.ho-check') && /6 項正常/.test(ok.querySelector('b').textContent), "all six checks fine, said once");
+    require(ok.querySelector('small').textContent === "OpenRouter、Codex、Claude、Gmail、Notion、記憶", `and named, so the owner knows what was looked at: ${ok.querySelector('small').textContent}`);
+    require(page.querySelector('.ho-hero .ho-health').textContent.startsWith('今天有三個行程'), "his line in the hero is his word on today");
+    return { check: name };
+  }
+  if (name === "home-empty-digest") {
+    // No model for Raphael: the numbers stay, his words say why they are missing, and one button opens the model choice.
+    const day = document.querySelector('.page-home:not([hidden]) .ho-yesterday');
+    require([...day.querySelectorAll('.ho-num b')].map(b => b.textContent).join() === "0,0,0" && !day.querySelector('.ho-who'), "an empty yesterday reads 0, 0, 0 with no faces");
+    const quiet = day.querySelector('.ho-story.is-quiet'), fix = quiet?.querySelector('[data-home-go="models"]');
+    require(visible(quiet) && /模型/.test(quiet.textContent) && fix?.tagName === 'BUTTON' && fix.textContent.trim() === '選模型', "the reason in plain words and one button to choose a model");
+    require(/^(健康檢查完成)/.test(document.querySelector('.ho-hero .ho-health').textContent), "without his word on today the hero keeps the health line");
     return { check: name };
   }
   if (name === "home-problem") {
@@ -2986,14 +3014,13 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "home-arrival") {
+    // Until 2026-11-07 the first Home of a day flew Raphael in; the owner asked for him to be simply there.
     const page = document.querySelector('.page-home:not([hidden])'), orb = page.querySelector('.ho-orb');
-    require(page.hasAttribute('data-arrive'), "the first Home of the day flies Raphael in");
-    require(getComputedStyle(orb).animationName === 'ho-fly' && getComputedStyle(orb).transform !== 'none', "his emblem is on its way from the corner");
-    const ring = getComputedStyle(orb, '::before'), probe = document.createElement('i');
-    probe.style.color = 'var(--raphael-color)'; document.body.append(probe); const gold = getComputedStyle(probe).color; probe.remove();
-    require(ring.animationName === 'ho-ring' && ring.borderTopColor === gold && parseFloat(ring.opacity) > 0, "a gold ring goes out around him");
-    require(getComputedStyle(page.querySelector('.ho-health')).animationName === 'ho-scan', "and he reads the health line");
     require(!matchMedia('(prefers-reduced-motion: reduce)').matches, "this scene runs with motion allowed");
+    require(!page.hasAttribute('data-arrive'), "the first Home of the day carries no arrival mark");
+    require(getComputedStyle(orb).animationName === 'none' && getComputedStyle(orb).transform === 'none', "his emblem stands in its place, not on its way");
+    require(getComputedStyle(orb, '::before').content === 'none' && getComputedStyle(orb, '::after').content === 'none', "no rings go out around him");
+    for (const element of page.querySelectorAll('.ho-hero *, .ho-board > .ho-sec')) require(getComputedStyle(element).animationName === 'none', `nothing rises or is read out: ${element.className}`);
     return { check: name };
   }
   if(name === "dictation-layout") {
@@ -3159,10 +3186,10 @@ export function checkRendered(name, context = {}) {
       const sections = [...page.querySelectorAll('.ho-board > .ho-sec')].filter(visible).map(section => section.getBoundingClientRect());
       const available = bounds.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
       require(Math.abs(lead.width - available) <= 1, 'Home hero spans the page measure');
-      require(sections.length === 3 && sections.every(section => section.top >= lead.bottom - 1 && section.width <= lead.width + 1), 'Home hero leads every section');
-      const columns = new Set(sections.map(section => Math.round(section.top))).size === 1 ? 3 : 1;
+      require(sections.length >= 3 && sections.every(section => section.top >= lead.bottom - 1 && section.width <= lead.width + 1), 'Home hero leads every section');
+      const first = sections.slice(0, 3), columns = new Set(first.map(section => Math.round(section.top))).size === 1 ? 3 : 1;
       // Side by side, the team's column is the narrow one: it holds names and states, the others titles.
-      require(columns === 1 || (Math.abs(sections[0].width - sections[1].width) <= 1 && sections[2].width < sections[0].width), 'side by side, the schedule and what is open share a width and the team is narrower');
+      require(columns === 1 || (Math.abs(first[0].width - first[1].width) <= 1 && first[2].width < first[0].width), 'side by side, the schedule and what is open share a width and the team is narrower');
       home = { heroWidth: lead.width, available, columns };
     }
     return { check: name, limits, measurements, ...(home ? { home } : {}) };
@@ -4057,20 +4084,23 @@ export function checkRendered(name, context = {}) {
     });
   }
   if (name === "home-overview") {
-    // A secretary's page (owner, 2026-11-07): no boxes, no spend, allowance or dictation figures, and no scroll on a small window.
+    // A secretary's page (owner, 2026-11-07, everything of today at a glance since that night): no boxes, no spend, allowance
+    // or dictation figures, nothing sideways and no scrolling panel inside; the page itself may scroll on a small window.
     const home = document.querySelector('.page-home:not([hidden])'), main = document.querySelector('.main');
-    require(main.scrollHeight <= main.clientHeight + 1, `Home fits the window without a scroll (${main.scrollHeight} > ${main.clientHeight})`);
-    require(document.documentElement.scrollWidth <= innerWidth + 1, "nothing on Home runs out sideways");
+    require(document.documentElement.scrollWidth <= innerWidth + 1 && main.scrollWidth <= main.clientWidth + 1, "nothing on Home runs out sideways");
     require(!home.querySelector('.ho-card, .ho-calendar, .ho-bars, .ho-meter, .ho-spend, .ho-allowance, .ho-dictation, .ho-target'), "no blocks of spend, allowances, dictation or a month calendar");
     const board = home.querySelector('.ho-board'), sections = [...board.children];
-    require(sections.length === 3 && ['ho-schedule', 'ho-pending', 'ho-team'].every((key, i) => sections[i].classList.contains(key)), "three sections: today's schedule, what is still open, the team");
+    require(sections.length === 5 && ['ho-schedule', 'ho-pending', 'ho-team', 'ho-yesterday', 'ho-checks'].every((key, i) => sections[i].classList.contains(key)), "five sections: today's schedule, what is still open, the team, yesterday, the health check");
     require(!/US\$|\d+\s*%/.test(board.textContent), "the sections carry no money or percentages");
-    const tops = sections.map(section => Math.round(section.getBoundingClientRect().top));
-    require(main.clientWidth <= 640 ? tops[1] > tops[0] && tops[2] > tops[1] : tops.every(top => Math.abs(top - tops[0]) <= 1), `the sections stand side by side when they fit (${tops})`);
+    const box = section => section.getBoundingClientRect(), [schedule, pending, team, yesterday, checks] = sections.map(box);
+    if (main.clientWidth > 900) require(Math.abs(pending.top - schedule.top) <= 1 && Math.abs(team.top - schedule.top) <= 1 && Math.abs(checks.top - yesterday.top) <= 1 && yesterday.width > schedule.width * 1.5,
+      "wide, today, what is open and the team stand in one row, and yesterday (twice as wide) beside the health check under them");
+    else if (main.clientWidth > 640) require(Math.abs(pending.top - schedule.top) <= 1 && Math.abs(checks.top - team.top) <= 1 && yesterday.top >= Math.max(team.bottom, checks.bottom) - 1, "medium, two columns, yesterday across the bottom");
+    else require(sections.every((section, i) => i === 0 || box(section).top >= box(sections[i - 1]).bottom - 1), "narrow, the five sections follow one another");
     for (const section of sections) {
       const style = getComputedStyle(section);
       require(style.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(style.borderLeftWidth) === 0 && parseFloat(style.borderTopWidth) === 0 && style.boxShadow === 'none', `no box around a section: ${section.className}`);
-      require(section.querySelectorAll('.ho-rows > .ho-row').length <= 4, `at most four rows, the rest counted: ${section.className}`);
+      require(section.querySelectorAll('.ho-rows > .ho-row').length <= 8, `at most eight rows, the rest counted: ${section.className}`);
       for (const element of [section, ...section.querySelectorAll('*')]) {
         const inner = getComputedStyle(element);
         require(!['auto', 'scroll'].includes(inner.overflowY) || element.scrollHeight <= element.clientHeight + 1, `Home has no scrolling inner panels: ${element.className}`);
@@ -4083,12 +4113,11 @@ export function checkRendered(name, context = {}) {
       require(row.tagName === 'BUTTON', "every row is a real button");
     }
     const emblem = home.querySelector('.ho-orb > .av');
-    require(visible(emblem) && emblem.offsetWidth >= 80, "Raphael's face is large on Home");
-    require(!!home.querySelector('.ho-hero h1') && !!home.querySelector('.ho-hero .ho-health'), "Raphael greets the owner and reports the team's health");
+    require(visible(emblem) && emblem.offsetWidth >= 72, "Raphael's emblem is large on Home");
+    require(!!home.querySelector('.ho-hero h1') && !!home.querySelector('.ho-hero .ho-health'), "Raphael greets the owner and gives his line on today");
     require(!home.querySelector('[data-home-go="agent"], .ho-ask'), "the hero has no ask-Raphael icon: Raphael is asked on his own page");
-    // Since 2026-11-07 (owner) Raphael is the very first blue slime outside voice (R-UI-43).
-    require(emblem.classList.contains('av-custom') || emblem.classList.contains('mb-av-slime') && emblem.querySelector('svg.slime'), "Raphael's face on Home is the owner's picture or else the first blue slime");
-    require(!emblem.querySelector('img.em, img.em-l, img.em-d'), "his emblem never stands on Home: it shows only in voice");
+    // Owner, 2026-11-07 night: no slime on Home; 拉斐爾大師's emblem, standing still (R-UI-43).
+    require(emblem.querySelector('img.em, img.em-l') && !emblem.querySelector('svg.slime') && !emblem.classList.contains('av-custom'), "Raphael on Home is his emblem, never a slime or a picture");
     require(!home.querySelector('.ho-pending [data-home-item^="routine:"]'), "what is still open lists only questions and reports");
     require(!home.querySelector('.ho-team [data-home-member="0"]'), "Raphael reports on the team; he is not one of its rows");
     require(document.querySelector('#nav [data-go][aria-current="page"]')?.dataset.go === "home", "Home is the selected rail destination");
@@ -4104,9 +4133,9 @@ export function checkRendered(name, context = {}) {
     require(!matchMedia('(prefers-reduced-motion: reduce)').matches, "this scene runs with motion allowed");
     // Its layout width, not its turning bounding box.
     require(picture && picture.getAttribute('src').startsWith('data:image/png') && picture.naturalWidth >= picture.offsetWidth, `Raphael's emblem on Home is drawn at its own size from vectors (${picture?.naturalWidth} for ${picture?.offsetWidth})`);
-    require(picture.classList.contains('em-turn') && getComputedStyle(picture).animationName === 'av-turn', "it turns when motion is allowed");
+    require(!picture.classList.contains('em-turn') && getComputedStyle(picture).animationName === 'none', "it stands still even with motion allowed (owner, 2026-11-07 night)");
     require(!document.querySelector('.page-home .ho-hero [data-home-go="agent"]'), "the hero has no ask-Raphael icon");
-    require(!document.querySelector('.page-home[data-arrive]') || getComputedStyle(document.querySelector('.ho-orb')).transform === 'none', "his arrival is over: the emblem stands in its place");
+    require(!document.querySelector('.page-home[data-arrive]') && getComputedStyle(document.querySelector('.ho-orb')).transform === 'none', "no arrival: the emblem stands in its place");
     return { check: name, pixels: picture.naturalWidth };
   }
   if (name === "home-report") {

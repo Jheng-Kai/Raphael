@@ -308,10 +308,12 @@ describe("shared look IPC boundary", () => {
       const target = {};
       installMock(fixture, { fixture: { homeManyQuestions } }, target);
       const home = await target.__TAURI_INTERNALS__.invoke("core_call", { method: "home.overview" });
-      expect(home.today.every(item => ["question", "routine"].includes(item.kind))).toBe(true);
+      // Since brief 9 today is every item of the day (questions, routine runs, calendar and own events), never a report.
+      expect(home.today.every(item => ["question", "routine", "event", "own"].includes(item.kind))).toBe(true);
       expect(home.today.some(item => home.reports.some(report => report.id === item.id))).toBe(false);
       expect(home.counts.today).toBe(home.today.length);
-      expect(home.today.length).toBe(homeManyQuestions ? 5 : 3);
+      expect(home.today.filter(item => item.kind === "question").length).toBe(homeManyQuestions ? 9 : 1);
+      expect(home.today.map(item => item.at_ms)).toEqual([...home.today.map(item => item.at_ms)].sort((a, b) => a - b));
     }
   });
   it("keeps empty home spend and the sidebar status consistent and exposes connection problems", async () => {

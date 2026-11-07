@@ -221,6 +221,8 @@ pub enum MainEvent {
         member_id: u64,
     },
     CalendarChanged,
+    /// Home's daily summaries were written: the window reads the overview again.
+    HomeChanged,
     RoomsChanged {
         room_id: u64,
     },
@@ -1228,6 +1230,7 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
             member_id: params.get("member_id")?.as_u64()?,
         }),
         "calendar.changed" => Some(MainEvent::CalendarChanged),
+        "home.changed" => Some(MainEvent::HomeChanged),
         "rooms.changed" => Some(MainEvent::RoomsChanged {
             room_id: params.get("room_id")?.as_u64()?,
         }),
@@ -3506,6 +3509,11 @@ mod tests {
                 "calendar.changed",
                 json!({"title": "private"}),
                 json!({"type": "CalendarChanged"}),
+            ),
+            (
+                "home.changed",
+                json!({"narrative": "private"}),
+                json!({"type": "HomeChanged"}),
             ),
             (
                 "members.changed",

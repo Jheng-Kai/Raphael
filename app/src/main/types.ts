@@ -828,6 +828,8 @@ export type MainEvent =
   | { type: "RoomsChanged"; room_id: number }
   | { type: "RoutinesChanged"; member_id: number }
   | { type: "CalendarChanged" }
+  /** Home's daily summaries were written (`home.changed`). */
+  | { type: "HomeChanged" }
   | { type: "MembersChanged" }
   | { type: "ProvidersChanged" }
   | { type: "SettingsChanged" }

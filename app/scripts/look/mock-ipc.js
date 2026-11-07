@@ -550,8 +550,9 @@ export function installMock(fixture, config = {}, target = window) {
     data.allowances = { brains: [], quotas: [] };
   }
   if (variant.homeManyQuestions) {
-    data.home.today.unshift(...[3, 4].map(id => ({ ...data.home.today[0], id: `question:${id}`, turn_id: id,
-      title: id === 3 ? "確認資料來源範圍" : "核准後續研究安排" })));
+    // More open questions than the eight rows Home draws, so the rest is counted.
+    const asks = ["確認資料來源範圍", "核准後續研究安排", "選擇報告格式", "確認訪談名單", "核對預算上限", "決定發布日期", "確認翻譯用語", "核准採購清單"];
+    data.home.today.unshift(...asks.map((title, index) => ({ ...data.home.today[0], id: `question:${index + 3}`, turn_id: index + 3, title })));
     data.home.counts.today = data.home.today.length;
   }
   if (variant.homeTeam) {
@@ -666,6 +667,40 @@ export function installMock(fixture, config = {}, target = window) {
       ];
       data.status.spend.month_usd = .88;
     }
+  }
+  // Home as the core sends it since brief 9 (2026-11-08): every item of today, yesterday's numbers and Raphael's words on
+  // them, his line on today, each member's last work and next routine, and what the offline health check looked at.
+  {
+    const home = data.home, now = home.generated_at_ms, quiet = variant.homeSparse || variant.homeEmpty;
+    const dayKey = at => { const d = new Date(at); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
+    const person = id => data.members.find(member => member.id === id) ?? { name: "", avatar: "" };
+    const runs = variant.calendarRhythm ? [8, 11, 14, 17, 20, 23].map(hour => ({ ...daily, id: `routine:91:${octoberAt(24, hour)}`, routine_id: 91, title: "Gmail 與行程檢查",
+      member_id: 1, name: person(1).name, avatar: person(1).avatar, at_ms: octoberAt(24, hour), all_day: false,
+      ...(hour === 11 ? { run_status: "error" } : hour === 14 ? { run_status: "confirm" } : {}) })) : [];
+    // A full day: more than the eight rows Home draws, so the rest is counted and opens the day on the calendar.
+    const more = variant.homeMore ? ["晨會", "設計審查", "客戶簡報", "午餐會議", "程式碼審查", "週報撰寫"].map((title, index) => own(60 + index, title, octoberAt(24, 8 + index * 2), octoberAt(24, 9 + index * 2))) : [];
+    home.today = [...home.today, ...home.calendar_events.filter(item => dayKey(item.at_ms) === dayKey(now)), ...runs, ...more].sort((a, b) => a.at_ms - b.at_ms);
+    home.counts.today = home.today.length;
+    const story = narrative => quiet ? { narrative: null, state: "unavailable", reason: "model_unavailable", model: null }
+      : { narrative, state: "ready", reason: null, model: "openrouter:sample", generated_at_ms: now };
+    const done = (member_id, work, routines, messages, titles) => ({ member_id, name: person(member_id).name, counts: { work, routines, messages },
+      items: titles.map((title, index) => ({ id: `turn:${member_id}${index}`, kind: index < work ? "work" : "routines", title, at_ms: now - 86400000 + index * 3600000, turn_id: null, source: null })) });
+    const groups = quiet ? [] : [done(1, 2, 2, 0, ["整理本週新聞素材", "比對兩份研究摘要", "每天早上的進度", "午間資訊摘要"]), done(2, 2, 1, 2, ["比較三家供應商報價", "更新專案時程", "每週進度檢查"])];
+    const sum = kind => groups.reduce((total, group) => total + group.counts[kind], 0);
+    home.yesterday = { date: "2026-10-23", start_ms: now - 86400000, end_ms: now, members: groups, counts: { work: sum("work"), routines: sum("routines"), messages: sum("messages") },
+      ...story("小晴整理了本週的新聞素材並比對兩份研究摘要，早上和中午的例行整理都準時完成。小森比較了三家供應商的報價、更新專案時程，也回覆了兩則 Telegram 訊息。沒有工作卡住。") };
+    home.today_plan = { date: "2026-10-24", items: home.today, calendar_google: home.calendar_google,
+      ...story("今天有三個行程，中午前小晴會先整理午間資訊摘要；確認本週研究方向還在等你回答。") };
+    const check = (id, name, status = "ok", detail = null) => ({ id, name, label_key: `health.${id.split(":")[0]}`, status, detail, detail_key: detail ? "health.connection_unavailable" : null });
+    home.health = { reason: null, checks: [check("key:OpenRouter", "OpenRouter"), check("brain:codex", "Codex"), check("brain:claude", "Claude"), check("connection:gmail", "Gmail"),
+      check("connection:notion", "Notion", variant.problem ? "warn" : "ok", variant.problem ? "連線尚未就緒。" : null), check("memory", "")] };
+    const last = { 1: "整理本週新聞素材", 2: "比較三家供應商報價" };
+    home.members = data.members.map(member => {
+      const next = data.routines.filter(routine => routine.member_id === member.id && routine.enabled && routine.next_run).sort((a, b) => a.next_run - b.next_run)[0];
+      return { ...member, state: member.activity ?? "idle", current_or_last: quiet ? "" : last[member.id] ?? "",
+        next_routine: next ? { id: next.id, title: next.title, at_ms: next.next_run } : null,
+        waiting_for_owner: home.today.filter(item => item.kind === "question" && item.member_id === member.id) };
+    });
   }
   function usageBill(period) {
     // The shared fixture clock and browser run in Asia/Taipei.
