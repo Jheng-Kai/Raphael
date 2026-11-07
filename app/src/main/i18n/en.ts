@@ -430,6 +430,7 @@ export const en = {
   "desktop.owner": "You are controlling the computer",
   "desktop.member": "The member is controlling the computer",
   "desktop.connecting": "Connecting to the desktop…",
+  "desktop.streamStalled": "Can't reach this computer's live screen",
   "desktop.stopped": "The computer is stopped",
   "desktop.unavailable": "Computer is unavailable; try again",
   "desktop.busy": "Control could not be switched. Try again shortly.",

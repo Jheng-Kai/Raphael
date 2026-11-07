@@ -708,8 +708,11 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .thread mark[data-find-match] { padding: 0; background: var(--hover); color: var(--text); text-decoration: underline dotted; text-underline-offset: 2px; }
 .thread mark.is-current { outline: 2px solid var(--text); outline-offset: 1px; text-decoration: underline; text-decoration-thickness: 2px; background: var(--text); color: var(--content); }
 .chat-message.is-search-expanded .message-text { max-height: none; -webkit-line-clamp: unset; mask-image: none; }
-.message-reactions { display: flex; gap: var(--sp-1); margin-block: var(--sp-1); }
-.message-reactions .reaction { min-width: 28px; min-height: 24px; padding: 0 var(--sp-2); background: var(--surface-2); color: var(--text); border-radius: var(--r-sm); }
+/* Reactions sit on the bubble's bottom-right corner, half over its edge, and add no height to the conversation (owner,
+   2026-11-07: they made it longer). A ring of the page's own colour parts them from the bubble. */
+.message-reactions { display: flex; gap: 2px; margin-block: -11px; }
+.chat-message > .message-reactions { justify-self: end; position: relative; z-index: 1; margin-inline-end: var(--sp-2); }
+.message-reactions .btn.reaction { min-width: 22px; height: 22px; min-height: 22px; padding: 0 6px; border: 1px solid var(--btn-edge); border-radius: var(--r-pill); background: var(--surface-2); color: var(--text); font-size: var(--fs-xs); line-height: 1; box-shadow: 0 0 0 2px var(--content); }
 /* A message menu opens with its reactions in one quiet row (Grok Bot's right click). */
 .menu-reactions { display: flex; justify-content: space-between; gap: 2px; padding: 2px 2px var(--sp-1); margin-bottom: var(--sp-1); border-bottom: 1px solid var(--line); }
 .menu-reactions .btn.reaction { flex: 1; justify-content: center; min-height: 32px; padding: 0; border-color: transparent; background: transparent; font-size: var(--fs-lg); border-radius: var(--r-sm); }

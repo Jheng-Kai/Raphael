@@ -430,6 +430,7 @@ export const ja = {
   "desktop.owner": "あなたがコンピューターを操作中",
   "desktop.member": "メンバーがコンピューターを操作中",
   "desktop.connecting": "デスクトップに接続中…",
+  "desktop.streamStalled": "このコンピューターの画面に接続できません",
   "desktop.stopped": "コンピューターは停止中です",
   "desktop.unavailable": "コンピューターを利用できません。もう一度お試しください",
   "desktop.busy": "操作を切り替えられませんでした。しばらくしてからもう一度お試しください。",

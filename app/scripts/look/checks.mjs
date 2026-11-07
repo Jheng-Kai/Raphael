@@ -165,9 +165,12 @@ export function checkRendered(name, context = {}) {
     const positions = rows.map(row => {
       const bubble = row.previousElementSibling, actions = row.nextElementSibling;
       require(bubble?.matches('.ans, .bubble') && actions?.matches('.message-actions'), 'reactions follow the bubble before the hover actions');
-      const bounds = row.getBoundingClientRect(), message = row.parentElement.getBoundingClientRect();
-      const gap = bounds.top - bubble.getBoundingClientRect().bottom;
-      require(gap >= 0 && gap <= 8, 'reactions stay within eight pixels of their bubble');
+      const bounds = row.getBoundingClientRect(), message = row.parentElement.getBoundingClientRect(), edge = bubble.getBoundingClientRect();
+      // On the bubble's bottom-right corner, half over its edge, adding no height (owner, 2026-11-07).
+      require(bounds.top < edge.bottom && bounds.bottom > edge.bottom, 'reactions straddle the bottom edge of their bubble');
+      require(bounds.right <= edge.right + 1 && edge.right - bounds.right <= 16, 'reactions stand at the bubble\'s right corner');
+      const style = getComputedStyle(row), takes = bounds.height + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
+      require(takes <= 1, `reactions add no height to the message (they take ${Math.round(takes)} px)`);
       return { top: bounds.top, left: bounds.left, height: message.height };
     });
     if (name === 'reaction-layout-rest') window.__look.reactionPositions = positions;
@@ -878,7 +881,7 @@ export function checkRendered(name, context = {}) {
       require(!visible(row.parentElement.querySelector('.mb-more')), "no ⋯ shows under the pointer: a right click opens the row's menu, as Grok Bot's");
       const pair = [...document.querySelectorAll('.side .mb-item')].find(item => visible(item) && item.nextElementSibling?.matches('.mb-item') && !item.querySelector('.mb-tile'));
       const rows = pair ? [pair, pair.nextElementSibling].map(item => item.querySelector('.nav.mb-row').getBoundingClientRect()) : [];
-      require(rows.length < 2 || (Math.abs(rows[0].height - 54) <= 1 && Math.abs(rows[1].top - rows[0].top - 58) <= 1), `rows are 54 px tall and 58 px apart, as Grok Bot's (${rows.map(box => Math.round(box.top) + '/' + Math.round(box.height)).join(' ')})`);
+      require(rows.length < 2 || (Math.abs(rows[0].height - 48) <= 1 && Math.abs(rows[1].top - rows[0].top - 50) <= 1), `rows are 48 px tall and 50 px apart, Grok Bot's rows made tighter (owner, 2026-11-07) (${rows.map(box => Math.round(box.top) + '/' + Math.round(box.height)).join(' ')})`);
     }
     if (name === "sidebar-group-author") require([...document.querySelectorAll('.au-room-row .mb-row-p')].some(line => line.textContent.startsWith(`${window.__look.data.members.find(m => m.id === 1).name}：`)), "group preview starts with its author");
     return { check: name };
@@ -2185,12 +2188,14 @@ export function checkRendered(name, context = {}) {
     const row = document.querySelector(`.au-room-row [data-room="${roomId}"]`);
     const last = context.latest ?? [...window.__look.data.messages].reverse().find(message => message.room_id === roomId && message.status === 'done' && message.text?.trim() && message.text.trim() !== '(pass)');
     require(last && row?.querySelector('.mb-row-p')?.textContent.endsWith(last.text.replace(/\s+/g, ' ')), "a room with messages shows its latest visible message, after who said it");
+    // The sidebar's rows carry no time on screen (R-UI-77); the row still knows its latest message's moment.
     const time = row.querySelector('time');
-    require(visible(time) && time.dateTime === new Date(last.created).toISOString(), "that room's own row shows its latest message time");
-    return {check:name, preview:row.querySelector('.mb-row-p').textContent, datetime:time.dateTime};
+    require(!time || time.dateTime === new Date(last.created).toISOString(), "that room's own row keeps its latest message time");
+    return {check:name, preview:row.querySelector('.mb-row-p').textContent, datetime:time?.dateTime ?? null};
   }
   if (name === "sidebar-unread") {
-    require(document.querySelector('.mb-col .mb-dot.is-unread') && document.querySelector('.mb-col time'), "new messages retain unread and time");
+    // Since 2026-11-06 the sidebar's rows show no time (R-UI-77): new messages keep their unread dot.
+    require(document.querySelector('.mb-col .mb-dot.is-unread') && ![...document.querySelectorAll('.mb-col time')].some(visible), "new messages keep their unread dot, with no time on screen");
     require(document.querySelector('.au-room-row [data-room="1"] .mb-dot.is-unread'), "the unread room has its own unread marker");
     require(document.querySelector('.mb-col .room-avatar > .av'), "room list uses actual member faces");
     return {check:name};

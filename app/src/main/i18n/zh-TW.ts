@@ -429,6 +429,7 @@ export const zhTW = {
   "desktop.owner": "你正在控制電腦",
   "desktop.member": "成員正在控制電腦",
   "desktop.connecting": "正在連線至桌面…",
+  "desktop.streamStalled": "連不上這台電腦的即時畫面",
   "desktop.stopped": "電腦已停止",
   "desktop.unavailable": "電腦目前無法使用，請再試一次",
   "desktop.busy": "目前無法切換控制權，請稍後再試。",

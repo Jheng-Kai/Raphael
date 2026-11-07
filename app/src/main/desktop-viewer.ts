@@ -137,6 +137,10 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     } finally { if (maintenance === operation) maintenance = undefined; if (id === member() && current === generation) { if (state) state = {...state, lifecycle: undefined}; draw(); if (state?.state === 'running' && active()) void openStream(); } }
   });
   let connected = false, interactive = false, changing = false, loading = false, opening = false, takeOnConnect = false, waking = false;
+  /** A stream that has not connected this long is said to be out of reach, with a retry (owner, 2026-11-07: a remote
+   *  computer's screen stayed on 「成員正在控制電腦」 with nothing behind it). */
+  const STALL_MS = 20_000;
+  let stalled = false, stallTimer: ReturnType<typeof setTimeout> | undefined;
   let closePending: Promise<unknown> = Promise.resolve(), clickedAt = 0;
   // Nothing is painted until the read answers, so the town never flashes under the owner's picture.
   let ownWallpaper: string | undefined, wallpaperKnown = false, wallpaperRead: Promise<void> | undefined;
@@ -170,7 +174,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const face = inline || options.panelVisible() || panel.hasAttribute('data-expanded') ? options.face?.() ?? "" : "";
     const hour = new Date().getHours();
     const period = hour >= 6 && hour < 11 ? 'morning' : hour >= 11 && hour < 16 ? 'noon' : hour >= 16 && hour < 19 ? 'dusk' : hour >= 19 && hour < 22 ? 'evening' : 'night';
-    const signature = JSON.stringify([visible, options.panelVisible(), member(), state, connected, interactive, changing, opening, suspended, demonstration, skillName, teachingBusy, drafting, !!skillEditor, review.hidden, filesOpen, filesOnly, panel.hasAttribute('data-expanded'), options.name(), face.replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, ""), getLocale(), location.ready(), location.isRemote(), session, lastFrames.get(member()), period, wallpaperKnown, !!ownWallpaper]);
+    const signature = JSON.stringify([visible, options.panelVisible(), member(), state, connected, interactive, changing, opening, stalled, suspended, demonstration, skillName, teachingBusy, drafting, !!skillEditor, review.hidden, filesOpen, filesOnly, panel.hasAttribute('data-expanded'), options.name(), face.replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, ""), getLocale(), location.ready(), location.isRemote(), session, lastFrames.get(member()), period, wallpaperKnown, !!ownWallpaper]);
     if (signature === drawn && inline === drawnInline) return;
     drawn = signature; drawnInline = inline;
     lifecycle.draw();
@@ -232,7 +236,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(panel.querySelector<HTMLElement>('[data-desktop="menu"]')!, "hidden", watching || filesOnly); paint(action, "disabled", changing);
     // A sleeping computer, as Grok Bot's: its face and one short line, and the whole screen wakes it (owner, 2026-11-07).
     paint(retry, "textContent", t(state?.error === 'docker_stopped' ? 'desktop.startDocker' : state?.state === 'missing' && state.image === false ? 'desktop.prepareImage' : "desktop.retry"));
-    paint(retry, "hidden", !!running || !!preparing || asleep || state?.state === "absent" || state?.error === 'remote_unavailable'); paint(retry, "disabled", opening);
+    paint(retry, "hidden", (!!running && !stalled) || !!preparing || asleep || state?.state === "absent" || state?.error === 'remote_unavailable'); paint(retry, "disabled", opening);
     paint(enlarge, 'hidden', expanded || !!preparing || !running && !asleep);
     paint(enlarge, 'disabled', asleep && opening);
     paint(revoke, "textContent", t("desktop.revoke")); paint(revoke, "hidden", !state?.granted || owner || !!preparing);
@@ -245,11 +249,14 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const picture = running && (!connected || inline && !expanded) ? lastFrames.get(member()) : undefined;
     paint(last, "hidden", !picture);
     if (picture && last.src !== picture) paint(last, "src", picture);
-    paint(placeholder, "hidden", (!!running && connected) || !!picture);
+    paint(placeholder, "hidden", (!!running && connected) || (!!picture && !stalled));
     const character = document.createElement('template'); character.innerHTML = face;
     for (const node of character.content.querySelectorAll('[data-presence-member], [data-tooltip]')) { node.removeAttribute('data-presence-member'); node.removeAttribute('data-tooltip'); }
     for (const node of character.content.querySelectorAll('.slime-surface, svg.slime')) { node.setAttribute('data-state', state?.state === 'stopped' || state?.state === 'missing' ? 'sleeping' : preparing ? 'working' : 'idle'); node.removeAttribute('data-slime-member'); }
-    patchHTML(stateContent, preparing ? preparationHTML(state!, face) : `<div class="desktop-boot-face" aria-hidden="true">${character.innerHTML}</div><span class="desktop-message">${esc(computerStateText(state))}</span>`);
+    // While a stream is on its way the screen says so, and says when it cannot be reached; never that a member works there.
+    const reaching = running && !connected && (!!session || opening);
+    const sentence = reaching ? t(stalled ? "desktop.streamStalled" : "desktop.connecting") : computerStateText(state);
+    patchHTML(stateContent, preparing ? preparationHTML(state!, face) : `<div class="desktop-boot-face" aria-hidden="true">${character.innerHTML}</div><span class="desktop-message">${esc(sentence)}</span>`);
     patchHTML(stateRecovery, state?.error === 'docker_stopped' || state?.error === 'remote_unavailable'
       ? btn(esc(t('desktop.useRemote')), 'sm', ' data-desktop-location')
       : state?.state === 'absent' && state.error !== 'disabled' && !location.isRemote() ? btn(esc(t('desktop.download')), 'sm', ' data-act="docker-download"') : '');
@@ -273,7 +280,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     }
   }
   function closeStream(): void {
-    clearTimeout(lingering);
+    clearTimeout(lingering); clearTimeout(stallTimer); stalled = false;
     generation++; takeOnConnect = false; watching = false; filesOnly = false; send(false); frame.remove(); frame.removeAttribute('src'); connected = interactive = false;
     const previous = session; session = undefined;
     if (previous) closePending = closePending.then(() => api.desktopClose(previous.session)).catch(() => {});
@@ -303,6 +310,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       panel.dataset.inputLatencyMs = String(event.data.latencyMs);
     } else {
       connected = event.data.state === 'connected';
+      if (connected) { clearTimeout(stallTimer); stalled = false; }
       if (!connected) { interactive = false; closeStream(); if (state) state = { ...state, control:'member' }; }
       // Only a fresh takeover click can acquire input after the new stream connects.
     }
@@ -319,6 +327,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       const opened = await api.desktopOpen(id, { conversation_id: options.conversation() });
       if (current !== generation || id !== member() || !active()) { await api.desktopClose(opened.session); return; }
       session = opened; streamMember = id; streamConversation = options.conversation();
+      clearTimeout(stallTimer); stalled = false;
+      stallTimer = setTimeout(() => { if (session === opened && !connected) { stalled = true; draw(); } }, STALL_MS);
     } catch {
       if (current === generation) {
         takeOnConnect = false; showNotice(t('desktop.unavailable'));

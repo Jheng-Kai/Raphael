@@ -690,3 +690,18 @@ test('an engine recovery reply cannot update another member after navigation', a
   expect(panel().querySelector('.desktop-error')?.textContent).not.toBe(t('desktop.dockerReady'));
   expect(api.desktopOpen).not.toHaveBeenCalled();
 });
+
+test('a stream that never connects says so after a while and offers a retry, never that a member works there', async () => {
+  panelOpen = true; mounted.show(); await flush();
+  expect(panel().querySelector('.desktop-message')?.textContent).toBe(t('desktop.connecting'));
+  expect(panel().querySelector<HTMLButtonElement>('[data-desktop="retry"]')!.hidden).toBe(true);
+  await vi.advanceTimersByTimeAsync(20_000); await flush();
+  expect(panel().querySelector('.desktop-message')?.textContent).toBe(t('desktop.streamStalled'));
+  const retry = panel().querySelector<HTMLButtonElement>('[data-desktop="retry"]')!;
+  expect(retry.hidden).toBe(false);
+  retry.click(); await flush();
+  expect(api.desktopOpen).toHaveBeenCalledTimes(2);
+  expect(panel().querySelector('.desktop-message')?.textContent).toBe(t('desktop.connecting'));
+  message('connected'); await flush();
+  expect(panel().querySelector<HTMLElement>('.desktop-placeholder')!.hidden).toBe(true);
+});
