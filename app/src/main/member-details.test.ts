@@ -519,7 +519,8 @@ describe("Raphael's panel", () => {
     await flush();
     expect(panel.el.querySelector("#mb-det-name")).toBeNull();
     expect(panel.el.querySelector(".mb-who-name")!.textContent).toBe("拉斐爾");
-    expect(panel.el.querySelector(".mb-avbtn .av")!.innerHTML).toContain("app-emblem");
+    // The first blue slime (owner, 2026-11-07): his emblem shows only in voice.
+    expect(panel.el.querySelector(".mb-avbtn .av.mb-av-slime svg.slime")).not.toBeNull();
     expect(panel.el.querySelector("#mb-det-instr")).toBeNull();
     expect(panel.el.querySelector('[data-det="group"]')).toBeNull();
     expect([...panel.el.querySelectorAll<HTMLElement>(".mb-panel-pages [data-tab]")].map(row => row.dataset.tab)).toEqual(["memory", "skills", "commands", "voice"]);
@@ -652,7 +653,7 @@ describe("primary changes do not add face badges", () => {
       expect(panel.el.querySelector('.mb-who-face .mb-avbtn .av')).not.toBeNull();
       if (name) { expect(document.activeElement).toBe(name); expect(name.value).toBe('Draft name'); }
     }
-    if (id === 0) expect(panel.el.querySelector('.mb-who-face .mb-av')).toBeNull();
+    if (id === 0) expect(panel.el.querySelector('.mb-who-face .mb-av-slime svg.slime')).not.toBeNull();
   });
 });
 

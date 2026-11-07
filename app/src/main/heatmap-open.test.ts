@@ -19,13 +19,14 @@ function days(n: number, words: (back: number) => number = () => 0) {
 const grid = () => buildGrid(days(21, (k) => ({ 1: 40, 4: 120, 6: 15 })[k] ?? 0), 3);
 
 describe("the days of the grid", () => {
-  test("a day's words show in its title under the pointer, in the language of the window", () => {
-    expect(heatmapSVG(grid())).toContain("<title>10 月 13 日：40 字</title>");
+  test("a day carries its words for the press that shows them, in the language of the window, and no hover title", () => {
+    expect(heatmapSVG(grid())).toContain('data-tip="10 月 13 日：40 字"');
+    expect(heatmapSVG(grid())).not.toContain("<title>");
     setLocale("en");
-    expect(heatmapSVG(grid())).toContain("40 words</title>");
+    expect(heatmapSVG(grid())).toContain('40 words"');
   });
 
-  test("a day is no button: pressing it would only say what its title already says (owner, 2026-11-07)", () => {
+  test("a day opens nothing: pressing it only says its words (owner, 2026-11-07)", () => {
     const svg = heatmapSVG(grid());
     expect(svg).not.toContain('role="button"');
     expect(svg).not.toContain("tabindex");

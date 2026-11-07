@@ -102,8 +102,8 @@ const BOTTOM = 18;
 export const weeksThatFit = (width: number): number => Math.max(6, Math.min(53, Math.floor((width - LEFT + GAP) / PITCH)));
 
 /**
- * The grid as inline SVG; each day's words show in its title under the pointer, and the whole has a label for a
- * screen reader. A day does nothing when pressed: its title already says all it has (owner, 2026-11-07).
+ * The grid as inline SVG; the whole has a label for a screen reader. A day's words show when the day is pressed, never
+ * under the pointer (owner, 2026-11-07): each day carries them in `data-tip` for the page to show.
  */
 export function heatmapSVG(grid: Grid): string {
   const weeks = grid.weeks;
@@ -125,7 +125,7 @@ export function heatmapSVG(grid: Grid): string {
           const cls = typeof c.state === "number" ? `h${c.state}` : c.state;
           const tip =
             c.state === "future" ? "" : c.state === "nodata" ? t("heatmap.011", { p0: longDate(c.date) }) : t("heatmap.012", { p0: longDate(c.date), p1: formatCount(c.words) });
-          return `<rect class="${cls}" x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="3" data-date="${c.date}">${tip ? `<title>${esc(tip)}</title>` : ""}</rect>`;
+          return `<rect class="${cls}" x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="3" data-date="${c.date}"${tip ? ` data-tip="${esc(tip)}"` : ""}></rect>`;
         })
         .join(""),
     )

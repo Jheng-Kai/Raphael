@@ -37,7 +37,9 @@
 .heat .hatch-bg { fill: transparent; }
 .heat .hatch-line { stroke: color-mix(in srgb, var(--hatch) 45%, transparent); stroke-width: 0.65; }
 .heat .future { fill: none; stroke: var(--line); stroke-width: 1; }
-.heat rect:hover { stroke: var(--text-2); stroke-width: 1; }
+/* A day says its words when pressed, never under the pointer (owner, 2026-11-07); the pressed day is outlined. */
+.heat rect[data-tip] { cursor: pointer; }
+.heat rect.is-picked { stroke: var(--text-2); stroke-width: 1; }
 /* A day with a dictation opens the history at that day. */
 .heat .ax { font: var(--fs-2xs) var(--ui); fill: var(--text-3); }
 .legend { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-1); margin-top: var(--sp-2); font-size: var(--fs-xs); color: var(--text-3); }

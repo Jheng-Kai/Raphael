@@ -34,7 +34,8 @@ export class Stage {
     private readonly subtitles: HTMLElement,
     private readonly onAction: (target: "settings" | "retry") => void,
   ) {
-    this.emblem = new Emblem(canvas, EMBLEM_PX, { base: 0.05 });
+    // The voice screen's emblem is the corner's, drawn the same way over whatever is behind it: no dark ground (owner, 2026-11-07).
+    this.emblem = new Emblem(canvas, EMBLEM_PX, { base: 0.05, surface: "transparent" });
     subtitles.addEventListener("click", (e) => {
       const button = (e.target as Element).closest<HTMLElement>("[data-target]");
       if (button) this.onAction(button.dataset.target as "settings" | "retry");

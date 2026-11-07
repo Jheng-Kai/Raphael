@@ -14,7 +14,6 @@ vi.mock("../api", () => ({
 vi.mock("../team-navigation", () => ({ openMemberThread: vi.fn() }));
 
 let reduce = true;
-let change: ((e: { matches: boolean }) => void) | null = null;
 
 const NOW = new Date(2026, 9, 27, 10, 0).getTime();
 const overview = (month: number, state: "ok" | "no_key" = "ok"): HomeOverview => ({
@@ -47,7 +46,6 @@ const flush = async (): Promise<void> => {
 
 beforeEach(() => {
   vi.resetModules();
-  change = null;
   reduce = true;
   queue.length = 0;
   queue.push(overview(5));
@@ -56,7 +54,7 @@ beforeEach(() => {
   vi.stubGlobal("matchMedia", (query: string) => ({
     matches: query.includes("reduce") ? reduce : false,
     media: query,
-    addEventListener: (_: string, fn: (e: { matches: boolean }) => void) => (change = fn),
+    addEventListener: () => {},
     removeEventListener() {},
   }));
 });
@@ -265,22 +263,13 @@ describe("Raphael's arrival", () => {
 });
 
 describe("the emblem", () => {
-  test("turns while the window allows motion", async () => {
+  test("is Raphael's first blue slime: his emblem shows only in voice (owner, 2026-11-07)", async () => {
     reduce = false;
     const { homeHTML } = await load();
-    const emblem = parse(homeHTML(overview(5))).querySelector(".ho-orb > .av")!;
-    expect([...emblem.querySelectorAll("img")].map((image) => image.getAttribute("src"))).toEqual(["/brand/app-emblem-light-loop.webp", "/brand/app-emblem-dark-loop.webp"]);
-  });
-
-  test("stands still under reduced motion, and turns again when the preference goes", async () => {
-    const { page } = await mount();
-    const sources = (): (string | null)[] => [...page.el.querySelectorAll(".ho-orb > .av img")].map((image) => image.getAttribute("src"));
-    expect(sources()).toEqual(["/brand/app-emblem-light-128.webp", "/brand/app-emblem-dark-128.webp"]);
-    expect(change).not.toBeNull();
-    change!({ matches: false });
-    expect(sources()).toEqual(["/brand/app-emblem-light-loop.webp", "/brand/app-emblem-dark-loop.webp"]);
-    change!({ matches: true });
-    expect(sources().join()).not.toContain("loop");
+    const face = parse(homeHTML(overview(5))).querySelector(".ho-orb > .av")!;
+    expect(face.classList.contains("mb-av-slime")).toBe(true);
+    expect(face.querySelector("svg.slime")?.outerHTML).toContain("#3DB5FF");
+    expect(face.querySelector("img")).toBeNull();
   });
 
   test("is drawn again by a refresh without starting his turn over: the emblem stays the same node", async () => {

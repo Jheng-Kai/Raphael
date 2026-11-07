@@ -74,7 +74,7 @@ test.each(["offscreen", "hidden", "collapsed", "unchanged"])("%s slimes receive 
   } finally { styled.mockRestore(); }
 });
 
-test("a member without a picture is a slime, its chosen one or a colour from its id; Raphael is not", () => {
+test("a member without a picture is a slime, its chosen one or a colour from its id; Raphael is the first blue one", () => {
   const face = (member: Parameters<typeof faceHTML>[0]): HTMLElement => {
     const el = document.createElement("div"); el.innerHTML = faceHTML(member, 40); return el;
   };
@@ -83,7 +83,8 @@ test("a member without a picture is a slime, its chosen one or a colour from its
   expect(face({ id: 3, name: "Ada", avatar: "slime:diablo" }).innerHTML).toContain("#EE5A64");
   expect(face({ id: 3, name: "Ada", avatar: "slime:unknown" }).querySelector(".mb-av-slime")).not.toBeNull();
   expect(face({ id: 3, name: "Ada", avatar: "preset:old", avatar_url: "data:image/png;base64,AAAA" }).querySelector(".mb-av-slime svg.slime")).not.toBeNull();
-  expect(face({ id: 0, name: "Raphael" }).querySelector(".mb-av-slime")).toBeNull();
+  // Since 2026-11-07 (owner) Raphael is the very first slime, the cute blue one; his emblem shows only in voice.
+  expect(face({ id: 0, name: "Raphael" }).querySelector(".mb-av-slime svg.slime")?.outerHTML).toContain("#3DB5FF");
 });
 
 test("every character is the one slime: the same body, and only its marks differ", () => {

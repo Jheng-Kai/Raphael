@@ -3,7 +3,7 @@ import { visibilityGate } from "../window-visibility";
 // health, then today's schedule, what is still open and what each member is doing. No figures of spend or dictation.
 import * as api from "../api";
 import { eventRead } from '../event-read';
-import { avatarHTML, onAvatarChange } from "../avatar";
+import { onAvatarChange } from "../avatar";
 import { chipClock, chipColor, dismissOffer, googleMark, googleNoticeHTML, runMarkHTML, type CalendarPerson, type EntryKind } from "../calendar-view";
 import type { GoogleCalendarState, HomeItem, HomeOverview } from "../home-types";
 import { getLocale, onLocaleChange, t } from "../i18n";
@@ -125,7 +125,9 @@ export function homeHTML(data: HomeOverview, members: readonly Member[] = []): s
   // Only a report that needs fixing speaks here, with its one fix; a well budget is no news for a secretary. The main window
   // shows his words plainly: 《告。…》 stays on the desktop's captions (R-UI-42).
   const alert = report.action ? `<p class="ho-alert">${esc(plainReplies([report.text])[0] ?? report.text)}${iconButton(report.action.target === "retry" ? "refresh" : "info", report.action.label, ' data-home-go="report"')}</p>` : "";
-  const hero = `<section class="ho-hero"><div class="ho-orb">${avatarHTML({ size: 128, avatar: null, loop: true })}</div>` +
+  // Raphael as the first blue slime (owner, 2026-11-07): his emblem shows only in voice.
+  const raphael = members.find(member => member.id === RAPHAEL_ID) ?? { id: RAPHAEL_ID, name: "" };
+  const hero = `<section class="ho-hero"><div class="ho-orb">${memberFaceHTML(raphael, 128)}</div>` +
     `<h1 class="ho-greet">${esc(greeting(data.generated_at_ms))}</h1><p class="ho-date">${esc(date)}</p>` +
     `<p class="ho-health" role="status">${esc(healthText(team))}</p>${alert}</section>`;
   return hero + `<div class="ho-board">${scheduleHTML(data)}${pendingHTML(data)}${teamHTML(team)}</div>`;

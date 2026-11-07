@@ -13,7 +13,8 @@
 
 import { cardHTML, cardFailure } from "./card";
 import { core } from "./api";
-import { avatarHTML, onAvatarChange } from "./avatar";
+import { onAvatarChange } from "./avatar";
+import { faceHTML, RAPHAEL_ID } from "./members";
 import { describeError } from "./format";
 import { onLocaleChange, t } from "./i18n";
 import type { MainEvent, PermissionCard } from "./types";
@@ -45,10 +46,10 @@ export interface Asker {
   name: string | null;
 }
 
-/** Raphael's own: the emblem, bare (never framed, filled or shadowed), and no name. */
+/** Raphael's own: his face (the first blue slime, or the owner's picture), bare, and no name. */
 const RAPHAEL: Asker = {
   get face() {
-    return avatarHTML({ size: 22, cls: "bgq-face" });
+    return faceHTML({ id: RAPHAEL_ID, name: "" }, 22, { cls: "bgq-face" });
   },
   name: null,
 };

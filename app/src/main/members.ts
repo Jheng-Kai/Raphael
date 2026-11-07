@@ -9,7 +9,7 @@
 
 import { zoneLabel } from "./timezones";
 import { presenceAttrs, slimeFaceHTML } from "./slime";
-import { avatarHTML } from "./avatar";
+import { avatarHTML, currentAvatar } from "./avatar";
 import { catalogs, t } from "./i18n";
 import { esc, ico } from "./ui";
 import { formatClock, formatDate } from "./format";
@@ -161,13 +161,19 @@ export const isPictureUrl = (url: unknown): url is string => typeof url === "str
 /** The placeholder's character: the first of the name (a whole character, an emoji too), or nothing. */
 export const initialOf = (name: string): string => Array.from(name.trim())[0] ?? "";
 
+/** Raphael's slime in the main window: the very first one, the cute blue slime (owner, 2026-11-07). */
+export const RAPHAEL_SLIME = "slime:rimuru";
+
 /**
- * A face at `size` px: Raphael's emblem or picture (avatar.ts, bare, never cut into a frame of
- * ours), a member's picture in a circle, or a neutral person silhouette.
- * Decorative: whoever shows it names it.
+ * A face at `size` px: a member's slime; for Raphael the owner's own picture when one is chosen (avatar.ts), else the
+ * first blue slime. His emblem shows only in voice (the voice screen and its button, avatar.ts). Decorative: whoever
+ * shows it names it.
  */
 export function faceHTML(member: { id: number; name: string; avatar?: string | null; avatar_url?: string | null }, size: number, o: { loop?: boolean; cls?: string } = {}): string {
-  if (member.id === RAPHAEL_ID) return avatarHTML({ size, loop: o.loop, cls: o.cls }).replace("<span", `<span${presenceAttrs(member.id)}`);
+  if (member.id === RAPHAEL_ID) {
+    if (currentAvatar()) return avatarHTML({ size, cls: o.cls }).replace("<span", `<span${presenceAttrs(member.id)}`);
+    return slimeFaceHTML({ ...member, avatar: RAPHAEL_SLIME }, size, o.cls);
+  }
   return slimeFaceHTML(member, size, o.cls);
 }
 

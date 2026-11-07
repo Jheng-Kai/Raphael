@@ -25,6 +25,6 @@ describe("artwork shipped in the repository", () => {
   });
 
   it("serves the in-app artwork from public/brand", () => {
-    for (const name of ["in-app-icon.png", "glyph-ring.png"]) pngSize(join(app, "public", "brand", name));
+    for (const name of ["app-icon.png", "glyph-ring.png"]) pngSize(join(app, "public", "brand", name));
   });
 });

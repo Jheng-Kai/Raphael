@@ -129,6 +129,11 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
         if (Math.abs(rect.left + rect.width / 2 - box.left - box.width / 2) > 1 || Math.abs(rect.top + rect.height / 2 - box.top - box.height / 2) > 1) violation('R-UI-19', 'Action glyph is not centered');
       }
     }
+    // A dim over a dialog covers all of it: a part left bright reads as a broken layer (owner, 2026-11-07).
+    if (element.matches('.cs-scrim')) {
+      const box = element.getBoundingClientRect(), dialog = element.closest('.modal')?.getBoundingClientRect();
+      if (dialog && (Math.abs(box.left - dialog.left) > 2 || Math.abs(box.right - dialog.right) > 2)) violation('R-UI-111', 'The dim over a dialog leaves part of it uncovered');
+    }
     if (element.matches('.au-month-grid .btn[aria-pressed="true"], .desktop-screen [data-desktop="retry"]')) {
       const luminance = value => {
         const rgb = value.match(/[\d.]+/g)?.slice(0, 3).map(Number);

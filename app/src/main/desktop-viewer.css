@@ -7,7 +7,7 @@
 .desktop-wallpaper[data-own] { object-position: center; }
 /* R-UI-95: the stage sits below the owner's picture's subject (the placeholder is a column). */
 .desktop-wallpaper[data-own] ~ .desktop-placeholder { justify-content: flex-end; }
-.desktop-panel:not([data-expanded]) .desktop-wallpaper[data-own] ~ .desktop-placeholder .desktop-boot-face > .av { --av: 44px; }
+.desktop-panel:not([data-expanded]) .desktop-wallpaper[data-own] ~ .desktop-placeholder .desktop-state-content > .desktop-boot-face > .av { --av: 44px; }
 .desktop-last { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .desktop-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .desktop-shell { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--sp-2); min-height: 0; }
@@ -84,7 +84,12 @@
 .desktop-placeholder .missing-note, .desktop-placeholder > [data-act="docker-download"] { --btn: var(--desktop-frame-bg); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); }
 .desktop-error { margin: 0; color: var(--err); }
 .desktop-error[role="status"] { color: var(--text-2); }
-.desktop-preparation { width: fit-content; max-width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); }
+/* A slim pill, the face beside its one stage (owner, 2026-11-07: the box was too fat); a percent or the first-build note
+   takes the next line. */
+.desktop-preparation { width: fit-content; max-width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: var(--sp-2); row-gap: var(--sp-1); padding: 6px var(--sp-3) 6px 6px; border-radius: var(--r-pill); }
+.desktop-preparation > :is(progress, .desktop-first-build) { grid-column: 1 / -1; }
+.desktop-preparation > .desktop-boot-face > .av { --av: 24px; }
+.desktop-panel[data-expanded] .desktop-preparation > .desktop-boot-face > .av { --av: 32px; }
 .desktop-boot-face > .av { --av: 64px; }
 .card-computer-screen:has(.desktop-preparation) > button .i { visibility: hidden; }
 .desktop-preparation p { margin: 0; font-size: var(--fs-sm); line-height: 1.4; color: var(--text-3); }

@@ -1,6 +1,6 @@
 import "./character.css";
 
-/** The in-app artwork (app/public/brand/in-app-icon.png), shown in the sidebar and the About page. */
+/** The app's icon, the first blue slime (app/public/brand/app-icon.png, owner 2026-11-07), shown on the About page. */
 export function brandIcon(className = ""): string {
-  return `<img class="app-icon ${className}" src="/brand/in-app-icon.png" alt="" width="40" height="40" draggable="false">`;
+  return `<img class="app-icon ${className}" src="/brand/app-icon.png" alt="" width="40" height="40" draggable="false">`;
 }

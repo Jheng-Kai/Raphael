@@ -770,9 +770,13 @@ export function checkRendered(name, context = {}) {
     require(visible(preparation.querySelector('.desktop-stage')), 'the current stage is readable');
     const face = preparation.querySelector('.av');
     require(visible(face), 'the member character is visible');
-    require(Math.abs(face.getBoundingClientRect().width - (panel.hasAttribute('data-expanded') && name !== 'desktop-boot-inline' ? 96 : 64)) < 1, 'the character has its panel or expanded size');
-    if (face.querySelector('img')) require([...face.querySelectorAll('img')].some(visible) && !face.querySelector('svg.slime'), 'Raphael keeps his emblem');
-    else require(!!face.querySelector('svg.slime[data-state="working"]'), 'the member uses the shared working motion');
+    // A slim pill (owner, 2026-11-07): the face beside its stage, small in the panel and a little larger in the larger view.
+    require(Math.abs(face.getBoundingClientRect().width - (panel.hasAttribute('data-expanded') && name !== 'desktop-boot-inline' ? 32 : 24)) < 1, 'the character has its slim pill size');
+    const stage = preparation.querySelector('.desktop-stage').getBoundingClientRect(), faceBox = face.getBoundingClientRect();
+    require(faceBox.right <= stage.left + 1 && Math.abs((faceBox.top + faceBox.bottom) / 2 - (stage.top + stage.bottom) / 2) < 4, 'the face stands beside its stage on one line');
+    require(pill.height <= (panel.dataset.desktopState === 'building' ? 96 : 48), `the pill is slim (${Math.round(pill.height)} px)`);
+    // Raphael is the first blue slime outside voice since 2026-11-07, so every face here is a slime in its working motion.
+    require(!!face.querySelector('svg.slime[data-state="working"]'), 'the member uses the shared working motion');
     require(!!preparation.querySelector('.desktop-first-build') === (panel.dataset.desktopState === 'building'), 'only a first build adds its quiet explanation');
     require(!preparation.querySelector('progress:not([value])'), 'no indeterminate progress line');
     if (!panel.hasAttribute('data-expanded') && name !== 'desktop-boot-inline') require(Math.abs(box.width / box.height - 1280 / 900) < .02, 'boot retains the running desktop aspect ratio');
@@ -3876,13 +3880,12 @@ export function checkRendered(name, context = {}) {
       require(row.tagName === 'BUTTON', "every row is a real button");
     }
     const emblem = home.querySelector('.ho-orb > .av');
-    require(visible(emblem) && emblem.offsetWidth >= 80, "Raphael's emblem is large on Home");
+    require(visible(emblem) && emblem.offsetWidth >= 80, "Raphael's face is large on Home");
     require(!!home.querySelector('.ho-hero h1') && !!home.querySelector('.ho-hero .ho-health'), "Raphael greets the owner and reports the team's health");
     require(!home.querySelector('[data-home-go="agent"], .ho-ask'), "the hero has no ask-Raphael icon: Raphael is asked on his own page");
-    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    // Drawn from vectors since 2026-11-07 (R-UI-113): it turns by a transform, and stands still under reduced motion.
-    const images = [...emblem.querySelectorAll('img')];
-    require(images.length === 2 && images.every(image => image.classList.contains('em-turn') !== reduced), reduced ? "under reduced motion Raphael's emblem is his still picture" : "Raphael's emblem is the turning loop");
+    // Since 2026-11-07 (owner) Raphael is the very first blue slime outside voice (R-UI-43).
+    require(emblem.classList.contains('av-custom') || emblem.classList.contains('mb-av-slime') && emblem.querySelector('svg.slime'), "Raphael's face on Home is the owner's picture or else the first blue slime");
+    require(!emblem.querySelector('img.em, img.em-l, img.em-d'), "his emblem never stands on Home: it shows only in voice");
     require(!home.querySelector('.ho-pending [data-home-item^="routine:"]'), "what is still open lists only questions and reports");
     require(!home.querySelector('.ho-team [data-home-member="0"]'), "Raphael reports on the team; he is not one of its rows");
     require(document.querySelector('#nav [data-go][aria-current="page"]')?.dataset.go === "home", "Home is the selected rail destination");
@@ -4789,10 +4792,13 @@ export function checkRendered(name, context = {}) {
     return { check: name, message: Math.round(box.width), bubble: Math.round(b.width) };
   }
   if (name === "dictation-heat-press") {
-    // A day's title already says its words under the pointer; pressing it adds nothing (owner, 2026-11-07).
-    const day = document.querySelector('.heat [data-date="2026-10-24"]');
-    require(/10 月 24 日.*字/.test(day?.querySelector('title')?.textContent ?? ''), "the day's words are in its title for the pointer");
-    require(!document.querySelector('.heat-said') && !document.querySelector('.heat [role="button"], .heat [tabindex]'), 'no day is a button and nothing else says its words');
+    // A day says its words when pressed, never under the pointer (owner, 2026-11-07).
+    const day = document.querySelector('.heat [data-date="2026-10-24"]'), tip = document.querySelector('.heat-tip');
+    require(!document.querySelector('.heat title'), "no day shows a title under the pointer");
+    require(visible(tip) && /10 月 24 日.*字/.test(tip.textContent) && day.classList.contains('is-picked'), "the pressed day shows its words above it and is outlined");
+    const tipBox = tip.getBoundingClientRect(), dayBox = day.getBoundingClientRect();
+    require(tipBox.bottom <= dayBox.top + 1 || tipBox.top >= dayBox.bottom - 1, "the words stand beside the day, never over it");
+    require(!document.querySelector('.heat [role="button"], .heat [tabindex]'), 'no day is a button');
     require(visible(document.querySelector('.page-overview .heat')) && !visible(document.querySelector('.day-row')) && document.querySelector('.page-overview:not([hidden])'), 'pressing a day leaves the grid as it was: no history opened');
     return { check: name };
   }

@@ -128,6 +128,7 @@ export function createDictationOverview(app: AppContext): Page {
     const box = el.querySelector<HTMLElement>(".heat-box");
     if (!box || !stats) return;
     const grid = buildGrid(stats.by_day, weeksThatFit(box.clientWidth || 600), back);
+    hideDay();
     box.innerHTML = heatmapSVG(grid);
     el.querySelector<HTMLButtonElement>('[data-act="older"]')!.disabled = !(grid.older || daysWanted < DAYS_ALL);
     el.querySelector<HTMLButtonElement>('[data-act="newer"]')!.disabled = back === 0;
@@ -181,8 +182,36 @@ export function createDictationOverview(app: AppContext): Page {
     paintGrid();
   }
 
+  // A day's words, shown when the day is pressed (owner, 2026-11-07: no hover tips); pressed again, elsewhere or Esc, gone.
+  const dayTip = document.createElement("div");
+  dayTip.className = "message-tooltip heat-tip";
+  dayTip.setAttribute("role", "status");
+  dayTip.hidden = true;
+  el.append(dayTip);
+  let picked: SVGRectElement | null = null;
+  function hideDay(): void {
+    picked?.classList.remove("is-picked");
+    picked = null;
+    dayTip.hidden = true;
+  }
+  function showDay(day: SVGRectElement): void {
+    hideDay();
+    picked = day;
+    day.classList.add("is-picked");
+    dayTip.textContent = day.dataset.tip ?? "";
+    dayTip.hidden = false;
+    const box = day.getBoundingClientRect(), size = dayTip.getBoundingClientRect();
+    dayTip.style.left = `${Math.max(8, Math.min(window.innerWidth - size.width - 8, box.left + (box.width - size.width) / 2))}px`;
+    dayTip.style.top = `${box.top - size.height - 6 < 8 ? box.bottom + 6 : box.top - size.height - 6}px`;
+  }
+  document.addEventListener("pointerdown", (e) => { if (picked && !(e.target as Element).closest?.(".heat rect[data-tip]")) hideDay(); }, true);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && picked) hideDay(); });
+  el.addEventListener("scroll", hideDay, true);
+
   el.addEventListener("click", (e) => {
     const target = e.target as Element;
+    const day = target.closest<SVGRectElement>(".heat rect[data-tip]");
+    if (day) { if (day === picked) hideDay(); else showDay(day); return; }
     const go = target.closest<HTMLElement>("[data-go]");
     if (go) app.go(go.dataset.go as PageId, go.dataset.pane as SettingsPane | undefined);
     const act = target.closest<HTMLElement>("[data-act]")?.dataset.act;

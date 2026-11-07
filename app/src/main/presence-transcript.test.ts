@@ -157,11 +157,11 @@ test("an open shared hover updates its public action without pointer movement", 
 });
 
 
-test("Raphael keeps his emblem and shares the public action hover", () => {
+test("Raphael's blue slime shares the public action hover and moves with his work", () => {
   followSlimeRoster([{id: RAPHAEL_ID, activity: "thinking", activity_label: "Checking a sample"}]);
   const root = dom(faceHTML({id: RAPHAEL_ID, name: "Raphael"}, 28));
   expect(root.querySelector(`[data-presence-member="${RAPHAEL_ID}"]`)?.getAttribute("data-tooltip")).toBe("Checking a sample");
-  expect(root.querySelector(".slime")).toBeNull();
+  expect(root.querySelector(".slime")?.getAttribute("data-state")).toBe("thinking");
 });
 
 test("a blocked task keeps its live presence until the owner acts", () => {

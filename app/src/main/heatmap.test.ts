@@ -71,10 +71,10 @@ describe("labels and drawing", () => {
     expect(weeksThatFit(5000)).toBe(53);
   });
 
-  test("the SVG has a square per day, a title per known day and a label", () => {
+  test("the SVG has a square per day, the words of each known day for its press, and a label", () => {
     const svg = heatmapSVG(buildGrid(days(14, (k) => (k < 3 ? 100 : 0)), 2));
     expect(svg.match(/<rect class="(h\d|future|nodata)"/g)).toHaveLength(14);
-    expect(svg).toContain("<title>10 月 14 日：100 字</title>");
+    expect(svg).toContain('data-tip="10 月 14 日：100 字"');
     expect(svg).toContain('aria-label="10 月 4 日到10 月 17 日，有 3 天聽寫，共 300 字"');
   });
 });

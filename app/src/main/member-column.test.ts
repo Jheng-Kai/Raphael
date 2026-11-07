@@ -62,7 +62,7 @@ describe("the column, drawn", () => {
     for (const last_at of [new Date(2026, 9, 24, 13, 45).getTime(), null, NaN, 1e20]) expect(dom(memberRowHTML(member(1, { last_at }), view())).querySelector("time")).toBeNull();
   });
 
-  test("Raphael leads the column as an ordinary row with his bare emblem", () => {
+  test("Raphael leads the column as an ordinary row with his blue slime", () => {
     const el = dom(columnHTML(view()));
     const chief = el.querySelector<HTMLElement>(".mb-chief")!;
     expect(el.firstElementChild?.querySelector(".mb-chief")).toBe(chief);
@@ -71,7 +71,8 @@ describe("the column, drawn", () => {
     expect(chief.dataset.member).toBe("0");
     expect(chief.querySelector("b")?.textContent).toBe("拉斐爾");
     expect(chief.querySelector(".av")!.getAttribute("style")).toBe("--av:40px");
-    expect(chief.innerHTML).not.toMatch(/管理員|mb-av|badge/);
+    expect(chief.innerHTML).not.toMatch(/管理員|badge|app-emblem/);
+    expect(chief.querySelector('.av.mb-av-slime')).not.toBeNull();
     expect(chief.getAttribute("aria-current")).toBe("true");
   });
 
@@ -82,7 +83,7 @@ describe("the column, drawn", () => {
     const el = dom(columnHTML(view({ list: roster(3) })));
     expect(ids(el)).toEqual([3, 1, 2, 0, 4]);
     expect(el.querySelector('[data-group="20"] [data-member="0"] .av')).not.toBeNull();
-    expect(el.querySelector('[data-group="20"] [data-member="0"] .mb-av')).toBeNull();
+    expect(el.querySelector('[data-group="20"] [data-member="0"] .mb-av-slime')).not.toBeNull();
     expect(el.querySelector('[data-member-more="0"]')).not.toBeNull();
     expect(el.querySelector('.mb-chief')?.getAttribute('data-member')).toBe('3');
     expect(el.querySelector('.mb-chief .av')?.getAttribute('style')).toBe('--av:40px');
@@ -98,7 +99,7 @@ describe("the column, drawn", () => {
     expect(el.querySelector('.mb-pinned [data-member="0"]')).toBeNull();
     expect(el.querySelector('.mb-chief')?.getAttribute('data-member')).toBe('1');
     expect(el.querySelectorAll('[data-member="0"]')).toHaveLength(1);
-    expect(el.querySelector('[data-member="0"] .mb-av')).toBeNull();
+    expect(el.querySelector('[data-member="0"] .mb-av-slime')).not.toBeNull();
   });
 
   test("only owner-created groups have headers, followed by ungrouped rows", () => {

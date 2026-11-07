@@ -15,9 +15,11 @@ import "./avatar.css";
 
 // ---------- the emblem as a picture, drawn by the corner's renderer ----------
 //
-// The faces are the overlay's own renderer drawn once at the size they are shown, times the screen's pixel ratio, with
-// the same rune texture as the corner, so the sidebar, the panel and Home show the same emblem. Until the texture is
-// there (and where there is no canvas, the tests) the pictures of app/public/brand stand in.
+// Since 2026-11-07 the emblem shows in the main window only in voice (the voice button and the voice screen); Raphael's
+// face elsewhere is the first blue slime (members.ts). It is the overlay's own renderer drawn once at the size it is
+// shown, times the screen's pixel ratio, exactly as the corner draws it over the desktop: no dark ground behind it, in
+// either theme (owner, 2026-11-07). Until the texture is there (and where there is no canvas, the tests) the pictures of
+// app/public/brand stand in.
 
 const stills = new Map<string, string | null>();
 /** The rune texture: still loading (a local file, a moment), there, or missing (the old pictures stand in). */
@@ -32,12 +34,12 @@ export function emblemTextureArrived(ok = true): void {
   notify();
 }
 
-/** The emblem standing still for `theme`, `px` CSS pixels square, as a data URL; null where it cannot be drawn yet. */
-function emblemStill(theme: "light" | "dark", px: number): string | null {
+/** The emblem standing still, `px` CSS pixels square, as a data URL; null where it cannot be drawn yet. */
+function emblemStill(px: number): string | null {
   if (!glyphTextureReady()) return null;
   const ratio = typeof window === "undefined" ? 1 : Math.max(1, Math.min(3, window.devicePixelRatio || 1));
   const side = Math.min(512, Math.ceil(px * ratio));
-  const key = `${theme}:${side}`;
+  const key = String(side);
   if (stills.has(key)) return stills.get(key)!;
   let url: string | null = null;
   try {
@@ -47,8 +49,8 @@ function emblemStill(theme: "light" | "dark", px: number): string | null {
     if (ctx) {
       ctx.translate(side / 2, side / 2);
       // The letters' rim reaches a little past the outer radius; a small face keeps its white ring visible. Unturned, the
-      // word break stands at one o'clock as in the owner's photo; a light page lays the photo's dark ground under it.
-      drawEmblem(ctx, side / 2 / 1.04, params("steady", 0, px < 48 ? 0.3 : 0.15), { tq: 0, rot: 0, dim: 1, calm: 0.7, lvl: 0.15, surface: theme });
+      // word break stands at one o'clock as in the owner's photo.
+      drawEmblem(ctx, side / 2 / 1.04, params("steady", 0, px < 48 ? 0.3 : 0.15), { tq: 0, rot: 0, dim: 1, calm: 0.7, lvl: 0.15, surface: "transparent" });
       url = canvas.toDataURL("image/png");
     }
   } catch {
@@ -208,10 +210,10 @@ export interface AvatarOptions {
 }
 
 /**
- * Raphael's face at `size` px: the emblem for the theme (two pictures, the stylesheet shows the
- * one of the theme), or the person's picture in a circle. Decorative: whoever shows it names it.
- * Under reduced motion nothing in it moves (see above): the loop is the still, a moving picture
- * its first frame, and the circle is empty for the moment that frame takes to be made.
+ * The emblem at `size` px, as the corner draws it (the voice button and the voice screen), or the person's picture in a
+ * circle (Raphael's face when the owner chose one). Decorative: whoever shows it names it. Under reduced motion nothing in
+ * it moves (see above): the loop is the still, a moving picture its first frame, and the circle is empty for the moment
+ * that frame takes to be made.
  */
 export function avatarHTML(o: AvatarOptions): string {
   const chosen = o.avatar === undefined ? custom : o.avatar;
@@ -222,16 +224,11 @@ export function avatarHTML(o: AvatarOptions): string {
     const img = url === null ? "" : `<img src="${esc(url)}" alt="" draggable="false" style="${cropStyle(chosen.crop)}">`;
     return `<span class="${cls}" ${box} aria-hidden="true">${img}</span>`;
   }
-  const light = emblemStill("light", o.size), dark = emblemStill("dark", o.size);
-  if (light && dark) {
+  const drawn = emblemStill(o.size);
+  if (drawn) {
     // While he thinks or listens the drawn emblem turns slowly, as the corner's ring does (still under reduced motion).
     const turn = o.loop && !reduced ? " em-turn" : "";
-    return (
-      `<span class="${cls}" ${box} aria-hidden="true">` +
-      `<img class="em-l${turn}" src="${light}" alt="" draggable="false">` +
-      `<img class="em-d${turn}" src="${dark}" alt="" draggable="false">` +
-      `</span>`
-    );
+    return `<span class="${cls}" ${box} aria-hidden="true"><img class="em${turn}" src="${drawn}" alt="" draggable="false"></span>`;
   }
   // The moment the texture takes to load leaves the circle empty rather than fetch a picture that is replaced at once.
   if (texture === "waiting" && canDraw()) return `<span class="${cls}" ${box} aria-hidden="true"></span>`;

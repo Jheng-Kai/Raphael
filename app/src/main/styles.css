@@ -429,6 +429,8 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .modal { position: relative; display: grid; grid-template-columns: var(--set-nav) minmax(0, 1fr); width: min(1000px, 100%); height: min(760px, 100%); border-radius: var(--r-lg); overflow: hidden; background: var(--content); border: 1px solid var(--edge); box-shadow: var(--pop); }
 .modal-nav { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-4) var(--sp-2); background: var(--side); border-right: 0; overflow-x: hidden; overflow-y: auto; min-height: 0; }
 /* 連結應用程式 opens alone, as Grok Bot's Connect apps: one column, no list of Settings (R-UI-111). */
+/* A dialog of its own has no list of Settings beside it, so what sits over it starts at its left edge too. */
+.modal-scrim[data-standalone] { --set-nav: 0px; }
 .modal-scrim[data-standalone] > .modal { grid-template-columns: minmax(0, 1fr); width: min(900px, 100%); }
 .modal-scrim[data-standalone] .modal-nav { display: none; }
 .modal-nav .nav { min-height: 34px; padding: var(--sp-1) var(--sp-2); }
