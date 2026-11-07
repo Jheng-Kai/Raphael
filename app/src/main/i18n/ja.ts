@@ -923,6 +923,7 @@ export const ja = {
   "dictionary.034": "インポートするファイルを選ぶ",
   "history.001": "整理済み",
   "history.002": "未整理",
+  "history.sentTo": "{p0} に送信",
   "history.003": "コピー",
   "history.004": "削除",
   "history.005": "<div class=\"hdetail\"{p0}><h4>元の認識結果</h4><div class=\"raw\">{p1}</div></div>",

@@ -1,6 +1,8 @@
+// @vitest-environment happy-dom
 import { describe, expect, test } from "vitest";
 import { dayBounds } from "../format";
-import { historyQuery } from "./history";
+import { historyQuery, itemHTML } from "./history";
+import type { HistoryItem } from "../types";
 
 describe("a day of the history", () => {
   test("is from its midnight to the next one, in local time", () => {
@@ -30,5 +32,16 @@ describe("a day of the history", () => {
   test("without a day the history is asked for as ever", () => {
     expect(historyQuery("", null, null)).toEqual({ limit: 50 });
     expect(historyQuery("hello", null, 1234)).toEqual({ limit: 50, query: "hello", before_ms: 1234 });
+  });
+});
+
+describe("a row of the history", () => {
+  const row = (over: Partial<HistoryItem>): HistoryItem => ({ id: 1, created_at_ms: 0, kind: "dictation", raw_text: "raw", text: "text", cleaned: true,
+    fallback_reason: null, target_app: null, audio_seconds: 1, stt_ms: 1, llm_ms: 1, model: null, cost_usd: 0, stt: null, ...over });
+  const meta = (item: HistoryItem): string => { const host = document.createElement("div"); host.innerHTML = itemHTML(item, false); return host.querySelector(".meta")?.textContent ?? ""; };
+  test("speech sent to a member says who it went to; a dictation names its program", () => {
+    expect(meta(row({ kind: "ask", target_app: "小晴" }))).toBe("傳給 小晴");
+    expect(meta(row({ kind: "ask", target_app: null }))).toBe("傳給 拉斐爾");
+    expect(meta(row({ target_app: "Code.exe" }))).toBe("Code");
   });
 });

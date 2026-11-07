@@ -3215,6 +3215,18 @@
       "stt_ms": 320,
       "llm_ms": 450,
       "cost_usd": 0.001
+    },
+    {
+      "id": 2,
+      "kind": "ask",
+      "text": "幫我把明天的行程排一下，下午留給研究",
+      "raw_text": "幫我把明天的行程排一下下午留給研究",
+      "created_at_ms": 1792806600000,
+      "target_app": "拉斐爾",
+      "cleaned": true,
+      "stt_ms": 300,
+      "llm_ms": 420,
+      "cost_usd": 0.001
     }
   ],
   "dictionary": [

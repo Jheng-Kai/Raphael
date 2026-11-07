@@ -923,6 +923,7 @@ export const en = {
   "dictionary.034": "Choose a file to import",
   "history.001": "Cleaned up",
   "history.002": "Original",
+  "history.sentTo": "To {p0}",
   "history.003": "Copy",
   "history.004": "Delete",
   "history.005": "<div class=\"hdetail\"{p0}><h4>Raw transcript</h4><div class=\"raw\">{p1}</div></div>",

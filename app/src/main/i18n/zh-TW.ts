@@ -922,6 +922,7 @@ export const zhTW = {
   "dictionary.034": "選擇要匯入的檔案",
   "history.001": "已整理",
   "history.002": "未整理",
+  "history.sentTo": "傳給 {p0}",
   "history.003": "複製",
   "history.004": "刪除",
   "history.005": "<div class=\"hdetail\"{p0}><h4>原始辨識</h4><div class=\"raw\">{p1}</div></div>",

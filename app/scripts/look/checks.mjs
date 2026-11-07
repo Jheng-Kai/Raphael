@@ -2728,6 +2728,13 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector(".au-room-pane .composer .cmp-chip"), "the composer is clear again");
     return { check: name };
   }
+  if (name === "history-sent-to") {
+    // Speech sent to a member is kept with the dictations and says who it went to (owner, 2026-11-07).
+    const metas = [...document.querySelectorAll(".hrow .meta")].map(meta => meta.textContent.trim());
+    require(metas.includes("傳給 拉斐爾"), `a spoken message names who it went to: ${metas.join(" | ")}`);
+    require(metas.includes("notepad"), "a dictation still names its program");
+    return { check: name };
+  }
   if (name === "room-picture-opened") {
     const card = document.querySelector(".media-lightbox .lb-card"), large = card?.querySelector(".lb-img"), close = card?.querySelector(".lb-close");
     require(large?.complete && large.naturalWidth > 0, "the picture opens large");

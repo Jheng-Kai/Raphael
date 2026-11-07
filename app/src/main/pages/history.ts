@@ -44,8 +44,10 @@ const FILTERS: { id: Filter; name: string }[] = [
   { id: "raw", get name() { return t("history.002"); } },
 ];
 
-function itemHTML(item: HistoryItem, expanded: boolean): string {
-  const meta = [item.target_app ? programName(item.target_app) : "", item.cleaned ? "" : t("history.002")]
+export function itemHTML(item: HistoryItem, expanded: boolean): string {
+  // Speech to a member is kept too (kind "ask"); its target is who it went to, not a program.
+  const where = item.kind === "ask" ? t("history.sentTo", { p0: item.target_app || t("agent.title") }) : item.target_app ? programName(item.target_app) : "";
+  const meta = [where, item.cleaned ? "" : t("history.002")]
     .filter(Boolean)
     .map(esc)
     .join("　");
