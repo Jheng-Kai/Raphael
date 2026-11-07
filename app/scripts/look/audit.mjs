@@ -163,10 +163,13 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (element.matches('.ob-col h2') && parseFloat(style.fontSize) < 28) violation('R-UI-37', 'Onboarding needs a large headline');
     if (element.matches('.ob-actions > .btn.pri') && box.width < element.parentElement.getBoundingClientRect().width * .6)
       violation('R-UI-37', 'Onboarding primary action must fill the action row');
-    if (element.matches('.ob-abilities')) {
-      const choices = [...element.children].filter(visible);
-      if (choices.length > 1 && choices.some((choice, index) => index > 0 && Math.abs(choice.getBoundingClientRect().top - choices[0].getBoundingClientRect().top) <= 1))
-        violation('R-UI-35', 'Onboarding abilities must form a vertical checklist');
+    if (element.matches('.ob-item')) {
+      const text = element.querySelector(':scope > .ob-tx'), control = element.querySelector(':scope > .ob-ctl');
+      if (text && control && visible(control)) {
+        const label = text.getBoundingClientRect(), side = control.getBoundingClientRect();
+        if (side.left < label.right - 1 || side.right > box.right + 1 || side.top < box.top - 1 || side.bottom > box.bottom + 1)
+          violation('R-UI-35', 'An onboarding choice keeps its control on the right of its name, inside its card');
+      }
     }
     if (element.matches('.mc-source-list')) {
       const selected = element.querySelector('.mc-source[aria-pressed="true"]');

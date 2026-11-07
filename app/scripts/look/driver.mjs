@@ -914,10 +914,6 @@ export async function perform(page, step, evidenceDirectory) {
       }, step);
       await element.dispose(); }
       break;
-    case "disable-abilities":
-      await visible("#ob [data-ability]");
-      while (await page.$('#ob [data-ability][aria-checked="true"]')) await click('#ob [data-ability][aria-checked="true"]');
-      break;
     default: throw new Error(`Unknown scene action: ${step.action}`);
   }
   // Let event handlers, microtasks and popover positioning finish between declarative actions.

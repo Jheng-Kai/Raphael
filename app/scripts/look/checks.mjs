@@ -2570,11 +2570,32 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, expanded, height: text.clientHeight, fullHeight: text.scrollHeight };
   }
-  if (name === "onboarding-abilities-hero") {
+  if (name === "onboarding-tools" || name === "onboarding-services" || name === "onboarding-abilities") {
+    // Each first-run choice is a headline and a grid of items: a mark, a name with one quiet line, the control on the right.
     const title = document.querySelector('.ob-col h2');
-    require(parseFloat(getComputedStyle(title).fontSize) >= 40, "abilities use the welcome hero headline size");
-    require(!document.querySelector('.ob-sub'), "abilities have no optional-setup helper paragraph");
-    return { check: name, fontSize: getComputedStyle(title).fontSize };
+    require(title && parseFloat(getComputedStyle(title).fontSize) >= 28, "the headline is large");
+    require(!document.querySelector('.ob-sub'), "a choice has no line of purpose under its headline");
+    const items = [...document.querySelectorAll('.ob-item')].filter(visible);
+    const expected = { "onboarding-tools": ["chatgpt", "claude", "codex", "gemini", "openrouter"], "onboarding-abilities": ["search", "read", "vision", "pdf", "voice"] }[name];
+    if (expected) require(JSON.stringify(items.map(item => item.dataset.item)) === JSON.stringify(expected), `the items are ${expected.join(", ")}: ${items.map(item => item.dataset.item).join(", ")}`);
+    else require(items.length > 0 && items.length <= 6 && items.some(item => item.dataset.item === "gmail"), "the popular services of the store are offered");
+    const column = document.querySelector('.ob-col').getBoundingClientRect();
+    for (const item of items) {
+      const box = item.getBoundingClientRect(), label = item.querySelector('.ob-tx').getBoundingClientRect(), control = item.querySelector('.ob-ctl').getBoundingClientRect(), nm = item.querySelector('.ob-tx .nm');
+      require(box.left >= column.left - 1 && box.right <= column.right + 1, `${item.dataset.item} stays inside the column`);
+      require(control.left >= label.right - 1 && control.right <= box.right + 1, `${item.dataset.item} keeps its control on the right inside its card`);
+      require(Math.abs((control.top + control.bottom) / 2 - (box.top + box.bottom) / 2) <= 2, `${item.dataset.item} centres its control`);
+      require(nm.scrollWidth <= nm.clientWidth + 1, `${item.dataset.item} shows its whole name`);
+    }
+    if (name === "onboarding-services") require(document.querySelector('[data-item="gmail"] .dot.ok'), "a connected service says so");
+    if (name === "onboarding-abilities") {
+      const switches = [...document.querySelectorAll('.ob-item button[role="switch"]')];
+      require(switches.length === 5, "five abilities have a switch each");
+      require(document.querySelector('[data-item="read"] [role="switch"]').getAttribute('aria-checked') === 'false', "a switch that was pressed turned off");
+    }
+    const primary = document.querySelector('.ob-actions > .btn.pri').getBoundingClientRect();
+    require(primary.width >= Math.min(column.width, 560) * .6, "the primary action fills its row");
+    return { check: name, items: items.length, columns: new Set(items.map(item => Math.round(item.getBoundingClientRect().left))).size, headline: getComputedStyle(title).fontSize };
   }
   if (name === "details-quick-once") {
     const quick = [...document.querySelectorAll('.mb-det [data-conversation-open]')].filter(row => visible(row) && row.textContent.includes('快速提問'));

@@ -376,12 +376,11 @@ watchChipRows(document.body);
       guide,
       {
         mode,
-        onDone: (result) => {
+        onDone: () => {
           guide.hidden = true;
           showPages();
           tellAgentPage();
           if (mode === "first" || !current) go(START_PAGE);
-          if (result.toSettings) go("settings", "usage");
           // The speech models that the guide did not wait for come on in the background.
           void resumeModels({ status: api.modelsStatus, ensure: api.modelsEnsure }, (message) => console.warn("main:", message));
         },

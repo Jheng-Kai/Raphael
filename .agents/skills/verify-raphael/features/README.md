@@ -529,7 +529,7 @@ checks turn-one recall on turn 25 and an entry in only that member's MEMORY.md. 
 
 ## Owner round 7 contracts
 
-Owner round 7 extended the affected journeys with home-lead-width, onboarding-abilities-hero, details-quick-once and conversation-scroll-edge. The sidebar decision replaces sidebar-count-alignment and team-card-lines with sidebar-shell and group-avatar checks. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800.
+Owner round 7 extended the affected journeys with home-lead-width, onboarding-abilities (replacing onboarding-abilities-hero since 2026-11-07, beside onboarding-tools and onboarding-services), details-quick-once and conversation-scroll-edge. The sidebar decision replaces sidebar-count-alignment and team-card-lines with sidebar-shell and group-avatar checks. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800.
 
 ## Connect and Docker acceptance (2026-10-30)
 

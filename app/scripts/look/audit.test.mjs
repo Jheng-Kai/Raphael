@@ -813,11 +813,18 @@ describe("rendered look checks", () => {
     window.document.querySelector('button').getBoundingClientRect = () => ({ left: 10, top: 10, right: 410, bottom: 40, width: 400, height: 30 });
     expect(audit().productRules).toEqual([]);
   });
-  it("requires a vertical onboarding ability checklist (R-UI-35)", () => {
-    const { window, audit } = productAudit('<div class="ob-abilities"><button class="btn" style="border:1px solid gray">Dictate</button><button class="btn" style="border:1px solid gray">Ask</button></div>');
+  it("keeps an onboarding choice's control on the right of its name, inside its card (R-UI-35)", () => {
+    const { window, audit } = productAudit('<div class="ob-item"><span class="ob-tx">Notion</span><span class="ob-ctl"><button class="btn" style="border:1px solid gray">Sign in</button></span></div>');
+    const rect = (left, right, top = 0, bottom = 72) => () => ({ left, right, top, bottom, width: right - left, height: bottom - top });
+    const item = window.document.querySelector('.ob-item');
+    item.getBoundingClientRect = rect(0, 400);
+    item.querySelector('.ob-tx').getBoundingClientRect = rect(40, 260, 20, 52);
+    item.querySelector('.ob-ctl').getBoundingClientRect = rect(200, 380, 20, 52);
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-35']);
-    window.document.querySelector('.ob-abilities').lastElementChild.getBoundingClientRect = () => ({ left: 10, top: 50, right: 110, bottom: 80, width: 100, height: 30 });
+    item.querySelector('.ob-ctl').getBoundingClientRect = rect(280, 380, 20, 52);
     expect(audit().productRules).toEqual([]);
+    item.querySelector('.ob-ctl').getBoundingClientRect = rect(280, 420, 20, 52);
+    expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-35']);
   });
   it("rejects duplicate custom and native tooltips", () => {
     const { audit } = productAudit('<button data-tooltip="Save" title="Save">Save</button><button data-tooltip="Open"><svg><title>Open</title></svg></button><button title="Native">Native</button>');

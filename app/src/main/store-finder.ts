@@ -22,3 +22,9 @@ export function storeGroup(item: StoreService): string {
 }
 
 export const popularApp = (item: StoreService): boolean => data.popular.includes(item.id);
+
+/** Where an app stands among the popular ones; the unlisted come after all of them. */
+export const popularRank = (item: StoreService): number => {
+  const at = data.popular.indexOf(item.id);
+  return at < 0 ? data.popular.length : at;
+};

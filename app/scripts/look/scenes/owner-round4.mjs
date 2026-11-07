@@ -13,7 +13,6 @@ export function withOwnerRound4(scenes) {
       ? [check("details-pointer-focus"), step] : [step]),
     ...(checks[original.name] ? [check(checks[original.name])] : []),
     ...(["home", "automations-calendar", "dictation-overview", "chat"].includes(original.name) ? [check("sidebar-shell")] : []),
-    ...(original.name === "onboarding-abilities" ? [check("onboarding-abilities-hero")] : []),
     ...(original.name === "raphael-details" ? [check("details-quick-once")] : []),
     ...(original.name === "connector-reconnected" ? [check("conversation-scroll-edge")] : []),
     ...(["quick-cleared", "conversation-delete-main", "member-delete"].includes(original.name) ? [check("toast-clearance")] : []),
