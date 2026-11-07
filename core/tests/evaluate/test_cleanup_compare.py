@@ -51,7 +51,7 @@ def test_shipped_candidate_uses_the_real_renderer_and_matches_production():
     assert '{"text": "<the cleaned text>"}' in rendered
     assert "Target app: unknown" in rendered
     assert build_system_prompt([], []) == original
-    assert original.startswith("Edit dictation into the clear text the speaker would type after thinking it through.")
+    assert original.startswith("You edit dictated text.")
 
 
 @pytest.mark.parametrize(("text", "cleaned", "needles", "items", "paragraphs"), [
