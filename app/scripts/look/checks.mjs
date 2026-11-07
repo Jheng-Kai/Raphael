@@ -5385,15 +5385,18 @@ export function checkRendered(name, context = {}) {
     return { check: name, open: !!chat };
   }
   if (name === "bot-message-from" || name === "bot-exchange-count" || name === "bot-exchange-expanded") {
-    // What a colleague handed over: one centred line where the owner's words would be, then the member's own turn.
-    const event = document.querySelector('.exchange-event[data-exchange="71"]'), line = event.querySelector("summary");
-    require(line.textContent.trim() === "訊息來自 小森", `the line reads who it came from: ${line.textContent}`);
-    require(visible(line.querySelector('.av')), "the line carries the asker's face");
+    // What a colleague handed over: one centred line 「與 小森 的 N 則訊息」 where the owner's words would be, the
+    // same line the asker's side shows; it opens the two members' conversation, never a box under it (2026-11-07).
+    const event = document.querySelector('.exchange-event[data-exchange="71"]'), words = event.textContent.trim();
+    require(event.matches('button[data-act="peer-chat"]'), "the line is a button that opens their conversation");
+    require(/^與 小森 的 \d+ 則訊息/.test(words), `the line names the colleague and counts the messages: ${words}`);
+    require(visible(event.querySelector('.av')), "the line carries the asker's face");
     require(document.querySelector('.tn[data-id="2"]').getBoundingClientRect().bottom <= event.getBoundingClientRect().top, "it sits where it came, after the member's own earlier turn");
     require(!document.querySelector('.tn[data-id="71"] .me'), "a colleague's request is never an owner bubble");
-    if (name === "bot-exchange-expanded") require(event.open && [...event.querySelectorAll('.exchange-message')].filter(visible).length === 1, "it opens on what was asked");
-    else require(!event.open, "the line starts closed");
-    return { check: name, words: line.textContent };
+    const chat = document.querySelector('.mb-chat:not([hidden]) > .peer-chat');
+    if (name === "bot-exchange-expanded") require(visible(chat) && [...chat.querySelectorAll('.peer-line')].filter(visible).length >= 1, "it opens the conversation on what was asked");
+    else require(!chat, "the conversation opens only from the line");
+    return { check: name, words };
   }
   if (name === "global-private-memory") {
     const shared = document.querySelector('.mb-det [data-mem-space="shared"]'), own = document.querySelector('.mb-det [data-mem-space="own"]');
