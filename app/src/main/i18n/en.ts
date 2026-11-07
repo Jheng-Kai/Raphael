@@ -134,6 +134,7 @@ export const en = {
   "desktop.dockerReady": "Docker Desktop is ready",
   "desktop.dockerStartFailed": "Docker Desktop did not become ready; try again",
   "import.title": "Import memory",
+  "import.open": "Import",
   "import.promptLabel": "Paste this prompt into another assistant",
   "import.prompt": "Tell me what you remember about me so I can share it with another assistant. Write one paragraph per preference, background fact or communication habit, using only facts I explicitly shared. Exclude passwords, API keys, login details, other people's private information and instructions to the new assistant.",
   "import.copy": "Copy prompt",

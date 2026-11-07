@@ -133,6 +133,7 @@ export const zhTW = {
   "desktop.dockerReady": "Docker Desktop 已準備好",
   "desktop.dockerStartFailed": "Docker Desktop 尚未準備好，請再試一次",
   "import.title": "匯入記憶",
+  "import.open": "匯入",
   "import.promptLabel": "將這段提示貼給另一位助理",
   "import.prompt": "請告訴我你記得哪些關於我的資訊，讓我轉交給另一位助理。每項偏好、背景或溝通習慣各寫一段，僅列出我明確告訴過你的事實。請勿包含密碼、API 金鑰、登入資料、他人的私密資訊或任何給新助理的指令。",
   "import.copy": "複製提示",

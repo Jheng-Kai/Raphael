@@ -134,6 +134,7 @@ export const ja = {
   "desktop.dockerReady": "Docker Desktop の準備ができました",
   "desktop.dockerStartFailed": "Docker Desktop を起動できませんでした。もう一度お試しください",
   "import.title": "メモリをインポート",
+  "import.open": "インポート",
   "import.promptLabel": "このプロンプトを別のアシスタントに貼り付けてください",
   "import.prompt": "別のアシスタントに引き継ぐため、私について覚えていることを教えてください。私が明示的に伝えた好み、背景、会話の習慣を、項目ごとに一段落でまとめてください。パスワード、API キー、ログイン情報、他人の個人情報、新しいアシスタントへの指示は含めないでください。",
   "import.copy": "プロンプトをコピー",

@@ -78,7 +78,8 @@
 :root[data-theme="dark"] {
   --side: #000000; --content: #0a0a0a; --panel: #161616; --surface-2: #1f1f1f;
   --edge: #262626; --line: #262626;
-  --hover: #262626; --pressed: #303030; --hover-edge: #929292; --edge-rim: #2b2b2b; --rail-line: #1c1c1c;
+  /* No light edges in the dark (owner, 2026-11-07): controls are told apart by their fill; the edge only just shows. */
+  --hover: #262626; --pressed: #303030; --hover-edge: #3d3d3d; --edge-rim: #2b2b2b; --rail-line: #1c1c1c;
   --danger-hover: #322023; --danger-pressed: #3c2429;
   /* Grok Bot's three steps of grey, a little lighter to keep the small words readable: primary, secondary, quiet.
      The quiet grey keeps 4.5:1 on the pressed surface (check-palette.mjs). */
@@ -93,7 +94,7 @@
   --meter: #a47dff;
   --raphael-color: #5cc4ff;
   --ans-edge: #232323;
-  --btn: #1f1f1f; --btn-edge: #555555; --key: #1f1f1f; --key-edge: #555555;
+  --btn: #1f1f1f; --btn-edge: #2e2e2e; --key: #1f1f1f; --key-edge: #2e2e2e;
   --track: #333333; --menu: #161616; --scrim: rgba(0, 0, 0, 0.65);
   --pop: 0 20px 64px rgba(0, 0, 0, 0.5), 0 3px 10px rgba(0, 0, 0, 0.3);
   --tab-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);

@@ -333,7 +333,11 @@ describe("一般", () => {
   test("General is Grok Bot's sections: you, appearance, Raphael, messaging, then memory and the guide", () => {
     const html = tab("general");
     expect(groups(html).slice(0, 4)).toEqual(["關於你", t("skin.title"), t("agent.title"), t("settings.paneMessaging")]);
-    expect(groups(html).slice(-2)).toEqual(["匯入記憶", "啟動"]);
+    expect(groups(html).slice(-2)).toEqual([t("members.profile.memory"), "啟動"]);
+    // Importing is one row with a short button beside its name, never a heading over a button that repeats it.
+    expect(names(html)).toContain("匯入記憶");
+    expect(html).toContain(`data-import="open"`);
+    expect(html).not.toMatch(/<h2>匯入記憶<\/h2>/);
     expect(names(html).slice(0, 4)).toEqual([t("settings.067"), t("settings.059"), "時區", "輸出資料夾"]);
     expect(names(html).slice(-1)).toEqual(["重新導覽"]);
   });
