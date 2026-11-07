@@ -27,7 +27,6 @@ export default [
   scene("missing-search-repair", "The step opens the existing SearXNG URL field", [...search, click('[data-missing-repair="search"]'), wait('#svc-url'), check("missing-search-repair")], {turns: [turn], missingSearch: true}),
   scene("missing-voice", "A failed ordinary read-aloud offers Fish Audio setup in the shared notice", [member(1), voice, wait('.toast .missing-note'), check("missing-voice")]),
   scene("missing-voice-repair", "The read-aloud notice opens the shared Fish Audio key form", [member(1), voice, wait('.toast .missing-note'), click('.toast [data-missing-repair="voice"]'), wait('#svc-key-fish'), check("missing-voice-repair")]),
-  scene("missing-hidden", "An unreadable hidden-member list stays distinct from an empty list", [...settings("general"), scroll('[data-hidden-members]'), wait('[data-hidden-retry]'), check("missing-hidden")], {missingHidden: true}),
   scene("missing-vision", "Same-as-answer says why an incompatible image model cannot be used", [...settings("tools"), click('button[data-svc="open"][data-id="vision"]'), wait('#svc-dialog'), click('[data-svc="service"][data-service="same"]'), wait('#svc-dialog .missing-note'), check("missing-vision")], {missingVision: true}),
   scene("missing-model-list", "A signed-in account with no models offers reload and account settings", [...settings("models"), click('.modal-scrim [data-row="quick-model"] .mp-trigger'), wait('.model-chooser'), click('[data-source="cli:codex"]'), wait('[data-dlg="reload"]'), check("missing-model-list")], {missingModelList: true}),
 ];

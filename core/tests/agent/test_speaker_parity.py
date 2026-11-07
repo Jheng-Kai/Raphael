@@ -52,7 +52,7 @@ def test_every_speaker_gets_the_same_tools_and_capabilities(path, primary):
     assert offers[0] == offers[1] == offers[2]
     for prompt in prompts:
         assert prompt.count(SHARED_CAPABILITIES) == 1
-        assert "You have a voice" in prompt
+        assert "Ordinary chat replies are text" in prompt
         assert "generate_audio" in prompt
         assert "owner's Windows computer" in prompt
     for offered in offers:

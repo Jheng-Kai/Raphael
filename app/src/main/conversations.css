@@ -9,43 +9,84 @@
 .pending-questions [role=alert] { margin: var(--sp-1) 0 0; color: var(--err); }
 .mb-det .conversation-list { border: 0; border-radius: 0; overflow: hidden; }
 .mb-det .conversation-open { border: 0; background: transparent; }
-.mb-det .conversation-open:hover, .mb-det .conversation-new:hover { background: var(--hover); }
+.mb-det .conversation-open:hover { background: var(--hover); }
+/* The open row of the two carries a soft fill, like the selected row in the sidebar. */
+.mb-det .conversation-open[aria-current="true"] { background: color-mix(in srgb, var(--text) 6%, transparent); }
 .conversation-tools { display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-2) 0; }
-.conversation-tools input, .conversation-name { min-width: 0; min-height: var(--h-ctl); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--panel); color: var(--text); outline: none; }
+.conversation-tools input { min-width: 0; min-height: var(--h-ctl); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--panel); color: var(--text); outline: none; }
 .conversation-tools input { width: 0; flex: 1; }
-.conversation-name { width: 100%; }
-:root[data-keys] .conversation-tools input:focus, :root[data-keys] .conversation-name:focus { border-color: var(--focus); box-shadow: 0 0 0 2px var(--accent-ring); }
+:root[data-keys] .conversation-tools input:focus { border-color: var(--focus); box-shadow: 0 0 0 2px var(--accent-ring); }
 .conversation-rows { max-height: 340px; overflow-y: auto; padding: var(--sp-1) 0; }
-.conversation-section > .mb-dh { padding: 0 var(--sp-2); }
-.conversation-section + .conversation-section { margin-top: var(--sp-3); }
 .conversation-row { display: flex; align-items: center; border-radius: var(--r-sm); }
 .conversation-row:hover { background: var(--hover); }
 .conversation-row .conversation-open { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1); text-align: left; padding: var(--sp-2) var(--sp-2); }
 .conversation-open span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .conversation-open small { color: var(--text-3); font-size: var(--fs-2xs); }
 .conversation-more { flex: 0 0 auto; margin-right: var(--sp-1); }
-.conversation-empty { padding: var(--sp-4); text-align: center; color: var(--text-3); }
 .conversation-search { width: min(390px, calc(100vw - 24px)); max-width: calc(100vw - 24px); }
-.conversation-list .conversation-new { width: 100%; margin-block: var(--sp-2); justify-content: flex-start; gap: var(--sp-2); }
 .conversation-head { display: flex; justify-content: center; min-width: 0; }
 .page.page-agent .page-head.mb-head { grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr); }
 .mb-head-l { display: flex; align-items: center; gap: var(--sp-1); }
 .mb-head-c { width: 100%; }
 .page-agent .btn.conversation-trigger { display: flex; flex-direction: column; align-items: center; gap: var(--sp-1); min-width: 0; width: 100%; max-width: min(320px, 100%); height: auto; min-height: 52px; padding: var(--sp-1) var(--sp-3); border-color: transparent; background: transparent; box-shadow: none; border-radius: var(--r-sm); }
-.page-agent .conversation-trigger:hover { background: var(--hover); }
-.page-agent .btn.conversation-trigger:is(:hover, :active):not(:disabled) { border-color: transparent; box-shadow: none; }
-.page-agent .btn.conversation-trigger:active:not(:disabled) { background: var(--pressed); }
-.conversation-trigger .mb-pill { flex: none; display: flex; align-items: center; justify-content: center; gap: var(--sp-2); max-width: 100%; font-size: var(--pa-pill-fs); font-weight: 600; line-height: 1.5; }
+/* As Grok Bot's header (owner, 2026-11-06): the face and name are one soft pill, a step lighter under the pointer, where a ›
+   slides in; the button around it stays clear. */
+.page-agent .btn.conversation-trigger:is(:hover, :active):not(:disabled) { background: transparent; }
+.page-agent .btn.conversation-trigger:is(:hover, :active):not(:disabled) { background: transparent; }
+/* The pill keeps one size, so its face never moves under the pointer: room for the › stays on its right and the same
+   room on its left keeps it centred. The soft surface is drawn behind it, short of the › at rest, and reaches it under
+   the pointer, where the › shows. */
+.conversation-trigger .mb-pill { position: relative; isolation: isolate; flex: none; display: flex; align-items: center; justify-content: center; gap: var(--sp-2); max-width: 100%; height: 40px; margin-left: calc(16px + var(--sp-2)); padding: 0 calc(var(--sp-3) + 16px + var(--sp-2)) 0 var(--sp-2); border-radius: var(--r-pill); font-size: var(--pa-pill-fs); font-weight: 600; line-height: 1.5; }
+.conversation-trigger .mb-pill::before { content: ""; position: absolute; z-index: -1; inset: 0 calc(16px + var(--sp-2)) 0 0; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); transition: inset 140ms ease, background-color 120ms ease; }
+.page-agent .btn.conversation-trigger:is(:hover, :focus-visible) .mb-pill::before { inset: 0; background: var(--hover); }
+.page-agent .btn.conversation-trigger:active .mb-pill::before { background: var(--pressed); }
+.mb-pill-go { position: absolute; top: 50%; right: var(--sp-3); display: grid; place-items: center; width: 16px; height: 16px; color: var(--text-3); opacity: 0; transform: translateY(-50%); transition: opacity 140ms ease; }
+.mb-pill-go .i { width: 16px; height: 16px; }
+.page-agent .btn.conversation-trigger:is(:hover, :focus-visible) .mb-pill-go { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .mb-pill-go, .conversation-trigger .mb-pill::before { transition: none; } }
 .conversation-trigger .mb-pill .av { --av: var(--pa-pill-av) !important; flex-shrink: 0; }
+.conversation-trigger .conversation-caption:empty { display: none; }
 .conversation-trigger .conversation-caption { flex: none; min-height: 1.5em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: var(--fs-xs); font-weight: 400; line-height: 1.5; }
 .mb-chat { position: relative; }
 /* Fade the scroll boundary so partial message lines never meet the fixed header. */
 /* The fade is for what scrolls away: at rest the first line stands clear of it. */
 .mb-chat .ra-scroll { mask-image: linear-gradient(to bottom, transparent 16px, var(--text) 40px); padding-top: 40px; }
+/* A conversation between members (peer-chat.ts), as Grok Bot's: over the thread and its composer, the pill 「A ⇄ B」 where
+   the member's pill was, each message under its speaker's face and coloured name, and 「關閉對話」 where the composer was. */
+.mb-chat > .peer-chat { position: absolute; z-index: 4; inset: calc(var(--window-controls-height) + 4px) 0 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; padding: 0 var(--pa-chat-pad); background: var(--content); animation: peer-in 160ms ease both; }
+.peer-head { display: flex; justify-content: center; min-width: 0; padding: 6px var(--sp-3); }
+.peer-pill { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; max-width: min(480px, 100%); height: 40px; padding: 0 var(--sp-3) 0 var(--sp-2); border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); font-size: var(--pa-pill-fs); font-weight: 600; line-height: 1.5; }
+.peer-person { display: inline-flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.peer-person > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: inherit; }
+.peer-person .av { --av: var(--pa-pill-av) !important; flex-shrink: 0; }
+.peer-swap { display: inline-flex; align-items: center; flex: none; color: var(--text-3); }
+.peer-swap .i { width: 16px; height: 16px; }
+.peer-scroll { position: relative; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; padding: var(--sp-4) var(--sp-1); mask-image: linear-gradient(to bottom, transparent 0, var(--text) 24px); }
+.peer-scroll::-webkit-scrollbar { display: none; }
+.peer-thread { max-width: var(--pa-colw); margin: 0 auto; }
+/* Unlike the member's own thread, each message here keeps its speaker's face, beside the name and the bubble. */
+.page-agent .tn.peer-line > .ra { grid-template-columns: var(--pa-ra-face) minmax(0, 1fr); column-gap: var(--sp-3); max-width: 88%; }
+.peer-line .ra-face { margin-top: 0; }
+.peer-line .ra-body { gap: 2px; }
+.peer-who { font-size: var(--fs-xs); font-weight: 600; line-height: 1.5; color: var(--peer-accent, var(--text-2)); }
+.peer-state { margin: 0; color: var(--text-3); font-size: var(--pa-fs-d); line-height: 1.6; }
+.peer-line .handoff-files { margin-top: var(--sp-1); }
+.peer-foot { display: flex; justify-content: center; padding: var(--sp-3) 0 calc(var(--sp-4) + 4px); }
+/* The conversations' jump-to-latest button, floating just above 「關閉對話」. */
+.peer-chat > .btn.peer-latest { position: absolute; left: 50%; bottom: calc(var(--sp-3) + 40px + var(--sp-4) + 16px); transform: translateX(-50%); z-index: 2; width: 36px; height: 36px; min-height: 36px; border-radius: var(--r-sm); background: var(--panel); border: 1px solid var(--edge); box-shadow: var(--pop); color: var(--text-2); }
+.peer-chat > .btn.peer-latest:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+.page-agent .btn.peer-close { min-width: 160px; height: 40px; padding: 0 var(--sp-5); border: 1px solid var(--edge-rim); border-radius: var(--r-pill); background: var(--surface-2); color: var(--text); font-weight: 600; }
+.page-agent .btn.peer-close:hover:not(:disabled) { border-color: var(--edge-rim); background: var(--hover); }
+.page-agent .btn.peer-close:active:not(:disabled) { background: var(--pressed); }
+@keyframes peer-in { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { .mb-chat > .peer-chat { animation: none; } }
 .quota-chips { display: grid; gap: var(--sp-1); width: 100%; max-width: var(--pa-colw); margin: 0 auto var(--sp-2); }
 .quota-chip { padding: var(--sp-1) var(--sp-3); font-size: var(--fs-2xs); border-radius: var(--r-sm); color: var(--text-2); background: var(--surface-2); display: flex; gap: var(--sp-1); align-items: center; }
 .quota-chip .i { width: 16px; height: 16px; }
-.tn.is-search-target { border-radius: var(--r-lg); outline: 2px solid var(--accent); outline-offset: -2px; }
+/* The turn a search or a report opened: a soft tint that fades, never a ring that reads as keyboard focus (R-UI-31). */
+.tn.is-search-target { border-radius: var(--r-lg); animation: tn-found 2400ms ease-out both; }
+@keyframes tn-found { from, 40% { background-color: var(--hover); } to { background-color: transparent; } }
+@media (prefers-reduced-motion: reduce) { .tn.is-search-target { animation: none; background-color: color-mix(in srgb, var(--hover) 60%, transparent); } }
 .work-section { margin: var(--sp-1) 0 var(--sp-2); }
 /* Work is a muted one-line state above the answer, not a framed control. */
 .page-agent .btn.work-toggle { display: inline-flex; justify-self: start; align-items: center; gap: var(--sp-1); min-height: 0; max-width: 100%; padding: 2px 0; border-color: transparent; border-radius: var(--r-sm); background: transparent; font-size: var(--fs-xs); color: var(--text-3); }
@@ -73,8 +114,6 @@
 /* The event gap also houses the preceding message's hover actions. */
 .page-agent .ra-body > :is(.timeline-event, .event-group) { margin-block: calc(var(--sp-6) - var(--sp-1)); }
 .page-agent .ra-body > :is(.timeline-event, .event-group) + :is(.timeline-event, .event-group) { margin-top: 0; }
-.page-agent .tn > .me:has(+ .ra > .ra-body > :is(.timeline-event, .event-group):first-child) .message-actions,
-.page-agent .ra-body > [data-seq]:has(+ :is(.timeline-event, .event-group)) .message-actions { margin-bottom: -28px; }
 .page-agent .tn > .me + .ra > .ra-body > :is(.timeline-event, .event-group):first-child { margin-top: calc(var(--sp-6) - var(--pa-gap-in)); }
 .work-body .chat-message { margin-bottom: var(--sp-2); }
 .work-body .message-actions { display: none; }
@@ -92,8 +131,7 @@
 .message-search-main { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
 .message-search-title { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
 .message-search-title b { flex-shrink: 0; max-width: 60%; font-size: var(--pa-row-name); font-weight: 600; }
-.message-search-title b, .message-search-title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.message-search-title > span { font-size: var(--pa-row-role); color: var(--text-3); }
+.message-search-title b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .message-search-snippet { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; font-size: var(--pa-row-pv); }
 .message-search-result small { color: var(--text-3); font-size: var(--fs-2xs); }
 .message-search-result mark { color: var(--on-selection); background: var(--selection); border-radius: var(--r-sm); font-weight: 600; }

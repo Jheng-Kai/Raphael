@@ -115,7 +115,8 @@ From Home click the calendar block, a date or an event. Home remains highlighted
 - **Top bar:** 今天, the arrows, the title, and on the right the view dropdown (日 週 月) in the shared menu.
 - **Left rail:** 建立, the month with its own arrows and today marked, then what the calendar shows with a check for each: 行程, each member's routines, Google when connected. A check hides that source and is remembered. A member's row still drags onto a slot to start a routine. Keep awake stands at its foot, and the line about Google above it.
 - **Week and day:** weekday over a big date with today filled, an all-day row, an hour gutter, thin lines, a red line and dot at the time now. It opens scrolled near now. Date numbers open that day.
-- **Chips:** time and title, sized by duration, side by side when overlapping (R-UI-65). An own event is ink, a routine its member's slime colour with the member's 20px face, a Google event an outline with Google's mark. Side by side a chip gives up its face to its words. A routine's occurrence has no length and is drawn an hour long.
+- **Chips:** time and title, sized by duration, side by side when overlapping (R-UI-65). An own event is ink, a routine its member's slime colour with the member's 20px face, a Google event an outline with Google's mark. Side by side a chip gives up its face to its words. A routine's occurrence has no length and is drawn an hour long. A failed or waiting run's mark stands in a corner (beside the time, or the foot corner under a face), so the title keeps its lines; titles balance their two lines. The event whose panel is open, or that Home opened, lifts with a shadow; a ring stays keyboard focus's (R-UI-31).
+- **Panels:** the form or detail stands beside its slot or event, on the right, else on the left while that stays on the calendar; a slot too wide for either side (the day view) has it centred over it, never over the rail or the sidebar. The notes grow with their words up to six lines, with no drag grip.
 - **Make:** click a slot for the small form beside it, drag over a range to set the time, or 建立 for the same form. It holds the title, start, end, all-day and notes, and 改成例行任務 for what repeats. Enter or 儲存 saves and draws it. A press outside closes a form with nothing typed; one that holds words stays until 取消 or Escape.
 - **Read and change:** click an event for its time, notes and who added it, the pencil and the ⋯ that holds delete, which asks once more. Right click reaches the same menu. Drag moves an own event, its bottom edge resizes it; an all-day bar moves by days and its right edge stretches it; in a month a chip moves to another day. Routine and Google entries are read and say where they come from; a routine opens its existing editor.
 - **Month:** six weeks of chips, 還有 N 個 for what does not fit, which opens that day. A click on an empty part of a day makes an all-day event there.
@@ -300,3 +301,14 @@ test_events.py, test_event_catalog.py, test_event_harness.py, test_webhooks.py,
 test_settings.py; routine-run.test.ts, timezones.test.ts, automations.test.ts,
 member-profile.test.ts, member-details.test.ts, routine-sentence.test.ts,
 settings-view.test.ts, agent-members.test.ts and look audit/app tests.
+
+
+## Owner-provided external webhook tunnels (2026-11-05)
+
+R-COLLEAGUE-05: Edit a saved webhook routine > External URL. Choose Tailscale Funnel, Cloudflare Tunnel or ngrok, copy the exact command and run the already-installed tool yourself. Paste its HTTPS URL and Test external URL. The PC-on reminder stays beside auth choices. Explicit key generation rotates the key; copy uses the displayed value and closing clears it. HMAC and Bearer share the existing receiver.
+
+```powershell
+npm run look -- webhook-external webhook-external-tested webhook-external-hmac automation-webhook routine-trigger-recipes --theme both --width 1120,720,1920x1080
+```
+
+The self-post uses a short-lived authenticated nonce and must reach this exact hook without executing its work or consuming admission. Private addresses, redirects, credentials and unrelated endpoints fail. Fakes prove these boundaries; no tunnel, public network or live form service is started during offline checks.

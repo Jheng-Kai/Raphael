@@ -11,10 +11,12 @@ The RPC methods (the main window only, through the shell's allow-list):
   says the thread has news the owner has not seen (`members.read` clears it), `unread_from` names
   its first unseen turn when known, and `waiting` that a
   question waits for the owner there. `groups` is `[{id, name, position, sources}]`.
-- `members.create {name, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, ui_language?}` ->
+- `members.create {name, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, ui_language?, greet?}` ->
   `{member, routine_offer}`. `routine_offer` is the routine offered to a member of a group that
   has places to look (`sources`): `{title, prompt, schedule}` for 「每天早上的進度」 at 09:00, or
   null. It is offered, not made: `routines.create` makes it.
+- `members.greet {id}` -> `{turn_id}`: start another hidden, tool-free greeting before any owner
+  message, replacing failed greetings. Only the member's own interactive brain answers it.
 - `members.update {id, name?, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, position?}`
   -> `{member}`. `avatar` here is "" or a slime, "slime:<character>" or "slime:color:<color>". Raphael (0) is not changed here: his picture is the app's to change.
 - `members.delete {id}` -> `{deleted}`: the member, its conversation (and the exchanges of other
@@ -113,12 +115,6 @@ OWNER_ABSENCE_MS = 30 * 24 * 3_600_000
 # What the member column shows of the last line of a thread, at most.
 PREVIEW_CHARS = 80
 # The folders of the pictures, in the app's local folder.
-# What a member made in the maker says first, before anything has run: no model is asked, so it costs nothing and is there at once.
-GREETINGS = {
-    "zh-TW": "你好，我是{name}。你想請我幫你做什麼？",
-    "en": "Hi, I'm {name}. What would you like me to do for you?",
-    "ja": "はじめまして、{name}です。どんなことをお手伝いしましょうか？",
-}
 AVATARS_DIR = "avatars"
 SLIME = "slime:"
 MEMBERS_DIR = "members"
@@ -258,8 +254,8 @@ class MembersService:
         self.store = MemberStore(conn, now_ms)
         self.capabilities = MemberCapabilities(conn, local_dir / "member-skills", self.store)
         self._speech = None
+        self.greeting = None  # Bound by the interactive AgentService, never the routine worker.
         self._delivered: set[tuple[int, int, str]] = set()
-        self._speech_tasks: set[asyncio.Task] = set()
         self._conn = conn
         self._history = AgentHistory(conn, now_ms)
         self._settings = SettingsStore(conn)
@@ -274,6 +270,8 @@ class MembersService:
         # Told of each member made through the tools: who made it, and which it is.
         self.member_made = lambda maker, made: None
         self.remove_computer_data = None
+        self.remove_messaging = None
+        self.deleting: set[int] = set()
         self._connections = connections
         self._now_ms = now_ms
         if not self._settings.get("routine_owner_seen_ms"):
@@ -321,10 +319,12 @@ class MembersService:
             "members.commands.save": self._commands_save,
             "members.commands.delete": self._commands_delete,
             "members.duplicate": self._duplicate,
+            "members.template": self._member_template,
             "members.mark_all_read": self._mark_all_read,
             "members.voices": self._voices,
             "members.list": self._list,
             "members.create": self._create,
+            "members.greet": self._greet,
             "members.update": self._update,
             "members.delete": self._delete,
             "members.set_primary": self._set_primary,
@@ -484,11 +484,6 @@ class MembersService:
         if member is None:
             return
         self._notice(member, kind)
-        if kind == "finished" and member.read_aloud and turn.text and self._speech is not None:
-            task = asyncio.get_running_loop().create_task(self._speech.say_member("\n".join(turn.messages) if turn.messages else turn.text, voice=member.voice, turn_id=turn.id))
-            self._speech_tasks.add(task)
-            task.add_done_callback(self._speech_tasks.discard)
-            task.add_done_callback(lambda done: done.cancelled() or done.exception())
 
     def _notice(self, member: Member, kind: str) -> None:
         if member.notify and self._notify is not None:
@@ -620,7 +615,7 @@ class MembersService:
         last = latest.get(0)
         activity, activity_label = self.activity.describe(0, waiting)
         view: dict[str, Any] = {
-            "blurb": "", "reply_style": "full", "voice": "", "read_aloud": False,
+            "blurb": "", "reply_style": "full", "voice": "",
             "notify": False, "ask_before_members": False, "pinned": self._chief_pinned(), "hidden": False, "draft_first": self._settings.get("raphael_draft_first"),
             "id": 0,
             "chief": self.store.is_chief(0),
@@ -922,11 +917,38 @@ class MembersService:
         language = self._ui_language(params)
         offer = routine_template(group.sources if group else (), language)
         if params.get("greet") is True:
-            self._history.add(session_id=f"greeting-{member.id}", question="", route="greeting", prefix="",
-                              text=GREETINGS[language].format(name=member.name), status="done", source="greeting",
-                              member_id=member.id)
+            self.greeting(member.id, language)
         self._changed()
         return {"member": self.view_of(member), "routine_offer": offer}
+
+    async def _greet(self, params: dict) -> dict:
+        member_id = self._member_id(params)
+        owner = self._conn.execute(
+            "SELECT 1 FROM agent_turns WHERE member_id=? AND scope='private' AND trim(question)<>'' "
+            "AND source NOT IN ('greeting','member','routine','resumed') LIMIT 1", (member_id,),
+        ).fetchone()
+        running = self._conn.execute(
+            "SELECT 1 FROM agent_turns WHERE member_id=? AND source='greeting' AND status='running' LIMIT 1",
+            (member_id,),
+        ).fetchone()
+        if owner or running:
+            raise invalid_params("greeting requires a conversation without an owner message or running greeting")
+        failed = self._conn.execute(
+            "SELECT id FROM agent_turns WHERE member_id=? AND source='greeting' AND status='error'", (member_id,),
+        ).fetchall()
+        result = self.greeting(member_id, self._ui_language(params))
+        for row in failed:
+            self._history.delete(row['id'])
+            if self._notify is not None:
+                self._notify("agent.turn", {"turn_id": row['id'], "member_id": member_id})
+        return result
+
+    async def _member_template(self, params):
+        from .templates import handle
+        try:
+            return await handle(self, params)
+        except MemberError as error:
+            raise _rpc_error(error) from None
 
     async def set_my_job(self, member_id: int, arguments: dict) -> dict:
         """A new member saves the job its owner has just given it. Once only: after that the job is the owner's to edit."""
@@ -981,27 +1003,33 @@ class MembersService:
             await self.remove_computer_data(member_id, params.get("computer_host"))
         member = self.store.member(member_id)
         assert member is not None
-        self._background.forget_member(member_id)
+        self.deleting.add(member_id)
         try:
-            self._history.clear_member(member_id)
-        except sqlite3.Error as exc:
-            logger.warning("Could not delete a member's conversation: %s", type(exc).__name__)
-        if self._memory is not None:
-            await self._memory.forget_member(member_id)
-        for skill in self.capabilities.skills(member_id):
-            self.capabilities.delete_skill(member_id, skill["id"])
-        # Uploaded avatars can be shared by a duplicated profile.
-        if not any(other.id != member_id and other.avatar == member.avatar for other in self.store.members()):
-            self._remove_picture(member.avatar)
-        deleted = self.store.delete_member(member_id)
-        if self._viewing == member_id:
-            self._viewing = None
-        if deleted:
-            await self.webhooks.sync()
-            self._changed()
-            self._changed("routines.changed", member_id)
-        logger.info("A member was deleted")
-        return {"deleted": deleted}
+            if self.remove_messaging is not None:
+                await self.remove_messaging(member_id)
+            self._background.forget_member(member_id)
+            try:
+                self._history.clear_member(member_id)
+            except sqlite3.Error as exc:
+                logger.warning("Could not delete a member's conversation: %s", type(exc).__name__)
+            if self._memory is not None:
+                await self._memory.forget_member(member_id)
+            for skill in self.capabilities.skills(member_id):
+                self.capabilities.delete_skill(member_id, skill["id"])
+            # Uploaded avatars can be shared by a duplicated profile.
+            if not any(other.id != member_id and other.avatar == member.avatar for other in self.store.members()):
+                self._remove_picture(member.avatar)
+            deleted = self.store.delete_member(member_id)
+            if self._viewing == member_id:
+                self._viewing = None
+            if deleted:
+                await self.webhooks.sync()
+                self._changed()
+                self._changed("routines.changed", member_id)
+            logger.info("A member was deleted")
+            return {"deleted": deleted}
+        finally:
+            self.deleting.discard(member_id)
 
     async def _set_primary(self, params: dict) -> dict:
         member_id = _whole(params, "id")
@@ -1434,7 +1462,6 @@ class MembersService:
             "group_delete": ("刪除資料夾；成員保留並移至未分類", "フォルダーを削除しメンバーは保持"),
             "room_members": ("替換群聊成員；移除下列成員", "グループのメンバーを置換"),
             "room_delete": ("刪除群聊及全部訊息", "グループと全メッセージを削除"),
-            "conversation_delete": ("刪除對話及全部紀錄", "会話と全記録を削除"),
             "conversation_clear": ("清除此對話的全部紀錄", "会話の全記録を消去"),
             "member_skill_delete": ("刪除技能套件與授權", "スキルと権限を削除"),
             "member_skill_undo": ("???????????????", "???????????????????"),
@@ -1583,7 +1610,7 @@ class MembersService:
 
                 changes = {key: value for key, value in params.items() if key in ("name", "role", "personality", "instructions")}
                 preferences = {"draft_first": "raphael_draft_first", "model": "agent_model", "pinned": "chief_pinned",
-                               "read_aloud": "tts_enabled", "voice": "tts_fish_voice"}
+                               "voice": "tts_fish_voice"}
                 # Profile drafts include these empty fields for ordinary members.
                 for field in ("blurb", "group", "avatar_preset"):
                     if params.get(field) == "":
@@ -1666,7 +1693,11 @@ class MembersService:
             raise invalid_params("This routine is not a webhook")
         if type(params.get("reveal", False)) is not bool:
             raise invalid_params("reveal must be a boolean")
-        return await self.webhooks.details(routine.id, reveal=params.get("reveal", False))
+        if "url" in params:
+            return await self.webhooks.test_external(routine.id, params["url"])
+        if type(params.get("rotate", False)) is not bool:
+            raise invalid_params("rotate must be a boolean")
+        return await self.webhooks.details(routine.id, reveal=params.get("reveal", False), rotate=params.get("rotate", False))
 
     def _finish_run(self, turn_id: int) -> None:
         run = self._conn.execute(
@@ -1961,9 +1992,6 @@ class MembersService:
         return task_id
 
     async def aclose(self) -> None:
-        for task in self._speech_tasks:
-            task.cancel()
-        await asyncio.gather(*self._speech_tasks, return_exceptions=True)
         ticking, self._ticking = self._ticking, None
         if ticking is not None and not ticking.done():
             ticking.cancel()

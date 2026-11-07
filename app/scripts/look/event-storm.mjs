@@ -30,11 +30,14 @@ export async function eventStorm(page, options) {
       hovered: hover ? scroller.querySelector('[data-id="200000"] .preview-card') : null };
     if (roster) {
       // Idle and sleeping faces intentionally have no loops; visible working faces must have them.
-      seen.motionRequired = [...document.querySelectorAll('.mb-row svg.slime')].some(svg => {
+      // A face off screen, as in the closed narrow drawer, pauses its loops to save the main thread.
+      const onScreen = svg => {
         const box = svg.getBoundingClientRect();
-        return box.width > 0 && box.height > 0 && ['thinking', 'working', 'searching', 'computer', 'waiting', 'blocked', 'error'].includes(svg.dataset.state);
-      });
-      seen.animations = [...document.querySelectorAll('.mb-row svg.slime')].flatMap(svg => {
+        return box.width > 0 && box.height > 0 && box.right > 0 && box.bottom > 0 && box.left < innerWidth && box.top < innerHeight;
+      };
+      const faces = [...document.querySelectorAll('.mb-row svg.slime')].filter(onScreen);
+      seen.motionRequired = faces.some(svg => ['thinking', 'working', 'searching', 'computer', 'waiting', 'blocked', 'error'].includes(svg.dataset.state));
+      seen.animations = faces.flatMap(svg => {
         const member = window.__look.data.members.find(member => member.id === Number(svg.dataset.slimeMember));
         if (member) member.activity = svg.dataset.state;
         return svg.closest('.slime-surface').getAnimations({ subtree: true }).filter(animation => animation.playState === 'running' && animation.effect.getTiming().iterations === Infinity)

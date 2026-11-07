@@ -47,7 +47,8 @@ export async function baseline(page, revision) {
       const original = document.createElement("div"); original.innerHTML = faces[index];
       for(const name of ['--slime-color','--slime-tempo']) {
         const value=original.querySelector('svg.slime').style.getPropertyValue(name);
-        svg.style.setProperty(name,value);svg.closest('.slime-surface').style.setProperty(name,value);
+        // Revisions before the shared surface drew a bare svg.
+        svg.style.setProperty(name,value);svg.closest('.slime-surface')?.style.setProperty(name,value);
       }
       svg.dataset.lookAt = original.querySelector("svg.slime").dataset.lookAt ?? "700";
     });
@@ -93,7 +94,8 @@ export function slimeParts() {
   let samples = 0;
   for (const svg of document.querySelectorAll('.look-slime-board svg.slime')) {
     const surface = svg.closest('.slime-surface'), host = surface.parentElement;
-    const animations = surface.getAnimations({subtree: true});
+    // The eyes easing toward the pointer (slime-follow.ts) answer the pointer; they are no resting animation (R-UI-99).
+    const animations = surface.getAnimations({subtree: true}).filter(animation => !animation.effect?.target?.matches?.('.slime-follow'));
     const state = svg.dataset.state, size = host.getBoundingClientRect().width;
     if (surface.querySelector('.slime-drop, .slime-bubble, .slime-cel-prop')) failures.push({state, size, part: 'detached droplet or bubble'});
     if (['idle', 'sleeping'].includes(state) && animations.length) failures.push({state, size, part: 'resting animation'});
@@ -236,7 +238,7 @@ export async function idleCost(page, seconds, revision) {
   const after = await main(), cpuAfter = await cpu();
   const percent = name => Number(((after[name] - before[name]) / seconds * 100).toFixed(1));
   const layers = await page.evaluate(() => document.querySelectorAll("svg.slime").length);
-  const avatarNodes = await page.evaluate(() => [...document.querySelectorAll('svg.slime')].reduce((count,svg)=>count+svg.closest('.slime-surface').querySelectorAll('*').length,0));
+  const avatarNodes = await page.evaluate(() => [...document.querySelectorAll('svg.slime')].reduce((count,svg)=>count+(svg.closest('.slime-surface') ?? svg).querySelectorAll('*').length,0));
   await client.detach(); await browser.detach();
   if (revision) await page.evaluate(() => window.__slimeRestore());
   return { check: "idle-cost", revision: revision ?? "working-tree", seconds, slimes: layers, avatarNodes, mainThread: percent("TaskDuration"), style: percent("RecalcStyleDuration"), layout: percent("LayoutDuration"), script: percent("ScriptDuration"), browser: Number(((cpuAfter - cpuBefore) / seconds * 100).toFixed(1)) };

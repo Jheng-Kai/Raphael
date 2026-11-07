@@ -20,7 +20,7 @@
 .cn-field { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
 .cn-hint { font-size: var(--fs-xs); line-height: 1.45; color: var(--text-3); }
 .cn-field .field { width: 100%; }
-.cn-keep { display: flex; align-items: flex-start; gap: var(--sp-2); font-size: var(--fs-xs); color: var(--text-2); }
+.cn-keep { display: flex; align-items: flex-start; gap: var(--sp-2); font-size: var(--fs-xs); color: var(--text-2); text-wrap: pretty; }
 .cn-keep > .i { flex: none; margin-top: 2px; color: var(--text-3); }
 .cn-setup .note { margin: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
 /* The line of a failure wraps whole: a sentence that says what to do is never cut off at the dialog's edge. */

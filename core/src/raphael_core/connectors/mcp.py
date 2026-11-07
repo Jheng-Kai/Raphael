@@ -58,7 +58,7 @@ class ManagedMcp:
     async def _request(self, method: str, **kwargs):
         url = self.url
         for _ in range(5):
-            response = await self.http.response(method, url, headers=self._headers, **kwargs)
+            response = await self.http.response(method, url, headers=self._headers, max_bytes=2_000_000, **kwargs)
             if response.status_code not in (301, 302, 303, 307, 308):
                 return response
             from urllib.parse import urljoin

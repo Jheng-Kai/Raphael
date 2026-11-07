@@ -10,6 +10,7 @@ import { isTopLayer, registerDismissal } from "./dismissals";
 import { iconHTML } from "./connections";
 import { describeError } from "./format";
 import { t } from "./i18n";
+import type { MessageKey } from "./i18n/zh-TW";
 import type { ServiceIconId } from "./service-icons";
 import type { BrainSettings, ServiceOption, ServicesStatus } from "./types";
 import { type IconName, actionRow, btn, esc, fieldHTML, ico, iconButton, leave, note, st, tg, toaster } from "./ui";
@@ -61,6 +62,21 @@ const MARKS: Record<string, ServiceIconId> = {
 
 /** App-owned pictures for local reading and the two model choices. */
 const LOCAL_ICONS: Record<string, IconName> = { builtin: "monitor", same: "sparkle", model: "bot" };
+
+/**
+ * What choosing a service means, in one line: what it costs and what it needs (owner, 2026-11-07: a choice that only says
+ * 「使用」 means nothing). Shown under the service in the list and at the top of its page.
+ */
+const WHY: Record<string, MessageKey> = {
+  "search.openrouter": "services.why.searchOpenrouter", "search.brave": "services.why.searchBrave", "search.tavily": "services.why.searchTavily",
+  "search.exa": "services.why.searchExa", "search.searxng": "services.why.searchSearxng",
+  "read.builtin": "services.why.readBuiltin", "read.jina": "services.why.readJina", "read.firecrawl": "services.why.readFirecrawl", "read.tavily": "services.why.readTavily",
+  "pdf.builtin": "services.why.pdfBuiltin", "pdf.openrouter": "services.why.pdfOpenrouter",
+  "voice.fish": "services.why.voiceFish",
+  "vision.same": "services.why.visionSame", "vision.model": "services.why.visionModel",
+};
+const tr = t as unknown as (key: MessageKey) => string;
+const whyOf = (kind: Capability, id: string): string => (WHY[`${kind}.${id}`] ? tr(WHY[`${kind}.${id}`]!) : "");
 
 /** The name of a service: 內建 for this computer's own, its brand for the others, its id for one this app does not know yet. */
 export const serviceName = (id: string): string => (id === "builtin" ? t("services.builtin") : (NAMES[id] ?? id));
@@ -173,8 +189,10 @@ export function serviceRows(kind: Capability, status: ServicesStatus | null, bra
   if (kind === "vision") {
     const model = status.vision.model;
     const sees = status.vision.supports_images !== false;
+    // The model that really reads the images: a command-line brain never does, so the core names the one it falls back to.
+    const resolved = shortModel(status.vision.resolved_model ?? "");
     return [
-      { id: VISION_SAME, name: t("services.sameAsAnswer"), note: shortModel(brain?.agent_model ?? ""), chosen: chosen === VISION_SAME, usable: chosen !== VISION_SAME || sees, mark: null },
+      { id: VISION_SAME, name: t("services.sameAsAnswer"), note: chosen === VISION_SAME ? resolved : "", chosen: chosen === VISION_SAME, usable: chosen !== VISION_SAME || sees, mark: null },
       { id: VISION_MODEL, name: t("services.visionModel"), note: shortModel(model), chosen: chosen === VISION_MODEL, usable: model !== "" && sees, mark: null },
     ];
   }
@@ -188,10 +206,10 @@ export function serviceRows(kind: Capability, status: ServicesStatus | null, bra
   }));
 }
 
-/** The words that say which service is in use, small and muted, before a row's switch. */
+/** The words that say which service is in use, whole, under a row's name: never a cut name or a raw model id. */
 function nowLabel(kind: Capability, status: ServicesStatus | null, brain: BrainSettings | null): string {
   const chosen = chosenOf(kind, status, brain);
-  if (kind === "vision") return chosen === VISION_SAME ? t("services.sameAsAnswer") : shortModel(status?.vision.model ?? brain?.vision_model ?? "");
+  if (kind === "vision") return shortModel(status?.vision.resolved_model || status?.vision.model || brain?.vision_model || "") || t("services.sameAsAnswer");
   return serviceName(chosen);
 }
 
@@ -218,11 +236,11 @@ function itemHTML(entry: (typeof CAPABILITIES)[number], v: ServicesView, brain: 
   return (
     `<div class="cs-item svc-item${on ? "" : " off"}" data-svc="open" data-id="${id}">` +
     btn(
-      `${capIcon(entry.icon)}<span class="tx"><span class="nm">${esc(name)}</span><span class="ds">${esc(entry.about())}</span></span>`,
+      `${capIcon(entry.icon)}<span class="tx"><span class="nm">${esc(name)}</span><span class="ds">${esc(entry.about())}</span>` +
+        `<span class="svc-now">${esc(t("services.nowUsing", { p0: nowLabel(entry.kind, status, brain) }))}</span></span>`,
       "cs-open",
-      ` data-svc="open" data-id="${id}" data-k="svc-open:${id}" aria-haspopup="dialog" title="${esc(t("services.open", { p0: name }))}"`,
+      ` data-svc="open" data-id="${id}" data-k="svc-open:${id}" aria-haspopup="dialog"`,
     ) +
-    `<span class="svc-now">${esc(nowLabel(entry.kind, status, brain))}</span>` +
     tg(on, t("services.switch", { p0: name }), ` data-svc="toggle" data-id="${id}" data-k="svc-toggle:${id}"${status && v.busy === null ? "" : " disabled"}`) +
     `<span class="chev" aria-hidden="true">${ico("right")}</span></div>`
   );
@@ -288,12 +306,13 @@ function listViewHTML(entry: (typeof CAPABILITIES)[number], v: ServicesView, bra
   const rows = serviceRows(entry.kind, status, brain)
     .map((row) => {
       const mark = row.mark ? iconHTML(row.name, row.mark, "md") : `<span class="mono md" aria-hidden="true">${ico(LOCAL_ICONS[row.id] ?? "plug")}</span>`;
+      const why = whyOf(entry.kind, row.id);
       return (
         `<div class="cs-item svc-srv" data-svc="service" data-service="${esc(row.id)}">` +
         btn(
-          `<span class="ic">${mark}</span><span class="tx"><span class="nm">${esc(row.name)}</span>${row.note ? `<span class="ds">${esc(row.note)}</span>` : ""}</span>`,
+          `<span class="ic">${mark}</span><span class="tx"><span class="nm">${esc(row.name)}${row.note ? `<span class="svc-tag">${esc(row.note)}</span>` : ""}</span>${why ? `<span class="ds">${esc(why)}</span>` : ""}</span>`,
           "cs-open",
-          ` data-svc="service" data-service="${esc(row.id)}" data-k="svc-svc:${esc(row.id)}" title="${esc(row.name)}"`,
+          ` data-svc="service" data-service="${esc(row.id)}" data-k="svc-svc:${esc(row.id)}"`,
         ) +
         `<span class="svc-chk"${row.chosen ? ` role="img" aria-label="${esc(t("services.inUse"))}">${ico("check")}` : ' aria-hidden="true">'}</span>` +
         `<span class="chev" aria-hidden="true">${ico("right")}</span></div>`
@@ -326,11 +345,13 @@ function subViewHTML(entry: (typeof CAPABILITIES)[number], service: string, v: S
   }
   const inUse = !!row?.chosen && on;
   const idle = v.busy !== null;
+  const why = whyOf(entry.kind, service);
+  // The button says what it does: 「改用 Brave」, or 「使用中」 once it is the one.
   const acts = actionRow({
     cls: "svc-acts", sticky: true,
-    primary: { label: esc(t("services.use")), attrs: ` data-svc="use" data-service="${esc(service)}" data-k="svc-use"${inUse || !row?.usable || idle ? " disabled" : ""}` },
+    primary: { label: esc(inUse ? t("services.inUse") : t("services.useThis", { p0: name })), attrs: ` data-svc="use" data-service="${esc(service)}" data-k="svc-use"${inUse || !row?.usable || idle ? " disabled" : ""}` },
   });
-  return head + fields + (entry.kind === "vision" && service === VISION_SAME && !row?.usable ? noticeHTML("sameVision") : "") + acts;
+  return head + (why ? `<p class="cs-desc svc-why">${esc(why)}</p>` : "") + fields + (entry.kind === "vision" && service === VISION_SAME && !row?.usable ? noticeHTML("sameVision") : "") + acts;
 }
 
 /**

@@ -1,5 +1,9 @@
 # Raphael feature map
 
+## External-input security boundaries (2026-11-05)
+
+See [Agent and external-input security boundaries](security-boundaries.md) for current allowlist checks, bounded messaging/webhook/MCP ingress, nonce-bound tunnel probes, OAuth callback admission and the offline verification limits.
+
 ## Member panel tabs (2026-11-05)
 
 The owner request of 2026-11-05 introduces R-PANEL-01 through R-PANEL-04. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for Details / Library / Computer navigation, shared file/work controls, truthful local Docker recovery, the selected scene matrix and native/judge limits. [Conversation](conversation.md#member-panel-destinations-2026-11-05) and [Daily work](daily-work.md#work-and-files-in-the-member-panel-2026-11-05) map the affected consumers.
@@ -217,9 +221,11 @@ apply.
 
 ## Sidebar redesign (2026-10-30)
 
-One 296px sidebar has no brand: a collapse icon and a plus share the top row, with a
-standing search box below. It collapses to a 72px rail of faces (hover names a face; the plus moves
-above the owner). The chief, without a star, is the first ordinary row; any pinned member leaves the
+One 296px sidebar has no brand. Search and plus stand side by side at the top as Grok Bot's two
+36px soft round buttons (2026-11-06); search opens a card in the middle of the dimmed window with the
+field, every member as face, name and last line, message results once words are typed, and 新增成員
+at its foot (Enter opens the first row). The edge drags the list down to a 72px rail of faces (hover
+names a face; search and plus move above the owner). The chief, without a star, is the first ordinary row; any pinned member leaves the
 rows for a larger centered face above its name at the top, over one continuous list of member rows and unframed group face grids (up to four faces).
 Only owner-created folders have headings; their chevrons appear on hover. Times
 appear on hover, and current-page selection remains unique. The footer is a Notion-like list without a
@@ -233,7 +239,7 @@ existing picker/crop component and presets; footer and owner messages share iden
 
 Selected acceptance: sidebar, sidebar-folders, sidebar-folded, sidebar-many,
 sidebar-unread, sidebar-drawer, sidebar-search, sidebar-chief-pinned, sidebar-rail, sidebar-plus, sidebar-group-avatar,
-sidebar-group-avatar-pair, sidebar-group-avatar-four, sidebar-owner, sidebar-owner-upload, chat, details, profile, plugins-installed,
+sidebar-group-avatar-pair, sidebar-group-avatar-four, sidebar-owner, sidebar-owner-upload, sidebar-owner-crop, sidebar-owner-crop-held, chat, details, profile, plugins-installed,
 all home-* scenes (including full/sparse/empty, edge-only hover and month gestures), both themes at 1120,720,1920x1080,1280x800. Home's emblem is 128px (96px compact), its report is --fs-h1 and its date is unchanged. Check these scenes in black at 1120,720,1920x1080 too.
 Run `npm run verify -- --core`, then the selected look matrix and inspect every
 contact sheet/relevant full-size image. Native readable-layout, locale-sweep and
@@ -341,8 +347,8 @@ from format.ts, with explicit zh-TW, ja and en expectations.
 
 The existing details-alignment, conversation-scroll-edge, home-lead-width,
 dictation-overview, dictation-layout, skill-learned-notice and growing-skills checks
-cover these contracts. toast-clearance covers quick-cleared, composer-learn,
-conversation-delete-main and member-delete. Native deletion audit uses the same
+cover these contracts. toast-clearance covers quick-cleared, composer-learn
+and member-delete. Native deletion audit uses the same
 rendered clearance check at every member checkpoint. Native skill-growth rejects a
 notice before its producing reply and checks the learned skill's Chinese date.
 No brain, tool, core or Rust behavior changed.
@@ -443,7 +449,7 @@ Appearance uses the shared theme/language dropdown rows; dictionary entries reta
 Representative main-page acceptance (all consumers of the shared layout):
 
 ```powershell
-npm run look -- home home-empty home-720 home-many home-motion chat details details-routines sidebar sidebar-folders dictation-overview dictation-history dictation-history-day dictation-dictionary dictation-keyboard profile appearance models dictation agent messaging data about plugins-installed plugins-store usage automations-calendar automations-day automation-weekly --theme both --width 1120,720,1920x1080
+npm run look -- home home-empty home-team home-many home-motion chat details details-routines sidebar sidebar-folders dictation-overview dictation-history dictation-heat-press dictation-dictionary dictation-keyboard profile appearance models dictation agent messaging about plugins-installed plugins-store usage automations-calendar automations-day automation-weekly --theme both --width 1120,720,1920x1080
 ```
 
 The dictionary scene uses twelve words to expose column count and wrapping; the
@@ -491,7 +497,7 @@ both themes. 1280x800 leaves 64 logical pixels for a taskbar on a 1536x864 deskt
 840/860 heights leave only 24/4px. Long Settings catalogs intentionally scroll.
 
 ```powershell
-npm run look -- home home-empty home-many home-motion chat details details-closed member-text room-text no-naming sidebar dictation-overview dictation-history dictation-dictionary profile appearance models dictation agent messaging data about plugins-installed plugins-store appearance-menu appearance-black theme-clarity usage automations-calendar onboarding --theme both --width 1120,720,1920x1080,1180x780,1280x800
+npm run look -- home home-empty home-many home-motion chat details details-closed member-text room-text no-naming sidebar dictation-overview dictation-history dictation-dictionary profile appearance models dictation agent messaging about plugins-installed plugins-store appearance-menu appearance-black theme-clarity usage automations-calendar onboarding --theme both --width 1120,720,1920x1080,1180x780,1280x800
 ```
 
 Home, dictation, thread-measure, settings-alignment, sidebar-shell and welcome
@@ -523,7 +529,7 @@ checks turn-one recall on turn 25 and an entry in only that member's MEMORY.md. 
 
 ## Owner round 7 contracts
 
-Owner round 7 extended the affected journeys with home-lead-width, onboarding-abilities-hero, details-quick-once and conversation-scroll-edge. The sidebar decision replaces sidebar-count-alignment and team-card-lines with sidebar-shell and group-avatar checks. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800.
+Owner round 7 extended the affected journeys with home-lead-width, onboarding-abilities (replacing onboarding-abilities-hero since 2026-11-07, beside onboarding-tools and onboarding-services), details-quick-once and conversation-scroll-edge. The sidebar decision replaces sidebar-count-alignment and team-card-lines with sidebar-shell and group-avatar checks. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800.
 
 ## Connect and Docker acceptance (2026-10-30)
 
@@ -739,6 +745,36 @@ discovery and document dialogs; see [Members](members.md#localized-skill-origins
 The same selected twenty-scene skill matrix checks raw-source leakage and one learned
 origin/date line.
 
+
+## Shared owner vault (2026-11-05)
+
+See [Settings and appearance](settings-appearance.md#shared-owner-vault-2026-11-05)
+for R-VAULT-01..05, Safety navigation, shared Credential Manager entries, transient
+CSV import and mandatory payment consent. The merge follow-up maps all nine vault
+scenes plus calm-thread in the ten-scene selected look matrix; the feature entry
+contains the executable look command used by judge context discovery.
+
 ## Calm conversations (owner, 2026-11-05)
 
 See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) for R-UI-101 and R-CLI-07, the selected eleven-scene matrix and offline/native boundaries.
+
+
+## Colleagues (2026-11-05)
+
+See [Members](members.md#colleague-recipes-and-goal-first-greeting-2026-11-05), [Connections](connections-mcp.md#named-connected-accounts-2026-11-05), [Automations](automations.md#owner-provided-external-webhook-tunnels-2026-11-05) and [Daily work](daily-work.md#native-output-folder-choice-2026-11-05) for R-COLLEAGUE-01..06 and the selected scene matrix. Recipe preview, imports, account labels and probes reuse existing owner UI/store boundaries; native/OAuth/SSH/live outcomes stay separate from fakes.
+
+## Desktop security and release path (2026-11-05)
+
+[Security boundary](security-boundary.md) maps R-SEC-01 through R-SEC-05 and R-CARD-11, native
+attachment associations, release path validation, publication commit binding and
+the reviewed shell/webview/IPC/update surfaces. Follow-up 1 adds composer-only page text
+placement; see conversation.md for the selected scene matrix.
+
+
+## Offline storage and diagnostic security (2026-11-05)
+
+R-SEC-FILES-01..03 and R-SEC-LOG-01 are core-only boundaries. See the appended
+security sections in member-computer.md, settings-appearance.md and conversation.md.
+Use the normal pytest suites for computer, services, memory, CLI diagnostics, vault,
+member homes/panel, database and architecture. No rendered UI changed, so look/judge
+are outside this local scope. Live/provider/SSH/native checks remain unverified.

@@ -119,8 +119,7 @@ def test_quick_kind_survives_reopen_and_cannot_be_renamed(tmp_path):
         store = Conversations(conn)
         assert store.quick() == quick
         assert store.get(quick)["kind"] == "quick"
-        with pytest.raises(RpcError, match="quick"):
-            store.rename(quick, "A different purpose")
+        assert not hasattr(store, "rename")
 
 
 async def test_overlay_retains_full_quick_history_below_half_window(make_rig, client):

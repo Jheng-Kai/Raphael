@@ -1,5 +1,8 @@
 /* Models shares the service list's surfaces, focus states and type scale. */
 .models-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-6); margin-top: var(--sp-5); }
+/* The two views are words side by side with the open one in a soft pill, as the member panel's tabs (2026-11-05). */
+.models-page > .tabs.plain { justify-self: start; }
+.models-page > .tabs.plain .tab { padding: 0 var(--sp-3); border-radius: var(--r-pill); }
 .models-content:not([hidden]) { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-6); }
 .models-content > .sgroup { margin: 0; }
 .pv, .cli-accounts { container: models / inline-size; }
@@ -20,7 +23,7 @@
 .pv-card .ds { font-size: var(--fs-sm); color: var(--text-2); line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pv-card .chev { display: inline-flex; color: var(--text-3); }
 .btn.pv-create { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: var(--sp-3); min-height: 96px; padding: var(--sp-4); border: 1px dashed var(--edge); border-radius: var(--r-lg); background: var(--panel); text-align: start; }
-.btn.pv-create:hover:not(:disabled), .btn.pv-create:active:not(:disabled) { border-color: var(--hover-edge); }
+.btn.pv-create:hover:not(:disabled), .btn.pv-create:active:not(:disabled) { background: var(--hover); }
 /* The add card uses a 24px mark, matching the provider artwork beside it. */
 .pv-create .i { inline-size: 24px; block-size: 24px; }
 .pv-add { grid-template-columns: 24px minmax(0, 1fr) auto; gap: var(--sp-3); padding: var(--sp-4); }

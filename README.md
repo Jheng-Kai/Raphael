@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="app/src-tauri/icons/128x128@2x.png" width="112" alt="Raphael">
+  <img src="app/public/brand/raphael-portrait.png" width="112" alt="Raphael">
 </p>
 
 <h1 align="center">Raphael</h1>

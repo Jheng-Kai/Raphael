@@ -17,7 +17,7 @@
    (its dialogs and menus), so no other page changes with them (they are not in :root). The faces
    are drawn by the markup at `--av: <px>` (members.ts, avatar.ts); the rules below set `--av` again
    with !important where a face must follow these sizes, which the inline value would otherwise win. */
-.page-agent, .side, .mb-scrim, .menu.mb-avpop, .menu.mb-menu, .menu.mb-toolpop, .toasts {
+.page-agent, .side, .mb-scrim, .menu.mb-avpop, .menu.mb-menu, .menu.mb-toolpop, .menu.side-search, .toasts {
   --pa-t: clamp(0px, calc(100vw - 960px), 960px);
   --pa-u: calc(var(--pa-t) / 960);
   /* the three columns */
@@ -25,13 +25,15 @@
   /* the member column */
   --pa-pad: var(--sp-2);
   --pa-tool: calc(30px + 18 * var(--pa-u));
-  --pa-gh-h: calc(30px + 10 * var(--pa-u));
+  /* A folder's heading is one quiet line: the members are what matters (owner, 2026-11-07). */
+  --pa-gh-h: 24px;
   --pa-gh-fs: var(--fs-2xs);
-  --pa-gh-btn: calc(24px + 8 * var(--pa-u));
+  --pa-gh-btn: 20px;
   --pa-row-h: 64px;
   --pa-row-av: 40px;
   --pa-row-gap: var(--sp-2);
-  --pa-row-name: var(--fs-sm);
+  /* Grok Bot's measured type (owner, 2026-11-07: learn its type and spacing): a sidebar name 15 px bold, its preview 13. */
+  --pa-row-name: var(--fs-md);
   --pa-row-role: var(--fs-2xs);
   --pa-row-pv: var(--fs-xs);
   --pa-row-r: var(--r-sm);
@@ -47,15 +49,17 @@
   --pa-pill-fs: var(--fs-sm);
   --pa-gap: var(--sp-5);
   --pa-gap-in: var(--sp-3);
+  /* Messages are 15 px on a 22 px line, as Grok Bot's. */
   --pa-fs-b: var(--fs-md);
-  --pa-lh-b: 24px;
+  --pa-lh-b: 22px;
   --pa-fs-a: var(--fs-md);
-  --pa-lh-a: 24px;
+  --pa-lh-a: 22px;
   --pa-bpy: var(--sp-3);
   --pa-bpx: var(--sp-4);
   --pa-ra-face: calc(26px + 10 * var(--pa-u));
   --pa-ra-gap: calc(10px + 4 * var(--pa-u));
-  --pa-sys: var(--fs-xs);
+  /* System lines and day dividers are 12 px grey, as Grok Bot's. */
+  --pa-sys: var(--fs-2xs);
   --pa-sys-face: calc(18px + 6 * var(--pa-u));
   --pa-day: var(--fs-2xs);
   --pa-fs-d: var(--fs-sm);
@@ -81,11 +85,10 @@
   /* the details panel */
   --pa-dpad: var(--sp-4);
   --pa-dgap: var(--sp-5);
-  --pa-dclose: calc(34px + 14 * var(--pa-u));
   --pa-det-av: calc(64px + 32 * var(--pa-u));
   --pa-dname: var(--fs-lg);
   --pa-drole: var(--fs-xs);
-  --pa-dtab: var(--fs-sm);
+  --pa-dtab: var(--fs-xs);
   --pa-dtab-h: calc(30px + 12 * var(--pa-u));
   --pa-dlabel: var(--fs-xs);
   --pa-dfs: var(--fs-sm);
@@ -95,7 +98,8 @@
   /* the dialogs and the menus */
   --pa-dlg-w: calc(420px + 100 * var(--pa-u));
   --pa-dlg-pad: calc(18px + 8 * var(--pa-u));
-  --pa-dlg-h2: var(--fs-lg);
+  /* Dialog titles 16 px, weight 600 (Grok Bot's 15-16). */
+  --pa-dlg-h2: 16px;
   --pa-dlg-lab: calc(76px + 28 * var(--pa-u));
   --pa-new-av: calc(64px + 24 * var(--pa-u));
   --pa-preset: calc(40px + 12 * var(--pa-u));
@@ -155,19 +159,31 @@
 .ans { margin: 0; font: var(--pa-fs-a)/var(--pa-lh-a) var(--voice); color: var(--text); overflow-wrap: anywhere; user-select: text; }
 .ra-body > .ans { justify-self: start; max-width: 100%; padding: var(--pa-bpy) var(--pa-bpx); border: 0; border-radius: var(--r-lg); background: var(--panel); white-space: pre-wrap; }
 .ans.progress { color: var(--text-2); }
-.chat-message { display: flex; flex-direction: column; align-items: flex-start; width: fit-content; min-width: 0; max-width: 100%; position: relative; }
+/* As Grok Bot's, a message's actions sit beside its bubble, centred on it: the message is one column of its parts with
+   the actions in a second (a first, for the owner's), on the bubble's row. */
+/* The first column stops at the bubble's own limit: a long paragraph would otherwise stretch the message to the whole
+   column, so the empty room beside the bubble answered the pointer and a right click, and the actions stood far from it
+   (measured: 900 px for a 500 px bubble). */
+.chat-message { display: grid; grid-template-columns: fit-content(60ch) auto; column-gap: var(--sp-1); justify-items: start; align-items: start; width: fit-content; min-width: 0; max-width: 100%; position: relative; }
+.chat-message > * { grid-column: 1; min-width: 0; max-width: 100%; }
+.chat-message > .message-actions { grid-column: 2; grid-row: 1; align-self: center; }
+/* A message with no actions beside it (a conversation between members) keeps no gap for them. */
+.chat-message:not(:has(> .message-actions)) { column-gap: 0; }
+.chat-message:has(> .routine-origin) > .message-actions { grid-row: 2; }
 .chat-message > .turn-event { width: fit-content; max-width: 100%; margin-inline: auto; }
-.owner-message { align-items: flex-end; margin-inline-start: auto; max-width: min(var(--pa-bw), 78%); }
+.owner-message { grid-template-columns: auto fit-content(var(--pa-bw)); justify-items: end; margin-inline-start: auto; max-width: min(var(--pa-bw), 78%); }
+.owner-message > * { grid-column: 2; }
+.owner-message > .message-actions { grid-column: 1; }
 .owner-message .bubble { box-sizing: border-box; max-width: 100%; }
 .mb-chat[data-member-bubble] .owner-message { --bubble: var(--member-bubble); }
 .mb-chat[data-member-bubble="light"] .owner-message { --on-bubble: var(--on-tint-light); }
 .mb-chat[data-member-bubble="dark"] .owner-message { --on-bubble: var(--on-tint-dark); }
 /* Words selected in the owner's coloured bubble invert it, as the bubble's own colours do; a member's answers keep the shared selection. */
 .mb-chat[data-member-bubble] .owner-message :is(.bubble, .bubble *)::selection { background: var(--on-bubble); color: var(--member-bubble); }
-/* The member's colour also marks the controls of its conversation: send, stop and its computer (memberAccent in owner-bubble.ts). */
-.mb-chat[data-member-bubble] :is(.composer .cmp-pair, .btn.ra-tool[data-act="computer"]) { --accent-icon: var(--member-accent); --accent-text: var(--member-accent); }
-.mb-chat[data-member-bubble] .btn.ra-tool[data-act="computer"] { color: var(--member-accent); }
-.chat-message > .ans { padding: var(--pa-bpy) var(--pa-bpx); border: 0; border-radius: var(--r-lg); background: var(--panel); }
+/* The member's colour also marks the controls of its conversation: send and stop (memberAccent in owner-bubble.ts). */
+.mb-chat[data-member-bubble] .composer .cmp-pair { --accent-icon: var(--member-accent); --accent-text: var(--member-accent); }
+/* A reply is a fill with a barely seen edge, as every surface of Grok Bot's is; drawn inside, so no size changes. */
+.chat-message > .ans { padding: var(--pa-bpy) var(--pa-bpx); border: 0; border-radius: var(--r-lg); background: var(--panel); box-shadow: inset 0 0 0 1px var(--ans-edge); }
 .message-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .ans .message-text { white-space: normal; }
 .owner-message .message-text { white-space: pre-wrap; }
@@ -187,7 +203,6 @@
 .message-link { overflow-wrap: anywhere; color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 :root[data-keys] .message-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: var(--r-sm); }
 .message-actions { display: flex; flex: none; align-items: center; justify-content: flex-start; gap: var(--sp-1); height: 28px; opacity: 0; }
-.owner-message > .message-actions { align-self: flex-end; }
 .message-tooltip { position: fixed; z-index: 100; pointer-events: none; max-width: calc(100vw - 16px); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--panel); color: var(--text); box-shadow: var(--pop); font: var(--fs-2xs)/1.5 var(--ui); }
 .message-tooltip { white-space: pre-line; overflow-wrap: anywhere; }
 .message-tooltip[hidden], :has([data-cancel-armed="true"]) > .message-tooltip { display: none; }
@@ -200,18 +215,18 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .cmp-quote { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3) 0; }
 .cmp-quote > .message-quote { flex: 1; margin: 0; }
 .cmp-quote > .btn { flex: none; }
-.message-actions time { color: var(--text-3); font: var(--fs-2xs)/1.4 var(--ui); margin-inline-end: 5px; }
-.message-actions .btn.icon { width: 28px; height: 28px; min-height: 28px; padding: var(--sp-1); }
+.message-actions .btn.icon { width: 28px; height: 28px; min-height: 28px; padding: var(--sp-1); color: var(--text-3); }
 .message-actions .i, .message-code .i { width: 16px; height: 16px; }
 .chat-message:hover > .message-actions, .chat-message:focus-within > .message-actions { opacity: 1; }
 .ra-scroll::-webkit-scrollbar { display: none; }
-.page-agent .btn.conversation-latest { position: absolute; right: var(--sp-4); z-index: 2; width: 36px; height: 36px; min-height: 36px; border-radius: var(--r-sm); background: var(--panel); border: 1px solid var(--edge); box-shadow: var(--pop); }
+/* Centred just above the composer, as Grok Bot places it (owner, 2026-11-06). */
+.page-agent .btn.conversation-latest { position: absolute; left: 50%; transform: translateX(-50%); z-index: 2; width: 36px; height: 36px; min-height: 36px; border-radius: var(--r-sm); background: var(--panel); border: 1px solid var(--edge); box-shadow: var(--pop); }
 .page-agent .btn.conversation-latest:hover:not(:disabled) { background: var(--surface-2); border-color: var(--edge); color: var(--text); }
 .page-agent .btn.conversation-latest:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
 .bubble > .btn.message-expand { margin-top: var(--sp-1); margin-inline-start: calc(-1 * var(--sp-2)); align-self: flex-start; font: inherit; color: inherit; border-color: transparent; background: transparent; padding-inline: var(--sp-2); }
 .bubble > .btn.message-expand:hover:not(:disabled) { background: color-mix(in srgb, currentColor 14%, transparent); border-color: transparent; }
 .bubble > .btn.message-expand:active:not(:disabled) { background: color-mix(in srgb, currentColor 22%, transparent); border-color: transparent; }
-.chat-message:has(> .preview-cards) { width: 100%; }
+.chat-message:has(> .preview-cards) { width: 100%; grid-template-columns: minmax(0, 1fr) auto; }
 .preview-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); width: min(calc(440px + 120 * var(--pa-u)), 100%); min-width: 0; }
 /* Every link card has one height, whatever its page gave: cards of two heights under one reply looked uneven. */
 .page-agent .btn.preview-card { display: flex; align-items: center; justify-content: flex-start; gap: var(--sp-3); width: 100%; height: 88px; min-height: 88px; padding: var(--sp-2) var(--sp-3); text-align: start; white-space: normal; border-inline-start: 3px solid var(--accent-text); background: var(--surface-2); border-radius: var(--r-sm); overflow: hidden; }
@@ -429,6 +444,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* Typing into it deepens its shadow a little; its edge keeps its colour, as no frame shows where the focus is. */
 .composer:focus-within { box-shadow: 0 6px 24px color-mix(in srgb, var(--text) 10%, transparent); }
 .cmp-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+.composer .cmp-page-note { display: block; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Under the words: what to add and how it acts on the left, which model and send on the right. */
 .cmp-bar { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
 .cmp-bar-fill { flex: 1; min-width: 0; }
@@ -463,12 +479,13 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .cmp-field.has-mentions > .cmp-input::selection { color: transparent; }
 .cmp-composing { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 /* A mention, in the field and in the owner's bubble: its mark stands where the @ is (the @ keeps its width, unseen), then the
-   name, in a quiet pill. In the field the pill's padding is cancelled by its margin, so a line wraps exactly as plain words do. */
-.mention-chip { padding: 1px 2px; margin: 0 1px; border-radius: var(--r-sm); background: color-mix(in srgb, currentColor 9%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 16%, transparent); }
-.cmp-mirror .mention-chip { margin: 0 -2px; }
+   name, as Grok Bot's: the logo and the words alone, with no frame or fill (owner, 2026-11-07). The words keep the field's
+   own metrics, so the caret and a wrapping line fall exactly as for plain words. */
 .cmp-mirror .url-chip { color: var(--accent-text); }
 .mention-at { position: relative; -webkit-text-fill-color: transparent; }
-.mention-ico { position: absolute; inset: 0; display: grid; place-items: center; -webkit-text-fill-color: currentColor; }
+/* The 16 px mark is wider than the @ it covers, so it leans 3 px left: a little air before the name (owner, 2026-11-07),
+   without changing the words' metrics. */
+.mention-ico { position: absolute; inset: 0; display: grid; place-items: center; translate: -3px 0; -webkit-text-fill-color: currentColor; }
 .mention-ico .i, .mention-ico .mono { width: 16px; height: 16px; margin: 0; }
 /* One slot: 拉斐爾大師 (voice) while the draft is empty; once there is something to send he turns
    into a bare send icon (a level paper plane, no background), as Telegram does. */
@@ -504,7 +521,10 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 
 /* Media stand on their own; only the owner's words receive a text bubble. */
 .owner-content { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); min-width: 0; max-width: min(var(--pa-bw), 78%); }
+/* Files give the message its width; the content column takes what is left, so no room stays empty beyond the actions
+   at its side (R-UI-104). */
 .me > .owner-content:has(.me-files), .owner-message:has(.me-files) { width: min(420px, 78%); }
+.owner-message:has(.me-files) { grid-template-columns: auto minmax(0, 1fr); }
 .owner-message > .owner-content { max-width: 100%; }
 .owner-content > .bubble { max-width: 100%; }
 .me-files { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); width: 100%; min-width: 0; white-space: normal; }
@@ -608,7 +628,9 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 
 /* Keep the conversation surface flat and opaque through its parent. */
 .mb-chat { background: none; }
-.ra-body > .ans, .chat-message > .ans { max-width: min(60ch, 100%); border: 0; border-radius: var(--r-lg); }
+.ra-body > .ans { max-width: min(60ch, 100%); border: 0; border-radius: var(--r-lg); }
+/* The message's first column holds the 60ch limit (one font for it), so the bubble and its actions meet. */
+.chat-message > .ans { max-width: 100%; border: 0; border-radius: var(--r-lg); }
 
 .bubble .message-quote, .bubble .quote-author, .bubble .message-link { color: var(--on-bubble); border-color: currentColor; }
 /* Send and Raphael voice form one quiet, equal-sized pair in every composer. */
@@ -629,7 +651,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .draft-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; padding: var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--content); }
 .draft-card-top { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: start; gap: 6px; min-width: 0; }
 .page-agent .btn.draft-av-btn { width: 40px; height: 40px; min-height: 40px; padding: 0; border-color: transparent; background: transparent; border-radius: var(--r-pill); }
-.page-agent .btn.draft-av-btn:hover:not(:disabled) { border-color: var(--hover-edge); background: transparent; }
+.page-agent .btn.draft-av-btn:hover:not(:disabled) { background: var(--hover); }
 .page-agent .btn.draft-av-btn:active:not(:disabled) { background: var(--pressed); }
 .draft-card-ident { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; }
 .draft-card .mb-fin { width: 100%; min-height: 32px; padding: 4px 6px; font-size: var(--fs-xs); }
@@ -658,7 +680,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* settled one-line summary in conversation */
 .draft-done { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); justify-self: start; max-width: 100%; min-width: 0; }
 .page-agent .btn.draft-done-sum { justify-self: start; display: inline-flex; align-items: center; gap: var(--sp-2); max-width: 100%; min-height: 36px; padding: var(--sp-1) var(--sp-3); border: 1px solid var(--edge); border-radius: var(--r-lg); background: var(--panel); color: var(--text); font-size: var(--fs-sm); font-weight: 500; }
-.page-agent .btn.draft-done-sum:hover:not(:disabled) { background: var(--hover); border-color: var(--hover-edge); }
+.page-agent .btn.draft-done-sum:hover:not(:disabled) { background: var(--hover); }
 .page-agent .btn.draft-done-sum:active:not(:disabled) { background: var(--pressed); }
 .draft-done-mark { display: inline-grid; place-items: center; width: 16px; height: 16px; color: var(--ok); flex: none; }
 .draft-done-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -688,3 +710,51 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .thread mark[data-find-match] { padding: 0; background: var(--hover); color: var(--text); text-decoration: underline dotted; text-underline-offset: 2px; }
 .thread mark.is-current { outline: 2px solid var(--text); outline-offset: 1px; text-decoration: underline; text-decoration-thickness: 2px; background: var(--text); color: var(--content); }
 .chat-message.is-search-expanded .message-text { max-height: none; -webkit-line-clamp: unset; mask-image: none; }
+/* Reactions sit on the bubble's bottom-right corner, half over its edge, and add no height to the conversation (owner,
+   2026-11-07: they made it longer). A ring of the page's own colour parts them from the bubble. */
+.message-reactions { display: flex; gap: 2px; margin-block: -11px; }
+.chat-message > .message-reactions { justify-self: end; position: relative; z-index: 1; margin-inline-end: var(--sp-2); }
+.message-reactions .btn.reaction { min-width: 22px; height: 22px; min-height: 22px; padding: 0 6px; border: 1px solid var(--btn-edge); border-radius: var(--r-pill); background: var(--surface-2); color: var(--text); font-size: var(--fs-xs); line-height: 1; box-shadow: 0 0 0 2px var(--content); }
+/* A message menu opens with its reactions in one quiet row (Grok Bot's right click). */
+.menu-reactions { display: flex; justify-content: space-between; gap: 2px; padding: 2px 2px var(--sp-1); margin-bottom: var(--sp-1); border-bottom: 1px solid var(--line); }
+.menu-reactions .btn.reaction { flex: 1; justify-content: center; min-height: 32px; padding: 0; border-color: transparent; background: transparent; font-size: var(--fs-lg); border-radius: var(--r-sm); }
+.menu-reactions .btn.reaction:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
+.menu-reactions .btn.reaction:active:not(:disabled) { border-color: transparent; background: color-mix(in srgb, var(--text) 12%, transparent); }
+.menu-reactions .btn.reaction[aria-pressed="true"] { border-color: transparent; background: color-mix(in srgb, var(--text) 8%, transparent); }
+/* The last slot opens every emoji: a smiley with a plus, drawn as a line icon beside the emoji. */
+.btn.reaction-more .i { width: 20px; height: 20px; color: var(--text-3); }
+/* The react button opens a pill of the quick reactions (emoji-picker.ts), as Grok Bot does. */
+.menu.reaction-bar { display: flex; gap: 2px; min-width: 0; padding: var(--sp-1); border-radius: var(--r-pill); }
+.reaction-bar .btn.reaction { width: 36px; min-height: 36px; padding: 0; justify-content: center; border-color: transparent; background: transparent; font-size: var(--fs-lg); border-radius: var(--r-pill); }
+.reaction-bar .btn.reaction:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
+.reaction-bar .btn.reaction:active:not(:disabled) { border-color: transparent; background: color-mix(in srgb, var(--text) 12%, transparent); }
+.reaction-bar .btn.reaction[aria-pressed="true"] { border-color: transparent; background: color-mix(in srgb, var(--text) 8%, transparent); }
+/* Every emoji in one card: a search field, one scrolling grid of eight columns under small section labels, and a footer that names the emoji under the pointer. */
+.menu.emoji-picker { display: flex; flex-direction: column; width: min(304px, calc(100vw - 16px)); max-width: none; height: min(340px, calc(100vh - 16px)); padding: 0; overflow: hidden; }
+.emoji-find { display: flex; flex: none; align-items: center; gap: var(--sp-2); margin: var(--sp-2); padding: 0 var(--sp-2); min-height: 32px; border-radius: var(--r-sm); background: var(--surface-2); color: var(--text-3); }
+.emoji-find input { flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--text); font: inherit; font-size: var(--fs-sm); outline: none; }
+.emoji-find input::-webkit-search-cancel-button { display: none; }
+.emoji-grid { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--sp-2) var(--sp-1); scrollbar-width: thin; }
+/* A section out of sight is neither laid out nor painted: hundreds of colour glyphs cost most of opening the picker. */
+.emoji-block { content-visibility: auto; contain-intrinsic-size: auto calc(4 * 34px); }
+.emoji-sec h4 { margin: var(--sp-2) 2px var(--sp-1); font-size: var(--fs-xs); font-weight: 500; color: var(--text-3); }
+.emoji-sec:first-child h4 { margin-top: 0; }
+.emoji-cells { display: grid; grid-template-columns: repeat(8, 34px); }
+.emoji-picker .emoji-cell { display: grid; place-items: center; width: 34px; min-height: 0; height: 34px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; font-size: var(--fs-h1); line-height: 1; cursor: pointer; }
+.emoji-picker .emoji-cell:hover, .emoji-picker .emoji-cell:focus-visible { background: var(--surface-2); outline: none; }
+.emoji-picker .emoji-cell[aria-selected="true"] { background: color-mix(in srgb, var(--text) 8%, transparent); }
+.emoji-none { margin: var(--sp-4) var(--sp-2); color: var(--text-3); font-size: var(--fs-sm); text-align: center; }
+.emoji-foot { display: flex; flex: none; align-items: center; gap: var(--sp-2); min-height: 36px; padding: 0 var(--sp-3); border-top: 1px solid var(--line); color: var(--text-2); font-size: var(--fs-sm); }
+.emoji-foot-char { font-size: var(--fs-lg); line-height: 1; }
+.emoji-foot-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-thread-chip { color: var(--text-2); margin-top: var(--sp-1); }
+.au-room-pane.has-side-thread { position: relative; }
+.room-side-thread { position: absolute; z-index: 12; inset: 0 0 0 auto; width: min(440px, 100%); display: flex; flex-direction: column; background: var(--content); border-left: 1px solid var(--edge); padding-top: var(--sp-3); }
+.room-side-thread > header { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-3) var(--sp-5); }
+.room-side-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: var(--sp-4) var(--sp-5); }
+.room-thread-origin { border-bottom: 1px solid var(--edge); margin-bottom: var(--sp-4); padding-bottom: var(--sp-3); }
+.room-side-thread .thread { list-style: none; padding: 0; margin: 0; }
+.room-side-thread .tn { margin-block: var(--sp-3); }
+.room-thread-dock { padding: var(--sp-3); }
+.room-side-thread .chat-message { max-width: 100%; }
+@media (min-width: 1100px) { .au-room-pane.has-side-thread > .ra-stage, .au-room-pane.has-side-thread > .page-head { margin-right: 440px; } }

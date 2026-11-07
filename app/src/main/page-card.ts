@@ -68,7 +68,8 @@ interface Live {
   opened: PageOpened | null;
   ready: boolean;
   expanded: boolean;
-  /** The owner said no to what it wanted to send: from now on only a sure press speaks, and it does not ask again. */
+  closeExpanded?: () => void;
+  /** A declined external link asks no more without a sure press. */
   refused: boolean;
 }
 
@@ -85,7 +86,7 @@ export interface PagesHost {
   carry(from: Element, to: Element): () => void;
 }
 
-export function mountPages(thread: HTMLElement, o: { send(text: string): void; answer?(pageId: string, text: string): boolean }): PagesHost {
+export function mountPages(thread: HTMLElement, o: { place(pageId: string, text: string): boolean }): PagesHost {
   const frames = new Map<string, Live>();
   let lastSend = 0, asking = false;
   hearInput();
@@ -164,13 +165,13 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void; a
   }
 
   /** A press that cannot be told from the page acting alone is the owner's to confirm, with the words in front of them. */
-  function whenPressed(live: Live, title: string, shown: string, act: () => void): void {
+  function whenPressed(live: Live, title: "page.askOpen", shown: string, act: () => void): void {
     const press = pressOf(live.frame);
     if (press === "sure") { act(); return; }
     if (press === "none" || asking || live.refused) return;
     asking = true;
     openDialog({
-      title: t(title as "page.askSend"), body: `<p class="pg-ask-words">${esc(shown)}</p>`, cls: "mb-confirm pg-ask",
+      title: t(title), body: `<p class="pg-ask-words">${esc(shown)}</p>`, cls: "mb-confirm pg-ask",
       actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(t("page.askYes")), attrs: ' data-dlg="yes"' } },
       onAct(action, _target, dialog) {
         if (action === "yes") act(); else live.refused = true;
@@ -180,12 +181,14 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void; a
     });
   }
 
-  function speak(live: Live, text: unknown): void {
-    if (typeof text !== "string" || !text.trim() || text.length > SEND_LIMIT) return;
+  function placeText(live: Live, text: unknown): boolean {
+    if (typeof text !== "string" || !text.trim() || text.length > SEND_LIMIT) return false;
     const now = Date.now();
-    if (now - lastSend < SEND_GAP_MS) return;
-    const words = text.trim();
-    whenPressed(live, "page.askSend", words, () => { lastSend = Date.now(); if (!o.answer?.(live.id, words)) o.send(words); });
+    if (now - lastSend < SEND_GAP_MS || pressOf(live.frame) === "none" || !cardOf(live)) return false;
+    if (!o.place(live.id, text.trim())) return false;
+    live.closeExpanded?.();
+    lastSend = now;
+    return true;
   }
 
   function openLink(live: Live, url: unknown): void {
@@ -225,8 +228,8 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void; a
         return answer({});
       case "ui/message": {
         const content = Array.isArray(params.content) ? params.content : [params.content];
-        speak(live, content.map((part: { type?: string; text?: string } | undefined) => (part?.type === "text" ? part.text ?? "" : "")).join("\n"));
-        return answer({});
+        const words = content.map(part => part && typeof part === "object" && part.type === "text" && typeof part.text === "string" ? part.text : "").join("\n");
+        return placeText(live, words) ? answer({ status: "placed" }) : refuse(-32000, "The page text was not placed in the composer.");
       }
       case "tools/call":
         if (typeof params.name !== "string" || !params.name) return refuse(-32602, "tools/call needs {name, arguments?}.");
@@ -252,7 +255,7 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void; a
     }
     if (data.raphaelPage !== 1) return;
     if (data.type === "height") { live.height = clampHeight(data.height); applyHeight(live); }
-    else if (data.type === "send") speak(live, data.text);
+    else if (data.type === "send" && placeText(live, data.text)) post(live, { raphaelPage: 1, type: "result", status: "placed" });
     else if (data.type === "open") openLink(live, data.url);
   });
 
@@ -265,11 +268,13 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void; a
       onAct(_act, _target, shown) { shown.close(); },
       onClosing() {
         live.expanded = false;
+        live.closeExpanded = undefined;
         const home = cardOf(live)?.querySelector<HTMLElement>(".pg-body");
         if (home) moveFrame(live.frame, home);
       },
     });
     live.expanded = true;
+    live.closeExpanded = () => dialog.close();
     moveFrame(live.frame, dialog.el.querySelector<HTMLElement>(".pg-view")!);
   }
 

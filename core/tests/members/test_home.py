@@ -104,15 +104,13 @@ async def test_local_home_does_not_wait_for_live_allowances_or_calendar(home, ri
     assert calls == [{"refresh": False}]
 
 
-async def test_pending_in_different_conversations_and_latest_unread_report(home, rig):
+async def test_pending_questions_of_one_conversation_and_latest_unread_report(home, rig):
     member = (await rig.call("members.create", {"name": "Research"}))["member"]["id"]
     older = add(rig, member)
     newest = add(rig, member)
     rig.service.store.mark_unread(member)
     first = add(rig, member, status="confirm")
-    from raphael_core.agent.conversations import Conversations
-    conversation = Conversations(rig.conn, rig.wall).create(member)["id"]
-    second = add(rig, member, status="confirm", conversation_id=conversation)
+    second = add(rig, member, status="confirm")
     value = await rig.call("home.overview")
     assert [r["turn_id"] for r in value["reports"]] == [newest]
     assert older != newest

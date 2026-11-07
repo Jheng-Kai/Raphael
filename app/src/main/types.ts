@@ -288,6 +288,10 @@ export interface MediaPayload {
 
 /** A turn of the conversation with Raphael (`agent.history.list`, newest first). */
 export interface AgentTurn {
+  reactions?: Record<string, string[]>;
+  voice_call_id?: string;
+  voice_call_summary_id?: number;
+  voice_call?: import("./voice-chat").VoiceCall;
   routine?: Pick<Routine, "id" | "schedule" | "when" | "app_name">;
   handoffs?: HandoffView[];
   conversation_id?: number;
@@ -431,6 +435,7 @@ export interface MailSender {
 
 /** An email draft as the owner's chat shows it: editable while it is a draft, and sent only by 傳送, once. */
 export interface MailDraftCard {
+  kind?: "email" | "slack";
   id: string;
   mode: "card";
   state: "draft" | "sending" | "sent" | "failed" | "discarded";
@@ -882,7 +887,6 @@ export interface Member {
   blurb?: string;
   reply_style?: "full" | "conversational";
   voice?: string;
-  read_aloud?: boolean;
   notify?: boolean;
   ask_before_members?: boolean;
   /** Writes an email as a draft in the owner's chat for them to send, instead of sending it (on unless turned off). */
@@ -956,6 +960,8 @@ export interface AppsInventory { state: "complete" | "partial" | "unknown"; coun
 
 /** What `members.create` takes (`ui_language` names the language of the routine it may offer). */
 export interface NewMember {
+  template?: import("./member-templates").MemberTemplate;
+  catalog_id?: string;
   name: string;
   /** It speaks first in its own conversation, asking what it is for. */
   greet?: boolean;
@@ -970,7 +976,6 @@ export interface NewMember {
   blurb?: string;
   reply_style?: "full" | "conversational";
   voice?: string;
-  read_aloud?: boolean;
   notify?: boolean;
   ask_before_members?: boolean;
   draft_first?: boolean;
@@ -980,7 +985,7 @@ export interface NewMember {
  * What `members.update` may change, beside its `id`: the avatar only as `""` or `"preset:<stem>"`
  * (a picture of the PC goes by `members.set_avatar`).
  */
-export type MemberPatch = Partial<Pick<Member, "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "voice" | "read_aloud" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">>;
+export type MemberPatch = Partial<Pick<Member, "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "voice" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">>;
 
 /** The routine the core offers with a new member of a group with places to look (`members.create`, `routines.template`). */
 export interface RoutineOffer {
@@ -1011,6 +1016,9 @@ export interface Room {
   roles?: Record<string, string>;
 }
 export interface RoomMessage {
+  reactions?: string[];
+  reply_thread_id?: number;
+  reply_count?: number;
   turn?: AgentTurn;
   id: number; room_id: number; member_id: number | null; text: string; created: number;
   request_id: string | null; reply_to: number | null; turn_id: number | null;
@@ -1176,7 +1184,7 @@ export interface ConnectionGroup {
   description?: string;
   logo?: string;
   /** The accounts a managed service is signed in with, by their status (`ACTIVE`, `EXPIRED`, ...): never an account's name or id. */
-  accounts?: { status: string }[];
+  accounts?: { id?: string; status: string; label?: string }[];
   disabled_tools?: string[];
   tools_state?: "loading" | "failed" | "ready";
   result_size_limit?: number;

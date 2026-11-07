@@ -34,6 +34,49 @@ def test_default_primary_offer_fits_the_measured_pre_unit_budget():
     assert "find_tools" in offered.refs
 
 
+@pytest.mark.parametrize("primary", [False, True])
+@pytest.mark.parametrize("interactive", [False, True])
+def test_shared_slack_discovery_never_grants_owner_management(primary, interactive):
+    speaker = Speaker(id=2, capabilities=frozenset({"chief"}) if primary else frozenset())
+    offered = take_snapshot(None, "Explain your abilities.", speaker=speaker, interactive=interactive)
+    assert "slack_draft" not in offered.refs and "slack_draft" in offered.work
+    added, _ = offered.find("slack_draft")
+    assert [item["function"]["name"] for item in added] == ["slack_draft"]
+    assert offered.refs["slack_draft"].kind == BUILTIN
+    assert not offered.find("slack_draft")[0]
+    assert not offered.refs.keys() & MANAGEMENT_TOOLS
+    assert bool(offered.management) == (primary and interactive)
+    by_intent = take_snapshot(None, "Draft a Slack reply", speaker=speaker, interactive=interactive)
+    assert "slack_draft" in by_intent.refs
+
+
+@pytest.mark.parametrize("brain", ["api", "cli"])
+@pytest.mark.parametrize("primary", [False, True])
+async def test_production_turn_discovers_shared_work_without_management(setup, client, monkeypatch, brain, primary):
+    rig, team = setup
+    writer = team.members.store.create_member(name="Writer", role="Writer", model="")
+    member_id = 0 if primary else writer.id
+    if brain == "api":
+        def discover(**kwargs):
+            assert "slack_draft" not in {item["function"]["name"] for item in kwargs["tools"]}
+            return chat("Find the work tool.", ("find_tools", {"query": "slack_draft"}))
+        def ready(**kwargs):
+            names = {item["function"]["name"] for item in kwargs["tools"]}
+            assert "slack_draft" in names and not names & MANAGEMENT_TOOLS
+            return live_said("Ready.")
+        client.chats = [discover, ready]
+    else:
+        rig.settings.set("agent_model", "cli:codex:test")
+        async def work(loop):
+            assert "slack_draft" not in {item["function"]["name"] for item in loop.tools}
+            assert (await loop._tool("find", "find_tools", {"query": "slack_draft"})).ok
+            names = {item["function"]["name"] for item in loop.tools}
+            assert "slack_draft" in names and not names & MANAGEMENT_TOOLS
+            loop._queue.put_nowait(Outcome("done", final="Ready."))
+        monkeypatch.setattr(CliLoop, "_work", work)
+    assert (await typed(rig, "Explain your abilities.", member_id, language="en"))["status"] == "done"
+
+
 @pytest.mark.parametrize("name", DEFINITIONS)
 def test_every_management_tool_can_be_discovered_by_name_without_plugins(name):
     offered = snapshot()

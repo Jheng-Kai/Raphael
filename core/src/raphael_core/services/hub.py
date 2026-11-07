@@ -234,7 +234,7 @@ class ServiceHub:
         )
         return service, page
 
-    def tts_ready(self) -> bool:
+    def tts_ready(self, *, voice: str = "") -> bool:
         """Whether Raphael can be heard: a voice service is chosen and has what it needs (for
         Fish Audio, a key and the owner's voice id). Nothing is requested to tell."""
         if not self.enabled("voice"):
@@ -242,7 +242,7 @@ class ServiceHub:
         service = self.tts_service()
         if service in KEYED_SERVICES and not self._keys.has(service):
             return False
-        return service != "fish" or bool(self._text("tts_fish_voice"))
+        return service != "fish" or bool(voice or self._text("tts_fish_voice"))
 
     def speech(self, text: str, *, voice: str | None = None) -> AsyncIterator[bytes]:
         """The speech of `text` by the voice service chosen (`tts.stream`) as chunks of PCM

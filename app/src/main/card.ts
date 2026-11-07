@@ -32,9 +32,10 @@ export function cardHTML(card: CardOptions): string {
     (card.content ?? "") + (actions ? `<footer class="card-actions cc-actions">${actions}</footer>` : "") + `</section>`;
 }
 
-export function cardDisclosureHTML(id: string, content: string, label = t("cards.show")): string {
+export function cardDisclosureHTML(id: string, content: string, label = t("cards.show"), openLabel?: string): string {
   if (!content.trim()) return "";
-  return `<div class="card-disclosure">${btn(`${ico("right")}<span>${esc(label)}</span>`, "card-disclosure-toggle", ` data-card-disclosure aria-expanded="false" aria-controls="card-detail-${esc(id)}"`)}<div class="card-detail" id="card-detail-${esc(id)}" hidden>${content}</div></div>`;
+  const open = openLabel ? ` data-open-label="${esc(openLabel)}"` : "";
+  return `<div class="card-disclosure">${btn(`${ico("right")}<span>${esc(label)}</span>`, "card-disclosure-toggle", ` data-card-disclosure aria-expanded="false" aria-controls="card-detail-${esc(id)}"${open}`)}<div class="card-detail" id="card-detail-${esc(id)}" hidden>${content}</div></div>`;
 }
 
 if (typeof document !== "undefined") document.addEventListener("click", event => {
@@ -48,7 +49,7 @@ if (typeof document !== "undefined") document.addEventListener("click", event =>
   const label = button.querySelector("span");
   if (label) {
     button.dataset.closedLabel ??= label.textContent ?? t("cards.show");
-    label.textContent = detail.hidden ? button.dataset.closedLabel : t("cards.hide");
+    label.textContent = detail.hidden ? button.dataset.closedLabel : button.dataset.openLabel ?? t("cards.hide");
   }
 });
 

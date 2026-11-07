@@ -246,30 +246,43 @@ async def test_raphael_asks_a_member_and_exchange_is_audit_only(setup, client, c
 
 
 @pytest.mark.parametrize("raphael", [True, False])
-@pytest.mark.parametrize("named", [True, False])
-async def test_composer_voice_stays_in_the_selected_default_or_named_conversation(setup, client, raphael, named):
+@pytest.mark.parametrize("explicit", [True, False])
+async def test_composer_voice_stays_in_main_with_or_without_an_id(setup, client, raphael, explicit):
     rig, team = setup
     person = member(team, name="Researcher")
     who = 0 if raphael else person.id
     default = rig.service.conversations.main(who)
-    selected = rig.service.conversations.create(who)["id"] if named else default
+    selected = default if explicit else None
     quick = rig.service.conversations.quick()
     client.decisions.append(decision("unclear"))
     client.chats.append(live_said("The selected conversation's answer."))
+    if raphael and not explicit:
+        # The hotkey must explicitly select quick; a composer's spoken question names main.
+        with pytest.raises(RpcError, match="must name its destination"):
+            await rig.call("agent.ask", {"session_id": "composer-voice", "text": "Review this", "source": "voice", "ui_language": "en"})
+        assert not client.chat_calls
+        return
     result = await rig.call("agent.ask", {"session_id": "composer-voice", "text": "Review this", "source": "voice",
         "ui_language": "en", "member_id": who, "conversation_id": selected})
     assert result["status"] == "done"
     turns = (await rig.call("agent.history.list", {"member_id": who, "conversation_id": selected}))["turns"]
-    assert [(turn["conversation_id"], turn["source"]) for turn in turns] == [(selected, "voice")]
+    assert [(turn["conversation_id"], turn["source"]) for turn in turns] == [(default, "voice")]
     assert (await rig.call("agent.history.list", {"conversation_id": quick}))["turns"] == []
-    if named:
-        assert (await rig.call("agent.history.list", {"member_id": who, "conversation_id": default}))["turns"] == []
 
 
-async def test_member_exchange_returns_to_the_named_conversation_that_asked(setup, client, conn):
+async def test_member_conversation_list_returns_its_one_main(setup):
+    rig, team = setup
+    person = member(team, name="Researcher")
+    main = rig.service.conversations.main(person.id)
+    for _ in range(2):
+        rows = (await rig.call("conversations.list", {"member_id": person.id}))["conversations"]
+        assert [(row["id"], row["kind"]) for row in rows] == [(main, "standard")]
+
+
+async def test_member_exchange_returns_to_the_main_conversation_that_asked(setup, client, conn):
     rig, team = setup
     one = member(team, name="Researcher")
-    conversation = (await rig.call("conversations.create", {"member_id": 0}))["conversation"]
+    conversation = rig.service.conversations.get(rig.service.conversations.main())
     client.decisions.append(decision("answer"))
     client.chats.append(chat("I will ask Researcher.", ("ask_member", {"member": "Researcher", "request": "Compare the reports"})))
     client.decisions.append(decision("answer"))
@@ -280,7 +293,7 @@ async def test_member_exchange_returns_to_the_named_conversation_that_asked(setu
     assert result["status"] == "done"
     selected = (await rig.call("agent.history.list", {"conversation_id": conversation["id"]}))["turns"]
     assert {turn["route"] for turn in selected} == {"answer"}
-    assert (await rig.call("agent.history.list"))["turns"] == []
+    assert (await rig.call("agent.history.list"))["turns"] == selected
     assert AgentHistory(conn).list(member_id=one.id) == []
     [theirs] = [AgentHistory(conn).get(r[0]) for r in conn.execute("SELECT id FROM agent_turns WHERE member_id=? AND scope='exchange'", (one.id,))]
     assert theirs.conversation_id == rig.service.conversations.main(one.id)
@@ -315,10 +328,10 @@ async def test_a_colleague_that_is_still_answering_is_waited_for(setup, client, 
     assert "The reports agree." in given and "timeout" not in given
 
 
-async def test_deleting_a_member_removes_named_conversation_context(setup, conn):
+async def test_deleting_a_member_removes_main_conversation_context(setup, conn):
     rig, team = setup
     one = member(team, name="Researcher")
-    conversation = (await rig.call("conversations.create", {"member_id": one.id}))["conversation"]
+    conversation = rig.service.conversations.get(rig.service.conversations.main(one.id))
     id = conversation["id"]
     rig.service._cli_sessions.put(one.id, "cli:codex", "native-session", id)
     with conn:
@@ -406,7 +419,7 @@ async def voiced(conn, tmp_path, client):
 
 
 async def test_a_members_reply_is_not_spoken(voiced, client):
-    """Only Raphael's own replies are said aloud: what a member answers in its thread is written."""
+    """Typed replies stay silent in both member and Raphael conversations."""
     rig, team, voice = voiced
     one = member(team)
     client.decisions.append(decision("chat"))
@@ -414,14 +427,15 @@ async def test_a_members_reply_is_not_spoken(voiced, client):
     result = await typed(rig, "明天有什麼行程", one.id)
     assert result["text"] == "明天早上九點開會。"
     assert voice.said == []
-    # ... and Raphael's own, typed at this computer in his thread, is.
+    # Raphael's typed replies follow the same boundary.
     client.decisions.append(decision("chat"))
     client.chats.append(live_said("台北。", prefix="答", say_ja="台北です。"))
     await typed(rig, "主人住哪裡", 0)
-    assert voice.said == [("解", "台北です。")]  # in Japanese: the voice speaks nothing else
+    assert voice.said == []
+    assert all("say_ja" not in call["messages"][0]["content"] for call in client.chat_calls)
 
 
-async def test_an_exchange_between_members_is_never_spoken_only_raphaels_final_reply(voiced, client):
+async def test_a_typed_exchange_and_raphaels_final_reply_are_never_spoken(voiced, client):
     rig, team, voice = voiced
     member(team, name="小研究")
     client.decisions.append(decision("answer"))  # Raphael's request
@@ -432,7 +446,8 @@ async def test_an_exchange_between_members_is_never_spoken_only_raphaels_final_r
         live_said("小研究說上季營收兩百萬。", prefix="答", say_ja="小研究によると、前期の売上は二百万です。")
     )  # Raphael, to the owner
     await typed(rig, "問小研究上季的數字", 0)
-    assert voice.said == [("解", "小研究によると、前期の売上は二百万です。")]
+    assert voice.said == []
+    assert all("say_ja" not in call["messages"][0]["content"] for call in client.chat_calls)
 
 
 async def test_a_member_asks_raphael_who_answers_as_himself(setup, client, conn):
@@ -502,8 +517,8 @@ async def test_a_consultation_stays_out_of_pages_but_the_respondent_can_search_i
     assert (asked["mode"], asked["member_id"], asked["state"], asked["request"], asked["result"], asked["task_id"]) == (
         "consult", b.id, "done", "上季的數字是多少？", "上季營收兩百萬。", None)
     # Pages and previews stay private; recall includes only B's own exchange.
-    named = (await rig.call("conversations.create", {"member_id": b.id}))["conversation"]
-    assert (await rig.call("agent.history.list", {"member_id": b.id, "conversation_id": named["id"]}))["turns"] == []
+    main = rig.service.conversations.main(b.id)
+    assert (await rig.call("agent.history.list", {"member_id": b.id, "conversation_id": main}))["turns"] == [own]
     assert AgentHistory(conn).latest_by_member()[b.id].scope == "private"
     found = (await rig.call("agent.history.search", {"query": "上季的數字", "member_id": b.id}))["turns"]
     [exchange] = found

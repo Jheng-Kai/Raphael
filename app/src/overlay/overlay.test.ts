@@ -5,6 +5,7 @@ import { WAITING_LINE_MS } from "./waiting-lines";
 import {
   HOLD_MS,
   OverlayController,
+  isRefusal,
   type AskButtons,
   type EmblemControl,
   type HoldState,
@@ -12,7 +13,16 @@ import {
   type OverlayView,
   type UiLanguage,
 } from "./overlay";
-import type { Mode, Phase } from "./emblem";
+import type { Mode, Mood, Phase } from "./emblem";
+
+test("a refusal is a 否 or Negative line, in any interface language; a report is not", () => {
+  expect(isRefusal("《否。未偵測到麥克風。》")).toBe(true);
+  expect(isRefusal("《Negative. No microphone was found.》")).toBe(true);
+  expect(isRefusal("否。目前無法回答。")).toBe(true);
+  expect(isRefusal("《告。一切正常。》")).toBe(false);
+  expect(isRefusal("《Notice. All is well.》")).toBe(false);
+  expect(isRefusal("我否認這件事")).toBe(false);
+});
 
 // ---- how long a notice stays ----
 
@@ -39,6 +49,7 @@ test("a long line stays 12 s at most", () => {
 // An emblem that keeps the real one's times (appear 833 ms, vanish 467 ms) on the fake clock.
 class FakeEmblem implements EmblemControl {
   level = 0;
+  mood: Mood = "calm";
   readonly log: string[] = [];
   get last(): string | undefined {
     return this.log[this.log.length - 1];
@@ -184,6 +195,19 @@ test("public turn progress replaces the previous subtitle without rotating or re
   expect(view.waiting).toBeNull();
   send({ type: "step", text: "Late event", language: "en" });
   expect(view.waiting).toBeNull();
+});
+
+test("Raphael is red while he refuses (a 否 line) and his gold again for a report or a new dictation", () => {
+  send({ type: "notice", text: "《否。未偵測到麥克風。請接上裝置。》" });
+  expect(emblem.mood).toBe("angry");
+  vi.advanceTimersByTime(30_000);
+  send({ type: "notice", text: ZH });
+  expect(emblem.mood).toBe("calm");
+  send({ type: "say", prefix: "否", text: "目前無法回答。" });
+  vi.advanceTimersByTime(30_000);
+  expect(emblem.mood).toBe("angry");
+  send({ type: "show", mode: "listening", line: "Hello" });
+  expect(emblem.mood).toBe("calm");
 });
 
 test("the fake page notices a caption and a line that stand in their one place together", () => {

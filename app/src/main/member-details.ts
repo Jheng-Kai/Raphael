@@ -29,10 +29,11 @@ import {
 import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
 import { esc, ico, iconButton, openMenu, patchHTML, sel, tg, toaster } from "./ui";
 import { eventRead } from './event-read';
-import { panelTasksHTML, panelLibraryHTML, readPanelWork, type PanelWork } from './member-panel-work';
+import { panelLibraryHTML, readPanelWork, type PanelWork } from './member-panel-work';
 import { tabs } from './ui';
-import { openActions } from "./member-column";
-import { routineRunState, testRoutine } from "./routine-run";
+import { describeError } from "./format";
+import { exportMemberTemplate } from "./member-templates";
+import { createMemberTelegram, messagingHTML } from "./messaging";
 
 export type DetailsTab = "details" | "library" | "computer" | "settings" | "memory" | "skills" | "commands" | "voice";
 
@@ -66,13 +67,18 @@ export interface DetailsPanel {
   refreshRoutines(): void;
   refreshMemory(memberId: number, space?: "own" | "shared"): void;
   refreshResources(): void;
+  /** Work moved: a task changed state, or a turn of the selected member changed (only files can follow from that). */
+  refreshWork(cause: 'task' | 'turn'): void;
 }
 
 export function createDetails(host: DetailsHost): DetailsPanel {
   const el = document.createElement("aside");
   el.className = "mb-det";
   el.innerHTML =
-    `<div class="mb-det-head">${iconButton("left", t("members.panelBack"), ' data-det="back" hidden', "mb-tool")}<span class="mb-det-fill"></span>${iconButton("gear", t("computer.settings"), ' data-det="gear"', "mb-tool")}${iconButton("x", t("members.close"), ' data-det="close"', "mb-tool")}</div>` +
+    // Share on the left edge and close on the right, apart (owner, 2026-11-07): the gear and its settings page gave way
+    // to one dialog opened from the member's face; share sends the member as a template, until the store comes.
+    // `gear` stays only as an unshown entry for the old settings page, which nothing on screen opens any more.
+    `<div class="mb-det-head">${iconButton("left", t("members.panelBack"), ' data-det="back" hidden', "mb-tool")}${iconButton("share", t("template.export"), ' data-det="share"', "mb-tool")}${iconButton("gear", t("computer.settings"), ' data-det="gear" hidden tabindex="-1"', "mb-tool")}<span class="mb-det-fill"></span>${iconButton("x", t("members.close"), ' data-det="close"', "mb-tool")}</div>` +
     `<div class="mb-det-scroll"><div class="mb-who"></div><div class="mb-tabs"></div><div class="mb-tab-body" role="tabpanel" id="member-panel-body"></div></div>`;
   const who = el.querySelector<HTMLElement>(".mb-who")!;
   const tabBar = el.querySelector<HTMLElement>(".mb-tabs")!;
@@ -83,14 +89,24 @@ export function createDetails(host: DetailsHost): DetailsPanel {
 
   let tab: DetailsTab = "details";
   let work: PanelWork | null = null, workFailed = false, workEpoch = 0, fileLimit = 12;
-  async function loadWork(): Promise<void> {
-    const epoch = ++workEpoch, id = host.member().id;
+  async function loadWork(fromEvent = false): Promise<void> {
+    const epoch = ++workEpoch, id = host.member().id, limit = fileLimit;
     try {
-      const result = await readPanelWork(id, fileLimit);
+      // A burst of turns reads the Library once, as the counts below do.
+      const result = await (fromEvent ? eventRead(`members.panel:${id}:${limit}`, () => readPanelWork(id, limit), host.app) : readPanelWork(id, limit));
       if (epoch !== workEpoch || id !== host.member().id) return;
-      work = {tasks: result?.tasks ?? [], files: result?.files ?? [], has_more: result?.has_more ?? false}; workFailed = false;
+      work = {files: result?.files ?? [], has_more: result?.has_more ?? false}; workFailed = false;
     } catch { if (epoch !== workEpoch || id !== host.member().id) return; workFailed = true; }
     draw();
+  }
+  // Events carry no owner for a task, so a busy team would read the list on every one: wait for a
+  // quiet 1.5 s, and never longer than 5 s while work keeps moving.
+  let workTimer: ReturnType<typeof setTimeout> | undefined, workSince = 0;
+  function scheduleWork(): void {
+    const now = performance.now();
+    if (workTimer === undefined) workSince = now;
+    else clearTimeout(workTimer);
+    workTimer = setTimeout(() => { workTimer = undefined; if (!el.hidden) void loadWork(true); }, Math.min(1500, Math.max(0, workSince + 5000 - now)));
   }
   function select(page: 'details' | 'library' | 'computer'): void {
     tab = page; draw();
@@ -110,6 +126,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   const conversationHost = document.createElement("div");
   let conversationMember: number | null = null;
   let conversationList: ReturnType<typeof mountConversationList> | null = null;
+  /** Only Raphael has a choice of conversation: its main one and its quick questions. */
   function drawConversations(): void {
     const memberId = host.member().id;
     if (conversationMember !== memberId) {
@@ -121,12 +138,10 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     if (!conversationList) conversationList = mountConversationList(conversationHost, {
       scope: host.app,
       active: () => host.visible?.() ?? true,
-      memberId, collapseWhenEmpty: true, showHeading: false,
-      onVisibility(visible) { const current = body.querySelector<HTMLElement>('[data-slot="conversations"]'); if (current && current.hidden !== !visible) current.hidden = !visible; },
+      memberId,
       onOpen(id) { host.openConversation?.(memberId, id); },
       current: () => host.conversationOf?.(memberId),
     });
-    slot.hidden = conversationHost.hidden;
   }
   async function loadCounts(fromEvent = false): Promise<void> {
     if (el.hidden) { countsStale = true; return; }
@@ -170,7 +185,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   // ---------- drawing ----------
 
   function whoHTML(member: Member): string {
-    if (tab !== 'settings') return `<span class="mb-panel-identity">${faceHTML(member, 32)}<b>${esc(member.name)}${member.role ? ` <span>· ${esc(member.role)}</span>` : ''}</b></span>`;
+    // The face is the way into every setting: under the pointer a pencil shows on it, and a press opens the one dialog.
+    if (tab !== 'settings') return `<span class="mb-panel-identity"><button type="button" class="btn mb-face-edit" data-det="edit" data-k="det-face-edit" aria-label="${esc(t("members.profile.edit"))}">${faceHTML(member, 64)}<span class="mb-face-pencil" aria-hidden="true">${ico("pencil")}</span></button><b>${esc(member.name)}</b>${member.role ? `<small>${esc(member.role)}</small>` : ''}</span>`;
     // The face is the button that changes its picture.
     const face =
       `<span class="mb-who-face"><button type="button" class="btn mb-avbtn" data-det="avatar" data-k="det-avatar" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}" title="${esc(t("members.changeAvatar"))}">` +
@@ -184,12 +200,13 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     );
   }
 
+  // A routine is its title and when it runs, with its own switch on the right as Grok Bot's Upcoming rows have
+  // (owner, 2026-11-07); the row opens the editor.
   function routineRowHTML(routine: Routine): string {
     return (
       `<div class="mb-routine-row" data-k="routine-row:${routine.id}"><button type="button" class="btn mb-rt${routine.when ? " is-event" : ""}" data-det="routine-open" data-id="${routine.id}" data-routine="${routine.id}" data-k="routine:${routine.id}">` +
-      `<span class="mb-rt-state${routine.enabled ? " is-on" : ""}" aria-label="${esc(t(routine.enabled ? "computer.routineOn" : "computer.routinePaused"))}">${ico(routine.enabled ? "clock" : "pause")}</span>` +
       `<span class="mb-rt-main"><b>${esc(routine.title)}</b><span>${routineSentenceHTML(routine)}</span>${routine.when || routine.last_error ? `<span>${esc(routineStatus(routine))}</span>` : ""}</span>` +
-      `</button>${iconButton("more", t("members.more", {p0:routine.title}), ` data-det="routine-menu" data-id="${routine.id}" aria-haspopup="menu" aria-expanded="false"`, "row mb-tool")}</div>`
+      `</button>${tg(routine.enabled, t("members.routineSwitch", { p0: routine.title }), ` data-det="routine-toggle" data-id="${routine.id}" data-k="routine-toggle:${routine.id}"`)}</div>`
     );
   }
 
@@ -200,8 +217,16 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       `</div>`;
     if (routines === "loading") return head + `<span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span>`;
     if (routines === "failed") return head + noticeHTML("routines");
-    const rows = routines.length ? routines.map(routineRowHTML).join("") : `<p class="mp-empty">${esc(t("members.profile.noRoutines"))}</p>`;
-    return head + `<div class="mb-rts">${rows}</div>`;
+    // An empty list is one quiet line outside the tinted list, in Grok Bot's words (Ask in chat to set a routine).
+    if (!routines.length) return head + `<p class="mp-empty">${esc(t("members.profile.noRoutines"))}</p>`;
+    return head + `<div class="mb-rts">${routines.map(routineRowHTML).join("")}</div>`;
+  }
+
+  // 建議, as Grok Bot's member panel suggests Add to Slack (owner, 2026-11-07): the member's own Telegram bot, so the
+  // owner can message this member directly; Slack and Discord come later. Raphael's own bot stays in Settings.
+  const telegram = createMemberTelegram({ visible: () => el.isConnected && !el.hidden && tab === "details", redraw: () => draw() }, () => host.member().id);
+  function suggestHTML(): string {
+    return `<div class="mb-dh"><span>${esc(t("members.suggested"))}</span></div><div class="member-msg">${messagingHTML(telegram.view())}</div>`;
   }
 
   /**
@@ -250,7 +275,9 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       if (field && field !== focused && field.value !== value) field.value = value;
     }
     const face = faceHTML(member, 64).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([member, face, host.list()?.groups, counts, routines, work, workFailed, tab, [...openFields], getLocale(), !!host.openConversation, host.conversationOf?.(member.id), tab === "memory" ? memories.map(list => list.view()) : null]);
+    const signature = JSON.stringify([member, face, host.list()?.groups, counts, routines, work, workFailed, tab, [...openFields], getLocale(), !!host.openConversation, host.conversationOf?.(member.id), tab === "memory" ? memories.map(list => list.view()) : null,
+      // The bot card redraws on its own state; the token being typed never redraws it.
+      tab === "details" && member.id !== RAPHAEL_ID ? { ...telegram.view(), token: "" } : null]);
     if (drawn === signature) return;
     drawn = signature;
     el.dataset.detailsTab = tab;
@@ -258,8 +285,10 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     closeButton.title = t("members.close");
     backButton.hidden = ['details', 'library', 'computer'].includes(tab);
     backButton.title = t('members.panelBack'); backButton.setAttribute('aria-label', backButton.title);
-    const gear = el.querySelector<HTMLElement>('[data-det="gear"]')!;
-    gear.title = t("computer.settings"); gear.setAttribute("aria-label", gear.title);
+    const share = el.querySelector<HTMLElement>('[data-det="share"]')!;
+    share.title = t("template.export"); share.setAttribute("aria-label", share.title);
+    // Raphael is the app's own: he is not shared as a template; the old settings page's back arrow keeps its place.
+    share.hidden = member.id === RAPHAEL_ID || !['details', 'library', 'computer'].includes(tab);
     el.setAttribute("aria-label", t("members.panel"));
     const typingIn = focused && el.contains(focused) && (focused.matches("input, textarea") ? focused.id : null);
     const scroll = el.querySelector<HTMLElement>(".mb-det-scroll")!;
@@ -288,7 +317,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     const mainTab = ['details', 'library', 'computer'].includes(tab);
     tabBar.hidden = !mainTab;
     body.hidden = tab === 'computer';
-    patchHTML(tabBar, tabs(['details', 'library', 'computer'].map(id => ({id, label:t(({details:'members.panelTab.details', library:'members.panelTab.library', computer:'members.panelTab.computer'} as const)[id as 'details' | 'library' | 'computer']), attrs:` id="member-tab-${id}" data-det="tab" data-tab="${id}" aria-controls="${id === 'computer' ? 'member-computer-panel' : 'member-panel-body'}" tabindex="${tab === id ? 0 : -1}"`})), tab, {kind:'nav', plain:true, fill:true, label:t('members.panel')}));
+    patchHTML(tabBar, tabs(['details', 'library', 'computer'].map(id => ({id, label:t(({details:'members.panelTab.details', library:'members.panelTab.library', computer:'members.panelTab.computer'} as const)[id as 'details' | 'library' | 'computer']), attrs:` id="member-tab-${id}" data-det="tab" data-tab="${id}" aria-controls="${id === 'computer' ? 'member-computer-panel' : 'member-panel-body'}" tabindex="${tab === id ? 0 : -1}"`})), tab, {kind:'nav', plain:true, label:t('members.panel')}));
     body.setAttribute('aria-labelledby', `member-tab-${tab}`);
     const typingText = typingIn === "mb-det-instr" || typingIn === "mb-det-personality";
     const kept = typingText ? (focused as HTMLElement).closest<HTMLElement>("section") : null;
@@ -307,7 +336,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     }
     if (typingText) void saveField(focused as HTMLTextAreaElement, true);
     const resourceTab = tab === "skills" || tab === "commands" || tab === "voice" ? tab : null;
-    const nextResourceKey = resourceTab ? `${member.id}:${resourceTab}` + (resourceTab === "voice" ? `:${member.voice}:${member.read_aloud}:${member.notify}` : "") : "";
+    const nextResourceKey = resourceTab ? `${member.id}:${resourceTab}` + (resourceTab === "voice" ? `:${member.voice}:${member.notify}` : "") : "";
     if (resourceKey !== nextResourceKey) { resources?.destroy(); resources = null; resourceKey = nextResourceKey; }
     if (resourceTab) {
       if (!resources) {
@@ -316,9 +345,19 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       }
     } else {
       if (tab === "details") {
-        if (!body.querySelector('.mb-panel-routines')) patchHTML(body, `<section class="mb-panel-tasks" data-k="panel-tasks"></section><section class="mb-panel-routines" data-k="panel-routines"></section><section><div class="mb-dh">${esc(t('members.panelConversations'))}</div><div data-slot="conversations" data-k="panel-conversations"></div></section>`);
-        patchHTML(body.querySelector('.mb-panel-tasks')!, panelTasksHTML(work, workFailed));
+        const chief = member.id === RAPHAEL_ID;
+        if (!body.querySelector('.mb-panel-routines') || !!body.querySelector('[data-slot="conversations"]') !== chief) {
+          conversationHost.remove();
+          patchHTML(body, `<section class="mb-panel-routines" data-k="panel-routines"></section>` +
+            (chief ? `<section><div class="mb-dh"><span data-panel-conversations-heading>${esc(t('members.panelConversations'))}</span></div><div data-slot="conversations" data-k="panel-conversations"></div></section>`
+              : `<section class="mb-panel-suggest" data-k="panel-suggest"></section>`));
+        }
+        // The skeleton is kept across draws, so its heading follows a language change here.
+        const heading = body.querySelector<HTMLElement>('[data-panel-conversations-heading]');
+        if (heading && heading.textContent !== t('members.panelConversations')) heading.textContent = t('members.panelConversations');
         patchHTML(body.querySelector('.mb-panel-routines')!, routinesHTML());
+        const suggest = body.querySelector<HTMLElement>('.mb-panel-suggest');
+        if (suggest) patchHTML(suggest, suggestHTML());
       } else if (tab === 'library') {
         conversationHost.remove(); patchHTML(body, panelLibraryHTML(work, workFailed));
       } else if (tab === 'computer') {
@@ -411,20 +450,6 @@ export function createDetails(host: DetailsHost): DetailsPanel {
 
   el.addEventListener("click", (e) => {
     const target = e.target as Element;
-    const taskButton = target.closest<HTMLElement>('[data-panel-task],[data-panel-task-menu]');
-    if (taskButton) {
-      const task = work?.tasks.find(task => task.id === Number(taskButton.dataset.panelTask ?? taskButton.dataset.panelTaskMenu));
-      if (!task) return;
-      if (taskButton.hasAttribute('data-panel-task')) { if (task.turn_id) host.openTurn?.(host.member().id, task.conversation_id ?? undefined, task.turn_id); }
-      else {
-        const member = host.member().id;
-        openMenu(taskButton, [], '', () => {}, undefined, [{label:t(['queued','running','waiting','waiting_owner','blocked'].includes(task.state) ? 'agent.stop' : 'members.panelRerun'), run() {
-          if (member !== host.member().id) return;
-          void (['queued','running','waiting','waiting_owner','blocked'].includes(task.state) ? api.workerCancel(task.id) : api.workerRerun(task.id)).then(() => loadWork()).catch(() => toaster.info(t('members.panelReadFailed')));
-        }}]);
-      }
-      return;
-    }
     if (target.closest('[data-panel-more]')) { fileLimit = Math.min(100, fileLimit + 12); void loadWork(); return; }
     const fileButton = target.closest<HTMLElement>('[data-panel-file]');
     if (fileButton) {
@@ -434,6 +459,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       return;
     }
     if (memories.some((list) => list.click(target))) return;
+    if (target.closest(".member-msg") && telegram.click(target)) return;
     const act = target.closest<HTMLElement>("[data-det]");
     if (!act || (act as HTMLButtonElement).disabled) return;
     const member = host.member();
@@ -442,6 +468,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         host.close();
         break;
       case "edit": host.edit?.(member); break;
+      case "share": void exportMemberTemplate(member.id).catch((error) => toaster.info(describeError(error))); break;
       case "draft": void host.update(member.id, { draft_first: !(member.draft_first ?? true) }); break;
       case "gear": tab = "settings"; draw(); break;
       case "back": tab = tab === "settings" ? "details" : "settings"; draw(); break;
@@ -477,12 +504,15 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         if (routine) openRoutineDialog({ members: host.list()?.members ?? [member], routine, onSaved: () => void loadRoutines(), onDeleted: () => void loadRoutines() });
         break;
       }
-      case "routine-menu": {
+      case "routine-toggle": {
         const routine = Array.isArray(routines) ? routines.find(row => row.id === Number(act.dataset.id)) : undefined;
-        if (routine) openActions(act, [{id:"test",label:t(routineRunState(routine.id).running ? "routine.testing" : "routine.test"),icon:"play"},{id:"edit",label:t("members.profile.editResource"),icon:"pencil"}], choice => {
-          openRoutineDialog({members:host.list()?.members ?? [member],routine,onSaved:()=>void loadRoutines(),onDeleted:()=>void loadRoutines()});
-          if (choice === "test") void testRoutine(routine.id);
-        });
+        if (!routine) break;
+        const enabled = !routine.enabled;
+        routine.enabled = enabled;
+        act.setAttribute("aria-checked", String(enabled));
+        void api.routinesUpdate(routine.id, { enabled })
+          .catch((error) => { routine.enabled = !enabled; toaster.info(describeError(error)); })
+          .finally(() => void loadRoutines());
         break;
       }
     }
@@ -490,9 +520,11 @@ export function createDetails(host: DetailsHost): DetailsPanel {
 
   el.addEventListener("input", (e) => {
     const target = e.target as HTMLInputElement | HTMLTextAreaElement;
+    if (target instanceof HTMLInputElement && telegram.input(target)) return;
     for (const list of memories) if (list.input(target)) break;
   });
   el.addEventListener("keydown", (e) => {
+    if (telegram.key(e)) return;
     if (memories.some((list) => list.key(e))) return;
     const target = e.target as HTMLElement;
     if (tabBar.contains(target) && target.matches('[role="tab"]') && ['ArrowLeft','ArrowRight','Home','End'].includes(e.key)) {
@@ -526,7 +558,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     overview() { select('details'); },
     select,
     refreshRoutines() { void loadRoutines(); },
-    refreshResources() { void loadCounts(true); void resources?.refresh(true); if (tab === 'details' || tab === 'library') void loadWork(); },
+    refreshResources() { void loadCounts(true); void resources?.refresh(true); if (tab === 'details' || tab === 'library') void loadWork(true); },
+    refreshWork(cause) { if (!el.hidden && (tab === 'library' || (cause === 'task' && tab === 'details'))) scheduleWork(); },
     refreshMemory(memberId, space) {
       if (el.hidden) return;
       if (memberId === host.member().id) {
@@ -539,6 +572,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     },
     showMember() {
       tab = "details";
+      telegram.reset();
+      if (host.member().id !== RAPHAEL_ID) void telegram.load();
       work = null; workFailed = false; fileLimit = 12; void loadWork();
       counts = {skills: 0, commands: 0, memory: 0};
       void loadCounts();

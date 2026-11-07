@@ -77,6 +77,10 @@
         "editable_email"
       ]
     },
+    "raphael/core/slack_draft": {
+      "scenario_ids": ["S05.slack-draft"],
+      "expected_assertions": ["editable_slack", "version_bound_send", "cancel_zero_send", "one_receipt"]
+    },
     "raphael/core/computer_act": {
       "scenario_ids": [
         "S21.computer.act"
@@ -460,9 +464,6 @@
     "raphael/core/members_mark_all_read": {"scenario_ids": ["S21.management.members_mark_all_read"], "expected_assertions": ["production_state", "primary_only"]},
     "raphael/core/group_update": {"scenario_ids": ["S21.management.group_update"], "expected_assertions": ["production_state", "primary_only"]},
     "raphael/core/group_delete": {"scenario_ids": ["S21.management.group_delete"], "expected_assertions": ["production_state", "primary_only"]},
-    "raphael/core/conversation_create": {"scenario_ids": ["S21.management.conversation_create"], "expected_assertions": ["production_state", "primary_only"]},
-    "raphael/core/conversation_rename": {"scenario_ids": ["S21.management.conversation_rename"], "expected_assertions": ["production_state", "primary_only"]},
-    "raphael/core/conversation_delete": {"scenario_ids": ["S21.management.conversation_delete"], "expected_assertions": ["production_state", "primary_only"]},
     "raphael/core/conversation_clear": {"scenario_ids": ["S21.management.conversation_clear"], "expected_assertions": ["production_state", "primary_only"]},
     "raphael/core/conversation_list": {"scenario_ids": ["S21.management.conversation_list"], "expected_assertions": ["production_state", "primary_only"]},
     "raphael/core/settings_read": {"scenario_ids": ["S21.management.settings_read"], "expected_assertions": ["production_state", "primary_only"]},

@@ -46,7 +46,7 @@ async def test_saved_but_unfilled_login_does_not_hide_any_screenshot(desktop, tm
 
 
 @pytest.mark.parametrize("recovery", ["navigation", "expiry", "other-target", "desktop-navigation"])
-async def test_picture_suppression_ends_at_navigation_or_two_minutes(desktop, tmp_path, recovery):
+async def test_picture_suppression_survives_navigation_time_and_other_tabs(desktop, tmp_path, recovery):
     hub, tools, reference = await rig(desktop, tmp_path)
     with vm_scope(("turn", 0, 7), turn_id=7):
         filled = await hub.call(tools["fill_login"], {"reference": reference, "site": "https://example.com",
@@ -66,7 +66,7 @@ async def test_picture_suppression_ends_at_navigation_or_two_minutes(desktop, tm
             Browser.url = "https://example.com/done"
             args, tool = {}, tools["get_desktop_state"]
         recovered = await hub.call(tool, args, approver="auto")
-        assert recovered.blocks
+        assert not recovered.blocks
     await hub.aclose()
 
 

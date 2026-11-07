@@ -30,7 +30,7 @@ IDS = {"type": "array", "items": MEMBER_ID}
 NULL_ID = {"type": ["integer", "null"], "minimum": 1}
 PROFILE = {
     **{key: TEXT for key in ("name", "role", "blurb", "personality", "instructions", "group", "avatar_preset", "model", "voice")},
-    **{key: BOOL for key in ("read_aloud", "notify", "ask_before_members", "draft_first", "pinned", "hidden")},
+    **{key: BOOL for key in ("notify", "ask_before_members", "draft_first", "pinned", "hidden")},
     "reply_style": {"type": "string", "enum": ["full", "conversational"]},
     "effort": {"type": "string", "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]},
     "position": {"type": "integer"}, "group_id": NULL_ID,
@@ -86,9 +86,6 @@ ACTIONS = (
     row("room_members", "rooms.update", "Replace group chat membership. The card names the complete new membership.", {"room_id": ID, "member_ids": IDS}, ("room_id", "member_ids"), destructive=True),
     row("room_stop", "rooms.stop", "Stop all work belonging to a group chat.", {"room_id": ID}, ("room_id",)),
     row("room_delete", "rooms.delete", "Delete a group chat, messages and associated room state.", {"room_id": ID}, ("room_id",), destructive=True),
-    row("conversation_create", "conversations.create", "Create a member conversation.", {"member_id": MEMBER_ID}, ("member_id",)),
-    row("conversation_rename", "conversations.rename", "Rename a conversation.", {"id": ID, "title": TEXT}, ("id", "title")),
-    row("conversation_delete", "conversations.delete", "Delete a conversation and its recorded turns.", {"id": ID}, ("id",), destructive=True),
     row("conversation_clear", "conversations.clear", "Clear the selected conversation. Read conversations.list for the permanent quick conversation ID.", {"id": ID}, ("id",), destructive=True),
     row("member_skill_import", "members.skills.import", "Import a member's skill package through the UI importer.", {"member_id": MEMBER_ID, "shared": BOOL, "source": TEXT}, ("member_id", "source")),
     row("member_skill_update", "members.skills.update", "Edit a member skill document or turn it on/off.", {"member_id": MEMBER_ID, "shared": BOOL, "id": ID, "enabled": BOOL, "text": TEXT, "expected_hash": TEXT}, ("member_id", "id")),
@@ -143,8 +140,8 @@ ACTIONS = (
           ("first_bot_profile", obj({key: TEXT for key in ("name", "role", "personality", "instructions")}), "Edit the first Bot's profile."),
           ("raphael_draft_first", BOOL, "Set the first Bot's mail draft preference."),
           ("chief_pinned", BOOL, "Pin/unpin the primary contact."),
-          ("tts_enabled", BOOL, "Enable/disable the first Bot's read-aloud voice."),
-          ("tts_fish_voice", TEXT, "Set the first Bot's read-aloud voice ID."),
+          ("tts_enabled", BOOL, "Enable/disable speech for quick questions, voice calls and requested audio files."),
+          ("tts_fish_voice", TEXT, "Set the default voice ID for quick questions, voice calls and audio files."),
           *((key, TEXT, "Choose this model only when the owner explicitly requests it; never recover a failure by changing it.")
             for key in ("cleanup_model", "stt_cloud_model", "assistant_model", "router_model", "memory_model", "pdf_model", "vision_model")),
           *((key, STRINGS, "Edit the model fallback list only when explicitly requested by the owner.")
@@ -303,6 +300,10 @@ def destructive(name, arguments, retention=None):
 # These are UI-controlled boundaries, never direct management tools. Work tools may
 # propose a card, but may not answer it or handle its credentials.
 OWNER_ONLY = {
+    "members.template": "The owner previews, imports and exports portable member recipes.",
+    "connectors.label": "The owner names a connected account after sign-in.",
+    **dict.fromkeys(("vault.list", "vault.add", "vault.update", "vault.remove", "vault.preview", "vault.cancel", "vault.import"),
+                   "Owner-only vault metadata, private value writes, sharing and transient CSV import; no private value read or export RPC exists."),
     "memory.import": "Only the owner explicitly imports outside memory through the checked shared-memory writer.",
     **dict.fromkeys(("owner_questions.answer", "owner_questions.bring", "background.answer", "pages.tool_call",
                      "integrations.card_connect", "integrations.card_cancel", "integrations.card_save", "integrations.card_resume",
@@ -317,7 +318,7 @@ OWNER_ONLY = {
                      "integrations.add", "integrations.update", "integrations.import", "integrations.test"),
                    "Sign-in and custom MCP activation use the existing owner-controlled card."),
     **dict.fromkeys(("safety.rules.create", "safety.rules.update", "safety.rules.delete"), "Safety rules cannot be changed by a model."),
-    **dict.fromkeys((f"messaging.{kind}.{action}" for kind in ("telegram", "slack", "discord")
+    **dict.fromkeys((f"messaging.{kind}.{action}" for kind in ("telegram", "slack", "discord", "member")
                     for action in ("connect", "set_enabled", "approve", "reject", "remove_user", "disconnect")),
                    "Messaging authentication and access approval belong to the owner."),
     **dict.fromkeys(("computer.viewer_open", "computer.viewer_renew", "computer.viewer_control", "computer.viewer_close",
@@ -327,11 +328,16 @@ OWNER_ONLY = {
                    "Device and downloaded speech-model settings belong to the owner."),
 }
 INTERACTION_RPCS = {
+    **dict.fromkeys(("agent.react", "rooms.react", "rooms.thread_open"),
+                   "Owner-authored message metadata and room thread navigation; never approval or model administration."),
     **dict.fromkeys(("attachments.info", "attachments.upload"),
                    "Owner composer file selection and bounded upload; not model management tools."),
     "routines.run": "Only the owner's explicit routine test starts a manual run through the existing worker.",
-    **dict.fromkeys(("members.viewing", "rooms.send", "rooms.transcribe", "agent.history.stop", "agent.history.retract",
-                     "worker.cancel", "worker.rerun", "agent.speak", "tts.preview", "tts.stop", "pages.open"),
+    **dict.fromkeys(("voice_chat.start", "voice_chat.end", "voice_chat.mute", "voice_chat.settings",
+                     "voice_chat.feedback", "voice_chat.status"),
+                   "The owner's own voice call controls with one member; never a model tool."),
+    **dict.fromkeys(("members.viewing", "members.greet", "rooms.send", "rooms.transcribe", "agent.history.stop", "agent.history.retract",
+                     "worker.cancel", "worker.rerun", "tts.preview", "tts.stop", "pages.open"),
                    "Existing owner conversation, work or presentation entry; not team administration."),
     **dict.fromkeys(("calendar.add", "calendar.update", "calendar.delete"), "Shared calendar work tools retain their existing gate for every member."),
 }
@@ -362,7 +368,7 @@ connectors.catalog connectors.categories connectors.status connectors.toolkit co
 history.list home.overview integrations.audit integrations.catalog integrations.discover
 integrations.inventory integrations.preview languages.list links.preview members.list
 members.tool_choices members.unread members.voices messages.search messaging.discord.status
-messaging.slack.status messaging.telegram.status models.catalog models.local models.status
+messaging.slack.status messaging.telegram.status messaging.member.status messaging.accounts models.catalog models.local models.status
 providers.kinds providers.list providers.models quota.list rooms.list rooms.messages
 routines.runs routines.template safety.rules.list secrets.status services.status stats.summary
 status.check_openrouter status.get toolsets.list usage.allowances usage.analytics usage.export usage.runs

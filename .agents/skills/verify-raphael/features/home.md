@@ -1,132 +1,94 @@
-# Home overview
-
-## Calendar rhythm (2026-11-01)
-
-home-calendar-rhythm shares Calendar's calendar-view chip: member face/colour,
-title only, without timing or a clock. Its projection has one rhythm per local date
-plus timed failure/owner-question exceptions; overflow includes each bar. Compare
-with home-own-events and calendar-rhythm-day in both themes at
-1120,720,1920x1080. The background Google reading notifies Home through
-calendar.changed and never holds first paint.
+# Home
 
 ## Sub-features
 
-### Product contract (owner refinement, 2026-10-30)
+### Product contract (owner, 2026-11-07, R-UI-114)
 
-The borderless hero has a 128px emblem (96px at 720px), the original --fs-h1 report and unchanged date on one horizontal row,
-including at 720. Home retains its 1080px maximum. The emblem loops when allowed,
-follows reduced motion and retains its DOM node during refreshes. Only a repair
-report has a fixing icon; Raphael is asked in his conversation.
+Home is Raphael as a secretary. The owner asked for today's plans and the team's state,
+not quotas, tokens or dictation counts; no boxes; no scroll on a small screen.
 
-Four equal blocks remain in a two-by-two grid for full, sparse and empty data:
-needs-you, monthly spend, allowances and dictation. Heights are 200px, or 224px below
-760px. Quiet copy replaces flat zero charts and lone dashes. Three inbox items and
-one window per CLI fit the same tracks. No descendant scrolls internally.
-Spend/allowances open Usage; dictation opens Dictation; reports open the exact turn.
-
-Named, keyboard-focusable transparent full-size click layers cover all five blocks.
-Inner controls are separate buttons. Hover changes only border-color to
-var(--hover-edge), matching the former sidebar spend card. Background, transparent
-layer, geometry and inner content remain unchanged. Press never paints a fill;
-keyboard focus remains visible. home-hover-content compares actual measurements.
-
-### Adaptive calendar
-
-One calendar adapts to available container width and height, without a toggle. It is
-a small view of the Calendar page: the same chip (`calendar-view.ts`), time format, today
-mark and colours, with the own events among what it draws.
-Six weeks, seven weekday initials and dimmed neighbouring dates remain in every
-month. Today has a filled accent circle. Month/year stays left; previous/next icon
-buttons and Today stay right. Arrows, horizontal trackpad wheel and touch swipe
-change month with a 160ms grid-only slide; reduced motion skips it. Header controls
-and block height stay fixed. There is no Coming up label.
-
-At 1120 and 1280x800, a compact mini month is left and selected-day agenda is right.
-The agenda shows today, or the first of a month the arrows moved to. Rows are the
-Calendar's chips; an empty day has one quiet line and 建立, which opens the Calendar's form
-on that day. Marked days have a dot. A date opens that day on the Calendar page in every
-layout. At 720 the agenda sits below the mini month without an inner scroll.
-Full, sparse and empty states retain identical tracks and dimensions.
-
-The block's header has one quiet line about Google between the title and the fixed
-controls, so that it is never taken for an empty calendar: not connected, with the place
-to connect it and a × that closes it for good (here and on the Calendar page); could not be
-read, with where to check, until it reads again. Connected, it says nothing. Own events show whatever Google does.
-
-At container width >=900px and height >=460px (1920x1080), a full month fills the
-remaining Home area. Days show two chips, or three above 600px of calendar height,
-with time, title and a remaining count. Chips open their event on Calendar with the
-occurrence highlighted and its detail open; dates open that Calendar day. A month with
-nothing in it offers 建立 in the header. Compact agenda rows use the event action. Blank
-space resumes the Calendar's last date and view (today with the stored view after a fresh launch). Calendar remains reachable from Home rather than the
-sidebar.
+- **Hero.** His emblem stands in the middle (128px, 96px when the main area is 760px or
+  narrower), then a greeting by the time of day (早安／午安／晚上好，主人) at --fs-h1, the date,
+  and one health line in plain words: all members are well, or who waits for the owner. A
+  report that needs fixing (no key, OpenRouter offline, budget used up) adds its own line and
+  one fix icon; a well budget says nothing. The main window never shows the 《告。…》 caption
+  wrapper (R-UI-42), so the report's words are unwrapped with `plainReplies`. No ask-Raphael icon (R-UI-43). The emblem turns
+  while motion is allowed, stands still under reduced motion, and stays the same DOM node
+  through refreshes.
+- **Three sections** side by side (one column when the main area is 640px or narrower):
+  今天的行程, 還沒解決的事 and 成員, the last narrower as it holds only names and states. In a
+  narrow main area an open item drops its time to keep its words. Each is a heading over a hairline and at most four rows;
+  the rest is counted below them. Rows are plain buttons that light their own background
+  under the pointer; nothing is framed.
+- **Today's schedule** lists today's items from the month projection, all-day first, then by
+  time: the time, the calendar's colour as a short tick (own events ink, routines the
+  member's slime colour, Google outline grey), the title, a failed or waiting run's mark and
+  the face or Google's mark. A rhythm shows its repeat mark, face and title, never a time
+  (R-CAL-03). What is over is dimmed, never a run that failed. The heading's calendar icon
+  resumes Calendar (R-CAL-04); a row opens its event; the count opens today. Empty, it says
+  今天沒有行程 and offers 建立. The Google line (not connected, once and closable; could not be
+  read, until it reads) sits under the rows (R-UI-66).
+- **What is still open** lists questions and reports, never routines; a row opens the
+  conversation at its turn.
+- **成員** lists every member the owner sees except Raphael, the ones who wait for the owner
+  first (in the warning colour), then the ones at work (the core's activity words), unread,
+  and standing by. A row opens that member's conversation. A `MemberActivity` event redraws
+  the row and the health line without a read.
+- **Arrival.** On Home's first showing of a day (`raphael.home.arrived` in guarded
+  localStorage), he flies in from his bottom-right corner, two gold rings go out around him,
+  the health line is read out left to right and the sections rise. The page drops
+  `data-arrive` when the outer ring, the last part, has gone (a held animation keeps it). Under reduced motion he is simply there and
+  the day still counts as seen.
 
 ## How to get to it (user POV)
 
-Click the Raphael brand in the sidebar to open Home. At narrow widths, open the
-sidebar with the window menu first. Click a date, an agenda event, a full-grid event or
-the calendar background to open Calendar. Use the month arrows, Today, trackpad or touch
-swipe to navigate.
+The square Home button at the sidebar's foot. At narrow widths, open the sidebar drawer
+first.
 
 ## Driving it with look
 
 ```powershell
-npm run look -- home home-empty home-sparse home-720 home-report home-routine home-calendar home-adaptive-calendar home-selected-day home-own-events home-create home-google-off home-google-closed home-google-failed home-event-chip home-month home-month-navigation home-month-swipe home-calendar-background home-many home-block-navigation home-block-interactions home-hover home-motion --theme both --width 1120,720,1920x1080,1280x800
+npm run look -- home home-empty home-team home-many home-problem home-calendar-rhythm home-own-events home-report home-member home-calendar home-more home-event-chip home-create home-google-off home-google-closed home-google-failed home-row-hover home-arrival home-motion --theme both --width 1120,720,1920x1080
 ```
 
-home-redesign measures equal blocks, horizontal hero and nine hit-test points per
-surface. home-month checks 42 days, headings, dimming, fixed controls, container mode,
-agenda visibility, chip limits and no inner scroll. home-selected-day checks
-exact-day navigation in every layout; home-event-chip checks Calendar focus.
-Month navigation/swipe scenes exercise arrows, wheel and real CDP touch dispatch.
-Calendar scenes prove exact-day and blank-space navigation. Block scenes exercise
-both corners, inner reports, hover, press and keyboard/pointer focus. home-motion
-verifies the animated WebP; month-navigation allows the finite slide.
+home-hero measures the centred emblem, greeting and health line; home-overview requires no
+main-area scroll, three unboxed sections, at most four plain rows each, no money or
+percentages and the turning emblem. home-team checks the order, the count and the warning
+colour; home-arrival holds each part of the arrival 700 ms in (the `home-arrive-again` action forgets the
+day and returns to Home) and checks the flight, the gold ring and the read-out line;
+home-motion holds it at 2000 ms, after the arrival. The calendar scenes prove each way into
+Calendar. Inspect every sheet and the full-size images in both themes.
 
-Inspect every sheet and relevant full-size image in both themes and requested sizes.
-Compare controls with Calendar and edge states with the shared hover-edge contract.
-The calendar header grows with its controls, including the 38px buttons at 1920;
-`home-google-off` and `home-google-failed` keep the notice inside that header.
-Native readable-layout covers sidebar, drawer, details, month changes and Calendar;
-locale-sweep changes en/ja/zh-TW through real Settings.
+Native readable-layout inspects Home at 720, 1920x1080 and 1280x800 and opens Calendar from
+the schedule's icon; the calendar journey opens a member's event from today's schedule;
+home-timing proves Home paints before the core's live allowance read finishes.
 
 ## Gotchas
 
 ### Data and refresh boundaries
 
-home.overview remains the sole projection. It reads the app's own events
-(`own_calendar.py`, `calendar_events`) beside what it computes: routine occurrences and
-Google events, and says what Google is in `calendar_google`.
-refresh=false reads local records and cached events/allowances without a CLI or
-provider request. Home paints it before the coalesced refresh=true read. Generation
-guards reject stale month responses. Allowance persistence uses notify=false.
-Member, question, conversation, routine, quota, settings and connection changes
-refresh Home. Locale changes redraw cached Home even behind Settings without an RPC
-or replacing the emblem; owner profile changes redraw the agenda face.
+home.overview remains the projection of the schedule and what is open; `members.list` gives
+the team, read through the same coalesced event read as the sidebar. home.overview reads the
+app's own events (`own_calendar.py`, `calendar_events`) beside routine occurrences and Google
+events, and says what Google is in `calendar_google`. It still carries usage, allowances and
+dictation for other callers; Home draws none of them.
+refresh=false reads local records and cached events/allowances without a CLI or provider
+request. Home paints it before the coalesced refresh=true read (at most one per five
+minutes). Member, question, conversation, routine, calendar, settings and connection changes
+refresh Home. Locale changes redraw cached Home even behind Settings without an RPC or
+replacing the emblem.
 
-Optional month uses strict YYYY-MM validation. CalendarDate/CalendarEventFocus use
-existing app.go, and Calendar requests the corresponding month. At most the three
-earliest items per local date (126 over 42 days), full daily counts and marked dates
-are projected independently of the seven-day preview. Existing schedules/history
-supply routines. Preview limits remain 12 today items, eight reports and 24 events.
+At most the three earliest items per local date are projected, with full daily counts;
+Home counts what it does not draw. Preview limits remain 12 today items, eight reports and
+24 events.
 
 Google Calendar uses connectors.status(refresh=false) and the existing private
-calendar_list_events tool only when ACTIVE/enabled. It reads primary calendar,
-expands recurrences and orders by start time over the visible 42 days, capped at
-2500 results with the existing twelve-second timeout. Unavailable, disabled or
-expired connections yield no connected events, and `calendar_google` says which it was;
-own events and local routines remain available. All-day dates use calendar time zone.
-Reports stay separate from the timeline. An own event or a Google one past midnight is
-counted and marked on each of its days. The `composio:googlecalendar` toolkit also supplies this reading through the fixed
-core read path; the direct Google sign-in wins when readable.
+calendar_list_events tool only when ACTIVE/enabled; the `composio:googlecalendar` toolkit
+also supplies it through the fixed core read path, and the direct Google sign-in wins when
+readable. Unavailable, disabled or expired connections yield no connected events, and
+`calendar_google` says which it was; own events and local routines remain available.
 
-Offline pytest covers projection and HTTP doubles. Browser fixtures prove UI;
+Offline pytest covers the projection and HTTP doubles. Browser fixtures prove the UI;
 isolated fake-brain native journeys prove the desktop path. Neither proves live
 calendar/OAuth/provider scheduling.
 Follow the shared [content-width contract](README.md#content-width).
-
-Native `sidebar-home` checks the emblem/report/date and in-place sidebar search at 1120,720,1920x1080, using the real WebView and isolated data.
-
-Review fixes: Home rhythms show only face and title, without interval or time window. Failed/waiting chips never carry is-past. Pending background owner/permission cards use the shared real-store run-status projection. Readable Google connections start connected and background reads never hold Home up.
-
-The general calendar block resumes Calendar without a date argument. Explicit day, event and create links still navigate to their targets. calendar-remember checks both Home and conversation returns; calendar-view-reload checks a fresh launch.

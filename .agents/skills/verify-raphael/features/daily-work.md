@@ -105,3 +105,14 @@ explicit re-enable remain authoritative. Rate or worker refusal has readable wor
 All provider payloads and Slack messages in this brief are synthetic; external
 HTTPS forwarding, real authentication and native subscription delivery remain
 separate acceptance.
+
+
+## Native output folder choice (2026-11-05)
+
+R-COLLEAGUE-06: Settings > General > output folder is a folder picker like Claude's or ChatGPT's, with no typed field (owner, 2026-11-07). Unset, the row is 選擇資料夾 alone. Chosen, the button carries the folder's name, the whole path stands under the row name; the folder is changed with that one button. A chosen native path uses the same settings writer; cancel leaves the preference unchanged.
+
+```powershell
+npm run look -- owner-output-folder output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
+```
+
+The look picker is an IPC fixture. The actual OS dialog, cancel and filesystem delivery remain native acceptance.

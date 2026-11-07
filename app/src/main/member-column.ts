@@ -1,8 +1,8 @@
 // The member column puts the primary contact first, followed by member groups and ungrouped members.
 // Raphael keeps his emblem even when the primary contact takes the first conversation slot.
 //
-// A row's borderless 「more」 that shows under the pointer, or a right click on the row (context-menu.ts), gives 「設為主要」 (the
-// primary contact, shown in the top slot), 「移到分組 ▸」 and 「刪除」; a group header's gives 「重新命名」, 「看的地方」 and 「刪除」. What they do is the host's
+// A row's borderless 「more」 that shows under the pointer, or a right click on the row (context-menu.ts), opens the row menu
+// (`memberMenu`); a group header's gives 「重新命名」, 「看的地方」 and 「刪除」. What they do is the host's
 // (members-shell.ts): the column only draws and says what was asked.
 //
 // `columnHTML` draws the list from a snapshot (pure, so its rules can be tested without a browser);
@@ -10,9 +10,8 @@
 
 import { createRoomsSection, openNewGroupChat } from "./group-chats";
 import { t } from "./i18n";
-import { formatClock } from "./format";
 import { createMessageSearch } from "./message-search";
-import { type MemberSection, faceHTML, memberMatches, memberSections, memberDisplayList, memberRole, previewOf, raphaelOf } from "./members";
+import { type MemberSection, faceHTML, memberMatches, memberSections, memberDisplayList, memberRole, previewOf, primaryIdOf, raphaelOf } from "./members";
 import type { Member, MembersList } from "./types";
 import { closeMenu, esc, ico, iconButton, openPopover } from "./ui";
 
@@ -25,7 +24,6 @@ export interface ColumnView {
   active?: boolean;
   /** The last message of each member's thread, as far as it is known. */
   previews: ReadonlyMap<number, string>;
-  query: string;
   /** The groups folded away, by id. */
   folded: ReadonlySet<number>;
   /** The members that were not there at the last drawing: their rows fade in. */
@@ -50,17 +48,16 @@ function pinnedTileHTML(member: Member, v: ColumnView, top: boolean): string {
   );
 }
 
-/** A member's row: its picture, name, time, preview and dot; then its protected member actions. */
+/** A member's row, as Grok Bot's: its picture, name, last line and dot, with no time (R-UI-77); then its protected member
+ *  actions. */
 export function memberRowHTML(member: Member, v: Pick<ColumnView, "current" | "active" | "previews" | "fresh"> & { list?: ColumnView["list"] }): string {
-  const lastAt = new Date(member.last_at ?? NaN);
   const preview = previewOf(member, v.previews.get(member.id));
   const dot = memberDot(member);
   return (
     `<div class="mb-item${v.fresh.has(member.id) ? " is-new" : ""}" data-member-item="${member.id}"${member.id ? ' draggable="true"' : ""}>` +
     `<button type="button" class="nav mb-row" data-member="${member.id}" aria-current="${v.active !== false && member.id === v.current}" data-k="member:${member.id}">` +
     faceHTML(member, 40) +
-    `<span class="mb-row-main"><span class="mb-row-t"><b>${esc(member.name)}</b>` +
-    (Number.isFinite(lastAt.getTime()) ? `<time class="mb-row-time" datetime="${lastAt.toISOString()}">${formatClock(lastAt.getTime())}</time>` : "") + `</span>` +
+    `<span class="mb-row-main"><span class="mb-row-t"><b>${esc(member.name)}</b></span>` +
     (preview.text ? `<span class="mb-row-p${preview.waiting ? " is-wait" : ""}">${esc(preview.text)}</span>` : "") +
     `</span>${dot}</button>` +
     iconButton("more", t("members.more", { p0: member.name }), ` data-member-more="${member.id}" aria-haspopup="menu" aria-expanded="false" data-k="member-more:${member.id}"`, "mb-more") +
@@ -73,7 +70,7 @@ function sectionHTML(section: MemberSection, v: ColumnView): string {
   const group = section.group;
   const id = group ? String(group.id) : "none";
   const name = group ? group.name : t("members.ungrouped");
-  const open = !(group && v.folded.has(group.id)) || v.query.trim() !== "";
+  const open = !(group && v.folded.has(group.id));
   return (
     `<section class="mb-sec"${group ? ' draggable="true"' : ""} data-group="${id}" data-open="${open}">` +
     (group ? `<div class="mb-ghead"><span class="mb-gname">${esc(name)}</span>` +
@@ -87,20 +84,35 @@ function sectionHTML(section: MemberSection, v: ColumnView): string {
   );
 }
 
-/** The list under the search: the primary, groups and ungrouped members, or an empty result. */
+/** The folder id the hidden section folds by: no group has it. */
+export const HIDDEN_SECTION = -1;
+
+/**
+ * As Grok Bot's Hidden Bots (owner, 2026-11-06): the members taken off the list sit in one more folder at its end, with
+ * the hidden group chats, which group-chats.ts puts in its `[data-hidden-rooms]`. Empty, it does not show.
+ */
+function hiddenSectionHTML(hidden: readonly Member[], v: ColumnView): string {
+  const open = !v.folded.has(HIDDEN_SECTION), name = t("members.hiddenSection");
+  return `<section class="mb-sec mb-hidden" data-group="hidden" data-open="${open}"${hidden.length ? "" : " data-empty"}>` +
+    `<div class="mb-ghead"><span class="mb-gname">${esc(name)}</span>` +
+    iconButton("down", t("members.toggleGroup", { p0: name }), ` data-group-fold="${HIDDEN_SECTION}" aria-expanded="${open}" data-k="group-fold:hidden"`, "mb-fold") +
+    `</div><div class="mb-gbody"${open ? "" : " inert"}><div class="mb-gclip">${hidden.map((member) => memberRowHTML(member, v)).join("")}` +
+    `<div class="mb-hidden-rooms" data-hidden-rooms></div></div></div></section>`;
+}
+
+/** The list: the pinned tiles, the primary, then groups and ungrouped members, then the hidden ones. */
 export function columnHTML(v: ColumnView): string {
   const all = memberDisplayList(v.list), top = all.members[0];
-  const pinned = all.members.filter(m => m.pinned && (m.id === top.id || !m.hidden) && memberMatches(m, v.query));
-  const sections = memberSections({ ...all, members: all.members.filter(m => !m.pinned) }, v.query, top.id);
-  const searching = v.query.trim() !== "";
-  const showChief = !top.pinned && (!searching || memberMatches(top, v.query));
+  const pinned = all.members.filter(m => m.pinned && (m.id === top.id || !m.hidden));
+  const sections = memberSections({ ...all, members: all.members.filter(m => !m.pinned) }, "", top.id);
   const chief = memberRowHTML(top, v).replace('class="nav mb-row"', 'class="nav mb-row mb-chief"');
-  return (pinned.length ? `<div class="mb-pinned" data-count="${Math.min(pinned.length, 3)}">${pinned.map(m => pinnedTileHTML(m, v, m.id === top.id)).join("")}</div>` : "") + (showChief ? chief : "") + sections.map((section) => sectionHTML(section, v)).join("") + (searching && !showChief && sections.length === 0 && pinned.length === 0 ? `<p class="mb-none">${esc(t("members.noMatch"))}</p>` : "");
+  const hidden = (v.list?.members ?? []).filter(m => m.hidden && m.id !== top.id);
+  return (pinned.length ? `<div class="mb-pinned" data-count="${Math.min(pinned.length, 3)}">${pinned.map(m => pinnedTileHTML(m, v, m.id === top.id)).join("")}</div>` : "") + (top.pinned ? "" : chief) + sections.map((section) => sectionHTML(section, v)).join("") + hiddenSectionHTML(hidden, v);
 }
 
 export interface ColumnHost {
   openMessage?(member: number, conversation: number, turn: number): void;
-  view(): Omit<ColumnView, "query" | "folded">;
+  view(): Omit<ColumnView, "folded">;
   /** Opens the thread of member `id`. */
   select(id: number): void;
   newMember(groupId: number | null): void;
@@ -120,20 +132,24 @@ export interface ColumnHost {
 export interface MemberColumn {
   readonly el: HTMLElement;
   draw(): void;
-  /** The same cross-conversation search, available when the column is hidden on narrow windows. */
+  /** The search card: members and what is found in the messages, from the search button, Ctrl+Shift+F or the palette. */
   openSearch(anchor: HTMLElement): void;
-  /** The search's words now. */
-  query(): string;
   menu(id: number, anchor: HTMLElement): void;
 }
 
+export interface ActionItem { id: string; label: string; icon?: Parameters<typeof ico>[0]; submenu?: boolean }
+/** A hairline between groups of items, as Grok Bot's row menu has. */
+export const SEP = "-";
+
 /** A menu of plain items under `anchor`; `onPick` gets the chosen item's `id`. */
-export function openActions(anchor: HTMLElement, items: readonly { id: string; label: string; icon?: Parameters<typeof ico>[0]; submenu?: boolean }[], onPick: (id: string, row: HTMLElement) => void): void {
+/** `lead` is a row above the items, such as a message's reactions; its buttons carry `data-lead`. */
+export function openActions(anchor: HTMLElement, items: readonly (ActionItem | typeof SEP)[], onPick: (id: string, row: HTMLElement) => void,
+  lead?: { html: string; onPick(value: string): void }): void {
   const el = openPopover(
     anchor,
-    items
+    (lead?.html ?? "") + items
       .map(
-        (item) =>
+        (item) => item === SEP ? `<div class="menu-sep" role="separator"></div>` :
           `<button type="button" role="menuitem"${item.icon === "trash" ? ' class="danger"' : ""} tabindex="-1" data-pick="${esc(item.id)}"${item.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
           `<span class="ck">${item.icon ? ico(item.icon) : ""}</span><span class="mt">${esc(item.label)}</span>${item.submenu ? ico("right") : ""}</button>`,
       )
@@ -141,6 +157,8 @@ export function openActions(anchor: HTMLElement, items: readonly { id: string; l
     { className: "menu mb-menu", role: "menu", label: anchor.getAttribute("aria-label") ?? undefined },
   );
   el.addEventListener("click", (e) => {
+    const led = lead && (e.target as Element).closest<HTMLElement>("[data-lead]");
+    if (led) { closeMenu(); anchor.focus({ preventScroll: true }); lead.onPick(led.dataset.lead ?? ""); return; }
     const pick = (e.target as Element).closest<HTMLElement>("[data-pick]");
     if (!pick) return;
     const id = pick.dataset.pick ?? "";
@@ -153,22 +171,27 @@ export function openActions(anchor: HTMLElement, items: readonly { id: string; l
   el.querySelector<HTMLElement>("button")?.focus();
 }
 
+/**
+ * A row's menu, grouped as Grok Bot's (owner, 2026-11-06): 釘選, 移到分組, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除.
+ * The primary sits in the top slot instead of a group and is not deleted from here: its menu ends with 換成其他成員.
+ */
 export function memberMenu(id: number, anchor: HTMLElement, host: Pick<ColumnHost, "view" | "moveMember" | "deleteMember" | "memberAction">): void {
-  const member = host.view().list?.members.find(m => m.id === id);
-  const pin = { id: "pin", label: t(member?.pinned ? "members.sideUnpin" : "members.sidePin"), icon: "pin" } as const;
-  // Raphael is not a member row the owner can edit: pinning is all there is to do to him here.
-  if (id === 0) return openActions(anchor, [pin], pick => host.memberAction?.(id, pick));
-  openActions(anchor, [
-    pin,
-    { id: "move", label: t("members.moveTo"), icon: "folder", submenu: true },
-    { id: "primary", label: t("members.sidePrimary"), icon: "up" },
-    { id: "unread", label: t("members.sideUnread"), icon: "chat" },
-    { id: "read-all", label: t("members.sideReadAll"), icon: "check" },
-    { id: "edit", label: t("members.sideEdit"), icon: "pencil" },
-    { id: "duplicate", label: t("members.sideDuplicate"), icon: "copy" },
-    { id: "clear", label: t("members.sideClear"), icon: "trash" },
-    { id: "hide", label: t("members.sideHide"), icon: "eyeOff" },
-    { id: "delete", label: t("members.sideDelete"), icon: "trash" },
+  const list = host.view().list;
+  const member = list?.members.find(m => m.id === id);
+  const primary = primaryIdOf(list) === id;
+  const pin: ActionItem = { id: "pin", label: t(member?.pinned ? "members.sideUnpin" : "members.sidePin"), icon: "pin" };
+  const replace: ActionItem = { id: "primary", label: t("members.sideReplacePrimary"), icon: "up" };
+  // Raphael is not a member row the owner can edit: pinning is all there is to do to him here, and handing on the primary when it is his.
+  if (id === 0) return openActions(anchor, primary ? [pin, SEP, replace] : [pin], pick => host.memberAction?.(id, pick));
+  const unread: ActionItem = { id: "unread", label: t("members.sideUnread"), icon: "chat" };
+  const tail: (ActionItem | typeof SEP)[] = [
+    SEP, { id: "edit", label: t("members.sideEdit"), icon: "pencil" },
+    SEP, { id: "export-template", label: t("template.export"), icon: "download" },
+    SEP, member?.hidden ? { id: "hide", label: t("members.sideUnhide"), icon: "eye" } : { id: "hide", label: t("members.sideHide"), icon: "eyeOff" },
+  ];
+  openActions(anchor, primary ? [pin, unread, ...tail, replace] : [
+    pin, { id: "move", label: t("members.moveTo"), icon: "folder", submenu: true }, unread,
+    ...tail, { id: "delete", label: t("members.sideDelete"), icon: "trash" },
   ], (pick, row) => {
     if (pick === "move") host.moveMember(id, null, row);
     else if (pick === "delete") host.deleteMember(id);
@@ -179,17 +202,18 @@ export function memberMenu(id: number, anchor: HTMLElement, host: Pick<ColumnHos
 export function createMemberColumn(host: ColumnHost): MemberColumn {
   const el = document.createElement("aside");
   el.className = "mb-col";
+  // Search and plus side by side at the top, as Grok Bot's (owner, 2026-11-06): search opens a card in the middle of the
+  // window instead of a field standing in the list.
   el.innerHTML =
-    `<div class="mb-top">${iconButton("plus", t("members.add"), ' data-col="add" aria-haspopup="menu" aria-expanded="false"', "mb-tool")}</div>` +
-    `<label class="mb-find">${ico("search")}<input type="search" class="mb-find-input" autocomplete="off" spellcheck="false" maxlength="40"></label>` +
+    `<div class="mb-top">${iconButton("search", t("chat.searchAll"), ' data-col="search" aria-haspopup="dialog"', "mb-tool")}` +
+    `${iconButton("plus", t("members.add"), ' data-col="add" aria-haspopup="menu" aria-expanded="false"', "mb-tool")}</div>` +
     `<nav class="mb-scroll"><div class="mb-list"></div></nav>`;
   const rooms = createRoomsSection(() => host.view().active !== false);
   el.querySelector(".mb-scroll")!.append(rooms);
-  const findInput = el.querySelector<HTMLInputElement>(".mb-find-input")!;
+  const searchButton = el.querySelector<HTMLElement>('[data-col="search"]')!;
   const addButton = el.querySelector<HTMLElement>('[data-col="add"]')!;
   const list = el.querySelector<HTMLElement>(".mb-list")!;
   const nav = el.querySelector<HTMLElement>(".mb-scroll")!;
-  let query = "";
   const folded = new Set<number>();
   try { for (const id of JSON.parse(localStorage.getItem("raphael.sidebar.folders") ?? "[]")) if (Number.isInteger(id)) folded.add(id); } catch { /* Keep folders open when storage is unavailable. */ }
   const search = createMessageSearch(list, {
@@ -206,12 +230,12 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     nav.setAttribute("aria-label", t("members.title"));
     addButton.setAttribute("aria-label", t("members.add"));
     addButton.title = t("members.add");
-    findInput.placeholder = t("chat.searchAll");
-    findInput.setAttribute("aria-label", t("chat.searchAll"));
+    searchButton.setAttribute("aria-label", t("chat.searchAll"));
+    searchButton.title = t("chat.searchAll");
     const focusKey = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-k]");
     const key = focusKey && list.contains(focusKey) ? focusKey.dataset.k : undefined;
-    search.draw(query, columnHTML({ ...host.view(), query, folded }));
-    rooms.dispatchEvent(new CustomEvent("sidebar-search", { detail: query }));
+    search.draw("", columnHTML({ ...host.view(), folded }));
+    rooms.dispatchEvent(new Event("sidebar-draw"));
     const focused = key ? list.querySelector<HTMLElement>(`[data-k="${CSS.escape(key)}"]`) : null;
     if (focused && focused !== document.activeElement) focused.focus({ preventScroll: true });
   }
@@ -241,9 +265,11 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
           { id: "member", label: t("members.newMember") + "  Ctrl+N", icon: "plus" },
           { id: "group", label: t("members.newGroup"), icon: "folder" },
           { id: "group-chat", label: t("members.sideNewGroupChat"), icon: "chat" },
+          { id: "member-store", label: t("store.title"), icon: "plus" },
         ],
         pick => {
           if (pick === "member") host.newMember(null);
+          else if (pick === "member-store") window.dispatchEvent(new Event("raphael:member-store"));
           else if (pick === "group") host.newGroup();
           else if (host.newGroupChat) host.newGroupChat();
           else void openNewGroupChat();
@@ -261,7 +287,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     if (fold) {
       if (suppressFold) { suppressFold = false; if (e.detail !== 0) return; }
       const value = fold.dataset.groupFold!;
-      if (value === "none" || query.trim() !== "") return;
+      if (value === "none") return;
       const id = Number(value);
       if (folded.has(id)) folded.delete(id);
       else folded.add(id);
@@ -278,17 +304,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     if (row) host.select(Number(row.dataset.member));
   });
 
-  findInput.addEventListener("input", () => {
-    query = findInput.value;
-    draw();
-  });
-  findInput.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      query = ""; findInput.value = ""; draw();
-    }
-  });
+  searchButton.addEventListener("click", () => openSearch(searchButton));
 
   let drag: { kind: "member" | "group"; id: number } | null = null;
   el.addEventListener("dragstart", event => {
@@ -319,26 +335,57 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     else if (target !== null && target !== moving.id) void host.reorderGroup?.(moving.id, target);
   });
 
+  /** Every member the search can reach, as two-line rows (face, name, last message), filtered by the words typed. */
+  function searchRowsHTML(words: string): string {
+    const view = host.view();
+    const members = memberDisplayList(view.list).members.filter((m, index) => (index === 0 || !m.hidden) && memberMatches(m, words));
+    if (!members.length) return `<p class="mb-none">${esc(t("members.noMatch"))}</p>`;
+    return members.map(m => `<button type="button" class="nav side-search-row" data-member="${m.id}">${faceHTML(m, 28)}` +
+      `<span class="side-search-main"><b>${esc(m.name)}</b><span>${esc(previewOf(m, view.previews.get(m.id)).text)}</span></span></button>`).join("");
+  }
+
+  /**
+   * Grok Bot's search (owner, 2026-11-06): a card in the middle of the window with the field, every member as a two-line
+   * row, what the words find in the messages, and 新增成員 at its foot. Enter takes the first row; the arrows walk them.
+   */
   function openSearch(anchor: HTMLElement): void {
-    const panel = openPopover(anchor, '<div class="conversation-tools"><input type="search"></div><div class="conversation-rows page-agent"></div>', { className: "menu conversation-search", role: "dialog", label: t("chat.searchAll") });
+    if (document.querySelector(".side-search")) { closeMenu(); return; }
+    const width = (): number => Math.min(560, innerWidth - 24);
+    const panel = openPopover(anchor,
+      `<label class="side-search-field">${ico("search")}<input type="search" class="side-search-input" autocomplete="off" spellcheck="false" maxlength="40"></label>` +
+      `<div class="side-search-rows"></div>` +
+      `<button type="button" class="nav side-search-new" data-search-new>${ico("plus")}<span>${esc(t("members.newMember"))}</span></button>`,
+      {
+        className: "menu side-search", role: "dialog", label: t("chat.searchAll"),
+        anchorRect: () => new DOMRect((innerWidth - width()) / 2, Math.min(Math.max(48, innerHeight * 0.26), 280), width(), 0),
+        onKey: event => {
+          if (event.key !== "Enter" || !(event.target instanceof HTMLInputElement)) return false;
+          panel.querySelector<HTMLButtonElement>(".side-search-rows button")?.click();
+          return true;
+        },
+      });
     const input = panel.querySelector<HTMLInputElement>("input")!;
     input.placeholder = t("chat.searchAll"); input.setAttribute("aria-label", t("chat.searchAll"));
-    const results = panel.querySelector<HTMLElement>(".conversation-rows")!;
-    const lookup = createMessageSearch(results, {
+    const rows = panel.querySelector<HTMLElement>(".side-search-rows")!;
+    // What is chosen here takes the whole window: a drawer behind the card has no use any more.
+    const leave = (): void => { closeMenu(); window.dispatchEvent(new Event("raphael:close-sidebar")); };
+    const lookup = createMessageSearch(rows, {
       name: id => (id === 0 ? raphaelOf(host.view().list) : host.view().list?.members.find(member => member.id === id))?.name ?? "",
       face: id => {
         const member = id === 0 ? raphaelOf(host.view().list) : host.view().list?.members.find(member => member.id === id);
-        return member ? faceHTML(member, 34) : "";
+        return member ? faceHTML(member, 28) : "";
       },
-      open: (member, conversation, turn) => { closeMenu(); host.openMessage?.(member, conversation, turn); },
+      open: (member, conversation, turn) => { leave(); host.openMessage?.(member, conversation, turn); },
     });
-    const redraw = (): void => lookup.draw(input.value, columnHTML({ ...host.view(), query: input.value, folded }));
+    const redraw = (): void => lookup.draw(input.value, searchRowsHTML(input.value));
     input.addEventListener("input", redraw);
-    results.addEventListener("click", event => {
-      const member = (event.target as Element).closest<HTMLElement>("[data-member]")?.dataset.member;
-      if (member !== undefined) { closeMenu(); host.select(Number(member)); }
+    panel.addEventListener("click", event => {
+      const target = event.target as Element;
+      if (target.closest("[data-search-new]")) { leave(); host.newMember(null); return; }
+      const member = target.closest<HTMLElement>("[data-member]")?.dataset.member;
+      if (member !== undefined) { leave(); host.select(Number(member)); }
     });
     redraw(); input.focus();
   }
-  return { el, draw, openSearch, query: () => query, menu: (id, anchor) => memberMenu(id, anchor, host) };
+  return { el, draw, openSearch, menu: (id, anchor) => memberMenu(id, anchor, host) };
 }

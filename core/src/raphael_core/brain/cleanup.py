@@ -407,12 +407,16 @@ def build_system_prompt(
     *,
     languages: Sequence[str] = DEFAULT_LANGUAGES,
     heard: str | None = None,
+    template: str | None = None,
 ) -> str:
     """The system prompt with the user's languages, dictionary and the target app filled in.
 
     `languages` is the `languages` setting: the prompt names them in that order and says how the
     chosen Chinese and English variants are written (`script_rules`). The same arguments always
     give the same prompt.
+
+    `template` lets offline comparisons use a candidate with the same field rendering;
+    omitted, the app continues to use the packaged cleanup_system.md.
 
     `target_app` is the process name of the window the text goes to, written as
     `describe_target_app` does. It is in the system prompt, never inside the transcript, so it
@@ -460,7 +464,7 @@ def build_system_prompt(
     }
     # One pass of re.sub, not str.format or one str.replace after another: the prompt has braces
     # of its own (the JSON of the reply), and a word or an app name may look like a placeholder.
-    return _PLACEHOLDER.sub(lambda match: values[match.group(1)], _prompt_template())
+    return _PLACEHOLDER.sub(lambda match: values[match.group(1)], _prompt_template() if template is None else template)
 
 
 @dataclass(frozen=True)

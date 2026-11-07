@@ -1,15 +1,28 @@
 /* The panel previews the member's workspace; takeover carries that same stream. */
 .mb-det:not([data-details-tab="computer"]) .desktop-panel:not([data-expanded]) { display: none; }
-.is-computer-active.btn.icon { color: var(--computer-active); }
+/* While the member's computer works, a small dot follows its name in the header: no button, as Grok Bot's header. */
+.conversation-trigger.is-computer-active .mb-pill::after { content: ""; flex: none; width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--computer-active); }
 .desktop-wallpaper { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center bottom; }
 /* xfdesktop zooms the owner's picture from its centre, and its subject sits in the middle rather than along the bottom. */
 .desktop-wallpaper[data-own] { object-position: center; }
-.desktop-wallpaper[data-own] ~ .desktop-placeholder { align-items: end; }
-.desktop-panel:not([data-expanded]) .desktop-wallpaper[data-own] ~ .desktop-placeholder .desktop-boot-face > .av { --av: 44px; }
+/* R-UI-95: the stage sits below the owner's picture's subject (the placeholder is a column). */
+.desktop-wallpaper[data-own] ~ .desktop-placeholder { justify-content: flex-end; }
+.desktop-panel:not([data-expanded]) .desktop-wallpaper[data-own] ~ .desktop-placeholder .desktop-state-content > .desktop-boot-face > .av { --av: 44px; }
 .desktop-last { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .desktop-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .desktop-shell { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--sp-2); min-height: 0; }
-.desktop-caption { display: none; }
+/* R-PANEL-03: as Grok Bot's, the preview is captioned with whose screen it is, and the whole preview opens the larger view;
+   under the pointer or keyboard focus a small dark pill says so. */
+.desktop-caption { margin: 0; color: var(--text-3); font-size: var(--fs-xs); text-align: center; }
+.btn.desktop-open { position: absolute; z-index: 3; inset: 0; display: grid; place-items: center; width: 100%; height: 100%; min-height: 0; padding: 0; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }
+.btn.desktop-open:is(:hover, :active):not(:disabled) { border-color: transparent; background: transparent; }
+.desktop-open-pill { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px 0 10px; border-radius: var(--r-pill); background: color-mix(in srgb, var(--desktop-frame-bg) 86%, transparent); color: var(--desktop-frame-text); font-size: var(--fs-sm); font-weight: 500; opacity: 0; transition: opacity 120ms ease; }
+.desktop-open-pill .i { width: 16px; height: 16px; }
+.btn.desktop-open:is(:hover, :focus-visible) .desktop-open-pill { opacity: 1; }
+.btn.desktop-open:active .desktop-open-pill { background: var(--desktop-frame-bg); }
+/* Asleep, the same cover wakes the computer and says nothing: the screen already shows the face and its one line. */
+.btn.desktop-open[data-asleep] .desktop-open-pill { display: none; }
+@media (prefers-reduced-motion: reduce) { .desktop-open-pill { transition: none; } }
 .computer-lifecycle { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; width: 100%; }
 .computer-lifecycle-state { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); }
 .desktop-location-header .computer-lifecycle-state { white-space: nowrap; }
@@ -20,9 +33,8 @@
 .computer-lifecycle-state:empty { display: none; }
 .computer-lifecycle-location { min-width: 0; margin-left: auto; }
 .desktop-screen, [data-card-desktop-screen], [data-card-screen] { --text: var(--desktop-frame-text); --text-2: var(--desktop-frame-text); --text-3: color-mix(in srgb, var(--desktop-frame-text) 70%, transparent); --panel: var(--desktop-frame-bg); --content: var(--desktop-frame-bg); }
-.desktop-takeover-bar { display: flex; align-items: center; gap: var(--sp-3); min-height: 44px; padding: var(--sp-2) var(--sp-3); }
-.desktop-identity { display: flex; align-items: center; gap: var(--sp-2); flex: 1; min-width: 0; }
-.desktop-identity > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desktop-takeover-bar { display: contents; }
+.desktop-takeover-bar[hidden] { display: none; }
 .desktop-screen > [data-desktop="retry"] { --btn: var(--desktop-frame-bg); --btn-edge: color-mix(in srgb, var(--desktop-frame-text) 30%, var(--desktop-frame-bg)); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); --hover-edge: var(--desktop-frame-text); --focus: var(--desktop-frame-text); position: absolute; left: 50%; bottom: var(--sp-3); transform: translateX(-50%); }
 .desktop-panel:not([data-expanded]) > :is(.desktop-actions, .desktop-teach-missing, .desktop-recording, .desktop-request, .desktop-review, .desktop-try, .desktop-checkpoints) { display: none; }
 .desktop-panel[data-expanded] .desktop-actions > :is([data-desktop="take"], [data-desktop="revoke"], [data-checkpoint-open]) { display: none; }
@@ -36,12 +48,10 @@
 .desktop-heading h2 { margin: 0; overflow: hidden; color: inherit; font-size: var(--fs-sm); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .desktop-request, .computer-repair-note { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .desktop-panel[data-expanded] > .desktop-request { padding: 0 var(--sp-3); }
-.desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; min-height: 160px; overflow: hidden; background: var(--content); border: 1px solid var(--line); border-radius: var(--r-sm); }
+/* Every state keeps the running screen's proportions, so the wallpaper is never squeezed (owner, 2026-11-07). The clip,
+   unlike hidden, leaves the box free to grow past its ratio when a narrow panel's words and buttons need the height. */
+.desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; overflow: clip; background: var(--content); border: 1px solid var(--line); border-radius: var(--r-lg); }
 .desktop-screen iframe, [data-card-desktop-screen] iframe, [data-card-screen] iframe { position: relative; z-index: 1; display: block; width: 100%; height: 100%; border: 0; }
-.btn.desktop-hit { position: absolute; z-index: 2; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }
-.btn.desktop-hit:is(:hover, :active):not(:disabled) { background: transparent; box-shadow: inset 0 0 0 1px var(--hover-edge); }
-.btn.desktop-hit:active:not(:disabled) { background: color-mix(in srgb, var(--text) 8%, transparent); }
-.desktop-hit:disabled { cursor: progress; }
 .desktop-owner { position: absolute; z-index: 2; left: var(--sp-2); bottom: var(--sp-2); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--panel); color: var(--text); font-size: var(--fs-2xs); pointer-events: none; }
 .desktop-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
 .desktop-recording { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
@@ -61,13 +71,11 @@
 .desktop-panel:has(.desktop-review:not([hidden])) .desktop-shell { display: none; }
 .desktop-actions:has(> [hidden]:only-child), .desktop-actions:not(:has(> :not([hidden]))) { display: none; }
 .desktop-placeholder { position: relative; min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); padding: var(--sp-3); overflow-wrap: anywhere; text-align: center; color: var(--text-2); pointer-events: none; }
-.desktop-screen:has(.desktop-placeholder:not([hidden])) { aspect-ratio: auto; min-height: 230px; }
 .desktop-state-content { display: grid; justify-items: center; gap: var(--sp-2); width: 100%; min-width: 0; }
-.desktop-state-content .desktop-boot-face > .av { --av: 48px; }
+/* The one-sentence state's face; preparation keeps its own size inside its pill (R-UI-93). */
+.desktop-state-content > .desktop-boot-face > .av { --av: 48px; }
 .desktop-state-actions, .desktop-state-recovery { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-2); }
 .desktop-state-actions .btn { --btn: var(--desktop-frame-bg); --btn-edge: color-mix(in srgb, var(--desktop-frame-text) 30%, var(--desktop-frame-bg)); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); color: var(--desktop-frame-text); max-width: 100%; white-space: normal; }
-.desktop-preview-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); }
-.desktop-preview-actions [data-desktop="enlarge"] { position: static; opacity: 1; }
 .desktop-panel:not([data-expanded]) .desktop-screen:has(.desktop-placeholder:not([hidden])) { display: flex; align-items: stretch; }
 .desktop-panel:not([data-expanded]) .desktop-placeholder { width: 100%; }
 .desktop-placeholder > * { pointer-events: auto; }
@@ -76,7 +84,12 @@
 .desktop-placeholder .missing-note, .desktop-placeholder > [data-act="docker-download"] { --btn: var(--desktop-frame-bg); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); }
 .desktop-error { margin: 0; color: var(--err); }
 .desktop-error[role="status"] { color: var(--text-2); }
-.desktop-preparation { width: fit-content; max-width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); }
+/* A slim pill, the face beside its one stage (owner, 2026-11-07: the box was too fat); a percent or the first-build note
+   takes the next line. */
+.desktop-preparation { width: fit-content; max-width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: var(--sp-2); row-gap: var(--sp-1); padding: 6px var(--sp-3) 6px 6px; border-radius: var(--r-pill); }
+.desktop-preparation > :is(progress, .desktop-first-build) { grid-column: 1 / -1; }
+.desktop-preparation > .desktop-boot-face > .av { --av: 24px; }
+.desktop-panel[data-expanded] .desktop-preparation > .desktop-boot-face > .av { --av: 32px; }
 .desktop-boot-face > .av { --av: 64px; }
 .card-computer-screen:has(.desktop-preparation) > button .i { visibility: hidden; }
 .desktop-preparation p { margin: 0; font-size: var(--fs-sm); line-height: 1.4; color: var(--text-3); }
@@ -91,29 +104,49 @@
   @keyframes desktop-stream-in { from { opacity: 0; } to { opacity: 1; } }
 }
 
-:root[data-desktop-expanded] .page-agent .mb-det { position: fixed; inset: var(--window-controls-height) 0 0; width: 100%; max-width: none; padding-top: 0; z-index: 80; transform: none; }
-:root[data-window-layout][data-desktop-expanded]:not([data-window-modal="true"]):not(:has(.mb-scrim:not(.cr-scrim))) .window-chrome { left: 0; border-top-left-radius: 0; background: var(--side); }
+/* The larger view, as Grok Bot's: the whole window, sidebar included, with the screen centred at its own proportions,
+   the fold-back button in the window buttons' row and one pill at the bottom (R-PANEL-03). */
+:root[data-desktop-expanded] .page-agent .mb-det { position: fixed; inset: var(--window-controls-height) 0 0; width: 100%; max-width: none; padding-top: 0; z-index: 80; transform: none; background: var(--content); }
+:root[data-window-layout][data-desktop-expanded]:not([data-window-modal="true"]):not(:has(.mb-scrim:not(.cr-scrim))) .window-chrome { left: 0; border-top-left-radius: 0; background: var(--content); }
 :root[data-desktop-expanded] .mb-det-scroll { height: 100%; max-width: none; overflow-x: hidden; overflow-y: auto; padding: 0; }
-:root[data-desktop-expanded] .mb-det-head, :root[data-desktop-expanded] .mb-det-scroll > :not(.desktop-panel) { display: none; }
-.desktop-panel[data-expanded] { display: flex; flex-direction: column; flex: 1; width: 100%; min-height: 0; height: 100%; margin: 0; gap: 0; }
-.desktop-panel[data-expanded] .desktop-shell { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); background: var(--desktop-frame-bg); }
+:root[data-desktop-expanded] .mb-det-head, :root[data-desktop-expanded] .mb-det-scroll > :not(.desktop-panel), :root[data-desktop-expanded] .det-edge { display: none; }
+.desktop-panel[data-expanded] { display: flex; flex-direction: column; flex: 1; width: 100%; min-height: 0; height: 100%; margin: 0; gap: 0; padding-bottom: 64px; }
+.desktop-panel[data-expanded] .desktop-shell { flex: 1; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); place-items: center; padding: var(--sp-4) var(--sp-6) var(--sp-2); }
 .desktop-panel[data-expanded] .desktop-caption { display: none; }
-.desktop-panel[data-expanded] .desktop-screen:has(.desktop-placeholder:not([hidden])) { aspect-ratio: auto; }
 .desktop-panel[data-expanded][data-files] .desktop-shell { display: none; }
 .desktop-panel[data-expanded] .desktop-checkpoints { padding: var(--sp-4); }
 .desktop-panel[data-expanded] .desktop-review { padding: var(--sp-4); }
-.desktop-panel[data-expanded] .desktop-screen { height: 100%; min-height: 0; aspect-ratio: auto; }
+.desktop-panel[data-expanded] .desktop-screen { width: min(100%, calc((100vh - var(--window-controls-height) - 64px - var(--sp-4) - var(--sp-2)) * 1280 / 900)); height: auto; min-height: 0; aspect-ratio: 1280 / 900; border-color: transparent; border-radius: var(--r-md); background: var(--desktop-frame-bg); }
 .desktop-panel[data-expanded] .desktop-recording { grid-row: 4; }
 .desktop-panel[data-expanded] .desktop-actions { grid-row: 5; }
 :root[data-desktop-expanded] :is(.side, [data-sidebar="open"]) { visibility: hidden; }
+/* desktop-viewer.ts moves fold back and Back into the window's top strip, shaped as its own buttons. */
+.window-chrome > .btn.icon:is([data-desktop="collapse"], [data-desktop="back"]) { flex: none; align-self: stretch; width: 46px; height: auto; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--text); }
+.window-chrome > .btn.icon:is([data-desktop="collapse"], [data-desktop="back"]):is(:hover, :active):not(:disabled) { border-color: transparent; background: var(--hover); }
+.window-chrome > .btn.icon:is([data-desktop="collapse"], [data-desktop="back"]):active:not(:disabled) { background: var(--pressed); }
+.desktop-dock { display: none; }
+.desktop-panel[data-expanded] .desktop-dock { position: fixed; left: 50%; bottom: var(--sp-4); z-index: 85; display: flex; align-items: center; gap: var(--sp-2); transform: translateX(-50%); }
+.desktop-mode { display: flex; align-items: center; gap: var(--sp-1); height: 36px; padding: 0 4px 0 12px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface-2); }
+.desktop-mode-label { display: inline-flex; align-items: center; gap: 6px; padding-right: var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); white-space: nowrap; }
+.desktop-mode-label .i { width: 16px; height: 16px; }
+.desktop-mode-label[data-mode="operating"] .i { display: none; }
+.desktop-mode .btn.sm { height: 28px; min-height: 28px; padding: 0 var(--sp-3); border: 1px solid var(--text); border-radius: var(--r-pill); background: var(--text); color: var(--content); font-size: var(--fs-sm); white-space: nowrap; }
+.desktop-mode .btn.sm:is(:hover, :active):not(:disabled) { border-color: color-mix(in srgb, var(--text) 86%, var(--content)); background: color-mix(in srgb, var(--text) 86%, var(--content)); color: var(--content); }
+.desktop-mode .btn.sm:active:not(:disabled) { border-color: color-mix(in srgb, var(--text) 76%, var(--content)); background: color-mix(in srgb, var(--text) 76%, var(--content)); }
+.desktop-mode .btn.sm:disabled { border-color: color-mix(in srgb, var(--text) 40%, var(--content)); background: color-mix(in srgb, var(--text) 40%, var(--content)); }
 
 .desktop-location-header { display: flex; justify-content: flex-end; min-width: 0; }
 .computer-location { min-width: 0; }
 .computer-location .btn { max-width: 100%; }
+/* Beside the state word and the ⋯ the location is a quiet button: words and a chevron, with no frame and no
+   fill, not even under the pointer (owner, 2026-11-06). Keyboard focus keeps its ring. */
+.desktop-location-header .computer-location .btn, .desktop-location-header .computer-location .btn:is(:hover, :active, [aria-expanded="true"]):not(:disabled) { border-color: transparent; background: transparent; }
 .computer-location .btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .desktop-takeover-bar .computer-location { flex: 0 1 auto; }
 .menu.computer-location-popover { width: min(380px, calc(100vw - var(--sp-4))); padding: var(--sp-3); }
 .menu.computer-location-popover .slist { --slist-pad: 0px; padding-inline: 0; }
+/* The repair command's copy button is a code block control, not a menu row. */
+.menu .message-code .btn.icon { flex-direction: row; align-items: center; justify-content: center; width: auto; min-height: 0; gap: 0; padding: 0; }
 .menu.computer-location-popover .row { flex-direction: column; align-items: stretch; min-height: 0; gap: var(--sp-2); padding-block: var(--sp-2); }
 .menu.computer-location-popover .row > .lbl { flex: none; min-width: 0; }
 .menu.computer-location-popover .row > .ctl { width: 100%; margin-left: 0; justify-content: flex-start; }
@@ -125,13 +158,6 @@
 .computer-location-purpose { color: var(--text-3); }
 .computer-location-error { color: var(--err); }
 
-/* Watching enlarges the same view-only stream and retains the existing sidebar. */
-.desktop-enlarge { position: absolute; z-index: 4; top: var(--sp-2); right: var(--sp-2); }
-.desktop-live { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: var(--fs-sm); }
-:root[data-desktop-watch] .page-agent .mb-det { left: var(--sidebar-width); width: auto; }
-@media (min-width: 860px) {
-  :root[data-desktop-watch] :is(.side, [data-sidebar="open"]) { visibility: visible; }
-}
-:root[data-desktop-watch] .desktop-panel { position: fixed; inset: var(--window-controls-height) 0 0 var(--sidebar-width); width: auto; height: auto; background: var(--content); }
+/* Watching is the same larger view with the member still at the controls: nothing of the owner's tools shows. */
 :root[data-desktop-watch] .desktop-actions { display: none; }
 [data-card-desktop-screen][data-owner-control] { cursor: auto; }

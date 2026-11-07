@@ -8,6 +8,7 @@ No new VM runtime, browser bundle, host-specific code or credential store.
 import asyncio
 import base64
 import json
+import logging
 import re
 import secrets
 from dataclasses import dataclass, field
@@ -18,20 +19,22 @@ import httpx
 from ..protocol import invalid_params
 from .vm import SHARED, VmError
 from .rfb_input import RfbInputGate
+from ..paths import local_storage_root
 
 LEASE_SECONDS = 15
 # An open page polls every two seconds and each answer starts several Docker processes.
 UNWATCHED_STATUS_S = 10
 # What the owner's press may open; anything else, such as a program a member wrote, is only shown in its folder.
 READABLE = frozenset(".html .htm .pdf .png .jpg .jpeg .gif .webp .svg .txt .md .csv .json .mp3 .wav .m4a .mp4 .webm .docx .xlsx .pptx".split())
-BOOTSTRAP = b'''import RFB from './core/rfb.js';
-let rfb, connecting = false, closed = false, controlAt = 0, revision = 0;
+BOOTSTRAP = b'''let RFB, rfb, connecting = false, closed = false, controlAt = 0, revision = 0;
 const screen = document.getElementById('noVNC_container');
 const tell = state => parent.postMessage({type:'raphael-desktop', state}, '*');
 async function connect() {
   if (connecting || closed) return;
   connecting = true;
   try {
+    try { if (!RFB) ({default:RFB} = await import('./core/rfb.js')); }
+    catch { tell('unreachable'); return; }
     const response = await fetch('./connection', {cache:'no-store'});
     if (!response.ok) throw Error('unavailable');
     let config = await response.json();
@@ -46,7 +49,7 @@ async function connect() {
     rfb.addEventListener('connect', () => tell('connected'));
     rfb.addEventListener('disconnect', () => {rfb = null; tell('disconnected');});
     rfb.addEventListener('securityfailure', () => {rfb?.disconnect(); tell('disconnected');});
-  } catch { tell('disconnected'); }
+  } catch { tell('unreachable'); }
   finally { connecting = false; }
 }
 addEventListener('message', event => {
@@ -128,6 +131,10 @@ class Session:
     preview: bool = False
     input_sequence: int = 0
     inputs: dict = field(default_factory=dict)
+    connection: tuple | None = field(default=None, repr=False)
+    connection_changes: int = -1
+    connection_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    error: str | None = None
 
 
 class DesktopViewer:
@@ -174,7 +181,7 @@ class DesktopViewer:
             target = self.target({"member_id": int(member)})
             if target.remote or Path(relative).is_absolute() or "\\" in relative:
                 raise invalid_params("not a member file on this computer")
-            root = Path(target.workspace if area == "workspace" else target.shared).resolve()
+            root = self.file_root(target.workspace if area == "workspace" else target.shared)
             found = (root / relative).resolve()
             if not found.is_relative_to(root) or not found.is_file():
                 raise invalid_params("no such member file")
@@ -188,11 +195,18 @@ class DesktopViewer:
         target = self.vm.target(0)
         if type(path) is not str or not path.startswith(SHARED + "/") or target.remote or target.shared is None:
             raise invalid_params("not a team file on this computer")
-        root = Path(target.shared).resolve()
+        root = self.file_root(target.shared)
         found = (root / path[len(SHARED) + 1:]).resolve()
         if not found.is_relative_to(root) or not found.is_file():
             raise invalid_params("no such team file")
         return {"path": str(found), "reads": found.suffix.lower() in READABLE}
+
+    @staticmethod
+    def file_root(path):
+        try:
+            return local_storage_root(path)
+        except (OSError, ValueError):
+            raise invalid_params("no such member file") from None
 
     async def revoke(self, params):
         self.target(params)
@@ -261,12 +275,45 @@ class DesktopViewer:
             raise invalid_params("preview must be a boolean")
         if not params.get("preview"):
             self.vm.grants.set(params.get("member_id", 0), True)
-        self.sessions[token] = Session(target, self.vm.clock() + LEASE_SECONDS,
+        session = Session(target, self.vm.clock() + LEASE_SECONDS,
             member_id=params.get("member_id", 0), conversation_id=params.get("conversation_id"), preview=params.get("preview", False))
         if (not params.get("preview") and (await self.status_for(target))["state"] != "running"
                 and self.vm.grants.allowed(params.get("member_id", 0))):
             self.vm.launch(target)
+        if target.remote and (await self.status_for(target))["state"] == "running":
+            try:
+                await self.connection_for(session)
+            except VmError:
+                # Keep the session so renew can explain an unreachable live screen.
+                pass
+        session.expires = self.vm.clock() + LEASE_SECONDS
+        self.sessions[token] = session
         return {"session": token, "url": f"{self.origin}/{token}/vnc.html"}
+
+    def connection_failed(self, session):
+        if session.error != "viewer_unreachable":
+            logging.getLogger(__name__).warning("Desktop viewer_unreachable")
+        session.error = "viewer_unreachable"
+        session.connection = None
+        session.connection_changes = self.vm.changes
+
+    async def connection_for(self, session):
+        # Parallel module requests share one resolution. Lifecycle changes invalidate it.
+        async with session.connection_lock:
+            if session.connection_changes == self.vm.changes:
+                if session.error:
+                    raise VmError(session.error)
+                if session.connection is not None:
+                    return session.connection
+            changes = self.vm.changes
+            try:
+                connection = await self.vm.viewer_connection(session.target)
+            except (VmError, OSError, TimeoutError, httpx.HTTPError):
+                self.connection_failed(session)
+                raise VmError("viewer_unreachable") from None
+            session.connection, session.connection_changes = connection, changes
+            session.error = None
+            return connection
 
     def session(self, params):
         token = params.get("session")
@@ -296,7 +343,8 @@ class DesktopViewer:
                 "control": "owner" if self.sessions.get(token) is session else "member",
                 "preview_allowed": session.target.key not in self.vm.held, "granted": self.vm.grants.allowed(session.member_id),
                 **({"works": works} if works else {}),
-                **(self.teaching.status(session.member_id, session.conversation_id, session.target) if self.teaching else {})}
+                **(self.teaching.status(session.member_id, session.conversation_id, session.target) if self.teaching else {}),
+                **({"error": session.error, "ready": False} if session.error else {})}
 
     async def unwatched_status(self, target):
         """Unwatched computers keep the longer cache; active viewers share the short cache."""
@@ -479,7 +527,7 @@ class DesktopViewer:
                     held = not session.preview and self.owners.get(session.target.key) == token
                     await self._respond(writer, 200, json.dumps({"held": held, "input_sequence": session.input_sequence}).encode(), "application/json")
                     return
-                port, password = await self.vm.viewer_connection(session.target)
+                port, password = await self.connection_for(session)
                 if asset == "connection":
                     config = {"password": password, "held": not session.preview and self.owners.get(session.target.key) == token,
                               "preview": session.preview,
@@ -500,6 +548,8 @@ class DesktopViewer:
                     await upstream.drain()
                 else:
                     response = await self.client.get(f"http://127.0.0.1:{port}/{asset}")
+                    if response.status_code != 200:
+                        raise VmError("viewer_unreachable")
                     body = embedded_page(response.text) if asset == "vnc.html" and response.status_code == 200 else response.content
                     await self._respond(writer, response.status_code, body, response.headers.get("content-type", "application/octet-stream"))
                     return
@@ -547,6 +597,8 @@ class DesktopViewer:
                     stream.cancel()
                 await asyncio.gather(*streams, return_exceptions=True)
         except (ValueError, OSError, TimeoutError, VmError, httpx.HTTPError, asyncio.IncompleteReadError):
+            if session:
+                self.connection_failed(session)
             if upstream is None:
                 try:
                     await self._respond(writer, 503)

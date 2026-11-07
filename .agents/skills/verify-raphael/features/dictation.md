@@ -1,5 +1,148 @@
 # Dictation
 
+## Cleanup v3 production decision and calibrated comparison (2026-11-05)
+
+Follow-up 5 explicitly adopts v3 for the owner's short-prompt, clear-structure goal.
+`core/src/raphael_core/brain/prompts/cleanup_system.md` is now the exact 3026-character
+v3 text, SHA-256 a67e50307492e25343ec7e0a8fe5670665e4f1a75ef92fcc8c726ea44947c82b
+on LF-normalized UTF-8 (3294 bytes), replacing the 6783-character/8119-byte prompt.
+`cleanup_candidate.md` equals production. V3 preserves final intent, scope, names,
+numbers, conditions, negation, original languages, dictionary and JSON boundaries;
+it emphasizes an opening point, topic paragraphs and numbered enumerations.
+V4 was rejected and archived with v3 under `.fold/prompts/`; the previous production
+prompt is `.fold/prompts/cleanup_system_before_v3.md`. The repository change does not
+claim a packaged/installed release. No model settings or judge rubric changed.
+
+All three integrator runs scored 91/91. Columns below are old/new, including the
+arbitrary two identical sides in the control; spreads always use absolute differences.
+
+| Run | Prompt characters | Kept | Missing | Additions | Clarity old/new (ties) | All/factual case failures |
+| --- | --- | --- | --- | --- | --- | --- |
+| noise, identical old prompt | 6783/6783 | 569/572 | 11/8 | 3/1 | 11/12 (68) | 16/2 |
+| v3 | 6783/3026 | 606/610 | 11/7 | 3/1 | 7/17 (67) | 11/2 |
+| v4 | 6783/3364 | 586/591 | 19/14 | 4/9 | 14/22 (55) | 15/8 |
+
+| Run | Language kept | Long clarity old/new (ties) | Long structure checks | All long enumerations formatted | Long topics separated |
+| --- | --- | --- | --- | --- | --- |
+| noise | 91/91 | 8/6 (1) | 8/10 | 5/6 | 13/14 |
+| v3 | 91/91 | 3/12 (0) | 8/14 | 4/13 | 15/13 |
+| v4 | 87/89 | 5/10 (0) | 11/14 | 5/10 | 14/15 |
+
+Sources are ignored `eval/data/cleanup-compare-noise-20261105/`,
+`cleanup-compare-followup-3-20261105/` and `cleanup-compare-followup-4-20261105/`.
+Private text/facts never enter tracked fixtures or handoff prose. The identical-prompt
+control invalidates a zero-case-failure requirement as a useful acceptance rule.
+The integrator's explicit adoption of v3 is distinct from the new automatic gate.
+
+The comparer accepts optional `--noise <report.json>`. Without it, results are still
+reported but `ship_candidate=false` (complete report exits 1). Before any write or CLI
+call, a supplied control must be complete with every case scored, identical prompts
+matching the comparison's old prompt, the same full ordered input fingerprints,
+models, seed and judge-instructions hash. Counts are recomputed from scored rows;
+only safe calibration hashes, spreads and counts are retained in the target report.
+
+Policy `noise-v1-strict` requires directional improvement STRICTLY GREATER THAN the
+control's absolute old/new spread for every metric: kept facts; missing facts and
+wrong additions (lower is better); language kept; overall clarity wins; list cases;
+long-case clarity; lead sentence, topic separation, enumeration formatting and
+structural checks on annotated long cases. Factual case failures (lost_facts OR
+wrong_additions) count each case once and cannot exceed the control count. Per-case
+diagnostics remain visible, but do not impose the obsolete zero-failure veto.
+Every comparison case must be scored and long-case evidence must exist. No ceiling
+or equality exception is inferred. Summaries list gains, spreads and failure reasons.
+
+Consequently, strict recalculation still rejects this historical v3: additions gain
+2 equals spread 2; language and lead sentence gain 0 equals spread 0; topic separation
+gain -2 fails spread 1. Factual count 2 meets the control ceiling 2. V4 fails additions
+and topic thresholds and its factual count 8 exceeds 2. Do not present the explicit
+production decision as an automatic gate pass. Fake CLI tests prove both refusal and
+a positive comparison that exceeds every spread, equality rejection and the case cap.
+
+The runner never installs prompts. It uses serial subscription-only Codex cleanup
+and tool-less Claude judgments; no OpenRouter or API credentials. One invalid judgment
+gets one identical-request retry, then judge_failed; cleanup calls never retry. Failed
+judgments have no wins/scores. Four judge failures or any cleanup failure stop with
+exit 2; setup/control/preflight errors also exit 2. Complete non-recommendations,
+including up to three failed judgments, exit 1; a calibrated passing run exits 0.
+
+Each cleanup checkpoints immediately. Matching reports resume scored rows intact,
+reuse cached cleanup outputs and finish an interrupted retry's remaining attempt.
+Changed prompt/model/seed/rubric/ordered-case fingerprints refuse resume. Legacy v2
+reports lack full input fingerprints; compatibility resume records that limitation.
+A fully scored matching report can recompute its gate with --noise without CLI calls;
+omitting --noise on a later invocation removes the recommendation, never reuses it.
+
+The 15 versioned, self-authored long scripts are the third --cases input after the
+76 private cases. Each has three topics, semantic fact floors and structure checks;
+estimated speech duration is 2.8-3.3 minutes, not measured audio. Optional cached
+local tokenization only; unavailable token counts remain null. CLI framing/latency
+is not app latency. See `core/tests/evaluate/data/README.md` for provenance.
+
+Required follow-up 5 offline checks: `tests/brain/test_cleanup.py`,
+`tests/evaluate/test_cleanup_compare.py` and `tests/architecture` from core/.
+Run targeted tests without the waiter. Full verify/core suites belong to the integrator
+at merge under the resource override. No UI boundary changed, so no look/native matrix.
+No new real model, provider, microphone/paste or release acceptance is claimed.
+
+## Private member voice chat (2026-11-05)
+
+An empty member composer keeps both gestures in its existing right-hand slot:
+a pointer held for 300 ms records a voice message through the existing down/up
+path, while a shorter click starts voice chat. The destination is captured at press
+time and retained across navigation. Enter/Space starts voice chat; the existing
+dictation hotkey is unchanged. The tooltip explains both gestures in one localized
+line. Typed words/files retain Send, Raphael retains dictation, and rooms retain
+their existing recording path without offering calls. The background questions
+slot stays directly above the composer; transient call failures live inside the
+composer and durable failures keep their existing receipt repair entry.
+Not released yet (owner, 2026-11-06, R-UI-106); its scenes return with it.
+One call owns the microphone across navigation. Another start opens the shared
+confirmation dialog; only End and start ends the previous call. The panel replaces
+the composer and exposes Mute, Hang up, a transcript disclosure and shared Voice /
+Speed / Language dropdowns (Auto-detect by default). The existing character's
+working and waiting motion projects speaking and listening without a second mascot.
+During a call the empty-thread hero yields to that single panel character.
+
+The same dictation recorder, device, selected engine and VAD cut a call turn after
+0.8 seconds of pause. Ordinary dictation still waits for its key. VAD speech onset
+sets the existing speaker stop event synchronously; PCM playback checks it before
+each audio block. AgentService keeps the owner question and member reply as ordinary
+private turns. The call uses the member voice and existing streamed PCM service;
+speed changes its playback sample rate. No new speech vendor/model loop is added.
+
+Hang-up writes one durable voice-call receipt, with duration, expandable literal
+transcript and local Good/Bad feedback. Call message rows fold under that receipt
+to preserve R-UI-101. Owner questions and pending permission/setup/draft cards remain
+actionable through the ordinary turn renderer until settled; folding never removes
+a required decision. Microphone/model/voice failures use the existing Settings repair
+entry; network failure ends the call and retains its already admitted turns.
+Migration 67 stores call metadata and links to existing turns, with scoped cascading
+deletion. Restart closes interrupted calls and retains their transcript.
+
+Voice chat is not released yet (owner, 2026-11-06, R-UI-106): the voice button records voice messages only, and the call scenes come back with the feature.
+
+Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
+the busy dialog with dialog-caption-confirm, the settings controls with details-voice, the
+receipt shell with card-mcp-done, and the
+repair note with the existing missing-service note. A call receipt is a standalone
+history card.
+The call confirmation uses the shared compact `mb-confirm` shell because it has one
+decision, rather than the member chooser's list. Settings put the existing `sel`
+controls in shared menu rows because these choices apply only to the current call;
+the member's persistent voice remains in Details. The receipt's disclosure includes
+the duration and both speakers, so its summary adds a time and uses a trailing
+chevron. A failed call keeps its shared missing-service note inside the durable
+receipt instead of the transient read-aloud toast; there is only one repair action.
+Fake recognizer / streamed TTS / player tests are in tests/services/test_voice_chat.py;
+the VAD test uses the real DictationService with fake recorder/segmenter/engine.
+The existing native runner's `npm run native -- voice-call` journey checks the real
+shell admission, empty-member/draft guard and missing-voice Settings repair with an
+isolated profile and no paid speech. It does not exercise a successful audio call.
+Rendered fixtures establish UI/IPC behavior only. Native microphone permissions,
+headset echo isolation, installed STT/model/device, actual audio-chunk interruption,
+live model/provider/network and native restart persistence require separate acceptance.
+
+
 ## Owner round 10 contracts (supersedes round 9 message previews)
 
 Only owner messages use eight-line faded previews with a quiet expand action inside
@@ -83,15 +226,15 @@ the short-clean-sentence shortcut, without a history row or target paste.
 
 ## How to get to it (user POV)
 
-Choose Dictation, then use the compact horizontal Overview/History/Dictionary tabs beside the title. Left/Right/Home/End change the selected tab while retaining keyboard focus; selection and legacy history/dictionary deep links remain available. Four separate stat cards form a 2 by 2 left grid above activity; shortcuts start in the right column. At 720 the order is totals, shortcuts, activity. An active heatmap day opens its
-history. Settings > Dictation configures recognition/shortcuts. Actual dictation
+Choose Dictation, then use the compact horizontal Overview/History/Dictionary tabs beside the title. Left/Right/Home/End change the selected tab while retaining keyboard focus; selection and legacy history/dictionary deep links remain available. Four separate stat cards form a 2 by 2 left grid; shortcuts stand beside them in the right column, end with them and share the header tabs' right edge, and the activity heatmap runs under both (2026-11-07). At 720 the order is totals, shortcuts, activity. A heatmap day says its words only in its title under the pointer;
+pressing it does nothing, and no history opens from the grid (owner, 2026-11-07). Settings > Dictation configures recognition/shortcuts. Actual dictation
 begins with the configured global key while a target field has focus.
 
 ## Driving it with look
 
 ```powershell
-npm run look -- dictation-overview dictation-history dictation-history-day dictation-dictionary dictation-keyboard dictation-notice dictation --theme both --width 1120,720,1920x1080
-npm run look -- overlay-transcribing overlay-cleaning --theme both --width 1120,720,1920x1080
+npm run look -- dictation-overview dictation-history dictation-heat-press dictation-dictionary dictation-keyboard dictation-notice dictation --theme both --width 1120,720,1920x1080
+npm run look -- overlay-transcribing overlay-cleaning overlay-emblem-gold overlay-emblem-angry --theme both --width 1120,720,1920x1080
 npm run look -- composer-learn member-composer-learn room-composer-learn --theme both --width 1120,720,1920x1080
 ```
 

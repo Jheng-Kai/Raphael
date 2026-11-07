@@ -15,8 +15,10 @@ import { saveReport } from "./report.mjs";
 import { navigationRequests, warmupEntries } from "./navigation.mjs";
 
 /** Product, model, unit, key names and external menu paths that stay in Latin letters in every language. */
-// Docker is an installed product name, including its unavailable-engine state.
-export const LATIN_NAMES = ["Raphael", "Docker", "Docker Desktop", "Rimuru", "Google", "Gmail", "Calendar", "Composio", "OpenRouter", "OpenAI", "ChatGPT", "Anthropic", "Claude", "Codex", "Gemini", "GPT", "Grok", "Telegram", "Slack", "Discord", "Notion", "GitHub", "MCP", "API", "URL", "CLI", "STT", "PDF", "WAV", "CSV", "JSON", "US", "KB", "MB", "GB", "GMT", "AM", "PM", "Alt", "AltGr", "Ctrl", "Shift", "Space", "Esc", "Enter", "Tab", "Win", "Windows", "Fn", "Edge", "Chrome", "macOS", "Whisper", "Typeless", "Webhook", "HMAC", "SHA", "Signature", "Hermes", "Simple", "Icons", "Bearer", "mcpServers", "Ollama", "Linear", "BotFather", "newbot", "English", "MIT", "JPG", "WebP", "GIF", "UTF", "Big", "txt", "px", "token", "Claude Code", "Antigravity", "KEY=value", "Settings → Project Settings → API Keys"];
+// Docker and the supported tunnel services keep their product names in every locale.
+export const LATIN_NAMES = ["Raphael", "Docker", "Docker Desktop", "Rimuru", "Google", "Gmail", "Calendar", "Composio", "OpenRouter", "OpenAI", "ChatGPT", "Anthropic", "Claude", "Codex", "Gemini", "GPT", "Grok", "Telegram", "Slack", "Discord", "Notion", "GitHub", "MCP", "API", "URL", "CLI", "STT", "PDF", "WAV", "CSV", "JSON", "US", "KB", "MB", "GB", "GMT", "AM", "PM", "Alt", "AltGr", "Ctrl", "Shift", "Space", "Esc", "Enter", "Tab", "Win", "Windows", "Fn", "Edge", "Chrome", "macOS", "Whisper", "Typeless", "Tailscale", "Funnel", "Cloudflare", "Tunnel", "ngrok", "Webhook", "HMAC", "SHA", "Signature", "Hermes", "Simple", "Icons", "Bearer", "mcpServers", "Ollama", "Linear", "BotFather", "newbot", "English", "MIT", "JPG", "WebP", "GIF", "UTF", "Big", "txt", "px", "token", "Claude Code", "Antigravity", "KEY=value", "Settings → Project Settings → API Keys"];
+
+LATIN_NAMES.push("1Password");
 
 /** Typed owner values are synthetic data, just like the initial fixture's values. */
 export function sceneLatinNames(scene, locale, fixture) {

@@ -28,9 +28,14 @@ export function besidePlacement(
   anchor: Pick<DOMRect, "left" | "right" | "top">,
   size: { width: number; height: number },
   viewport: { width: number; height: number; top: number },
+  area: { left: number } = { left: 0 },
 ): { left: number; top: number } {
+  // Beside it on the right, else on the left while that stays on the calendar (never over its rail or the sidebar), else
+  // centred over it: a wide event of the day view keeps its time and title in view, and the panel stays inside the grid.
   const gap = 8, right = anchor.right + gap, left = anchor.left - gap - size.width;
-  const x = right + size.width <= viewport.width - gap ? right : left >= gap ? left : Math.max(gap, viewport.width - gap - size.width);
+  const centred = anchor.left + (anchor.right - anchor.left - size.width) / 2;
+  const x = right + size.width <= viewport.width - gap ? right : left >= Math.max(gap, area.left) ? left
+    : Math.max(gap, Math.min(Math.max(area.left + gap, centred), viewport.width - gap - size.width));
   const lowest = Math.max(viewport.top + gap, viewport.height - gap - size.height);
   return { left: x, top: Math.max(viewport.top + gap, Math.min(anchor.top, lowest)) };
 }
@@ -73,7 +78,8 @@ function openPanel(rect: Pick<DOMRect, "left" | "right" | "top">, cls: string, l
 
 function place(panel: Panel, rect: Pick<DOMRect, "left" | "right" | "top">): void {
   const top = document.getElementById("window-chrome")?.getBoundingClientRect().bottom ?? 0;
-  const spot = besidePlacement(rect, { width: panel.el.offsetWidth, height: panel.el.offsetHeight }, { width: innerWidth, height: innerHeight, top });
+  const grid = document.querySelector(".au-page:not([hidden]) .au-calendar-scroll")?.getBoundingClientRect();
+  const spot = besidePlacement(rect, { width: panel.el.offsetWidth, height: panel.el.offsetHeight }, { width: innerWidth, height: innerHeight, top }, { left: grid?.left ?? 0 });
   panel.el.style.left = `${spot.left}px`;
   panel.el.style.top = `${spot.top}px`;
 }

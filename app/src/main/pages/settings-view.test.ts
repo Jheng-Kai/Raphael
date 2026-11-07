@@ -18,7 +18,6 @@ import {
   PANES,
   canonicalPane,
   RETENTIONS,
-  SEARCH_INDEX,
   computerApps,
   type SettingsView,
   loadingHTML,
@@ -27,8 +26,6 @@ import {
   paneHTML,
   paneListHTML,
   priceTexts,
-  searchResultsHTML,
-  searchSettings,
   WORKER_COST_CAPS,
 } from "./settings-view";
 
@@ -41,9 +38,8 @@ test("local commands use the shared three-choice dropdown beside computer operat
   expect(html).toContain("每次詢問");
 });
 
-test("Models has its own settings navigation entry and searchable provider page", () => {
+test("Models has its own settings navigation entry and provider page", () => {
   expect(paneListHTML()).toContain('data-pane="models"');
-  expect(searchSettings("OpenAI").some((hit) => hit.pane === "models")).toBe(true);
   expect(tab("models", { providers: { ...emptyProvidersView(), state: "ready" } })).toContain("新增供應商");
 });
 
@@ -110,21 +106,26 @@ const view = (over: Partial<SettingsView> = {}): SettingsView => ({
   pane: "general", device, brain, hasKey: true, openrouter, spend, catalog, checkingOpenrouter: false,
   devices: { devices: [{ index: 0, name: REALTEK, is_default: true }], selected: null, automatic_device: REALTEK },
   altgr: false, version: "0.1.0", replacingKey: false, keyBusy: false, keyError: null, limitDraft: null, limitError: null,
-  cityDraft: null, cityError: null, languageGroups: GROUPS, now: NOW, connections: emptyConnectionsView(), messaging: emptyMessagingView(),
+  languageGroups: GROUPS, now: NOW, connections: emptyConnectionsView(), messaging: emptyMessagingView(),
   localModels: LOCAL_MODELS, localDownload: null, ...over,
 });
 
-test("appearance offers one theme dropdown and language without a preview gallery", () => {
-  const html = paneHTML(view({ pane: "appearance" }));
-  expect(html).toContain('data-k="appearance"');
-  expect(html).toContain('data-k="ui-language"');
-  expect(html).not.toContain("極致黑");
-  expect(html).not.toContain('skin-preview');
-  expect(html).not.toContain('data-skin-choice');
+test("appearance is a section of 一般: one theme dropdown and the language, without a preview gallery", () => {
+  for (const pane of ["general", "appearance"] as const) {
+    const html = paneHTML(view({ pane }));
+    expect(html).toContain('data-k="appearance"');
+    expect(html).toContain('data-k="ui-language"');
+    expect(html).not.toContain("極致黑");
+    expect(html).not.toContain('skin-preview');
+    expect(html).not.toContain('data-skin-choice');
+  }
+  expect(canonicalPane("appearance")).toBe("general");
 });
-test("Telegram is in the 訊息平台 tab, and only there", () => {
-  expect(tab("messaging")).toContain("data-msg-section");
-  for (const id of ["general", "dictation", "agent", "connections", "usage", "data", "about"] as const) expect(tab(id)).not.toContain("data-msg");
+test("Telegram is a section of 一般, and only there", () => {
+  expect(tab("general")).toContain("data-msg-section");
+  expect(tab("general")).toContain('data-section="messaging"');
+  expect(canonicalPane("messaging")).toBe("general");
+  for (const id of ["dictation", "agent", "connections", "usage", "about"] as const) expect(tab(id)).not.toContain("data-msg");
 });
 
 test("shared owner memory lives in General, while own memory stays out of Settings", () => {
@@ -133,13 +134,13 @@ test("shared owner memory lives in General, while own memory stays out of Settin
   expect(html).toContain('data-mem-space="shared"');
   const document = new Window().document;
   document.body.innerHTML = html;
-  const imported = document.querySelector("[data-memory-import]")!;
-  const owner = imported.parentElement!;
-  expect(owner.querySelector("h2")?.textContent).toBe("關於你");
-  expect(owner.querySelector('[data-mem-space="shared"]')).not.toBeNull();
+  // Grok Bot's order of sections: the account first, then appearance, Raphael, messaging, memory and the guide.
+  expect(document.querySelector(".set-account > h2")?.textContent).toBe("關於你");
+  expect(document.querySelector("[data-memory-import]")).not.toBeNull();
   expect(html.indexOf("data-memory-import")).toBeGreaterThan(html.indexOf('data-mem-space="shared"'));
-  expect(owner.querySelector('[data-k="routine-timezone"]')).not.toBeNull();
-  expect(owner.querySelector("#owner-output-folder")).not.toBeNull();
+  expect(html.indexOf('data-mem-space="shared"')).toBeGreaterThan(html.indexOf('data-section="messaging"'));
+  expect(document.querySelector('[data-k="routine-timezone"]')).not.toBeNull();
+  expect(document.querySelector('[data-row="output-folder"] [data-act="output-pick"]')).not.toBeNull();
   for (const pane of ["tools", "safety", "dictation"] as const) expect(tab(pane, { memoryShared })).not.toContain("data-mem-section");
   expect(tab("general", { memoryShared })).not.toContain('data-mem-space="own"');
 });
@@ -155,7 +156,7 @@ test("shared safety rules and local permissions live in Safety", () => {
 
 test.each(["zh-TW", "en", "ja"] as const)("shared safety and connection wording applies to all members in %s", locale => {
   setLocale(locale);
-  for (const key of ["rules.placeholder", "rules.action", "rules.err.empty", "settings.purposeConnections"] as const) {
+  for (const key of ["rules.placeholder", "rules.action", "rules.err.empty"] as const) {
     expect(t(key)).not.toMatch(/Raphael|拉斐爾|ラファエル/);
     expect(t(key)).toContain(locale === "zh-TW" ? "成員" : locale === "ja" ? "メンバー" : "member");
   }
@@ -175,7 +176,7 @@ test("Tools contains five shared service rows and leaves memory in the owner pan
   expect(picker).toMatch(/<span class="mp-slot" data-model-picker="vision"><button type="button" class="sel mp-trigger"[^>]*data-k="svc-vision">/);
   expect(picker).toContain('<strong class="mp-tname">Claude Haiku 5.5</strong>');
   expect(tab("agent", { services: { ...emptyServicesView(), open: { kind: "vision", service: "model" } } })).toContain('<strong class="mp-tname">與拉斐爾相同</strong>');
-  for (const id of ["general", "dictation", "connections", "messaging", "usage", "data", "about"] as const) {
+  for (const id of ["general", "dictation", "connections", "usage", "about"] as const) {
     expect(tab(id, { services: emptyServicesView() })).not.toContain("data-svc");
   }
 });
@@ -187,7 +188,6 @@ test.each(["zh-TW", "en", "ja"] as const)("About exposes localized help and feed
   const html = tab("about");
   expect(html).toContain('data-act="help"');
   expect(html).toContain(t("nav.help"));
-  expect(searchSettings(t("nav.help")).some(hit => hit.pane === "about")).toBe(true);
 });
 
 test.each([catalog, "loading", "failed"] as const)("a CLI answer is priced as subscription regardless of API catalog availability", (source) => {
@@ -223,12 +223,12 @@ const described = (html: string): string[] =>
   html.split(/(?=<div class="row[ "])/).filter((r) => r.includes('<div class="d">')).map((r) => /<div class="t">(.*?)<\/div>/.exec(r)![1]);
 
 describe("the tabs", () => {
-  test("are General, Dictation, Raphael; Connections, Messaging; Models & usage, Data and About, in each language", () => {
-    expect(IDS).toEqual(["general", "appearance", "dictation", "tools", "safety", "connections", "messaging", "models", "data", "about"]);
+  test("are Grok Bot's six: General, Dictation, Tools, Safety, Models & usage and About, in each language", () => {
+    expect(IDS).toEqual(["general", "dictation", "tools", "safety", "models", "about", "connections"]);
     const titles = {
-      "zh-TW": ["一般", "外觀", "聽寫與快捷鍵", "工具", "安全", "連接", "訊息平台", "模型與用量", "資料", "關於"],
-      en: ["General", "Appearance", "Dictation & shortcuts", "Tools", "Safety", "Connections", "Messaging", "Models & usage", "Data", "About"],
-      ja: ["一般", "外観", "音声入力とショートカット", "ツール", "安全", "接続", "メッセージ", "モデルと使用量", "データ", "アプリ情報"],
+      "zh-TW": ["一般", "聽寫與快捷鍵", "工具", "安全", "模型與用量", "關於", "連結應用程式"],
+      en: ["General", "Dictation & shortcuts", "Tools", "Safety", "Models & usage", "About", "Connect apps"],
+      ja: ["一般", "音声入力とショートカット", "ツール", "安全", "モデルと使用量", "アプリ情報", "アプリを連携"],
     };
     for (const locale of LOCALES) {
       setLocale(locale);
@@ -236,39 +236,33 @@ describe("the tabs", () => {
     }
   });
 
-  test("sit in three groups: the basics with no name, then 整合 and 帳戶 in small grey words", () => {
+  test("sit flat, as Grok Bot's: no group names and no search (owner, 2026-11-07)", () => {
     const list = paneListHTML();
-    const order = [...list.matchAll(/class="nav-group">([^<]+)<|data-pane="(\w+)"/g)].map((m) => m[1] ?? m[2]);
-    expect(order).toEqual(["基本", "general", "appearance", "dictation", "團隊", "tools", "safety", "整合", "connections", "messaging", "帳戶", "models", "data", "about"]);
-    setLocale("en");
-    expect(paneListHTML()).toContain('<div class="nav-group">Integrations</div>');
-    expect(paneListHTML()).toContain('<div class="nav-group">Account</div>');
-    setLocale("ja");
-    expect(paneListHTML()).toContain('<div class="nav-group">連携</div>');
+    // 連結應用程式 is no tab: the sidebar opens it as a dialog of its own (R-UI-111).
+    expect([...list.matchAll(/data-pane="(\w+)"/g)].map((m) => m[1])).toEqual(["general", "dictation", "tools", "safety", "models", "about"]);
+    expect(list).not.toContain("nav-group");
+    expect(list).not.toContain("set-search");
   });
 
-  test("every tab is a real button and legacy Raphael links resolve to Tools", () => {
-    expect(paneListHTML().match(/<button type="button" class="nav" data-pane="\w+" aria-current="false">/g)).toHaveLength(10);
+  test("every tab is a real button and links of before land on their new tab", () => {
+    expect(paneListHTML().match(/<button type="button" class="nav" data-pane="\w+" aria-current="false">/g)).toHaveLength(6);
     expect(paneListHTML()).not.toContain('data-pane="agent"');
     expect(canonicalPane("agent")).toBe("tools");
+    expect(canonicalPane("appearance")).toBe("general");
+    expect(canonicalPane("messaging")).toBe("general");
   });
 
-  test("each opens with its name and one owner-requested purpose line", () => {
+  test("each opens with its name alone, as Grok Bot's: no line under it (owner, 2026-11-07)", () => {
     for (const locale of LOCALES) {
       setLocale(locale);
       for (const id of IDS) {
         const html = tab(id);
         const title = PANES.find((p) => p.id === id)!.title();
         const head = `<h1 id="set-title" tabindex="-1">${title.replace("&", "&amp;")}</h1>`;
-        expect(html.match(/class="set-purpose"/g)).toHaveLength(1);
-        expect(html).toContain(PANES.find(p => p.id === id)!.purpose(view().device).replace(/&/g, "&amp;"));
-        // Connections keeps Add beside its title.
-        if (id === "connections") {
-          expect(html).toMatch(new RegExp(`^<div class="set-head">${head}<button[^>]*data-k="conn-add"[^>]*>.*?</button></div>`));
-          expect(html).not.toContain('class="purpose"');
-          continue;
-        }
-        else expect(html.startsWith(head)).toBe(true);
+        expect(html).not.toContain("set-purpose");
+        // Connections' Add stands on the row of its two views, clear of the dialog's ✕ (owner, 2026-11-07).
+        if (id === "connections") expect(html).toMatch(/<div class="cs-bar">.*?<\/div><button type="button" class="sel cs-add"[^>]*data-k="conn-add"/s);
+        expect(html.startsWith(head)).toBe(true);
         expect(html).not.toContain('class="purpose"');
       }
     }
@@ -298,7 +292,11 @@ describe("the rules for every tab, in every language", () => {
 
   test("no tab shows the options of a setting in a row: no segmented controls, radio rows or chips", () => {
     for (const id of IDS) {
-      const html = tab(id);
+      const doc = new Window().document;
+      doc.body.innerHTML = tab(id);
+      // Vault filters browse saved data; they are not mutually exclusive setting values.
+      doc.querySelector(".vault .tabs")?.remove();
+      const html = doc.body.innerHTML;
       expect(html).not.toMatch(/role="radio|aria-pressed|class="tabs"|class="chip|lchip/);
     }
   });
@@ -313,19 +311,45 @@ describe("the rules for every tab, in every language", () => {
 });
 
 describe("一般", () => {
-  test("output folder belongs to General and is discoverable by settings search", () => {
-    const html = paneHTML(view({ brain: { ...brain, owner_output_folder: 'C:\\Owner\\Deliveries' } }));
-    expect(html).toContain('id="owner-output-folder"');
-    expect(html).toContain('C:\\Owner\\Deliveries');
-    expect(SEARCH_INDEX).toContainEqual({ pane: "general", label: "output.folder" });
-    expect(paneHTML(view({ pane: "agent" }))).not.toContain('id="owner-output-folder"');
+  test("output folder belongs to General", () => {
+    expect(rowOf(tab("general"), "輸出資料夾")).toContain('data-act="output-pick"');
+    expect(paneHTML(view({ pane: "agent" }))).not.toContain('data-row="output-folder"');
   });
-  test("has the interface language, the theme and the emblem's size as dropdowns, the subtitles and the start as switches", () => {
+
+  test("the output folder is a picker that names the chosen folder and shows its whole path", () => {
+    const unset = rowOf(tab("general"), "輸出資料夾");
+    expect(unset).not.toMatch(/<input|<textarea/);
+    expect(buttons(unset)).toHaveLength(1);
+    expect(unset).toContain("選擇資料夾");
+    const chosen = rowOf(tab("general", { brain: { ...brain, owner_output_folder: "C:\\Owner\\交付成果\\" } }), "輸出資料夾");
+    expect(chosen).not.toMatch(/<input|<textarea/);
+    expect(chosen).toContain('<span class="output-name">交付成果</span>');
+    expect(chosen).toContain('<span class="output-path">C:\\Owner\\交付成果\\</span>');
+    expect(chosen).toContain('aria-label="變更輸出資料夾（目前是 交付成果）"');
+    // As Claude's and ChatGPT's: the folder is changed, never cleared with a button standing open (R-UI-56); no title repeats the path.
+    expect(buttons(chosen)).toHaveLength(1);
+    expect(chosen).not.toMatch(/title="/);
+  });
+  test("messaging lists the members that have a bot of their own, one row each, after Raphael's card", () => {
+    const account = { member_id: 4, member_name: "紫苑", kind: "telegram" as const, paired: true, connected: true, enabled: true, running: true, error: null, bot: { username: "shion_bot" }, allowed: [], pending: [] };
+    const html = tab("general", { memberAccounts: [account, { ...account, member_id: 5, member_name: "紅丸", connected: false }] });
+    const section = html.slice(html.indexOf('class="sgroup msg-accounts"'));
+    expect(section).toContain("成員的帳號");
+    expect(section).toContain("紫苑");
+    expect(section).toContain("@shion_bot");
+    expect(section).not.toContain("紅丸");
+    expect(tab("general", { memberAccounts: [] })).not.toContain("msg-accounts");
+  });
+  test("General is Grok Bot's sections: you, appearance, Raphael, messaging, then memory and the guide", () => {
     const html = tab("general");
-    expect(groups(html)).toEqual(["關於你", "匯入記憶", "介面與桌面", "啟動"]);
-    expect(names(html)).toEqual(["天氣的城市", "時區", "輸出資料夾", "桌面圖案大小", "字幕", "開機時自動啟動", "重新導覽"]);
-    for (const k of ["size"]) expect(html).toMatch(new RegExp(`<button type="button" class="sel"[^>]*data-k="${k}"`));
-    for (const k of ["subtitles", "autostart"]) expect(html).toMatch(new RegExp(`class="tg" role="switch"[^>]*data-k="${k}"`));
+    expect(groups(html).slice(0, 4)).toEqual(["關於你", t("skin.title"), t("agent.title"), t("settings.paneMessaging")]);
+    expect(groups(html).slice(-2)).toEqual([t("members.profile.memory"), "啟動"]);
+    // Importing is one row with a short button beside its name, never a heading over a button that repeats it.
+    expect(names(html)).toContain("匯入記憶");
+    expect(html).toContain(`data-import="open"`);
+    expect(html).not.toMatch(/<h2>匯入記憶<\/h2>/);
+    expect(names(html).slice(0, 4)).toEqual([t("settings.067"), t("settings.059"), "時區", "輸出資料夾"]);
+    expect(names(html).slice(-1)).toEqual(["重新導覽"]);
   });
 
   test("starts the guide again with a real bordered button, not a switch or a link", () => {
@@ -342,10 +366,10 @@ describe("一般", () => {
 });
 
 describe("聽寫", () => {
-  test("is how a dictation starts, then how Raphael listens", () => {
+  test("is how a dictation starts, how Raphael listens, then how long the history is kept", () => {
     const html = tab("dictation");
-    expect(groups(html)).toEqual(["快捷鍵", "開始方式", "聆聽方式"]);
-    expect(names(html)).toEqual(["問拉斐爾", "聽寫", "貼上上一次", "取消", "聽寫方式", "你說的語言", "麥克風"]);
+    expect(groups(html)).toEqual(["快捷鍵", "開始方式", "聆聽方式", "聽寫紀錄"]);
+    expect(names(html)).toEqual(["問拉斐爾", "聽寫", "貼上上一次", "取消", "聽寫方式", "你說的語言", "麥克風", "保留聽寫紀錄"]);
   });
 
   test("shows each shortcut as key caps, with a 變更 button on the one that can be changed here", () => {
@@ -416,8 +440,7 @@ describe("聽寫", () => {
 describe("拉斐爾", () => {
   test("moved rows keep their existing field ids and shortcut action", () => {
     expect(rowOf(tab("dictation"), "問拉斐爾")).toContain('data-act="rec-agent"');
-    expect(rowOf(tab("general"), "天氣的城市")).toContain('id="agent-city" type="text" value="台北"');
-    expect(tab("tools")).not.toContain('id="agent-city"');
+    expect(rowOf(tab("general"), "輸出資料夾")).toContain('data-act="output-pick"');
   });
 
   test("hides the retired background cost cap", () => {
@@ -427,7 +450,7 @@ describe("拉斐爾", () => {
     expect(WORKER_COST_CAPS.map((c) => c.value)).toEqual(["0.1", "0.2", "0.5", "1"]);
   });
 
-  test("has no Telegram: it is in 訊息平台", () => {
+  test("has no Telegram: it is in 一般's 訊息平台", () => {
     expect(tab("agent")).not.toContain("Telegram");
   });
 
@@ -445,10 +468,9 @@ describe("拉斐爾", () => {
     expect(tab("dictation", { altgr: true, device: { ...device, dictation_keys: ["F9"], agent_keys: ["ControlLeft+Space"] } })).not.toContain("AltGr");
   });
 
-  test("an empty city is said to be wrong", () => {
-    const html = tab("general", { cityDraft: " ", cityError: () => "請輸入城市名稱" });
-    expect(html).toContain('role="alert"');
-    expect(html).toContain('aria-invalid="true"');
+  test("General keeps it simple: no emblem size, subtitles, start with Windows or weather city to set", () => {
+    const html = tab("general");
+    for (const gone of ['data-k="size"', 'data-k="subtitles"', 'data-k="autostart"', 'id="agent-city"']) expect(html).not.toContain(gone);
   });
 });
 
@@ -464,11 +486,28 @@ describe("Models", () => {
     expect(html).not.toContain("data-usage-host");
     expect(html).not.toContain("data-fallback");
     const usage = tab("usage");
-    expect(names(usage)).toEqual(["金鑰", "Raphael 本月花費", "OpenRouter 帳號本月用量"]);
+    // This month's spending of the app is Grok Bot's usage card above the allowances; an OpenRouter account's own usage is
+    // read on OpenRouter (owner, 2026-11-07).
+    expect(names(usage)).toEqual(["金鑰"]);
+    expect(usage.indexOf('data-row="raphael-spend"')).toBeLessThan(usage.indexOf("data-usage-host"));
+    expect(usage).toContain("<h2>拉斐爾本月花費</h2>");
+    expect(usage).not.toContain("OpenRouter 帳號本月用量");
     expect(usage).toContain("data-usage-host");
     expect(usage).not.toContain("data-model-picker");
     expect(usage).not.toContain("<h2>用量</h2>");
     expect(usage).not.toContain('data-pv="directory"');
+  });
+
+  test("this month's spending is Grok Bot's usage card: the amount, the share of the monthly limit as a bar, the month's end", () => {
+    const card = (over: Partial<SettingsView>): string => /<section class="spend-card"[\s\S]*?<\/section>/.exec(tab("usage", over))![0];
+    const full = card({});
+    expect(full).toContain('<strong class="num">US$1.20</strong><small>已使用 12%</small>');
+    expect(full).toContain('role="progressbar" aria-label="拉斐爾本月花費" aria-valuemin="0" aria-valuemax="100" aria-valuenow="12"><i style="width:12%">');
+    expect(full).toContain("每月上限 US$10.00 · 照目前速度，月底約 US$2.50");
+    expect(card({ spend: { ...spend, month_usd: 14 } })).toContain('aria-valuenow="100"');
+    const unknown = card({ spend: null });
+    expect(unknown).toContain("暫時無法取得");
+    expect(unknown).not.toContain("progressbar");
   });
 
   test("shows how OpenRouter took the key, with buttons to check again and to change it", () => {
@@ -589,121 +628,38 @@ describe("Models", () => {
 });
 
 describe("訊息平台", () => {
-  test("is Telegram, in rows like the others", () => {
-    expect(tab("messaging")).toMatch(/<section class="sgroup msg" data-msg-section data-msg-kind="telegram" aria-label="Telegram"><div class="slist"><div class="row msg-head">/);
+  test("is a section of 一般 holding Telegram, in rows like the others", () => {
+    expect(tab("general")).toMatch(/<section class="sgroup set-messaging" data-section="messaging"><h2>訊息平台<\/h2><section class="sgroup msg" data-msg-section data-msg-kind="telegram" aria-label="Telegram"><div class="slist"><div class="row msg-head">/);
   });
 });
 
-describe("資料", () => {
-  test("is the dictation history (how long it is kept, and a clear), then the conversation with 拉斐爾 (a clear)", () => {
-    const html = tab("data");
-    expect(groups(html)).toEqual(["聽寫紀錄", "拉斐爾的對話"]);
-    expect(names(html)).toEqual(["保留聽寫紀錄"]);
-    expect(described(html)).toEqual([]);
-    expect(html).not.toContain('class="foot"');
+describe("dictation history retention", () => {
+  test("lives at the end of 聽寫, there is no Data page, and its old link opens 聽寫", () => {
+    expect(groups(tab("dictation")).slice(-1)).toEqual(["聽寫紀錄"]);
+    expect(paneListHTML()).not.toContain('data-pane="data"');
+    expect(canonicalPane("data")).toBe("dictation");
+    expect(tab("dictation")).not.toContain('data-act="data-clear"');
+  });
+
+  test("a choice in a Settings row is its value and a chevron, with no box", () => {
+    const window = new Window({ settings: { disableCSSFileLoading: true } });
+    try {
+      const css = ["styles.css", "settings-polish.css"].map(file => readFileSync(path.resolve(import.meta.dirname, "..", file), "utf8").replace(/@import[^;]+;/g, "")).join("\n");
+      window.document.head.innerHTML = `<style>${css}</style>`;
+      window.document.body.innerHTML = `<div class="modal-body">${tab("dictation")}</div>`;
+      const style = window.getComputedStyle(window.document.querySelector('.modal-body [data-k="retention"]')!);
+      expect(["transparent", "rgba(0, 0, 0, 0)"]).toContain(style.backgroundColor);
+      expect(["transparent", "rgba(0, 0, 0, 0)"]).toContain(style.borderTopColor);
+    } finally { window.happyDOM.abort(); }
   });
 
   test("keeps the dictation history for a choice of days, a dropdown that shows the one in force", () => {
-    const row = rowOf(tab("data"), "保留聽寫紀錄");
+    const row = rowOf(tab("dictation"), "保留聽寫紀錄");
     expect(row).toMatch(/<button type="button" class="sel"[^>]*aria-label="保留聽寫紀錄" title="30 天" data-k="retention">/);
     expect(RETENTIONS.map((c) => c.value)).toEqual(["1", "7", "30", "365", "36500"]);
-    expect(rowOf(tab("data", { brain: { ...brain, history_retention_days: 36_500 } }), "保留聽寫紀錄")).toContain("一直保留");
+    expect(rowOf(tab("dictation", { brain: { ...brain, history_retention_days: 36_500 } }), "保留聽寫紀錄")).toContain("一直保留");
     // a retention set elsewhere that is none of the choices is still shown
-    expect(rowOf(tab("data", { brain: { ...brain, history_retention_days: 90 } }), "保留聽寫紀錄")).toContain("90 天");
-  });
-
-  test("Data shows records and counted clear buttons without a one-action menu", () => {
-    const html = tab("data", { data: { items: [{ id: 1, created_at_ms: NOW, text: "Synthetic dictation" } as never], total: 21, conversations: 3, more: true } });
-    expect(html).toContain("Synthetic dictation");
-    expect(html).toContain('data-act="data-more"');
-    expect(html).toContain('data-act="data-clear" data-what="dictation"');
-    expect(html).toContain("3 段對話");
-    expect(html).not.toContain('data-act="data-menu"');
-    expect(tab("data", { data: { items: [], total: 0, conversations: 0, more: false } })).not.toContain('data-act="data-clear"');
-  });
-
-  test("has no export: the app cannot save a file where the user chooses yet", () => {
-    expect(tab("data")).not.toMatch(/匯出|export/i);
-  });
-});
-
-describe("搜尋設定", () => {
-  const where = (query: string): string[] => searchSettings(query).map((hit) => `${hit.pane}:${hit.text}`);
-
-  test("finds a row by its name, in the window's language, and says where it is", () => {
-    expect(where("麥克風")).toEqual(["dictation:麥克風"]);
-    expect(where("天氣")).toEqual(["general:天氣的城市"]);
-    expect(where("版本")).toEqual(["about:版本"]);
-  });
-
-  test("finds a row by its name in the other languages too, and shows it in the window's", () => {
-    expect(where("microphone")).toEqual(["dictation:麥克風"]);
-    expect(where("マイク")).toEqual(["dictation:麥克風"]);
-    setLocale("en");
-    expect(where("麥克風")).toEqual(["dictation:Microphone"]);
-  });
-
-  test("finds the shortcuts by the word for them, though no row is called that", () => {
-    const shortcuts = ["dictation:聽寫與快捷鍵", "dictation:聽寫", "dictation:貼上上一次", "dictation:問拉斐爾"];
-    expect(where("快捷鍵")).toEqual(shortcuts);
-    expect(where("hotkey")).toEqual(shortcuts.slice(1));
-    expect(where("ショートカット")).toEqual(shortcuts);
-  });
-
-  test("no longer finds Raphael's picture: it is changed in his details panel on the 拉斐爾 page", () => {
-    for (const locale of LOCALES) {
-      setLocale(locale);
-      for (const query of ["頭像", "大頭貼", "avatar", "Picture", "アイコン"]) expect(where(query), query).toEqual([]);
-    }
-  });
-
-  test("finds Raphael's memory by its name and by what one asks him to do, in any of the languages", () => {
-    for (const query of ["記憶", "記住", "memory", "Remember", "メモリ", "覚える"]) {
-      expect(where(query), query).toContain("general:共同記憶");
-    }
-    setLocale("en");
-    expect(where("記憶")).toEqual(["general:Import memory", "general:Shared memory"]);
-    setLocale("ja");
-    expect(where("memory")).toEqual(["general:メモリをインポート", "general:共有メモリ"]);
-  });
-
-  test("finds a tab by its name, before its rows, and a brand by its name; case does not matter", () => {
-    expect(where("連接")[0]).toBe("connections:連接");
-    expect(where("telegram")).toEqual(["messaging:訊息平台"]);
-    expect(where("OPENROUTER")).toEqual(["models:新增供應商", "usage:金鑰", "usage:OpenRouter 帳號本月用量"]);
-    expect(where("模型")).toEqual(["models:模型與用量", "models:語音轉文字", "models:整理文字", "models:拉斐爾的快速提問"]);
-    expect(where("Models & usage")[0]).toBe("models:模型與用量");
-  });
-
-  test("finds nothing for nothing, and says so for what it does not know", () => {
-    expect(searchSettings("  ")).toEqual([]);
-    expect(where("zzz")).toEqual([]);
-    expect(searchResultsHTML([])).toContain("找不到符合的設定");
-  });
-
-  test("lists what it found as real buttons, each with the tab it is in under it", () => {
-    const html = searchResultsHTML(searchSettings("麥克風"));
-    expect(html).toBe('<button type="button" class="nav set-hit" data-hit="0"><span class="hit-t">麥克風</span><span class="hit-p">聽寫與快捷鍵</span></button>');
-  });
-
-  test("knows a row of every tab, and each row it knows is drawn on its tab under that name, in every language", () => {
-    expect(new Set(SEARCH_INDEX.map((e) => canonicalPane(e.pane)))).toEqual(new Set(IDS));
-    for (const locale of LOCALES) {
-      setLocale(locale);
-      for (const entry of SEARCH_INDEX) {
-        if (!entry.label || entry.target) continue;
-        const name = (t as unknown as (key: string) => string)(entry.label).replace("&", "&amp;");
-        // a row's name, or the name of a section (電腦操作 is found as a whole)
-        const html = tab(entry.pane, { memoryShared: { ...emptyMemoryView(), space: "shared", title: t("mem.shared") }, rules: emptyRulesView(), services: emptyServicesView() });
-        const headings = [...html.matchAll(/<h2(?: class="[^"]*")?>(.*?)<\/h2>/g)].map((m) => m[1]);
-        // a capability of 服務 is a row of the rounded list, named by its `.nm`
-        const items = [...html.matchAll(/<span class="nm">(.*?)<\/span>/g)].map((m) => m[1]);
-        const addButton = /data-pv="directory"[^>]*>(.*?)<\/button>/.exec(html)?.[1].replace(/<[^>]*>/g, "") ?? "";
-        // a labelled field of the owner's profile
-        const fields = [...html.matchAll(/<label>([^<]*)</g)].map((m) => m[1]);
-        expect([...names(html), ...items, ...headings, ...fields, addButton].map((shown) => shown.replace("&#39;", "'")), `${locale} ${entry.label}`).toContain(name);
-      }
-    }
+    expect(rowOf(tab("dictation", { brain: { ...brain, history_retention_days: 90 } }), "保留聽寫紀錄")).toContain("90 天");
   });
 });
 
@@ -722,15 +678,14 @@ describe("關於", () => {
 describe("while the core does not answer", () => {
   test("the tabs that need it say so, and its settings cannot be changed; this computer's still can", () => {
     const down = { brain: null };
-    for (const id of ["general", "appearance", "dictation", "agent", "usage", "data"] as const) expect(tab(id, down)).toContain("core-note");
+    for (const id of ["general", "appearance", "dictation", "agent", "usage"] as const) expect(tab(id, down)).toContain("core-note");
     expect(tab("about", down)).not.toContain("core-note");
-    expect(rowOf(tab("data", down), "保留聽寫紀錄")).toMatch(/data-k="retention" disabled>/);
-    expect(tab("data", down)).not.toContain('data-act="data-clear"');
+    expect(rowOf(tab("dictation", down), "保留聽寫紀錄")).toMatch(/data-k="retention" disabled>/);
     const dictation = tab("dictation", down);
     expect(rowOf(dictation, "你說的語言")).toMatch(/data-k="languages" disabled>/);
     expect(rowOf(dictation, "麥克風")).not.toContain("disabled");
     expect(rowOf(dictation, "聽寫")).not.toContain("disabled");
-    expect(rowOf(tab("general", down), "天氣的城市")).toContain("disabled");
+    expect(rowOf(tab("general", down), "輸出資料夾")).toContain("disabled");
     expect(rowOf(tab("dictation", down), "問拉斐爾")).not.toContain("disabled");
     const usage = tab("usage", down);
     expect(usage).not.toContain('id="limit-input"');
@@ -791,13 +746,9 @@ describe("電腦操作", () => {
     expect(source).not.toContain("computer_apps: computerAppsWithout");
   });
 
-  test("computer location search has one destination outside Settings", () => {
-    for (const query of ["電腦位置", "遠端", "remote"]) {
-      const hits = searchSettings(query);
-      expect(hits).toHaveLength(1);
-      expect(hits[0].target).toBe("computer");
-    }
+  test("the computer's location is not a Settings row", () => {
     expect(tab("safety")).not.toContain("docker-download");
+    expect(tab("safety")).not.toContain('data-k="computer-host"');
   });
 
   test('host health separates states and offers an exact copyable repair where it must be run', () => {
@@ -811,36 +762,5 @@ describe("電腦操作", () => {
     expect(html).toContain('/Applications/Docker.app/Contents/Resources/bin');
   });
 
-  test("the search finds the section by its name in any language", () => {
-    expect(searchSettings("電腦操作").map((hit) => `${hit.pane}:${hit.text}`)).toEqual(["safety:電腦操作"]);
-    expect(searchSettings("computer use").map((hit) => hit.pane)).toEqual(["safety"]);
-    expect(searchSettings("コンピューター").some(hit => hit.pane === "safety")).toBe(true);
-  });
 });
 
-test("Data uses the shared small Settings group heading beside its delete action", () => {
-  const window = new Window({ settings: { disableCSSFileLoading: true } });
-  try {
-    const css = ["styles.css", "settings-polish.css"].map(file => readFileSync(path.resolve(import.meta.dirname, "..", file), "utf8").replace(/@import[^;]+;/g, "")).join("\n");
-    window.document.head.innerHTML = `<style>${css}</style>`;
-    window.document.body.innerHTML = `<section class="sgroup"><h2>Reference</h2></section><div class="modal-body">${tab("data", {data:{items:[],total:1,conversations:1,more:false}})}</div>`;
-    const reference = window.getComputedStyle(window.document.querySelector('.sgroup > h2')!);
-    const title = window.getComputedStyle(window.document.querySelector('.modal-body h1')!);
-    for (const heading of window.document.querySelectorAll('.data-heading h2')) {
-      const style = window.getComputedStyle(heading);
-      expect(style.fontSize).toBe(reference.fontSize);
-      expect(style.fontWeight).toBe(reference.fontWeight);
-      expect(style.color).toBe(reference.color);
-      expect(parseFloat(style.fontSize)).toBeLessThan(parseFloat(title.fontSize));
-      expect(heading.parentElement!.querySelector('button[data-act="data-clear"]')).not.toBeNull();
-    }
-  } finally { window.happyDOM.abort(); }
-});
-
-test("Data shows local month/day and minute time, adding the year only outside the current year", () => {
-  const html = tab("data", {data:{items:[
-    {id:2,created_at_ms:new Date(2026,9,24,10,0,24).getTime(),text:"Current year"} as never,
-    {id:1,created_at_ms:new Date(2025,9,24,0,5,24).getTime(),text:"Previous year"} as never,
-  ],total:2,conversations:0,more:false}});
-  expect([...html.matchAll(/<time[^>]*>(.*?)<\/time>/g)].map(match=>match[1])).toEqual(["10/24 10:00", "2025/10/24 00:05"]);
-});

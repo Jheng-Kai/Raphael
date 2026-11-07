@@ -40,7 +40,7 @@ async def test_production_turns_offer_every_speaker_the_same_abilities(setup, cl
         assert "set_my_job" not in names
         assert ("room_meeting" in names) == (index == 2)
         assert not names & MANAGEMENT_TOOLS
-        assert ("find_tools" in names) == (index == 2)
+        assert "find_tools" in names  # Every speaker can discover deferred shared work tools.
         offers.append({item["function"]["name"]: item["function"] for item in tools
                        if item["function"]["name"] not in set(COORDINATION_TOOLS) | MANAGEMENT_TOOLS | {"find_tools"}})
     assert offers[0] == offers[1] == offers[2]

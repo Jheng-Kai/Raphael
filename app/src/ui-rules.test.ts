@@ -127,10 +127,21 @@ describe("buttons", () => {
       // Daily sidebar controls share the owner's requested round soft press surface.
       'sidebar.css: .side .side-foot .btn.icon[aria-current="page"]:active:not(:disabled)',
       "sidebar.css: .side .btn.icon:hover:not(:disabled)", "sidebar.css: .side .btn.icon:active:not(:disabled)",
+      // Search and plus, and the buttons on the window's edges, are Grok Bot's soft round buttons (owner, 2026-11-06).
+      "sidebar.css: .side .btn.icon.mb-tool[data-col]:hover:not(:disabled)", "sidebar.css: .side .btn.icon.mb-tool[data-col]:active:not(:disabled)",
+      ...[':is(:hover, [aria-expanded="true"]):not(:disabled)', ":active:not(:disabled)"].flatMap(state => [
+        `styles.css: :is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon${state}`,
+        `styles.css: .page-agent .cmp-bar .btn.cmp-attach${state}`,
+      ]),
+      "styles.css: .btn.icon.modal-x:hover:not(:disabled)", "styles.css: .btn.icon.modal-x:active:not(:disabled)",
+      // The larger view's fold back and Back live in the window strip and fill as its own buttons do (R-COMP-PERF-07).
+      'desktop-viewer.css: .window-chrome > .btn.icon:is([data-desktop="collapse"], [data-desktop="back"]):is(:hover, :active):not(:disabled)',
+      'desktop-viewer.css: .window-chrome > .btn.icon:is([data-desktop="collapse"], [data-desktop="back"]):active:not(:disabled)',
       "styles.css: .window-button:hover", "styles.css: .window-button:active",
       "styles.css: .window-close:hover", "styles.css: .window-close:active",
       // R-UI-50: the contextual latest action floats over messages and needs an opaque surface.
       "agent.css: .page-agent .btn.conversation-latest:hover:not(:disabled)",
+      "conversations.css: .peer-chat > .btn.peer-latest:hover:not(:disabled)",
     ];
     const violations = (css: string): string[] => [...strip(css).matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap(([, selectors, body]) => {
       const surfaces = [...body!.matchAll(/(?:^|;)\s*background(?:-color|-image)?\s*:\s*([^;]+)/g)]
@@ -239,11 +250,11 @@ describe("translations", () => {
 });
 
 describe("icons", () => {
-  // The icons are drawn on a 16 x 16 grid with a 1.5 stroke (ui.ts ICON): at 16 px one edge of each
-  // straight line falls on a whole pixel; at 12 to 15 px none does and they blur. So an icon is shown
-  // at 16 px, or 20 where a larger one is meant, and keeps its stroke. The window's own minimise,
-  // maximise and close are Windows' caption glyphs, drawn for 12 px: not icons of the set.
-  const SIZES = new Set(["16px", "20px"]);
+  // The icons are Lucide's 24 x 24 drawings with their stroke of 2 (icon-set.ts, as Grok Bot's since 2026-11-06): shown
+  // at 16 px, 18 on the round edge buttons (Grok Bot's 1.5 px lines) or 20 where a larger one is meant; at 12 to 15 px
+  // their lines thin out and blur. The window's own minimise, maximise and close are Windows' caption glyphs, drawn for
+  // 12 px: not icons of the set.
+  const SIZES = new Set(["16px", "18px", "20px"]);
   const NOT_ICONS = new Set([".slime-cels > svg", ".slime-prop-cels > svg", ".slime-blink-cels > svg", ".window-button svg"]);
   const strip = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, "");
   const cssFiles = [...mainFiles, ...walk(join(SRC, "overlay"))].filter((f) => f.endsWith(".css"));
@@ -269,15 +280,17 @@ describe("icons", () => {
     expect(bad).toEqual([]);
   });
 
-  test("an icon keeps the 1.5 stroke it is drawn for", () => {
+  test("an icon keeps the stroke of 2 it is drawn for", () => {
     const bad = iconRules()
-      .filter(({ body }) => [...body.matchAll(/stroke-width\s*:\s*([^;]+)/g)].some(([, value]) => value.trim() !== "1.5"))
+      .filter(({ body }) => [...body.matchAll(/stroke-width\s*:\s*([^;]+)/g)].some(([, value]) => value.trim() !== "2"))
       .map(({ file, selector }) => `${file}: ${selector}`);
     expect(bad).toEqual([]);
   });
 
-  test("no page keeps a copy of an icon: every 16 x 16 drawing comes from ui.ts", () => {
-    const copies = sources.filter((f) => rel(f) !== "ui.ts" && read(f).includes('viewBox="0 0 16 16"')).map(rel);
+  test("no page keeps a copy of an icon: every drawing of the set comes from icon-set.ts", () => {
+    const drawings = [...read(join(SRC, "main/icon-set.ts")).matchAll(/d=\\"([^\\"]{12,})\\"/g)].map(([, d]) => d);
+    expect(drawings.length).toBeGreaterThan(50);
+    const copies = sources.filter((f) => !["ui.ts", "icon-set.ts"].includes(rel(f)) && (read(f).includes('viewBox="0 0 16 16"') || drawings.some((d) => read(f).includes(d)))).map(rel);
     expect(copies).toEqual([]);
   });
 });

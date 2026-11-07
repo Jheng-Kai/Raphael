@@ -1492,6 +1492,198 @@ PRAGMA user_version = 62;
 COMMIT;
 """
 
+_MIGRATIONS[63] = """
+BEGIN;
+CREATE TABLE vault_entries (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK(kind IN ('login','contact','card')),
+    label TEXT NOT NULL,
+    hint TEXT NOT NULL DEFAULT '',
+    origin TEXT NOT NULL DEFAULT '',
+    members TEXT NOT NULL,
+    credential TEXT NOT NULL
+);
+CREATE TABLE computer_payment_holds (target TEXT PRIMARY KEY);
+INSERT INTO vault_entries(id,kind,label,origin,members,credential)
+SELECT reference,'login',origin,origin,json_array(member_id),'computer-login:' || reference FROM computer_logins;
+PRAGMA user_version = 63;
+COMMIT;
+"""
+
+_MIGRATIONS[64] = """
+BEGIN;
+ALTER TABLE room_threads ADD COLUMN parent_message_id INTEGER REFERENCES room_messages(id) ON DELETE SET NULL;
+CREATE UNIQUE INDEX room_thread_parent ON room_threads(parent_message_id) WHERE parent_message_id IS NOT NULL;
+CREATE TABLE message_reactions (
+    turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE,
+    message_key TEXT NOT NULL,
+    emoji TEXT NOT NULL CHECK(emoji IN ('👍','❤','✓','?')),
+    PRIMARY KEY(turn_id, message_key, emoji)
+);
+CREATE TABLE room_reactions (
+    message_id INTEGER NOT NULL REFERENCES room_messages(id) ON DELETE CASCADE,
+    emoji TEXT NOT NULL CHECK(emoji IN ('👍','❤','✓','?')),
+    PRIMARY KEY(message_id, emoji)
+);
+CREATE TRIGGER clear_message_reactions AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM message_reactions WHERE turn_id=OLD.id;
+END;
+CREATE TRIGGER clear_room_reactions AFTER DELETE ON room_messages BEGIN
+    DELETE FROM room_reactions WHERE message_id=OLD.id;
+    UPDATE room_threads SET parent_message_id=NULL WHERE parent_message_id=OLD.id;
+END;
+ALTER TABLE email_drafts ADD COLUMN kind TEXT NOT NULL DEFAULT 'email' CHECK(kind IN ('email','slack'));
+ALTER TABLE members ADD COLUMN voice_memo INTEGER NOT NULL DEFAULT 0;
+PRAGMA user_version = 64;
+COMMIT;
+"""
+
+_MIGRATIONS[67] = """
+BEGIN;
+CREATE TABLE voice_calls (
+    id TEXT PRIMARY KEY,
+    member_id INTEGER NOT NULL,
+    conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    started_at_ms INTEGER NOT NULL,
+    ended_at_ms INTEGER,
+    summary_id INTEGER REFERENCES agent_turns(id) ON DELETE CASCADE,
+    failure TEXT,
+    rating TEXT CHECK(rating IN ('good','bad'))
+);
+CREATE TABLE voice_call_turns (
+    call_id TEXT NOT NULL REFERENCES voice_calls(id) ON DELETE CASCADE,
+    turn_id INTEGER NOT NULL UNIQUE REFERENCES agent_turns(id) ON DELETE CASCADE,
+    PRIMARY KEY(call_id,turn_id)
+);
+CREATE TRIGGER clear_conversation_voice_calls AFTER DELETE ON conversations BEGIN
+    DELETE FROM voice_calls WHERE conversation_id=OLD.id;
+END;
+CREATE TRIGGER clear_voice_call_turns AFTER DELETE ON voice_calls BEGIN
+    DELETE FROM voice_call_turns WHERE call_id=OLD.id;
+END;
+CREATE TRIGGER clear_turn_voice_calls AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM voice_call_turns WHERE turn_id=OLD.id;
+    DELETE FROM voice_calls WHERE summary_id=OLD.id;
+END;
+PRAGMA user_version = 67;
+COMMIT;
+"""
+
+# Each member keeps one standard conversation; the quick conversation is independent.
+_MIGRATIONS[68] = """
+BEGIN;
+CREATE TEMP TABLE conversation_fold AS
+SELECT id AS source_id, member_id,
+       FIRST_VALUE(id) OVER (
+           PARTITION BY member_id ORDER BY is_default DESC, updated_at_ms DESC, id DESC
+       ) AS target_id
+FROM conversations WHERE kind = 'standard';
+
+-- Prefer the target's admission, then the earliest admitted folded request.
+CREATE TEMP TABLE conversation_fold_cancelled AS
+SELECT turn_id FROM (
+    SELECT i.turn_id, ROW_NUMBER() OVER (
+        PARTITION BY i.member_id, f.target_id, i.request_id
+        ORDER BY (f.source_id = f.target_id) DESC, i.turn_id
+    ) AS position
+    FROM agent_inbox i JOIN conversation_fold f ON f.source_id = i.conversation_id
+    WHERE i.state != 'terminal'
+) WHERE position > 1;
+INSERT INTO conversation_fold_cancelled
+SELECT turn_id FROM (
+    SELECT i.turn_id, ROW_NUMBER() OVER (
+        PARTITION BY i.member_id, f.target_id
+        ORDER BY (f.source_id = f.target_id) DESC, i.turn_id
+    ) AS position
+    FROM agent_inbox i JOIN conversation_fold f ON f.source_id = i.conversation_id
+    WHERE i.state = 'started' AND i.turn_id NOT IN (SELECT turn_id FROM conversation_fold_cancelled)
+) WHERE position > 1;
+UPDATE agent_turns SET status = 'denied'
+WHERE id IN (SELECT turn_id FROM conversation_fold_cancelled);
+UPDATE agent_inbox SET state = 'terminal', outcome = 'cancelled',
+    settled_at_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+WHERE turn_id IN (SELECT turn_id FROM conversation_fold_cancelled);
+
+-- Per-conversation sequence numbers overlap; retain admission order in the merged FIFO.
+CREATE TEMP TABLE conversation_fold_sequence AS
+SELECT i.turn_id, ROW_NUMBER() OVER (PARTITION BY i.member_id, f.target_id ORDER BY i.turn_id) AS seq
+FROM agent_inbox i JOIN conversation_fold f ON f.source_id = i.conversation_id
+WHERE f.target_id IN (SELECT target_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE agent_inbox SET seq = (SELECT seq FROM conversation_fold_sequence s WHERE s.turn_id = agent_inbox.turn_id)
+WHERE turn_id IN (SELECT turn_id FROM conversation_fold_sequence);
+
+UPDATE agent_turns SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE voice_calls SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE connect_cards SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE secret_cards SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE handback_cards SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE permission_cards SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE email_drafts SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE pages SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE connection_proposals SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE agent_inbox SET conversation_id = (SELECT target_id FROM conversation_fold WHERE source_id = conversation_id)
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+
+DELETE FROM conversation_context_summaries
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+DELETE FROM agent_conversation_cli_sessions
+WHERE conversation_id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+UPDATE conversations SET is_default = 1, updated_at_ms = (
+    SELECT MAX(c.updated_at_ms) FROM conversations c
+    JOIN conversation_fold f ON f.source_id = c.id WHERE f.target_id = conversations.id
+)
+WHERE id IN (SELECT target_id FROM conversation_fold);
+DELETE FROM conversations WHERE id IN (SELECT source_id FROM conversation_fold WHERE source_id != target_id);
+CREATE UNIQUE INDEX one_standard_conversation ON conversations(member_id) WHERE kind = 'standard';
+DROP TABLE conversation_fold_sequence;
+DROP TABLE conversation_fold_cancelled;
+DROP TABLE conversation_fold;
+PRAGMA user_version = 68;
+COMMIT;
+"""
+
+# Keep existing reactions and their parent cleanup semantics; validation belongs to set_reaction.
+_MIGRATIONS[69] = """
+BEGIN;
+DROP TRIGGER clear_message_reactions;
+DROP TRIGGER clear_room_reactions;
+CREATE TABLE message_reactions_v69 (
+    turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE,
+    message_key TEXT NOT NULL,
+    emoji TEXT NOT NULL,
+    PRIMARY KEY(turn_id, message_key, emoji)
+);
+INSERT INTO message_reactions_v69 SELECT turn_id,message_key,emoji FROM message_reactions;
+DROP TABLE message_reactions;
+ALTER TABLE message_reactions_v69 RENAME TO message_reactions;
+CREATE TABLE room_reactions_v69 (
+    message_id INTEGER NOT NULL REFERENCES room_messages(id) ON DELETE CASCADE,
+    emoji TEXT NOT NULL,
+    PRIMARY KEY(message_id, emoji)
+);
+INSERT INTO room_reactions_v69 SELECT message_id,emoji FROM room_reactions;
+DROP TABLE room_reactions;
+ALTER TABLE room_reactions_v69 RENAME TO room_reactions;
+CREATE TRIGGER clear_message_reactions AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM message_reactions WHERE turn_id=OLD.id;
+END;
+CREATE TRIGGER clear_room_reactions AFTER DELETE ON room_messages BEGIN
+    DELETE FROM room_reactions WHERE message_id=OLD.id;
+    UPDATE room_threads SET parent_message_id=NULL WHERE parent_message_id=OLD.id;
+END;
+PRAGMA user_version = 69;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

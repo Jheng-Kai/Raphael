@@ -474,9 +474,6 @@ const ALLOWED_METHODS: &[&str] = &[
     "chatgpt.sign_out",
     "chatgpt.models",
     "stats.summary",
-    "usage.analytics",
-    "usage.runs",
-    "usage.export",
     "usage.allowances",
     "messaging.telegram.status",
     "messaging.telegram.connect",
@@ -485,6 +482,14 @@ const ALLOWED_METHODS: &[&str] = &[
     "messaging.telegram.reject",
     "messaging.telegram.remove_user",
     "messaging.telegram.disconnect",
+    "messaging.member.status",
+    "messaging.member.connect",
+    "messaging.member.set_enabled",
+    "messaging.member.approve",
+    "messaging.member.reject",
+    "messaging.member.remove_user",
+    "messaging.member.disconnect",
+    "messaging.accounts",
     "messaging.slack.status",
     "messaging.slack.connect",
     "messaging.slack.set_enabled",
@@ -500,6 +505,13 @@ const ALLOWED_METHODS: &[&str] = &[
     "messaging.discord.remove_user",
     "messaging.discord.disconnect",
     "computer.checkpoints",
+    "vault.list",
+    "vault.add",
+    "vault.update",
+    "vault.remove",
+    "vault.preview",
+    "vault.cancel",
+    "vault.import",
     // The conversation view stops the task it shows, by its id (`validate_core_call`). The other
     // methods of the worker stay closed (a task's question is answered by `background.answer`).
     "worker.cancel",
@@ -526,16 +538,20 @@ const ALLOWED_METHODS: &[&str] = &[
     // is asked something only by `agent_ask_text`, like Raphael: `agent.ask` stays closed.
     "members.list",
     "conversations.list",
-    "conversations.create",
-    "conversations.rename",
-    "conversations.delete",
     "conversations.clear",
     "agent.history.delete",
     "messages.search",
     "quota.list",
     "agent.speech.status",
-    "agent.speak",
+    "voice_chat.start",
+    "voice_chat.status",
+    "voice_chat.mute",
+    "voice_chat.settings",
+    "voice_chat.end",
+    "voice_chat.feedback",
+    "agent.react",
     "members.create",
+    "members.greet",
     "members.update",
     "members.delete",
     "members.set_primary",
@@ -553,6 +569,8 @@ const ALLOWED_METHODS: &[&str] = &[
     "members.commands.delete",
     "members.voices",
     "members.duplicate",
+    "members.template",
+    "connectors.label",
     "members.mark_all_read",
     "members.unread",
     "groups.create",
@@ -573,6 +591,8 @@ const ALLOWED_METHODS: &[&str] = &[
     "rooms.create",
     "rooms.delete",
     "rooms.messages",
+    "rooms.react",
+    "rooms.thread_open",
     "rooms.send",
     "rooms.stop",
     "rooms.transcribe",
@@ -821,32 +841,86 @@ pub async fn core_call(
     Ok(result)
 }
 
-/// Saves an already exported CSV only at the location chosen in the native save dialog. The
-/// webview cannot supply a path. Cancel is a normal result and writes nothing.
+/// Return only the folder explicitly chosen by the owner; cancelling changes nothing.
 #[tauri::command]
-pub async fn save_usage_csv(app: AppHandle, webview: Webview, csv: String) -> Result<bool, String> {
+pub async fn pick_output_folder(
+    app: AppHandle,
+    webview: Webview,
+) -> Result<Option<String>, String> {
     require_main(&webview)?;
-    if csv.len() > 32 * 1024 * 1024 || !csv.starts_with("time,member,title,model,provider,") {
-        return Err("invalid usage CSV".to_owned());
-    }
     let window = webview.window();
     tauri::async_runtime::spawn_blocking(move || {
         use tauri_plugin_dialog::DialogExt;
-        let chosen = app
+        app.dialog()
+            .file()
+            .set_parent(&window)
+            .blocking_pick_folder()
+            .map(|chosen| {
+                chosen
+                    .into_path()
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .map_err(|_| "invalid folder location".to_owned())
+            })
+            .transpose()
+    })
+    .await
+    .map_err(|err| format!("a background task failed: {err}"))?
+}
+
+/// Member recipes cross only an owner-selected file, never a caller-supplied path.
+#[tauri::command]
+pub async fn member_template_file(
+    app: AppHandle,
+    webview: Webview,
+    action: String,
+    text: String,
+) -> Result<Option<String>, String> {
+    require_main(&webview)?;
+    if !matches!(action.as_str(), "open" | "save") || text.len() > 512 * 1024 {
+        return Err("invalid member template request".to_owned());
+    }
+    let window = webview.window();
+    tauri::async_runtime::spawn_blocking(move || {
+        use std::io::Read;
+        use tauri_plugin_dialog::DialogExt;
+        let picker = app
             .dialog()
             .file()
             .set_parent(&window)
-            .add_filter("CSV", &["csv"])
-            .set_file_name("raphael-usage.csv")
-            .blocking_save_file();
+            .add_filter("Raphael member", &["raphael-member"]);
+        let chosen = if action == "open" {
+            picker.blocking_pick_file()
+        } else {
+            picker
+                .set_file_name("colleague.raphael-member")
+                .blocking_save_file()
+        };
         let Some(chosen) = chosen else {
-            return Ok(false);
+            return Ok(None);
         };
         let path = chosen
             .into_path()
-            .map_err(|_| "invalid save location".to_owned())?;
-        std::fs::write(path, format!("\u{feff}{csv}")).map_err(|err| err.to_string())?;
-        Ok(true)
+            .map_err(|_| "invalid template location".to_owned())?;
+        if path.extension().and_then(|ext| ext.to_str()) != Some("raphael-member") {
+            return Err("choose a .raphael-member file".to_owned());
+        }
+        if action == "save" {
+            std::fs::write(path, text).map_err(|_| "could not save member template".to_owned())?;
+            Ok(Some(String::new()))
+        } else {
+            let mut bytes = Vec::new();
+            std::fs::File::open(path)
+                .map_err(|_| "could not open member template".to_owned())?
+                .take(512 * 1024 + 1)
+                .read_to_end(&mut bytes)
+                .map_err(|_| "could not read member template".to_owned())?;
+            if bytes.len() > 512 * 1024 {
+                return Err("member template is too large".to_owned());
+            }
+            String::from_utf8(bytes)
+                .map(Some)
+                .map_err(|_| "member template must be UTF-8".to_owned())
+        }
     })
     .await
     .map_err(|err| format!("a background task failed: {err}"))?
@@ -2201,12 +2275,13 @@ mod tests {
                 "keyboard_has_altgr",
                 "main_events",
                 "main_window_forward",
+                "member_template_file",
                 "mic_access",
                 "open_attachment",
                 "open_external_url",
                 "open_link",
                 "open_team_file",
-                "save_usage_csv",
+                "pick_output_folder",
                 "schedule_keep_awake_get",
                 "schedule_keep_awake_set",
                 "window_hotkey",
@@ -2491,6 +2566,42 @@ mod tests {
     }
 
     #[test]
+    fn member_voice_calls_have_only_explicit_owner_methods() {
+        for method in ["start", "status", "mute", "settings", "end", "feedback"] {
+            assert!(is_allowed_method(&format!("voice_chat.{method}")));
+        }
+        for method in ["voice_chat", "voice_chat.record", "voice_chat.start.extra"] {
+            assert!(!is_allowed_method(method));
+        }
+    }
+
+    #[test]
+    fn vault_owner_methods_never_expose_private_value_reads_or_exports() {
+        for method in [
+            "vault.list",
+            "vault.add",
+            "vault.update",
+            "vault.remove",
+            "vault.preview",
+            "vault.cancel",
+            "vault.import",
+        ] {
+            assert!(is_allowed_method(method), "{method}");
+        }
+        for method in [
+            "vault",
+            "vault.",
+            "vault.get",
+            "vault.read",
+            "vault.values",
+            "vault.export",
+            "vault.execute",
+        ] {
+            assert!(!is_allowed_method(method), "{method}");
+        }
+    }
+
+    #[test]
     fn desktop_viewer_exposes_only_named_main_window_operations() {
         assert!(is_allowed_method("computer.teach"));
         assert!(!is_allowed_method("computer.teach_input"));
@@ -2512,14 +2623,18 @@ mod tests {
     }
 
     #[test]
-    fn usage_analytics_is_a_named_read_of_the_main_window_only() {
+    fn usage_is_a_named_read_of_the_main_window_only() {
         assert!(is_allowed_method("home.overview"));
         assert!(validate_core_call("home.overview", &json!({"tz": "Asia/Taipei"})).is_ok());
-        assert!(is_allowed_method("usage.analytics"));
-        assert!(validate_core_call("usage.analytics", &json!({"range": "7d"})).is_ok());
-        assert!(!is_allowed_method("usage.clear"));
-        assert!(is_allowed_method("usage.export"));
-        assert!(is_allowed_method("usage.runs"));
+        // The usage page shows only subscription allowances since 2026-11-06: the analytics, runs and CSV reads are closed.
+        for retired in [
+            "usage.analytics",
+            "usage.runs",
+            "usage.export",
+            "usage.clear",
+        ] {
+            assert!(!is_allowed_method(retired), "{retired}");
+        }
         assert!(is_allowed_method("usage.allowances"));
         assert!(ensure_caller(crate::MAIN_WINDOW, crate::MAIN_WINDOW).is_ok());
         assert!(ensure_caller("overlay", crate::MAIN_WINDOW).is_err());
@@ -2654,6 +2769,30 @@ mod tests {
             "Messaging.telegram.status",
         ] {
             assert!(!is_allowed_method(method), "{method:?}");
+        }
+    }
+
+    #[test]
+    fn member_messaging_has_only_named_owner_window_methods() {
+        for method in [
+            "status",
+            "connect",
+            "disconnect",
+            "set_enabled",
+            "approve",
+            "reject",
+            "remove_user",
+        ] {
+            assert!(is_allowed_method(&format!("messaging.member.{method}")));
+        }
+        assert!(is_allowed_method("messaging.accounts"));
+        for method in [
+            "messaging.member",
+            "messaging.member.send",
+            "messaging.member.connectx",
+            "messaging.accounts.delete",
+        ] {
+            assert!(!is_allowed_method(method));
         }
     }
 
@@ -2898,7 +3037,6 @@ mod tests {
             "models.local_delete",
             "models.catalog",
             "stats.summary",
-            "usage.analytics",
             "languages.list",
             "agent.history.list",
             "agent.history.clear",

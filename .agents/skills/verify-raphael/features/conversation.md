@@ -1,8 +1,107 @@
 # Conversation
 
+## Private member voice chat (2026-11-05)
+
+An empty member composer keeps both gestures in its existing right-hand slot:
+a pointer held for 300 ms records a voice message through the existing down/up
+path, while a shorter click starts voice chat. The destination is captured at press
+time and retained across navigation. Enter/Space starts voice chat; the existing
+dictation hotkey is unchanged. The tooltip explains both gestures in one localized
+line. Typed words/files retain Send, Raphael retains dictation, and rooms retain
+their existing recording path without offering calls. The background questions
+slot stays directly above the composer; transient call failures live inside the
+composer and durable failures keep their existing receipt repair entry.
+Not released yet (owner, 2026-11-06, R-UI-106); its scenes return with it.
+One call owns the microphone across navigation. Another start opens the shared
+confirmation dialog; only End and start ends the previous call. The panel replaces
+the composer and exposes Mute, Hang up, a transcript disclosure and shared Voice /
+Speed / Language dropdowns (Auto-detect by default). The existing character's
+working and waiting motion projects speaking and listening without a second mascot.
+During a call the empty-thread hero yields to that single panel character.
+
+The same dictation recorder, device, selected engine and VAD cut a call turn after
+0.8 seconds of pause. Ordinary dictation still waits for its key. VAD speech onset
+sets the existing speaker stop event synchronously; PCM playback checks it before
+each audio block. AgentService keeps the owner question and member reply as ordinary
+private turns. The call uses the member voice and existing streamed PCM service;
+speed changes its playback sample rate. No new speech vendor/model loop is added.
+
+Hang-up writes one durable voice-call receipt, with duration, expandable literal
+transcript and local Good/Bad feedback. Call message rows fold under that receipt
+to preserve R-UI-101. Owner questions and pending permission/setup/draft cards remain
+actionable through the ordinary turn renderer until settled; folding never removes
+a required decision. Microphone/model/voice failures use the existing Settings repair
+entry; network failure ends the call and retains its already admitted turns.
+Migration 67 stores call metadata and links to existing turns, with scoped cascading
+deletion. Restart closes interrupted calls and retains their transcript.
+
+Voice chat is not released yet (owner, 2026-11-06, R-UI-106): the voice button records voice messages only, and the call scenes come back with the feature.
+
+Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
+the busy dialog with dialog-caption-confirm, the settings controls with details-voice, the
+receipt shell with card-mcp-done, and the
+repair note with the existing missing-service note. A call receipt is a standalone
+history card.
+The call confirmation uses the shared compact `mb-confirm` shell because it has one
+decision, rather than the member chooser's list. Settings put the existing `sel`
+controls in shared menu rows because these choices apply only to the current call;
+the member's persistent voice remains in Details. The receipt's disclosure includes
+the duration and both speakers, so its summary adds a time and uses a trailing
+chevron. A failed call keeps its shared missing-service note inside the durable
+receipt instead of the transient read-aloud toast; there is only one repair action.
+Fake recognizer / streamed TTS / player tests are in tests/services/test_voice_chat.py;
+the VAD test uses the real DictationService with fake recorder/segmenter/engine.
+The existing native runner's `npm run native -- voice-call` journey checks the real
+shell admission, empty-member/draft guard and missing-voice Settings repair with an
+isolated profile and no paid speech. It does not exercise a successful audio call.
+Rendered fixtures establish UI/IPC behavior only. Native microphone permissions,
+headset echo isolation, installed STT/model/device, actual audio-chunk interruption,
+live model/provider/network and native restart persistence require separate acceptance.
+
+
+## Message metadata and side threads (2026-11-05)
+
+Reactions are owner-authored message metadata: one hover control opens 👍, ❤, ✓ and ?;
+selected reactions sit under that message. Repeating a selection removes it. Private
+model context and room transcripts label reactions as metadata, never approval or
+instructions. No reaction answers a permission, owner question or draft.
+
+Room action rows open a side thread. The main room keeps only an N-reply chip under
+the root; rooms.messages defaults to the main thread. The existing room worker and
+thread_id carry the replies, with only the root plus that thread in member context.
+No sibling or main-room discussion joins the side context.
+Side-thread Stop cancels only its exchange and worker trees. Room permission queries
+default to the main thread, with explicit thread_id for a side thread; legacy null
+thread tasks belong to the main thread. Side replies use the shared conversation cards.
+
+Slack drafts reuse the email store, digests, owner edits, conditional send claim,
+safety screening and existing permission modes. The slack_draft tool is private-chat
+only, including resumed/background calls. Channels/people and body are editable;
+only Send sends, while Discard changes no external state. The member's draft_first
+preference applies to discovered Slack send tools as well as email.
+Guardian S05.slack-draft exercises the production model/tool loops and draft RPCs
+with a recording Slack connector: editable card, discard without sending, old
+digest refusal and one version-bound send. It maps slack_draft in the tool registry;
+offline API/CLI fakes prove the driver, separately from authorized live acceptance.
+
+Voice memos and manual read-aloud are removed (owner, 2026-11-07): replies carry no
+Play/Pause control or transcript, and only the Alt+Space quick ask and voice calls speak.
+
+```powershell
+npm run look -- message-hugs-bubble reaction-picker reaction-row reaction-not-approval room-thread-open room-thread-chip slack-draft calm-thread --theme both --width 1120,720,1920x1080
+```
+
+Synthetic zh-TW fixtures replace only native IPC. Inspect all contact sheets and every
+new scene at light 720 and dark 1120, then judge this same selected run. Compare the
+Slack card with email, reaction/thread chips with shared compact controls and memo
+actions with adjacent reply/copy controls. Tests use fake Slack and TTS only. Native
+persistence/playback, live Slack/provider behavior and design judge remain separate.
+
+Attribution: Interaction reference: Grok Bot, Message and collaborate, local research snapshot 2026-11-05; no external code or assets copied.
+
 ## Member panel destinations (2026-11-05)
 
-The owner request of 2026-11-05 introduces R-PANEL-01/02/03/04. The conversation title opens Details first; the chat monitor opens Computer directly, and new active computer work selects Computer. One member identity line precedes the shared Details / Library / Computer tabs, with arrow-key navigation. Work results and pages navigate through the existing conversation result path; identity/resources remain behind the gear. Routines and conversation creation/search remain in Details. This supersedes the older screen/routines/conversations landing arrangement. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for the selected matrix, state-layout assertions, external references and deferred native acceptance.
+The owner request of 2026-11-05 introduces R-PANEL-01/02/03/04. The conversation title opens Details first; its Computer tab shows the computer (the header has no computer button since 2026-11-06; a dot beside the name says it is working), and new active computer work selects Computer. One member identity line precedes the shared Details / Library / Computer tabs, with arrow-key navigation. Work results and pages navigate through the existing conversation result path; identity/resources remain behind the gear. Routines and conversation creation/search remain in Details. This supersedes the older screen/routines/conversations landing arrangement. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for the selected matrix, state-layout assertions, external references and deferred native acceptance.
 
 ## Calm conversations (owner request, 2026-11-05)
 
@@ -286,9 +385,42 @@ process at a time, Vitest --maxWorkers=2, CARGO_BUILD_JOBS=2 and the shared nati
 CARGO_TARGET_DIR apply.
 
 
+## One conversation per member (owner decision, 2026-11-06)
+
+Like Grok Bot, each member has one conversation and nobody makes, renames or deletes
+conversations (R-UI-103). Migration 68 folds each member's standard conversations into its
+default in turn order, moving turns, calls, cards, drafts, pages, proposals and inbox rows; only
+the folded summaries and CLI sessions go, and a partial unique index keeps one standard
+conversation per member. Raphael's quick conversation is untouched. `conversations.create`,
+`.rename` and `.delete` are gone from the core, the shell allowlist, the management tools and the
+look mock; `list` and `clear` remain. A member's details have no conversation list; Raphael's have
+two rows, 主要對話 and 快速提問, with a quiet fill on the open one. The header names only the
+member and says 快速提問 under it when those are open.
+
+A message's ⋯ and a right click open one menu (R-UI-104): a colleague's message has its
+reactions above 回覆 and 複製, and 重新產生 on the latest answer; the owner's has 回覆 and 複製.
+The jump-to-latest button sits centred just above the composer (R-UI-105). Voice chat waits for
+a later release (R-UI-106): the voice button records voice messages only.
+
+Reactions are Grok Bot's (R-UI-108): the reaction row of the menu, and the pill a message's react
+button opens, hold 👍 😂 👎 ❤️ 🎉 and a last slot (a smiley with a plus) that opens every emoji in
+one card about 300 by 340 px: a focused search field, one scrolling grid of eight 34 px cells under
+small section labels in Unicode's order (names from emojibase-data in the app's language, skin
+tones left out, emoji newer than 15.1 left out because a Windows font may draw them as boxes), and
+a footer naming the emoji under the pointer. Search filters in place with no labels; the arrows walk
+the grid; a click chooses and closes; one Esc leaves. The data loads the first time the card opens.
+A message shows any emoji it has as its own chip; the core accepts any single emoji, up to 20 on a
+message, and still takes back the old ✓ and ?.
+
+```powershell
+npm run look -- conversation-sections member-conversation-sections quick-conversation quick-clear-confirm quick-cleared actions reaction-bar emoji-picker emoji-picker-speed header-pill-hover emoji-search thread-new-divider-latest raphael-details details member-panel-details composer-voice-pending-0 composer-voice-pending-1 empty-conversation-recording empty-conversation-hearing --theme both --width 1120,720,1920x1080
+```
+
+Core: tests/brain/test_one_conversation_migration.py and tests/agent/test_folded_conversations.py.
+
 ## Sub-features
 
-Named conversations per member; new/rename/delete; public work/event chips; answers,
+One conversation per member (Raphael also keeps his quick questions; see One conversation per member below); public work/event chips; answers,
 attachments, reply quoting, message actions, search and composer menus; connector cards for an app a
 task needs, and the one resume of that task (see Connecting an app from the chat below); a secret card for a key a
 connection needs and a computer card for the owner's turn at a sign-in (see Handing a key or the computer to the owner below);
@@ -335,13 +467,13 @@ Offline fixtures do not prove native microphone, providers or transport.
 From Home, click Raphael in the rail or open a member report. Select Raphael or another member in the sidebar (compact width:
 member picker). Raphael stays first with his original large bare emblem and name. The column's top-left arrow toggles a remembered 56px face strip, including at compact width. Other expanded rows retain their 40px faces, time and preview. Click the stacked member/conversation title to toggle details. The title displays
 the current session only; conversation creation, search, switching and row menus
-live in the details list. The top-right gear opens Settings. Use sidebar search, or
+live in the details list. The header's only tool is the computer, for Raphael too (2026-11-05). Use sidebar search, or
 the compact picker's search action, for messages.
 
 ## Driving it with look
 
 ```powershell
-npm run look -- composer-task-stop chat running running-motion empty details raphael-details details-closed conversation-filter new-conversation row-menu rename delete --theme both --width 1120,720,1920x1080
+npm run look -- composer-task-stop chat running running-motion empty details raphael-details details-closed --theme both --width 1120,720,1920x1080
 npm run look -- quick-conversation-list quick-conversation quick-question-result quick-formal-isolation quick-stop --theme both --width 1120,720,1920x1080
 npm run look -- live-scenario-owner-view --theme both --width 1120,720,1920x1080
 npm run look -- work work-member-builtin composer mode actions reply search search-target tooltip slash-commands --theme both --width 1120,720,1920x1080
@@ -642,8 +774,8 @@ unverified by rendered fixtures.
 
 ## Right click on an answer (R-UI-44)
 
-A right click anywhere on one of Raphael's answers opens the menu of its ⋯ (重新產生, 朗讀, 刪除這則), at the pointer, as a click on the ⋯ opens it: see
-[Members](members.md) for the rule and its table. A conversation row in a member's details gives its rename and delete menu the same way; its left click still opens the conversation.
+A right click anywhere on one of Raphael's answers opens the menu of its ⋯ (the reactions, 回覆, 複製, and 重新產生 on the latest answer, R-UI-104), at the pointer, as a click on the ⋯ opens it: see
+[Members](members.md) for the rule and its table. The quick-questions row in Raphael's details gives its clear menu the same way; its left click still opens the conversation.
 
 ```powershell
 npm run look -- context-menu-message context-menu-conversation --theme both --width 1120,720,1920x1080
@@ -669,7 +801,7 @@ legacy rows use their existing default or are removed if none exists. Empty fini
 records never create an exchange line or a date separator. Reopening the database is idempotent.
 
 ```powershell
-npm run look -- conversation-sections member-conversation-sections quick-clear-confirm quick-cleared new-conversation-empty composer-voice-pending-0 composer-voice-answer-0 composer-voice-pending-1 composer-voice-answer-1 --theme both --width 1120,720,1920x1080
+npm run look -- conversation-sections member-conversation-sections quick-clear-confirm quick-cleared composer-voice-pending-0 composer-voice-answer-0 composer-voice-pending-1 composer-voice-answer-1 --theme both --width 1120,720,1920x1080
 ```
 
 Regression coverage: `conversation-list.test.ts`, `conversation.test.ts`,
@@ -696,7 +828,7 @@ existing retract-and-restore behavior after the second Escape.
 
 ```powershell
 npm run look -- esc-main-armed esc-member-armed esc-recording-cancel composer-stop-pending-result composer-stop-background-result composer-stop-voice-result composer-stop-navigation composer-stop-roster chat --theme both --width 1120,720,1920x1080
-npm run look -- conversation-delete-main delete member-delete --theme both --width 1120,720,1920x1080
+npm run look -- member-delete --theme both --width 1120,720,1920x1080
 npm run look -- page-product page-buy page-expand page-gone --theme both --width 1120,720,1920x1080
 npm run look -- composer-model-small composer-model-favorites composer-model-sources composer-model-same composer-model-fold composer-quick-model composer-model-menu model-sync model-sync-member settings-chatgpt-row composer-model-arrives member-brain-saved --theme both --width 1120,720,1920x1080
 ```
@@ -1019,7 +1151,7 @@ npm run look -- composer-voice-recording composer-voice-sent composer-stop-voice
 
 ## The owner's bubble and link cards (2026-11-02)
 
-The owner's bubble in a member's own conversation wears that member's colour (`owner-bubble.ts`, set in `drawFaces` so an avatar change follows at once); Raphael's conversation and group chats stay neutral. A link card under a reply is the media card's width whatever the reply says, and an address with no title reads once, in full.
+The owner's bubble in a member's own conversation wears that member's colour (`owner-bubble.ts`, set in `drawFaces` so an avatar change follows at once); since 2026-11-06 Raphael's conversation wears his warm gold with dark words (R-UI-81), and group chats stay neutral. A link card under a reply is the media card's width whatever the reply says, and an address with no title reads once, in full.
 
 ```powershell
 npm run look -- owner-bubble-member owner-bubble-other-member owner-bubble-light-character owner-bubble-long owner-bubble-chief owner-bubble-room link-card-short-reply --theme both --width 1120,720,1920x1080
@@ -1078,7 +1210,7 @@ form. Installation dependencies and file repair steps without an app setting hav
 no settings button. Local services remain in Settings > Raphael > Services.
 A store card opens the Composio form; the native Google client needs an administrator.
 
-npm run look -- missing-card missing-card-repair missing-onboarding-repair missing-store-repair missing-search missing-search-repair missing-voice missing-voice-repair missing-hidden missing-vision missing-model-list missing-provider missing-provider-repair missing-routines missing-learned missing-pdf missing-media missing-expired missing-mail --theme both --width 1120,720,1920x1080
+npm run look -- missing-card missing-card-repair missing-onboarding-repair missing-store-repair missing-search missing-search-repair missing-voice missing-voice-repair missing-vision missing-model-list missing-provider missing-provider-repair missing-routines missing-learned missing-pdf missing-media missing-expired missing-mail --theme both --width 1120,720,1920x1080
 
 Run both themes at 1120,720,1920x1080. Also cover desktop-absent,
 desktop-unavailable, desktop-install, model-choices-answer, plugins-store-key,
@@ -1205,7 +1337,7 @@ core/tests/agent/test_routine_event.py and core/tests/members/test_harness.py.
 
 ```powershell
 npm run look -- composer-long-link composer-long-link-sent room-long-link room-composer-files room-composer-drop-sign room-files-sent --theme both --width 1120,720,1920x1080
-npm run look -- new-conversation-recording new-conversation-hearing composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
+npm run look -- empty-conversation-recording empty-conversation-hearing composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
 npm run look -- team-file-reply rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
@@ -1254,16 +1386,16 @@ Unit evidence: app/scripts/look/event-storm.test.mjs (nearest-rank P90, retained
 npm run look -- busy-team-thread busy-team-up busy-team-steps busy-team-typing busy-team-follow busy-team-anchor busy-team-hover busy-team-room busy-team-home --theme both --width 1120,720,1920x1080
 ```
 
-Activity listener audit also covers Settings usage: unchanged analytics and allowances retain their nodes; changed values use the shared DOM patch. Evidence: usage-analytics.test.ts and run-analytics.test.ts. Representative additional consumers:
+Activity listener audit also covers Settings usage: unchanged allowances retain their nodes; changed values use the shared DOM patch. Evidence: usage-analytics.test.ts. Representative additional consumers:
 ```powershell
-npm run look -- slime-states sidebar-unread usage usage-allowances --theme both --width 1120,720,1920x1080
+npm run look -- slime-states sidebar-unread usage usage-allowances-chatgpt --theme both --width 1120,720,1920x1080
 ```
 
 Animation clocks are not content identity: retained slimes keep their phase, delight and handover transition; new room messages retain older slime lines. ui-patch.test.ts::a changed row preserves its slime clock and active transition and group-chats.test.ts::a new room message retains older slime lines across animation clocks pin this. slime-states now updates a row preview during WorkerChanged traffic and asserts the actual CSS animation objects, start times and delays remain unchanged before checking the real member states.
 
 The prompt, empty-page hero and active voice flyer also patch their unchanged faces during roster updates. Evidence: pages/agent-members.test.ts::a changed roster preview retains the prompt and empty-page faces and voice-mode.test.ts::an unchanged voice redraw retains the listening picture. Voice consumers:
 ```powershell
-npm run look -- composer-voice-recording new-conversation-recording --theme both --width 1120,720,1920x1080
+npm run look -- composer-voice-recording empty-conversation-recording --theme both --width 1120,720,1920x1080
 ```
 
 
@@ -1275,7 +1407,7 @@ npm run look -- busy-team-thread busy-team-up busy-team-steps busy-team-typing b
 
 ## Folded colleague exchanges (2026-11-02)
 
-R-UI-72 uses handoff-line.ts and event-line.ts for private turn groups and consecutive room receipts. A message or blocked-intent entry separates room groups. Shared thread-diff.ts retains every handoff-event disclosure and its open state, including received-message lines. Existing individual request, result and artifact controls remain inside the closed-by-default group.
+R-UI-72 uses handoff-line.ts and event-line.ts for private turn groups and consecutive room receipts. A message or blocked-intent entry separates room groups. Shared thread-diff.ts keeps every handoff line node, and the open state of received-message lines. What was said opens in the conversation between members (see below, 2026-11-07).
 
 Selected matrix: handoff-group, handoff-group-done, handoff-group-many, handoff-group-open, handoff-group-room, centred-system-events, handoff-centred-line, room-handoff-queued, room-handoff-running, room-handoff-result, room-handoff-failed, room-workflow-blocked, room-immediate-work, room-mention-after-hop-limit, busy-team-thread, busy-team-room. Both themes at 1120,720,1920x1080. The centred-system-events assertion retains the two original handoff receipt labels; the meeting is in reply detail (owner, 2026-11-05).
 Additional R-UI-72 coverage: handoff-group-long checks long and unbroken names at all three sizes. Arriving receipts update only the event subtree; the owner question, answer and intervening room message retain their DOM nodes.
@@ -1283,6 +1415,14 @@ Additional R-UI-72 coverage: handoff-group-long checks long and unbroken names a
 
 ```powershell
 npm run look -- handoff-group handoff-group-done handoff-group-many handoff-group-long handoff-group-open handoff-group-room --theme both --width 1120,720,1920x1080
+```
+
+## Conversation between members (2026-11-07)
+
+Since 2026-11-07 (owner, after Grok Bot's 「2 messages with Savio」) the line is a button 「與 X 的 N 則訊息」 with no disclosure under it: N counts each request and each answer. peer-chat.ts opens the conversation in place over the member's header, thread and composer (`.mb-chat > .peer-chat`): the pill 「A ⇄ B」, every exchange between the same members in the loaded thread (or room) oldest first under each speaker's face and coloured name (owner-bubble.ts `nameAccent`), day dividers, an unfinished answer as its state and reason, and 「關閉對話」 where the composer was. Esc and leaving the conversation close it; an arriving answer redraws it. The scenes peer-chat (two days with one member, a third member's exchange excluded) and peer-chat-close drive it; handoff-group-open keeps it open through arriving receipts; bot-ask-centred, handoff-centred-line and room-workflow-blocked read the request, result, files and reason inside it.
+
+```powershell
+npm run look -- peer-chat peer-chat-close handoff-group handoff-group-open handoff-group-room centred-system-events bot-ask-centred handoff-centred-line room-workflow-blocked room-handoff-result --theme both --width 1120,720,1920x1080
 ```
 
 ## Review: one group state and scroll intent (2026-11-02)
@@ -1399,7 +1539,7 @@ Additional calendar target journeys: event-calendar-line and event-calendar-open
 verify the named event opens directly in its existing calendar detail.
 
 ```powershell
-npm run look -- presence-hover-action presence-sidebar-hover presence-rail-hover presence-blocked-stays presence-waiting-colleague transcript-clean transcript-working transcript-hover-detail transcript-time-gap event-routine-line event-routine-opens event-calendar-line event-calendar-opens event-lines-collapse sidebar-row-time sidebar-group-author --theme both --width 1120,720,1920x1080
+npm run look -- presence-hover-action presence-sidebar-hover presence-rail-hover presence-blocked-stays presence-waiting-colleague transcript-clean transcript-working transcript-hover-detail transcript-time-gap event-routine-line event-routine-opens event-calendar-line event-calendar-opens event-lines-collapse sidebar-row-time sidebar-hidden-folder sidebar-group-author --theme both --width 1120,720,1920x1080
 ```
 
 Owner 2026-11-05 supersedes the notes-1 32px between-message event gaps: receipts now live in collapsed reply detail; shared header hovers open below the face, stay clear of window controls, and show no pointer focus ring. Expanded sidebar hovers show the action, collapsed rails show the name then action.
@@ -1638,3 +1778,48 @@ Eye atlases inherit typed pixel-fit scale, offsets and stroke from their shared
 parent. The 576 thinking poses must not each carry the vector face's fitting
 class. Keep the same pixel formulas, all poses and periods; cover the gallery,
 parts, presence hovers and handovers when changing this shared style boundary.
+
+## Page text is an owner-reviewed draft (2026-11-05 follow-up 1)
+
+R-CARD-11 / R-SEC-05: a sure page gesture never sends an owner message or answers
+a waiting question. Both generated HTML send and MCP ui/message append bounded
+plain text on a new line in that conversation's composer, preserving existing
+words, files and quotes. Focus moves to the field. The shared one-line hint reads
+"這段文字來自頁面，確認後再送出" in zh-TW, with English/Japanese translations. It
+uses the existing hint typography/color and spacing tokens below the controls;
+no success toast or second send button appears. The draft keeps page provenance
+through navigation, restart and failed delivery. Clearing/sending it hides the note.
+
+MCP success is {status: "placed"}; generated pages receive
+{raphaelPage: 1, type: "result", status: "placed"}. Rejected placement is never
+reported as sent/placed. Input source, length and rate checks remain. A page's
+waiting task continues only after the owner submits the reviewed composer; normal
+messages retain their existing send flow. Transcription never auto-submits a page
+draft. HTTPS links, tools/call with the existing core gate, resize, retry and frame
+carry remain; an expanded page returns to the conversation when it places text.
+
+Tests: page-card.test.ts, chat-composer.test.ts, composer-drafts.test.ts,
+pages/agent-page.test.ts, group-chats.test.ts and owner-questions.test.ts.
+Compare page-buy and page-room-draft at matching theme/width: identical note
+component, wording, typography, spacing and state. The blank page-product scene
+proves the note has no reserved space before a page requests placement.
+
+The follow-up explicitly selects both themes at 1120 and 720 once. The maintained
+matrix below also includes the standard 1920x1080 size for later acceptance:
+
+```powershell
+npm run look -- page-product page-buy page-send page-expand page-expand-place page-gone page-room-draft owner-card-room-page --theme both --width 1120,720,1920x1080
+```
+
+Use judge on this same run when its prerequisites and network are authorized.
+Offline fixture/browser evidence does not prove native MCP/provider transport.
+
+
+## Diagnostic credential security (2026-11-05)
+
+R-SEC-LOG-01: core/tests/test_security_redaction.py covers complete quoted passwords,
+escaped quotes/backslashes, Basic auth, JSON-escaped known secrets and overlapping
+secret values. Select the existing agent/cli, test_cli_failure_detail.py,
+test_failure.py and test_failure_kinds.py consumers. native_diagnostics shares
+failures.scrub, retaining bounded readable causes without copying private fragments.
+This core-only change does not alter calm-thread presentation or require look/judge.

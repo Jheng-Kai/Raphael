@@ -1,138 +1,136 @@
 import { visibilityGate } from "../window-visibility";
-// Home keeps four equal summaries and a month calendar in the same places for every data state.
+// Home is Raphael as a secretary (owner, 2026-11-07): his emblem and greeting in the middle, one line of the team's
+// health, then today's schedule, what is still open and what each member is doing. No figures of spend or dictation.
 import * as api from "../api";
 import { eventRead } from '../event-read';
-import { avatarHTML, onAvatarChange } from "../avatar";
-import { chipHTML, dismissOffer, googleNoticeHTML, type EntryKind } from "../calendar-view";
+import { onAvatarChange } from "../avatar";
+import { chipClock, chipColor, dismissOffer, googleMark, googleNoticeHTML, runMarkHTML, type CalendarPerson, type EntryKind } from "../calendar-view";
 import type { GoogleCalendarState, HomeItem, HomeOverview } from "../home-types";
 import { getLocale, onLocaleChange, t } from "../i18n";
 import { loadingHTML } from "../loading";
 import { buildReport } from "../report";
-import { durationParts, formatCount } from "../stats";
-import { dateKey, monthDays, monthLabel } from "../schedule-picker";
-import { dayName } from "../members";
+import { dateKey } from "../schedule-picker";
+import { RAPHAEL_ID, faceHTML as memberFaceHTML } from "../members";
 import { onOwnerProfile } from "../owner-avatar";
+import { plainReplies } from "../../shared/anime";
 import { openMemberThread } from "../team-navigation";
-import type { AppContext, CalendarCreate, CalendarDate, CalendarEventFocus, Page } from "../types";
-import { faceHTML as memberFaceHTML } from "../members";
+import type { AppContext, CalendarCreate, CalendarDate, CalendarEventFocus, Member, Page } from "../types";
 import { btn, esc, ico, iconButton, patchHTML } from "../ui";
 import "../home.css";
 
-const money = (value: number): string => value.toFixed(2);
-const clock = (at: number): string => new Date(at).toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", hour12: false });
-const unitHTML = (parts: [string, string][]): string => parts.map(([n, u]) => `${esc(n)}<small>${esc(u)}</small>`).join("");
+const HOUR = 3_600_000;
+/** Rows a section shows; the rest is counted below them, so Home never scrolls inside. */
+const ROWS = 4;
+/** The day Raphael last flew in: once a day, on the first Home of that day. */
+const ARRIVED_KEY = "raphael.home.arrived";
 
+const clock = (at: number): string => new Date(at).toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", hour12: false });
 const faceHTML = (item: HomeItem, size: number): string => memberFaceHTML({ id: item.member_id, name: item.name, avatar: item.avatar }, size);
 
-function card(key: string, title: string, go: string, body: string, count?: number): string {
-  return `<section class="ho-card ho-${key}">${blockTarget(title, go)}<header><h2>${esc(title)}${count ? `<span class="ho-count">${count}</span>` : ""}</h2>` +
-    `<span class="ho-open" aria-hidden="true">${ico("right")}</span></header>${body}</section>`;
+/** What a member is doing, as Home says it: waiting for the owner first, then at work, then unread, then free. */
+export type TeamState = "needs" | "busy" | "unread" | "idle";
+export function memberState(m: Member): { kind: TeamState; words: string } {
+  const activity = m.activity ?? "idle";
+  if (m.waiting || activity === "blocked" || activity === "error") return { kind: "needs", words: m.activity_label || t("home.stateWaiting") };
+  if (activity !== "idle" && activity !== "done" && m.activity_label) return { kind: "busy", words: m.activity_label };
+  if (m.unread) return { kind: "unread", words: t("home.stateUnread") };
+  return { kind: "idle", words: t("home.stateIdle") };
+}
+const ORDER: readonly TeamState[] = ["needs", "busy", "unread", "idle"];
+
+/** The members Home reports on: everyone the owner sees, Raphael aside (he is the one reporting). */
+export const teamOf = (members: readonly Member[]): Member[] => members.filter(m => m.id !== RAPHAEL_ID && !m.hidden);
+
+/** Raphael's one line on the team: all well, or who needs the owner. */
+export function healthText(team: readonly Member[]): string {
+  if (!team.length) return t("home.healthAlone");
+  const needs = team.filter(m => memberState(m).kind === "needs");
+  if (!needs.length) return t("home.healthWell", { p0: team.length });
+  if (needs.length > 3) return t("home.healthMany", { p0: needs.length });
+  return t("home.healthNeeds", { p0: new Intl.ListFormat(getLocale(), { type: "conjunction" }).format(needs.map(m => m.name)) });
 }
 
-function blockTarget(title: string, go: string): string {
-  return btn("", "ho-target", ` data-home-go="${go}" aria-label="${esc(title)}"`);
+function greeting(at: number): string {
+  const hour = new Date(at).getHours();
+  return t(hour >= 5 && hour < 12 ? "home.greetMorning" : hour >= 12 && hour < 18 ? "home.greetAfternoon" : "home.greetEvening");
 }
 
-/** Bars of one value a day, the last (today) in the accent. */
-function barsSVG(values: number[], label: string): string {
-  if (!values.some(value => value > 0)) return "";
-  const max = Math.max(...values, 0) || 1, w = 8, gap = 4, h = 44;
-  return `<svg class="ho-bars" viewBox="0 0 ${values.length * (w + gap) - gap} ${h}" preserveAspectRatio="none" role="img" aria-label="${esc(label)}">` +
-    values.map((v, i) => { const bh = Math.max(2, (Math.max(0, v) / max) * h); return `<rect class="${i === values.length - 1 ? "is-today" : ""}" x="${i * (w + gap)}" y="${h - bh}" width="${w}" height="${bh}" rx="2"/>`; }).join("") + `</svg>`;
-}
-
-/** A calendar item as the chip of the Calendar page draws it. */
-function chipOf(item: HomeItem): Parameters<typeof chipHTML>[0] {
+/** A calendar item as the Calendar page tells it apart: its kind, the member it is for and a run that went wrong. */
+function entryOf(item: HomeItem): { kind: EntryKind; member?: CalendarPerson; run?: { status: string } } {
   const kind: EntryKind = item.kind === "own" ? "own" : item.kind === "routine" ? "routine" : "event";
   const by = kind === "routine" ? item.member_id : item.added_by;
   const member = kind !== "event" && typeof by === "number" && item.name ? { id: by, name: item.name, avatar: item.avatar } : undefined;
-  return { kind, title: item.title, allDay: item.all_day === true, start: item.at_ms, member, rhythm:item.rhythm,
-    run:item.run_status ? {status:item.run_status} : undefined };
+  return { kind, member, run: item.run_status ? { status: item.run_status } : undefined };
 }
 
-function scheduleHTML(data: HomeOverview, month = new Date(data.generated_at_ms), selected = dateKey(new Date(data.generated_at_ms))): string {
-  const today = dateKey(new Date(data.generated_at_ms)), items = data.calendar_items ?? data.calendar;
-  const byDay = new Map<string, HomeItem[]>();
-  for (const item of items) {
-    const key = dateKey(new Date(item.at_ms)), day = byDay.get(key) ?? [];
-    day.push(item); byDay.set(key, day);
-  }
-  const count = (key: string): number => data.calendar_counts?.[key] ?? byDay.get(key)?.length ?? 0;
-  const marked = new Set(data.calendar_days ?? [...byDay.keys()]);
-  const weekday = new Intl.DateTimeFormat(getLocale(), { weekday: "narrow" });
-  const eventTarget = (item: HomeItem): string => ` data-home-event="${esc(item.id)}" data-home-date="${dateKey(new Date(item.at_ms))}"`;
-  const more = (key: string, total: number, limit: number, className: string): string => total > limit
-    ? btn(esc(t("overview.moreEvents", { p0: total - limit })), className, ` data-home-go="calendar" data-home-date="${key}"`) : "";
-  const days = monthDays(month).map(day => {
-    const key = dateKey(day), events = byDay.get(key) ?? [], label = day.toLocaleDateString(getLocale(), { month: "long", day: "numeric", weekday: "long" });
-    return `<div class="ho-day${key === today ? " is-today" : ""}${key === selected ? " is-selected" : ""}${day.getMonth() === month.getMonth() ? "" : " ho-other-month"}"${key === today ? ' aria-current="date"' : ""}>` +
-      btn(`<b>${day.getDate()}</b><span class="ho-dots" aria-hidden="true">${marked.has(key) ? "<i></i>" : ""}</span>`, "ho-date-btn",
-        ` data-home-select="${key}" aria-pressed="${key === selected}" aria-label="${esc(label)}"`) +
-      `<div class="ho-day-events">${events.slice(0, 3).map(item => chipHTML(chipOf(item), "ho-event-chip is-line", eventTarget(item), { clock: !item.all_day, face:item.rhythm ? 20 : 0 })).join("")}` +
-      more(key, count(key), 2, "ho-more ho-more-two") + more(key, count(key), 3, "ho-more ho-more-three") + `</div></div>`;
-  }).join("");
-  const chosen = byDay.get(selected) ?? [], chosenLabel = new Date(`${selected}T00:00:00`).toLocaleDateString(getLocale(), { month: "long", day: "numeric", weekday: "short" });
-  const create = (cls: string): string => btn(ico("plus") + esc(t("auto.create")), `sm ho-create ${cls}`, ` data-home-create="${selected}"`);
-  const agenda = `<aside class="ho-agenda" data-selected-day="${selected}"><h3>${esc(chosenLabel)}</h3>` +
-    (chosen.length ? chosen.slice(0, 3).map(item => chipHTML(chipOf(item), "ho-agenda-row is-line", eventTarget(item), { face: 20 })).join("") + more(selected, count(selected), 3, "ho-agenda-more")
-      : `<p class="ho-day-empty">${esc(t("overview.emptyDay"))}</p>${create("ho-create-day")}`) + `</aside>`;
+/** One line of today's schedule: its time, the calendar's colour as a tick, the title and who it is for. No box. */
+function eventRowHTML(item: HomeItem, now: number): string {
+  const entry = entryOf(item), mark = runMarkHTML(entry);
+  // A rhythm is the calendar's quiet bar: its face and title, no time (R-CAL-03).
+  const when = item.rhythm ? `<span class="ho-repeat" aria-hidden="true">${ico("repeat")}</span>` : esc(chipClock({ allDay: item.all_day === true, start: item.at_ms }));
+  const lead = entry.kind === "event" ? googleMark() : entry.member ? memberFaceHTML(entry.member, 20) : "";
+  const past = !mark && !item.all_day && (item.end_ms ?? item.at_ms + HOUR) <= now;
+  return `<button type="button" class="btn ho-row ho-event is-${entry.kind}${item.rhythm ? " is-rhythm" : ""}${past ? " is-past" : ""}"${entry.kind === "event" ? "" : chipColor(entry.member)}` +
+    ` data-home-event="${esc(item.id)}" data-home-date="${dateKey(new Date(item.at_ms))}"><time>${when}</time><b>${esc(item.title)}</b>${mark}${lead}</button>`;
+}
+
+function scheduleHTML(data: HomeOverview): string {
+  const now = data.generated_at_ms, today = dateKey(new Date(now));
+  const items = (data.calendar_items ?? data.calendar).filter(item => dateKey(new Date(item.at_ms)) === today)
+    .sort((a, b) => Number(b.all_day === true) - Number(a.all_day === true) || a.at_ms - b.at_ms);
+  // The core sends a few items a day and the day's count: what is not drawn is counted.
+  const shown = items.slice(0, ROWS), rest = Math.max(data.calendar_counts?.[today] ?? 0, items.length) - shown.length;
   const notice = googleNoticeHTML(data.calendar_google, { go: 'data-home-go="connections"', dismiss: "data-home-dismiss" });
-  return `<div class="ho-calendar-frame"><section class="ho-calendar" aria-label="${esc(t("overview.calendar"))}" data-month="${dateKey(month).slice(0, 7)}">${blockTarget(t("overview.calendar"), "calendar")}<header><h2>${esc(monthLabel(month))}</h2><div class="ho-calendar-note">${notice}${items.length ? "" : create("ho-create-month")}</div>` +
-    `<div class="ho-month-actions">${iconButton("left", t("auto.monthPrevious"), ' data-home-month="-1"')}${iconButton("right", t("auto.monthNext"), ' data-home-month="1"')}${btn(esc(t("auto.today")), "sm ho-today", ' data-home-today')}</div></header>` +
-    `<div class="ho-calendar-body"><div class="ho-month">${[1, 2, 3, 4, 5, 6, 0].map(n => `<span class="ho-weekday" title="${esc(dayName(n))}">${esc(weekday.format(new Date(2024, 0, 7 + n)))}</span>`).join("")}${days}</div>${agenda}</div></section></div>`;
+  const body = items.length
+    ? shown.map(item => eventRowHTML(item, now)).join("") +
+      (rest > 0 ? btn(esc(t("overview.moreEvents", { p0: rest })), "sm ho-more", ` data-home-go="calendar" data-home-date="${today}"`) : "")
+    : `<p class="ho-empty">${esc(t("overview.noSchedule"))}</p>${btn(ico("plus") + esc(t("auto.create")), "sm ho-create", ` data-home-create="${today}"`)}`;
+  return sectionHTML("schedule", t("home.schedule"), body + notice, iconButton("calendar", t("overview.calendar"), ' data-home-go="calendar"'));
 }
 
-function rowsHTML(items: HomeItem[], empty: string, report: boolean): string {
-  if (!items.length) return `<p class="ho-empty">${ico("check")}${esc(empty)}</p>`;
-  return items.slice(0, 4).map(item => `<button type="button" class="btn ho-row" data-home-item="${esc(item.id)}">${faceHTML(item, 28)}` +
+function itemRowHTML(item: HomeItem): string {
+  const report = item.kind === "report";
+  return `<button type="button" class="btn ho-row" data-home-item="${esc(item.id)}">${faceHTML(item, 28)}` +
     `<span class="ho-row-copy"><strong>${esc(report ? item.name : item.title)}</strong><span>${esc(report ? item.summary : item.name)}</span></span>` +
-    `<time datetime="${new Date(item.at_ms).toISOString()}">${esc(clock(item.at_ms))}</time></button>`).join("");
+    `<time datetime="${new Date(item.at_ms).toISOString()}">${esc(clock(item.at_ms))}</time></button>`;
 }
 
-function spendHTML(data: HomeOverview): string {
-  const u = data.usage, share = Math.round(Math.max(0, Math.min(100, u.limit_usd > 0 ? u.month_usd / u.limit_usd * 100 : 0)));
-  return `<div class="ho-big">US$ ${money(u.month_usd)}<small>/ ${money(u.limit_usd)}</small></div>` +
-    `<div class="ho-sub">${esc(t("overview.used", { p0: share }))}</div><div class="ho-chart">` +
-    (barsSVG(u.daily.slice(-14), t("overview.chart", { p0: u.daily.slice(-14).map(money).join(", ") })) || `<p class="ho-empty">${esc(t("overview.noSpend"))}</p>`) + `</div>`;
+function pendingHTML(data: HomeOverview): string {
+  const open = [...data.today.filter(item => item.kind === "question"), ...data.reports];
+  const shown = open.slice(0, ROWS), rest = data.today.filter(item => item.kind === "question").length + Math.max(data.counts.reports, data.reports.length) - shown.length;
+  const body = open.length
+    ? shown.map(itemRowHTML).join("") + (rest > 0 ? `<p class="ho-count">${esc(t("home.moreItems", { p0: rest }))}</p>` : "")
+    : `<p class="ho-empty">${ico("check")}${esc(t("overview.allClear"))}</p>`;
+  return sectionHTML("pending", t("home.pending"), body);
 }
 
-function allowanceHTML(data: HomeOverview): string {
-  const brains = data.usage.allowances.brains;
-  const windows = brains.flatMap(brain => brain.windows.filter(w => w.remaining_percent !== null).map(window => ({brain, window, used:100-window.remaining_percent!}))).sort((a,b)=>b.used-a.used);
-  const most = windows[0], next = windows[1];
-  return (most ? `<div class="ho-big">${most.used}%<small>${esc(`${most.brain.name.replace(/\s+CLI$/, "")} ${t(`overview.${most.window.period}`)}`)}</small></div>` : `<p class="ho-empty ho-allowance-empty">${ico("info")}${esc(t("overview.emptyAllowances"))}</p>`) +
-    (next ? `<div class="ho-sub">${esc(`${t(`overview.${next.window.period}`)} ${next.used}%`)}</div>` : "") +
-    `<div class="ho-chart ho-allowances">` + brains.map(brain => {
-      const window = windows.find(w => w.brain === brain)?.window;
-      const used = window?.remaining_percent == null ? null : 100-window.remaining_percent;
-      const tip = window?.resets_at ? t("overview.reset", { p0: new Date(window.resets_at*1000).toLocaleString(getLocale(), { month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit",hour12:false }) }) : "";
-      return `<div class="ho-meter-row${used === null ? " is-unknown" : ""}" title="${esc(tip)}"><small>${esc(brain.name.replace(/\s+CLI$/, ""))}</small>` +
-        (used === null ? `<b>${esc(t("overview.unknown"))}</b>` : `<span class="ho-meter"><i style="width:${used}%"></i></span><b>${used}%</b>`) + `</div>`;
-    }).join("") + `</div>`;
+function teamHTML(team: readonly Member[]): string {
+  const sorted = team.map((m, i) => ({ m, i, state: memberState(m) }))
+    .sort((a, b) => ORDER.indexOf(a.state.kind) - ORDER.indexOf(b.state.kind) || a.i - b.i);
+  const body = sorted.length
+    ? sorted.slice(0, ROWS).map(({ m, state }) => `<button type="button" class="btn ho-row ho-member" data-home-member="${m.id}" data-state="${state.kind}">${memberFaceHTML(m, 28)}` +
+        `<span class="ho-row-copy"><strong>${esc(m.name)}</strong><span>${esc(state.words)}</span></span></button>`).join("") +
+      (sorted.length > ROWS ? `<p class="ho-count">${esc(t("home.moreMembers", { p0: sorted.length - ROWS }))}</p>` : "")
+    : `<p class="ho-empty">${esc(t("home.teamEmpty"))}</p>`;
+  return sectionHTML("team", t("members.title"), body);
 }
 
-function dictationHTML(data: HomeOverview): string {
-  const d = data.dictation;
-  return `<div class="ho-big">${esc(formatCount(d.words))}<small>${esc(t("home.003"))}</small></div>` +
-    `<div class="ho-sub">${esc(t("home.005"))} ${unitHTML(durationParts(d.time_saved_seconds))}</div><div class="ho-chart">` +
-    (barsSVG((d.daily ?? []).slice(-14), t("overview.wordsChart", { p0: (d.daily ?? []).slice(-14).join(", ") })) || `<p class="ho-empty">${esc(t("overview.noDictation"))}</p>`) + `</div>`;
+function sectionHTML(key: string, title: string, body: string, action = ""): string {
+  return `<section class="ho-sec ho-${key}" aria-label="${esc(title)}"><header><h2>${esc(title)}</h2>${action}</header><div class="ho-rows">${body}</div></section>`;
 }
 
-export function homeHTML(data: HomeOverview, month?: Date, selected?: string): string {
-  const report = buildReport(data.report, data.generated_at_ms);
-  // His emblem turns while the window allows motion (avatar.ts keeps it still otherwise); nothing sits right of his report but its fix.
-  const date = new Date(data.generated_at_ms).toLocaleDateString(getLocale(), { month: "numeric", day: "numeric", weekday: "short" });
-  const headline = report.text.split(/(?<=[。！？])(?=[^》])/u).map(phrase => `<span class="ho-phrase">${esc(phrase)}</span>`).join("");
-  const hero = `<section class="ho-hero">${avatarHTML({ size: 128, avatar: null, loop: true })}<div class="ho-lead-copy"><p class="ho-date">${esc(date)}</p><h1 class="ho-said">${headline}</h1></div>` +
-    (report.action ? iconButton(report.action.target === "retry" ? "refresh" : "info", report.action.label, ' data-home-go="report"') : "") + `</section>`;
-  const pending = data.today.filter(item => item.kind !== "routine");
-  const inbox = [...pending, ...data.reports].slice(0, 3);
-  return hero + `<div class="ho-board">` +
-    card("inbox", t("overview.needsYou"), "agent",
-      inbox.length ? `<div class="ho-inbox-body">${inbox.map(item => rowsHTML([item], "", item.kind === "report")).join("")}</div>` : `<p class="ho-empty ho-all-clear">${ico("check")}${esc(t("overview.allClear"))}</p>`, pending.length+data.counts.reports) +
-    card("spend ho-stat", t("overview.month"), "usage", spendHTML(data)) +
-    card("allowance ho-stat", t("overview.allowance"), "usage", allowanceHTML(data)) +
-    card("dictation ho-stat", t("nav.dictation"), "dictation", dictationHTML(data)) + `</div>` + scheduleHTML(data, month, selected);
+export function homeHTML(data: HomeOverview, members: readonly Member[] = []): string {
+  const team = teamOf(members), report = buildReport(data.report, data.generated_at_ms);
+  const date = new Date(data.generated_at_ms).toLocaleDateString(getLocale(), { month: "long", day: "numeric", weekday: "long" });
+  // Only a report that needs fixing speaks here, with its one fix; a well budget is no news for a secretary. The main window
+  // shows his words plainly: 《告。…》 stays on the desktop's captions (R-UI-42).
+  const alert = report.action ? `<p class="ho-alert">${esc(plainReplies([report.text])[0] ?? report.text)}${iconButton(report.action.target === "retry" ? "refresh" : "info", report.action.label, ' data-home-go="report"')}</p>` : "";
+  // Raphael as the first blue slime (owner, 2026-11-07): his emblem shows only in voice.
+  const raphael = members.find(member => member.id === RAPHAEL_ID) ?? { id: RAPHAEL_ID, name: "" };
+  const hero = `<section class="ho-hero"><div class="ho-orb">${memberFaceHTML(raphael, 128)}</div>` +
+    `<h1 class="ho-greet">${esc(greeting(data.generated_at_ms))}</h1><p class="ho-date">${esc(date)}</p>` +
+    `<p class="ho-health" role="status">${esc(healthText(team))}</p>${alert}</section>`;
+  return hero + `<div class="ho-board">${scheduleHTML(data)}${pendingHTML(data)}${teamHTML(team)}</div>`;
 }
 
 export function createHome(app: AppContext): Page {
@@ -142,42 +140,57 @@ export function createHome(app: AppContext): Page {
   el.hidden = true;
   let visible = false, generation = 0;
   let data: HomeOverview | null = null;
-  let month: Date | undefined, selected: string | undefined;
+  let members: Member[] = [];
   let live: Promise<HomeOverview> | undefined;
   let liveAt = -Infinity;
   const poll = visibilityGate(() => void load(), () => visible);
   let timer: ReturnType<typeof setInterval> | undefined;
-  let slide: { direction: number; started: number } | undefined;
+  /** Raphael flies in from his corner once a day; the page drops the mark when his outer ring, the last of it, has gone. */
+  const arrive = (): void => {
+    const day = dateKey(new Date());
+    let seen: string | null = null;
+    try { seen = localStorage.getItem(ARRIVED_KEY); } catch { /* No storage: he flies in every time, which is harmless. */ }
+    if (seen === day) return;
+    try { localStorage.setItem(ARRIVED_KEY, day); } catch { /* As above. */ }
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) el.dataset.arrive = "";
+  };
+  el.addEventListener("animationend", event => {
+    if (event.animationName === "ho-ring" && event.pseudoElement === "::after") delete el.dataset.arrive;
+  });
   // Drawn again on every refresh, but the emblem stays the node it is while its picture is the same: a new <img> would start its turn over.
   let paintedHTML = "";
+  /** Set by show(): the first paint of this showing flies him in if the day has not seen it yet. */
+  let showing = false;
   const paint = (): void => {
     if (!data) return;
-    const html = homeHTML(data, month, selected);
+    const html = homeHTML(data, members);
+    if (showing && visible) { showing = false; arrive(); }
     if (html === paintedHTML) return;
     paintedHTML = html;
     patchHTML(el, html);
-    const elapsed = slide ? performance.now() - slide.started : 160;
-    if (slide && elapsed < 160 && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      const animation = el.querySelector('.ho-month')?.animate?.(
-        [{ transform: `translateX(${slide.direction * 16}px)`, opacity: 0 }, { transform: 'translateX(0)', opacity: 1 }], { duration: 160, easing: 'ease-out' });
-      if (animation) animation.currentTime = elapsed;
-    }
   };
   const sameData = (next: HomeOverview): boolean => data !== null && JSON.stringify(data) === JSON.stringify(next);
-  async function load(fromEvent = false, calendarChanged = false): Promise<void> {
+  /** `team`: read the members too. A turn alone leaves the team as it is: its activity comes as MemberActivity. */
+  async function load(fromEvent = false, team = true): Promise<void> {
     const mine = ++generation;
     if (!data) el.innerHTML = loadingHTML();
     try {
-      const requestedMonth = month ? dateKey(month).slice(0, 7) : undefined;
-      const read=()=>api.homeOverview(false, requestedMonth);
-      const next = await (fromEvent ? eventRead(`home.overview:${requestedMonth ?? ''}`,read,app) : read());
+      const read = () => api.homeOverview(false);
+      const people = () => api.membersList(getLocale());
+      const [next, list] = await Promise.all([
+        fromEvent ? eventRead("home.overview:", read, app) : read(),
+        // The sidebar reads the same list on the same events: one read serves both.
+        !team ? null : (fromEvent ? eventRead(`members.list:${getLocale()}`, people, app) : people()).catch(() => null),
+      ]);
       if (!visible || mine !== generation) return;
-      if (!sameData(next)) { data = next; paint(); }
-      if (fromEvent || !calendarChanged && Date.now() - liveAt < 300_000) return;
+      if (list?.members) members = list.members;
+      if (!sameData(next)) data = next;
+      paint();
+      if (fromEvent || Date.now() - liveAt < 300_000) return;
       // Local records paint first. One live read fills the same page without emitting changes.
       if (!live) {
         liveAt = Date.now();
-        const pending = api.homeOverview(true, requestedMonth);
+        const pending = api.homeOverview(true);
         live = pending;
         const clear = (): void => { if (live === pending) live = undefined; };
         void pending.then(clear, clear);
@@ -190,88 +203,33 @@ export function createHome(app: AppContext): Page {
       if (!data) el.innerHTML = `<p class="ho-empty" role="status">${esc(t("overview.error"))}</p><button type="button" class="btn" data-home-go="reload">${esc(t("overview.retry"))}</button>`;
     }
   }
-  function moveMonth(direction: number): void {
-    if (!data) return;
-    const current = month ?? new Date(data.generated_at_ms);
-    month = new Date(current.getFullYear(), current.getMonth() + direction, 1);
-    selected = dateKey(month);
-    live = undefined;
-    data = { ...data, calendar_days: [], calendar_items: [], calendar_counts: {} };
-    const focused = el.querySelector<HTMLElement>('[data-home-month]:focus')?.dataset.homeMonth;
-    slide = { direction, started: performance.now() };
-    paint();
-    if (focused) el.querySelector<HTMLElement>(`[data-home-month="${focused}"]`)?.focus();
-    void load(false, true);
-  }
-  /** The block resumes the calendar; selecting a date or event remains an explicit jump. */
-  const openCalendar = (): void => app.go("automations");
-  let wheelDistance = 0, wheelAt = 0, swipedAt = -1000;
-  el.addEventListener("wheel", event => {
-    if (!(event.target as Element).closest('.ho-calendar') || event.ctrlKey || Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
-    event.preventDefault();
-    const now = performance.now();
-    if (now - swipedAt < 400) return;
-    if (now - wheelAt > 160) wheelDistance = 0;
-    wheelAt = now; wheelDistance += event.deltaX;
-    if (Math.abs(wheelDistance) < 60) return;
-    moveMonth(wheelDistance > 0 ? 1 : -1); wheelDistance = 0; swipedAt = now;
-  }, { passive: false });
-  let touch: { id: number; x: number; y: number } | undefined;
-  el.addEventListener("pointerdown", event => {
-    if (event.pointerType === "touch" && (event.target as Element).closest('.ho-calendar')) touch = { id: event.pointerId, x: event.clientX, y: event.clientY };
-  });
-  el.addEventListener("pointerup", event => {
-    if (!touch || event.pointerId !== touch.id) return;
-    const dx = event.clientX - touch.x, dy = event.clientY - touch.y; touch = undefined;
-    if (Math.abs(dx) >= 48 && Math.abs(dx) > Math.abs(dy) * 1.5) { moveMonth(dx < 0 ? 1 : -1); swipedAt = performance.now(); }
-  });
-  el.addEventListener("pointercancel", () => { touch = undefined; });
   el.addEventListener("click", event => {
-    if (performance.now() - swipedAt < 400 && (event.target as Element).closest('.ho-calendar')) { event.preventDefault(); return; }
-    const navigation = (event.target as Element).closest<HTMLElement>('[data-home-month]');
-    if (navigation) { moveMonth(Number(navigation.dataset.homeMonth)); return; }
-    const todayButton = (event.target as Element).closest('[data-home-today]');
-    if (todayButton && data) {
-      const focused = document.activeElement === todayButton;
-      month = new Date(data.generated_at_ms); selected = dateKey(month); live = undefined; paint();
-      if (focused) el.querySelector<HTMLElement>('[data-home-today]')?.focus({ preventScroll: true });
-      void load(); return;
-    }
-    const dateButton = (event.target as Element).closest<HTMLElement>('[data-home-select]');
-    if (dateButton) { app.go('automations', dateButton.dataset.homeSelect as CalendarDate); return; }
-    const creating = (event.target as Element).closest<HTMLElement>('[data-home-create]');
+    const at = event.target as Element;
+    const creating = at.closest<HTMLElement>('[data-home-create]');
     if (creating) { app.go('automations', `calendar-new:${creating.dataset.homeCreate}` as CalendarCreate); return; }
-    const dismissing = (event.target as Element).closest<HTMLElement>('[data-home-dismiss]');
+    const dismissing = at.closest<HTMLElement>('[data-home-dismiss]');
     if (dismissing) { dismissOffer(dismissing.dataset.homeDismiss as GoogleCalendarState); paint(); return; }
-    const target = (event.target as Element).closest<HTMLElement>("[data-home-item], [data-home-go], [data-home-event]");
-    if (!target) {
-      if ((event.target as Element).closest(".ho-calendar") && data) openCalendar();
-      return;
-    }
+    const person = at.closest<HTMLElement>('[data-home-member]');
+    if (person) { openMemberThread(app, Number(person.dataset.homeMember)); return; }
+    const target = at.closest<HTMLElement>("[data-home-item], [data-home-go], [data-home-event]");
+    if (!target) return;
     if (target.dataset.homeEvent) {
       app.go('automations', `calendar:${target.dataset.homeDate}:${encodeURIComponent(target.dataset.homeEvent)}` as CalendarEventFocus); return;
     }
-    const item = data && [...data.today, ...data.reports, ...data.calendar].find(item => item.id === target.dataset.homeItem);
-    if (item) {
-      if (item.kind === "routine" || item.kind === "event") app.go("automations");
-      else openMemberThread(app, item.member_id, item.turn_id ?? undefined);
-      return;
-    }
+    const item = data && [...data.today, ...data.reports].find(item => item.id === target.dataset.homeItem);
+    if (item) { openMemberThread(app, item.member_id, item.turn_id ?? undefined); return; }
     switch (target.dataset.homeGo) {
       case "reload": void load(); break;
-      case "usage": app.go("settings", "usage"); break;
       case "connections": app.go("settings", "connections"); break;
-      case "dictation": app.go("dictation"); break;
       case "calendar":
         if (target.dataset.homeDate) app.go("automations", target.dataset.homeDate as CalendarDate);
-        else openCalendar();
+        else app.go("automations");
         break;
       case "report":
         if (data && buildReport(data.report, data.generated_at_ms).action?.target === "retry") {
           void api.statusCheckOpenrouter().then(() => load(), () => load());
         } else app.go("settings", data?.report.openrouter.state === "ok" ? "usage" : "models");
         break;
-      default: app.go("agent");
     }
   });
   onAvatarChange(() => { if (visible) paint(); });
@@ -279,10 +237,18 @@ export function createHome(app: AppContext): Page {
   // Settings retains Home behind its dialog. Translate cached data even while the page is inactive.
   onLocaleChange(paint);
   app.onEvent(event => {
-    if (visible && ["AgentTurn", "MembersChanged", "RoutinesChanged", "CalendarChanged", "SettingsChanged", "QuotaChanged", "AgentQuestion", "AgentQuestionClosed", "ConversationsChanged", "ConnectionsChanged"].includes(event.type)) void load(true);
+    if (!visible) return;
+    if (event.type === "MemberActivity") {
+      // What a member does now changes its row and the health line at once, without a read.
+      members = members.map(m => m.id !== event.member_id ? m : { ...m, activity: event.state,
+        activity_label: event.label ?? (event.state === "idle" || event.state === "done" ? "" : m.activity_label) });
+      paint();
+      return;
+    }
+    if (["MembersChanged", "AgentQuestion", "AgentQuestionClosed", "ConversationsChanged"].includes(event.type)) void load(true);
+    else if (["AgentTurn", "RoutinesChanged", "CalendarChanged", "SettingsChanged", "ConnectionsChanged"].includes(event.type)) void load(true, false);
   });
-  app.cleared.on("dictation", () => { if (visible) void load(); });
   app.cleared.on("conversation", () => { if (visible) void load(); });
-  return { id: "home", el, show() { visible = true; void load(); clearInterval(timer); timer = setInterval(() => { poll.run(); }, 30_000); },
-    hide() { visible = false; generation++; clearInterval(timer); } };
+  return { id: "home", el, show() { visible = true; showing = true; void load(); clearInterval(timer); timer = setInterval(() => { poll.run(); }, 30_000); },
+    hide() { visible = false; generation++; clearInterval(timer); delete el.dataset.arrive; } };
 }

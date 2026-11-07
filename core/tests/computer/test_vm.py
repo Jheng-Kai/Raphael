@@ -70,11 +70,10 @@ def container(vm, target, runtime):
     if target.shared:
         raw["Mounts"].append({"Type": "bind", "Source": str(target.shared), "Destination": "/home/cua/team", "RW": True})
     if target.remote:
-        raw["HostConfig"]["PortBindings"] = {}
         for mount, source in zip(raw["Mounts"], [target.workspace, target.shared]):
             mount.update(Type="volume", Name=str(source), Source="/engine/volumes/" + str(source))
         raw["HostConfig"]["Mounts"] = [{"Type": "volume", "Source": m["Name"], "Target": m["Destination"]} for m in raw["Mounts"]]
-        raw["NetworkSettings"] = {"Ports": {}, "Networks": {"bridge": {"IPAddress": "172.18.0.2"}}}
+        raw["NetworkSettings"]["Networks"] = {"bridge": {"IPAddress": "172.18.0.2"}}
     return raw
 
 
@@ -722,13 +721,45 @@ async def test_real_driver_catalog_offers_only_the_curated_tools(desktop, tmp_pa
     assert DRIVER_CATALOG["reported_count"] == 67
     assert len(DRIVER_CATALOG["names"]) == len(set(DRIVER_CATALOG["names"])) == 68
     assert CURATED <= set(DRIVER_CATALOG["names"])
-    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps"}
+    deferred = {"vault_entries", "fill_contact", "fill_card"}
+    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps"} | deferred
     snapshot = take_snapshot(hub)
     assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps"}
-    assert not snapshot.hidden()
+    assert set(snapshot.hidden()) == {"computer__" + name for name in deferred}
     assert not snapshot.refresh_computer(hub, 0)
     assert all(tool.pinned for tool in hub.offered())
     assert hub.tier_of("mcp:computer-shared/install_extension") is None
+
+
+@pytest.mark.parametrize("interactive", [False, True])
+async def test_vault_discovery_survives_refresh_but_not_a_revoked_computer_grant(desktop, tmp_path, interactive):
+    vm, _, runtime = desktop
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=CatalogBridge)
+    await hub.prepare()
+    snapshot = take_snapshot(hub, interactive=interactive)
+    deferred = {"computer__vault_entries", "computer__fill_contact", "computer__fill_card"}
+    try:
+        assert not deferred & snapshot.refs.keys()
+        snapshot.refresh_plugins(hub, 0)
+        snapshot.refresh_computer(hub, 0)
+        assert not deferred & snapshot.refs.keys()
+        for name in sorted(deferred):
+            added, _ = snapshot.find(name)
+            assert name in snapshot.refs  # One query can also discover related fill tools.
+            assert not snapshot.find(name)[0]
+        assert snapshot.refs["computer__fill_card"].tier == Tier.T3
+        snapshot.refresh_plugins(hub, 0)
+        snapshot.refresh_computer(hub, 0)
+        assert deferred <= snapshot.refs.keys()
+        assert len(snapshot.definitions) == len(snapshot.refs)
+        vm.grants.set(0, False)
+        snapshot.refresh_plugins(hub, 0)
+        snapshot.refresh_computer(hub, 0)
+        assert not deferred & snapshot.refs.keys()
+        assert not snapshot.find("fill_card")[0]
+        assert not runtime.calls
+    finally:
+        await hub.aclose()
 
 
 @pytest.mark.parametrize("count", [40, 65, 400])
@@ -842,13 +873,15 @@ async def test_sandbox_steps_do_not_reenter_per_action_safety_screening(desktop,
     snapshot = take_snapshot(hub)
     caller = SimpleNamespace(_gate=gate, snapshot=snapshot, language="en", ledger=None,
                              _check=lambda **kwargs: None, _guarded=guarded)
+    snapshot.find("vault_entries fill_contact fill_card")
+    private_fills = {"fill_login", "fill_contact", "fill_card"}
     for tool in hub.offered():
         call = SimpleNamespace(tool=tool, arguments={})
-        expected = Screening(DENY) if tool.name == "fill_login" else PASS
+        expected = Screening(DENY) if tool.name in private_fills else PASS
         assert await AgentService._screen_call(caller, SimpleNamespace(language="en"), call, None) == expected
         ref = snapshot.refs["computer__" + tool.name]
         assert await TaskRun._screen(caller, ref, {}) == expected
-    assert screened == ["computer / fill_login", "computer / fill_login"]
+    assert screened == [f"computer / {tool.name}" for tool in hub.offered() if tool.name in private_fills for _ in range(2)]
     assert not gate.is_vm_tool("mcp:unrelated/click")
 
 
@@ -858,16 +891,26 @@ async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(des
     vm, target, runtime = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
     await hub.prepare()
-    definitions = {item["function"]["name"]: item["function"] for item in take_snapshot(hub).definitions}
+    snapshot = take_snapshot(hub)
+    snapshot.find("vault_entries fill_contact fill_card")
+    definitions = {item["function"]["name"]: item["function"] for item in snapshot.definitions}
     for tool in hub.offered():
-        assert tool.tier == Tier.T0
+        assert tool.tier == (Tier.T3 if tool.name == "fill_card" else Tier.T0)
+        description = definitions["computer__" + tool.name]["description"]
+        if tool.name == "vault_entries":
+            assert "opaque IDs" in description and "Never ask for private values" in description
+            continue
+        if tool.name in ("fill_login", "fill_contact", "fill_card"):
+            assert all(clause in description for clause in ("hint", "ask_owner", "submit"))
+            if tool.name == "fill_card":
+                assert "Every use needs owner approval" in description and "request_takeover" in description
+            continue
         if tool.name == "attach_file":
             assert tool.description == ATTACH["description"]
             continue
         if tool.name == "request_takeover":
             assert "Never request secrets in chat" in definitions["computer__request_takeover"]["description"]
             continue
-        description = definitions["computer__" + tool.name]["description"]
         for clause in ("no per-action approval", "owner control blocks all calls",
                        "sending a message/email", "publishing/posting", "outside the workspace",
                        "paying/buying", "call approve", "API harness", "owner's yes",

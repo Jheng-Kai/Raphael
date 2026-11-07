@@ -2,72 +2,76 @@
 
 ## Sub-features
 
-Welcome, optional abilities, setup progression and entry into the usable app with
-first-run state saved.
+A welcome with the language dropdown, then three steps that are each a choice, then entry into
+the usable app with first-run state saved. There are no practice lessons, no microphone step and
+no completion screen (owner, 2026-11-07).
+
+1. **AI tools** (`onboarding-tools`, `onboarding-tools-key`): ChatGPT sign-in, the Claude Code,
+   Codex and Antigravity command-line accounts and the OpenRouter key, as items with their state.
+   ChatGPT and the command-line tools are driven by the same account controller as Settings >
+   Models (`createCliBrains`); the key uses the same masked field, paste button and core call.
+2. **Services** (`onboarding-services`): up to six popular apps of the Connect apps store, from
+   the built-in catalog plus the Composio-managed apps when Composio is set up; only apps that ask
+   for no more than a sign-in. One sign-in button each, then a Connected state.
+3. **Abilities** (`onboarding-abilities`): the shared abilities of Settings > Tools (web search,
+   reading web pages, images, PDFs, speech) as one switch each. An ability that still needs a key
+   says so in place of its line and its switch waits.
+
+Every step can be gone past without choosing. The last step's primary button finishes; a first
+run then saves the device setting `onboarded`, a rerun from Settings does not.
 
 ## How to get to it (user POV)
 
-Launch with a fresh isolated data directory. Follow Next through welcome/ability
-choices to the Home overview. Never reset an installed user's onboarding state.
+Launch with a fresh isolated data directory. Press Start, then Continue through the three steps
+and finish on the third to land on the Home overview. Never reset an installed user's onboarding
+state.
 
 ## Driving it with look
 
 ```powershell
-npm run look -- onboarding onboarding-abilities onboarding-done after-onboarding --theme both --width 1120,720
+npm run look -- onboarding onboarding-tools onboarding-tools-key onboarding-services onboarding-abilities after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
-Keep welcome/completed-main-screen PNGs and report. Completion uses actual Next
-clicks and disables every optional ability. Check responsive content, reachable
-buttons and resulting Home navigation/status report. For onboarding changes add intermediate
-scenes and exercise enabled abilities. Native proof needs an authorized fresh
-`RAPHAEL_DATA_DIR`: complete setup, relaunch and verify onboarding stays dismissed
-and chosen settings persist. Keep sanitized readback and stop the owned dev process.
+Keep the welcome and each step's PNGs, the contact sheet and the report. Each scene presses the
+real Next button from the welcome; `onboarding-services` signs in to Gmail through the managed
+connector and `onboarding-abilities` switches reading web pages off, so the rendered checks see a
+changed state. Check that each item keeps its mark, name and control in one row, that the controls
+are real buttons and switches, that nothing is cut off at 720 wide (one column) and that the dark
+theme has no light edges. Native proof needs an authorized fresh `RAPHAEL_DATA_DIR`: finish the
+steps, relaunch and verify onboarding stays dismissed and the chosen tools, services and switches
+persist. Keep sanitized readback and stop the owned dev process.
 
 ## Gotchas
 
-Each scene begins fresh. The onboarding variant overrides the ordinary onboarded
-device setting. All-disabled completion proves only that branch. Credentials,
-downloads, permission prompts, ability activation and native persistence remain
-separate checks.
+Each scene begins fresh. The onboarding variant overrides the ordinary onboarded device setting.
+The look mock signs no one in to ChatGPT, has all three command-line tools ready and the
+OpenRouter key set; `integrations.connect` is cancelled there, so only a managed app proves a
+completed sign-in. Credentials, real browser logins, command-line sign-in and native persistence
+remain separate checks.
 
 ## UI audit regression coverage
 
-The primary footer action fills the available centered action row (R-UI-37),
-including welcome and completion, while secondary actions stay to its left.
-Tutorial step headings use the 28px onboarding scale; welcome and abilities titles use 44px. The welcome and completion screens omit redundant
-subtitles; essential tutorial guidance remains visible (R-UI-02/37).
+R-UI-35: every `.ob-item` keeps its control on the right of its name, inside its card
+(audit.mjs, audit.test.mjs). R-UI-37: a headline of at least 28px per screen (the welcome 44px)
+and a primary action that fills the action row. `onboarding-tools`, `onboarding-services` and
+`onboarding-abilities` carry the rendered check of the same name: the expected items, the control
+inside the card and centred, whole names, a headline and no purpose line.
 
-`onboarding-abilities` and `onboarding-done` capture the intermediate choice and
-completion screens. Shared rendered checks reject small headlines and narrow
-primary actions, with failing bad-state coverage in audit.test.mjs.
-
-UI hand-off also runs these named scenes at 1920x1080 in both themes, as
-required by the shared guardian hand-off gate.
-
-Ability choices form one vertical checklist (R-UI-35), including at full-screen
-widths. The rendered audit rejects side-by-side ability choices.
+UI hand-off also runs these named scenes at 1920x1080 in both themes, as required by the shared
+guardian hand-off gate.
 
 ## No conversation setup (owner round 4)
 
-Raphael is usable immediately, including fresh installs and cleared conversations.
-The frontend no longer uses profile_ready to hide the ordinary empty thread/composer.
-The naming/personality/work wizard, its styles and its strings are removed. The
-ordinary editable member proposal remains available from Create from description.
+Raphael is usable immediately, including fresh installs and cleared conversations. The frontend
+no longer uses profile_ready to hide the ordinary empty thread/composer. The naming/personality/
+work wizard, its styles and its strings are removed. The ordinary editable member proposal
+remains available from Create from description.
 
 ```powershell
 npm run look -- no-naming onboarding after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
-Welcome content and Start form one centered block with a consistent gap. Manual
-initial and second launches reveal/focus the main window; only --autostart stays
-hidden. Every launch opens at the designed 1280x800, centred; window-state restores
-nothing, not even a last maximized window. Rust policy
-regressions live in first_run.rs and window_state_tests in lib.rs.
-
-## Owner round 6 contracts
-
-Owner round 6: onboarding keeps the welcome title at 44px (within the owner-requested 40–48px range). onboarding-abilities is a representative step consumer and retains its existing 28px heading and step layout. The 44px requirement applies only to the welcome title. welcome-alignment checks that rendered title size.
-
-## Owner round 7 contracts
-
-The abilities headline now shares the welcome hero size (44px), overriding the round 6 abilities exception. Its optional-setup helper paragraph is removed; the vertical checklist and primary action retain their existing flow. onboarding-abilities-hero checks the rendered headline and absence of the paragraph. Other tutorial step titles are unchanged.
+The welcome content and Start form one centered block with a consistent gap. Manual initial and
+second launches reveal/focus the main window; only --autostart stays hidden. Every launch opens
+at the designed 1280x800, centred; window-state restores nothing, not even a last maximized
+window. Rust policy regressions live in first_run.rs and window_state_tests in lib.rs.

@@ -131,10 +131,12 @@ describe("a row's preview", () => {
 });
 
 describe("the faces", () => {
-  test("Raphael's is his bare emblem, never a member's face, a circle or a placeholder", () => {
+  test("Raphael's is the first blue slime, never his emblem, a circle or a placeholder (owner, 2026-11-07)", () => {
     const html = faceHTML(raphaelOf(LIST), 64);
-    expect(html).toContain('src="/brand/app-emblem-light-128.webp"');
-    expect(html).not.toMatch(/mb-av|letter|拉/);
+    expect(html).toContain('class="av mb-av mb-av-slime"');
+    expect(html).toContain("<svg");
+    expect(html).toContain("#3DB5FF");
+    expect(html).not.toMatch(/app-emblem|letter|拉/);
   });
 
   test("a member is a slime, whatever picture an older build stored for it", () => {
@@ -170,7 +172,7 @@ describe("a routine's schedule", () => {
     expect(scheduleText({ kind: "daily", time: "09:00" })).toBe("每天 09:00");
     expect(scheduleText({ kind: "weekly", days: [0], time: "20:00" })).toBe("每週日 20:00");
     expect(scheduleText({ kind: "weekly", days: [3, 1, 1], time: "08:30" })).toBe("每週一、週三 08:30");
-    expect(scheduleText({ kind: "every", hours: 3 })).toBe("每 3 小時");
+    expect(scheduleText({ kind: "every", hours: 3 })).toBe("每隔 3 小時");
     expect(scheduleText({ kind: "every", hours: 1 })).toBe("每小時");
     setLocale("en");
     expect(scheduleText({ kind: "weekly", days: [0], time: "20:00" })).toBe("Every Sunday at 20:00");

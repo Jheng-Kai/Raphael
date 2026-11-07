@@ -144,14 +144,13 @@ async function run(options) {
         if (!journey.startup) await page.setViewport({ width: 1120, height: 900 });
         await collectErrors(page, result.runtimeErrors);
         if (journey.name === "home-timing") await page.evaluateOnNewDocument(() => {
-          window.__homeTiming = { firstPaintMs: null, firstAllowance: null };
+          window.__homeTiming = { firstPaintMs: null };
           const observer = new MutationObserver(() => {
             const hero = document.querySelector('.page-home:not([hidden]) .ho-hero');
             if (!hero || window.__homeTiming.firstPaintMs !== null) return;
             observer.disconnect();
             requestAnimationFrame(() => requestAnimationFrame(() => {
               window.__homeTiming.firstPaintMs = performance.now();
-              window.__homeTiming.firstAllowance = document.querySelector('.ho-allowance')?.textContent;
             }));
           });
           observer.observe(document, { childList: true, subtree: true, attributes: true });

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { AppContext, Member, Routine } from "./types";
-const api = vi.hoisted(() => ({ homeOverview:vi.fn(), membersList:vi.fn(), routinesList:vi.fn(), routineWebhook:vi.fn(), routineRuns:vi.fn(), routinesRun:vi.fn(), routinesCreate:vi.fn(), routinesUpdate:vi.fn(), routinesDelete:vi.fn(), calendarAdd:vi.fn(), calendarUpdate:vi.fn(), calendarDelete:vi.fn(), keepAwakeGet:vi.fn(), keepAwakeSet:vi.fn(), roomsList:vi.fn(), settingsGet:vi.fn(), modelsCatalog:vi.fn(), brainsCli:vi.fn(), groupsCreate:vi.fn(), groupsUpdate:vi.fn(), groupsDelete:vi.fn(), membersUpdate:vi.fn(), roomsCreate:vi.fn(), roomSend:vi.fn(), roomStop:vi.fn(), roomMessages:vi.fn() }));
+const api = vi.hoisted(() => ({ core:vi.fn(), homeOverview:vi.fn(), membersList:vi.fn(), routinesList:vi.fn(), routineWebhook:vi.fn(), routineRuns:vi.fn(), routinesRun:vi.fn(), routinesCreate:vi.fn(), routinesUpdate:vi.fn(), routinesDelete:vi.fn(), calendarAdd:vi.fn(), calendarUpdate:vi.fn(), calendarDelete:vi.fn(), keepAwakeGet:vi.fn(), keepAwakeSet:vi.fn(), roomsList:vi.fn(), settingsGet:vi.fn(), modelsCatalog:vi.fn(), brainsCli:vi.fn(), groupsCreate:vi.fn(), groupsUpdate:vi.fn(), groupsDelete:vi.fn(), membersUpdate:vi.fn(), roomsCreate:vi.fn(), roomSend:vi.fn(), roomStop:vi.fn(), roomMessages:vi.fn() }));
 vi.mock("./api",()=>api);
 import { openRoutineDialog } from "./routine-dialog";
 import { occurrences } from "./automation-calendar";
@@ -30,25 +30,18 @@ beforeEach(()=>{
   api.keepAwakeGet.mockResolvedValue(false);api.keepAwakeSet.mockResolvedValue(true);api.roomsList.mockResolvedValue({rooms:[]});api.settingsGet.mockResolvedValue({settings:{agent_model:"openai/shared-model"}});
 });
 
-test.each([0, 1, 2])("routine history and test results use relative days and minutes (%s days ago)", async days => {
+test("the routine editor is wide and short: title with its switch and the instructions beside when it runs, no test run, history or who", async () => {
   setLocale("zh-TW");
-  const now = new Date(2026, 10, 5, 12).getTime();
-  const started = new Date(2026, 10, 5 - days, 8, 0, 37).getTime();
-  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
-  const label = ["今天", "昨天", "11 月 3 日"][days];
-  const routine = { ...plan, id: 1001 + days };
-  api.routineRuns.mockResolvedValue({runs:[{id:501,routine_id:routine.id,started,finished:started+1000,status:"done",summary:"Completed",cost:0,turn_id:12}]});
-  api.routinesRun.mockResolvedValue({run_id:501});
-  try {
-    const dialog = openRoutineDialog({members, routine});
-    await flush();
-    expect(document.querySelector('[data-run-status="done"]')?.textContent).toBe(`成功 · ${label} 08:00Completed`);
-    click('[data-dlg="test"]');
-    await flush();
-    expect(document.querySelector('.au-test-status')?.textContent).toBe(`成功 · ${label} 08:00 · Completed`);
-    expect(document.querySelector('.au-run-section')?.textContent).not.toContain("08:00:37");
-    dialog.close();
-  } finally { clock.mockRestore(); }
+  const dialog = openRoutineDialog({members, routine: plan});
+  await flush();
+  const grid = document.querySelector(".au-routine-grid")!;
+  expect(grid.querySelectorAll(":scope > .au-col")).toHaveLength(2);
+  expect(grid.querySelector(".au-col-what .au-title-row #au-title")).not.toBeNull();
+  expect(grid.querySelector('.au-col-what .au-title-row [data-dlg="enabled"]')).not.toBeNull();
+  expect(grid.querySelector(".au-col-what #au-prompt")).not.toBeNull();
+  expect(document.querySelector('[data-dlg="test"], .au-run-section, [data-dlg="member"]')).toBeNull();
+  expect(api.routineRuns).not.toHaveBeenCalled();
+  dialog.close();
 });
 
 test("monthly and minute choices save through the existing routine dialog", async () => {
@@ -78,51 +71,65 @@ test("webhook choice saves without exposing technical event fields", async () =>
 });
 
 test("webhook details share the masked secret field and reveal only on request", async () => {
-  api.routineWebhook.mockImplementation(async (_id:number,reveal:boolean)=>({address:'http://127.0.0.1:43210/routines/1',...(reveal?{secret:'sample-secret'}:{})}));
+  api.routineWebhook.mockResolvedValue({address:'http://127.0.0.1:43210/routines/1'});
+  api.core.mockResolvedValue({address:'http://127.0.0.1:43210/routines/1',secret:'sample-secret'});
   openRoutineDialog({members,routine:{...plan,schedule:null,when:{webhook:true}}}); await flush();
   expect(document.querySelector('.field.sc-field .au-hook-secret')).not.toBeNull();
   expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('password');
-  expect(api.routineWebhook).toHaveBeenCalledWith(1,false);
+  expect(api.routineWebhook).toHaveBeenCalledWith(1);
+  expect(api.core).not.toHaveBeenCalled();
   expect(document.body.innerHTML).not.toContain('sample-secret');
   click('[data-dlg="hook-show"]'); await flush();
-  expect(api.routineWebhook).toHaveBeenLastCalledWith(1,true);
+  expect(api.core).toHaveBeenLastCalledWith('routines.webhook',{id:1,reveal:true,rotate:true});
   expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.value).toBe('sample-secret');
   click('[data-dlg="hook-show"]');
   expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('password');
   expect(document.body.innerHTML).not.toContain('sample-secret');
 });
 
-test("copying a webhook secret keeps the unchanged form and its mask", async () => {
+test("copying requires explicit generation and keeps the displayed field without another key request", async () => {
   const copied = vi.spyOn(navigator.clipboard,'writeText').mockResolvedValue();
-  api.routineWebhook.mockImplementation(async (_id:number,reveal:boolean)=>({address:'http://127.0.0.1:43210/routines/1',...(reveal?{secret:'sample-secret'}:{})}));
+  api.routineWebhook.mockResolvedValue({address:'http://127.0.0.1:43210/routines/1'});
+  api.core.mockResolvedValue({address:'http://127.0.0.1:43210/routines/1',secret:'sample-secret'});
   openRoutineDialog({members,routine:{...plan,schedule:null,when:{webhook:true}}}); await flush();
+  click('[data-dlg="hook-copy"]'); await flush();
+  expect(copied).not.toHaveBeenCalled(); expect(api.core).not.toHaveBeenCalled();
+  click('[data-dlg="hook-show"]'); await flush();
   const input = document.querySelector('.au-hook-secret');
   click('[data-dlg="hook-copy"]'); await flush();
   expect(copied).toHaveBeenCalledWith('sample-secret');
   expect(document.querySelector('.au-hook-secret')).toBe(input);
+  expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('text');
+  expect(api.core).toHaveBeenCalledTimes(1); expect(api.routineWebhook).toHaveBeenCalledTimes(1);
+  click('[data-dlg="hook-show"]');
   expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('password');
+  expect(document.querySelector<HTMLButtonElement>('[data-dlg="hook-copy"]')!.disabled).toBe(true);
   expect(document.body.innerHTML).not.toContain('sample-secret');
   copied.mockRestore();
 });
 
-test("copying a webhook secret keeps its feedback when the address changes", async () => {
+test("explicit generation updates a replacement address and local copying keeps its feedback", async () => {
   const copied = vi.spyOn(navigator.clipboard,'writeText').mockResolvedValue();
   api.routineWebhook.mockResolvedValueOnce({address:'http://127.0.0.1:43210/routines/1'});
   openRoutineDialog({members,routine:{...plan,schedule:null,when:{webhook:true}}}); await flush();
   let complete!: (value: unknown) => void;
-  api.routineWebhook.mockImplementationOnce(() => new Promise(resolve => { complete=resolve; }));
-  const button=document.querySelector<HTMLButtonElement>('[data-dlg="hook-copy"]')!;
-  button.click();
-  expect(button.disabled).toBe(true);
-  expect(button.getAttribute('aria-busy')).toBe('true');
+  api.core.mockImplementationOnce(() => new Promise(resolve => { complete=resolve; }));
+  const generate=document.querySelector<HTMLButtonElement>('[data-dlg="hook-show"]')!;
+  generate.click();
+  expect(generate.disabled).toBe(true);
+  expect(generate.getAttribute('aria-busy')).toBe('true');
   complete({address:'http://127.0.0.1:43211/routines/1',address_changed:true,secret:'sample-secret'}); await flush();
   expect(document.querySelector('.au-hook-address')?.textContent).toContain(':43211/');
   expect(document.querySelector('.au-webhook [role="status"]')?.textContent).toBeTruthy();
+  const button=document.querySelector<HTMLButtonElement>('[data-dlg="hook-copy"]')!;
+  button.click(); await flush();
+  expect(copied).toHaveBeenCalledWith('sample-secret');
+  expect(api.core).toHaveBeenCalledTimes(1); expect(api.routineWebhook).toHaveBeenCalledTimes(1);
   expect(document.querySelector('[data-dlg="hook-copy"]')).toBe(button);
   expect(button.getAttribute('aria-label')).toBe('Copied');
   expect(button.disabled).toBe(false);
   expect(button.hasAttribute('aria-busy')).toBe(false);
-  expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('password');
+  expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('text');
   copied.mockRestore();
 });
 
@@ -297,7 +304,8 @@ test("routine editor saves the chosen weekdays, owner, date and end count",async
 
 test("routine editing preserves an until date and never changes the member",async()=>{
   openRoutineDialog({members,routine:{...plan,schedule:{kind:"weekdays",time:"08:30",start_date:"2030-01-01",until:"2030-12-31"}}});
-  expect(document.querySelector<HTMLButtonElement>('[data-dlg="member"]')!.disabled).toBe(true);
+  // A routine is always its member's: no one else can be picked.
+  expect(document.querySelector('[data-dlg="member"]')).toBeNull();
   click('[data-dlg="save"]');await flush();
   expect(api.routinesUpdate).toHaveBeenCalledWith(1,expect.objectContaining({schedule:{kind:"weekdays",time:"08:30",start_date:"2030-01-01",until:"2030-12-31",timezone:Intl.DateTimeFormat().resolvedOptions().timeZone}}));
 });
@@ -405,7 +413,7 @@ test("calendar accepts member drops with date and hour but ignores unrelated dra
  const slot=page.el.querySelector<HTMLElement>('[data-slot][data-hour="9"]')!;
  const drop=(value:string):void=>{const event=new Event("drop",{bubbles:true,cancelable:true});Object.defineProperty(event,"dataTransfer",{value:{getData:()=>value}});slot.dispatchEvent(event);};
  drop("");expect(document.querySelector('.au-routine-dialog')).toBeNull();drop("2");
- expect(document.querySelector('[data-dlg="member"][aria-pressed="true"]')!.textContent).toContain("Bob");expect(document.querySelector('[data-dlg="date"]')!.textContent).toBe(slot.dataset.slot);expect(document.querySelector<HTMLInputElement>('#au-time')!.value).toBe("09:00");page.hide();
+ expect(document.querySelector('.au-routine-dialog')).not.toBeNull();expect(document.querySelector('[data-dlg="member"]')).toBeNull();expect(document.querySelector('[data-dlg="date"]')!.textContent).toBe(slot.dataset.slot);expect(document.querySelector<HTMLInputElement>('#au-time')!.value).toBe("09:00");page.hide();
 });
 
 test("future calendar windows account for occurrences before the visible range",()=>{
@@ -464,7 +472,10 @@ test("a panel stands beside what it is about and inside the window",()=>{
  expect(besidePlacement({left:300,right:380,top:200},{width:344,height:300},viewport)).toEqual({left:388,top:200});
  expect(besidePlacement({left:800,right:900,top:200},{width:344,height:300},viewport)).toEqual({left:448,top:200});
  expect(besidePlacement({left:300,right:380,top:700},{width:344,height:300},viewport).top).toBe(492);
- expect(besidePlacement({left:10,right:700,top:5},{width:344,height:300},{...viewport,width:720})).toEqual({left:368,top:40});
+ expect(besidePlacement({left:10,right:700,top:5},{width:344,height:300},{...viewport,width:720})).toEqual({left:183,top:40});
+ // A wide event of the day view: neither side fits on the calendar, so the panel stands centred over it, never over the rail.
+ expect(besidePlacement({left:567,right:1890,top:300},{width:344,height:300},{...viewport,width:1920},{left:513})).toEqual({left:1056.5,top:300});
+ expect(besidePlacement({left:600,right:700,top:300},{width:344,height:300},{...viewport,width:900},{left:513}).left).toBe(521);
 });
 
 test("an own event keeps who added it and is one entry from its item",()=>{

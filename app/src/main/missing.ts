@@ -25,6 +25,7 @@ const messages: Record<string, MissingKey> = {
   "modelFormat": "missing.modelFormat",
   "noModels": "missing.noModels",
   "mail": "missing.mail",
+  "slack": "missing.slack",
   "attachment": "missing.attachment",
   "allowance": "missing.allowance",
   "conversation": "missing.conversation",
@@ -57,11 +58,12 @@ export function missingText(value: Missing): string {
   return t(key);
 }
 
-export function missingHTML(value: Missing): string {
+/** `action` is the note's own button where no repair page exists (a retry). */
+export function missingHTML(value: Missing, text = missingText(value), action = ""): string {
   const repair = value.repair && repairs.has(value.repair) ? value.repair : null;
   const resource = value.requirement === "image_generation" ? "image" : value.requirement === "video_generation" ? "video" : value.resource;
-  return `<div class="missing-note" role="status"><span>${esc(missingText(value))}</span>` +
-    (repair ? btn(esc(t("missing.open")), "sm", ` data-missing-repair="${esc(repair)}" data-missing-resource="${esc(resource)}"`) : "") + `</div>`;
+  return `<div class="missing-note" role="status"><span>${esc(text)}</span>` +
+    (repair ? btn(esc(t("missing.open")), "sm", ` data-missing-repair="${esc(repair)}" data-missing-resource="${esc(resource)}"`) : action) + `</div>`;
 }
 
 export function noticeHTML(requirement: string, repair: string | null = null, resource = repair ?? "app"): string {

@@ -41,6 +41,8 @@ const words = (key: MessageKey, kind: MessagingKind): string => tr(key).split("T
 
 export interface MessagingView {
   kind?: MessagingKind;
+  /** The token field's id: a member's own bot (member panel) has its own, beside Raphael's in Settings. */
+  tokenId?: string;
   channels?: Partial<Record<MessagingKind, MessagingView>>;
   status: TelegramStatus | "loading" | "failed";
   token: string;
@@ -80,7 +82,7 @@ const headName = (name: string, dot: string, kind: MessagingKind): string => `<s
 
 function setupRows(v: MessagingView, kind: MessagingKind): string[] {
   const field = fieldHTML(t("msg.tg.tokenHint"), v.token, {
-    id: kind === "telegram" ? "msg-token" : `msg-token-${kind}`,
+    id: v.tokenId ?? (kind === "telegram" ? "msg-token" : `msg-token-${kind}`),
     type: "password",
     label: t("msg.tg.token"),
     invalid: v.tokenError !== null,
@@ -187,9 +189,48 @@ export function createMessaging(host: MessagingHost): Messaging {
   };
 }
 
-function createChannelMessaging(host: MessagingHost, kind: MessagingKind): Messaging {
-  const tokenId = kind === "telegram" ? "msg-token" : `msg-token-${kind}`;
+type ConnectReply = Awaited<ReturnType<typeof api.telegramConnect>>;
+/** What a channel asks the core: Raphael's Telegram, his Slack or Discord, or one member's own Telegram bot. */
+interface ChannelOps {
+  status(): Promise<TelegramStatus>;
+  connect(token: string): Promise<ConnectReply>;
+  setEnabled(on: boolean): Promise<TelegramStatus>;
+  approve(code: string): Promise<{ approved: boolean; status: TelegramStatus }>;
+  reject(code: string): Promise<TelegramStatus>;
+  removeUser(userId: string): Promise<TelegramStatus>;
+  disconnect(): Promise<TelegramStatus>;
+}
+
+function raphaelOps(kind: MessagingKind): ChannelOps {
+  // Read at the moment of the call, as before: a channel is made with the panel, long before it asks anything.
+  if (kind === "telegram") return {
+    status: () => api.telegramStatus(), connect: (token) => api.telegramConnect(token), setEnabled: (on) => api.telegramSetEnabled(on),
+    approve: (code) => api.telegramApprove(code), reject: (code) => api.telegramReject(code), removeUser: (user) => api.telegramRemoveUser(user),
+    disconnect: () => api.telegramDisconnect(),
+  };
   const call = <T>(method: string, params?: object): Promise<T> => api.messagingCall<T>(kind, method, params);
+  return {
+    status: () => call("status"), connect: (token) => call("connect", { token }), setEnabled: (enabled) => call("set_enabled", { enabled }),
+    approve: (code) => call("approve", { code }), reject: (code) => call("reject", { code }), removeUser: (user_id) => call("remove_user", { user_id }),
+    disconnect: () => call("disconnect"),
+  };
+}
+
+/**
+ * A member's own Telegram bot, in its panel's 建議 section (owner, 2026-11-07): the same card as Raphael's in Settings,
+ * through `messaging.member.*`; messages to that bot land in the member's own conversation.
+ */
+export function createMemberTelegram(host: MessagingHost, memberId: () => number): Messaging {
+  return createChannelMessaging(host, "telegram", {
+    status: () => api.memberMessagingStatus(memberId()), connect: (token) => api.memberMessagingConnect(memberId(), token),
+    setEnabled: (on) => api.memberMessagingSetEnabled(memberId(), on), approve: (code) => api.memberMessagingApprove(memberId(), code),
+    reject: (code) => api.memberMessagingReject(memberId(), code), removeUser: (user) => api.memberMessagingRemoveUser(memberId(), user),
+    disconnect: () => api.memberMessagingDisconnect(memberId()),
+  }, "msg-token-member");
+}
+
+function createChannelMessaging(host: MessagingHost, kind: MessagingKind, ops: ChannelOps = raphaelOps(kind), ownTokenId?: string): Messaging {
+  const tokenId = ownTokenId ?? (kind === "telegram" ? "msg-token" : `msg-token-${kind}`);
   let status: MessagingView["status"] = "loading";
   let token = "";
   let connecting = false;
@@ -204,7 +245,7 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind): Messa
   const redraw = (): void => {
     if (host.visible()) host.redraw();
   };
-  const view = (): MessagingView => ({ status, token, connecting, tokenError, confirmingDisconnect: confirming, busy, expanded });
+  const view = (): MessagingView => ({ status, token, connecting, tokenError, confirmingDisconnect: confirming, busy, expanded, ...(ownTokenId ? { tokenId } : {}) });
 
   const poll = visibilityGate(() => void refresh(), () => poller !== undefined && host.visible());
 
@@ -228,8 +269,8 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind): Messa
     if (!host.visible() || !windowVisible()) return;
     const mine = ++loads;
     try {
-      const next = await (kind === "telegram" ? api.telegramStatus() : call<TelegramStatus>("status"));
-      if (mine === loads && !busy) take(next);
+      const next = await ops.status();
+      if (mine === loads && !busy && next && typeof next === "object") take(next);
     } catch {
       // a poll that fails is tried again; the state on screen stays
     }
@@ -238,8 +279,10 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind): Messa
   async function load(): Promise<void> {
     const mine = ++loads;
     try {
-      const next = await (kind === "telegram" ? api.telegramStatus() : call<TelegramStatus>("status"));
+      const next = await ops.status();
       if (mine !== loads) return;
+      // A core too old to know the method answers nothing: that is a failed read, never a crash of the card.
+      if (!next || typeof next !== "object") throw new Error("no status");
       status = next;
       schedule();
     } catch {
@@ -261,7 +304,7 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind): Messa
     tokenError = null;
     redraw();
     try {
-      const reply = await (kind === "telegram" ? api.telegramConnect(token.trim()) : call<Awaited<ReturnType<typeof api.telegramConnect>>>("connect", { token: token.trim() }));
+      const reply = await ops.connect(token.trim());
       if (reply.ok) {
         token = ""; // it is in the vault now: nothing of it stays on this page
         status = reply.status;
@@ -315,25 +358,25 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind): Messa
       case "enable":
         if (typeof status === "object") {
           const on = !status.enabled;
-          void act(() => (kind === "telegram" ? api.telegramSetEnabled(on) : call<TelegramStatus>("set_enabled", { enabled: on })));
+          void act(() => ops.setEnabled(on));
         }
         return true;
       case "approve": {
         const code = button.dataset.code ?? "";
         void act(async () => {
-          const reply = await (kind === "telegram" ? api.telegramApprove(code) : call<Awaited<ReturnType<typeof api.telegramApprove>>>("approve", { code }));
+          const reply = await ops.approve(code);
           if (!reply.approved) toaster.info(t("msg.tg.codeGone"));
           return reply.status;
         });
         return true;
       }
       case "reject":
-        void act(() => (kind === "telegram" ? api.telegramReject(button.dataset.code ?? "") : call<TelegramStatus>("reject", { code: button.dataset.code ?? "" })));
+        void act(() => ops.reject(button.dataset.code ?? ""));
         return true;
       case "user-menu": {
         const user = button.dataset.user ?? "";
         const name = (typeof status === "object" ? status.allowed.find((u) => String(u.user_id) === user)?.name : "") || user;
-        openActions(button, [{ id: "remove", label: t("msg.tg.removeUser", { p0: name }), icon: "trash" }], () => void act(() => (kind === "telegram" ? api.telegramRemoveUser(user) : call<TelegramStatus>("remove_user", { user_id: user }))));
+        openActions(button, [{ id: "remove", label: t("msg.tg.removeUser", { p0: name }), icon: "trash" }], () => void act(() => ops.removeUser(user)));
         return true;
       }
       case "disconnect":
@@ -350,7 +393,7 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind): Messa
         clearTimeout(confirmTimer);
         confirming = false;
         void act(async () => {
-          const next = await (kind === "telegram" ? api.telegramDisconnect() : call<TelegramStatus>("disconnect"));
+          const next = await ops.disconnect();
           toaster.info(words("msg.tg.disconnected", kind));
           return next;
         });

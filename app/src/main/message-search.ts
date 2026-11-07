@@ -1,7 +1,7 @@
 // Cross-conversation search is kept outside the member column so its grouping stays independent.
 import * as api from "./api";
 import { t } from "./i18n";
-import { conversationTitle, relativeTime } from "./conversation-list";
+import { relativeTime } from "./conversation-list";
 import { esc, patchHTML } from "./ui";
 import { describeError } from "./format";
 import { publicEventText } from "./public-event";
@@ -34,7 +34,7 @@ export function createMessageSearch(host: HTMLElement, options: { face(member: n
       `<div class="search-group-label">${esc(t("chat.messages"))}</div>` +
       (error ? `<p class="mb-none">${esc(error)}</p>` : hits.length ? hits.map(hit =>
         `<button type="button" class="nav message-search-result" data-message-result="${hit.id}">${options.face(hit.member_id)}` +
-        `<span class="message-search-main"><span class="message-search-title"><b>${esc(options.name(hit.member_id))}</b><span>${esc(conversationTitle({ title: hit.conversation_title } as Parameters<typeof conversationTitle>[0]))}</span></span><span class="message-search-snippet">${snippet(hit, query)}</span>` +
+        `<span class="message-search-main"><span class="message-search-title"><b>${esc(options.name(hit.member_id))}</b></span><span class="message-search-snippet">${snippet(hit, query)}</span>` +
         `<small>${esc(relativeTime(hit.created_at_ms))}</small></span></button>`).join("") : `<p class="mb-none">${esc(t("chat.noMessages"))}</p>`);
   }
   host.addEventListener("click", event => {

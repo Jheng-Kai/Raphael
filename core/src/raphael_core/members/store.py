@@ -131,6 +131,7 @@ class Member:
     blurb: str = ""
     reply_style: str = "full"
     voice: str = ""
+    # Legacy preference remains readable, but is neither editable nor used for playback.
     read_aloud: bool = False
     notify: bool = False
     ask_before_members: bool = False
@@ -347,7 +348,7 @@ PROFILE_FIELDS: dict[str, Callable[[Any], Any]] = {
     "blurb": lambda value: _text(value, "blurb", 200),
     "reply_style": _reply_style,
     "voice": _voice,
-    **{name: _boolean for name in ("read_aloud", "notify", "ask_before_members", "pinned", "hidden", "draft_first")},
+    **{name: _boolean for name in ("notify", "ask_before_members", "pinned", "hidden", "draft_first")},
 }
 
 _MEMBER_COLUMNS = (

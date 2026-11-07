@@ -1,15 +1,13 @@
-"""Bounded owner-panel projections from existing tasks, pages and workspace files."""
+"""The member panel's Library: a bounded projection of verified task artifacts, pages and workspace files."""
 
 import os
 from pathlib import Path
 
+from ..paths import local_storage_root
+
 
 def snapshot(conn, member, workspaces=(), limit=12):
     limit = min(max(limit, 1), 100)
-    tasks = [dict(row) for row in conn.execute(
-        "SELECT w.id,w.turn_id,w.text AS title,w.state,w.created_at_ms,w.started_at_ms,w.finished_at_ms,"
-        "t.conversation_id FROM worker_tasks w LEFT JOIN agent_turns t ON t.id=w.turn_id "
-        "WHERE w.member_id=? AND w.scope='private' ORDER BY w.created_at_ms DESC,w.id DESC LIMIT 100", (member,))]
     files = {}
     for row in conn.execute(
         "SELECT e.id,e.task_id,e.uri,e.verified_at_ms FROM task_evidence e JOIN worker_tasks w ON w.id=e.task_id "
@@ -21,7 +19,10 @@ def snapshot(conn, member, workspaces=(), limit=12):
     # A fixed entry/depth budget includes directories, so sparse trees cannot grow the scan.
     budget = 500
     for area, root in workspaces:
-        root = Path(root).resolve()
+        try:
+            root = local_storage_root(root)
+        except (OSError, ValueError):
+            continue
         pending = [(root, 0)]
         while pending and budget > 0:
             directory, depth = pending.pop()
@@ -45,4 +46,4 @@ def snapshot(conn, member, workspaces=(), limit=12):
             except OSError:
                 continue
     ordered = sorted(files.values(), key=lambda item: (-item['at_ms'], item['id']))
-    return dict(tasks=tasks, files=ordered[:limit], has_more=len(ordered) > limit and limit < 100)
+    return dict(files=ordered[:limit], has_more=len(ordered) > limit and limit < 100)

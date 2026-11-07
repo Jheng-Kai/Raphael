@@ -3,8 +3,15 @@
 .au-empty { padding: 48px var(--sp-4); color: var(--text-3); text-align: center; }
 .au-empty > .i { width: 20px; height: 20px; }
 .mb-scrim:has(> .au-routine-dialog) { overflow-y: auto; scrollbar-width: none; place-items: start center; }
-.au-routine-dialog.mb-dialog { width: min(690px, calc(100vw - 40px)); max-height: none; overflow: visible; }
-.au-routine-dialog .mb-dlg-body { display: flex; flex-direction: column; flex: none; overflow: visible; gap: var(--sp-5); padding: var(--sp-5) var(--sp-5); }
+/* Wide and short (owner, 2026-11-07): what it does on the left, when it runs on the right; one column when narrow. */
+.au-routine-dialog.mb-dialog { width: min(880px, calc(100vw - 40px)); max-height: none; overflow: visible; }
+.au-routine-dialog .mb-dlg-body { display: flex; flex-direction: column; flex: none; overflow: visible; gap: var(--sp-4); padding: var(--sp-5) var(--sp-5); }
+.au-routine-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: var(--sp-6, 32px); align-items: start; }
+.au-col { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
+.au-title-row { display: flex; align-items: center; gap: var(--sp-3); }
+.au-title-row > .au-title { flex: 1; min-width: 0; }
+.au-prompt-field textarea { min-height: 200px; resize: vertical; }
+@media (max-width: 760px) { .au-routine-grid { grid-template-columns: minmax(0, 1fr); } }
 .au-title.mb-fin { font-size: var(--fs-h1); font-weight: 600; border: 0; border-bottom: 1px solid var(--edge); border-radius: 0; background: transparent; padding: var(--sp-2) 0 var(--sp-3); }
 .au-field { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; margin: 0; }
 .au-field > .sel { width: 100%; max-width: 100%; justify-content: space-between; }
@@ -21,14 +28,17 @@
 .au-event label { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .au-start { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-xs); }
 .au-time.mb-fin { width: 90px; font-variant-numeric: tabular-nums; }
+/* The start date and time are one pair: the same surface and frame (R-UI-17). */
+.au-start .au-time.mb-fin:not(:disabled) { border-color: var(--btn-edge); background: var(--panel); }
 .au-repeat-options { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: var(--sp-2); min-height: var(--h-ctl); }
 .au-repeat-options.is-reserved { visibility: hidden; }
 .au-repeat-options > .sel { width: 100%; }
 .au-window { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
 .au-window .sel { flex: 1; min-width: 0; padding-inline: var(--sp-2); font-variant-numeric: tabular-nums; }
 .au-chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
-.au-event .au-chips { align-items: center; }
-.au-event .au-chips label { display: flex; align-items: center; gap: var(--sp-1); white-space: nowrap; }
+.au-event-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-2); }
+.au-event-fields > .mp-label { flex: 1 1 180px; }
+.au-routine-dialog .au-event .sel, .au-routine-dialog .au-event-fields .mb-fin, .au-routine-dialog .au-event-fields > .btn { height: max(var(--h-ctl), var(--pa-dctl)); min-height: max(var(--h-ctl), var(--pa-dctl)); }
 .au-chips .btn { border-radius: var(--r-pill); font-size: var(--fs-xs); }
 .au-chips .btn[aria-pressed="true"], .au-members .btn[aria-pressed="true"] { background: var(--selected); border-color: var(--accent-text); }
 .au-members { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); max-height: 168px; overflow-y: auto; overflow-x: hidden; }
@@ -102,7 +112,6 @@ button.au-room-reply { border: 0; font-family: inherit; cursor: pointer; }
 .event-person { display: inline; overflow-wrap: anywhere; }
 .event-person.is-word-gap { margin-inline-end: .25em; }
 .event-person > :first-child { display: inline-block; vertical-align: middle; margin-inline-end: 4px; }
-.handoff-group > .handoff-detail { width: 100%; }
 .event-line > .i { width: 16px; height: 16px; color: var(--text-3); }
 .event-state::before { content: "·"; margin-inline-end: 6px; }
 .conversation-event-line, .handoff-event > summary { display: flex; justify-content: center; }
@@ -111,6 +120,9 @@ button.au-room-reply { border: 0; font-family: inherit; cursor: pointer; }
 .page-agent .btn.event-open:hover .event-line, .handoff-event > summary:hover .event-line { color: var(--text-2); }
 .page-agent .btn.event-open:active:not(:disabled) .event-line { color: color-mix(in srgb, var(--text-2) 85%, transparent); }
 .handoff-row, .handoff-event { width: 100%; }
+/* 「與 X 的 2 則訊息」 is a button that reads as the other centred lines; their conversation opens from it (peer-chat.ts). */
+.page-agent .btn.handoff-event { display: flex; justify-content: center; width: 100%; max-width: 100%; height: auto; min-width: 0; white-space: normal; text-align: center; overflow-wrap: anywhere; }
+.page-agent .btn.handoff-event > .event-line { min-width: 0; max-width: 100%; }
 .handoff-event > summary { cursor: pointer; list-style: none; }
 .handoff-event > summary::-webkit-details-marker { display: none; }
 .handoff-detail { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); width: fit-content; max-width: min(calc(560px + 160 * var(--pa-u)), 100%); margin: var(--sp-2) auto 0; padding: calc(10px + 4 * var(--pa-u)) calc(12px + 6 * var(--pa-u)); border-radius: var(--r-lg); background: var(--surface-2); font-size: var(--pa-fs-d); line-height: 1.6; color: var(--text-2); overflow-wrap: anywhere; }
@@ -190,6 +202,8 @@ button.au-room-reply { border: 0; font-family: inherit; cursor: pointer; }
 .is-movable .cal-chip.btn, .au-bar .cal-chip.is-own.btn { cursor: grab; }
 .btn.au-event-more { display: none; }
 .au-event.is-tight .cal-chip > .av, .au-event.is-tight .cal-chip > .cal-mark { display: none; }
+/* With its face hidden, a tight chip's run mark takes the top corner beside the time. */
+.au-event.is-tight .cal-chip > .cal-run-mark { top: 2px; bottom: auto; }
 .au-event-edge { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
 .au-bar-edge { position: absolute; top: 0; right: 0; bottom: 0; width: 6px; cursor: ew-resize; }
 .au-event.is-dragging { z-index: 5; opacity: 0.88; }
@@ -199,7 +213,9 @@ button.au-room-reply { border: 0; font-family: inherit; cursor: pointer; }
 .cal-chip.btn.is-past { opacity: 0.6; }
 .cal-chip.is-own.btn.is-past, .cal-chip.is-own.btn.is-past:hover:not(:disabled) { opacity: 1; background: var(--surface-2); color: var(--text-2); }
 .cal-chip.is-own.btn.is-past:active:not(:disabled) { background: var(--pressed); }
-.cal-chip.is-home-focus, .cal-chip[aria-current="true"] { outline: 2px solid var(--focus); outline-offset: 1px; }
+/* The event whose panel is open, or that Home opened, lifts as Google Calendar's does; a ring stays keyboard focus's (R-UI-31). */
+.cal-chip.is-home-focus, .cal-chip[aria-current="true"] { z-index: 2; box-shadow: var(--pop); }
+.cal-chip.is-event.is-home-focus, .cal-chip.is-event[aria-current="true"] { box-shadow: inset 0 0 0 1px var(--btn-edge), var(--pop); }
 .au-history-mark { position: absolute; right: var(--sp-1); bottom: var(--sp-1); width: 6px; height: 6px; border-radius: var(--r-pill); background: var(--err); pointer-events: none; }
 .au-history-mark[data-status="done"] { background: var(--ok); }
 .au-history-mark[data-status="skipped"] { background: var(--text-3); }
@@ -240,7 +256,8 @@ button.au-room-reply { border: 0; font-family: inherit; cursor: pointer; }
 .au-pop-when .btn { justify-content: flex-start; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .au-pop-when .sel { justify-content: space-between; width: 100%; padding-inline: var(--sp-2) var(--sp-1); font-variant-numeric: tabular-nums; }
 .au-pop-allday { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); font-size: var(--fs-sm); color: var(--text-2); }
-.au-pop .mb-ta { width: 100%; min-height: 56px; box-sizing: border-box; }
+/* The notes grow with what is written, up to six lines, with no drag grip of the browser's own. */
+.au-pop .mb-ta { width: 100%; min-height: 56px; max-height: calc(6lh + var(--sp-4)); box-sizing: border-box; resize: none; field-sizing: content; }
 .au-pop .action-row { margin: 0; padding: 0; border: 0; background: transparent; }
 .au-pop .btn.au-pop-routine { margin-right: auto; gap: var(--sp-1); padding-inline: var(--sp-2); font-size: var(--fs-xs); }
 .au-pop-detail { gap: var(--sp-2); padding-top: var(--sp-2); }

@@ -1,6 +1,6 @@
 import { scene, click, hover, type, wait, waitGone, page, key, scroll, room, newRoom, check, rightClick, member } from "./steps.mjs";
 
-const auto = [page("home"), { action: "click-position", selector: ".ho-calendar", x: 0.02, y: 0.02, expect: ".au-toolbar" }, wait(".au-toolbar")];
+const auto = [page("home"), click('.ho-schedule header [data-home-go="calendar"]'), wait(".au-toolbar")];
 const calendar = [...auto, wait(".au-occurrence"), check("calendar-chips"), check("calendar-shell")];
 const view = name => [click('[data-au="view"]'), click(`#app-popover [data-value="${name}"]`)];
 const dialog = [...auto, click('[data-au="new"]'), wait(".au-pop-editor"), click('[data-pop="routine"]'), wait(".mb-dialog")];
@@ -38,7 +38,7 @@ export default [
   scene("routine-sentence-webhook", "A failed webhook run keeps its readable trigger and routine link", sentenceRoundTrip, {routineSentence:true,routines:[{...eventRoutine,when:{webhook:true}}]}),
   scene("automation-monthly-calendar", "A date 31 appears on the last day of November", [...auto,...view('month'),click('[data-au="next"]'),wait('[data-month-day="2026-11-30"] .is-routine'),check('moving-monthly-calendar')], {routines:[{...eventRoutine,title:"每月範例",when:null,schedule:{kind:"monthly",day:31,time:"08:00"},next_run:1793404800000}],routineRuns:[]}),
   scene("automation-minutes-calendar", "Five-minute runs stay in one rhythm bar", [...auto,...view('day'),wait('.au-all-day-row .is-rhythm'),check('moving-minutes-calendar')], {routines:[{...eventRoutine,title:"分鐘範例",when:null,schedule:{kind:"every",minutes:5},next_run:1792800000000}],routineRuns:[]}),
-  scene("automation-offer", "A suggested routine shares the trigger sentence", [{action:"key",key:"n",ctrl:true},wait('.cr-dialog'),type('#mb-new-name','範例成員'),click('.cr-dialog [data-dlg="create"]'),wait('.mb-offer-t .routine-sentence'),check('moving-offer')], {routineOffer:true}),
+  scene("automation-offer", "A suggested routine shares the trigger sentence", [{action:"member-column",collapsed:false},click('[data-col="add"]'),click('#app-popover [data-pick="member"]'),wait('.cr-dialog'),type('#mb-new-name','範例成員'),click('.cr-dialog [data-dlg="create"]'),wait('.mb-offer-t .routine-sentence'),check('moving-offer')], {routineOffer:true}),
   scene("calendar-remember", "Home and conversation returns preserve the date and chosen view", [...auto,...view("month"),click('[data-au="next"]'),check("calendar-remember-save"),...auto,check("calendar-remember-return"),member(1),...auto,check("calendar-remember-return")], rhythm),
   scene("calendar-view-reload", "Reload keeps the view preference and starts on today", [...auto,...view("month"),click('[data-au="next"]'),check("calendar-view-stored"),{action:"reload"},...auto,check("calendar-view-reload")], rhythm),
   scene("calendar-week-fit", "Seven week columns and aligned all-day bars fit the available width", [...auto,check("calendar-shell"),check("calendar-week-fit")], rhythm),
@@ -55,10 +55,10 @@ export default [
   scene("routine-event-edit", "A readable event filter in the shared routine editor", [...eventDialog, check("routine-event-edit")], { routines: [eventRoutine] }),
   scene("routine-event-saved", "A changed event filter is saved and shown in the same list", [...eventDialog, type("#au-filter", "owner@example.com"), click('[data-dlg="save"]'), waitGone('.au-routine-dialog'), check("routine-event-saved")], { routines: [eventRoutine] }),
   scene("routine-event-missing", "A stopped trigger names its connection and offers the existing connection settings", [...eventDialog, check("routine-event-missing")], { routines: [{ ...eventRoutine, enabled: false, last_error: "Gmail 連接無法使用。請到設定 › 連接重新連接。" }] }),
-  scene("routine-event-reconnect", "The stopped trigger opens the existing Connections pane", [...eventDialog, click('[data-missing-repair="connections"]'), wait('.modal-scrim [data-pane="connections"][aria-current="page"]'), check("settings-shell")], { routines: [{ ...eventRoutine, enabled: false, last_error: "Gmail 連接無法使用。請到設定 › 連接重新連接。" }] }),
+  scene("routine-event-reconnect", "The stopped trigger opens the existing Connections pane", [...eventDialog, click('[data-missing-repair="connections"]'), wait('.modal-scrim[data-standalone="connections"] .modal-body .cs'), check("settings-shell")], { routines: [{ ...eventRoutine, enabled: false, last_error: "Gmail 連接無法使用。請到設定 › 連接重新連接。" }] }),
   scene("routine-event-profile", "The member profile shares readable event rows and switches", [member(1), { action: "open-details" }, click('[data-det="gear"]'),click('[data-det="edit"]'), wait('#mp-tab-routines'), click('#mp-tab-routines'), wait('.mp-routine-list .tg'), check("routine-event-profile")], { routines: [eventRoutine] }),
 
-  scene("room-workflow-blocked", "Missing artifact has a named incomplete reason", [room(1),click('[data-handoff] summary'),check('p04-blocked')], {p04Blocked:true}),
+  scene("room-workflow-blocked", "Missing artifact has a named incomplete reason", [room(1),click('[data-handoff]'),wait('.peer-chat'),check('p04-blocked')], {p04Blocked:true}),
   scene("room-final-owner", "Chief is last after delivered work", [room(1),check('room-wrapup'),check('p04-chief-last')], {p03Handoff:'done',roomWrapup:true}),
   scene("room-progress-status-only", "Work progress stays in its status row", [room(1),check('room-thinking'),check('p04-status-only')], {roomThinking:true}),
   scene("room-no-dangling-mention", "Published final has no incomplete address", [room(1),check('p04-addresses')]),
@@ -67,7 +67,7 @@ export default [
   ...["queued", "running", "result", "failed"].map(state => scene(`room-handoff-${state}`, `Durable work ${state}`, [room(1), wait("[data-handoff]"), check("p03-handoff")], { p03Handoff: state === "result" ? "done" : state })),
   scene("room-immediate-work", "Assigned work starts immediately", [room(1), wait("[data-handoff]"), check("p03-handoff")], { p03Handoff: "running" }),
   scene("room-source-dates-not-schedule", "Document deadlines never defer assigned work", [room(1), wait("[data-handoff]"), check("p03-handoff")], { p03Handoff: "running", p03SourceDates: true }),
-  scene("handoff-centred-line", "Private receipt expands its real result without public message history", [wait("[data-handoff]"), check("p03-handoff"), click("[data-handoff] summary"), wait(".handoff-event[open]"), check("p03-handoff-expanded")], { p03Handoff: "done", p03Private: true }),
+  scene("handoff-centred-line", "A private receipt opens the members' conversation with its real result", [wait("[data-handoff]"), check("p03-handoff"), click("[data-handoff]"), wait(".peer-chat"), check("p03-handoff-expanded")], { p03Handoff: "done", p03Private: true }),
   scene("mentions-bots-apps", "Bots and connected apps share the mention inventory", [room(1), type("#room-message", "@"), wait("#app-popover"), check("p02-mentions")]),
   scene("member-mentions-bots-apps", "Private composer shares the current team and app inventory", [type(".composer .cmp-input", "@"), wait("#app-popover"), check("p02-mentions")]),
   scene("plus-create-room", "Plus opens a room picker with selected chips", [click('[data-col="add"]'), click('[data-pick="group-chat"]'), wait(".mb-dialog"), click('[data-dlg="member"][data-member="1"]'), check("p02-picker")]),

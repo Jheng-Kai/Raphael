@@ -7,7 +7,7 @@ const serverDetail = [...connections, click('[data-conn="open"][data-id="notes"]
 const store = [...connections, { ...click('[data-conn="tab"][data-id="store"]'), measure: { name: "store-render-paint", budgetMs: 250, maxLongTaskMs: 50 } }, wait('.cs-card'), waitGone('[data-cs-pending]')];
 // A key made up for the scenes: it is typed into a masked field and must reach nothing but the one call that adds the app.
 const setupKey = "zk-look-0123456789";
-const usage = [...settings("models"), click('[data-models-tab="usage"]'), wait(".run-tile"), wait(".run-bill-total"), check("usage-summary")];
+const usage = [...settings("models"), click('[data-models-tab="usage"]'), wait('[data-row="raphael-spend"]')];
 const cliMenu = [...settings("models"), scroll(".cli-accounts"), click('[data-cli-menu="codex"]')];
 const cliDisconnected = [...cliMenu, click('#app-popover [data-pick="disconnect"]'), wait('[data-cli="codex"]')];
 const modelChooser = role => [...settings("models"), click(`.modal-scrim [data-model-picker="${role}"] .mp-trigger`), wait(".model-chooser .mc-row")];
@@ -20,10 +20,8 @@ const dictation = tab => [page("dictation"), click(`[data-dictation-tab="${tab}"
 export default [
   scene("settings-speech-service", "Shared speech setup owns its key while the voice and preview belong to member details", [...settings("tools"),click('[data-svc="open"][data-id="voice"]'),wait('#svc-dialog'),click('[data-k="svc-svc:fish"]'),wait('#svc-dialog [type="password"]'),check('settings-speech-service')]),
 
-  scene("settings-agent-legacy", "The existing Raphael settings link opens shared Tools", [page("agent"),click('.page-agent:not([hidden]) [data-act="settings"]'),wait('[data-pane="tools"][aria-current="page"]'),check('settings-tools')]),
 
-  scene("settings-computer-search", "Computer location search opens the member computer panel", [...settings("general"), type('#set-search', '遠端'), wait('.set-hit'), check('settings-computer-result'), key('Enter'), wait('.mb-det:not([hidden]) [data-computer-location]'), check('settings-computer-open')]),
-  scene("settings-owner", "Owner identity, weather and shared memory share General", [...settings("general"), wait('[data-mem-space="shared"] .mem-entry'), check('settings-owner')]),
+  scene("settings-owner", "Owner identity and shared memory share General, with no weather city to set", [...settings("general"), wait('[data-mem-space="shared"] .mem-entry'), check('settings-owner')]),
 
   scene("settings-memory", "Shared owner memory belongs in General", [...settings("general"), wait('[data-mem-space="shared"] .mem-entry'), scroll('[data-mem-space="shared"]'), check("settings-memory")]),
   scene("local-command-settings", "One shared local command dropdown beside computer use", [...settings("safety"), scroll('[data-k="local-commands"]'), check("local-command-setting"), click('[data-k="local-commands"]'), wait('.menu [data-value="never"]'), check("local-command-menu")]),
@@ -62,7 +60,7 @@ export default [
   ...["minimize", "maximize", "close"].map(control => scene(`window-hover-${control}`, `Transparent ${control} caption hover`, [{ action: "window-control", control }])),
   scene("window-hover-restore", "Restore caption keeps its centered glyph and transparent hover", [{ action: "window-control", control: "maximize", restore: true }]),
   scene("window-hover-modal", "Caption hover stays usable while settings dim the window", [...settings("models"), { action: "window-control", control: "close", hoverOnly: true }]),
-  ...["general", "appearance", "connections", "models", "dictation", "tools", "safety", "messaging", "data", "about"].map(pane => scene(pane === "general" ? "profile" : pane, `${pane} settings pane`, [...settings(pane), ...(pane === "appearance" ? [check("appearance-settings")] : [])])),
+  ...["general", "appearance", "connections", "models", "dictation", "tools", "safety", "messaging", "about"].map(pane => scene(pane === "general" ? "profile" : pane, `${pane} settings pane`, [...settings(pane), ...(pane === "appearance" ? [check("appearance-settings")] : [])])),
   scene("appearance-menu", "One shared theme dropdown without a preview gallery", [...settings("appearance"), click('[data-k="appearance"]'), wait('.menu [data-value="dark"]'), check("appearance-settings")]),
   scene("appearance-keyboard", "Theme choices retain visible keyboard focus in every palette", [...settings("appearance"), click('[data-k="appearance"]'), key('Tab'), {...key('Tab'),shift:true}, key('ArrowDown'), check('appearance-settings'), check('appearance-focus')]),
   scene("plugins-installed", "Unified managed, private Google and custom MCP plugins", [...connections, wait('[data-conn="open"][data-id="composio:notion"]')]),
@@ -152,23 +150,20 @@ export default [
   scene("connections-discover", "Discover local MCP definitions", [...add, click('.menu [data-value="import"]')]),
   scene("connections-empty", "Connections without servers", [...connections, click('[data-conn="tab"][data-id="installed"]')], { servers: [], managedConnectors: [] }),
   scene("connections-discover-empty", "Discovery without candidates", [...add, click('.menu [data-value="import"]')], { servers: [], candidates: [] }),
-  scene("usage", "Usage summary and grouping", usage),
-  scene("usage-bill-breakdown", "Ledger purposes reconcile exactly with the sidebar", [...usage, check("usage-bill-breakdown")], { usageFishVoice: true }),
-  scene("usage-members", "Expanded member usage", [...usage, click('[data-run-act="members"]'), scroll(".run-members")]),
-  scene("usage-period", "Usage period menu", [...usage, click('[data-run-act="period"]')]),
-  ...["day", "provider", "routine"].map(group => scene(`usage-group-${group}`, `Usage grouped by ${group}`, [...usage, click(`[data-run-group="${group}"]`), scroll(".run-groups")])),
-  scene("usage-allowances", "Subscription exclusion opens Claude, Codex and Gemini allowances", [...usage, click('[data-run-act="show-allowance"]'), check("usage-allowance-link")]),
-  scene("usage-allowances-chatgpt", "ChatGPT sits with the other subscriptions, with the button to its own usage page", [...usage, click('[data-run-act="show-allowance"]'), wait('[data-allowance="chatgpt"]'), scroll('[data-allowance="chatgpt"]')], { chatgptSignedIn: true }),
-  scene("usage-empty", "Usage without runs", usage, { usageEmpty: true }),
+  scene("usage", "Usage as plain as Grok Bot's: this month's spending with a coloured bar, what each subscription has left, then the key", [...usage, wait(".run-subscription"), check("usage-plain")]),
+  scene("usage-allowances-chatgpt", "ChatGPT sits with the other subscriptions, with the button to its own usage page", [...usage, wait('[data-allowance="chatgpt"]'), scroll('[data-allowance="chatgpt"]'), check("usage-plain")], { chatgptSignedIn: true }),
+  scene("usage-empty", "With no subscription signed in, the rows of what was spent stand alone", [...usage, check("usage-plain")], { usageEmpty: true }),
   ...["overview", "history", "dictionary"].map(tab => scene(`dictation-${tab}`, `Dictation ${tab}`, [...dictation(tab), ...(tab === "dictionary" ? [wait(".wrow"), click('[data-act="word-menu"]'), wait('#app-popover [data-pick="delete"]'), key("Escape")] : [])], tab === "dictionary" ? {
     dictionary: ["Raphael", "Methelia", "GitHub", "Composio", "OpenRouter", "Notion", "Slack", "Telegram", "Calendar", "Claude", "Codex", "Gemini"].map((word, index) => ({ id: index + 1, word, misheard: index === 0 ? ["Rafael"] : [], source: index % 2 ? "learned" : "manual", created_at_ms: 1792720800000 })),
   } : {})),
   scene("dictation-keyboard", "Horizontal dictation navigation with keyboard focus", [...dictation("overview"), key("ArrowRight"), wait('[data-dictation-tab="history"][aria-selected="true"]'), key("ArrowLeft"), wait('[data-dictation-tab="overview"][aria-selected="true"]'), key("End"), key("Home"), wait('[data-dictation-tab="overview"][aria-selected="true"]'), key("End"), wait('[data-dictation-tab="dictionary"][aria-selected="true"]'), check("dictation-navigation")]),
-  scene("dictation-history-day", "History filtered through the heatmap", [...dictation("overview"), click('.heat [data-date="2026-10-24"]'), wait(".day-row:not([hidden])")]),
+  scene("dictation-heat-press", "Pressing a heatmap day shows its words above it; nothing shows under the pointer", [...dictation("overview"), click('.heat [data-date="2026-10-24"]'), check("dictation-heat-press")]),
   scene("dictation-notice", "Dictation connection notice", dictation("overview"), { problem: true }),
   scene("conversation-notice", "Conversation connection notice", [], { problem: true }),
   scene("onboarding", "First-run welcome", [wait('#ob:not([hidden]) [data-ob="next"]')], { onboarding: true }),
-  scene("onboarding-abilities", "First-run ability choices and wide primary action", [click('[data-ob="next"]'), wait('.ob-abilities')], { onboarding: true }),
-  scene("onboarding-done", "First-run completion with optional abilities disabled", [click('[data-ob="next"]'), { action: "disable-abilities" }, click('[data-ob="next"]'), wait('.ob-col h2')], { onboarding: true }),
-  scene("after-onboarding", "First run opens the home overview with all optional abilities disabled", [click('[data-ob="next"]'), { action: "disable-abilities" }, click('[data-ob="next"]'), click('[data-ob="next"]'), wait(".page-home:not([hidden]) .ho-hero"), check("home-overview")], { onboarding: true }),
+  scene("onboarding-tools", "First-run step 1: ChatGPT, the command-line tools and the OpenRouter key as items with their state", [click('[data-ob="next"]'), wait('[data-ob-tools] [data-item="claude"] .dot.ok'), check("onboarding-tools")], { onboarding: true }),
+  scene("onboarding-tools-key", "First-run step 1: the OpenRouter key being replaced shows its field and paste button", [click('[data-ob="next"]'), wait('[data-ob="key-replace"]'), click('[data-ob="key-replace"]'), wait("#ob-key-input"), check("onboarding-tools")], { onboarding: true }),
+  scene("onboarding-services", "First-run step 2: the popular services of the store, one sign-in each", [click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-services] .ob-item'), click('[data-item="gmail"] [data-ob="conn-login"]'), wait('[data-item="gmail"] .dot.ok'), check("onboarding-services")], { onboarding: true }),
+  scene("onboarding-abilities", "First-run step 3: the abilities members share, one switch each, and the wide primary action", [click('[data-ob="next"]'), click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .ob-item'), click('[data-item="read"] [data-ob="ability"]'), wait('[data-item="read"] [aria-checked="false"]'), check("onboarding-abilities")], { onboarding: true }),
+  scene("after-onboarding", "Finishing the third step opens the home overview", [click('[data-ob="next"]'), click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .ob-item'), click('[data-ob="next"]'), wait(".page-home:not([hidden]) .ho-hero"), check("home-overview")], { onboarding: true }),
 ];

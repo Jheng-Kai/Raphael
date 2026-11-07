@@ -106,7 +106,7 @@ class ConnectorsService:
     def register(self, router) -> None:
         methods = {"catalog": self.catalog, "categories": self.categories, "toolkit": self.toolkit, "connect": self.connect,
                    "status": self.status, "disconnect": self.disconnect, "tools": self.tools,
-                   "set_tools": self.set_tools, "set_key": self.set_key,
+                   "set_tools": self.set_tools, "set_key": self.set_key, "label": self.label,
                    "google.configure": self.google_configure, "google.connect": self.google_connect}
         for name, handler in methods.items():
             router.register("connectors." + name, self._handler(handler, name))
@@ -140,6 +140,27 @@ class ConnectorsService:
         if entry is None:
             raise invalid_params("There is no such connector")
         return entry
+
+    async def label(self, params):
+        entry = self._entry(params)
+        account_id, label = _text(params, "account_id"), _text(params, "label")
+        if not label or len(label) > 100:
+            raise invalid_params("A label needs 1 to 100 characters")
+        account = next((a for a in entry.accounts if a["id"] == account_id), None)
+        if account is None:
+            raise invalid_params("No such connected account")
+        account["label"] = label
+        self._save()
+        return {"connector": self._view(entry)}
+
+    @staticmethod
+    def account_view(account, previous=()):
+        old = next((a for a in previous if a["id"] == account["id"]), {})
+        # Keep only public address metadata; never copy provider tokens or auth state.
+        data = account.get("data") if isinstance(account.get("data"), dict) else {}
+        address = account.get("email") or data.get("email") or ""
+        label = old.get("label") or (address if isinstance(address, str) and len(address) <= 100 else "")
+        return {"id": account["id"], "status": account["status"], "label": label}
 
     def _view(self, entry: Connector) -> dict:
         view = asdict(entry)
@@ -401,7 +422,7 @@ class ConnectorsService:
         entry.description = (details.get("meta") or {}).get("description", "")
         entry.logo = (details.get("meta") or {}).get("logo", "")
         entry.status, entry.auth_config_id = "ACTIVE", auth_id
-        entry.accounts = [{"id": account_id, "status": "ACTIVE"}]
+        entry.accounts = [self.account_view(account, entry.accounts)]
         self._save()
         await self._load_tools(entry)
         await self._patch()
@@ -448,7 +469,7 @@ class ConnectorsService:
                         raise ConnectorFailure("account_mismatch")
                     if account.get("toolkit", {}).get("slug", slug) != slug:
                         raise ConnectorFailure("account_mismatch")
-                    entry.accounts = [a for a in entry.accounts if a["id"] != account_id] + [{"id": account_id, "status": status}]
+                    entry.accounts = [a for a in entry.accounts if a["id"] != account_id] + [self.account_view(account, entry.accounts)]
                     entry.status = "ACTIVE" if prior_active else status
                     self._save()
                     if status == "ACTIVE":
@@ -565,7 +586,8 @@ class ConnectorsService:
                     slug = account.get("toolkit", {}).get("slug")
                     status = account.get("status")
                     if isinstance(slug, str) and status in STATUSES and isinstance(account.get("id"), str):
-                        by_slug.setdefault(slug, []).append({"id": account["id"], "status": status})
+                        prior = self.store.connectors.get("composio:" + slug)
+                        by_slug.setdefault(slug, []).append(self.account_view(account, prior.accounts if prior else []))
                 for entry in self.store.connectors.values():
                     if entry.kind == "composio":
                         entry.accounts = by_slug.get(entry.id.split(":", 1)[1], [])
@@ -663,7 +685,7 @@ class ConnectorsService:
         self._save()
         try:
             entry.granted_scopes = await self.google.connect(scopes_for(entry.gmail, entry.calendar), self.open_browser)
-            entry.status, entry.accounts = "ACTIVE", [{"id": "me", "status": "ACTIVE"}]
+            entry.status, entry.accounts = "ACTIVE", [self.account_view({"id": "me", "status": "ACTIVE"}, entry.accounts)]
             await self.sync_google()
             self._save()
         except BaseException:

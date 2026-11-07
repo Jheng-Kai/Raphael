@@ -41,3 +41,6 @@ coverage/
 # Shared visual verification output
 /app/.look/
 /core/.live/
+
+# Keep the signed synthetic package even when local excludes hide research folders.
+!/core/tests/fixtures/member-catalog/packages/research/

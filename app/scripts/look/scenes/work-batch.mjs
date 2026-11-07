@@ -4,7 +4,7 @@ const disconnected = { connected: false, enabled: false, running: false, error: 
 const connected = (name, code) => ({ connected: true, enabled: true, running: true, error: null, bot: { username: name }, allowed: [], pending: [{ code, name: "Owner", expires_in_s: 120 }] });
 const channels = { slack: connected("Research", "SL1234"), discord: connected("ResearchBot", "DC1234") };
 const desktop = { desktop: { state: "running", ready: true, control: "member" }, checkpoints: true };
-const review = [member(1), {action:'open-details'}, wait('.desktop-panel[data-desktop-state="member"]'), click('[data-desktop="peek"]'),wait('.desktop-panel[data-expanded]'),click('[data-desktop="menu"]'),click('#app-popover [data-pick="files"]'), wait('.checkpoint'), scroll('.checkpoint'), click('.checkpoint summary'), wait('.checkpoint details[open] pre')];
+const review = [member(1), {action:'open-details'}, click('[data-det="tab"][data-tab="computer"]'), wait('.desktop-panel[data-desktop-state="member"]'), click('[data-desktop="enlarge"]'),click('[data-desktop="take"]'),wait('.desktop-panel[data-expanded][data-interactive="true"]'),click('[data-desktop="menu"]'),click('#app-popover [data-pick="files"]'), wait('.checkpoint'), scroll('.checkpoint'), click('.checkpoint summary'), wait('.checkpoint details[open] pre')];
 const login = [member(1), wait('[data-secret-card="card-login"]')];
 
 export default [

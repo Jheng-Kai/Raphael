@@ -9,6 +9,19 @@ const flush = async (): Promise<void> => { for (let i = 0; i < 40; i++) await Pr
 let editor: ReturnType<typeof mountMemberResources>;
 afterEach(() => { editor?.destroy(); document.body.replaceChildren(); vi.resetAllMocks(); });
 
+test("member voice settings hold the voice choice and notify only: no read-aloud or voice-memo toggle, even for a legacy member", async () => {
+  setLocale("en");
+  api.membersVoices.mockResolvedValue({configured:true,voices:[]});
+  api.membersUpdate.mockResolvedValue({});
+  const host = document.createElement("div"); document.body.append(host);
+  editor = mountMemberResources(host, {memberId:1,tab:"voice",standalone:true,member:{id:1,read_aloud:true} as never});
+  await flush();
+  expect([...host.querySelectorAll<HTMLElement>("[data-res]")].map(el => el.dataset.res).sort()).toEqual(["notify","voice"]);
+  expect(host.textContent).not.toMatch(/read replies aloud|voice memo/i);
+  host.querySelector<HTMLButtonElement>('[data-res="notify"]')!.click(); await flush();
+  expect(api.membersUpdate).toHaveBeenCalledExactlyOnceWith(1,{notify:true});
+});
+
 test("Raphael details save and preview the existing voice setting without member updates", async () => {
   setLocale("zh-TW");
   const voice = "0123456789abcdef0123456789abcdef";

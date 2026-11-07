@@ -95,6 +95,7 @@ export function checksums(directory) {
 }
 
 export function prepareReleaseAssets({ installer, notices, signature, updater = "signed", version, output, env = process.env, tools = collectTools(env) }) {
+  if (typeof version !== "string" || !/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(version)) throw new Error("Release version must use a numeric major.minor.patch.");
   if (!["signed", "disabled"].includes(updater)) throw new Error("Updater mode must be signed or disabled.");
   if (updater === "signed" && !signature) throw new Error("Signed updater mode requires --signature.");
   if (updater === "disabled" && signature) throw new Error("Disabled updater mode must not include --signature.");

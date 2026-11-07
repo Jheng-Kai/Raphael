@@ -1,7 +1,5 @@
-"""Local desktops as a PluginHub adapter, under the existing gate and snapshots.
-
-Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
-"""
+"""Local desktops as a PluginHub adapter, under the existing gate and snapshots."""
+# Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses/NOTICES.md.
 
 import asyncio
 import base64
@@ -100,10 +98,28 @@ REQUEST = {"description": "Ask for a sandbox desktop when a task must be seen or
 BROWSER_OPEN = {"description": VM_CONTRACT + " Open an http/https URL in the member's persistent browser and return its semantic page references without a screenshot. Use the typed browser tools for follow-ups.",
     "parameters": {"type": "object", "properties": {"url": {"type": "string", "pattern": "^https?://", "maxLength": 8192},
         "query": {"type": "string"}, "scope_ref": {"type": "string"}}, "required": ["url"], "additionalProperties": False}}
-FILL_LOGIN = {"description": VM_CONTRACT + " Fill the username and password saved through request_secret(site) into current page references. The reference belongs to this member and exact HTTPS origin. Values never enter your messages or results. This does not submit; keep request_takeover for owner-only sign-in steps. Private fields hide screenshots while filled; page text remains redacted.",
+FILL_LOGIN = {"description": "Use vault_entries labels and owner hints to choose a saved login; if two fit, ask_owner. Fill only the current exact HTTPS origin. Never submit or request private values in chat; use request_takeover for owner-only steps. Legacy request_secret(site) references still work. " + VM_CONTRACT,
     "parameters": {"type": "object", "properties": {key: {"type": "string", "minLength": 1, "maxLength": 2048} for key in
         ("reference", "site", "target_id", "username_ref", "password_ref")},
         "required": ["reference", "site", "target_id", "username_ref", "password_ref"], "additionalProperties": False}}
+
+ENTRY_CHOICES = {"description": "List the saved entries this member may use: opaque IDs, kinds, labels and owner hints only. Choose by the owner's hint. If two entries fit, ask_owner before choosing. Never ask for private values in chat.",
+    "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}
+
+
+def fill_definition(kind, fields):
+    properties = {key: {"type": "string", "minLength": 1, "maxLength": 2048} for key in ("reference", "site", "target_id", "label")}
+    properties["fields"] = {"type": "object", "properties": {key: {"type": "string", "minLength": 1} for key in fields},
+                            "minProperties": 1, "additionalProperties": False}
+    if kind == "card":
+        properties["amount"] = {"type": "string", "maxLength": 120}
+    guidance = ("Every use needs owner approval naming site/merchant, visible amount (empty if absent), and label. Never pay/submit; request_takeover lets the owner finish. " if kind == "card" else "Never submit or request private values in chat. ")
+    return {"description": f"Fill a saved {kind}. " + guidance + "Use vault_entries labels/hints; if two fit, ask_owner. fields maps private field names to page refs, never values. Exact HTTPS site and label are required. " + VM_CONTRACT,
+            "parameters": {"type": "object", "properties": properties, "required": list(properties), "additionalProperties": False}}
+
+
+FILL_CONTACT = fill_definition("contact", ("name", "address", "phone", "email"))
+FILL_CARD = fill_definition("card", ("name", "number", "expiry", "cvc"))
 
 
 class VmTools:
@@ -141,6 +157,7 @@ class VmTools:
         self.connections, self.labels = {}, itertools.count(1)
         self.logins = None
         self.private_pages = {}
+        self.payment_holds = set() if conn is None else {row[0] for row in conn.execute("SELECT target FROM computer_payment_holds")}
         self.checkpointed, self.checkpoint_locks = set(), {}
         self.refreshes = {}
         self.step_gate = None
@@ -260,6 +277,8 @@ class VmTools:
         target = self.vm.target(member_id)
         if self.logins:
             try:
+                if hasattr(self.logins, "preload"):
+                    self.logins.preload(member_id)
                 for row in self.logins.references(None if target.key == "shared" else member_id):
                     try:
                         self.logins.load(row["member_id"], row["origin"], row["reference"])
@@ -273,7 +292,8 @@ class VmTools:
             self._catalog(target, offline_catalog())
 
     def _catalog(self, target, definitions):
-        definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER, fill_login=FILL_LOGIN, browser_open=BROWSER_OPEN, run_steps=RUN_STEPS)
+        definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER, fill_login=FILL_LOGIN,
+                           vault_entries=ENTRY_CHOICES, fill_contact=FILL_CONTACT, fill_card=FILL_CARD, browser_open=BROWSER_OPEN, run_steps=RUN_STEPS)
         if target.key != "shared":
             from .datasets import DEFINITION
             definitions["dataset"] = DEFINITION
@@ -283,7 +303,8 @@ class VmTools:
             description = definition["description"]
             if name in DRIVER_TOOLS and not description.startswith(VM_CONTRACT):
                 description = VM_CONTRACT + " " + description
-            self.tools[key] = PluginTool(key, "computer", name, description, definition["parameters"], Tier.T0, pinned=True)
+            self.tools[key] = PluginTool(key, "computer", name, description, definition["parameters"], Tier.T3 if name == "fill_card" else Tier.T0, pinned=True,
+                                         deferred=name in ("vault_entries", "fill_contact", "fill_card"))
             self.routes[key] = target
             self.schemas[key] = definition.get("validation", definition["parameters"])
             keys.append(key)
@@ -379,7 +400,7 @@ class VmTools:
 
     def kind_of(self, server, name):
         if server == "computer":
-            return "read" if name in READS or name == "attach_file" else "write"
+            return "read" if name in READS or name in ("attach_file", "vault_entries") else "write"
         return self.delegate.kind_of(server, name)
 
     def kind_for_call(self, server, name, arguments):
@@ -403,6 +424,15 @@ class VmTools:
     async def call(self, key, arguments, *, approver, task_id=None, pool=None):
         if not self.is_computer_tool(key):
             return await self.delegate.call(key, arguments, approver=approver, task_id=task_id, pool=pool)
+        scope = _SCOPE.get()
+        member = scope[1] if scope and scope[0] == "turn" else 0
+        if task_id and self.conn is not None:
+            row = self.conn.execute("SELECT member_id FROM worker_tasks WHERE id=?", (task_id,)).fetchone()
+            if row:
+                member = row[0]
+        picture_target = self.routes.get(key, self.vm.target(member))
+        private_before = picture_target.key in self.payment_holds or any(
+            page[0] == picture_target.key for page in self.private_pages)
         began = time.monotonic()
         repair_budget = _REPAIRS.set(set())
         reading = key in self.tools and self.tools[key].name in SCREEN_READS | {"browser_open"}
@@ -431,20 +461,30 @@ class VmTools:
                 result.text = (prefix + "\n" if prefix else "") + json.dumps(data, ensure_ascii=False)
             else:
                 result.text = (result.text + f"\nElapsed: {elapsed:.2f} seconds.").strip()
-        scope = _SCOPE.get()
-        member = scope[1] if scope and scope[0] == "turn" else 0
-        if task_id and self.conn is not None:
-            row = self.conn.execute("SELECT member_id FROM worker_tasks WHERE id=?", (task_id,)).fetchone()
-            if row:
-                member = row[0]
-        private_members = list(self.logins.values) if self.logins and self.vm.target(member).key == "shared" else [member]
+        private_members = list(self.logins.values) if self.logins and picture_target.key == "shared" else [member]
         if self.logins and any(self.logins.values.get(identifier) for identifier in private_members):
             for identifier in private_members:
                 result.text = self.logins.redact(identifier, result.text)
                 if result.kind:
                     result.kind = self.logins.redact(identifier, result.kind)
-            if result.blocks and await self._private_picture(self.vm.target(member), arguments):
-                result.text = (result.text + "\nPrivate login fields are hidden. Use page references or request_takeover; no screenshot was returned.").strip()
+        if (reading and result.ok) or result.blocks:
+            if not self.vm.grants.allowed(member) or picture_target != self.vm.target(member):
+                return PluginResult(False, "computer_permission_required")
+            private_after = await self._private_picture(picture_target, arguments)
+            if not self.vm.grants.allowed(member) or picture_target != self.vm.target(member):
+                return PluginResult(False, "computer_permission_required")
+            if private_before or private_after:
+                # A safe observation after capture cannot authorize pixels from before that observation.
+                tree = getattr(self, "private_tree", {}).get(picture_target.key, {})
+                if not tree:
+                    try:
+                        tree = json.loads(result.text.rsplit("\n", 1)[-1])
+                    except ValueError:
+                        tree = {}
+                result.text = json.dumps(self._without_values(tree), ensure_ascii=False) + "\nPrivate fields are hidden until the filled page leaves its origin and its fields are absent. Use page references or request_takeover; no screenshot was returned."
+                if self.logins:
+                    for identifier in private_members:
+                        result.text = self.logins.redact(identifier, result.text)
                 result.blocks = []
         return result
 
@@ -467,28 +507,63 @@ class VmTools:
                 logger.warning("File checkpoint skipped: %s", type(error).__name__)
 
     def _observe_page(self, target, page):
+        from urllib.parse import urlsplit
         identifier = page.get("target_id")
         url = page.get("url") or next((tab.get("url") for tab in page.get("tabs", []) if tab.get("active") is True), None)
         key = (target.key, identifier)
         protected = self.private_pages.get(key)
-        if protected and url and protected[0] != url:
-            self.private_pages.pop(key, None)
+        if protected and url:
+            try:
+                parsed = urlsplit(url)
+                if parsed.scheme not in ("https", "http") or not parsed.hostname:
+                    return
+                current = (parsed.scheme.lower(), parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80))
+            except (ValueError, TypeError):
+                return
+            nodes = page.get("nodes")
+            if (current not in protected["origins"] and isinstance(nodes, list) and page.get("truncated") is False
+                    and not page.get("has_more") and not self._has_private_refs(nodes, protected["refs"])):
+                self.private_pages.pop(key, None)
+
+    @staticmethod
+    def _has_private_refs(value, refs):
+        if isinstance(value, dict):
+            return value.get("ref") in refs or any(VmTools._has_private_refs(item, refs) for item in value.values())
+        return isinstance(value, list) and any(VmTools._has_private_refs(item, refs) for item in value)
+
+    @staticmethod
+    def _without_values(value):
+        if isinstance(value, dict):
+            return {key: VmTools._without_values(item) for key, item in value.items()
+                    if "value" not in key.lower() and key.lower() not in (
+                        "text", "textcontent", "innertext", "screenshot", "images", "image", "html")}
+        if isinstance(value, list):
+            return [VmTools._without_values(item) for item in value]
+        return value
+
+    def _protect_page(self, target, identifier, url, refs):
+        from urllib.parse import urlsplit
+        parsed = urlsplit(url)
+        protected = self.private_pages.setdefault((target.key, identifier), {"origins": set(), "refs": set()})
+        protected["origins"].add((parsed.scheme.lower(), parsed.hostname, parsed.port or 443))
+        protected["refs"].update(refs)
 
     async def _private_picture(self, target, arguments):
-        now = self.vm.clock()
-        for key, (_, until) in list(self.private_pages.items()):
-            if now >= until:
-                self.private_pages.pop(key, None)
-        keys = [key for key in self.private_pages if key[0] == target.key and
-                (not arguments.get("target_id") or key[1] == arguments["target_id"])]
+        keys = [key for key in self.private_pages if key[0] == target.key]
+        self.private_tree = getattr(self, "private_tree", {})
+        self.private_tree.pop(target.key, None)
         for key in keys:
             try:
                 client, session = await self._connection(target)
-                state = await client.request("tools/call", {"name": "get_browser_state", "arguments": {"target_id": key[1], "session": session}})
-                self._observe_page(target, state.get("structuredContent") or {})
+                state = await client.request("tools/call", {"name": "get_browser_state", "arguments": {
+                    "target_id": key[1], "session": session, "include_screenshot": False, "snapshot_format": "semantic_v2"}})
+                page = state.get("structuredContent") or {}
+                if not state.get("isError"):
+                    self._observe_page(target, page)
+                    self.private_tree[target.key] = page
             except Exception:
                 pass
-        return any(key in self.private_pages for key in keys)
+        return target.key in self.payment_holds or any(key in self.private_pages for key in keys)
 
     async def _call(self, key, arguments, *, approver, task_id=None, pool=None):
         if key in self.requests:
@@ -542,6 +617,11 @@ class VmTools:
             if "session" in arguments or not Draft202012Validator(self.schemas[key]).is_valid(arguments):
                 result = PluginResult(False, "bad_arguments")
                 return result
+            if tool.name == "vault_entries":
+                choices = self.logins.choices(member) if self.logins and hasattr(self.logins, "choices") else []
+                return PluginResult(True, text=json.dumps({"entries": choices}, ensure_ascii=False))
+            if target.key in self.payment_holds and tool.name not in READS | {"request_takeover"}:
+                return PluginResult(False, "owner_payment_required", "The owner must finish payment through request_takeover. No further member action is allowed on this computer.")
             owner = _SCOPE.get() or ("async", asyncio.current_task())
             turn = _TURN.get()
             if task_id and self.conn is not None:
@@ -569,6 +649,11 @@ class VmTools:
                         self.actions.get(target.key) and self.actions[target.key].locked()):
                     return self._busy(target, None, 0.0)
                 data = await self.vm.work.request(work, arguments["reason"])
+                if arguments["reason"] == "payment" and target.key in self.payment_holds:
+                    self.payment_holds.discard(target.key)
+                    if self.conn is not None:
+                        with self.conn:
+                            self.conn.execute("DELETE FROM computer_payment_holds WHERE target=?", (target.key,))
                 result = PluginResult(True, text=json.dumps(data))
                 return result
             if work:
@@ -597,6 +682,8 @@ class VmTools:
             try:
                 await self.vm.start(target)
                 await self._disk_notice(target)
+                if not self.vm.grants.allowed(member) or target != self.vm.target(member):
+                    return PluginResult(False, "computer_permission_required")
                 # A hold may have arrived while the desktop was starting. Never queue actions.
                 if target.key in self.vm.held:
                     raise VmError("owner_holds_control")
@@ -604,6 +691,10 @@ class VmTools:
                     background = arguments.get("background", False)
                     wait = arguments.get("timeout_seconds", 3600 if background else 60)
                     await self._checkpoint(target, member, turn[0], owner, arguments["command"])
+                    if not self.vm.grants.allowed(member) or target != self.vm.target(member):
+                        return PluginResult(False, "computer_permission_required")
+                    if target.key in self.vm.held:
+                        raise VmError("owner_holds_control")
                     if background:
                         data = await self.vm.execute(target, arguments["command"], wait, background=True)
                     else:
@@ -618,6 +709,8 @@ class VmTools:
                     result = PluginResult(True, text=json.dumps({"attachment": attachment.metadata()}))
                 elif tool.name == "fill_login":
                     result = await self._fill_login(target, member, arguments)
+                elif tool.name in ("fill_contact", "fill_card"):
+                    result = await self._fill_entry(target, member, arguments, "card" if tool.name == "fill_card" else "contact")
                 else:
                     if not self.vm.grants.allowed(member):
                         result = PluginResult(False, "computer_permission_required")
@@ -685,7 +778,8 @@ class VmTools:
                             result = PluginResult(False, "connection_repaired", "Computer connection repaired. The previous action was not replayed because its outcome is unknown. Read the current window or page before deciding the next action.")
                             return result
                         raise
-                    self._observe_page(target, data.get("structuredContent") or {})
+                    if not data.get("isError"):
+                        self._observe_page(target, data.get("structuredContent") or {})
                     blocks, text = [], []
                     for block in data.get("content", []):
                         if block.get("type") == "text":
@@ -742,6 +836,9 @@ class VmTools:
             result = PluginResult(False, "error")
             return result
         finally:
+            if self.logins and result.kind:
+                for identifier in self.logins.values:
+                    result.kind = self.logins.redact(identifier, result.kind)
             self._audit(key, "blocked" if result.kind in NOTICES else "ok" if result.ok else result.kind or "error", approver, task_id)
 
     # --- the driver connection -------------------------------------------------------------------
@@ -851,8 +948,9 @@ class VmTools:
                 if (state.get("isError") or page.get("target_id") != args["target_id"] or origin(url) != origin(args["site"])
                         or not self.vm.grants.allowed(member) or target != self.vm.target(member) or target.key in self.vm.held):
                     raise ValueError()
+                self.logins.load(member, args["site"], args["reference"])
                 # Driver echoes and pictures are deliberately discarded, including errors.
-                self.private_pages[(target.key, args["target_id"])] = (url, self.vm.clock() + 120)
+                self._protect_page(target, args["target_id"], url, (call["ref"],))
                 reply = await client.request("tools/call", {"name": "browser_type", "arguments": {**call, "session": session}})
                 if reply.get("isError"):
                     return PluginResult(False, "login_not_filled", '{"filled": false}')
@@ -861,6 +959,57 @@ class VmTools:
             self.vm.invalidate(target)
             # Transport and vault exceptions may echo input; none of their diagnostics leave this boundary.
             return PluginResult(False, "login_not_filled", '{"filled": false}')
+
+    async def _fill_entry(self, target, member, args, kind):
+        from .logins import origin
+        if self.logins is None or not hasattr(self.logins, "entry"):
+            return PluginResult(False, "entry_not_filled", '{"filled": false}')
+        try:
+            row, values = self.logins.entry(member, args["reference"], kind)
+            if row["label"] != args["label"]:
+                raise ValueError()
+            await self._discover(target)
+            client, session = await self._connection(target, member=member)
+            schema = self.schemas.get(tool_key(f"computer-{target.key}", "browser_type"))
+            if not schema:
+                raise ValueError()
+            calls = [{"target_id": args["target_id"], "ref": ref, "text": values[field]}
+                     for field, ref in args["fields"].items() if values[field]]
+            if not calls:
+                raise ValueError()
+            if "delivery_mode" in schema.get("properties", {}):
+                calls = [{**call, "delivery_mode": "foreground"} for call in calls]
+            if not all(Draft202012Validator(schema).is_valid(call) for call in calls):
+                raise ValueError()
+            for call in calls:
+                state = await client.request("tools/call", {"name": "get_browser_state", "arguments": {"target_id": args["target_id"], "session": session}})
+                page = state.get("structuredContent") or {}
+                url = page.get("url")
+                if (state.get("isError") or page.get("target_id") != args["target_id"] or origin(url) != origin(args["site"])
+                        or not self.vm.grants.allowed(member) or target != self.vm.target(member) or target.key in self.vm.held):
+                    raise ValueError()
+                if not any(entry["id"] == args["reference"] and entry["label"] == args["label"]
+                           for entry in self.logins.entries(member)):
+                    raise ValueError()
+                if kind == "card":
+                    # Require the owner-approved amount to match the current page on every field.
+                    text = json.dumps(state, ensure_ascii=False)
+                    amounts = re.findall(r"(?:NT\$|US\$|[$€£¥]|(?:USD|TWD|EUR|JPY)\s*)\s*\d[\d,.]*(?:\s*(?:USD|TWD|EUR|JPY))?", text)
+                    if (amounts and args["amount"] not in amounts) or (not amounts and args["amount"]):
+                        raise ValueError()
+                    # Set the hold before sending the first private byte, even if the driver fails.
+                    self.payment_holds.add(target.key)
+                    if self.conn is not None:
+                        with self.conn:
+                            self.conn.execute("INSERT OR IGNORE INTO computer_payment_holds VALUES (?)", (target.key,))
+                self._protect_page(target, args["target_id"], url, (call["ref"],))
+                reply = await client.request("tools/call", {"name": "browser_type", "arguments": {**call, "session": session}})
+                if reply.get("isError"):
+                    raise ValueError()
+            return PluginResult(True, text=json.dumps({"filled": True, "owner_finishes": kind == "card"}))
+        except Exception:
+            self.vm.invalidate(target)
+            return PluginResult(False, "entry_not_filled", '{"filled": false}')
 
     async def _connection(self, target, *, member=None):
         """A computer's one connection to its driver, and its session label. The driver ends a session with the connection

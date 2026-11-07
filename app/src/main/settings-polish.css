@@ -16,8 +16,17 @@
 
 .data-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-3); }
 .data-heading h2 { margin: 0; }
-.data-record { padding: var(--sp-3) 0; border-bottom: 1px solid var(--line); }
-.data-record time { color: var(--text-3); font-size: var(--fs-xs); }
-.data-record-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: var(--fs-sm); line-height: 1.6; }
+/* A tab's name alone heads it, as Grok Bot's; its first section keeps the gap of the others. */
+.modal-body > h1 + .sgroup, .modal-body > .set-head + .sgroup, .modal-body > h1 + div > .sgroup:first-child { margin-top: var(--sp-5); }
+/* The sections of 一般 that hold sections of their own (messaging): their cards follow one another under one name. */
+.set-messaging > .sgroup { margin-top: var(--sp-2); }
+.set-messaging > h2 + .sgroup { margin-top: 0; }
 
-.set-purpose { margin: var(--sp-2) 0 var(--sp-5); color: var(--text-3); font-size: var(--fs-sm); }
+/* Grok Bot's settings rows (2026-11-05): a choice is its value and a chevron on the row's right edge, with no box
+   and no fill, not even under the pointer (owner, 2026-11-06); only its words brighten. The chevrons line up. */
+.modal-body .slist .ctl .sel { width: auto; max-width: 100%; justify-content: flex-end; gap: var(--sp-1); padding-inline: var(--sp-2); border-color: transparent; background-color: transparent; color: var(--text-2); }
+.modal-body .slist .ctl .sel:hover:not(:disabled), .modal-body .slist .ctl .sel[aria-expanded="true"] { border-color: transparent; background-color: transparent; color: var(--text); }
+.modal-body .slist .ctl .sel:disabled:hover { border-color: transparent; }
+/* The model picker is a card with the model's mark, name and price, and keeps its frame. */
+.modal-body .slist .ctl .sel.mp-trigger { justify-content: flex-start; padding-inline: var(--sp-3); border-color: var(--btn-edge); background-color: var(--btn); color: var(--text); }
+.modal-body .slist .ctl .sel.mp-trigger:hover:not(:disabled) { background-color: var(--hover); }

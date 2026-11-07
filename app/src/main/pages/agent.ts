@@ -44,7 +44,6 @@ import { eventRead } from '../event-read';
 import { cancelGesture } from "../../shared/cancel-gesture";
 import { openActions } from "../member-column";
 import { mountConversationFind } from "../conversation-find";
-import { confirmDelete } from "../member-dialogs";
 import { openRoutineDialog } from "../routine-dialog";
 import { createAttachmentMedia } from "../attachment-media";
 import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachmentLimit, readComposerFile, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
@@ -71,17 +70,22 @@ import { RAPHAEL_ID, faceHTML, memberPlaceholder } from "../members";
 import { createMembers } from "../members-shell";
 import { createDraftPanel, hasDrafts } from "../member-draft";
 import { mountBackgroundQuestions } from "../background-mount";
+import { mountVoiceChat, voiceCallCardHTML, foldCallTurns } from "../voice-chat";
 import { TYPED, VOICE, exchangeTurn, mergeTurns, oldestId, refreshTurns, sourceOf, threadItems, visibleTurn } from "../conversation";
 import { carryTyped } from "../secret-card";
 import { carryInlineSetup, mountInlineConnectionSetup } from "../connection-setup";
 import { carryMail } from "../mail-card";
 import { mountPages } from "../page-card";
+import { menuReactionsHTML, mountMessageMetadata } from "../message-metadata";
+import { MORE_EMOJI, openEmojiPicker } from "../emoji-picker";
 import { mountMailActions } from "../mail-actions";
+import { mountGreeting } from "../member-greeting";
 import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
 import { mountPendingQuestions } from "../pending-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
-import { memberAccent, ownerBubble } from "../owner-bubble";
-import { slimeColorOf } from "../slime";
+import { memberAccent, memberColor, ownerBubble } from "../owner-bubble";
+import { openPeerChat, type PeerChatView } from "../peer-chat";
+import { exchangeView } from "../exchange-line";
 import { dayLabel, describeError } from "../format";
 import { loadingHTML } from "../loading";
 import {
@@ -110,7 +114,7 @@ import {
 import type { PageArgument, AgentQuestion, AgentTurn, AppContext, GroupDraft, MemberDraft, MessageQuote, OwnerQuestion, Page, TurnAttachment, WireAttachment } from "../types";
 import { copyButton, esc, ico, iconButton, patchHTML, toaster } from "../ui";
 import { createRoomPane } from "../group-chats";
-import { bindActionMode, composerHTML, drawTaskSlot } from "../chat-composer";
+import { bindActionMode, bindPageComposer, composerHTML, drawTaskSlot } from "../chat-composer";
 import { mountComposerBrain } from "../composer-brain";
 import { bindComposerHistory } from "../composer-history";
 import { bindComposerLearning, learnComposerCorrections } from "../composer-learning";
@@ -157,11 +161,6 @@ export function askLabels(q: AgentQuestion | null): { yes: string; no: string; a
     no: (always !== null && q?.no) || t("perm.deny"),
     always,
   };
-}
-
-/** Retain the legacy settings link; Settings resolves the former agent pane to Tools. */
-export function openRaphaelSettings(app: Pick<AppContext, "go">): void {
-  app.go("settings", "agent");
 }
 
 /** The words of the empty page: the overlay's greeting to a question, without its last stop. */
@@ -224,6 +223,7 @@ interface Outgoing {
 
 interface ComposerDraft {
   dictation?: DictationBaseline;
+  pageId?: string;
   text: string;
   files: ComposerFile[];
   missing: TurnAttachment[];
@@ -240,10 +240,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     `<section class="mb-chat">` +
     `<div class="page-head mb-head"><h1 class="mb-h1">${esc(t("agent.title"))}</h1><span class="mb-head-l">` +
     iconButton("search", t("agent.search"), ' data-act="search" aria-expanded="false" hidden', "ra-tool") +
-    `</span><span class="mb-head-c"></span><div class="ra-tools">` +
-    iconButton("monitor", t("card.pcTitle"), ' data-act="computer"', "ra-tool") +
-    iconButton("gear", t("agent.settings"), ' data-act="settings"', "ra-tool") +
-    `</div></div>` +
+    // Nothing at the right end, as Grok Bot's header (owner, 2026-11-06): the computer is a tab of the panel the name opens.
+    `</span><span class="mb-head-c"></span><div class="ra-tools"></div></div>` +
     `<div class="ra-find" hidden></div>` +
     `<div class="ra-stage">` +
     `<div class="ra-scroll"><div class="ra-col"><div class="ra-older" hidden></div><ol class="thread"></ol><p class="ra-none" hidden></p></div></div>` +
@@ -254,8 +252,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     `</section>`;
   const heading = el.querySelector<HTMLElement>("h1")!;
   const searchButton = el.querySelector<HTMLElement>('[data-act="search"]')!;
-  const computerButton = el.querySelector<HTMLElement>('[data-act="computer"]')!;
-  const settingsButton = el.querySelector<HTMLElement>('[data-act="settings"]')!;
+  /** Whether the open member's computer is working now: a dot beside its name in the header says so. */
+  let computerActive = false;
   const find = el.querySelector<HTMLElement>(".ra-find")!;
 
   const stage = el.querySelector<HTMLElement>(".ra-stage")!;
@@ -326,7 +324,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     face: () => members.faceOf(members.current(), 22),
     closePanel: () => members.setDetails(false),
     openPanel: () => members.computer(), panelVisible: () => members.detailsOpen() && members.details.dataset.detailsTab === 'computer',
-    status: active => el.querySelector('[data-act="computer"]')!.classList.toggle('is-computer-active', active),
+    status: active => {
+      computerActive = active;
+      const trigger = el.querySelector<HTMLElement>(".mb-chat .conversation-trigger");
+      if (trigger) { trigger.classList.toggle("is-computer-active", active); drawConversation(); }
+    },
     changed: () => { if (visible && !scroller.hidden) drawThread(); },
     trySkill: text => sendFromPage(text),
     stop: turnId => { const turn = turns.find(turn => turn.id === turnId); return turn?.task ? api.workerCancel(turn.task.id) : turn?.session_id ? api.agentStop(turn.session_id, memberId()) : Promise.resolve(); },
@@ -363,12 +365,17 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     conversation === undefined ? {} : { conversationId: conversation,
       ...(conversationCache.get(member)?.find(c => c.id === conversation)?.kind === "quick" ? { destination: "quick" as const } : {}) };
 
+  /** The header names only the member; Raphael's quick questions say so under it. */
   function drawConversation(): void {
     const selected = conversationCache.get(memberId())?.find(c => c.id === conversationId());
-    const title = conversationTitle(selected);
+    const title = selected?.kind === "quick" ? conversationTitle(selected) : "";
     composerBrain?.draw();
     caption.textContent = title;
-    conversationButton.setAttribute("aria-label", `${members.member().name}: ${title}`); conversationButton.title = title;
+    caption.hidden = !title;
+    const name = members.member().name;
+    const working = computerActive ? ` · ${t("desktop.working")}` : "";
+    conversationButton.setAttribute("aria-label", (title ? `${name}: ${title}` : name) + working); conversationButton.title = (title || name) + working;
+    conversationButton.classList.toggle("is-computer-active", computerActive);
   }
 
   const conversationsDirty = new Set<number>();
@@ -421,23 +428,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     window.dispatchEvent(new CustomEvent("conversation-opened", { detail: member }));
   }
 
-  window.addEventListener("conversation-deleted", event => {
-    const {member,id}=(event as CustomEvent<{member:number;id:number}>).detail;
-    discardComposerDraft(draftKey(member, id));
-    const remaining=(conversationCache.get(member)??[]).filter(c=>c.id!==id);
-    conversationCache.set(member,remaining);
-    conversationsDirty.add(member);
-    if(chosenConversations.get(member)!==id)return;
-    if (composerKey === draftKey(member, id)) { composerKey = "deleted"; clearTimeout(draftTimer); }
-    // Read activity again before history; the core's stable default is not the window's selection.
-    chosenConversations.delete(member);
-    if(member===memberId())switchThread();
-  });
   conversationButton.addEventListener("click", () => {
     members.setDetails(!members.detailsOpen());
-  });
-  el.querySelector('[data-act="computer"]')!.addEventListener("click", () => {
-    members.computer();
   });
   window.addEventListener("conversations-changed", (event) => {
     const member = (event as CustomEvent<number>).detail;
@@ -470,6 +462,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   drawConversation();
 
   const memberChat = el.querySelector<HTMLElement>(".mb-chat")!;
+  /** The conversation between members a centred line opened over the thread (peer-chat.ts). */
+  let peer: PeerChatView | null = null;
   const roomPane = createRoomPane(app, () => {
     el.classList.remove("is-room"); memberChat.hidden = false;
     el.querySelector(".mb-head-l")!.append(members.picker);
@@ -497,6 +491,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   composer.noValidate = true;
   composer.innerHTML = composerHTML();
   const input = composer.querySelector<HTMLTextAreaElement>(".cmp-input")!;
+  const pageDraft = bindPageComposer(input);
   const correctionLearning = bindComposerLearning(input);
   const slashMenu = mountSlashMenu(input, { memberId, scope: app });
   const attachButton = composer.querySelector<HTMLElement>(".cmp-attach")!;
@@ -504,6 +499,15 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   composerBrain = mountComposerBrain(composer.querySelector<HTMLElement>(".cmp-model")!, () => members.member(), { onEvent: handler => app.onEvent(handler), quick: () => conversationCache.get(memberId())?.find(c => c.id === conversationId())?.kind === "quick" });
   const voiceButton = composer.querySelector<HTMLButtonElement>(".cmp-voice")!;
   const sendButton = composer.querySelector<HTMLButtonElement>(".cmp-send")!;
+  input.addEventListener("input", () => voiceChat.draw());
+  // Voice chat waits for a later release (owner, 2026-11-06): the voice button records voice messages only.
+  const VOICE_CALLS = false;
+  const callEligible = (): boolean => VOICE_CALLS && !roomPane.active && memberId() > 0 && conversationId() !== undefined &&
+    !input.value.trim() && !files.length && !missingFiles.length && !composerQuote && replacing === undefined && !composerTask();
+  const voiceChat = mountVoiceChat({ composer, button: voiceButton, root: el,
+    target: () => ({ member: roomPane.active ? -1 : memberId(), conversation: conversationId(), name: members.member().name }),
+    eligible: callEligible, changed: () => {}, refresh: () => { if (visible) void load(false); },
+  });
   const fileChip = composer.querySelector<HTMLElement>(".cmp-file")!;
   const picker = composer.querySelector<HTMLInputElement>(".cmp-picker")!;
   const hideTooltip = messageTooltip(el);
@@ -584,10 +588,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function saveComposerDraft(): void {
     clearTimeout(draftTimer);
     if (composerKey === "deleted") return;
-    const draft: ComposerDraft = { text: input.value, files: [...files], missing: [...missingFiles], replacing, quote: composerQuote, dictation: correctionLearning.snapshot() };
+    const draft: ComposerDraft = { text: input.value, files: [...files], missing: [...missingFiles], replacing, quote: composerQuote, dictation: correctionLearning.snapshot(), pageId: pageDraft.pageId };
     if (draft.text || draft.files.length || draft.missing.length || draft.quote || draft.replacing !== undefined) restored.set(composerKey, draft);
     else restored.delete(composerKey);
-    writeDraftWords(`member:${composerKey}`, { text: wholeLinks(draft.text), quote: draft.quote });
+    writeDraftWords(`member:${composerKey}`, { text: wholeLinks(draft.text), quote: draft.quote, pageId: draft.pageId });
   }
   function loadComposerDraft(): void {
     composerKey = draftKey();
@@ -623,8 +627,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   let searching = false;
   /** What each line of the thread was drawn from, so that a line whose HTML is the same stays as it is. */
   const drawnHTML = new WeakMap<Element, string>();
-  const pagesHost = mountPages(thread, { send: text => sendFromPage(text), answer: (id, text) => answerOwnerPage(thread, id, text, () => { void load(false); }) });
+  const pagesHost = mountPages(thread, { place: pageDraft.place });
   mountOwnerQuestions(thread, () => { void load(false); });
+  mountGreeting(thread, sendFromPage);
   const floatingQuestions = mountPendingQuestions(thread, scroller, () => load(false), () => pendingQuestions?.member === memberId() && pendingQuestions.conversation === conversationId() ? pendingQuestions.questions : [], revealTurn);
   /** The newest turn drawn: a turn after it comes in from below. */
   let newestDrawn = 0;
@@ -646,10 +651,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const look = (): TurnLook => {
     const latest = turns.filter(turn => turn.question.trim() && sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && turn.route !== "exchange" && (turn.text.trim() || turn.messages?.some(m => m.kind === "reply"))).reduce((id, turn) => Math.max(id, turn.id), 0);
     const busy = pacing.active || regenerating.size > 0 || outgoing.some(belongs) || own().some(turn => turn.status === "running" || isLive(turn.task));
-    const shared = { regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), waitingForOwner: desktop.waitingForOwner, memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
+    const shared = { greetingOpen: !turns.some(turn => !!turn.question.trim()) && !outgoing.some(belongs), regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), waitingForOwner: desktop.waitingForOwner, memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
       // A permission card in the thread can be answered while the window holds its question and is not answering it.
       answerable: (cardId: string) => question?.id === cardId && !answering };
-    if (inRaphael()) return { ...shared, face: (loop) => avatarHTML({ size: 26, loop }), liveFace: () => faceHTML(members.member(), 28, {loop: true}), activityLabel: members.member().activity_label };
+    if (inRaphael()) return { ...shared, face: () => faceHTML(members.member(), 26), liveFace: () => faceHTML(members.member(), 28), activityLabel: members.member().activity_label };
     const member = members.member();
     return { ...shared, face: () => faceHTML(member, 26), liveFace: () => faceHTML(member, 28), activityLabel: member.activity_label };
   };
@@ -690,17 +695,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    */
   function drawFaces(): void {
     drawComposerTask();
-    if (inRaphael()) {
-      patchHTML(hero, avatarHTML({ size: 132, loop: true }));
-      delete memberChat.dataset.memberBubble;
-    } else {
-      const member = members.member();
-      patchHTML(hero, faceHTML(member, 96));
-      const bubble = ownerBubble(slimeColorOf(member));
-      memberChat.dataset.memberBubble = bubble.words;
-      memberChat.style.setProperty("--member-bubble", bubble.fill);
-      memberChat.style.setProperty("--member-accent", memberAccent(slimeColorOf(member)));
-    }
+    // Each conversation wears its member's colour, Raphael's his first blue slime's since 2026-11-07 (R-UI-81).
+    const member = members.member(), color = memberColor(member);
+    patchHTML(hero, faceHTML(member, inRaphael() ? 132 : 96));
+    const bubble = ownerBubble(color);
+    memberChat.dataset.memberBubble = bubble.words;
+    memberChat.style.setProperty("--member-bubble", bubble.fill);
+    memberChat.style.setProperty("--member-accent", memberAccent(color));
     voice.redraw();
   }
 
@@ -709,7 +710,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const words = inRaphael() ? t("home.askRaphael") : memberPlaceholder(members.member().name);
     input.placeholder = words;
     input.setAttribute("aria-label", words);
-    settingsButton.hidden = !inRaphael();
     empty.classList.toggle("is-member", !inRaphael());
   }
 
@@ -724,8 +724,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     // The voice slot's tooltip is the custom one drawTaskSlot keeps (voice or Stop); a native title would double it.
     voiceButton.setAttribute("aria-label", t("agent.voice"));
     for (const [button, label] of [
-      [computerButton, t("card.pcTitle")],
-      [settingsButton, t("agent.settings")],
       [searchButton, t("agent.search")],
       [attachButton, t("agent.attach")],
     ] as const) {
@@ -810,6 +808,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const home = empty.hidden ? dock : slot;
     if (backgroundSlot.parentElement !== home) home.prepend(backgroundSlot);
     if (composer.parentElement !== home) home.append(composer);
+    voiceChat.draw();
     if (!quotaHost.hidden && quotaHost.nextElementSibling !== composer) home.insertBefore(quotaHost, composer);
     if (!problemNotice.el.hidden) home.insertBefore(problemNotice.el, composer);
     const asking = question !== null;
@@ -867,7 +866,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const sentHere = outgoing.filter(belongs);
     const additions = sentHere.length > 1 || active && (sentHere.length > 0 || turns.some(turn => turn.id > active.id && (turn.route === "owner_input" || turn.status === "queued")));
     const turnLook = additions ? { ...shape, deferPresence: true } : shape;
-    const chronological = [...turns].sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id);
+    const chronological = foldCallTurns(turns).sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id);
     const openingTarget = targetTurn ?? (openingThread && unreadFrom !== null ? chronological.find(turn => turn.id >= unreadFrom!)?.id : undefined);
     if (openingTarget !== undefined && openingTarget !== openingWindowTarget && chronological.some(turn => turn.id === openingTarget)) {
       turnWindow.focus(String(openingTarget), chronological.map(turn => String(turn.id))); openingWindowTarget = openingTarget;
@@ -880,10 +879,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         ? { key: item.key, html: dayHTML(item.label) }
         // Eligibility belongs to the turn; the menu checks which reply is latest when opened.
         : { key: item.key, html: (() => {
+          if (item.turn.voice_call) return voiceCallCardHTML(item.turn.voice_call, members.nameOf(memberId()));
           const turn = item.turn, view = pacing.view(turn), task = turn.task?.id;
           const expanded = [...state.expandedMessages].filter(key => key.startsWith(`${turn.id}:`)).join("\0");
           const live = turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting" || pacing.waiting(turn.id);
-          return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), shape.mentions, turnLook.query ?? "", details.has(turn.id),
+          return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), turn.route === "greeting" ? shape.greetingOpen : false, shape.mentions, turnLook.query ?? "", details.has(turn.id),
             state.open.get(turn.id), state.thinkingOpen.get(turn.id), expanded, task !== undefined && state.stopping.has(task), task !== undefined && state.rerunning.has(task),
             state.workStartedAt.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
             live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId],
@@ -914,8 +914,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    */
   function sendFromPage(text: string): void {
     const typed = input.value;
+    const sourcePage = pageDraft.pageId;
     input.value = text;
-    void send().finally(() => { if (typed && !input.value) { input.value = typed; fit(); } });
+    pageDraft.restore();
+    void send().finally(() => { if (typed && !input.value) { input.value = typed; pageDraft.restore(sourcePage); fit(); } });
   }
 
   let renderedThread: ReturnType<typeof lines> = [];
@@ -975,8 +977,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     [...state.stopping], [...state.rerunning], answering, searching]);
   function render(follow = false): void {
     renderedPage = pageStamp();
+    // An open conversation between members follows the turns it is read from, and closes with its conversation.
+    if (peer) queueMicrotask(() => peer?.update());
     stage.setAttribute("aria-busy", String(pending));
-    if (pending && isEmpty()) {
+    // Only a thread not read yet says it is loading: a refresh of an empty one keeps its empty state (R-UI-71).
+    if (pending && isEmpty() && !loadedThread) {
       wait.innerHTML = loadingHTML();
       wait.hidden = false;
       scroller.hidden = empty.hidden = dock.hidden = true;
@@ -1048,13 +1053,19 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** Loads the newest turns, or with `earlier` the ones before what is loaded, keeping the reader's place. */
   let activeRead: { key: string; promise: Promise<void> } | null = null;
   const dirtyTurnIds = new Set<number>();
+  const OPEN_HANDOFF = new Set(["queued", "running", "waiting"]);
+  // A delta read never names turns a clear or delete removed; after a conversation change the
+  // next read is whole. The version keeps a read started before the change from settling it.
+  const staleHistory = new Map<number, number>();
   let newestReadId = 0;
   let readAgain = false;
   const needsUnreadHistory = (): boolean => openingThread && unreadFrom !== null && canLoadEarlier && (oldestId(turns) ?? 0) > unreadFrom;
   function finishOpening(): void {
     if (!openingThread || !unreadCaptured || pending || needsUnreadHistory() || !visible || scroller.hidden || targetTurn !== undefined) return;
     openingThread = false;
-    openUnread(scroller);
+    // Opening at the first unread line is navigation: the first draw's follow must not pull it to the bottom.
+    releaseRichScroll(scroller);
+    if (!openUnread(scroller)) followRichScroll(scroller);
   }
   async function load(earlier: boolean, fromEvent = false): Promise<void> {
     if (earlier) return readPage(true);
@@ -1079,8 +1090,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (turns.length === 0 && !earlier) render();
     else stage.setAttribute("aria-busy", "true");
     let got: AgentTurn[];
-    const deltaRead = fromEvent && loadedThread && turns.length > 0 && targetTurn === undefined;
-    const requestedIds = deltaRead ? [...new Set([...dirtyTurnIds, ...turns.filter(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting").map(turn => turn.id)])].slice(0, 50) : [];
+    const staleVersion = staleHistory.get(memberId());
+    const deltaRead = fromEvent && loadedThread && turns.length > 0 && targetTurn === undefined && staleVersion === undefined;
+    // A turn whose colleagues still work can gain a receipt or change one after the turn itself ended.
+    const requestedIds = deltaRead ? [...new Set([...dirtyTurnIds, ...turns.filter(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting" || turn.handoffs?.some(handoff => OPEN_HANDOFF.has(handoff.state))).map(turn => turn.id)])].slice(0, 50) : [];
     requestedIds.forEach(id => dirtyTurnIds.delete(id));
     let delta = false, more = false, removed: number[] = [];
     try {
@@ -1107,6 +1120,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (mine === loads) {
         // Invalidated rows can be newer than this forward page; only its cursor advances paging.
         newestReadId = delta && history.next_after_id !== undefined ? history.next_after_id : Math.max(newestReadId, ...history.turns.map(turn => turn.id));
+        if (!earlier && !delta && staleVersion !== undefined && staleHistory.get(member) === staleVersion) staleHistory.delete(member);
         pendingQuestions = { member, conversation: chosen, questions: history.pending_questions ?? [] };
         floatingQuestions.sync();
       }
@@ -1267,6 +1281,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (input.value.trim() !== "") toaster.info(t("agent.tooLong"));
       return;
     }
+    if (pageDraft.pageId && !files.length && !composerQuote && replacing === undefined && answerOwnerPage(thread, pageDraft.pageId, text, () => { void load(false); })) {
+      clearTimeout(draftTimer); discardComposerDraft(composerKey);
+      input.value = "";
+      input.dispatchEvent(new Event("composer-draft-restored"));
+      fit();
+      return;
+    }
     composer.querySelector(".composer-failure")?.remove();
     const sending = files;
     const dictation = correctionLearning.snapshot();
@@ -1274,7 +1295,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const member = memberId();
     const sentConversation = conversationId();
     const requestId = crypto.randomUUID();
-    const draft: ComposerDraft = { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation };
+    const draft: ComposerDraft = { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation, pageId: pageDraft.pageId };
     rememberDraft(requestId, draft);
     clearTimeout(draftTimer); discardComposerDraft(composerKey);
     const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" ? `data:${mime};base64,${data}` : undefined })), quote: composerQuote };
@@ -1432,18 +1453,19 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    * else, say), it comes back down.
    */
   let taskStopPressed=false;
-  function voiceDown(): void {
+  function voiceDown(member = memberId(), conversation = conversationId()): void {
+    const here = member === memberId() && conversation === conversationId();
     // Recording clicks release/send audio through the native key path; only Escape cancels it.
-    if(!(listening && voiceMember === memberId()) && composer.dataset.taskState && composer.dataset.taskState!=="idle"){taskStopPressed=true;void stopComposerTask().catch(error=>toaster.info(describeError(error)));return;}
-    if (question) return;
-    pressedMember = memberId();
+    if(here && !(listening && voiceMember === memberId()) && composer.dataset.taskState && composer.dataset.taskState!=="idle"){taskStopPressed=true;void stopComposerTask().catch(error=>toaster.info(describeError(error)));return;}
+    if (here && question) return;
+    pressedMember = member;
     const starting = !listening;
     if (starting) {
       voiceMember = pressedMember;
-      rememberVoiceBoundary(pressedMember, conversationId());
+      rememberVoiceBoundary(pressedMember, conversation);
       voiceRequested = true;
     }
-    if (voiceMember === memberId()) voice.up();
+    if (here && voiceMember === memberId()) voice.up();
     if (starting) {
       listening = false;
       clearTimeout(listenTimer);
@@ -1507,8 +1529,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
 
   const finder = mountConversationFind({ button: searchButton, bar: find, thread, scroll: scroller,
-    records: () => turnWindow.before || turnWindow.after ? [...turns].sort((a,b) => a.created_at_ms-b.created_at_ms || a.id-b.id).map(turn => ({ key: `turn:${turn.id}`,
-      texts: [turn.question, ...(turn.messages?.length ? turn.messages.filter(message => ["reply", "event"].includes(message.kind)).map(message => messagePlainText(message.text, true, composioAction(turn))) : [messagePlainText(turn.text, true, composioAction(turn))])] })) : undefined,
+    records: () => turnWindow.before || turnWindow.after ? foldCallTurns(turns).sort((a,b) => a.created_at_ms-b.created_at_ms || a.id-b.id).map(turn => ({ key: `turn:${turn.id}`,
+      texts: turn.voice_call ? turn.voice_call.transcript.flatMap(item => [item.question, item.text]) : [turn.question, ...(turn.messages?.length ? turn.messages.filter(message => ["reply", "event"].includes(message.kind)).map(message => messagePlainText(message.text, true, composioAction(turn))) : [messagePlainText(turn.text, true, composioAction(turn))])] })) : undefined,
     reveal: key => { if (turnWindow.focus(key.replace(/^turn:/, ""))) render(); },
     revealWork: id => {
       state.thinkingOpen.set(id, true);
@@ -1607,7 +1629,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       manageLocal: () => app.go("settings", "safety"),
       asker: () => {
         const member = members.member();
-        return inRaphael() ? { face: avatarHTML({ size: 22, cls: "bgq-face" }), name: null } : { face: faceHTML(member, 22, { cls: "bgq-face" }), name: member.name };
+        return { face: faceHTML(member, 22, { cls: "bgq-face" }), name: inRaphael() ? null : member.name };
       },
       changed: () => {
         members.changed();
@@ -1792,28 +1814,44 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     drawQuote(); focusComposer();
   }
 
-  async function messageMenu(control: HTMLElement): Promise<void> {
+  /**
+   * The ⋯ of a message and a right click on it open one menu, as Grok Bot does: beside the bubble only react, reply and ⋯
+   * show, so everything else is here. A colleague's message has its reactions above Reply, Copy, its work and Regenerate
+   * on the latest answer; the owner's has Reply, Copy and Edit or Cancel; a message still being sent has Copy and Cancel.
+   */
+  function messageMenu(control: HTMLElement): void {
     const source = messageSource(control);
-    if (!source) return;
-    const member = memberId(), conversation = conversationId();
-    let speaks = false;
-    try { speaks = (await api.core<{ ready: boolean }>("agent.speech.status")).ready; } catch { /* Reading and deletion remain available without speech. */ }
-    if (!control.isConnected || member !== memberId() || conversation !== conversationId()) return;
+    const pending = !source && outgoing.some(item => item.requestId === control.closest<HTMLElement>("[data-session]")?.dataset.session);
+    if (!source && !pending) return;
+    const owner = !source || source.key === "question";
+    const message = control.closest<HTMLElement>(".chat-message");
+    const work = message?.querySelector<HTMLElement>('[data-act="thinking"]');
     const items: Parameters<typeof openActions>[1][number][] = [];
-    if (control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id) items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
-    if (speaks) items.push({ id: "speak", label: t("chat.readAloud"), icon: "voice" });
-    items.push({ id: "delete", label: t("chat.deleteTurn"), icon: "trash" });
+    if (source) items.push({ id: "reply", label: t("chat.reply"), icon: "reply" });
+    items.push({ id: "copy", label: t("chat.copy"), icon: "copy" });
+    if (work) items.push({ id: "work", label: work.getAttribute("aria-label") ?? t("work.inspect"), icon: "steps" });
+    // A greeting that came through stays: only a failed one is written again (its rerun button), never a second.
+    if (source && !owner && control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id && source.turn.route !== "greeting") items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
+    const ownerAct = pending ? "cancel" : control.dataset.ownerAct;
+    if (ownerAct === "edit") items.push({ id: "edit", label: t("chat.edit"), icon: "pencil" });
+    if (ownerAct === "cancel") items.push({ id: "cancel", label: t("common.cancel"), icon: "x" });
+    const reactions = source && !owner && message?.querySelector('[data-act="react-message"]') ? source.turn.reactions?.[source.key] ?? [] : null;
     openActions(control, items, pick => {
-      if (pick === "regenerate") { void regenerate(control); return; }
-      const params = { member_id: member, conversation_id: conversation, turn_id: source.turn.id };
-      if (pick === "speak") {
-        void api.core("agent.speak", { ...params, ...(source.key !== "reply" ? { message_seq: Number(source.key) } : {}) }).catch(err => toaster.info(describeError(err)));
-      } else void confirmDelete(t("chat.deleteTurn")).then(async yes => {
-        if (!yes) return;
-        await api.core("agent.history.delete", params);
-        if (member === memberId() && conversation === conversationId()) await load(false);
-      }).catch(err => toaster.info(describeError(err)));
-    });
+      if (pick === "regenerate") void regenerate(control);
+      else if (pick === "reply") replyMessage(control);
+      else if (pick === "work" && work) toggleThinking(work);
+      else if (pick === "edit") void editMessage(control);
+      else if (pick === "cancel") void cancelMessage(control);
+      else void copyMessage(message?.querySelector<HTMLElement>('[data-act="copy-message"]') ?? control);
+    }, reactions && source ? { html: menuReactionsHTML(reactions), onPick: lead => {
+      const react = (emoji: string): void => {
+        const scope = { member_id: source.turn.member_id ?? 0, conversation_id: source.turn.conversation_id, turn_id: source.turn.id };
+        void api.core("agent.react", { ...scope, message_key: source.key, emoji, active: !reactions.includes(emoji) })
+          .then(() => { if (visible) void load(false); }).catch(err => toaster.info(describeError(err)));
+      };
+      if (lead === MORE_EMOJI) openEmojiPicker(control, reactions, react);
+      else react(lead);
+    } } : undefined);
   }
 
   async function regenerate(control: HTMLElement): Promise<void> {
@@ -1821,6 +1859,17 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const latest = look().regenerateTurnId;
     if (!source || latest === undefined || latest !== source.turn.id && !(source.turn.status === "error" && control.classList.contains("rerun"))) return;
     const member = memberId(), turn = source.turn;
+    // A greeting has no question to send again: the core writes it again with the member's own model.
+    if (turn.route === "greeting") {
+      if (turn.status !== "error") return;
+      regenerating.add(turn.id); render(true);
+      try {
+        await api.membersGreet(member);
+        if (visible && memberId() === member) await load(false);
+      } catch (err) { toaster.info(describeError(err)); }
+      finally { regenerating.delete(turn.id); render(true); }
+      return;
+    }
     const sentConversation = conversationId();
     const requestId = crypto.randomUUID();
     const epoch = attachmentEpoch;
@@ -1882,6 +1931,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function restoreDraft(draft: ComposerDraft, focus = true): void {
     correctionLearning.restore(draft.dictation);
     input.value = draft.text;
+    pageDraft.restore(draft.pageId);
     attachmentEpoch++;
     files = [...draft.files];
     missingFiles = draft.missing.map(file => ({ ...file }));
@@ -1931,6 +1981,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (note) { note.hidden = !voiceButton.disabled; note.innerHTML = voiceButton.disabled ? noticeHTML("conversation") : ""; }
     if (task) { if (!listening || voiceMember !== memberId()) voice.drop(); voiceButton.classList.remove("vm-away"); }
     drawTaskSlot(composer, task ? question ? "waiting" : task.state : "idle", task !== null && stoppingComposerTasks.has(task.key));
+    voiceChat.draw();
   }
 
   async function stopComposerTask(): Promise<void> {
@@ -2080,6 +2131,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   const taskResults = mountTaskResults(thread, memberId, () => { desktop.files(); });
 
+  mountMessageMetadata(thread, control => {
+    const source = messageSource(control);
+    if (!source) return null;
+    const { turn, key } = source, messageKey = key === "question" ? "owner" : key;
+    const scope = { member_id: turn.member_id ?? 0, conversation_id: turn.conversation_id, turn_id: turn.id };
+    return { reactions: turn.reactions?.[messageKey] ?? [],
+      react: (emoji, active) => api.core("agent.react", { ...scope, message_key: messageKey, emoji, active }) };
+  }, () => { if (visible) void load(false); }, error => toaster.info(describeError(error)));
   mountMailActions(thread, (err) => toaster.info(describeError(err)), (words) => toaster.info(words));
 
   thread.addEventListener("input", (e) => {
@@ -2121,9 +2180,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "local-settings":
         app.go("settings", "safety");
         break;
-      case "settings":
-        openRaphaelSettings(app);
-        break;
       case "search":
       case "search-close":
         break;
@@ -2145,6 +2201,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         if (url) void api.openExternalUrl(url).catch(err => toaster.info(describeError(err)));
         break;
       }
+      case "peer-chat":
+        peer?.close();
+        // What this member sent colleagues, and what colleagues said to it (its exchange turns), are one conversation.
+        peer = openPeerChat(memberChat, act, () => turns.flatMap(turn => [...(turn.handoffs ?? []), ...(exchangeTurn(turn) ? [exchangeView(turn)] : [])]),
+          (id, fallback) => ({ name: members.nameOf(id) || fallback, face: members.faceOf(id, 28), accent: members.accentOf(id) }), () => { peer = null; });
+        break;
       case "copy-message":
         void copyMessage(act);
         break;
@@ -2284,35 +2346,60 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
   bindFilePaste(input, pasted => { void attachAll(pasted); }, fit, () => files.map(file => file.name));
 
-  // The voice button is the question key: down when it is pressed, up when it is let go.
+  // The voice button records while held. When calls return, an empty member composer's short click calls and a
+  // 300 ms hold records. Capture the destination on press, before either the timer or navigation can change it.
+  let voicePointer: { id: number; member: number; conversation?: number; recording: boolean; timer?: ReturnType<typeof setTimeout> } | null = null;
+  let suppressVoiceClick = false;
   voiceButton.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || voicePointer) return;
     voiceButton.setPointerCapture(e.pointerId);
-    voiceDown();
+    suppressVoiceClick = true;
+    const press = { id: e.pointerId, member: memberId(), conversation: conversationId(), recording: false, timer: undefined as ReturnType<typeof setTimeout> | undefined };
+    voicePointer = press;
+    const record = (): void => { press.recording = true; voiceDown(press.member, press.conversation); };
+    if (callEligible()) press.timer = setTimeout(record, 300);
+    else record();
   });
-  voiceButton.addEventListener("pointerup", voiceUp);
-  voiceButton.addEventListener("pointercancel", voiceUp);
+  const releasePointer = (cancelled: boolean): void => {
+    const press = voicePointer;
+    if (!press) return;
+    voicePointer = null;
+    clearTimeout(press.timer);
+    suppressVoiceClick = cancelled || press.recording || press.member !== memberId() || press.conversation !== conversationId();
+    if (press.recording) voiceUp();
+  };
+  voiceButton.addEventListener("pointerup", e => { if (e.pointerId === voicePointer?.id) releasePointer(false); });
+  voiceButton.addEventListener("pointercancel", e => { if (e.pointerId === voicePointer?.id) releasePointer(true); });
+  voiceButton.addEventListener("lostpointercapture", e => { if (e.pointerId === voicePointer?.id) releasePointer(true); });
+  voiceButton.addEventListener("click", e => {
+    // A browser click follows pointerup even after a hold. Keyboard/assistive clicks stay usable.
+    if (e.detail > 0 && suppressVoiceClick) { e.preventDefault(); e.stopImmediatePropagation(); }
+  }, { capture: true });
   // A key held on the button is let go wherever the focus is by then: the release is heard on the
   // whole page, for the key that pressed it, once; a window that loses the focus lets it go too.
   // (The button stays where it is while the picture is up, but the focus may still move: the
   // approval card can take the composer's place.)
   let heldKey: string | null = null;
+  let keyRecordsVoice = false;
   const releaseKey = (): void => {
     heldKey = null;
-    voiceUp();
+    if (keyRecordsVoice) voiceUp();
+    keyRecordsVoice = false;
   };
   voiceButton.addEventListener("keydown", (e) => {
-    if ((e.key === "Enter" || e.key === " ") && !e.repeat) {
+    if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      if (heldKey !== null) return;
+      if (e.repeat || heldKey !== null || voicePointer) return;
       heldKey = e.key;
-      voiceDown();
+      keyRecordsVoice = !callEligible();
+      if (keyRecordsVoice) voiceDown(); else voiceButton.click();
     }
   });
   document.addEventListener("keyup", (e) => {
     if (heldKey !== null && e.key === heldKey) releaseKey();
   });
   window.addEventListener("blur", () => {
+    releasePointer(true);
     if (heldKey !== null) releaseKey();
   });
 
@@ -2323,6 +2410,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       const page = await api.agentHistoryList({ member_id: member, conversation_id: conversation, around_id: id, limit: PAGE_SIZE });
       if (member !== memberId() || conversation !== conversationId()) return;
       turns = mergeTurns(turns, page.turns);
+    }
+    const receipt = turns.find(turn => turn.id === id)?.voice_call_summary_id;
+    if (receipt) {
+      await revealTurn(receipt);
+      const card = thread.querySelector<HTMLDetailsElement>(`[data-id="${receipt}"] details`);
+      if (card) card.open = true;
+      thread.querySelector(`[data-call-turn="${id}"]`)?.scrollIntoView({block: "center"});
+      return;
     }
     const keys = [...turns].sort((a,b) => a.created_at_ms-b.created_at_ms || a.id-b.id).map(turn => String(turn.id));
     if (turnWindow.focus(String(id), keys)) { drawingFollows = false; render(); }
@@ -2348,14 +2443,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (event.type === "Hotkey" && event.kind === "cancel_key" && visible ) cancelGesture().press();
     if (event.type === "Hotkey" && event.kind === "cancel_reset") cancelGesture().clear();
     members.follow(event);
-    if (event.type === "ConversationsChanged") { conversationsDirty.add(event.member_id); conversationChange(event.member_id); }
+    if (event.type === "ConversationsChanged") { conversationsDirty.add(event.member_id); staleHistory.set(event.member_id, (staleHistory.get(event.member_id) ?? 0) + 1); conversationChange(event.member_id); }
     if (event.type === "AgentTurn") { conversationsDirty.add(event.member_id ?? RAPHAEL_ID); conversationChange(event.member_id ?? RAPHAEL_ID); }
     if (event.type === "QuotaChanged") void readQuotas();
     if (event.type === "MembersChanged") void slashMenu.refresh(true);
     if (wantsRefresh(event)) {
       // a turn of another thread changes only that member's row
       if (event.type === "WorkerChanged") {
-        for (const turn of turns) if (turn.task?.id === event.task_id) dirtyTurnIds.add(turn.id);
+        for (const turn of turns) if (turn.task?.id === event.task_id || turn.handoffs?.some(handoff => handoff.task_id === event.task_id)) dirtyTurnIds.add(turn.id);
         const loaded=hasWorkerTask(turns,event.task_id);
         if (!loaded && visible && !roomPane.active && renderedPage!==pageStamp()) render();
         scheduleRefresh(loaded ? 0 : 1000+REFRESH_DELAY_MS);
@@ -2505,6 +2600,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       drawBackgroundQuestions();
     },
     hide() {
+      releasePointer(true);
+      if (heldKey !== null) releaseKey();
       saveComposerDraft();
       desktop.hide();
       hideTooltip();

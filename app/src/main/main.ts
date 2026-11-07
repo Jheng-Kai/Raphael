@@ -5,6 +5,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { loadGlyphTexture } from "../overlay/emblem";
+import { dropEchoTitles } from "./message-tooltip";
 import * as api from "./api";
 import { createAutomationsPage } from "./pages/automations";
 import { createHome } from "./pages/home";
@@ -25,10 +26,12 @@ import { Navigation, type Place, samePage } from "./nav-history";
 import { installNavInput } from "./nav-input";
 import { createSidebar } from "./sidebar";
 import { setOwnerProfile } from "./owner-avatar";
-import { loadAvatar } from "./avatar";
+import { emblemTextureArrived, loadAvatar } from "./avatar";
 import { followDictation, installWindowHotkeys } from "./window-hotkeys";
 import { installFocusKeys } from "./focus-keys";
 import { installContextMenus } from "./context-menu";
+import { prefetchEmojiWhenIdle } from "./emoji-data";
+import { fixedDevicePatch } from "./device-fixed";
 import { followTray } from "./tray-open";
 import { installWindowChrome, labelWindowControls, showMaximized } from "./window-chrome";
 import { installWindowZoom } from "./window-zoom";
@@ -52,12 +55,12 @@ const DEFAULT_DEVICE: DeviceSettings = {
   paste_last_keys: ["AltRight+V"],
   agent_keys: ["AltRight+Space"],
   microphone: null,
-  emblem_size: 150,
+  emblem_size: 120,
   subtitles: "on",
   appearance: "system",
   ui_language: "zh-TW",
   autostart: true,
-  auto_update: false,
+  auto_update: true,
   onboarded: false,
   computer_apps: [],
 };
@@ -128,11 +131,17 @@ async function start(): Promise<void> {
   } catch (err) {
     console.error("main: could not read the device settings", err);
   }
+  const fixed = deviceRead ? fixedDevicePatch(device.get()) : null;
+  if (fixed) void device.set(fixed).catch((err) => console.error("main: could not keep the fixed device settings", err));
   installWindowHotkeys(() => device.get());
-  void loadGlyphTexture(GLYPH_URL);
+  // The emblem's runes are the texture app/public/brand/glyph-ring.png; the faces draw again once it is there.
+  void loadGlyphTexture(GLYPH_URL).then(image => emblemTextureArrived(!!image));
 
   // A right click presses the ⋯ of the row under it; elsewhere the browser's own menu has no place in an app. Text fields keep theirs.
   installContextMenus(document);
+  // A title that only repeats the words under it never shows (owner, 2026-11-07).
+  dropEchoTitles(document);
+  prefetchEmojiWhenIdle();
 
   const listeners = new Set<(event: MainEvent) => void>();
   const ctx: AppContext = {
@@ -177,6 +186,8 @@ watchChipRows(document.body);
   void loadAvatar(api.avatarGet);
   void agent.loadSidebar();
   nav.addEventListener("click", (e) => {
+    // 連結應用程式 is no page of Settings: it opens its own dialog (R-UI-111).
+    if ((e.target as Element).closest("[data-connect-apps]")) { go("settings", "connections"); return; }
     const target = (e.target as Element).closest<HTMLElement>("[data-go]");
     if (target) go(target.dataset.go as PageId, target.dataset.pane as SettingsPane | undefined);
   });
@@ -365,12 +376,11 @@ watchChipRows(document.body);
       guide,
       {
         mode,
-        onDone: (result) => {
+        onDone: () => {
           guide.hidden = true;
           showPages();
           tellAgentPage();
           if (mode === "first" || !current) go(START_PAGE);
-          if (result.toSettings) go("settings", "usage");
           // The speech models that the guide did not wait for come on in the background.
           void resumeModels({ status: api.modelsStatus, ensure: api.modelsEnsure }, (message) => console.warn("main:", message));
         },

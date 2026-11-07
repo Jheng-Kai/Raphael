@@ -1,6 +1,9 @@
 export const stableClick = (selector, then = []) => ({ action: "stable-click", selector, then });
 export const click = selector => ({ action: "click", selector });
 export const hover = selector => ({ action: "hover", selector });
+export const hold = (selector, ms = 500) => ({ action: "hold", selector, ms });
+// A press on `selector` moved `dx` px across and let go there (a pane's edge resizes it, edge-drag.ts). `wide`: only on a desktop-width window, where the list is not a drawer.
+export const drag = (selector, dx, options = {}) => ({ action: "drag", selector, dx, ...options });
 export const type = (selector, text) => ({ action: "type", selector, text });
 export const wait = selector => ({ action: "wait", selector });
 export const waitGone = selector => ({ action: "wait-gone", selector });
@@ -12,7 +15,15 @@ export const scroll = selector => ({ action: "scroll", selector });
 export const waitScrollEnd = selector => ({ action: "wait-scroll-end", selector });
 export const rightClick = selector => ({ action: "right-click", selector });
 export const page = name => click(name === "agent" ? ".mb-chief" : `#nav [data-go="${name}"]`);
-export const settings = pane => [page("settings"), wait(".modal-scrim [data-pane]"), check("settings-shell"), click(`.modal-scrim [data-pane="${pane}"]`), wait(`.modal-scrim [data-pane="${pane}"][aria-current="page"]`)];
+// 連結應用程式 is no tab of Settings: its one way in is the sidebar's button, which opens it as a dialog of its own (R-UI-111).
+// Appearance and messaging are sections of 一般 since 2026-11-07 (Grok Bot's six tabs): their scenes open 一般 at that section.
+const SECTION_OF = { appearance: ".appearance-settings", messaging: '[data-section="messaging"]' };
+export const settings = pane => {
+  if (pane === "connections") return [click("#nav .sidebar-apps"), wait(".modal-scrim[data-standalone=\"connections\"] .modal-body .cs"), check("settings-shell")];
+  const tab = SECTION_OF[pane] ? "general" : pane;
+  return [page("settings"), wait(".modal-scrim [data-pane]"), check("settings-shell"), click(`.modal-scrim [data-pane="${tab}"]`), wait(`.modal-scrim [data-pane="${tab}"][aria-current="page"]`),
+    ...(SECTION_OF[pane] ? [scroll(`.modal-scrim ${SECTION_OF[pane]}`)] : [])];
+};
 export const scene = (name, description, steps = [], fixture = {}) => ({ name, description, steps, fixture });
 
 // The compact member/room picker exposes the same destinations as the wide sidebar.

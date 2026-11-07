@@ -33,6 +33,7 @@ export const journeys = [
   { name: "slime-sharp", description: "Twelve slimes in the real sidebar: moving, each paints the pixels of its pose held still, and what they cost while idle" },
   { name: "locale-sweep", description: "Switch every locale and visit main pages and settings" },
   { name: "voice-conversation", description: "Speak into a newly created conversation and inspect persistence" },
+  { name: "voice-call", description: "Real shell admission, empty-member entry, draft guard and missing-voice repair without paid speech" },
   { name: "voice-keys", description: "The real worker: after the composer's microphone the dictation key works during the answer, one Esc ends it, the recognising light shows, and a slow brain at high depth finishes" },
   { name: "long-think", description: "The real core: a model that thinks past the old 60 second deadline finishes its turn, and the answer reaches the window" },
   { name: "every-source", description: "One real turn on every signed-in CLI: Claude Code, Codex, Antigravity, with Claude's models as the CLI lists them" },
@@ -104,7 +105,7 @@ async function keepFocus(page) {
 async function details(page) {
   if (await page.$('.conversation-trigger[aria-expanded="false"]')) await click(page, ".conversation-trigger");
   for (let back; (back = await page.$('.mb-det [data-det="back"]:not([hidden])')); await pause(50)) { await back.click(); await back.dispose(); }
-  await wait(page, "[data-conversation-new]");
+  await wait(page, '.mb-det[data-details-tab="details"] [data-det="gear"]');
 }
 async function chat(page) {
   await click(page, '.mb-chief');
@@ -309,7 +310,7 @@ export async function drive(name, context) {
   }
   if (name === "appearance") {
     await click(page, '#nav [data-go="settings"]');
-    await click(page, '.modal-scrim [data-pane="appearance"]');
+    await click(page, '.modal-scrim [data-pane="general"]');
     await wait(page, '.appearance-settings');
     result.appearance = [];
     for (const width of [1120, 720, 1920]) {
@@ -345,9 +346,10 @@ export async function drive(name, context) {
       if (width === 720) { await click(page, '[data-sidebar="open"]'); await pause(300); }
       result.layout.push(await page.evaluate(checkRendered, "sidebar-shell"));
       await page.evaluate(checkRendered, "sidebar-search-before");
-      await click(page, '.mb-find-input');
+      await click(page, '[data-col="search"]');
       result.layout.push(await page.evaluate(checkRendered, "sidebar-search-open"));
       await capture(`home-sidebar-${width}`);
+      await page.keyboard.press('Escape'); await pause(150);
       if (width === 720) await click(page, '.sidebar-scrim');
     }
     return;
@@ -381,11 +383,8 @@ export async function drive(name, context) {
     await page.waitForFunction(() => window.__homeTiming?.firstPaintMs !== null);
     result.homeTiming = await page.evaluate(() => window.__homeTiming);
     await capture("first-paint");
-    await page.waitForFunction(() => document.querySelector('.ho-allowance')?.textContent.includes('40%'), { timeout: 15000 });
-    result.homeTiming.liveVisibleMs = await page.evaluate(() => performance.now());
-    await capture("live-allowance");
+    // Home shows no allowances since 2026-11-07, but the core still reads them for its overview: that read must not hold Home up.
     if (result.homeTiming.firstPaintMs >= 1500) throw new Error(`Home waited for CLI allowances: ${result.homeTiming.firstPaintMs.toFixed(1)} ms`);
-    if (!result.homeTiming.firstAllowance?.includes('25%')) throw new Error("Home did not first paint the stored allowance before the live 40% window");
     return;
   }
   if (name === "voice-keys") {
@@ -756,13 +755,23 @@ export async function drive(name, context) {
     const member = (await context.rpc("members.list", {})).members.find(row => row.name === "NativeJob");
     if (!member) throw new Error("The member was not made");
     if (member.avatar !== "slime:gobta") throw new Error(`The member lost its slime: ${member.avatar}`);
-    const greeting = await page.$eval(".page-agent .ra-body", el => el.textContent);
-    result.greeting = greeting;
-    if (!greeting.includes("NativeJob") || !greeting.includes("？")) throw new Error(`It did not speak first: ${greeting}`);
+    const conversation = (await snapshot()).conversations.find(row => row.member_id === member.id);
+    if (!conversation) throw new Error("The member has no conversation");
+    // The member's own model writes its first words (R-COLLEAGUE-02), so the greeting is a hidden turn to wait for.
+    let greet;
+    for (let i = 0; i < 900 && !greet; i++) {
+      greet = (await snapshot()).agent_turns.find(row => row.conversation_id === conversation.id && row.question === "" && ["done", "error"].includes(row.status));
+      if (!greet) await pause(200);
+    }
+    if (!greet) throw new Error("The greeting on the real Codex did not finish");
+    result.greeting = { status: greet.status, model: greet.model, text: greet.text.slice(0, 200) };
+    if (greet.status !== "done" || !greet.text.trim()) throw new Error(`It did not speak first: ${JSON.stringify(result.greeting)}`);
+    const opening = greet.text.replace(/[*_`#>[\]]/g, "").trim().slice(0, 8);
+    await page.waitForFunction(text => document.querySelector(".page-agent .ra-body")?.textContent.includes(text), { timeout: 15000 }, opening)
+      .catch(() => { throw new Error(`The greeting is not on the page: ${opening}`); });
     if (await page.$(".page-agent .owner-message")) throw new Error("A message was put in the owner's mouth");
     if (member.role || member.instructions) throw new Error("A job was made up before the owner said one");
     await capture("greeting");
-    const conversation = (await snapshot()).conversations.find(row => row.member_id === member.id);
     const text = "幫我看我貼給你的發布說明，每次都整理成三行重點。";
     await type(page, ".composer .cmp-input", text);
     await click(page, ".cmp-send");
@@ -863,7 +872,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     await page.setViewport({ width: 1120, height: 900 });
     await click(page, '#nav [data-go="settings"]');
     await perform(page, { action: "settle-motion" });
-    await click(page, '.modal-scrim [data-pane="appearance"]');
+    await click(page, '.modal-scrim [data-pane="general"]');
     frame = await frameNow();
     if (await inFrame(frame, "#loaded") !== loaded) throw new Error("Opening Settings reloaded the page");
     await click(page, '[data-k="appearance"]');
@@ -1005,7 +1014,9 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     result.computer.timezone = { ...clock, ownerZone, expected, checks: timezoneChecks };
     if (clock?.offset !== expected) throw new Error(`VM UTC offset ${clock?.offset ?? "unavailable"} differs from host ${expected}`);
     await chat(page);
-    await click(page, '[data-act="computer"]');  // the panel shows the computer on demand, until something is at work on it
+    // The panel's Computer tab shows the computer on demand (no header button since 2026-11-06), until something is at work on it.
+    if (await page.$eval('.mb-chat .conversation-trigger', button => button.getAttribute('aria-expanded') !== 'true')) await click(page, '.mb-chat .conversation-trigger');
+    await click(page, '#member-tab-computer');
     await wait(page, ' .desktop-panel:not([hidden])');
     await capture("entry");
     await page.waitForSelector('.desktop-panel[data-desktop-state="member"]', { visible: true, timeout: 60000 });
@@ -1025,6 +1036,9 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     };
     await inspectDesktop("viewer");
     await capture("viewer");
+    // As Grok Bot's: the preview opens the larger view, and Take control is there.
+    await click(page, '[data-desktop="enlarge"]');
+    await page.waitForSelector('.desktop-panel[data-expanded] [data-desktop="take"]:not(:disabled)', { visible: true, timeout: 60000 });
     await click(page, '[data-desktop="take"]');
     await page.waitForSelector('.desktop-panel[data-interactive="true"]', { visible: true, timeout: 60000 });
     const state = await context.rpc("computer.viewer_status", { member_id: 0 });
@@ -1048,6 +1062,8 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     await capture("takeover");
     const auditBefore = (await snapshot()).tool_audit.filter(row => row.server === "computer").length;
     await page.waitForSelector('.desktop-panel iframe:not([hidden])', {visible:true,timeout:60000});
+    await click(page, '[data-desktop="enlarge"]');
+    await page.waitForSelector('.desktop-panel[data-expanded] [data-desktop="take"]:not(:disabled)', { visible: true, timeout: 60000 });
     await click(page, '[data-desktop="take"]');
     await page.waitForSelector('.desktop-panel[data-interactive="true"][data-control-latency-ms]', { visible: true, timeout: 60000 });
     const ownerFrame = await (await page.$('.desktop-panel iframe')).contentFrame();
@@ -1198,9 +1214,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
         await page.waitForFunction(() => !!document.querySelector('[data-connector][data-card-state="cancelled"]'));
       }
     }
-    await click(page, '#nav [data-go="settings"]');
-    await click(page, '.modal-scrim [data-pane="connections"]');
-    await click(page, '[data-conn="tab"][data-id="store"]');
+    // 連結應用程式 opens from the sidebar only, as a dialog of its own (R-UI-111).2    await click(page, '#nav .sidebar-apps');2    await click(page, '[data-conn="tab"][data-id="store"]');
     await type(page, '#conn-search', app);
     const previousAccounts = new Set((await pendingAccounts()).map(account => account.id));
     await page.waitForSelector(`[data-conn="join"][data-id="${app}"]`, { timeout: 30000 });
@@ -1219,9 +1233,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     return;
   }
   if (name === "store-finder") {
-    await click(page, '#nav [data-go="settings"]');
-    await click(page, '.modal-scrim [data-pane="connections"]');
-    await click(page, '[data-conn="tab"][data-id="store"]');
+    // 連結應用程式 opens from the sidebar only, as a dialog of its own (R-UI-111).2    await click(page, '#nav .sidebar-apps');2    await click(page, '[data-conn="tab"][data-id="store"]');
     const catalog = await context.rpc("connectors.catalog", {});
     result.catalog = catalog;
     if (catalog.ok === false) throw new Error(`Real catalog unavailable: ${catalog.error}`);
@@ -1355,21 +1367,12 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     }
     await scrim?.dispose();
     await click(page, '#nav [data-go="home"]'); await wait(page, '.ho-hero h1');
-    await inspect("home-720", ["sidebar-shell", "home-lead-width", "home-overview", "home-redesign"]);
-    const originalMonth = await page.$eval('.ho-calendar', node => node.dataset.month);
-    await click(page, '[data-home-month="1"]');
-    await page.waitForFunction(month => document.querySelector('.ho-calendar')?.dataset.month !== month, {}, originalMonth);
-    await click(page, '[data-home-month="-1"]');
-    await page.waitForFunction(month => document.querySelector('.ho-calendar')?.dataset.month === month, {}, originalMonth);
-    await perform(page, {action:'scroll',selector:'.ho-calendar'});
-    await inspect("home-month-720", ["home-month"]);
-    await click(page, '[data-home-today]');
+    await inspect("home-720", ["sidebar-shell", "home-hero", "home-overview"]);
     await page.setViewport({ width: 1920, height: 1080 });
-    await inspect("home-month-full-1920", ["home-month", "home-redesign"]);
+    await inspect("home-1920", ["home-hero", "home-overview"]);
     await page.setViewport({ width: 1280, height: 800 });
-    await perform(page, {action:'scroll',selector:'.ho-calendar'});
-    await inspect("home-month-compact-1280", ["home-month"]);
-    await perform(page, {action:'click-position',selector:'.ho-calendar',x:.02,y:.02,expect:'.au-day-col'}); await pause(200);
+    await inspect("home-1280", ["home-hero", "home-overview"]);
+    await click(page, '.ho-schedule header [data-home-go="calendar"]'); await wait(page, '.au-day-col'); await pause(200);
     await inspect("calendar-week-1280", ["calendar-shell"]);
     await click(page, '[data-au="view"]'); await click(page, '#app-popover [data-value="day"]');
     await inspect("calendar-day-1280", ["calendar-shell"]);
@@ -1404,7 +1407,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     };
     const inspectPage = async (label, checks) => { await pause(200); for (const check of checks) await page.evaluate(checkRendered, check); await capture(label); };
     await page.setViewport({ width: 1280, height: 800 });
-    await perform(page, { action: "click-position", selector: ".ho-calendar", x: .02, y: .02, expect: ".au-day-col" });
+    await click(page, '.ho-schedule header [data-home-go="calendar"]'); await wait(page, ".au-day-col");
     await inspectPage("week-empty", ["calendar-shell", "calendar-now"]);
     // The owner, by hand: 建立, then the small form beside the placeholder.
     await click(page, '[data-au="new"]');
@@ -1449,7 +1452,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     // Home draws both, and a click on the member's event opens it on the Calendar page.
     await perform(page, { action: "click", selector: '#nav [data-go="home"]' });
     await wait(page, ".ho-hero h1");
-    const eventOnHome = `.ho-calendar [data-home-event="own:${added.id}"]`;
+    const eventOnHome = `.ho-schedule [data-home-event="own:${added.id}"]`;
     await wait(page, eventOnHome);
     await inspectPage("home", ["home-calendar-language"]);
     await click(page, eventOnHome);
@@ -1517,7 +1520,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     result.deviceNames = deviceNames;
     for (const locale of ["en", "ja", "zh-TW"]) {
       await click(page, '#nav [data-go="settings"]');
-      await click(page, '.modal-scrim [data-pane="appearance"]');
+      await click(page, '.modal-scrim [data-pane="general"]');
       await click(page, '[data-k="ui-language"]');
       await click(page, `#app-popover [data-value="${locale}"]`);
       await page.waitForFunction(locale => document.documentElement.lang === locale, {}, locale);
@@ -1611,6 +1614,27 @@ if (!pillWindow || !(pillWindow.style & 0x08000000) || !pillWindow.rounded) thro
     result.afterExpiry = await context.windows();
     if (!(result.afterExpiry.windows.find(window => window.title === "Raphael learned word").style & 0x20)) throw new Error("Expired learned window is not click-through");
     await capture("learned-expired");
+  } else if (name === "voice-call") {
+    // A new isolated profile deliberately has no voice key; never borrow the owner's key.
+    const { member } = await context.rpc("members.create", { name: "Voice member", role: "Assistant" });
+    const conversation = await newConversation(context, member.id);
+    result.expectedConversation = conversation;
+    await wait(page, '.cmp-voice[data-voice-call-start="true"]');
+    await capture("empty-member-entry");
+    await type(page, ".composer .cmp-input", "Keep this draft");
+    await page.waitForFunction(() => document.querySelector('.cmp-voice')?.dataset.voiceCallStart === "false");
+    await capture("draft-keeps-send");
+    await page.$eval('.cmp-input', input => { input.value = ""; input.dispatchEvent(new Event("input", {bubbles:true})); });
+    await wait(page, '.cmp-voice[data-voice-call-start="true"]');
+    await click(page, '.cmp-voice[data-voice-call-start="true"]');
+    await wait(page, '.vc-failure [data-missing-repair="voice"]');
+    result.status = await context.rpc("voice_chat.status", {});
+    result.stored = await snapshot();
+    if (result.status.call || result.stored.voice_calls.length) throw new Error("Missing voice must not admit a native call");
+    await capture("voice-unavailable");
+    await click(page, '.vc-failure [data-missing-repair="voice"]');
+    await wait(page, '#svc-key-fish');
+    await capture("existing-repair-settings");
   } else if (name === "voice-conversation") {
     const conversation = await newConversation(context);
     const before = new Set((await snapshot()).agent_turns.map(row => row.id));

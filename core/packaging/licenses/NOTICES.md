@@ -295,6 +295,8 @@ Private login references in `core/src/raphael_core/computer/logins.py` and the f
 `computer/vm_tools.py` draw on OpenMausBot `server/drivers/agents-catalog.ts` and
 `server/drivers/agents-call.ts` at `f9191b5`, under the Apache-2.0 notice above.
 
+The shared owner vault in `computer/vault_entries.py` extends those private-reference and fill contracts with Raphael's own metadata, member grants, metadata-only legacy migration, transient CSV previews, contact/card filling and mandatory single-use payment approval; no additional upstream code or dependency is bundled.
+
 Owner input at loop boundaries in `core/src/raphael_core/worker/owner_input.py`
 and Telegram attachment delivery in `core/src/raphael_core/messaging/channels/telegram.py`
 are adapted from Hermes Agent revision `c419cf7c`, respectively
@@ -386,3 +388,7 @@ the upstream develop files on 2026-10-23. The pinned source, component usage and
 CC0 text remain in `app/scripts/release-licenses/manifest.json` and
 `app/scripts/release-licenses/simple-icons-16.35.0-LICENSE.txt`.
 The marks are trademarks of their owners, who do not sponsor or endorse Raphael.
+
+Member templates, goal-first greetings, team folders, named accounts and webhook tunnel guidance are original Raphael implementations informed by the Grok Bot walkthrough (Gary Chen, 2026-11-04, frames f000405/f000920/f002005 and sheets 05/08/09/10) and xAI Grok Bot documentation reviewed 2026-11-05; no third-party code or artwork was copied.
+
+Member-store catalogue validation and export scanning were informed by OpenMausBot server/team-library.ts and shared/package-format.ts (Apache-2.0; https://github.com/milind-soni/openmausbot); original Raphael implementation, no enterprise code, artwork or branding copied.

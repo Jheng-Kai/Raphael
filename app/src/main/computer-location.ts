@@ -11,7 +11,7 @@ export function computerHostHealthHTML(health: api.ComputerHostHealth): string {
   return `<div class="slist">` + health.checks.flatMap(check => {
     const words = { ssh: 'desktop.health.ssh', docker: 'desktop.health.docker', ssh_unreachable: 'desktop.health.ssh_unreachable', ssh_key: 'desktop.health.ssh_key', docker_path: 'desktop.health.docker_path', docker_missing: 'desktop.health.docker_missing', docker_stopped: 'desktop.health.docker_stopped', architecture: 'desktop.health.architecture', image_missing: 'desktop.health.image_missing' } as const;
     const label = t(check.kind.startsWith('ssh') ? 'desktop.health.connection' : check.kind === 'architecture' || check.kind === 'image_missing' ? 'desktop.health.image' : 'desktop.health.runtime');
-    const state = check.ok ? t('desktop.health.ok') : t(words[check.kind as keyof typeof words] ?? 'desktop.health.ssh_unreachable');
+    const state = check.ok ? t('desktop.health.ok') : check.kind === 'ssh_key' && check.user ? t('desktop.health.ssh_key_user', { p0: check.user }) : t(words[check.kind as keyof typeof words] ?? 'desktop.health.ssh_unreachable');
     const repair: { where: 'desktop.health.macTerminal' | 'desktop.health.projectTerminal' | 'desktop.health.localTerminal'; command: string } = check.kind === 'docker_path' ? { where: 'desktop.health.macTerminal', command: `echo 'export PATH="/usr/local/bin:/opt/homebrew/bin:$HOME/.docker/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"' >> ~/.zshenv` } :
       check.kind === 'docker_stopped' ? { where: 'desktop.health.macTerminal', command: 'open -a Docker' } :
       check.kind === 'docker_missing' ? { where: 'desktop.health.macTerminal', command: 'open https://www.docker.com/products/docker-desktop/' } :
@@ -27,8 +27,10 @@ export function computerLocationHTML(remote: boolean, alias: string, invalid = f
     row(t("desktop.host"), "", sel([
       { value: "local", label: t("desktop.local") }, { value: "remote", label: t("desktop.remote") },
     ], remote ? "remote" : "local", t("desktop.host"), ` data-k="computer-host"${saving ? " disabled" : ""}`)) +
-    (remote ? row(t("desktop.sshAlias"), "", fieldHTML("", alias, { id: "computer-ssh-alias", label: t("desktop.sshAlias"), invalid, disabled: saving })) : "") + `</div>` +
-    (remote ? btn(esc(t(checking ? 'desktop.checkingHost' : 'desktop.checkHost')), 'sm', ` data-act="computer-host-check"${checking || saving || !validComputerAlias(alias) ? ' disabled' : ''}`) : '') +
+    // The field stays enabled while it saves: disabling it dropped its focus and closed the popover on Enter.
+    (remote ? row(t("desktop.sshAlias"), "", fieldHTML("", alias, { id: "computer-ssh-alias", label: t("desktop.sshAlias"), invalid })) : "") + `</div>` +
+    // The check reads the typed alias, so it never waits for the save that leaving the field starts.
+    (remote ? btn(esc(t(checking ? 'desktop.checkingHost' : 'desktop.checkHost')), 'sm', ` data-act="computer-host-check"${checking || !validComputerAlias(alias) ? ' disabled' : ''}`) : '') +
     (health ? computerHostHealthHTML(health) : '') +
     (invalid ? `<p class="computer-location-error" role="alert" data-computer-host-error>${esc(t("desktop.invalidAlias"))}</p>` : "") +
     (error ? `<p class="computer-location-error" role="alert">${esc(error)}</p>` : "");
@@ -69,7 +71,7 @@ export function mountComputerLocation(host: HTMLElement, changed: () => void) {
       const copy = target.closest<HTMLElement>('[data-act="copy-code"]');
       if (copy) { void copyButton(copy, copy.closest('.message-code')?.querySelector('code')?.textContent ?? '').catch(error => toaster.info(describeError(error))); return; }
       if (target.closest('[data-act="computer-host-check"]')) {
-        if (checking || saving || !validComputerAlias(draft)) return;
+        if (checking || !validComputerAlias(draft)) return;
         const selected = draft, mine = ++healthEpoch;
         checking = true; health = undefined; draw();
         void api.desktopHostCheck(selected).then(result => { if (mine === healthEpoch && selected === draft) health = result; })
@@ -101,7 +103,11 @@ export function mountComputerLocation(host: HTMLElement, changed: () => void) {
     });
     panel.addEventListener("input", event => {
       const input = event.target as HTMLInputElement;
-      if (input.id === "computer-ssh-alias") draft = input.value;
+      if (input.id !== "computer-ssh-alias") return;
+      draft = input.value;
+      // Tab from a valid alias reaches 檢查主機 instead of leaving the popover.
+      const check = panel?.querySelector<HTMLButtonElement>('[data-act="computer-host-check"]');
+      if (check) check.disabled = checking || !validComputerAlias(draft);
     });
     panel.addEventListener("change", event => {
       const input = event.target as HTMLInputElement;

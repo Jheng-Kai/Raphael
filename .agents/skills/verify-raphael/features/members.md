@@ -1,5 +1,62 @@
 # Members and sidebar
 
+## Private member voice chat (2026-11-05)
+
+An empty member composer offers Start voice chat in its existing right-hand slot;
+typed words/files retain Send, Raphael retains dictation, and rooms never offer calls.
+One call owns the microphone across navigation. Another start opens the shared
+confirmation dialog; only End and start ends the previous call. The panel replaces
+the composer and exposes Mute, Hang up, a transcript disclosure and shared Voice /
+Speed / Language dropdowns (Auto-detect by default). The existing character's
+working and waiting motion projects speaking and listening without a second mascot.
+During a call the empty-thread hero yields to that single panel character.
+
+The same dictation recorder, device, selected engine and VAD cut a call turn after
+0.8 seconds of pause. Ordinary dictation still waits for its key. VAD speech onset
+sets the existing speaker stop event synchronously; PCM playback checks it before
+each audio block. AgentService keeps the owner question and member reply as ordinary
+private turns. The call uses the member voice and existing streamed PCM service;
+speed changes its playback sample rate. No new speech vendor/model loop is added.
+
+Hang-up writes one durable voice-call receipt, with duration, expandable literal
+transcript and local Good/Bad feedback. Call message rows fold under that receipt
+to preserve R-UI-101. Owner questions and pending permission/setup/draft cards remain
+actionable through the ordinary turn renderer until settled; folding never removes
+a required decision. Microphone/model/voice failures use the existing Settings repair
+entry; network failure ends the call and retains its already admitted turns.
+Migration 67 stores call metadata and links to existing turns, with scoped cascading
+deletion. Restart closes interrupted calls and retains their transcript.
+
+Voice chat is not released yet (owner, 2026-11-06, R-UI-106): the voice button records voice messages only, and the call scenes come back with the feature.
+
+Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
+the busy dialog with dialog-caption-confirm, the settings controls with details-voice, the
+receipt shell with card-mcp-done, and the
+repair note with the existing missing-service note. A call receipt is a standalone
+history card.
+The call confirmation uses the shared compact `mb-confirm` shell because it has one
+decision, rather than the member chooser's list. Settings put the existing `sel`
+controls in shared menu rows because these choices apply only to the current call;
+the member's persistent voice remains in Details. The receipt's disclosure includes
+the duration and both speakers, so its summary adds a time and uses a trailing
+chevron. A failed call keeps its shared missing-service note inside the durable
+receipt instead of the transient read-aloud toast; there is only one repair action.
+Fake recognizer / streamed TTS / player tests are in tests/services/test_voice_chat.py;
+the VAD test uses the real DictationService with fake recorder/segmenter/engine.
+The existing native runner's `npm run native -- voice-call` journey checks the real
+shell admission, empty-member/draft guard and missing-voice Settings repair with an
+isolated profile and no paid speech. It does not exercise a successful audio call.
+Rendered fixtures establish UI/IPC behavior only. Native microphone permissions,
+headset echo isolation, installed STT/model/device, actual audio-chunk interruption,
+live model/provider/network and native restart persistence require separate acceptance.
+
+
+## Member voice memos removed (2026-11-07)
+
+Member details > Voice keeps the voice choice and the notify switch only; the voice-memo
+and read-aloud switches, the reply Play/Pause control and the transcript are gone (owner
+decision). Selected scene: details-voice; unit coverage asserts no memo control or toggle.
+
 ## Member panel tabs (2026-11-05)
 
 The owner's 2026-11-05 request supersedes the former landing panel. R-PANEL-01/02/03/04 require the existing member identity followed by shared Details / Library / Computer tabs. Details contains work, routines and conversations; Library uses the existing file chip; Computer owns the screen, location and lifecycle controls. Gear keeps identity/resource editing. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for the complete selected matrix and deferred native acceptance.
@@ -38,6 +95,12 @@ The owner's primary contact (P15b-1, the last section) takes the top display slo
 
 The fixed sidebar is present on every page. Its chief uses the same compact row as colleagues. Folders preserve their collapsed state; drag members between folders or reorder folders. Below 860px the menu opens the same full sidebar as a drawer. No icon strip or separate Team page remains.
 
+Both sides are resized by dragging, as Grok Bot's (owner, 2026-11-06, R-UI-110): there is no fold button and no handle is drawn, only the cursor changes over the edge and a thin line shows while it moves. The list's right edge drags it from 240 to 400 px; narrower than 176 px it folds to the 72 px rail, and the rail dragged out opens it at the width it was let go. The details panel's left edge drags it from 300 to 720 px; narrower than 240 px it closes, and the header's name opens it again at its kept width. Widths and the fold are kept in the browser's storage. Each edge is a keyboard separator (arrows; Enter folds the list or closes the panel); Ctrl+B still folds the list.
+
+```powershell
+npm run look -- sidebar-rail sidebar-rail-dragged-open sidebar-dragged-wider panel-dragged-wider panel-drag-closes --theme both --width 1120,720,1920x1080
+```
+
 Select a member, then click the stacked header title for details.
 At compact width open the sidebar drawer to select a member first. The same title
 closes the panel; its close button updates the same remembered session state. Details has the avatar, edit pencil and resource
@@ -50,25 +113,26 @@ complete flow for creation changes.
 npm run look -- members-expanded sidebar-folders --theme both --width 1120,720,1920x1080
 npm run look -- details member-avatar member-edit details-memory details-routines details-skills details-commands details-voice --theme both --width 1120,720,1920x1080
 npm run look -- sidebar-folders member-text --theme both --width 1120,720,1920x1080
-npm run look -- member-delete new-conversation-rests conversation-delete-main --theme both --width 1120,720,1920x1080
-npm run look -- member-maker member-maker-chosen member-maker-made --theme both --width 1120,720,1920x1080
+npm run look -- member-delete member-conversation-sections --theme both --width 1120,720,1920x1080
+npm run look -- member-maker member-maker-chosen member-maker-greeting member-maker-made --theme both --width 1120,720,1920x1080
 npm run look -- slime-states slime-picker slime-sizes slime-gallery slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-sharp slime-pointer slime-cost --theme both --width 1120,720,1920x1080
 ```
 
 These walk the owner's flows to their end: `member-delete`
 deletes 小森 from the row's ⋯ menu after the confirmation (the menu had lost 刪除 on
-10/24); `new-conversation-rests` presses 新對話 in the details and the button must rest
-while that conversation is unwritten (owner, 10/31: a new conversation is made only from
-a member's details, never the sidebar's ＋, and never beside one still empty);
+10/24); `member-conversation-sections` checks that a member's details have no
+conversation list and nothing that makes one (owner, 2026-11-06: one conversation per
+member, like Grok Bot, R-UI-103);
 `member-maker*` is 新增成員 as a character maker where the conversation stands, slimes
 only (owner, 10/31: no pictures, for copyright; Grok Bot's create page is the reference
 at bots/research/grokbot/12-flaviocopes-create-first-bot.jpg, without its suggestions: other
 people's bots will come from a library later). It asks only for a name; the
-member opens and speaks first (the core's greeting, no model), and the owner's answer
-becomes its job through `set_my_job`, offered only while it has none;
-`conversation-delete-main` deletes Raphael's main conversation, and the
-latest one must take over with no empty 新對話 in its place (the look mock keeps the main
-conversation as the core's `Conversations.main` does).
+member opens and speaks first, typing while its own model writes the greeting (since
+2026-11-06, R-COLLEAGUE-02: no tools, at most two sentences, only known owner context; a
+failed one is an ordinary failure line whose 重新產生 calls `members.greet`), and the
+owner's answer becomes its job through `set_my_job`, offered only while it has none. Conversations are
+never deleted; only Raphael's quick questions can be cleared (`quick-clear-confirm`,
+`quick-cleared`).
 
 Keep details/resource-pane/avatar-menu/edit-dialog PNGs; check layering, focus and
 scroll access. Current scenes open editing but do not save. For creation work extend
@@ -168,17 +232,23 @@ core/tests/background/test_room_cli.py and core/tests/members/test_cli_brains.py
 ## The primary contact (P15b-1)
 
 The owner chooses which member is their primary contact, the Bot that new work is brought to and that hands it to the colleague it belongs to.
-Raphael is the primary until another is chosen, and exactly one is at a time. Choosing is 設為主要 in a member's menu (the row's more button
-or a right click): it opens 「選擇主要成員」, a list of real buttons (Raphael and the other visible members, not the primary now) with the member whose menu
-it was chosen already, 取消 and the primary 設為主要. Position alone identifies the primary: no star badge is drawn in the column, face strip or details, and the menu uses an up arrow instead of a star.
+Raphael is the primary until another is chosen, and exactly one is at a time. As in Grok Bot (owner, 2026-11-06, R-UI-107), only the primary's own menu (the
+row's more button or a right click; Raphael's while he is the primary) hands it on: its last item, after a hairline, is 換成其他成員. It opens 「選擇主要成員」,
+a list of real buttons (Raphael and the other visible members, not the primary now) with nothing chosen, 取消 and the primary 設為主要, which waits for a
+choice. Position alone identifies the primary: no star badge is drawn in the column, face strip or details, and the menu uses an up arrow instead of a star.
+
+A member's row menu is grouped as Grok Bot's, with hairlines between the groups: 釘選, 移到分組 ▸, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除 (red, last).
+The primary sits in the top slot, so its menu has no 移到分組 and no 刪除: 釘選, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 換成其他成員. Raphael's row has 釘選 only,
+and 換成其他成員 while he is the primary. Clearing a member's conversation, duplicating a member and marking every member read are not in the menu
+(one conversation per member, R-UI-103; fewer choices, as Grok's).
 The primary takes Raphael's large top slot in the member column, collapsed strip and sidebar board; Raphael takes the primary's former group/pinned position and keeps his emblem. The same identity swap orders member/conversation pickers, mentions, room membership/responder choices, room participant faces/role choices, and calendar/routine choices. It never mutates stored groups, pins, identities, current conversation, default recipient or the core roster.
 Raphael's row has no destructive menu wherever it moves; an ordinary primary keeps its member menu at the top. Raphael can be chosen again from another member's primary picker. The primary holds the chief capability, is required in new or edited rooms and writes their single wrap-up. Existing rooms missing a newly selected chief require membership adjustment; in-flight work is not replayed. Opening the Conversation page and Alt+Space quick questions retain their existing thread behavior; this change only exchanges display positions.
 
 ```powershell
-npm run look -- members-expanded sidebar-folders primary-contact-column primary-contact-menu primary-contact-picker primary-contact-set primary-room-picker primary-room-members primary-calendar-members primary-routine-members primary-room-chief --theme both --width 1120,720,1920x1080
+npm run look -- members-expanded sidebar-folders member-row-menu primary-contact-column primary-contact-menu primary-contact-picker primary-contact-set primary-room-picker primary-room-members primary-calendar-members primary-routine-members primary-room-chief --theme both --width 1120,720,1920x1080
 ```
 
-`primary-contact-column` and `primary-contact-strip` check the exchanged positions, Raphael's emblem and localized name tooltips; only the sidebar chief has a star. `primary-contact-menu` retains 設為主要 after 移到分組; `primary-contact-picker` excludes the current primary while offering Raphael, with one checked choice, 取消 immediately before 設為主要 and no write before confirmation. `primary-contact-set` asserts one `members.set_primary` call, the updated top row, badge-free details and no room/task/conversation mutation. The board scene also checks top-card visibility before/after fit, natural panel heights and no overlap. Member/new-conversation/mention/calendar/routine/room scenes assert the exchanged order; room choices require the current chief and routine selection stays unchanged. The member-picker driver uses the compact picker when available and the real new-conversation picker at wide widths.
+`primary-contact-column` and `primary-contact-strip` check the exchanged positions, Raphael's emblem and localized name tooltips; only the sidebar chief has a star. `member-row-menu` asserts the grouped row menu, its hairlines and the red 刪除 last. `primary-contact-menu` opens Raphael's menu while he is the primary and asserts 換成其他成員 last, after a hairline; `primary-contact-picker` opens it from 小晴's menu while she is the primary, excludes her while offering Raphael, and after 小森 is clicked has one checked choice, 取消 immediately before 設為主要 and no write before confirmation. `primary-contact-set` asserts one `members.set_primary` call, the updated top row, badge-free details and no room/task/conversation mutation. The board scene also checks top-card visibility before/after fit, natural panel heights and no overlap. Member/new-conversation/mention/calendar/routine/room scenes assert the exchanged order; room choices require the current chief and routine selection stays unchanged. The member-picker driver uses the compact picker when available and the real new-conversation picker at wide widths.
 
 The IPC double keeps `primaryId` as the core keeps the flag: the list's `team_context.primary_id` says it, a hidden or deleted primary is Raphael again, and a hidden member cannot be chosen. Unit cases cover default/explicit Raphael, valid and absent primary IDs, grouped/pinned/ungrouped slots, source immutability, details drafts, picker identities and restricted mentions.
 
@@ -252,7 +322,7 @@ not excepted. Telegram's 中斷連線, a pending person's reject and a mail draf
 
 ```powershell
 npm run look -- memory-clear-menu memory-clear-done memory-summary-menu memory-summary-done context-menu-memory-title context-menu-memory-summary details-memory global-private-memory --theme both --width 1120,720,1920x1080
-npm run look -- data usage-key-menu usage-key-removed context-menu-api-key messaging-user-menu messaging-user-removed model-choices-local-menu context-menu-local-model --theme both --width 1120,720,1920x1080
+npm run look -- dictation usage-key-menu usage-key-removed context-menu-api-key messaging-paired-aligned messaging-user-menu messaging-user-removed model-choices-local-menu context-menu-local-model --theme both --width 1120,720,1920x1080
 ```
 
 Each scene presses the real right button (the `right-click` driver step, which keeps the point it pressed) and its `context-menu` check asserts that the menu is open, starts
@@ -497,7 +567,7 @@ presence-blocked-stays and presence-waiting-colleague. The same SVG parts serve 
 sidebar, header and 28px live thread. Reduced motion keeps the thinking dots,
 attention mark, lidded waiting eyes and static working ribbons recognizable.
 
-sidebar-row-time checks the reserved time/overflow slot and absence of role pills;
+sidebar-row-time checks that rows carry no time or role pill, sit 58 px apart as Grok Bot's, and show overflow under the pointer;
 sidebar-group-author checks the latest public author prefix, while owner waiting
 keeps its existing preview. Names stay on pinned tiles and roles remain in the
 header/details panel. Run both themes at 1120,720,1920x1080. See conversation.md's
@@ -515,7 +585,7 @@ room-group-menu, room-required-chief and room-generated-name journeys click the
 plus button and open group creation at all three mapped widths.
 
 ```powershell
-npm run look -- room-group-menu room-required-chief room-generated-name home-empty home-720 home-motion --theme both --width 1120,720,1920x1080
+npm run look -- room-group-menu room-required-chief room-generated-name home-empty home-team home-motion --theme both --width 1120,720,1920x1080
 ```
 
 slime-board.test.mjs guards the static sharpness comparison: freezing animations
@@ -847,3 +917,76 @@ Run the twenty-scene skill matrix above in both themes and all three sizes, insp
 every contact sheet and relevant full-size member/detail/source views. Unit evidence
 is connection-skills.test.ts and the three localized learned-origin cases in
 member-profile.test.ts. This presentation change adds no migration or RPC.
+
+
+## Colleague recipes and goal-first greeting (2026-11-05)
+
+R-COLLEAGUE-01..03: New member > Start from a template opens eight shipped slime roles; Open template file uses the system file picker and previews profile, skill names, paused routines and one disabled connect card per app. Import creates the colleague without grants; only subsequent per-app Connect requests sign-in and member access. The member row menu exports one .raphael-member file without memory, pictures, credentials or model choices.
+
+Since 2026-11-06 a new member's greeting is written by its own model (see above) and carries no choice form; greetings stored earlier with locally computed suggestions still show them, and sending a choice uses the existing composer words and task route. The shared API/CLI prompt puts the one outcome question rule beside owner input before set_my_job saves the goal. Fake-brain tests prove routing and persistence, not a real model's judgment.
+
+The shared team mount /home/cua/team creates context/, meetings/ and projects/ on first computer use. Existing contents survive. Handoffs and requested wrap-ups may cite successful file writes there.
+
+```powershell
+npm run look -- member-template-gallery member-template-preview member-template-imported member-template-export member-greeting-choices member-greeting-goal team-folder-handoff --theme both --width 1120,720,1920x1080
+```
+
+Core fakes cover export/import, no-side-effect preview, no grants, disabled routines, local suggestions, goal question/save and first-use directories. Native save/open dialogs, real VM/SSH mounts and real model behavior need separate authorized acceptance.
+
+Follow-up 1 (2026-11-05): Template previews keep one quiet no-grants/privacy notice immediately above the Close/Import actions in the fixed footer. Skills and paused routines use the shared compact list rows with names and muted detail. Templates have no status pill; a connection gains its own signed-in status only after a successful explicit connection. The member-template-preview scene asserts these contracts; compare it with member-panel-details and calm-thread after merging.
+
+## Member store (2026-11-05)
+
+R-STORE-01 through R-STORE-04 extend the existing raphael-member v1 recipe, not a
+second package format. New member > Store and sidebar + > Store browse a signed
+catalogue. Featured rows, eight categories and local search reuse existing slime
+characters and shared buttons. Preview shows full instructions, personality, skill
+documents/dependencies, routine schedules and individual disabled app connect cards.
+Adding installs skills and routines off and grants no apps; only subsequent per-app
+Connect can request login. Export now opens Review contents before Export file or
+Publish to store. A secret finding disables both. Publishing prepares only a local
+package folder and opens GitHub's prefilled PR page; the owner submits through GitHub.
+
+The catalogue uses Ed25519 over exact index bytes, two compiled trust roots for
+rotation, a monotonic sequence, permanent revoked IDs and per-package SHA256. Reads
+are HTTPS without redirects, capped at 256 KiB/512 KiB and ten seconds, with ETag and
+verified disk cache. Installs revalidate the catalogue and recheck revocation after
+download. Offline cache proves last verified state, not current remote revocations.
+No production key or account is needed by fake HTTP or the signed synthetic fixture.
+
+npm run look -- store-home store-category store-search store-empty store-offline template-preview template-preview-warning template-export-review member-template-gallery member-template-preview member-template-imported member-template-export sidebar-plus --theme both --width 1120,720,1920x1080
+
+Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
+store chips/buttons with starter gallery and sidebar-plus, and preview/export cards
+with member-template-preview at matching dimensions. Run judge on that same run;
+missing external reference images/login are blocked, never design acceptance.
+Native file picker, OS browser/folder opening, persistence across desktop restart,
+public catalogue hosting, production trust-root provisioning and GitHub CI remain
+separate acceptance. No live provider calls, public repository creation or tokens.
+
+## Recipe preview polish (2026-11-05)
+
+R-COLLEAGUE-01 and R-STORE-03: local recipes, store previews and export review share
+one renderer. Known connection ids use the existing SERVICE_ICONS catalogue's
+brand titles (including Gmail, GitHub and Google Calendar); unknown custom ids
+retain their exact spelling. Presentation never changes connection ids or grants.
+Skill rows show plain name/description metadata; the existing card disclosure
+reveals the complete body and dependency files without the opening frontmatter.
+Quoted and folded scalar metadata and CRLF files follow the skill store's forms;
+missing/incomplete frontmatter preserves all text. Export still retains source bytes.
+
+The routine editor uses shared mp-label field rows with labels above controls,
+equal control heights and a bottom-aligned confirmation action. Vault's Traditional
+Chinese owner hint is shortened without changing typography (R-VAULT-01).
+The existing look checks guard metadata leakage, disclosure state, service names,
+Slack control geometry and a single-character final line in the vault hint.
+
+npm run look -- routine-trigger-slack automation-event-channel automation-event-repository automation-event-pick member-template-preview member-template-imported member-template-export member-template-starter template-preview template-preview-warning template-skill-expanded template-export-review member-panel-details calm-thread vault-list store-home member-greeting-choices reaction-row room-thread-open local-permission-card --theme both --width 1120,720,1920x1080
+
+Inspect every contact sheet, full-size light 720/dark 1120 views of the seven
+review consumers, the Slack row at all sizes and the folded/expanded previews.
+Compare Slack fields with the event selector and ordinary routine fields;
+compare preview rows with member panel rows and disclosures with existing cards.
+Run the selected tests and frontend verify once at the end. Judge uses the same
+selected run; missing external reference images are blocked, never design PASS.
+No core, Rust, native, OS vault or live-provider acceptance is implied.

@@ -5,7 +5,8 @@
 // reaches with a right click: each is a violation of R-UI-44.
 export function auditDocument(doc = document, viewport = { width: innerWidth, height: innerHeight }, namespaces = [], latinAllowed = null, englishUI = [], overflowOrphans = []) {
   const win = doc.defaultView;
-  const describe = element => ({ tag: element.tagName.toLowerCase(), id: element.id, class: typeof element.className === "string" ? element.className : "", text: element.textContent?.trim().slice(0, 100) });
+  // An icon button has no words, so its accessible name says which one a finding means.
+  const describe = element => ({ tag: element.tagName.toLowerCase(), id: element.id, class: typeof element.className === "string" ? element.className : "", text: element.textContent?.trim().slice(0, 100), ...(element.getAttribute?.("aria-label") ? { label: element.getAttribute("aria-label") } : {}) });
   const visible = element => {
     const box = element.getBoundingClientRect();
     if (box.width <= 0 || box.height <= 0) return false;
@@ -57,7 +58,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   };
   if (visible(doc.body) && onScreen(doc.body)) checkMarkdown(doc.body);
   const allowed = latinAllowed && new Set(latinAllowed), seenWords = new Set();
-  const phrases = latinAllowed?.filter(name => /\s|=/.test(name)) ?? [];
+  const phrases = latinAllowed?.filter(name => /\s|=|\d/.test(name)) ?? [];
   const productPattern = phrases.length ? new RegExp(`\\b(?:${phrases.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "gi") : null;
   const keyPattern = /\b([a-z][A-Za-z0-9]*\.[A-Za-z0-9_.-]+)\b/g;
   const seenKeys = new Set();
@@ -72,7 +73,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       horizontalOverflow.push({ ...description, width: element.clientWidth, scrollWidth: element.scrollWidth });
     if (!onScreen(element)) continue;
     const floatingLatest = element.matches(".page-agent .ra-stage > button.conversation-latest");
-    const sidebarAction = element.matches(".side .btn.icon");
+    // The sidebar's icons and the buttons on the window's edges are Grok Bot's soft round buttons (owner, 2026-11-06).
+    const sidebarAction = element.matches(".side .btn.icon, .page-agent .mb-det-head .btn.icon, .page-agent .mb-head :is(.ra-tools, .mb-head-l) .btn.icon, :is(.mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon, .btn.icon.modal-x");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
     if (element.matches('button:disabled[title], [aria-disabled="true"][title]')) {
       const title = element.getAttribute('title')?.trim();
@@ -83,6 +85,20 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (title && title !== label && !text.includes(title)) violation('R-UI-69', 'A disabled control explains its reason only in a hover title');
     }
     if (element.matches('.page-agent .ans.thinking')) violation('R-UI-38', 'Conversation waiting must use the shared work line');
+    // A message hugs its bubble and the actions beside it, as Grok Bot's: empty room to its side is no part of it, so a
+    // pointer or a right click there shows nothing (owner, 2026-11-06).
+    if (element.matches('.chat-message') && box.width > 0) {
+      // The parts' margin boxes (a file card keeps a small margin) side by side with the actions and the gap between.
+      const spans = [...element.children].map(child => {
+        const rect = child.getBoundingClientRect(), own = win.getComputedStyle(child);
+        return rect.width ? [rect.left - (parseFloat(own.marginLeft) || 0), rect.right + (parseFloat(own.marginRight) || 0)] : null;
+      }).filter(Boolean);
+      // Actions with no width yet (shown on hover) still keep their track's gap.
+      const resting = element.querySelector(':scope > .message-actions')?.getBoundingClientRect().width === 0 ? parseFloat(style.columnGap) || 0 : 0;
+      const allowed = (spans.length ? Math.max(...spans.map(span => span[1])) - Math.min(...spans.map(span => span[0])) : 0) + resting;
+      const parts = [...element.children].map(child => `${child.className.split(' ')[0] || child.tagName}:${Math.round(child.getBoundingClientRect().left - box.left)}+${Math.round(child.getBoundingClientRect().width)}`).join(' ');
+      if (box.width > allowed + 2) violation('R-UI-104', `A message is wider than its bubble and actions: ${Math.round(box.width)} > ${Math.round(allowed)} (${parts})`);
+    }
     const scrollbar = element.offsetWidth - element.clientWidth - (parseFloat(style.borderLeftWidth) || 0) - (parseFloat(style.borderRightWidth) || 0);
     if (['auto', 'scroll'].includes(style.overflowY) && scrollbar > 1 && !element.matches('.main, .modal-body, .cs-results, .cs-form .add-grid')) violation('R-UI-62', 'A scrollbar takes room from a narrow part; only a wide page shows one');
     if (element.matches('.main') && scrollbar > 1 && element.querySelector(':scope > .page-agent:not([hidden])')) violation('R-UI-62', 'A conversation never scrolls the main area, so it keeps no strip for a scrollbar');
@@ -101,7 +117,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const glyph = element.querySelector(':scope > svg.i');
       if (glyph) {
         const rect = glyph.getBoundingClientRect();
-        const sizes = element.matches('.cmp-send') ? [32] : [16, 20];
+        // Lucide's icons: 16 px, 18 on the round edge buttons (Grok Bot's 1.5 px lines), 20 where a larger one is meant (R-UI-19).
+        const sizes = element.matches('.cmp-send') ? [32] : [16, 18, 20];
         // CSS zoom scales glyphs too; compare their shared size before scaling.
         let zoom = 1;
         for (let parent = element; parent; parent = parent.parentElement) {
@@ -111,6 +128,11 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
         if (!sizes.some(size => Math.abs(rect.width / zoom - size) <= .5 && Math.abs(rect.height / zoom - size) <= .5)) violation('R-UI-19', 'Action glyph does not use the shared icon sizes');
         if (Math.abs(rect.left + rect.width / 2 - box.left - box.width / 2) > 1 || Math.abs(rect.top + rect.height / 2 - box.top - box.height / 2) > 1) violation('R-UI-19', 'Action glyph is not centered');
       }
+    }
+    // A dim over a dialog covers all of it: a part left bright reads as a broken layer (owner, 2026-11-07).
+    if (element.matches('.cs-scrim')) {
+      const box = element.getBoundingClientRect(), dialog = element.closest('.modal')?.getBoundingClientRect();
+      if (dialog && (Math.abs(box.left - dialog.left) > 2 || Math.abs(box.right - dialog.right) > 2)) violation('R-UI-111', 'The dim over a dialog leaves part of it uncovered');
     }
     if (element.matches('.au-month-grid .btn[aria-pressed="true"], .desktop-screen [data-desktop="retry"]')) {
       const luminance = value => {
@@ -141,10 +163,13 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (element.matches('.ob-col h2') && parseFloat(style.fontSize) < 28) violation('R-UI-37', 'Onboarding needs a large headline');
     if (element.matches('.ob-actions > .btn.pri') && box.width < element.parentElement.getBoundingClientRect().width * .6)
       violation('R-UI-37', 'Onboarding primary action must fill the action row');
-    if (element.matches('.ob-abilities')) {
-      const choices = [...element.children].filter(visible);
-      if (choices.length > 1 && choices.some((choice, index) => index > 0 && Math.abs(choice.getBoundingClientRect().top - choices[0].getBoundingClientRect().top) <= 1))
-        violation('R-UI-35', 'Onboarding abilities must form a vertical checklist');
+    if (element.matches('.ob-item')) {
+      const text = element.querySelector(':scope > .ob-tx'), control = element.querySelector(':scope > .ob-ctl');
+      if (text && control && visible(control)) {
+        const label = text.getBoundingClientRect(), side = control.getBoundingClientRect();
+        if (side.left < label.right - 1 || side.right > box.right + 1 || side.top < box.top - 1 || side.bottom > box.bottom + 1)
+          violation('R-UI-35', 'An onboarding choice keeps its control on the right of its name, inside its card');
+      }
     }
     if (element.matches('.mc-source-list')) {
       const selected = element.querySelector('.mc-source[aria-pressed="true"]');
@@ -174,7 +199,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       // Navigation cards, list choices and disclosures are not text action buttons; an event line
       // that opens its room navigates like the sidebar's room rows. Pending question rows reveal their card.
       // Keep this inventory explicit: ordinary action buttons never opt out by an attribute.
-      const navigation = element.matches('.pending-questions > .pending-question, .conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .mb-chat-choice, .mc-source, .cs-open, .cs-main, .au-room-row > .btn:first-child, .event-open, .ho-spend, .ho-row, .ho-agenda-row, .ho-agenda-more, .ho-event-chip, .ho-more, .ho-allowance, .ho-dictation, .au-edit, .cal-chip, .cal-more, .au-day-num, .au-date-nav > .au-today, .steps-sum, .task-sum') || element.closest('.mb-col, .au-month-grid, .ho-month, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded') || element.matches('.conversation-card > .card-actions > .card-quiet');
+      const navigation = element.matches('.pending-questions > .pending-question, .conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .mb-det .mb-rt, .mb-chat-choice, .mc-source, .cs-open, .cs-main, .au-room-row > .btn:first-child, .event-open, .menu-reactions .reaction, .reaction-bar .reaction, .ho-row, .ho-more, .au-edit, .cal-chip, .cal-more, .au-day-num, .au-date-nav > .au-today, .steps-sum, .task-sum, .desktop-panel .desktop-screen > .btn.desktop-open') || element.closest('.mb-col, .au-month-grid, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded') || element.matches('.conversation-card > .card-actions > .card-quiet');
       const hasBorder = ['Top', 'Right', 'Bottom', 'Left'].some(side => parseFloat(style[`border${side}Width`]) > 0 && !['transparent', 'rgba(0, 0, 0, 0)'].includes(style[`border${side}Color`]) && !['none', 'hidden'].includes(style[`border${side}Style`]));
       if (!floatingLatest && element.classList.contains('icon') && hasBorder) violation('R-UI-18', 'Icon button has a visible border');
       const routineNavigation = element.matches('.chat-message .routine-origin > button.routine-run-link[data-act="open-routine"]');
@@ -191,9 +216,10 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (element.matches('.work-time, .work-toggle, .step-ms') && /\b(?:NaN|Infinity)\b/.test(element.textContent)) invalidDurations.push(description);
     if (element.matches('select,input[type="time"]')) nativeControls.push(description);
     // Owner-authored text is data; labels, titles and placeholders remain UI copy.
-    const authored = element.matches(".modal-body .data-record > .data-record-text, .thread :is(.message-text, .message-code code, .message-table td, .message-table th) mark[data-find-match]") || element.closest("textarea, .checkpoint summary, .checkpoint pre code, .checkpoint-uncovered li");
+    const authored = element.matches(".modal-body .data-record > .data-record-text, .output-path, .output-name, .thread :is(.message-text, .message-code code, .message-table td, .message-table th) mark[data-find-match]") || element.closest("textarea, .checkpoint summary, .checkpoint pre code, .checkpoint-uncovered li");
     const strings = authored ? [] : [...element.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent);
-    for (const attribute of ["aria-label", "title", "placeholder"]) if (element.hasAttribute(attribute)) strings.push(element.getAttribute(attribute));
+    // The output folder's button names the owner's own folder in its label: that name is data too.
+    for (const attribute of ["aria-label", "title", "placeholder"]) if (element.hasAttribute(attribute) && !element.matches(".output-chosen")) strings.push(element.getAttribute(attribute));
     for (const value of strings) for (const match of value.matchAll(keyPattern)) {
       // Explicit JSON path examples are provider field names, not untranslated catalogue keys.
       if (element.matches('code[data-json-paths]') && /^(?:data|event)\./.test(match[1])) continue;
@@ -266,7 +292,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       for (const selector of rule.selectorText.split(/,(?![^(]*\))/)) {
         if (!selector.includes(":hover")) continue;
         let matches;
-        try { matches = doc.querySelectorAll(selector.replace(/:hover/g, "").trim() || "*"); } catch { continue; }
+        // `:is(*)` stands where `:hover` was, so `x:is(:hover, :active)` stays a valid selector for x.
+        try { matches = doc.querySelectorAll(selector.replace(/:hover/g, ":is(*)").trim()); } catch { continue; }
         const weight = specificity(selector);
         for (const element of matches) {
           const entry = hovered.get(element) ?? {};

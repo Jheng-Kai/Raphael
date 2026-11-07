@@ -361,7 +361,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 62
+LATEST = 69
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -593,6 +593,66 @@ SCHEMA_V62 = {
     "skill_sets": ["id INTEGER PK", "identity TEXT NOT NULL", "name TEXT NOT NULL", "version TEXT NOT NULL", "source TEXT NOT NULL", "description TEXT NOT NULL", "folder TEXT NOT NULL", "metadata TEXT NOT NULL"],
     "member_skills": [*SCHEMA_V61["member_skills"], "set_id INTEGER", "set_key TEXT", "set_kind TEXT"],
 }
+SCHEMA_V63 = {
+    **SCHEMA_V62,
+    "vault_entries": ["id TEXT PK", "kind TEXT NOT NULL", "label TEXT NOT NULL", "hint TEXT NOT NULL DEFAULT ''",
+                      "origin TEXT NOT NULL DEFAULT ''", "members TEXT NOT NULL", "credential TEXT NOT NULL"],
+    "computer_payment_holds": ["target TEXT PK"],
+}
+SCHEMA_V64 = {
+    **SCHEMA_V63,
+    "room_threads": [*SCHEMA_V63["room_threads"], "parent_message_id INTEGER"],
+    "message_reactions": ["turn_id INTEGER PK NOT NULL", "message_key TEXT PK NOT NULL", "emoji TEXT PK NOT NULL"],
+    "room_reactions": ["message_id INTEGER PK NOT NULL", "emoji TEXT PK NOT NULL"],
+    "email_drafts": [*SCHEMA_V63["email_drafts"], "kind TEXT NOT NULL DEFAULT 'email'"],
+    "members": [*SCHEMA_V63["members"], "voice_memo INTEGER NOT NULL DEFAULT 0"],
+}
+
+
+SCHEMA_V67 = {
+    **SCHEMA_V64,
+    "voice_calls": ["id TEXT PK", "member_id INTEGER NOT NULL", "conversation_id INTEGER NOT NULL",
+                    "started_at_ms INTEGER NOT NULL", "ended_at_ms INTEGER", "summary_id INTEGER", "failure TEXT", "rating TEXT"],
+    "voice_call_turns": ["call_id TEXT PK NOT NULL", "turn_id INTEGER PK NOT NULL"],
+}
+
+
+@pytest.mark.parametrize("start_version, expected_steps", [(62, [63, 64, 67, 68, 69]), (63, [64, 67, 68, 69]), (64, [67, 68, 69]), (67, [68, 69]), (68, [69])])
+def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(monkeypatch, tmp_path, start_version, expected_steps):
+    path = tmp_path / f"v{start_version}-to-latest.db"
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 62)
+        conn = db.connect(path)
+    with conn:
+        conn.execute("INSERT INTO computer_logins(member_id,origin,reference) VALUES (7,'https://login.example.invalid','legacy-login')")
+    if start_version >= 63:
+        with monkeypatch.context() as old:
+            old.setattr(db, "LATEST_VERSION", start_version)
+            db.migrate(conn)
+        with conn:
+            conn.execute("UPDATE vault_entries SET label='Owner label',hint='Owner hint' WHERE id='legacy-login'")
+            conn.execute("INSERT INTO computer_payment_holds(target) VALUES ('pending-payment')")
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == start_version
+    steps = []
+    conn.set_trace_callback(lambda sql: steps.append(int(sql.strip().rstrip(';').split('=')[1]))
+                            if sql.strip().startswith('PRAGMA user_version =') else None)
+    db.migrate(conn)
+    assert steps == expected_steps
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
+    for table, columns in SCHEMA_V67.items():
+        if table != "agent_turns_fts":
+            assert describe_columns(conn, table) == columns
+    entry = conn.execute("SELECT kind,label,hint,origin,members,credential FROM vault_entries WHERE id='legacy-login'").fetchone()
+    assert tuple(entry) == ("login", "Owner label" if start_version >= 63 else "https://login.example.invalid",
+                            "Owner hint" if start_version >= 63 else "", "https://login.example.invalid", "[7]", "computer-login:legacy-login")
+    assert conn.execute("SELECT COUNT(*) FROM computer_payment_holds").fetchone()[0] == (start_version >= 63)
+    db.migrate(conn)
+    assert steps == expected_steps
+    conn.close()
+    reopened = db.connect(path)
+    assert reopened.execute("PRAGMA user_version").fetchone()[0] == LATEST
+    assert reopened.execute("SELECT COUNT(*) FROM vault_entries").fetchone()[0] == 1
+    reopened.close()
 
 
 def test_v48_adds_the_calendar_without_changing_existing_members_and_keeps_events_on_reopen(tmp_path):
@@ -749,7 +809,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V62) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V67) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -767,9 +827,10 @@ def test_connect_creates_the_latest_schema(conn):
         "owner_question_turn",
         "agent_inbox_scope",
         "agent_inbox_started",
+        "one_standard_conversation",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V62.items():
+    for table, columns in SCHEMA_V67.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [

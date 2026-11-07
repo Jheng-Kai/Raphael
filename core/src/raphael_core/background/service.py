@@ -443,6 +443,9 @@ class BackgroundService:
         self._workspace_of: Callable[[int], Path | None] = lambda member_id: None
         # Tasks the user cleared while they ran: they end without a report and leave no row.
         self._discarded: set[int] = set()
+        # task id -> the words a task's report ends in, whole (not the short line the overlay says),
+        # for the messaging app a chat reads them in. Read once by `final_words`.
+        self._final_words: dict[int, list[str]] = {}
         # Raphael's memory, which a task may read and search (`use_memory`); none until it is given.
         self._memory: MemoryReader | None = None
         # The owner's team (`use_team`): who a task's member is, and the team tools, which the
@@ -1165,6 +1168,11 @@ class BackgroundService:
         except sqlite3.Error as exc:
             logger.warning("Could not delete a member's tasks: %s", type(exc).__name__)
 
+    def final_words(self, task_id: int) -> list[str]:
+        """The whole of what a task just reported, message by message, as its thread shows it;
+        empty when this process did not write the report (then the stored report is all there is)."""
+        return self._final_words.pop(task_id, [])
+
     def task(self, task_id: int) -> Task | None:
         """A task as it is written down (for what reports it elsewhere), or None."""
         try:
@@ -1855,6 +1863,9 @@ class BackgroundService:
         prefix = PREFIXES[language].question
         what = parenthesized(language, preview(waiting.arguments))
         asked = phrase(language, "confirm_plugin", server=ref.server, tool=ref.name, what=what)
+        if ref.server == "computer" and ref.name == "fill_card":
+            from ..computer.vault_entries import payment_question
+            asked = payment_question(waiting.arguments, language)
         if ref.name == "routine_delete" and self._team is not None:
             asked = self._team.admin_confirmation(ref.name, waiting.arguments, language)
         text = asked_with(language, waiting.screening, asked)
@@ -1938,7 +1949,7 @@ class BackgroundService:
             "expires_at_ms": question.expires_at_ms,
         }
 
-    def waiting_questions(self, member_id: int | None = None, room_id: int | None = None) -> list[dict[str, Any]]:
+    def waiting_questions(self, member_id: int | None = None, room_id: int | None = None, thread_id: int | None = None) -> list[dict[str, Any]]:
         """The questions that wait for the owner now, the oldest first (in one member's thread, in one
         room, or all), as `background.questions.list` gives them."""
         self.sweep_questions()
@@ -1956,6 +1967,12 @@ class BackgroundService:
             paused = self._paused[q.task_id]
             task = self._store.get(q.task_id)
             view["room_id"] = task.room_id if task else None
+            view['thread_id'] = task.thread_id if task else None
+            if view['room_id'] is not None and view['thread_id'] is None:
+                main = self._metrics_conn.execute('SELECT id FROM room_threads WHERE room_id=? ORDER BY id LIMIT 1', (view['room_id'],)).fetchone()
+                view['thread_id'] = main[0] if main else None
+            if thread_id is not None and view['thread_id'] != thread_id:
+                continue
             # A question waits where it was asked: a room's turn in the room, never also in the member's thread.
             if (room_id is not None and view["room_id"] != room_id) or (member_id is not None and view["room_id"] is not None):
                 continue
@@ -1993,7 +2010,17 @@ class BackgroundService:
             raise invalid_params("member_id must be a whole number or null")
         if room_id is not None and type(room_id) is not int:
             raise invalid_params("room_id must be a whole number or null")
-        return {"questions": self.waiting_questions(member_id, room_id)}
+        thread_id = params.get('thread_id')
+        if thread_id is not None and type(thread_id) is not int:
+            raise invalid_params('thread_id must be a whole number or null')
+        if room_id is not None:
+            row = self._metrics_conn.execute('SELECT id FROM room_threads WHERE room_id=? AND (? IS NULL OR id=?) ORDER BY id LIMIT 1', (room_id,thread_id,thread_id)).fetchone()
+            if row is None:
+                return {'questions': []}
+            thread_id = row[0]
+        elif thread_id is not None:
+            raise invalid_params('thread_id requires room_id')
+        return {"questions": self.waiting_questions(member_id, room_id, thread_id)}
 
     async def _answer(self, params: dict) -> dict:
         task_id, question_id = params.get("task_id"), params.get("question_id")
@@ -2484,6 +2511,12 @@ class BackgroundService:
             current.tool_calls if run is None and current else run.tool_calls if run else task.tool_calls,
             cost,
         )
+        # A task stopped at a limit keeps its whole last word in the detail; the line is a cut of it.
+        # Otherwise these are the reply messages just published, as the app shows them.
+        self._final_words[task.id] = [detail] if state == "limit" and detail else [
+            line for line in terminal_replies if line and line.strip()]
+        while len(self._final_words) > 64:
+            self._final_words.pop(next(iter(self._final_words)))
         if not task.quiet:
             self._notify(
                 "worker.report",
@@ -2651,12 +2684,12 @@ class BackgroundService:
             )
         return True
 
-    async def cancel_room(self, room_id, *, work=True):
+    async def cancel_room(self, room_id, *, work=True, thread_id=None):
         """Stop the tasks of a room. The owner speaking again stops what its members were saying but not
         the work they were assigned (`work` false): that goes on until it is done or the owner stops it."""
         rows = self._metrics_conn.execute(
             "SELECT id FROM worker_tasks WHERE COALESCE(report_room_id,room_id)=? AND state IN ('queued','running','waiting')"
-            " AND (? OR mode IS NULL)", (room_id, work)).fetchall()
+            " AND (? OR mode IS NULL) AND (? IS NULL OR COALESCE(report_thread_id,thread_id)=?)", (room_id, work, thread_id, thread_id)).fetchall()
         identifiers = set()
         for row in rows:
             identifiers.update(self._store.invalidate_tree(row[0]))

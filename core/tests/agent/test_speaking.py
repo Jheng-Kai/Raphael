@@ -78,7 +78,8 @@ def rig(make_rig, speaker):
 async def ask_from(rig, source, text="你好", language="zh-TW"):
     return await rig.call(
         "agent.ask",
-        {"session_id": "s1", "text": text, "ui_language": language, "source": source},
+        {"session_id": "s1", "text": text, "ui_language": language, "source": source,
+         **({"destination": "quick"} if source == "overlay" else {})},
     )
 
 
@@ -277,10 +278,12 @@ async def test_a_reply_that_is_a_note_taken_is_a_fixed_line_and_spoken_in_japane
 # --- which replies are said --------------------------------------------------------------------------
 
 
-async def test_an_answer_to_a_request_typed_in_the_app_is_said_too(rig, client, speaker):
+async def test_a_typed_app_reply_never_requests_translation_or_speech(rig, client, speaker):
     client.chats.append(chat('{"prefix":"答","text":"好。","detail":"","say_ja":"はい。"}'))
     await ask_from(rig, "app")
-    assert speaker.said == [("解", "はい。")]
+    assert speaker.said == []
+    assert len(client.chat_calls) == 1
+    assert "say_ja" not in client.chat_calls[0]["messages"][0]["content"]
 
 
 async def test_a_message_from_a_phone_is_never_said(rig, client, speaker):
@@ -387,7 +390,7 @@ async def test_an_assistant_with_no_voice_answers_in_silence(make_rig, client):
     ("language", "prefix", "shown"),
     [("zh-TW", "答", "現在是下午兩點。"), ("en", "Answer", "It is two o'clock.")],
 )
-async def test_a_narrated_final_speaks_japanese_and_waits_for_voice_but_progress_does_not(
+async def test_a_quick_narrated_final_speaks_japanese_and_waits_for_voice_but_progress_does_not(
     make_rig, client, speaker, caplog, language, prefix, shown
 ):
     announced = []
@@ -411,12 +414,11 @@ async def test_a_narrated_final_speaks_japanese_and_waits_for_voice_but_progress
     client.decisions.append(decision("answer"))
     client.chats = [chat(progress, ("local_time", {})), finish]
     with caplog.at_level(logging.DEBUG):
-        asking = asyncio.create_task(ask_from(rig, "app", language=language))
+        asking = asyncio.create_task(ask_from(rig, "overlay", language=language))
         try:
             await until(lambda: speaker.waiting)
             assert not asking.done()
-            assert announced[0][0] == "queued"
-            assert all(status in ("queued", "running") for status, _ in announced)
+            assert all(status == "running" for status, _ in announced)
             count = len(announced)
         finally:
             speaker.gate.set()
@@ -528,3 +530,49 @@ async def test_a_cancel_while_the_voice_is_awaited_still_announces_the_turn(
     with pytest.raises(asyncio.CancelledError):
         await asking
     assert [m for m, _ in announced] == ["agent.turn"]  # never left unannounced
+
+
+@pytest.mark.parametrize(("member", "source", "quick"), [
+    (False, "voice", False), (False, "overlay", False), (False, "app", True),
+    (True, "app", False), (True, "voice", False),
+])
+async def test_formal_and_member_replies_never_request_translation_or_speech(
+    make_rig, conn, client, speaker, tmp_path, member, source, quick
+):
+    from unittest.mock import AsyncMock
+    from raphael_core.members.service import MembersService
+    from .test_service import FakeBackground
+
+    team = MembersService(conn, tmp_path, background=FakeBackground())
+    person = team.store.create_member(name="Ada", voice="b" * 32)
+    with conn:
+        conn.execute("UPDATE members SET read_aloud=1, voice_memo=1 WHERE id=?", (person.id,))
+    speaker.say_member = AsyncMock()
+    team.use_speech(speaker)
+    rig = make_rig(speaker=speaker, team=team)
+    member_id = person.id if member else 0
+    client.decisions.append(decision("answer"))
+    client.replies.append(with_japanese(text="Written reply."))
+    client.chats.append(chat('{"prefix":"答","text":"Written reply.","say_ja":"はい。"}'))
+    params = {"session_id": "written", "text": "你好", "ui_language": "zh-TW",
+              "source": source, "member_id": member_id}
+    if quick:
+        params["destination"] = "quick"
+    else:
+        params["conversation_id"] = rig.service.conversations.main(member_id)
+    try:
+        result = await rig.call("agent.ask", params)
+        team.turn_arrived(result["turn_id"])
+        await asyncio.sleep(0)
+        assert result["status"] == "done" and result["text"] == "Written reply."
+        assert not result.get("voiced")
+        assert speaker.said == []
+        speaker.say_member.assert_not_awaited()
+        assert len(client.chat_calls) + len(client.json_calls) == 1
+        assert all("say_ja" not in call["schema"].get("properties", {}) and "say_ja" not in call["system"]
+                   for call in client.json_calls)
+        assert all("say_ja" not in call["messages"][0]["content"] for call in client.chat_calls)
+        [turn] = await rig.turns(member_id=member_id)
+        assert "voice_memo" not in turn and "voice_memo_state" not in turn
+    finally:
+        await team.aclose()

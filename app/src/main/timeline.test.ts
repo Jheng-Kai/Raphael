@@ -48,8 +48,8 @@ test("queued owner bubbles show a muted mark and withdraw instead of edit or liv
   setLocale("en");
   document.body.innerHTML = turnHTML(turn(91, { status: "queued", text: "", messages: [], model: null }), emptyTimelineState(), false, LOOK);
   expect(document.querySelector(".queued-mark")?.textContent).toBe("Queued");
-  expect(document.querySelector('button[data-act="cancel-message"]')).not.toBeNull();
-  expect(document.querySelector('[data-act="edit-message"],.live-presence,.work-section')).toBeNull();
+  expect(document.querySelector('button[data-act="more-message"][data-owner-act="cancel"]')).not.toBeNull();
+  expect(document.querySelector('[data-owner-act="edit"],.live-presence,.work-section')).toBeNull();
 });
 
 test("a pending permission card replaces duplicate running and waiting task controls", () => {
@@ -173,6 +173,39 @@ test.each(["zh-TW", "en", "ja"] as const)("completed work preserves the exact mi
   }
 });
 
+test("a meeting opened and a skill learned stay one line each in the conversation while routine events fold into the work", () => {
+  setLocale("zh-TW");
+  const item = turn(1, {
+    messages: [
+      { seq: 1, kind: "event", text: JSON.stringify({ type: "meeting", room_id: 4, name: "Sample room" }), at_ms: T0 },
+      { seq: 2, kind: "event", text: JSON.stringify({ type: "routine", action: "created", id: 7, name: "Sample routine" }), at_ms: T0 },
+      { seq: 3, kind: "event", text: JSON.stringify({ type: "skill_learned", name: "sample-skill" }), at_ms: T0 },
+      { seq: 4, kind: "reply", text: "Done.", at_ms: T0 },
+    ],
+  });
+  const root = document.createElement("div"); root.innerHTML = turnHTML(item, emptyTimelineState(), false, LOOK);
+  const meeting = root.querySelector('[data-meeting-room="4"]')!;
+  expect(meeting.closest(".work-section")).toBeNull();
+  expect(meeting.textContent).toContain("Sample room");
+  const learned = [...root.querySelectorAll(".conversation-event-line")].find(line => line.textContent?.includes("sample-skill"));
+  expect(learned?.closest(".work-section")).toBeFalsy();
+  expect(root.querySelector('[data-routine="7"]')?.closest(".work-body")).not.toBeNull();
+});
+
+test("a prerequisite the reply already states is not repeated in the opened work", () => {
+  setLocale("zh-TW");
+  const missing = { resource: "fish", requirement: "setup", state: "missing", repair: "voice" } as const;
+  const state = emptyTimelineState(); state.thinkingOpen.set(1, true);
+  const item = turn(1, {
+    status: "error", text: "請先設定語音服務。",
+    steps: [step({ tool: "generate_audio", server: "Raphael", outcome: "error", reason: "not_configured", missing })],
+    messages: [{ seq: 1, kind: "media", text: JSON.stringify({ missing }), at_ms: T0 }],
+  });
+  const root = document.createElement("div"); root.innerHTML = turnHTML(item, state, false, LOOK);
+  expect(root.querySelectorAll('[data-missing-repair="voice"]')).toHaveLength(1);
+  expect(root.querySelector(".work-section.is-open [data-missing-repair]")).toBeNull();
+});
+
 /** What a sighted reader sees: the text outside the tags, without what only a screen reader hears. */
 const visible = (html: string): string =>
   html.replace(/<span class="sr">.*?<\/span>/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -212,6 +245,12 @@ test("an old turn without messages still renders its answer once", () => {
   expect(html).not.toContain("《");
 });
 
+test("a reply carries no play control or transcript, even when stored data still has legacy voice memo fields", () => {
+  const html = turnHTML(turn(1, { voice_memo: true, voice_memo_state: "playing" } as Partial<AgentTurn>), emptyTimelineState(), false, { face: () => "" });
+  expect(html).toContain("台北現在 24 度。");
+  expect(html).not.toMatch(/memo|data-act="play|aria-pressed/i);
+});
+
 test("Raphael's stored replies and progress read plainly in the window", () => {
   const html = turnHTML(turn(1, { status: "done", messages: [
     { seq: 1, kind: "progress", text: "《告。正在查看今天下午的行程。》", at_ms: T0 },
@@ -231,8 +270,8 @@ test.each([false, true])("a durable receipt renders outside assistant bubbles wi
     reason: null, created_at_ms: T0, ready_at_ms: T0, dispatch_policy: "immediate", result: "", evidence: [] }] }),
     emptyTimelineState(), false, { face: () => "" });
   expect(html.match(/data-handoff="42"/g)).toHaveLength(1);
-  expect(html.indexOf('class="handoff-event"')).toBeLessThan(html.indexOf('class="ra"'));
-  expect(visible(html)).toContain("已轉交給 小晴");
+  expect(html.indexOf('class="btn event-open handoff-event"')).toBeLessThan(html.indexOf('class="ra"'));
+  expect(visible(html)).toContain("與 小晴 的 1 則訊息");
 });
 
 test("an unknown tool connection has a plug with its accessible name, never an initial", () => {
@@ -557,25 +596,23 @@ describe("停止", () => {
 const LOOK: TurnLook = { face: (loop) => `<i class="face${loop ? " loop" : ""}"></i>` };
 
 describe("a turn", () => {
-  test("a question asked of a colleague is one 和 X 討論 line naming the colleague, opening on the question and its answer", () => {
+  test("a question asked of a colleague is one 與 X 的 2 則訊息 line naming the colleague, keeping what was said for their conversation", () => {
     const asked = { task_id: null, source_turn_id: 5, work_turn_id: 9, member_id: 0, member_name: "", from_member_id: 4,
       stage_id: "", mode: "consult" as const, state: "done", reason: null, created_at_ms: T0, ready_at_ms: T0,
       dispatch_policy: "immediate" as const, result: "新品代號是 NX-1。", request: "新品代號是什麼？", evidence: [] };
     const look: TurnLook = { ...LOOK, memberName: (id) => (id === 4 ? "PM" : "拉斐爾"), memberFace: () => "<i></i>" };
     const html = turnHTML(turn(5, { handoffs: [asked] }), emptyTimelineState(), false, look);
     expect(html).toContain('data-handoff="x9"');
-    expect(visible(html.slice(html.indexOf("<summary>"), html.indexOf("</summary>")))).toContain("和 拉斐爾 討論");
-    const detail = visible(html.slice(html.indexOf('class="handoff-detail"')));
-    expect(detail).toContain("PM");
-    expect(detail).toContain("新品代號是什麼？");
-    expect(detail).toContain("新品代號是 NX-1。");
-    expect(detail).not.toContain("主人");
+    expect(html).toContain('data-act="peer-chat"');
+    expect(visible(html)).toContain("與 拉斐爾 的 2 則訊息");
+    expect(visible(html)).not.toContain("新品代號是什麼？");
+    expect(visible(html)).not.toContain("主人");
   });
 
   test("the person on the right without 「」 with where and when; Raphael on the left with his face and plain words", () => {
     const html = turnHTML(turn(5), emptyTimelineState(), false, LOOK);
     expect(html).not.toContain('class="me-src"');
-    expect(html).toContain('data-act="edit-message"');
+    expect(html).toContain('data-owner-act="edit"');
     expect(html).toContain('<div class="bubble"><div class="message-text">台北天氣如何，順便記到行事曆</div><button');
     expect(html).not.toContain('class="ra-face"');
     expect(html).toContain('data-tooltip="查看過程 ·');

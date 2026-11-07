@@ -51,11 +51,14 @@ export function mountComputerLifecycle(_host: HTMLElement, panel: HTMLElement, m
   button.addEventListener('click', menu);
   return { locationHost: holder.querySelector<HTMLElement>('.computer-lifecycle-location')!, draw() {
     const state = read();
-    repaired.hidden = !state?.repair_revision;
-    if (state?.repair_revision) repaired.textContent = t('desktop.repaired');
+    // R-UI-71: an unchanged renewal writes nothing here either.
+    const set = <T extends object, K extends keyof T>(target: T, key: K, value: T[K]): void => { if (target[key] !== value) target[key] = value; };
+    set(repaired, 'hidden', !state?.repair_revision);
+    if (state?.repair_revision) set(repaired, 'textContent', t('desktop.repaired'));
     const available = !!state && state.state !== 'absent' && state.granted !== false;
-    label.hidden = !state; button.hidden = !available;
-    button.setAttribute('aria-label', t('chat.more')); button.title = t('chat.more');
+    set(label, 'hidden', !state); set(button, 'hidden', !available);
+    if (button.getAttribute('aria-label') !== t('chat.more')) button.setAttribute('aria-label', t('chat.more'));
+    set(button, 'title', t('chat.more'));
     patchHTML(label, `<span data-computer-state-text>${esc(computerStateLabel(state))}</span>`);
   } };
 }

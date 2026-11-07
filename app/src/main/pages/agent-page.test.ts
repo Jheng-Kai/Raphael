@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
   workerRerun: vi.fn(),
   openLink: vi.fn(),
   openExternalUrl: vi.fn(),
+  pagesOpen: vi.fn(),
   core: vi.fn(),
 }));
 vi.mock("../api", () => api);
@@ -84,19 +85,45 @@ beforeEach(() => {
   api.agentVoice.mockResolvedValue(undefined);
 });
 
-test("the header computer button updates its accessible label and title when the locale changes", async () => {
+test("a sure page gesture appends a draft and sends nothing until the owner submits", async () => {
+  const page = { id: "page-draft", title: "Sample page", rev: 0, height: 320, source: "html", server: null, fallback: "Sample fallback" } as const;
+  api.pagesOpen.mockResolvedValue({ ...page, url: "http://127.0.0.1:9/page-draft" });
+  api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { pages: [page] })] });
+  api.agentAskText.mockResolvedValue(undefined);
+  const agent = mount(); await flush();
+  const input = agent.el.querySelector<HTMLTextAreaElement>(".cmp-input")!;
+  input.value = "My existing draft"; input.dispatchEvent(new Event("input", { bubbles: true }));
+  const frame = agent.el.querySelector<HTMLIFrameElement>(".pg-frame")!;
+  Object.defineProperty(navigator, "userActivation", { value: { isActive: true }, configurable: true });
+  Object.defineProperty(frame, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
+  const focus = vi.spyOn(document, "activeElement", "get").mockReturnValue(frame);
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
+  const event = new MessageEvent("message", { data: { raphaelPage: 1, type: "send", text: "Page-provided words" } });
+  Object.defineProperty(event, "source", { value: frame.contentWindow });
+  window.dispatchEvent(event); focus.mockRestore(); await flush();
+  expect(api.agentAskText).not.toHaveBeenCalled();
+  expect(input.value).toBe("My existing draft\nPage-provided words");
+  expect(document.activeElement).toBe(input);
+  const note = agent.el.querySelector<HTMLElement>(".cmp-page-note")!;
+  expect(note.hidden).toBe(false);
+  expect(note.textContent).toBe("這段文字來自頁面，確認後再送出");
+  agent.el.querySelector<HTMLFormElement>("form.composer")!.requestSubmit(); await flush();
+  expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("My existing draft\nPage-provided words", [], 0, expect.any(Object));
+  expect(note.hidden).toBe(true);
+  agent.hide(); Reflect.deleteProperty(navigator, "userActivation");
+});
+
+test("the header has no computer button, and an idle computer adds nothing to the name", async () => {
   const previous = getLocale();
   setLocale("zh-TW");
   api.agentHistoryList.mockResolvedValue({ turns: [] });
   const agent = mount();
   try {
     await flush();
-    const button = agent.el.querySelector<HTMLButtonElement>('.mb-head [data-act="computer"]')!;
-    for (const [locale, label] of [["zh-TW", "電腦"], ["en", "Computer"], ["ja", "コンピューター"], ["zh-TW", "電腦"]] as const) {
-      setLocale(locale);
-      expect(button.getAttribute("aria-label"), locale).toBe(label);
-      expect(button.title, locale).toBe(label);
-    }
+    expect(agent.el.querySelector('.mb-head [data-act="computer"], .mb-head .btn.ra-tool:not([hidden])')).toBeNull();
+    const title = agent.el.querySelector<HTMLElement>(".conversation-trigger")!;
+    expect(title.classList.contains("is-computer-active")).toBe(false);
+    expect(title.getAttribute("aria-label")).not.toContain("正在使用電腦");
   } finally {
     agent.hide();
     setLocale(previous);
@@ -150,20 +177,23 @@ test("messages copy plain text, code copies exactly, only the latest reply regen
   const copy = vi.spyOn(ui, "copyButton").mockResolvedValue(true);
   const agent = mount(); await flush();
   const latest = document.querySelector<HTMLElement>('.tn[data-id="2"]')!;
-  document.querySelector<HTMLButtonElement>('.tn[data-id="1"] [data-act="more-message"]')!.click();
+  document.querySelector<HTMLButtonElement>('.tn[data-id="1"] .ra [data-act="more-message"]')!.click();
   await flush(); expect(document.querySelector('[data-pick="regenerate"]')).toBeNull();
   document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
-  latest.querySelector<HTMLButtonElement>('.owner-message [data-act="copy-message"]')!.click();
-  await flush(); expect(copy).toHaveBeenLastCalledWith(expect.any(HTMLElement), "問題 2");
-  latest.querySelector<HTMLButtonElement>('.ra [data-act="copy-message"]')!.click();
-  await flush(); expect(copy.mock.lastCall?.[1]).toContain("bold\na < b\n");
+  // Copy lives in each message's ⋯ menu (R-UI-104).
+  const copyFrom = async (scope: string): Promise<void> => {
+    latest.querySelector<HTMLButtonElement>(`${scope} [data-act="more-message"]`)!.click(); await flush();
+    document.querySelector<HTMLButtonElement>('#app-popover [data-pick="copy"]')!.click(); await flush();
+  };
+  await copyFrom('.owner-message'); expect(copy).toHaveBeenLastCalledWith(expect.any(HTMLElement), "問題 2");
+  await copyFrom('.ra'); expect(copy.mock.lastCall?.[1]).toContain("bold\na < b\n");
   expect(copy.mock.lastCall?.[1]).not.toContain("**");
   latest.querySelector<HTMLButtonElement>('[data-act="copy-code"]')!.click();
   await flush(); expect(copy).toHaveBeenLastCalledWith(expect.any(HTMLElement), "a < b");
   expect(latest.querySelector('.ra [data-act="expand-message"]')).toBeNull();
   expect([...latest.querySelectorAll('.ra .message-text')].map(node => node.textContent).join("\n")).toContain("line 34");
   expect(latest.querySelector('.ans .message-code')).toBeNull();
-  latest.querySelector<HTMLButtonElement>('[data-act="more-message"]')!.click();
+  latest.querySelector<HTMLButtonElement>('.ra [data-act="more-message"]')!.click();
   await flush(); document.querySelector<HTMLButtonElement>('[data-pick="regenerate"]')!.click();
   await flush(); expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("問題 2", [], 0, expect.objectContaining({ requestId: expect.any(String) }));
   copy.mockRestore(); agent.hide();

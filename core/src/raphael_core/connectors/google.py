@@ -68,8 +68,6 @@ class Loopback:
         try:
             if self.claimed:
                 return
-            self.claimed = True
-            self.server.close()
             async with asyncio.timeout(5):
                 head = (await reader.readuntil(b"\r\n\r\n")).decode("latin-1")
             lines = head.split("\r\n")
@@ -83,6 +81,12 @@ class Loopback:
                     or len(query.get("state", [])) != 1
                     or not secrets.compare_digest(query["state"][0], self.state)):
                 raise ConnectorFailure("state")
+            # An unauthenticated request must not end the owner's sign-in.
+            # Another callback may have won while this request was being read.
+            if self.claimed:
+                return
+            self.claimed = True
+            self.server.close()
             if "error" in query:
                 raise ConnectorFailure("denied")
             if len(query.get("code", [])) != 1:
@@ -93,7 +97,7 @@ class Loopback:
                          b"Connection: close\r\nContent-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body)
             await writer.drain()
         except Exception as error:
-            if not self.done.done():
+            if self.claimed and not self.done.done():
                 self.done.set_exception(error if isinstance(error, ConnectorFailure) else ConnectorFailure("protocol"))
         finally:
             writer.close()

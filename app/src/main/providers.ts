@@ -44,7 +44,8 @@ const choicesFor = (field: "region" | "location") => FIELD_CHOICES[field].map((v
 const GROUP_TITLES = { official: () => t("providers.official"), gateway: () => t("providers.gateway"), local: () => t("providers.local") };
 const POPULAR = ["openrouter", "litellm", "portkey", "vercel"];
 const allowsMultiple = (kind: ProviderKind): boolean => kind.group === "local" || ["openai_compatible", "litellm", "bifrost"].includes(kind.kind);
-function description(kind: ProviderKind): string {
+/** What a provider is, in one line: its official API, a model gateway, a cloud host or a server on this computer. */
+export function description(kind: ProviderKind): string {
   if (kind.kind === "openai_compatible") return t("providers.compatibleNote");
   if (kind.group === "official") return t("providers.officialAPI", { p0: kind.name });
   if (kind.group === "local") return t("providers.localServer");

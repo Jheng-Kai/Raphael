@@ -21,7 +21,7 @@ const pairedUser = [...settings("messaging"), click('[data-msg="expand"]'), wait
 
 export default [
   scene("context-menu-member", "A right click on a member's row opens the menu of its ⋯ at the pointer", rightClicked('.mb-col [data-member-item="2"]', [column])),
-  scene("context-menu-conversation", "A right click on a conversation in the member's details opens its rename and delete menu", rightClicked(".mb-det .conversation-row", details)),
+  scene("context-menu-conversation", "A right click on one of Raphael's conversations in his details opens its rename and delete menu", rightClicked(".mb-det .conversation-row:has([data-conversation-more])", [member(0), { action: "open-details" }])),
   scene("context-menu-routine", "A direct routine row opens its editor without another menu", [...details, click(".mb-det .mb-rt"), wait(".au-routine-dialog"), check("level-routine")]),
   scene("context-menu-connection", "A right click on a custom server's header opens the menu of its ⋯: test, edit and delete", rightClicked(".cs-dlg-head", [
     ...settings("connections"), click('[data-conn="open"][data-id="notes"]'), wait(".cs-dlg-head"),
@@ -40,6 +40,7 @@ export default [
   scene("memory-summary-done", "The second press clears the summary and its row goes", [...memoryTab, ...confirmed(ownSummaryMore), waitGone(".mb-det .mem-summary"), check("memory-summary-done")], withSummary),
   scene("usage-key-menu", "移除金鑰 waits in the key row's ⋯; its first press asks once more", [...usageKey, ...asked('[data-act="key-menu"]')]),
   scene("usage-key-removed", "The second press removes the key and the row asks for one", [...usageKey, ...confirmed('[data-act="key-menu"]'), wait("#key-input"), check("usage-key-removed")]),
+  scene("messaging-paired-aligned", "A paired person's face and name start on the bot's left edge, not set in", [...settings("messaging"), click('[data-msg="expand"]'), wait('[data-msg="user-menu"]'), check("messaging-paired-aligned")], paired),
   scene("messaging-user-menu", "Removing a person from Telegram waits in their row's ⋯", pairedUser, paired),
   scene("messaging-user-removed", "移除 in the ⋯ takes the person off the list", [...pairedUser, click('#app-popover [data-pick="remove"]'), waitGone('[data-msg="user-menu"]'), check("messaging-user-removed")], paired),
 ];

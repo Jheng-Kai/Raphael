@@ -3,20 +3,25 @@
  * of its own with one or two marks of who it is, so Shion is lavender with a horn and nothing more. Loop motion is
  * CSS keyed on `data-state` (slime.css); finite handovers use explicit keyframes from JS pose/timing state.
  * Nothing in script runs per animation frame: it only changes state and admits deferred strips.
- * Raphael keeps his own emblem and never comes here (members.ts `faceHTML`).
+ * Raphael is the first blue slime (`rimuru`, members.ts `faceHTML`); the primary member wears a gold crown (crown.ts).
  * A member's `avatar` is `slime:<character>` or `slime:color:<color>`; one without a picture gets a colour from its id.
  */
 import "./slime.css";
 import { t } from "./i18n";
 import { motionStrips } from "./slime-cels";
 import { loopState, LOOPS, sample, easing } from "./slime-motion";
+import { crownedId } from "./crown";
 
 export type SlimeState = "idle" | "thinking" | "working" | "searching" | "computer" | "waiting" | "blocked" | "done" | "error" | "sleeping" | "arriving";
 type Hat = "witch" | "santa";
 
+/** Raphael's colour: the first blue slime's, his face since 2026-11-07 (the `rimuru` character below). */
+export const RAPHAEL_COLOR = "#3DB5FF";
+
+/** The plain slimes' colours, as clear and saturated as Grok Bot's swatches (owner, 2026-11-06: ours read a shade too dark). */
 const COLORS = {
-  sky: "#2A83D5", lavender: "#9270CB", coral: "#D4556D", tangerine: "#B96A27", ochre: "#A17B13",
-  leaf: "#4C8A43", teal: "#15897E", ocean: "#4167BB", orchid: "#B25C9B", charcoal: "#5A5E6B",
+  sky: "#1EA7FD", lavender: "#905AFB", coral: "#FC2C3E", tangerine: "#F9670E", ochre: "#F69412",
+  leaf: "#14C370", teal: "#13B8A3", ocean: "#1884FC", orchid: "#FB3499", charcoal: "#777777",
 } as const;
 export type SlimeColor = keyof typeof COLORS;
 
@@ -39,43 +44,71 @@ const SASH = "M 11 68 Q 50 82 89 68 L 91 75 Q 50 91 9 75 Z";
 
 /** Each character: its colour, and the marks on the same body. A mark is never hair unless it is all there is to tell them by. */
 const CHARACTERS = {
-  rimuru: { name: "slime.rimuru", color: "#5AB4E8" },
+  rimuru: { name: "slime.rimuru", color: RAPHAEL_COLOR },
   shion: { name: "slime.shion", color: COLORS.lavender, marks: loose(fill(ONE_HORN, "#363140"), 49, 34) },
   diablo: { name: "slime.diablo", color: COLORS.charcoal,
     marks: `<path d="${COLLAR} M 48 73 L 52 73 L 53 77 L 51 83 L 49 83 L 47 77 Z" fill="#FFF6E9" fill-rule="evenodd"/>` +
       fill("M 60 31 L 64 32 L 69 42 L 65 40 Z", "#EE5A64") + fill("M 67 34 L 71 36 L 75 45 L 71 43 Z", "#F5CE55"),
   },
-  benimaru: { name: "slime.benimaru", color: "#C8413F", marks: loose(fill(TWO_HORNS, "#2B2430"), 50, 34, 0.4) },
-  shuna: { name: "slime.shuna", color: "#E58CB4", marks: loose(fill(SMALL_HORNS, "#FBEFE3"), 50, 33, 0.4) },
-  souei: { name: "slime.souei", color: "#2F4A80", marks: loose(fill(ONE_HORN, "#1B2238"), 49, 34) + fill(SASH, "#F2F2F5") },
+  benimaru: { name: "slime.benimaru", color: "#F23B3B", marks: loose(fill(TWO_HORNS, "#2B2430"), 50, 34, 0.4) },
+  shuna: { name: "slime.shuna", color: "#FF8FC4", marks: loose(fill(SMALL_HORNS, "#FBEFE3"), 50, 33, 0.4) },
+  souei: { name: "slime.souei", color: "#3A62C8", marks: loose(fill(ONE_HORN, "#1B2238"), 49, 34) + fill(SASH, "#F2F2F5") },
   hakurou: { name: "slime.hakurou", color: "#8E949C", marks: loose(fill("M 50 66 C 44 63 35 64 29 72 C 37 73 45 72 50 69 Z M 50 66 C 56 63 65 64 71 72 C 63 73 55 72 50 69 Z", "#FFFFFF"), 50, 67, 0.7) },
-  gobta: { name: "slime.gobta", color: "#6BAA4C",
+  gobta: { name: "slime.gobta", color: "#4CC85A",
     marks: fill("M 28 37 Q 50 26 72 37 L 72 40 Q 50 30 28 40 Z", "#3A3A44") +
       `<circle cx="39" cy="33" r="5.5" fill="#D9E6EA" stroke="#3A3A44" stroke-width="2.5"/><circle cx="61" cy="33" r="5.5" fill="#D9E6EA" stroke="#3A3A44" stroke-width="2.5"/>`,
   },
   rigur: { name: "slime.rigur", color: COLORS.leaf, marks: fill("M 22 42 C 30 27 68 25 78 42 Q 50 31 22 42 Z", "#A8342F") },
-  rigurd: { name: "slime.rigurd", color: "#3D7440", marks: loose(fill(BOW, "#1E1E24") + `<circle cx="50" cy="72" r="3" fill="#D6A14A"/>`, 50, 72, 0.8) },
-  milim: { name: "slime.milim", color: "#F07F9C", marks: loose(`<path d="M 50 30 C 47 21 53 13 61 15 C 55 17 52 23 54 30 Z" fill="var(--slime-color)"/>`, 52, 30) },
-  veldora: { name: "slime.veldora", color: "#2C4A8C", marks: loose(fill(TWO_HORNS, "#C9D2E3"), 50, 34, 0.4) },
-  ranga: { name: "slime.ranga", color: "#56607A",
+  rigurd: { name: "slime.rigurd", color: "#2FA24F", marks: loose(fill(BOW, "#1E1E24") + `<circle cx="50" cy="72" r="3" fill="#D6A14A"/>`, 50, 72, 0.8) },
+  milim: { name: "slime.milim", color: "#FF7AA6", marks: loose(`<path d="M 50 30 C 47 21 53 13 61 15 C 55 17 52 23 54 30 Z" fill="var(--slime-color)"/>`, 52, 30) },
+  veldora: { name: "slime.veldora", color: "#3463D6", marks: loose(fill(TWO_HORNS, "#C9D2E3"), 50, 34, 0.4) },
+  ranga: { name: "slime.ranga", color: "#6C7A9E",
     back: loose(`<path d="M 19 42 Q 15 25 20 14 Q 32 19 38 32 Z M 62 32 Q 69 19 80 14 Q 85 26 81 42 Z" fill="var(--slime-color)"/>`, 50, 38, 0.3),
     marks: fill("M 50 30 L 52 35 L 57 35 L 53 38 L 55 43 L 50 40 L 45 43 L 47 38 L 43 35 L 48 35 Z", "#F2C14E"),
   },
-  gabiru: { name: "slime.gabiru", color: "#6E6A93", marks: fill("M 18 78 Q 24 70 30 78 Q 36 70 42 78 Q 48 70 54 78 Q 60 70 66 78 Q 72 70 78 78 L 76 84 Q 50 90 22 84 Z", "#F2EBDD") },
-  geld: { name: "slime.geld", color: "#A57C4E", marks: fill("M 35 80 C 33 73 34 68 38 64 C 40 69 42 74 43 81 Z M 65 80 C 67 73 66 68 62 64 C 60 69 58 74 57 81 Z", "#FBF3DC") },
-  treyni: { name: "slime.treyni", color: "#3FA287",
+  gabiru: { name: "slime.gabiru", color: "#8A82D6", marks: fill("M 18 78 Q 24 70 30 78 Q 36 70 42 78 Q 48 70 54 78 Q 60 70 66 78 Q 72 70 78 78 L 76 84 Q 50 90 22 84 Z", "#F2EBDD") },
+  geld: { name: "slime.geld", color: "#C98A45", marks: fill("M 35 80 C 33 73 34 68 38 64 C 40 69 42 74 43 81 Z M 65 80 C 67 73 66 68 62 64 C 60 69 58 74 57 81 Z", "#FBF3DC") },
+  treyni: { name: "slime.treyni", color: "#1FC29A",
     marks: loose(fill("M 48 32 L 48 19 Q 49 17 51 19 L 52 32 Z", "#2E7D4F") + fill("M 50 24 C 35 25 29 18 29 12 C 41 10 49 14 50 24 Z M 50 24 C 51 11 61 8 71 10 C 70 20 61 25 50 24 Z", "#8FD18A"), 50, 30),
   },
-  kurobe: { name: "slime.kurobe", color: "#6A5A4A", marks: fill("M 23 39 Q 50 26 77 39 L 80 45 Q 50 31 20 45 Z", "#EFEFEF") },
-  shizu: { name: "slime.shizu", color: "#5C6B8E", marks: `<ellipse cx="50" cy="35" rx="15" ry="6" fill="#F4F4F7"/>` + `<path d="M 39 35 Q 44 31 50 35 T 61 35" fill="none" stroke="#C94250" stroke-width="2.5" stroke-linecap="round"/>` },
-  hinata: { name: "slime.hinata", color: "#454A66", marks: fill(COLLAR, "#F4F4F7") + fill("M 48 72 H 52 V 84 H 48 Z", "#D6A14A") },
-  guy: { name: "slime.guy", color: "#A8283B", marks: fill(SASH, "#2A1A1E") },
+  kurobe: { name: "slime.kurobe", color: "#8E7254", marks: fill("M 23 39 Q 50 26 77 39 L 80 45 Q 50 31 20 45 Z", "#EFEFEF") },
+  shizu: { name: "slime.shizu", color: "#6A86CC", marks: `<ellipse cx="50" cy="35" rx="15" ry="6" fill="#F4F4F7"/>` + `<path d="M 39 35 Q 44 31 50 35 T 61 35" fill="none" stroke="#C94250" stroke-width="2.5" stroke-linecap="round"/>` },
+  hinata: { name: "slime.hinata", color: "#5A63A3", marks: fill(COLLAR, "#F4F4F7") + fill("M 48 72 H 52 V 84 H 48 Z", "#D6A14A") },
+  guy: { name: "slime.guy", color: "#E0304B", marks: fill(SASH, "#2A1A1E") },
   testarossa: { name: "slime.testarossa", color: "#D5D9D6", marks: loose(fill(BOW, "#3FBF94") + `<circle cx="50" cy="72" r="3" fill="#FFFFFF"/>`, 50, 72, 0.8) },
-  ultima: { name: "slime.ultima", color: "#A86FB8", marks: loose(fill(BOW, "#2A1A2E"), 50, 72, 0.8) },
-  carrera: { name: "slime.carrera", color: "#C9A227", marks: loose(fill("M 50 66 L 45 71 L 48 85 H 52 L 55 71 Z", "#B3262E"), 50, 66, 0.7) },
-  ramiris: { name: "slime.ramiris", color: "#E0B23C", back: loose(`<path d="M 16 54 C 2 48 -2 28 6 16 C 16 20 24 34 27 44 Z M 84 54 C 98 48 102 28 94 16 C 84 20 76 34 73 44 Z" fill="#F6C7DC"/>`, 50, 44, 0.3) },
+  ultima: { name: "slime.ultima", color: "#C27BE6", marks: loose(fill(BOW, "#2A1A2E"), 50, 72, 0.8) },
+  carrera: { name: "slime.carrera", color: "#F5B417", marks: loose(fill("M 50 66 L 45 71 L 48 85 H 52 L 55 71 Z", "#B3262E"), 50, 66, 0.7) },
+  ramiris: { name: "slime.ramiris", color: "#FFC83D", back: loose(`<path d="M 16 54 C 2 48 -2 28 6 16 C 16 20 24 34 27 44 Z M 84 54 C 98 48 102 28 94 16 C 84 20 76 34 73 44 Z" fill="#F6C7DC"/>`, 50, 44, 0.3) },
 } as const satisfies Record<string, { name: string; color: string; back?: string; marks?: string }>;
 export type SlimeCharacter = keyof typeof CHARACTERS;
+
+// ---------- the crown of the primary member ----------
+
+/** One gold shape, no gem and no shine (owner, 2026-11-07), drawn with its base's middle at (50, 30). */
+const CROWN_GOLD = "#F6C141";
+const CROWN = fill("M 37 32.4 L 36.2 18 L 43.6 23.8 L 50 14.2 L 56.4 23.8 L 63.8 18 L 63 32.4 Q 50 28 37 32.4 Z", CROWN_GOLD).replace("/>", ` stroke="${CROWN_GOLD}" stroke-width="1.8" stroke-linejoin="round"/>`) +
+  `<circle cx="36.2" cy="17.2" r="2.4" fill="${CROWN_GOLD}"/><circle cx="50" cy="13.2" r="2.6" fill="${CROWN_GOLD}"/><circle cx="63.8" cy="17.2" r="2.4" fill="${CROWN_GOLD}"/>`;
+type CrownSpot = readonly [x: number, y: number, turn: number, size: number];
+/**
+ * Stuck on the outline from outside, not worn: its base sits on the edge line (it never sinks into the body; owner,
+ * 2026-11-07), square to it, on the upper right where the dome slopes 30 degrees. Each spot is a point of the outline
+ * moved 0.7 out along its normal.
+ */
+const CROWN_EDGE: CrownSpot = [71.6, 33.7, 30, 0.62];
+/**
+ * A character whose own marks are there gets a spot of its own: two horns hold it upright between them (owner,
+ * 2026-11-07), Shizu's mask and Gobta's goggles push it down the edge, Diablo's streaks to the left, and the ears and
+ * wings of Ranga and Ramiris to the top. One horn in the middle leaves the edge free.
+ */
+const CROWN_SPOTS: Partial<Record<SlimeCharacter, CrownSpot>> = {
+  benimaru: [50, 27.8, 0, 0.55], veldora: [50, 27.8, 0, 0.55], shuna: [50, 27.9, 0, 0.5],
+  shizu: [79.5, 40.1, 46, 0.6], gobta: [81.7, 42.6, 50, 0.58], diablo: [28.4, 32.9, -32, 0.6],
+  ranga: [50, 27.6, 4, 0.6], ramiris: [57, 28.2, 12, 0.62],
+};
+function crownMark(slime: Slime): string {
+  const [x, y, turn, size] = ("character" in slime && CROWN_SPOTS[slime.character]) || CROWN_EDGE;
+  return loose(`<g transform="translate(${x} ${y}) rotate(${turn}) scale(${size}) translate(-50 -30)">${CROWN}</g>`, x, y, 0.6);
+}
 
 const CHARACTER_IDS = Object.keys(CHARACTERS) as SlimeCharacter[];
 const COLOR_IDS = Object.keys(COLORS) as SlimeColor[];
@@ -140,22 +173,25 @@ function strips(state: SlimeState, drawing: {back: string; worn: string}): [stri
   return loopState(state) ? motionStrips(state,BODY,EYES,FACE_SCALE,drawing.back,drawing.worn) : ['',''];
 }
 
-export interface SlimeDrawing { now?: Date; state?: SlimeState; delay?: number; tempo?: number; since?: number; member?: number }
+export interface SlimeDrawing { now?: Date; state?: SlimeState; delay?: number; tempo?: number; since?: number; member?: number; crown?: boolean }
 
 /** The shared vector surface; `slimeFaceHTML` supplies the member's fixed avatar box. */
-export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay = 0, tempo = 1, since, member }: SlimeDrawing = {}): string {
+export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay = 0, tempo = 1, since, member, crown = false }: SlimeDrawing = {}): string {
   hearThePointer();
   const look: { color: string; back?: string; marks?: string } = "character" in slime ? CHARACTERS[slime.character] : { color: COLORS[slime.color] };
-  const hat = "character" in slime ? null : seasonalHat(now);
-  const worn = (look.marks ?? "") + (hat ? loose(`<g transform="translate(0 ${HAT_LIFT})">${HATS[hat]}</g>`, 50, 30, 0.6) : "");
+  // The primary member wears the crown in any season: a plain slime's hat gives way to it.
+  const hat = "character" in slime || crown ? null : seasonalHat(now);
+  const worn = (look.marks ?? "") + (hat ? loose(`<g transform="translate(0 ${HAT_LIFT})">${HATS[hat]}</g>`, 50, 30, 0.6) : "") + (crown ? crownMark(slime) : "");
   const key = `${look.back ?? ''}|${worn}`;
   let drawingId = drawingIds.get(key);
   if (!drawingId) { drawingId=String(drawings.size);drawingIds.set(key,drawingId);drawings.set(drawingId,{back:look.back ?? '',worn}); }
   const [bodyStrip,eyeStrip] = strips(state,drawings.get(drawingId)!);
-  return `<span class="slime-surface" data-slime-drawing="${drawingId}" data-slime-reuse="${drawingId}:${look.color}:${tempo}:${member ?? ''}" data-state="${state}" aria-hidden="true" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}">${bodyStrip}<svg class="slime" viewBox="4 11 92 92" data-slime-mounted="${performance.now()}" data-state="${state}"${member === undefined ? "" : ` data-slime-member="${member}"`} aria-hidden="true" focusable="false" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}${since === undefined ? "" : `;--slime-since:${since}ms`}">` +
+  // Each member glances to its own side at rest; neighbours in a list look different ways.
+  const aside = member !== undefined && Math.abs(member) % 2 === 1 ? 3 : -3;
+  return `<span class="slime-surface" data-slime-drawing="${drawingId}" data-slime-reuse="${drawingId}:${look.color}:${tempo}:${member ?? ''}" data-state="${state}" aria-hidden="true" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}">${bodyStrip}<svg class="slime" viewBox="4 11 92 92" data-slime-mounted="${performance.now()}" data-state="${state}"${member === undefined ? "" : ` data-slime-member="${member}"`} aria-hidden="true" focusable="false" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo};--slime-aside:${aside}px${since === undefined ? "" : `;--slime-since:${since}ms`}">` +
     `<g class="slime-press"><g class="slime-settle"><g class="slime-counterturn"><g class="slime-motion">` +
     (look.back ? `<g class="slime-back">${look.back}</g>` : "") + correction(`<path d="${BODY}" fill="var(--slime-color)" class="slime-body"/>`) + `<g class="slime-marks">${worn}</g>` +
-    `<g class="slime-face" transform="${FACE_SCALE}"><g class="slime-look"><g class="slime-counterturn"><g class="slime-gaze" fill="none" stroke="#fff" stroke-linecap="round"><path class="slime-eyes" d="${EYES}"/></g></g></g></g>` +
+    `<g class="slime-face" transform="${FACE_SCALE}"><g class="slime-follow"><g class="slime-look"><g class="slime-counterturn"><g class="slime-gaze" fill="none" stroke="#fff" stroke-linecap="round"><path class="slime-eyes" d="${EYES}"/></g></g></g></g></g>` +
     `</g></g></g></g></svg>${eyeStrip}</span>`;
 }
 
@@ -163,18 +199,14 @@ export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay
 
 let hearing = false;
 
-/** A slime under the pointer wiggles, and finishes after the pointer has gone, so that a sweep down the list runs through it like a wave. */
+/**
+ * Under the pointer a slime does not wiggle any more (owner, 2026-11-07): a resting one glances aside and looks back
+ * at you while the pointer is on it or its row, as Grok Bot's bots do (slime.css). Here only the end of a handover.
+ */
 function hearThePointer(): void {
   if (hearing || typeof document === "undefined") return;
   hearing = true;
-  document.addEventListener("pointerover", event => {
-    const target = event.target as Element;
-    const host = target.closest?.(".mb-row, .mb-avbtn, .mb-preset") ?? target.closest?.(".mb-av-slime");
-    if (!host || host.contains(event.relatedTarget as Node | null)) return;
-    for (const svg of host.querySelectorAll('svg.slime')) svg.classList.add("is-delighted");
-  });
   document.addEventListener("animationend", event => {
-    if (event.animationName === "slime-delight") (event.target as Element).closest(".slime-surface")?.querySelector("svg.slime")?.classList.remove("is-delighted");
     if (event.animationName === 'slime-idle-hide') {
       const svg=(event.target as Element).closest<SVGElement>('svg.slime');
       if(!svg)return;
@@ -488,7 +520,7 @@ export function slimeFaceHTML(member: SlimeFacts & { avatar?: string | null }, s
   const state = member.waiting ? "blocked" : activity.get(member.id) ?? rest, now = performance.now(), start = began.get(member.id);
   const label = labels.get(member.id) ?? "";
   return `<span class="av mb-av mb-av-slime${cls ? ` ${cls}` : ""}" data-presence-member="${member.id}"${label ? ` data-tooltip="${label.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;")}"` : ""} style="--av:${Math.round(size)}px" aria-hidden="true">` +
-    slimeSVG(slime, { state, member: member.id, delay: delayOf(member.id, now), tempo: tempoOf(member.id), since: start === undefined ? undefined : -Math.round(now - start) }) + `</span>`;
+    slimeSVG(slime, { state, member: member.id, crown: member.id === crownedId(), delay: delayOf(member.id, now), tempo: tempoOf(member.id), since: start === undefined ? undefined : -Math.round(now - start) }) + `</span>`;
 }
 
 // ---------- the picture menu ----------

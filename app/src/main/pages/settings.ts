@@ -8,7 +8,6 @@
 // Raphael listens, learning from corrections) has no switch: it is simply on.
 
 import { openTimezoneMenu } from "../timezones";
-import { confirmDelete } from "../member-dialogs";
 import { knownCatalog, rememberCatalog } from "../brain-lists";
 import { isUiLocale, onLocaleChange, t } from "../i18n";
 import { createMemoryImport } from "../memory-import";
@@ -16,7 +15,6 @@ import { createOwnerControls } from "../owner-settings";
 
 import { getVersion } from "@tauri-apps/api/app";
 import * as api from "../api";
-import { createHiddenMembers } from "../hidden-members";
 import { openActions } from "../member-column";
 import "../member-panel.css";
 import "../settings-polish.css";
@@ -28,6 +26,7 @@ import "../memory.css";
 import { createMemory } from "../memory-view";
 import "../safety-rules.css";
 import { createRules } from "../safety-rules";
+import { createVault } from "../vault";
 import { createConnections } from "../connections";
 import { createMessaging } from "../messaging";
 import { DICTATION_MODES, isDictationMode } from "../dictation";
@@ -55,7 +54,6 @@ import {
   closeMenu,
   copyButton,
   esc,
-  ico,
   iconBtn,
   menuIsOpenFor,
   openConfirmMenu,
@@ -74,7 +72,6 @@ import {
   APPEARANCES,
   LOCAL_COMMAND_MODES,
   HOTKEY_ROWS,
-  agentCity,
   quickModels,
   quickPickerLook,
   WORKER_COST_CAPS,
@@ -83,7 +80,7 @@ import {
   mediaRowPrice,
   canonicalPane,
   PANES,
-  type SearchHit,
+  STANDALONE_PANE,
   SIZES,
   type SettingsView,
   type ModelsTab,
@@ -99,8 +96,6 @@ import {
   priceTexts,
   retentionChoices,
   retentionOf,
-  searchResultsHTML,
-  searchSettings,
   sttEngine,
   sttModel,
 } from "./settings-view";
@@ -166,10 +161,6 @@ export interface SettingsPage extends Page {
   /** Reads ahead, so that the first opening has nothing to wait for either. */
   preload(): Promise<void>;
 }
-/** How long a row the search jumped to stays lit. */
-const FOUND_MS = 1600;
-
-
 export function createSettings(app: AppContext): SettingsPage {
   const el = document.createElement("div");
   el.className = "modal-scrim";
@@ -178,15 +169,12 @@ export function createSettings(app: AppContext): SettingsPage {
   el.innerHTML =
     `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="set-title">` +
     `<nav class="modal-nav" aria-label="${esc(t("nav.settings"))}">` +
-    `<label class="field set-search">${ico("search")}<input id="set-search" type="text" autocomplete="off" spellcheck="false"></label>` +
     `<div class="set-list"></div>` +
     `</nav>` +
     `<div class="modal-body"></div>` +
     `${iconBtn("x", t("common.close"), ' data-act="close"', "modal-x")}` +
     `</div>`;
-  const hiddenMembers = createHiddenMembers();
   const body = el.querySelector<HTMLElement>(".modal-body")!;
-  const searchField = el.querySelector<HTMLInputElement>("#set-search")!;
   const navList = el.querySelector<HTMLElement>(".set-list")!;
   let pane: SettingsPane = "general";
   let modelsTab: ModelsTab = "models";
@@ -195,13 +183,7 @@ export function createSettings(app: AppContext): SettingsPage {
   let usage: UsageAnalyticsMount | null = null;
   let usageRefresh: Promise<void> | null = null;
   let usageAgain = false;
-  /** What 「搜尋設定」 found for what is typed in it; the tabs are listed again when it is empty. */
-  let hits: SearchHit[] = [];
-  /** A row the search chose, to be lit once its tab is drawn with its rows (not while it is being read). */
-  let pendingJump: SearchHit | null = null;
 
-  let data: SettingsView["data"];
-  let dataEpoch = 0;
   let brain: BrainSettings | null = null;
   const memoryImport = createMemoryImport(() => { if (visible) render(); });
   let update: api.UpdateView | null = null;
@@ -239,8 +221,6 @@ export function createSettings(app: AppContext): SettingsPage {
   let limitDraft: string | null = null;
   let limitError: (() => string) | null = null;
   /** The same for the weather city. */
-  let cityDraft: string | null = null;
-  let cityError: (() => string) | null = null;
   /** A shortcut being recorded (「變更」): the row is drawn again when it is over. */
   const recording = createHotkeyRecording(app, () => {
     if (visible) render();
@@ -251,7 +231,7 @@ export function createSettings(app: AppContext): SettingsPage {
   /** The search for microphones that 「重新搜尋麥克風」 started is under way. */
   let searchingMicrophones = false;
   let visible = false;
-  let readOnce = false, preloading = false;
+  let readOnce = false, preloading = false, connectionsWarmed = false;
   let stopOutside = (): void => {};
   let loading = false;
   let loads = 0;
@@ -264,7 +244,13 @@ export function createSettings(app: AppContext): SettingsPage {
   });
   app.onEvent((event) => connections.followEvent(event));
   /** Telegram, in the 「訊息平台」 tab: it keeps its own state too. */
-  const messaging = createMessaging({ visible: () => visible && pane === "messaging", redraw: () => render() });
+  const messaging = createMessaging({ visible: () => visible && pane === "general", redraw: () => render() });
+  // Which members have their own bot (each set up in its panel's 建議); Raphael's own is the card above them.
+  let memberAccounts: api.MemberMessagingAccount[] = [];
+  async function loadMemberAccounts(): Promise<void> {
+    try { memberAccounts = (await api.messagingAccounts()).accounts ?? []; } catch { memberAccounts = []; }
+    if (visible && pane === "general") render();
+  }
   const memoryHost = { visible: () => visible && pane === "general", redraw: () => render() };
   const memoryShared = createMemory({ ...memoryHost, space: "shared" });
   const memories = [memoryShared];
@@ -272,6 +258,7 @@ export function createSettings(app: AppContext): SettingsPage {
     if (event.type === "MemoryChanged" && event.space !== "own" && memoryHost.visible()) void memoryShared.load();
   });
   const rules = createRules({ visible: () => visible && pane === "safety", redraw: () => render(), undo: app.undo });
+  const vault = createVault(el, () => { if (visible && pane === "safety") render(); });
   const services = createServices({ root: el, visible: () => visible && pane === "tools", redraw: () => render(), brain: () => brain, changeSetting: (key, value) => changeBrain(key, value) });
   const cliBrains = createCliBrains({ visible: () => visible, redraw: () => render() });
   const providers = createProviders({ root: el, visible: () => visible && pane === "models" && modelsTab === "models", redraw: () => render() });
@@ -289,9 +276,9 @@ export function createSettings(app: AppContext): SettingsPage {
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
     update, memoryImportHTML: memoryImport.html(),
-    data, pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
-    replacingKey, keyBusy, keyError, limitDraft, limitError, cityDraft, cityError, languageGroups, now: Date.now(),
-    connections: connections.view(), messaging: messaging.view(), memoryShared: memoryShared.view(), rules: rules.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
+    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
+    replacingKey, keyBusy, keyError, limitDraft, limitError, languageGroups, now: Date.now(),
+    connections: connections.view(), messaging: messaging.view(), memberAccounts, memoryShared: memoryShared.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
 
   /** The item at the foot of the microphones' menu that looks for them again. */
@@ -423,19 +410,19 @@ export function createSettings(app: AppContext): SettingsPage {
     const activeLimit = focusedId === "limit-input" ? el.querySelector<HTMLInputElement>("#limit-input")?.value : undefined;
     // What is being typed in 服務's fields stays through a drawing (a status that came in, say): it
     // is carried from the old field to the new one here, and kept nowhere else.
-    const serviceDrafts = Array.from(el.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('.svc-line input, .pv-field input:not([type="file"]), .pv-field textarea, #owner-output-folder')).filter(input => input.id !== "owner-output-folder" || input === active).map((input) => [input.id, input.value] as const);
+    const serviceDrafts = Array.from(el.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('.svc-line input, .pv-field input:not([type="file"]), .pv-field textarea')).map((input) => [input.id, input.value] as const);
     // A menu that is open stays open when the page is drawn again (a status that came in, say).
     const openK = openAnchorKey();
     const scroll = body.scrollTop;
     body.setAttribute("aria-busy", String(loading && pane !== "about"));
     // Only what changed moves: a list drawn again stands still, a switch that was turned slides.
-    // Analytics owns its controls and filters; keep that live subtree out of page HTML redraws.
+    // The allowances own their reading; keep that live subtree out of page HTML redraws.
     usageHost.remove();
     swapHTML(body, `<div class="set-content">${pane !== "about" && loading ? loadingHTML(view()) : paneHTML(view())}</div>`);
     const slot = body.querySelector<HTMLElement>("[data-usage-host]");
     if (slot) {
       slot.replaceWith(usageHost);
-      usage ??= mountUsageAnalytics(usageHost, { usageAnalytics: api.usageAnalytics, usageRuns: api.usageRuns, usageExport: api.usageExport, usageAllowances: api.usageAllowances, saveUsageCsv: api.saveUsageCsv, modelsCatalog: api.modelsCatalog, brainsCli: api.brainsCli, chatgptStatus: api.chatgptStatus, openExternalUrl: api.openExternalUrl });
+      usage ??= mountUsageAnalytics(usageHost, { usageAllowances: api.usageAllowances, chatgptStatus: api.chatgptStatus, openExternalUrl: api.openExternalUrl });
       if (usageFocus?.isConnected) usageFocus.focus({ preventScroll: true });
     }
     // Before the focus goes back by `data-k`, which the pickers' buttons have too.
@@ -445,7 +432,6 @@ export function createSettings(app: AppContext): SettingsPage {
       if (input && !input.disabled) input.value = value;
     }
     if (ownerFocus) el.querySelector<HTMLElement>(`[data-owner="${ownerFocus}"]`)?.focus({ preventScroll: true });
-    hiddenMembers.mount(body);
     const keyInput = el.querySelector<HTMLInputElement>("#key-input");
     if (keyInput && keyDraft !== undefined) keyInput.value = keyDraft;
     const limitInput = el.querySelector<HTMLInputElement>("#limit-input");
@@ -456,6 +442,10 @@ export function createSettings(app: AppContext): SettingsPage {
     }
     body.scrollTop = scroll;
     el.querySelectorAll<HTMLElement>("[data-pane]").forEach((b) => b.setAttribute("aria-current", b.dataset.pane === pane ? "page" : "false"));
+    // 連結應用程式 is a dialog of its own, as Grok Bot's Connect apps: no list of Settings beside it (R-UI-111).
+    if ((el.dataset.standalone ?? "") !== (pane === STANDALONE_PANE ? pane : "")) {
+      if (pane === STANDALONE_PANE) el.dataset.standalone = pane; else delete el.dataset.standalone;
+    }
 
     if (focused) el.querySelector<HTMLElement>(`[data-k="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
     else if (focusedId) el.querySelector<HTMLElement>(`#${CSS.escape(focusedId)}`)?.focus({ preventScroll: true });
@@ -465,25 +455,19 @@ export function createSettings(app: AppContext): SettingsPage {
       if (anchor && openK === "languages") openLanguages(anchor);
       else if (anchor && menu) showMenu(anchor, menu);
     }
-    if (pendingJump && !(loading && pane !== "about")) light(pendingJump);
   }
 
-  // ---------- the tabs and 「搜尋設定」 ----------
+  // ---------- the tabs ----------
 
-  /** The list on the left: the tabs in their groups, or, while something is typed, what the search found. */
+  /** The list on the left: the six tabs, flat, as Grok Bot's. */
   function paintNav(): void {
     // A tab chosen with Enter is drawn anew here: the keyboard stays on it, and Esc still closes.
-    repaintKeepingFocus(navList, document.activeElement, () => {
-      navList.innerHTML = searchField.value.trim() ? searchResultsHTML(hits) : paneListHTML();
-    });
+    repaintKeepingFocus(navList, document.activeElement, () => { navList.innerHTML = paneListHTML(); });
     navList.querySelectorAll<HTMLElement>("[data-pane]").forEach((b) => b.setAttribute("aria-current", b.dataset.pane === pane ? "page" : "false"));
   }
 
   function translateNav(): void {
     el.querySelector(".modal-nav")!.setAttribute("aria-label", t("nav.settings"));
-    searchField.placeholder = t("settings.search");
-    searchField.setAttribute("aria-label", t("settings.search"));
-    hits = searchSettings(searchField.value);
     paintNav();
   }
   translateNav();
@@ -492,22 +476,18 @@ export function createSettings(app: AppContext): SettingsPage {
   function openPane(next: SettingsPane, tab?: ModelsTab): void {
     closeMenu();
     const hadUsage = usage !== null;
-    const jumping = pendingJump !== null;
     if (next === "usage") modelsTab = "usage";
     else if (tab) modelsTab = tab;
     pane = canonicalPane(next);
     if (pane === "about") void checkUpdate();
-    if (pane === "data") void loadData();
-    if (pane === "general") void hiddenMembers.load();
     if (pane !== "models") destroyUsage();
     if (pane === "connections") void connections.load();
     else connections.reset();
-    if (pane === "messaging") void messaging.load();
-    else messaging.reset();
-    if (pane === "general") for (const list of memories) void list.load();
-    else for (const list of memories) list.reset();
-    if (pane === "safety") void rules.load();
-    else rules.reset();
+    // Messaging and memory are sections of 一般 (owner, 2026-11-07).
+    if (pane === "general") { void messaging.load(); void loadMemberAccounts(); for (const list of memories) void list.load(); }
+    else { messaging.reset(); for (const list of memories) list.reset(); }
+    if (pane === "safety") { void rules.load(); void vault.load(); }
+    else { rules.reset(); vault.reset(); }
     services.reset();
     providers.reset();
     if (pane === "tools") void services.load();
@@ -515,7 +495,9 @@ export function createSettings(app: AppContext): SettingsPage {
     syncMonitor();
     body.scrollTop = 0;
     render();
-    if (!jumping) body.scrollTop = 0;
+    body.scrollTop = 0;
+    // A link to messaging of before lands on its section of 一般.
+    if (next === "messaging") body.querySelector<HTMLElement>('[data-section="messaging"]')?.scrollIntoView({ block: "start" });
     if (hadUsage && pane === "models" && modelsTab === "usage") refreshUsage();
     paintNav();
     replay(body, "pane-in");
@@ -533,75 +515,6 @@ export function createSettings(app: AppContext): SettingsPage {
     if (next === "models") void providers.load();
     else if (hadUsage) refreshUsage();
   }
-
-  /** Goes where a hit of the search is: its tab, then its row, which is lit for a moment and gets the focus. */
-  function jump(hit: SearchHit): void {
-    if (hit.target === "computer") { app.closeSettings(); app.go("agent", "computer"); return; }
-    searchField.value = "";
-    hits = [];
-    pendingJump = hit.label ? hit : null;
-    openPane(hit.pane, hit.label && canonicalPane(hit.pane) === "models" ? hit.pane === "usage" ? "usage" : "models" : undefined);
-    if (!hit.label) el.querySelector<HTMLElement>("#set-title")?.focus();
-  }
-
-  /** Lights the row a jump was for, if its tab shows it, scrolls it into view and focuses its control. */
-  function light(hit: SearchHit): void {
-    pendingJump = null;
-    if (pane !== canonicalPane(hit.pane)) return;
-    if (hit.label === "providers.add") {
-      const button = body.querySelector<HTMLButtonElement>('[data-pv="directory"]');
-      if (button?.disabled && providers.view().state !== "failed") { pendingJump = hit; return; }
-      button?.scrollIntoView({ block: "center" }); button?.focus({ preventScroll: true });
-      return;
-    }
-    const rows = Array.from(body.querySelectorAll<HTMLElement>(".row"));
-    const found =
-      rows.find((r) => r.querySelector(":scope > .lbl > .t")?.textContent?.trim() === hit.text) ??
-      // a capability of 服務 is a row of the rounded list, named by its `.nm`
-      Array.from(body.querySelectorAll<HTMLElement>(".cs-item.svc-item")).find((r) => r.querySelector(".nm")?.textContent?.trim() === hit.text);
-    if (!found) {
-      // A hit that names a whole section (電腦操作) brings its heading into view and lights its list.
-      const list = Array.from(body.querySelectorAll<HTMLElement>(".sgroup")).find((g) => g.querySelector(":scope > h2")?.textContent?.trim() === hit.text)?.querySelector<HTMLElement>(":scope > .slist, :scope > .cs-list");
-      if (!list) return;
-      list.scrollIntoView({ block: "center" });
-      list.classList.add("found");
-      setTimeout(() => list.classList.remove("found"), FOUND_MS);
-      return;
-    }
-    const control = found.querySelector<HTMLElement>(":scope > .ctl :is(button, input):not([disabled]), :scope > .cs-open");
-    control?.focus({ preventScroll: true });
-    found.scrollIntoView({ block: "center" });
-    found.classList.add("found");
-    setTimeout(() => found.classList.remove("found"), FOUND_MS);
-  }
-
-  searchField.addEventListener("input", () => {
-    hits = searchSettings(searchField.value);
-    paintNav();
-  });
-  searchField.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && hits.length) {
-      e.preventDefault();
-      jump(hits[0]);
-    } else if (e.key === "ArrowDown" && hits.length) {
-      e.preventDefault();
-      navList.querySelector<HTMLElement>(".set-hit")?.focus();
-    } else if (e.key === "Escape" && searchField.value) {
-      // Esc empties the search first; the next one closes the settings.
-      e.preventDefault();
-      searchField.value = "";
-      hits = [];
-      paintNav();
-    }
-  });
-  navList.addEventListener("keydown", (e) => {
-    const items = Array.from(navList.querySelectorAll<HTMLElement>(".set-hit"));
-    const i = items.indexOf(document.activeElement as HTMLElement);
-    if (i < 0 || (e.key !== "ArrowDown" && e.key !== "ArrowUp")) return;
-    e.preventDefault();
-    if (e.key === "ArrowUp" && i === 0) searchField.focus();
-    else items[Math.min(items.length - 1, Math.max(0, i + (e.key === "ArrowDown" ? 1 : -1)))].focus();
-  });
 
   onLocaleChange(() => {
     translateNav();
@@ -1060,54 +973,6 @@ export function createSettings(app: AppContext): SettingsPage {
     void changeBrain("monthly_limit_usd", limit);
   }
 
-  async function loadData(more = false): Promise<void> {
-    const mine = ++dataEpoch;
-    const last = more ? data?.items.slice(-1)[0] : undefined;
-    try {
-      const [history, conversations] = await Promise.all([
-        api.historyList({limit:21, ...(last ? {before_ms:last.created_at_ms, before_id:last.id} : {})}),
-        api.core<{conversations: {turn_count?:number}[]}>("conversations.list", {member_id:0}),
-      ]);
-      if (mine !== dataEpoch) return;
-      data = { items:[...(more ? data?.items ?? [] : []), ...history.items.slice(0,20)], total:history.total ?? history.items.length, conversations:conversations.conversations.filter(c => (c.turn_count ?? 0) > 0).length, more:history.items.length>20 };
-    } catch (error) {
-      if (mine !== dataEpoch) return;
-      data = {...data ?? {items:[],total:0,conversations:0,more:false},busy:false,error:describeError(error)};
-    }
-    if (visible && pane === "data") render();
-  }
-
-  async function clear(what: "dictation" | "conversation"): Promise<void> {
-    if (!data || data.busy) return;
-    const count = what === "dictation" ? data.total : data.conversations;
-    if (!await confirmDelete(t(what === "dictation" ? "data.deleteDictations" : "data.deleteConversations", {p0:count}))) return;
-    dataEpoch++; data = {...data,busy:true,error:undefined}; render();
-    try {
-      if (what === "dictation") { await api.historyClear(); data = {...data,items:[],total:0,more:false}; }
-      else { await api.agentHistoryClear(); data = {...data,conversations:0}; }
-      app.cleared.say(what);
-    } catch (error) { data = {...data,error:describeError(error)}; }
-    data = {...data,busy:false};
-    if (visible && pane === "data") render();
-  }
-
-  function commitCity(input: HTMLInputElement): void {
-    const city = input.value.trim();
-    if (city === "") {
-      cityDraft = input.value;
-      cityError = () => t("settings.agentCityEmpty");
-      render();
-      return;
-    }
-    cityDraft = null;
-    cityError = null;
-    if (city === agentCity(view())) {
-      render();
-      return;
-    }
-    void changeBrain("agent_city", city);
-  }
-
   // ---------- the microphone and its level ----------
 
   // After a core restart the app switches the new core's monitoring back on by itself.
@@ -1203,19 +1068,13 @@ export function createSettings(app: AppContext): SettingsPage {
       openPane(paneButton.dataset.pane as SettingsPane);
       return;
     }
-    const hit = target.closest<HTMLElement>("[data-hit]");
-    if (hit) {
-      const chosen = hits[Number(hit.dataset.hit)];
-      if (chosen) jump(chosen);
-      return;
-    }
 
     if (target.closest("[data-cli], [data-cli-menu], [data-chatgpt], [data-chatgpt-menu]")) { void cliBrains.click(target); return; }
     if (providers.click(target)) return;
-    // the usage view opens its own dropdowns' menus (usage-analytics.ts)
+    // the vault opens its own dropdowns' menus (vault.ts)
     const choose = target.closest<HTMLElement>(".sel");
     if (choose?.dataset.k === "routine-timezone") { openTimezoneMenu(choose, brain?.routine_timezone ?? "", value => void changeBrain("routine_timezone", value)); return; }
-    if (choose && !choose.closest(".usage-analytics, .run-analytics")) {
+    if (choose && !choose.closest(".vault")) {
       if (menuIsOpenFor(choose)) {
         closeMenu();
         return;
@@ -1244,6 +1103,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
     const act = target.closest<HTMLElement>("[data-act]")?.dataset.act;
     switch (act) {
+      case "output-pick": void api.pickOutputFolder().then(path => { if (path !== null) return changeBrain("owner_output_folder", path); }).catch(error => toaster.info(describeError(error))); break;
       case "update-check": void checkUpdate(); break;
       case "update-install": void checkUpdate("install"); break;
       case "update-releases":
@@ -1295,12 +1155,6 @@ export function createSettings(app: AppContext): SettingsPage {
         }
         break;
       }
-      case "data-clear":
-        void clear(target.closest<HTMLElement>('[data-what]')?.dataset.what === "dictation" ? "dictation" : "conversation");
-        break;
-      case "data-more":
-        if (data && !data.busy) { data = {...data,busy:true}; render(); void loadData(true); }
-        break;
       case "help":
         void api.openExternalUrl("https://github.com/Jheng-Kai/Raphael/issues").catch(error => toaster.info(describeError(error)));
         break;
@@ -1318,16 +1172,13 @@ export function createSettings(app: AppContext): SettingsPage {
     void ownerControls.change(e.target as Element);
     void providers.change(e.target as Element);
     const input = e.target as HTMLInputElement;
-    if (input.id === "owner-output-folder") void changeBrain("owner_output_folder", input.value);
-    else if (input.id === "limit-input") commitLimit(input);
-    else if (input.id === "agent-city") commitCity(input);
+    if (input.id === "limit-input") commitLimit(input);
   });
   el.addEventListener("input", (e) => {
     const input = e.target as HTMLInputElement;
     providers.input(input);
     if (connections.input(input) || messaging.input(input) || memories.some((list) => list.input(input)) || rules.input(input)) return;
     if (input.id === "limit-input") limitDraft = input.value;
-    else if (input.id === "agent-city") cityDraft = input.value;
   });
   el.addEventListener("keydown", (e) => {
     const tab = (e.target as Element).closest<HTMLElement>("[data-models-tab]");
@@ -1419,6 +1270,13 @@ export function createSettings(app: AppContext): SettingsPage {
       preloading = true;
       try { const apply = await readSettings(); if (!visible) apply(); }
       finally { preloading = false; }
+      // Connect apps opens on what it already holds: its lists, the store and Composio's catalog are read once the app
+      // is idle after launch, not when the owner first asks for them (owner, 2026-11-07). Opening reads them again quietly.
+      if (!connectionsWarmed) {
+        connectionsWarmed = true;
+        const warm = (): void => { if (!(visible && pane === "connections")) void connections.load(); };
+        if (typeof requestIdleCallback === "function") requestIdleCallback(warm, { timeout: 3000 }); else setTimeout(warm, 1500);
+      }
     },
     async show(open?: PageArgument) {
       const repair = open?.startsWith("repair:") ? open.split(":").slice(1) : null;
@@ -1436,8 +1294,6 @@ export function createSettings(app: AppContext): SettingsPage {
       keyError = null;
       limitDraft = null;
       limitError = null;
-      cityDraft = null;
-      cityError = null;
       // the first tab, unless the way in knows better (the report that says there is no key goes to the key)
       pane = open && PANES.some((p) => p.id === canonicalPane(open as SettingsPane)) ? canonicalPane(open as SettingsPane) : "general";
       if (open === "usage" || open === "models") modelsTab = open;
@@ -1446,19 +1302,15 @@ export function createSettings(app: AppContext): SettingsPage {
       messaging.reset();
       for (const list of memories) list.reset();
       rules.reset();
+      vault.reset();
       services.reset();
       providers.reset();
       if (pane === "about") void checkUpdate();
-      if (pane === "data") void loadData();
       if (pane === "connections") void connections.load();
-      if (pane === "messaging") void messaging.load();
-      if (pane === "general") for (const list of memories) void list.load();
-      if (pane === "safety") void rules.load();
+      if (pane === "general") { void messaging.load(); for (const list of memories) void list.load(); }
+      if (pane === "safety") { void rules.load(); void vault.load(); }
       if (pane === "tools") void services.load();
       if (pane === "models" && modelsTab === "models") void providers.load();
-      searchField.value = "";
-      hits = [];
-      pendingJump = null;
       body.scrollTop = 0;
       closeMenu();
       render();
@@ -1495,7 +1347,6 @@ export function createSettings(app: AppContext): SettingsPage {
           field?.scrollIntoView({block: "center"}); field?.focus();
         }
       }
-      void hiddenMembers.load();
       if (!el.contains(document.activeElement)) el.querySelector<HTMLElement>("#set-title")?.focus();
       void loadCatalog();
       void loadLocalModels();
@@ -1503,7 +1354,6 @@ export function createSettings(app: AppContext): SettingsPage {
       stopEvents?.();
       const stopLevels = app.onEvent((event) => {
         if (event.type === "Level") onLevel(event.value);
-        if (event.type === "MembersChanged") void hiddenMembers.load();
       });
       windowFocused = true;
       window.addEventListener("focus", onFocus);
@@ -1530,6 +1380,7 @@ export function createSettings(app: AppContext): SettingsPage {
       messaging.reset();
       for (const list of memories) list.reset();
       rules.reset();
+      vault.reset();
       services.reset();
       providers.reset();
       document.removeEventListener("keydown", settingsKey);

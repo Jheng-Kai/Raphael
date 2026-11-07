@@ -103,7 +103,7 @@ LOST_SESSION_SECONDS = 60.0
 
 # What a session can be for (the `purpose` of `dictation.start`).
 PURPOSE_DICTATION, PURPOSE_AGENT = "dictation", "agent"
-_PURPOSES = (PURPOSE_DICTATION, PURPOSE_AGENT)
+_PURPOSES = (PURPOSE_DICTATION, PURPOSE_AGENT, "voice_chat")
 
 _LEVEL_METHOD = "audio.level"
 # After the stop: how far the transcription of what is left has come, then that the brain is
@@ -166,6 +166,9 @@ class _Session:
     ) -> None:
         self.id = session_id
         self.purpose = purpose
+        self.language = "auto"
+        self.voice_started = False
+        self.voice_paused = False
         self.ui_language = ui_language
         self.loop = loop
         # "starting" (being set up), "recording", "stopping" (the last words are transcribed), or
@@ -305,6 +308,7 @@ class DictationService:
         stall_seconds: float = MIC_STALL_SECONDS,
         clock: Callable[[], float] = time.monotonic,
         on_idle: Callable[[], None] | None = None,
+        on_voice_activity: Callable[[str, str], None] | None = None,
     ) -> None:
         if not level_hz > 0:
             raise ValueError(f"level_hz must be more than 0, not {level_hz}")
@@ -325,6 +329,7 @@ class DictationService:
         self._watch_interval = min(0.25, stall_seconds / 4)
         self._clock = clock
         self._on_idle = on_idle
+        self._on_voice_activity = on_voice_activity
         self._session: _Session | None = None
         # Cancelled sessions whose threads have not exited yet (the transcriber may be inside the
         # engine).
@@ -367,6 +372,11 @@ class DictationService:
             session_id, asyncio.get_running_loop(), self._clock(), purpose,
             normalize_language(ui_language),
         )
+        if purpose == "voice_chat":
+            language = params.get("language", "auto")
+            if language not in ("auto", "zh", "en", "ja"):
+                raise RpcError(INVALID_PARAMS, "language is unsupported")
+            session.language = language
         self._session = session
         try:
             await self._set_up(session)
@@ -538,6 +548,16 @@ class DictationService:
             logger.exception("The voice activity detector failed")
             self._fail_for_good(session, exc)
             return
+        if session.purpose == "voice_chat" and self._on_voice_activity:
+            speech = session.segmenter.speech_seconds
+            silence = session.segmenter.silence_seconds
+            active = getattr(session.segmenter, "speech_active", speech > 0 and silence == 0)
+            if active and not session.voice_started:
+                session.voice_started = True
+                self._call_on_loop(session, self._on_voice_activity, session.id, "speech")
+            if session.voice_started and silence >= 0.8 and not session.voice_paused:
+                session.voice_paused = True
+                self._call_on_loop(session, self._on_voice_activity, session.id, "pause")
         with session.lock:
             session.found += len(segments)
         for segment in segments:
@@ -556,7 +576,10 @@ class DictationService:
             return
         session.silence_told_at = self._clock()
         logger.warning("The dictation can hear nothing more: it ends")
-        self._router.notify(_SILENCE_METHOD, {"session_id": session.id})
+        if session.purpose == "voice_chat" and self._on_voice_activity:
+            self._on_voice_activity(session.id, "failed")
+        else:
+            self._router.notify(_SILENCE_METHOD, {"session_id": session.id})
 
     def _finish(self, session: _Session, *, transcribe: bool) -> None:
         """The end of the recording: the speech that was still going on, and a segmenter that is
@@ -673,7 +696,10 @@ class DictationService:
         try:
             method = "transcribe_final" if final else "transcribe_tail"
             transcribe = getattr(session.engine, method, None) if final or tail else None
-            text = (transcribe or session.engine.transcribe)(segment, hints=session.hints)
+            options = {"hints": session.hints}
+            if session.purpose == "voice_chat":
+                options["language"] = session.language
+            text = (transcribe or session.engine.transcribe)(segment, **options)
         except Exception as exc:
             # Exception messages and tracebacks can contain provider text or credentials.
             logger.warning("Dictation segment failed; %s (%s)",
@@ -792,7 +818,7 @@ class DictationService:
         cut_short = session.failure is not None
         if session.failure is not None and (
             not text or session.missing == session.found
-            or (cut_short and session.purpose == PURPOSE_AGENT)
+            or (cut_short and session.purpose in (PURPOSE_AGENT, "voice_chat"))
         ):
             raise _failure_as_error(session.failure)
         # The segmenter's own count, but not if it never heard this recording: a segmenter that is
@@ -825,6 +851,10 @@ class DictationService:
                 "stt_ms": stt_ms,
                 "silent": silent,
             }
+        if session.purpose == "voice_chat":
+            if mic_failed:
+                raise RpcError(NO_MICROPHONE, "The microphone stopped working")
+            return self._agent_result(text, session, speech, silent=False)
         if mic_failed:
             logger.warning("The microphone stopped during the recording; using what was captured")
         with session.lock:

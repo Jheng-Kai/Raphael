@@ -55,6 +55,17 @@ test("learning uses native IPC and leaves notice ownership to the passive pill",
   await expect(learnComposerCorrections(correction)).resolves.toBeUndefined();
 });
 
+test("capture uses only the native correction route and never requests a model judgment", async () => {
+  await learnComposerCorrections([]);
+  expect(api.core).not.toHaveBeenCalled();
+  api.core.mockResolvedValue({ learned: [], undo: undefined });
+  await learnComposerCorrections([{ before: "不錯", after: "真的很好" }]);
+  expect(api.core.mock.calls).toEqual([["dictionary.correct", {
+    edits: [{ before: "不錯", after: "真的很好" }],
+  }]]);
+  expect(document.querySelectorAll(".toast")).toHaveLength(0);
+});
+
 test("sequential input snapshots retain separate corrections for one native batch", () => {
   const input = document.createElement("textarea"), learning = bindComposerLearning(input);
   const before = "Please ask Allice and Cloude to review the next release notes carefully.";

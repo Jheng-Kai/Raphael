@@ -6,12 +6,11 @@ import { createAgent } from "./agent";
 import { Cleared } from "../cleared";
 import { closeMenu } from "../ui";
 import { setLocale } from "../i18n";
-import { ico } from "../ui";
 import type { AppContext, MainEvent } from "../types";
 const flush = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
 afterEach(() => { closeMenu(); document.body.replaceChildren(); vi.clearAllMocks(); vi.useRealTimers(); });
 
-test("the stacked member and conversation title toggles details with one state; the gear still opens Settings", async () => {
+test("the stacked member and conversation title toggles details with one state, and the header holds nothing else", async () => {
   api.agentQuestionOpen.mockResolvedValue(null);
   api.agentHistoryList.mockResolvedValue({ turns: [] });
   api.core.mockImplementation(async method => method === "conversations.list" ? { conversations: [{ id: 1, member_id: 0, is_default: 1, title: "Research" }] } : method === "background.questions.list" ? { questions: [] } : {});
@@ -20,16 +19,16 @@ test("the stacked member and conversation title toggles details with one state; 
   document.body.append(page.el); page.show(); await flush();
   const title = page.el.querySelector<HTMLButtonElement>(".conversation-trigger")!;
   expect(title.querySelector(".mb-pill-t")?.textContent).toBe("拉斐爾");
-  expect(title.querySelector(".conversation-caption")?.textContent).toBe("Research");
+  expect(title.querySelector(".conversation-caption")?.textContent).toBe("");
+  expect(title.querySelector<HTMLElement>(".conversation-caption")!.hidden).toBe(true);
   expect(title.querySelector("button")).toBeNull();
   expect(page.el.querySelector(".conversation-head")?.textContent).not.toContain(" / ");
-  expect(page.el.querySelectorAll('.mb-head .ra-tools [data-act="settings"]')).toHaveLength(1);
+  expect(page.el.querySelector('.mb-head .ra-tools')!.children).toHaveLength(0);
   expect(page.el.querySelector('.desktop-panel')?.closest('.mb-det')).not.toBeNull();
-  const expectedGear = document.createElement("div"); expectedGear.innerHTML = ico("gear");
-  expect(page.el.querySelector('[data-act="settings"] path')?.getAttribute("d")).toBe(expectedGear.querySelector("path")?.getAttribute("d"));
   expect(page.el.querySelector('[data-act="clear"]')).toBeNull();
   expect(title.hasAttribute("aria-haspopup")).toBe(false);
-  expect(title.querySelector(".i")).toBeNull();
+  // The only icon is the › that shows under the pointer, as Grok Bot's header pill has.
+  expect([...title.querySelectorAll(".i")].every(icon => icon.closest(".mb-pill-go"))).toBe(true);
   const initial = title.getAttribute("aria-expanded") === "true";
   title.click(); await flush();
   expect(title.getAttribute("aria-expanded")).toBe(String(!initial));
@@ -42,8 +41,6 @@ test("the stacked member and conversation title toggles details with one state; 
   expect(title.getAttribute("aria-expanded")).toBe("false");
   title.click(); await flush();
   expect(title.getAttribute("aria-expanded")).toBe("true");
-  page.el.querySelector<HTMLButtonElement>('[data-act="settings"]')!.click();
-  expect(go).toHaveBeenCalledWith("settings", "agent");
   page.hide();
 });
 
@@ -67,9 +64,9 @@ test("quota notices stay immediately above the composer and disappear at reset",
   page.hide();
 });
 
-test("switching conversations scopes history, quotes the entire answer and sends the chosen ID", async () => {
+test("quick questions scope history, quote the entire answer, send their ID, and a message menu has reactions, Reply and Copy", async () => {
   api.agentQuestionOpen.mockResolvedValue(null);
-  const conversations = [{ id: 1, member_id: 0, title: "Main", is_default: 1 }, { id: 2, member_id: 0, title: "Research", is_default: 0 }];
+  const conversations = [{ id: 1, member_id: 0, title: "Main", is_default: 1, kind: "standard" }, { id: 2, member_id: 0, title: "", is_default: 0, kind: "quick" }];
   api.core.mockImplementation(async method => method === "conversations.list" ? { conversations } : method === "agent.speech.status" ? { ready: true } : method === "background.questions.list" ? { questions: [] } : {});
   api.agentHistoryList.mockImplementation(async ({ conversation_id }) => ({ turns: [{ id: conversation_id, conversation_id, member_id: 0, question: "Explain", text: "**Entire** answer\n\nSecond paragraph.", prefix: "", created_at_ms: 1000, status: "done", route: "answer", source: "app", detail: null }] }));
   const page = createAgent({ go() {}, device: () => ({}), onEvent: () => () => {}, undo: { begin() {} }, cleared: new Cleared() } as unknown as AppContext);
@@ -82,10 +79,22 @@ test("switching conversations scopes history, quotes the entire answer and sends
   const input = page.el.querySelector<HTMLTextAreaElement>(".cmp-input")!; input.value = "Continue"; input.dispatchEvent(new Event("input"));
   page.el.querySelector(".composer")!.dispatchEvent(new Event("submit", { cancelable: true })); await flush();
   expect(api.agentAskText).toHaveBeenCalledWith("Continue", [], 0, expect.objectContaining({ conversationId: 2, quote: expect.objectContaining({ text: "Entire answer\nSecond paragraph." }) }));
-  page.el.querySelector<HTMLButtonElement>('[data-act="more-message"]')!.click(); await flush();
-  expect(document.querySelector('[data-pick="speak"]')).not.toBeNull();
-  document.querySelector<HTMLButtonElement>('[data-pick="speak"]')!.click(); await flush();
-  expect(api.core).toHaveBeenCalledWith("agent.speak", { member_id: 0, conversation_id: 2, turn_id: 2 });
+  page.el.querySelector<HTMLButtonElement>('.ra [data-act="more-message"]')!.click(); await flush();
+  expect([...document.querySelectorAll<HTMLElement>('#app-popover [data-pick]')].map(item => item.dataset.pick)).toEqual(["reply", "copy", "regenerate"]);
+  expect([...document.querySelectorAll<HTMLElement>('#app-popover .menu-reactions [data-lead]')].map(item => item.dataset.lead)).toEqual(["👍", "😂", "👎", "❤️", "🎉", "+"]);
+  document.querySelector<HTMLButtonElement>('#app-popover [data-lead="👍"]')!.click(); await flush();
+  expect(api.core).toHaveBeenCalledWith("agent.react", { member_id: 0, conversation_id: 2, turn_id: 2, message_key: "reply", emoji: "👍", active: true });
+  page.el.querySelector<HTMLButtonElement>('.ra [data-act="more-message"]')!.click(); await flush();
+  document.querySelector<HTMLButtonElement>('#app-popover [data-lead="+"]')!.click();
+  expect(document.querySelector("#app-popover.emoji-picker")).not.toBeNull();
+  await vi.waitFor(() => expect(document.querySelector('#app-popover .emoji-cell[data-emoji="🚀"]')).not.toBeNull());
+  document.querySelector<HTMLButtonElement>('#app-popover .emoji-cell[data-emoji="🚀"]')!.click(); await flush();
+  expect(api.core).toHaveBeenCalledWith("agent.react", { member_id: 0, conversation_id: 2, turn_id: 2, message_key: "reply", emoji: "🚀", active: true });
+  expect(api.core).not.toHaveBeenCalledWith("agent.speak", expect.anything());
+  page.el.querySelector<HTMLButtonElement>('.owner-message [data-act="more-message"]')!.click(); await flush();
+  // The owner's own message adds Edit, which no longer stands beside the bubble (R-UI-104).
+  expect([...document.querySelectorAll<HTMLElement>('#app-popover [data-pick]')].map(item => item.dataset.pick)).toEqual(["reply", "copy", "edit"]);
+  expect(document.querySelector('#app-popover .menu-reactions')).toBeNull();
   page.hide();
 });
 
@@ -111,10 +120,10 @@ test("a question typed in the quick conversation names the quick destination, an
   page.hide();
 });
 
-test("two conversations of one member retain independent approval cards", async () => {
+test("Raphael's conversation and his quick questions retain independent approval cards", async () => {
   api.agentQuestionOpen.mockResolvedValue(null);
   api.agentHistoryList.mockResolvedValue({ turns: [] });
-  const conversations = [{ id: 1, member_id: 0, title: "Main", is_default: 1 }, { id: 2, member_id: 0, title: "Research", is_default: 0 }];
+  const conversations = [{ id: 1, member_id: 0, title: "Main", is_default: 1, kind: "standard" }, { id: 2, member_id: 0, title: "", is_default: 0, kind: "quick" }];
   api.core.mockImplementation(async method => method === "conversations.list" ? { conversations } : method === "background.questions.list" ? { questions: [] } : {});
   let emit: (event: MainEvent) => void = () => {};
   const page = createAgent({ go() {}, device: () => ({}), onEvent(handler: typeof emit) { emit = handler; return () => {}; }, undo: { begin() {} }, cleared: new Cleared() } as unknown as AppContext);
@@ -151,7 +160,7 @@ test("rooms close the private desktop lease, hide the member picker and keep rep
   document.body.append(page.el); page.show(); await flush();
   if (page.el.querySelector('.conversation-trigger')!.getAttribute('aria-expanded') !== 'true') page.el.querySelector<HTMLButtonElement>('.conversation-trigger')!.click();
   await flush();
-  page.el.querySelector<HTMLButtonElement>('[data-act="computer"]')!.click(); await flush();
+  page.el.querySelector<HTMLButtonElement>('#member-tab-computer')!.click(); await flush();
   expect(page.el.querySelector('.desktop-panel iframe')).not.toBeNull();
   window.dispatchEvent(new CustomEvent("raphael:open-room", { detail: { roomId: 7 } })); await flush();
   expect(page.el.querySelector('.desktop-panel iframe')).toBeNull();

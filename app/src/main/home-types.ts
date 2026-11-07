@@ -1,5 +1,5 @@
 import type { Status } from "./types";
-import type { CliAllowances } from "./run-analytics-types";
+import type { CliAllowances } from "./usage-analytics-types";
 import type { RoutineSchedule } from "./types";
 
 export interface HomeItem {

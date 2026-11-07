@@ -23,8 +23,8 @@
   --ask-gap: 10px;
   --ask-bottom: calc(var(--margin) + var(--e) * 0.2 - 6px);
 
-  --ui: "Inter", "Microsoft JhengHei UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
-  --zh-sub: "Microsoft JhengHei UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+  --ui: "Inter", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", system-ui, sans-serif;
+  --zh-sub: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
   --ja: "Yu Gothic UI", "Yu Gothic", "Meiryo UI", "Meiryo", "Hiragino Sans", "Noto Sans JP", sans-serif;
 }
 

@@ -101,51 +101,11 @@ const BOTTOM = 18;
 /** How many weeks fit in `width` px. */
 export const weeksThatFit = (width: number): number => Math.max(6, Math.min(53, Math.floor((width - LEFT + GAP) / PITCH)));
 
-/** Whether the day can be opened: it has a dictation (the others have nothing to show). */
-const canOpen = (c: Cell): boolean => typeof c.state === "number" && c.dictations > 0;
-
-/** The days that can be opened, oldest first: the order of the cells. */
-export const openableDates = (grid: Grid): string[] => grid.weeks.flat().filter(canOpen).map((c) => c.date);
-
-/** The day of the cell that `target` is, or is inside; null for anything else in the page. */
-export function dateOfTarget(target: Element | null): string | null {
-  return target?.closest(".heat [data-date]")?.getAttribute("data-date") ?? null;
-}
-
 /**
- * Where an arrow key goes from the day `from`, among `dates` (the days that can be opened, oldest
- * first): left and up to the day before, right and down to the day after, Home and End to the
- * first and the last. Null for any other key and when there is nowhere to go.
+ * The grid as inline SVG; the whole has a label for a screen reader. A day's words show when the day is pressed, never
+ * under the pointer (owner, 2026-11-07): each day carries them in `data-tip` for the page to show.
  */
-export function stepTo(dates: string[], from: string, key: string): string | null {
-  const at = dates.indexOf(from);
-  if (at < 0 || dates.length === 0) return null;
-  const to = { ArrowLeft: at - 1, ArrowUp: at - 1, ArrowRight: at + 1, ArrowDown: at + 1, Home: 0, End: dates.length - 1 }[key];
-  return to === undefined || to === at || to < 0 || to >= dates.length ? null : dates[to];
-}
-
-/** What an event on the grid asks for: to open a day in the history, or to move the focus to a day. */
-export type HeatAction = { open: string } | { focus: string } | null;
-
-/**
- * What a click, or a key pressed on a cell, does. A click on a day and Enter or Space on one open
- * it; the arrow keys, Home and End move to another day (`dates`: those that can be opened, oldest
- * first). Nothing for anything else in the page.
- */
-export function heatAction(event: { type: "click" | "keydown"; key?: string; target: Element | null }, dates: string[]): HeatAction {
-  const day = dateOfTarget(event.target);
-  if (day === null) return null;
-  if (event.type === "click" || event.key === "Enter" || event.key === " ") return { open: day };
-  const to = stepTo(dates, day, event.key ?? "");
-  return to === null ? null : { focus: to };
-}
-
-/**
- * The grid as inline SVG; each day has a title for the mouse, and the whole a label for a screen
- * reader. The days that can be opened are buttons; `tabStop` is the one a Tab reaches (the newest
- * when it is not one of them).
- */
-export function heatmapSVG(grid: Grid, tabStop: string | null = null): string {
+export function heatmapSVG(grid: Grid): string {
   const weeks = grid.weeks;
   const width = LEFT + weeks.length * PITCH - GAP;
   const height = 7 * PITCH - GAP + BOTTOM;
@@ -156,8 +116,6 @@ export function heatmapSVG(grid: Grid, tabStop: string | null = null): string {
     weeks.length > 0
       ? t("heatmap.009", { p0: longDate(weeks[0][0].date), p1: longDate(weeks[weeks.length - 1][6].date), p2: active, p3: formatCount(words) })
       : t("heatmap.010");
-  const openable = openableDates(grid);
-  const stop = tabStop !== null && openable.includes(tabStop) ? tabStop : openable[openable.length - 1];
   const cells = weeks
     .map((column, w) =>
       column
@@ -167,10 +125,7 @@ export function heatmapSVG(grid: Grid, tabStop: string | null = null): string {
           const cls = typeof c.state === "number" ? `h${c.state}` : c.state;
           const tip =
             c.state === "future" ? "" : c.state === "nodata" ? t("heatmap.011", { p0: longDate(c.date) }) : t("heatmap.012", { p0: longDate(c.date), p1: formatCount(c.words) });
-          const button = canOpen(c)
-            ? ` data-date="${c.date}" role="button" tabindex="${c.date === stop ? 0 : -1}" aria-label="${esc(t("heatmap.openDay", { p0: longDate(c.date), p1: formatCount(c.words) }))}"`
-            : "";
-          return `<rect class="${cls}" x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="3"${button}>${tip ? `<title>${esc(tip)}</title>` : ""}</rect>`;
+          return `<rect class="${cls}" x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="3" data-date="${c.date}"${tip ? ` data-tip="${esc(tip)}"` : ""}></rect>`;
         })
         .join(""),
     )

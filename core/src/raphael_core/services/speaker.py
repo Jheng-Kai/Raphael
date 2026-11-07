@@ -1,7 +1,7 @@
 """Raphael's voice: his answers spoken aloud, one at a time, and stopped the moment the owner moves on.
 
 `Speaker.say(prefix, text)` is called by the assistant (`agent.service`) with the line to speak, for
-the owner's own requests only (never a dictation, a message from a phone, a report of the
+Alt+Space quick questions only (never a typed reply, dictation, message from a phone, report of the
 background worker, or a question waiting for a yes). The line is the one the voice speaks, which is
 Japanese whatever the language on screen is (`agent.persona.spoken_line` makes it): the owner's
 voice model speaks Japanese only. The prefix (解, 告, 否, 了) is part of his character and is
@@ -133,6 +133,7 @@ class _Utterance:
     finished: bool = False
     playing: bool = False
     voice: str | None = None
+    speed: float = 1.0
 
 
 class Speaker:
@@ -199,19 +200,17 @@ class Speaker:
         except TimeoutError:
             pass  # the answer goes out without the sound, which follows when it comes
 
-    async def say_member(self, text: str, *, voice: str = "", turn_id: int | None = None) -> None:
-        """Speak a member's reply through the configured service with an optional voice override."""
+    async def say_call(self, text: str, *, voice: str, speed: float, turn_id: int) -> str | None:
+        """Stream a call reply through the same player and wait for its actual end."""
         self.stop()
-        if not self._hub.enabled("voice"):
-            return
-        spoken = line("", text)
-        if not spoken:
-            return
-        utterance = self._start(spoken, turn_id, voice=voice or None)
+        utterance = self._start(line("", text), turn_id, voice=voice or None, speed=speed)
         try:
-            await asyncio.wait_for(utterance.ready.wait(), self._first_audio_wait_s)
-        except TimeoutError:
-            pass
+            await asyncio.shield(utterance.task)
+        except asyncio.CancelledError:
+            # A failed player cancels its producer; owner cancellation must still propagate.
+            if not utterance.failure or asyncio.current_task().cancelling():
+                raise
+        return utterance.failure
 
     def stop(self) -> None:
         """End the speech at once: the sound, a request still on its way, and the wait for it."""
@@ -224,8 +223,8 @@ class Speaker:
         if task is not None and not task.done():
             task.cancel()
 
-    def _start(self, spoken: str, turn_id: int | None = None, *, voice: str | None = None) -> _Utterance:
-        utterance = _Utterance(turn_id=turn_id, voice=voice)
+    def _start(self, spoken: str, turn_id: int | None = None, *, voice: str | None = None, speed: float = 1.0) -> _Utterance:
+        utterance = _Utterance(turn_id=turn_id, voice=voice, speed=speed)
         self._current = utterance
         task = asyncio.get_running_loop().create_task(self._speak(spoken, utterance))
         utterance.task = task
@@ -287,7 +286,7 @@ class Speaker:
                 source.put(first)
                 playing = asyncio.ensure_future(
                     asyncio.to_thread(
-                        self._player_now().play, source, PCM_RATE, utterance.stopped, started
+                        self._player_now().play, source, round(PCM_RATE * utterance.speed), utterance.stopped, started
                     )
                 )
                 playing.add_done_callback(lambda done: self._played(utterance, done))
@@ -297,6 +296,7 @@ class Speaker:
                             break
                         source.put(chunk)
                 except ServiceError as error:  # the stream broke: what came is played
+                    utterance.failure = error.kind
                     self._failed(error.kind)
                 source.put(None)
             try:

@@ -59,22 +59,23 @@ async def test_production_workers_offer_every_speaker_the_same_abilities(make_ri
 
 @pytest.mark.parametrize("who", [0, 1])
 @pytest.mark.parametrize("brain", ["api", "cli"])
-async def test_self_lane_returns_to_the_same_named_conversation_once(make_rig, monkeypatch, who, brain):
+async def test_self_lane_returns_to_the_same_main_conversation_once(make_rig, monkeypatch, who, brain):
     rig = make_rig()
     model = "cli:codex:test" if brain == "cli" else "fake/model"
     SettingsStore(rig.conn).set("agent_model", model)
     target, _ = setup(rig, room=False, model=model)
     speaker = target if who else replace(RAPHAEL, model=model)
     conversations = Conversations(rig.conn, rig.wall)
-    main = conversations.main(who)
-    named = conversations.create(who)["id"]
+    named = conversations.main(who)
+    other_member = 0 if who else target.id
+    other_conversation = conversations.main(other_member)
     history = AgentHistory(rig.conn, rig.wall)
     source = history.get(history.add(session_id="private-long-work", question="Write a detailed review.",
         route="answer", prefix="", text="", status="running", member_id=who, conversation_id=named))
     history.add(session_id="context", question="PRIVATE-NAMED-CONTEXT", route="answer", prefix="",
                 text="Named context.", status="done", member_id=who, conversation_id=named)
     history.add(session_id="other", question="OTHER-CONVERSATION-SECRET", route="answer", prefix="",
-                text="Other context.", status="done", member_id=who, conversation_id=main)
+                text="Other context.", status="done", member_id=other_member, conversation_id=other_conversation)
     seen = []
     written = "The completed review documents the design, verified behavior and remaining acceptance boundaries. " * 5
     if brain == "api":

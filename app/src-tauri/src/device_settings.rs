@@ -163,7 +163,8 @@ impl Default for DeviceSettings {
             appearance: Appearance::default(),
             ui_language: "zh-TW".to_owned(),
             autostart: true,
-            auto_update: false,
+            // On by default (owner, 2026-11-07): a new version is checked for hourly and installed while idle.
+            auto_update: true,
             update_receipt: String::new(),
             onboarded: false,
             computer_apps: Vec::new(),
@@ -588,10 +589,14 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn automatic_updates_are_opt_in_and_receipts_cannot_be_forged_by_a_page() {
+    fn automatic_updates_are_on_by_default_and_receipts_cannot_be_forged_by_a_page() {
         let mut settings = DeviceSettings::default();
-        assert!(!settings.auto_update);
+        assert!(settings.auto_update);
         assert!(settings.update_receipt.is_empty());
+        settings
+            .apply_patch(&json!({"auto_update": false}))
+            .unwrap();
+        assert!(!settings.auto_update);
         settings.apply_patch(&json!({"auto_update": true})).unwrap();
         assert!(settings.auto_update);
         assert!(
@@ -718,7 +723,7 @@ mod tests {
                 "appearance": "light",
                 "ui_language": "zh-TW",
                 "autostart": true,
-                "auto_update": false,
+                "auto_update": true,
                 "update_receipt": "",
                 "onboarded": false,
                 "computer_apps": [],

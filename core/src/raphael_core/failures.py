@@ -166,17 +166,18 @@ def _when(at, language, now=None):
 def scrub(text: str) -> str:
     """`text` without what looks like a credential, and otherwise as it was: addresses, paths and
     long ids stay, for a text that has to keep them (a run's summary), unlike `redact`."""
-    text = re.sub(r"(?i)\b(?:bearer\s+)[^\s,;\"']+", "[redacted]", text)
-    text = re.sub(r"(?i)(?<![\w-])([\"']?(?:[\w-]*(?:key|token|secret|password|authorization|cookie))[\"']?\s*[:=]\s*)(?:[\"'][^\"']*[\"']|[^\s,;}]+)", r"\1[redacted]", text)
+    text = re.sub(r"(?i)\b(?:bearer|basic)\s+[^\s,;\"']+", "[redacted]", text)
+    text = re.sub(r'''(?ix)(?<![\w-])(["']?(?:[\w-]*(?:key|token|secret|password|authorization|cookie))["']?\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}]+)''', r"\1[redacted]", text)
     text = re.sub(r"(?i)\b(?:sk[-_]|ak_|lt_|gh[pousr]_|eyJ)[A-Za-z0-9_.-]+", "[redacted]", text)
     return re.sub(r"(?i)\b(?:refresh_token|access_token|id_token)\b", "[credential]", text)
 
 
 def redact(value: object, *, secrets=(), limit=240) -> str:
     text = str(value)
-    for secret in secrets:
+    for secret in sorted((item for item in secrets if isinstance(item, str) and item), key=len, reverse=True):
         if isinstance(secret, str) and secret:
-            text = text.replace(secret, "[redacted]")
+            for representation in {secret, json.dumps(secret)[1:-1], json.dumps(secret, ensure_ascii=False)[1:-1]}:
+                text = text.replace(representation, "[redacted]")
             if secret.lower().startswith("bearer "):
                 text = text.replace(secret[7:], "[redacted]")
     text = scrub(text)

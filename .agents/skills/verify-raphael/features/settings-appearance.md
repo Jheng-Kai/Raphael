@@ -1,5 +1,22 @@
 # Settings and appearance
 
+## Grok Bot's six tabs (owner, 2026-11-07, R-UI-115)
+
+Settings has six flat tabs, as Grok Bot's: 一般, 聽寫與快捷鍵, 工具, 安全, 模型與用量 and 關於. There are no
+group names, no search box and no line under a tab's name. Each tab is its name, then sections: a small name
+over one rounded card (`--panel`) of rows with no lines between them, the name left and the control right.
+一般 holds, in order: 關於你 (the owner's picture, name and about me), 外觀 (theme and language), 拉斐爾 (the
+routines' time zone and the output folder), 訊息平台 (Telegram, Slack, Discord), the shared memory and its
+import, and 啟動 (the guide). Links of before land on their section: `appearance` and `messaging` open 一般
+(messaging scrolled to its section). 連結應用程式 stays a dialog of its own from the sidebar (R-UI-111).
+This supersedes the About-you grouping and the search notes below.
+
+```powershell
+npm run look -- profile appearance messaging dictation tools safety models about settings-owner settings-memory appearance-menu work-messaging-setup --theme both --width 1120,720,1920x1080
+```
+
+`settings-shell` refuses group names, the search and a line under a tab's name on every settings scene.
+
 ## Signed updates and owner memory import (2026-11-05)
 
 General > About you > Import memory shows a copyable handover prompt, an answer field
@@ -70,20 +87,20 @@ Computer search opens that member's panel. Host checks and copyable repair
 commands use the location popover, never the retired settings pane.
 
 ```powershell
-npm run look -- settings-raphael-memory settings-raphael-voice desktop-host-local desktop-host-error settings-speech-service settings-agent-legacy settings-computer-search settings-owner --theme both --width 1120,720,1920x1080
+npm run look -- settings-raphael-memory settings-raphael-voice desktop-host-local desktop-host-error settings-speech-service settings-owner --theme both --width 1120,720,1920x1080
 ```
 
 ## Owner output folder in General (2026-11-05)
 
 R-OUTPUT-01 adds the optional absolute delivery folder to Settings > General,
-using its existing row, text field and settings search. Changing the preference
+chosen with the folder picker of R-COLLEAGUE-06 (no typed field). Changing the preference
 never moves existing files. The shared owner context tells every speaker to use
 it by default within existing permissions; VM and owner-PC paths remain distinct.
 See [Daily work](daily-work.md) for prompt and native delivery limits.
 Follow-up 1 authorizes the selected look run; actual native/live delivery is deferred.
 
 ```powershell
-npm run look -- owner-output-folder --theme both --width 1120,720,1920x1080
+npm run look -- owner-output-folder output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
 ```
 
 Inspect its full-size General pane in both themes at all three sizes. Compare
@@ -141,7 +158,7 @@ upload and crop an image; the resulting face appears on the footer and outgoing 
 ## Driving it with look
 
 ```powershell
-npm run look -- profile appearance appearance-menu appearance-keyboard models dictation tools safety messaging data about theme-clarity --theme both --width 1120,720
+npm run look -- profile appearance appearance-menu appearance-keyboard models dictation tools safety messaging about theme-clarity --theme both --width 1120,720
 npm run look -- home sidebar sidebar-search sidebar-group-avatar-pair sidebar-group-avatar-four chat appearance appearance-menu appearance-keyboard desktop-takeover-owner home-calendar dictation-dictionary theme-clarity --theme both --width 1120,720,1920x1080
 npm run look -- appearance --theme both --width 1120,720,1920x1080 --locale ja
 npm run look -- chatgpt-signed-out chatgpt-signed-in chooser-chatgpt-signed-out chooser-chatgpt-signed-in cli-account-menu cli-account-disconnected cli-account-reconnected window-hover-minimize window-hover-maximize window-hover-restore window-hover-close window-hover-modal --theme both --width 1120,720,1920x1080
@@ -299,10 +316,10 @@ existing viewer stream is not replaced by changing the setting.
 
 Selected scenes (synthetic zh-TW, both themes, 1120,720,1920x1080):
 profile, settings-owner, settings-memory, appearance, dictation, tools, safety,
-models, connections, messaging, data, about, settings-speech-service, settings-agent-legacy,
+models, connections, messaging, about, settings-speech-service,
 local-command-settings, local-command-setting-always, local-command-setting-never,
 menu-settings-redraw, missing-vision, missing-search, missing-search-repair,
-missing-voice, missing-voice-repair, settings-computer-search,
+missing-voice, missing-voice-repair,
 speaker-draft-chief, speaker-draft-member, speaker-draft-profile,
 settings-raphael-memory, settings-raphael-voice, desktop-host-local,
 desktop-host-remote, desktop-host-invalid, desktop-host-error, desktop-install,
@@ -338,3 +355,74 @@ within 1px, matching select/field widths, and left-aligned trigger text. Keep th
 same standard field/select padding inside those controls. No status note repeats
 the host, and host errors remain contextual. The follow-up matrix is the four host
 scenes plus desktop-panel, both themes at 1120,720,1920x1080.
+
+
+## Shared owner vault (2026-11-05)
+
+R-VAULT-01..05: Settings > Safety contains Vault. Entries have login, contact or
+card kinds, counted list filters, a label, one-line owner hint and all/chosen-member
+access. The counted filters browse records; they are not setting-value controls.
+Use the shared fieldHTML, sel/openMenu, row action menu and confirm menu.
+
+```powershell
+npm run look -- vault-list vault-filter vault-entry-menu vault-new-login vault-new-contact vault-new-card vault-sharing vault-import-preview vault-card-permission calm-thread --theme both --width 1120,720,1920x1080
+```
+
+Selected scenes: vault-list, vault-filter, vault-entry-menu, vault-new-login, vault-new-contact,
+vault-new-card, vault-sharing, vault-import-preview, vault-card-permission,
+calm-thread on the merged thread layout. Run both themes at
+1120,720,1920x1080. Inspect all contact sheets and each new scene at light 720
+and dark 1120. Compare fields, dropdowns, list filters, row menus and permission
+cards with existing consumers at the same dimensions.
+
+VaultEntries keeps only metadata in SQLite. Values stay in Windows Credential
+Manager. Migration 63 preserves every legacy computer_logins reference and its
+member grant without reading or rewriting a credential. CSV file input sends
+selected owner file bytes to an in-memory, ten-minute preview; previews return
+labels/origins only. Confirmation imports only checked entries, once; cancellation
+discards the preview. Chrome and 1Password login column variants are supported;
+non-HTTPS, malformed or non-login records are counted as skipped. The source is
+never copied. Partial credential-store failures report counts and require a fresh
+preview; inspect the list before retrying.
+
+The curated computer catalog adds vault_entries, fill_contact and fill_card.
+Members see opaque IDs, kinds, labels and hints, choose by hint and ask the owner
+if two fit. Value reads recheck member access and HTTPS origin before each input;
+driver echoes, exception details and screenshots stay private. Card use is firm
+T3 in every mode with no Always option, names merchant/amount/label, and persists
+a computer action hold before the first field. Only explicit owner completion of
+a payment takeover clears it; navigation, scripts, batched actions and restart
+do not. An interrupted payment may therefore require a fresh private payment
+takeover, even after restarting the core.
+
+Offline checks: tests/computer/test_vault_entries.py, test_login_vault.py,
+test_login_visibility.py, tests/agent/test_private_login.py, background question
+and snapshot consumers, frontend vault.test.ts and settings-view.test.ts. Tests
+use only fake keyrings and browsers. Real OS persistence, native file selection,
+real merchant pages, subscription judgment and live model choice remain separate
+acceptance. This unit explicitly skips full verify/core suites and forbids network.
+
+Payment permission cards deliberately show their merchant, amount and label in the
+shared card body without disclosure, and omit Always. Other permission cards keep
+their existing disclosure and policy. Vault kind filters use the same plain
+navigation tabs and inline counts as Connections; segmented filters remain exclusive to History and Dictionary.
+
+
+## Attachment root and Office expansion security (2026-11-05)
+
+R-SEC-FILES-01/03: core/tests/services/test_reader_security.py verifies attachment read,
+save and chunk-upload admission against a redirected storage root and limits repeated
+XLSX shared-string output before allocation/join. Keep the existing upload, text/Office,
+PDF/media, vault and memory suites in the affected core scope. Existing size limits,
+opaque IDs, owner CSV preview and private-fill consent semantics are retained. No UI
+change means no local look/judge run; OS vault and native file opening are unverified.
+
+## Owner-only persistence and bounded native logs (2026-11-05 follow-up 1)
+
+R-SEC-DATA-01 and R-SEC-LOG-02: tests/test_storage_security.py uses temporary folders
+for owner-only DACL verification, fail-closed ACL errors and five-version migration
+backup retention. Include tests/test_paths.py, memory/test_files.py and app startup
+consumers. Never infer a real owner data migration from these isolated tests.
+Rust core_stderr tests cover credential forms, overlong lines, UTF-8/EOF and benign
+diagnostics; run cargo test --locked offline with a worktree-local target directory.
+This changes no Settings markup or navigation and adds no look scope.

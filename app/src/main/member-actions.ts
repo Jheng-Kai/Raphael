@@ -1,12 +1,13 @@
 // Shared member actions for the column and the team board.
+import { exportMemberTemplate } from "./member-templates";
 import * as api from "./api";
 import { describeError } from "./format";
 import { t } from "./i18n";
-import { confirmDelete, groupChoices, groupFromValue, groupValue, openEditMemberDialog, openDialog } from "./member-dialogs";
+import { confirmDelete, groupChoices, groupFromValue, groupValue, openEditMemberDialog } from "./member-dialogs";
 import { RAPHAEL_ID, memberOf, orderedMembers, primaryIdOf } from "./members";
 import { openPrimaryPicker } from "./primary-picker";
 import type { Member, MemberPatch, MembersList } from "./types";
-import { btn, esc, openMenu, toaster } from "./ui";
+import { openMenu, toaster } from "./ui";
 
 interface MemberActionHost {
   list(): MembersList | null;
@@ -14,7 +15,6 @@ interface MemberActionHost {
   select(id: number): void;
   load(): Promise<void>;
   update(id: number, patch: MemberPatch): Promise<boolean>;
-  cleared(id: number): void;
   deleted(id: number): void;
 }
 
@@ -26,47 +26,36 @@ export function createMemberActions(host: MemberActionHost) {
   async function memberAction(id: number, action: string): Promise<void> {
     const m = memberOf(host.list(), id);
     if (!m) return;
+    if (action === "primary") return choosePrimary();
     if (id === RAPHAEL_ID) {
       if (action === "pin") { await api.settingsSet("chief_pinned", !m.pinned).catch(error => toaster.info(describeError(error))); await host.load(); }
       return;
     }
     if (action === "edit") return editMember(m);
-    if (action === "primary") return choosePrimary(id);
     try {
+      if (action === "export-template") return await exportMemberTemplate(id);
       if (action === "pin") await host.update(id, {pinned: !m.pinned});
       else if (action === "hide") {
-        await api.membersUpdate(id, {hidden: true});
-        if (host.current() === id) host.select(RAPHAEL_ID);
+        // Hidden members wait in the sidebar's hidden folder, where the same item brings them back (R-UI-112).
+        await api.membersUpdate(id, {hidden: !m.hidden});
+        if (!m.hidden && host.current() === id) host.select(RAPHAEL_ID);
         await host.load();
       } else if (action === "unread") {
         await api.core("members.unread", {id});
         // Marking the open conversation unread moves away so viewing does not immediately clear it.
         if (host.current() === id) host.select(RAPHAEL_ID);
         await host.load();
-      } else if (action === "read-all") {
-        await api.core("members.mark_all_read", {}); await host.load();
-      } else if (action === "duplicate") {
-        const result = await api.core<{member: Member}>("members.duplicate", {id});
-        await host.load(); host.select(result.member.id);
-      } else if (action === "clear") {
-        openDialog({title: t("members.sideClearConfirm", {p0: m.name}), body: `<p>${esc(t("members.sideClearHint"))}</p>`, cls: "mb-confirm",
-          actions: {secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), destructive: {label: esc(t("members.sideClear")), attrs: ' data-dlg="clear"'}},
-          onAct(pick, _button, dialog) {
-            if (pick !== "clear") return dialog.close();
-            void api.core("agent.history.clear", {member_id: id}).then(() => { dialog.close(); if (host.current() === id) host.cleared(id); void host.load(); }).catch(err => toaster.info(describeError(err)));
-          },
-        });
       }
     } catch (err) { toaster.info(describeError(err)); }
   }
 
-  /** Choose the primary contact without changing the chief or existing conversations. */
-  async function choosePrimary(from: number): Promise<void> {
+  /** 換成其他成員 on the primary's menu: choose who takes over, without changing the chief or existing conversations. */
+  async function choosePrimary(): Promise<void> {
     const list = host.list();
     if (!list) return;
     const now = primaryIdOf(list);
     const candidates = orderedMembers(list).filter((m) => m.id !== now);
-    const chosen = await openPrimaryPicker({ members: candidates, chosen: from });
+    const chosen = await openPrimaryPicker({ members: candidates });
     if (chosen === null || chosen === now) return;
     try {
       await api.membersSetPrimary(chosen);

@@ -1,2 +1,5 @@
 # The desktop image context is read inside Linux; shell steps break on CRLF.
 core/src/raphael_core/computer/image/** text eol=lf
+
+# Signed catalogue fixtures: their bytes are hashed and signed, so no line-ending conversion.
+core/tests/fixtures/member-catalog/** -text

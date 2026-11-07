@@ -38,7 +38,7 @@ heavy process at a time.
 
 Owner review regression scenes: sidebar-group-avatar-hover, sidebar-group-avatar-pair,
 sidebar-room-home and sidebar-unread. Run every sidebar-prefixed scene plus home,
-home-hover and chat in both themes at 1120, 720 and 1920x1080. The native
+home-row-hover and chat in both themes at 1120, 720 and 1920x1080. The native
 readable-layout journey checks two- and three-face rooms, production RPC summaries,
 and selection after leaving each room for Home. Inspect contact sheets and full-size
 images separately from automated assertions.
@@ -77,8 +77,12 @@ npm run look -- room-stop room-row-menu room-rename room-members room-delete roo
 The following retained room and sidebar journeys cover their shared consumers:
 
 ```powershell
-npm run look -- sidebar-owner-upload --theme both --width 1120,720,1920x1080
+npm run look -- sidebar-owner-upload sidebar-owner-crop sidebar-owner-crop-held --theme both --width 1120,720,1920x1080
 ```
+
+The picture crop dialog (owner photo and Raphael's picture share it) shows the whole picture under a
+square frame: the left button drags the picture or, on a corner, resizes the frame; the wheel zooms;
+the thirds show only while the button is held; there is no slider (owner, 2026-11-07).
 
 ## Gotchas
 
@@ -86,7 +90,7 @@ Synthetic IPC does not establish native persistence, provider or design acceptan
 
 ## Folded room receipts (2026-11-02)
 
-R-UI-72 groups consecutive handoff rows using the same renderer as private turns. handoff-group-room places a message between two receipt runs and requires two groups; handoff-group-open verifies disclosure identity during WorkerChanged delivery and arriving data. See conversation.md for the selected shared matrix. Individual receipt and room workflow checks retain their request/result/artifact protections.
+R-UI-72 groups consecutive handoff rows using the same renderer as private turns. handoff-group-room places a message between two receipt runs and requires two groups; handoff-group-open keeps the line node and the open conversation between members through WorkerChanged delivery and arriving data. See conversation.md for the selected shared matrix. Room workflow checks read the request, result, files and reason in that conversation (peer-chat.ts, 2026-11-07).
 ## Send while rooms work (2026-11-03)
 
 R-QUEUE-06 uses the shared chat composer: clear the submitted draft immediately,

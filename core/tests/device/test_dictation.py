@@ -2610,6 +2610,22 @@ async def test_an_agent_session_whose_cleanup_and_normalizing_fail_keeps_the_wor
     assert "秘密" not in caplog.text and "打開 YouTube" not in caplog.text  # type of error only
 
 
+@pytest.mark.parametrize("purpose", ["agent", "voice_chat"])
+async def test_a_conversation_never_submits_a_transcript_with_an_unrecoverable_gap(rig, router, brain, purpose):
+    def decode(samples, **kwargs):
+        if samples.size == RATE:
+            raise RuntimeError("provider unavailable")
+        return "Heard before the gap"
+    rig.engine.transcribe = decode
+    rig.recorder.chunks = [chunk(2.0), chunk(1.0)]
+    await router.call("dictation.start", {"session_id": "s1", "purpose": purpose})
+    await rig.recorder.fed(2)
+    with pytest.raises(RpcError) as error:
+        await stop(router)
+    assert error.value.code == INTERNAL_ERROR
+    assert brain.finalize_calls == 0
+
+
 async def test_an_agent_session_that_is_cancelled_while_recording_is_gone(rig, router, brain):
     rig.recorder.chunks = [chunk(1.0)]
     await start_agent(router)

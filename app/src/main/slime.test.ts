@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { faceHTML } from "./members";
+import { crownedId, crownPrimary } from "./crown";
 import { followSlimeRoster, handOver, isSlimeAvatar, parseSlime, pickSlime, seasonalHat, setSlimeState, slimeFaceHTML, slimePickerHTML, slimeSVG, type SlimeState } from "./slime";
 
 const css = readFileSync(resolve(__dirname, "slime.css"), "utf8");
@@ -18,6 +19,22 @@ const keyframes = css.split("@keyframes ").slice(1).map(chunk => {
 const stateIn = (el: Element): string | undefined => el.querySelector<SVGElement>("svg.slime")?.dataset.state;
 const plain = { now: new Date(2026, 5, 1) }, witch = { now: new Date(2026, 9, 31) };
 const same = (text: string): string => text;
+
+test("the primary member's slime wears the gold crown on its edge, in place of a season's hat; nobody else's does", () => {
+  crownPrimary({ members: [{ id: 3 }, { id: 4 }], team_context: { primary_id: 3 } });
+  const crowned = slimeFaceHTML({ id: 3, avatar: "slime:color:teal" }, 40), other = slimeFaceHTML({ id: 4, avatar: "slime:color:teal" }, 40);
+  expect(crowned).toContain('fill="#F6C141"');
+  expect(crowned).toContain("rotate(30)");
+  expect(other).not.toContain("#F6C141");
+  // two horns hold it upright between them
+  expect(slimeSVG({ character: "benimaru" }, { ...plain, crown: true })).toContain("translate(50 27.8) rotate(0)");
+  // a plain slime gives its hat up for the crown
+  expect(slimeSVG({ color: "teal" }, { ...witch, crown: true })).not.toContain("#554177");
+  // a primary the roster does not have is Raphael's again
+  crownPrimary({ members: [{ id: 4 }], team_context: { primary_id: 9 } });
+  expect(crownedId()).toBe(0);
+  expect(faceHTML({ id: 0, name: "Raphael" }, 40)).toContain("#F6C141");
+});
 
 test('sampled eyes share pixel fitting instead of fitting every hidden pose separately', () => {
   const host = document.createElement('div');
@@ -74,7 +91,7 @@ test.each(["offscreen", "hidden", "collapsed", "unchanged"])("%s slimes receive 
   } finally { styled.mockRestore(); }
 });
 
-test("a member without a picture is a slime, its chosen one or a colour from its id; Raphael is not", () => {
+test("a member without a picture is a slime, its chosen one or a colour from its id; Raphael is the first blue one", () => {
   const face = (member: Parameters<typeof faceHTML>[0]): HTMLElement => {
     const el = document.createElement("div"); el.innerHTML = faceHTML(member, 40); return el;
   };
@@ -83,7 +100,8 @@ test("a member without a picture is a slime, its chosen one or a colour from its
   expect(face({ id: 3, name: "Ada", avatar: "slime:diablo" }).innerHTML).toContain("#EE5A64");
   expect(face({ id: 3, name: "Ada", avatar: "slime:unknown" }).querySelector(".mb-av-slime")).not.toBeNull();
   expect(face({ id: 3, name: "Ada", avatar: "preset:old", avatar_url: "data:image/png;base64,AAAA" }).querySelector(".mb-av-slime svg.slime")).not.toBeNull();
-  expect(face({ id: 0, name: "Raphael" }).querySelector(".mb-av-slime")).toBeNull();
+  // Since 2026-11-07 (owner) Raphael is the very first slime, the cute blue one; his emblem shows only in voice.
+  expect(face({ id: 0, name: "Raphael" }).querySelector(".mb-av-slime svg.slime")?.outerHTML).toContain("#3DB5FF");
 });
 
 test("every character is the one slime: the same body, and only its marks differ", () => {
@@ -98,7 +116,7 @@ test("every character is the one slime: the same body, and only its marks differ
 
 test("Shion is lavender and a horn, and no hair", () => {
   const shion = slimeSVG({ character: "shion" }, plain);
-  expect(shion).toContain("--slime-color:#9270CB");
+  expect(shion).toContain("--slime-color:#905AFB");
   expect(shion).toContain("#363140");
   const bare = slimeSVG({ character: "rimuru" }, plain);
   // The resting vector carries the horn once.
@@ -323,25 +341,16 @@ test("a list keeps different paces, and each member keeps its own", () => {
   expect(tempo(5)).toBe(tempo(5));
 });
 
-test("hover plays one finite delight on the static idle vector and then leaves it still", () => {
-  document.body.innerHTML = `<button class="mb-row">${slimeFaceHTML({ id: 62 }, 40)}</button>`;
-  const row = document.querySelector(".mb-row")!, svg = row.querySelector<SVGElement>("svg.slime")!, surface = svg.parentElement!;
-  expect(svg.dataset.state).toBe("idle");
-  expect(svg.classList.contains("is-delighted")).toBe(false);
-  expect(surface.querySelector(".slime-loop, .slime-idle")).toBeNull();
-  const body = svg.querySelector(".slime-body");
-  expect(body).not.toBeNull();
+test("hover never wiggles a slime: a resting one glances to its own side and looks back while the pointer is on it", () => {
+  document.body.innerHTML = `<button class="mb-row">${slimeFaceHTML({ id: 62 }, 40)}${slimeFaceHTML({ id: 63 }, 40)}</button>`;
+  const row = document.querySelector(".mb-row")!, [even, odd] = [...row.querySelectorAll<SVGElement>("svg.slime")];
+  expect(even!.style.getPropertyValue("--slime-aside")).toBe("-3px");
+  expect(odd!.style.getPropertyValue("--slime-aside")).toBe("3px");
   row.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
-  expect(svg.classList.contains("is-delighted")).toBe(true);
-  expect(svg.querySelector(".slime-body")).toBe(body);
-  const css = readFileSync(resolve(__dirname, "slime.css"), "utf8");
-  expect(css).toContain(".slime-surface:has(.slime.is-delighted) { animation: slime-delight 620ms linear both; }");
-  expect(css).toContain(".slime.is-delighted .slime-look > .slime-counterturn { animation: slime-delight-eyes 620ms cubic-bezier(0.3, 0, 0.3, 1) both; }");
-  surface.dispatchEvent(new AnimationEvent("animationend", { bubbles: true, animationName: "slime-delight" }));
-  expect(svg.classList.contains("is-delighted")).toBe(false);
-  expect(svg.dataset.state).toBe("idle");
-  expect(svg.querySelector(".slime-body")).toBe(body);
-  expect(surface.querySelector(".slime-loop, .slime-idle")).toBeNull();
+  expect(even!.classList.contains("is-delighted")).toBe(false);
+  expect(css).not.toContain("slime-delight");
+  expect(css).toContain('.slime[data-state="idle"] .slime-follow { translate: var(--slime-aside, -3px) -0.5px;');
+  expect(css).toContain(':is(.mb-row, .mb-avbtn, .mb-preset, .mb-av-slime, .slime-surface):hover .slime[data-state="idle"] .slime-follow { translate: 0 0; }');
 });
 
 test("idle press uses a finite squash and release on its resting vector", () => {
@@ -352,24 +361,6 @@ test("idle press uses a finite squash and release on its resting vector", () => 
   expect(css).toContain(':is(.mb-row, .mb-avbtn, .mb-preset, .mb-av-slime):active .slime-surface { scale: 1.12 0.84; transition: scale 90ms cubic-bezier(0.2, 0.8, 0.3, 1); }');
   expect(css).not.toMatch(/--slime-(?:touch|squish)/);
   expect(css).toContain("transition: scale 480ms");
-});
-
-test("the pointer wakes a working slime once on the way in", () => {
-  document.body.innerHTML = `<button class="mb-row" id="row"><i id="inner"></i>${slimeFaceHTML({ id: 61 }, 40)}</button><div id="away"></div>`;
-  const svg = document.querySelector<SVGElement>("svg.slime")!, row = document.getElementById("row")!, inner = document.getElementById("inner")!, away = document.getElementById("away")!;
-  const over = (target: Element, from: Element | null): void => { target.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, relatedTarget: from })); };
-  setSlimeState(61, "thinking");
-  over(row, away);
-  expect(svg.classList.contains("is-delighted")).toBe(true);
-  svg.classList.remove("is-delighted");
-  over(inner, row);
-  expect(svg.classList.contains("is-delighted")).toBe(false);
-  over(inner, away);
-  expect(svg.classList.contains("is-delighted")).toBe(true);
-  svg.querySelector(".slime-press")!.dispatchEvent(new AnimationEvent("animationend", { bubbles: true, animationName: "slime-other" }));
-  expect(svg.classList.contains("is-delighted")).toBe(true);
-  svg.querySelector(".slime-press")!.dispatchEvent(new AnimationEvent("animationend", { bubbles: true, animationName: "slime-delight" }));
-  expect(svg.classList.contains("is-delighted")).toBe(false);
 });
 
 test("every liquid state keeps the body, eyes and costume instead of substituting a symbol", () => {

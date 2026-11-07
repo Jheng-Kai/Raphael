@@ -5,6 +5,23 @@ import { checkRendered } from "./checks.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixture.json", import.meta.url), "utf8"));
 describe("shared look IPC boundary", () => {
+  it("keeps member-store empty, offline and warning variants at the IPC boundary", async () => {
+    for (const variant of [{storeEmpty:true}, {storeOffline:true}, {storeWarning:true}]) {
+      const target = {}, state = installMock(fixture, {fixture:variant}, target);
+      const call = params => target.__TAURI_INTERNALS__.invoke("core_call", {method:"members.template",params});
+      const catalogue = await call({action:"catalog"});
+      expect(catalogue.entries).toHaveLength(variant.storeWarning ? 4 : 0);
+      expect(catalogue.offline).toBe(!!variant.storeOffline);
+      if (variant.storeWarning) {
+        const before = state.data.members.length;
+        const preview = await call({action:"catalog-preview",catalog_id:"research"});
+        expect(preview.findings).toEqual([{kind:"injection",path:"template.instructions"}]);
+        expect(preview.template.instructions).not.toBe(fixture.memberCatalog.templates.research.instructions);
+        expect(state.data.members).toHaveLength(before);
+      }
+      expect(state.errors).toEqual([]);
+    }
+  });
   it("installs a plugin set once, preserves its member choice on update and removes every set capability", async () => {
     const source = {kind:"plugin",name:"desk",version:"1.0.0",source:"local:C:/synthetic/plugin",skills:[{name:"write",description:"Write"},{name:"check",description:"Check"}],commands:[{name:"review",description:"Review",set_kind:"command"}]};
     const target = {}, state = installMock(fixture,{fixture:{skillSources:[source]}},target);
@@ -195,25 +212,21 @@ describe("shared look IPC boundary", () => {
     expect(roster.members.find(member => member.id === 3).model).toBe('cli:claude:haiku');
     expect((await invoke('brains.cli')).clis.find(cli => cli.id === 'codex').models.some(model => model.name === 'GPT-6.1 Sol')).toBe(true);
   });
-  it("reconciles the month bill exactly with sidebar ledger spend, including fractional costs", async () => {
+  it("the plain usage page reads only allowances, as the shell allows, and the month's spend stays the ledger's", async () => {
     const target = {};
-    installMock(fixture, { fixture: { usageFishVoice: true } }, target);
+    const state = installMock(fixture, {}, target);
     const call = (method, params = {}) => target.__TAURI_INTERNALS__.invoke("core_call", { method, params });
-    const month = await call("usage.runs", { range: "month" });
-    expect(month.bill.cost_usd).toBe((await call("status.get")).spend.month_usd);
-    expect(month.bill.purposes.map(row => row.purpose)).toEqual(["agent", "stt", "cleanup", "memory", "other"]);
-    expect(month.bill.purposes.find(row => row.purpose === "stt").share).toBeCloseTo(.4);
-    expect(month.fish_voice).toBe(true);
-    expect((await call("usage.runs", { range: "last_month" })).bill.cost_usd).toBe(.25);
-    expect((await call("usage.runs", { range: "all" })).bill.cost_usd).toBeCloseTo(1.49);
+    expect((await call("usage.allowances")).brains.length).toBeGreaterThan(0);
+    expect((await call("status.get")).spend.month_usd).toBeCloseTo(1.24);
+    for (const retired of ["usage.runs", "usage.analytics", "usage.export"]) await expect(call(retired, { range: "month" })).rejects.toThrow(`Unmocked IPC: ${retired}`);
+    state.errors.length = 0;
   });
-  it("keeps a finite empty bill and omits disabled Fish Audio voice", async () => {
+  it("usageEmpty has no subscriptions and nothing spent", async () => {
     const target = {};
     installMock(fixture, { fixture: { usageEmpty: true } }, target);
-    const report = await target.__TAURI_INTERNALS__.invoke("core_call", { method:"usage.runs", params:{range:"month"} });
-    expect(report.bill.cost_usd).toBe(0);
-    expect(report.bill.purposes.every(row => row.cost_usd === 0 && row.share === 0)).toBe(true);
-    expect(report.fish_voice).toBe(false);
+    const call = (method, params = {}) => target.__TAURI_INTERNALS__.invoke("core_call", { method, params });
+    expect((await call("usage.allowances")).brains).toEqual([]);
+    expect((await call("status.get")).spend.month_usd).toBe(0);
   });
   it.each([undefined, -1])("rejects an approval without an explicit existing source turn (%s)", turn_id => {
     const data = structuredClone(fixture);

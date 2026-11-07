@@ -19,6 +19,8 @@ const api = vi.hoisted(() => ({
   avatarSave: vi.fn(),
   avatarClear: vi.fn(),
   avatarGet: vi.fn(),
+  memberMessagingStatus: vi.fn(),
+  memberMessagingConnect: vi.fn(),
 }));
 vi.mock("./api", () => api);
 
@@ -48,6 +50,7 @@ function mount(settings = true) {
     list: () => LIST,
     update: vi.fn(async (_id: number, _patch: MemberPatch) => true),
     close: vi.fn<() => void>(),
+    edit: vi.fn(),
   };
   const panel = createDetails(host);
   document.body.append(panel.el);
@@ -83,17 +86,11 @@ describe("a member's panel", () => {
     resourceTab.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
     expect(panel.el.dataset.detailsTab).toBe('settings');
   });
-  test.each(['running', 'done'])('work in state %s opens its existing result and exposes the matching action', async state => {
-    api.core.mockImplementation(async method => method === 'members.list' ? {tasks:[{id:99,turn_id:42,conversation_id:7,title:'Sample work',state,created_at_ms:1}],files:[],has_more:false} : {});
-    api.workerCancel.mockResolvedValue({}); api.workerRerun.mockResolvedValue({});
-    const panel = mount(false); host.openTurn = vi.fn(); await flush();
-    panel.el.querySelector<HTMLButtonElement>('[data-panel-task="99"]')!.click();
-    expect(host.openTurn).toHaveBeenCalledExactlyOnceWith(3,7,42);
-    panel.el.querySelector<HTMLButtonElement>('[data-panel-task-menu="99"]')!.click();
-    const action = document.querySelector<HTMLButtonElement>('.menu [role="menuitem"]')!;
-    expect(action.textContent).toContain(t(state === 'running' ? 'agent.stop' : 'members.panelRerun'));
-    action.click(); await flush();
-    expect(state === 'running' ? api.workerCancel : api.workerRerun).toHaveBeenCalledExactlyOnceWith(99);
+  test('Details has no list of what the member did: its routines come first (owner, 2026-11-07)', async () => {
+    api.core.mockImplementation(async method => method === 'members.list' ? {files:[],has_more:false} : {});
+    const panel = mount(false); await flush();
+    expect(panel.el.querySelector('.mb-panel-tasks, .mb-task-list, [data-panel-task]')).toBeNull();
+    expect(panel.el.querySelector('.mb-tab-body > :first-child')?.matches('.mb-panel-routines')).toBe(true);
   });
   test('the shared three tabs support arrow navigation and reset for another member', async () => {
     const panel = mount(false); await flush();
@@ -182,26 +179,28 @@ describe("a member's panel", () => {
     expect(hide.querySelectorAll('svg')).toHaveLength(1);
     expect(hide.hasAttribute('aria-haspopup')).toBe(false);
   });
-  test("conversation slot loads the selected member, preserves search on redraw, navigates and collapses when empty", async () => {
+  test("a member has no conversation list, and Raphael's panel switches between its conversation and quick questions", async () => {
     const panel = mount(false);
     const open = vi.fn();
     host.openConversation = open;
     const original = api.core.getMockImplementation()!;
     api.core.mockImplementation(async (method, params) => method === "conversations.list"
-      ? { conversations: params.member_id === 3 ? [{ id: 91, member_id: 3, title: "Research", updated_at_ms: Date.now() }] : [] }
+      ? { conversations: params.member_id === 0
+        ? [{ id: 1, member_id: 0, title: "Weekly plan", updated_at_ms: Date.now(), is_default: 1, kind: "standard" }, { id: 2, member_id: 0, title: "", updated_at_ms: Date.now(), kind: "quick" }]
+        : [{ id: 91, member_id: params.member_id, title: "Research", updated_at_ms: Date.now(), is_default: 1, kind: "standard" }] }
       : original(method, params));
     panel.draw(); await flush();
-    const slot = panel.el.querySelector<HTMLElement>('[data-slot="conversations"]')!;
-    expect([...panel.el.querySelectorAll('.mb-dh')].filter(node => node.textContent === t('conversations.heading'))).toHaveLength(1);
-    const input = slot.querySelector<HTMLInputElement>('input')!;
-    input.value = "Research"; input.dispatchEvent(new Event("input"));
-    panel.draw(); await flush();
-    expect(panel.el.querySelector('[data-slot="conversations"] input')).toBe(input);
-    panel.el.querySelector<HTMLButtonElement>('[data-conversation-open="91"]')!.click();
-    expect(open).toHaveBeenCalledWith(3, 91);
-    current = 4; panel.showMember(); await flush();
-    expect(panel.el.querySelector<HTMLElement>('[data-slot="conversations"]')!.hidden).toBe(true);
+    expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
+    expect(panel.el.querySelector('[data-conversation-new]')).toBeNull();
     expect(panel.el.textContent).not.toContain("Research");
+    current = 0; panel.showMember(); await flush();
+    const rows = [...panel.el.querySelectorAll<HTMLButtonElement>('[data-slot="conversations"] [data-conversation-open]')];
+    expect(rows.map(row => row.querySelector('span')!.textContent)).toEqual([t('conversations.main'), t('conversations.quick')]);
+    expect(panel.el.querySelector('[data-slot="conversations"] input')).toBeNull();
+    rows[1]!.click();
+    expect(open).toHaveBeenCalledWith(0, 2);
+    current = 4; panel.showMember(); await flush();
+    expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
   });
 
   test("editing and hiding belong to settings behind the gear", async () => {
@@ -227,8 +226,10 @@ describe("a member's panel", () => {
     expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
     current = 0;
     panel.showMember();
-    expect(panel.el.querySelector('[data-det="edit"]')).toBeNull();
+    // Raphael's face opens the same one dialog, and he cannot be hidden or shared.
+    expect(panel.el.querySelector('[data-det="edit"]')!.classList.contains("mb-face-edit")).toBe(true);
     expect(panel.el.querySelector('[data-det="hide"]')).toBeNull();
+    expect(panel.el.querySelector<HTMLElement>('[data-det="share"]')!.hidden).toBe(true);
   });
 
   test("a personality draft survives redraws and is saved to its original member on switching", async () => {
@@ -523,7 +524,8 @@ describe("Raphael's panel", () => {
     await flush();
     expect(panel.el.querySelector("#mb-det-name")).toBeNull();
     expect(panel.el.querySelector(".mb-who-name")!.textContent).toBe("拉斐爾");
-    expect(panel.el.querySelector(".mb-avbtn .av")!.innerHTML).toContain("app-emblem");
+    // The first blue slime (owner, 2026-11-07): his emblem shows only in voice.
+    expect(panel.el.querySelector(".mb-avbtn .av.mb-av-slime svg.slime")).not.toBeNull();
     expect(panel.el.querySelector("#mb-det-instr")).toBeNull();
     expect(panel.el.querySelector('[data-det="group"]')).toBeNull();
     expect([...panel.el.querySelectorAll<HTMLElement>(".mb-panel-pages [data-tab]")].map(row => row.dataset.tab)).toEqual(["memory", "skills", "commands", "voice"]);
@@ -639,7 +641,51 @@ test("resource rows count saved skills including disabled ones and only active r
   const panel = mount(); await flush();
   expect(panel.el.querySelector('[data-tab="skills"] small')!.textContent).toContain("2");
   panel.el.querySelector<HTMLButtonElement>('[data-det="back"]')!.click();
-  expect(panel.el.querySelectorAll('.mb-rt-state.is-on')).toHaveLength(1);
+  // Each routine carries its own switch, on for the active one only, and no ⋯ menu.
+  expect([...panel.el.querySelectorAll('[data-det="routine-toggle"]')].map(toggle => toggle.getAttribute("aria-checked"))).toEqual(["true", "false"]);
+  expect(panel.el.querySelector('[data-det="routine-menu"]')).toBeNull();
+});
+
+test("建議 offers the member its own Telegram bot, connected with a BotFather token through the member's own calls", async () => {
+  const off = { connected: false, enabled: false, running: false, error: null, bot: null, allowed: [], pending: [], member_id: current, kind: "telegram", paired: false };
+  api.memberMessagingStatus.mockResolvedValue(off);
+  api.memberMessagingConnect.mockResolvedValue({ ok: true, status: { ...off, connected: true, enabled: true, running: true, bot: { username: "shion_bot" } } });
+  const panel = mount(false); await flush();
+  expect(api.memberMessagingStatus).toHaveBeenCalledWith(current);
+  const suggest = panel.el.querySelector<HTMLElement>(".mb-panel-suggest")!;
+  expect(suggest.querySelector(".mb-dh")!.textContent).toBe("建議");
+  const field = suggest.querySelector<HTMLInputElement>("#msg-token-member")!;
+  expect(suggest.querySelector('[data-msg="botfather"]')).not.toBeNull();
+  field.value = "123:abc"; field.dispatchEvent(new Event("input", { bubbles: true }));
+  suggest.querySelector<HTMLButtonElement>('[data-msg="connect"]')!.click();
+  await flush();
+  expect(api.memberMessagingConnect).toHaveBeenCalledWith(current, "123:abc");
+  expect(panel.el.querySelector(".mb-panel-suggest")!.textContent).toContain("@shion_bot");
+  // Raphael's own bot stays in Settings: his panel has no 建議.
+  current = 0; panel.showMember(); await flush();
+  expect(panel.el.querySelector(".mb-panel-suggest")).toBeNull();
+});
+
+test("the panel has no gear: share on the left, and the face with a pencil opens every setting", async () => {
+  const panel = mount(false); await flush();
+  const share = panel.el.querySelector<HTMLButtonElement>('.mb-det-head [data-det="share"]')!;
+  expect(share.hidden).toBe(false);
+  expect(share.getAttribute("aria-label")).toBe("分享為範本");
+  expect([...panel.el.querySelectorAll<HTMLElement>('.mb-det-head button')].filter(button => !button.hidden).map(button => button.dataset.det)).toEqual(["share", "close"]);
+  const face = panel.el.querySelector<HTMLButtonElement>(".mb-panel-identity .mb-face-edit")!;
+  expect(face.querySelector(".mb-face-pencil")).not.toBeNull();
+  face.click();
+  expect(host.edit).toHaveBeenCalledWith(LIST.members.find(member => member.id === current));
+});
+
+test("a routine's switch turns it on or off from the row without opening the editor", async () => {
+  api.routinesList.mockResolvedValue({ routines: [{ ...ROUTINE, enabled: true }] });
+  const panel = mount(false); await flush();
+  const toggle = panel.el.querySelector<HTMLButtonElement>('[data-det="routine-toggle"]')!;
+  toggle.click();
+  expect(api.routinesUpdate).toHaveBeenCalledWith(ROUTINE.id, { enabled: false });
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+  expect(document.querySelector(".au-routine-dialog")).toBeNull();
 });
 
 
@@ -656,23 +702,17 @@ describe("primary changes do not add face badges", () => {
       expect(panel.el.querySelector('.mb-who-face .mb-avbtn .av')).not.toBeNull();
       if (name) { expect(document.activeElement).toBe(name); expect(name.value).toBe('Draft name'); }
     }
-    if (id === 0) expect(panel.el.querySelector('.mb-who-face .mb-av')).toBeNull();
+    if (id === 0) expect(panel.el.querySelector('.mb-who-face .mb-av-slime svg.slime')).not.toBeNull();
   });
 });
 
 
-test("the details routine editor uses the same relative history timestamp", async () => {
-  const now = new Date(2026, 10, 5, 12).getTime();
-  const started = new Date(2026, 10, 4, 8, 0, 37).getTime();
-  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
-  api.routineRuns.mockResolvedValue({ runs: [{ id: 1, routine_id: ROUTINE.id, started, finished: started + 1000, status: "done", summary: "Completed", cost: 0, turn_id: 1 }] });
-  try {
-    const panel = mount(false);
-    await flush();
-    panel.el.querySelector<HTMLElement>('[data-det="routine-open"]')!.click();
-    await flush();
-    expect(document.querySelector('[data-run-status="done"]')?.textContent).toBe("成功 · 昨天 08:00Completed");
-    expect(document.querySelector('.au-run-history')?.textContent).not.toContain("08:00:37");
-    document.querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();
-  } finally { clock.mockRestore(); }
+test("a routine row opens the wide editor with its instructions and no history", async () => {
+  const panel = mount(false);
+  await flush();
+  panel.el.querySelector<HTMLElement>('[data-det="routine-open"]')!.click();
+  await flush();
+  expect(document.querySelector<HTMLTextAreaElement>(".au-routine-grid #au-prompt")!.value).toBe(ROUTINE.prompt);
+  expect(document.querySelector(".au-run-history, .au-run-section")).toBeNull();
+  document.querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();
 });

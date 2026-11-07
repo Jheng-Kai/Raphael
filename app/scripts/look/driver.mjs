@@ -55,7 +55,7 @@ export async function decodeVisibleImages() {
 }
 
 export function findVisibleElement(selector) {
-  return [...document.querySelectorAll(selector)].find(element => {
+  const shown = element => {
     const box = element.getBoundingClientRect();
     if (box.width <= 0 || box.height <= 0) return false;
     for (let parent = element; parent; parent = parent.parentElement) {
@@ -63,7 +63,22 @@ export function findVisibleElement(selector) {
       if (parent.hidden || style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") return false;
     }
     return true;
-  }) ?? null;
+  };
+  const found = [...document.querySelectorAll(selector)].find(shown);
+  if (found) return found;
+  // A row draws no ⋯, as Grok Bot's (styles.css): a step that waits for one, or hovers it, has the row it sits in. A
+  // message's work is in its ⋯ menu (timeline.ts): a step that waits for the work control has that ⋯.
+  for (const element of document.querySelectorAll(selector)) {
+    if (element.matches("[data-overflow]") && getComputedStyle(element).display === "none") {
+      // A wrapper that held only the ⋯ has no size now: the row is the first box out from it, unless that row is hidden.
+      let row = element.parentElement;
+      while (row && !(row.getBoundingClientRect().width > 0 && row.getBoundingClientRect().height > 0) && getComputedStyle(row).display !== "none" && !row.hidden) row = row.parentElement;
+      if (row && shown(row)) return row;
+    }
+    const more = element.matches('[data-act="thinking"][hidden]') ? element.closest(".chat-message")?.querySelector('[data-act="more-message"]') : null;
+    if (more && shown(more.closest(".chat-message"))) return more;
+  }
+  return null;
 }
 
 export async function perform(page, step, evidenceDirectory) {
@@ -76,6 +91,41 @@ export async function perform(page, step, evidenceDirectory) {
     catch (error) { throw new Error(`No visible match: ${selector}`, { cause: error }); }
   };
   const click = async selector => {
+    // Rows keep their ⋯ out of sight, as Grok Bot's (owner, 2026-11-06): a step that names one presses it the way the
+    // owner does, with a right click on its row (context-menu.ts), which presses the very same button.
+    if (await page.evaluate(selector => matchMedia("(max-width: 859px)").matches && !document.documentElement.hasAttribute("data-sidebar-open") && !!document.querySelector(selector)?.matches("[data-overflow]") && !!document.querySelector(selector)?.closest("#nav"), selector)) await page.click('[data-sidebar="open"]');
+    const row = await page.evaluate(selector => {
+      const button = document.querySelector(selector);
+      if (!button?.matches("[data-overflow]") || button.getClientRects().length) return null;
+      for (let node = button.parentElement; node; node = node.parentElement) {
+        if (!(node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0)) continue;
+        node.scrollIntoView({ block: "nearest", inline: "nearest" });
+        const box = node.getBoundingClientRect();
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      }
+      return null;
+    }, selector);
+    if (row) {
+      await page.mouse.click(row.x, row.y, { button: "right" });
+      await page.evaluate(at => { window.__look.pointer = at; }, row);
+      return;
+    }
+    // A message's work opens from its ⋯ menu, as Grok Bot's keeps only react, reply and ⋯ beside the bubble.
+    const work = await page.evaluate(selector => {
+      const control = [...document.querySelectorAll(selector)].find(node => node.matches('[data-act="thinking"][hidden]') && node.closest(".chat-message")?.getClientRects().length);
+      if (!control) return null;
+      const message = control.closest(".chat-message"), id = `look-work-${Math.random().toString(36).slice(2)}`;
+      message.querySelector('[data-act="more-message"]')?.setAttribute("data-look-more", id);
+      message.scrollIntoView({ block: "nearest" });
+      return id;
+    }, selector);
+    if (work) {
+      await page.hover(`[data-look-more="${work}"]`);
+      await page.click(`[data-look-more="${work}"]`);
+      await page.waitForSelector('#app-popover [data-pick="work"]', { visible: true, timeout: 6000 });
+      await page.click('#app-popover [data-pick="work"]');
+      return;
+    }
     for (let attempt = 0; ; attempt++) {
       const element = await visible(selector);
       try { await element.click(); return; }
@@ -208,14 +258,14 @@ export async function perform(page, step, evidenceDirectory) {
     case "handoff-arrival": {
       await page.evaluate(() => {
         window.__handoffGroup = document.querySelector('[data-handoff-group]');
-        window.__handoffReceipt = document.querySelector('[data-handoff="800"]');
+        window.__peerChat = document.querySelector('.peer-chat');
         window.__handoffOwner = document.querySelector('.tn[data-id="1"] .me');
         window.__handoffAnswer = document.querySelector('.tn[data-id="1"] .ra');
         const turn = window.__look.data.turns.find(turn => turn.id === 1);
         turn.handoffs.push({ ...turn.handoffs[0], task_id: 850, work_turn_id: 950 });
         for (let i = 0; i < 20; i++) window.__look.emit({ type: "WorkerChanged", task_id: 850, state: "running", running: true });
       });
-      await page.waitForFunction(() => document.querySelector('[data-handoff="850"]'), { timeout: 5000 });
+      await page.waitForFunction(() => document.querySelector('[data-peer-keys~="850"]') && (!window.__peerChat || document.querySelector('.peer-chat [data-peer-key="850"]')), { timeout: 5000 });
       break;
     }
     case "reload":
@@ -245,7 +295,7 @@ export async function perform(page, step, evidenceDirectory) {
       await dialog.dispose();
       if (step.kind === 'settings') await click('#nav [data-go="settings"]');
       else if (step.kind === 'member') { await perform(page, {action:'open-details'}, evidenceDirectory); await click('[data-det="gear"]'); await click('[data-det="edit"]'); }
-      else await click('[data-act="data-clear"][data-what="dictation"]');
+      else { await click('[data-room-menu]'); await click('[data-pick="delete"]'); }
       await page.evaluate(() => { window.__polishCaptionOutside = true; });
       break;
     }
@@ -316,9 +366,10 @@ export async function perform(page, step, evidenceDirectory) {
       await element.hover();
       await new Promise(resolve => setTimeout(resolve, 160));
       const hovered = await measure();
-      if (hovered.background !== (step.control === 'close' ? hovered.close : hovered.hover) || hovered.radius <= 0) throw new Error('Caption hover needs a rounded token surface');
+      // Grok Bot's caption buttons are Windows cells: the token surface fills the square cell (R-UI-16).
+      if (hovered.background !== (step.control === 'close' ? hovered.close : hovered.hover) || hovered.radius !== 0) throw new Error('Caption hover needs its token surface on a square cell');
       if (Math.abs(hovered.centerX - hovered.x) > .5 || Math.abs(hovered.centerY - hovered.y) > .5 || Math.abs(rest.x - hovered.x) > .5 || Math.abs(rest.y - hovered.y) > .5) throw new Error('Caption glyph moved or is not centered');
-      if (hovered.marginTop < 3 || Math.abs(hovered.marginTop - hovered.marginBottom) > .5) throw new Error('Caption hover needs even inner margins');
+      if (hovered.marginTop > .5 || hovered.marginBottom > .5) throw new Error("A caption cell fills the strip from top to bottom, as Windows' and Grok Bot's");
       if (!hovered.label || hovered.title !== hovered.label) throw new Error('Caption tooltip and accessible label must remain');
       if (step.control === 'close') {
         const rgb = value => value.match(/[\d.]+/g).slice(0, 3).map(Number).map(c => c / 255).map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4);
@@ -362,7 +413,7 @@ export async function perform(page, step, evidenceDirectory) {
       for (const target of step.selectors) {
         const selector = typeof target === 'string' ? target : target.selector;
         const behindDrawer = await page.evaluate(selector => matchMedia('(max-width: 859px)').matches && document.documentElement.hasAttribute('data-sidebar-open') && [...document.querySelectorAll(selector)].some(el => !el.closest('#nav')), selector);
-        if (behindDrawer) await page.click('[data-sidebar="collapse"]');
+        if (behindDrawer) await page.click('.sidebar-scrim');
         const element = await visible(selector);
         try {
           const snapshot = () => element.evaluate(button => {
@@ -505,7 +556,8 @@ export async function perform(page, step, evidenceDirectory) {
           active = await state();
         } finally { await page.mouse.move(0, 0); await page.mouse.up(); }
         if ([hover, active].some(value => value.background !== "rgba(0, 0, 0, 0)")) throw new Error("Icon hover/active must remain transparent");
-        if (active.color !== active.accent) throw new Error("Pressed icon must use the accent color");
+        // R-UI-88 (2026-11-03): a press changes colour from the hover, without a surface (R-UI-16).
+        if (active.color === hover.color) throw new Error("A pressed icon must change colour from its hover");
         await page.keyboard.press("Tab");
         await element.focus();
         const focus = await state();
@@ -577,7 +629,9 @@ export async function perform(page, step, evidenceDirectory) {
         let pressed;
         try { await new Promise(resolve => setTimeout(resolve, 180)); pressed = await measure(); }
         finally { await page.mouse.move(0, 100); await page.mouse.up(); }
-        if (pressed.background !== normal.background || pressed.layer !== 'rgba(0, 0, 0, 0)') throw new Error('Whole block press preserves its background and transparent target');
+        // R-UI-88: an enabled control changes colour on press without moving; the block's target layer stays transparent.
+        if (pressed.background === normal.background || pressed.layer !== 'rgba(0, 0, 0, 0)') throw new Error(`A whole block press changes its surface colour with a transparent target (${step.selector}: ${normal.background} -> ${pressed.background}, target ${pressed.layer})`);
+        if (pressed.visual.some((node, index) => node.slice(0, 4).some((value, edge) => Math.abs(value - hovered.visual[index][edge]) > .5))) throw new Error('A whole block press moves nothing inside it');
         await element.focus();
         const pointer = await measure();
         if (pointer.outline !== 'none' && pointer.width > 0) throw new Error('Pointer focus must not show a keyboard ring');
@@ -590,7 +644,8 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case "stable-click":
     case "click": {
-      const enabled = step.action === "stable-click" || await page.evaluate(({ selector, selectors }) => [...document.querySelectorAll(selector)].some(node => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0 && node.matches(selectors) && !node.closest('#nav, .page-home')), { selector: step.selector, selectors: stableControls });
+      // A choice in a shared popover (the narrow calendar tools' dates) closes it once made; tabs there stay checked.
+      const enabled = step.action === "stable-click" || await page.evaluate(({ selector, selectors }) => [...document.querySelectorAll(selector)].some(node => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0 && node.matches(selectors) && !node.closest('#nav, .page-home') && !(node.closest('#app-popover') && node.matches('button[aria-pressed]'))), { selector: step.selector, selectors: stableControls });
       if (!enabled) { await click(step.selector); break; }
       const target = await visible(step.selector);
       await target.evaluate(node => node.scrollIntoView({ block: "nearest", inline: "nearest" }));
@@ -632,6 +687,24 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case "type": await fill(step.selector, step.text); break;
     case "hover": { const element = await visible(step.selector); await element.hover(); await element.dispose(); break; }
+    // A press held past a control's long-press threshold, then let go there (the member voice button records on hold).
+    // `release: false` keeps the button down through the still frame (the crop frame's thirds show only while held).
+    case "hold": {
+      const element = await visible(step.selector), box = await element.boundingBox(); await element.dispose();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down();
+      if (step.release === false) { await new Promise(resolve => setTimeout(resolve, step.ms ?? 100)); break; }
+      try { await new Promise(resolve => setTimeout(resolve, step.ms ?? 500)); } finally { await page.mouse.up(); }
+      break;
+    }
+    // A press moved across in small steps and let go: a pane's edge resizes it as the owner's pointer would.
+    case "drag": {
+      if (step.wide && await page.evaluate(() => matchMedia("(max-width: 859px)").matches)) break;
+      const element = await visible(step.selector), box = await element.boundingBox(); await element.dispose();
+      const x = box.x + box.width / 2, y = box.y + box.height / 2;
+      await page.mouse.move(x, y); await page.mouse.down();
+      try { await page.mouse.move(x + step.dx, y, { steps: 12 }); } finally { await page.mouse.up(); }
+      break;
+    }
     case "desktop-refresh-still": {
       const before = await page.evaluate(() => {
         const panel = document.querySelector('.mb-det');
@@ -729,13 +802,14 @@ export async function perform(page, step, evidenceDirectory) {
       } finally { await element.dispose(); }
       break;
     }
-    case "home-day": {
-      const calendar = await visible('.ho-calendar');
-      const expanded = await calendar.evaluate(node => getComputedStyle(node).getPropertyValue('--home-calendar-expanded').trim() === '1');
-      await calendar.dispose();
-      await click(`[data-home-select="${step.date}"]`);
-      const day = await visible(`.au-day-col[data-day="${step.date}"]`); await day.dispose();
-      return {check:'home-day-selection',expanded,date:step.date,opened:true};
+    case "home-arrive-again": {
+      // Raphael flies in on Home's first showing of a day: forget the day, leave Home and come back to it.
+      await page.evaluate(() => { try { localStorage.removeItem('raphael.home.arrived'); } catch { /* the page then shows him still */ } });
+      await click('#nav [data-go="dictation"]');
+      await (await visible('.page-dictation:not([hidden])')).dispose();
+      await click('#nav [data-go="home"]');
+      await (await visible('.page-home:not([hidden])[data-arrive] .ho-hero')).dispose();
+      return {check:'home-arrive-again'};
     }
     case "touch-swipe": {
       const element = await visible(step.selector), client = await page.createCDPSession();
@@ -829,7 +903,8 @@ export async function perform(page, step, evidenceDirectory) {
     case "room-row-menu": { const more = await visible(`[data-room-more="${step.id}"]`); try { await more.hover(); await more.click(); } finally { await more.dispose(); } break; }
     case "rooms-menu": await visible(".mb-col [data-room]"); break;
     case "search":
-      await fill(".mb-find-input", step.text); break;
+      if (!(await page.$("#app-popover .side-search-input"))) await click('[data-col="search"]');
+      await fill("#app-popover .side-search-input", step.text); break;
     case "drop": case "drag-start": case "drag-over":
       { const element = await visible(step.selector);
       await element.evaluate((element, options) => {
@@ -838,10 +913,6 @@ export async function perform(page, step, evidenceDirectory) {
         element.dispatchEvent(new DragEvent(options.action === "drop" ? "drop" : options.action === "drag-over" ? "dragover" : "dragstart", { bubbles: true, cancelable: true, dataTransfer: transfer }));
       }, step);
       await element.dispose(); }
-      break;
-    case "disable-abilities":
-      await visible("#ob [data-ability]");
-      while (await page.$('#ob [data-ability][aria-checked="true"]')) await click('#ob [data-ability][aria-checked="true"]');
       break;
     default: throw new Error(`Unknown scene action: ${step.action}`);
   }

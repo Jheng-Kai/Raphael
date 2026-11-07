@@ -24,6 +24,34 @@ class ChannelError(Exception):
         self.retry_after = retry_after
 
 
+# A rate limit is waited out at most this many tries, and no longer than this in all.
+RATE_LIMIT_TRIES = 3
+RATE_LIMIT_MAX_WAIT_SECONDS = 30.0
+
+
+async def send_through_rate_limits(
+    send: Callable[[], Awaitable[None]], sleep: Callable[[float], Awaitable[None]]
+) -> None:
+    """Run `send`, and run it again after the pause the app asked for when the app answered
+    "rate_limited". Gives up (raising that error) after RATE_LIMIT_TRIES tries or when the pauses
+    would add up to more than RATE_LIMIT_MAX_WAIT_SECONDS. Any other error is raised at once."""
+    waited = 0.0
+    for attempt in range(1, RATE_LIMIT_TRIES + 1):
+        try:
+            await send()
+            return
+        except ChannelError as error:
+            pause = max(error.retry_after, 0.0)
+            if (
+                error.kind != "rate_limited"
+                or attempt == RATE_LIMIT_TRIES
+                or waited + pause > RATE_LIMIT_MAX_WAIT_SECONDS
+            ):
+                raise
+            waited += pause
+            await sleep(pause)
+
+
 @dataclass
 class Attachment:
     """Something besides text in a message. `ref` is what the channel needs to fetch it. `size` is

@@ -104,7 +104,7 @@ from .connectors.service import ConnectorsService
 from .integrations.vault import CredentialVault, MemoryVault, SecretVault
 from .messaging.config import MessagingStore
 from .messaging.service import MessagingService
-from .messaging.words import compose, words
+from .messaging.words import plain_replies, words
 from .protocol import (
     BUSY,
     INTERNAL_ERROR,
@@ -782,7 +782,7 @@ class App(Router):
         super().__init__()
         self._fake_audio = fake_audio
         self._load_kit = _import_kit if load_kit is None else load_kit
-        data_dir.mkdir(parents=True, exist_ok=True)
+        paths.owner_only_directory(data_dir)
         if manager is None:
             from .native_journeys import OfflineModelManager, native_enabled
 
@@ -856,8 +856,9 @@ class App(Router):
         # The card for a key a connection declares and the vault holds none of: the value goes from the
         # window to the vault, and that task's one resume follows.
         self.secret_cards = SecretCards(self._conn, self.integrations, notify=self._agent_notice)
-        from .computer.logins import LoginVault
-        self.login_vault = LoginVault(self.vault, conn=self._conn)
+        from .computer.vault_entries import VaultEntries
+        self.login_vault = VaultEntries(self.vault, conn=self._conn)
+        self.login_vault.register(self)
         self.secret_cards.logins = self.login_vault
         self.secret_cards.register(self)
         # The owner's safety rules (`safety.rules.*`), which the gate asks before every action that
@@ -930,6 +931,7 @@ class App(Router):
         self.handbacks.register(self)
         # Raphael's memory: the notes on this PC, the summary of the conversation, the reflection.
         memory_root = paths.memory_dir(data_dir) if memory_dir is None else memory_dir
+        paths.owner_only_directory(memory_root)
         self.memory = MemoryService(self._conn, memory_root, self.client, self.keys, notify=self.notify)
         self.memory.register(self)
         self.background.use_memory(self.memory)
@@ -1032,8 +1034,11 @@ class App(Router):
             stop=self._stop_from_messaging,
             transcribe=self._transcribe_from_messaging,
             language=lambda: self.agent.language,
+            members=lambda: {0: self.members.name_of(0) or "Raphael", **{
+                member.id: member.name for member in self.members.store.members() if member.id not in self.members.deleting}},
         )
         self.messaging.register(self)
+        self.members.remove_messaging = self.messaging.remove_member
 
         self._speech = SpeechModels(
             self.manager, make_segmenter=self._make_segmenter, make_engine=self._make_engine
@@ -1055,6 +1060,10 @@ class App(Router):
         self._closing = threading.Event()
         self._closed = False
         self._shutdown_requested = asyncio.Event()
+
+        from .voice_chat import VoiceChat
+        self.voice_chat = VoiceChat(self._conn, self, self.agent, self.members.store, self.speaker, self.services)
+        self.voice_chat.register()
 
         methods = {
             "core.hello": self._hello,
@@ -1164,6 +1173,7 @@ class App(Router):
             segmenter_factory=self._dictation_segmenter,
             engine_provider=self._dictation_engine,
             on_idle=self._on_dictation_idle,
+            on_voice_activity=self.voice_chat.activity,
         )
         service.register(self._inner)
         self._service.set_result(service)
@@ -1215,6 +1225,7 @@ class App(Router):
         steps: list[tuple[str, Callable[[], Awaitable[None]]]] = [
             ("stop the calendar refresh", self.home.calendar_events.aclose),
             ("end room routing calls", self.rooms.aclose),
+            ("end the voice call", self.voice_chat.aclose),
             ("cancel the dictation", close_dictation),
             ("close the level meter", close_meter),
             ("stop the account usage refresh", self.brain.aclose),
@@ -1371,6 +1382,16 @@ class App(Router):
             "ui_language": language,
             "source": source,
         }
+        from .messaging.core import session_target
+        target = session_target(session_id)
+        if session_id.startswith("member:") and target is None:
+            raise invalid_params("invalid member messaging session")
+        if target is not None and target[0]:
+            member = target[0]
+            if not self.members.member_exists(member) or member in self.members.deleting:
+                raise invalid_params("there is no such member")
+            params["member_id"] = member
+            params["conversation_id"] = self.agent.conversations.main(member)
         if attachments:
             params["attachments"] = [
                 {"name": a.name, "mime": a.mime, "data": base64.b64encode(a.data).decode("ascii")}
@@ -1380,13 +1401,14 @@ class App(Router):
         if reply.get("status") == "confirm":
             question = reply["confirm"]
             await self.call("agent.confirm", {"id": question["id"], "approved": False})
-            asked = compose(question["prefix"], question["text"], None)
-            return f"{asked}\n{words(language, 'confirm')}"
+            return f"{question['text']}\n{words(language, 'confirm')}"
         from .messaging.core import Answer
         from .services.artifacts import turn_files
         from .answer_forms import forms_plain_text
-        return Answer(forms_plain_text(compose(reply.get("prefix", ""), reply.get("text", ""), None)),
-                      list(turn_files(self.agent._history, reply.get("turn_id", 0), self.attachment_store)))
+        # Every message of the reply, unframed, as the app shows them: never only the last one.
+        shown = [m for m in (reply.get("messages") or []) if isinstance(m, str) and m.strip()]
+        parts = [forms_plain_text(m) for m in plain_replies(shown or [reply.get("text", "")])]
+        return Answer("\n\n".join(parts), list(turn_files(self.agent._history, reply.get("turn_id", 0), self.attachment_store)), parts)
 
     async def _transcribe_room(self, audio: bytes, language: str) -> str:
         return await self._transcribe_from_messaging(audio, language, cleanup=True)
@@ -1449,6 +1471,10 @@ class App(Router):
         if method == "agent.turn" and type(params.get("turn_id")) is int and not params.get("activity_only"):
             if hasattr(self, "agent"):
                 asyncio.get_running_loop().call_soon(self.agent.sync_owner_cards)
+                call = getattr(self, "voice_chat", None)
+                if call and call.current and call.current.request:
+                    call._link(call.current, call.current.request)
+                    call.turn_changed()
             self.members.turn_arrived(params["turn_id"])
             self.rooms.turn_arrived(params["turn_id"])
         self.notify(method, params)
@@ -1477,14 +1503,20 @@ class App(Router):
         if task.report_text is None:
             return
         from .answer_forms import forms_plain_text
-        text = forms_plain_text(compose(task.report_prefix or "", task.report_text, None))
+        # The chat gets what the thread shows, whole (the report's one-line `report_text` is only
+        # what the overlay says). A report this process did not write falls back to the stored one.
+        shown = self.background.final_words(task.id) or [task.report_detail or task.report_text]
+        text = [part for part in map(forms_plain_text, plain_replies(shown)) if part.strip()]
+        if not text:
+            return
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return
         from .services.artifacts import turn_files
         files = list(turn_files(self.agent._history, task.turn_id or 0, self.attachment_store))
-        sent = loop.create_task(self.messaging.report(task.session_id, text, **({"files": files} if files else {})))
+        sent = loop.create_task(self.messaging.report(
+            task.session_id, text[0] if len(text) == 1 else text, **({"files": files} if files else {})))
         sent.add_done_callback(lambda t: t.cancelled() or t.exception())
 
     def _tell_chat_to_answer_here(self, task_id: object) -> None:
@@ -1792,7 +1824,9 @@ class App(Router):
         way the meter stays suspended, so a stop that ends meanwhile cannot reopen it beside the
         new dictation.
         """
-        if method == "dictation.start":
+        if method == "dictation.start" and params.get("purpose") != "voice_chat":
+            if self.voice_chat.current:
+                raise RpcError(BUSY, "A voice call owns the microphone")
             self.speaker.stop()  # a new recording ends what Raphael was saying
         service = await self._wait_for(self._service)
         if method != "dictation.start":

@@ -1,4 +1,4 @@
-import { scene, click, hover, check, page, member, room, type, wait, paste, stableClick, settings, key, waitGone } from "./steps.mjs";
+import { scene, click, hover, check, page, member, room, type, wait, paste, stableClick, settings, key, waitGone, drag } from "./steps.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import settingsScenes from "./settings.mjs";
@@ -26,7 +26,7 @@ export default [
     page('dictation'),{action:'press-feedback',selectors:['.sidebar-dictation']},
   ]),
   scene('daily-press-surfaces','Quiet Home, connections and calendar controls retain visible stationary press feedback',[
-    page('home'),{action:'press-feedback',selectors:[{selector:'.ho-target',x:.02,y:.02},'.ho-row','.ho-calendar .btn.icon','.ho-date-btn']},
+    page('home'),{action:'press-feedback',selectors:['.ho-member','.ho-schedule .ho-event','.ho-schedule header .btn.icon']},
     ...settings('connections'),{action:'press-feedback',selectors:['.cs-open']},
     click('[data-conn="tab"][data-id="store"]'),wait('.cs-card'),{action:'press-feedback',selectors:['.cs-main']},
     key('Escape'),waitGone('.modal-scrim:not([hidden])'),
@@ -37,7 +37,8 @@ export default [
     ...settingsScenes.find(item=>item.name==='model-choices-stt').steps,
     {action:'press-feedback',selectors:['.mc-source:not([aria-pressed="true"])','.mc-source[aria-pressed="true"]']},
   ]),
-  (()=>{const source=presenceScenes.find(item=>item.name==='event-routine-line');return {...source,name:'daily-press-event',description:'An event receipt answers a press without opening during measurement',steps:[...source.steps,{action:'press-feedback',selectors:['.mb-chat:not([hidden]) .btn.event-open']}]};})(),
+  // The receipt folds into the reply's work detail (R-UI-101), so the press opens that detail first.
+  (()=>{const source=presenceScenes.find(item=>item.name==='event-routine-opens');return {...source,name:'daily-press-event',description:'An event receipt answers a press without opening during measurement',steps:[...source.steps.filter(step=>step.action!=='check'&&!String(step.selector).includes('open-routine')&&!String(step.selector).includes('au-routine-dialog')),{action:'press-feedback',selectors:['.mb-chat:not([hidden]) .btn.event-open']}]};})(),
   scene('daily-press-card','A conversation card primary action answers before its asynchronous work',[page('agent'),wait('[data-permission-card]'),{action:'press-feedback',selectors:['[data-act="perm-once"]']}],{permissionCard:'tool'}),
   (()=>{const source=desktopScenes.find(item=>item.name==='panel-screen-routines');return {...source,name:'daily-press-desktop',description:'Desktop preview controls answer without changing geometry',steps:[...source.steps,{action:'press-feedback',selectors:['.desktop-hit']}]};})(),
   scene('daily-newest','A new window opens recent activity rather than the stable default',[page('agent'),check('daily-newest')],{conversations:[
@@ -55,7 +56,7 @@ export default [
     ...settingsScenes.find(item=>item.name==='plugins-setup-own-app').steps.filter(step=>step.action!=='check'),
     stableClick('.cn-setup-dialog [data-dlg="copy"]'),check('daily-copy'),
   ]),
-  (()=>{const source=automationScenes.find(item=>item.name==='automation-webhook-address-changed');return {...source,name:'daily-copy-webhook',description:'A masked webhook secret copies on its existing button and retains its address notice',steps:[...source.steps,stableClick('[data-dlg="hook-copy"]'),check('daily-copy'),check('moving-webhook-changed')]};})(),
+  (()=>{const source=automationScenes.find(item=>item.name==='automation-webhook-address-changed');return {...source,name:'daily-copy-webhook',description:'A masked webhook secret copies on its existing button and retains its address notice',steps:[...source.steps,click('[data-dlg="hook-show"]'),wait('.au-hook-secret[type="text"]'),stableClick('[data-dlg="hook-copy"]'),check('daily-copy')]};})(),
   scene('daily-draft-member','A member draft waits through other conversations and Home',[
     member(1),type(input,'Unfinished sample draft'),member(2),type(input,'Another sample draft'),member(1),page('home'),member(1),check('daily-draft-member'),
   ]),
@@ -66,6 +67,6 @@ export default [
     ...(kind==='room'?[room(1)]:[page('agent')]),{action:'composer-measure-start'},paste(kind==='room'?'#room-message':input,{text:'x'.repeat(200000)}),wait(kind==='room'?'.au-room-pane .cmp-chip':'.mb-chat:not([hidden]) .cmp-chip'),{action:'composer-measure-end',selector:kind==='room'?'#room-message':input},
   ])),
   scene('daily-long-draft','A stored long draft restores without a long task',[{action:'composer-restore-long'},{action:'reload'},{action:'composer-measure-start'},{...page('agent'),measure:{name:'long-draft-restore',budgetMs:100,maxLongTaskMs:100}},{action:'composer-measure-end',selector:input,longDraft:true}]),
-  ...[2,3,4].map(count=>scene(`daily-faces-${count}-rail`,'Bare participant faces retain marks and rail centring',[room(1),{action:'member-column',collapsed:false},click('[data-sidebar="collapse"]'),check('sidebar-room-avatar'),check('sidebar-rail')],faces(count))),
+  ...[2,3,4].map(count=>scene(`daily-faces-${count}-rail`,'Bare participant faces retain marks and rail centring',[room(1),{action:'member-column',collapsed:false},drag('.side-edge', -240, { wide: true }),check('sidebar-room-avatar'),check('sidebar-rail')],faces(count))),
   ...[2,3,4].map(count=>scene(`daily-faces-${count}`,'The sidebar cluster and single header row retain hats and horns',[room(1),{action:'member-column',collapsed:false},check('sidebar-room-avatar'),check('sidebar-shell')],faces(count))),
 ];

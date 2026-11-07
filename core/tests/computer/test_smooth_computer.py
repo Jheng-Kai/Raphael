@@ -108,7 +108,7 @@ def test_restored_completion_evidence_uses_only_the_result_header(read_ok):
     (255, "", "Permission denied (publickey)", "ssh_key"),
     (255, "", "Host not found", "ssh_unreachable"),
     (42, "", "", "docker_path"), (43, "", "", "docker_missing"), (1, "", "", "docker_stopped"),
-    (0, '{"Architecture":"arm64"}', "", "architecture"),
+    (0, "aarch64\namd64\n", "", "architecture"),
 ])
 async def test_remote_health_has_classified_fixes_and_no_lifecycle_commands(code, out, err, kind):
     calls = []
@@ -121,7 +121,29 @@ async def test_remote_health_has_classified_fixes_and_no_lifecycle_commands(code
     assert all(word not in calls[0][-1] for word in ("docker start", "docker run", "docker pull", "docker stop"))
 
 
-async def test_ten_remote_docker_calls_share_one_ssh_connection(desktop, monkeypatch):
+async def test_a_matching_arm64_mac_reads_only_the_two_architectures_and_passes():
+    # Docker Desktop's full `docker info` JSON (13 KB on the owner's Mac mini) plus the image's passed the
+    # 16 KiB read, so the image line was cut and a matching host read as unsupported.
+    calls = []
+    async def fake(args):
+        calls.append(args)
+        return 0, "aarch64\narm64\n", ""
+    health = await host_health("mac-mini", run=fake)
+    assert health["ok"] and health["checks"][-1] == {"kind": "architecture", "ok": True, "architecture": "arm64"}
+    assert calls[0][-1].count("{{.Architecture}}") == 2 and "json" not in calls[0][-1]
+
+
+async def test_a_refused_key_login_names_the_user_ssh_logged_in_as():
+    async def fake(args):
+        if args[:2] == ["ssh", "-G"]:
+            return 0, "host 192.168.8.178\nuser jack2\nhostname 192.168.8.178\n", ""
+        return 255, "", "jack2@192.168.8.178: Permission denied (publickey,password)."
+    health = await host_health("192.168.8.178", run=fake)
+    assert health["checks"] == [{"kind": "ssh_key", "ok": False, "user": "jack2"}]
+    assert "Permission denied" not in json.dumps(health)
+
+
+async def test_ten_remote_docker_calls_share_one_ssh_connection(desktop, monkeypatch, tmp_path):
     vm, target, runtime = desktop
     from dataclasses import replace
     from raphael_core.computer import remote_host
@@ -144,6 +166,9 @@ async def test_ten_remote_docker_calls_share_one_ssh_connection(desktop, monkeyp
     monkeypatch.setattr(remote_host.asyncio, "open_connection", connect)
     now = [0]
     session = RemoteSession("studio-mini", launch=launch, clock=lambda: now[0])
+    session._socket_path = lambda: tmp_path / "docker.sock"
+    async def probe(endpoint): return True
+    session._probe = probe
     vm.remote_sessions["studio-mini"] = session
     vm.real_transport = True
     target = replace(target, remote="studio-mini")
@@ -151,7 +176,8 @@ async def test_ten_remote_docker_calls_share_one_ssh_connection(desktop, monkeyp
         for _ in range(10):
             await vm.run_for(target, ["info"])
         assert len(launched) == 1 and len(runtime.calls) == 10
-        assert "-L" in launched[0] and "-D" in launched[0]
+        assert "-L" in launched[0] and "-D" not in launched[0]
+        assert all("tcp://" not in arg and "127.0.0.1:" not in arg for arg in launched[0])
         session.process.returncode = 1
         await vm.run_for(target, ["info"])
         assert len(launched) == 1

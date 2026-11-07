@@ -18,37 +18,59 @@
 /* 選擇主要成員: the chosen member is tinted and carries a check, so that colour is not the only sign of it */
 .mb-primary-picker .mb-chat-choice[aria-checked="true"] { background: var(--selected); }
 .mb-primary-picker .mb-chat-choice > .i { flex: none; margin-left: auto; color: var(--accent-text); }
-.mb-hidden-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin-top: var(--sp-5); }
-.mb-hidden-row { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) 0; }
-.mb-hidden-row > span { flex: 1; }
 
 .mb-det .mb-rsched { display: grid; grid-template-columns: minmax(0, 1fr); }
 .mb-det .mb-time { width: 100%; }
 
 .mb-panel-routines { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .mb-tab-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); }
-.mb-det .mb-rt.btn { display: flex; width: 100%; gap: var(--sp-3); padding: var(--sp-2); text-align: left; background: transparent; border: 1px solid var(--line); border-radius: var(--r-sm); }
+.mb-det .mb-rt.btn { display: flex; width: 100%; gap: var(--sp-3); padding: var(--sp-2); text-align: left; background: transparent; border: 0; border-radius: var(--r-md); }
 .mb-rt-state { display: flex; color: var(--text-3); flex: none; }
 .mb-rt-state.is-on { color: var(--ok); }
 .mb-rt-main { flex: 1; }
 .mb-routine-row { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
 .mb-routine-row > .mb-rt { flex: 1; min-width: 0; }
-.mb-routine-row > .mb-tool { flex: none; }
+.mb-routine-row > .mb-tool { flex: none; opacity: 0; }
+.mb-routine-row:is(:hover, :focus-within) > .mb-tool, .mb-routine-row > .mb-tool[aria-expanded="true"] { opacity: 1; }
 .mb-routine-row .mb-rt-main > span { white-space: normal; overflow-wrap: anywhere; }
 
 .mb-panel-preference { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-3); font-size: var(--fs-sm); line-height: 1.4; }
 .mb-panel-preference + .mb-panel-row.btn { border-top: 1px solid var(--line); }
 .mb-panel-preference .mb-panel-row-copy small { white-space: normal; }
-.mb-panel-identity { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; width: 100%; }
-.mb-panel-identity > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sm); }
-.mb-panel-identity > b > span { color: var(--text-3); font-weight: 400; }
+/* Grok Bot's panel head (2026-11-06): a large face centred above the name, the job quiet under it. */
+.mb-panel-identity { display: flex; flex-direction: column; align-items: center; gap: var(--sp-1); min-width: 0; width: 100%; }
+.mb-panel-identity > .av { margin-bottom: var(--sp-1); }
+/* The face opens every setting: a bare button (no frame or fill), a pencil on it under the pointer (owner, 2026-11-07). */
+.mb-panel-identity > .btn.mb-face-edit { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 0; margin-bottom: var(--sp-1); padding: 0; border: 0; background: transparent; overflow: clip; overflow-clip-margin: 8px; }
+.mb-panel-identity > .btn.mb-face-edit:hover:not(:disabled), .mb-panel-identity > .btn.mb-face-edit:active:not(:disabled) { background: transparent; }
+.mb-face-pencil { position: absolute; right: -6px; bottom: 0; display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--r-pill); background: var(--panel); color: var(--text); box-shadow: 0 0 0 2px var(--content); opacity: 0; transition: opacity 0.12s ease; pointer-events: none; }
+.mb-face-pencil .i { width: 16px; height: 16px; }
+.btn.mb-face-edit:hover .mb-face-pencil, :root[data-keys] .btn.mb-face-edit:focus-visible .mb-face-pencil { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .mb-face-pencil { transition: none; } }
+/* 建議: the member's own Telegram card, the Settings card in the panel's width. */
+.mb-panel-suggest { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin-top: var(--sp-4); }
+.mb-panel-suggest .member-msg .sgroup { margin: 0; }
+/* The panel is narrow: the bot's name keeps its width, and the token field and 連接 share one line with no label column
+   (the field carries the label for screen readers). */
+.mb-panel-suggest .msg-head > .lbl { flex: 1 0 auto; }
+.mb-panel-suggest .msg-token-row > .lbl { display: none; }
+.mb-panel-suggest .msg-token-row > .ctl { flex: 1; min-width: 0; }
+.mb-panel-suggest .msg-token { display: flex; flex-wrap: nowrap; }
+.mb-panel-suggest .msg-token .field { flex: 1; width: auto; min-width: 0; }
+.mb-panel-identity > :is(b, small) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-panel-identity > b { font-size: var(--fs-md); font-weight: 600; }
+.mb-panel-identity > small { color: var(--text-3); font-size: var(--fs-xs); }
+/* Its lists, as Grok Bot's: each heading starts where the text inside its tinted list starts, an empty section is one
+   tinted line, and the conversations are the same tinted list, so 工作, 例行任務 and 對話 read as one system. */
+.mb-det[data-details-tab="details"] .mb-tab-body > section > .mb-dh { padding-left: var(--sp-3); }
+.mb-det[data-details-tab="details"] .mb-tab-body > section > .mp-empty { margin: 0; padding: var(--sp-3); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.mb-det [data-slot="conversations"] .conversation-rows { max-height: none; padding: var(--sp-1); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.mb-det [data-slot="conversations"] :is(.conversation-row, .conversation-open) { border-radius: var(--r-md); }
+.mb-det [data-slot="conversations"] .conversation-more { opacity: 0; }
+.mb-det [data-slot="conversations"] .conversation-row:is(:hover, :focus-within) .conversation-more, .mb-det [data-slot="conversations"] .conversation-more[aria-expanded="true"] { opacity: 1; }
 .mb-det .mb-who:has(.mb-panel-identity) { display: block; }
-.mb-panel-tasks { min-width: 0; }
-.mb-task-row { display: flex; align-items: center; min-width: 0; gap: var(--sp-1); }
-.mb-task-open.btn { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; flex: 1; text-align: left; padding: var(--sp-2); border: 1px solid var(--line); background: transparent; }
-.mb-task-open > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mb-task-open > small, .mb-task-open > time { flex: none; color: var(--text-3); font-size: var(--fs-2xs); }
-.mb-task-open > .i { flex: none; }
+/* Grok Bot's routine list: one quiet tinted list, no frame around each row. */
+.mb-rts { display: grid; grid-template-columns: minmax(0, 1fr); padding: var(--sp-1); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
 .mb-library-files { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
 .mb-library-files .team-file { max-width: 100%; }
 .mb-library-files .team-file > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

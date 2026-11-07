@@ -25,6 +25,11 @@ import { bindComposerMentions, mentionTargets } from "./team-mentions";
 import { createMemberActions } from "./member-actions";
 import { createMemberColumn } from "./member-column";
 import { createDetails } from "./member-details";
+import { mountEdge, savedWidth, saveWidth } from "./edge-drag";
+
+/** The details panel's widths (px): Grok Bot's opens at about 453 and drags to about 685; narrower than PANEL_CLOSE it closes. */
+const PANEL_MIN = 300, PANEL_MAX = 720, PANEL_CLOSE = 240;
+const PANEL_KEY = "raphael.panel.width";
 import {
   askGroupName,
   confirmDelete,
@@ -33,6 +38,7 @@ import {
 } from "./member-dialogs";
 import { openMemberCreator } from "./member-creator";
 import { RAPHAEL_ID, faceHTML, memberOf, orderedMembers, memberRole, raphaelOf } from "./members";
+import { nameAccent } from "./owner-bubble";
 import { followSlimeRoster, setSlimeState } from "./slime";
 import type { AppContext, MainEvent, Member, MemberGroup, MemberPatch, MembersList } from "./types";
 import { type Choice, closeMenu, esc, ico, leave, openMenu, patchHTML, toaster } from "./ui";
@@ -74,6 +80,8 @@ export interface MembersShell {
   nameOf(id: number): string;
   /** The face of member `id` at `size` px (Raphael's bare emblem for 0); none for a member the list does not have. */
   faceOf(id: number, size: number): string;
+  /** The colour member `id`'s name takes where members talk (owner-bubble.ts `nameAccent`). */
+  accentOf(id: number): string;
   /** The open member, as the list has it. */
   member(): Member;
   /** Existing groups sorted by position. */
@@ -122,7 +130,7 @@ export function createMembers(host: MembersHost): MembersShell {
 
   const { editMember, memberAction, moveMember, deleteMember } = createMemberActions({
     list: () => list, current: () => current, select, load, update,
-    cleared: id => host.onSelect(id), deleted: id => previews.delete(id),
+    deleted: id => previews.delete(id),
   });
 
   const column = createMemberColumn({
@@ -167,6 +175,31 @@ export function createMembers(host: MembersHost): MembersShell {
     openTurn: (member, conversation, turn) => host.onOpenConversation?.(member, conversation!, turn),
   });
 
+  // As Grok Bot's: the panel's left edge drags it wider or narrower, and dragged narrower than it can be it closes; the
+  // header's name opens it again at the width it had. There is no button for it (owner, 2026-11-06).
+  let panelWidth = savedWidth(PANEL_KEY, PANEL_MIN, PANEL_MAX);
+  const panelEdge = document.createElement("div");
+  panelEdge.className = "det-edge";
+  details.el.prepend(panelEdge);
+  const placePanel = (): void => {
+    const page = details.el.parentElement;
+    if (panelWidth === null) page?.style.removeProperty("--pa-det");
+    else page?.style.setProperty("--pa-det", `${panelWidth}px`);
+  };
+  mountEdge(panelEdge, {
+    label: t("nav.panelWidth"),
+    grow: -1,
+    widthAt: x => details.el.getBoundingClientRect().right - x,
+    width: () => details.el.getBoundingClientRect().width,
+    resize: next => {
+      if (next < PANEL_CLOSE) { setDetails(false); return false; }
+      panelWidth = Math.round(Math.min(PANEL_MAX, innerWidth * 0.6, Math.max(PANEL_MIN, next)));
+      placePanel();
+    },
+    done: () => saveWidth(PANEL_KEY, panelWidth),
+    toggle: () => setDetails(false),
+  });
+
   const pill = document.createElement("span");
   pill.className = "mb-pill";
   pill.dataset.shell = "pill";
@@ -179,7 +212,8 @@ export function createMembers(host: MembersHost): MembersShell {
   /** The pill and the narrow dropdown, for the open member. */
   function drawHead(): void {
     const m = member();
-    patchHTML(pill, faceHTML(m, 22, { cls: "mb-pill-face" }) + `<span class="mb-pill-t">${esc(m.name)}</span>`);
+    // As Grok Bot's header pill: the face and name, and a › that slides in under the pointer (the pill opens the panel).
+    patchHTML(pill, faceHTML(m, 22, { cls: "mb-pill-face" }) + `<span class="mb-pill-t">${esc(m.name)}</span><span class="mb-pill-go" aria-hidden="true">${ico("right")}</span>`);
     const waiting = list?.members.some((other) => other.id !== current && (other.waiting || other.unread)) ?? false;
     patchHTML(picker, `<span>${esc(m.name)}</span>${waiting ? `<i class="mb-dot is-wait" aria-hidden="true"></i>` : ""}${ico("down")}`);
     picker.setAttribute("aria-label", `${t("members.pick")}: ${m.name}`);
@@ -189,6 +223,8 @@ export function createMembers(host: MembersHost): MembersShell {
     column.draw();
     details.draw();
     drawHead();
+    // The panel joins its page after the shell is made; its width follows it there.
+    placePanel();
   }
 
   // ---------- reading ----------
@@ -305,6 +341,7 @@ export function createMembers(host: MembersHost): MembersShell {
     stopLeaving = null;
     if (next) {
       details.el.hidden = false;
+      placePanel();
       page?.setAttribute("data-det", "open");
       details.el.classList.remove("is-in");
       void details.el.offsetWidth;
@@ -362,9 +399,10 @@ export function createMembers(host: MembersHost): MembersShell {
     return true;
   }
 
-  function newMember(groupId: number | null): void {
+  function newMember(groupId: number | null, store = false): void {
     window.dispatchEvent(new Event("raphael:close-sidebar"));
     openMemberCreator({
+      store,
       groupId,
       taken: (list?.members ?? []).map((m) => m.name),
       async create(made) {
@@ -471,6 +509,7 @@ export function createMembers(host: MembersHost): MembersShell {
   }
 
   window.addEventListener("raphael:new-member", () => newMember(null));
+  window.addEventListener("raphael:member-store", () => newMember(null, true));
   onLocaleChange(() => { drawAll(); details.refreshMemory(current); });
   details.el.hidden = !open;
   drawAll();
@@ -490,6 +529,7 @@ export function createMembers(host: MembersHost): MembersShell {
       const found = memberOf(list, id);
       return found ? faceHTML(found, size, { cls: "sys-face" }) : "";
     },
+    accentOf: id => nameAccent(memberOf(list, id) ?? { id }),
     member,
     select,
     load,
@@ -515,7 +555,10 @@ export function createMembers(host: MembersHost): MembersShell {
       } else if (event.type === "MemberActivity") {
         setSlimeState(event.member_id, event.state, event.label);
       } else if (event.type === 'AgentTurn' && (event.member_id ?? 0) === current && open) {
-        details.refreshResources();
+        // Skills, commands and memory change through their own events; a streaming turn can only add files.
+        details.refreshWork('turn');
+      } else if (event.type === 'WorkerChanged' && open) {
+        details.refreshWork('task');
       }
     },
     hide() {

@@ -689,6 +689,7 @@ class IntegrationsService:
                 "tools": len(ready),
                 "state": app_state(enabled=entry.enabled, status=status, error=error, tools=len(ready), waiting=waiting),
                 "services": services, "source": entry.kind,
+                "accounts": [{"id": a["id"], "status": a["status"], "label": a.get("label", "")} for a in entry.accounts],
                 **({"last_used_at": entry.last_used_at} if entry.last_used_at else {})}
 
     async def _inventory(self, params: dict) -> dict:

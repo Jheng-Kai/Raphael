@@ -7,8 +7,10 @@ import type { Member } from "./types";
 const member = (id: number, patch: Partial<Member> = {}): Member => ({ id, name: `Member ${id}`, role: "", instructions: "", avatar: "", group_id: null, model: "", tools: null, position: id, created: 0, unread: false, waiting: false, preview: "", last_at: null, ...patch });
 test("hidden members stay out of navigation and pinned members precede all groups", () => {
   const el = document.createElement("div");
-  el.innerHTML = columnHTML({ list: { members: [member(0), member(1, { hidden: true }), member(2), member(3, { pinned: true, group_id: 4 })], groups: [{ id: 4, name: "Work", position: 0, sources: [] }] }, current: 0, previews: new Map(), query: "", folded: new Set(), fresh: new Set() });
-  expect([...el.querySelectorAll<HTMLElement>(".mb-row")].map(row => row.dataset.member)).toEqual(["3", "0", "2"]);
+  el.innerHTML = columnHTML({ list: { members: [member(0), member(1, { hidden: true }), member(2), member(3, { pinned: true, group_id: 4 })], groups: [{ id: 4, name: "Work", position: 0, sources: [] }] }, current: 0, previews: new Map(), folded: new Set(), fresh: new Set() });
+  // A hidden member waits only in the hidden folder at the end (R-UI-112).
+  expect([...el.querySelectorAll<HTMLElement>(".mb-sec:not(.mb-hidden) .mb-row, .mb-pinned .mb-row, .mb-list > .mb-item .mb-row, :scope > .mb-item .mb-row")].map(row => row.dataset.member).filter((id, at, all) => all.indexOf(id) === at)).toEqual(["3", "0", "2"]);
+  expect([...el.querySelectorAll<HTMLElement>(".mb-hidden .mb-row")].map(row => row.dataset.member)).toEqual(["1"]);
   expect(el.querySelector(".mb-pinned [data-member='3']")).not.toBeNull();
 });
 test("the sidebar plus makes members and groups, never a conversation, and keeps member management actions", () => {
@@ -20,7 +22,7 @@ test("the sidebar plus makes members and groups, never a conversation, and keeps
   expect(document.querySelector("[data-pick=member]")).not.toBeNull();
   closeMenu();
   column.el.querySelector<HTMLElement>("[data-member-more='1']")!.click();
-  expect([...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(el => el.dataset.pick)).toEqual(["pin", "move", "primary", "unread", "read-all", "edit", "duplicate", "clear", "hide", "delete"]);
+  expect([...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(el => el.dataset.pick)).toEqual(["pin", "move", "unread", "edit", "export-template", "hide", "delete"]);
   document.querySelector<HTMLElement>("[data-pick=hide]")!.click();
   expect(action).toHaveBeenCalledWith(1, "hide");
 });

@@ -84,7 +84,7 @@ test("thinking, blocked and working keep their own-colour slime and liquid props
     expect(root.querySelector(".slime-body")).not.toBeNull();
     expect(root.querySelector(".slime-drop")).toBeNull();
     expect(root.querySelector(".slime-dots, .slime-blocked, .slime-ribbons")).toBeNull();
-    expect(root.querySelector(".slime")?.getAttribute("style")).toContain("--slime-color:#15897E");
+    expect(root.querySelector(".slime")?.getAttribute("style")).toContain("--slime-color:#13B8A3");
   }
 });
 
@@ -141,10 +141,10 @@ test("a routine receipt preserves the member who owns its inspection target", ()
   expect(root.querySelector('[data-routine="9"]')?.getAttribute("data-routine-member")).toBe("4");
 });
 
-test("a sidebar row keeps the name and time without a role pill", () => {
+test("a sidebar row keeps the name and its last line, without a role pill or a time, as Grok Bot's", () => {
   const root = dom(memberRowHTML({id: 1, name: "Sample", role: "Research", last_at: time} as Member, {current: 1, previews: new Map(), fresh: new Set()}));
   expect(root.querySelector(".mb-row-t i")).toBeNull();
-  expect(root.querySelector(".mb-row-t time")).not.toBeNull();
+  expect(root.querySelector("time")).toBeNull();
 });
 
 test("an open shared hover updates its public action without pointer movement", async () => {
@@ -157,11 +157,11 @@ test("an open shared hover updates its public action without pointer movement", 
 });
 
 
-test("Raphael keeps his emblem and shares the public action hover", () => {
+test("Raphael's blue slime shares the public action hover and moves with his work", () => {
   followSlimeRoster([{id: RAPHAEL_ID, activity: "thinking", activity_label: "Checking a sample"}]);
   const root = dom(faceHTML({id: RAPHAEL_ID, name: "Raphael"}, 28));
   expect(root.querySelector(`[data-presence-member="${RAPHAEL_ID}"]`)?.getAttribute("data-tooltip")).toBe("Checking a sample");
-  expect(root.querySelector(".slime")).toBeNull();
+  expect(root.querySelector(".slime")?.getAttribute("data-state")).toBe("thinking");
 });
 
 test("a blocked task keeps its live presence until the owner acts", () => {

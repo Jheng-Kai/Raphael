@@ -62,6 +62,7 @@ from ..agent.toolpick import (
     scored,
     shortlist,
     widen,
+    words,
 )
 
 # The highest tier a task is offered: T2, whose calls ask the owner through the waiting question
@@ -179,7 +180,8 @@ class Snapshot:
     """The tools of a task. `refs` and `definitions` are what the worker may call now. `pool` is
     every tool of the plugins that could be offered, by alias: when it holds more than the task was
     shown, the rest can be found (`find`) and shown from then on. `management` holds the primary's
-    eligible native actions, discovered through the same finder without plugin execution."""
+    eligible native actions, and `work` holds deferred shared work tools. Both use the same finder
+    without plugin execution."""
 
     refs: dict[str, ToolRef]
     definitions: list[dict[str, Any]]
@@ -188,16 +190,20 @@ class Snapshot:
     _aliases: dict[str, str] = field(default_factory=dict, repr=False)
     sealed: bool = False
     management: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
+    work: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
 
     def show_management(self, names):
         """Discover native tools without treating them as external plugin calls."""
+        return self._show_native(self.management, names)
+
+    def _show_native(self, catalog, names):
         added = []
         for name in names:
-            if name in self.refs or name not in self.management:
+            if name in self.refs or name not in catalog:
                 continue
             native = harness_tool(name)
             self.refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, native.tier)
-            definition = {"type": "function", "function": {"name": name, **self.management[name]}}
+            definition = {"type": "function", "function": {"name": name, **catalog[name]}}
             self.definitions.append(definition)
             added.append(definition)
         return added
@@ -231,7 +237,8 @@ class Snapshot:
         self.definitions[:] = [item for item in self.definitions if item["function"]["name"] not in shown]
         new = set(self.pool.by_alias) - before
         selected = new if len(new) <= MAX_OFFERED else set(self.pool.pinned_aliases)
-        self.show([alias for alias in self.pool.by_alias if alias in shown or alias in selected])
+        self.show([alias for alias, tool in self.pool.by_alias.items()
+                   if alias in shown or alias in selected and not tool.deferred])
         if self.hidden() and "find_tools" not in self.refs:
             self.refs["find_tools"] = ToolRef(FIND, "find_tools", BUILTIN_SERVER, "find_tools", Tier.T0)
             self.definitions.append({"type": "function", "function": {"name": "find_tools", **_DEFINITIONS["find_tools"]}})
@@ -253,7 +260,8 @@ class Snapshot:
         kept = [tool for tool in (self.pool.by_alias.values() if self.pool else []) if tool.server != "computer"]
         computer = [tool for tool in plugins.offered_for(member_id) if tool.server == "computer"]
         self.pool = make_offer([*kept, *computer])
-        self.show([alias for alias, tool in self.pool.by_alias.items() if tool.server == "computer"])
+        self.show([alias for alias, tool in self.pool.by_alias.items()
+                   if tool.server == "computer" and (alias in old or not tool.deferred)])
         after = {item["function"]["name"]: item for item in self.definitions
                  if item["function"]["name"].startswith("computer__")}
         return after != before
@@ -274,7 +282,7 @@ class Snapshot:
         return added
 
     def find(self, query: str) -> tuple[list[dict[str, Any]], list[str]]:
-        """Show hidden native management and pool tools that fit `query` best: returns
+        """Show hidden native work, management and pool tools that fit `query` best: returns
         their definitions and a line about each for the worker to read. The calendar is the task's
         already, but a model that looks for one by the owner's words is told it is there, not sent to
         connect another."""
@@ -283,10 +291,12 @@ class Snapshot:
         from ..management import tools_for_request
         matching = tools_for_request(query)
         candidates = [name for name in self.management if name not in self.refs and (not matching or name in matching)]
+        candidates += [name for name in self.work if name not in self.refs]
+        catalog = {**self.management, **self.work}
         ranked = scored([harness_tool(name) for name in candidates], query)
-        chosen_native = [tool.name for score, tool in ranked if score > 0 or matching][:FIND_MAX]
-        added_native = self.show_management(chosen_native)
-        lines += [f"{name}: {first_sentence(self.management[name]['description'])}" for name in chosen_native]
+        chosen_native = [tool.name for score, tool in ranked if score > 0 or tool.name in matching][:FIND_MAX]
+        added_native = self._show_native(catalog, chosen_native)
+        lines += [f"{name}: {first_sentence(catalog[name]['description'])}" for name in chosen_native]
         hidden = self.hidden()
         if self.pool is None or not hidden:
             return added_native, lines
@@ -342,11 +352,10 @@ def take_snapshot(
     refs["generate_audio"] = ToolRef(BUILTIN, "generate_audio", BUILTIN_SERVER, "generate_audio", Tier.T1)
     definitions.append({"type": "function", "function": {"name": "generate_audio", **_DEFINITIONS["generate_audio"]}})
     for name in team:
-        if name == "create_member" and (not interactive or not owner_management or not speaker.is_chief or speaker.depth):
-            continue
         if name == "create_member":
-            if "member_create" not in wanted_management:
-                continue
+            # The management catalog offers member_create to the primary owner chat.
+            # Its legacy team alias must not consume a second native tool slot.
+            continue
         if name in TEAM_TOOLS:
             refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, TEAM_TIER)
             definitions.append(worker_definition(name))
@@ -355,6 +364,9 @@ def take_snapshot(
     everywhere = ("self_check", "raphael_help", *CALENDAR_TOOLS, "connections_list",
                   *((*sorted(BACKGROUND_TOOLS), *sorted(ROUTINE_TOOLS)) if not interactive else ()))
     for name in everywhere:
+        if harness_tool(name).deferred:
+            snapshot.work[name] = HARNESS_DEFINITIONS[name]
+            continue
         refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, harness_tool(name).tier)
         definitions.append({"type": "function", "function": {"name": name, **HARNESS_DEFINITIONS[name]}})
     if interactive:
@@ -371,6 +383,9 @@ def take_snapshot(
             if name == "computer" and getattr(plugins, "has_own_computer", lambda member: False)(speaker.id):
                 continue
             native = harness_tool(name)
+            if native.deferred:
+                snapshot.work[name] = item
+                continue
             refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, native.tier)
             definitions.append({"type": "function", "function": {"name": name, **item}})
         snapshot.show_management(wanted_management)
@@ -379,6 +394,8 @@ def take_snapshot(
             native = harness_tool(name)
             refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, native.tier)
             definitions.append({"type": "function", "function": {"name": name, **item}})
+    requested = words(question)
+    snapshot._show_native(snapshot.work, [name for name in snapshot.work if words(name.replace("_", " ")) & requested])
     if plugins is not None:
         try:
             tools = [
@@ -406,8 +423,8 @@ def take_snapshot(
         selectable = pool.unpinned()
         everything = list(selectable.by_alias)
         selected = everything if len(everything) <= MAX_OFFERED else widen(selectable, shortlist(selectable, question, PICK_MAX))
-        snapshot.show([*pool.pinned_aliases, *selected])
-    if snapshot.hidden() or snapshot.management:
+        snapshot.show([alias for alias in [*pool.pinned_aliases, *selected] if not pool.by_alias[alias].deferred])
+    if snapshot.hidden() or snapshot.management or snapshot.work:
         refs["find_tools"] = ToolRef(FIND, "find_tools", BUILTIN_SERVER, "find_tools", Tier.T0)
         definitions.append(
             {"type": "function", "function": {"name": "find_tools", **_DEFINITIONS["find_tools"]}}

@@ -109,6 +109,7 @@ class UsageAnalytics:
 
         cost_rows = {key: [] for key in ("purpose", "model", "provider")}
         for at, purpose, model, cost in costs:
+            model = model.partition("?effort=")[0] if model else model
             for key, value in (("purpose", purpose), ("model", model), ("provider", provider(model))):
                 cost_rows[key].append((day(at), value or "unknown", cost))
         turns = list(self.conn.execute(
@@ -117,6 +118,7 @@ class UsageAnalytics:
         member_info = {row[0]: (row[1], row[2]) for row in self.conn.execute("SELECT id,name,role FROM members")}
         members = {}
         for mid, model, source, cost, at in turns:
+            model = model.partition("?effort=")[0] if model else model
             # A member that is gone has no name to show, so it is not listed; the totals keep its cost.
             if mid != 0 and mid not in member_info:
                 continue
@@ -134,6 +136,9 @@ class UsageAnalytics:
         for member in members.values():
             member["share"] = member["cost_usd"] / member_total if member_total else 0
             member["models"] = sorted(member["models"].values(), key=lambda m: (-m["cost_usd"], -m["turns"], m["model"]))
+            for model in member["models"]:
+                if not model["cost_usd"] and model["model"].startswith(("cli:", "@chatgpt:")):
+                    model["cost_usd"] = None
         calls = []
         tool_labels = {}
         for table in ("agent_steps", "worker_steps"):
@@ -163,7 +168,7 @@ class UsageAnalytics:
                         for key, rows in cost_rows.items()},
             "members": sorted(members.values(), key=lambda m: (m["id"] != 0, -m["cost_usd"], -m["turns"], m["id"])),
             "tools": grouped(calls, days, tool_labels),
-            "messages_by": {key: grouped([(day(at), (model if key == "model" else source) or "unknown", 1)
+            "messages_by": {key: grouped([(day(at), ((model or "").partition("?effort=")[0] if key == "model" else source) or "unknown", 1)
                                           for _, model, source, _, at in turns], days)
                             for key in ("model", "source")},
             "dictation": dictation,

@@ -9,16 +9,18 @@
 /* The bar: 已安裝 N and 商店 N as quiet tabs, the search on the right */
 .cs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-3); }
 .cs-find { display: flex; width: 100%; margin: 0; min-width: 0; }
+/* 新增 ends the row of the two views, away from the dialog's ✕ (owner, 2026-11-07). */
+.cs-bar > .cs-add { margin-left: auto; flex: none; }
 .cs-find { gap: var(--sp-2); }
 .cs-find .sel { max-width: 180px; }
 .cs-find .sel span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cs-find .field { width: 220px; height: 32px; }
-.cs:has([data-conn="store-group"]) .cs-find { order: 0; width: 100%; margin: 0; }
-.cs:has([data-conn="store-group"]) .cs-find .field { width: 100%; height: 40px; }
+/* One search for both views, so switching tabs never reshapes it. */
+.cs-find .field { width: 100%; height: 40px; }
 .cs-store-groups-row { margin-bottom: var(--sp-3); }
 .cs-store-groups { display: flex; flex-wrap: nowrap; gap: var(--sp-2); }
 .cs-store-groups .btn { flex: 0 0 auto; border-radius: var(--r-pill); font-size: var(--fs-xs); }
-.cs-store-groups [aria-pressed="true"] { color: var(--text); background: var(--selected); border-color: var(--accent-text); }
+/* The chosen chip is filled, as Grok Bot's, not only outlined. */
+.cs-store-groups [aria-pressed="true"], .cs-store-groups [aria-pressed="true"]:hover:not(:disabled) { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
 .cs-store-pages { display: flex; align-items: center; justify-content: center; gap: var(--sp-3); margin: var(--sp-3) 0; }
 /* Keep search and groups outside the results scrollport, including after a page change. */
 .modal-body:has(.cs-store) { display: flex; flex-direction: column; overflow: hidden; }
@@ -40,12 +42,15 @@
 :root[data-theme="dark"] .logo-art .lg-d { display: block; }
 :root[data-theme="dark"] .logo-art .lg-d ~ .lg-l, :root[data-theme="dark"] .logo-art .lg-l:has(+ .lg-d) { display: none; }
 
-/* 已安裝: one rounded list; a row is the mark, the name and its line, the switch and a chevron, none of them boxed */
-.cs-list { border: 0; border-radius: 0; background: transparent; overflow: hidden; }
-.cs-item { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto 18px; align-items: center; gap: var(--sp-3); padding-right: var(--sp-3); border-radius: var(--r-md); cursor: pointer; }
+/* 已連結: two columns side by side, as Grok Bot's Connect Apps (owner, 2026-11-07), so a page holds more of them; a row is
+   the mark, the name and its line, the switch and a chevron, none of them boxed. */
+.cs-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2) var(--sp-3); border: 0; border-radius: 0; background: transparent; }
+.cs-item { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto 18px; align-items: center; gap: var(--sp-3); min-width: 0; padding-right: var(--sp-3); border-radius: var(--r-md); cursor: pointer; }
 /* Dividers are lines of their own, so a rounded hover does not bend them; they step aside for the row under the pointer. */
-.cs-item + .cs-item::before, .cs-grp > .btn.gr + .btn.gr::before { content: ""; position: absolute; top: 0; left: var(--sp-3); right: var(--sp-3); height: 1px; background: var(--line); }
-:is(.cs-item:hover, .cs-item:hover + .cs-item)::before, :is(.cs-grp > .btn.gr:hover, .cs-grp > .btn.gr:hover + .btn.gr)::before { opacity: 0; }
+.cs-item::after { content: ""; position: absolute; bottom: 0; left: var(--sp-3); right: var(--sp-3); height: 1px; background: var(--line); }
+.cs-item:hover::after { opacity: 0; }
+.cs-grp > .btn.gr + .btn.gr::before { content: ""; position: absolute; top: 0; left: var(--sp-3); right: var(--sp-3); height: 1px; background: var(--line); }
+:is(.cs-grp > .btn.gr:hover, .cs-grp > .btn.gr:hover + .btn.gr)::before { opacity: 0; }
 .cs-item:hover { background: var(--hover); }
 .cs-item .btn.cs-open { justify-content: flex-start; gap: var(--sp-3); min-width: 0; min-height: 60px; padding: var(--sp-2) 0 var(--sp-2) var(--sp-3); border: 0; border-radius: 0; background: transparent; text-align: left; white-space: normal; }
 .cs-item .btn.cs-open:hover:not(:disabled), .cs-item .btn.cs-open:active:not(:disabled) { background: transparent; }
@@ -59,8 +64,8 @@
 .cs-open .ds .st { font-size: var(--fs-2xs); }
 .cs-item .chev { display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); }
 
-/* The dialog of a service: over the settings' tab, with the tab dimmed, its own close and switch at the top */
-.cs-scrim { position: absolute; top: 0; right: 0; bottom: 0; left: var(--set-nav); z-index: 5; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--sp-5); background: var(--scrim); }
+/* The dialog of a service: over the whole settings window, all of it dimmed (R-UI-111), its own close and switch at the top */
+.cs-scrim { position: absolute; inset: 0; z-index: 5; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--sp-5); background: var(--scrim); }
 .cs-scrim:not(.again) { animation: scrim-in 0.2s ease-out; }
 .cs-scrim:not(.again) > .cs-dialog { animation: dialog-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .cs-scrim.leaving { animation: scrim-out 0.14s ease-in forwards; pointer-events: none; }
@@ -171,6 +176,9 @@
 .cs-say { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
 .cs-say li { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-radius: 0; border: 0; background: transparent; font-size: var(--fs-xs); line-height: 1.5; }
 .cs-say .i { color: var(--text-3); }
+/* A store page's headings, examples and words share one left edge with its head. */
+.cs-page .cs-sec h3 { margin-left: 0; }
+.cs-page .cs-say li { padding-inline: 0; }
 
 /* Store rows share the detail button, action slot and divider across both catalogs. */
 .cs-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2) var(--sp-3); }
@@ -184,6 +192,7 @@
 .cs-card .btn.cs-main:focus-visible { outline: none; }
 :where(:root[data-keys]) .cs-card:has(.cs-main:focus-visible) { box-shadow: inset 0 0 0 2px var(--focus); }
 .cs-main .nm { font-size: var(--fs-xs); }
+/* One line each, so paired rows keep one height; the columns pair only where that line has room (see the container rules). */
 .cs-main .sub { font-size: var(--fs-2xs); line-height: 1.45; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-main .sub.wait { color: var(--accent-text); }
 /* What an app asks for (its own key, or its own developer app) comes first on its row, in words, never only a title. */
@@ -221,17 +230,24 @@
 .trust > .i { color: var(--warn); margin-top: var(--sp-1); }
 .trust b { color: var(--text); font-weight: 600; }
 
-/* A single track stays within the short-card cap; wider panes fill two tracks. */
-@container connections (max-width: 384px) {
+/* Store rows are a name and at most a short need, as Grok Bot's, so they pair down to a narrow dialog; a connected row also
+   has its line and switch, so it pairs only where that line has room. */
+@container connections (max-width: 480px) {
   .cs-grid { grid-template-columns: minmax(0, 1fr); }
 }
+@container connections (max-width: 680px) {
+  .cs-list { grid-template-columns: minmax(0, 1fr); }
+}
+.cs-main .sub:empty { display: none; }
+/* Every mark in a row stands bare (R-UI-34) in one 24 px slot, and a generic plug fills it as the brand marks do, so the
+   column of marks keeps one size and weight (R-UI-19). */
+:is(.cs-item, .cs-card) .ic .mono { width: 24px; height: 24px; }
+:is(.cs-item, .cs-card) .ic .mono > .i { width: 20px; height: 20px; }
 
 @media (max-width: 720px) {
   .cs-find { margin-left: 0; width: 100%; }
   .cs-find .field { flex: 1; width: auto; }
   .add-grid .two { grid-template-columns: minmax(0, 1fr); }
-  .cs-head { flex-wrap: wrap; }
-  .cs-join { width: 100%; }
   .cs-scrim { padding: var(--sp-4); }
 }
 

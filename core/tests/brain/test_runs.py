@@ -8,6 +8,49 @@ import pytest
 from raphael_core.brain.runs import RunAnalytics
 
 
+@pytest.mark.parametrize("kind", ["turn", "task", "routine"])
+async def test_model_spans_keep_subscription_tokens_and_router_cost_separate(conn, kind):
+    from raphael_core.brain.runs import save_metrics
+
+    now = at('2026-10-24')
+    conn.execute("INSERT INTO agent_turns(id,created_at_ms,session_id,question,route,prefix,text,status,cost_usd,model) VALUES(1,?,'s','Question','answer','','ok','done',.0019,'@chatgpt:gpt-6.1-terra')", (now,))
+    if kind == "task":
+        conn.execute("INSERT INTO worker_tasks(id,created_at_ms,state,session_id,turn_id,language,text,cost_usd) VALUES(1,?,'done','s',1,'en','Work',.0019)", (now,))
+    if kind == "routine":
+        conn.execute("INSERT INTO routines(id,member_id,title,prompt,schedule,next_run_ms,created_at_ms) VALUES(1,0,'Daily','Review','{}',0,0)")
+        conn.execute("INSERT INTO routine_runs(id,routine_id,started,finished,status,turn_id,cost) VALUES(1,1,?,?,'done',1,.0019)", (now, now + 2000))
+    save_metrics(conn, 'task' if kind == 'task' else 'turn', 1, now, now + 2000, [
+        {'model': '@chatgpt:gpt-6.1-terra', 'tokens': 11932035, 'cost_usd': 0},
+        {'model': 'typesafe/jev-1.14', 'tokens': 0, 'cost_usd': .0019},
+    ])
+    result = await RunAnalytics(conn, lambda: now).read({'range': 'all'})
+    groups = {g['label']: g for g in result['groups']['model']}
+    assert set(groups) == {'@chatgpt:gpt-6.1-terra', 'typesafe/jev-1.14'}
+    assert groups['@chatgpt:gpt-6.1-terra'] == {'label': '@chatgpt:gpt-6.1-terra', 'tokens': 11932035, 'cost_usd': None, 'runs': 1}
+    assert groups['typesafe/jev-1.14']['tokens'] == 0
+    assert groups['typesafe/jev-1.14']['cost_usd'] == .0019
+    assert result['summary']['tokens'] == 11932035
+    assert result['summary']['cost_usd'] == .0019
+    assert result['groups']['member'][0]['cost_usd'] == .0019
+    assert result['total'] == 1
+
+
+async def test_historical_cli_efforts_merge_and_count_each_run_once(conn):
+    from raphael_core.brain.runs import save_metrics
+
+    now = at('2026-10-24')
+    for ident, effort in enumerate(('xhigh', 'high'), 1):
+        model = f'cli:codex:gpt-6.1-sol?effort={effort}'
+        conn.execute("INSERT INTO agent_turns(id,created_at_ms,session_id,question,route,prefix,text,status,cost_usd,model) VALUES(?,?,'s','Question','answer','','ok','done',0,?)", (ident, now, model))
+        save_metrics(conn, 'turn', ident, now, now + 2000, [
+            {'model': model, 'tokens': 60, 'cost_usd': 0},
+            {'model': model, 'tokens': 40, 'cost_usd': 0},
+        ])
+    result = await RunAnalytics(conn, lambda: now).read({'range': 'all'})
+    assert result['groups']['model'] == [{'label': 'cli:codex:gpt-6.1-sol', 'tokens': 200, 'cost_usd': None, 'runs': 2}]
+    assert [r[0] for r in conn.execute('SELECT model FROM agent_turns ORDER BY id')] == [f'cli:codex:gpt-6.1-sol?effort={e}' for e in ('xhigh', 'high')]
+
+
 def at(day):
     return int(datetime.fromisoformat(day).replace(tzinfo=UTC).timestamp() * 1000)
 

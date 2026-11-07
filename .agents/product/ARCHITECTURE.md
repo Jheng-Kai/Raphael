@@ -1,5 +1,37 @@
 # Raphael architecture and checked boundaries
 
+## Member voice-call boundary (2026-11-05)
+
+VoiceChat orchestrates existing DictationService, AgentService and Speaker; it owns
+one call across the owner window. Dictation's call-only VAD callback signals speech
+and pause on the loop; ordinary hotkey recording semantics are unchanged. Speaker's
+existing PCM stop event handles barge-in before its next block. Calls never enter
+room routing or add a model/provider loop (A-01/03/04). Frontend RPCs stay in api.ts
+and six literal voice_chat methods have explicit shell allowlist entries (A-06/10).
+Migration 67 adds call metadata and links to ordinary history turns; the history
+projection folds them under one receipt, with local feedback (A-11, R-UI-101).
+Settings reuse shared dropdowns and the existing repair navigation, without another
+settings registry (A-07/08). Fake audio tests do not prove native/live acceptance.
+
+
+## Conversation metadata boundary (2026-11-05)
+
+Migration 64 adds bounded owner reaction tables with message/turn ownership, side
+thread root links, the existing draft store's transport kind and member voice_memo.
+agent.react and rooms.react only change metadata and notify their existing timeline;
+they never enter confirmation, owner-question or draft completion paths. Private
+context reads metadata through AgentHistory; room transcripts include the same
+explicit non-instruction label. rooms.thread_open validates a main-room root and
+reuses room_threads/thread_id, the existing worker and its isolated transcript.
+
+slack_draft shares EmailDrafts, its version digest, send claim and ToolGate. It refuses
+room origins at both tool and service boundaries. Discovered Slack sends obey the
+same draft-first/full-permission policy as mail. No second draft engine is added.
+Member voice_memo is a profile boolean; agent.speak uses Speaker.say_member and the
+existing PCM player with a pause event. All frontend IPC stays in api.ts and the
+literal owner-window RPCs use explicit Rust allowlist entries. No worker, provider,
+model loop or settings registry is added (A-01/03/04/06/08).
+
 ## Member panel and host preflight projection (2026-11-05)
 
 Owner request of 2026-11-05: use Grok Bot's clear Details / Library / Computer hierarchy and explain the actual unavailable-computer reason. This section supersedes earlier landing-panel and first-build-caption guidance for this panel.
@@ -57,8 +89,9 @@ web_read receives the same VmTools rendered-read callback, with current member
 scope; no new worker, model loop, service registry or provider fallback is added.
 
 LocalVm owns one RemoteSession per SSH alias. Docker stdio and normal calls use
-its forwarded Unix socket; noVNC reuses its SOCKS forward through an owned local
-relay. Failed forwarding uses the existing ssh:// transport with reconnect backoff.
+its owner-only local Unix socket; noVNC uses SSH -W pipes through an owned local
+relay, without a general SOCKS listener. Unsupported socket forwarding uses the
+existing per-command ssh:// transport with reconnect backoff.
 The existing main-window computer.viewer_status RPC accepts check_host for the
 read-only diagnostic; no new RPC or Rust allowlist entry is needed (A-01/03/04/08).
 
@@ -742,3 +775,134 @@ Skill source rendering uses skill-source.ts in member resources, Connections row
 discovery and document dialogs. skillOriginLabel owns the single localized origin
 and learned date line; skillSourceLabel removes transport prefixes and collapses
 plugin cache paths to name/version. Stored source identifiers remain unchanged.
+
+
+## Colleague recipes, accounts and tunnel probes (2026-11-05)
+
+MembersService owns the main-window-only members.template RPC. The allowlisted recipe codec never reads memory, credentials, pictures or model settings; it validates bounded data before mutations. MemberCapabilities remains the skill writer and MemberStore remains the routine writer. Import grants no app tools and schedules no runs. Existing member creation, AgentHistory greetings, ownerQuestionHTML and the existing sendFromPage composer path supply the local greeting form; NEW_MEMBER_STEP stays next to the owner input. There is no second model loop (A-01/03/04/11).
+
+ConnectorStore keeps account labels in its existing accounts rows. The owner-only connectors.label RPC updates one current account; refresh preserves names by account ID and copies only a returned public email. IntegrationsService projects these labels to members and connections_list. The shared persona instructs account disambiguation. No token or provider auth blob crosses that projection (A-05/12).
+
+LocalVm creates the three team directories on the existing shared mount when a computer first becomes ready, locally or through an exact remote mkdir command. Handoffs and requested wrap-ups can cite this shared contract; no new file store or renderer is added.
+
+The existing routines.webhook RPC accepts an owner-requested URL probe. PageFetcher pins a public HTTPS address without redirects. A short-lived authenticated nonce reaches Webhooks._receive and returns 204 before admission or background work, including for paused routines. No tunnel subprocess is launched. Existing loopback binding, HMAC/Bearer validation, rate limits and untrusted body handling remain authoritative.
+
+The main-window-only pick_output_folder and member_template_file shell commands reuse tauri_plugin_dialog. No webview-supplied path is accepted; recipe files are bounded UTF-8 and filtered to .raphael-member. Native dialog and installed file-opening acceptance remain separate from IPC fixtures (A-06/10).
+
+
+## Signed member store (2026-11-05)
+
+members.template retains the sole owner-window RPC and raphael-member v1 codec.
+members/member_catalog.py owns bounded catalogue HTTP, Ed25519, sequence/revocation
+and verified disk cache. Imports refetch by catalogue identity and ignore caller
+package bytes, then use MembersService, MemberCapabilities and MemberStore with
+skills/routines off. Preview never creates a member, grant, routine or skill.
+templates.py owns structural caps and scan locations without credential excerpts.
+Review precedes native file save. Publish writes only an owned local export folder
+and returns the prefilled GitHub URL through the existing openExternalUrl API.
+No new RPC, migration, settings registry, worker or brain loop (A-01/05/06/08/10/11/12).
+catalog-template/ holds the future public repository's schema/scan/signing CI;
+PRs never receive the signing secret. Production trust roots require owner setup.
+
+## Shared owner vault (2026-11-05)
+
+VaultEntries extends LoginVault at the existing Windows Credential Manager
+boundary. Migration 63 adds nonsecret metadata/member grants and a durable payment
+action hold; no value moves into SQLite. Existing per-member credential keys stay
+readable and are projected into metadata without reading the OS vault. Owner-only
+vault RPCs are enumerated in management.py and the main-window Rust allowlist;
+no model management tool can read, import, edit sharing or delete credentials.
+
+The existing VmTools adapter owns choices/contact/card fill tools, per-field
+HTTPS/grant checks, driver-echo suppression and shared redaction. ToolGate's firm
+confirmation applies to fill_card across foreground API, CLI and worker paths.
+The ordinary conversation permission card and background question remain the
+approval surfaces. No new model loop, worker, provider, MCP server, browser
+service or feature-specific test harness is introduced (A-01/03/04).
+
+The real Settings Safety pane owns the vault controller and uses shared controls.
+The owner's file input reads a bounded CSV into a transient core preview with
+a single-use token and ten-minute expiry; no source path/copy is retained. The
+metadata preview is separate from private import candidates. Core RPC failures
+return fixed field identifiers and counts, never secret-bearing exception text.
+
+## Desktop security review (2026-11-05)
+
+AttachmentStore.open_path is the authoritative native file-association boundary for
+open_attachment and attachment_source. Its reviewed extension allowlist does not
+restrict upload, opaque ID storage or bounded model readers. Unknown associations
+fail before Rust receives a native path. Existing team-file read-or-reveal behavior
+remains separate. This does not certify third-party document viewers or custom owner
+file associations.
+
+prepare-release-assets validates the version before writes. The existing publication
+job resolves an exact existing tag to its commit (including annotated tags), refuses
+a mismatch or API failure, and supplies github.sha as gh release create --target.
+Signature/version verification in updates.rs and the pinned updater plugin remains
+authoritative at runtime. No new RPC, provider, registry or execution engine is added
+(A-01/03/04/06/08/10/11).
+
+See ../skills/verify-raphael/features/security-boundary.md in the verification map for coverage, evidence,
+remaining consent decisions and offline/native boundaries.
+
+The shell drains oversized child-process lines without retaining their content:
+stdout admits at most 64 MiB per JSON-RPC line and stderr at most 16 KiB per log
+line, including the delimiter. Discarding a line preserves framing and emits only
+a fixed diagnostic. The RPC waits for its existing timeout if its reply was dropped.
+This bounds shell buffering; it does not bound all Python/provider allocations.
+
+### Page composer boundary (follow-up 1)
+
+mountPages now accepts only a place(pageId, text) callback. Neither HTML send nor
+MCP ui/message calls an owner send or owner-question answer. The existing shared
+composer owns append, focus and the localized page provenance note; its existing
+draft store retains the page ID alongside words and quotes. Owner submission uses
+the existing delivery or waiting-question controller. No new RPC, transport or
+provider loop is introduced (A-01/03/04/06). Voice transcription leaves page drafts
+unsent, and an expanded page closes back to the focused composer on placement.
+
+
+## Offline storage security review (2026-11-05)
+
+paths.local_storage_root keeps the lexical identity of local roots instead of accepting a
+new trust root after resolve. LocalVm validates mounts on cached and fresh starts and again
+before creation; DesktopViewer, member library scans and AttachmentStore use the same check.
+Guest file reads retain their descriptor walk and no-follow checks. This is defense against
+persistent redirection, not a cross-process handle-pinned TOCTOU guarantee.
+
+VmTools rechecks grants, captured targets and owner holds after preparation and checkpoint
+awaits. file_reader bounds emitted Office text before joining repeated XLSX shared strings.
+native_diagnostics reuses failures.scrub for complete quoted and Basic/Bearer credentials;
+known secrets also cover JSON escaping and longest-first replacement. Existing state,
+RPCs, OS vault keys and approval surfaces remain authoritative (A-03/A-04/A-05/A-08/A-11/A-12).
+The offline review's owner decisions and evidence are in .fold/report.md; no network,
+real credentials, native desktop or release acceptance is implied.
+
+TaskStore also uses paths.local_storage_root for artifact receipt admission, completion
+and opening. MAX_ARTIFACT_BYTES shares the existing 50 MiB opening budget across
+all three paths before hashing bytes; no additional evidence store is introduced.
+
+## Approved native and persistent security boundaries (2026-11-05 follow-up 1)
+
+RemoteSession owns one SSH local Unix socket and its private temporary directory. The
+owner-only ACL is applied before SSH starts; Docker CLI probes endpoint support, and
+failure uses the existing per-command ssh:// adapter without a privileged TCP listener.
+Viewer streams use SSH -W pipes rather than a general local SOCKS proxy; the existing
+capability-protected viewer surface remains the only local viewer listener.
+
+VmTools retains filled origins/refs without a timer. Only a different HTTP(S) origin
+with an explicitly complete semantic tree and no filled refs can remove protection;
+missing, truncated or failed observations fail closed. While any private page remains,
+computer screen reads return value-free semantic nodes and a reason, without pixels.
+Payment action holds remain independent and require explicit owner completion.
+
+core_process feeds stderr through core_stderr before log::info. Bounded BufRead chunks
+discard an overlong line completely, and a linear scanner ports failures.scrub patterns
+without new dependencies or native-library imports into the core startup path.
+
+storage.owner_only_directory applies a protected owner-SID DACL using existing Windows
+APIs (0700 elsewhere). Both explicit/default app data and memory roots use it before
+opening stores. Legacy migration's existing backup path records created-file identity,
+mtime and digest in a local ledger; only unchanged tracked versions beyond five per
+source are removed. Existing untracked copies and revision/undo journals are retained.
+Shell/browser privilege separation remains a separate hardening unit (D03 in report).
