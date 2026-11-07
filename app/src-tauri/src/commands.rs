@@ -559,6 +559,10 @@ const ALLOWED_METHODS: &[&str] = &[
     "members.delete",
     "members.set_primary",
     "members.set_avatar",
+    // One picture candidate from the owner's image model, and what a member delivered (its Library and a file of it).
+    "members.avatar_generate",
+    "members.library",
+    "members.library_file",
     "members.read",
     "members.viewing",
     "members.tool_choices",
@@ -667,6 +671,38 @@ fn validate_memory_call(method: &str, params: &Value) -> Result<(), String> {
 /// stopping a background task, the owner's safety rules, the questions a background task waits on
 /// and the answer to one, and the few device methods the settings page needs. Everything else
 /// is refused, the dictation methods and the ones that ask Raphael something above all.
+/// The text of a failed call for the window: `[code] message`. A generated picture's failure is acted on (a button to
+/// the image model, the key it needs, try again later), so for that call alone the kind and the place to fix it follow
+/// as JSON, and nothing else the core's handler put in `data`.
+pub fn window_error(method: &str, err: &crate::rpc::RpcError) -> String {
+    let text = err.to_string();
+    if method != "members.avatar_generate" {
+        return text;
+    }
+    let word = |value: Option<&Value>| {
+        value.and_then(Value::as_str).filter(|word| {
+            !word.is_empty()
+                && word.len() <= 64
+                && word
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "_-:.".contains(c))
+        })
+    };
+    let Some(data) = err.data.as_ref() else {
+        return text;
+    };
+    let Some(kind) = word(data.get("kind")) else {
+        return text;
+    };
+    let missing = data.get("missing");
+    let safe = json!({
+        "kind": kind,
+        "repair": word(missing.and_then(|m| m.get("repair"))),
+        "resource": word(missing.and_then(|m| m.get("resource"))),
+    });
+    format!("{text} {safe}")
+}
+
 pub fn is_allowed_method(m: &str) -> bool {
     ALLOWED_METHODS.contains(&m)
         || ALLOWED_PREFIXES
@@ -817,7 +853,7 @@ pub async fn core_call(
     let result = core
         .call(&method, params)
         .await
-        .map_err(|err| err.to_string())?;
+        .map_err(|err| window_error(&method, &err))?;
     if method == "dictionary.learn" {
         let words = result
             .get("learned")
@@ -3096,6 +3132,9 @@ mod tests {
             "members.update",
             "members.delete",
             "members.set_avatar",
+            "members.avatar_generate",
+            "members.library",
+            "members.library_file",
             "members.read",
             "members.viewing",
             "members.tool_choices",
@@ -3495,6 +3534,26 @@ mod tests {
             json!({"task_id": 3, "state": "done", "prefix": "告", "text": "x"}),
         );
         assert_eq!(main_event_from(&report, true), None);
+    }
+
+    #[test]
+    fn a_generated_picture_failure_tells_the_window_its_kind_and_fix_and_nothing_else() {
+        let err = crate::rpc::RpcError {
+            code: 1001,
+            message: "Avatar generation failed".into(),
+            data: Some(json!({"kind": "image_model_missing", "reason": "secret words",
+                "missing": {"resource": "image", "requirement": "image_generation", "repair": "models"},
+                "target": {"pane": "models", "field": "image-model"}})),
+        };
+        let text = window_error("members.avatar_generate", &err);
+        assert_eq!(
+            text,
+            r#"[1001] Avatar generation failed {"kind":"image_model_missing","repair":"models","resource":"image"}"#
+        );
+        assert!(!text.contains("secret"));
+        assert_eq!(window_error("members.update", &err), "[1001] Avatar generation failed");
+        let odd = crate::rpc::RpcError { data: Some(json!({"kind": "<b>x</b>"})), ..err };
+        assert_eq!(window_error("members.avatar_generate", &odd), "[1001] Avatar generation failed");
     }
 
     #[test]

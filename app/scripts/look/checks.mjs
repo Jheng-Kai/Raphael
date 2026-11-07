@@ -4754,6 +4754,42 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, rows: document.querySelectorAll(".look-slime-board > div").length };
   }
+  if (name.startsWith("avatar-generate")) {
+    // A member's face picker has two tabs, 史萊姆 · 生成 (owner, 2026-11-07 night, as Grok Bot's picker).
+    const menu = document.querySelector(".mb-avpop"), face = document.querySelector('.mb-panel-identity [data-det="avatar"]');
+    if (name !== "avatar-generate-used") {
+      const tabs = [...menu.querySelectorAll('.tabs [role="tab"]')];
+      require(tabs.map(tab => tab.textContent.trim()).join() === "史萊姆,生成" && tabs[1].getAttribute("aria-selected") === "true", "two tabs, 生成 open");
+      require(menu.querySelector('[data-avp-pane="slime"]').hidden && !menu.querySelector('[data-avp-pane="generate"]').hidden, "only the open tab's body shows");
+      require(menu.getAttribute("role") === "dialog", "with a field inside, the picker is a dialog that keeps Tab");
+      const box = menu.getBoundingClientRect(), at = face.getBoundingClientRect();
+      require(box.top >= at.bottom - 1 && box.left >= 8 && box.right <= innerWidth - 8 && box.bottom <= innerHeight - 4, "the picker stands under the face, whole in the window");
+    }
+    if (name === "avatar-generate-off") {
+      const fix = menu.querySelector('.avg-off [data-avg="fix"]');
+      require(/還沒有選圖片生成模型/.test(menu.querySelector(".avg-note").textContent) && !menu.querySelector('[data-avg="prompt"]'), "no image model: one plain line, no field to type in vain");
+      require(fix?.tagName === "BUTTON" && fix.textContent.trim() === "選圖片模型" && fix.dataset.missingRepair === "models" && fix.dataset.missingResource === "image", "and one button that opens the image model's row");
+      require(!window.__look.calls.some(call => call.method === "members.avatar_generate"), "nothing is asked of a model that is not there");
+    }
+    if (name === "avatar-generate") {
+      const picture = menu.querySelector(".avg-candidate img"), use = menu.querySelector('[data-avg="use"]'), again = menu.querySelector('[data-avg="go"]');
+      require(visible(picture) && picture.naturalWidth > 0 && Math.abs(picture.getBoundingClientRect().width - 88) <= 1, "the drawn picture stands round at the top");
+      require(getComputedStyle(picture.parentElement).borderTopLeftRadius !== "0px", "cut round like a face");
+      require(use?.tagName === "BUTTON" && use.textContent.trim() === "使用" && use.classList.contains("pri") && again.textContent.trim() === "再生成一張", "使用 is the primary press, another try beside it");
+      require(menu.querySelector('[data-avg="prompt"]').value === "戴圓眼鏡的綠色小狐狸", "the owner's words stay for another try");
+      const calls = window.__look.calls.filter(call => call.method === "members.avatar_generate");
+      require(calls.length === 1 && calls[0].params.member_id === 1 && calls[0].params.prompt === "戴圓眼鏡的綠色小狐狸", "one press, one picture, with the owner's words");
+      require(window.__look.data.members.find(row => row.id === 1)?.avatar !== "file:avatar-1.png", "nothing is applied before 使用");
+    }
+    if (name === "avatar-generate-used") {
+      require(window.__look.data.members.find(row => row.id === 1)?.avatar === "file:avatar-1.png", "使用 saved the picture as the member's face");
+      require(visible(face.querySelector(".mb-av-pic img")) && !face.querySelector("svg.slime"), "the panel shows the picture in the slime's place");
+      // The sidebar's row too, where the sidebar stands open (a narrow window keeps it in its drawer).
+      const row = [...document.querySelectorAll('[data-member="1"]')].find(element => visible(element) && element.closest('#nav, .side, .mb-col'));
+      if (row) require(visible(row.querySelector(".mb-av-pic img")), "and so does the sidebar");
+    }
+    return { check: name };
+  }
   if (name === "slime-picker") {
     const menu = document.querySelector(".mb-avpop");
     require(menu && menu.querySelector('[data-slime-character="shion"]').getAttribute("aria-pressed") === "true", "the menu stays open on the chosen slime");

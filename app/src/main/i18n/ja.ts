@@ -1,5 +1,6 @@
 import { navJa } from "./nav-catalogs";
 import { homeJa } from "./home-catalogs";
+import { avatarGenJa } from "./avatar-gen-catalogs";
 import { missingJa } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
@@ -520,6 +521,7 @@ export const ja = {
   "handoff.done": "完了", "handoff.failed": "未完了", "handoff.withheld": "アクセス取消済み",
   ...navJa,
   ...homeJa,
+  ...avatarGenJa,
   "conversations.now": "たった今",
   "conversations.minutes": "{p0} 分前",
   "conversations.hours": "{p0} 時間前",

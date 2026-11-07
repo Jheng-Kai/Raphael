@@ -174,6 +174,10 @@ export function faceHTML(member: { id: number; name: string; avatar?: string | n
     if (currentAvatar()) return avatarHTML({ size, cls: o.cls }).replace("<span", `<span${presenceAttrs(member.id)}`);
     return slimeFaceHTML({ ...member, avatar: RAPHAEL_SLIME }, size, o.cls);
   }
+  // A picture the owner generated for it (the face picker's 生成, 2026-11-07 night) stands in the slime's place.
+  if (member.avatar?.startsWith("file:") && member.avatar_url?.startsWith("data:image/"))
+    return `<span class="av mb-av mb-av-pic${o.cls ? ` ${o.cls}` : ""}" data-presence-member="${member.id}" style="--av:${Math.round(size)}px" aria-hidden="true">` +
+      `<img src="${member.avatar_url.replace(/"/g, "%22")}" alt="" draggable="false"></span>`;
   return slimeFaceHTML(member, size, o.cls);
 }
 

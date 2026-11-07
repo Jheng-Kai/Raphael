@@ -112,6 +112,18 @@ Nothing is typed into the panel and Settings holds no bot (owner, 2026-11-07). S
 member-avatar, slime-picker, work-messaging-setup, work-messaging-pairing, messaging-paired-aligned. The sidebar plus is the member creation entry; verify the
 complete flow for creation changes.
 
+A member's face picker in the details panel has two tabs, 史萊姆 · 生成, as Grok Bot's (owner, 2026-11-07 night), and
+keeps the slimes' width on either tab. 生成 reads `settings.get`: with no `image_model` it says so in one line with one button, 選圖片模型, that
+opens Settings › Models at the image model's row (missing.ts `data-missing-repair="models"`, resource `image`); with one
+it is the member's face, a field for a few words (Enter presses 生成) and 生成. One press is one
+`members.avatar_generate` (a spinner and no second press while it draws; the core never retries or switches model);
+the candidate stands round in the face's place with 使用 (primary) and 再生成一張, the words kept. 使用 saves it through
+`members.set_avatar` and closes the picker; the member's face is then that picture everywhere `faceHTML` draws it
+(`mb-av-pic`, from `avatar_url`), the slime's place. A failure says its kind in plain words (avatar-generate.ts), with
+去設定 where the core names a fix; the window learns the kind only through commands.rs `window_error`, which passes
+`kind`, `repair` and `resource` of this one call and nothing else of the error's data. The Tauri timeout for the
+call is 300 s. Scenes: avatar-generate-off, avatar-generate, avatar-generate-used.
+
 ## Driving it with look
 
 ```powershell
@@ -121,6 +133,7 @@ npm run look -- sidebar-folders member-text --theme both --width 1120,720,1920x1
 npm run look -- member-delete member-conversation-sections --theme both --width 1120,720,1920x1080
 npm run look -- member-maker member-maker-chosen member-maker-greeting member-maker-made --theme both --width 1120,720,1920x1080
 npm run look -- slime-states slime-picker slime-sizes slime-gallery slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-sharp slime-pointer slime-cost --theme both --width 1120,720,1920x1080
+npm run look -- slime-picker avatar-generate-off avatar-generate avatar-generate-used --theme both --width 1120,720,1920x1080
 ```
 
 These walk the owner's flows to their end: `member-delete`

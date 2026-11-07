@@ -562,6 +562,8 @@ export function installMock(fixture, config = {}, target = window) {
     data.members.push(...[[4, "阿凱"], [5, "小魚"]].map(([id, name]) => ({ ...structuredClone(data.members[3]), id, name, position: id, unread: false, waiting: false })));
   }
   if (variant.calendarSparse) data.routines = data.routines.slice(0, 1);
+  // The owner has chosen an image model (Settings › Models), so the face picker's 生成 can draw.
+  if (variant.imageModel) data.settings = { ...data.settings, image_model: "openrouter:sample-image" };
   if (variant.calendarAllDay) {
     const event = data.home.calendar.find(item => item.kind === "event");
     if (event) data.home.calendar.push({ ...event, id: "event:all-day", title: "素材整理日", all_day: true });
@@ -1006,6 +1008,25 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "members.tool_choices": return { tools: [], connections: data.servers };
       case "members.update": { const member = update(data.members, p.id, p); if (p.hidden && p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { member }; }
+      case "members.avatar_generate": {
+        // As the core (brief 10): the owner's chosen image model draws one square candidate, not applied; without a model the
+        // window is told so with the place that chooses one. The window reads the kind from the error text (window_error).
+        if (!data.settings.image_model) throw '[1001] Avatar generation failed {"kind":"image_model_missing","repair":"models","resource":"image"}';
+        const canvas = document.createElement("canvas"); canvas.width = canvas.height = 256;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#f3efe6"; ctx.fillRect(0, 0, 256, 256);
+        ctx.fillStyle = "#4f9a6b"; ctx.beginPath(); ctx.arc(128, 140, 78, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(70, 90); ctx.lineTo(92, 30); ctx.lineTo(118, 78); ctx.moveTo(186, 90); ctx.lineTo(164, 30); ctx.lineTo(138, 78); ctx.fill();
+        ctx.fillStyle = "#1d1d1d"; for (const x of [104, 152]) { ctx.beginPath(); ctx.arc(x, 132, 9, 0, Math.PI * 2); ctx.fill(); }
+        ctx.strokeStyle = "#1d1d1d"; ctx.lineWidth = 5; for (const x of [104, 152]) { ctx.beginPath(); ctx.arc(x, 132, 20, 0, Math.PI * 2); ctx.stroke(); }
+        data.avatarPrompts = [...(data.avatarPrompts ?? []), p.prompt];
+        return { candidate: { name: "avatar.png", mime: "image/png", data: canvas.toDataURL("image/png").split(",")[1], crop: { x: .5, y: .5, zoom: 1 } }, model: data.settings.image_model };
+      }
+      case "members.set_avatar": {
+        const member = update(data.members, p.id, { avatar: `file:avatar-${p.id}.png`, avatar_url: `data:${p.mime};base64,${p.data}` });
+        notify("MembersChanged", { member_id: p.id });
+        return { member };
+      }
       case "members.set_primary": {
         // as the core: Raphael or a member that is there and not hidden from the sidebar; only the choice changes
         if (p.id !== 0 && !data.members.some(member => member.id === p.id && !member.hidden)) throw new Error("Invalid params: no such member");

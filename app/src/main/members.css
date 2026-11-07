@@ -243,6 +243,30 @@
 .menu.mb-menu { min-width: calc(180px + 40 * var(--pa-u)); }
 .mb-presets { display: grid; grid-template-columns: repeat(4, var(--pa-preset)); gap: calc(6px + 4 * var(--pa-u)); padding: calc(6px + 4 * var(--pa-u)); }
 .menu.mb-avpop .mb-preset { width: var(--pa-preset); height: var(--pa-preset); min-height: var(--pa-preset); padding: 0; justify-content: center; border-radius: var(--r-pill); overflow: hidden; }
+/* A member's picker has two tabs, 史萊姆 · 生成 (Grok Bot's picker); 生成 is as wide as the slimes: its face, a few words,
+   one press, then 使用 or another try, and when no image model is chosen the one button that chooses it. */
+.menu.mb-avpop.has-tabs { --avp-gap: calc(6px + 4 * var(--pa-u)); padding-top: var(--avp-gap); }
+.menu.mb-avpop > .tabs { margin: 0 var(--avp-gap); }
+.avp-pane[data-avp-pane="generate"] { min-width: 0; }
+.avg { display: grid; justify-items: center; gap: var(--sp-2); padding: var(--sp-3) var(--avp-gap) var(--avp-gap); }
+.avg-wait { min-height: 120px; place-content: center; }
+.avg-preview { display: flex; justify-content: center; }
+.avg-candidate { border-radius: var(--r-pill); overflow: hidden; }
+.avg-candidate > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.avg .avg-prompt { width: 100%; box-sizing: border-box; }
+.avg-note { display: grid; justify-items: center; gap: var(--sp-2); margin: 0; font-size: var(--fs-xs); line-height: 1.5; color: var(--text-2); text-align: center; text-wrap: pretty; }
+.avg-note.is-failure { color: var(--warn); }
+.avg-actions { display: flex; gap: var(--sp-2); width: 100%; }
+/* The menu's own items are bare; 生成's are real framed buttons (R-UI-18), 使用 / 生成 the filled primary. */
+.menu.mb-avpop .avg .btn { width: auto; justify-content: center; border: 1px solid var(--btn-edge); background: var(--btn); text-align: center; }
+.menu.mb-avpop .avg .btn:hover:not(:disabled) { background: var(--btn-hover, var(--hover)); }
+.menu.mb-avpop .avg .btn.pri { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.menu.mb-avpop .avg .btn.pri:hover:not(:disabled) { border-color: var(--accent-hover); background: var(--accent-hover); }
+.avg-actions > .btn { flex: 1; }
+.avg-off { padding-block: var(--sp-4); }
+/* A generated picture as a member's face (members.ts faceHTML). */
+.mb-av-pic { display: inline-flex; flex: none; width: var(--av); height: var(--av); border-radius: var(--r-pill); overflow: hidden; }
+.mb-av-pic > img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 @media (prefers-reduced-motion: reduce) {
   .mb-det.is-in, .mb-det.leaving, .mb-item.is-new, .mb-scrim, .mb-dialog { animation: none !important; }

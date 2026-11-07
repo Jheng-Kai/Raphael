@@ -1,5 +1,6 @@
 import { navEn } from "./nav-catalogs";
 import { homeEn } from "./home-catalogs";
+import { avatarGenEn } from "./avatar-gen-catalogs";
 import { missingEn } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
@@ -520,6 +521,7 @@ export const en = {
   "handoff.done": "Completed", "handoff.failed": "Incomplete", "handoff.withheld": "Access revoked",
   ...navEn,
   ...homeEn,
+  ...avatarGenEn,
   "conversations.now": "Just now",
   "conversations.minutes": "{p0} min ago",
   "conversations.hours": "{p0} hr ago",

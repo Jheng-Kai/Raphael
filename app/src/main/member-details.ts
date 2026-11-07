@@ -437,6 +437,11 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       slimes: true,
       current: member.avatar || defaultSlimeAvatar(member.id),
       onSlime: (avatar) => void host.update(member.id, { avatar }),
+      generate: {
+        memberId: member.id,
+        face: faceHTML(member, 88),
+        apply: async (file) => { await api.membersSetAvatar(member.id, file); },
+      },
     });
   }
 

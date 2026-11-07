@@ -89,6 +89,8 @@ pub fn timeout_for(method: &str) -> Duration {
         | "connectors.set_key" => 120,
         // Downloads speech models.
         "models.ensure" | "models.local_use" => 3600,
+        // One picture from the owner's image model; an asynchronous provider is polled until it is drawn.
+        "members.avatar_generate" => 300,
         _ => 15,
     };
     Duration::from_secs(seconds)

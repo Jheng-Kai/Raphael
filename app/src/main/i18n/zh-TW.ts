@@ -1,5 +1,6 @@
 import { navZh } from "./nav-catalogs";
 import { homeZh } from "./home-catalogs";
+import { avatarGenZh } from "./avatar-gen-catalogs";
 import { missingZh } from "./missing-catalogs";
 // Traditional Chinese is the source catalogue. Placeholders are interpolated by t().
 export const zhTW = {
@@ -519,6 +520,7 @@ export const zhTW = {
   "mail.updated": "草稿剛被更新，請看過新內容再傳送",
   ...navZh,
   ...homeZh,
+  ...avatarGenZh,
   "conversations.now": "剛剛",
   "conversations.minutes": "{p0} 分鐘前",
   "conversations.hours": "{p0} 小時前",
