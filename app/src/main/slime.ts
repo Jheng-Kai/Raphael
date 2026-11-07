@@ -89,17 +89,21 @@ const CROWN_GOLD = "#F6C141";
 const CROWN = fill("M 37 32.4 L 36.2 18 L 43.6 23.8 L 50 14.2 L 56.4 23.8 L 63.8 18 L 63 32.4 Q 50 28 37 32.4 Z", CROWN_GOLD).replace("/>", ` stroke="${CROWN_GOLD}" stroke-width="1.8" stroke-linejoin="round"/>`) +
   `<circle cx="36.2" cy="17.2" r="2.4" fill="${CROWN_GOLD}"/><circle cx="50" cy="13.2" r="2.6" fill="${CROWN_GOLD}"/><circle cx="63.8" cy="17.2" r="2.4" fill="${CROWN_GOLD}"/>`;
 type CrownSpot = readonly [x: number, y: number, turn: number, size: number];
-/** Stuck on the outline, not worn: on the upper right, its base square to the edge, tilted down the slope. */
-const CROWN_EDGE: CrownSpot = [70.4, 35.6, 30, 0.62];
+/**
+ * Stuck on the outline from outside, not worn: its base sits on the edge line (it never sinks into the body; owner,
+ * 2026-11-07), square to it, on the upper right where the dome slopes 30 degrees. Each spot is a point of the outline
+ * moved 0.7 out along its normal.
+ */
+const CROWN_EDGE: CrownSpot = [71.6, 33.7, 30, 0.62];
 /**
  * A character whose own marks are there gets a spot of its own: two horns hold it upright between them (owner,
  * 2026-11-07), Shizu's mask and Gobta's goggles push it down the edge, Diablo's streaks to the left, and the ears and
  * wings of Ranga and Ramiris to the top. One horn in the middle leaves the edge free.
  */
 const CROWN_SPOTS: Partial<Record<SlimeCharacter, CrownSpot>> = {
-  benimaru: [50, 29.2, 0, 0.55], veldora: [50, 29.2, 0, 0.55], shuna: [50, 29.4, 0, 0.5],
-  shizu: [78, 41.6, 44, 0.6], gobta: [80, 44, 48, 0.58], diablo: [29.6, 34.8, -32, 0.6],
-  ranga: [50, 29, 8, 0.6], ramiris: [57, 29.4, 14, 0.62],
+  benimaru: [50, 27.8, 0, 0.55], veldora: [50, 27.8, 0, 0.55], shuna: [50, 27.9, 0, 0.5],
+  shizu: [79.5, 40.1, 46, 0.6], gobta: [81.7, 42.6, 50, 0.58], diablo: [28.4, 32.9, -32, 0.6],
+  ranga: [50, 27.6, 4, 0.6], ramiris: [57, 28.2, 12, 0.62],
 };
 function crownMark(slime: Slime): string {
   const [x, y, turn, size] = ("character" in slime && CROWN_SPOTS[slime.character]) || CROWN_EDGE;

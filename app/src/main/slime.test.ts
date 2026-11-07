@@ -27,7 +27,7 @@ test("the primary member's slime wears the gold crown on its edge, in place of a
   expect(crowned).toContain("rotate(30)");
   expect(other).not.toContain("#F6C141");
   // two horns hold it upright between them
-  expect(slimeSVG({ character: "benimaru" }, { ...plain, crown: true })).toContain("translate(50 29.2) rotate(0)");
+  expect(slimeSVG({ character: "benimaru" }, { ...plain, crown: true })).toContain("translate(50 27.8) rotate(0)");
   // a plain slime gives its hat up for the crown
   expect(slimeSVG({ color: "teal" }, { ...witch, crown: true })).not.toContain("#554177");
   // a primary the roster does not have is Raphael's again
