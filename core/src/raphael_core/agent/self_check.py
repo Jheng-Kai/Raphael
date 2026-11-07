@@ -102,7 +102,7 @@ def snapshot(service, ask):
     if hub is not None and hasattr(hub, "connections"):
         for item in hub.connections():
             error = item.get("error")
-            connections.append({key: item.get(key) for key in ("id", "name", "state", "enabled", "tools")})
+            connections.append({key: item.get(key) for key in ("id", "name", "source", "state", "enabled", "tools")})
             connections[-1]["failure"] = classify(error, record=False).wire() if error else None
         if hasattr(hub, "_config"):
             for server in hub._config.servers():
@@ -118,7 +118,7 @@ def snapshot(service, ask):
     if registry is not None:
         for pid in registry.ids():
             view = registry.view(pid)
-            brains.append({key: view.get(key) for key in ("id", "kind", "enabled", "has_key", "status")})
+            brains.append({key: view.get(key) for key in ("id", "name", "kind", "enabled", "has_key", "status")})
     else:
         brains.append({"id": "openrouter", "has_key": keys["OpenRouter"],
                        "status": "configured" if keys["OpenRouter"] else "unknown"})

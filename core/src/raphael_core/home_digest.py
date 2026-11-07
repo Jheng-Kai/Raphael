@@ -194,6 +194,7 @@ class DailyNarratives:
 
 def health(members, language):
     """Project only the existing offline self_check observations; never probe a provider."""
+    from .agent.cli.discovery import NAMES, brain_ref
     from .brain.providers.presets import OPTIONAL_KEY_KINDS
     read = getattr(members._background, "diagnostics", None)
     if read is None:
@@ -206,32 +207,74 @@ def health(members, language):
     checks = []
 
     words = {
-        "zh-TW": {"unknown": "狀態不明。", "key_missing": "尚未設定憑證。", "brain_unavailable": "模型未就緒或需要登入。",
+        "zh-TW": {"memory": "記憶", "provider": "模型供應商", "connection": "連線",
+                  "unknown": "狀態不明。", "key_missing": "尚未設定憑證。", "brain_unavailable": "模型未就緒或需要登入。",
                   "connection_unavailable": "連線尚未就緒。", "memory_unavailable": "記憶服務需要檢查。"},
-        "ja": {"unknown": "状態を確認できません。", "key_missing": "認証情報が未設定です。", "brain_unavailable": "モデルの準備またはログインが必要です。",
+        "ja": {"memory": "メモリ", "provider": "モデルプロバイダー", "connection": "接続",
+               "unknown": "状態を確認できません。", "key_missing": "認証情報が未設定です。", "brain_unavailable": "モデルの準備またはログインが必要です。",
                "connection_unavailable": "接続はまだ利用できません。", "memory_unavailable": "メモリの確認が必要です。"},
-        "en": {"unknown": "State is unknown.", "key_missing": "Credential is not configured.", "brain_unavailable": "Model is unavailable or needs sign-in.",
+        "en": {"memory": "Memory", "provider": "Model provider", "connection": "Connection",
+               "unknown": "State is unknown.", "key_missing": "Credential is not configured.", "brain_unavailable": "Model is unavailable or needs sign-in.",
                "connection_unavailable": "Connection is not ready.", "memory_unavailable": "Memory needs attention."},
     }[language]
 
-    def add(identifier, label, ok, detail, *, error=False):
-        checks.append({"id": identifier, "label_key": label, "status": "ok" if ok else "warn",
+    def add(identifier, name, label, ok, detail, *, error=False):
+        checks.append({"id": identifier, "name": name, "label_key": label, "status": "ok" if ok else "warn",
                        "detail": None if ok else words[detail], "detail_key": None if ok else f"health.{detail}"})
         if error:
             checks[-1]["status"] = "error"
 
-    for name, present in snapshot.get("keys_present", {}).items():
-        add(f"key:{name}", "health.key_presence", present is True, "key_missing" if present is False else "unknown")
-    for brain in snapshot.get("brains", []):
+    selected_clis, selected_providers = set(), set()
+    for model in [members._settings.get("agent_model"), *(member.model for member in members.store.members())]:
+        reference = brain_ref(model)
+        if reference:
+            selected_clis.add(reference[0])
+        elif isinstance(model, str) and model and not model.startswith("cli:"):
+            selected_providers.add(model[1:].partition(":")[0] if model.startswith("@") else "openrouter")
+
+    brains = snapshot.get("brains", [])
+    connections = snapshot.get("connections", [])
+    keys = snapshot.get("keys_present", {})
+    sources = {connection.get("source") for connection in connections}
+    openrouter_in_use = "openrouter" in selected_providers or any(
+        brain["id"] == "openrouter" and brain.get("enabled", True) for brain in brains)
+    for key, present in keys.items():
+        if key == "OpenRouter":
+            if not openrouter_in_use or any(brain["id"] == "openrouter" for brain in brains):
+                continue
+            name = "OpenRouter"
+        elif key in ("Composio", "Google OAuth client"):
+            if ("composio" if key == "Composio" else "google") not in sources:
+                continue
+            name = key
+        else:
+            server = next((connection for connection in connections if not connection.get("source")
+                           and connection.get("enabled") and any(
+                               key.startswith(f"{connection['id']}/{kind}/") for kind in ("env", "header"))), None)
+            if server is None:
+                continue
+            name = server.get("name") or words["connection"]
+        add(f"key:{key}", name, "health.key_presence", present is True, "key_missing" if present is False else "unknown")
+    for brain in brains:
+        identifier = brain["id"]
         if "installed" in brain:
+            if not brain.get("installed") and identifier not in selected_clis:
+                continue
+            name = NAMES.get(identifier) or brain.get("name") or words["provider"]
             ok = brain.get("installed") and brain.get("signed_in") and not brain.get("disconnected") and not brain.get("blocked")
         else:
+            if not brain.get("enabled", True) and identifier not in selected_providers:
+                continue
+            name = brain.get("name") or brain.get("label") or ("OpenRouter" if identifier == "openrouter" else words["provider"])
             credential = brain.get("has_key") is True or brain.get("kind") in OPTIONAL_KEY_KINDS
+            if identifier == "openrouter" and "OpenRouter" in keys:
+                credential = keys["OpenRouter"] is True
             ok = brain.get("enabled", True) and credential and brain.get("status") in ("ok", "configured")
-        add(f"brain:{brain['id']}", "health.brain_status", ok, "brain_unavailable")
-    for connection in snapshot.get("connections", []):
-        add(f"connection:{connection['id']}", "health.connection", connection.get("state") in ("ready", "duplicate") and not connection.get("failure"),
+        add(f"brain:{identifier}", name, "health.brain_status", ok, "brain_unavailable")
+    for connection in connections:
+        add(f"connection:{connection['id']}", connection.get("name") or words["connection"], "health.connection",
+            connection.get("state") in ("ready", "duplicate") and not connection.get("failure"),
             "connection_unavailable", error=connection.get("state") == "error")
     memory = snapshot.get("memory", {})
-    add("memory", "health.memory", memory.get("status") == "ok", "memory_unavailable")
+    add("memory", words["memory"], "health.memory", memory.get("status") == "ok", "memory_unavailable")
     return {"checks": checks, "reason": None}

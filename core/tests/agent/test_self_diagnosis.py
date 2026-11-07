@@ -391,3 +391,22 @@ def test_self_check_exposes_content_free_memory_health(make_rig):
     rig.service._memory = SimpleNamespace(health=lambda: {"status": "attention", "consecutive_failures": 3})
     result = snapshot(rig.service, SimpleNamespace(speaker=RAPHAEL, conversation_id=None))
     assert result["memory"] == {"status": "attention", "consecutive_failures": 3}
+
+
+def test_self_check_preserves_provider_display_name_and_connection_source(make_rig, monkeypatch):
+    from raphael_core.agent.self_check import snapshot
+    from raphael_core.agent.speaker import RAPHAEL
+    rig = make_rig()
+    rig.service._client = SimpleNamespace(registry=SimpleNamespace(
+        ids=lambda: ["opaque-provider"],
+        view=lambda pid: {"id": pid, "name": "Studio AI", "kind": "openai", "enabled": False,
+                          "has_key": False, "status": "auth"}))
+    rig.service._secret_cards = SimpleNamespace(_integrations=SimpleNamespace(connections=lambda: [
+        {"id": "opaque-connection", "name": "Gmail", "source": "composio", "enabled": False, "state": "error"}]))
+    monkeypatch.setattr(rig.service._cli_brains, "command", lambda name: None)
+    monkeypatch.setattr(rig.service._cli_brains, "disconnected", lambda name: False)
+    data = snapshot(rig.service, SimpleNamespace(speaker=RAPHAEL, conversation_id=None))
+    assert data["brains"][0] == {"id": "opaque-provider", "name": "Studio AI", "kind": "openai",
+                                 "enabled": False, "has_key": False, "status": "auth"}
+    assert data["connections"][0]["name"] == "Gmail"
+    assert data["connections"][0]["source"] == "composio"

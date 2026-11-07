@@ -474,7 +474,8 @@ async def test_health_mirrors_only_existing_self_check_observations(home, rig):
         return {"keys_present": {"OpenRouter": None, "Composio": False},
                 "brains": [{"id": "codex", "installed": True, "signed_in": True},
                            {"id": "claude", "installed": True, "signed_in": False}],
-                "connections": [{"id": "github", "state": "ready"}, {"id": "broken", "state": "error"}],
+                "connections": [{"id": "github", "name": "GitHub", "source": "composio", "state": "ready"},
+                                {"id": "broken", "name": "Weather", "state": "error"}],
                 "memory": {"status": "ok"}}
     rig.background.diagnostics = diagnostics
     checks = (await rig.call("home.overview"))["health"]["checks"]

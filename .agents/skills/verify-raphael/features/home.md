@@ -97,8 +97,9 @@ minutes). Member, question, conversation, routine, calendar, settings, connectio
 changes refresh Home. Locale changes redraw cached Home even behind Settings without an RPC or
 replacing the emblem.
 
-The health list reflects only the offline self-check; until brief 11 lands it can list a CLI
-that is not installed or a key nothing uses, and names fall back to the id after its kind.
+The health list reflects only the offline self-check, and only what is in use (brief 11): a CLI
+that is installed or chosen, a provider that is enabled or chosen, a key that something in use needs
+(one check for OpenRouter), every connection and memory; each check carries the `name` Home shows.
 
 Google Calendar uses connectors.status(refresh=false) and the existing private
 calendar_list_events tool only when ACTIVE/enabled; the `composio:googlecalendar` toolkit
