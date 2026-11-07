@@ -61,8 +61,10 @@ async def test_a_request_to_add_to_todays_schedule_lands_in_the_store_and_on_hom
     assert [row["title"] for row in value["calendar_items"]] == ["牙醫"]
     assert value["calendar_counts"] == {TODAY: 1} and TODAY in value["calendar_days"]
     assert [row["title"] for row in value["calendar"]] == ["牙醫"]
-    # Home's inbox is what needs the owner; an event on the calendar is not.
-    assert value["today"] == []
+    # Today's agenda includes calendar events as well as work waiting for the owner.
+    assert [row["title"] for row in value["today"]] == ["牙醫"]
+    assert value["counts"]["today"] == 1
+    assert any(row["id"] == item["id"] for row in value["today_plan"]["items"])
     [turn] = (await rig.call("agent.history.list", {"member_id": secretary.id}))["turns"]
     assert [json.loads(m["text"]) for m in turn["messages"] if m["kind"] == "event" and not is_action(m["text"])] == [{
         "type": "calendar", "action": "created", "id": item["event_id"], "name": "牙醫", "date": TODAY,

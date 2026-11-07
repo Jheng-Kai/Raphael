@@ -1227,6 +1227,7 @@ class App(Router):
             self._conn.close()
 
         steps: list[tuple[str, Callable[[], Awaitable[None]]]] = [
+            ("stop Home narratives", self.home.aclose),
             ("stop the calendar refresh", self.home.calendar_events.aclose),
             ("end room routing calls", self.rooms.aclose),
             ("end the voice call", self.voice_chat.aclose),

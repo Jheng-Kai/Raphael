@@ -1,4 +1,4 @@
-"""A bounded, read-only home projection of existing services and conversation records."""
+"""Home projections of existing services, with nonblocking daily narrative caching."""
 
 import asyncio
 import logging
@@ -9,13 +9,15 @@ from typing import Any, NotRequired, TypedDict
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .clock import wall_clock_ms
+from .agent.history import UNFINISHED
+from .agent.owner_questions import OwnerQuestions
+from .home_digest import DailyNarratives, health, member_details, yesterday
 from .connectors.http import ConnectorFailure
 from .members.schedule import next_run
 from .members.store import ROUTINE_RUN_STATUS_SQL
 from .own_calendar import CalendarStore, own_item
 from .protocol import RpcError, invalid_params
 
-TODAY_LIMIT = 12
 REPORT_LIMIT = 8
 CALENDAR_LIMIT = 24
 CALENDAR_EVENT_LIMIT = 2500
@@ -81,6 +83,10 @@ class Overview(TypedDict):
     usage: HomeUsage
     dictation: DictationNumbers
     counts: dict[str, int]
+    yesterday: dict[str, Any]
+    today_plan: dict[str, Any]
+    health: dict[str, Any]
+    members: list[dict[str, Any]]
 
 
 async def no_calendar_events(start_ms: int, end_ms: int) -> list[HomeItem]:
@@ -260,6 +266,10 @@ class HomeOverview:
         self._calendar_task = None
         self._calendar_key = None
         self._calendar = []
+        self.narratives = DailyNarratives(conn, members, now_ms)
+
+    async def aclose(self):
+        await self.narratives.aclose()
 
     def register(self):
         self.router.register("home.overview", self.read)
@@ -370,7 +380,7 @@ class HomeOverview:
         refresh = params.get("refresh", False)
         if type(refresh) is not bool:
             raise invalid_params("refresh must be a boolean")
-        zone = self.tz
+        zone = self.zone()
         if "tz" in params:
             try:
                 if not isinstance(params["tz"], str) or len(params["tz"]) > 100:
@@ -432,6 +442,17 @@ class HomeOverview:
             if row["member_id"] in people:
                 today.append(item("question", f"worker:{row['id']}", row["member_id"], row["text"], row["created_at_ms"],
                                   turn=row["turn_id"], conversation=row["conversation_id"]))
+        for question in OwnerQuestions(self.conn).pending():
+            mid, turn = question["member_id"], question["turn_id"]
+            if mid not in people or any(value["turn_id"] == turn for value in today):
+                continue
+            parent = self.conn.execute("SELECT t.question,t.text,t.conversation_id,q.created_at_ms FROM agent_turns t"
+                                       " JOIN owner_questions q ON q.turn_id=t.id WHERE q.id=?", (question["id"],)).fetchone()
+            title = question.get("question") or question.get("title") or (parent["question"] if parent else "") or question["kind"]
+            today.append(item("question", f"owner:{question['id']}", mid, title, parent["created_at_ms"] if parent else now,
+                              turn=turn, conversation=parent["conversation_id"] if parent else None))
+        questions = list(today)
+        routines = self.members.store.routines()
         calendar = []
         calendar_days = set()
         month_items, month_counts, month_seen = {}, {}, set()
@@ -459,7 +480,17 @@ class HomeOverview:
                 at = int(day.timestamp() * 1000)
                 if month_start <= at < month_end:
                     month_day({**value, "at_ms": at, "all_day": True}, day.date().isoformat())
-        for routine in self.members.store.routines():
+        for routine in routines:
+            if routine.member_id in people:
+                # Completed/event-triggered runs remain part of today even when the
+                # routine has exhausted its schedule or has since been paused.
+                if routine.enabled and routine.schedule is not None and routine.next_run_ms is not None:
+                    today_runs = self._due(routine, start, tomorrow, zone)
+                else:
+                    today_runs = sorted({row[0] for row in self.conn.execute(
+                        "SELECT COALESCE(scheduled,started) FROM routine_runs WHERE routine_id=?"
+                        " AND COALESCE(scheduled,started)>=? AND COALESCE(scheduled,started)<?", (routine.id, start, tomorrow))})
+                today.extend(item("routine", f"{routine.id}:{at}", routine.member_id, routine.title, at, routine=routine.id) for at in today_runs)
             if routine.schedule is None or not routine.enabled or routine.next_run_ms is None or routine.member_id not in people:
                 continue
             due = routine.next_run_ms
@@ -472,8 +503,6 @@ class HomeOverview:
                 if due >= start:
                     occurrence = item("routine", f"{routine.id}:{due}", routine.member_id, routine.title, due, routine=routine.id)
                     calendar.append(occurrence)
-                    if due < tomorrow:
-                        today.append(occurrence)
                 due = next_run(routine.schedule, due, tz=zone)
             # The month marks every scheduled day, independently of the bounded seven-day preview.
             schedule = routine.schedule
@@ -506,15 +535,50 @@ class HomeOverview:
         events = [*self._own_items(month_start, month_end, zone, people), *events]
         for event in events:
             month_item(event)
+        # A selected month may be elsewhere; today's agenda still belongs to today.
+        today_events = events if month_start <= start and tomorrow <= month_end else [
+            *self._own_items(start, tomorrow, zone, people), *await self._events(start, tomorrow, refresh)]
+        today.extend(event for event in today_events if event["at_ms"] < tomorrow and event.get("end_ms", event["at_ms"] + 1) > start)
         calendar.extend(event for event in events if start <= event["at_ms"] < end)
-        today.sort(key=lambda r: (0 if r["kind"] == "question" else 1, r["at_ms"], r["id"]))
+        today.sort(key=lambda r: (r["at_ms"], r["id"]))
         calendar.sort(key=lambda r: (r["at_ms"], r["id"]))
         status = await self.router.call("status.get")
         stats = await self.router.call("stats.summary", {"days": 14})
         spend = status["spend"]
-        return {"generated_at_ms": now, "report": status, "today": today[:TODAY_LIMIT], "reports": reports[:REPORT_LIMIT],
+        language = self.members._ui_language(params)
+        yesterday_start = int((day - timedelta(days=1)).timestamp() * 1000)
+        previous = yesterday(self.conn, people, yesterday_start, start)
+        previous.update(date=(day - timedelta(days=1)).date().isoformat(), start_ms=yesterday_start, end_ms=start)
+        unfinished = [{"id": f"task:{row['id']}", "kind": "unfinished", "member_id": row["member_id"],
+                       "title": " ".join(row["text"].split())[:240], "state": row["state"], "at_ms": row["created_at_ms"]}
+                      for row in self.conn.execute("SELECT id,member_id,text,state,created_at_ms FROM worker_tasks WHERE state IN ('queued','running','waiting','failed','interrupted','limit') ORDER BY created_at_ms,id")
+                      if row["member_id"] in people]
+        unfinished += [{"id": f"turn:{row['id']}", "kind": "unfinished", "member_id": row["member_id"],
+                        "title": " ".join(row["question"].split())[:240], "state": row["status"], "at_ms": row["created_at_ms"]}
+                       for row in self.conn.execute(
+                           "SELECT t.* FROM agent_turns t WHERE t.status IN (?,?,?,?) AND t.source NOT IN ('routine','member')"
+                           " AND t.route NOT IN ('routine','exchange') AND NOT EXISTS (SELECT 1 FROM worker_tasks w WHERE w.turn_id=t.id)"
+                           " ORDER BY t.created_at_ms,t.id", UNFINISHED) if row["member_id"] in people]
+        google = await self.google_state()
+        plan = {"date": day.date().isoformat(), "items": [*today, *unfinished], "calendar_google": google}
+
+        async def prepared_plan():
+            if not isinstance(self.calendar_events, ConnectedCalendar):
+                return plan
+            # Share the window's pending read before wording a daily plan. Only the background
+            # narrative waits, never home.overview, and a failed calendar remains explicit data.
+            first, last = (month_start, month_end) if month_start <= start and tomorrow <= month_end else (start, tomorrow)
+            connected = await self.calendar_events.read(first, last)
+            items = [value for value in today if value["kind"] != "event"]
+            items += [value for value in connected if value["at_ms"] < tomorrow and value.get("end_ms", value["at_ms"] + 1) > start]
+            items.sort(key=lambda value: (value["at_ms"], value["id"]))
+            return {**plan, "items": [*items, *unfinished], "calendar_google": await self.google_state()}
+        return {"generated_at_ms": now, "report": status, "today": today, "reports": reports[:REPORT_LIMIT],
+                "yesterday": self.narratives.read("yesterday", day.date().isoformat(), zone, language, previous),
+                "today_plan": self.narratives.read("today_plan", day.date().isoformat(), zone, language, plan, prepare=prepared_plan),
+                "health": health(self.members, language), "members": member_details(self.conn, roster, routines, questions),
                 "calendar": calendar[:CALENDAR_LIMIT], "calendar_days": sorted(calendar_days), "calendar_events": events,
-                "calendar_google": await self.google_state(), "counts": {"today": len(today), "reports": len(reports), "calendar": len(calendar)},
+                "calendar_google": google, "counts": {"today": len(today), "reports": len(reports), "calendar": len(calendar)},
                 "calendar_items": [value for key in sorted(month_items) for value in month_items[key]], "calendar_counts": month_counts,
                 "usage": {"month_usd": spend["month_usd"], "limit_usd": spend["limit_usd"], "daily": spend["daily"][-14:], "allowances": allowances},
                 "dictation": {"words": stats["all"]["words"], "audio_seconds": stats["all"]["audio_seconds"],

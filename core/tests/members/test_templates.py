@@ -62,3 +62,78 @@ async def test_a_stored_greeting_with_old_choices_still_loads(rig):
                             text="An old greeting", detail=detail, status="done", source="greeting", member_id=new["id"])
     [turn] = rig.service._history.list(member_id=new["id"])
     assert turn.detail == detail and turn.text == "An old greeting"
+
+
+@pytest.fixture
+def app_connections(rig, monkeypatch):
+    connections = [{"id": f"composio:{slug}", "name": name, "enabled": True, "services": [slug]}
+                   for slug, name in [("notion", "Notion"), ("github", "GitHub"), ("huggingface", "Hugging Face"),
+                                      ("gmail", "Gmail"), ("googlecalendar", "Google Calendar"),
+                                      ("mobbin", "Mobbin MCP"), ("googledrive", "Google Drive")]]
+    monkeypatch.setattr(rig.service, "_connections", lambda: connections)
+    return connections
+
+
+async def test_template_infers_only_gmail_and_calendar_from_routine(rig, app_connections):
+    member = (await rig.call("members.create", {"name": "Inbox"}))["member"]["id"]
+    await rig.call("routines.create", {"member_id": member, "title": "Morning inbox", "prompt": "Check Gmail and Google Calendar.",
+                  "schedule": {"kind": "daily", "time": "09:00"}})
+    value = (await rig.call("members.template", {"action": "export", "id": member}))["template"]
+    assert value["connections"] == ["Gmail", "Google Calendar"]
+
+
+async def test_template_without_app_use_has_no_connections(rig, app_connections):
+    member = (await rig.call("members.create", {"name": "Writer"}))["member"]["id"]
+    value = (await rig.call("members.template", {"action": "export", "id": member}))["template"]
+    assert value["connections"] == []
+
+
+@pytest.mark.parametrize("tools,expected", [([], []), (["composio:github"], ["GitHub"])])
+async def test_explicit_app_list_wins_over_all_inferred_uses(rig, app_connections, tools, expected):
+    member = (await rig.call("members.create", {"name": "Inbox", "tools": tools}))["member"]["id"]
+    await rig.call("routines.create", {"member_id": member, "title": "Gmail", "prompt": "Check Google Calendar.",
+                  "schedule": {"kind": "daily", "time": "09:00"}})
+    value = (await rig.call("members.template", {"action": "export", "id": member}))["template"]
+    assert value["connections"] == expected
+
+
+async def test_template_reads_skill_requirements_and_references_without_private_memory(rig, app_connections):
+    member = (await rig.call("members.create", {"name": "Researcher"}))["member"]["id"]
+    rig.service.capabilities.keep_recipe(member, "---\nname: Research\ndescription: Check sources\nrequires: [huggingface]\n---\nRead the attached reference.",
+                                        {"references/source.md": "Read Google Drive documents."})
+    rig.service.capabilities.homes.keep(member, "MEMORY.md", "Use Notion and GitHub privately.")
+    value = (await rig.call("members.template", {"action": "export", "id": member}))["template"]
+    assert value["connections"] == ["Hugging Face", "Google Drive"]
+
+
+async def test_template_tool_records_belong_only_to_the_exported_member(rig, app_connections):
+    from raphael_core.agent.history import AgentHistory
+    member = (await rig.call("members.create", {"name": "Researcher"}))["member"]["id"]
+    history = AgentHistory(rig.conn, rig.wall)
+    turn = history.add(session_id="test", question="Read", route="answer", prefix="", text="Done", status="done", member_id=member)
+    other = history.add(session_id="other", question="Read", route="answer", prefix="", text="Done", status="done", member_id=0)
+    rig.conn.execute("INSERT INTO agent_steps(turn_id,n,at_ms,kind,tool,server,outcome) VALUES(?,1,?,'tool','GMAIL_FETCH_EMAILS','composio','ok')", (turn, rig.wall.now))
+    rig.conn.execute("INSERT INTO agent_steps(turn_id,n,at_ms,kind,tool,server,outcome) VALUES(?,1,?,'tool','NOTION_SEARCH','composio','ok')", (other, rig.wall.now))
+    rig.conn.execute("INSERT INTO agent_steps(turn_id,n,at_ms,kind,tool,server,outcome) VALUES(?,2,?,'tool','search','composio:github','denied')", (turn, rig.wall.now))
+    task = rig.background.submit(session_id="worker", text="Read", language="en", model="", member_id=member)
+    rig.conn.execute("INSERT INTO worker_steps(task_id,n,at_ms,kind,tool,server,outcome) VALUES(?,1,?,'tool','GOOGLECALENDAR_EVENTS_LIST','composio','ok')", (task, rig.wall.now))
+    rig.conn.execute("INSERT INTO tool_audit(at_ms,server,tool,approver,outcome,task_id) VALUES(?, 'composio:googledrive','list','auto','ok',?)", (rig.wall.now, task))
+    value = (await rig.call("members.template", {"action": "export", "id": member}))["template"]
+    assert value["connections"] == ["Gmail", "Google Calendar", "Google Drive"]
+
+
+async def test_template_matching_does_not_match_word_substrings(rig, app_connections):
+    member = (await rig.call("members.create", {"name": "Writer"}))["member"]["id"]
+    await rig.call("routines.create", {"member_id": member, "title": "Notional planning", "prompt": "Review githubish examples and gmailbox notes.",
+                  "schedule": {"kind": "daily", "time": "09:00"}})
+    value = (await rig.call("members.template", {"action": "export", "id": member}))["template"]
+    assert value["connections"] == []
+
+
+async def test_template_matches_an_app_name_without_its_transport_suffix(rig, monkeypatch):
+    monkeypatch.setattr(rig.service, "_connections", lambda: [{"id": "srv-custom", "name": "Mobbin MCP"}])
+    member = (await rig.call("members.create", {"name": "Designer"}))["member"]["id"]
+    await rig.call("routines.create", {"member_id": member, "title": "Design inspiration", "prompt": "Read Mobbin for inspiration.",
+                  "schedule": {"kind": "daily", "time": "09:00"}})
+    value = (await rig.call("members.template", {"action": "export", "id": member}))["template"]
+    assert value["connections"] == ["Mobbin MCP"]

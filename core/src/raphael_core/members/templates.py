@@ -104,9 +104,49 @@ def export(service, member_id, *, review=False):
               "routines": [{"title": r.title, "prompt": r.prompt,
                             "schedule": r.schedule.to_json() if r.schedule else None, "when": r.when}
                            for r in service.store.routines(member_id)],
-              "connections": [c["name"] for c in service._connections()
-                              if member.tools is None or c["id"] in member.tools]}
+              "connections": []}
+    result["connections"] = used_connections(service, member, result)
     return checked(result, review=review)
+
+
+def used_connections(service, member, recipe):
+    """An explicit grant list wins; otherwise infer only this member's app evidence."""
+    connections = service._connections()
+    if member.tools is not None:
+        return list(dict.fromkeys(c["name"] for c in connections if c["id"] in member.tools))
+    # Include declarations and packaged references as well as the skill body. No private memory.
+    documents = [json.dumps(recipe["skills"], ensure_ascii=False), json.dumps(recipe["routines"], ensure_ascii=False)]
+    calls = list(service._conn.execute(
+        "SELECT s.server,s.tool FROM agent_steps s JOIN agent_turns t ON t.id=s.turn_id"
+        " WHERE t.member_id=? AND s.kind='tool' AND s.outcome IN ('ok','error','timeout')"
+        " UNION SELECT s.server,s.tool FROM worker_steps s JOIN worker_tasks t ON t.id=s.task_id"
+        " WHERE t.member_id=? AND s.kind='tool' AND s.outcome IN ('ok','error','timeout')"
+        " UNION SELECT a.server,a.tool FROM tool_audit a JOIN worker_tasks t ON t.id=a.task_id"
+        " WHERE t.member_id=? AND a.outcome IN ('ok','error','timeout')", (member.id, member.id, member.id)))
+    aliases = {"googlecalendar": ("Google Calendar", "calendar_list_events", "calendar"),
+               "googledrive": ("Google Drive", "drive_list_files"), "gmail": ("Gmail", "gmail_list_messages"),
+               "huggingface": ("Hugging Face",), "github": ("GitHub",)}
+
+    def mentions(text, token):
+        # Spaces, hyphens and underscores in toolkit slugs are equivalent, but word substrings are not.
+        words = re.findall(r"[^\W_]+", token.casefold())
+        if not words:
+            return False
+        return re.search(r"(?<![^\W_])" + r"[\s_:\-/]*".join(map(re.escape, words)) + r"(?![^\W_])", text.casefold()) is not None
+
+    result = []
+    for connection in connections:
+        identifier, name = connection["id"], connection["name"]
+        tokens = [identifier, name, re.sub(r"\s+(?:MCP|server|connector)$", "", name, flags=re.I), *connection.get("services", [])]
+        for token in list(tokens):
+            slug = re.sub(r"[^a-z0-9]", "", token.casefold().removeprefix("composio:"))
+            tokens.extend(aliases.get(slug, ()))
+        # Per-member receipts supply both server ids and connector tool slugs. Global last-used is not evidence.
+        evidence = documents + [f"{row['server'] or ''} {row['tool'] or ''}" for row in calls]
+        if any(mentions(text, token) for text in evidence for token in tokens):
+            if name not in result:
+                result.append(name)
+    return result
 
 
 def export_skill(capabilities, member_id, identifier):
