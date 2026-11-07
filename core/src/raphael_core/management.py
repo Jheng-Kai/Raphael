@@ -300,6 +300,7 @@ def destructive(name, arguments, retention=None):
 # These are UI-controlled boundaries, never direct management tools. Work tools may
 # propose a card, but may not answer it or handle its credentials.
 OWNER_ONLY = {
+    "members.avatar_generate": "Only an explicit owner press requests one paid image candidate using the chosen image model.",
     "members.template": "The owner previews, imports and exports portable member recipes.",
     **dict.fromkeys(("members.template_card", "members.template_card_export", "members.template_card_publish"),
                    "Only the owner reviews, saves and publishes member recipe snapshot cards."),
@@ -369,7 +370,7 @@ attachments.get audio.devices background.questions.list background.waiting.list
 brains.cli chatgpt.models chatgpt.status computer.viewer_status computer.wallpaper
 connectors.catalog connectors.categories connectors.status connectors.toolkit connectors.tools
 history.list home.overview integrations.audit integrations.catalog integrations.discover
-integrations.inventory integrations.preview languages.list links.preview members.list
+integrations.inventory integrations.preview languages.list links.preview members.list members.library members.library_file
 members.tool_choices members.unread members.voices messages.search messaging.discord.status
 messaging.slack.status messaging.telegram.status messaging.member.status messaging.accounts models.catalog models.local models.status
 providers.kinds providers.list providers.models quota.list rooms.list rooms.messages

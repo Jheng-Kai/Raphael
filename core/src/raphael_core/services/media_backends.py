@@ -61,11 +61,12 @@ async def _cancel(http, service, method, url, headers):
         pass  # Local cancellation is authoritative even when the remote job has finished.
 
 
-async def generate(kind, service, model, prompt, *, http, key, asset, raw_asset, charge, progress=None, poll_seconds=1):
+async def generate(kind, service, model, prompt, *, http, key, asset, raw_asset, charge, progress=None, poll_seconds=1, square=False):
     headers = bearer(service, key)
     if service == "fal":
         headers = {"Authorization": f"Key {need_key(service, key)}"}
-        data = await json_request(http, service, "POST", "https://queue.fal.run/" + model, headers=headers, json={"prompt": prompt})
+        data = await json_request(http, service, "POST", "https://queue.fal.run/" + model, headers=headers,
+            json={"prompt": prompt, **({"num_images": 1, "image_size": "square_hd"} if square else {})})
         charge(data)
         job = _job(data.get("request_id"), service)
         status_url = _fal_url(data.get("status_url"), job)
@@ -117,7 +118,7 @@ async def generate(kind, service, model, prompt, *, http, key, asset, raw_asset,
     base = BASES[service]
     if kind == "image":
         data = await json_request(http, service, "POST", base + "/images/generations", headers=headers,
-            json={"model": model, "prompt": prompt, "n": 1}, limit=72 * 1024 * 1024, timeout=120)
+            json={"model": model, "prompt": prompt, "n": 1, **({"size": "1024x1024"} if square else {})}, limit=72 * 1024 * 1024, timeout=120)
         charge(data)
         try:
             result = data["data"][0]

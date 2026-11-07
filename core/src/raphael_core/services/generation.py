@@ -20,6 +20,7 @@ from .fetch import PageFetcher
 from .keys import credential_keys
 from . import media_backends
 from .backends import credential_service
+from .backend_http import response_failure
 
 
 class Generation:
@@ -62,7 +63,8 @@ class Generation:
         if route is not None:
             if arguments.get("images"):
                 raise ServiceError("bad_arguments", service=route[0])
-            return await self._backend(kind, route, selected, arguments["prompt"], progress, ledger)
+            return await self._backend(kind, route, selected, arguments["prompt"], progress, ledger,
+                                       square=arguments.get("square", False))
         ids = arguments.get("images", [])
         if not isinstance(ids, list) or len(ids) > 4 or ids and not choice.get("image_input"):
             raise ServiceError("bad_arguments")
@@ -98,7 +100,8 @@ class Generation:
                     attachment = await self._video(provider, model, arguments["prompt"], progress, charge=charge)
                 else:
                     attachment = await self._image(provider, model, arguments["prompt"], images,
-                                                   image_only=choice.get("generation_only", False), charge=charge)
+                                                   image_only=choice.get("generation_only", False), charge=charge,
+                                                   square=arguments.get("square", False))
                 # Cancellation before publication never creates a conversation artifact.
                 await asyncio.sleep(0)
                 saved = self.store.save(attachment)
@@ -120,7 +123,7 @@ class Generation:
                            prompt_tokens=billing["prompt_tokens"], completion_tokens=billing["completion_tokens"],
                            outcome="ok" if billing["cost_usd"] is not None else "cost_unknown")
 
-    async def _backend(self, kind, route, reference, prompt, progress, ledger):
+    async def _backend(self, kind, route, reference, prompt, progress, ledger, *, square=False):
         service, model = route
         billing = {"cost_usd": None, "prompt_tokens": 0, "completion_tokens": 0}
         contacted = False
@@ -134,7 +137,7 @@ class Generation:
             async with asyncio.timeout(self.timeout_seconds):
                 attachment = await media_backends.generate(kind, service, model, prompt,
                     http=self._client(), key=self._keys.get(credential_service(service)), asset=self._asset, raw_asset=self._bytes,
-                    charge=charge, progress=progress, poll_seconds=self.poll_seconds)
+                    charge=charge, progress=progress, poll_seconds=self.poll_seconds, square=square)
                 await asyncio.sleep(0)
                 saved = self.store.save(attachment)
                 return {"attachment": saved.metadata(), "model": reference, **billing}
@@ -156,15 +159,20 @@ class Generation:
         try:
             async with provider._client().stream(method, provider.base_url + path, headers=provider._headers(),
                     json=body, timeout=120, follow_redirects=False, **kwargs) as response:
-                if not response.is_success:
-                    raise ServiceError("auth" if response.status_code in (401, 403) else "rate_limit" if response.status_code == 429 else "tool_error")
                 raw = bytearray()
                 async for chunk in response.aiter_bytes():
                     raw.extend(chunk)
+                    if not response.is_success and len(raw) > 65536:
+                        raise ServiceError(response_failure(response.status_code))
                     if len(raw) > MAX_FILE_BYTES * 4 // 3 + 1024 * 1024:
                         raise ServiceError("too_large")
+                if not response.is_success:
+                    raise ServiceError(response_failure(response.status_code, raw))
             data = json.loads(raw)
-            if not isinstance(data, dict) or data.get("error"):
+            if isinstance(data, dict) and data.get("error"):
+                kind = response_failure(200, raw)
+                raise ServiceError("protocol" if kind == "http_error" else kind)
+            if not isinstance(data, dict):
                 raise ServiceError("protocol")
             return data
         except httpx.TimeoutException:
@@ -172,19 +180,26 @@ class Generation:
         except httpx.TransportError:
             raise ServiceError("network") from None
 
-    async def _image(self, provider, model, prompt, images, *, image_only=False, charge=lambda data: None):
+    async def _image(self, provider, model, prompt, images, *, image_only=False, charge=lambda data: None, square=False):
         if provider.kind == "openrouter":
             content = [{"type": "text", "text": prompt}, *({"type": "image_url", "image_url": {"url": image.data_url()}} for image in images)]
-            data = await self._json(provider, "POST", "/chat/completions", body={"model": model, "modalities": ["image"] if image_only else ["image", "text"], "messages": [{"role": "user", "content": content}]})
+            data = await self._json(provider, "POST", "/chat/completions", body={"model": model, "modalities": ["image"] if image_only else ["image", "text"], "messages": [{"role": "user", "content": content}],
+                **({"image_config": {"aspect_ratio": "1:1"}} if square else {})})
             charge(data)
+            if data["choices"][0]["message"].get("refusal"):
+                raise ServiceError("content_policy")
             value = data["choices"][0]["message"]["images"][0]["image_url"]["url"]
             return await self._asset(value, "image")
         if provider.kind == "google":
             parts = [{"text": prompt}, *({"inlineData": {"mimeType": image.mime, "data": base64.b64encode(image.data).decode()}} for image in images)]
             base = provider.base_url.removesuffix("/openai").rstrip("/")
             provider = CompatibleProvider("google", base if base.endswith("/v1beta") else base + "/v1beta", provider._key_provider, http=provider._client())
-            data = await self._json(provider, "POST", f"/models/{model}:generateContent", body={"contents": [{"parts": parts}], "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}})
+            data = await self._json(provider, "POST", f"/models/{model}:generateContent", body={"contents": [{"parts": parts}], "generationConfig": {"responseModalities": ["TEXT", "IMAGE"],
+                **({"imageConfig": {"aspectRatio": "1:1"}} if square else {})}})
             charge(data)
+            if data.get("promptFeedback", {}).get("blockReason") or any(
+                    candidate.get("finishReason") in ("SAFETY", "IMAGE_SAFETY", "PROHIBITED_CONTENT") for candidate in data.get("candidates", [])):
+                raise ServiceError("content_policy")
             image = next((p["inlineData"] for p in data["candidates"][0]["content"]["parts"] if "inlineData" in p), None)
             if image is None:
                 raise ServiceError("protocol")
@@ -194,6 +209,8 @@ class Generation:
                                     files=[("image[]", (image.name, image.data, image.mime)) for image in images])
         else:
             body = {"model": model, "prompt": prompt, "n": 1, "response_format": "b64_json"}
+            if square:
+                body.update({"aspect_ratio": "1:1"} if provider.kind == "xai" else {"size": "1024x1024"})
             if images:
                 if len(images) != 1:
                     raise ServiceError("bad_arguments")

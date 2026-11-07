@@ -5,6 +5,7 @@ memory."""
 from test_app import make_app  # noqa: F401  (the fixture)
 
 MEMBER_METHODS = {
+    "members.avatar_generate", "members.library", "members.library_file",
     "members.list", "members.create", "members.update", "members.delete", "members.set_avatar",
     "members.read", "members.viewing", "members.tool_choices", "groups.create",
     "groups.update", "groups.delete", "routines.list", "routines.create", "routines.update",

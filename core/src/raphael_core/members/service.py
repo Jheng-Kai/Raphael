@@ -312,6 +312,11 @@ class MembersService:
     def register(self, router: Router) -> None:
         self._management_rpc = router.call
         self.template_cards.register(router)
+        from .avatar_generation import AvatarGeneration
+        self.avatar_generation = AvatarGeneration(self, lambda: getattr(router, "generation", None))
+        router.register("members.avatar_generate", self.avatar_generation.generate)
+        router.register("members.library", self._library)
+        router.register("members.library_file", self._library_file)
         methods = {
             "members.skills.list": self._skills_list,
             "members.skills.read": self._skills_read,
@@ -868,12 +873,7 @@ class MembersService:
 
     async def _list(self, params: dict) -> dict:
         if "panel_member_id" in params:
-            member = _whole(params, "panel_member_id")
-            if not self.member_exists(member):
-                raise invalid_params("no such member")
-            from .panel import snapshot
-            workspaces = getattr(self, "panel_workspaces", lambda member: [])(member)
-            return snapshot(self._conn, member, workspaces, _whole({"panel_limit": 12, **params}, "panel_limit", least=1))
+            return await self._library({"member_id": params["panel_member_id"], "limit": params.get("panel_limit", 12)})
         language = self._ui_language(params)
         unread = self.store.unread_from()
         waiting = self.waiting_members()
@@ -882,6 +882,34 @@ class MembersService:
         members += [self._member_view(m, unread, waiting, latest) for m in self.store.members()]
         return {"members": members, "groups": [group_view(g) for g in self.store.groups()],
                 "team_context": self.team_context(0, language)}
+
+    def _library_snapshot(self, params, paths=None):
+        from .panel import snapshot
+        member = _whole(params, "member_id")
+        if not self.member_exists(member):
+            raise invalid_params("no such member")
+        workspaces = getattr(self, "panel_workspaces", lambda member: [])(member)
+        return snapshot(self._conn, member, workspaces, _whole({"limit": 12, **params}, "limit", least=1),
+                        output_folder=self._settings.get("owner_output_folder"), tz=self._tz, paths=paths)
+
+    async def _library(self, params):
+        return self._library_snapshot(params)
+
+    async def _library_file(self, params):
+        paths = {}
+        self._library_snapshot(params, paths)
+        identifier = params.get("id")
+        if not isinstance(identifier, str) or identifier not in paths:
+            raise invalid_params("delivered file unavailable")
+        from ..services.attachment_store import OPENABLE
+        path, receipt = paths[identifier]
+        if receipt:
+            from ..background.tasks import TaskStore
+            if TaskStore(self._conn).artifact_path(*receipt) != path:
+                raise invalid_params("delivered file changed or unavailable")
+        if path.suffix.lower().lstrip(".") not in OPENABLE:
+            raise invalid_params("delivered file type cannot be opened")
+        return {"path": str(path)}
 
     def _member_id(self, params: dict) -> int:
         """The `id` of a member that is there (never Raphael's: he is not changed here)."""
