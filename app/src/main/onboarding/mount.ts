@@ -11,6 +11,7 @@ import { onLocaleChange, t } from "../i18n";
 
 import * as api from "../api";
 import { createCliBrains } from "../cli-brains";
+import { createProviders } from "../providers";
 import { describeError, keyReasonText } from "../format";
 import { wireKeyField } from "../keyfield";
 import { UI_LANGUAGES } from "../pages/settings-view";
@@ -78,6 +79,15 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     },
   });
 
+  // Every provider of the catalog, with the same editor as Settings › 模型與用量 (providers.ts).
+  const providers = createProviders({
+    root,
+    visible: () => !destroyed && flow.step === "tools",
+    redraw: () => {
+      if (!destroyed && flow.step === "tools") repaintBody();
+    },
+  });
+
   const device = () => app.device();
 
   // ---------- drawing ----------
@@ -90,7 +100,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
           languageSelect: sel(UI_LANGUAGES, device().ui_language, t("settings.059"), ' data-ob="lang"'),
         });
       case "tools":
-        return toolsHTML(accounts.view(), { ...key, error: keyError?.() ?? null }, accountsError());
+        return toolsHTML(accounts.view(), { ...key, error: keyError?.() ?? null }, accountsError(), providers.view());
       case "services":
         return servicesHTML({ services, waiting: waitingService, failed: connectFailed });
       case "abilities":
@@ -156,6 +166,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       case "tools":
         accounts.start();
         void loadKey();
+        void providers.load();
         break;
       case "services":
         if (!servicesLoaded || services === "failed") void loadServices();
@@ -396,6 +407,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       void accounts.click(target);
       return;
     }
+    if (flow.step === "tools" && providers.click(target)) return;
 
     const button = target.closest<HTMLElement>("[data-ob]");
     switch (button?.dataset.ob) {
@@ -439,7 +451,12 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
 
   // The key is sent by Enter or 貼上 only, never by leaving the field (see keyfield.ts).
   root.addEventListener("keydown", (e) => {
-    if (!destroyed) openMenuOnArrow(e);
+    if (destroyed) return;
+    if (flow.step === "tools" && providers.key(e)) return;
+    openMenuOnArrow(e);
+  }, { signal });
+  root.addEventListener("input", (e) => {
+    if (!destroyed && flow.step === "tools" && e.target instanceof HTMLInputElement) providers.input(e.target);
   }, { signal });
   wireKeyField(root, { inputId: "ob-key-input", pasteSelector: '[data-ob="key-paste"]', submit: (value) => void submitKey(value), signal });
 

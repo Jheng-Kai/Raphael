@@ -2,7 +2,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { emptyCliBrainsView, type CliBrainsView } from "../cli-brains";
 import { setLocale } from "../i18n";
-import type { CliBrain, StoreService } from "../types";
+import type { CliBrain, ModelProvider, ProviderKind, StoreService } from "../types";
+import { emptyProvidersView } from "../providers";
 import type { AbilityRow } from "./helpers";
 import { abilitiesHTML, servicesHTML, toolCards, toolsHTML, topHTML, welcomeHTML } from "./screens";
 
@@ -105,10 +106,28 @@ describe("step 1: the AI tools", () => {
     expect(replacing.querySelector('[data-ob="key-cancel"]')).not.toBeNull();
   });
 
-  test("a refused key and a failed sign-in are told as alerts", () => {
+  test("a refused key and a failed sign-in are told as alerts, each under its own list", () => {
     const host = dom(toolsHTML(accounts(), { ...noKey, error: "That key was refused" }, "Sign-in did not finish"));
-    expect([...host.querySelectorAll('[role="alert"]')].map((el) => el.textContent)).toEqual(["That key was refused", "Sign-in did not finish"]);
+    expect([...host.querySelectorAll('[role="alert"]')].map((el) => el.textContent)).toEqual(["Sign-in did not finish", "That key was refused"]);
     expect(host.querySelector("#ob-key-input")!.getAttribute("aria-invalid")).toBe("true");
+  });
+
+  test("one per row: the accounts, then every provider of the catalog, connected ones to manage, others to connect", () => {
+    const kind = (id: string, name: string, group: "official" | "gateway" | "local", available = true) =>
+      ({ kind: id, name, group, available, fields: ["key"], default_base_url: null, docs_url: null, local_context_hint: false }) as unknown as ProviderKind;
+    const providers = { ...emptyProvidersView(), state: "ready" as const,
+      kinds: [kind("ollama", "Ollama", "local"), kind("openrouter", "OpenRouter", "gateway"), kind("xai", "xAI", "official"), kind("anthropic", "Anthropic", "official"), kind("future", "Future AI", "official", false)],
+      providers: [{ id: "p1", kind: "anthropic", name: "Anthropic", enabled: true, status: "ok", models: 3 } as unknown as ModelProvider] };
+    const host = dom(toolsHTML(accounts(), noKey, "", providers));
+    expect(host.querySelector(".ob-grid")).toBeNull();
+    // OpenRouter is its own key row; the catalog follows it by group, each group by name, under its own label
+    expect(host.querySelector('[data-ob-key] [data-item="openrouter"]')).not.toBeNull();
+    expect(host.querySelectorAll(".ob-subsection")).toHaveLength(2);
+    expect([...host.querySelectorAll("[data-ob-providers] .ob-item")].map((el) => el.getAttribute("data-item"))).toEqual(["provider:anthropic", "provider:future", "provider:xai", "provider:ollama"]);
+    expect([...host.querySelectorAll("[data-ob-providers]")].map((el) => el.getAttribute("data-ob-providers"))).toEqual(["official", "local"]);
+    expect(host.querySelector('[data-item="provider:anthropic"] [data-pv="open"][data-id="p1"]')).not.toBeNull();
+    expect(host.querySelector('[data-item="provider:xai"] [data-pv="add"][data-id="xai"]')).not.toBeNull();
+    expect(host.querySelector<HTMLButtonElement>('[data-item="provider:future"] [data-pv="add"]')!.disabled).toBe(true);
   });
 });
 

@@ -642,6 +642,15 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .ob-ctl { display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); min-width: 0; }
 .ob-alert { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-2); margin-top: var(--sp-3); font-size: var(--fs-sm); }
 .ob-grid > .ob-alert { margin-top: 0; }
+/* The AI tools are one per row (owner, 2026-11-07): accounts, then every provider of the catalog, as long as it grows,
+   each under a small section label. The page scrolls; no inner scroll box. */
+.ob-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.ob-list > .ob-item { min-height: 60px; }
+.ob-list > .ob-alert { margin-top: 0; }
+.ob-section { margin: var(--sp-5) 0 var(--sp-2); font-size: var(--fs-xs); font-weight: 600; color: var(--text-3); letter-spacing: 0.02em; }
+.ob-main > .ob-section:first-child { margin-top: 0; }
+.ob-subsection { margin: var(--sp-4) 0 var(--sp-2); font-size: var(--fs-2xs); font-weight: 500; color: var(--text-3); }
+.ob-list .ob-tx .ds { white-space: normal; overflow: visible; }
 .ob-state { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-2); min-height: 72px; font-size: var(--fs-sm); color: var(--text-2); }
 .dot.busy { background: var(--accent); animation: ob-pulse 1.2s ease-in-out infinite; }
 @keyframes ob-pulse { 50% { opacity: 0.35; } }

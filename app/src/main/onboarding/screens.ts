@@ -4,11 +4,13 @@
 // or the core, so a screen can be drawn from made-up data (the browser check does).
 
 import { t } from "../i18n";
+import type { MessageKey } from "../i18n/zh-TW";
 
 import { CLIS, type CliBrainsView } from "../cli-brains";
 import { entryIcon } from "../connections";
 import { providerMark } from "../provider-marks";
-import type { StoreService } from "../types";
+import { type ProvidersView, description, emptyProvidersView, providersAddHTML } from "../providers";
+import type { ProviderKind, StoreService } from "../types";
 import { btn, esc, fieldHTML, ico, iconButton, st, tg } from "../ui";
 import type { AbilityRow } from "./helpers";
 
@@ -131,12 +133,39 @@ function keyItem(k: KeyView): string {
   return item({ id: "openrouter", mark: providerMark("openrouter"), name: "OpenRouter", line, control, wide: true }) + (k.error ? alert(st("err", k.error)) : "");
 }
 
-export function toolsHTML(accounts: CliBrainsView, key: KeyView, accountError: string): string {
+/**
+ * Every provider the app can connect, one per row, from the core's catalog (the same as Settings › 模型與用量's 新增供應商):
+ * the guide is for everyone, not only the providers one owner uses (owner, 2026-11-07). A row's button opens the same
+ * editor as Settings. OpenRouter keeps its own key row above them; ChatGPT is a sign-in among the accounts.
+ */
+const GROUP_TITLE: Record<ProviderKind["group"], MessageKey> = { official: "providers.official", gateway: "providers.gateway", local: "providers.local" };
+
+function providerItem(kind: ProviderKind, v: ProvidersView): string {
+  const provider = v.providers.find((p) => p.kind === kind.kind);
+  const control = provider
+    ? st("ok", t("providers.connected")) + btn(esc(t("providers.manage")), "sm", ` data-pv="open" data-id="${esc(provider.id)}" aria-label="${esc(`${t("providers.manage")} ${kind.name}`)}"${v.busy ? " disabled" : ""}`)
+    : btn(esc(t("providers.connect")), "sm", ` data-pv="add" data-id="${esc(kind.kind)}" aria-label="${esc(`${t("providers.connect")} ${kind.name}`)}"${kind.available && !v.busy ? "" : " disabled"}`);
+  return item({ id: `provider:${kind.kind}`, mark: providerMark(kind.kind), name: kind.name, line: kind.available ? description(kind) : t("providers.soon"), control });
+}
+
+/** The catalog's providers by group (official, gateways and clouds, this computer), each group under its own label. */
+export function providerGroupsHTML(v: ProvidersView): string {
+  if (v.state !== "ready") return v.state === "failed" ? alert(st("err", t("providers.error"))) : "";
+  const kinds = v.kinds.filter((kind) => kind.kind !== "openrouter" && kind.kind !== "chatgpt");
+  return (["official", "gateway", "local"] as const).map((group) => {
+    const rows = kinds.filter((kind) => kind.group === group).sort((a, b) => a.name.localeCompare(b.name, "en"));
+    return rows.length ? `<h4 class="ob-subsection">${esc(tr(GROUP_TITLE[group]))}</h4><div class="ob-list" data-ob-providers="${group}">${rows.map((kind) => providerItem(kind, v)).join("")}</div>` : "";
+  }).join("");
+}
+const tr = t as unknown as (key: MessageKey) => string;
+
+export function toolsHTML(accounts: CliBrainsView, key: KeyView, accountError: string, providers: ProvidersView = emptyProvidersView()): string {
   return (
     head(t("onboarding.toolsTitle")) +
-    `<div class="ob-main"><div class="ob-grid" data-ob-tools>${toolCards(accounts).map(toolItem).join("")}${keyItem(key)}</div>` +
+    `<div class="ob-main"><h3 class="ob-section">${esc(t("brains.accounts"))}</h3><div class="ob-list" data-ob-tools>${toolCards(accounts).map(toolItem).join("")}</div>` +
     (accountError ? alert(st("err", accountError)) : "") +
-    `</div>`
+    `<h3 class="ob-section">${esc(t("models.providers"))}</h3><div class="ob-list" data-ob-key>${keyItem(key)}</div>${providerGroupsHTML(providers)}` +
+    `</div>` + providersAddHTML(providers)
   );
 }
 
