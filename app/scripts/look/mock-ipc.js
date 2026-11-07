@@ -409,6 +409,15 @@ export function installMock(fixture, config = {}, target = window) {
     turn.secrets = [{...turn.secrets[0], id: "card-login", name: "https://research.example", secret: "login", login: true}];
     data.turns.push(turn);
   }
+  // The panel's 設定 and share answered in the member's conversation (owner, 2026-11-07): a bot token card, a pairing
+  // request to that bot, and the template the member made of itself.
+  if (variant.chatCards) {
+    const base = structuredClone(data.secretTurns.notion);
+    const turn = (id, question, text, extra) => ({ ...base, id, member_id: 1, conversation_id: 11, question, text, steps: [], messages: [], secrets: [], ...extra });
+    data.turns.push(turn(141, "幫我設定 Slack", "我需要一個 Slack 機器人權杖：照卡片上的步驟建立機器人，再把權杖貼進來。", { secrets: [{ id: "card-slack", name: "Slack", secret: "bot_token", state: "pending", error: null, expires_at_ms: data.now + 600000, resumed: false, platform: "slack", link: "https://api.slack.com/apps" }],
+      pairings: [{ id: "pair-1", platform: "slack", member_id: 1, code: "SL7Q2K", who: "Sam", expires_at_ms: data.now + 300000, state: "pending" }] }));
+    data.turns.push(turn(142, "把你自己打包成範本，讓別人也能用", "範本做好了，可以先看內容再儲存或發布。", { templates: [{ id: "tpl-1", state: "draft", name: "研究與資訊整理", avatar: "slime:shion", description: "幫人查證來源、整理成一份能直接讀的研究摘要。", counts: { skills: 2, routines: 1 }, connections: ["Gmail", "Notion"], findings: [] }] }));
+  }
   if (variant.ownerQuestion) {
     const question = structuredClone(data.ownerQuestionCard);
     const turn = { ...structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11)),
@@ -1381,6 +1390,20 @@ export function installMock(fixture, config = {}, target = window) {
           }, 0);
         }
         return { card: copy(card), started: true };
+      }
+      case "messaging.pairing.answer": {
+        const turn = data.turns.find(item => item.pairings?.some(card => card.id === p.id));
+        const card = turn?.pairings.find(item => item.id === p.id);
+        if (!card) throw new Error(`Fixture pairing not found: ${p.id}`);
+        card.state = p.approve ? "approved" : "rejected";
+        notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+        return { card };
+      }
+      case "members.template_card": return { template: { format: "raphael-member", version: 1, name: "研究與資訊整理", role: "研究與資訊整理", personality: "", instructions: "查證來源，整理成摘要。", reply_style: "full", description: "幫人查證來源、整理成一份能直接讀的研究摘要。", skills: [], routines: [], connections: ["Gmail", "Notion"] }, findings: [] };
+      case "members.template_card_export": {
+        const turn = data.turns.find(item => item.templates?.some(card => card.id === p.id));
+        turn.templates[0].state = "saved"; notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+        return { text: "{}" };
       }
       case "integrations.card_save": {
         const turn = data.turns.find(item => item.secrets?.some(card => card.id === p.id));

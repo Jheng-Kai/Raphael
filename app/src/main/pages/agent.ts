@@ -73,6 +73,7 @@ import { mountBackgroundQuestions } from "../background-mount";
 import { mountVoiceChat, voiceCallCardHTML, foldCallTurns } from "../voice-chat";
 import { TYPED, VOICE, exchangeTurn, mergeTurns, oldestId, refreshTurns, sourceOf, threadItems, visibleTurn } from "../conversation";
 import { carryTyped } from "../secret-card";
+import { chatCardAction } from "../chat-cards";
 import { carryInlineSetup, mountInlineConnectionSetup } from "../connection-setup";
 import { carryMail } from "../mail-card";
 import { mountPages } from "../page-card";
@@ -2294,6 +2295,15 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         break;
       case "card-settings":
         app.go("settings", "repair:store:composio");
+        break;
+      case "bot-link":
+      case "pairing-allow":
+      case "pairing-deny":
+      case "template-view":
+      case "template-save":
+      case "template-publish":
+      case "template-open":
+        chatCardAction(act);
         break;
       case "card-save":
         void secretSave(act);

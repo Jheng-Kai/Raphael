@@ -9,6 +9,7 @@ import { reactionControlHTML, reactionRowHTML } from "./message-metadata";
 import { mailCardsHTML, mailHandedLinesHTML } from "./mail-card";
 import { pageCardsHTML } from "./page-card";
 import { ownerQuestionsHTML, permissionCardsHTML } from "./permission-card";
+import { chatCardsHTML } from "./chat-cards";
 import { secretCardsHTML, secretResumedLineHTML } from "./secret-card";
 import { mcpProposalsHTML } from "./mcp-proposal";
 import { liveAction, pastStep, workActions } from "./work-actions";
@@ -374,7 +375,7 @@ const actionsText = (count: number): string => (count === 1 ? t("agent.stepsDone
 
 /** The same conversation cards and controls are used in private and room replies. */
 export function conversationCardsHTML(turn: AgentTurn, memberName?: string): string {
-  return (turn.task?.state === "done" ? `<div data-task-result-slot="${turn.id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") + connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + permissionCardsHTML(turn, undefined, false, memberName) +
+  return (turn.task?.state === "done" ? `<div data-task-result-slot="${turn.id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") + connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + permissionCardsHTML(turn, undefined, false, memberName) +
     mailCardsHTML(turn) + pageCardsHTML(turn) + ownerQuestionsHTML(turn) +
     (turn.messages ?? []).filter(message => message.kind === "media").map(message => artifactHTML(message.text, message.seq)).join("");
 }
@@ -967,7 +968,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   // the request and the answer are read there, not under the line. Only a card that waits for the owner stays here.
   if (handed) {
     const name = turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title");
-    const cards = permissionCardsHTML(turn, look.answerable, true, name) + connectorCardsHTML(turn) + secretCardsHTML(turn) + computerCardsHTML(turn) +
+    const cards = permissionCardsHTML(turn, look.answerable, true, name) + connectorCardsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + computerCardsHTML(turn) +
       permissionCardsHTML(turn, look.answerable, false, name) + ownerQuestionsHTML(turn);
     return `<li class="tn" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}>` + receivedLineHTML(turn, look) +
       (cards ? `<div class="ra"><div class="ra-body">${cards}</div></div>` : "") + `</li>`;
@@ -995,7 +996,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
       ? turnMessagesHTML(turn, state, query, regenerate, revealing, permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")), textAnswer, waitingForOwner)
       : permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + textAnswer + workSectionHTML(turn, state, query, revealing, waitingForOwner)) +
     (settledDraft ? settledDraftHTML(turn, detailOpen, query) : "") +
-    connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + computerCardsHTML(turn) +
+    connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + computerCardsHTML(turn) +
     `<div data-desktop-slot="${id}"></div>` +
     permissionCardsHTML(turn, look.answerable, false, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + mailCardsHTML(turn, look) + pageCardsHTML(turn) +
     ownerQuestionsHTML(turn) + greetingHTML(turn, look.greetingOpen ?? true) +

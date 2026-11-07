@@ -1962,6 +1962,14 @@ export function checkRendered(name, context = {}) {
     require(label.top>=face.bottom&&Math.abs(label.left+label.width/2-(box.left+box.width/2))<1,'the name is centered below the face');
     return {check:name,face:face.width};
   }
+  if(name==='chat-setup-cards'){
+    const bot=document.querySelector('[data-secret-card="card-slack"]'),pair=document.querySelector('[data-pairing-card="pair-1"]'),tpl=document.querySelector('[data-template-card-id="tpl-1"]');
+    require(visible(bot)&&bot.querySelector('input[type=password][data-secret-input]')&&bot.querySelector('[data-act="bot-link"][data-platform="slack"]'),"the bot card has where to make the bot and one masked field");
+    require(!bot.innerHTML.includes('xoxb')&&!bot.querySelector('input')?.value,"no token in the markup");
+    require(pair&&pair.querySelector('.code')?.textContent==='SL7Q2K'&&pair.querySelector('[data-act="pairing-allow"]')&&pair.querySelector('[data-act="pairing-deny"]'),"the pairing card shows its code with Allow and Deny");
+    require(tpl&&tpl.querySelector('[data-act="template-view"]')&&tpl.querySelector('[data-act="template-save"]')&&tpl.querySelector('[data-act="template-publish"]')&&tpl.textContent.includes('Gmail'),"the template card says what it brings and can be viewed, saved or published");
+    return {check:name};
+  }
   if(name==='voice-flyer-emblem'){
     const flyer=document.querySelector('.ra-flyer'),canvas=flyer?.querySelector('canvas.ra-flyer-emblem');
     require(visible(flyer)&&canvas&&!flyer.querySelector('img'),"the voice flyer draws the emblem live on a canvas, not a picture of it");

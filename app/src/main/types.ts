@@ -346,6 +346,10 @@ export interface AgentTurn {
   resumed_app_logos?: string[];
   /** The cards of the keys this turn's task waits for (`connectors.secret_cards`). */
   secrets?: SecretCard[];
+  /** Pairing requests to a bot this turn set up, each answered in place. */
+  pairings?: PairingCard[];
+  /** The template this turn's member made of itself. */
+  templates?: TemplateCard[];
   connection_proposals?: ConnectionProposal[];
   /** The cards of the owner's turn at the computer this turn's task is paused on (`computer.handback`). */
   computers?: ComputerCard[];
@@ -502,6 +506,33 @@ export interface SecretCard {
   error: string | null;
   expires_at_ms: number;
   resumed: boolean;
+  /** A bot token a member asked for in its conversation (`connect_messaging`): its platform and where the bot is made. */
+  platform?: "telegram" | "slack" | "discord";
+  link?: string;
+}
+
+/** Someone asked a bot set up in this conversation to pair (`messaging.pairing.answer`). */
+export interface PairingCard {
+  id: string;
+  platform: "telegram" | "slack" | "discord";
+  member_id: number;
+  code: string;
+  who: string;
+  expires_at_ms: number;
+  state: "pending" | "approved" | "rejected" | "expired";
+}
+
+/** A member packaged as a template in its conversation (`share_template`): the snapshot is kept by the core. */
+export interface TemplateCard {
+  id: string;
+  state: "draft" | "saved" | "published";
+  name: string;
+  avatar: string;
+  description: string;
+  counts: { skills: number; routines: number };
+  connections: string[];
+  findings: { kind: "secret" | "injection"; path: string }[];
+  url?: string;
 }
 
 /** A computer card: the owner's turn at the computer for a sign-in, a password or a payment. Never what was on screen. */
