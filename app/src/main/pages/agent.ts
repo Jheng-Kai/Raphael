@@ -710,11 +710,21 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     voice.redraw();
   }
 
-  /** The thread's prompt in the window's language. */
+  /** A bot whose setup waits for its token in this conversation (the card's platform), newest first; null for none. */
+  function waitingSetup(): string | null {
+    for (const turn of [...turns].reverse()) for (const card of turn.secrets ?? []) {
+      if (card.platform && card.secret === "bot_token" && (card.state === "pending" || card.state === "failed")) return card.platform;
+    }
+    return null;
+  }
+
+  /** The thread's prompt in the window's language; while a bot's setup waits here it asks about that (owner, 2026-11-07). */
   function drawComposer(): void {
-    const words = inRaphael() ? t("home.askRaphael") : memberPlaceholder(members.member().name);
-    input.placeholder = words;
-    input.setAttribute("aria-label", words);
+    const setup = waitingSetup();
+    const brand: Record<string, string> = { telegram: "Telegram", slack: "Slack", discord: "Discord" };
+    const words = setup ? t("chat.askAboutSetup", { p0: brand[setup] ?? setup }) : inRaphael() ? t("home.askRaphael") : memberPlaceholder(members.member().name);
+    if (input.placeholder !== words) input.placeholder = words;
+    if (input.getAttribute("aria-label") !== words) input.setAttribute("aria-label", words);
     empty.classList.toggle("is-member", !inRaphael());
   }
 
@@ -982,6 +992,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     [...state.stopping], [...state.rerunning], answering, searching]);
   function render(follow = false): void {
     renderedPage = pageStamp();
+    drawComposer();
     // An open conversation between members follows the turns it is read from, and closes with its conversation.
     if (peer) queueMicrotask(() => peer?.update());
     stage.setAttribute("aria-busy", String(pending));

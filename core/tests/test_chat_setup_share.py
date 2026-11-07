@@ -152,7 +152,7 @@ async def test_cancelled_card_while_token_check_waits_never_connects_or_resumes(
 
 
 @pytest.mark.parametrize("approve", [True, False])
-async def test_pairing_arrives_in_original_turn_delta_and_answer_is_idempotent(rig, approve):
+async def test_pairing_arrives_in_new_turn_delta_and_answer_is_idempotent(rig, approve):
     card = await setup_card(rig, "slack")
     rig.brain.chats = [live_said("Message the bot.")]
     await rig.agent.call("integrations.card_save", {"id": card.id, "value": "synthetic-slack"})
@@ -162,12 +162,14 @@ async def test_pairing_arrives_in_original_turn_delta_and_answer_is_idempotent(r
     await rig.channels["slack", "synthetic-slack"].inbox.put(Incoming(user="U1", chat="D1", name="Someone", text="Hello"))
     await settle(lambda: bool(running.switchboard.pairing.pending()))
     code = running.switchboard.pairing.pending()[0][0].code
-    [pairing] = rig.messaging.cards.views([card.turn_id])[card.turn_id]
+    turn_id = rig.conn.execute("SELECT turn_id FROM messaging_pairing_cards ORDER BY rowid DESC").fetchone()[0]
+    [pairing] = rig.messaging.cards.views([turn_id])[turn_id]
     assert {k: pairing[k] for k in ("platform", "member_id", "code", "who", "state")} == {"platform": "slack", "member_id": rig.member.id, "code": code, "who": "Someone", "state": "pending"}
     assert rig.now[0] + 599900 <= pairing["expires_at_ms"] <= rig.now[0] + 600000
-    assert ("agent.turn", {"turn_id": card.turn_id, "member_id": rig.member.id}) in rig.events
+    assert turn_id > card.turn_id
+    assert ("agent.turn", {"turn_id": turn_id, "member_id": rig.member.id}) in rig.events
     delta = await rig.agent.call("agent.history.list", {"member_id": rig.member.id, "after_id": card.turn_id, "turn_ids": [card.turn_id]})
-    assert next(t for t in delta["turns"] if t["id"] == card.turn_id)["pairings"] == [pairing]
+    assert next(t for t in delta["turns"] if t["id"] == turn_id)["pairings"] == [pairing]
     method = "messaging.pairing.answer"
     answer = await rig.agent.call(method, {"id": pairing["id"], "approve": approve})
     assert answer["card"]["state"] == ("approved" if approve else "rejected")
@@ -176,18 +178,19 @@ async def test_pairing_arrives_in_original_turn_delta_and_answer_is_idempotent(r
     assert running.switchboard.pairing.pending() == []
 
 
-async def test_panel_connections_have_no_chat_pairing_and_expired_cards_cannot_approve(rig):
+async def test_panel_connections_deliver_chat_pairing_and_expired_cards_cannot_approve(rig):
     owner = rig.member.id
     await rig.agent.call("messaging.member.connect", {"member_id": owner, "token": "panel-token"})
     account = member_account(owner)
     rig.messaging._running[account].switchboard.pairing.issue("U1", "D1", "Panel only")
-    assert not rig.conn.execute("SELECT * FROM messaging_pairing_cards").fetchall()
+    assert rig.conn.execute("SELECT member_id FROM messaging_pairing_cards").fetchone()[0] == owner
     card = await setup_card(rig, "discord")
     rig.brain.chats = [live_said("Pair now.")]
     await rig.agent.call("integrations.card_save", {"id": card.id, "value": "discord-token"})
     await rig.cards.idle()
     rig.messaging._running[member_account(owner, "discord")].switchboard.pairing.issue("U2", "D2", "Later")
-    [pairing] = rig.messaging.cards.views([card.turn_id])[card.turn_id]
+    turn_id = rig.conn.execute("SELECT turn_id FROM messaging_pairing_cards ORDER BY rowid DESC").fetchone()[0]
+    [pairing] = rig.messaging.cards.views([turn_id])[turn_id]
     rig.now[0] += 600001
     answer = await rig.agent.call("messaging.pairing.answer", {"id": pairing["id"], "approve": True})
     assert answer["card"]["state"] == "expired"
@@ -290,10 +293,14 @@ async def test_panel_reconnect_detaches_card_and_deleted_turn_cleans_card_rows(r
     account = member_account(rig.member.id)
     rig.messaging._running[account].switchboard.pairing.issue("U1", "D1", "First")
     await rig.agent.call("messaging.member.connect", {"member_id": rig.member.id, "token": "panel-token"})
-    [pairing] = rig.messaging.cards.views([card.turn_id])[card.turn_id]
+    turn_id = rig.conn.execute("SELECT turn_id FROM messaging_pairing_cards ORDER BY rowid DESC").fetchone()[0]
+    [pairing] = rig.messaging.cards.views([turn_id])[turn_id]
     assert pairing["state"] == "expired"
     rig.messaging._running[account].switchboard.pairing.issue("U2", "D2", "Panel")
-    assert len(rig.messaging.cards.views([card.turn_id])[card.turn_id]) == 1
+    assert len(rig.messaging.cards.views([turn_id])[turn_id]) == 1
+    assert rig.conn.execute("SELECT COUNT(*) FROM messaging_pairing_cards").fetchone()[0] == 2
+    for row in rig.conn.execute("SELECT turn_id FROM messaging_pairing_cards").fetchall():
+        rig.agent.history.delete(row[0])
     rig.agent.history.delete(card.turn_id)
     assert rig.conn.execute("SELECT COUNT(*) FROM secret_cards").fetchone()[0] == 0
     assert rig.conn.execute("SELECT COUNT(*) FROM messaging_pairing_cards").fetchone()[0] == 0
@@ -314,12 +321,15 @@ async def test_connected_member_platforms_and_card_origin_survive_restart(rig):
     try:
         restarted.start()
         assert restarted._member_view(rig.member.id, "discord")["running"]
-        [old] = restarted.cards.views([card.turn_id])[card.turn_id]
+        turn_id = rig.conn.execute("SELECT turn_id FROM messaging_pairing_cards").fetchone()[0]
+        [old] = restarted.cards.views([turn_id])[turn_id]
         assert old["state"] == "expired"
         code = restarted._running[account].switchboard.pairing.issue("U2", "D2", "After restart")
-        assert restarted.cards.views([card.turn_id])[card.turn_id][-1]["code"] == code
+        new_turn_id = rig.conn.execute("SELECT turn_id FROM messaging_pairing_cards ORDER BY rowid DESC LIMIT 1").fetchone()[0]
+        assert new_turn_id > turn_id
+        assert restarted.cards.views([new_turn_id])[new_turn_id][-1]["code"] == code
         assert restarted.handles(f"member:{rig.member.id}:discord:D2")
-        [_, pending] = restarted.cards.views([card.turn_id])[card.turn_id]
+        [pending] = restarted.cards.views([new_turn_id])[new_turn_id]
         assert (await restarted.cards.answer({"id": pending["id"], "approve": True}))["card"]["state"] == "approved"
         await restarted.report(f"member:{rig.member.id}:discord:D2", "Delivered")
         assert ("D2", "Delivered") in rig.channels["discord", "discord-token"].sent

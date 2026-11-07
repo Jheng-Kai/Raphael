@@ -1752,6 +1752,43 @@ PRAGMA user_version = 70;
 COMMIT;
 """
 
+_MIGRATIONS[71] = """
+BEGIN;
+DROP TRIGGER clear_conversation_cards;
+DROP TRIGGER clear_messaging_card_links;
+ALTER TABLE messaging_card_accounts RENAME TO messaging_card_accounts_previous;
+ALTER TABLE messaging_pairing_cards RENAME TO messaging_pairing_cards_previous;
+CREATE TABLE messaging_card_accounts (
+    account TEXT PRIMARY KEY,
+    turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE
+);
+INSERT INTO messaging_card_accounts
+    SELECT a.account,c.turn_id FROM messaging_card_accounts_previous a JOIN secret_cards c ON c.id=a.card_id;
+CREATE TABLE messaging_pairing_cards (
+    id TEXT PRIMARY KEY,
+    turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE,
+    account TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    member_id INTEGER NOT NULL,
+    code TEXT NOT NULL,
+    who TEXT NOT NULL,
+    expires_at_ms INTEGER NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('pending','approved','rejected','expired'))
+);
+INSERT INTO messaging_pairing_cards
+    SELECT p.id,c.turn_id,p.account,p.platform,p.member_id,p.code,p.who,p.expires_at_ms,p.state
+    FROM messaging_pairing_cards_previous p JOIN secret_cards c ON c.id=p.card_id;
+DROP TABLE messaging_card_accounts_previous;
+DROP TABLE messaging_pairing_cards_previous;
+CREATE TRIGGER clear_conversation_cards AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM messaging_pairing_cards WHERE turn_id=OLD.id;
+    DELETE FROM messaging_card_accounts WHERE turn_id=OLD.id;
+    DELETE FROM member_template_cards WHERE turn_id=OLD.id;
+END;
+PRAGMA user_version = 71;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

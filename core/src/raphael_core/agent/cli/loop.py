@@ -193,7 +193,7 @@ class CliLoop:
         return f"cli:{brain_ref(self.model)[0]}:{self.actual_model}" + (f"?effort={effort}" if effort else "")
 
     def _progress(self):
-        if line := public_line(self._buffer, self.language):
+        if line := public_line(self._buffer, "auto"):
             self.progress(line[:400])
         self._buffer = ""
 
@@ -622,7 +622,7 @@ class CliLoop:
                             self._stream_records.append(record)
                     self._acted = True
                     self._progress()
-                    if line := public_line(self._thought, self.language):
+                    if line := public_line(self._thought, "auto"):
                         self.thinking(line[:240])
                     self._thought = ""
                 elif event.kind == "usage":

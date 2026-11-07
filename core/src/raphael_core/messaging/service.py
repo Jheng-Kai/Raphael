@@ -46,7 +46,7 @@ class _Running:
 
 class MessagingService:
     """`ask` and `stop` are what a switchboard reaches the assistant by, `transcribe` turns the
-    audio of a voice message into text, and `language` is the language Raphael answers in. `http`
+    audio of a voice message into text, and `language` selects fixed app notices, not authored replies. `http`
     is a client for tests (a fake server); otherwise one is made."""
 
     def __init__(
@@ -207,6 +207,8 @@ class MessagingService:
         running.task.cancel()
         await asyncio.gather(running.task, return_exceptions=True)
         await running.switchboard.aclose()
+        if self.cards:
+            self.cards.stopped(kind)
 
     # --- what the worker says when a task ends ---
 

@@ -35,6 +35,8 @@ export function visibleTurn(turn: AgentTurn): boolean {
   return !!(turn.question.trim() || turn.text.trim() || turn.detail?.trim() ||
     turn.messages?.some(message => message.text.trim()) || turn.attachments?.length || turn.handoffs?.length ||
     turn.connectors?.length || turn.secrets?.length || turn.computers?.length || turn.permissions?.length || turn.drafts?.length || turn.pages?.length ||
+    // A pairing code that came later is a turn with its card and no words (owner, 2026-11-07); a template card too.
+    turn.pairings?.length || turn.templates?.length ||
     turn.status === "running" || turn.status === "confirm" || turn.task || turn.steps?.length);
 }
 

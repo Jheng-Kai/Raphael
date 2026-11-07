@@ -1099,6 +1099,7 @@ export const en = {
   "chat.quote": "Quote",
   "chat.you": "You",
   "chat.removeQuote": "Remove quote",
+  "chat.askAboutSetup": "Ask about the {p0} setup",
   "chat.reattach": "Reattach the original files before sending this edit.",
   "chat.table": "Table",
   "chat.copyTable": "Copy table",

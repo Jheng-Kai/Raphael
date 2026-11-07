@@ -12,7 +12,7 @@ ABOUT_INDEX = """About Raphael (read raphael_help for details):
 4. Continuation: successful cards resume once; failures return their classified reason.
 5. Brains: API providers and signed-in subscription CLIs share Raphael tools.
 6. Usage: plan windows and credits are separate; available credits permit work.
-7. Settings: general, appearance, connections, models, dictation, agent, messaging, data, about.
+7. Settings: general, dictation, tools, safety, models, about; connected apps have their own entry. Bots belong to their member panels and conversation cards.
 8. Safety: permissions and consent remain authoritative; never bypass a denial.
 9. Logs: raphael.log; self_check reads only recent redacted failure diagnostics.
 10. Diagnosis: inspect once, change approach once, then report the exact blocker.
@@ -53,17 +53,17 @@ Google OAuth client takes priority. Generic installed MCP servers declare their 
 and header secrets. Keys go to the secure vault, never to the member or conversation.
 connect_app shows a connection card; request_secret shows a vault-entry card. connect_messaging uses
 the same secure card to connect the speaker's Telegram, Slack or Discord bot, then asks the owner
-to message it and approve its pairing card in this conversation. A rejected token stays editable;
+to message it and approve or reject its pairing card in this conversation. Existing bots do not need another token; show any waiting pairing card here. The bot's panel row has its switch and details; ask here to remove an allowed person or disconnect, with owner approval. Never direct the owner to a messaging settings page. A rejected token stays editable;
 an offline check can be retried. share_template offers a members-only immutable recipe card for
 review, saving or publishing; private credential findings block export and publishing. The owner signs in,
 grants consent, or saves the value. Successful cards resume the original request in its own thread
 once, preserving receipts so completed actions are not repeated. A failed card returns a classified
 reason to the same member, who diagnoses it and explains the owner-only step without making a new card.
-General settings hold language, hotkeys and microphone; appearance holds the theme;
-connections holds installed apps, the Store and capability services; models holds providers,
-subscription accounts, model choices and usage; dictation holds transcription choices;
-agent holds conversation preferences; messaging holds gateways; data holds retention and export;
-about holds version information. Native logs are written to logs/raphael.log in Raphael's data directory.
+General holds account, appearance, interface language, time zone, output folder, shared memory and the guide.
+Dictation holds transcription, microphone, hotkeys and retention; Tools holds work capabilities; Safety holds
+permissions; Models holds providers, subscriptions, choices and usage; About holds version information.
+Connected apps have their own entry. Telegram, Slack and Discord belong to each member's panel; setup,
+pairing, approval and rejection happen through cards in that member's conversation, not a settings page. Native logs are written to logs/raphael.log in Raphael's data directory.
 self_check reads existing state only: it does not sign in, refresh credentials, probe a provider,
 run a model, change settings, create a card or send a request over the network.
 Unknown/unreadable key presence or sign-in is unknown, not false. Report it honestly.
@@ -83,7 +83,7 @@ REFERENCES = {
     "agent/cli/discovery.py": ("logged_in", "codex", "claude", "gemini"),
     "agent/quota.py": ("credit_state", "allowances"),
 }
-PANES = ("general", "appearance", "connections", "models", "dictation", "agent", "messaging", "data", "about")
+PANES = ("general", "dictation", "tools", "safety", "models", "about", "connections")
 SAFE_SETTINGS = ("agent_model", "quick_model", "action_mode", "monthly_limit_usd", "stt_engine",
                  "web_search_enabled", "web_read_enabled", "vision_enabled", "pdf_enabled", "tts_enabled")
 

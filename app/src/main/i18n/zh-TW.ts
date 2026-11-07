@@ -1098,6 +1098,7 @@ export const zhTW = {
   "chat.quote": "引用",
   "chat.you": "你",
   "chat.removeQuote": "移除引用",
+  "chat.askAboutSetup": "關於 {p0} 的設定，直接問我",
   "chat.reattach": "請重新附加原訊息的檔案，再送出編輯。",
   "chat.table": "表格",
   "chat.copyTable": "複製表格",

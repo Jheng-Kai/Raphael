@@ -300,7 +300,7 @@ def test_nothing_is_nothing():
 @pytest.mark.parametrize("route", ["answer", "discuss", "chat"])
 def test_the_system_prompt_names_the_language_prefixes_and_complete_reply(language, route):
     prompt = persona.system_prompt(language, route)
-    assert "Reply ONLY in" in prompt
+    assert persona.REPLY_LANGUAGE in prompt
     for prefix in PREFIXES[language]:
         assert f'"{prefix}"' in prompt
     assert "your complete reply" in prompt
@@ -312,13 +312,12 @@ def test_the_system_prompt_names_the_language_prefixes_and_complete_reply(langua
     assert persona.system_prompt(language, route) == prompt  # the same every time
 
 
-def test_the_system_prompt_of_each_language_asks_for_that_language_and_no_other():
-    assert "Traditional Chinese as written in Taiwan" in persona.system_prompt("zh-TW", "chat")
-    assert "never Simplified" in persona.system_prompt("zh-TW", "chat")
-    assert "Reply ONLY in English" in persona.system_prompt("en", "chat")
-    assert "Reply ONLY in Japanese" in persona.system_prompt("ja", "chat")
-    other = persona.system_prompt("en", "chat")
-    assert "答" not in other and "Answer" in other  # the prefixes of the others are not offered
+def test_interface_language_only_selects_fixed_prefixes():
+    for language in LANGUAGES:
+        prompt = persona.system_prompt(language, "chat")
+        assert persona.REPLY_LANGUAGE in prompt
+        assert "Reply ONLY in" not in prompt and "never Simplified" not in prompt
+        assert f'"{PREFIXES[language].answer}"' in prompt
 
 
 def test_the_system_prompt_has_the_character_and_the_rules_about_facts():
@@ -347,30 +346,25 @@ def test_the_system_prompt_names_the_master_in_the_word_of_its_language_to_use_s
 ):
     prompt = persona.system_prompt(language, "chat")
     assert persona.ADDRESS[language] == address
-    assert f'You call your master "{address}".' in prompt
+    assert address in prompt and "according to the reply language" in prompt
     assert "sparingly" in prompt and "most replies not at all" in prompt
     for other in persona.ADDRESS.values():
-        if other != address:
-            assert f'"{other}"' not in prompt
+        assert other in prompt
 
 
-def test_the_system_prompt_of_each_language_has_no_word_of_another():
-    assert persona.system_prompt("en", "discuss").isascii()
+def test_persona_is_identical_across_interface_languages():
     for route in ("answer", "discuss", "chat"):
-        zh = persona.system_prompt("zh-TW", route)
-        ja = persona.system_prompt("ja", route)
-        assert not any("぀" <= ch <= "ヿ" for ch in zh)  # no kana in the Chinese prompt
-        assert "主人" not in ja and "啦" not in ja
-        assert convert_leftover_simplified(zh) == zh
+        personas = [persona.system_prompt(language, route).split("</persona>")[0] for language in LANGUAGES]
+        assert len(set(personas)) == 1
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
-def test_the_system_prompt_sets_the_register_and_the_tone_of_its_language(language):
+def test_the_system_prompt_keeps_its_register_across_interface_languages(language):
     prompt = persona.system_prompt(language, "answer")
-    assert persona._REGISTER[language] in prompt
-    assert persona._TONE[language] in prompt
+    assert "same formal, concise register in whichever language" in prompt
+    assert persona._TONE["en"] in prompt
     assert "For the tone only, never for the content" in prompt
-    tone = persona._TONE[language]
+    tone = persona._TONE["en"]
     assert "!" not in tone and "！" not in tone
 
 
@@ -464,8 +458,8 @@ def test_the_system_prompt_asks_for_the_japanese_line_only_when_told_to():
 
 
 def test_the_language_reminder_names_the_japanese_field_only_when_there_is_one():
-    assert persona.language_reminder("en") == "Reply in English only."
-    assert 'except the field "say_ja"' in persona.language_reminder("en", say_ja=True)
+    assert persona.language_reminder("en") == persona.REPLY_LANGUAGE
+    assert 'field "say_ja" in Japanese for the configured voice' in persona.language_reminder("en", say_ja=True)
 
 
 @pytest.mark.parametrize("language", LANGUAGES)

@@ -538,7 +538,7 @@ class Resumption:
                          " connection uses it by itself: you never see it. Do it now with the connection's tools, and do not"
                          " ask for the key again.")
         if self.messaging:
-            parts.append("Messaging connected: " + ", ".join(self.messaging) + ". Tell the owner to send the bot any message now to pair. Never ask for its token again.")
+            parts.append("Messaging connected: " + ", ".join(self.messaging) + ". Tell the owner to send the bot any message now to pair, then approve or reject its pairing card in this conversation. The bot's panel row has its switch and details; ask here to remove a person or disconnect, with owner approval. Never ask for its token again.")
         if self.report is not None:
             report = self.report
             parts.append(
@@ -1585,7 +1585,7 @@ class AgentService:
                 memory_snapshot=memory,
                 looked_up=looked_up,
                 speaker=ask.speaker,
-                say_ja=ask.voiced and ask.language != "ja",
+                say_ja=ask.voiced,
                 roster=roster_prompt(self._team, ask.speaker, ask.language) + owner_context(self._settings),
                 reasoning_effort=self._effort(settings),
                 recall=self._recall(ask),
@@ -2025,7 +2025,7 @@ class AgentService:
                 await prepare(ask.speaker.id)
             context = self._memory_context(ask.speaker, ask.conversation_id, quick=ask.quick)
             memory = None if self._memory is None else self._memory.snapshot(ask.speaker.id)
-            say_ja = ask.voiced and ask.language != "ja"
+            say_ja = ask.voiced
             if brain_ref(settings.model):
                 system = cli_system_prompt(ask.language,
                     name=None if ask.speaker.is_raphael else ask.speaker.name,
@@ -2362,7 +2362,7 @@ class AgentService:
                     rate_limit_waits=() if ask.quick else None,
                     conversation_id=ask.conversation_id, quota=self.quotas.record,
                     member_id=ask.speaker.id, event=lambda text: self._message(ask, "event", text),
-                    expire=lambda: self._expire(self._confirmations.sweep()), spoken=ask.voiced and ask.language != "ja", **common)
+                    expire=lambda: self._expire(self._confirmations.sweep()), spoken=ask.voiced, **common)
                 self._cli_loops.add(loop)
                 loop.on_done = self._cli_loops.discard
             else:
@@ -2429,8 +2429,8 @@ class AgentService:
 
     def _greeting_loop(self, ask, settings, ledger):
         """Use the interactive API/CLI harness with an ephemeral instruction and no tool offer."""
-        from .persona import GREETING
-        system = GREETING.format(name=json.dumps(ask.speaker.name, ensure_ascii=False), language=ask.language)
+        from .persona import greeting_prompt
+        system = greeting_prompt(ask.speaker)
         system += owner_context(self._settings) + roster_prompt(self._team, ask.speaker, ask.language)
         if self._memory is not None:
             snapshot = self._memory.snapshot(ask.speaker.id)
@@ -3300,7 +3300,12 @@ class AgentService:
         card, view = self._secret_cards.show_messaging(turn_id=ask.turn_id, member_id=ask.speaker.id,
             conversation_id=ask.conversation_id, platform=args.get("platform"), language=ask.language, done=ask.made)
         if card is None:
-            return {"text": f"@{view['bot']['username']} is already connected and running. Nothing is needed."}
+            return {"connected": True, "enabled": view["enabled"], "running": view["running"],
+                    "text": f"@{view['bot']['username']} is already connected. Do not ask for a token or explain creating a new bot. "
+                    + ("A waiting pairing card is shown in this conversation; approve or reject it here. " if view["pending"] else
+                       "Message this bot to request pairing; its pairing card will arrive in this conversation. " if view["running"] and not view["allowed"] else "")
+                    + ("Receiving is off or unavailable. " if not view["running"] else "")
+                    + "The bot's panel row holds its switch and details. Ask in this conversation to remove an allowed person or disconnect the bot; those changes still need owner approval."}
         ask.waiting_secrets.append(card.name)
         ask.owner_card_ids = [card.id]
         self._turn_changed(ask.turn_id, ask.speaker.id)

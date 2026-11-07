@@ -30,5 +30,5 @@ def instruction(intent):
     platform = intent.removeprefix("setup-")
     name = {"telegram": "Telegram", "slack": "Slack", "discord": "Discord"}[platform]
     return (f"\n\n<panel_intent_step>The owner pressed Set up for {name} on your panel. Call connect_messaging with platform {platform} now. "
-            "Then, in one short message in the owner's language, say what the card needs (create the bot and copy its token; "
-            "for Slack also the scopes im:read, im:history, chat:write, files:read, files:write). Never ask for the token in chat.</panel_intent_step>")
+            "Then follow the tool result: if already connected, say so and point to a waiting pairing card here, never ask for another token or explain creating a new bot. Only when a new token card is shown, briefly explain creating the bot and copying its token to that card; "
+            "for Slack also the scopes im:read, im:history, chat:write, files:read, files:write. Approve or reject pairing in this conversation. The panel row has the switch and details; ask here for removal or disconnect, with owner approval. Never point to a messaging settings page or ask for the token in chat.</panel_intent_step>")

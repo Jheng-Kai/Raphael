@@ -126,7 +126,11 @@ async def test_two_bots_route_to_two_existing_private_conversations_and_reply_fr
     await settle(lambda: all(rig.bots.sent[token] for token in TOKENS[:2]))
     for member, question, token in ((one, "Question for Ada", TOKENS[0]), (two, "Question for Lin", TOKENS[1])):
         turns = (await rig.app.call("agent.history.list", {"member_id": member}))["turns"]
-        assert len(turns) == 1 and turns[0]["question"] == question
+        assert len(turns) == 2 and turns[0]["question"] == question
+        assert turns[1]["route"] == "pairing" and turns[1]["source"] == "messaging"
+        assert turns[1]["pairings"][0]["member_id"] == member
+        assert turns[1]["pairings"][0]["state"] == "approved"
+        assert turns[1]["conversation_id"] == turns[0]["conversation_id"]
         assert turns[0]["session_id"] == f"member:{member}:telegram:{OWNER}"
         assert turns[0]["conversation_id"] == rig.app.agent.conversations.main(member)
         assert turns[0]["source"] == "telegram"
@@ -151,7 +155,10 @@ async def test_pairing_is_not_shared_between_members_and_group_messages_are_igno
     code = (await rig.call("status", two))["pending"][0]["code"]
     assert not (await rig.call("approve", one, code=code))["approved"]
     assert not (await rig.call("status", two))["paired"]
-    assert (await rig.app.call("agent.history.list", {"member_id": two}))["turns"] == []
+    [turn] = (await rig.app.call("agent.history.list", {"member_id": two}))["turns"]
+    assert turn["route"] == "pairing" and turn["question"] == "" and turn["text"] == ""
+    assert turn["pairings"][0]["member_id"] == two
+    assert turn["pairings"][0]["code"] == code and turn["pairings"][0]["state"] == "pending"
     rig.bots.message(TOKENS[0], "group", private=False)
     await asyncio.sleep(0.02)
     assert not rig.bots.sent[TOKENS[0]]
@@ -242,7 +249,9 @@ async def test_raphael_keeps_its_original_account_session_and_secret(rig):
     rig.bots.message(TOKENS[2], "Question for Raphael")
     await settle(lambda: bool(rig.bots.sent[TOKENS[2]]))
     turns = (await rig.app.call("agent.history.list", {"member_id": 0}))["turns"]
-    assert len(turns) == 1 and turns[0]["session_id"] == f"telegram:{OWNER}"
+    assert len(turns) == 2 and turns[0]["session_id"] == f"telegram:{OWNER}"
+    assert turns[1]["route"] == "pairing" and turns[1]["pairings"][0]["member_id"] == 0
+    assert turns[1]["pairings"][0]["state"] == "approved"
     assert rig.app.vault.get(secret_name("telegram", "bot_token")) == TOKENS[2]
     assert (await rig.app.call("messaging.telegram.status"))["bot"]["username"] == "member_2_bot"
     await rig.call("disconnect", rig.members[0])

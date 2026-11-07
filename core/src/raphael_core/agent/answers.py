@@ -17,7 +17,6 @@ from typing import Any
 
 from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
-from ..brain.textnorm import convert_leftover_simplified
 from ..memory.reflection import ACTIONS as MEMORY_ACTIONS
 from ..memory.reflection import TARGETS as MEMORY_TARGETS
 from ..memory.reflection import Edit as MemoryEdit
@@ -163,8 +162,8 @@ def build_user_message(
     (oldest first), the date and time, the results of the tools, the question in tags, which mark it
     as the user's words, and last the language to reply in. What changes least comes first.
     `looked_up` says that the lookups the model asked for were made (their results are among the
-    tools) and that it is to answer now. `narrated` distinguishes public UI-language updates from
-    persona replies; `member` allows persona reply languages in the non-narrated path too."""
+    tools) and that it is to answer now. `narrated` and `member` retain call compatibility; all authored speech follows the speaker,
+    never the interface locale."""
     parts = []
     if summary:
         parts.append(
@@ -387,10 +386,6 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
         raise AgentFailure("error")
     if plain:
         detail = _one_line_text(data.get("detail")).strip()
-        if language == "zh-TW":
-            full = convert_leftover_simplified(full)
-            detail = convert_leftover_simplified(detail)
-            messages = [convert_leftover_simplified(text) for text in messages]
         return Reply(
             prefix="",
             text=full,
@@ -401,10 +396,6 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
         )
     line = full
     detail = _one_line_text(data.get("detail")).strip()
-    if language == "zh-TW":
-        line = convert_leftover_simplified(line)
-        detail = convert_leftover_simplified(detail)
-        messages = [convert_leftover_simplified(text) for text in messages]
     return Reply(
         prefix=canonical_prefix(prefix, language, default=PREFIXES[language].answer),
         text=line,
@@ -469,7 +460,7 @@ class Voice:
         in Japanese and the reply is Raphael's own.
         AgentFailure (of a kind) if the model fails or says nothing."""
         plain = not speaker.is_raphael
-        say_ja = say_ja and not plain and language != "ja"
+        say_ja = say_ja and not plain
         user = build_user_message(
             question, moment, context, tools, language, background,
             summary=summary, looked_up=looked_up, say_ja=say_ja, member=plain, recall=recall,

@@ -1860,3 +1860,34 @@ tests/messaging/test_wiring.py, tests/members/test_events.py and tests/services/
 Window integration must verify full reply bubbles and the selected reply-split-bubbles,
 handoff-group-done and bot-exchange-expanded scenes in both themes at 1120,720,1920x1080,
 then judge that same run. No visual/native acceptance is claimed by the core-only brief.
+
+## Conversation-following pairing and authored language (2026-11-07)
+
+R-PAIR-01: Telegram, Slack and Discord pairing belongs to the owning member's private conversation,
+including identity 0. A late code creates a done assistant turn with source messaging and route pairing.
+A new code replaces the pending card (same card and turn ids) and revokes the previous code;
+approved, rejected and expired states update in place. After a terminal card, another code opens
+a new turn. Reconnecting an existing bot shows any pending card in the requesting conversation
+and never opens a token card, including when receiving is off. Panel rows keep switch/details;
+other removal/disconnect actions go through conversation tools and existing owner approval.
+Migration 71 changes the account and pairing anchors from secret-card ids to turn ids.
+
+R-AG-LANG-01: UI locale selects fixed app labels/notices only. All authored replies, progress,
+thinking, greetings, reports, recaps and routines follow the speaker's own profile/instructions,
+otherwise the owner's words or conversation. API and CLI share this policy. Authored Chinese
+script is preserved; language filtering/conversion is not selected by UI locale. The configured
+voice language remains independent, including Japanese rendering on a Japanese interface.
+
+Offline coverage: core/tests/test_pairing_language.py, test_chat_setup_share.py,
+brain/test_db.py, agent/test_persona.py, agent/test_answers.py,
+members/test_personality_prompts.py, members/test_model_greeting.py and
+background/test_personality.py. Fake channels/providers/CLI drivers only; see the brief report
+for exact runs. No full core suite, live/provider, native, audio or visual acceptance is claimed.
+
+Window handoff: consume existing agent.turn invalidations and agent.history.list turns[].pairings
+even when question/text/messages are empty. Refresh old and new turn ids after reconnect relocation.
+Pending setup hint uses turns[].secrets entries with platform and secret bot_token in pending/failed
+states. The brief report records the full wire shape. Claude owns app/src integration and the
+selected chat-setup-cards/chat-pairing-allowed matrix at both themes and 1120,720,1920x1080,
+including contact/full-size review and judge on the same run.
+Window (2026-11-07): conversation.ts visibleTurn shows a turn that only carries pairings or templates; the composer asks about a waiting bot setup (chat.askAboutSetup). look: chat-pairing-bottom.

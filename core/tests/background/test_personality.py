@@ -26,8 +26,8 @@ async def test_worker_and_scheduler_use_only_the_selected_persona(make_rig, conn
 
     rig.service.use_memory(memory)
     rig.service.use_team(members, unused)
-    teacher = members.store.create_member(name="Teacher", role="Japanese", personality="STRICT-STYLE", instructions="Teach N1.")
-    coach = members.store.create_member(name="Coach", personality="WARM-STYLE", instructions="Coach running.")
+    teacher = members.store.create_member(name="Teacher", role="Japanese", personality="STRICT-STYLE", instructions="Teach N1. Always reply in Japanese.")
+    coach = members.store.create_member(name="Coach", personality="WARM-STYLE", instructions="Coach running. Always reply in Japanese.")
     who = {"teacher": teacher, "coach": coach}.get(selected)
     speaker_id = who.id if who else 0
     history = AgentHistory(conn)
@@ -35,7 +35,7 @@ async def test_worker_and_scheduler_use_only_the_selected_persona(make_rig, conn
         history.add(session_id="old", question=f"THREAD-{person.name}", route="answer", prefix="", text="Previous answer.", status="done", member_id=person.id)
         memory.own(person.id).edit_document(f"OWN-{person.name}: private work context.\n", None)
     memory.shared.edit_document("CITY-TAIPEI: the user lives in Taipei.\n", None)
-    rig.client.replies.append(turn(json.dumps({"prefix": "告", "text": "Ready.", "detail": ""})))
+    rig.client.replies.append(turn(json.dumps({"prefix": "告", "text": "準備ができました。", "detail": ""})))
     try:
         if routine:
             rig.client.replies.insert(0, turn("我来检查。", calls=[call("local_time", {})]))
@@ -46,19 +46,21 @@ async def test_worker_and_scheduler_use_only_the_selected_persona(make_rig, conn
             task_id = rig.service.submit(session_id="task", text="Start a lesson.", language="zh-TW", model="fake/model", member_id=speaker_id)
         await until(lambda: rig.task(task_id).state not in ("queued", "running"))
         assert rig.task(task_id).state == "done"
+        assert rig.task(task_id).report_text == "準備ができました。"
         if routine:
             turns = history.list(member_id=speaker_id)
             current = next(t for t in turns if t.id == rig.task(task_id).turn_id)
             progress = [m["text"] for m in history.messages([current.id])[current.id] if m["kind"] == "progress"]
             assert not progress
-            assert any(method == "worker.progress" and data["turn_id"] == current.id and "我來檢查。" in data["text"] for method,data in rig.notifications)
+            assert any(method == "worker.progress" and data["turn_id"] == current.id and "我来检查。" in data["text"] for method,data in rig.notifications)
         model_call = rig.client.chat_calls[0]
         system = model_call["messages"][0]["content"]
         shown = json.dumps(model_call["messages"], ensure_ascii=False)
         assert "CITY-TAIPEI" in shown
         assert "<team_roster>" in system
         assert "another member's thread" in system and "ask_member" in system
-        assert "zh-TW" in system and "Traditional Chinese" in system
+        assert "The interface language never selects" in system
+        assert "By default use" not in system
         assert "ask_member" in {t["function"]["name"] for t in model_call["tools"]}
         for person in (teacher, coach):
             if person.id != speaker_id:

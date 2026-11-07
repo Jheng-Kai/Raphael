@@ -139,7 +139,7 @@ async def test_the_question_goes_in_tags_after_the_time(voice, client, ledger):
     await reply(voice, ledger, question="台北天氣如何")
     message = client.json_calls[0]["user"]
     assert message.startswith("Current date and time: 2026-10-20 14:05, Tuesday (UTC+08:00)")
-    assert "<question>\n台北天氣如何\n</question>\n\nReply in " in message
+    assert "<question>\n台北天氣如何\n</question>\n\nUse the language specified" in message
     assert "Conversation so far" not in message and "Tool results" not in message
 
 
@@ -147,15 +147,14 @@ async def test_the_question_goes_in_tags_after_the_time(voice, client, ledger):
     ("language", "named"),
     [("en", "English"), ("ja", "Japanese"), ("zh-TW", "Traditional Chinese")],
 )
-async def test_the_last_thing_the_model_reads_is_the_language_to_reply_in(
+async def test_last_instruction_follows_speaker_and_owner_not_interface(
     voice, client, ledger, language, named
 ):
-    # A Chinese question in the English interface was answered in Chinese until this was said
-    # last.
+    # A Chinese owner question stays authoritative in any interface locale.
     client.replies.append(completion(spoken()))
     await reply(voice, ledger, question="台北天氣如何", language=language)
     last_line = client.json_calls[0]["user"].rsplit("\n\n", 1)[1]
-    assert last_line.startswith(f"Reply in {named}") and last_line.endswith(" only.")
+    assert last_line == persona.REPLY_LANGUAGE
 
 
 async def test_the_background_tasks_are_given_as_their_own_block_before_the_question(
@@ -258,10 +257,10 @@ def test_line_breaks_in_the_text_are_preserved():
     assert parse_reply(spoken(text="one\ntwo", prefix="Answer"), "en").text == "one\ntwo"
 
 
-def test_simplified_characters_in_a_traditional_reply_are_made_traditional():
+def test_authored_chinese_script_survives_traditional_interface():
     result = parse_reply(spoken(text="这个软件很好用。", detail="详细说明"), "zh-TW")
-    assert result.text == "這個軟體很好用。"
-    assert result.detail == "詳細說明"
+    assert result.text == "这个软件很好用。"
+    assert result.detail == "详细说明"
 
 
 def test_japanese_and_english_are_not_converted():
@@ -423,7 +422,7 @@ async def test_the_voice_asks_for_the_japanese_in_the_same_call_when_told_to(voi
     assert call["user"].endswith(persona.language_reminder("zh-TW", say_ja=True))
 
 
-async def test_the_voice_does_not_ask_for_it_by_default_nor_for_a_japanese_screen(
+async def test_voice_rendering_is_opt_in_independent_of_interface(
     voice, client, ledger
 ):
     client.replies.append(completion(spoken()))
@@ -431,5 +430,5 @@ async def test_the_voice_does_not_ask_for_it_by_default_nor_for_a_japanese_scree
     assert "say_ja" not in client.json_calls[0]["schema"]["properties"]
     client.replies.append(completion(spoken("解", "はい。")))
     await reply(voice, ledger, language="ja", say_ja=True)
-    assert "say_ja" not in client.json_calls[1]["schema"]["properties"]
-    assert "say_ja" not in client.json_calls[1]["system"]
+    assert "say_ja" in client.json_calls[1]["schema"]["properties"]
+    assert "say_ja" in client.json_calls[1]["system"]

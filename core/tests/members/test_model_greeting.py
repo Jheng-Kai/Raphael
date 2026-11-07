@@ -45,7 +45,7 @@ async def test_creation_returns_while_its_own_brain_writes_hidden_greeting(setup
     call = client.chat_calls[0]
     prompt = json.dumps(call['messages'], ensure_ascii=False)
     assert call['model'] == 'test/member-model' and not call['fallbacks'] and call['tools'] == []
-    for text in (language, 'Filia', 'gardening', 'Manage appointments', 'Gmail', 'no tools'):
+    for text in ('The interface language never selects', 'Filia', 'gardening', 'Manage appointments', 'Gmail', 'no tools'):
         assert text in prompt
     instruction = call['messages'][0]['content']
     assert '- Owner enjoys gardening\n' in instruction
@@ -127,14 +127,16 @@ async def test_cli_greeting_has_no_tools_native_permission_or_persisted_instruct
             result = await http.post(kwargs['endpoint'], json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list', 'params': {}})
             assert result.json()['result']['tools'] == []
         yield Event('session', 'synthetic-greeting-session')
-        yield Event('final', 'I am Mia. What would you like me to take off your plate?')
+        yield Event('final', '私はミアです。何をお手伝いしましょうか。')
 
     monkeypatch.setattr(Driver, 'run', run)
-    new = (await rig.call('members.create', {'name': 'Mia', 'greet': True, 'model': f'cli:{brain}:test', 'ui_language': 'en'}))['member']
+    new = (await rig.call('members.create', {'name': 'Mia', 'greet': True, 'model': f'cli:{brain}:test', 'ui_language': 'zh-TW', 'instructions': 'Always speak Japanese.'}))['member']
     [turn] = await rig.turns(member_id=new['id'])
     await until(lambda: rig.history.get(turn['id']).status == 'done')
     assert len(captured) == 1 and client.chat_calls == []
-    assert rig.history.get(turn['id']).text == 'I am Mia. What would you like me to take off your plate?'
+    assert rig.history.get(turn['id']).text == '私はミアです。何をお手伝いしましょうか。'
+    assert 'Always speak Japanese.' in captured[0]['system']
+    assert 'The interface language never selects' in captured[0]['system']
     assert not rig.conn.execute('SELECT 1 FROM agent_conversation_cli_sessions WHERE conversation_id=?', (turn['conversation_id'],)).fetchone()
 
 

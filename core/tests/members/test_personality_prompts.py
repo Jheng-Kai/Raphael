@@ -28,7 +28,8 @@ async def test_narrated_prompt_contains_only_its_own_persona_and_thread(setup, c
     if who:
         assert "拉斐爾" in system and '"coordination_duty": "primary_contact"' in system
     assert "ask_member" in system and "another member's thread" in system
-    assert "zh-TW" in system and "Traditional Chinese" in system
+    assert "The interface language never selects" in system
+    assert "By default use" not in system
     assert "ask_member" in {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
     if who:
         assert who.personality in system and who.instructions in system
@@ -167,7 +168,7 @@ async def test_shared_harness_requires_original_quote_attribution(setup, client,
     assert "owner:" in system
 
 
-async def test_traditional_chinese_public_updates_and_reply_preserve_japanese(setup, client):
+async def test_authored_public_updates_and_reply_preserve_script_and_japanese(setup, client):
     rig, team = setup
     teacher = member(team)
     client.chats = [
@@ -175,11 +176,11 @@ async def test_traditional_chinese_public_updates_and_reply_preserve_japanese(se
         live_said("这句话的意思是什麼？\n学校で会いましょう。"),
     ]
     result = await typed(rig, "解釋這句話", teacher.id)
-    assert result["text"] == "這句話的意思是什麼？\n学校で会いましょう。"
+    assert result["text"] == "这句话的意思是什麼？\n学校で会いましょう。"
     turns = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     messages = turns[0]["messages"]
-    assert next(m["text"] for m in messages if m["kind"] == "thinking") == "這句話需要檢查。"
-    assert next(m["text"] for m in messages if m["kind"] == "progress") == "我來確認。"
+    assert next(m["text"] for m in messages if m["kind"] == "thinking") == "这句話需要检查。"
+    assert next(m["text"] for m in messages if m["kind"] == "progress") == "我来确认。"
 
 
 async def test_voice_fetches_the_lesson_and_speaks_the_actual_japanese_sentences(voiced, client):

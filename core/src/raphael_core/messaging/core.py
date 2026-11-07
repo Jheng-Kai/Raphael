@@ -145,7 +145,7 @@ class Switchboard:
     """Routes the private messages of one channel.
 
     `is_allowed(user)` and `chat_allowed(chat)` are read at each message, so removing a user takes
-    effect at once. `language()` is the language Raphael answers in. Without `transcribe`, a voice
+    effect at once. `language()` selects fixed app notices, not authored replies. Without `transcribe`, a voice
     message is declined. `album_wait` is how long an album is waited for after its latest
     message (shorter in tests).
     """

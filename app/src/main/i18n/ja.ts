@@ -1099,6 +1099,7 @@ export const ja = {
   "chat.quote": "引用",
   "chat.you": "あなた",
   "chat.removeQuote": "引用を削除",
+  "chat.askAboutSetup": "{p0} の設定について質問",
   "chat.reattach": "編集を送信する前に、元のファイルをもう一度添付してください。",
   "chat.table": "表",
   "chat.copyTable": "表をコピー",

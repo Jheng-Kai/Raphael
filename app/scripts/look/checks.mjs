@@ -2751,6 +2751,16 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector(".au-room-pane .composer .cmp-chip"), "the composer is clear again");
     return { check: name };
   }
+  if (name === "chat-pairing-bottom") {
+    // A later code follows the talk: the last turn of the thread, its card drawn though the turn has no words.
+    const turns = [...document.querySelectorAll('.page-agent .thread > li.tn')].filter(visible);
+    require(turns.at(-1)?.querySelector('[data-pairing-card="pair-late"]'), "the later pairing card is the last thing in the conversation");
+    require(visible(turns.at(-1).querySelector('[data-pairing-card="pair-late"] [data-act="pairing-allow"]')), "it can be allowed there");
+    require(!turns.at(-1).querySelector('.me'), "no empty owner bubble above it");
+    const field = document.querySelector('.page-agent .composer textarea, .page-agent .composer [contenteditable]');
+    require(field?.getAttribute('placeholder') === "關於 Slack 的設定，直接問我", `the field asks about the Slack setup that waits: ${field?.getAttribute('placeholder')}`);
+    return { check: name };
+  }
   if (name === "guide-window-fixed") {
     // The guide's window is its card, fixed (owner, 2026-11-07); the language dropdown stands without a label.
     const calls = window.__look.windowCalls ?? [], size = JSON.stringify(calls.find(call => call.command === "set_size")?.args ?? {});

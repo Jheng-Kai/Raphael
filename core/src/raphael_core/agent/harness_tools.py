@@ -65,7 +65,7 @@ CALENDAR_FIELDS = {
 
 
 DEFINITIONS = {
-    CONNECT_MESSAGING: definition("Show the owner a secure bot-token card in this conversation for Telegram, Slack or Discord. Never ask for the token in chat. The current speaker owns the bot; saving validates it and resumes this turn once. If already running, nothing is needed.", {"platform": {"type": "string", "enum": ["telegram", "slack", "discord"]}}, ["platform"]),
+    CONNECT_MESSAGING: definition("Show the owner a secure bot-token card in this conversation for Telegram, Slack or Discord. Never ask for the token in chat. The current speaker owns the bot; saving validates it and resumes this turn once. If already connected, report its current state and show any waiting pairing card here, without asking for another token. Pairing is approved or rejected in this conversation; the bot's panel row has its switch and details. Ask here for removing an allowed person or disconnecting; owner approval is still required. Never send the owner to a messaging settings page.", {"platform": {"type": "string", "enum": ["telegram", "slack", "discord"]}}, ["platform"]),
     SHARE_TEMPLATE: definition("Offer your member recipe as a snapshot card for the owner to review, save or publish. Describe what you do for strangers in one or two sentences in the owner's language; no names, private facts, credentials, internal URLs or customer data. Members only.", {"description": {"type": "string", "maxLength": 280}}, ["description"]),
     SHOW_PAGE: definition(
         "Show an operable page inside this conversation: a product page, form, interactive comparison or small tool. "

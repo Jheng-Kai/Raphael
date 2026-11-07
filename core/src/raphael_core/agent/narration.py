@@ -28,8 +28,8 @@ from ..retry_utils import MODEL_SILENCE_S, Outage
 PUBLIC_PROGRESS_RULES = """
 This is a live conversation: your owner sees your messages while you work.
 Before EVERY batch of tool calls, provide a public progress update.
-Thinking and progress are ALWAYS in the owner's UI language,
-even when the persona teaches or replies in another language. Replies follow the persona.
+Thinking, progress and replies follow the speaker's own language instructions, otherwise the owner's words.
+The interface language never selects the language of authored speech.
 Say what you are doing and why it helps the goal, in everyday words.
 Use first person, at most 25 CJK characters or 25 words. Do not name tools,
 services, API parameters or internal steps. Do not expose private reasoning or chain of thought.
@@ -202,14 +202,15 @@ class NarratedLoop:
         )
         if answer.content.strip():
             # Only explicitly public fields are published, including those in final content.
+            # Keep envelope validation without choosing or converting the authored language.
             objects, prose = _content(answer.content)
             for public in objects:
                 for kind, emit, limit in (("thinking", self.thinking, 120), ("progress", self.progress, 60)):
-                    text = public_line(_public_text(public.get(kind), limit, sentences=2 if kind == "thinking" else None), self.language)
+                    text = public_line(_public_text(public.get(kind), limit, sentences=2 if kind == "thinking" else None), "auto")
                     if text:
                         emit(text)
             if answer.calls and not objects and prose:
-                text = public_line(_public_text(prose, 60), self.language)
+                text = public_line(_public_text(prose, 60), "auto")
                 if text:
                     self.progress(text)
         self.batch_calls = answer.calls

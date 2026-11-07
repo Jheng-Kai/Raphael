@@ -618,7 +618,7 @@ class TaskRun:
         self._step(kind="model", outcome="ok", cost_usd=cost, ms=_ms(began))
         if turn.calls and turn.content.strip():
             text = " ".join(turn.content.split())[:200]
-            text = public_line(text, self.language)
+            text = public_line(text, "auto")
             if text:
                 self._progress(text)
         return {
