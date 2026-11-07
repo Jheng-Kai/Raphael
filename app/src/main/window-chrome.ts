@@ -83,6 +83,8 @@ export function installWindowChrome(
     settling = setTimeout(() => run(refresh), RESIZE_SETTLE_MS);
   };
   const toggle = async (): Promise<void> => {
+    // The guide's window keeps its card size (guide-window.ts).
+    if (typeof document !== "undefined" && document.documentElement.dataset.windowFixed === "true") return;
     await window.toggleMaximize();
     await refresh();
   };

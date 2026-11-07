@@ -2,6 +2,12 @@
 
 ## Sub-features
 
+While the guide is up the window is the card itself (owner, 2026-11-07, as Typeless's): guide-window.ts
+sizes it to 960 x 640 under the control strip, centres it, turns off resizing and maximizing (no maximize
+button, no resize edges, a double-click on the strip does nothing) and gives back the earlier size, place
+and maximized state when the guide ends; `guide-window-fixed` in the onboarding scene checks the requests.
+The welcome's language dropdown stands alone, with no 「介面語言」 label (its name is its aria-label).
+
 A welcome with the language dropdown, then three steps that are each a choice, then entry into
 the usable app with first-run state saved. There are no practice lessons, no microphone step and
 no completion screen (owner, 2026-11-07). Everything sits in one card of a designed size (at most

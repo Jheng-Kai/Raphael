@@ -600,6 +600,10 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
    left under its title and one quiet line, the one button under it; Raphael on the right saying what the step is for.
    No progress bar. A smaller window shrinks the card, and a narrow one drops Raphael's side. */
 .ob { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; height: 100%; min-height: 0; padding: calc(var(--window-controls-height) + var(--sp-4)) var(--sp-5) var(--sp-5); background: var(--side); }
+/* The guide's window is the card itself (guide-window.ts): no gutter, frame or way to make it larger. */
+:root[data-window-fixed] .ob { padding: var(--window-controls-height) 0 0; background: var(--content); }
+:root[data-window-fixed] .ob-card { border: 0; border-radius: 0; box-shadow: none; }
+:root[data-window-fixed] :is([data-window-action="maximize"], [data-window-resize]) { display: none; }
 .ob-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 340px; width: min(960px, 100%); height: min(640px, 100%); min-height: 0; overflow: hidden; border: 1px solid var(--edge-rim); border-radius: var(--r-lg); background: var(--content); box-shadow: var(--pop); }
 .ob-pane { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); min-width: 0; min-height: 0; }
 .ob-top { display: flex; align-items: center; min-height: calc(var(--h-ctl) + var(--sp-4)); padding: var(--sp-4) var(--sp-5) 0; }
@@ -619,7 +623,6 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .ob-aside { display: grid; grid-template-columns: minmax(0, 1fr); align-content: center; justify-items: center; gap: var(--sp-4); padding: var(--sp-6) var(--sp-5); background: var(--panel); }
 .ob-say { max-width: 260px; margin: 0; padding: var(--sp-3) var(--sp-4); border-radius: var(--r-lg); background: var(--content); color: var(--text); font-size: var(--fs-sm); line-height: 1.6; text-align: center; text-wrap: pretty; }
 .ob-lang { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
-.ob-lang-label { color: var(--text-2); font-size: var(--fs-sm); }
 /* Every choice is a list, one item per row (owner, 2026-11-07): the mark, the name with one quiet line, the control on
    the right. Long lists scroll inside the card. */
 .ob-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }

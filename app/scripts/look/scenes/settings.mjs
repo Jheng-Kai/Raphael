@@ -160,7 +160,7 @@ export default [
   scene("dictation-heat-press", "Pressing a heatmap day shows its words above it; nothing shows under the pointer", [...dictation("overview"), click('.heat [data-date="2026-10-24"]'), check("dictation-heat-press")]),
   scene("dictation-notice", "Dictation connection notice", dictation("overview"), { problem: true }),
   scene("conversation-notice", "Conversation connection notice", [], { problem: true }),
-  scene("onboarding", "First-run welcome", [wait('#ob:not([hidden]) [data-ob="next"]')], { onboarding: true }),
+  scene("onboarding", "First-run welcome", [wait('#ob:not([hidden]) [data-ob="next"]'), check("guide-window-fixed")], { onboarding: true }),
   scene("onboarding-tools", "First-run step 1: ChatGPT, the command-line tools and the OpenRouter key as items with their state", [click('[data-ob="next"]'), wait('[data-ob-tools] [data-item="claude"] .dot.ok'), check("onboarding-tools")], { onboarding: true }),
   scene("onboarding-tools-key", "First-run step 1: the OpenRouter key being replaced shows its field and paste button", [click('[data-ob="next"]'), wait('[data-ob="key-replace"]'), click('[data-ob="key-replace"]'), wait("#ob-key-input"), check("onboarding-tools")], { onboarding: true }),
   scene("onboarding-services", "First-run step 2: the popular services of the store, one sign-in each", [click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-services] .ob-item'), click('[data-item="gmail"] [data-ob="conn-login"]'), wait('[data-item="gmail"] .dot.ok'), check("onboarding-services")], { onboarding: true }),

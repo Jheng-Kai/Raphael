@@ -22,6 +22,7 @@ import { applyAppearance } from "./owner-settings";
 import { DeviceState } from "./device";
 import { resumeModels } from "./models";
 import { mountOnboarding } from "./onboarding";
+import { fitGuideWindow, releaseGuideWindow } from "./guide-window";
 import { Navigation, type Place, samePage } from "./nav-history";
 import { installNavInput } from "./nav-input";
 import { createSidebar } from "./sidebar";
@@ -371,12 +372,17 @@ watchChipRows(document.body);
     document.documentElement.dataset.windowLayout = "onboarding";
     document.querySelector<HTMLElement>(".wbody")!.hidden = true;
     guide.hidden = false;
+    // The window becomes the guide's card until it is done (guide-window.ts).
+    const strip = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--window-controls-height")) || 32;
+    try { void fitGuideWindow(getCurrentWindow(), strip).catch((err) => console.warn("main: the guide window keeps its size", err)); }
+    catch (err) { console.warn("main: no native window for the guide", err); }
     tellAgentPage();
     mountOnboarding(
       guide,
       {
         mode,
         onDone: () => {
+          void releaseGuideWindow().catch((err) => console.warn("main: the window did not get its size back", err));
           guide.hidden = true;
           showPages();
           tellAgentPage();

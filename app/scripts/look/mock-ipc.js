@@ -1757,6 +1757,13 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "plugin:event|listen") return ++callbackId;
       if (command === "plugin:window|is_maximized") return maximized;
       if (command === "plugin:window|toggle_maximize") { maximized = !maximized; return; }
+      // The guide makes the window its card and gives it back afterwards (guide-window.ts).
+      if (command === "plugin:window|outer_size") return { width: 1280, height: 800 };
+      if (command === "plugin:window|outer_position") return { x: 0, y: 0 };
+      if (["plugin:window|set_size", "plugin:window|set_position", "plugin:window|set_resizable", "plugin:window|set_maximizable", "plugin:window|center", "plugin:window|maximize", "plugin:window|unmaximize"].includes(command)) {
+        (state.windowCalls ??= []).push({ command: command.slice("plugin:window|".length), args });
+        return;
+      }
       if (command === "keyboard_has_altgr") return false;
       if (command === "mic_access") return { allowed: true, blocked_by: null };
       if (command === "schedule_keep_awake_get") return data.awake ?? false;

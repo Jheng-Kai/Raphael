@@ -2728,6 +2728,17 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector(".au-room-pane .composer .cmp-chip"), "the composer is clear again");
     return { check: name };
   }
+  if (name === "guide-window-fixed") {
+    // The guide's window is its card, fixed (owner, 2026-11-07); the language dropdown stands without a label.
+    const calls = window.__look.windowCalls ?? [], size = JSON.stringify(calls.find(call => call.command === "set_size")?.args ?? {});
+    require(document.documentElement.dataset.windowFixed === "true", "the window is fixed while the guide is up");
+    require(size.includes("960") && size.includes("672"), `the window is asked to be the card under the control strip: ${size}`);
+    require(calls.some(call => call.command === "set_resizable" && call.args.value === false), "it cannot be resized");
+    require(calls.some(call => call.command === "set_maximizable" && call.args.value === false), "it cannot be maximized");
+    require(!visible(document.querySelector('[data-window-action="maximize"]')), "no maximize button while it is fixed");
+    require(!document.querySelector(".ob-lang-label") && document.querySelector(".ob-lang .sel"), "the language dropdown stands alone");
+    return { check: name };
+  }
   if (name === "history-sent-to") {
     // Speech sent to a member is kept with the dictations and says who it went to (owner, 2026-11-07).
     const metas = [...document.querySelectorAll(".hrow .meta")].map(meta => meta.textContent.trim());

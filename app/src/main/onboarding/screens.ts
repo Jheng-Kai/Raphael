@@ -52,7 +52,8 @@ export function welcomeHTML(o: { rerun: boolean; languageSelect: string }): stri
   return (
     `<div class="ob-face" aria-hidden="true">${slimeFaceHTML({ id: 0, avatar: RAPHAEL_SLIME }, 88)}</div>` +
     head(o.rerun ? t("onboarding.rerunTitle") : t("onboarding.welcomeTitle")) +
-    `<div class="ob-main ob-lang"><span class="ob-lang-label">${esc(t("settings.059"))}</span>${o.languageSelect}</div>`
+    // The dropdown says what it is by itself; its name is only its accessible label (owner, 2026-11-07).
+    `<div class="ob-main ob-lang">${o.languageSelect}</div>`
   );
 }
 
