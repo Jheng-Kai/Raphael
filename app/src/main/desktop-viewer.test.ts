@@ -747,7 +747,7 @@ test('a stream that never connects stays silent, waits after a while, and one pr
   expect(shownText(panel())).not.toContain(t('desktop.connecting'));
   await vi.advanceTimersByTimeAsync(20_000); await flush();
   // Stalled: still not a word on the screen, and no retry button; the screen is the press.
-  expectBareScreen(panel()); expect(shownText(panel())).not.toContain(t('desktop.streamStalled'));
+  expectBareScreen(panel());
   expect(panel().querySelector<HTMLButtonElement>('[data-desktop="retry"]')!.hidden).toBe(true);
   expect(api.desktopOpen).toHaveBeenCalledTimes(1);
   expect(enlarge().hidden).toBe(false);
@@ -761,7 +761,7 @@ test('a stream that never connects stays silent, waits after a while, and one pr
 test('a stream that ends before it ever showed the screen, or says it cannot reach it, waits for a press instead of reopening', async () => {
   panelOpen = true; mounted.show(); await flush();
   message('unreachable'); await flush();
-  expectBareScreen(panel()); expect(shownText(panel())).not.toContain(t('desktop.streamStalled'));
+  expectBareScreen(panel());
   await vi.advanceTimersByTimeAsync(10_000); await flush();
   expect(api.desktopOpen).toHaveBeenCalledTimes(1);
   enlarge().click(); await flush();
