@@ -58,7 +58,7 @@
 .mb-panel-suggest .msg-token { display: flex; flex-wrap: nowrap; }
 .mb-panel-suggest .msg-token .field { flex: 1; width: auto; min-width: 0; }
 .mb-panel-identity > :is(b, small) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mb-panel-identity > b { font-size: var(--fs-md); font-weight: 600; }
+.mb-panel-identity > b { font-size: var(--fs-md); font-weight: var(--weight-semibold); }
 .mb-panel-identity > small { color: var(--text-3); font-size: var(--fs-xs); }
 /* Its lists, as Grok Bot's: each heading starts where the text inside its tinted list starts, an empty section is one
    tinted line, and the conversations are the same tinted list, so 工作, 例行任務 and 對話 read as one system. */

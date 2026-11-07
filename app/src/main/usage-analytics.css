@@ -2,7 +2,7 @@
 .run-allowance { margin-bottom: var(--sp-5); min-width: 0; }
 .run-allowance > header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; }
 /* The same small heading as every settings group, so the cards and the rows below read as one page. */
-.run-allowance > header h2 { margin: 0 0 0 var(--sp-1); font: 600 var(--fs-sm)/1.4 var(--ui); color: var(--text-2); }
+.run-allowance > header h2 { margin: 0 0 0 var(--sp-1); font: 500 var(--fs-sm)/1.4 var(--ui); color: var(--text-2); }
 .run-subscription { border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--sp-4); margin-top: var(--sp-3); background: var(--panel); }
 .run-subscription > header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; }
 .run-subscription h4 { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--fs-xs); }
@@ -19,9 +19,9 @@
 /* What the app spent this month, as Grok Bot's usage card: the amount large, the share of the monthly limit beside it, a
    coloured bar and one quiet line (settings-view.ts `spendCardHTML`). */
 .spend-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); }
-.spend-card h2 { margin: 0; font: 600 var(--fs-sm)/1.4 var(--ui); color: var(--text); }
+.spend-card h2 { margin: 0; font: 500 var(--fs-sm)/1.4 var(--ui); color: var(--text); }
 .spend-value { display: flex; align-items: baseline; gap: var(--sp-2); margin: 0; }
-.spend-value strong { font: 600 var(--fs-h1)/1.2 var(--display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.spend-value strong { font: 500 var(--fs-h1)/1.2 var(--display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .spend-value small { font-size: var(--fs-xs); color: var(--text-2); }
 .spend-bar { height: 7px; border-radius: var(--r-sm); background: var(--hover); overflow: hidden; }
 .spend-bar i { display: block; height: 100%; min-width: 4px; border-radius: var(--r-sm); background: var(--meter); }

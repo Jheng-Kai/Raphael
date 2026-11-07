@@ -11,10 +11,11 @@ import { entryIcon } from "../connections";
 import { providerMark } from "../provider-marks";
 import { type ProvidersView, description, emptyProvidersView, providersAddHTML } from "../providers";
 import type { ProviderKind, StoreService } from "../types";
-import { btn, esc, fieldHTML, ico, iconButton, st, tg } from "../ui";
-import type { AbilityRow } from "./helpers";
+import { RAPHAEL_SLIME } from "../members";
+import { slimeFaceHTML } from "../slime";
+import { btn, esc, fieldHTML, iconButton, st } from "../ui";
 
-/** The title of a screen. */
+/** The title of a screen; what the step is for is Raphael's sentence beside it, never a line under it. */
 export const head = (title: string): string => `<h2 tabindex="-1">${esc(title)}</h2>`;
 
 /** One item of a choice: the mark, the name with its quiet line, and the control. */
@@ -29,28 +30,27 @@ function item(o: { id: string; mark: string; name: string; line?: string; contro
 
 const alert = (html: string): string => `<div class="ob-alert" role="alert">${html}</div>`;
 
-// ---------- the bar and the way back ----------
+// ---------- the way back, and Raphael's side ----------
 
-export interface Top {
-  segments: { total: number; current: number };
-  /** The way back: false on the first screen of a first run. */
-  back: boolean;
+/** The way back (none on the first screen of a first run). No progress bar (owner, 2026-11-07). */
+export function topHTML(o: { back: boolean }): string {
+  return o.back ? iconButton("left", t("onboarding.back"), ' data-ob="back"') : `<span class="ob-gap"></span>`;
 }
 
-export function topHTML(top: Top): string {
-  const bar = Array.from({ length: top.segments.total }, (_, i) => `<i class="${i < top.segments.current ? "done" : i === top.segments.current ? "now" : ""}"></i>`).join("");
-  return (
-    (top.back ? iconButton("left", t("onboarding.back"), ' data-ob="back"') : `<span class="ob-gap"></span>`) +
-    `<div class="ob-bar-steps" role="img" aria-label="${esc(t("onboarding.progress", { p0: Math.max(1, top.segments.current + 1), p1: Math.max(1, top.segments.total) }))}">${bar}</div>` +
-    `<span class="ob-gap"></span>`
-  );
+export type GuideStep = "welcome" | "tools" | "services" | "abilities";
+
+const SAY: Record<GuideStep, MessageKey> = { welcome: "onboarding.sayWelcome", tools: "onboarding.sayTools", services: "onboarding.sayConn", abilities: "onboarding.sayAbilities" };
+
+/** Raphael's side of the card: his first blue slime and one sentence about the step. */
+export function asideHTML(step: GuideStep): string {
+  return slimeFaceHTML({ id: 0, avatar: RAPHAEL_SLIME }, 112) + `<p class="ob-say">${esc(tr(SAY[step]))}</p>`;
 }
 
 // ---------- welcome ----------
 
 export function welcomeHTML(o: { rerun: boolean; languageSelect: string }): string {
   return (
-    `<div class="stage onboarding-stage"><canvas class="emb" aria-hidden="true"></canvas><div class="subs" aria-live="polite"></div></div>` +
+    `<div class="ob-face" aria-hidden="true">${slimeFaceHTML({ id: 0, avatar: RAPHAEL_SLIME }, 88)}</div>` +
     head(o.rerun ? t("onboarding.rerunTitle") : t("onboarding.welcomeTitle")) +
     `<div class="ob-main ob-lang"><span class="ob-lang-label">${esc(t("settings.059"))}</span>${o.languageSelect}</div>`
   );
@@ -193,33 +193,17 @@ export function servicesHTML(v: ServicesState): string {
   let body: string;
   if (v.services === "loading") body = `<div class="ob-state"><span class="spin" role="status" aria-label="${esc(t("conn.loading"))}"></span></div>`;
   else if (v.services === "failed") body = alert(st("err", t("onboarding.connLoadFailed")) + btn(esc(t("onboarding.retry")), "sm", ' data-ob="conn-reload"'));
-  else body = `<div class="ob-grid" data-ob-services>${v.services.map((s) => serviceItem(s, v)).join("")}</div>` + (v.failed ? alert(st("err", v.failed)) : "");
+  else body = `<div class="ob-list" data-ob-services>${v.services.map((s) => serviceItem(s, v)).join("")}</div>` + (v.failed ? alert(st("err", v.failed)) : "");
   return head(t("onboarding.connTitle")) + `<div class="ob-main" id="ob-conn">${body}</div>`;
 }
 
 // ---------- 3. the abilities ----------
 
-export interface AbilitiesState {
-  rows: AbilityRow[] | "loading" | "failed";
-  /** The ability whose switch is being turned. */
-  busy: string | null;
-}
-
-function abilityItem(row: AbilityRow, busy: string | null): string {
-  const locked = !row.on && row.note !== null;
-  return item({
-    id: row.kind,
-    mark: `<span class="ob-tile" aria-hidden="true">${ico(row.icon)}</span>`,
-    name: row.label,
-    line: locked ? row.note! : row.about,
-    control: tg(row.on, row.label, ` data-ob="ability" data-id="${esc(row.kind)}"${busy !== null || locked ? " disabled" : ""}`),
-  });
-}
-
-export function abilitiesHTML(v: AbilitiesState): string {
-  let body: string;
-  if (v.rows === "loading") body = `<div class="ob-state"><span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span></div>`;
-  else if (v.rows === "failed") body = alert(st("err", t("services.loadFailed")) + btn(esc(t("onboarding.retry")), "sm", ' data-ob="abilities-reload"'));
-  else body = `<div class="ob-grid" data-ob-abilities>${v.rows.map((r) => abilityItem(r, v.busy)).join("")}</div>`;
-  return head(t("onboarding.abilitiesTitle")) + `<div class="ob-main">${body}</div>`;
+/**
+ * The abilities the members share, as the same rows and dialogs as Settings › 工具 (services.ts): each says what it
+ * uses now and opens the choice of service, its key and its model (owner, 2026-11-07: a switch alone did not say
+ * whether Brave or OpenRouter would search).
+ */
+export function abilitiesHTML(services: string): string {
+  return head(t("onboarding.abilitiesTitle")) + `<div class="ob-main" data-ob-abilities>${services}</div>`;
 }

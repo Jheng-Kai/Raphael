@@ -4,8 +4,7 @@ import { emptyCliBrainsView, type CliBrainsView } from "../cli-brains";
 import { setLocale } from "../i18n";
 import type { CliBrain, ModelProvider, ProviderKind, StoreService } from "../types";
 import { emptyProvidersView } from "../providers";
-import type { AbilityRow } from "./helpers";
-import { abilitiesHTML, servicesHTML, toolCards, toolsHTML, topHTML, welcomeHTML } from "./screens";
+import { abilitiesHTML, asideHTML, servicesHTML, toolCards, toolsHTML, topHTML, welcomeHTML } from "./screens";
 
 const WORDS = { "zh-TW": "", en: "", ja: "" };
 const service = (id: string, name: string, over: Partial<StoreService> = {}): StoreService => ({
@@ -36,14 +35,14 @@ describe("every screen", () => {
       welcomeHTML({ rerun: false, languageSelect: '<button type="button" class="sel"></button>' }),
       toolsHTML(accounts(), noKey, ""),
       servicesHTML({ services: [service("notion", "Notion")], waiting: null, failed: null }),
-      abilitiesHTML({ rows: [{ kind: "search", icon: "search", label: "Web search", about: "x", on: true, note: null }], busy: null }),
+      abilitiesHTML('<section class="sgroup svc"></section>'),
     ].join("");
     expect(html).not.toMatch(/<select|class="link"|<a /);
     expect(html).not.toContain("title=");
   });
 
   test("has a headline of its own and no line of purpose under it", () => {
-    for (const html of [toolsHTML(accounts(), noKey, ""), servicesHTML({ services: "loading", waiting: null, failed: null }), abilitiesHTML({ rows: "loading", busy: null })]) {
+    for (const html of [toolsHTML(accounts(), noKey, ""), servicesHTML({ services: "loading", waiting: null, failed: null }), abilitiesHTML("")]) {
       const host = dom(html);
       expect(host.querySelectorAll("h2")).toHaveLength(1);
       expect(host.querySelector(".ob-sub")).toBeNull();
@@ -51,14 +50,24 @@ describe("every screen", () => {
   });
 });
 
-describe("the bar", () => {
-  test("has a way back, a segment for each step, and no way to skip", () => {
-    const host = dom(topHTML({ segments: { total: 3, current: 1 }, back: true }));
+describe("the top and Raphael's side", () => {
+  test("a way back and nothing else: no progress bar (owner, 2026-11-07) and no way to skip", () => {
+    const host = dom(topHTML({ back: true }));
     expect(host.querySelector('[data-ob="back"]')).not.toBeNull();
-    expect(host.querySelectorAll(".ob-bar-steps i")).toHaveLength(3);
-    expect(host.querySelectorAll(".ob-bar-steps i.done")).toHaveLength(1);
+    expect(host.querySelector(".ob-bar-steps, [role=progressbar]")).toBeNull();
     expect(host.querySelector('[data-ob="skip"]')).toBeNull();
-    expect(dom(topHTML({ segments: { total: 3, current: -1 }, back: false })).querySelector('[data-ob="back"]')).toBeNull();
+    expect(dom(topHTML({ back: false })).querySelector('[data-ob="back"]')).toBeNull();
+  });
+
+  test("Raphael is his first blue slime with one sentence for each step", () => {
+    const lines = (["welcome", "tools", "services", "abilities"] as const).map((step) => {
+      const host = dom(asideHTML(step));
+      expect(host.querySelector(".slime-surface")).not.toBeNull();
+      expect(host.querySelector("canvas, .emb")).toBeNull();
+      return host.querySelector(".ob-say")!.textContent;
+    });
+    expect(new Set(lines).size).toBe(4);
+    expect(lines.every((line) => line && line.length > 0)).toBe(true);
   });
 });
 
@@ -162,35 +171,10 @@ describe("step 2: the services", () => {
 });
 
 describe("step 3: the abilities", () => {
-  const rows: AbilityRow[] = [
-    { kind: "search", icon: "search", label: "Web search", about: "Look things up online", on: true, note: null },
-    { kind: "read", icon: "globe", label: "Read web pages", about: "Read the pages you share", on: false, note: null },
-    { kind: "voice", icon: "voice", label: "Speech service", about: "Say the answers aloud", on: false, note: "Needs a key" },
-  ];
-
-  test("each ability is a row with its name and a switch that says whether it is on", () => {
-    const host = dom(abilitiesHTML({ rows, busy: null }));
-    expect(items(host)).toEqual(["search", "read", "voice"]);
-    const switches = [...host.querySelectorAll<HTMLElement>('.ob-item button[role="switch"]')];
-    expect(switches.map((el) => el.getAttribute("aria-checked"))).toEqual(["true", "false", "false"]);
-    expect(switches.map((el) => el.dataset.id)).toEqual(["search", "read", "voice"]);
-    expect(switches.map((el) => el.getAttribute("aria-label"))).toEqual(["Web search", "Read web pages", "Speech service"]);
-  });
-
-  test("one that waits for a key says so in place of its line and cannot be switched on here", () => {
-    const host = dom(abilitiesHTML({ rows, busy: null }));
-    expect(host.querySelector('[data-item="voice"] .ds')!.textContent).toBe("Needs a key");
-    expect(host.querySelector('[data-item="voice"] button')!.hasAttribute("disabled")).toBe(true);
-    expect(host.querySelector('[data-item="read"] button')!.hasAttribute("disabled")).toBe(false);
-  });
-
-  test("while one switch is turning no switch can be pressed", () => {
-    const host = dom(abilitiesHTML({ rows, busy: "search" }));
-    expect([...host.querySelectorAll("button[role=switch]")].every((el) => el.hasAttribute("disabled"))).toBe(true);
-  });
-
-  test("loading and failing are told, and a failure can be tried again", () => {
-    expect(dom(abilitiesHTML({ rows: "loading", busy: null })).querySelector(".spin")).not.toBeNull();
-    expect(dom(abilitiesHTML({ rows: "failed", busy: null })).querySelector('[data-ob="abilities-reload"]')).not.toBeNull();
+  test("are Settings › Tools' own rows under the step's title (owner, 2026-11-07: a switch alone did not say which service)", () => {
+    const host = dom(abilitiesHTML('<section class="sgroup svc" data-svc-section><h2>Services</h2><div class="cs-list"></div></section>'));
+    expect(host.querySelectorAll("h2")).toHaveLength(2);
+    expect(host.querySelector("[data-ob-abilities] [data-svc-section]")).not.toBeNull();
+    expect(host.querySelector('button[role="switch"][data-ob="ability"]')).toBeNull();
   });
 });

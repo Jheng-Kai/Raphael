@@ -2571,16 +2571,23 @@ export function checkRendered(name, context = {}) {
     return { check: name, expanded, height: text.clientHeight, fullHeight: text.scrollHeight };
   }
   if (name === "onboarding-tools" || name === "onboarding-services" || name === "onboarding-abilities") {
-    // Each first-run choice is a headline and a grid of items: a mark, a name with one quiet line, the control on the right.
-    const title = document.querySelector('.ob-col h2');
+    // Each first-run choice is a headline and a list of items in one card of a designed size: a mark, a name with one
+    // quiet line, the control on the right; Raphael's side beside it when the window is wide (owner, 2026-11-07).
+    const title = document.querySelector('.ob-col > h2');
     require(title && parseFloat(getComputedStyle(title).fontSize) >= 28, "the headline is large");
+    const card = document.querySelector('.ob-card').getBoundingClientRect();
+    require(card.width <= 962 && card.height <= 642, `the guide is one card of a designed size, not the whole window (${Math.round(card.width)} x ${Math.round(card.height)})`);
+    require(Math.abs((card.left + card.right) / 2 - innerWidth / 2) <= 2, "the card sits in the middle of the window");
+    require(!document.querySelector('.ob-bar-steps'), "there is no progress bar");
+    if (innerWidth > 860) require(visible(document.querySelector('.ob-aside .slime-surface')) && document.querySelector('.ob-aside .ob-say').textContent.trim(), "Raphael's side shows his slime and one sentence");
     require(!document.querySelector('.ob-sub'), "a choice has no line of purpose under its headline");
-    const items = [...document.querySelectorAll('.ob-item')].filter(visible);
+    const items = [...document.querySelectorAll(name === "onboarding-abilities" ? '.svc-item' : '.ob-item:not([data-item^="provider:"])')].filter(visible);
+    items.forEach(item => { item.dataset.item ??= item.dataset.id; });
     const expected = { "onboarding-tools": ["chatgpt", "claude", "codex", "gemini", "openrouter"], "onboarding-abilities": ["search", "read", "vision", "pdf", "voice"] }[name];
     if (expected) require(JSON.stringify(items.map(item => item.dataset.item)) === JSON.stringify(expected), `the items are ${expected.join(", ")}: ${items.map(item => item.dataset.item).join(", ")}`);
     else require(items.length > 0 && items.length <= 6 && items.some(item => item.dataset.item === "gmail"), "the popular services of the store are offered");
     const column = document.querySelector('.ob-col').getBoundingClientRect();
-    for (const item of items) {
+    for (const item of name === "onboarding-abilities" ? [] : items) {
       const box = item.getBoundingClientRect(), label = item.querySelector('.ob-tx').getBoundingClientRect(), control = item.querySelector('.ob-ctl').getBoundingClientRect(), nm = item.querySelector('.ob-tx .nm');
       require(box.left >= column.left - 1 && box.right <= column.right + 1, `${item.dataset.item} stays inside the column`);
       require(control.left >= label.right - 1 && control.right <= box.right + 1, `${item.dataset.item} keeps its control on the right inside its card`);
@@ -2589,12 +2596,16 @@ export function checkRendered(name, context = {}) {
     }
     if (name === "onboarding-services") require(document.querySelector('[data-item="gmail"] .dot.ok'), "a connected service says so");
     if (name === "onboarding-abilities") {
-      const switches = [...document.querySelectorAll('.ob-item button[role="switch"]')];
-      require(switches.length === 5, "five abilities have a switch each");
-      require(document.querySelector('[data-item="read"] [role="switch"]').getAttribute('aria-checked') === 'false', "a switch that was pressed turned off");
+      // The same rows as Settings › 工具: what each uses now, its switch and the way to its choice of service.
+      for (const item of items) {
+        const box = item.getBoundingClientRect();
+        require(box.left >= column.left - 1 && box.right <= column.right + 1, `${item.dataset.id} stays inside the column`);
+        require(item.querySelector('.svc-now')?.textContent.trim() && item.querySelector('[data-svc="toggle"]') && item.querySelector('[data-svc="open"]'), `${item.dataset.id} says what it uses, has its switch and opens its choice`);
+      }
+      require(document.querySelector('[data-svc="toggle"][data-id="read"]').getAttribute('aria-checked') === 'false', "a switch that was pressed turned off");
     }
-    const primary = document.querySelector('.ob-actions > .btn.pri').getBoundingClientRect();
-    require(primary.width >= Math.min(column.width, 560) * .6, "the primary action fills its row");
+    const primary = document.querySelector('.ob-actions > .btn.pri').getBoundingClientRect(), foot = document.querySelector('.ob-foot').getBoundingClientRect();
+    require(primary.width >= foot.width * .6, "the primary action fills the foot of the card's choice");
     return { check: name, items: items.length, columns: new Set(items.map(item => Math.round(item.getBoundingClientRect().left))).size, headline: getComputedStyle(title).fontSize };
   }
   if (name === "details-quick-once") {
@@ -2869,13 +2880,6 @@ export function checkRendered(name, context = {}) {
       require(!close || box.right<=close.left || box.left>=close.right || box.bottom<=close.top || box.top>=close.bottom,"settings header actions clear the modal Close button");
     }
     return {check:name,right,rows:rows.length};
-  }
-  if(name === "welcome-alignment") {
-    const col=document.querySelector('.ob-col').getBoundingClientRect(), foot=document.querySelector('.ob-foot').getBoundingClientRect();
-    require(foot.top-col.bottom<=32 && foot.top>=col.bottom,"welcome content and Start form one centered block");
-    const size=parseFloat(getComputedStyle(document.querySelector('.ob-col h2')).fontSize);
-    require(size >= 40 && size <= 48, "welcome title is the 40–48px page hero");
-    return {check:name,gap:foot.top-col.bottom};
   }
   if (name === "cancel-armed" || name === "cancel-cleared") {
     const button = document.querySelector('[data-cancel-armed="true"]');

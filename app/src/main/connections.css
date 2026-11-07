@@ -2,9 +2,9 @@
    rounded list of the connected services, a dialog for each over the settings, and the store as cards
    in two columns. Colours are the app's tokens. */
 .cs { width: 100%; max-width: var(--layout-reading-max); margin-top: var(--sp-4); container: connections / inline-size; }
-.cs h2.big { margin: 0; font: 600 var(--fs-lg)/1.3 var(--display); }
-.cs h2 { margin: 0 0 var(--sp-2) var(--sp-1); font-size: var(--fs-md); font-weight: 600; }
-.cs h3, .cs-skill-import h3 { margin: 0 0 var(--sp-2) var(--sp-1); font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); }
+.cs h2.big { margin: 0; font: 500 var(--fs-lg)/1.3 var(--display); }
+.cs h2 { margin: 0 0 var(--sp-2) var(--sp-1); font-size: var(--fs-md); font-weight: var(--weight-semibold); }
+.cs h3, .cs-skill-import h3 { margin: 0 0 var(--sp-2) var(--sp-1); font-size: var(--fs-sm); font-weight: var(--weight-semibold); color: var(--text-2); }
 
 /* The bar: 已安裝 N and 商店 N as quiet tabs, the search on the right */
 .cs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-3); }
@@ -32,7 +32,7 @@
 .cs-none { margin: var(--sp-5) var(--sp-1); font-size: var(--fs-sm); line-height: 1.6; color: var(--text-3); text-align: center; text-wrap: pretty; }
 
 /* The picture of a service: its mark bare, or a neutral plug. Marks use the text colour, or the brand's where it reads on both themes. */
-.mono { display: inline-grid; place-items: center; flex: none; width: 28px; height: var(--h-ctl-sm); color: var(--text); font: 600 var(--fs-lg)/1 var(--display); }
+.mono { display: inline-grid; place-items: center; flex: none; width: 28px; height: var(--h-ctl-sm); color: var(--text); font: 500 var(--fs-lg)/1 var(--display); }
 .mono.xl { width: 40px; height: 40px; font-size: var(--fs-h1); }
 .mono .logo { width: 100%; height: 100%; display: block; }
 .logo-mono[style] { color: var(--brand); }
@@ -59,7 +59,7 @@
 :where(:root[data-keys]) .cs-item:has(.cs-open:focus-visible) { box-shadow: inset 0 0 0 2px var(--focus); }
 .cs-item .ic, .cs-card .ic { display: inline-grid; place-items: center; width: 30px; flex: none; }
 .cs-open .tx, .cs-main .tx { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; min-width: 0; }
-.cs-open .nm, .cs-main .nm { font-size: var(--fs-md); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-open .nm, .cs-main .nm { font-size: var(--fs-md); font-weight: var(--weight-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-open .ds { margin-top: var(--sp-1); font-size: var(--fs-2xs); line-height: 1.45; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-open .ds .st { font-size: var(--fs-2xs); }
 .cs-item .chev { display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); }
@@ -78,7 +78,7 @@
 .cs-dlg-head .sp { flex: 1; }
 .cs-dlg-head .tg { margin-right: var(--sp-1); }
 .cs-dlg-head.sub .cs-dlg-name { flex: 1; min-width: 0; font-size: var(--fs-md); }
-.cs-dlg-name { margin: 0; font: 600 var(--fs-lg)/1.3 var(--display); overflow-wrap: anywhere; }
+.cs-dlg-name { margin: 0; font: 500 var(--fs-lg)/1.3 var(--display); overflow-wrap: anywhere; }
 .cs-dialog em.num, .cs-grp em.num { margin-left: var(--sp-1); font-style: normal; font-weight: 500; color: var(--text-3); }
 .cs-dialog .cs-desc { margin: 0; font-size: var(--fs-sm); line-height: 1.6; color: var(--text-2); text-wrap: pretty; }
 .cs-dialog .cs-meta { margin: 0; }
@@ -129,7 +129,7 @@
 /* The page of a skill is the dialog of an app, wider for the document it holds */
 .cs-dialog.wide { width: min(640px, 100%); }
 .cs-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
-.cs-field > .flabel { font-size: var(--fs-sm); font-weight: 600; color: var(--text); }
+.cs-field > .flabel { font-size: var(--fs-sm); font-weight: var(--weight-semibold); color: var(--text); }
 /* The document is a textarea with the field's look; the field's own padding and height (one line) yield to these, hence the longer selector. */
 .cs-field > .cs-skill-text { display: block; width: 100%; height: auto; min-height: 320px; padding: var(--sp-3); resize: vertical; font-family: var(--mono); font-size: var(--fs-xs); line-height: 1.55; white-space: pre-wrap; }
 
@@ -196,9 +196,9 @@
 .cs-main .sub { font-size: var(--fs-2xs); line-height: 1.45; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-main .sub.wait { color: var(--accent-text); }
 /* What an app asks for (its own key, or its own developer app) comes first on its row, in words, never only a title. */
-.cs-main .sub .need { font-weight: 600; color: var(--text-2); }
+.cs-main .sub .need { font-weight: var(--weight-semibold); color: var(--text-2); }
 .cs-needs { margin: var(--sp-3) 0 0; font-size: var(--fs-sm); line-height: 1.55; color: var(--text-2); text-wrap: pretty; }
-.cs-needs b { color: var(--text); font-weight: 600; }
+.cs-needs b { color: var(--text); font-weight: var(--weight-semibold); }
 .cs-card > .btn { flex: none; padding-inline: var(--sp-2); }
 .cs-card > .cs-state { flex: none; font-size: var(--fs-xs); }
 .cs-card .cs-state .st { font-size: var(--fs-xs); color: var(--text-3); }
@@ -208,7 +208,7 @@
 .cs-composio-setup > button { flex: none; }
 .cs-composio-mark { color: var(--text-2); }
 .cs-composio-mark svg { width: 20px; height: 20px; }
-.cs-key-form label { font-size: var(--fs-sm); font-weight: 600; }
+.cs-key-form label { font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
 .cs-key-form > p { margin: 0; font-size: var(--fs-xs); color: var(--err); }
 .cs-key-form > .note { font-size: var(--fs-sm); color: var(--text-2); }
 
@@ -218,17 +218,17 @@
 .add-grid .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-3); }
 .add-acts { margin-top: var(--sp-1); }
 .fld { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
-.fld > .flabel { font-size: var(--fs-sm); font-weight: 600; color: var(--text); }
+.fld > .flabel { font-size: var(--fs-sm); font-weight: var(--weight-semibold); color: var(--text); }
 .fld > .fhint { font-size: var(--fs-xs); color: var(--text-3); }
 .fld .field { width: 100%; }
 .fld .sel { width: 100%; max-width: none; justify-content: space-between; }
 .secret-row { display: flex; align-items: center; gap: var(--sp-2); min-height: 40px; padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-3); border-radius: var(--r-sm); background: var(--surface-2); font-size: var(--fs-sm); }
-.secret-row .nm { font-weight: 600; font-family: var(--mono); font-size: var(--fs-2xs); overflow-wrap: anywhere; }
+.secret-row .nm { font-weight: var(--weight-semibold); font-family: var(--mono); font-size: var(--fs-2xs); overflow-wrap: anywhere; }
 .secret-row .where { flex: 1; min-width: 0; color: var(--text-3); font-size: var(--fs-xs); display: inline-flex; align-items: center; gap: var(--sp-1); }
 .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: var(--sp-2); }
 .trust { display: flex; gap: var(--sp-2); align-items: flex-start; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--warn-soft); border: 1px solid var(--warn-edge); font-size: var(--fs-2xs); line-height: 1.55; color: var(--text-2); }
 .trust > .i { color: var(--warn); margin-top: var(--sp-1); }
-.trust b { color: var(--text); font-weight: 600; }
+.trust b { color: var(--text); font-weight: var(--weight-semibold); }
 
 /* Store rows are a name and at most a short need, as Grok Bot's, so they pair down to a narrow dialog; a connected row also
    has its line and switch, so it pairs only where that line has room. */
@@ -255,8 +255,8 @@
 .cs-device { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-4); padding: var(--sp-4) var(--sp-4); border: 0; border-radius: 0; background: transparent; }
 .cs-device-hint { margin: 0; font-size: var(--fs-xs); color: var(--text-2); text-align: center; text-wrap: pretty; }
 .cs-code { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--sp-1); user-select: text; }
-.cs-cap { display: inline-grid; place-items: center; width: 36px; height: 46px; border: 1px solid var(--key-edge); border-bottom-width: 3px; border-radius: var(--r-sm); background: var(--key); color: var(--text); font: 600 var(--fs-h1)/1 var(--mono); }
-.cs-dash { padding: 0 var(--sp-1); color: var(--text-3); font: 600 var(--fs-h1)/1 var(--mono); }
+.cs-cap { display: inline-grid; place-items: center; width: 36px; height: 46px; border: 1px solid var(--key-edge); border-bottom-width: 3px; border-radius: var(--r-sm); background: var(--key); color: var(--text); font: 500 var(--fs-h1)/1 var(--mono); }
+.cs-dash { padding: 0 var(--sp-1); color: var(--text-3); font: 500 var(--fs-h1)/1 var(--mono); }
 .cs-device-acts { gap: var(--sp-2); }
 .mcp-lines { width: 100%; min-height: 96px; padding: var(--sp-2) var(--sp-3); resize: vertical; font-family: var(--mono); white-space: pre; }
 .mcp-row-actions { display: flex; align-items: center; gap: var(--sp-1); }

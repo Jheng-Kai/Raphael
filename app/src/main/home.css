@@ -5,7 +5,7 @@
 /* His arrival's rings paint around the emblem; the clip margin holds them, so they never widen the page. */
 .ho-orb { position: relative; display: flex; align-items: center; justify-content: center; margin-bottom: var(--sp-3); overflow: clip; overflow-clip-margin: 96px; }
 .ho-orb > .av { flex-shrink: 0; }
-.page-home .ho-greet { margin: 0; font: 600 var(--fs-h1)/1.35 var(--voice, var(--ui)); text-wrap: balance; }
+.page-home .ho-greet { margin: 0; font: 500 var(--fs-h1)/1.35 var(--voice, var(--ui)); text-wrap: balance; }
 .ho-date { margin: 0; font-size: var(--fs-sm); color: var(--text-3); }
 .ho-health { margin: var(--sp-2) 0 0; max-width: var(--layout-reading-max); font: 500 var(--fs-md)/1.6 var(--voice, var(--ui)); color: var(--text-2); text-wrap: pretty; }
 .ho-alert { display: inline-flex; align-items: center; gap: var(--sp-1); margin: 0; max-width: var(--layout-reading-max); font-size: var(--fs-sm); line-height: 1.5; color: var(--warn); text-wrap: pretty; }
@@ -15,7 +15,7 @@
 .ho-board { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, .75fr); gap: var(--sp-5); align-items: start; min-width: 0; }
 .ho-sec { min-width: 0; display: grid; grid-template-rows: 32px auto; gap: var(--sp-2); }
 .ho-sec > header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-width: 0; padding-left: var(--sp-2); border-bottom: 1px solid var(--line); }
-.ho-sec h2 { margin: 0; font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ho-sec h2 { margin: 0; font-size: var(--fs-sm); font-weight: var(--weight-semibold); color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ho-rows { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; min-width: 0; }
 /* A row's words line up with its heading; its own background lights under the pointer. */
 .ho-row.btn { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-3); width: 100%; min-width: 0; height: 48px; padding: 0 var(--sp-2); box-sizing: border-box; border: 0; border-radius: var(--r-sm); background: transparent; text-align: left; }

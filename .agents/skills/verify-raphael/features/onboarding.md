@@ -4,7 +4,11 @@
 
 A welcome with the language dropdown, then three steps that are each a choice, then entry into
 the usable app with first-run state saved. There are no practice lessons, no microphone step and
-no completion screen (owner, 2026-11-07).
+no completion screen (owner, 2026-11-07). Everything sits in one card of a designed size (at most
+960 x 640) in the middle of the window, with no progress bar: the step on the left (a way back, the
+headline, the choice, one wide primary button) and Raphael's first blue slime with one sentence
+about the step on the right; below 860px wide that side goes and the welcome shows his face. The
+rerun from Settings exists for the current setup round only.
 
 1. **AI tools** (`onboarding-tools`, `onboarding-tools-key`): ChatGPT sign-in, the Claude Code,
    Codex and Antigravity command-line accounts and the OpenRouter key, as items with their state.
@@ -13,9 +17,10 @@ no completion screen (owner, 2026-11-07).
 2. **Services** (`onboarding-services`): up to six popular apps of the Connect apps store, from
    the built-in catalog plus the Composio-managed apps when Composio is set up; only apps that ask
    for no more than a sign-in. One sign-in button each, then a Connected state.
-3. **Abilities** (`onboarding-abilities`): the shared abilities of Settings > Tools (web search,
-   reading web pages, images, PDFs, speech) as one switch each. An ability that still needs a key
-   says so in place of its line and its switch waits.
+3. **Abilities** (`onboarding-abilities`, `onboarding-abilities-choice`): the shared abilities
+   of Settings > Tools (web search, reading web pages, images, PDFs, speech) as the very rows and
+   dialogs of that pane (`createServices`): each says which service it uses, keeps its switch and
+   opens, inside the card, the choice of service with its key, and for images the model picker.
 
 Every step can be gone past without choosing. The last step's primary button finishes; a first
 run then saves the device setting `onboarded`, a rerun from Settings does not.
@@ -29,7 +34,7 @@ state.
 ## Driving it with look
 
 ```powershell
-npm run look -- onboarding onboarding-tools onboarding-tools-key onboarding-services onboarding-abilities after-onboarding --theme both --width 1120,720,1920x1080
+npm run look -- onboarding onboarding-tools onboarding-tools-key onboarding-services onboarding-abilities onboarding-abilities-choice after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
 Keep the welcome and each step's PNGs, the contact sheet and the report. Each scene presses the
@@ -52,8 +57,9 @@ remain separate checks.
 ## UI audit regression coverage
 
 R-UI-35: every `.ob-item` keeps its control on the right of its name, inside its card
-(audit.mjs, audit.test.mjs). R-UI-37: a headline of at least 28px per screen (the welcome 44px)
-and a primary action that fills the action row. `onboarding-tools`, `onboarding-services` and
+(audit.mjs, audit.test.mjs); the card keeps its designed size, sits in the middle and shows
+Raphael's side when wide. R-UI-37: a headline of at least 28px per screen (`.ob-col > h2`; the
+dialogs of the abilities keep their own size) and a primary action that fills the action row. `onboarding-tools`, `onboarding-services` and
 `onboarding-abilities` carry the rendered check of the same name: the expected items, the control
 inside the card and centred, whole names, a headline and no purpose line.
 
@@ -71,7 +77,7 @@ remains available from Create from description.
 npm run look -- no-naming onboarding after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
-The welcome content and Start form one centered block with a consistent gap. Manual initial and
+The welcome stands in the middle of the card's left side. Manual initial and
 second launches reveal/focus the main window; only --autostart stays hidden. Every launch opens
 at the designed 1280x800, centred; window-state restores nothing, not even a last maximized
 window. Rust policy regressions live in first_run.rs and window_state_tests in lib.rs.

@@ -36,7 +36,7 @@
 /* The pill keeps one size, so its face never moves under the pointer: room for the › stays on its right and the same
    room on its left keeps it centred. The soft surface is drawn behind it, short of the › at rest, and reaches it under
    the pointer, where the › shows. */
-.conversation-trigger .mb-pill { position: relative; isolation: isolate; flex: none; display: flex; align-items: center; justify-content: center; gap: var(--sp-2); max-width: 100%; height: 40px; margin-left: calc(16px + var(--sp-2)); padding: 0 calc(var(--sp-3) + 16px + var(--sp-2)) 0 var(--sp-2); border-radius: var(--r-pill); font-size: var(--pa-pill-fs); font-weight: 600; line-height: 1.5; }
+.conversation-trigger .mb-pill { position: relative; isolation: isolate; flex: none; display: flex; align-items: center; justify-content: center; gap: var(--sp-2); max-width: 100%; height: 40px; margin-left: calc(16px + var(--sp-2)); padding: 0 calc(var(--sp-3) + 16px + var(--sp-2)) 0 var(--sp-2); border-radius: var(--r-pill); font-size: var(--pa-pill-fs); font-weight: var(--weight-semibold); line-height: 1.5; }
 .conversation-trigger .mb-pill::before { content: ""; position: absolute; z-index: -1; inset: 0 calc(16px + var(--sp-2)) 0 0; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); transition: inset 140ms ease, background-color 120ms ease; }
 .page-agent .btn.conversation-trigger:is(:hover, :focus-visible) .mb-pill::before { inset: 0; background: var(--hover); }
 .page-agent .btn.conversation-trigger:active .mb-pill::before { background: var(--pressed); }
@@ -55,7 +55,7 @@
    the member's pill was, each message under its speaker's face and coloured name, and 「關閉對話」 where the composer was. */
 .mb-chat > .peer-chat { position: absolute; z-index: 4; inset: calc(var(--window-controls-height) + 4px) 0 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; padding: 0 var(--pa-chat-pad); background: var(--content); animation: peer-in 160ms ease both; }
 .peer-head { display: flex; justify-content: center; min-width: 0; padding: 6px var(--sp-3); }
-.peer-pill { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; max-width: min(480px, 100%); height: 40px; padding: 0 var(--sp-3) 0 var(--sp-2); border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); font-size: var(--pa-pill-fs); font-weight: 600; line-height: 1.5; }
+.peer-pill { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; max-width: min(480px, 100%); height: 40px; padding: 0 var(--sp-3) 0 var(--sp-2); border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); font-size: var(--pa-pill-fs); font-weight: var(--weight-semibold); line-height: 1.5; }
 .peer-person { display: inline-flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 .peer-person > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: inherit; }
 .peer-person .av { --av: var(--pa-pill-av) !important; flex-shrink: 0; }
@@ -68,14 +68,14 @@
 .page-agent .tn.peer-line > .ra { grid-template-columns: var(--pa-ra-face) minmax(0, 1fr); column-gap: var(--sp-3); max-width: 88%; }
 .peer-line .ra-face { margin-top: 0; }
 .peer-line .ra-body { gap: 2px; }
-.peer-who { font-size: var(--fs-xs); font-weight: 600; line-height: 1.5; color: var(--peer-accent, var(--text-2)); }
+.peer-who { font-size: var(--fs-xs); font-weight: var(--weight-semibold); line-height: 1.5; color: var(--peer-accent, var(--text-2)); }
 .peer-state { margin: 0; color: var(--text-3); font-size: var(--pa-fs-d); line-height: 1.6; }
 .peer-line .handoff-files { margin-top: var(--sp-1); }
 .peer-foot { display: flex; justify-content: center; padding: var(--sp-3) 0 calc(var(--sp-4) + 4px); }
 /* The conversations' jump-to-latest button, floating just above 「關閉對話」. */
 .peer-chat > .btn.peer-latest { position: absolute; left: 50%; bottom: calc(var(--sp-3) + 40px + var(--sp-4) + 16px); transform: translateX(-50%); z-index: 2; width: 36px; height: 36px; min-height: 36px; border-radius: var(--r-sm); background: var(--panel); border: 1px solid var(--edge); box-shadow: var(--pop); color: var(--text-2); }
 .peer-chat > .btn.peer-latest:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
-.page-agent .btn.peer-close { min-width: 160px; height: 40px; padding: 0 var(--sp-5); border: 1px solid var(--edge-rim); border-radius: var(--r-pill); background: var(--surface-2); color: var(--text); font-weight: 600; }
+.page-agent .btn.peer-close { min-width: 160px; height: 40px; padding: 0 var(--sp-5); border: 1px solid var(--edge-rim); border-radius: var(--r-pill); background: var(--surface-2); color: var(--text); font-weight: var(--weight-semibold); }
 .page-agent .btn.peer-close:hover:not(:disabled) { border-color: var(--edge-rim); background: var(--hover); }
 .page-agent .btn.peer-close:active:not(:disabled) { background: var(--pressed); }
 @keyframes peer-in { from { opacity: 0; transform: translateY(6px); } }
@@ -130,10 +130,10 @@
 .message-search-result > .av { flex-shrink: 0; }
 .message-search-main { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
 .message-search-title { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
-.message-search-title b { flex-shrink: 0; max-width: 60%; font-size: var(--pa-row-name); font-weight: 600; }
+.message-search-title b { flex-shrink: 0; max-width: 60%; font-size: var(--pa-row-name); font-weight: var(--weight-semibold); }
 .message-search-title b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .message-search-snippet { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; font-size: var(--pa-row-pv); }
 .message-search-result small { color: var(--text-3); font-size: var(--fs-2xs); }
-.message-search-result mark { color: var(--on-selection); background: var(--selection); border-radius: var(--r-sm); font-weight: 600; }
+.message-search-result mark { color: var(--on-selection); background: var(--selection); border-radius: var(--r-sm); font-weight: var(--weight-semibold); }
 .menu .menu-action > .mtd { flex: 1; }
 .conversation-search .mb-more, .conversation-search .mb-fold { display: none; }

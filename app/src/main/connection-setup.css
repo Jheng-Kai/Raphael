@@ -8,7 +8,7 @@
 .cn-wait { font-size: var(--fs-sm); color: var(--text-2); }
 .cn-lead { color: var(--text); text-wrap: pretty; }
 .cn-where { display: flex; flex-direction: column; gap: var(--sp-2); }
-.cn-where h3, .cn-label { margin: 0; font-size: var(--fs-xs); font-weight: 600; color: var(--text); }
+.cn-where h3, .cn-label { margin: 0; font-size: var(--fs-xs); font-weight: var(--weight-semibold); color: var(--text); }
 .cn-label i { font-style: normal; font-weight: 400; color: var(--text-3); }
 .cn-link { display: flex; }
 .cn-steps { display: flex; flex-direction: column; gap: var(--sp-1); margin: 0; padding-left: 1.4em; color: var(--text-2); }

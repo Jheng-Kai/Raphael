@@ -160,7 +160,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
         violation('R-UI-17', 'Shortcut label and keys wrap onto separate rows');
     }
     if (element.matches('.modal-body .purpose')) violation('R-UI-02', 'Settings subtitle repeats the pane purpose');
-    if (element.matches('.ob-col h2') && parseFloat(style.fontSize) < 28) violation('R-UI-37', 'Onboarding needs a large headline');
+    if (element.matches('.ob-col > h2') && parseFloat(style.fontSize) < 28) violation('R-UI-37', 'Onboarding needs a large headline');
     if (element.matches('.ob-actions > .btn.pri') && box.width < element.parentElement.getBoundingClientRect().width * .6)
       violation('R-UI-37', 'Onboarding primary action must fill the action row');
     if (element.matches('.ob-item')) {

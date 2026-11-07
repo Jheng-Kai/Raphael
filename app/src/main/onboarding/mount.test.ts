@@ -100,11 +100,13 @@ describe("the guide", () => {
     expect(text('[data-ob="next"]')).toBe("Start");
   });
 
-  test("walks the three choices in order and shows a bar of three", async () => {
+  test("walks the three choices in order in one card, with no progress bar", async () => {
     await open();
     await press('[data-ob="next"]');
     expect(root.dataset.step).toBe("tools");
-    expect(root.querySelectorAll(".ob-bar-steps i")).toHaveLength(3);
+    expect(root.querySelectorAll(".ob-card")).toHaveLength(1);
+    expect(root.querySelector(".ob-card .ob-aside .slime-surface")).not.toBeNull();
+    expect(root.querySelector(".ob-bar-steps")).toBeNull();
     await press('[data-ob="next"]');
     expect(root.dataset.step).toBe("services");
     await press('[data-ob="next"]');
@@ -253,35 +255,24 @@ describe("step 3: the abilities", () => {
     for (let i = 0; i < 3; i++) await press('[data-ob="next"]');
   };
 
-  test("a switch changes the setting of Settings > Tools and shows the result", async () => {
+  test("each ability is Settings › Tools' own row: what it uses now and its switch, which changes the same setting", async () => {
     await toAbilities();
-    expect(root.querySelector('[data-item="read"] [role="switch"]')!.getAttribute("aria-checked")).toBe("true");
-    await press('[data-item="read"] [data-ob="ability"]');
+    expect(root.querySelector('.svc-item[data-id="read"] .svc-now')).not.toBeNull();
+    expect(root.querySelector('[data-svc="toggle"][data-id="read"]')!.getAttribute("aria-checked")).toBe("true");
+    await press('[data-svc="toggle"][data-id="read"]');
     expect(api.settingsSet).toHaveBeenCalledWith("web_read_enabled", false);
-    expect(root.querySelector('[data-item="read"] [role="switch"]')!.getAttribute("aria-checked")).toBe("false");
   });
 
-  test("an ability that needs a key cannot be switched on here and says so", async () => {
+  test("an ability opens the choice of its service in the card, as in Settings", async () => {
     await toAbilities();
-    const voice = root.querySelector<HTMLButtonElement>('[data-item="voice"] [role="switch"]')!;
-    expect(voice.disabled).toBe(true);
-    expect(text('[data-item="voice"] .ds')).toBe("Needs a key");
-    voice.click();
-    await flush();
-    expect(api.settingsSet).not.toHaveBeenCalled();
-  });
-
-  test("a refused change is told and the switch stays as it was", async () => {
-    api.settingsSet.mockRejectedValue(new Error("refused"));
-    await toAbilities();
-    await press('[data-item="read"] [data-ob="ability"]');
-    expect(root.querySelector('[data-item="read"] [role="switch"]')!.getAttribute("aria-checked")).toBe("true");
+    await press('[data-svc="open"][data-id="search"]');
+    expect(root.querySelector(".ob-card #svc-dialog")).not.toBeNull();
   });
 
   test("the guide can be finished even when the abilities could not be read", async () => {
     api.servicesStatus.mockRejectedValue(new Error("down"));
     await toAbilities();
-    expect(root.querySelector('[data-ob="abilities-reload"]')).not.toBeNull();
+    expect(root.querySelector('[data-svc-section] [role="alert"]')).not.toBeNull();
     await press('[data-ob="next"]');
     expect(done).toHaveBeenCalledWith({ finished: true });
   });

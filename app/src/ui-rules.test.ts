@@ -167,6 +167,32 @@ describe("buttons", () => {
   });
 });
 
+describe("type weight", () => {
+  const stripComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const sheets = (): [string, string][] => mainFiles.filter((f) => f.endsWith(".css")).map((f) => [rel(f), stripComments(read(f))]);
+
+  // Grok Bot keeps one quiet weight: emphasis is size and colour (white or grey), never heavier type (owner, 2026-11-07).
+  test("weights come from the tokens, and nothing is heavier than medium", () => {
+    const bad: string[] = [];
+    for (const [file, css] of sheets()) {
+      for (const m of css.matchAll(/font-weight:\s*([^;}\s]+)/g)) if (!/^(var\(--weight-(regular|medium|semibold)\)|400|500|inherit|100)$/.test(m[1])) bad.push(`${file}: ${m[0]}`);
+      for (const m of css.matchAll(/\bfont:\s*(\d{3}|bold)\b/g)) if (!/^(400|500)$/.test(m[1])) bad.push(`${file}: ${m[0]}`);
+    }
+    expect(bad).toEqual([]);
+    expect(read(join(MAIN, "styles.css"))).toMatch(/--weight-semibold:\s*500;/);
+  });
+
+  test("a chosen, current or pressed item changes its background or colour, never its weight", () => {
+    const bad: string[] = [];
+    for (const [file, css] of sheets()) {
+      for (const m of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+        if (/aria-(current|selected|pressed|checked)|\.is-(today|live|active|wait)\b/.test(m[1]) && /font-weight/.test(m[2])) bad.push(`${file}: ${m[1].trim().slice(0, 90)}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+});
+
 describe("colours", () => {
   const stripComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, "");
   const COLOUR = /#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(/;

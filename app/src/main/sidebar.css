@@ -33,7 +33,7 @@
 .side .nav.mb-tile.mb-row > .av { --av: 48px !important; margin-bottom: var(--sp-1); }
 .side .mb-pinned[data-count="1"] .nav.mb-tile.mb-row > .av { --av: 72px !important; }
 .side .nav.mb-tile small { display: block; max-width: 100%; overflow: hidden; color: var(--text-3); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
-.side .nav.mb-tile b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-md); font-weight: 600; }
+.side .nav.mb-tile b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-md); font-weight: var(--weight-semibold); }
 .side .mb-pinned:not([data-count="1"]) .nav.mb-tile b { font-size: var(--fs-sm); }
 .side .nav.mb-tile[aria-current="true"] b { color: var(--accent-text); }
 .side .nav.mb-tile > .mb-dot { position: absolute; top: 10px; right: 12px; }
@@ -93,7 +93,7 @@
 .side .side-foot .sidebar-update-btn { width: 100%; height: 40px; border: 1px solid var(--line); border-radius: var(--r-pill); padding-inline: 12px; background: transparent; color: var(--text); }
 .side .side-foot .sidebar-update-btn:is(:hover, :active):not(:disabled) { background: var(--hover); }
 .side .side-foot .sidebar-update-btn .nav-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
-.side .side-foot .sidebar-update-act { flex: none; font-size: var(--fs-xs); font-weight: 600; color: var(--accent-text); }
+.side .side-foot .sidebar-update-act { flex: none; font-size: var(--fs-xs); font-weight: var(--weight-semibold); color: var(--accent-text); }
 :root[data-sidebar-collapsed] .side .side-foot .sidebar-update-btn { width: 44px; height: 44px; padding: 0; justify-content: center; border-color: transparent; }
 :root[data-sidebar-collapsed] .side .side-foot .sidebar-update-act { display: none; }
 .side .side-foot .sidebar-apps { height: 40px; border: 1px solid var(--line); border-radius: var(--r-pill); padding-inline: 12px; background: transparent; }

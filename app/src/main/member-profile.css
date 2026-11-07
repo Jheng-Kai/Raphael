@@ -26,13 +26,13 @@
 .mp-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
 .mp-card .mp-card-head h3 { margin: 0; }
 #mp-memory { field-sizing: content; overflow: hidden; resize: none; }
-.mp-card h3 { margin: 0 0 var(--sp-3); font-size: var(--fs-sm); font-weight: 600; }
+.mp-card h3 { margin: 0 0 var(--sp-3); font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
 .mp-card p, .mp-empty { font-size: var(--fs-2xs); color: var(--text-2); line-height: 1.6; }
 .mp-empty { margin: var(--sp-3) 0; }
 .mp-resource { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-3) 0; min-width: 0; }
 .mp-resource + .mp-resource { border-top: 1px solid var(--line); }
 .mp-resource > div:first-child, .mp-resource > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.mp-resource b { font-size: var(--fs-sm); font-weight: 600; line-height: 1.5; color: var(--text); }
+.mp-resource b { font-size: var(--fs-sm); font-weight: var(--weight-semibold); line-height: 1.5; color: var(--text); }
 .mp-resource p { margin: var(--sp-1) 0 0; overflow-wrap: anywhere; }
 .mp-routine-list .mp-resource p { white-space: pre-line; }
 .mp-resource .tg { flex-shrink: 0; }

@@ -8,7 +8,7 @@
 .card-head { display: flex; align-items: start; gap: 8px; min-width: 0; }
 .card-heading { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
 .card-heading > .mono { width: 22px; height: 22px; flex: 0 0 22px; }
-.card-title { font-size: var(--fs-sm); font-weight: 600; overflow-wrap: anywhere; }
+.card-title { font-size: var(--fs-sm); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
 .card-status { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; max-width: 48%; min-height: 24px; box-sizing: border-box; padding: 2px 8px; border-radius: var(--r-pill); background: var(--hover); font-size: var(--fs-2xs); color: var(--text-2); }
 .card-status i { display: block; width: 6px; height: 6px; border-radius: var(--r-pill); background: currentColor; flex: 0 0 auto; }
 .card-status.is-waiting { color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--panel)); }

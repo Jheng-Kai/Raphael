@@ -16,13 +16,13 @@ import { describeError, keyReasonText } from "../format";
 import { wireKeyField } from "../keyfield";
 import { UI_LANGUAGES } from "../pages/settings-view";
 import { storePlugin } from "../plugins-data";
-import { CAPABILITIES } from "../services";
-import { Stage } from "../stage";
-import type { AppContext, BrainSettings, MainEvent, ServicesStatus, StoreService } from "../types";
+import { modelPickerHTML, mountModelPicker, type ModelPickerLook } from "../model-picker";
+import { createServices, servicesHTML as abilityRowsHTML } from "../services";
+import type { AppContext, BrainSettings, MainEvent, ModelCatalog, StoreService } from "../types";
 import { actionRow, closeMenu, esc, openMenu, openMenuOnArrow, sel, toaster } from "../ui";
-import { type AbilityRow, abilityRows, pickServices } from "./helpers";
-import { type FlowState, type Mode, initialState, isLast, reduce, segments } from "./flow";
-import { abilitiesHTML, servicesHTML, toolsHTML, topHTML, welcomeHTML } from "./screens";
+import { pickServices } from "./helpers";
+import { type FlowState, type Mode, initialState, isLast, reduce } from "./flow";
+import { abilitiesHTML, asideHTML, servicesHTML, toolsHTML, topHTML, welcomeHTML } from "./screens";
 
 /** What the guide tells whoever opened it when it is over. */
 export interface GuideResult {
@@ -48,7 +48,6 @@ function focusSelector(host: HTMLElement): string {
 export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: AppContext): void {
   const mode = options.mode;
   let flow: FlowState = initialState(mode);
-  let stage: Stage | null = null;
   let finishing = false;
   let destroyed = false;
   /** Every listener on the root ends with the guide: a guide opened again on the same root is a new one. */
@@ -66,11 +65,40 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   let waitingService: string | null = null;
   let connectFailed: string | null = null;
 
-  // the abilities
-  let abilities: AbilityRow[] | "loading" | "failed" = "loading";
-  let abilitiesLoaded = false;
+  // the abilities: the same rows and dialogs as Settings › 工具, and its 看圖片 model picker
   let brain: BrainSettings | null = null;
-  let abilityBusy: string | null = null;
+  let catalog: ModelCatalog | null | "loading" = "loading";
+  const abilities = createServices({
+    root,
+    visible: () => !destroyed && flow.step === "abilities",
+    redraw: () => {
+      if (!destroyed && flow.step === "abilities") repaintBody();
+    },
+    brain: () => brain,
+    changeSetting: async (key, value) => {
+      try {
+        brain = (await api.settingsSet(key, value)).settings;
+      } catch (err) {
+        toaster.info(describeError(err));
+      }
+    },
+  });
+  const visionLook = (): ModelPickerLook => {
+    const status = abilities.view().status;
+    return {
+      role: "vision",
+      key: "svc-vision",
+      label: t("services.vision"),
+      current: (typeof status === "object" ? status.vision.model : null) ?? brain?.vision_model ?? "",
+      catalog: typeof catalog === "object" ? catalog : null,
+      providers: providers.view().providers,
+      loading: catalog === "loading",
+      favorites: brain?.model_favorites?.answer ?? [],
+      lead: { id: "", name: t("services.sameAsAnswer") },
+      showPrice: false,
+      disabled: brain === null,
+    };
+  };
 
   const accounts = createCliBrains({
     visible: () => !destroyed && flow.step === "tools",
@@ -104,14 +132,14 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       case "services":
         return servicesHTML({ services, waiting: waitingService, failed: connectFailed });
       case "abilities":
-        return abilitiesHTML({ rows: abilities, busy: abilityBusy });
+        return abilitiesHTML(abilityRowsHTML(abilities.view(), modelPickerHTML(visionLook()), brain));
     }
   }
 
   /** What stopped the last ChatGPT sign-in, in the owner's words (the account controller keeps it). */
   const accountsError = (): string => accounts.view().chatgptError;
 
-  const topHTMLNow = (): string => topHTML({ segments: segments(flow), back: flow.step !== "welcome" || mode === "rerun" });
+  const topHTMLNow = (): string => topHTML({ back: flow.step !== "welcome" || mode === "rerun" });
 
   function footHTML(): string {
     const label = flow.step === "welcome" ? "onboarding.start" : isLast(flow) ? (mode === "rerun" ? "onboarding.finishRerun" : "onboarding.finish") : "onboarding.next";
@@ -125,16 +153,16 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
 
   /** Draws the whole screen. */
   function render(): void {
-    stage?.dispose();
-    stage = null;
     closeMenu();
-    const quiet = flow.step === "welcome" && mode === "first";
     root.dataset.step = flow.step;
     root.innerHTML =
-      `<div class="ob-top${quiet ? " quiet" : ""}">${topHTMLNow()}</div>` +
-      `<div class="ob-body"${flow.step === "welcome" ? " data-welcome" : ""}><div class="ob-col">${bodyHTML()}</div></div>` +
-      `<div class="ob-foot">${footHTML()}</div>`;
+      `<div class="ob-card"><div class="ob-pane">` +
+      `<div class="ob-top">${topHTMLNow()}</div>` +
+      `<div class="ob-body"><div class="ob-col">${bodyHTML()}</div></div>` +
+      `<div class="ob-foot">${footHTML()}</div>` +
+      `</div><aside class="ob-aside" aria-hidden="true">${asideHTML(flow.step)}</aside></div>`;
     enterScreen();
+    mountVisionPicker();
   }
 
   /** Draws the part between the bar and the button again, keeping what is typed and where the focus is. */
@@ -150,19 +178,19 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       if (input) input.value = value;
     }
     if (focus) col.querySelector<HTMLElement>(focus)?.focus({ preventScroll: true });
+    mountVisionPicker();
+  }
+
+  /** The 看圖片 picker of 「指定模型」, on the button the dialog drew (only when that page is open). */
+  function mountVisionPicker(): void {
+    const slot = flow.step === "abilities" ? root.querySelector<HTMLElement>('[data-model-picker="vision"]') : null;
+    if (slot) mountModelPicker(slot, { ...visionLook(), onChoose: (id) => void abilities.chooseVision(id) });
   }
 
   function enterScreen(): void {
     switch (flow.step) {
-      case "welcome": {
-        const canvas = root.querySelector<HTMLCanvasElement>("canvas.emb");
-        const subs = root.querySelector<HTMLElement>(".subs");
-        if (canvas && subs) {
-          stage = new Stage(canvas, subs, () => {});
-          stage.play();
-        }
+      case "welcome":
         break;
-      }
       case "tools":
         accounts.start();
         void loadKey();
@@ -172,7 +200,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
         if (!servicesLoaded || services === "failed") void loadServices();
         break;
       case "abilities":
-        if (!abilitiesLoaded || abilities === "failed") void loadAbilities();
+        void loadAbilities();
         break;
     }
     root.querySelector<HTMLElement>("h2")?.focus({ preventScroll: true });
@@ -229,8 +257,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
 
   function destroy(): void {
     destroyed = true;
-    stage?.dispose();
-    stage = null;
+    abilities.reset();
     closeMenu();
     accounts.stop();
     stopEvents();
@@ -352,35 +379,18 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   // ---------- the abilities ----------
 
   async function loadAbilities(): Promise<void> {
-    abilities = "loading";
+    const [settings] = await Promise.allSettled([api.settingsGet(), abilities.load()]);
+    if (destroyed) return;
+    if (settings.status === "fulfilled") brain = settings.value.settings;
     if (flow.step === "abilities") repaintBody();
-    try {
-      const [status, settings] = await Promise.all([api.servicesStatus(), api.settingsGet()]);
-      if (destroyed) return;
-      brain = settings.settings;
-      abilities = abilityRows(status, brain);
-      abilitiesLoaded = true;
-    } catch {
-      abilities = "failed";
+    if (catalog === "loading") {
+      try {
+        catalog = await api.modelsCatalog();
+      } catch {
+        catalog = null;
+      }
+      if (!destroyed && flow.step === "abilities") repaintBody();
     }
-    if (!destroyed && flow.step === "abilities") repaintBody();
-  }
-
-  async function toggleAbility(kind: string): Promise<void> {
-    const entry = CAPABILITIES.find((c) => c.kind === kind);
-    const row = Array.isArray(abilities) ? abilities.find((r) => r.kind === kind) : undefined;
-    if (!entry || !row || abilityBusy !== null) return;
-    abilityBusy = kind;
-    repaintBody();
-    try {
-      brain = (await api.settingsSet(entry.enabled, !row.on)).settings;
-      const status: ServicesStatus = await api.servicesStatus();
-      if (!destroyed) abilities = abilityRows(status, brain);
-    } catch (err) {
-      toaster.info(describeError(err));
-    }
-    abilityBusy = null;
-    if (!destroyed && flow.step === "abilities") repaintBody();
   }
 
   // ---------- events ----------
@@ -408,6 +418,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       return;
     }
     if (flow.step === "tools" && providers.click(target)) return;
+    if (flow.step === "abilities" && abilities.click(target)) return;
 
     const button = target.closest<HTMLElement>("[data-ob]");
     switch (button?.dataset.ob) {
@@ -440,12 +451,6 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       case "conn-reload":
         void loadServices();
         break;
-      case "ability":
-        void toggleAbility(button.dataset.id ?? "");
-        break;
-      case "abilities-reload":
-        void loadAbilities();
-        break;
     }
   }, { signal });
 
@@ -453,6 +458,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   root.addEventListener("keydown", (e) => {
     if (destroyed) return;
     if (flow.step === "tools" && providers.key(e)) return;
+    if (flow.step === "abilities" && abilities.key(e)) return;
     openMenuOnArrow(e);
   }, { signal });
   root.addEventListener("input", (e) => {

@@ -1,39 +1,7 @@
 // Small rules of the guide that do not belong to one step. Pure, so each is tested on its own.
 
-import { type Capability, CAPABILITIES, canTurnOn, isOn, serviceRows } from "../services";
 import { popularRank } from "../store-finder";
-import type { BrainSettings, ServicesStatus, StoreService } from "../types";
-import type { IconName } from "../ui";
-
-/** One ability of the third step: what a member can use, and whether it is on. */
-export interface AbilityRow {
-  kind: Capability;
-  icon: IconName;
-  label: string;
-  about: string;
-  on: boolean;
-  /** Why it cannot be turned on yet (it needs a key, an address or a voice model, set in the settings); null when it can. */
-  note: string | null;
-}
-
-/**
- * The abilities the members share, in the order of Settings > Tools, with the switches as they are.
- * Seeing images is always one switch away; the others wait for what their service needs.
- */
-export function abilityRows(status: ServicesStatus, brain: BrainSettings | null): AbilityRow[] {
-  return CAPABILITIES.map((entry) => {
-    const chosen = serviceRows(entry.kind, status, brain).find((row) => row.chosen);
-    const waits = entry.kind !== "vision" && !canTurnOn(entry.kind, status, brain);
-    return {
-      kind: entry.kind,
-      icon: entry.icon,
-      label: entry.label(),
-      about: entry.about(),
-      on: isOn(entry.kind, status, brain),
-      note: waits ? chosen?.note || null : null,
-    };
-  });
-}
+import type { StoreService } from "../types";
 
 /** The services the second step offers. */
 export const SERVICES_SHOWN = 6;

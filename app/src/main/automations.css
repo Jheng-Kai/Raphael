@@ -2,7 +2,9 @@
 .au-page { display: flex; flex-direction: column; width: 100%; max-width: var(--layout-workspace-max); margin-inline: auto; min-width: 0; height: 100%; padding-top: var(--window-controls-height); overflow: hidden; background: var(--content); container: calendar / inline-size; }
 .au-empty { padding: 48px var(--sp-4); color: var(--text-3); text-align: center; }
 .au-empty > .i { width: 20px; height: 20px; }
+/* In the middle of the window like every dialog (owner, 2026-11-07); a dialog taller than the window starts at the top and scrolls. */
 .mb-scrim:has(> .au-routine-dialog) { overflow-y: auto; scrollbar-width: none; place-items: start center; }
+.mb-scrim > .au-routine-dialog { margin-block: auto; }
 /* Wide and short (owner, 2026-11-07): what it does on the left, when it runs on the right; one column when narrow. */
 .au-routine-dialog.mb-dialog { width: min(880px, calc(100vw - 40px)); max-height: none; overflow: visible; }
 .au-routine-dialog .mb-dlg-body { display: flex; flex-direction: column; flex: none; overflow: visible; gap: var(--sp-4); padding: var(--sp-5) var(--sp-5); }
@@ -12,14 +14,14 @@
 .au-title-row > .au-title { flex: 1; min-width: 0; }
 .au-prompt-field textarea { min-height: 200px; resize: vertical; }
 @media (max-width: 760px) { .au-routine-grid { grid-template-columns: minmax(0, 1fr); } }
-.au-title.mb-fin { font-size: var(--fs-h1); font-weight: 600; border: 0; border-bottom: 1px solid var(--edge); border-radius: 0; background: transparent; padding: var(--sp-2) 0 var(--sp-3); }
+.au-title.mb-fin { font-size: var(--fs-h1); font-weight: var(--weight-semibold); border: 0; border-bottom: 1px solid var(--edge); border-radius: 0; background: transparent; padding: var(--sp-2) 0 var(--sp-3); }
 .au-field { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; margin: 0; }
 .au-field > .sel { width: 100%; max-width: 100%; justify-content: space-between; }
-.au-field h3, .au-label { font-size: var(--fs-xs); font-weight: 600; margin: 0; }
+.au-field h3, .au-label { font-size: var(--fs-xs); font-weight: var(--weight-semibold); margin: 0; }
 .au-event p { margin: 0; overflow-wrap: anywhere; }
 .routine-sentence { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 0 4px; }
 .routine-sentence > .i { align-self: center; flex: none; margin-right: 2px; }
-.routine-sentence strong { font-weight: 600; }
+.routine-sentence strong { font-weight: var(--weight-semibold); }
 .routine-object { color: var(--text-2); font-weight: 400; }
 .au-hook-address { overflow-wrap: anywhere; user-select: text; }
 .au-webhook p { margin: 0; }
@@ -130,7 +132,7 @@ button.au-room-reply { border: 0; font-family: inherit; cursor: pointer; }
 /* What a colleague asked this member (exchange-line.ts): each question and answer under its speaker's name. */
 .exchange-detail { gap: var(--sp-3); }
 .exchange-message { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; user-select: text; }
-.exchange-message > b { font-size: var(--pa-sys); font-weight: 600; color: var(--text-3); }
+.exchange-message > b { font-size: var(--pa-sys); font-weight: var(--weight-semibold); color: var(--text-3); }
 .handoff-files { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
 .handoff-files li { display: inline-flex; align-items: center; gap: var(--sp-2); min-width: 0; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); background: var(--panel); color: var(--text); font-size: var(--fs-xs); }
 .au-room-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -153,15 +155,15 @@ button.au-room-reply { border: 0; font-family: inherit; cursor: pointer; }
 .au-calendar-side::-webkit-scrollbar { display: none; }
 .btn.au-create { align-self: flex-start; flex: none; gap: var(--sp-2); min-height: 40px; padding-inline: var(--sp-4) var(--sp-5); margin-bottom: var(--sp-4); border-radius: var(--r-md); }
 .au-calendar-side .au-month-head { padding: 0 0 var(--sp-1) var(--sp-1); }
-.au-calendar-side .au-month-head b { flex: 1; text-align: left; font-size: var(--fs-sm); font-weight: 600; }
+.au-calendar-side .au-month-head b { flex: 1; text-align: left; font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
 .au-calendar-side .au-month-head .btn.icon { width: 24px; min-height: 24px; }
 .au-calendar-side .au-month-grid { flex: none; gap: 0; }
 .au-calendar-side .au-month-grid .btn { width: 26px; height: 26px; min-height: 26px; justify-self: center; border-radius: var(--r-pill); }
 .au-calendar-side .au-month-grid .btn[aria-pressed="true"], .au-calendar-side .au-month-grid .btn[aria-pressed="true"]:hover:not(:disabled) { background: var(--selected); color: var(--text); }
-.au-calendar-side .au-month-grid .btn[aria-current="date"], .au-calendar-side .au-month-grid .btn[aria-current="date"]:hover:not(:disabled) { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.au-calendar-side .au-month-grid .btn[aria-current="date"], .au-calendar-side .au-month-grid .btn[aria-current="date"]:hover:not(:disabled) { background: var(--accent); color: var(--on-accent); }
 .au-calendar-side .au-month-grid .btn[aria-pressed="true"]:active:not(:disabled) { background: var(--pressed); }
 .au-calendar-side .au-month-grid .btn[aria-current="date"]:active:not(:disabled) { background: var(--accent-pressed); }
-.au-calendar-side h3 { margin: var(--sp-4) 0 var(--sp-1); font-size: var(--fs-xs); font-weight: 600; color: var(--text-2); }
+.au-calendar-side h3 { margin: var(--sp-4) 0 var(--sp-1); font-size: var(--fs-xs); font-weight: var(--weight-semibold); color: var(--text-2); }
 .au-drag-members { display: flex; flex-direction: column; flex: none; gap: 1px; margin-inline: calc(-1 * var(--sp-2)); }
 .btn.au-source { flex: none; justify-content: flex-start; gap: var(--sp-2); min-height: 30px; padding: 3px var(--sp-2); border: 0; background: transparent; font-size: var(--fs-xs); text-align: left; }
 .btn.au-source:hover:not(:disabled) { background: var(--hover); border-color: transparent; }
@@ -184,7 +186,7 @@ button.au-room-reply { border: 0; font-family: inherit; cursor: pointer; }
 .au-grid { position: relative; display: grid; grid-template-columns: 52px repeat(var(--au-days), minmax(0, 1fr)); min-width: 0; }
 .au-grid-head { grid-column: 1 / -1; position: sticky; top: 0; z-index: 4; display: grid; grid-template-columns: 52px repeat(var(--au-days), minmax(0, 1fr)); background: var(--content); border-bottom: 1px solid var(--line); }
 .au-day-head { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: var(--sp-2) 0 var(--sp-1); font-size: var(--fs-2xs); color: var(--text-2); }
-.au-day-head.is-today > span { color: var(--text); font-weight: 600; }
+.au-day-head.is-today > span { color: var(--text); }
 .is-one-day .au-day-head { align-items: flex-start; padding-left: var(--sp-3); }
 .btn.au-day-num { width: 38px; height: 38px; min-height: 38px; padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; font-size: var(--fs-h1); font-weight: 400; font-variant-numeric: tabular-nums; }
 .btn.au-day-num:hover:not(:disabled) { background: var(--hover); border-color: transparent; }
@@ -269,7 +271,7 @@ button.au-room-reply { border: 0; font-family: inherit; cursor: pointer; }
 .au-rhythm-runs .btn:disabled { opacity: 1; color: var(--text-3); }
 .au-pop-routine-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
 .au-pop-tools { display: flex; justify-content: flex-end; gap: var(--sp-1); margin-right: calc(-1 * var(--sp-2)); }
-.au-pop-detail h2 { margin: 0; font-size: var(--fs-lg); font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.au-pop-detail h2 { margin: 0; font-size: var(--fs-lg); font-weight: var(--weight-semibold); line-height: 1.35; overflow-wrap: anywhere; }
 .au-pop-time, .au-pop-status { margin: 0; font-size: var(--fs-sm); color: var(--text-2); }
 .au-pop-notes { margin: var(--sp-1) 0 0; max-height: 168px; overflow-y: auto; font-size: var(--fs-sm); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .au-pop-from { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-1) 0 0; font-size: var(--fs-xs); color: var(--text-2); }
