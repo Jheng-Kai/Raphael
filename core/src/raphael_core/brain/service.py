@@ -79,6 +79,7 @@ from .textnorm import (
     apply_replacements,
     finish_cleaned_text,
     finish_chinese_dictation,
+    guard_cleanup_text,
     remove_unspoken_ma,
     normalize_transcript,
     remove_stutters,
@@ -424,6 +425,24 @@ class Brain:
         if result.model is not None and not result.model.startswith("@") and self._openrouter.state == "ok":
             # The model answered, so the time it took is a round trip to OpenRouter.
             self._openrouter.latency_ms = result.llm_ms
+        if result.cleaned:
+            words = self._dictionary.hint_words()
+            if result.parts:
+                guarded = tuple(
+                    replace(part, text=guard_cleanup_text(
+                        chunks[index][0] if chunks else normalized, part.text, dictionary_words=words,
+                    )) if part.cleaned else part
+                    for index, part in enumerate(result.parts)
+                )
+                rejected = any(part.cleaned and not part.text.strip() for part in guarded)
+                result = replace(result, parts=guarded)
+            else:
+                guarded_text = guard_cleanup_text(normalized, result.text, dictionary_words=words)
+                rejected = not guarded_text.strip()
+                result = replace(result, text=guarded_text)
+            if rejected:
+                # Preserve model billing/timing, but never claim unsupported output was cleaned.
+                result = replace(result, text=normalized, cleaned=False, fallback_reason="suspicious", parts=())
         if result.parts:
             # All pieces succeeded. Finish each and retain its sentence/paragraph boundary.
             def finish_part(index, part):

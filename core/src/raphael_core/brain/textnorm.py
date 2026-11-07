@@ -450,6 +450,79 @@ _HAN = re.compile(r"[㐀-鿿豈-﫿]")
 _KANA = re.compile(r"[぀-ヿ]")
 
 
+# A CJK character is one unit; a Latin word is one unit regardless of its length.
+# Digits and punctuation include list markers and do not make a paragraph unsupported.
+_CLEANUP_UNITS = re.compile(r"[A-Za-z\u00c0-\u024f]+(?:['’][A-Za-z\u00c0-\u024f]+)*|[^\W\d_]", re.UNICODE)
+_CLEANUP_FILLERS = re.compile(r"怎麼講|怎么讲|那個|那个|就是|然後|然后|[嗯呃哦]|\b(?:um|uh)\b", re.IGNORECASE)
+MIN_PARAGRAPH_SHARE = 0.5
+
+
+def guard_cleanup_text(raw: str, cleaned: str, *, dictionary_words: Sequence[str] = ()) -> str:
+    """Retain supported boundary prose and every original middle paragraph.
+
+    An empty return rejects the whole cleanup: the caller must retain normalized raw text with
+    a failure reason, never deliver an empty dictation. Both scripts and regional word forms
+    count as spoken, as do canonical dictionary names. The threshold is inclusive.
+    """
+    def units(text: str, convert: Callable[[str], str]) -> list[str]:
+        return _CLEANUP_UNITS.findall(_CLEANUP_FILLERS.sub("", convert(text).casefold()))
+
+    conversions = (to_simplified, to_mainland)
+    heard = [set(units(raw + "\n" + "\n".join(dictionary_words), convert)) for convert in conversions]
+
+    def supported(text: str) -> bool:
+        for convert, present in zip(conversions, heard, strict=True):
+            tokens = units(text, convert)
+            if not tokens or sum(token in present for token in tokens) / len(tokens) >= MIN_PARAGRAPH_SHARE:
+                return True
+        return False
+
+    spans = []
+    start = 0
+    for boundary in re.finditer(r"\r?\n[ \t]*\r?\n(?:[ \t]*\r?\n)*", cleaned):
+        if cleaned[start:boundary.start()].strip():
+            spans.append((start, boundary.start()))
+        start = boundary.end()
+    if cleaned[start:].strip():
+        spans.append((start, len(cleaned)))
+    if not spans:
+        return ""
+
+    # Some models put their preface/note on a single line without a blank separator. Inspect
+    # only the outward line of each original edge, never list interiors or fences. Do this
+    # before scoring the paragraph: a long note must not overwhelm a short spoken line.
+    adjusted = list(spans)
+    for index in dict.fromkeys((0, len(spans) - 1)):
+        start, end = spans[index]
+        paragraph = cleaned[start:end]
+        lines = paragraph.splitlines(keepends=True)
+        if len(lines) < 2 or re.search(r"(?m)^ {0,3}(?:`{3,}|~{3,})", paragraph):
+            continue
+        left, right = start, end
+        if index == 0 and not supported(lines[0]):
+            left = start + len(lines[0])
+        if index == len(spans) - 1 and not supported(lines[-1]):
+            right = end - len(lines[-1])
+            # The removed line owns the preceding line break, not the speaker's paragraph.
+            while right > left and cleaned[right - 1] in "\r\n":
+                right -= 1
+        adjusted[index] = (left, right)
+
+    # Decide on the original edges once. A middle paragraph never becomes a new candidate.
+    kept = [index for index, (start, end) in enumerate(adjusted)
+            if index not in (0, len(spans) - 1) or
+            (end > start and cleaned[start:end].strip() and supported(cleaned[start:end]))]
+    if not kept:
+        return ""
+    left = adjusted[kept[0]][0]
+    right = adjusted[kept[-1]][1]
+    if kept[0] == 0 and left == spans[0][0]:
+        left = 0
+    if kept[-1] == len(spans) - 1 and right == spans[-1][1]:
+        right = len(cleaned)
+    return cleaned[left:right] if right > left else ""
+
+
 def _dictation_prose(text: str, change: Callable[[str, set[int], int], str]) -> str:
     """Edit prose lines only, retaining kana lines, code fences and inline code byte for byte."""
     fence = ""

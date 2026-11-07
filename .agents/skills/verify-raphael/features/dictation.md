@@ -233,7 +233,11 @@ The owner dislikes 。: every Chinese result (cleaned, cleaned in pieces, the ra
 `textnorm.finish_chinese_dictation` (a line-final 。 goes, one inside a line becomes ，; kana lines and
 code stay). A cleaned result also goes through `remove_unspoken_ma`: a 嗎 the transcript does not have
 around it is removed with its ？, so a request never becomes a question. Tests:
-core/tests/brain/test_dictation_finish.py. The prompt stays the owner's version C (cleanup_system.md);
+core/tests/brain/test_dictation_finish.py. Before that, `textnorm.guard_cleanup_text` drops a first or last
+paragraph (or outer line) the transcript mostly does not have (below half of its characters/words, dictionary
+words counting as present), so a model's note, answer or preface never reaches the paste; a result with nothing
+left falls back to the normalized raw text as `suspicious` (core/tests/brain/test_cleanup_guard.py). MAI-Transcribe
+is called with automatic language detection (no hint): a forced zh would bend English names. The prompt was the owner's version C (cleanup_system.md);
 a shorter candidate D lost paragraph breaks and a hedge and added two 嗎 on the owner's own 24 hours
 (gpt-6-luna, 30 cases), so it was not adopted.
 
