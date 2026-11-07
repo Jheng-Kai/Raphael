@@ -77,7 +77,8 @@ function mount() {
     picker().dispatchEvent(new Event("change"));
     await flush();
   };
-  const chips = (): string[] => [...agent.el.querySelectorAll(".cmp-file .cmp-chip .cmp-chip-t")].map((c) => c.textContent ?? "");
+  // A picture's chip prints nothing; its name is the thumbnail's accessible name.
+  const chips = (): string[] => [...agent.el.querySelectorAll(".cmp-file .cmp-chip")].map((c) => c.querySelector(".cmp-chip-t")?.textContent ?? c.querySelector(".cmp-pic")?.getAttribute("aria-label") ?? "");
   return { agent, picker, field, pick, chips };
 }
 
@@ -271,6 +272,23 @@ describe("the composer with images and PDFs", () => {
       expect(x.getAttribute("aria-label")).toBe("移除檔案");
     }
     expect(agent.el.querySelector<HTMLElement>(".cmp-file")!.hidden).toBe(false);
+    // The picture prints no name or size; the document still does.
+    expect(image.textContent!.trim()).toBe("");
+    expect(file.querySelector(".cmp-chip-t")!.textContent).toBe("report.pdf");
+  });
+
+  test("a draft picture opens large, with only the picture and a close button inside it", async () => {
+    const { agent, pick } = mount();
+    await flush();
+    await pick(png());
+    agent.el.querySelector<HTMLButtonElement>(".cmp-chip .cmp-pic")!.click();
+    const card = document.querySelector<HTMLElement>(".media-lightbox .lb-card")!;
+    expect(card.querySelector<HTMLImageElement>(".lb-img")!.src).toBe(`data:image/png;base64,${base64Of(PNG)}`);
+    expect(card.querySelector(".lb-head, .lb-title")).toBeNull();
+    card.querySelector<HTMLButtonElement>('.lb-close[data-lb="close"]')!.click();
+    expect(document.querySelector(".media-lightbox")).toBeNull();
+    expect(agent.el.querySelector(".cmp-chip")).not.toBeNull();
+    agent.hide();
   });
 
   test("× takes one off; the others stay", async () => {

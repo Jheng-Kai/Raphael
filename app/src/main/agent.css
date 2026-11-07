@@ -356,10 +356,10 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .mail-done > .mono { align-self: center; }
 
 /* image lightbox */
-.media-lightbox .lb-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); width: min(860px, 100%); max-height: 100%; padding: var(--sp-3); border-radius: var(--r-lg); background: var(--panel); box-shadow: var(--pop); }
-.media-lightbox .lb-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
-.media-lightbox .lb-title { font-size: var(--pa-fs-d); font-weight: var(--weight-semibold); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.media-lightbox .lb-img { display: block; width: 100%; max-height: 76vh; object-fit: contain; border-radius: var(--r-sm); background: var(--surface-2); }
+/* Only the picture, as large as the window allows; its close button sits inside it on the photo scrim (owner, 2026-11-07). */
+.media-lightbox .lb-card { position: relative; max-width: 100%; max-height: 100%; overflow: hidden; border-radius: var(--r-lg); background: var(--surface-2); box-shadow: var(--pop); }
+.media-lightbox .lb-img { display: block; min-width: 160px; min-height: 120px; max-width: min(1400px, calc(100vw - 2 * var(--sp-4))); max-height: calc(100vh - var(--window-controls-height) - 3 * var(--sp-4)); object-fit: contain; }
+.media-lightbox .lb-card > .btn.icon.lb-close { position: absolute; top: var(--sp-2); right: var(--sp-2); width: 32px; min-height: 32px; border-radius: var(--r-pill); background: var(--photo-dim); color: var(--photo-mark); }
 .tn[data-status="error"] .ans, .tn[data-status="denied"] .ans, .tn[data-status="expired"] .ans { color: var(--text-2); }
 .tn mark { background: var(--selection); color: var(--on-selection); border-radius: var(--r-sm); padding: 0 var(--sp-1); }
 .tn-detail { padding: var(--sp-2) var(--sp-3); border-radius: var(--r-lg); background: var(--surface-2); font-size: var(--pa-fs-d); line-height: 1.75; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
@@ -507,6 +507,11 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .me-file-t, .cmp-chip-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cmp-chip .chip-x { display: inline-grid; place-items: center; flex: 0 0 20px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--text-3); }
 .cmp-chip .chip-x:hover { background: transparent; color: var(--text); }
+/* A picture is only its thumbnail, which opens it large; the remove button sits inside its corner (owner, 2026-11-07). */
+.cmp-chip:has(> .cmp-pic) { position: relative; flex: 0 0 auto; width: 56px; height: 56px; padding: 0; overflow: hidden; }
+.btn.cmp-pic { display: block; width: 100%; height: 100%; min-height: 0; padding: 0; border: 0; border-radius: inherit; background: transparent; }
+.cmp-pic .cmp-thumb { width: 100%; height: 100%; }
+.cmp-chip > .cmp-pic + .chip-x { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; flex: none; background: var(--photo-dim); color: var(--photo-mark); }
 
 /* The drop target ends above whichever composer or approval card is visible. */
 .attachment-drop { position: absolute; inset: 12px; z-index: 12; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); border: 2px dashed var(--accent-text); border-radius: var(--r-lg); background: color-mix(in srgb, var(--accent-soft) 94%, transparent); color: var(--accent-text); font-size: var(--fs-md); font-weight: var(--weight-semibold); pointer-events: none; }

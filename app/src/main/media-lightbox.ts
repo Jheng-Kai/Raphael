@@ -14,10 +14,11 @@ export function openMediaLightbox(button: HTMLElement, src: string): void {
   scrim.setAttribute("role", "dialog");
   scrim.setAttribute("aria-modal", "true");
   scrim.setAttribute("aria-label", title || t("agent.viewImage"));
+  // Only the picture, as large as the window allows, with its close button inside it (owner, 2026-11-07: no bar above).
   scrim.innerHTML =
     `<div class="lb-card">` +
-    `<div class="lb-head"><span class="lb-title">${esc(title)}</span>${iconButton("x", t("common.close"), ' data-lb="close"')}</div>` +
     `<img class="lb-img" src="${esc(src)}" alt="${esc(title)}">` +
+    iconButton("x", t("common.close"), ' data-lb="close"', "lb-close") +
     `</div>`;
   let stopOutside = (): void => {};
   const close = (): void => {

@@ -2705,6 +2705,10 @@ export function checkRendered(name, context = {}) {
       const thumb = chip.querySelector("img.cmp-thumb");
       require(thumb?.complete && thumb.naturalWidth > 0, "each shows its picture");
       require(chip.querySelector(".chip-x")?.getAttribute("aria-label"), "each can be taken off");
+      // Only the picture: no name or size, and its remove button inside it (owner, 2026-11-07).
+      require(chip.textContent.trim() === "", `a picture prints no name or size: ${chip.textContent.trim()}`);
+      const box = chip.getBoundingClientRect(), x = chip.querySelector(".chip-x").getBoundingClientRect();
+      require(x.left >= box.left && x.right <= box.right && x.top >= box.top && x.bottom <= box.bottom, "its remove button sits inside the picture");
     }
     require(document.querySelector(".au-room-pane .attachment-drop").hidden, "the drop sign is gone after the drop");
     require(!document.querySelector(".au-room-pane .cmp-send").disabled, "they can be sent");
@@ -2725,8 +2729,13 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "room-picture-opened") {
-    const large = document.querySelector(".media-lightbox .lb-img");
+    const card = document.querySelector(".media-lightbox .lb-card"), large = card?.querySelector(".lb-img"), close = card?.querySelector(".lb-close");
     require(large?.complete && large.naturalWidth > 0, "the picture opens large");
+    // Only the picture, with its close button inside it (owner, 2026-11-07: no bar above).
+    require(!card.querySelector(".lb-head, .lb-title, h2"), "no bar above the picture");
+    const picture = large.getBoundingClientRect(), x = close.getBoundingClientRect();
+    require(x.left >= picture.left && x.right <= picture.right && x.top >= picture.top && x.bottom <= picture.bottom, "the close button sits inside the picture");
+    require(picture.width >= Math.min(large.naturalWidth, innerWidth * 0.5) - 1, `the picture is not shrunk: ${Math.round(picture.width)} of ${large.naturalWidth}`);
     return { check: name };
   }
   if (name === "details-sheet") {

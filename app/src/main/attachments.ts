@@ -71,9 +71,13 @@ export function fileIcon(file: Pick<TurnAttachment, "name" | "mime">): string {
   const ext = file.name.split(".").pop()?.toUpperCase().slice(0, 6) ?? "";
   return `<span class="attachment-icon">${ico(/^(DOCX|XLSX|PPTX|PDF)$/.test(ext) ? "book" : "file")}<small>${esc(ext)}</small></span>`;
 }
-/** A draft card's inside: thumbnail or type icon, name, size and a remove button. The caller fills in the thumbnail from the draft's own bytes. */
+/** A draft card's inside: a picture is only its thumbnail, which opens it large, with the remove button inside it (owner,
+ *  2026-11-07: no name, no size); another file shows its type icon, name and size. The caller fills in the thumbnail from
+ *  the draft's own bytes. */
 export function draftFileHTML(file: { name: string; mime: string; size?: number }, removeAttrs: string): string {
-  return `<span class="cmp-tile">${fileKind(file.mime) === "image" ? `<img class="cmp-thumb" alt="" width="40" height="40">` : fileIcon(file)}</span>` +
+  if (fileKind(file.mime) === "image") return `<button type="button" class="btn cmp-pic" data-act="attachment-image" aria-label="${esc(file.name)}">` +
+    `<img class="cmp-thumb" alt="" width="56" height="56"></button><button type="button" class="chip-x" ${removeAttrs}>${ico("x")}</button>`;
+  return `<span class="cmp-tile">${fileIcon(file)}</span>` +
     `<span class="attachment-name"><span class="cmp-chip-t">${esc(file.name)}</span><small>${esc(fileSize(file.size))}</small></span>` +
     `<button type="button" class="chip-x" ${removeAttrs}>${ico("x")}</button>`;
 }

@@ -240,7 +240,14 @@ test("an image pasted into the composer is attached with its picture, and its wo
  const {view,send}=mount();const event=paste(view.input,[png()],"caption");expect(event.defaultPrevented).toBe(true);await flush();await new Promise(resolve=>setTimeout(resolve));await flush();
  expect(view.input.value).toBe("caption");
  expect(view.el.querySelector<HTMLImageElement>(".cmp-chip img.cmp-thumb")!.src).toContain("data:image/png;base64,");
- expect(view.el.querySelector(".cmp-chip .cmp-chip-t")!.textContent).toBe("shot.png");
+ // Only the picture: its name is for screen readers, never printed beside it (owner, 2026-11-07).
+ expect(view.el.querySelector(".cmp-chip .cmp-pic")!.getAttribute("aria-label")).toBe("shot.png");
+ expect(view.el.querySelector(".cmp-chip")!.textContent!.trim()).toBe("");
+ // The composer keeps its clicks, so its own picture opens large from inside it.
+ view.el.querySelector<HTMLButtonElement>(".cmp-chip .cmp-pic")!.click();
+ expect(document.querySelector<HTMLImageElement>(".media-lightbox .lb-img")!.src).toContain("data:image/png;base64,");
+ document.querySelector<HTMLButtonElement>('.media-lightbox [data-lb="close"]')!.click();
+ expect(view.el.querySelectorAll(".cmp-chip")).toHaveLength(1);
  view.el.requestSubmit();await flush();
  expect(send).toHaveBeenCalledWith("caption",[{name:"shot.png",mime:"image/png",data:"AAAAAA=="}]);
 });
