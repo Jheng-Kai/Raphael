@@ -5,7 +5,7 @@ import { computerCardsHTML, computerResumedLineHTML } from "./computer-card";
 import { connectorCardsHTML, resumedLineHTML } from "./connector-card";
 import { NAME, eventLineHTML, eventPeopleHTML } from "./event-line";
 import { handoffGroupHTML } from "./handoff-line";
-import { memoActionHTML, memoTranscriptHTML, reactionControlHTML, reactionRowHTML } from "./message-metadata";
+import { reactionControlHTML, reactionRowHTML } from "./message-metadata";
 import { mailCardsHTML, mailHandedLinesHTML } from "./mail-card";
 import { pageCardsHTML } from "./page-card";
 import { ownerQuestionsHTML, permissionCardsHTML } from "./permission-card";
@@ -635,7 +635,7 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
   return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
     (reply && origin && sourceOf(turn) === "routine" ? routineLineHTML(turn) : "") +
     (reply ? replyContentHTML(text, query, turn.status === "running") : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`) +
-    reactionRowHTML(turn.reactions?.[key]) + messageActionsHTML(time, regenerate, undefined, reply, reply ? workActionHTML(turn, state) + retry + (turn.voice_memo ? memoActionHTML(turn.voice_memo_state === "playing") : "") : "") + (reply && turn.voice_memo ? memoTranscriptHTML(text) : "") + (reply ? previewCardsHTML(text) : "") + `</div>`;
+    reactionRowHTML(turn.reactions?.[key]) + messageActionsHTML(time, regenerate, undefined, reply, reply ? workActionHTML(turn, state) + retry : "") + (reply ? previewCardsHTML(text) : "") + `</div>`;
 }
 
 /** A failed reply's Run again: a bare icon first among its actions, which stay in sight on the latest failure. */

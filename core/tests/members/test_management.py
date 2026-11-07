@@ -167,7 +167,7 @@ async def test_management_uses_the_same_profile_folder_and_command_services(rig)
     await run("group_update", id=group["id"], position=2, sources=[{"kind": "github", "ref": "owner/repo"}])
     person = (await run("member_create", name="Writer", role="Write", group_id=group["id"]))["member"]
     updated = (await run("member_update", id=person["id"], reply_style="conversational", pinned=True, hidden=True,
-                         notify=True, read_aloud=True, draft_first=False, ask_before_members=True, effort="high"))["member"]
+                         notify=True, draft_first=False, ask_before_members=True, effort="high"))["member"]
     assert updated["reply_style"] == "conversational" and updated["hidden"] and updated["notify"]
     assert updated["model"].endswith("?effort=high")
     await run("member_command_save", member_id=person["id"], name="review", template="Review {input}")

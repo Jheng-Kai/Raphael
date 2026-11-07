@@ -320,7 +320,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     }
     if (typingText) void saveField(focused as HTMLTextAreaElement, true);
     const resourceTab = tab === "skills" || tab === "commands" || tab === "voice" ? tab : null;
-    const nextResourceKey = resourceTab ? `${member.id}:${resourceTab}` + (resourceTab === "voice" ? `:${member.voice}:${member.read_aloud}:${member.notify}` : "") : "";
+    const nextResourceKey = resourceTab ? `${member.id}:${resourceTab}` + (resourceTab === "voice" ? `:${member.voice}:${member.notify}` : "") : "";
     if (resourceKey !== nextResourceKey) { resources?.destroy(); resources = null; resourceKey = nextResourceKey; }
     if (resourceTab) {
       if (!resources) {

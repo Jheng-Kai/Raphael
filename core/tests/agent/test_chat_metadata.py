@@ -130,36 +130,14 @@ async def test_slack_full_permission_uses_the_existing_direct_send_mode(office, 
     assert slack == [('C012345','Synthetic message')]
 
 
-async def test_memo_uses_the_members_voice_and_checks_private_and_room_ownership(office, monkeypatch):
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock, Mock
-    from raphael_core.members.store import MemberStore
-    store = MemberStore(office.conn)
-    member = store.create_member(name='Memo speaker', voice_memo=True)
-    service = office.rig.service
-    monkeypatch.setattr(service, '_team', SimpleNamespace(store=store))
-    monkeypatch.setattr(service, '_speaker', lambda member_id: member if member_id == member.id else None)
-    speaker = SimpleNamespace(speaks=lambda:True, memo_control=Mock(return_value=False), say_member=AsyncMock(), stop=Mock())
-    monkeypatch.setattr(service, '_speaking', speaker)
-    conversation = service.conversations.main(member.id)
-    turn = service._history.add(session_id='memo-private',question='Synthetic',route='answer',prefix='',text='Private reply',status='done',member_id=member.id,conversation_id=conversation)
-    scope = {'turn_id':turn,'member_id':member.id,'conversation_id':conversation,'memo_action':'play'}
-    assert (await office.rig.call('agent.speak', scope))['ok']
-    speaker.say_member.assert_awaited_once_with('Private reply',voice=member.voice,turn_id=turn)
-    with pytest.raises(RpcError):
-        await office.rig.call('agent.speak', {**scope,'room_id':99,'thread_id':1})
-    with office.conn:
-        room = office.conn.execute("INSERT INTO rooms(name,created) VALUES('Memo room',1)").lastrowid
-        thread = office.conn.execute('INSERT INTO room_threads(room_id,created) VALUES(?,1)', (room,)).lastrowid
-    room_turn = service._history.add(session_id='memo-room',question='',route='answer',prefix='',text='Room reply',status='done',member_id=member.id,scope='room',room_id=room,thread_id=thread)
-    with office.conn:
-        office.conn.execute('INSERT INTO room_messages(room_id,thread_id,member_id,turn_id,text,created) VALUES(?,?,?,?,?,1)', (room,thread,member.id,room_turn,'Room reply'))
-    scope = {'turn_id':room_turn,'member_id':member.id,'room_id':room,'thread_id':thread,'memo_action':'play'}
-    assert (await office.rig.call('agent.speak', scope))['ok']
-    speaker.say_member.assert_awaited_with('Room reply',voice=member.voice,turn_id=room_turn)
-    with pytest.raises(RpcError):
-        await office.rig.call('agent.speak', {**scope,'thread_id':thread+1})
-    with office.conn:
-        office.conn.execute('UPDATE members SET voice_memo=0 WHERE id=?', (member.id,))
-    with pytest.raises(RpcError):
-        await office.rig.call('agent.speak', scope)
+@pytest.mark.parametrize("scope", [
+    {"turn_id": 1, "member_id": 0, "conversation_id": 1},
+    {"turn_id": 1, "member_id": 1, "room_id": 1, "thread_id": 1, "memo_action": "play"},
+    {"turn_id": 1, "member_id": 1, "memo_action": "pause", "message_seq": 1},
+])
+async def test_manual_speech_rpc_is_removed(office, scope):
+    from raphael_core.protocol import METHOD_NOT_FOUND
+
+    with pytest.raises(RpcError) as error:
+        await office.rig.call("agent.speak", scope)
+    assert error.value.code == METHOD_NOT_FOUND

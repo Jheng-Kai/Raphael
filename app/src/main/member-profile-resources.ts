@@ -47,7 +47,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
   let commands: MemberCommand[] = [];
   let voices: MemberVoice[] = [];
   let configured = false;
-  const voiceState = { voice: host.member?.voice ?? "", voice_memo: host.member?.voice_memo ?? false, read_aloud: host.member?.read_aloud ?? false, notify: host.member?.notify ?? false };
+  const voiceState = { voice: host.member?.voice ?? "", notify: host.member?.notify ?? false };
   let command: Omit<MemberCommand, "id"> & { id?: number } = { name: "", description: "", template: "" };
   let suggested = false;
   let source = "";
@@ -86,7 +86,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     container.innerHTML = failed ? `<div class="mp-error" role="alert">${btn(esc(t("members.profile.retry")), "sm", ' data-res="retry"')}</div>` : !loaded ? `<span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span>` :
       raphaelVoice ? `<section class="mp-card"><h3>${esc(t("members.panelVoice"))}</h3>${voiceLineHTML(raphaelVoice.view(), voiceDraft ?? brain?.tts_fish_voice ?? "")}</section>` :
       host.tab === "voice" ? `<section class="mp-card">${label(t("members.profile.voiceLabel"), sel(voiceChoices, voiceState.voice, t("members.profile.voiceLabel"), ` data-res="voice"${!configured || busy ? " disabled" : ""}`))}${configured ? "" : noticeHTML("voice", "voice", "fish")}</section>` +
-        `<section class="mp-card">${(["voice_memo", "read_aloud", "notify"] as const).map(key => `<div class="mp-resource"><span>${esc(t(key === "voice_memo" ? "chat.memoSetting" : key === "read_aloud" ? "members.profile.readAloud" : "members.profile.notify"))}</span>${tg(voiceState[key], t(key === "voice_memo" ? "chat.memoSetting" : key === "read_aloud" ? "members.profile.readAloud" : "members.profile.notify"), ` data-res="${key}"${off}`)}</div>`).join("")}</section>` :
+        `<section class="mp-card"><div class="mp-resource"><span>${esc(t("members.profile.notify"))}</span>${tg(voiceState.notify, t("members.profile.notify"), ` data-res="notify"${off}`)}</div></section>` :
       (host.tab === "skills" ? skillHTML : "") + (host.tab === "commands" || !host.standalone ? commandsHTML : "");
   }
   async function refresh(fromEvent = false): Promise<void> {
@@ -150,7 +150,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
       openMenu(target, [{ value: "", label: t("members.profile.defaultVoice") }, ...voices.map(v => ({ value: v.id, label: v.name }))], voiceState.voice, value => void run(() => patch({ voice: value })));
       return;
     }
-    if (action === "voice_memo" || action === "read_aloud" || action === "notify") { void run(() => patch({ [action]: !voiceState[action] })); return; }
+    if (action === "notify") { void run(() => patch({ notify: !voiceState.notify })); return; }
     if (action === "command-edit") { suggested = false; command = { ...commands.find(c => c.id === id)! }; container.innerHTML = ""; draw(); container.querySelector<HTMLInputElement>("#mp-command-name")?.focus(); return; }
     if (action === "command-cancel") { suggested = false; command = { name: "", description: "", template: "" }; container.innerHTML = ""; draw(); return; }
     void run(async () => {

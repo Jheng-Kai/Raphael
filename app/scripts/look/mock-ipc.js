@@ -30,7 +30,6 @@ export function installMock(fixture, config = {}, target = window) {
     const sample = data.chatMetadataSample, base = structuredClone(data.mailTurns.draft);
     data.members.forEach(member => Object.assign(member, {unread:false,unread_from:null,activity:"idle",waiting:false}));
     const turn = {...base,id:8201,question:sample.question,text:sample.reply,created_at_ms:data.now, messages:[],drafts:[],reactions:{reply:["👍","❤"]},owner_questions:[],permissions:[]};
-    if (variant.chatMetadata === 'voice') turn.voice_memo = true;
     if (['slack','approval'].includes(variant.chatMetadata)) {
       const draft = {...structuredClone(base.drafts[0]),id:'slack-1',kind:'slack',to:sample.channel,subject:'',body:sample.body,from:{key:'mcp:slack/send_message',name:'Slack'},senders:[{key:'mcp:slack/send_message',name:'Slack'}]};
       turn.drafts = [draft];
@@ -1140,14 +1139,6 @@ export function installMock(fixture, config = {}, target = window) {
         reactions[p.message_key] = (reactions[p.message_key] ?? []).filter(emoji=>emoji!==p.emoji);
         if (p.active) reactions[p.message_key].push(p.emoji);
         notify('AgentTurn',{turn_id:turn.id,member_id:turn.member_id}); return {ok:true};
-      }
-      case "agent.speak": {
-        const turn = data.turns.find(turn => turn.id === p.turn_id);
-        if (turn && p.memo_action) {
-          turn.voice_memo_state = p.memo_action === 'play' ? 'playing' : 'paused';
-          notify('AgentTurn', {turn_id:turn.id,member_id:turn.member_id,activity_only:true});
-        }
-        return {ok:true};
       }
       case "agent.speech.status": return data.speech;
       case "agent.question.open": return null;

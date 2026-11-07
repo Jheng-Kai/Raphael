@@ -123,9 +123,9 @@ Voice chat is not released yet (owner, 2026-11-06, R-UI-106): the voice button r
 
 Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
 the busy dialog with dialog-caption-confirm, the settings controls with details-voice, the
-receipt shell with card-mcp-done, transcript disclosure with voice-memo, and the
+receipt shell with card-mcp-done, and the
 repair note with the existing missing-service note. A call receipt is a standalone
-history card; an ordinary voice memo stays attached to its existing answer.
+history card.
 The call confirmation uses the shared compact `mb-confirm` shell because it has one
 decision, rather than the member chooser's list. Settings put the existing `sel`
 controls in shared menu rows because these choices apply only to the current call;

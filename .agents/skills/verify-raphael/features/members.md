@@ -31,9 +31,9 @@ Voice chat is not released yet (owner, 2026-11-06, R-UI-106): the voice button r
 
 Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
 the busy dialog with dialog-caption-confirm, the settings controls with details-voice, the
-receipt shell with card-mcp-done, transcript disclosure with voice-memo, and the
+receipt shell with card-mcp-done, and the
 repair note with the existing missing-service note. A call receipt is a standalone
-history card; an ordinary voice memo stays attached to its existing answer.
+history card.
 The call confirmation uses the shared compact `mb-confirm` shell because it has one
 decision, rather than the member chooser's list. Settings put the existing `sel`
 controls in shared menu rows because these choices apply only to the current call;
@@ -51,18 +51,11 @@ headset echo isolation, installed STT/model/device, actual audio-chunk interrupt
 live model/provider/network and native restart persistence require separate acceptance.
 
 
-## Optional member voice memos (2026-11-05)
+## Member voice memos removed (2026-11-07)
 
-Member details > Voice has a separate voice-memo switch, off by default. It uses the
-same saved voice as read-aloud without enabling automatic playback. Enabled members'
-finished private and room replies expose Play/Pause in the existing action row and a collapsed
-literal transcript retained across playback refreshes. The service owns one utterance; pause retains pending PCM and
-Stop still interrupts immediately. Voice model, credentials and live-call behavior
-remain in the existing voice service.
-
-Selected scene: voice-memo, with synthetic zh-TW and fake read-aloud responses, both
-themes at 1120,720,1920x1080; details-voice covers the setting and email-draft-edit is the shared card consistency consumer. Unit coverage includes the resource switch and fake PCM
-pause/resume. See conversation.md for the selected matrix and native limitations.
+Member details > Voice keeps the voice choice and the notify switch only; the voice-memo
+and read-aloud switches, the reply Play/Pause control and the transcript are gone (owner
+decision). Selected scene: details-voice; unit coverage asserts no memo control or toggle.
 
 ## Member panel tabs (2026-11-05)
 

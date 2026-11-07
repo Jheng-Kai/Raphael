@@ -30,7 +30,7 @@ IDS = {"type": "array", "items": MEMBER_ID}
 NULL_ID = {"type": ["integer", "null"], "minimum": 1}
 PROFILE = {
     **{key: TEXT for key in ("name", "role", "blurb", "personality", "instructions", "group", "avatar_preset", "model", "voice")},
-    **{key: BOOL for key in ("read_aloud", "notify", "ask_before_members", "draft_first", "pinned", "hidden")},
+    **{key: BOOL for key in ("notify", "ask_before_members", "draft_first", "pinned", "hidden")},
     "reply_style": {"type": "string", "enum": ["full", "conversational"]},
     "effort": {"type": "string", "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]},
     "position": {"type": "integer"}, "group_id": NULL_ID,
@@ -140,8 +140,8 @@ ACTIONS = (
           ("first_bot_profile", obj({key: TEXT for key in ("name", "role", "personality", "instructions")}), "Edit the first Bot's profile."),
           ("raphael_draft_first", BOOL, "Set the first Bot's mail draft preference."),
           ("chief_pinned", BOOL, "Pin/unpin the primary contact."),
-          ("tts_enabled", BOOL, "Enable/disable the first Bot's read-aloud voice."),
-          ("tts_fish_voice", TEXT, "Set the first Bot's read-aloud voice ID."),
+          ("tts_enabled", BOOL, "Enable/disable speech for quick questions, voice calls and requested audio files."),
+          ("tts_fish_voice", TEXT, "Set the default voice ID for quick questions, voice calls and audio files."),
           *((key, TEXT, "Choose this model only when the owner explicitly requests it; never recover a failure by changing it.")
             for key in ("cleanup_model", "stt_cloud_model", "assistant_model", "router_model", "memory_model", "pdf_model", "vision_model")),
           *((key, STRINGS, "Edit the model fallback list only when explicitly requested by the owner.")
@@ -337,7 +337,7 @@ INTERACTION_RPCS = {
                      "voice_chat.feedback", "voice_chat.status"),
                    "The owner's own voice call controls with one member; never a model tool."),
     **dict.fromkeys(("members.viewing", "members.greet", "rooms.send", "rooms.transcribe", "agent.history.stop", "agent.history.retract",
-                     "worker.cancel", "worker.rerun", "agent.speak", "tts.preview", "tts.stop", "pages.open"),
+                     "worker.cancel", "worker.rerun", "tts.preview", "tts.stop", "pages.open"),
                    "Existing owner conversation, work or presentation entry; not team administration."),
     **dict.fromkeys(("calendar.add", "calendar.update", "calendar.delete"), "Shared calendar work tools retain their existing gate for every member."),
 }

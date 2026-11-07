@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, test, vi } from "vitest";
 import { setLocale } from "./i18n";
-import { carryMessageMetadata, mountMessageMetadata, reactionControlHTML, reactionRowHTML, memoActionHTML, memoTranscriptHTML } from "./message-metadata";
+import { mountMessageMetadata, reactionControlHTML, reactionRowHTML } from "./message-metadata";
 import { closeMenu } from "./ui";
 
 beforeEach(() => { closeMenu(); document.body.innerHTML = ""; setLocale("en"); });
@@ -36,22 +36,3 @@ test("any emoji a message has shows as its own chip, the old ones too", () => {
   expect(reactionRowHTML([])).toBe("");
 });
 
-test("playback refresh preserves an expanded transcript", () => {
-  const before = document.createElement("div"), after = document.createElement("div");
-  before.innerHTML = memoTranscriptHTML("Reply"); after.innerHTML = memoTranscriptHTML("Reply");
-  before.querySelector("details")!.open = true;
-  carryMessageMetadata(before, after);
-  expect(after.querySelector("details")!.open).toBe(true);
-});
-
-test("memo controls play and pause through one service and expose the literal transcript", async () => {
-  const host = document.createElement("section"); document.body.append(host);
-  host.innerHTML = memoActionHTML() + memoTranscriptHTML("Reply <script>unsafe()</script>");
-  const memo=vi.fn().mockResolvedValue({ok:true}), react=vi.fn();
-  const unmount=mountMessageMetadata(host,()=>({reactions:[],react,memo}),vi.fn(),vi.fn());
-  const button=host.querySelector<HTMLButtonElement>('[data-act="memo-play"]')!;
-  button.click(); await flush(); expect(memo).toHaveBeenLastCalledWith("play"); expect(button.getAttribute("aria-label")).toBe("Pause voice memo");
-  button.click(); await flush(); expect(memo).toHaveBeenLastCalledWith("pause"); expect(react).not.toHaveBeenCalled();
-  expect(host.querySelector("script")).toBeNull(); expect(host.textContent).toContain("Reply <script>unsafe()</script>");
-  unmount();
-});

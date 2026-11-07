@@ -245,6 +245,12 @@ test("an old turn without messages still renders its answer once", () => {
   expect(html).not.toContain("《");
 });
 
+test("a reply carries no play control or transcript, even when stored data still has legacy voice memo fields", () => {
+  const html = turnHTML(turn(1, { voice_memo: true, voice_memo_state: "playing" } as Partial<AgentTurn>), emptyTimelineState(), false, { face: () => "" });
+  expect(html).toContain("台北現在 24 度。");
+  expect(html).not.toMatch(/memo|data-act="play|aria-pressed/i);
+});
+
 test("Raphael's stored replies and progress read plainly in the window", () => {
   const html = turnHTML(turn(1, { status: "done", messages: [
     { seq: 1, kind: "progress", text: "《告。正在查看今天下午的行程。》", at_ms: T0 },

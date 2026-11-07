@@ -256,7 +256,6 @@ class MembersService:
         self._speech = None
         self.greeting = None  # Bound by the interactive AgentService, never the routine worker.
         self._delivered: set[tuple[int, int, str]] = set()
-        self._speech_tasks: set[asyncio.Task] = set()
         self._conn = conn
         self._history = AgentHistory(conn, now_ms)
         self._settings = SettingsStore(conn)
@@ -483,11 +482,6 @@ class MembersService:
         if member is None:
             return
         self._notice(member, kind)
-        if kind == "finished" and member.read_aloud and turn.text and self._speech is not None:
-            task = asyncio.get_running_loop().create_task(self._speech.say_member("\n".join(turn.messages) if turn.messages else turn.text, voice=member.voice, turn_id=turn.id))
-            self._speech_tasks.add(task)
-            task.add_done_callback(self._speech_tasks.discard)
-            task.add_done_callback(lambda done: done.cancelled() or done.exception())
 
     def _notice(self, member: Member, kind: str) -> None:
         if member.notify and self._notify is not None:
@@ -619,7 +613,7 @@ class MembersService:
         last = latest.get(0)
         activity, activity_label = self.activity.describe(0, waiting)
         view: dict[str, Any] = {
-            "blurb": "", "reply_style": "full", "voice": "", "read_aloud": False,
+            "blurb": "", "reply_style": "full", "voice": "",
             "notify": False, "ask_before_members": False, "pinned": self._chief_pinned(), "hidden": False, "draft_first": self._settings.get("raphael_draft_first"),
             "id": 0,
             "chief": self.store.is_chief(0),
@@ -1608,7 +1602,7 @@ class MembersService:
 
                 changes = {key: value for key, value in params.items() if key in ("name", "role", "personality", "instructions")}
                 preferences = {"draft_first": "raphael_draft_first", "model": "agent_model", "pinned": "chief_pinned",
-                               "read_aloud": "tts_enabled", "voice": "tts_fish_voice"}
+                               "voice": "tts_fish_voice"}
                 # Profile drafts include these empty fields for ordinary members.
                 for field in ("blurb", "group", "avatar_preset"):
                     if params.get(field) == "":
@@ -1990,9 +1984,6 @@ class MembersService:
         return task_id
 
     async def aclose(self) -> None:
-        for task in self._speech_tasks:
-            task.cancel()
-        await asyncio.gather(*self._speech_tasks, return_exceptions=True)
         ticking, self._ticking = self._ticking, None
         if ticking is not None and not ticking.done():
             ticking.cancel()

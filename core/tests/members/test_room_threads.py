@@ -48,14 +48,24 @@ async def test_thread_and_reaction_cannot_cross_room_boundaries(rig, rooms):
             await rig.call(method, {'room_id':second['id'],**params})
 
 
-async def test_member_voice_memo_setting_defaults_off_and_persists_independently(rig):
-    member = (await rig.call('members.create', {'name':'Memo speaker'}))['member']
-    assert member['voice_memo'] is False and member['read_aloud'] is False
-    await rig.call('members.update', {'id':member['id'],'voice_memo':True})
-    stored = rig.service.store.member(member['id'])
-    assert stored.voice_memo and not stored.read_aloud
-    with pytest.raises(RpcError):
-        await rig.call('members.update', {'id':member['id'],'voice_memo':'true'})
+async def test_legacy_speech_settings_are_readable_but_never_projected_or_written(rig):
+    member = (await rig.call('members.create', {'name': 'Old speaker'}))['member']
+    identifier = member['id']
+    with rig.conn:
+        rig.conn.execute('UPDATE members SET read_aloud=1, voice_memo=1 WHERE id=?', (identifier,))
+    assert rig.service.store.member(identifier).read_aloud is True
+    statements = []
+    rig.conn.set_trace_callback(statements.append)
+    try:
+        listed = (await rig.call('members.list'))['members']
+        updated = (await rig.call('members.update', {'id': identifier, 'read_aloud': False, 'voice_memo': False}))['member']
+        copied = (await rig.call('members.duplicate', {'id': identifier}))['member']
+    finally:
+        rig.conn.set_trace_callback(None)
+    assert all('read_aloud' not in item and 'voice_memo' not in item for item in [*listed, updated, copied])
+    assert not any('voice_memo' in statement for statement in statements)
+    assert not any('read_aloud' in statement for statement in statements if statement.startswith(('UPDATE', 'INSERT')))
+    assert tuple(rig.conn.execute('SELECT read_aloud, voice_memo FROM members WHERE id=?', (identifier,)).fetchone()) == (1, 1)
 
 
 async def test_stopping_a_side_thread_leaves_the_main_exchange_running(rig, rooms, monkeypatch):

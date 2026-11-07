@@ -39,9 +39,9 @@ Voice chat is not released yet (owner, 2026-11-06, R-UI-106): the voice button r
 
 Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
 the busy dialog with dialog-caption-confirm, the settings controls with details-voice, the
-receipt shell with card-mcp-done, transcript disclosure with voice-memo, and the
+receipt shell with card-mcp-done, and the
 repair note with the existing missing-service note. A call receipt is a standalone
-history card; an ordinary voice memo stays attached to its existing answer.
+history card.
 The call confirmation uses the shared compact `mb-confirm` shell because it has one
 decision, rather than the member chooser's list. Settings put the existing `sel`
 controls in shared menu rows because these choices apply only to the current call;
@@ -84,13 +84,11 @@ with a recording Slack connector: editable card, discard without sending, old
 digest refusal and one version-bound send. It maps slack_draft in the tool registry;
 offline API/CLI fakes prove the driver, separately from authorized live acceptance.
 
-Voice memos reuse agent.speak and the configured read-aloud service. A member's voice
-settings enable them separately from automatic read-aloud, off by default. Play/Pause
-stays in the message action row and the expandable transcript is the reply text.
-The existing PCM player retains unplayed samples while paused; this adds no live call.
+Voice memos and manual read-aloud are removed (owner, 2026-11-07): replies carry no
+Play/Pause control or transcript, and only the Alt+Space quick ask and voice calls speak.
 
 ```powershell
-npm run look -- message-hugs-bubble reaction-picker reaction-row reaction-not-approval room-thread-open room-thread-chip slack-draft voice-memo calm-thread --theme both --width 1120,720,1920x1080
+npm run look -- message-hugs-bubble reaction-picker reaction-row reaction-not-approval room-thread-open room-thread-chip slack-draft calm-thread --theme both --width 1120,720,1920x1080
 ```
 
 Synthetic zh-TW fixtures replace only native IPC. Inspect all contact sheets and every

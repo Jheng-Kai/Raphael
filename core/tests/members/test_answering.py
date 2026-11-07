@@ -419,7 +419,7 @@ async def voiced(conn, tmp_path, client):
 
 
 async def test_a_members_reply_is_not_spoken(voiced, client):
-    """Only Raphael's own replies are said aloud: what a member answers in its thread is written."""
+    """Typed replies stay silent in both member and Raphael conversations."""
     rig, team, voice = voiced
     one = member(team)
     client.decisions.append(decision("chat"))
@@ -427,14 +427,15 @@ async def test_a_members_reply_is_not_spoken(voiced, client):
     result = await typed(rig, "明天有什麼行程", one.id)
     assert result["text"] == "明天早上九點開會。"
     assert voice.said == []
-    # ... and Raphael's own, typed at this computer in his thread, is.
+    # Raphael's typed replies follow the same boundary.
     client.decisions.append(decision("chat"))
     client.chats.append(live_said("台北。", prefix="答", say_ja="台北です。"))
     await typed(rig, "主人住哪裡", 0)
-    assert voice.said == [("解", "台北です。")]  # in Japanese: the voice speaks nothing else
+    assert voice.said == []
+    assert all("say_ja" not in call["messages"][0]["content"] for call in client.chat_calls)
 
 
-async def test_an_exchange_between_members_is_never_spoken_only_raphaels_final_reply(voiced, client):
+async def test_a_typed_exchange_and_raphaels_final_reply_are_never_spoken(voiced, client):
     rig, team, voice = voiced
     member(team, name="小研究")
     client.decisions.append(decision("answer"))  # Raphael's request
@@ -445,7 +446,8 @@ async def test_an_exchange_between_members_is_never_spoken_only_raphaels_final_r
         live_said("小研究說上季營收兩百萬。", prefix="答", say_ja="小研究によると、前期の売上は二百万です。")
     )  # Raphael, to the owner
     await typed(rig, "問小研究上季的數字", 0)
-    assert voice.said == [("解", "小研究によると、前期の売上は二百万です。")]
+    assert voice.said == []
+    assert all("say_ja" not in call["messages"][0]["content"] for call in client.chat_calls)
 
 
 async def test_a_member_asks_raphael_who_answers_as_himself(setup, client, conn):

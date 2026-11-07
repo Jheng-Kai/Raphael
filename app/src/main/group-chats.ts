@@ -1,5 +1,5 @@
 import { openRoomThread } from "./room-thread";
-import { carryMessageMetadata, mountMessageMetadata, reactionControlHTML, reactionRowHTML, memoActionHTML, memoTranscriptHTML } from "./message-metadata";
+import { mountMessageMetadata, reactionControlHTML, reactionRowHTML } from "./message-metadata";
 import { roomBoardHTML, roomReportHTML } from "./room-meeting";
 import { openMemberThread } from "./team-navigation";
 import { wholeLinks } from "./composer-links";
@@ -274,8 +274,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   mountRichContent(scroll);
   mountMessageMetadata(thread, control => {
     const message = messages.find(item => item.id === Number(control.closest<HTMLElement>("[data-room-message]")?.dataset.roomMessage));
-    return message && roomId ? { reactions: message.reactions ?? [], react: (emoji, active) => api.core("rooms.react", { room_id: roomId, message_id: message.id, emoji, active }),
-      memo: message.turn?.voice_memo ? memo_action => api.core("agent.speak", { room_id: roomId, thread_id: message.thread_id, turn_id: message.turn_id, member_id: message.member_id, memo_action }) : undefined } : null;
+    return message && roomId ? { reactions: message.reactions ?? [], react: (emoji, active) => api.core("rooms.react", { room_id: roomId, message_id: message.id, emoji, active }) } : null;
   }, () => { void refresh(); }, error => toaster.info(describeError(error)));
   mountOwnerQuestions(thread, () => { void refresh(); });
   const floatingQuestions = mountPendingQuestions(thread, scroll, () => refresh(), () => pendingQuestions && pendingQuestions.room === roomId ? pendingQuestions.questions : [], async turn => {
@@ -439,9 +438,9 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       const member=person(m.member_id),owner=m.member_id===null,parts=owner?[m.text]:plainReplies(replyMessages(m.text)).map(text=>composioText(text,composioAction(m.turn))),words=parts.join("\n\n")||(owner?"":t(m.status==="error"?"auto.error":"auto.running"));
       const source=m.reply_reference;
       const reply=source?`<${source.unavailable ? 'span' : `button type="button" data-room-act="jump-reply" data-message="${source.message_id}"`} class="au-room-reply">${esc(source.unavailable?t("rooms.sourceMissing"):t("rooms.replyTo",{p0:source.author_kind==="owner"?t("rooms.owner"):person(source.author_member_id??null)?.name??t("rooms.sourceMissing")}))}</${source.unavailable ? 'span' : 'button'}>`:"";
-      const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',reactionControlHTML() + (m.turn?.voice_memo ? memoActionHTML(m.turn.voice_memo_state === "playing") : "") + iconButton("chat", t("rooms.thread"), ` data-room-act="thread" data-message="${m.id}"`).replace(" title=", " data-tooltip=") + (!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
+      const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',reactionControlHTML() + iconButton("chat", t("rooms.thread"), ` data-room-act="thread" data-message="${m.id}"`).replace(" title=", " data-tooltip=") + (!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
       const reactions = reactionRowHTML(m.reactions);
-      const metadata = (m.turn?.voice_memo ? memoTranscriptHTML(m.text) : "") + (m.reply_count ? `<button type="button" class="btn sm room-thread-chip" data-room-act="thread" data-message="${m.id}">${esc(t("rooms.threadCount", { p0: m.reply_count }))}</button>` : "");
+      const metadata = (m.reply_count ? `<button type="button" class="btn sm room-thread-chip" data-room-act="thread" data-message="${m.id}">${esc(t("rooms.threadCount", { p0: m.reply_count }))}</button>` : "");
       const preview = ` data-expandable="true"`, expanded = expandedMessages.has(m.id) ? " is-expanded" : "";
       return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${reactions}${actions}${metadata}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?reactions+actions+metadata:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn, m.member_id ? member?.name : t("agent.title")) : ""}</div></div>`}</li>`;
     }), })).filter(line => line.html) : [{ key: "empty", html: `<li class="au-empty">${esc(t("rooms.empty"))}</li>`, turnId: undefined }];
@@ -449,7 +448,6 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     const changed = patchThread(thread, wanted, drawn, {
       arrives: line => drewOnce && line.turnId !== undefined && line.turnId > newestMessage,
       carry(node, made) {
-        carryMessageMetadata(node, made);
         const restorePages = pagesHost.carry(node, made), restoreTyped = carryTyped(node, made), restoreMail = carryMail(node, made), restoreSetup = carryInlineSetup(node, made);
         return () => { node.before(made); restorePages(); restoreSetup(); node.remove(); restoreTyped(); restoreMail(); };
       },

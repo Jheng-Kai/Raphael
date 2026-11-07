@@ -84,11 +84,11 @@ async def test_input_after_admission_closes_becomes_a_new_turn_even_before_the_o
     finalizing, release = asyncio.Event(), asyncio.Event()
     said = rig.service._said
 
-    async def hold(reply, *args):
+    async def hold(reply, *args, **kwargs):
         if reply.get("text") == "First answer":
             finalizing.set()
             await release.wait()
-        return await said(reply, *args)
+        return await said(reply, *args, **kwargs)
 
     monkeypatch.setattr(rig.service, "_said", hold)
     client.chats = [chat("First answer"), chat("Second answer")]

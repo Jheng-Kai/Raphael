@@ -76,7 +76,7 @@ import { carryTyped } from "../secret-card";
 import { carryInlineSetup, mountInlineConnectionSetup } from "../connection-setup";
 import { carryMail } from "../mail-card";
 import { mountPages } from "../page-card";
-import { carryMessageMetadata, menuReactionsHTML, mountMessageMetadata } from "../message-metadata";
+import { menuReactionsHTML, mountMessageMetadata } from "../message-metadata";
 import { MORE_EMOJI, openEmojiPicker } from "../emoji-picker";
 import { mountMailActions } from "../mail-actions";
 import { mountGreeting } from "../member-greeting";
@@ -929,7 +929,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const changed = patchThread(thread, wanted, drawnHTML, {
       arrives: line => drewOnce && (line.turnId === undefined ? !line.key.startsWith("day:") : line.turnId > newestDrawn && !droppedPending),
       carry(node, made) {
-        carryMessageMetadata(node, made);
         const restore = carryTyped(node, made), restoreMail = carryMail(node, made), restorePages = pagesHost.carry(node, made), restoreSetup = carryInlineSetup(node, made);
         return () => { node.before(made); restorePages(); restoreSetup(); desktop.carry(node); node.remove(); restore(); restoreMail(); };
       },
@@ -2137,8 +2136,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const { turn, key } = source, messageKey = key === "question" ? "owner" : key;
     const scope = { member_id: turn.member_id ?? 0, conversation_id: turn.conversation_id, turn_id: turn.id };
     return { reactions: turn.reactions?.[messageKey] ?? [],
-      react: (emoji, active) => api.core("agent.react", { ...scope, message_key: messageKey, emoji, active }),
-      memo: turn.voice_memo ? action => api.core("agent.speak", { ...scope, memo_action: action, ...(key === "reply" ? {} : { message_seq: Number(key) }) }) : undefined };
+      react: (emoji, active) => api.core("agent.react", { ...scope, message_key: messageKey, emoji, active }) };
   }, () => { if (visible) void load(false); }, error => toaster.info(describeError(error)));
   mountMailActions(thread, (err) => toaster.info(describeError(err)), (words) => toaster.info(words));
 

@@ -90,10 +90,6 @@ class SoundDevicePlayer:
                     else:
                         pending += chunk
                     while len(pending) >= block_bytes or (ended and len(pending) >= _SAMPLE_BYTES):
-                        paused = getattr(stopped, 'paused', None)
-                        while paused is not None and paused.is_set():
-                            if stopped.wait(POLL_SECONDS):
-                                return
                         if stopped.is_set():
                             return
                         if stream is None:

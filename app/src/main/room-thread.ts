@@ -13,7 +13,7 @@ import { createBackgroundQuestions } from "./background-questions";
 import { carryTyped } from "./secret-card";
 import { carryMail } from "./mail-card";
 import { faceHTML } from "./members";
-import { carryMessageMetadata, mountMessageMetadata, reactionControlHTML, reactionRowHTML, memoActionHTML, memoTranscriptHTML } from "./message-metadata";
+import { mountMessageMetadata, reactionControlHTML, reactionRowHTML } from "./message-metadata";
 import type { AppContext, MembersList, RoomMessage } from "./types";
 import { copyButton, esc, iconButton, toaster } from "./ui";
 
@@ -27,19 +27,17 @@ export async function openRoomThread(host: HTMLElement, app: AppContext, roomId:
   const thread = pane.querySelector<HTMLElement>("ol")!, origin = pane.querySelector<HTMLElement>(".room-thread-origin")!;
   const drawn = new WeakMap<Element, string>();
   const carryTranscript = (before: Element, after: HTMLElement): (() => void) => {
-    carryMessageMetadata(before, after);
     const restoreTyped = carryTyped(before, after), restoreMail = carryMail(before, after);
     return () => { before.before(after); before.remove(); restoreTyped(); restoreMail(); };
   };
   const media = createAttachmentMedia(pane, id => api.core("attachments.get", { id }));
   const render = (message: RoomMessage): string => {
     const member = people.members.find(person => person.id === message.member_id);
-    const actions = messageActionsHTML(message.created, false, undefined, false, reactionControlHTML() + (message.turn?.voice_memo ? memoActionHTML(message.turn.voice_memo_state === "playing") : ""));
+    const actions = messageActionsHTML(message.created, false, undefined, false, reactionControlHTML());
     const reactions = reactionRowHTML(message.reactions);
-    const metadata = (message.turn?.voice_memo ? memoTranscriptHTML(message.text) : "");
     const body = message.member_id === null
-      ? `<div class="me"><div class="chat-message owner-message">${filesHTML(message.attachments)}<div class="bubble"><div class="message-text">${messageHTML(message.text, "", false)}</div></div>${reactions}${actions}${metadata}</div></div>`
-      : `<div class="ra"><span class="ra-face">${member ? faceHTML(member, 28) : ""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name ?? t("rooms.owner"))}</b><div class="chat-message">${filesHTML(message.attachments)}${replyContentHTML(message.text, "", message.status === "running")}${reactions}${actions}${metadata}</div>${message.turn ? conversationCardsHTML(message.turn, member?.name) : ""}</div></div>`;
+      ? `<div class="me"><div class="chat-message owner-message">${filesHTML(message.attachments)}<div class="bubble"><div class="message-text">${messageHTML(message.text, "", false)}</div></div>${reactions}${actions}</div></div>`
+      : `<div class="ra"><span class="ra-face">${member ? faceHTML(member, 28) : ""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name ?? t("rooms.owner"))}</b><div class="chat-message">${filesHTML(message.attachments)}${replyContentHTML(message.text, "", message.status === "running")}${reactions}${actions}</div>${message.turn ? conversationCardsHTML(message.turn, member?.name) : ""}</div></div>`;
     return `<li class="tn" data-side-message="${message.id}">${body}</li>`;
   };
   const refresh = async (): Promise<void> => {
@@ -78,8 +76,7 @@ export async function openRoomThread(host: HTMLElement, app: AppContext, roomId:
   mountRichContent(pane);
   const unmount = mountMessageMetadata(pane, button => {
     const message = messages.find(item => item.id === Number(button.closest<HTMLElement>("[data-side-message]")?.dataset.sideMessage));
-    return message ? { reactions: message.reactions ?? [], react: (emoji, active) => api.core("rooms.react", { room_id: roomId, message_id: message.id, emoji, active }),
-      memo: message.turn?.voice_memo ? memo_action => api.core("agent.speak", { room_id: roomId, thread_id: message.thread_id, turn_id: message.turn_id, member_id: message.member_id, memo_action }) : undefined } : null;
+    return message ? { reactions: message.reactions ?? [], react: (emoji, active) => api.core("rooms.react", { room_id: roomId, message_id: message.id, emoji, active }) } : null;
   }, () => { void refresh().catch(error => toaster.info(describeError(error))); }, error => toaster.info(describeError(error)));
   pane.addEventListener("click", event => {
     const button = (event.target as Element).closest<HTMLElement>('[data-act="copy-message"], [data-act="attachment-open"]');

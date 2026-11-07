@@ -292,8 +292,6 @@ export interface AgentTurn {
   voice_call_id?: string;
   voice_call_summary_id?: number;
   voice_call?: import("./voice-chat").VoiceCall;
-  voice_memo?: boolean;
-  voice_memo_state?: "playing" | "paused" | "done";
   routine?: Pick<Routine, "id" | "schedule" | "when" | "app_name">;
   handoffs?: HandoffView[];
   conversation_id?: number;
@@ -889,8 +887,6 @@ export interface Member {
   blurb?: string;
   reply_style?: "full" | "conversational";
   voice?: string;
-  voice_memo?: boolean;
-  read_aloud?: boolean;
   notify?: boolean;
   ask_before_members?: boolean;
   /** Writes an email as a draft in the owner's chat for them to send, instead of sending it (on unless turned off). */
@@ -980,8 +976,6 @@ export interface NewMember {
   blurb?: string;
   reply_style?: "full" | "conversational";
   voice?: string;
-  voice_memo?: boolean;
-  read_aloud?: boolean;
   notify?: boolean;
   ask_before_members?: boolean;
   draft_first?: boolean;
@@ -991,7 +985,7 @@ export interface NewMember {
  * What `members.update` may change, beside its `id`: the avatar only as `""` or `"preset:<stem>"`
  * (a picture of the PC goes by `members.set_avatar`).
  */
-export type MemberPatch = Partial<Pick<Member, "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "voice" | "voice_memo" | "read_aloud" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">>;
+export type MemberPatch = Partial<Pick<Member, "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "voice" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">>;
 
 /** The routine the core offers with a new member of a group with places to look (`members.create`, `routines.template`). */
 export interface RoutineOffer {

@@ -7,7 +7,6 @@ import pytest
 
 from raphael_core.agent.history import AgentHistory
 from raphael_core.memory.conversation import turn_text
-from raphael_core.protocol import RpcError
 from .test_service import make_rig  # noqa: F401
 
 
@@ -54,17 +53,12 @@ def test_saved_indexes_from_before_the_projection_are_repaired(conn):
 
 
 @pytest.mark.parametrize("kind", ["routine", "calendar", "meeting", "skill_learned"])
-async def test_voice_and_telegram_deliver_answers_without_event_transport(make_rig, kind):
+async def test_telegram_delivers_answers_without_event_transport(make_rig, kind):
     from raphael_core.app import App
-    voice = SimpleNamespace(speaks=lambda: True, say=AsyncMock())
-    rig = make_rig(speaker=voice)
+    rig = make_rig()
     turn_id = rig.history.add(session_id="sample", question="Check samples", route="answer", prefix="", text="Samples checked.", status="done")
     raw = json.dumps({"type": kind, "action": "created", "id": 987654321, "name": "Sample orchard"})
     rig.history.add_message(turn_id, "event", raw)
-    await rig.call("agent.speak", {"turn_id": turn_id})
-    voice.say.assert_awaited_once_with("", "Samples checked.", turn_id=turn_id)
-    with pytest.raises(RpcError, match="message_seq must name an answer"):
-        await rig.call("agent.speak", {"turn_id": turn_id, "message_seq": 1})
     reply = {"status": "done", "prefix": "", "text": "Samples checked.", "turn_id": turn_id,
              "messages": [{"kind": "event", "text": raw}]}
     app = SimpleNamespace(call=AsyncMock(return_value=reply), agent=rig.service, attachment_store=None)

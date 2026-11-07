@@ -447,7 +447,7 @@ export function checkRendered(name, context = {}) {
     require(window.__look.calls.some(call=>call.method==='settings.set' && call.params.key==='routine_timezone' && call.params.value===expected), 'the existing settings boundary owns persistence');
     return {check:name};
   }
-  if (['reaction-picker','reaction-row','reaction-not-approval','room-thread-open','room-thread-chip','slack-draft','voice-memo'].includes(name)) {
+  if (['reaction-picker','reaction-row','reaction-not-approval','room-thread-open','room-thread-chip','slack-draft'].includes(name)) {
     const calls = window.__look.calls, data = window.__look.data;
     require(!document.querySelector('.conversation-event-line[data-reaction]'), 'metadata adds no centered event line');
     require([...document.querySelectorAll('[data-reaction]')].every(button => button.getAttribute('aria-pressed') === 'true' && button.getAttribute('aria-label')?.includes(button.dataset.reaction)), 'selected reactions are named pressed toggles');
@@ -477,10 +477,6 @@ export function checkRendered(name, context = {}) {
       require(card.querySelector('[data-mail-field="to"]')?.value==='#研究討論' && !card.querySelector('[data-mail-field="subject"]'), 'channel and body replace email-only fields');
       require(calls.some(call=>call.method==='integrations.draft_save' && call.params.body.includes('週五')), 'owner edits persist through the existing versioned draft boundary');
       require(!calls.some(call=>call.method==='integrations.draft_send'), 'editing never sends');
-    }
-    if (name === 'voice-memo') {
-      require(calls.some(call=>call.method==='agent.speak' && call.params.memo_action==='play') && calls.some(call=>call.method==='agent.speak' && call.params.memo_action==='pause'), 'Play and Pause use the existing read-aloud boundary');
-      require(document.querySelector('.memo-transcript[open]')?.textContent.includes(data.chatMetadataSample.reply), 'expanded transcript is the member reply');
     }
     return {check:name};
   }
