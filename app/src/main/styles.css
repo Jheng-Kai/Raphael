@@ -26,12 +26,14 @@
   --h-ctl: 34px; --h-ctl-sm: 28px; --h-row: 48px;
   /* official brand colours of service logos: the only colours outside the app palette */
   --brand-telegram: #26a5e4;
-  --ui: "Inter", "Microsoft JhengHei UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
+  /* Chinese in Noto Sans TC first, as Grok Bot's text falls back to it on Windows (measured 2026-11-07: identical
+     renders); JhengHei only where it is not installed. */
+  --ui: "Inter", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", system-ui, sans-serif;
   --display: var(--ui);
   /* Windows' own fixed-width faces for Latin, the UI face for Chinese: the generic family is MingLiU on zh-TW Windows. */
-  --mono: "Cascadia Mono", Consolas, "Microsoft JhengHei UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", monospace;
+  --mono: "Cascadia Mono", Consolas, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", monospace;
   --ja: "Yu Gothic UI", "Yu Gothic", "Meiryo UI", "Meiryo", "Hiragino Sans", "Noto Sans JP", sans-serif;
-  --zh-sub: "Microsoft JhengHei UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+  --zh-sub: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
 
   /* surfaces: the window (sidebar), the page, the panels on it, a recessed fill */
   --side: #f7f7f7; --content: #ffffff; --panel: #f7f7f7; --surface-2: #efefef;
