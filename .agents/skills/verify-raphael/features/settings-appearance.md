@@ -93,14 +93,14 @@ npm run look -- settings-raphael-memory settings-raphael-voice desktop-host-loca
 ## Owner output folder in General (2026-11-05)
 
 R-OUTPUT-01 adds the optional absolute delivery folder to Settings > General,
-using its existing row, text field and settings search. Changing the preference
+chosen with the folder picker of R-COLLEAGUE-06 (no typed field). Changing the preference
 never moves existing files. The shared owner context tells every speaker to use
 it by default within existing permissions; VM and owner-PC paths remain distinct.
 See [Daily work](daily-work.md) for prompt and native delivery limits.
 Follow-up 1 authorizes the selected look run; actual native/live delivery is deferred.
 
 ```powershell
-npm run look -- owner-output-folder --theme both --width 1120,720,1920x1080
+npm run look -- owner-output-folder output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
 ```
 
 Inspect its full-size General pane in both themes at all three sizes. Compare

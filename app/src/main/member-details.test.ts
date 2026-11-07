@@ -83,17 +83,11 @@ describe("a member's panel", () => {
     resourceTab.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
     expect(panel.el.dataset.detailsTab).toBe('settings');
   });
-  test.each(['running', 'done'])('work in state %s opens its existing result and exposes the matching action', async state => {
-    api.core.mockImplementation(async method => method === 'members.list' ? {tasks:[{id:99,turn_id:42,conversation_id:7,title:'Sample work',state,created_at_ms:1}],files:[],has_more:false} : {});
-    api.workerCancel.mockResolvedValue({}); api.workerRerun.mockResolvedValue({});
-    const panel = mount(false); host.openTurn = vi.fn(); await flush();
-    panel.el.querySelector<HTMLButtonElement>('[data-panel-task="99"]')!.click();
-    expect(host.openTurn).toHaveBeenCalledExactlyOnceWith(3,7,42);
-    panel.el.querySelector<HTMLButtonElement>('[data-panel-task-menu="99"]')!.click();
-    const action = document.querySelector<HTMLButtonElement>('.menu [role="menuitem"]')!;
-    expect(action.textContent).toContain(t(state === 'running' ? 'agent.stop' : 'members.panelRerun'));
-    action.click(); await flush();
-    expect(state === 'running' ? api.workerCancel : api.workerRerun).toHaveBeenCalledExactlyOnceWith(99);
+  test('Details has no list of what the member did: its routines come first (owner, 2026-11-07)', async () => {
+    api.core.mockImplementation(async method => method === 'members.list' ? {files:[],has_more:false} : {});
+    const panel = mount(false); await flush();
+    expect(panel.el.querySelector('.mb-panel-tasks, .mb-task-list, [data-panel-task]')).toBeNull();
+    expect(panel.el.querySelector('.mb-tab-body > :first-child')?.matches('.mb-panel-routines')).toBe(true);
   });
   test('the shared three tabs support arrow navigation and reset for another member', async () => {
     const panel = mount(false); await flush();

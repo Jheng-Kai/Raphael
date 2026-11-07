@@ -195,13 +195,13 @@ test('enlarging an owner-held screen disables viewer input without changing the 
   expect(api.desktopControl.mock.calls).toHaveLength(before);
 });
 
-test('returning from another page restores an unchanged stopped screen and its Start button',async()=>{
+test('returning from another page restores an unchanged sleeping screen that wakes with a press',async()=>{
  panelOpen=true; api.desktopStatus.mockResolvedValue({state:'stopped',ready:false,control:'member'});
  mounted.show(); await flush(); mounted.hide(); await flush();
  expect(panel().hidden).toBe(true);
  mounted.show(); await flush();
  expect(panel().hidden).toBe(false);
- expect(host.querySelector<HTMLButtonElement>('[data-desktop="retry"]')!.hidden).toBe(false);
+ expect(host.querySelector<HTMLButtonElement>('[data-desktop="enlarge"][data-asleep]')!.hidden).toBe(false);
 });
 
 test('a failed takeover open cannot acquire input when a later watching stream connects',async()=>{
@@ -339,11 +339,21 @@ test('access can be taken back from the panel',async()=>{
   const revoke=host.querySelector<HTMLButtonElement>('[data-desktop="revoke"]')!;expect(revoke.hidden).toBe(false);
   revoke.click();await flush();expect(api.desktopRevoke).toHaveBeenCalledTimes(1);expect(revoke.hidden).toBe(true);
 });
-test('a stopped computer is shown, not started, until the owner presses start',async()=>{
+test('a sleeping computer is shown, not started, until the owner presses its screen',async()=>{
   panelOpen=true;api.desktopStatus.mockResolvedValue({state:'stopped',ready:false,control:'member'});mounted.show();await flush();
   expect(api.desktopOpen).not.toHaveBeenCalled();
-  host.querySelector<HTMLButtonElement>('[data-desktop="retry"]')!.click();await flush();
+  let opened!:(value:{session:string;url:string})=>void;
+  api.desktopOpen.mockImplementationOnce(()=>new Promise(resolve=>{opened=resolve;}));
+  host.querySelector<HTMLButtonElement>('[data-desktop="enlarge"]')!.click();await flush();
   expect(api.desktopOpen).toHaveBeenCalledTimes(1);
+  // As Grok Bot's Waking up: a status read from before the press cannot put the screen back to sleep.
+  expect(panel().querySelector('.desktop-stage')?.textContent).toBe(t('desktop.waking'));
+  await vi.advanceTimersByTimeAsync(2000); await flush();
+  expect(panel().querySelector('.desktop-stage')?.textContent).toBe(t('desktop.waking'));
+  opened({session:'one',url:'http://127.0.0.1:5000/one/vnc.html'}); api.desktopRenew.mockResolvedValue(running);
+  await vi.advanceTimersByTimeAsync(10_000); await flush();
+  expect(panel().querySelector('.desktop-stage')).toBeNull();
+  expect(panel().dataset.desktopState).not.toBe('stopped');
 });
 
 test.each([
@@ -361,9 +371,10 @@ test.each([
   expect(panel().textContent!.split(sentence)).toHaveLength(2);
   expect(panel().querySelector('.desktop-location-header .desktop-boot-face, .computer-lifecycle-face')).toBeNull();
   const enlarge = panel().querySelector<HTMLButtonElement>('[data-desktop="enlarge"]')!;
-  expect(enlarge.hidden).toBe(true); expect(take().hidden).toBe(true);
-  enlarge.click(); expect(panel().hasAttribute('data-expanded')).toBe(false);
-  expect(api.desktopOpen).not.toHaveBeenCalled();
+  // Only a sleeping screen is itself the press that wakes it; nothing else offline opens or starts anything from it.
+  expect(enlarge.hidden).toBe(phase !== 'sleeping'); expect(take().hidden).toBe(true);
+  enlarge.click(); await flush(); expect(panel().hasAttribute('data-expanded')).toBe(false);
+  expect(api.desktopOpen).toHaveBeenCalledTimes(phase === 'sleeping' ? 1 : 0);
 });
 test('the preview opens the larger view with the same iframe and session',async()=>{
   panelOpen=true;mounted.show();await flush();message('connected');const same=frame();
@@ -548,12 +559,14 @@ test('an unchanged stopped renewal touches nothing after a running stream stops'
  observer.disconnect();
 });
 
-test('the panel has a screen caption and quiet wallpaper with start inside the screen',async()=>{
+test('the sleeping panel is a captioned wallpaper with its face and one short line, and no Open button',async()=>{
  panelOpen=true; api.desktopStatus.mockResolvedValue({state:'stopped',ready:false,control:'member'}); mounted.show(); await flush();
- expect(panel().querySelector('.desktop-screen [data-desktop="retry"]')).not.toBeNull();
  expect(panel().querySelector('.desktop-wallpaper')).not.toBeNull();
  expect(panel().querySelector('.desktop-caption')?.textContent).toBe('小晴的畫面');
- expect(panel().querySelector('[data-desktop="retry"]')?.textContent).toBe('開啟');
+ expect(panel().querySelector('.desktop-message')?.textContent).toBe('電腦在休眠');
+ expect(panel().querySelector<HTMLButtonElement>('[data-desktop="retry"]')!.hidden).toBe(true);
+ const cover = panel().querySelector<HTMLButtonElement>('[data-desktop="enlarge"]')!;
+ expect(cover.hidden).toBe(false); expect(cover.getAttribute('aria-label')).toBe('喚醒電腦');
  expect(panel().querySelector<HTMLButtonElement>('[data-desktop="collapse"]')!.hidden).toBe(true);
 });
 

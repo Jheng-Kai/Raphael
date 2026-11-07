@@ -6,6 +6,10 @@
 /* On the section's card the fields keep the page's own ground, so they read as fields. */
 .owner-profile .field { width: 100%; min-width: 0; padding: var(--sp-2) var(--sp-2); background: var(--content); border: 1px solid var(--btn-edge); border-radius: var(--r-sm); }
 .owner-profile textarea { resize: vertical; min-height: 110px; }
+/* The output folder: the button names the folder; its whole path stands under the row's name. */
+.output-path { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.btn.output-chosen { max-width: 220px; }
+.btn.output-chosen .output-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .memory-import .import-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin-block: var(--sp-3); font-size: var(--fs-sm); }
 .memory-import textarea { width: 100%; min-width: 0; height: auto; min-height: 140px; padding: var(--sp-3); resize: vertical; }

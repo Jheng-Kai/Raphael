@@ -929,9 +929,8 @@ export function installMock(fixture, config = {}, target = window) {
       case "members.list": {
         if ('panel_member_id' in p) {
           const sample = data.memberPanelSample, now = Date.now();
-          const tasks = variant.memberPanelWork ? sample.tasks.map((title, index) => ({id:701+index, turn_id:2, conversation_id:11, title, state:['running','waiting_owner','done','failed'][index],created_at_ms:now-index*3600000,started_at_ms:now-index*3600000,finished_at_ms:index>1?now-index*3600000:null})) : [];
           const files = variant.memberPanelFiles ? Array.from({length:15}, (_,index) => ({id:`sample-${index}`,name:index===1?sample.page:sample.files[index%3],path:`/home/cua/team/sample-${index}.md`,kind:index===1?'page':'file',turn_id:2,conversation_id:11,at_ms:index<7?now:now-10*86400000})) : [];
-          return {tasks, files:files.slice(0,p.panel_limit??12), has_more:files.length>(p.panel_limit??12)};
+          return {files:files.slice(0,p.panel_limit??12), has_more:files.length>(p.panel_limit??12)};
         }
         // the roster of every model carries the same inventory and the same count as the sidebar and the connections page
         const counted = inventory();

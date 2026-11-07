@@ -133,7 +133,8 @@
 @keyframes mb-det-out { to { opacity: 0; transform: translateX(16px); } }
 /* As Grok Bot's panel, everything in it follows its width: the gear on the left edge, close on the right, and every
    card and the computer's screen as wide as the panel is (owner, 2026-11-07). */
-.mb-det-head { display: flex; align-items: center; width: 100%; padding: 4px var(--pa-dpad) 0; }
+/* Two round buttons never touch (owner, 2026-11-07): back and the gear keep a gap between them. */
+.mb-det-head { display: flex; align-items: center; gap: var(--sp-2); width: 100%; padding: 4px var(--pa-dpad) 0; }
 .mb-det-fill { flex: 1; }
 .mb-det-scroll { flex: 1; min-height: 0; width: 100%; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: var(--pa-dgap); padding: 0 var(--pa-dpad) calc(18px + 6 * var(--pa-u)); }
 .mb-det-scrim { display: none; }
@@ -249,7 +250,7 @@
 /* The icons are drawn on a 16 px grid and are shown at 16 or 20 px, never between (ui-rules.test.ts): so
    they do not follow the fluid sizes, they step from 16 to 20 px once the window is wide. */
 @media (min-width: 1280px) {
-  .page-agent .btn.mb-tool .i, :is(.page-agent, .side) .mb-ghead .btn.icon .i, :is(.page-agent, .side) .mb-item .btn.mb-more .i, .page-agent .mb-det-head .btn.icon .i, .page-agent .mb-dh .btn.icon .i, .mb-dialog .btn.icon .i { width: 20px; height: 20px; }
+  .page-agent .btn.mb-tool .i, :is(.page-agent, .side) .mb-item .btn.mb-more .i, .page-agent .mb-det-head .btn.icon .i, .page-agent .mb-dh .btn.icon .i, .mb-dialog .btn.icon .i { width: 20px; height: 20px; }
   .sys .i { width: 20px; height: 20px; }
   .menu.mb-avpop :is(.ck, .ck svg, svg.i), .menu.mb-menu :is(.ck, .ck svg, svg.i) { width: 20px; height: 20px; }
 }

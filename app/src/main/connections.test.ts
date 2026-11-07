@@ -129,9 +129,11 @@ describe("the two views", () => {
     expect(connectionsHTML(view({ inventory: { state: "partial", count: null, apps: INVENTORY.apps } }))).toMatch(/data-id="installed"[^>]*>已連結<span class="n">—<\/span>/);
   });
 
-  test("the menu that adds a server of the user's own is a dropdown, beside the tab's name (settings-view.ts puts it there)", () => {
+  test("the menu that adds a server of the user's own is a dropdown at the end of the 已連結 and 商店 row, away from the close button", () => {
     expect(connectionsAddHTML()).toMatch(/^<button type="button" class="sel cs-add" aria-haspopup="menu" aria-expanded="false" data-k="conn-add"><span>新增<\/span>/);
-    expect(connectionsHTML(view())).not.toContain('data-k="conn-add"');
+    const html = connectionsHTML(view());
+    expect(html.match(/data-k="conn-add"/g)).toHaveLength(1);
+    expect(html).toMatch(/<div class="cs-bar">.*?<\/div><button type="button" class="sel cs-add"[^>]*data-k="conn-add"/s);
   });
 
   test("the loading and failed states say so", () => {
@@ -986,6 +988,21 @@ describe("what the tab does", () => {
     expect(c.view().tab).toBe("store");
     c.click(button("tab", { id: "installed" }));
     await c.load();
+    expect(c.view().tab).toBe("installed");
+  });
+
+  test("read in the background at launch, it opens at once on what it holds, on the store when nothing is connected", async () => {
+    api.toolsetsList.mockResolvedValue({ groups: [] });
+    let shown = false;
+    const c = createConnections({ ...host, visible: () => shown });
+    await c.load(); await settle();
+    // Unseen, the read decides nothing about where the page opens.
+    expect(c.view().tab).toBe("installed");
+    expect(c.view().catalog).toEqual(CATALOG);
+    shown = true; c.reset();
+    expect(c.view().groups).toEqual([]);
+    expect(c.view().tab).toBe("store");
+    c.reset();
     expect(c.view().tab).toBe("installed");
   });
 

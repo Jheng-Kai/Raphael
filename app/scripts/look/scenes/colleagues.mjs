@@ -21,6 +21,6 @@ export default [
   scene("webhook-external","Existing tunnel tools have exact commands and a PC-on reminder",[...hook,scroll('.au-tunnel'),check("colleague-tunnel")],hookFixture),
   scene("webhook-external-tested","A self-post tests the public URL without a job",[...hook,type('[data-tunnel-url]',"https://sample.ts.net"),click('[data-dlg="tunnel-test"]'),{action:"wait-text",selector:'.au-tunnel',text:"已收到自測 POST"},scroll('.au-tunnel'),check("colleague-tunnel-tested")],hookFixture),
   scene("webhook-external-hmac","HMAC authentication shares the one-time key and copy actions",[...hook,click('[data-dlg="hook-show"]'),click('[data-auth="hmac"]'),scroll('.au-tunnel'),check("colleague-tunnel-hmac")],hookFixture),
-  scene("output-folder-picker","The native folder picker updates the existing full-path field",[...settings("general"),click('[data-act="output-pick"]'),wait('#owner-output-folder[value="C:\\\\Owner\\\\交付成果"]'),check("colleague-output")],{ownerOutputFolder:true}),
-  scene("output-folder-picker-cancel","Cancelling the native folder picker preserves the typed path",[...settings("general"),click('[data-act="output-pick"]'),check("colleague-output-cancel")],{ownerOutputFolder:true,folderCancel:true}),
+  scene("output-folder-picker","The native folder picker shows the chosen folder's name and path",[...settings("general"),click('[data-act="output-pick"]'),wait('[data-row="output-folder"] .output-path'),check("colleague-output")],{ownerOutputFolder:true}),
+  scene("output-folder-picker-cancel","Cancelling the native folder picker keeps the chosen folder",[...settings("general"),click('[data-act="output-pick"]'),check("colleague-output-cancel")],{ownerOutputFolder:true,folderCancel:true}),
 ];

@@ -1,6 +1,30 @@
 // @vitest-environment happy-dom
 import { expect, test, vi } from "vitest";
-import { messageTooltip } from "./message-tooltip";
+import { dropEchoTitles, messageTooltip } from "./message-tooltip";
+
+test("a tip that only repeats the words on screen never shows, outside the dictation pages (owner, 2026-11-07)", () => {
+  document.body.innerHTML = '<section><p class="work-line" data-tooltip="檔案太大，我在本機抽出那段函式。">檔案太大，我在本機抽出那段函式。</p>' +
+    '<button data-tooltip="停止" aria-label="停止"><svg></svg></button></section>' +
+    '<div class="page-dictation"><p data-tooltip="今天的聽寫">今天的聽寫</p></div>';
+  const host = document.querySelector("section")!, dictation = document.querySelector<HTMLElement>(".page-dictation")!;
+  messageTooltip(host); messageTooltip(dictation);
+  const tip = host.querySelector<HTMLElement>('[role="tooltip"]')!;
+  host.querySelector("p")!.dispatchEvent(new Event("pointerover", { bubbles: true }));
+  expect(tip.hidden).toBe(true);
+  host.querySelector("button")!.dispatchEvent(new Event("pointerover", { bubbles: true }));
+  expect(tip.hidden).toBe(false);
+  expect(tip.textContent).toBe("停止");
+  dictation.querySelector("p")!.dispatchEvent(new Event("pointerover", { bubbles: true }));
+  expect(dictation.querySelector<HTMLElement>('[role="tooltip"]')!.hidden).toBe(false);
+});
+
+test("the browser's own title is taken away under the pointer when it only repeats the words", () => {
+  document.body.innerHTML = '<span id="echo" title="研究摘要.md">研究摘要.md</span><button id="icon" title="新增"><svg></svg></button>';
+  dropEchoTitles(document);
+  for (const id of ["echo", "icon"]) document.getElementById(id)!.dispatchEvent(new Event("pointerover", { bubbles: true }));
+  expect(document.getElementById("echo")!.hasAttribute("title")).toBe(false);
+  expect(document.getElementById("icon")!.getAttribute("title")).toBe("新增");
+});
 
 test("typing outside the sidebar hides its tooltip until an intentional hover or focus", async () => {
   document.body.innerHTML = '<section><span data-tooltip="Working">Face</span></section><textarea></textarea>';
@@ -43,7 +67,7 @@ test("moving within an animated tooltip target does not measure it again", () =>
 });
 
 test("the armed Escape hint replaces the hovered or focused Stop tooltip", () => {
-  document.body.innerHTML = '<section><button data-tooltip="Stop">Stop</button></section>';
+  document.body.innerHTML = '<section><button data-tooltip="Stop" aria-label="Stop"><svg></svg></button></section>';
   const host = document.querySelector("section")!, button = host.querySelector("button")!;
   messageTooltip(host);
   const tooltip = host.querySelector<HTMLElement>('[role="tooltip"]')!;

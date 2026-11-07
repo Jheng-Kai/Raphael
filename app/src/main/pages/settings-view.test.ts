@@ -140,7 +140,7 @@ test("shared owner memory lives in General, while own memory stays out of Settin
   expect(html.indexOf("data-memory-import")).toBeGreaterThan(html.indexOf('data-mem-space="shared"'));
   expect(html.indexOf('data-mem-space="shared"')).toBeGreaterThan(html.indexOf('data-section="messaging"'));
   expect(document.querySelector('[data-k="routine-timezone"]')).not.toBeNull();
-  expect(document.querySelector("#owner-output-folder")).not.toBeNull();
+  expect(document.querySelector('[data-row="output-folder"] [data-act="output-pick"]')).not.toBeNull();
   for (const pane of ["tools", "safety", "dictation"] as const) expect(tab(pane, { memoryShared })).not.toContain("data-mem-section");
   expect(tab("general", { memoryShared })).not.toContain('data-mem-space="own"');
 });
@@ -260,13 +260,9 @@ describe("the tabs", () => {
         const title = PANES.find((p) => p.id === id)!.title();
         const head = `<h1 id="set-title" tabindex="-1">${title.replace("&", "&amp;")}</h1>`;
         expect(html).not.toContain("set-purpose");
-        // Connections keeps Add beside its title.
-        if (id === "connections") {
-          expect(html).toMatch(new RegExp(`^<div class="set-head">${head}<button[^>]*data-k="conn-add"[^>]*>.*?</button></div>`));
-          expect(html).not.toContain('class="purpose"');
-          continue;
-        }
-        else expect(html.startsWith(head)).toBe(true);
+        // Connections' Add stands on the row of its two views, clear of the dialog's ✕ (owner, 2026-11-07).
+        if (id === "connections") expect(html).toMatch(/<div class="cs-bar">.*?<\/div><button type="button" class="sel cs-add"[^>]*data-k="conn-add"/s);
+        expect(html.startsWith(head)).toBe(true);
         expect(html).not.toContain('class="purpose"');
       }
     }
@@ -316,10 +312,23 @@ describe("the rules for every tab, in every language", () => {
 
 describe("一般", () => {
   test("output folder belongs to General", () => {
-    const html = paneHTML(view({ brain: { ...brain, owner_output_folder: 'C:\\Owner\\Deliveries' } }));
-    expect(html).toContain('id="owner-output-folder"');
-    expect(html).toContain('C:\\Owner\\Deliveries');
-    expect(paneHTML(view({ pane: "agent" }))).not.toContain('id="owner-output-folder"');
+    expect(rowOf(tab("general"), "輸出資料夾")).toContain('data-act="output-pick"');
+    expect(paneHTML(view({ pane: "agent" }))).not.toContain('data-row="output-folder"');
+  });
+
+  test("the output folder is a picker that names the chosen folder and shows its whole path", () => {
+    const unset = rowOf(tab("general"), "輸出資料夾");
+    expect(unset).not.toMatch(/<input|<textarea/);
+    expect(buttons(unset)).toHaveLength(1);
+    expect(unset).toContain("選擇資料夾");
+    const chosen = rowOf(tab("general", { brain: { ...brain, owner_output_folder: "C:\\Owner\\交付成果\\" } }), "輸出資料夾");
+    expect(chosen).not.toMatch(/<input|<textarea/);
+    expect(chosen).toContain('<span class="output-name">交付成果</span>');
+    expect(chosen).toContain('<span class="output-path">C:\\Owner\\交付成果\\</span>');
+    expect(chosen).toContain('aria-label="變更輸出資料夾（目前是 交付成果）"');
+    // As Claude's and ChatGPT's: the folder is changed, never cleared with a button standing open (R-UI-56); no title repeats the path.
+    expect(buttons(chosen)).toHaveLength(1);
+    expect(chosen).not.toMatch(/title="/);
   });
   test("General is Grok Bot's sections: you, appearance, Raphael, messaging, then memory and the guide", () => {
     const html = tab("general");
@@ -417,7 +426,7 @@ describe("聽寫", () => {
 describe("拉斐爾", () => {
   test("moved rows keep their existing field ids and shortcut action", () => {
     expect(rowOf(tab("dictation"), "問拉斐爾")).toContain('data-act="rec-agent"');
-    expect(rowOf(tab("general"), "輸出資料夾")).toContain('id="owner-output-folder"');
+    expect(rowOf(tab("general"), "輸出資料夾")).toContain('data-act="output-pick"');
   });
 
   test("hides the retired background cost cap", () => {

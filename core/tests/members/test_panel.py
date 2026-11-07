@@ -1,4 +1,4 @@
-"""The owner panel reads bounded existing records; it never starts a computer."""
+"""The member panel's Library reads bounded existing records; it never starts a computer."""
 import os
 
 import pytest
@@ -8,17 +8,19 @@ from raphael_core.members.panel import snapshot
 from raphael_core.protocol import RpcError
 
 
-def test_tasks_are_member_scoped_and_newest_first_with_verified_artifacts(conn, tmp_path):
+def test_library_lists_only_the_members_verified_artifacts_and_no_task_list(conn, tmp_path):
     ticks = iter([100, 200, 300])
     store = TaskStore(conn, now_ms=lambda: next(ticks))
-    older = store.create(session_id='sample-1', language='en', text='Older work', member_id=0)
+    store.create(session_id='sample-1', language='en', text='Older work', member_id=0)
     latest = store.create(session_id='sample-2', language='en', text='Latest work', member_id=0)
     other = store.create(session_id='sample-3', language='en', text='Other member', member_id=1)
-    conn.execute("INSERT INTO task_evidence(task_id,tool_call_id,kind,uri,digest,mime,scope,verified_at_ms,verdict) VALUES (?,?,?,?,?,?,?,?,?)",
-                 (latest, 'sample', 'artifact', str(tmp_path / 'result.md'), 'sample-digest', 'text/markdown', 'private', 210, 'verified'))
+    for task, name in ((latest, 'result.md'), (other, 'other.md')):
+        conn.execute("INSERT INTO task_evidence(task_id,tool_call_id,kind,uri,digest,mime,scope,verified_at_ms,verdict) VALUES (?,?,?,?,?,?,?,?,?)",
+                     (task, 'sample', 'artifact', str(tmp_path / name), 'sample-digest', 'text/markdown', 'private', 210, 'verified'))
     result = snapshot(conn, 0)
-    assert [task['id'] for task in result['tasks']] == [latest, older]
-    assert other not in [task['id'] for task in result['tasks']]
+    # The panel's 工作 list was removed (owner, 2026-11-07): the projection carries files only.
+    assert set(result) == {'files', 'has_more'}
+    assert [item['name'] for item in result['files']] == ['result.md']
     assert result['files'][0]['path'].startswith(f'task-artifact:{latest}:')
 
 
@@ -46,7 +48,7 @@ def test_workspace_listing_is_bounded_and_skips_hidden_and_escaping_links(conn, 
 
 
 async def test_panel_reads_validate_the_member_and_limit_without_changing_roster(rig):
-    assert (await rig.call('members.list', {'panel_member_id':0})) == {'tasks':[], 'files':[], 'has_more':False}
+    assert (await rig.call('members.list', {'panel_member_id':0})) == {'files':[], 'has_more':False}
     assert 'members' in await rig.call('members.list', {})
     with pytest.raises(RpcError):
         await rig.call('members.list', {'panel_member_id':999})

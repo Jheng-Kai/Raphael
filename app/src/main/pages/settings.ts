@@ -231,7 +231,7 @@ export function createSettings(app: AppContext): SettingsPage {
   /** The search for microphones that 「重新搜尋麥克風」 started is under way. */
   let searchingMicrophones = false;
   let visible = false;
-  let readOnce = false, preloading = false;
+  let readOnce = false, preloading = false, connectionsWarmed = false;
   let stopOutside = (): void => {};
   let loading = false;
   let loads = 0;
@@ -404,7 +404,7 @@ export function createSettings(app: AppContext): SettingsPage {
     const activeLimit = focusedId === "limit-input" ? el.querySelector<HTMLInputElement>("#limit-input")?.value : undefined;
     // What is being typed in 服務's fields stays through a drawing (a status that came in, say): it
     // is carried from the old field to the new one here, and kept nowhere else.
-    const serviceDrafts = Array.from(el.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('.svc-line input, .pv-field input:not([type="file"]), .pv-field textarea, #owner-output-folder')).filter(input => input.id !== "owner-output-folder" || input === active).map((input) => [input.id, input.value] as const);
+    const serviceDrafts = Array.from(el.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('.svc-line input, .pv-field input:not([type="file"]), .pv-field textarea')).map((input) => [input.id, input.value] as const);
     // A menu that is open stays open when the page is drawn again (a status that came in, say).
     const openK = openAnchorKey();
     const scroll = body.scrollTop;
@@ -1166,8 +1166,7 @@ export function createSettings(app: AppContext): SettingsPage {
     void ownerControls.change(e.target as Element);
     void providers.change(e.target as Element);
     const input = e.target as HTMLInputElement;
-    if (input.id === "owner-output-folder") void changeBrain("owner_output_folder", input.value);
-    else if (input.id === "limit-input") commitLimit(input);
+    if (input.id === "limit-input") commitLimit(input);
   });
   el.addEventListener("input", (e) => {
     const input = e.target as HTMLInputElement;
@@ -1265,6 +1264,13 @@ export function createSettings(app: AppContext): SettingsPage {
       preloading = true;
       try { const apply = await readSettings(); if (!visible) apply(); }
       finally { preloading = false; }
+      // Connect apps opens on what it already holds: its lists, the store and Composio's catalog are read once the app
+      // is idle after launch, not when the owner first asks for them (owner, 2026-11-07). Opening reads them again quietly.
+      if (!connectionsWarmed) {
+        connectionsWarmed = true;
+        const warm = (): void => { if (!(visible && pane === "connections")) void connections.load(); };
+        if (typeof requestIdleCallback === "function") requestIdleCallback(warm, { timeout: 3000 }); else setTimeout(warm, 1500);
+      }
     },
     async show(open?: PageArgument) {
       const repair = open?.startsWith("repair:") ? open.split(":").slice(1) : null;

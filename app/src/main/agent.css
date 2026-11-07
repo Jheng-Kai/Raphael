@@ -25,9 +25,10 @@
   /* the member column */
   --pa-pad: var(--sp-2);
   --pa-tool: calc(30px + 18 * var(--pa-u));
-  --pa-gh-h: calc(30px + 10 * var(--pa-u));
+  /* A folder's heading is one quiet line: the members are what matters (owner, 2026-11-07). */
+  --pa-gh-h: 24px;
   --pa-gh-fs: var(--fs-2xs);
-  --pa-gh-btn: calc(24px + 8 * var(--pa-u));
+  --pa-gh-btn: 20px;
   --pa-row-h: 64px;
   --pa-row-av: 40px;
   --pa-row-gap: var(--sp-2);
@@ -478,9 +479,8 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .cmp-field.has-mentions > .cmp-input::selection { color: transparent; }
 .cmp-composing { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 /* A mention, in the field and in the owner's bubble: its mark stands where the @ is (the @ keeps its width, unseen), then the
-   name, in a quiet pill. In the field the pill's padding is cancelled by its margin, so a line wraps exactly as plain words do. */
-.mention-chip { padding: 1px 2px; margin: 0 1px; border-radius: var(--r-sm); background: color-mix(in srgb, currentColor 9%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 16%, transparent); }
-.cmp-mirror .mention-chip { margin: 0 -2px; }
+   name, as Grok Bot's: the logo and the words alone, with no frame or fill (owner, 2026-11-07). The words keep the field's
+   own metrics, so the caret and a wrapping line fall exactly as for plain words. */
 .cmp-mirror .url-chip { color: var(--accent-text); }
 .mention-at { position: relative; -webkit-text-fill-color: transparent; }
 .mention-ico { position: absolute; inset: 0; display: grid; place-items: center; -webkit-text-fill-color: currentColor; }

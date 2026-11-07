@@ -4,7 +4,8 @@ import { onLocaleChange, setLocale, t } from "./i18n";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-import { useVectorGlyphs } from "../overlay/emblem";
+import { loadGlyphTexture } from "../overlay/emblem";
+import { dropEchoTitles } from "./message-tooltip";
 import * as api from "./api";
 import { createAutomationsPage } from "./pages/automations";
 import { createHome } from "./pages/home";
@@ -25,7 +26,7 @@ import { Navigation, type Place, samePage } from "./nav-history";
 import { installNavInput } from "./nav-input";
 import { createSidebar } from "./sidebar";
 import { setOwnerProfile } from "./owner-avatar";
-import { loadAvatar } from "./avatar";
+import { emblemTextureArrived, loadAvatar } from "./avatar";
 import { followDictation, installWindowHotkeys } from "./window-hotkeys";
 import { installFocusKeys } from "./focus-keys";
 import { installContextMenus } from "./context-menu";
@@ -44,6 +45,9 @@ import { leave, toaster } from "./ui";
 import { bindMissing, missingHTML, noticeHTML } from "./missing";
 import "./styles.css";
 import "./sidebar.css";
+
+/** The glyph ring texture (app/public/brand/glyph-ring.png); if it fails to load the emblem draws a plain ring. */
+const GLYPH_URL = "/brand/glyph-ring.png";
 
 /** What the window uses until the real settings arrive (the same as device_settings.rs). */
 const DEFAULT_DEVICE: DeviceSettings = {
@@ -131,11 +135,13 @@ async function start(): Promise<void> {
   const fixed = deviceRead ? fixedDevicePatch(device.get()) : null;
   if (fixed) void device.set(fixed).catch((err) => console.error("main: could not keep the fixed device settings", err));
   installWindowHotkeys(() => device.get());
-  // The emblem's glyph ring is drawn from vectors, crisp at every size (overlay/glyph-ring.ts).
-  useVectorGlyphs();
+  // The emblem's runes are the texture app/public/brand/glyph-ring.png; the faces draw again once it is there.
+  void loadGlyphTexture(GLYPH_URL).then(image => emblemTextureArrived(!!image));
 
   // A right click presses the ⋯ of the row under it; elsewhere the browser's own menu has no place in an app. Text fields keep theirs.
   installContextMenus(document);
+  // A title that only repeats the words under it never shows (owner, 2026-11-07).
+  dropEchoTitles(document);
   installSlimeFollow(document);
   prefetchEmojiWhenIdle();
 

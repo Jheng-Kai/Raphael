@@ -64,8 +64,9 @@
 :root[data-sidebar-collapsed] .side .side-foot .nav { justify-content: center; width: 44px; padding: 0; border-radius: var(--r-sm); }
 :root[data-sidebar-collapsed] .side-foot :is(.nav-t, .sidebar-account-name) { display: none; }
 .side .mb-sec.is-drop-target { border-radius: var(--r-sm); outline: 2px solid var(--accent-text); background: var(--selected); }
+/* Under the pointer only its words brighten, with no fill: no hover frames (owner, 2026-11-06 and 2026-11-07). */
 .side .mb-ghead { cursor: pointer; border-radius: var(--r-sm); }
-.side .mb-ghead:hover { background: var(--hover); }
+.side .mb-ghead:hover .mb-gname { color: var(--text); }
 .side .mb-ghead .mb-fold { opacity: 0; }
 .side .mb-ghead:is(:hover, :focus-within) .mb-fold { opacity: 1; }
 .side .au-rooms-section { border: 0; margin: 0; padding: 0; }

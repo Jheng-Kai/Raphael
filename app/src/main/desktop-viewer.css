@@ -20,6 +20,8 @@
 .desktop-open-pill .i { width: 16px; height: 16px; }
 .btn.desktop-open:is(:hover, :focus-visible) .desktop-open-pill { opacity: 1; }
 .btn.desktop-open:active .desktop-open-pill { background: var(--desktop-frame-bg); }
+/* Asleep, the same cover wakes the computer and says nothing: the screen already shows the face and its one line. */
+.btn.desktop-open[data-asleep] .desktop-open-pill { display: none; }
 @media (prefers-reduced-motion: reduce) { .desktop-open-pill { transition: none; } }
 .computer-lifecycle { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; width: 100%; }
 .computer-lifecycle-state { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); }
@@ -46,7 +48,9 @@
 .desktop-heading h2 { margin: 0; overflow: hidden; color: inherit; font-size: var(--fs-sm); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .desktop-request, .computer-repair-note { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .desktop-panel[data-expanded] > .desktop-request { padding: 0 var(--sp-3); }
-.desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; min-height: 160px; overflow: hidden; background: var(--content); border: 1px solid var(--line); border-radius: var(--r-lg); }
+/* Every state keeps the running screen's proportions, so the wallpaper is never squeezed (owner, 2026-11-07). The clip,
+   unlike hidden, leaves the box free to grow past its ratio when a narrow panel's words and buttons need the height. */
+.desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; overflow: clip; background: var(--content); border: 1px solid var(--line); border-radius: var(--r-lg); }
 .desktop-screen iframe, [data-card-desktop-screen] iframe, [data-card-screen] iframe { position: relative; z-index: 1; display: block; width: 100%; height: 100%; border: 0; }
 .desktop-owner { position: absolute; z-index: 2; left: var(--sp-2); bottom: var(--sp-2); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--panel); color: var(--text); font-size: var(--fs-2xs); pointer-events: none; }
 .desktop-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
@@ -67,8 +71,6 @@
 .desktop-panel:has(.desktop-review:not([hidden])) .desktop-shell { display: none; }
 .desktop-actions:has(> [hidden]:only-child), .desktop-actions:not(:has(> :not([hidden]))) { display: none; }
 .desktop-placeholder { position: relative; min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); padding: var(--sp-3); overflow-wrap: anywhere; text-align: center; color: var(--text-2); pointer-events: none; }
-/* A state with words and buttons may grow; preparation keeps the running screen's geometry (R-UI-93). */
-.desktop-panel:not([data-expanded]) .desktop-screen:has(.desktop-placeholder:not([hidden])):not(:has(.desktop-preparation)) { aspect-ratio: auto; min-height: 230px; }
 .desktop-state-content { display: grid; justify-items: center; gap: var(--sp-2); width: 100%; min-width: 0; }
 /* The one-sentence state's face; preparation keeps its own size inside its pill (R-UI-93). */
 .desktop-state-content > .desktop-boot-face > .av { --av: 48px; }

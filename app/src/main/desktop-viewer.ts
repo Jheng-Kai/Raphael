@@ -35,6 +35,11 @@ export interface DesktopState {
   teach_available?: boolean;
 }
 export interface DesktopSession { session: string; url: string }
+/** Asleep and woken by one press on the screen: an engine, image or remote failure names its own way back instead. */
+export function isAsleep(state: DesktopState | undefined): boolean {
+  return !!state && !state.lifecycle && (state.state === 'stopped' || state.state === 'missing' && state.image !== false)
+    && state.error !== 'docker_stopped' && state.error !== 'remote_unavailable';
+}
 const STATUS_KEY = { stopped: "desktop.stopped", unavailable: "desktop.unavailable", connecting: "desktop.connecting", starting: "desktop.starting", building: "desktop.building", preparing: "desktop.preparing", owner: "desktop.owner", member: "desktop.member" } as const;
 
 export function preparationHTML(state: DesktopState, face = ""): string {
@@ -131,7 +136,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       if (id === member() && current === generation) update(next);
     } finally { if (maintenance === operation) maintenance = undefined; if (id === member() && current === generation) { if (state) state = {...state, lifecycle: undefined}; draw(); if (state?.state === 'running' && active()) void openStream(); } }
   });
-  let connected = false, interactive = false, changing = false, loading = false, opening = false, takeOnConnect = false;
+  let connected = false, interactive = false, changing = false, loading = false, opening = false, takeOnConnect = false, waking = false;
   let closePending: Promise<unknown> = Promise.resolve(), clickedAt = 0;
   // Nothing is painted until the read answers, so the town never flashes under the owner's picture.
   let ownWallpaper: string | undefined, wallpaperKnown = false, wallpaperRead: Promise<void> | undefined;
@@ -173,7 +178,9 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(panel.querySelector<HTMLElement>('.desktop-caption')!, 'textContent', t("desktop.screenOf", { p0: options.name() }));
     options.status?.(state?.state === "running");
     paint(frame, "title", t("desktop.open"));
-    attr(enlarge, 'aria-label', t("desktop.openLarger"));
+    const asleep = isAsleep(state);
+    attr(enlarge, 'aria-label', t(asleep ? "desktop.wake" : "desktop.openLarger"));
+    enlarge.toggleAttribute('data-asleep', asleep);
     paint(enlarge.querySelector<HTMLElement>('.desktop-open-pill > span')!, 'textContent', t("desktop.openShort"));
     const expanded = panel.hasAttribute('data-expanded');
     const locationHost = lifecycle.locationHost;
@@ -223,10 +230,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(status, "textContent", t("desktop.operating")); paint(status, "hidden", !owner || !connected);
     paint(action, "textContent", t(pending() ? "desktop.done" : "desktop.release")); paint(action, "hidden", watching || !expanded || !!recording || filesOnly);
     paint(panel.querySelector<HTMLElement>('[data-desktop="menu"]')!, "hidden", watching || filesOnly); paint(action, "disabled", changing);
-    const asleep = state?.state === "stopped" || state?.state === "missing";
-    paint(retry, "textContent", t(state?.error === 'docker_stopped' ? 'desktop.startDocker' : state?.state === 'missing' && state.image === false ? 'desktop.prepareImage' : asleep ? "computer.open" : "desktop.retry"));
-    paint(retry, "hidden", !!running || !!preparing || state?.state === "absent" || state?.error === 'remote_unavailable'); paint(retry, "disabled", opening);
-    paint(enlarge, 'hidden', expanded || !running || !!preparing);
+    // A sleeping computer, as Grok Bot's: its face and one short line, and the whole screen wakes it (owner, 2026-11-07).
+    paint(retry, "textContent", t(state?.error === 'docker_stopped' ? 'desktop.startDocker' : state?.state === 'missing' && state.image === false ? 'desktop.prepareImage' : "desktop.retry"));
+    paint(retry, "hidden", !!running || !!preparing || asleep || state?.state === "absent" || state?.error === 'remote_unavailable'); paint(retry, "disabled", opening);
+    paint(enlarge, 'hidden', expanded || !!preparing || !running && !asleep);
+    paint(enlarge, 'disabled', asleep && opening);
     paint(revoke, "textContent", t("desktop.revoke")); paint(revoke, "hidden", !state?.granted || owner || !!preparing);
     const source = ownWallpaper ?? `/wallpapers/${period}.svg`;
     const paintWallpaper = (image: HTMLImageElement): void => {
@@ -240,7 +248,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(placeholder, "hidden", (!!running && connected) || !!picture);
     const character = document.createElement('template'); character.innerHTML = face;
     for (const node of character.content.querySelectorAll('[data-presence-member], [data-tooltip]')) { node.removeAttribute('data-presence-member'); node.removeAttribute('data-tooltip'); }
-    for (const node of character.content.querySelectorAll('.slime-surface, svg.slime')) { node.setAttribute('data-state', asleep ? 'sleeping' : preparing ? 'working' : 'idle'); node.removeAttribute('data-slime-member'); }
+    for (const node of character.content.querySelectorAll('.slime-surface, svg.slime')) { node.setAttribute('data-state', state?.state === 'stopped' || state?.state === 'missing' ? 'sleeping' : preparing ? 'working' : 'idle'); node.removeAttribute('data-slime-member'); }
     patchHTML(stateContent, preparing ? preparationHTML(state!, face) : `<div class="desktop-boot-face" aria-hidden="true">${character.innerHTML}</div><span class="desktop-message">${esc(computerStateText(state))}</span>`);
     patchHTML(stateRecovery, state?.error === 'docker_stopped' || state?.error === 'remote_unavailable'
       ? btn(esc(t('desktop.useRemote')), 'sm', ' data-desktop-location')
@@ -311,7 +319,12 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       const opened = await api.desktopOpen(id, { conversation_id: options.conversation() });
       if (current !== generation || id !== member() || !active()) { await api.desktopClose(opened.session); return; }
       session = opened; streamMember = id; streamConversation = options.conversation();
-    } catch { if (current === generation) { takeOnConnect = false; showNotice(t('desktop.unavailable')); } }
+    } catch {
+      if (current === generation) {
+        takeOnConnect = false; showNotice(t('desktop.unavailable'));
+        if (waking) { waking = false; if (state) state = { ...state, lifecycle: undefined }; }
+      }
+    }
     finally { opening = false; if (current === generation) draw(); }
   }
   function parkFrame(): void {
@@ -325,7 +338,9 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (beganWork) options.openPanel();
     const previousWaiting = waitingTurns();
     if (!next.works?.some(work => work.state === "waiting_control")) parkFrame();
-    state = maintenance?.member === member() ? { ...next, lifecycle: maintenance.phase } : next;
+    // A status read taken before the wake press landed must not put the screen back to sleep.
+    if (waking && next.state !== 'stopped' && next.state !== 'missing') waking = false;
+    state = maintenance?.member === member() ? { ...next, lifecycle: maintenance.phase } : waking ? { ...next, lifecycle: 'waking' } : next;
     if (pending()) lastFrames.delete(member());
     if (suspended && waitingRequests().some(request => !returnedRequests.includes(request))) suspended = false;
     if (next.state !== 'running') connected = interactive = false;
@@ -382,8 +397,16 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (!returnPanelOpen) options.closePanel?.();
     draw();
   }
+  /** The press that wakes a sleeping computer; it reads 正在喚醒 until the core reports it awake, as Grok Bot's Waking up. */
+  function wake(): void {
+    if (!state || opening) return;
+    suspended = false; closeStream();
+    waking = true; state = { ...state, lifecycle: 'waking' }; draw();
+    void openStream();
+  }
   // Opening never waits for the stream: a screen that is still connecting opens large and connects there.
   enlarge.addEventListener('click', () => {
+    if (isAsleep(state)) { wake(); return; }
     if (state?.state !== 'running') return;
     watching = true; suspended = false;
     send(false);
@@ -530,7 +553,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     refresh() {
       // Back to the conversation whose stream is still open: nothing to reconnect.
       if (session && streamMember === member() && streamConversation === options.conversation()) { clearTimeout(lingering); draw(); return; }
-      closeStream(); opening = false; error.hidden = true; error.setAttribute('role', 'alert'); suspended = false; pollDelay = 2000; filesOpen = false; checkpoints.hide(); clearReview(); demonstration = undefined; skillName = ''; teachingBusy = drafting = false; state = undefined; timeline.clear(); clearTimeout(timer); draw(); if (visible) void poll();
+      closeStream(); opening = false; error.hidden = true; error.setAttribute('role', 'alert'); suspended = false; pollDelay = 2000; filesOpen = false; checkpoints.hide(); clearReview(); demonstration = undefined; skillName = ''; teachingBusy = drafting = waking = false; state = undefined; timeline.clear(); clearTimeout(timer); draw(); if (visible) void poll();
     },
     sync() { if (!options.panelVisible()) location.hide(); timeline.sync(); if (!active() && session) leave(); else { clearTimeout(lingering); if (active() && state?.state === 'running') void openStream(); } draw(); },
     carry(before) { if (before.contains(frame)) parkFrame(); },

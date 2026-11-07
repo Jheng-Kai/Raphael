@@ -29,7 +29,7 @@ import {
 import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
 import { esc, ico, iconButton, openMenu, patchHTML, sel, tg, toaster } from "./ui";
 import { eventRead } from './event-read';
-import { panelTasksHTML, panelLibraryHTML, readPanelWork, type PanelWork } from './member-panel-work';
+import { panelLibraryHTML, readPanelWork, type PanelWork } from './member-panel-work';
 import { tabs } from './ui';
 import { openActions } from "./member-column";
 import { routineRunState, testRoutine } from "./routine-run";
@@ -85,14 +85,14 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   let drawn = "";
 
   let tab: DetailsTab = "details";
-  let work: PanelWork | null = null, workFailed = false, workEpoch = 0, fileLimit = 12, allTasks = false;
+  let work: PanelWork | null = null, workFailed = false, workEpoch = 0, fileLimit = 12;
   async function loadWork(fromEvent = false): Promise<void> {
     const epoch = ++workEpoch, id = host.member().id, limit = fileLimit;
     try {
-      // A burst of turns reads the work list once, as the counts below do.
+      // A burst of turns reads the Library once, as the counts below do.
       const result = await (fromEvent ? eventRead(`members.panel:${id}:${limit}`, () => readPanelWork(id, limit), host.app) : readPanelWork(id, limit));
       if (epoch !== workEpoch || id !== host.member().id) return;
-      work = {tasks: result?.tasks ?? [], files: result?.files ?? [], has_more: result?.has_more ?? false}; workFailed = false;
+      work = {files: result?.files ?? [], has_more: result?.has_more ?? false}; workFailed = false;
     } catch { if (epoch !== workEpoch || id !== host.member().id) return; workFailed = true; }
     draw();
   }
@@ -263,7 +263,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       if (field && field !== focused && field.value !== value) field.value = value;
     }
     const face = faceHTML(member, 64).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([member, face, host.list()?.groups, counts, routines, work, workFailed, allTasks, tab, [...openFields], getLocale(), !!host.openConversation, host.conversationOf?.(member.id), tab === "memory" ? memories.map(list => list.view()) : null]);
+    const signature = JSON.stringify([member, face, host.list()?.groups, counts, routines, work, workFailed, tab, [...openFields], getLocale(), !!host.openConversation, host.conversationOf?.(member.id), tab === "memory" ? memories.map(list => list.view()) : null]);
     if (drawn === signature) return;
     drawn = signature;
     el.dataset.detailsTab = tab;
@@ -332,13 +332,12 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         const chief = member.id === RAPHAEL_ID;
         if (!body.querySelector('.mb-panel-routines') || !!body.querySelector('[data-slot="conversations"]') !== chief) {
           conversationHost.remove();
-          patchHTML(body, `<section class="mb-panel-tasks" data-k="panel-tasks"></section><section class="mb-panel-routines" data-k="panel-routines"></section>` +
+          patchHTML(body, `<section class="mb-panel-routines" data-k="panel-routines"></section>` +
             (chief ? `<section><div class="mb-dh"><span data-panel-conversations-heading>${esc(t('members.panelConversations'))}</span></div><div data-slot="conversations" data-k="panel-conversations"></div></section>` : ''));
         }
         // The skeleton is kept across draws, so its heading follows a language change here.
         const heading = body.querySelector<HTMLElement>('[data-panel-conversations-heading]');
         if (heading && heading.textContent !== t('members.panelConversations')) heading.textContent = t('members.panelConversations');
-        patchHTML(body.querySelector('.mb-panel-tasks')!, panelTasksHTML(work, workFailed, allTasks));
         patchHTML(body.querySelector('.mb-panel-routines')!, routinesHTML());
       } else if (tab === 'library') {
         conversationHost.remove(); patchHTML(body, panelLibraryHTML(work, workFailed));
@@ -432,22 +431,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
 
   el.addEventListener("click", (e) => {
     const target = e.target as Element;
-    const taskButton = target.closest<HTMLElement>('[data-panel-task],[data-panel-task-menu]');
-    if (taskButton) {
-      const task = work?.tasks.find(task => task.id === Number(taskButton.dataset.panelTask ?? taskButton.dataset.panelTaskMenu));
-      if (!task) return;
-      if (taskButton.hasAttribute('data-panel-task')) { if (task.turn_id) host.openTurn?.(host.member().id, task.conversation_id ?? undefined, task.turn_id); }
-      else {
-        const member = host.member().id;
-        openMenu(taskButton, [], '', () => {}, undefined, [{label:t(['queued','running','waiting','waiting_owner','blocked'].includes(task.state) ? 'agent.stop' : 'members.panelRerun'), run() {
-          if (member !== host.member().id) return;
-          void (['queued','running','waiting','waiting_owner','blocked'].includes(task.state) ? api.workerCancel(task.id) : api.workerRerun(task.id)).then(() => loadWork()).catch(() => toaster.info(t('members.panelReadFailed')));
-        }}]);
-      }
-      return;
-    }
     if (target.closest('[data-panel-more]')) { fileLimit = Math.min(100, fileLimit + 12); void loadWork(); return; }
-    if (target.closest('[data-panel-tasks-more]')) { allTasks = true; draw(); return; }
     const fileButton = target.closest<HTMLElement>('[data-panel-file]');
     if (fileButton) {
       const file = work?.files.find(file => file.id === fileButton.dataset.panelFile);
@@ -562,7 +546,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     },
     showMember() {
       tab = "details";
-      work = null; workFailed = false; fileLimit = 12; allTasks = false; void loadWork();
+      work = null; workFailed = false; fileLimit = 12; void loadWork();
       counts = {skills: 0, commands: 0, memory: 0};
       void loadCounts();
       routines = "loading";

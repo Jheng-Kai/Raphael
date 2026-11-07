@@ -151,7 +151,11 @@ export function checkRendered(name, context = {}) {
     if (name === "colleague-tunnel") require(document.querySelector('.au-tunnel').textContent.includes('tailscale funnel --bg http://127.0.0.1:43210'), "exact loopback-forward command");
     if (name === "colleague-tunnel-tested") require(document.querySelector('.au-tunnel').innerText.includes('已收到自測 POST'), "public URL probe returned to the editor");
     if (name === "colleague-tunnel-hmac") require(document.querySelector('[data-auth="hmac"]').getAttribute('aria-pressed') === 'true' && document.querySelector('.au-hook-secret').type === 'text', "explicit HMAC choice and one-time key");
-    if (name === "colleague-output") require(document.querySelector('#owner-output-folder').value === window.__look.data.colleagueSample.path && calls.some(call => call.command === "pick_output_folder") && calls.some(call => call.method === "settings.set" && call.params.key === "owner_output_folder" && call.params.value === window.__look.data.colleagueSample.path), "native picker result is stored in the existing typed field and settings");
+    if (name === "colleague-output") {
+      const path = window.__look.data.colleagueSample.path, row = document.querySelector('[data-row="output-folder"]');
+      require(calls.some(call => call.command === "pick_output_folder") && calls.some(call => call.method === "settings.set" && call.params.key === "owner_output_folder" && call.params.value === path), "native picker result is stored in settings");
+      require(row.querySelector('.output-name')?.textContent === path.split('\\').pop() && row.querySelector('.output-path')?.textContent === path, "the chosen folder shows its name on the button and its whole path under the row name");
+    }
     if (name === "colleague-output-cancel") require(calls.some(call => call.command === "pick_output_folder") && !calls.some(call => call.method === "settings.set" && call.params.key === "owner_output_folder"), "cancel never writes the folder setting");
     return {check:name};
   }
@@ -241,36 +245,30 @@ export function checkRendered(name, context = {}) {
       require(parseFloat(style.borderRadius) >= box.width / 2 - 0.5 && Math.abs(box.width - box.height) < 1 && style.backgroundColor !== 'rgba(0, 0, 0, 0)', `the buttons on the window's edges are Grok Bot's soft round buttons (${button.getAttribute('aria-label') ?? button.dataset.act})`);
     }
     if (tab === 'details') for (const section of panel.querySelectorAll('.mb-tab-body > section')) {
-      const head = section.querySelector(':scope > .mb-dh'), list = section.querySelector('.mb-task-list, .mb-rts, .conversation-rows, :scope > .mp-empty');
+      const head = section.querySelector(':scope > .mb-dh'), list = section.querySelector('.mb-rts, .conversation-rows, :scope > .mp-empty');
       if (!visible(head) || !visible(list)) continue;
-      const pad = node => node ? parseFloat(getComputedStyle(node).paddingLeft) : 0, row = list.querySelector('.mb-task-open, .mb-rt, .conversation-open');
+      const pad = node => node ? parseFloat(getComputedStyle(node).paddingLeft) : 0, row = list.querySelector('.mb-rt, .conversation-open');
       const inner = list.getBoundingClientRect().left + pad(list) + pad(row), start = head.getBoundingClientRect().left + pad(head);
       require(Math.abs(inner - start) <= 1 && getComputedStyle(list).backgroundColor !== 'rgba(0, 0, 0, 0)', `a panel heading starts where the text of its tinted list starts (${Math.round(start)} vs ${Math.round(inner)})`);
     }
     if (tab === 'computer') {
       const live = visible(panel.querySelector('.desktop-screen iframe'));
-      const runs = ['member', 'owner', 'connecting'].includes(panel.querySelector('.desktop-panel')?.dataset.desktopState);
-      require(!!visible(panel.querySelector('[data-desktop="enlarge"]')) === runs, 'the preview opens the larger view whenever the computer runs');
+      const phase = panel.querySelector('.desktop-panel')?.dataset.desktopState, cover = panel.querySelector('[data-desktop="enlarge"]');
+      const runs = ['member', 'owner', 'connecting'].includes(phase), asleep = !!cover?.hasAttribute('data-asleep');
+      require(!!visible(cover) === (runs || asleep) && (!asleep || phase === 'stopped'), 'the preview opens the larger view whenever the computer runs, and wakes it while it sleeps');
       require(!visible(panel.querySelector('[data-desktop="take"]')), 'Take control waits in the larger view, never under the preview');
       if (live) require(panel.querySelector('[data-computer-state-text]')?.textContent === '執行中', 'the live header names the running state');
     }
     if (tab === 'details') require([...panel.querySelectorAll('.mb-dh')].filter(node => visible(node) && node.textContent === '對話').length === (panel.querySelector('[data-slot="conversations"]') ? 1 : 0), 'Details names the conversation section once, and only for Raphael');
-    if (name === 'member-panel-task-stop' || name === 'member-panel-task-rerun') {
-      const items = document.querySelectorAll('.menu [role="menuitem"]');
-      require(items.length === 1 && items[0].textContent.trim() === (name.endsWith('stop') ? '停止' : '重新執行'), 'work exposes only the action for its current state');
-      require(!window.__look.calls.some(call => ['worker.cancel','worker.rerun'].includes(call.method)), 'opening a menu does not mutate work');
-    } else if (name === 'member-panel-details') {
-      const rows = [...panel.querySelectorAll('.mb-task-row')];
-      require(rows.length === 4 && rows.map(row => row.querySelector('small').textContent.split(' · ')[0]).join('/') === '進行中/等你/完成/失敗', 'work in hand comes first, then the newest finished work');
-      require(rows.every(row => row.querySelector('time') && row.querySelector('[data-panel-task-menu]')), 'each work row has time and its menu');
-      require(rows.every(row => row.parentElement === rows[0].parentElement && row.parentElement.matches('.mb-task-list')), 'all work sits in one list, as in Grok Bot');
-      require(rows.every(row => parseFloat(getComputedStyle(row.querySelector('.mb-task-open')).borderTopWidth) === 0), 'no frame is drawn around each work row');
-      const closeRight = panel.querySelector('[data-det="close"]').getBoundingClientRect().right, listBox = panel.querySelector('.mb-task-list').getBoundingClientRect(), tabBar = panel.querySelector('.mb-tabs .tabs').getBoundingClientRect();
+    if (name === 'member-panel-details') {
+      // The list of what the member did was removed (owner, 2026-11-07): Details begins with the routines.
+      require(!panel.querySelector('.mb-panel-tasks, .mb-task-list, [data-panel-task]'), 'Details has no work list');
+      require(panel.querySelector('.mb-tab-body > section')?.matches('.mb-panel-routines') && !panel.querySelector('[data-slot="conversations"]'), 'routines come first, and a member has no conversation list');
+      const closeRight = panel.querySelector('[data-det="close"]').getBoundingClientRect().right, listBox = panel.querySelector('.mb-rts').getBoundingClientRect(), tabBar = panel.querySelector('.mb-tabs .tabs').getBoundingClientRect();
       require(Math.abs(closeRight - listBox.right) < 1, `close stands on the content's right edge (${Math.round(closeRight)} vs ${Math.round(listBox.right)})`);
       require(Math.abs((tabBar.left + tabBar.right) / 2 - (listBox.left + listBox.right) / 2) < 1, 'the tabs sit in the middle of the content');
-      require(!!panel.querySelector('.mb-panel-routines') && !panel.querySelector('[data-slot="conversations"]'), 'routines follow work, and a member has no conversation list');
     } else if (name === 'member-panel-details-empty') {
-      require(panel.querySelector('.mb-panel-tasks').textContent.includes('還沒有工作'), 'work has a one-line empty state');
+      require(!panel.querySelector('.mb-panel-tasks') && panel.querySelector('.mb-panel-routines .mp-empty'), 'an empty Details is one quiet routine line and no work list');
     } else if (name === 'member-panel-library' || name === 'member-panel-library-more') {
       require(panel.querySelectorAll('.team-file[data-panel-file]').length === (name.endsWith('-more') ? 15 : 12), 'library reuses file chips and its bounded next page');
       require(panel.querySelector('.mb-tab-body').textContent.includes('本週') && panel.querySelector('.mb-tab-body').textContent.includes('更早'), 'library groups recent and earlier files/pages');
@@ -327,7 +325,8 @@ export function checkRendered(name, context = {}) {
     const word = header.getBoundingClientRect();
     require(word.top < location.bottom && word.bottom > location.top, 'the short state stays on the location control row');
     require(visible(screen.querySelector('.desktop-boot-face')), 'each offline state uses the member face');
-    const buttons = [...screen.querySelectorAll('button')].filter(visible);
+    // A sleeping screen is itself the press that wakes it (R-PANEL-03): that cover is the screen, not a button over the words.
+    const buttons = [...screen.querySelectorAll('button:not([data-desktop="enlarge"])')].filter(visible);
     for (const button of buttons) {
       const box = button.getBoundingClientRect();
       require(inside(box), 'each state button stays inside the screen');
@@ -612,16 +611,15 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }
   if (name === "owner-output-folder") {
-    const input = document.querySelector('#owner-output-folder');
-    const reference = document.querySelector('.owner-profile input.field');
-    require(visible(input) && visible(reference), "General shows the output folder beside the existing owner fields");
-    const control = input.closest('.field') ?? input;
-    const box = control.getBoundingClientRect(), referenceBox = reference.getBoundingClientRect();
-    const inset = input.getBoundingClientRect().left - box.left;
-    require(Math.abs(box.height - referenceBox.height) <= 1, "the folder uses the same control height as the General owner field");
-    require(inset >= 7, "the folder text retains the shared settings field inset");
-    require(input.value === 'C:\\Owner\\Deliveries', "the saved output path remains visible");
-    return { check: name, height: box.height, inset };
+    const row = document.querySelector('[data-row="output-folder"]');
+    require(visible(row) && !row.querySelector('input, textarea'), "R-COLLEAGUE-06: the output folder is a picker, with no typed field");
+    const chosen = row.querySelector('[data-act="output-pick"]'), name_ = row.querySelector('.output-name'), path = row.querySelector('.output-path');
+    require(visible(chosen) && name_?.textContent === 'Deliveries', "the button names the chosen folder");
+    require(visible(path) && path.textContent === 'C:\\Owner\\Deliveries', "the whole path stands under the row name");
+    require(row.querySelectorAll('button').length === 1, "as Claude's and ChatGPT's, the folder is changed with its one button (R-UI-56: no clear button standing open)");
+    const box = row.getBoundingClientRect(), pick = chosen.getBoundingClientRect();
+    require(pick.right <= box.right + 0.5 && path.getBoundingClientRect().right <= pick.left, "the path never runs under the button");
+    return { check: name, button: Math.round(pick.width) };
   }
   if (name.startsWith("skills-") || ["growing-skills", "member-shared-source", "skill-page"].includes(name)) {
     for (const label of document.querySelectorAll('[data-skill-provenance], .mp-resource p, .cs-item .ds, .cs-dialog > .cs-desc')) {
@@ -903,7 +901,14 @@ export function checkRendered(name, context = {}) {
       require(panel.dataset.detailsTab === 'computer' && visible(panel.querySelector('[data-computer-location]')), 'the computer tab keeps its state header and shared location control');
       require(!panel.querySelector('[data-tab="routines"], .mb-rt [role="switch"], [data-desktop="expand"]') && !visible(panel.querySelector('[data-desktop="collapse"]')), 'there is no routines page, row switch or visible collapse control');
       if (name !== 'level-no-computer') require(visible(desktop) && visible(desktop.querySelector('.desktop-screen')), 'the computer tab shows the screen');
-      if (name === 'level-off') require(visible(desktop.querySelector('.desktop-wallpaper')) && visible(desktop.querySelector('.desktop-screen [data-desktop="retry"]')) && !desktop.querySelector('iframe'), 'wallpaper and Start share the quiet screen');
+      if (name === 'level-off') {
+        const screen = desktop.querySelector('.desktop-screen'), cover = desktop.querySelector('[data-desktop="enlarge"]');
+        require(visible(desktop.querySelector('.desktop-wallpaper')) && !desktop.querySelector('iframe'), 'the sleeping screen keeps its wallpaper');
+        require(desktop.querySelector('.desktop-message')?.textContent === '電腦在休眠' && !visible(desktop.querySelector('[data-desktop="retry"]')), 'as Grok Bot: one short line and no Open button');
+        require(visible(cover) && cover.hasAttribute('data-asleep') && getComputedStyle(cover.querySelector('.desktop-open-pill')).display === 'none', 'the whole screen wakes the computer, with no pill');
+        const box = screen.getBoundingClientRect();
+        require(Math.abs(box.height - box.width * 900 / 1280) <= 2, 'the sleeping screen keeps the running screen proportions instead of stretching');
+      }
     } else if (name === 'level-gear') {
       require(visible(panel.querySelector('.mb-who')) && visible(panel.querySelector('#mb-det-name')) && visible(panel.querySelector('[data-det="back"]')), 'identity and Back are available through the gear');
       require(!visible(desktop) && !panel.querySelector('[data-tab="routines"]'), 'settings has no separate computer or routines page');
@@ -2239,7 +2244,9 @@ export function checkRendered(name, context = {}) {
     }
       if(name==='desktop-viewer'){
         require(panel.hasAttribute('data-expanded')&&calls.filter(call=>call.method==='computer.viewer_open'&&call.params.member_id===1).length===1,'expansion uses the same member frame/session');
-        require(frame.getBoundingClientRect().width>innerWidth*0.9,'expanded screen uses the window width');
+        // At its own proportions the screen fills the window's width, or, in a wide window, its height.
+        const shown=frame.getBoundingClientRect(), room=innerHeight-(document.querySelector('.window-chrome')?.getBoundingClientRect().bottom??32)-64;
+        require(shown.width>innerWidth*0.9||shown.height>room*0.9,`expanded screen fills the window's width or height (${Math.round(shown.width)}x${Math.round(shown.height)})`);
       }
     if(name==='desktop-offline'){
       require(!frame,'offline screen has no blank frame');
@@ -2247,6 +2254,7 @@ export function checkRendered(name, context = {}) {
         require(visible(panel.querySelector('.desktop-stage')) && !panel.querySelector('.desktop-preparation li'), 'preparation names only the current stage');
         require(!!panel.querySelector('progress[value]') === (panel.dataset.desktopState === 'building'), 'only a real fixture percent draws progress');
       }
+      else if (panel.dataset.desktopState === 'stopped') require(!visible(panel.querySelector('[data-desktop="retry"]')) && visible(panel.querySelector('[data-desktop="enlarge"][data-asleep]')), 'a sleeping screen wakes with a press on the screen itself');
       else require(visible(panel.querySelector('[data-desktop="retry"]')),'failure offers contextual retry');
       const bounds = panel.querySelector('.desktop-screen').getBoundingClientRect();
       for (const content of panel.querySelectorAll('.desktop-preparation > *')) {
@@ -3632,7 +3640,7 @@ export function checkRendered(name, context = {}) {
       nameRange.selectNodeContents(chip.lastChild);
       require(markBox.left >= box.left - 1 && markBox.right <= nameRange.getBoundingClientRect().left + 1, `${chipText(chip)}: the mark stands before its name inside the chip`);
       require(markBox.width >= 10 && markBox.width <= 18 && Math.abs(markBox.height - markBox.width) <= 2, `${chipText(chip)}: the mark is a small square (${markBox.width} x ${markBox.height})`);
-      require(style.backgroundColor !== 'rgba(0, 0, 0, 0)' && style.boxShadow !== 'none', `${chipText(chip)} stands apart from the words as a pill`);
+      require(style.backgroundColor === 'rgba(0, 0, 0, 0)' && style.boxShadow === 'none' && parseFloat(style.borderTopWidth) === 0, `${chipText(chip)}: as Grok Bot's, the logo and the name alone, with no frame or fill (owner, 2026-11-07)`);
       require(!chip.closest('a, button') && getComputedStyle(at).webkitTextFillColor === 'rgba(0, 0, 0, 0)', `${chipText(chip)} is not a control and does not show its @`);
       return { text: chipText(chip), kind: chip.dataset.mention, width: box.width, height: box.height, mark: markBox.width };
     };

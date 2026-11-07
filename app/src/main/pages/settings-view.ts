@@ -18,7 +18,7 @@ import { detectedTimezone, zoneLabel } from "../timezones";
 import { ownerProfileHTML } from "../owner-settings";
 
 import { brandIcon } from "../brand";
-import { type ConnectionsView, connectionsAddHTML, connectionsHTML } from "../connections";
+import { type ConnectionsView, connectionsHTML } from "../connections";
 import { DICTATION_MODES } from "../dictation";
 import { KEEP_FOREVER_DAYS, formatClock, formatRetention, formatUsd } from "../format";
 import { type LanguageGroup, languageSelectHTML, normalizeLanguages } from "../languages";
@@ -37,7 +37,7 @@ import { pricingNote } from "../pricing";
 import type { HotkeyField } from "../hotkey-recording";
 import type { AudioDevices, BrainSettings, DeviceSettings, LocalModel, ModelCatalog, ModelRole, SettingsPane, Status } from "../types";
 import { keyEntryRow, micRow } from "../setup-rows";
-import { type Choice, type IconName, actionRow, btn, esc, fieldHTML, ico, iconBtn, iconButton, keys, note, row, sel, st, tabs } from "../ui";
+import { type Choice, type IconName, actionRow, btn, esc, ico, iconBtn, iconButton, keys, note, row, sel, st, tabs } from "../ui";
 
 /** The models the core reads when none is chosen (brain/settings.py), shown while it does not answer. */
 const DEFAULT_MODELS = { cleanup: "openai/gpt-6-luna", answer: "openai/gpt-6-luna", stt: "elevenlabs/scribe-v2" } as const;
@@ -423,6 +423,19 @@ const coreNote = (v: SettingsView): string => (v.brain === null ? `<div class="a
 // ---------- the tabs ----------
 
 /**
+ * The output folder as a folder picker of Claude's or ChatGPT's (owner, 2026-11-07): no text field. Unset, it is 選擇資料夾 alone;
+ * set, the button names the folder and the whole path stands under the row's name, so where it is stays plain.
+ */
+function outputFolderRow(v: SettingsView): string {
+  const folder = v.brain?.owner_output_folder ?? "", off = v.brain === null ? " disabled" : "";
+  if (!folder) return row(t("output.folder"), esc(t("output.helpPick")), btn(ico("folder") + esc(t("output.pick")), "sm", ` data-act="output-pick"${off}`), { attrs: ' data-row="output-folder"' });
+  const name = folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || folder;
+  return row(t("output.folder"), `<span class="output-path">${esc(folder)}</span>`,
+    btn(ico("folder") + `<span class="output-name">${esc(name)}</span>`, "sm output-chosen", ` data-act="output-pick" aria-label="${esc(t("output.change", { p0: name }))}"${off}`),
+    { attrs: ' data-row="output-folder"' });
+}
+
+/**
  * 一般, in Grok Bot's order of sections: who you are, how the window looks, what Raphael works with (the timezone of
  * routines and the folder of what is delivered), where he can be reached (messaging), what he remembers, and the guide.
  */
@@ -436,7 +449,7 @@ function generalHTML(v: SettingsView): string {
     ]) + `</div>` +
     section(t("agent.title"), [
       row(t("zone.title"), t("zone.help"), sel([{value:v.brain?.routine_timezone ?? "",label:v.brain?.routine_timezone ? zoneLabel(v.brain.routine_timezone) : `${t("zone.auto")} · ${zoneLabel(detectedTimezone())}`}], v.brain?.routine_timezone ?? "", t("zone.title"), ' data-k="routine-timezone"' + (v.brain === null ? ' disabled' : ''))),
-      row(t("output.folder"), t("output.help"), fieldHTML(t("output.empty"), v.brain?.owner_output_folder ?? "", { id: "owner-output-folder", label: t("output.folder"), w: 200, disabled: v.brain === null }) + btn(ico("folder") + esc(t("output.pick")), "sm", ` data-act="output-pick"${v.brain === null ? " disabled" : ""}`)),
+      outputFolderRow(v),
     ]) +
     // Messaging was a tab of its own until 2026-11-07: Telegram, Slack and Discord are a section of 一般 now.
     `<section class="sgroup set-messaging" data-section="messaging"><h2>${esc(t("settings.paneMessaging"))}</h2>${messagingHTML(v.messaging)}</section>` +
@@ -519,9 +532,9 @@ function safetyHTML(v: SettingsView): string {
   return headingHTML(v) + coreNote(v) + vaultHTML(v.vault ?? emptyVaultView()) + (v.rules ? rulesHTML(v.rules) : "") + section(t("settings.computerUse"), computerRows(v));
 }
 
-/** 連接: the services Raphael is connected to and the store that adds them, under the heading and its 「新增」. */
+/** 連接: the services Raphael is connected to and the store that adds them; 「新增」 stands on the row of the two views. */
 function connectionsTabHTML(v: SettingsView): string {
-  return headingHTML(v, connectionsAddHTML()) + connectionsHTML(v.connections);
+  return headingHTML(v) + connectionsHTML(v.connections);
 }
 
 /** The dictation history's retention: the choices, with the one in force too if it is none of them. */

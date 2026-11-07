@@ -23,7 +23,6 @@ export const OVERFLOW_ROWS: readonly OverflowRow[] = [
   { more: "[data-room-menu]", row: ".au-room-pane > .page-head" },
   { more: '[data-desktop="menu"]', row: ".desktop-takeover-bar" },
   { more: '[data-computer-menu]', row: ".desktop-location-header" },
-  { more: '[data-panel-task-menu]', row: '.mb-task-row' },
   { more: '[data-dlg="routine-menu"]', row: ".mp-resource" },
   { more: '[data-det="routine-menu"]', row: ".mb-routine-row" },
   { more: '[data-res="skill-menu"]', row: ".mp-resource" },

@@ -274,7 +274,7 @@ const matches = (query: string, ...texts: string[]): boolean => {
 
 // ---------- the bar: the two views and the search; the menu that adds, beside the tab's name ----------
 
-/** 「新增 ▾」, the menu beside the tab's name that adds a server of the user's own (settings-view.ts puts it there). */
+/** 「新增 ▾」, the menu that adds a server of the user's own: on the row of the two views, clear of the dialog's ✕ (owner, 2026-11-07). */
 export const connectionsAddHTML = (): string =>
   `<button type="button" class="sel cs-add" aria-haspopup="menu" aria-expanded="false" data-k="conn-add">` +
   `<span>${esc(t("conn.addMenu"))}</span>${ico("down")}</button>`;
@@ -287,6 +287,7 @@ function barHTML(v: ConnectionsView, entries: StoreEntries): string {
   return (
     `<div class="cs-bar">` +
     tabs([tab("installed", t("conn.tab.installed"), installed), tab("store", t("conn.tab.store"), store)], v.tab, { label: t("conn.tabs"), kind: "nav", plain: true }) +
+    connectionsAddHTML() +
     `<div class="cs-find">${fieldHTML(t("conn.search"), v.search, { id: "conn-search", icon: "search", label: t("conn.search") })}</div></div>`
   );
 }
@@ -943,8 +944,9 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (recent.status === "fulfilled") audit = recent.value.entries;
     // what is open is gone (removed from elsewhere): back to the list
     if (open && !(open.tab === "installed" ? groupById(open.id) : entryById(open.id))) open = null;
-    // Nothing connected yet: the store is where there is something to do.
-    if (firstLoad && Array.isArray(groups)) {
+    // Nothing connected yet: the store is where there is something to do. A read before the page is shown (the launch
+    // warm-up) leaves that choice to the opening, in reset().
+    if (firstLoad && Array.isArray(groups) && host.visible()) {
       firstLoad = false;
       if (!groups.length) tab = "store";
     }
@@ -1802,6 +1804,7 @@ export function createConnections(host: ConnectionsHost): Connections {
     closing = false;
     search = "";
     tab = "installed";
+    if (firstLoad && Array.isArray(groups)) { firstLoad = false; if (!groups.length) tab = "store"; }
     loginError = null;
     dialogNotice = null;
     // the code stays: the login still waits for it in the core, which does not send it again

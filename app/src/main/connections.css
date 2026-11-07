@@ -9,6 +9,8 @@
 /* The bar: 已安裝 N and 商店 N as quiet tabs, the search on the right */
 .cs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-3); }
 .cs-find { display: flex; width: 100%; margin: 0; min-width: 0; }
+/* 新增 ends the row of the two views, away from the dialog's ✕ (owner, 2026-11-07). */
+.cs-bar > .cs-add { margin-left: auto; flex: none; }
 .cs-find { gap: var(--sp-2); }
 .cs-find .sel { max-width: 180px; }
 .cs-find .sel span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
