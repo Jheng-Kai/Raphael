@@ -26,6 +26,8 @@
   --h-ctl: 34px; --h-ctl-sm: 28px; --h-row: 48px;
   /* official brand colours of service logos: the only colours outside the app palette */
   --brand-telegram: #26a5e4;
+  /* marks drawn over a photo (the picture crop frame): one set for both themes, as the photo under them is the same */
+  --photo-mark: #ffffff; --photo-edge: rgba(255, 255, 255, 0.72); --photo-grid: rgba(255, 255, 255, 0.55); --photo-dim: rgba(0, 0, 0, 0.52);
   /* Chinese in Noto Sans TC first, as Grok Bot's text falls back to it on Windows (measured 2026-11-07: identical
      renders); JhengHei only where it is not installed. */
   --ui: "Inter", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", system-ui, sans-serif;
@@ -52,7 +54,7 @@
   --computer-active: #7138bd;
   /* Usage bars: a member's lavender, as Grok Bot's coloured bar, never the black or white of the controls (owner, 2026-11-07). */
   --meter: #905afb;
-  /* Raphael's gold, for the rings of his arrival on Home. */
+  /* Raphael's blue, for the rings of his arrival on Home. */
   --raphael-color: #1f9fe8;
   --ans-edge: #ececec;
   --btn: #ffffff; --btn-edge: #d4d4d4; --key: #f7f7f7; --key-edge: #d4d4d4;

@@ -2,6 +2,7 @@ import { scene, click, hover, check, page, room, settings, wait, waitGone, drag,
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 const fixture = JSON.parse(readFileSync(join(import.meta.dirname, "../fixture.json"), "utf8"));
+const cropOpen = [...settings("general"), click('[data-owner-photo]'), click('.mb-avpop [data-pick="0"]'), { action: "upload", selector: 'input.mb-picker', path: 'public/brand/glyph-ring.png' }, wait('.av-crop-frame:not([hidden])')];
 
 export default [
   scene("sidebar-hidden-folder", "Hidden members and group chats wait in one folder at the end of the list, as Grok Bot's Hidden Bots, and a right click brings one back", [rightClick('.mb-hidden [data-member="2"]'), wait('#app-popover [data-pick="hide"]'), check("sidebar-hidden-folder")], { hiddenMember: true }),
@@ -26,5 +27,7 @@ export default [
   scene("sidebar-group-avatar-four", "Four participant faces overlap in two rows without rings", [room(1),{action:'member-column',collapsed:false},check('sidebar-room-avatar'),check('sidebar-shell')], {rooms:fixture.rooms.map(room=>({...room,member_ids:room.id===1?[0,1,2,3]:room.member_ids}))}),
   scene("sidebar-room-home", "Leaving a group selects Home alone and returning selects that group alone", [room(1), page("home"), check("sidebar-shell"), room(1), check("sidebar-shell")]),
   scene("sidebar-owner", "Account exposes the shared drag and crop avatar picker", [...settings("general"), check("owner-avatar"), click('[data-owner-photo]'), wait('.mb-avpop')]),
+  scene("sidebar-owner-crop", "The crop dialog shows the whole picture under a square frame: a corner resizes it, a left-button drag moves the picture, no slider", [...cropOpen, { action: "pointer-drag", selector: '.av-crop-corner[data-corner="se"]', dx: -70, dy: -70 }, { action: "pointer-drag", selector: '.av-crop-frame', dx: -30, dy: -20 }, check("avatar-crop-frame")]),
+  scene("sidebar-owner-crop-held", "While the left button is held the frame shows its thirds", [...cropOpen, { action: "hold", selector: '.av-crop-frame', release: false }, check("avatar-crop-held")]),
   scene("sidebar-owner-upload", "An uploaded and dragged owner photo reaches the account and outgoing messages", [...settings("general"), click('[data-owner-photo]'), click('.mb-avpop [data-pick="0"]'), { action: "upload", selector: 'input.mb-picker', path: 'public/brand/glyph-ring.png' }, wait('.av-crop-view img'), { action: "wheel", selector: '.av-crop-view', deltaY: -200 }, { action: "pointer-drag", selector: '.av-crop-view', dx: 20, dy: -10 }, click('[data-act="crop-done"]'), wait('[data-owner-photo] img'), click('.modal-scrim [data-act="close"]'), check("owner-avatar-saved")]),
 ];

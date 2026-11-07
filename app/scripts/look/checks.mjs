@@ -2204,6 +2204,23 @@ export function checkRendered(name, context = {}) {
     require(document.querySelector('[data-owner-photo] .owner-face'), "account exposes the shared photo picker");
     return {check:name};
   }
+  if (name === "avatar-crop-frame" || name === "avatar-crop-held") {
+    const dialog = document.querySelector('.av-crop'), stage = dialog?.querySelector('.av-crop-view'), frame = stage?.querySelector('.av-crop-frame'), img = stage?.querySelector('img');
+    require(visible(dialog) && visible(frame) && img, "the crop dialog shows the whole picture and its frame");
+    require(!dialog.querySelector('input[type="range"]'), "no zoom slider: the wheel and the frame's corners zoom (owner, 2026-11-07)");
+    require(frame.querySelectorAll('.av-crop-corner').length === 4, "the frame has its four corners");
+    const s = stage.getBoundingClientRect(), f = frame.getBoundingClientRect(), p = img.getBoundingClientRect();
+    require(Math.abs(f.width - f.height) < 0.5, "the frame is square");
+    require(f.left >= s.left && f.top >= s.top && f.right <= s.right && f.bottom <= s.bottom, "the frame stays inside the stage");
+    require(p.left <= f.left + 0.5 && p.top <= f.top + 0.5 && p.right >= f.right - 0.5 && p.bottom >= f.bottom - 0.5, "the picture covers the whole frame");
+    const thirds = getComputedStyle(frame.querySelector('.av-crop-grid')).opacity;
+    if (name === "avatar-crop-frame") {
+      require(thirds === "0", "the thirds hide while nothing is held");
+      require(f.width < Math.min(p.width, p.height) - 20, "a corner drag made the frame smaller");
+      require(p.left < f.left - 5, "a left-button drag moved the picture under the frame");
+    } else require(stage.hasAttribute('data-pressed') && thirds === "1", "the thirds show while the left button is held");
+    return { check: name, frame: Math.round(f.width) };
+  }
   if (name === "owner-avatar-saved") {
     const photo = window.__look.data.settings.owner_photo;
     require(photo?.startsWith('data:image/webp;base64,'), "the cropped owner photo is saved as bounded WebP");

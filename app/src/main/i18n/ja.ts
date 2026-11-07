@@ -1051,7 +1051,7 @@ export const ja = {
   "agent.loadFailed": "《告。会話を読み込めません。》",
   "settings.avatar": "アイコン",
   "settings.avatarReset": "元に戻す",
-  "settings.avatarZoom": "ズーム",
+  "settings.avatarFrame": "ドラッグで画像を移動、ホイールか角のドラッグで拡大縮小",
   "settings.avatarDone": "完了",
   "settings.computerUse": "コンピューター操作",
   "local.title": "ローカルコマンド",

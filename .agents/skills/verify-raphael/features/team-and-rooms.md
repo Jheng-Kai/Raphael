@@ -77,8 +77,12 @@ npm run look -- room-stop room-row-menu room-rename room-members room-delete roo
 The following retained room and sidebar journeys cover their shared consumers:
 
 ```powershell
-npm run look -- sidebar-owner-upload --theme both --width 1120,720,1920x1080
+npm run look -- sidebar-owner-upload sidebar-owner-crop sidebar-owner-crop-held --theme both --width 1120,720,1920x1080
 ```
+
+The picture crop dialog (owner photo and Raphael's picture share it) shows the whole picture under a
+square frame: the left button drags the picture or, on a corner, resizes the frame; the wheel zooms;
+the thirds show only while the button is held; there is no slider (owner, 2026-11-07).
 
 ## Gotchas
 

@@ -1050,7 +1050,7 @@ export const zhTW = {
   "agent.loadFailed": "《告。無法讀取對話。》",
   "settings.avatar": "頭像",
   "settings.avatarReset": "還原",
-  "settings.avatarZoom": "縮放",
+  "settings.avatarFrame": "拖曳移動圖片，用滾輪或拉角落縮放",
   "settings.avatarDone": "完成",
   "settings.computerUse": "電腦操作",
   "local.title": "本機指令",
