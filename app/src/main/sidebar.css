@@ -64,7 +64,9 @@
 :root[data-sidebar-collapsed] .side .sidebar-account { flex: none; }
 :root[data-sidebar-collapsed] .side .side-foot .nav { justify-content: center; width: 44px; padding: 0; border-radius: var(--r-sm); }
 :root[data-sidebar-collapsed] .side-foot :is(.nav-t, .sidebar-account-name) { display: none; }
-.side .mb-sec.is-drop-target { border-radius: var(--r-sm); outline: 2px solid var(--accent-text); background: var(--selected); }
+/* Where a dragged row lands: one line between two rows, the row itself dimmed in its place (owner, 2026-11-07). */
+.mb-drop-line { position: fixed; z-index: 30; height: 2px; border-radius: var(--r-pill); background: var(--accent-text); pointer-events: none; }
+.side .is-dragged { opacity: 0.4; }
 /* Under the pointer only its words brighten, with no fill: no hover frames (owner, 2026-11-06 and 2026-11-07). */
 .side .mb-ghead { cursor: pointer; border-radius: var(--r-sm); }
 .side .mb-ghead:hover .mb-gname { color: var(--text); }

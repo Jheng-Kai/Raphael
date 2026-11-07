@@ -577,6 +577,9 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* ---------- the voice mode: Raphael flies up over the conversation ---------- */
 .ra-flyer { position: absolute; left: 0; top: 0; z-index: 5; width: 132px; height: 132px; transform-origin: 50% 50%; cursor: pointer; }
 .ra-flyer > .av { width: 132px; height: 132px; }
+/* The emblem in voice is the corner's renderer (its canvas is wider than the ring for the light around it), centred. */
+.ra-flyer > .ra-flyer-emblem { position: absolute; left: 50%; top: 50%; translate: -50% -50%; pointer-events: none; }
+.ra-flyer:has(> .ra-flyer-emblem) { overflow: clip; overflow-clip-margin: 24px; }
 /* the person's picture in a circle: a thin ring around it brightens with the voice (--lvl, 0 to 1) */
 .ra-flyer:has(> .av-custom)::after { content: ""; position: absolute; inset: -5px; border-radius: var(--r-pill); border: 2px solid var(--accent-text); opacity: calc(0.35 + 0.65 * var(--lvl, 0)); pointer-events: none; }
 /* the voice mode writes no words: the empty page's line steps aside, its place kept */

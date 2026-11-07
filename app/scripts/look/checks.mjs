@@ -1962,6 +1962,13 @@ export function checkRendered(name, context = {}) {
     require(label.top>=face.bottom&&Math.abs(label.left+label.width/2-(box.left+box.width/2))<1,'the name is centered below the face');
     return {check:name,face:face.width};
   }
+  if(name==='voice-flyer-emblem'){
+    const flyer=document.querySelector('.ra-flyer'),canvas=flyer?.querySelector('canvas.ra-flyer-emblem');
+    require(visible(flyer)&&canvas&&!flyer.querySelector('img'),"the voice flyer draws the emblem live on a canvas, not a picture of it");
+    const a=flyer.getBoundingClientRect(),b=canvas.getBoundingClientRect();
+    require(Math.abs((a.left+a.right)/2-(b.left+b.right)/2)<=1&&Math.abs((a.top+a.bottom)/2-(b.top+b.bottom)/2)<=1,"the emblem is centred in the flyer");
+    return {check:name,canvas:Math.round(b.width)};
+  }
   if(name==='messaging-paired-aligned'){
     const card=document.querySelector('[data-msg-kind="telegram"]'),mark=card?.querySelector('.msg-head .msg-mark'),face=card?.querySelector('.msg-sub .msg-avatar'),title=[...(card?.querySelectorAll('.row:not(.msg-head):not(.msg-sub) > .lbl')??[])].find(visible);
     require(visible(mark)&&visible(face)&&title,'the bot, a paired person and 中斷 Telegram are shown');

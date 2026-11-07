@@ -126,7 +126,8 @@ export interface ColumnHost {
   editSources(id: number): void;
   deleteGroup(id: number): void;
   dropMember?(id: number, groupId: number | null, beforeId?: number): Promise<void>;
-  reorderGroup?(id: number, beforeId: number): Promise<void>;
+  /** Moves folder `id` before `beforeId`, or to the end for null. */
+  reorderGroup?(id: number, beforeId: number | null): Promise<void>;
 }
 
 export interface MemberColumn {
@@ -306,33 +307,74 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
 
   searchButton.addEventListener("click", () => openSearch(searchButton));
 
-  let drag: { kind: "member" | "group"; id: number } | null = null;
+  // Dragging a member or a folder shows one line where it will land, between two rows, as Grok Bot's list does (owner,
+  // 2026-11-07): no box around a folder, and no see-through copy of the row over the others, only the row itself dimmed.
+  let drag: { kind: "member" | "group"; id: number; source: HTMLElement } | null = null;
+  let landing: { group: HTMLElement; before: number | null } | null = null;
+  const line = document.createElement("div");
+  line.className = "mb-drop-line";
+  line.hidden = true;
+  line.setAttribute("aria-hidden", "true");
+  const blank = typeof Image === "undefined" ? null : Object.assign(new Image(), { src: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" });
+  const showLine = (y: number, box: DOMRect): void => {
+    if (!line.isConnected) el.append(line);
+    Object.assign(line.style, { top: `${Math.round(y - 1)}px`, left: `${Math.round(box.left + 8)}px`, width: `${Math.round(box.width - 16)}px` });
+    line.hidden = false;
+  };
+  const clearDrop = (): void => { line.hidden = true; landing = null; };
+  /** Where the dragged row lands for a pointer at `y`, and the line that says so. */
+  function landingAt(target: Element, y: number): { group: HTMLElement; before: number | null; lineY: number; box: DOMRect } | null {
+    if (!drag) return null;
+    if (drag.kind === "member") {
+      const group = target.closest<HTMLElement>(".mb-sec[data-group]");
+      if (!group) return null;
+      const rows = [...group.querySelectorAll<HTMLElement>("[data-member-item]")].filter(row => Number(row.dataset.memberItem) !== drag!.id && row.getBoundingClientRect().height > 0);
+      const box = group.getBoundingClientRect();
+      for (const row of rows) {
+        const r = row.getBoundingClientRect();
+        if (y < r.top + r.height / 2) return { group, before: Number(row.dataset.memberItem), lineY: r.top, box };
+      }
+      const last = rows[rows.length - 1]?.getBoundingClientRect();
+      return { group, before: null, lineY: last ? last.bottom : (group.querySelector(".mb-gh")?.getBoundingClientRect().bottom ?? box.top), box };
+    }
+    const groups = [...el.querySelectorAll<HTMLElement>('.mb-sec[data-group]:not([data-group="none"])')].filter(g => Number(g.dataset.group) !== drag!.id);
+    if (!groups.length || !target.closest(".mb-sec[data-group]")) return null;
+    for (const group of groups) {
+      const r = group.getBoundingClientRect();
+      if (y < r.top + r.height / 2) return { group, before: Number(group.dataset.group), lineY: r.top, box: r };
+    }
+    const last = groups[groups.length - 1];
+    const r = last.getBoundingClientRect();
+    return { group: last, before: null, lineY: r.bottom, box: r };
+  }
   el.addEventListener("dragstart", event => {
     const target = event.target as Element;
     const item = target.closest<HTMLElement>("[data-member-item]");
     const group = target.closest<HTMLElement>(".mb-sec[data-group]");
-    drag = item && Number(item.dataset.memberItem) ? { kind: "member", id: Number(item.dataset.memberItem) } : group && group.dataset.group !== "none" ? { kind: "group", id: Number(group.dataset.group) } : null;
+    drag = item && Number(item.dataset.memberItem) ? { kind: "member", id: Number(item.dataset.memberItem), source: item } : group && group.dataset.group !== "none" ? { kind: "group", id: Number(group.dataset.group), source: group } : null;
     if (!drag) { event.preventDefault(); return; }
     suppressFold = true;
     event.stopPropagation(); event.dataTransfer?.setData(`application/x-raphael-${drag.kind}`, String(drag.id));
-    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+    if (event.dataTransfer) { event.dataTransfer.effectAllowed = "move"; if (blank) event.dataTransfer.setDragImage(blank, 0, 0); }
+    drag.source.classList.add("is-dragged");
   });
-  const clearDrop = (): void => { el.querySelectorAll(".is-drop-target").forEach(node => node.classList.remove("is-drop-target")); };
   el.addEventListener("dragover", event => {
-    const group = (event.target as Element).closest<HTMLElement>(".mb-sec[data-group]");
-    if (!drag || !group || (drag.kind === "group" && group.dataset.group === "none")) return;
-    event.preventDefault(); clearDrop(); group.classList.add("is-drop-target");
-  });
-  el.addEventListener("dragend", () => { drag = null; clearDrop(); });
-  el.addEventListener("drop", event => {
-    const group = (event.target as Element).closest<HTMLElement>(".mb-sec[data-group]");
-    const moving = drag; drag = null; clearDrop();
-    if (!moving || !group) return;
+    const next = landingAt(event.target as Element, event.clientY);
+    if (!next) { clearDrop(); return; }
     event.preventDefault();
-    const target = group.dataset.group === "none" ? null : Number(group.dataset.group);
-    const before = (event.target as Element).closest<HTMLElement>("[data-member-item]")?.dataset.memberItem;
-    if (moving.kind === "member") void host.dropMember?.(moving.id, target, before === undefined ? undefined : Number(before));
-    else if (target !== null && target !== moving.id) void host.reorderGroup?.(moving.id, target);
+    landing = { group: next.group, before: next.before };
+    showLine(next.lineY, next.box);
+  });
+  const endDrag = (): void => { drag?.source.classList.remove("is-dragged"); drag = null; clearDrop(); };
+  el.addEventListener("dragend", endDrag);
+  el.addEventListener("drop", event => {
+    const computed = landingAt(event.target as Element, event.clientY);
+    const moving = drag, at = landing ?? (computed && { group: computed.group, before: computed.before });
+    endDrag();
+    if (!moving || !at) return;
+    event.preventDefault();
+    if (moving.kind === "member") void host.dropMember?.(moving.id, at.group.dataset.group === "none" ? null : Number(at.group.dataset.group), at.before ?? undefined);
+    else if (at.before !== moving.id) void host.reorderGroup?.(moving.id, at.before);
   });
 
   /** Every member the search can reach, as two-line rows (face, name, last message), filtered by the words typed. */

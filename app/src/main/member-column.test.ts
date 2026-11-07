@@ -344,13 +344,24 @@ describe("the column, used", () => {
     const column = mount();
     host.dropMember = vi.fn().mockResolvedValue(undefined);
     host.reorderGroup = vi.fn().mockResolvedValue(undefined);
-    const drag = (source: string, destination: string): void => {
-      column.el.querySelector(source)!.dispatchEvent(new Event("dragstart", { bubbles: true, cancelable: true }));
-      column.el.querySelector(destination)!.dispatchEvent(new Event("drop", { bubbles: true, cancelable: true }));
+    // Rows and folders where the window would draw them: a drop above a row's middle lands before it.
+    const place = (selector: string, top: number, height: number): void => {
+      column.el.querySelector<HTMLElement>(selector)!.getBoundingClientRect = () => ({ top, bottom: top + height, height, left: 0, right: 240, width: 240, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
     };
-    drag('[data-member-item="3"]', '[data-group="10"] [data-member-item="1"]');
+    place('[data-group="10"] [data-member-item="1"]', 100, 40);
+    place('[data-group="10"]', 60, 160);
+    place('[data-group="20"]', 240, 120);
+    const drag = (source: string, destination: string, clientY: number): void => {
+      column.el.querySelector(source)!.dispatchEvent(new Event("dragstart", { bubbles: true, cancelable: true }));
+      column.el.querySelector(destination)!.dispatchEvent(new MouseEvent("dragover", { bubbles: true, cancelable: true, clientY }));
+      expect(column.el.querySelector<HTMLElement>(".mb-drop-line")?.hidden).toBe(false);
+      expect(column.el.querySelector(".is-drop-target")).toBeNull();
+      column.el.querySelector(destination)!.dispatchEvent(new MouseEvent("drop", { bubbles: true, cancelable: true, clientY }));
+    };
+    drag('[data-member-item="3"]', '[data-group="10"] [data-member-item="1"]', 105);
     expect(host.dropMember).toHaveBeenCalledWith(3, 10, 1);
-    drag('[data-group="20"] .mb-gname', '[data-group="10"] .mb-gname');
+    drag('[data-group="20"] .mb-gname', '[data-group="10"] .mb-gname', 70);
     expect(host.reorderGroup).toHaveBeenCalledWith(20, 10);
+    expect(column.el.querySelector(".is-dragged")).toBeNull();
   });
 });

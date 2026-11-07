@@ -1823,3 +1823,14 @@ secret values. Select the existing agent/cli, test_cli_failure_detail.py,
 test_failure.py and test_failure_kinds.py consumers. native_diagnostics shares
 failures.scrub, retaining bounded readable causes without copying private fragments.
 This core-only change does not alter calm-thread presentation or require look/judge.
+
+## Voice flyer is the corner emblem (owner, 2026-11-07)
+
+When the owner speaks to Raphael from the composer and he has no picture of the owner's own, the flyer above the
+composer is the overlay's own `Emblem` renderer on a canvas (voice-mode.ts `live`), set to listening and fed the
+same `VoiceLevel` the corner gets, so it looks and moves exactly like the emblem over the desktop when Alt is held.
+A picture of the owner's own keeps the ringed circle. The sidebar drag between rows shows one insertion line, no box.
+
+```powershell
+npm run look -- voice-flyer-emblem --theme both --width 1120,720,1920x1080
+```

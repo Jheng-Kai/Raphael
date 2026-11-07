@@ -1609,6 +1609,11 @@ export function installMock(fixture, config = {}, target = window) {
         if (variant.stopVoice) notify("Dictation", { phase: "cancelled", agent: true, member_id: variant.stopVoiceMember ?? 0 });
         return;
       }
+      // The voice button's press and release reach the native recorder; here it simply starts listening.
+      if (command === "window_hotkey" && variant.voicePress) {
+        if (args.kind === "down" || args.state === "down") notify("Dictation", { phase: "listening", agent: true, member_id: args.memberId ?? 0 });
+        return null;
+      }
       if (command === "agent_ask_text") {
         if (variant.colleague === "greeting") {
           const base = data.turns.find(turn => turn.member_id === args.memberId);

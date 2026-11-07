@@ -532,6 +532,16 @@ export async function perform(page, step, evidenceDirectory) {
       return result;
     }
     case "event-storm": return await eventStorm(page, step);
+    // The composer's voice button pressed and held, as the owner starts speaking to Raphael.
+    case "press-voice":
+      await page.evaluate(() => { const button = document.querySelector(".page-agent:not([hidden]) .composer .cmp-voice"); button?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 1 })); });
+      await new Promise(resolve => setTimeout(resolve, 200));
+      return { action: "press-voice" };
+    // The core's events, as the window hears them (a recording that started, its loudness).
+    case "emit":
+      await page.evaluate(events => { for (const event of events) window.__look.emit(event); }, step.events);
+      await new Promise(resolve => setTimeout(resolve, step.wait ?? 300));
+      return { action: "emit", events: step.events.map(event => event.type) };
     case "send-probe": return await sendProbe(page, step);
     case "advance-time":
       // Advance the shared fixed clock, then let production timers observe it.

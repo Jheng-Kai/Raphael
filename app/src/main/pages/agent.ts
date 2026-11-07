@@ -63,7 +63,7 @@ import { measureMessagePreviews, messagePreviewMeasure } from "../message-previe
 import { messageTooltip } from "../message-tooltip";
 import { quoteHTML, selectionQuote } from "../message-quote";
 import { ReplyPacing } from "../reply-pacing";
-import { avatarHTML, onAvatarChange } from "../avatar";
+import { avatarHTML, currentAvatar, onAvatarChange } from "../avatar";
 import "../background-questions.css";
 import type { BackgroundQuestions } from "../background-questions";
 import { RAPHAEL_ID, faceHTML, memberPlaceholder } from "../members";
@@ -684,6 +684,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     composer: () => (composer.isConnected && !composer.hidden ? composer : null),
     target: () => (empty.hidden || !inRaphael() ? null : hero.querySelector<HTMLElement>(".av")),
     face: () => avatarHTML({ size: 132, loop: true }),
+    live: () => currentAvatar() === null,
     onClick: () => void endVoice(),
   });
 

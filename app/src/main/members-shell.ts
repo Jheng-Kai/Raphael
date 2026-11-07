@@ -156,7 +156,9 @@ export function createMembers(host: MembersHost): MembersShell {
     async reorderGroup(id, beforeId) {
       const groups = [...(list?.groups ?? [])].sort((a, b) => a.position - b.position);
       const moving = groups.find(g => g.id === id); if (!moving) return;
-      const next = groups.filter(g => g.id !== id); next.splice(next.findIndex(g => g.id === beforeId), 0, moving);
+      const next = groups.filter(g => g.id !== id);
+      const at = beforeId === null ? -1 : next.findIndex(g => g.id === beforeId);
+      next.splice(at < 0 ? next.length : at, 0, moving);
       await groupChange(async () => { for (const [position, group] of next.entries()) await api.groupsUpdate(group.id, { position }); });
     },
   });
