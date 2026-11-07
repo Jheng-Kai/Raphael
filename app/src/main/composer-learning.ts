@@ -4,7 +4,7 @@
 import * as api from "./api";
 export interface Correction { before: string; after: string }
 
-/** Transport dictation evidence to the native tracker; acceptance belongs to the core. */
+/** Transport dictation evidence to the pure native term rule; the core persists accepted pairs. */
 export function composerCorrections(before: string, after: string): Correction[] {
   return before && before !== after && before.length <= 20_000 && after.length <= 20_000
     ? [{ before, after }] : [];

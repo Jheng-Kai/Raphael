@@ -19,12 +19,12 @@
 //! kept: the word pairs that are learned are the only thing that is stored.
 
 mod apps;
-mod cjk_words;
 pub(crate) mod corrections;
 mod keystrokes;
 #[cfg(all(test, windows))]
 mod native_tests;
 mod terminal;
+mod terms;
 #[cfg(windows)]
 mod uia;
 

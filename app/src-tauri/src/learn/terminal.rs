@@ -666,9 +666,7 @@ mod tests {
 
     #[test]
     fn committed_chinese_and_japanese_text_is_read_from_the_same_terminal_field() {
-        // One Han character changed is a whole word only by the Windows zh-TW word breaker; a
-        // machine without it (the CI runner) fails closed and learns nothing (`cjk_words`).
-        let segmented = super::super::cjk_words::word_ranges("拉斐爾在臺北").is_some();
+        // The pure rule has identical boundaries on every supported platform.
         for (old, new) in [("拉菲爾", "拉斐爾"), ("ラファエル", "ラフィエル")] {
             let pasted = format!("今天請用{old}來整理昨天的會議紀錄並且寄給大家確認。");
             let fixed = pasted.replace(old, new);
@@ -678,11 +676,7 @@ mod tests {
                 TerminalDecision::Continue
             );
             let learned: Vec<String> = tracker.corrections().into_iter().map(|c| c.word).collect();
-            let expected = if new == "拉斐爾" && !segmented {
-                vec![]
-            } else {
-                vec![new.to_owned()]
-            };
+            let expected = vec![new.to_owned()];
             assert_eq!(learned, expected, "{old} -> {new}");
         }
     }
@@ -745,9 +739,9 @@ mod tests {
         let mut tracker = TerminalTracker::new(HERDR, HERDR_PASTE).expect("middle-pane paste");
         assert_eq!(tracker.pane, 1);
         assert_eq!(tracker.pane_count, 3);
-        let edited = HERDR.replacen("：cloud", "：tools", 1);
+        let edited = HERDR.replacen("：cloud", "：Claude", 1);
         assert_eq!(tracker.observe(&edited), TerminalDecision::Continue);
-        assert_eq!(pairs(&tracker), [("cloud".into(), "tools".into())]);
+        assert_eq!(pairs(&tracker), [("cloud".into(), "Claude".into())]);
     }
 
     #[test]
@@ -1502,8 +1496,8 @@ mod tests {
     #[test]
     fn a_session_of_edits_moves_and_redraws_only_ever_learns_what_is_in_the_input() {
         let words = [
-            "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india",
-            "juliet", "kilo", "lima",
+            "Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel", "India",
+            "Juliet", "Kilo", "Lima",
         ];
         let mut rng = Rng(0x1234_5678_9ABC_DEF1);
         let mut learned = 0;
