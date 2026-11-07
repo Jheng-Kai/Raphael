@@ -2992,7 +2992,7 @@ export function checkRendered(name, context = {}) {
     const who = [...day.querySelectorAll('.ho-who')];
     require(who.length === 2 && who.every(b => b.tagName === 'BUTTON' && visible(b.querySelector('.av, .slime-surface, svg.slime'))) && who.map(b => b.dataset.homeMember).join() === "2,1", "the faces of who did the work, the busiest first, each a button");
     const story = day.querySelector('.ho-story');
-    require(visible(story) && !story.classList.contains('is-quiet') && /小晴/.test(story.textContent) && story.getBoundingClientRect().top >= day.querySelector('.ho-tally').getBoundingClientRect().bottom - 1, "his paragraph on yesterday follows the numbers");
+    require(visible(story) && !story.classList.contains('is-note') && /小晴/.test(story.textContent) && story.getBoundingClientRect().top >= day.querySelector('.ho-tally').getBoundingClientRect().bottom - 1, "his paragraph on yesterday follows the numbers");
     require(day.querySelectorAll('.ho-story li, .ho-story h3').length === 0, "a paragraph, not a list");
     const checks = page.querySelector('.ho-checks'), ok = checks.querySelector('.ho-ok');
     require(!checks.querySelector('.ho-check') && /6 項正常/.test(ok.querySelector('b').textContent), "all six checks fine, said once");
@@ -3004,7 +3004,7 @@ export function checkRendered(name, context = {}) {
     // No model for Raphael: the numbers stay, his words say why they are missing, and one button opens the model choice.
     const day = document.querySelector('.page-home:not([hidden]) .ho-yesterday');
     require([...day.querySelectorAll('.ho-num b')].map(b => b.textContent).join() === "0,0,0" && !day.querySelector('.ho-who'), "an empty yesterday reads 0, 0, 0 with no faces");
-    const quiet = day.querySelector('.ho-story.is-quiet'), fix = quiet?.querySelector('[data-home-go="models"]');
+    const quiet = day.querySelector('.ho-story.is-note'), fix = quiet?.querySelector('[data-home-go="models"]');
     require(visible(quiet) && /模型/.test(quiet.textContent) && fix?.tagName === 'BUTTON' && fix.textContent.trim() === '選模型', "the reason in plain words and one button to choose a model");
     require(/^(健康檢查完成)/.test(document.querySelector('.ho-hero .ho-health').textContent), "without his word on today the hero keeps the health line");
     return { check: name };

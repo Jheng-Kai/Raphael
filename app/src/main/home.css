@@ -66,7 +66,7 @@
 .ho-who.btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 var(--sp-2) 0 5px; border: 1px solid var(--line); border-radius: var(--r-pill); background: transparent; font-size: var(--fs-xs); color: var(--text-2); font-variant-numeric: tabular-nums; }
 .page-home .ho-who.btn:hover:not(:disabled) { background: var(--hover); }
 .ho-story { margin: var(--sp-2) 0 0; padding-left: var(--sp-2); max-width: var(--layout-reading-max); font-size: var(--fs-sm); line-height: 1.7; color: var(--text-2); text-wrap: pretty; }
-.ho-story.is-quiet { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); color: var(--text-3); }
+.ho-story.is-note { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); color: var(--text-3); }
 .ho-story-fix.btn { flex: none; }
 /* The health check: what is not well as rows that open its place, then one line naming everything that is fine. */
 .ho-check .ho-dot { justify-self: center; width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--warn); }
@@ -75,7 +75,7 @@
 .ho-check[data-status] .ho-row-copy span { color: var(--text-2); }
 .ho-ok { display: flex; align-items: flex-start; gap: var(--sp-3); margin: 0; padding: var(--sp-2) var(--sp-2) 0; min-width: 0; }
 .ho-ok > .i { flex: none; width: 16px; height: 16px; margin: 2px 6px 0; color: var(--ok); }
-.ho-ok > span { min-width: 0; display: grid; gap: 2px; }
+.ho-ok > span { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
 .ho-ok b { font-size: var(--fs-sm); font-weight: 500; }
 .ho-ok small { font-size: var(--fs-xs); line-height: 1.6; color: var(--text-3); overflow-wrap: anywhere; }
 @container main (max-width: 900px) {

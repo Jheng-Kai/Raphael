@@ -113,8 +113,6 @@ export const zhTW = {
   "members.panelConversations": "對話",
   "members.panelNoFiles": "還沒有檔案或頁面",
   "members.panelReadFailed": "無法讀取，請再試一次",
-  "members.panelThisWeek": "本週",
-  "members.panelEarlier": "更早",
   "members.panelMore": "顯示更多",
   "desktop.asleep": "電腦在休眠",
   "desktop.wake": "喚醒電腦",

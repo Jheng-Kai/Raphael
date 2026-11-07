@@ -31,11 +31,11 @@ const clock = (at: number): string => new Date(at).toLocaleTimeString(getLocale(
 /** A picture: its thumbnail when it is a delivered attachment, else its icon on the tile. */
 function pictureHTML(item: LibraryItem): string {
   const inner = item.attachment_id ? `<img data-attachment="${esc(item.attachment_id)}" alt="">` : `<span class="lib-tile-icon">${ico("image")}</span>`;
-  return `<button type="button" class="lib-pic" data-panel-file="${esc(item.id)}" data-title="${esc(item.title)}" aria-label="${esc(item.title)}">${inner}</button>`;
+  return `<button type="button" class="btn lib-pic" data-panel-file="${esc(item.id)}" data-title="${esc(item.title)}" aria-label="${esc(item.title)}">${inner}</button>`;
 }
 
 function rowHTML(item: LibraryItem): string {
-  return `<button type="button" class="lib-row" data-panel-file="${esc(item.id)}"><span class="lib-icon" data-kind="${item.kind}">${ico(ICONS[item.kind] ?? "file")}</span>` +
+  return `<button type="button" class="btn lib-row" data-panel-file="${esc(item.id)}"><span class="lib-icon" data-kind="${item.kind}">${ico(ICONS[item.kind] ?? "file")}</span>` +
     `<span class="lib-title">${esc(item.title)}</span><time datetime="${new Date(item.at_ms).toISOString()}">${esc(clock(item.at_ms))}</time></button>`;
 }
 

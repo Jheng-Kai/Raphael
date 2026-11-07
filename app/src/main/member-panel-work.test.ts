@@ -11,7 +11,7 @@ const item = (id: string, kind: LibraryItem["kind"], title: string, at: number, 
 };
 const parse = (html: string): HTMLElement => { const host = document.createElement("div"); host.innerHTML = html; return host; };
 
-test("groups by day, newest first; pictures are thumbnails and the rest rows with their kind's icon, title and time", () => {
+test("groups by day, newest first, with pictures as thumbnails and the rest as rows with their kind's icon, title and time", () => {
   const hour = 3_600_000;
   const page = parse(panelLibraryHTML({ has_more: true, files: [
     item("attachment:a.png", "image", "Sketch.png", NOW - hour, { attachment_id: "a".repeat(32) + ".png" }),

@@ -70,17 +70,16 @@
 .mb-rts { display: grid; grid-template-columns: minmax(0, 1fr); padding: var(--sp-1); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
 /* The Library: what the member delivered, by day (Grok Bot's Library). Pictures in a grid of three square thumbnails,
    every other deliverable a quiet row: its kind's icon, its title, the time. Nothing framed; a row lights under the pointer. */
-.lib-day { display: grid; gap: var(--sp-2); }
+.lib-day { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .lib-day + .lib-day { margin-top: var(--sp-4); }
 .lib-pics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); }
-.lib-pic { display: grid; place-items: center; aspect-ratio: 1; max-width: 100%; padding: 0; border: 0; border-radius: var(--r-md); overflow: hidden; background: color-mix(in srgb, var(--text) 6%, transparent); cursor: pointer; }
-.lib-pic > img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.lib-pic:not(:has(img[src])) > img { visibility: hidden; }
+.lib-pic.btn { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; aspect-ratio: 1; max-width: 100%; padding: 0; border: 0; border-radius: var(--r-md); overflow: hidden; background: color-mix(in srgb, var(--text) 6%, transparent); cursor: pointer; }
+.lib-pic.btn > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.lib-pic.btn:not(:has(img[src])) > img { visibility: hidden; }
 .lib-tile-icon { color: var(--text-3); }
-.lib-pic:focus-visible, .lib-row:focus-visible { outline: 2px solid var(--focus, var(--accent)); outline-offset: 2px; }
 .lib-rows { display: grid; grid-template-columns: minmax(0, 1fr); }
-.lib-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); min-height: 40px; padding: 0 var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); text-align: left; cursor: pointer; }
-.lib-row:hover { background: var(--hover); }
+.lib-row.btn { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); min-height: 40px; padding: 0 var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.lib-row.btn:hover:not(:disabled) { background: var(--hover); }
 .lib-icon { display: inline-flex; color: var(--text-3); }
 .lib-icon .i { width: 16px; height: 16px; }
 .lib-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sm); }

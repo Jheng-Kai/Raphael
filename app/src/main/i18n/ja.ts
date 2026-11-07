@@ -114,8 +114,6 @@ export const ja = {
   "members.panelConversations": "会話",
   "members.panelNoFiles": "まだファイルやページはありません",
   "members.panelReadFailed": "読み込めませんでした。もう一度お試しください",
-  "members.panelThisWeek": "今週",
-  "members.panelEarlier": "それ以前",
   "members.panelMore": "もっと見る",
   "desktop.asleep": "コンピューターは休止中です",
   "desktop.wake": "コンピューターを起動",

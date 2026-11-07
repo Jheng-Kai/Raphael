@@ -114,8 +114,6 @@ export const en = {
   "members.panelConversations": "Conversations",
   "members.panelNoFiles": "No files or pages yet",
   "members.panelReadFailed": "Could not load. Try again.",
-  "members.panelThisWeek": "This week",
-  "members.panelEarlier": "Earlier",
   "members.panelMore": "Show more",
   "desktop.asleep": "Computer is asleep",
   "desktop.wake": "Wake the computer",

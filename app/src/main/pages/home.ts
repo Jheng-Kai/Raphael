@@ -166,10 +166,10 @@ function teamHTML(team: readonly Member[], data: HomeOverview): string {
 /** A daily paragraph Raphael writes, or the plain reason it is not there; without a model, the way to choose one. */
 function narrativeHTML(story: HomeNarrative): string {
   if (story.state === "ready" && story.narrative) return `<p class="ho-story">${esc(story.narrative)}</p>`;
-  if (story.state === "pending") return `<p class="ho-story is-quiet">${esc(t("home.storyPending"))}</p>`;
+  if (story.state === "pending") return `<p class="ho-story is-note">${esc(t("home.storyPending"))}</p>`;
   if (story.reason === "model_unavailable")
-    return `<p class="ho-story is-quiet">${esc(t("home.storyNoModel"))}${btn(esc(t("home.chooseModel")), "sm ho-story-fix", ' data-home-go="models"')}</p>`;
-  return `<p class="ho-story is-quiet">${esc(t("home.storyFailed"))}</p>`;
+    return `<p class="ho-story is-note">${esc(t("home.storyNoModel"))}${btn(esc(t("home.chooseModel")), "sm ho-story-fix", ' data-home-go="models"')}</p>`;
+  return `<p class="ho-story is-note">${esc(t("home.storyFailed"))}</p>`;
 }
 
 function yesterdayHTML(data: HomeOverview, members: readonly Member[]): string {

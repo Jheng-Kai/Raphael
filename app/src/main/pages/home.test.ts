@@ -257,7 +257,7 @@ describe("what Home gathers for the day (owner, 2026-11-07 night)", () => {
     return sample;
   };
 
-  test("five plain sections; his line on today in the hero; yesterday in numbers, faces and his paragraph", async () => {
+  test("five plain sections, his line on today in the hero, and yesterday in numbers, faces and his paragraph", async () => {
     team.members = [person(0, "Raphael"), person(1, "Ari"), person(2, "Bo", { role: "Keeps the books" })];
     queue.splice(0, queue.length, digest());
     const { page, app } = await mount();
@@ -294,7 +294,7 @@ describe("what Home gathers for the day (owner, 2026-11-07 night)", () => {
     const pending = digest(); pending.yesterday = { ...pending.yesterday!, ...story("pending", null, "generating") };
     pending.today_plan = { ...pending.today_plan!, ...story("pending", null, "generating") };
     const waiting = parse(homeHTML(pending, team.members as Member[]));
-    expect(waiting.querySelector(".ho-story.is-quiet")!.textContent).toBe("正在整理昨天的紀錄…");
+    expect(waiting.querySelector(".ho-story.is-note")!.textContent).toBe("正在整理昨天的紀錄…");
     expect(waiting.querySelector(".ho-hero .ho-health")!.textContent).toBe("健康檢查完成，2 位成員都正常。");
     const none = digest(); none.yesterday = { ...none.yesterday!, ...story("unavailable", null, "model_unavailable") };
     queue.splice(0, queue.length, none);
