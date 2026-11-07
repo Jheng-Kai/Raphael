@@ -2078,6 +2078,22 @@ export function checkRendered(name, context = {}) {
     require(edge.getAttribute('role') === 'separator' && Math.abs(box.left - panel.getBoundingClientRect().left) < 1 && getComputedStyle(edge, '::after').content === 'none', "its left edge drags it, with no handle drawn");
     return {check:name, width:Math.round(width)};
   }
+  if (name === "reading-place-before" || name === "reading-place-kept") {
+    // The details panel dragged wider rewraps the conversation without moving what is read (owner, 2026-11-07).
+    const scroller = [...document.querySelectorAll('.page-agent .ra-scroll')].find(visible);
+    const top = scroller.getBoundingClientRect().top, items = [...scroller.querySelectorAll('.thread > li')];
+    if (name === "reading-place-before") {
+      require(scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop > 40, "the view is in the middle of the conversation");
+      const item = items.find(li => li.getBoundingClientRect().bottom > top);
+      window.__readingPlace = { index: items.indexOf(item), offset: item.getBoundingClientRect().top - top, width: scroller.clientWidth };
+      return { check: name };
+    }
+    const was = window.__readingPlace, panel = document.querySelector('.page-agent .mb-det:not([hidden])');
+    if (panel && getComputedStyle(panel).position !== 'absolute') require(scroller.clientWidth < was.width - 50, `the conversation got narrower: ${was.width} -> ${scroller.clientWidth}`);
+    const offset = items[was.index].getBoundingClientRect().top - top;
+    require(Math.abs(offset - was.offset) <= 2, `the message at the top stays where it was: ${Math.round(was.offset)} -> ${Math.round(offset)}`);
+    return { check: name, moved: Math.round(offset - was.offset) };
+  }
   if (name === "sidebar-rail-folded") {
     if (matchMedia('(max-width: 859px)').matches) return {check:name,compact:true};
     const folder = document.querySelector('#nav .mb-sec[data-group="1"]');

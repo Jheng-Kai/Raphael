@@ -48,6 +48,7 @@ import { openRoutineDialog } from "../routine-dialog";
 import { createAttachmentMedia } from "../attachment-media";
 import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachmentLimit, readComposerFile, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
 import { closeMediaLightbox, openMediaLightbox } from "../media-lightbox";
+import { keepReadingPlace } from "../reading-place";
 import { wholeLinks } from "../composer-links";
 import { mountSlashMenu } from "../slash-menu";
 import { getLocale, onLocaleChange, t } from "../i18n";
@@ -261,6 +262,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const scroller = el.querySelector<HTMLElement>(".ra-scroll")!;
   const older = el.querySelector<HTMLElement>(".ra-older")!;
   const thread = el.querySelector<HTMLOListElement>(".thread")!;
+  // A panel dragged wider or narrower leaves the reading place where it was (reading-place.ts).
+  keepReadingPlace(scroller, ".thread > li");
   const none = el.querySelector<HTMLElement>(".ra-none")!;
   const wait = el.querySelector<HTMLElement>(".ra-wait")!;
   const empty = el.querySelector<HTMLElement>(".ra-empty")!;

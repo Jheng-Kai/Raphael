@@ -29,6 +29,7 @@ import { bindComposerMentions, mentionTargets } from "./team-mentions";
 import { createAttachmentMedia } from "./attachment-media";
 import { mountStageDrop } from "./attachments";
 import { openMediaLightbox } from "./media-lightbox";
+import { keepReadingPlace } from "./reading-place";
 import { createBackgroundQuestions } from "./background-questions";
 import { conversationCardsHTML, filesHTML, latestProgress, livePresenceHTML, messageActionsHTML, updateLiveTimes, waitsAtCard } from "./timeline";
 import { mountConversationCardActions } from "./conversation-card-actions";
@@ -226,6 +227,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const el=document.createElement("section");el.className="mb-chat au-room-pane";el.hidden=true;
   el.innerHTML=`<header class="page-head mb-head"><span class="room-picker"></span><div class="au-room-heading"></div><div class="ra-tools">${iconButton("search",t("agent.search"), ' data-room-search')}${iconButton("more",t("members.more",{p0:t("rooms.title")}), ' data-room-menu')}</div></header><div class="ra-find" hidden></div><div class="ra-stage"><div class="ra-scroll"><div class="ra-col"><div class="ra-older"></div><ol class="thread au-room-thread"></ol></div></div><div class="ra-dock"></div></div>`;
   const thread=el.querySelector<HTMLElement>(".thread")!,scroll=el.querySelector<HTMLElement>(".ra-scroll")!,older=el.querySelector<HTMLElement>(".ra-older")!;
+  keepReadingPlace(scroll, ".thread > *");
   let room:Room|undefined,list:MembersList={members:[],groups:[]},messages:RoomMessage[]=[],generation=0,opened=false,canOlder=false,loadingOlder=false;
   // Navigation identity remains available while the complete room is loading.
   let roomId: number | undefined;
