@@ -5,7 +5,7 @@ const fixture = JSON.parse(readFileSync(join(import.meta.dirname, "../fixture.js
 const cropOpen = [...settings("general"), click('[data-owner-photo]'), { action: "upload", selector: 'input.mb-picker', path: 'public/brand/glyph-ring.png' }, wait('.av-crop-frame:not([hidden])')];
 
 export default [
-  scene("sidebar-hidden-folder", "Hidden members and group chats wait in one folder at the end of the list, as Grok Bot's Hidden Bots, and a right click brings one back", [rightClick('.mb-hidden [data-member="2"]'), wait('#app-popover [data-pick="hide"]'), check("sidebar-hidden-folder")], { hiddenMember: true }),
+  scene("sidebar-hidden-folder", "Hidden members and group chats wait in one folder at the end of the list, closed until its header is pressed (as Grok Bot's Hidden Bots), and a right click brings one back", [check("sidebar-hidden-folder-closed"), click('.side .mb-hidden .mb-ghead'), wait('.side .mb-hidden[data-open="true"] [data-member="2"]'), rightClick('.mb-hidden [data-member="2"]'), wait('#app-popover [data-pick="hide"]'), check("sidebar-hidden-folder")], { hiddenMember: true }),
   scene("sidebar", "One conversation sidebar across Home and dictation", [page("home"), check("sidebar-shell"), page("dictation"), check("sidebar-shell"), page("agent"), check("sidebar-shell")]),
   scene("sidebar-folders", "Open member folders and group chats", [{ action: "member-column", collapsed: false }, check("sidebar-shell")]),
   scene("sidebar-folded", "A collapsed folder preserves its choice", [{ action: "member-column", collapsed: false }, click('[data-group-fold="1"]'), check("sidebar-folded"), check("sidebar-shell")]),

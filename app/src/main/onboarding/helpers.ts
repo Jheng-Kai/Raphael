@@ -3,8 +3,8 @@
 import { popularRank } from "../store-finder";
 import type { StoreService } from "../types";
 
-/** The services the second step offers. */
-export const SERVICES_SHOWN = 6;
+/** The services the second step offers: six rows of the three-column grid, the rest of the store being a search away. */
+export const SERVICES_SHOWN = 18;
 
 const identity = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, "");
 

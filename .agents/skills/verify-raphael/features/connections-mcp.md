@@ -73,25 +73,25 @@ CARGO_TARGET_DIR apply.
 ## Sub-features
 
 Settings > Connections contains one connected view (the tab 已連結) for Composio
-toolkits, private Google, custom MCP servers and the members' private skills. Every
-row has a bare service mark (or a generic plug, or the member's face for a skill),
+toolkits, private Google and custom MCP servers: connectors only (owner, 2026-11-07).
+A member's skills, their sharing and their import are managed in that member's own
+panel, never here; the dialog has no skills section, no import button and no skill
+rows. Every row has a bare service mark (or a generic plug),
 name, one-line description, switch and detail chevron. Managed bridge
 servers are not duplicate rows. Tool switches are grouped by write/read in the
 detail. Disconnect lives in the detail overflow with a second-press confirmation.
 Custom MCP add/edit/test, command/HTTP, JSON paste and local discovery stay reachable.
 
-The rows sit under three headings: 應用程式 (their tools can be called now), 尚未連結
+The rows sit under two headings: 應用程式 (their tools can be called now) and 尚未連結
 (waiting for sign-in, failed, a duplicate of another connection, all tools off or
-unreadable, each with its reason) and 私人技能. An app is connected only when its tools
+unreadable, each with its reason). An app is connected only when its tools
 can be called now, and the core defines that once (`integrations/inventory.py`); the
 Settings > Connections tab's number and its installed rows
 all show that one count. An unreadable inventory shows 「—」 instead of a number (the
 entry's accessible name says it cannot be read), and an app whose state cannot be read
 says 「無法讀取」 on its row.
 An app's detail shows its account(s) by status, `已開啟 N/M 個工具` with a switch per
-tool, signing in again and, in the overflow, disconnect. A private skill's page shows
-its name, who has it, its description (when it is used), a switch, the whole
-SKILL.md as editable text and 刪除技能. Sharing an app or a skill is not offered
+tool, signing in again and, in the overflow, disconnect. Sharing an app is not offered
 until members can share across users (P13).
 
 The Store always reads Raphael's built-in services from integrations.catalog, with
@@ -126,7 +126,7 @@ and does not prove remote image availability.
 ## How to get to it (user POV)
 
 Open Settings > Connections from the account footer. Use 已連結 to open a service
-detail or a private skill, change their switches or open an overflow. Add offers custom command/URL, pasted JSON and import.
+detail, change its switch or open an overflow. Add offers custom command/URL, pasted JSON and import.
 Use Store to search and Add a built-in service without configuring Composio;
 complete its existing login, then return to 已連結. Optionally use the setup row at
 the end to save a Composio project key and add its extra apps.
@@ -137,7 +137,7 @@ the end to save a Composio project key and add its extra apps.
 npm run look -- plugins-installed plugins-detail plugins-store plugins-store-category plugins-store-key plugins-store-key-openrouter plugins-store-key-consumer plugins-connecting --theme both --width 1120,720,1920x1080
 npm run look -- connections connections-hover server-menu connections-add-menu connections-command connections-test connections-url connections-edit connections-delete --theme both --width 1120,720,1920x1080
 npm run look -- connections-paste connections-paste-preview connections-discover connections-empty connections-discover-empty --theme both --width 1120,720,1920x1080
-npm run look -- connect-apps-categories connected-apps-skills connected-apps-unreadable connections-app-switch connector-many-tools connector-account-tools connector-uninstalled skill-private-detail --theme both --width 1120,720,1920x1080
+npm run look -- connect-apps-categories connected-apps-only connected-apps-unreadable connections-app-switch connector-many-tools connector-account-tools connector-uninstalled --theme both --width 1120,720,1920x1080
 ```
 
 For this local store change, the selected acceptance matrix is:
@@ -168,10 +168,13 @@ failures, local search/count, category isolation and late replies after reset.
 Core tests cover cursor paging, concurrent cache reads, one-hour expiry, atomic
 failure fallback, key invalidation, repeated cursors and the 3,000-entry cap.
 
-The last command in the broader list above is the apps and skills set (`scenes/apps.mjs`). Each scene enters
+The last command in the broader list above is the apps set (`scenes/apps.mjs`). Each scene enters
 through Settings > Connections; `apps-count` compares the tab's
-number, the rows and the roster, and `apps-unreadable` checks that an unreadable
-inventory shows no count.
+number, the rows and the roster, `apps-unreadable` checks that an unreadable
+inventory shows no count, and `connectors-only` (scene `connected-apps-only`, whose fixture
+gives the members skills) requires no skills section, import button, skill row, plugin set or word of skills (connections.test.ts pins that the dialog never reads a member's skills; the open member panel behind it may).
+The scenes `connected-apps-skills`, `skill-private-detail` and the `skills-*` import, grant, source and plugin scenes were
+retired on 2026-11-07 with the dialog's skills section; the member panel's skills are covered by `details-skills` and the members map.
 
 All switches in Connections are binary (owner, 2026-10-28). The app switch reflects
 only its enabled flag; turning it off or on preserves every tool exclusion. A
@@ -200,7 +203,7 @@ RPCs and then expands the individual list. Its sign-in failure step checks the
 dedicated toolkit-not-allowed words. All scenes retain the shared real entry and
 synthetic IPC boundary.
 
-`skill-page` checks the action order and that the document is whole and starts at its first line. Also run `home` (the global sidebar on the wide
+Also run `home` (the global sidebar on the wide
 and compact layouts) and the `plugins-*` scenes above for regressions.
 
 Inspect every contact sheet and detail/store/key/menu full-size image, especially
@@ -273,7 +276,7 @@ Count the connected apps by hand against Settings: connect one, let a sign-in ex
 the same service twice and uninstall one, and watch the number follow each time; ask a CLI
 and an API brain how many apps are connected. Switch a tool off, start a new turn and a
 running one, and confirm neither brain offers or runs it; do the same after uninstalling,
-once with 一律允許 chosen earlier. Edit a private skill's document, ask for what its
+once with 一律允許 chosen earlier. Edit a skill in the member's own panel (not here), ask for what its
 description names and see it used; delete it and see that it is not.
 
 ## UI audit regression coverage
@@ -297,25 +300,23 @@ A failed sign-in or re-link started in an app dialog uses the Store's same local
 loginFailure copy in a note with role=alert after the account rows. It does not
 raise a toast. Retry, close and success clear the error; a pending failure from a
 closed or replaced dialog is discarded. Other connections-owned feedback raised
-while an app, skill or project-key dialog is open stays inside that dialog:
-re-login success, skill save/toggle/delete errors, tool/app operation errors,
-custom server test/refresh and device/browser/cancellation errors. Skill save uses
-role=status immediately before its actions. Successful removal closes its dialog
+while an app or project-key dialog is open stays inside that dialog:
+re-login success, tool/app operation errors,
+custom server test/refresh and device/browser/cancellation errors. Successful removal closes its dialog
 before showing the usual list-level toast.
 
 The selected regression matrix for this change is:
 
 ~~~powershell
-npm run look -- connector-account-tools connector-many-tools connections-app-switch plugins-detail plugins-store plugins-store-category plugins-store-key skill-private-detail connector-uninstalled --theme both --width 1120,720,1920x1080
+npm run look -- connector-account-tools connector-many-tools connections-app-switch plugins-detail plugins-store plugins-store-category plugins-store-key connector-uninstalled --theme both --width 1120,720,1920x1080
 ~~~
 
 connector-account-tools checks the refusal inline with no refusal toast, then
 connections-dialog-actions calls elementFromPoint at EVERY footer button centre
 and requires the button or its child. It checks both the folded and expanded tool
-states. connector-many-tools and skill-private-detail run the same footer check;
-the skill scene also checks inline save feedback without a save toast. Happy-dom
+states. connector-many-tools runs the same footer check. Happy-dom
 tests cover refusal/denial/timeout/network copy, retry/success/close, stale replies
-after reopening, skill save feedback and the footer check's covered-button failure.
+after reopening and the footer check's covered-button failure.
 
 ## Shared content measures (2026-10-28)
 

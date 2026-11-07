@@ -779,7 +779,7 @@ room and background paths retain their shared production engines.
 Offline tests: core/tests/members/test_skill_library.py,
 core/tests/agent/test_cli_skill_packages.py,
 core/tests/agent/test_local_commands.py::test_imported_skill_script_uses_ordinary_local_command_approval,
-app/src/main/connection-skills.test.ts, connections.test.ts, member-profile.test.ts and member-details.test.ts.
+app/src/main/connections.test.ts (connectors only since 2026-11-07), member-profile.test.ts and member-details.test.ts.
 The existing app/scripts/look/mock-ipc boundary also models shared scope, local
 source selection/import and individual grants; mock-ipc.test.mjs covers that contract.
 All package/credential fixtures use temporary synthetic homes. Installed CLIs are
@@ -787,7 +787,7 @@ inspected with --help only; fake protocols do not prove installed native loading
 login refresh, provider behavior or rendering.
 
 Affected scenes to list now and capture during authorized integration:
-connected-apps-skills, skill-private-detail, raphael-skills, details-skills,
+raphael-skills, details-skills,
 details-commands, completion-slash, completion-plugin, completion-clash,
 slash-commands, local-command-consent and local-command-background. Capture both
 themes at 1120,720,1920x1080, then judge the same run. Shared rows/buttons/dialogs
@@ -796,6 +796,8 @@ Follow-up 3 authorizes the selected offline look matrix below. Native, network a
 paid API acceptance remain outside this unit's authorization.
 
 ### Shared skill import and member choices (review follow-up 3)
+
+> Retired on 2026-11-07 (owner): Connect apps lists connectors only, so the Connections skills section, its import dialog, library rows, grants dialog and plugin sets are gone from the app, together with the scenes connected-apps-skills, skill-private-detail, skills-installed-sources, skills-import-shared, skills-member-grants, skills-source-changed, skills-plugin-entry, skills-marketplace, skills-plugin-set, skills-plugin-update and skills-plugin-details (connected-apps-only and its `connectors-only` check replace the first). Skills belong to each member and are managed in that member's right panel (details-skills, raphael-skills). The core capability and its pytest evidence stay. What follows is the history of the retired dialog.
 
 Connections has one Skills section in its existing position after apps. Its
 data-heading uses the same layout as Settings > Data, with an icon plus short
@@ -815,16 +817,16 @@ sizes, row action placement and the real IPC boundary/results. The connected-app
 scene also checks the consolidated section. All fixture copy is synthetic zh-TW.
 
 ```powershell
-npm run look -- connected-apps-skills skill-private-detail raphael-skills details-skills details-commands completion-slash completion-plugin completion-clash slash-commands local-command-consent local-command-background skills-installed-sources skills-import-shared skills-member-grants skills-source-changed --theme both --width 1120,720,1920x1080
+npm run look -- raphael-skills details-skills details-commands completion-slash completion-plugin completion-clash slash-commands local-command-consent local-command-background --theme both --width 1120,720,1920x1080
 ```
 
-Inspect every contact sheet and every full-size image for connected-apps-skills,
-skill-private-detail and the four new scenes. Compare owner/source text, row
-insets and switches with neighbouring Connections apps, and the header action
-with Settings > Data. Vitest: connection-skills.test.ts, connections.test.ts and
+Inspect every contact sheet and every full-size image for the member-panel scenes.
+Vitest: connections.test.ts, member-profile.test.ts and
 app/scripts/look/mock-ipc.test.mjs (scene fixture source propagation).
 
 ### One shared package row and readable sources (review follow-up 4)
+
+> Retired on 2026-11-07 (owner): Connect apps lists connectors only, so the Connections skills section, its import dialog, library rows, grants dialog and plugin sets are gone from the app, together with the scenes connected-apps-skills, skill-private-detail, skills-installed-sources, skills-import-shared, skills-member-grants, skills-source-changed, skills-plugin-entry, skills-marketplace, skills-plugin-set, skills-plugin-update and skills-plugin-details (connected-apps-only and its `connectors-only` check replace the first). Skills belong to each member and are managed in that member's right panel (details-skills, raphael-skills). The core capability and its pytest evidence stay. What follows is the history of the retired dialog.
 
 Connections keeps one library row per shared skill regardless of member count.
 Its existing document dialog lists every member, Raphael first, with the same tg
@@ -873,6 +875,8 @@ npm run look -- speaker-draft-chief speaker-draft-member speaker-draft-profile -
 
 ## Plugin sets and GitHub marketplaces (2026-11-04)
 
+> Retired on 2026-11-07 (owner): Connect apps lists connectors only, so the Connections skills section, its import dialog, library rows, grants dialog and plugin sets are gone from the app, together with the scenes connected-apps-skills, skill-private-detail, skills-installed-sources, skills-import-shared, skills-member-grants, skills-source-changed, skills-plugin-entry, skills-marketplace, skills-plugin-set, skills-plugin-update and skills-plugin-details (connected-apps-only and its `connectors-only` check replace the first). Skills belong to each member and are managed in that member's right panel (details-skills, raphael-skills). The core capability and its pytest evidence stay. What follows is the history of the retired dialog.
+
 R-SKILL-06/07 extend the shared library without another settings page. In the existing
 import dialog a local plugin shows one name/version/count row and one import; its
 disclosure still permits individual skill imports. Add a GitHub owner/repo to read
@@ -894,7 +898,7 @@ bounds, link/traversal refusal and unsupported sources. Fake CLI tests cover ass
 skills/commands only, disabled hooks and no automatic shell expansion. They do not
 prove an installed CLI or live GitHub behavior.
 
-npm run look -- connected-apps-skills skill-private-detail raphael-skills details-skills details-commands completion-slash completion-plugin completion-clash slash-commands local-command-consent local-command-background skills-installed-sources skills-import-shared skills-member-grants skills-source-changed skills-plugin-entry skills-marketplace skills-plugin-set skills-plugin-update skills-plugin-details --theme both --width 1120,720,1920x1080
+npm run look -- raphael-skills details-skills details-commands completion-slash completion-plugin completion-clash slash-commands local-command-consent local-command-background --theme both --width 1120,720,1920x1080
 
 New scene checks cover one plugin import, individual import disclosure, market version
 and unsupported-source copy, exactly three grouped fixture capabilities, one whole-set
@@ -906,21 +910,19 @@ missing references reported as blocked and no unapproved network requests.
 
 Run core/tests/members/test_skill_plugins.py, test_skill_library.py,
 core/tests/brain/test_db.py and core/tests/agent/test_cli_skill_packages.py plus the
-changed frontend files: connection-skills.test.ts, skill-sets.test.ts,
-connections.test.ts, mcp-proposal.test.ts, i18n/i18n.test.ts and look/mock-ipc.test.mjs.
+changed frontend files: connections.test.ts, mcp-proposal.test.ts, i18n/i18n.test.ts and look/mock-ipc.test.mjs.
 Follow-up 5 additionally requires one frontend verify and one final complete core
 suite, each after wait-heavy.ps1. R-SKILL-05 named evidence above remains in force.
 ## Localized skill origins (2026-11-05)
 
-R-SKILL-08 shares skillOriginLabel across member details, Connections rows and skill
-dialogs; discovery uses the same source formatter. Learned rows have exactly one
+R-SKILL-08 shares skillOriginLabel across member details and the shared member resource editor. Learned rows have exactly one
 localized origin/date line. No origin text or title exposes learned/owner/imported,
 local:/github:/plugin: prefixes or plugin cache paths. The source fixture includes a
 GitHub transport prefix. The growing-skills check asserts the learned line exactly;
 the shared source guard checks source labels and row paragraphs, including titles.
 Run the twenty-scene skill matrix above in both themes and all three sizes, inspect
 every contact sheet and relevant full-size member/detail/source views. Unit evidence
-is connection-skills.test.ts and the three localized learned-origin cases in
+is the three localized learned-origin cases in
 member-profile.test.ts. This presentation change adds no migration or RPC.
 
 

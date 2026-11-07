@@ -641,7 +641,7 @@ export function checkRendered(name, context = {}) {
     require(pick.right <= box.right + 0.5 && path.getBoundingClientRect().right <= pick.left, "the path never runs under the button");
     return { check: name, button: Math.round(pick.width) };
   }
-  if (name.startsWith("skills-") || ["growing-skills", "member-shared-source", "skill-page"].includes(name)) {
+  if (name.startsWith("skills-") || ["growing-skills", "member-shared-source"].includes(name)) {
     for (const label of document.querySelectorAll('[data-skill-provenance], .mp-resource p, .cs-item .ds, .cs-dialog > .cs-desc')) {
       const text = label.textContent.trim(), title = label.getAttribute('title') ?? '';
       require(!/^(learned|owner|imported)$/i.test(text) && !/(?:local:|github:|plugin:|[/\\]plugins[/\\]cache[/\\])/i.test(text + title), "R-SKILL-08: skill origins never show raw source values or plugin cache paths");
@@ -2615,31 +2615,89 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, expanded, height: text.clientHeight, fullHeight: text.scrollHeight };
   }
+  if (name === "onboarding-welcome") {
+    // The welcome is Grok Bot's: Raphael's emblem, his name, one promise, the language dropdown and one wide black pill,
+    // all in one centred column of the fixed card (owner, 2026-11-07).
+    const card = document.querySelector('.ob-card').getBoundingClientRect();
+    const canvas = document.querySelector('.ob-emblem canvas.ob-emb'), title = document.querySelector('.ob-col > h2');
+    require(visible(canvas) && canvas.width > 0, "Raphael's emblem is on the welcome");
+    require(title && title.textContent.trim().length > 0 && parseFloat(getComputedStyle(title).fontSize) >= 28, "his name is the headline");
+    const promise = document.querySelector('.ob-line');
+    require(visible(promise) && promise.textContent.trim().length > 0, "one promise line stands under the name");
+    require(visible(document.querySelector('.ob-lang .sel')) && !document.querySelector('.ob-lang label, .ob-lang-label'), "the language dropdown stands alone");
+    require(!document.querySelector('.ob-aside, .ob-say, .ob-floaters, .ob-top, [data-ob="back"], .ob-bar-steps'), "the welcome has no side, no slimes floating, no way back and no progress bar");
+    const centre = card.left + card.width / 2;
+    for (const [what, element] of [["the emblem", canvas], ["the name", title], ["the promise", promise], ["the language dropdown", document.querySelector('.ob-lang .sel')], ["the primary pill", document.querySelector('.ob-actions > .btn.pri')]]) {
+      const box = element.getBoundingClientRect();
+      require(Math.abs(box.left + box.width / 2 - centre) <= 2, `${what} is centred in the card`);
+      require(box.left >= card.left && box.right <= card.right && box.top >= card.top && box.bottom <= card.bottom + 1, `${what} stays inside the card`);
+    }
+    const pill = document.querySelector('.ob-actions > .btn.pri'), box = pill.getBoundingClientRect();
+    require(box.width >= 240 && box.height >= 40 && parseFloat(getComputedStyle(pill).borderTopLeftRadius) >= box.height / 2 - 1, "the one button is a wide pill");
+    const ink = getComputedStyle(pill).backgroundColor, text = getComputedStyle(document.body).color;
+    require(ink !== 'rgba(0, 0, 0, 0)' && ink !== getComputedStyle(document.querySelector('.ob-card')).backgroundColor, `the pill is the solid accent, not the card's colour (${ink} on ${text})`);
+    const drawn = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    let inked = 0;
+    for (let at = 3; at < drawn.length; at += 4) if (drawn[at] > 8) inked++;
+    require(inked > 40, `the emblem is drawn on its canvas (${inked} pixels)`);
+    return { check: name, inked };
+  }
   if (name === "onboarding-tools" || name === "onboarding-services" || name === "onboarding-abilities") {
-    // Each first-run choice is a headline and a list of items in one card of a designed size: a mark, a name with one
-    // quiet line, the control on the right; Raphael's side beside it when the window is wide (owner, 2026-11-07).
+    // Each first-run choice is one calm centred column in one card of a designed size: a title with two small slimes
+    // floating by it, the choice as tiles in a grid of three (rows for the abilities), one wide black pill and, under
+    // it, a grey one for the way back (owner, 2026-11-07, after Grok Bot's first run).
     const title = document.querySelector('.ob-col > h2');
     require(title && parseFloat(getComputedStyle(title).fontSize) >= 28, "the headline is large");
     const card = document.querySelector('.ob-card').getBoundingClientRect();
     require(card.width <= 962 && card.height <= 642, `the guide is one card of a designed size, not the whole window (${Math.round(card.width)} x ${Math.round(card.height)})`);
     require(Math.abs((card.left + card.right) / 2 - innerWidth / 2) <= 2, "the card sits in the middle of the window");
-    require(!document.querySelector('.ob-bar-steps'), "there is no progress bar");
-    if (innerWidth > 860) require(visible(document.querySelector('.ob-aside .slime-surface')) && document.querySelector('.ob-aside .ob-say').textContent.trim(), "Raphael's side shows his slime and one sentence");
+    require(!document.querySelector('.ob-bar-steps, .ob-aside, .ob-say, .ob-top'), "there is no progress bar, no side and no bar above the column");
     require(!document.querySelector('.ob-sub'), "a choice has no line of purpose under its headline");
-    const items = [...document.querySelectorAll(name === "onboarding-abilities" ? '.svc-item' : '.ob-item:not([data-item^="provider:"])')].filter(visible);
+    const floaters = [...document.querySelectorAll('.ob-floaters .slime-surface')];
+    require(document.querySelector('.ob-floaters')?.getAttribute('aria-hidden') === 'true', "the floating slimes are decoration only");
+    if (innerWidth > 640) {
+      require(floaters.length === 2 && floaters.every(visible), "two small slimes float by the title");
+      const words = title.getBoundingClientRect();
+      for (const slime of floaters) {
+        const at = slime.getBoundingClientRect(), titleText = document.createRange();
+        titleText.selectNodeContents(title);
+        const ink = titleText.getBoundingClientRect();
+        require(at.right <= ink.left + 1 || at.left >= ink.right - 1 || at.bottom <= ink.top + 1 || at.top >= ink.bottom - 1, "a floating slime never sits on the words of the title");
+        require(at.left >= card.left && at.right <= card.right && at.top >= card.top && at.bottom <= words.bottom + 40, "a floating slime stays in the card, by the title");
+      }
+    }
+    const items = [...document.querySelectorAll(name === "onboarding-abilities" ? '.svc-item' : '.ob-tile:not([data-item^="provider:"])')].filter(visible);
     items.forEach(item => { item.dataset.item ??= item.dataset.id; });
     const expected = { "onboarding-tools": ["chatgpt", "claude", "codex", "gemini", "openrouter"], "onboarding-abilities": ["search", "read", "vision", "pdf", "voice"] }[name];
     if (expected) require(JSON.stringify(items.map(item => item.dataset.item)) === JSON.stringify(expected), `the items are ${expected.join(", ")}: ${items.map(item => item.dataset.item).join(", ")}`);
-    else require(items.length > 0 && items.length <= 6 && items.some(item => item.dataset.item === "gmail"), "the popular services of the store are offered");
+    else require(items.length >= 3 && items.length <= 18 && items.some(item => item.dataset.item === "gmail"), "the popular services of the store are offered as a grid");
     const column = document.querySelector('.ob-col').getBoundingClientRect();
-    for (const item of name === "onboarding-abilities" ? [] : items) {
-      const box = item.getBoundingClientRect(), label = item.querySelector('.ob-tx').getBoundingClientRect(), control = item.querySelector('.ob-ctl').getBoundingClientRect(), nm = item.querySelector('.ob-tx .nm');
+    const tiles = name === "onboarding-abilities" ? [] : items;
+    for (const item of tiles) {
+      const box = item.getBoundingClientRect(), label = item.querySelector('.ob-tx').getBoundingClientRect(), nm = item.querySelector('.ob-tx .nm'), control = item.querySelector('.ob-ctl'), wide = item.classList.contains('wide');
       require(box.left >= column.left - 1 && box.right <= column.right + 1, `${item.dataset.item} stays inside the column`);
-      require(control.left >= label.right - 1 && control.right <= box.right + 1, `${item.dataset.item} keeps its control on the right inside its card`);
-      require(Math.abs((control.top + control.bottom) / 2 - (box.top + box.bottom) / 2) <= 2, `${item.dataset.item} centres its control`);
       require(nm.scrollWidth <= nm.clientWidth + 1, `${item.dataset.item} shows its whole name`);
+      require(item.querySelector('.ob-ic').getBoundingClientRect().right <= label.left + 1, `${item.dataset.item} has its mark before its name`);
+      if (control) {
+        const side = control.getBoundingClientRect();
+        require(side.left >= box.left - 1 && side.right <= box.right + 1 && side.bottom <= box.bottom + 1 && side.top >= box.top - 1, `${item.dataset.item} keeps its control inside its tile`);
+        require(wide ? side.left >= label.right - 1 : side.top >= label.bottom - 1, `${item.dataset.item} keeps its control clear of its name`);
+        if (wide) require(Math.abs((side.top + side.bottom) / 2 - (box.top + box.bottom) / 2) <= 2, `${item.dataset.item} centres its control`);
+      }
+      if (item.classList.contains('on') && !wide) require(visible(item.querySelector('.ob-tick')), `${item.dataset.item} shows its check`);
     }
-    if (name === "onboarding-services") require(document.querySelector('[data-item="gmail"] .dot.ok'), "a connected service says so");
+    const narrow = tiles.filter(item => !item.classList.contains('wide'));
+    const lefts = new Set(narrow.map(item => Math.round(item.getBoundingClientRect().left)));
+    const columns = name === "onboarding-tools" ? 2 : 3;
+    if (narrow.length >= columns) require(lefts.size === columns, `the tiles stand in a grid of ${columns} columns (${lefts.size})`);
+    if (name === "onboarding-services") {
+      const find = document.querySelector('.ob-find input#ob-find');
+      require(find && visible(find) && find.getAttribute('aria-label'), "a search box is above the tiles");
+      require(find.getBoundingClientRect().bottom <= narrow[0].getBoundingClientRect().top, "the search box is above the first tile");
+      require(document.querySelector('[data-item="gmail"].on .dot.ok') && visible(document.querySelector('[data-item="gmail"].on .ob-tick')), "a connected service says so, with the check");
+      require(!document.querySelector('[data-item="gmail"] button'), "a connected service has nothing left to press");
+      require(document.querySelector('button.ob-tile[data-ob="conn-login"]'), "a service that is not connected is one whole button");
+    }
     if (name === "onboarding-abilities") {
       // The same rows as Settings › 工具: what each uses now, its switch and the way to its choice of service.
       for (const item of items) {
@@ -2649,9 +2707,15 @@ export function checkRendered(name, context = {}) {
       }
       require(document.querySelector('[data-svc="toggle"][data-id="read"]').getAttribute('aria-checked') === 'false', "a switch that was pressed turned off");
     }
-    const primary = document.querySelector('.ob-actions > .btn.pri').getBoundingClientRect(), foot = document.querySelector('.ob-foot').getBoundingClientRect();
-    require(primary.width >= foot.width * .6, "the primary action fills the foot of the card's choice");
-    return { check: name, items: items.length, columns: new Set(items.map(item => Math.round(item.getBoundingClientRect().left))).size, headline: getComputedStyle(title).fontSize };
+    // Under the choice: one wide black pill that fills its row, and a grey pill for the way back below it.
+    const primary = document.querySelector('.ob-actions > .btn.pri'), back = document.querySelector('.ob-actions > .btn.ob-back'), row = document.querySelector('.ob-actions').getBoundingClientRect();
+    const ink = primary.getBoundingClientRect(), grey = back?.getBoundingClientRect();
+    require(ink.width >= row.width * .9 && ink.width >= 240 && parseFloat(getComputedStyle(primary).borderTopLeftRadius) >= ink.height / 2 - 1, "the primary action is a wide pill that fills its row");
+    require(back && grey.top >= ink.bottom - 1 && Math.abs(grey.width - ink.width) <= 1 && Math.abs((grey.left + grey.width / 2) - (ink.left + ink.width / 2)) <= 1, "the way back is a grey pill of the same width under it");
+    require(parseFloat(getComputedStyle(back).borderTopLeftRadius) >= grey.height / 2 - 1 && getComputedStyle(back).backgroundColor !== getComputedStyle(primary).backgroundColor, "the way back is a pill of another colour");
+    require(Math.abs(ink.left + ink.width / 2 - (card.left + card.width / 2)) <= 2, "the pills are centred in the card");
+    require(ink.bottom <= card.bottom && grey.bottom <= card.bottom, "both pills stay inside the card");
+    return { check: name, items: items.length, columns: lefts.size, headline: getComputedStyle(title).fontSize };
   }
   if (name === "details-quick-once") {
     const quick = [...document.querySelectorAll('.mb-det [data-conversation-open]')].filter(row => visible(row) && row.textContent.includes('快速提問'));
@@ -2709,22 +2773,32 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "composer-url-chip") {
     const field = [...document.querySelectorAll(".composer .cmp-field")].find(visible), input = field.querySelector(".cmp-input"), mirror = field.querySelector(".cmp-mirror"), chip = mirror.querySelector(".url-chip");
-    require(chip && visible(chip) && chip.textContent.startsWith("x.com/someone/") && chip.textContent.endsWith("…"), `the link stands as its short name: ${chip?.textContent}`);
-    require(!input.value.includes("https://") && input.value.includes("這個是我當時看到的"), "the field holds the short name and the words");
+    // Owner, 2026-11-07: the link shows its whole address in the link colour, never a shortened name.
+    require(chip && visible(chip) && chip.textContent.startsWith("https://x.com/someone/status/") && chip.textContent.endsWith("ai-agents-pixel-office-tools") && !chip.textContent.includes("…"), `the link stands as its whole address: ${chip?.textContent}`);
+    require(input.value.includes(chip.textContent) && input.value.includes("這個是我當時看到的"), "the field holds the whole address and the words");
+    const probe = document.createElement("i"); probe.style.color = "var(--link)"; document.documentElement.append(probe);
+    const link = getComputedStyle(probe).color; probe.remove();
+    require(getComputedStyle(chip).color === link && link !== getComputedStyle(mirror).color, `the address is in the link colour: ${getComputedStyle(chip).color} / ${link}`);
     require(getComputedStyle(input).color !== getComputedStyle(mirror).color, "only the copy is painted");
     require(Math.abs(input.scrollHeight - mirror.scrollHeight) <= 1, `the field and its copy wrap alike: ${input.scrollHeight} / ${mirror.scrollHeight}`);
-    require(input.scrollHeight <= parseFloat(getComputedStyle(input).lineHeight) * 2 + 40, `the link takes no extra lines: ${input.scrollHeight}`);
+    require(mirror.scrollWidth <= mirror.clientWidth + 1, `the address wraps inside the field: ${mirror.scrollWidth} / ${mirror.clientWidth}`);
     return { check: name, name: chip.textContent, height: input.scrollHeight };
   }
   if (name === "composer-link-sent") {
     const sent = window.__look.calls.filter(call => call.command === "agent_ask_text").at(-1);
     require(sent?.text?.includes("ref_src=twsrc") && sent.text.startsWith("https://x.com/someone/status/"), `the whole address goes out: ${sent?.text}`);
     require(document.querySelector(".composer .cmp-mirror .url-chip") === null, "the field is empty again");
+    require(sent.text.startsWith("https://x.com/someone/status/") && sent.text.endsWith("這個是我當時看到的") && sent.text.includes("ai-agents-pixel-office-tools"), `the link goes out whole, with the words after it: ${sent?.text}`);
     return { check: name };
   }
   if (name === "room-link-sent") {
     const sent = window.__look.calls.filter(call => call.method === "rooms.send").at(-1);
     require(sent?.params.text.includes("ref_src=twsrc") && sent.params.text.startsWith("https://x.com/someone/status/"), `the whole address goes out: ${sent?.params.text}`);
+    const probe = document.createElement("i"); probe.style.color = "var(--link)"; document.documentElement.append(probe);
+    const link = getComputedStyle(probe).color; probe.remove();
+    const shown = [...document.querySelectorAll(".au-room-message .message-link")].filter(visible).at(-1);
+    require(shown && shown.textContent === shown.dataset.url && shown.textContent.includes("ref_src=twsrc"), `the group's message shows the whole address: ${shown?.textContent}`);
+    require(getComputedStyle(shown).color === link, `in the link colour: ${getComputedStyle(shown).color} / ${link}`);
     return { check: name };
   }
   if (name === "room-composer-files") {
@@ -4656,6 +4730,18 @@ export function checkRendered(name, context = {}) {
     require(menu && menu.querySelector('[data-slime-character="shion"]').getAttribute("aria-pressed") === "true", "the menu stays open on the chosen slime");
     require(menu.querySelectorAll('[aria-pressed="true"]').length === 1, "nothing else looks chosen");
     require(window.__look.data.members.find(row => row.id === 1)?.avatar === "slime:shion", "the member keeps it");
+    // No ring stays on the chosen one, and the picker stands under the middle of the face (owner, 2026-11-07).
+    // A copy of the chosen slime away from the pointer shows its own look, not the hover the click left behind.
+    const chosen = menu.querySelector('[data-slime-character="shion"]').cloneNode(true);
+    chosen.style.position = "fixed"; chosen.style.left = "-400px"; chosen.style.top = "0"; menu.append(chosen);
+    const style = getComputedStyle(chosen);
+    const probe = document.createElement("i"); probe.style.background = "var(--accent-soft)"; menu.append(probe);
+    const chosenFill = getComputedStyle(probe).backgroundColor; probe.remove();
+    const look = { shadow: style.boxShadow, fill: style.backgroundColor }; chosen.remove();
+    require(look.shadow === "none" && look.fill !== chosenFill, `no ring or chosen fill on the chosen slime: ${look.shadow} / ${look.fill}`);
+    const face = document.querySelector('.mb-panel-identity [data-det="avatar"]').getBoundingClientRect(), box = menu.getBoundingClientRect();
+    const centred = Math.abs((box.left + box.right) / 2 - (face.left + face.right) / 2) <= 2 || box.left <= 9 || box.right >= innerWidth - 9;
+    require(box.top >= face.bottom - 1 && centred, `the picker is under the middle of the face: face ${Math.round(face.left)}-${Math.round(face.right)}, menu ${Math.round(box.left)}-${Math.round(box.right)}`);
     return { check: name };
   }
   if (name === "conversation-picker") {
@@ -4666,121 +4752,14 @@ export function checkRendered(name, context = {}) {
     require(box.left >= parent.left && box.right <= parent.right + 1, "new conversation button fits inside the list");
     return { check: name, width: list.clientWidth, scrollWidth: list.scrollWidth };
   }
-  if (name === "skills-plugin-details-bottom") {
-    const button = document.querySelector('[data-set-mcp="1"] [data-conn="set-mcp"]');
-    require(visible(button), "the second MCP server's setup action can be reached by scrolling");
-    const box = button.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-    require(hit && button.contains(hit), "the sticky set footer never covers the reached MCP setup action");
-    return { check: name };
-  }
-  if (["skills-plugin-entry", "skills-marketplace", "skills-plugin-set", "skills-plugin-update", "skills-plugin-details"].includes(name)) {
-    const section = document.querySelector('[data-skills-section]');
-    require(section && document.querySelectorAll('[data-skills-section]').length === 1, "plugin sets stay in the one existing Skills section");
-    if (name === "skills-plugin-entry") {
-      const entries = [...document.querySelectorAll('[data-plugin-source]')];
-      require(entries.length === 1 && entries[0].textContent.includes('research-tools · 1.2.0') && entries[0].textContent.includes('2 個技能'), "one plugin entry shows its name, version and skill count");
-      require(document.querySelectorAll('.cs-dialog [data-conn="skill-import-local"]').length === 1, "one import action installs the entire plugin");
-      require(document.querySelectorAll('.cs-dialog [data-conn="skill-import-alone"]').length === 2, "individual skill imports remain available in the disclosure");
-      require(!document.querySelector('.cs-dialog').textContent.includes('local:'), "plugin entries hide internal source prefixes");
-    }
-    if (name === "skills-marketplace") {
-      const supported = document.querySelector('[data-market-plugin="research-tools"]'), unsupported = document.querySelector('[data-market-plugin="npm-workflows"]');
-      require(supported.textContent.includes('2.0.0') && !supported.querySelector('button').disabled, "a marketplace plugin shows the listed version and install action");
-      require(unsupported.querySelector('button').disabled && unsupported.textContent.includes('僅支援 GitHub 來源'), "unsupported plugin sources explain why they cannot be installed");
-      require(window.__look.calls.some(call => call.method === 'members.skills.list' && call.params.marketplace === 'sample/workflows'), "the owner adds the marketplace through the existing skill boundary");
-    }
-    if (name === "skills-plugin-set" || name === "skills-plugin-update") {
-      const groups = [...section.querySelectorAll('[data-skill-set]')], rows = [...section.querySelectorAll('.cs-set .cs-skill')];
-      require(groups.length === 1 && rows.length === 3 && rows.every(row => row.hasAttribute('data-library-skill')), "the set groups each shared skill and command exactly once");
-      require(groups[0].textContent.includes('2 個技能 · 1 個指令'), "the installed set counts skills and slash commands separately");
-      require(section.querySelectorAll('[data-conn="set-update"]').length === (name === 'skills-plugin-update' ? 1 : 0), "an update offer appears once for the complete set");
-      require(section.querySelectorAll('[data-conn="skill-reimport"]').length === 0, "set members have no duplicate per-skill reimport action");
-      if (name === 'skills-plugin-set') {
-        const calls = window.__look.calls.filter(call => call.method === 'members.skills.import');
-        require(calls.length === 1 && calls[0].params.plugin && calls[0].params.shared, "one owner action installs all plugin capabilities");
-      }
-      for (const button of section.querySelectorAll('[data-conn="set-update"]')) {
-        const box = button.getBoundingClientRect(), parent = button.parentElement.getBoundingClientRect();
-        require(box.left >= parent.left && box.right <= parent.right + 1, "the whole-set update fits its heading at every width");
-      }
-    }
-    if (name === "skills-plugin-details") {
-      const dialog = document.querySelector('[data-dialog="skill-set:1"]');
-      require(visible(dialog) && dialog.querySelectorAll('.conversation-card.mcp-proposal').length === 2, "the set detail reuses one existing MCP card per declared server");
-      require(dialog.querySelectorAll('[data-conn="set-mcp"]').length === 2 && !dialog.querySelector('[data-mcp-operation="enable"]'), "each server needs explicit setup before it can be added");
-      require(dialog.textContent.includes('不執行事件鉤子、代理定義或其他外掛功能'), "the set states which plugin parts Raphael does not run");
-      require(dialog.querySelector('[data-conn="set-delete"]') && dialog.querySelector('[data-conn="set-update"]'), "the set reuses the existing action row for removal and reimport");
-    }
-    require(!window.__look.calls.some(call => ['integrations.add','integrations.import','integrations.test','integrations.proposal'].includes(call.method)), "skill discovery, install and details never add or run MCP servers");
-    return {check:name,sets:window.__look.data.skillSets.length};
-  }
-  if (["skills-section", "skills-installed-sources", "skills-import-shared", "skills-member-grants", "skills-source-changed"].includes(name)) {
-    const sections = [...document.querySelectorAll('.cs-body [data-skills-section]')];
-    require(sections.length === 1 && ![...document.querySelectorAll('.cs-body h2')].some(node => node.textContent === '技能庫'), "one skills section replaces the old split headings");
-    const section = sections[0], heading = section.querySelector('.data-heading'), action = heading.querySelector('[data-conn="skill-discover"]');
-    require(heading.querySelector('h2').textContent === '技能' && action.textContent.trim() === '匯入' && action.querySelector('svg'), "the skills header has one short icon action");
-    const titleBox = heading.querySelector('h2').getBoundingClientRect(), actionBox = action.getBoundingClientRect();
-    require(actionBox.left > titleBox.right && Math.abs((titleBox.top + titleBox.bottom - actionBox.top - actionBox.bottom) / 2) < 2, "import is aligned at the right of the skills heading");
-    const firstApp = document.querySelector('.cs-body [data-stagger="installed"]');
-    if (firstApp) require(Boolean(firstApp.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING), "skills follow the existing app section");
-    const rows = [...section.querySelectorAll('.cs-skill')];
-    const appSwitch = document.querySelector('.cs-item [data-conn="enable"]');
-    for (const row of rows) {
-      const control = row.querySelector('[data-conn="skill-enable"]'), open = row.querySelector('.cs-open');
-      require(open && row.querySelector('.chev') && open.querySelectorAll('.ds').length === 2, "skill rows retain source, owner and document trigger");
-      require(!open.textContent.includes('local:') && !open.textContent.includes('plugins/cache') && !open.textContent.includes('\\'), "skill source copy hides internal prefixes and cache paths");
-      if (row.hasAttribute('data-library-skill')) {
-        require(!control && open.querySelector('.cs-library-icon svg') && !open.querySelector('.slime'), "one neutral library row replaces inherited member rows");
-        const iconBox = open.querySelector('.cs-library-icon svg').getBoundingClientRect();
-        require(iconBox.width === 20 && iconBox.height === 20, "the library icon keeps the app icon size");
-        const iconSlot = open.querySelector('.cs-library-icon').getBoundingClientRect();
-        require(iconSlot.width === 28 && iconSlot.height === 28, "the library icon slot aligns with member faces");
-        const members = window.__look.data.members.length;
-        require(open.textContent.includes(`共享 · 已給 ${name === 'skills-member-grants' ? members - 1 : members} 位成員`), "the library row summarizes enabled member access");
-      } else require(control, "private skill rows retain their member switch");
-      require(!row.querySelector('button button'), "row actions are siblings rather than nested controls");
-      if (appSwitch && control) require(Math.abs(control.getBoundingClientRect().height - appSwitch.getBoundingClientRect().height) < 1, "skill and neighbouring app switches share their size");
-    }
-    const library = rows.filter(row => row.hasAttribute('data-library-skill'));
-    require(library.length === window.__look.data.skills.filter(skill => skill.member_id === -1).length, "each shared skill has exactly one Connections row");
-    if (name === "skills-installed-sources") {
-      const dialog = document.querySelector('[data-dialog="skill-import"] .cs-dialog');
-      require(visible(dialog) && ['Claude Code', 'Codex', '外掛'].every((title, index) => dialog.querySelector(`[data-skill-origin="${index}"] h3`)?.textContent === title), "installed sources are grouped by origin");
-      require(dialog.querySelectorAll('[data-conn="skill-import-local"]').length === 3, "each synthetic installed source offers import");
-      require(dialog.textContent.includes('~/.claude/skills/weekly-summary') && dialog.textContent.includes('~/.codex/skills/source-check') && dialog.textContent.includes('文件工具 · 2.0.0'), "source groups show recognizable folders and plugin versions");
-      require(!dialog.textContent.includes('local:') && !dialog.textContent.includes('plugins/cache'), "discovery hides internal source encodings too");
-      require(window.__look.calls.some(call => call.method === 'members.skills.list' && call.params.discover), "the real discovery action crosses IPC");
-    }
-    if (name === "skills-import-shared") {
-      require(!document.querySelector('[data-dialog="skill-import"]'), "successful import returns to the skills list");
-      const calls = window.__look.calls.filter(call => call.method === 'members.skills.import');
-      require(calls.length === 1 && calls[0].params.shared === true && calls[0].params.member_id === 0, "one package is imported through the shared owner scope");
-      require(rows.length === 1 && library.length === 1 && library[0].textContent.includes('~/.claude/skills/weekly-summary'), "import creates a single attributed library row");
-    }
-    if (name === "skills-member-grants") {
-      const dialog = document.querySelector('[data-dialog="skill:-1:20"]'), grants = [...dialog.querySelectorAll('[data-skill-grant]')];
-      require(visible(dialog) && grants.length === window.__look.data.members.length && grants[0].dataset.skillGrant === '0', "the existing detail dialog lists every member with Raphael first");
-      require(rows.length === 2 && section.querySelector('[data-k="cs-skill:1:21"]'), "the private skill keeps its separate member row");
-      const on = dialog.querySelector('[data-k="cs-skill-enable:1:20"]'), off = dialog.querySelector('[data-k="cs-skill-enable:2:20"]');
-      require(on?.getAttribute('aria-checked') === 'true' && off?.getAttribute('aria-checked') === 'false', "one member has the shared skill while another does not");
-      for (const grant of grants) {
-        const control = grant.querySelector('[role="switch"]'), box = control.getBoundingClientRect(), row = grant.getBoundingClientRect();
-        require(visible(control) && box.right <= row.right + 1 && Math.abs(box.height - appSwitch.getBoundingClientRect().height) < 1, "grant switches use the existing control and fit their member rows");
-      }
-      const calls = window.__look.calls.filter(call => call.method === 'members.skills.update');
-      require(calls.length === 3 && calls.map(call => `${call.params.member_id}:${call.params.enabled}`).join(',') === '1:false,2:false,1:true', "individual grants use ordinary member switches");
-      require(window.__look.data.skills.find(skill => skill.id === 20).enabled, "individual choices never disable the library original");
-    }
-    if (name === "skills-source-changed") {
-      const actions = [...section.querySelectorAll('[data-conn="skill-reimport"]')];
-      require(actions.length === 1 && actions[0].parentElement.hasAttribute('data-library-skill') && actions[0].textContent.trim() === '重新匯入', "a changed shared source has one reimport action on its library row");
-      require(library[0].textContent.includes('文件工具 · 2.0.0'), "imported plugins show their name and version");
-      for (const button of actions) {
-        const box = button.getBoundingClientRect(), chevron = button.parentElement.querySelector('.chev').getBoundingClientRect();
-        require(box.right <= chevron.left && box.width > 0, "the single reimport action fits before the library chevron");
-      }
-    }
-    return { check: name, rows: rows.length };
+  if (name === "connectors-only") {
+    // Owner, 2026-11-07: Connect apps lists connectors only. Skills belong to each member and are managed in that member's panel.
+    const body = document.querySelector('.cs-body');
+    require(visible(body) && body.querySelector('.cs-item'), "the connectors are listed");
+    require(!document.querySelector('[data-skills-section], [data-conn="skill-discover"], [data-conn^="skill-"], [data-conn^="set-"], [data-conn^="marketplace-"], .cs-skill, [data-library-skill], [data-skill-set]'), "no skills section, import button, skill row or plugin set");
+    const text = document.querySelector('.modal-scrim .modal-body').textContent;
+    require(!/技能|Skills|スキル/.test(text), `no word of skills in the dialog: ${text.slice(0, 80)}`);
+    return { check: name, rows: body.querySelectorAll('.cs-item').length };
   }
   if (name === "apps-count") {
     const tab = document.querySelector('.modal-scrim [data-conn="tab"][data-id="installed"] .n');
@@ -4860,21 +4839,6 @@ export function checkRendered(name, context = {}) {
     require(calls[0].params.disabled_tools.length === 3 && calls[1].params.disabled_tools.length === 0 && calls[2].params.disabled_tools.length === 6 && calls[3].params.disabled_tools.length === 0, "write and read permissions change independently and return on");
     return { check: name, on, tools: switches.length };
   }
-  if (name === "skill-page") {
-    const dialog = document.querySelector(".modal-scrim .cs-dialog.wide"), text = dialog?.querySelector("#skill-text");
-    require(visible(dialog) && visible(text), "the page of a skill and its document are visible");
-    const acts = [...dialog.querySelectorAll(".action-row > *")].flatMap(node => node.matches("button") ? [node] : [...node.querySelectorAll("button")]);
-    const del = dialog.querySelector('[data-conn="skill-delete"]'), save = dialog.querySelector('[data-conn="skill-save"]');
-    require(acts.indexOf(del) === 0 && acts.at(-1) === save, "delete is first and save is last in the action row");
-    require(text.value.startsWith("---") && /\nname: [^\n]+\ndescription: [^\n]+\n---/.test(text.value), "the document is shown whole, from its first line");
-    const box = text.getBoundingClientRect(), frame = dialog.getBoundingClientRect();
-    require(box.left >= frame.left && box.right <= frame.right, "the document sits inside its dialog");
-    require(text.scrollWidth <= text.clientWidth + 1, "the document does not scroll sideways");
-    require(dialog.querySelector('[data-cs-notice][role="status"]')?.textContent.includes('已儲存技能'), "save feedback stays inside the skill dialog");
-    require(![...document.querySelectorAll('.toast')].some(node => node.textContent.includes('已儲存技能')), "skill saving never covers the dialog as a toast");
-    require(text.scrollTop === 0, `the document starts at its first line, not ${text.scrollTop}px down (${text.clientHeight}px box, ${text.scrollHeight}px of text)`);
-    return { check: name, rows: text.rows, chars: text.value.length, box: text.clientHeight, text: text.scrollHeight };
-  }
   if (name === "settings-shell") {
     const modal = document.querySelector(".modal"), close = modal?.querySelector(".modal-x");
     require(visible(modal) && visible(close), "settings and its close control are visible");
@@ -4888,6 +4852,15 @@ export function checkRendered(name, context = {}) {
       require(!scrim.querySelector('.set-purpose'), "a tab is its name alone, with no line under it");
     }
     return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius };
+  }
+  if (name === "sidebar-hidden-folder-closed") {
+    // R-UI-112 (owner, 2026-11-07): the folder starts closed, so hidden members stay hidden until its header is pressed.
+    const folder = document.querySelector('.side .mb-hidden');
+    require(visible(folder) && folder.dataset.open === 'false', 'the hidden folder starts closed');
+    require(folder.querySelector('.mb-gbody').hasAttribute('inert') && folder.querySelector('[data-group-fold]').getAttribute('aria-expanded') === 'false', 'a closed folder is out of the keyboard\'s way');
+    const body = folder.querySelector('.mb-gbody').getBoundingClientRect(), head = folder.querySelector('.mb-ghead').getBoundingClientRect();
+    require(body.height < 1 && folder.getBoundingClientRect().height <= head.height + 1, `no hidden member or group chat shows while it is closed: ${body.height}`);
+    return { check: name };
   }
   if (name === "sidebar-hidden-folder") {
     // R-UI-112: as Grok Bot's Hidden Bots, the members and group chats taken off the list wait in one folder at its end.

@@ -89,7 +89,7 @@ function skillContents(text: string): { name: string; description: string; body:
  * warning stands at the top only when there is something to warn of: a third-party template being added, or a secret
  * or an injected instruction found in it.
  */
-export function templateContents(template: MemberTemplate, warnings: ScanFinding[] = [], o: { thirdParty?: boolean } = {}): string {
+export function templateContents(template: MemberTemplate, warnings: ScanFinding[] = [], o: { thirdParty?: boolean; face?: string } = {}): string {
   const full = (text: string): string => `<pre class="template-text">${esc(text || t("template.none"))}</pre>`;
   const risks = [...new Set(warnings.map(w => t(w.kind === "secret" ? "store.secret" : "store.injection", {p0:scanLocation(w)})))];
   const notes = [...(o.thirdParty ? [t("store.thirdParty")] : []), ...risks];
@@ -111,7 +111,7 @@ export function templateContents(template: MemberTemplate, warnings: ScanFinding
       (r.prompt.trim() && r.prompt.trim() !== template.instructions.trim() ? cardDisclosureHTML(`template-routine-${index}`, full(r.prompt)) : "") + `</div></div>`).join("") + `</div></section>` : "";
   const apps = template.connections.length ? `<section class="tpl-sec"><h4>${esc(t("template.connections"))}</h4><div class="tpl-apps">` +
     template.connections.map(app => `<span class="tpl-app">${appMarkHTML(app)}<span>${esc(connectionName(app))}</span></span>`).join("") + `</div></section>` : "";
-  return `<div class="tpl-hero"><b>${esc(template.name)}</b>${template.role && template.role !== template.name ? `<span>${esc(template.role)}</span>` : ""}</div>` +
+  return `<div class="tpl-hero">${o.face ? `<span class="tpl-face" aria-hidden="true">${o.face}</span>` : ""}<b>${esc(template.name)}</b>${template.role && template.role !== template.name ? `<span>${esc(template.role)}</span>` : ""}</div>` +
     alert + text(t("members.instructions"), template.instructions) + text(t("members.personality"), template.personality) + skills + routines + apps;
 }
 
@@ -193,11 +193,11 @@ async function connectTemplateApp(name: string): Promise<string> {
   return `composio:${slug}`;
 }
 
-export async function exportMemberTemplate(id: number): Promise<void> {
+export async function exportMemberTemplate(id: number, face = ""): Promise<void> {
   const {template, findings = []} = await api.core<{template: MemberTemplate; findings: ScanFinding[]}>("members.template", {action: "review", id});
   let busy = false;
   const blocked = findings.some(w => w.kind === "secret");
-  const dialog = openDialog({title: t("store.review"), cls: "template-preview template-export-review", body: templateContents(template, findings),
+  const dialog = openDialog({title: t("store.review"), cls: "template-preview template-export-review", body: templateContents(template, findings, {face}),
     actions: {secondary: btn(esc(t("store.publish")), "", ` data-dlg="publish"${blocked ? " disabled" : ""}`), primary: {label: esc(t("store.export")), attrs: ` data-dlg="export"${blocked ? " disabled" : ""}`}},
     canClose: () => !busy,
     onAct(action, button) {

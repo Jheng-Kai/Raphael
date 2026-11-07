@@ -381,7 +381,7 @@ export function swapHTML(host: HTMLElement, html: string): void {
 interface MenuState {
   el: HTMLElement; anchor: HTMLElement; rect: DOMRect; stopOutside(): void;
   onKey?: (e: KeyboardEvent) => boolean; onClose?: () => void;
-  parent: MenuState | null; placement?: "beside" | "start" | "pointer" | "above"; anchorRect?: () => DOMRect;
+  parent: MenuState | null; placement?: "beside" | "start" | "pointer" | "above" | "center"; anchorRect?: () => DOMRect;
   /** Set when a right click asked for the menu: it stands at that point rather than under its button. */
   at?: PointerAt;
   stopHover?: () => void;
@@ -551,7 +551,7 @@ export function menuPlacement(
   anchor: Pick<DOMRect, "top" | "bottom" | "right"> & Partial<Pick<DOMRect, "left">>,
   size: { width: number; height: number },
   viewport: { width: number; height: number; headerBottom: number },
-  alignment: "end" | "start" | "pointer" | "above" = "end",
+  alignment: "end" | "start" | "pointer" | "above" | "center" = "end",
 ): { left: number; top: number; maxHeight: number } {
   const upper = viewport.headerBottom + 8;
   const lower = Math.max(upper, viewport.height - 8);
@@ -564,7 +564,8 @@ export function menuPlacement(
     : size.height <= below || (size.height > above && below >= above);
   const maxHeight = useBelow ? below : above;
   return {
-    left: Math.max(8, Math.min(alignment === "end" || alignment === "above" ? anchor.right - size.width : anchor.left ?? anchor.right, viewport.width - size.width - 8)),
+    // "center" stands under the middle of its anchor (a face picker under the face, owner 2026-11-07).
+    left: Math.max(8, Math.min(alignment === "center" ? ((anchor.left ?? anchor.right) + anchor.right - size.width) / 2 : alignment === "end" || alignment === "above" ? anchor.right - size.width : anchor.left ?? anchor.right, viewport.width - size.width - 8)),
     top: useBelow ? belowTop : aboveBottom - Math.min(size.height, maxHeight),
     maxHeight,
   };
@@ -596,7 +597,7 @@ export function placeMenu(): void {
   // Release the previous side's height limit before measuring a menu after scrolling or redraw.
   el.style.maxHeight = `${Math.max(0, innerHeight - headerBottom - 16)}px`;
   const size = { width: el.offsetWidth, height: el.offsetHeight }, viewport = { width: innerWidth, height: innerHeight, headerBottom };
-  const placement = menu.placement === "beside" ? submenuPlacement(r, size, viewport) : menuPlacement(r, size, viewport, menu.placement === "start" || menu.placement === "pointer" || menu.placement === "above" ? menu.placement : "end");
+  const placement = menu.placement === "beside" ? submenuPlacement(r, size, viewport) : menuPlacement(r, size, viewport, menu.placement === "start" || menu.placement === "pointer" || menu.placement === "above" || menu.placement === "center" ? menu.placement : "end");
   if (menu.placement === "beside") {
     const first = el.querySelector<HTMLElement>("button");
     const inset = first ? first.getBoundingClientRect().top - el.getBoundingClientRect().top : 0;
@@ -665,7 +666,7 @@ function listenForSubmenus(state: MenuState): void {
 
 export interface PopoverOptions {
   /** Beside preserves its parent menu; start aligns text completions above their character. */
-  placement?: "beside" | "start" | "above";
+  placement?: "beside" | "start" | "above" | "center";
   /** A live text/caret rectangle; the field remains the dismissal and focus anchor. */
   anchorRect?: () => DOMRect;
   onClose?: () => void;

@@ -3,7 +3,7 @@
 // it with each address as a chip (`.cmp-mirror`, aria-hidden, never taking a click); the caret, selection and input method are the
 // textarea's own. A chip is derived from the words, not stored: change a letter of it and it is plain text again, which is the
 // rule the core applies. Deleting, moving over and selecting treat it as one unit. A link is the same kind of chip: the words hold
-// its short name (composer-links.ts), and copying or sending gives the whole address back.
+// its whole address (composer-links.ts), drawn in the link colour, and copying or sending gives the same text.
 import { esc } from "./ui";
 import { linkRanges, shortenLinks, wholeLinks } from "./composer-links";
 import { mentionChipHTML, mentionRanges, type MentionTarget } from "./mention-text";

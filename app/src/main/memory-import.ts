@@ -1,6 +1,6 @@
 import * as api from "./api";
 import { t } from "./i18n";
-import { btn, esc, copyButton, row } from "./ui";
+import { btn, esc, copyButton } from "./ui";
 import { describeError } from "./format";
 
 // One row, its name on the left and a short button on the right (never a heading over a button that repeats it);
@@ -12,7 +12,8 @@ export function createMemoryImport(changed: () => void) {
   return {
     html(): string {
       return `<section class="sgroup memory-import" data-memory-import><h2>${esc(t("members.profile.memory"))}</h2>` +
-        row(esc(t("import.title")), "", open ? "" : btn(esc(t("import.open")), "", ' data-import="open"')) +
+        // One button that says what it does, with no row repeating its name (owner, 2026-11-07).
+        (open ? "" : `<div class="sgroup-act">${btn(esc(t("import.title")), "", ' data-import="open"')}</div>`) +
         (open ? `<div class="import-pair">` +
           `<div class="import-field"><div class="import-head"><label for="import-prompt">${esc(t("import.promptLabel"))}</label>${btn(esc(t("import.copy")), "sm", ' data-import="copy"')}</div><textarea id="import-prompt" class="field" rows="5" readonly data-import-prompt>${esc(t("import.prompt"))}</textarea></div>` +
           `<div class="import-field"><div class="import-head"><label for="import-answer">${esc(t("import.answer"))}</label>${btn(esc(t(busy ? "import.saving" : "import.add")), "sm", ` data-import="save"${busy || !text.trim() ? " disabled" : ""}`)}</div><textarea id="import-answer" class="field" rows="5" maxlength="64000" data-import-answer${busy ? " disabled" : ""}>${esc(text)}</textarea></div>` +

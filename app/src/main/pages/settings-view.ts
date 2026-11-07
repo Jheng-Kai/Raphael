@@ -456,9 +456,8 @@ function generalHTML(v: SettingsView): string {
     (v.memoryImportHTML ?? createMemoryImport(() => {}).html()) +
     // The emblem's size, its subtitles and starting with Windows are fixed (device-fixed.ts, owner 2026-11-06), and the
     // weather city is the member's to ask when it needs it: none of them is a setting any more.
-    section(t("settings.groupStartup"), [
-      row(t("settings.rerunGuide"), "", btn(esc(t("settings.rerunGuideButton")), "", ' data-act="rerun-guide"')),
-    ])
+    // The tour, as one button named 導覽 (owner, 2026-11-07: it is there to look at the guide while it is built).
+    `<section class="sgroup"><h2>${esc(t("settings.groupStartup"))}</h2><div class="sgroup-act">${btn(esc(t("settings.rerunGuide")), "", ' data-act="rerun-guide"')}</div></section>`
   );
 }
 

@@ -26,6 +26,8 @@ export interface ColumnView {
   previews: ReadonlyMap<number, string>;
   /** The groups folded away, by id. */
   folded: ReadonlySet<number>;
+  /** The folders that start closed and are open now: only the hidden one, for as long as the owner keeps it open. */
+  unfolded?: ReadonlySet<number>;
   /** The members that were not there at the last drawing: their rows fade in. */
   fresh: ReadonlySet<number>;
 }
@@ -89,10 +91,11 @@ export const HIDDEN_SECTION = -1;
 
 /**
  * As Grok Bot's Hidden Bots (owner, 2026-11-06): the members taken off the list sit in one more folder at its end, with
- * the hidden group chats, which group-chats.ts puts in its `[data-hidden-rooms]`. Empty, it does not show.
+ * the hidden group chats, which group-chats.ts puts in its `[data-hidden-rooms]`. Empty, it does not show. It starts closed
+ * (owner, 2026-11-07): hidden stays hidden until the owner presses its header.
  */
 function hiddenSectionHTML(hidden: readonly Member[], v: ColumnView): string {
-  const open = !v.folded.has(HIDDEN_SECTION), name = t("members.hiddenSection");
+  const open = v.unfolded?.has(HIDDEN_SECTION) === true, name = t("members.hiddenSection");
   return `<section class="mb-sec mb-hidden" data-group="hidden" data-open="${open}"${hidden.length ? "" : " data-empty"}>` +
     `<div class="mb-ghead"><span class="mb-gname">${esc(name)}</span>` +
     iconButton("down", t("members.toggleGroup", { p0: name }), ` data-group-fold="${HIDDEN_SECTION}" aria-expanded="${open}" data-k="group-fold:hidden"`, "mb-fold") +
@@ -112,7 +115,7 @@ export function columnHTML(v: ColumnView): string {
 
 export interface ColumnHost {
   openMessage?(member: number, conversation: number, turn: number): void;
-  view(): Omit<ColumnView, "folded">;
+  view(): Omit<ColumnView, "folded" | "unfolded">;
   /** Opens the thread of member `id`. */
   select(id: number): void;
   newMember(groupId: number | null): void;
@@ -216,7 +219,9 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
   const list = el.querySelector<HTMLElement>(".mb-list")!;
   const nav = el.querySelector<HTMLElement>(".mb-scroll")!;
   const folded = new Set<number>();
-  try { for (const id of JSON.parse(localStorage.getItem("raphael.sidebar.folders") ?? "[]")) if (Number.isInteger(id)) folded.add(id); } catch { /* Keep folders open when storage is unavailable. */ }
+  /** The hidden folder is closed at every start; pressing its header opens it for this session only. */
+  const unfolded = new Set<number>();
+  try { for (const id of JSON.parse(localStorage.getItem("raphael.sidebar.folders") ?? "[]")) if (Number.isInteger(id) && id !== HIDDEN_SECTION) folded.add(id); } catch { /* Keep folders open when storage is unavailable. */ }
   const search = createMessageSearch(list, {
     name: id => (id === 0 ? raphaelOf(host.view().list) : host.view().list?.members.find(member => member.id === id))?.name ?? "",
     face: id => {
@@ -235,7 +240,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     searchButton.title = t("chat.searchAll");
     const focusKey = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-k]");
     const key = focusKey && list.contains(focusKey) ? focusKey.dataset.k : undefined;
-    search.draw("", columnHTML({ ...host.view(), folded }));
+    search.draw("", columnHTML({ ...host.view(), folded, unfolded }));
     rooms.dispatchEvent(new Event("sidebar-draw"));
     const focused = key ? list.querySelector<HTMLElement>(`[data-k="${CSS.escape(key)}"]`) : null;
     if (focused && focused !== document.activeElement) focused.focus({ preventScroll: true });
@@ -290,12 +295,20 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
       const value = fold.dataset.groupFold!;
       if (value === "none") return;
       const id = Number(value);
-      if (folded.has(id)) folded.delete(id);
-      else folded.add(id);
-      try { localStorage.setItem("raphael.sidebar.folders", JSON.stringify([...folded])); } catch { /* Keep the current session choice. */ }
+      let open: boolean;
+      if (id === HIDDEN_SECTION) {
+        // Closed unless the owner opened it in this session; never stored.
+        if (unfolded.has(id)) unfolded.delete(id);
+        else unfolded.add(id);
+        open = unfolded.has(id);
+      } else {
+        if (folded.has(id)) folded.delete(id);
+        else folded.add(id);
+        try { localStorage.setItem("raphael.sidebar.folders", JSON.stringify([...folded])); } catch { /* Keep the current session choice. */ }
+        open = !folded.has(id);
+      }
       // the group folds where it is: its body slides, nothing else is drawn again
       const section = fold.closest<HTMLElement>(".mb-sec")!;
-      const open = !folded.has(id);
       section.dataset.open = String(open);
       fold.setAttribute("aria-expanded", String(open));
       section.querySelector(".mb-gbody")?.toggleAttribute("inert", !open);

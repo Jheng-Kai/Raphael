@@ -55,7 +55,8 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
     const url = messageUrl(raw);
     if (!url) return null;
     urls.add(url);
-    return `<a class="message-link" href="${esc(url)}" data-act="open-url" data-url="${esc(url)}" rel="noreferrer noopener">${highlightHTML(label ?? shortUrl(url), query)}</a>`;
+    // A bare link reads as its whole address (owner, 2026-11-07), in the link colour.
+    return `<a class="message-link" href="${esc(url)}" data-act="open-url" data-url="${esc(url)}" rel="noreferrer noopener">${highlightHTML(label ?? url, query)}</a>`;
   };
   while (at < text.length) {
     if (markdown && text.startsWith("\\![", at)) {
@@ -278,7 +279,7 @@ function plainTextBlock(source: string): string {
   el.querySelectorAll("button").forEach(button => button.remove());
   for (const link of el.querySelectorAll<HTMLAnchorElement>("a")) {
     const url = link.dataset.url!;
-    link.textContent = link.textContent === shortUrl(url) ? url : `${link.textContent} (${url})`;
+    link.textContent = link.textContent === url || link.textContent === shortUrl(url) ? url : `${link.textContent} (${url})`;
   }
   const read = (node: Node): string => {
     if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";

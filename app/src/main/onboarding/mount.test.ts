@@ -98,21 +98,33 @@ describe("the guide", () => {
     expect(root.dataset.step).toBe("welcome");
     expect(root.querySelector('[data-ob="back"]')).toBeNull();
     expect(text('[data-ob="next"]')).toBe("Start");
+    expect(root.querySelector(".ob-card canvas.ob-emb")).not.toBeNull();
+    expect(root.querySelector(".ob-aside, .ob-top")).toBeNull();
   });
 
-  test("walks the three choices in order in one card, with no progress bar", async () => {
+  test("walks the three choices in order in one card, with no progress bar and no side", async () => {
     await open();
     await press('[data-ob="next"]');
     expect(root.dataset.step).toBe("tools");
     expect(root.querySelectorAll(".ob-card")).toHaveLength(1);
-    expect(root.querySelector(".ob-card .ob-aside .slime-surface")).not.toBeNull();
-    expect(root.querySelector(".ob-bar-steps")).toBeNull();
+    expect(root.querySelector(".ob-card canvas.ob-emb")).toBeNull();
+    expect(root.querySelector(".ob-card .ob-floaters .slime-surface")).not.toBeNull();
+    expect(root.querySelector(".ob-aside, .ob-bar-steps")).toBeNull();
     await press('[data-ob="next"]');
     expect(root.dataset.step).toBe("services");
     await press('[data-ob="next"]');
     expect(root.dataset.step).toBe("abilities");
     await press('[data-ob="back"]');
     expect(root.dataset.step).toBe("services");
+  });
+
+  test("under every step a wide primary pill and, once there is a step to go back to, a grey Back pill", async () => {
+    await open();
+    expect(root.querySelectorAll(".ob-foot .btn")).toHaveLength(1);
+    await press('[data-ob="next"]');
+    expect(text('[data-ob="next"]')).toBe("Next");
+    expect(text('.ob-foot [data-ob="back"].ob-back')).toBe("Back");
+    expect(root.querySelector(".ob-foot .btn.pri")).not.toBeNull();
   });
 
   test("a first run saves onboarded once, on the last step, and tells who opened it", async () => {
@@ -151,7 +163,7 @@ describe("step 1: the AI tools", () => {
   test("shows the accounts as the settings do, and the key as a field until one is saved", async () => {
     await open();
     await press('[data-ob="next"]');
-    expect([...root.querySelectorAll(".ob-item")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["chatgpt", "claude", "codex", "gemini", "openrouter"]);
+    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["chatgpt", "claude", "codex", "gemini", "openrouter"]);
     expect(root.querySelector('[data-item="claude"] .dot.ok')).not.toBeNull();
     expect(root.querySelector("#ob-key-input")).not.toBeNull();
   });
@@ -205,20 +217,20 @@ describe("step 2: the services", () => {
 
   test("offers the popular apps of the store, managed ones first among the popular", async () => {
     await toServices();
-    expect([...root.querySelectorAll(".ob-item")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["gmail", "notion", "github"]);
+    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["gmail", "notion", "github"]);
   });
 
   test("a managed app signs in through the managed connector and says connected", async () => {
     await toServices();
-    await press('[data-item="gmail"] [data-ob="conn-login"]');
+    await press('[data-item="gmail"][data-ob="conn-login"]');
     expect(api.connectorsConnect).toHaveBeenCalledWith("gmail");
     expect(root.querySelector('[data-item="gmail"] .dot.ok')).not.toBeNull();
-    expect(root.querySelector('[data-item="notion"] [data-ob="conn-login"]')).not.toBeNull();
+    expect(root.querySelector('[data-item="notion"][data-ob="conn-login"]')).not.toBeNull();
   });
 
   test("a built-in app signs in through the store's own call", async () => {
     await toServices();
-    await press('[data-item="notion"] [data-ob="conn-login"]');
+    await press('[data-item="notion"][data-ob="conn-login"]');
     expect(api.integrationsConnect).toHaveBeenCalledWith({ catalog_id: "notion" });
     expect(root.querySelector('[data-item="notion"] .dot.ok')).not.toBeNull();
   });
@@ -226,11 +238,29 @@ describe("step 2: the services", () => {
   test("a sign-in that did not come through is told, a cancelled one is not", async () => {
     api.integrationsConnect.mockResolvedValueOnce({ connected: false, error: "denied" });
     await toServices();
-    await press('[data-item="notion"] [data-ob="conn-login"]');
+    await press('[data-item="notion"][data-ob="conn-login"]');
     expect(root.querySelector('[role="alert"]')).not.toBeNull();
     api.integrationsConnect.mockResolvedValueOnce({ connected: false, error: "cancelled" });
-    await press('[data-item="github"] [data-ob="conn-login"]');
+    await press('[data-item="github"][data-ob="conn-login"]');
     expect(root.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  test("the search narrows the tiles in place and keeps what was typed through a sign-in", async () => {
+    await toServices();
+    const find = root.querySelector<HTMLInputElement>("#ob-find")!;
+    find.value = "git";
+    find.dispatchEvent(new Event("input", { bubbles: true }));
+    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["github"]);
+    expect(root.querySelector("#ob-find")).toBe(find);
+    await press('[data-item="github"][data-ob="conn-login"]');
+    expect(root.querySelector<HTMLInputElement>("#ob-find")!.value).toBe("git");
+    expect(root.querySelector('[data-item="github"] .dot.ok')).not.toBeNull();
+    expect(root.querySelector('[data-item="notion"]')).toBeNull();
+    const again = root.querySelector<HTMLInputElement>("#ob-find")!;
+    again.value = "zzz";
+    again.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(root.querySelector(".ob-tile")).toBeNull();
+    expect(text("[data-ob-services] .ob-state")).toBe("No service matches");
   });
 
   test("a catalog that cannot be read offers another try", async () => {
@@ -238,13 +268,13 @@ describe("step 2: the services", () => {
     await toServices();
     expect(root.querySelector('[data-ob="conn-reload"]')).not.toBeNull();
     await press('[data-ob="conn-reload"]');
-    expect(root.querySelector(".ob-item")).not.toBeNull();
+    expect(root.querySelector(".ob-tile")).not.toBeNull();
   });
 
   test("without Composio the built-in apps are enough", async () => {
     api.connectorsStatus.mockResolvedValue({ composio_configured: false, connectors: [] });
     await toServices();
-    expect([...root.querySelectorAll(".ob-item")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["notion", "github"]);
+    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["notion", "github"]);
     expect(api.connectorsCatalog).not.toHaveBeenCalled();
   });
 });

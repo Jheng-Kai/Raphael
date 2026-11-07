@@ -690,7 +690,13 @@ export async function perform(page, step, evidenceDirectory) {
           transfer.items.add(input);
         }
         if (text) transfer.setData("text/plain", text);
-        if (action === "clipboard-paste") { element.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer })); return; }
+        if (action === "clipboard-paste") {
+          const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer });
+          element.dispatchEvent(event);
+          // A synthetic paste does nothing by itself: the browser's own default, which writes the words in, is done here when no page code took the paste.
+          if (!event.defaultPrevented && text && !file) document.execCommand("insertText", false, text);
+          return;
+        }
         for (const type of hold ? ["dragenter", "dragover"] : ["dragenter", "dragover", "drop"]) element.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: transfer }));
       }, step);
       break;

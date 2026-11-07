@@ -660,11 +660,10 @@ test("訊息平台: a bot not set up is one row whose 設定 asks the member in 
   // Nothing is typed into the panel (owner, 2026-11-07).
   expect(suggest.querySelector("input")).toBeNull();
   expect(suggest.textContent).toContain("@shion_slack");
-  expect([...suggest.querySelectorAll<HTMLElement>('[data-det="setup"]')].map((button) => button.dataset.intent)).toEqual(["setup-telegram", "setup-discord", "settings"]);
+  // Only the bots have rows: skills, memory, voice and permissions are asked for in the conversation (owner, 2026-11-07).
+  expect([...suggest.querySelectorAll<HTMLElement>('[data-det="setup"]')].map((button) => button.dataset.intent)).toEqual(["setup-telegram", "setup-discord"]);
   suggest.querySelector<HTMLButtonElement>('[data-intent="setup-telegram"]')!.click(); await flush();
   expect(api.agentAskText).toHaveBeenCalledWith("幫我設定 Telegram", [], current, { intent: "setup-telegram" });
-  suggest.querySelector<HTMLButtonElement>('[data-intent="settings"]')!.click(); await flush();
-  expect(api.agentAskText).toHaveBeenLastCalledWith("我想調整你的設定", [], current, { intent: "settings" });
   // Raphael's own bots are in his panel now, Settings no longer holds them.
   current = 0; panel.showMember(); await flush();
   expect(panel.el.querySelectorAll('.mb-panel-suggest [data-det="setup"]').length).toBeGreaterThan(0);
@@ -676,7 +675,13 @@ test("the panel has no gear: share asks the member to package itself in its conv
   expect(share.hidden).toBe(false);
   expect(share.getAttribute("aria-label")).toBe("分享為範本");
   expect([...panel.el.querySelectorAll<HTMLElement>('.mb-det-head button')].filter(button => !button.hidden).map(button => button.dataset.det)).toEqual(["share", "close"]);
+  // As Grok Bot's: one choice first, 建立副本 · 分享範本連結; only that asks the member (owner, 2026-11-07).
   share.click(); await flush();
+  expect(api.agentAskText).not.toHaveBeenCalled();
+  const choice = document.querySelector<HTMLButtonElement>("#app-popover [role=menuitem]")!;
+  expect(choice.textContent).toContain("建立副本");
+  expect(choice.textContent).toContain("分享範本連結");
+  choice.click(); await flush();
   expect(api.agentAskText).toHaveBeenCalledWith("把你自己打包成範本，讓別人也能用", [], current, { intent: "share-template" });
   const face = panel.el.querySelector<HTMLButtonElement>(".mb-panel-identity .mb-face-edit")!;
   expect(face.querySelector(".mb-face-pencil")).toBeNull();

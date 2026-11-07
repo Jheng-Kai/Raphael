@@ -437,13 +437,13 @@ an ordinary private member skill on API, CLI and scheduled routine paths.
 Selected local UI matrix:
 
 ```powershell
-npm run look -- desktop-teach-recording desktop-teach-draft desktop-teach-saved desktop-teach-try desktop-teach-discard desktop-teach-shared desktop-owner desktop-absent details-skills skill-private-detail --theme both --width 1120,720,1920x1080
+npm run look -- desktop-teach-recording desktop-teach-draft desktop-teach-saved desktop-teach-try desktop-teach-discard desktop-teach-shared desktop-owner desktop-absent details-skills --theme both --width 1120,720,1920x1080
 ```
 
 The teach-* rendered checks assert lease actions, visible privacy/repair, the
 editable draft before Save, explicit publication, discard without publication,
 and the ordinary conversation call with skill name and fresh input. Compare the
-draft editor with details-skills/skill-private-detail, and teaching controls with
+draft editor with details-skills, and teaching controls with
 desktop-owner. Offline proof: members/test_teaching.py, evaluate/test_teaching.py
 (API and CLI plus routines), computer/test_rfb_input.py and desktop-viewer.test.ts.
 Real Docker/cua accessibility, screenshot privacy across third-party applications,

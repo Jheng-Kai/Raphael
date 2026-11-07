@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { Window } from "happy-dom";
 import { setLocale, t } from "./i18n";
-import type { SkillItem } from "./connection-skills";
-import { confirmDelete } from "./member-dialogs";
-import type { SkillSet } from "./skill-sets";
 import type { AppsInventory, AuditEntry, ConnectionGroup, InventoryApp, StoreService } from "./types";
 
 const api = vi.hoisted(() => ({
@@ -23,7 +20,7 @@ const api = vi.hoisted(() => ({
   integrationsSetToolEnabled: vi.fn(),
   integrationsSetToolsEnabled: vi.fn(),
   integrationsInventory: vi.fn(),
-  core: vi.fn(), membersSkillsImport: vi.fn(), membersList: vi.fn(), membersSkillsList: vi.fn(), membersSkillsRead: vi.fn(), membersSkillsEdit: vi.fn(), membersSkillsUpdate: vi.fn(), membersSkillsDelete: vi.fn(),
+  core: vi.fn(), membersList: vi.fn(), membersSkillsImport: vi.fn(), membersSkillsList: vi.fn(),
 }));
 vi.mock("./api", () => api);
 vi.mock("./ui", async (original) => ({ ...(await original<typeof import("./ui")>()), toaster: { info: vi.fn() } }));
@@ -84,13 +81,8 @@ const AUDIT: AuditEntry[] = [{ id: 1, at_ms: NOW - 60_000, server: "Notion", too
 const app = (id: string, name: string, over: Partial<InventoryApp> = {}): InventoryApp => ({ id, name, enabled: true, state: "ready", tools: 2, connected: true, ...over });
 const inventoryOf = (apps: InventoryApp[]): AppsInventory => ({ state: "complete", count: apps.filter((a) => a.connected).length, apps });
 const INVENTORY = inventoryOf([app("ab12", "Notion"), app("cu1", "Files", { tools: 1 })]);
-const SKILLS: SkillItem[] = [
-  { member: { id: 1, name: "Ada" }, skill: { id: 7, name: "summary-style", description: "Use when the owner asks for a summary", enabled: true, source: "owner/repo" } },
-  { member: { id: 2, name: "Ben" }, skill: { id: 8, name: "meeting-notes", description: "Use after a meeting to list owners", enabled: false, source: "owner/notes" } },
-];
-
 const view = (over: Partial<ConnectionsView> = {}): ConnectionsView => ({
-  ...emptyConnectionsView(), groups: GROUPS, catalog: CATALOG, inventory: INVENTORY, skills: [], audit: AUDIT, now: NOW, ...over,
+  ...emptyConnectionsView(), groups: GROUPS, catalog: CATALOG, inventory: INVENTORY, audit: AUDIT, now: NOW, ...over,
 });
 const form = (over: Partial<ConnectionForm> = {}): ConnectionForm => ({
   type: "stdio", name: "", command: "", args: "", url: "", pairLines: "", busy: false, error: null, ...over,
@@ -209,7 +201,7 @@ describe("已安裝", () => {
   });
 });
 
-describe("the apps that cannot be called, and the private skills", () => {
+describe("the apps that cannot be called", () => {
   const slack: ConnectionGroup = { ...notes, id: "w1", name: "Slack", status: "error", error: "auth", description: "Slack的一句話" };
   const twin: ConnectionGroup = { ...notes, id: "d1", name: "Notion 2", description: "Notion again" };
   const empty: ConnectionGroup = { ...custom, id: "e1", name: "Empty" };
@@ -236,9 +228,18 @@ describe("the apps that cannot be called, and the private skills", () => {
     expect(later).toContain("npx -y notes");
     expect(later).toMatch(/aria-checked="false" aria-label="開啟 Notes"/);
     expect(later!.match(/data-conn="enable"/g)).toHaveLength(4);
-    // The app list keeps its original placement; the skills header always offers import.
+    // With every app connected the list is one list and needs no heading.
     expect(bodyHTML(view())).not.toContain("<h2>應用程式</h2>");
-    expect(bodyHTML(view())).toContain("<h2>技能</h2>");
+  });
+
+  test("the dialog holds connectors only: no skills section, no import button, no skill rows (owner, 2026-11-07)", () => {
+    // Skills belong to each member and are managed in that member's own panel.
+    for (const state of [view(), all, view({ groups: [] }), view({ search: "zzz" }), view({ tab: "store" }), view({ open: { tab: "installed", id: "ab12" } })]) {
+      const html = connectionsHTML(state);
+      expect(html).not.toMatch(/data-skills-section|skill-discover|skill-open|skill-enable|retry-skills|cs-skill|data-library-skill|data-dialog="skill/);
+      expect(html).not.toMatch(/<h2>技能<\/h2>|技能|匯入/);
+    }
+    expect(connectionsHTML(view())).toContain("data-cs-body");
   });
 
   test("while the count is not read, or cannot be, the apps are one list as before", () => {
@@ -254,82 +255,6 @@ describe("the apps that cannot be called, and the private skills", () => {
     const html = connectionsHTML(view({ groups: [notes], inventory: partial }));
     expect(html).toMatch(/data-id="installed"[^>]*>已連結<span class="n">—<\/span>/);
     expect(html).toContain("無法讀取");
-  });
-
-  test("the skills are under their own heading, a row each: the member's face, the name, who and when, a switch and a chevron", () => {
-    const html = bodyHTML(view({ skills: SKILLS }));
-    expect(html).toContain("<h2>應用程式</h2>"); // the apps need a name once there is another list
-    const skills = html.slice(html.indexOf("<h2>技能</h2>"));
-    expect(skills).toContain('data-stagger="skills"');
-    const rows = skills.split('<div class="cs-item cs-skill"').slice(1);
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatch(/^ data-conn="skill-open" data-member="1" data-id="7">/);
-    expect(rows[0]).toMatch(/<button type="button" class="btn cs-open" data-conn="skill-open" data-member="1" data-id="7" data-k="cs-skill:1:7" aria-haspopup="dialog" title="查看技能 summary-style">/);
-    expect(rows[0]).toContain('<span class="nm">summary-style</span>');
-    expect(rows[0]).toContain('<span class="ds">Ada · Use when the owner asks for a summary</span>');
-    expect(rows[0]).toContain('class="av mb-av');
-    expect(rows[0]).toMatch(/class="tg" role="switch" aria-checked="true" aria-label="開啟技能 summary-style" data-conn="skill-enable" data-member="1" data-id="7"/);
-    expect(rows[1]).toMatch(/aria-checked="false" aria-label="開啟技能 meeting-notes"/);
-    expect(rows[0]!.match(/<button/g)).toHaveLength(2); // the row's name and the switch: no button in a button
-    expect(rows[0]).toMatch(/<span class="chev" aria-hidden="true"><svg/);
-  });
-
-  test("a search finds a skill by its name, its words and its member; a skill that cannot be read is told where it would be", () => {
-    expect(bodyHTML(view({ skills: SKILLS, search: "meeting" }))).toContain("meeting-notes");
-    expect(bodyHTML(view({ skills: SKILLS, search: "meeting" }))).not.toContain("summary-style");
-    expect(bodyHTML(view({ skills: SKILLS, search: "Ada" }))).toContain("summary-style");
-    expect(bodyHTML(view({ groups: [], skills: SKILLS }))).toContain("summary-style"); // skills alone are no empty page
-    const failed = bodyHTML(view({ skills: "failed" }));
-    expect(failed).toContain("無法讀取技能。");
-    expect(failed).toContain('data-conn="retry-skills"');
-    expect(bodyHTML(view({ groups: [], skills: [] }))).toContain(t("conn.emptyInstalled"));
-  });
-
-  test("the page of a skill is the dialog of an app: its name, who has it and when it is used, its instructions and 刪除技能 on the left", () => {
-    const document = "---\nname: summary-style\ndescription: Use when the owner asks for a summary\n---\nStart <b>with</b> the verdict.";
-    const page = { memberId: 1, id: 7, saved: document, draft: document, state: "ready" as const, busy: false, error: null };
-    const html = connectionsHTML(view({ skills: SKILLS, skill: page }));
-    const d = html.slice(html.indexOf('<div class="cs-scrim"'));
-    expect(d).toContain('<div class="cs-scrim" data-conn="scrim" data-dialog="skill:1:7">');
-    expect(d).toContain('<div class="cs-dialog wide" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>');
-    expect(d).toContain('<h2 class="cs-dlg-name" id="cs-dlg-title">summary-style</h2>');
-    expect(d).toContain('<p class="cs-desc">Ada · Use when the owner asks for a summary</p>');
-    expect(d).toMatch(/role="switch" aria-checked="true" aria-label="開啟技能 summary-style" data-conn="skill-enable" data-member="1" data-id="7" data-k="cs-skill-dlg-enable"/);
-    expect(d).toMatch(/<button type="button" class="btn icon" aria-label="關閉" title="關閉" data-conn="close"/);
-    // the document is the text of the field, written out as text: nothing in it is markup
-    expect(d).toMatch(/<textarea id="skill-text" class="field cs-skill-text" rows="14" spellcheck="false" data-k="cs-skill-text">---\nname: summary-style/);
-    expect(d).toContain("Start &lt;b&gt;with&lt;/b&gt; the verdict.");
-    // the action row: delete on the left (the destructive one first), save the primary one; nothing to save until it changes
-    const acts = d.slice(d.indexOf('class="action-row cs-acts is-sticky"'));
-    expect(acts.indexOf('data-conn="skill-delete"')).toBeLessThan(acts.indexOf('data-conn="skill-save"'));
-    expect(acts).toContain('<span class="action-destructive"><button type="button" class="btn danger" data-conn="skill-delete"');
-    expect(acts).toMatch(/class="btn pri" data-conn="skill-save" data-member="1" data-id="7" data-k="cs-skill-save" disabled>儲存</);
-    const edited = connectionsHTML(view({ skills: SKILLS, skill: { ...page, draft: document + "\nMore." } }));
-    expect(edited).toMatch(/class="btn pri" data-conn="skill-save" data-member="1" data-id="7" data-k="cs-skill-save">儲存</);
-    expect(edited).not.toMatch(/data-k="cs-skill-save" disabled/);
-    // it is on top of the list, which stays under it; no other dialog is drawn
-    expect(html).toContain("data-cs-body");
-    expect(d.match(/role="dialog"/g)).toHaveLength(1);
-  });
-
-  test("a refusal is said under the document in the words of the window; the document is waited for, or cannot be had", () => {
-    const base = { memberId: 1, id: 7, saved: "a", draft: "a", state: "ready" as const, busy: false, error: null };
-    const refused = connectionsHTML(view({ skills: SKILLS, skill: { ...base, error: "這位成員已有同名的技能。" } }));
-    expect(refused).toMatch(/<div class="note" role="alert">.*這位成員已有同名的技能。/);
-    const busy = connectionsHTML(view({ skills: SKILLS, skill: { ...base, draft: "b", busy: true } }));
-    expect(busy).toMatch(/<textarea[^>]* disabled>/);
-    expect(busy).toMatch(/data-conn="skill-delete"[^>]* disabled/);
-    expect(connectionsHTML(view({ skills: SKILLS, skill: { ...base, state: "loading", saved: null } }))).toContain("讀取中");
-    const failed = connectionsHTML(view({ skills: SKILLS, skill: { ...base, state: "failed", saved: null } }));
-    expect(failed).toContain("無法讀取這個技能。");
-    expect(failed).toContain('data-conn="skill-retry"');
-    expect(failed).not.toContain("<textarea");
-  });
-
-  test("a page whose skill is gone is the list alone", () => {
-    const html = connectionsHTML(view({ skills: [], skill: { memberId: 1, id: 7, saved: "a", draft: "a", state: "ready", busy: false, error: null } }));
-    expect(html).toContain("data-cs-body");
-    expect(html).not.toContain("cs-scrim");
   });
 
   test("the dialog of an app says its account: a row for each account of a managed one, the owner's own Google, a signed-in server", () => {
@@ -378,7 +303,7 @@ describe("the dialog of a connected service", () => {
     expect(d.indexOf('data-conn="kind"')).toBeLessThan(d.indexOf('data-conn="tool-list"'));
     const onlyRead = dialog(installedPage("cu1"));
     expect(onlyRead).toMatch(/aria-checked="false"[^>]*data-kind="write"[^>]*disabled/);
-    for (const state of [view(), view({ open: { tab: "installed", id: "ab12" } }), view({ tab: "store" }), view({ skills: SKILLS })]) {
+    for (const state of [view(), view({ open: { tab: "installed", id: "ab12" } }), view({ tab: "store" })]) {
       expect(connectionsHTML(state)).not.toContain('aria-checked="mixed"');
     }
   });
@@ -679,19 +604,16 @@ describe("the form that connects a server of the user's own", () => {
 });
 
 describe("the rules for this tab", () => {
-  // Slack waits for its sign-in (two accounts, one expired); the skills of two members are beside the apps
+  // Slack waits for its sign-in (two accounts, one expired)
   const slack: ConnectionGroup = { ...notes, id: "w1", name: "Slack", source: "composio", status: "error", error: "auth", accounts: [{ status: "EXPIRED" }, { status: "ACTIVE" }] };
   const more = {
     groups: [...GROUPS, slack],
     inventory: inventoryOf([app("ab12", "Notion"), app("cu1", "Files", { tools: 1 }), app("w1", "Slack", { state: "needs_sign_in", connected: false, tools: 0 })]),
-    skills: SKILLS,
   };
-  const document = "---\nname: summary-style\ndescription: Use when the owner asks for a summary\n---\nStart with the verdict.";
   const pages = (): string[] => [
     connectionsHTML(view()),
     connectionsHTML(view(more)),
     installedPage("w1", more),
-    connectionsHTML(view({ ...more, skill: { memberId: 1, id: 7, saved: document, draft: document + " Edited.", state: "ready", busy: false, error: null } })),
     connectionsHTML(view({ tab: "store" })),
     connectionsHTML(view({ tab: "store", login: { target: "linear", name: "Linear" } })),
     installedPage("ab12", { confirmingDisconnect: "ab12", auditOpen: true }),
@@ -705,7 +627,7 @@ describe("the rules for this tab", () => {
     const all = pages().join("");
     // A row of the list and the dimmed part around a dialog take a click too, each beside a real
     // button that does the same (the row's name, the dialog's ×).
-    const acts = [...all.matchAll(/<(\w+)[^>]*data-conn="([\w-]+)"/g)].filter((m) => !(m[1] === "div" && ["open", "skill-open", "scrim"].includes(m[2]!))).map((m) => m[1]);
+    const acts = [...all.matchAll(/<(\w+)[^>]*data-conn="([\w-]+)"/g)].filter((m) => !(m[1] === "div" && ["open", "scrim"].includes(m[2]!))).map((m) => m[1]);
     expect(acts.length).toBeGreaterThan(30);
     expect(new Set(acts)).toEqual(new Set(["button"]));
     for (const tag of all.match(/<button[^>]*>/g)!) expect(tag).toMatch(/class="(btn[ "]|sel[ "]|tg|tab")/);
@@ -739,7 +661,7 @@ describe("the rules for this tab", () => {
       expect(all).toContain("2/3 tools on (2 write, 1 read)");
       expect(all).toContain("Tell Linear one");
       expect(all).toContain(">Try it<");
-      expect(all).toContain("Skills");
+      expect(all).not.toContain("Skills");
       expect(all).toContain("Not connected");
       expect(all).toContain("Account 1");
       expect(all).not.toMatch(CJK);
@@ -747,7 +669,7 @@ describe("the rules for this tab", () => {
       expect(all).toContain("接続済み");
       expect(all).toContain("ブラウザでログインしてください…");
       expect(all).toContain("Linearに一");
-      expect(all).toContain("スキル");
+      expect(all).not.toContain("スキル");
       expect(all).toContain("未接続");
       expect(all).toContain("アカウント 1");
       expect(all).not.toMatch(/Installed|Popular|Sign in|Contains|Recent actions|Disconnect|Private skills|Not connected|Account/);
@@ -778,7 +700,6 @@ describe("what the tab does", () => {
     api.integrationsAudit.mockResolvedValue({ entries: AUDIT });
     api.integrationsInventory.mockResolvedValue(INVENTORY);
     api.membersList.mockResolvedValue({ members: [{ id: 0, name: "拉斐爾" }, { id: 1, name: "Ada" }, { id: 2, name: "Ben" }], groups: [] });
-    api.membersSkillsList.mockImplementation(async (id: number) => ({ skills: SKILLS.filter((item) => item.member.id === id).map((item) => item.skill) }));
     for (const name of ["integrationsRefresh", "integrationsSetEnabled", "integrationsSetToolEnabled"] as const) api[name].mockResolvedValue({});
     api.integrationsDisconnect.mockResolvedValue({ removed: true, revoked: true });
     api.integrationsConnectCancel.mockResolvedValue({ cancelled: true });
@@ -813,152 +734,17 @@ describe("what the tab does", () => {
     expect((c.view().inventory as AppsInventory).count).toBe(1);
   });
 
-  test("discovers installed packages and imports the selected package into the shared library", async () => {
-    const source = { source: "local:C:/synthetic/.codex/skills/writer", name: "writer", description: "Write notes" };
-    api.core.mockResolvedValue({ sources: [source] });
-    api.membersSkillsImport.mockResolvedValue({ skill: SKILLS[0]!.skill });
-    const c = createConnections(host);
-    await c.load();
-    c.click(button("skill-discover"));
-    expect(c.view().skillSources).toBe("loading");
-    await settle();
-    expect(api.core).toHaveBeenCalledWith("members.skills.list", { member_id: 0, discover: true });
-    expect(connectionsHTML(c.view())).toContain("writer");
-    expect(connectionsHTML(c.view())).toContain('data-dialog="skill-import"');
-    c.click(button("skill-import-local", { source: "0" }));
-    await settle();
-    expect(api.membersSkillsImport).toHaveBeenCalledWith(-1, source.source);
-    expect(c.view().skillSources).toBeUndefined();
-    api.core.mockRejectedValueOnce(new Error("unavailable"));
-    c.click(button("skill-discover")); await settle();
-    expect(c.view().skillSources).toBe("failed");
-  });
-
-  test("one shared library row opens every member grant and refreshes its count without changing private rows", async () => {
-    const shared = { id: 20, name: "writer", description: "Write", enabled: true, source: "local:C:/Synthetic/.claude/skills/writer", source_changed: true };
-    const grants = new Map<number, boolean>();
-    api.membersList.mockResolvedValue({ members: [{ id: 1, name: "Ada" }, { id: 0, name: "Raphael" }, { id: 2, name: "Ben" }] });
-    api.membersSkillsList.mockImplementation(async (id: number) => ({ skills: id === -1 ? [shared] : [
-      { ...shared, shared: true, enabled: grants.get(id) ?? true },
-      ...(id === 1 ? [SKILLS[0]!.skill] : []),
-    ] }));
-    api.membersSkillsRead.mockResolvedValue({ text: "Write notes" });
-    api.membersSkillsUpdate.mockImplementation(async (id: number, _skill: number, enabled: boolean) => { grants.set(id, enabled); });
-    api.membersSkillsImport.mockResolvedValue({ skill: shared });
+  test("never reads a member's skills, and a change of a member's skills leaves the dialog alone", async () => {
     const c = createConnections(host);
     await c.load(); await settle();
-    let html = connectionsHTML(c.view());
-    expect(html.match(/data-library-skill/g)).toHaveLength(1);
-    expect(html).toContain("共享 · 已給 3 位成員");
-    expect(html).toContain('data-k="cs-skill:1:7"');
-    c.click(button("skill-open", { member: "-1", id: "20" })); await settle();
-    html = connectionsHTML(c.view());
-    expect(html.indexOf('data-skill-grant="0"')).toBeLessThan(html.indexOf('data-skill-grant="1"'));
-    expect(html.match(/data-skill-grant=/g)).toHaveLength(3);
-    expect(api.membersSkillsRead).toHaveBeenCalledWith(-1, 20);
-    c.click(button("skill-enable", { member: "0", id: "20" })); await settle();
-    expect(api.membersSkillsUpdate).toHaveBeenCalledWith(0, 20, false);
-    html = connectionsHTML(c.view());
-    expect(html).toContain("共享 · 已給 2 位成員");
-    expect(html).toContain('data-dialog="skill:-1:20"');
-    expect(html).toMatch(/aria-checked="false"[^>]*data-conn="skill-enable" data-member="0"/);
-    c.click(button("skill-reimport", { member: "-1", id: "20" })); await settle();
-    expect(api.membersSkillsImport).toHaveBeenCalledWith(-1, shared.source);
-    expect(grants.get(0)).toBe(false);
-  });
-
-  test("closing discovery restores the single skills section and late results do not reopen it", async () => {
-    let finish!: (value: { sources: [] }) => void;
-    api.core.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-    const c = createConnections(host);
-    await c.load();
-    c.click(button("skill-discover"));
-    c.click(button("close"));
-    finish({ sources: [] });
+    host.redraw.mockClear();
+    c.followEvent({ type: "MembersChanged" });
     await settle();
-    const html = connectionsHTML(c.view());
-    expect(html.match(/data-skills-section/g)).toHaveLength(1);
-    expect(html).not.toContain('data-dialog="skill-import"');
-    expect(html.indexOf("<h2>應用程式</h2>")).toBeLessThan(html.indexOf("data-skills-section"));
-  });
-
-  test("a plugin imports once as a set and removal waits for the existing owner confirmation", async () => {
-    const set: SkillSet = { id: 1, name: "desk", version: "1.0.0", source: "local:C:/Synthetic/.claude/plugins/cache/market/desk/1.0.0", description: "Write", skill_count: 1, command_count: 1, mcp_servers: [] };
-    const source = { kind: "plugin", name: "desk", version: "1.0.0", source: set.source, skills: [{ name: "write", source: set.source + "/skills/write" }] };
-    let installed = false;
-    api.membersSkillsList.mockImplementation(async () => ({ skills: [], sets: installed ? [set] : [] }));
-    api.core.mockImplementation(async (method, params) => {
-      if (method === "members.skills.list") return { sources: [source], marketplaces: [] };
-      if (method === "members.skills.import") { installed = true; return { set }; }
-      if (method === "members.skills.delete") { expect(params.set_id).toBe(1); installed = false; return { deleted: true }; }
-      throw new Error("Unexpected IPC");
-    });
-    const c = createConnections(host); await c.load(); await settle();
-    c.click(button("skill-discover")); await settle();
-    c.click(button("skill-import-local", { source: "0" })); await settle();
-    expect(api.core).toHaveBeenCalledWith("members.skills.import", { member_id: 0, shared: true, source: set.source, plugin: true });
-    expect(c.view().skillSets).toEqual([set]);
+    expect(api.membersSkillsList).not.toHaveBeenCalled();
     expect(api.membersSkillsImport).not.toHaveBeenCalled();
-    c.click(button("set-open", { id: "1" }));
-    vi.mocked(confirmDelete).mockResolvedValueOnce(false);
-    c.click(button("set-delete", { id: "1" })); await settle();
-    expect(installed).toBe(true);
-    vi.mocked(confirmDelete).mockResolvedValueOnce(true);
-    c.click(button("set-delete", { id: "1" })); await settle();
-    expect(installed).toBe(false); expect(c.view().skillSets).toEqual([]);
-  });
-
-  test("marketplace refresh offers an update and an unsupported source never installs", async () => {
-    const market = { repo: "owner/repo", name: "market", plugins: [{ name: "desk", version: "2.0.0", installable: true, description: "Write" }, { name: "npm", version: "1.0.0", installable: false, reason: "Unsupported" }] };
-    api.core.mockImplementation(async (method) => method === "members.skills.list" ? { sources: [], marketplaces: [market], marketplace: market, sets: [] } : {});
-    const c = createConnections(host); await c.load();
-    c.click(button("skill-discover")); await settle();
-    c.click(button("marketplace-install", { market: "0", plugin: "1" })); await settle();
-    expect(api.core.mock.calls.filter(([method]) => method === "members.skills.import")).toHaveLength(0);
-    c.click(button("marketplace-refresh", { market: "0" })); await settle();
-    expect(api.core).toHaveBeenCalledWith("members.skills.list", { member_id: 0, marketplace: "owner/repo" });
-    c.click(button("marketplace-install", { market: "0", plugin: "0" })); await settle();
-    expect(api.core).toHaveBeenCalledWith("members.skills.import", { member_id: 0, shared: true, marketplace: "owner/repo", name: "desk" });
-  });
-
-  test("plugin MCP cards only open the existing setup form and never add a server during import", async () => {
-    const server = { name: "Desk MCP", transport: "stdio" as const, command: "python", args: ["server.py"], url: "", env: ["TOKEN"], headers: [] };
-    const set = { id: 1, name: "desk", version: "1.0.0", description: "Write", source: "plugin:desk", skill_count: 1, command_count: 0, mcp_servers: [server, { ...server, name: "Second MCP" }] };
-    api.membersSkillsList.mockResolvedValue({ skills: [], sets: [set] });
-    const c = createConnections(host); await c.load(); await settle();
-    c.click(button("set-open", { id: "1" }));
-    const browser = new Window();
-    browser.document.body.innerHTML = connectionsHTML(c.view());
-    vi.stubGlobal("document", browser.document);
-    try {
-      expect(browser.document.querySelectorAll(".mcp-proposal")).toHaveLength(2);
-      c.click(browser.document.querySelector('[data-conn="set-mcp"]')! as unknown as Element);
-      expect(c.view().form).toMatchObject({ name: "Desk MCP", type: "stdio", command: "python", args: "server.py", pairLines: "TOKEN=" });
-      expect(api.integrationsAdd).not.toHaveBeenCalled(); expect(api.integrationsTest).not.toHaveBeenCalled();
-    } finally { vi.unstubAllGlobals(); await browser.happyDOM.abort(); }
-  });
-
-  test("reads shared skills and every member including Raphael, and refreshes changes", async () => {
-    const c = createConnections(host);
-    expect(c.view().skills).toBe("loading");
-    await c.load();
-    await settle();
-    expect(api.membersSkillsList.mock.calls.map(([id]) => id)).toEqual([0, 1, 2, -1]);
-    expect((c.view().skills as SkillItem[]).map((item) => [item.member.name, item.skill.name])).toEqual([["Ada", "summary-style"], ["Ben", "meeting-notes"]]);
-    api.membersSkillsList.mockResolvedValue({ skills: [] });
-    c.followEvent({ type: "MembersChanged" });
-    await settle();
-    expect(c.view().skills).toEqual([]);
-    // a skill list that cannot be read is told where the skills would be, and keeps the old ones when a later read fails
-    api.membersList.mockRejectedValueOnce("down");
-    c.followEvent({ type: "MembersChanged" });
-    await settle();
-    expect(c.view().skills).toEqual([]);
-    const fresh = createConnections(host);
-    api.membersList.mockRejectedValueOnce("down");
-    await fresh.load();
-    await settle();
-    expect(fresh.view().skills).toBe("failed");
+    expect(api.core.mock.calls.filter(([method]) => String(method).startsWith("members.skills"))).toHaveLength(0);
+    expect(host.redraw).not.toHaveBeenCalled();
+    expect("skills" in c.view() || "skill" in c.view()).toBe(false);
   });
 
   test("edits a custom server with blank existing secrets, tests without saving, then persists the draft", async () => {
@@ -1325,152 +1111,6 @@ describe("what the tab does", () => {
     expect(c.view().open).toEqual({ tab: "installed", id: "ab12" });
     expect(c.view().dialogNotice).toEqual({ text: "已重新登入 Notion", kind: "ok" });
     expect(toaster.info).not.toHaveBeenCalled();
-  });
-
-  describe("a private skill", () => {
-    const DOC = "---\nname: summary-style\ndescription: Use when the owner asks for a summary\n---\nStart with the verdict.";
-    const open = async () => {
-      api.membersSkillsRead.mockResolvedValue({ skill: SKILLS[0]!.skill, text: DOC });
-      const c = createConnections(host);
-      await c.load();
-      await settle();
-      c.click(button("skill-open", { member: "1", id: "7" }));
-      return c;
-    };
-
-    test("opens with its document read, and the page is the one skill of that member", async () => {
-      const c = createConnections(host);
-      await c.load();
-      await settle();
-      let release!: (answer: { skill: unknown; text: string }) => void;
-      api.membersSkillsRead.mockReturnValue(new Promise((resolve) => { release = resolve; }));
-      c.click(button("skill-open", { member: "1", id: "7" }));
-      expect(c.view().skill).toMatchObject({ memberId: 1, id: 7, state: "loading", saved: null });
-      release({ skill: SKILLS[0]!.skill, text: DOC });
-      await settle();
-      expect(api.membersSkillsRead).toHaveBeenCalledWith(1, 7);
-      expect(c.view().skill).toMatchObject({ state: "ready", saved: DOC, draft: DOC, busy: false, error: null });
-      expect(c.view().open).toBeNull(); // the page of a skill is not the dialog of an app
-      api.membersSkillsRead.mockRejectedValueOnce("gone");
-      c.click(button("skill-retry"));
-      await settle();
-      expect(c.view().skill!.state).toBe("failed");
-    });
-
-    test("is edited where it stands (no page drawn again) and kept as typed; the name and the words follow the document", async () => {
-      const c = await open();
-      await settle();
-      const save = { disabled: true };
-      vi.stubGlobal("document", { querySelector: () => save });
-      try {
-        expect(c.input(input("skill-text", DOC))).toBe(true);
-        expect(save.disabled).toBe(true); // nothing changed: nothing to keep
-        host.redraw.mockReset();
-        expect(c.input(input("skill-text", DOC.replace("verdict", "answer")))).toBe(true);
-        expect(save.disabled).toBe(false);
-        expect(host.redraw).not.toHaveBeenCalled();
-      } finally {
-        vi.unstubAllGlobals();
-      }
-      const edited = DOC.replace("verdict", "answer");
-      api.membersSkillsEdit.mockResolvedValue({ skill: { ...SKILLS[0]!.skill, name: "answer-style" } });
-      api.membersSkillsList.mockImplementation(async (id: number) => ({ skills: id === 1 ? [{ ...SKILLS[0]!.skill, name: "answer-style" }] : id === 2 ? [SKILLS[1]!.skill] : [] }));
-      c.click(button("skill-save", { member: "1", id: "7" }));
-      await settle();
-      expect(api.membersSkillsEdit).toHaveBeenCalledWith(1, 7, edited);
-      expect(c.view().skill).toMatchObject({ saved: edited, draft: edited, busy: false, error: null });
-      expect(c.view().dialogNotice).toEqual({ text: "已儲存技能", kind: "ok" });
-      expect(toaster.info).not.toHaveBeenCalled();
-      expect((c.view().skills as SkillItem[]).map((item) => item.skill.name)).toEqual(["answer-style", "meeting-notes"]);
-      // saving what was saved is nothing
-      c.click(button("skill-save", { member: "1", id: "7" }));
-      await settle();
-      expect(api.membersSkillsEdit).toHaveBeenCalledTimes(1);
-    });
-
-    test("a document the core refuses stays as it was typed, with the reason in the words of the window", async () => {
-      const c = await open();
-      await settle();
-      c.input(input("skill-text", "no frontmatter"));
-      const refusals: [string, string][] = [
-        ["[-32602] Invalid params: a skill with that name already exists", "這位成員已有同名的技能。"],
-        ["[-32602] Invalid params: name must not be empty", "文件開頭要有 name 與 description。"],
-        ["[-32602] Invalid params: skill document is too large", "文件太大。"],
-        ["[-32602] Invalid params: skill must be a UTF-8 Markdown document", "技能必須是 UTF-8 的 Markdown 文件。"],
-      ];
-      for (const [message, words] of refusals) {
-        api.membersSkillsEdit.mockRejectedValueOnce(message);
-        c.click(button("skill-save", { member: "1", id: "7" }));
-        await settle();
-        expect(c.view().skill).toMatchObject({ draft: "no frontmatter", saved: DOC, busy: false, error: words });
-      }
-      c.input(input("skill-text", "no frontmatter!")); // typing again takes the refusal away
-      expect(c.view().skill!.error).toBeNull();
-    });
-
-    test("is switched on or off from its row, and the list follows", async () => {
-      const c = await open();
-      await settle();
-      api.membersSkillsUpdate.mockResolvedValue({});
-      api.membersSkillsList.mockImplementation(async (id: number) => ({ skills: id === 1 ? [{ ...SKILLS[0]!.skill, enabled: false }] : id === 2 ? [SKILLS[1]!.skill] : [] }));
-      c.click(button("skill-enable", { member: "1", id: "7" }));
-      await settle();
-      expect(api.membersSkillsUpdate).toHaveBeenCalledWith(1, 7, false);
-      expect((c.view().skills as SkillItem[])[0]!.skill.enabled).toBe(false);
-      api.membersSkillsUpdate.mockRejectedValueOnce("[-32602] Invalid params: no such member skill");
-      c.click(button("skill-enable", { member: "1", id: "7" }));
-      await settle();
-      expect(c.view().dialogNotice?.text).toContain(t("missing.unknown"));
-      expect(toaster.info).not.toHaveBeenCalled();
-    });
-
-    test("is deleted only after the owner agrees, and the page goes with it", async () => {
-      const { confirmDelete } = await import("./member-dialogs");
-      const c = await open();
-      await settle();
-      vi.mocked(confirmDelete).mockResolvedValueOnce(false);
-      c.click(button("skill-delete", { member: "1", id: "7" }));
-      await settle();
-      expect(api.membersSkillsDelete).not.toHaveBeenCalled();
-      expect(c.view().skill).not.toBeNull();
-      api.membersSkillsDelete.mockResolvedValue({ deleted: true });
-      api.membersSkillsList.mockImplementation(async (id: number) => ({ skills: id === 2 ? [SKILLS[1]!.skill] : [] }));
-      vi.mocked(confirmDelete).mockResolvedValueOnce(true);
-      c.click(button("skill-delete", { member: "1", id: "7" }));
-      await settle();
-      expect(confirmDelete).toHaveBeenLastCalledWith("summary-style");
-      expect(api.membersSkillsDelete).toHaveBeenCalledWith(1, 7);
-      expect(c.view().skill).toBeNull();
-      expect((c.view().skills as SkillItem[]).map((item) => item.skill.name)).toEqual(["meeting-notes"]);
-      expect(lastToast()).toBe("已刪除技能 summary-style");
-    });
-
-    test("closes with its X or Escape and drops what was typed; a page whose skill was deleted elsewhere closes by itself", async () => {
-      const c = await open();
-      await settle();
-      c.input(input("skill-text", "half typed"));
-      c.click(button("close"));
-      expect(c.view().skill).toBeNull();
-      c.click(button("skill-open", { member: "1", id: "7" }));
-      await settle();
-      expect(c.view().skill).toMatchObject({ saved: DOC, draft: DOC }); // the document is read again: nothing typed stays
-      const esc = key("Escape");
-      expect(c.key(esc)).toBe(true);
-      expect(c.view().skill).toBeNull();
-      c.click(button("skill-open", { member: "1", id: "7" }));
-      await settle();
-      api.membersSkillsList.mockResolvedValue({ skills: [] });
-      c.followEvent({ type: "MembersChanged" });
-      await settle();
-      expect(c.view().skill).toBeNull();
-      // leaving the tab drops the page too
-      api.membersSkillsList.mockImplementation(async (id: number) => ({ skills: SKILLS.filter((item) => item.member.id === id).map((item) => item.skill) }));
-      await c.load();
-      await settle();
-      c.click(button("skill-open", { member: "2", id: "8" }));
-      c.reset();
-      expect(c.view().skill).toBeNull();
-    });
   });
 
   describe("a server of the user's own", () => {

@@ -909,6 +909,13 @@ describe("rendered look checks", () => {
     primary.getBoundingClientRect = () => ({ left: 0, top: 10, right: 50, bottom: 40, width: 50, height: 30 });
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-27', 'R-UI-27']);
   });
+  it("lets the guide stack its primary pill over the grey way back instead of putting it rightmost", () => {
+    const { window, audit } = productAudit('<div class="action-row ob-actions"><button class="btn ob-back" style="border:1px solid gray">Back</button><button class="btn pri" style="border:1px solid gray">Next</button></div>');
+    const [back, primary] = window.document.querySelectorAll('button');
+    back.getBoundingClientRect = () => ({ left: 0, top: 50, right: 300, bottom: 90, width: 300, height: 40 });
+    primary.getBoundingClientRect = () => ({ left: 0, top: 0, right: 300, bottom: 40, width: 300, height: 40 });
+    expect(audit().productRules.map(item => item.rule)).not.toContain('R-UI-27');
+  });
   it("distinguishes date choices and navigation from ordinary text actions", () => {
     const { audit } = productAudit('<div class="au-month-grid"><button class="btn" style="border:0">25</button></div><button class="btn mb-panel-back" style="border:0">Members</button><button class="btn mc-source" style="border:0">Provider</button><button class="btn cs-main" style="border:0">Notion service details</button><button class="btn ho-row" style="border:0">Dentist</button><button class="btn conversation-new" style="border:0">New conversation</button>');
     expect(audit().productRules.map(item => item.text)).toEqual(['New conversation']);

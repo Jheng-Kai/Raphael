@@ -49,6 +49,10 @@ describe("the column, drawn", () => {
     expect([...folder.querySelectorAll("[data-member]")].map(row => row.getAttribute("data-member"))).toEqual(["3"]);
     expect(el.querySelectorAll('[data-member="3"]')).toHaveLength(1);
     expect(folder.querySelector("[data-hidden-rooms]")).not.toBeNull();
+    // Hidden stays hidden until the owner presses the header: the folder starts closed and out of the keyboard's way.
+    expect((folder as HTMLElement).dataset.open).toBe("false");
+    expect(folder.querySelector(".mb-gbody")!.hasAttribute("inert")).toBe(true);
+    expect(folder.querySelector("[data-group-fold]")!.getAttribute("aria-expanded")).toBe("false");
     // With nothing hidden the folder is empty and does not show (sidebar.css).
     expect(dom(columnHTML(view())).querySelector(".mb-hidden")?.hasAttribute("data-empty")).toBe(true);
   });
@@ -187,6 +191,34 @@ describe("the column, used", () => {
     expect(folder.dataset.open).toBe("false");
     expect(folder.querySelector(".mb-gbody")!.hasAttribute("inert")).toBe(true);
     expect(column.el.querySelector<HTMLElement>('.mb-sec[data-group="20"]')!.dataset.open).toBe("true");
+  });
+
+  test("the hidden folder starts closed every time, opens on its header for the session, and is never stored open", () => {
+    host.view = () => ({ list: { ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, hidden: true } : m) }, current: 0, previews, fresh: new Set() });
+    // An older build stored the hidden folder's id among the folded ones; it no longer means anything.
+    localStorage.setItem("raphael.sidebar.folders", "[-1,10]");
+    const column = mount();
+    const folder = (): HTMLElement => column.el.querySelector<HTMLElement>(".mb-hidden")!;
+    expect(folder().dataset.open).toBe("false");
+    expect(folder().querySelector(".mb-gbody")!.hasAttribute("inert")).toBe(true);
+    folder().querySelector<HTMLElement>(".mb-gname")!.click();
+    expect(folder().dataset.open).toBe("true");
+    expect(folder().querySelector(".mb-gbody")!.hasAttribute("inert")).toBe(false);
+    column.draw();
+    expect(folder().dataset.open).toBe("true");
+    folder().querySelector<HTMLElement>("[data-group-fold]")!.click();
+    expect(folder().dataset.open).toBe("false");
+    folder().querySelector<HTMLElement>("[data-group-fold]")!.click();
+    // A new start (a new column) closes it again: the open state lives only in the session.
+    document.body.innerHTML = "";
+    const next = createMemberColumn(host);
+    document.body.append(next.el);
+    next.draw();
+    expect(next.el.querySelector<HTMLElement>(".mb-hidden")!.dataset.open).toBe("false");
+    // Opening it stored nothing; folding another folder writes only real folders.
+    expect(localStorage.getItem("raphael.sidebar.folders")).toBe("[-1,10]");
+    next.el.querySelector<HTMLElement>('[data-group-fold="20"]')!.click();
+    expect(JSON.parse(localStorage.getItem("raphael.sidebar.folders")!)).toEqual([10, 20]);
   });
 
   test("a click on a row opens that member's thread", () => {

@@ -209,7 +209,7 @@ const groups = (html: string): string[] => [...html.matchAll(/<h2>(.*?)<\/h2>/g)
 const names = (html: string): string[] => [...html.matchAll(/<div class="t">(.*?)<\/div>/g)].map((m) => m[1]);
 /** The row called `name`, from its start to the start of the next one. */
 function rowOf(html: string, name: string): string {
-  const rows = html.split(/(?=<div class="row[ "])/);
+  const rows = html.split(/(?=<div class="row[ "]|<section)/);
   const found = rows.find((r) => r.includes(`<div class="t">${name}</div>`));
   if (!found) throw new Error(`no row called ${name}`);
   return found;
@@ -331,12 +331,12 @@ describe("一般", () => {
     expect(html).not.toContain("data-msg-section");
     expect(groups(html).slice(0, 3)).toEqual(["關於你", t("skin.title"), t("agent.title")]);
     expect(groups(html).slice(-2)).toEqual([t("members.profile.memory"), "啟動"]);
-    // Importing is one row with a short button beside its name, never a heading over a button that repeats it.
-    expect(names(html)).toContain("匯入記憶");
-    expect(html).toContain(`data-import="open"`);
+    // Importing and the tour are one button each, named for what they do, with no row repeating the name (owner, 2026-11-07).
+    expect(html).toMatch(/<button[^>]*data-import="open"[^>]*>匯入記憶<\/button>/);
+    expect(html).toMatch(/<button[^>]*data-act="rerun-guide"[^>]*>導覽<\/button>/);
+    expect(names(html)).not.toContain("匯入記憶");
     expect(html).not.toMatch(/<h2>匯入記憶<\/h2>/);
     expect(names(html).slice(0, 4)).toEqual([t("settings.067"), t("settings.059"), "時區", "輸出資料夾"]);
-    expect(names(html).slice(-1)).toEqual(["重新導覽"]);
   });
 
   test("starts the guide again with a real bordered button, not a switch or a link", () => {

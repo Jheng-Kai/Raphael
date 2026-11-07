@@ -130,19 +130,20 @@ test("an input method composing next to a chip is left alone and its words are d
 });
 
 const LINK = "https://x.com/someone/status/2115177376921293212?ref_src=twsrc%5Etfw";
-const NAME = "x.com/someone/status/2115177376…";
 const clipboardEvent = (type: string, text = "", files: File[] = []): Event & { clipboardData: { setData: ReturnType<typeof vi.fn> } } => {
   const event = new Event(type, { bubbles: true, cancelable: true });
   return Object.assign(event, { clipboardData: { files, getData: () => text, setData: vi.fn() } });
 };
 
-test("a pasted link stands as a chip with its short name, and the words go out with the whole address", () => {
+test("a pasted link is the browser's own paste, and stands as a chip with its whole address", () => {
   input.value = "看 "; input.setSelectionRange(2, 2);
   const event = clipboardEvent("paste", LINK);
   input.dispatchEvent(event);
-  expect(event.defaultPrevented).toBe(true);
-  expect(input.value).toBe(`看 ${NAME}`);
-  expect(chips()).toEqual([NAME]);
+  expect(event.defaultPrevented).toBe(false);
+  input.setRangeText(LINK, 2, 2, "end");
+  expect(input.value).toBe(`看 ${LINK}`);
+  expect(chips()).toEqual([LINK]);
+  expect(mirror.querySelectorAll(".url-chip")).toHaveLength(1);
   expect(field.classList.contains("has-mentions")).toBe(true);
   expect(wholeLinks(input.value)).toBe(`看 ${LINK}`);
 });
@@ -154,41 +155,54 @@ test("a paste with no link, and a paste of files, are not the field's to change"
   expect(withFile.defaultPrevented).toBe(false);
 });
 
-test("words put back from elsewhere show their links as chips too", () => {
+test("words put back from elsewhere keep their links whole and show them as chips too", () => {
   input.value = `${LINK} 這個`;
-  expect(input.value).toBe(`${NAME} 這個`);
-  expect(chips()).toEqual([NAME]);
+  expect(input.value).toBe(`${LINK} 這個`);
+  expect(chips()).toEqual([LINK]);
   input.setRangeText(LINK, 0, input.value.length, "end");
-  expect(input.value).toBe(NAME);
+  expect(input.value).toBe(LINK);
+  expect(chips()).toEqual([LINK]);
 });
 
 test("a link chip is one unit: backspace takes all of it, and the caret never rests inside", () => {
-  typeText(`${LINK} 這個`, NAME.length);
+  typeText(`${LINK} 這個`, LINK.length);
   press("Backspace");
   expect(input.value).toBe(" 這個");
   typeText(`a ${LINK}`);
   input.setSelectionRange(5, 5);
   document.dispatchEvent(new Event("selectionchange"));
   expect(caret()).toEqual([2, 2]);
+  input.setSelectionRange(LINK.length - 3, LINK.length - 3);
+  document.dispatchEvent(new Event("selectionchange"));
+  expect(caret()).toEqual([2 + LINK.length, 2 + LINK.length]);
 });
 
-test("copying or cutting a link gives the whole address", () => {
+test("copying or cutting a link is the browser's own and gives the same whole text", () => {
   typeText(`看 ${LINK}`);
   input.setSelectionRange(0, input.value.length);
   const copied = clipboardEvent("copy");
   input.dispatchEvent(copied);
-  expect(copied.clipboardData.setData).toHaveBeenCalledWith("text/plain", `看 ${LINK}`);
-  expect(input.value).toBe(`看 ${NAME}`);
+  expect(copied.defaultPrevented).toBe(false);
+  expect(copied.clipboardData.setData).not.toHaveBeenCalled();
+  expect(input.value.slice(input.selectionStart, input.selectionEnd)).toBe(`看 ${LINK}`);
+  expect(input.value).toBe(`看 ${LINK}`);
   const cut = clipboardEvent("cut");
   input.dispatchEvent(cut);
-  expect(cut.clipboardData.setData).toHaveBeenCalledWith("text/plain", `看 ${LINK}`);
-  expect(input.value).toBe("");
+  expect(cut.defaultPrevented).toBe(false);
+  expect(input.value).toBe(`看 ${LINK}`);
 });
 
-test("a mention inside a link's name stays part of the link", () => {
+test("a mention inside a link's address stays part of the link", () => {
   typeText("https://medium.com/@小森/post");
-  expect(input.value).toBe("medium.com/@小森/post");
+  expect(input.value).toBe("https://medium.com/@小森/post");
   expect(mirror.querySelectorAll(".url-chip")).toHaveLength(1);
-  expect(chips()).toEqual(["medium.com/@小森/post"]);
+  expect(chips()).toEqual(["https://medium.com/@小森/post"]);
+});
+
+test("a link chip carries the link class apart from a mention beside it", () => {
+  typeText(`看 ${LINK} 和 @小森`);
+  expect([...mirror.querySelectorAll(".url-chip")].map(chip => chip.textContent)).toEqual([LINK]);
+  expect(mirror.querySelectorAll(".url-chip")).toHaveLength(1);
+  expect(chips()).toEqual([LINK, "@小森"]);
 });
 

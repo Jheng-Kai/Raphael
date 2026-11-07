@@ -28,13 +28,13 @@ import {
   sourceLabel,
 } from "./members";
 import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
-import { esc, ico, iconButton, openMenu, patchHTML, sel, tg, toaster } from "./ui";
+import { closeMenu, esc, ico, iconButton, openMenu, patchHTML, sel, tg, toaster } from "./ui";
 import { eventRead } from './event-read';
 import { panelLibraryHTML, readPanelWork, type PanelWork } from './member-panel-work';
 import { tabs } from './ui';
 import { describeError } from "./format";
 import { askInChat, askPending, onAskPending } from "./chat-ask";
-import { type Messaging, type MessagingKind, busySetupButton, chatChannelsHTML, createMemberChannel, createRaphaelChannel } from "./messaging";
+import { type Messaging, type MessagingKind, chatChannelsHTML, createMemberChannel, createRaphaelChannel } from "./messaging";
 
 export type DetailsTab = "details" | "library" | "computer" | "settings" | "memory" | "skills" | "commands" | "voice";
 
@@ -243,8 +243,9 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   const channelViews = (memberId: number): (readonly [MessagingKind, ReturnType<Messaging["view"]>])[] => KINDS.map((kind) => [kind, channelsOf(memberId)[kind].view()] as const);
   function suggestHTML(): string {
     const id = host.member().id;
-    return `<div class="mb-dh"><span>${esc(t("settings.paneMessaging"))}</span></div><div class="member-msg">${chatChannelsHTML(channelViews(id), (intent) => askPending(id, intent))}</div>` +
-      `<div class="mb-panel-row mb-panel-setup"><span class="mb-panel-row-copy"><span>${esc(t("members.setupWhat"))}</span></span>${busySetupButton(t("members.setUp"), ' data-det="setup" data-intent="settings" data-k="det-setup:settings"', askPending(id, "settings"))}</div>`;
+    // Only the bots have rows here: skills, memory, voice and permissions are set by asking in the conversation, with
+    // no row for them (owner, 2026-11-07).
+    return `<div class="mb-dh"><span>${esc(t("settings.paneMessaging"))}</span></div><div class="member-msg">${chatChannelsHTML(channelViews(id), (intent) => askPending(id, intent))}</div>`;
   }
   // A press the member is working on draws its button busy; the end of it frees the button (chat-ask.ts).
   onAskPending(() => { if (!el.hidden) draw(); });
@@ -496,7 +497,10 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         host.close();
         break;
       case "edit": host.edit?.(member); break;
-      case "share": askInChat(member.id, "share-template"); break;
+      // As Grok Bot's: the share button opens one choice, 建立副本 · 分享範本連結, and only that asks the member (owner, 2026-11-07).
+      case "share":
+        openMenu(act, [], "", () => {}, undefined, [{ label: t("template.copyTitle"), desc: t("template.copyHint"), icon: "copy", run() { closeMenu(); askInChat(member.id, "share-template"); } }]);
+        break;
       case "setup": askInChat(member.id, act.dataset.intent as api.AskIntent); break;
       case "draft": void host.update(member.id, { draft_first: !(member.draft_first ?? true) }); break;
       case "gear": tab = "settings"; draw(); break;

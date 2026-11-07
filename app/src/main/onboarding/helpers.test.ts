@@ -14,9 +14,9 @@ describe("pickServices", () => {
     expect(picked.map((s) => s.id)).toEqual(["gmail", "googlecalendar", "notion", "github", "zzz"]);
   });
 
-  test("six at most, and an app that wants its own key or developer app is left to the store", () => {
-    const many = Array.from({ length: 10 }, (_, i) => service(`app${i}`));
-    expect(pickServices(many, [])).toHaveLength(6);
+  test("eighteen at most, and an app that wants its own key or developer app is left to the store", () => {
+    const many = Array.from({ length: 24 }, (_, i) => service(`app${i}`));
+    expect(pickServices(many, [])).toHaveLength(18);
     const picked = pickServices([service("sentry", { needs: "key" }), service("linear", { needs: "own_app" }), service("notion", { needs: "sign_in" })], []);
     expect(picked.map((s) => s.id)).toEqual(["notion"]);
   });

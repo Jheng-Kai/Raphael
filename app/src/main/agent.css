@@ -200,7 +200,8 @@
 .message-code pre { margin: 0; padding: 34px var(--sp-3) var(--sp-3); border-radius: var(--r-sm); background: var(--surface-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .message-code pre code { padding: 0; background: transparent; }
 .message-code > .btn.icon { position: absolute; inset-block-start: 3px; inset-inline-end: 3px; }
-.message-link { overflow-wrap: anywhere; color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.message-link { overflow-wrap: anywhere; color: var(--link); text-decoration: none; cursor: pointer; }
+.message-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 :root[data-keys] .message-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: var(--r-sm); }
 .message-actions { display: flex; flex: none; align-items: center; justify-content: flex-start; gap: var(--sp-1); height: 28px; opacity: 0; }
 .message-tooltip { position: fixed; z-index: 100; pointer-events: none; max-width: calc(100vw - 16px); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--panel); color: var(--text); box-shadow: var(--pop); font: var(--fs-2xs)/1.5 var(--ui); }
@@ -481,7 +482,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* A mention, in the field and in the owner's bubble: its mark stands where the @ is (the @ keeps its width, unseen), then the
    name, as Grok Bot's: the logo and the words alone, with no frame or fill (owner, 2026-11-07). The words keep the field's
    own metrics, so the caret and a wrapping line fall exactly as for plain words. */
-.cmp-mirror .url-chip { color: var(--accent-text); }
+.cmp-mirror .url-chip { color: var(--link); }
 .mention-at { position: relative; -webkit-text-fill-color: transparent; }
 /* The 16 px mark is wider than the @ it covers, so it leans 3 px left: a little air before the name (owner, 2026-11-07),
    without changing the words' metrics. */
@@ -640,7 +641,9 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* The message's first column holds the 60ch limit (one font for it), so the bubble and its actions meet. */
 .chat-message > .ans { max-width: 100%; border: 0; border-radius: var(--r-lg); }
 
-.bubble .message-quote, .bubble .quote-author, .bubble .message-link { color: var(--on-bubble); border-color: currentColor; }
+.bubble .message-quote, .bubble .quote-author { color: var(--on-bubble); border-color: currentColor; }
+/* A link in a neutral bubble stays in the link colour; only a bubble that wears a member's colour needs its own words colour to read. */
+.mb-chat[data-member-bubble] .owner-message .bubble .message-link { color: var(--on-bubble); }
 /* Send and Raphael voice form one quiet, equal-sized pair in every composer. */
 .cmp-pair { display: inline-flex; flex: none; align-items: center; gap: var(--sp-1); }
 .composer .cmp-pair .btn { width: 32px; height: 32px; min-height: 32px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; }

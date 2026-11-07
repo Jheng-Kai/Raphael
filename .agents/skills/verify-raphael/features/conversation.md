@@ -1341,6 +1341,8 @@ npm run look -- empty-conversation-recording empty-conversation-hearing composer
 npm run look -- team-file-reply rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
+Links (owner, 2026-11-07): a link in the composer and in a sent message shows its whole address in the link colour (`--link`, blue), never a shortened name; the field's words are the address itself, so copy, cut and send give the same text. `composer-url-chip` requires the whole address, the link colour, a matching field and copy and no sideways overflow; `composer-link-sent` requires the whole address to go out with the words after it, and `room-link-sent` also requires the group's sent message to show the whole address in the link colour (the member conversation's mock does not echo the sent bubble; message-content.test.ts covers its HTML). A bubble that wears a member's colour keeps its own words colour for a link so that it reads (R-UI-81); a neutral bubble shows the link colour. The look driver's `clipboard-paste` does the browser's default insertion of pasted words when no page code took the paste.
+
 
 ## Answer forms (2026-11-01)
 
@@ -1541,6 +1543,8 @@ verify the named event opens directly in its existing calendar detail.
 ```powershell
 npm run look -- presence-hover-action presence-sidebar-hover presence-rail-hover presence-blocked-stays presence-waiting-colleague transcript-clean transcript-working transcript-hover-detail transcript-time-gap event-routine-line event-routine-opens event-calendar-line event-calendar-opens event-lines-collapse sidebar-row-time sidebar-hidden-folder sidebar-group-author --theme both --width 1120,720,1920x1080
 ```
+
+The hidden members' folder (R-UI-112, `sidebar-hidden-folder`) starts closed at every start: `sidebar-hidden-folder-closed` requires it closed, inert and collapsed to its header, then the scene presses the header and the right click brings the member back. Its open state lives only in the session and is never stored.
 
 Owner 2026-11-05 supersedes the notes-1 32px between-message event gaps: receipts now live in collapsed reply detail; shared header hovers open below the face, stay clear of window controls, and show no pointer focus ring. Expanded sidebar hovers show the action, collapsed rails show the name then action.
 

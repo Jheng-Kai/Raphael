@@ -8,6 +8,7 @@
 // Never kept or logged here: the key that is pasted. It is sent once and the field is emptied.
 
 import { onLocaleChange, t } from "../i18n";
+import { Emblem } from "../../overlay/emblem";
 
 import * as api from "../api";
 import { createCliBrains } from "../cli-brains";
@@ -19,10 +20,13 @@ import { storePlugin } from "../plugins-data";
 import { modelPickerHTML, mountModelPicker, type ModelPickerLook } from "../model-picker";
 import { createServices, servicesHTML as abilityRowsHTML } from "../services";
 import type { AppContext, BrainSettings, MainEvent, ModelCatalog, StoreService } from "../types";
-import { actionRow, closeMenu, esc, openMenu, openMenuOnArrow, sel, toaster } from "../ui";
+import { actionRow, btn, closeMenu, esc, openMenu, openMenuOnArrow, sel, toaster } from "../ui";
 import { pickServices } from "./helpers";
 import { type FlowState, type Mode, initialState, isLast, reduce } from "./flow";
-import { abilitiesHTML, asideHTML, servicesHTML, toolsHTML, topHTML, welcomeHTML } from "./screens";
+import { abilitiesHTML, serviceTilesHTML, servicesHTML, toolsHTML, welcomeHTML } from "./screens";
+
+/** The emblem's diameter on the welcome, in px (its canvas is 1.3 times larger, so that its rays have room). */
+const EMBLEM_PX = 96;
 
 /** What the guide tells whoever opened it when it is over. */
 export interface GuideResult {
@@ -64,6 +68,10 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   let servicesLoaded = false;
   let waitingService: string | null = null;
   let connectFailed: string | null = null;
+  let query = "";
+
+  /** Raphael's emblem on the welcome: drawn by the voice screen's renderer, ended with the screen. */
+  let emblem: Emblem | null = null;
 
   // the abilities: the same rows and dialogs as Settings › 工具, and its 看圖片 model picker
   let brain: BrainSettings | null = null;
@@ -124,13 +132,12 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     switch (flow.step) {
       case "welcome":
         return welcomeHTML({
-          rerun: mode === "rerun",
           languageSelect: sel(UI_LANGUAGES, device().ui_language, t("settings.059"), ' data-ob="lang"'),
         });
       case "tools":
         return toolsHTML(accounts.view(), { ...key, error: keyError?.() ?? null }, accountsError(), providers.view());
       case "services":
-        return servicesHTML({ services, waiting: waitingService, failed: connectFailed });
+        return servicesHTML({ services, waiting: waitingService, failed: connectFailed, query });
       case "abilities":
         return abilitiesHTML(abilityRowsHTML(abilities.view(), modelPickerHTML(visionLook()), brain));
     }
@@ -139,11 +146,18 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   /** What stopped the last ChatGPT sign-in, in the owner's words (the account controller keeps it). */
   const accountsError = (): string => accounts.view().chatgptError;
 
-  const topHTMLNow = (): string => topHTML({ back: flow.step !== "welcome" || mode === "rerun" });
-
+  /**
+   * One wide black pill, with a grey one for the way back under it (as Grok Bot's first run); a first run has nothing to
+   * go back to from its welcome, and a rerun's welcome leaves the guide.
+   */
   function footHTML(): string {
     const label = flow.step === "welcome" ? "onboarding.start" : isLast(flow) ? (mode === "rerun" ? "onboarding.finishRerun" : "onboarding.finish") : "onboarding.next";
-    return actionRow({ cls: "ob-actions", primary: { label: esc(t(label)), attrs: ` data-ob="next"${finishing ? " disabled" : ""}` } });
+    const way = flow.step === "welcome" ? (mode === "rerun" ? "common.cancel" : null) : "onboarding.back";
+    return actionRow({
+      cls: "ob-actions",
+      secondary: way ? btn(esc(t(way)), "ob-back", ' data-ob="back"') : undefined,
+      primary: { label: esc(t(label)), attrs: ` data-ob="next"${finishing ? " disabled" : ""}` },
+    });
   }
 
   function paintFoot(): void {
@@ -154,15 +168,30 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   /** Draws the whole screen. */
   function render(): void {
     closeMenu();
+    stopEmblem();
     root.dataset.step = flow.step;
     root.innerHTML =
       `<div class="ob-card"><div class="ob-pane">` +
-      `<div class="ob-top">${topHTMLNow()}</div>` +
       `<div class="ob-body"><div class="ob-col">${bodyHTML()}</div></div>` +
       `<div class="ob-foot">${footHTML()}</div>` +
-      `</div><aside class="ob-aside" aria-hidden="true">${asideHTML(flow.step)}</aside></div>`;
+      `</div></div>`;
     enterScreen();
     mountVisionPicker();
+    showEmblem();
+  }
+
+  function stopEmblem(): void {
+    emblem?.dispose();
+    emblem = null;
+  }
+
+  /** The welcome's emblem appears as it does on the desktop (with reduced motion it just stands there). */
+  function showEmblem(): void {
+    const canvas = flow.step === "welcome" ? root.querySelector<HTMLCanvasElement>("canvas.ob-emb") : null;
+    if (!canvas || typeof canvas.getContext !== "function") return;
+    emblem = new Emblem(canvas, EMBLEM_PX, { base: 0.05, surface: "transparent" });
+    emblem.set("steady");
+    emblem.appear();
   }
 
   /** Draws the part between the bar and the button again, keeping what is typed and where the focus is. */
@@ -259,6 +288,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     destroyed = true;
     abilities.reset();
     closeMenu();
+    stopEmblem();
     accounts.stop();
     stopEvents();
     stopLocale();
@@ -462,7 +492,14 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     openMenuOnArrow(e);
   }, { signal });
   root.addEventListener("input", (e) => {
-    if (!destroyed && flow.step === "tools" && e.target instanceof HTMLInputElement) providers.input(e.target);
+    if (destroyed || !(e.target instanceof HTMLInputElement)) return;
+    if (flow.step === "tools") providers.input(e.target);
+    // The search narrows the tiles where they stand: the field keeps its caret, and the page its place.
+    if (flow.step === "services" && e.target.id === "ob-find") {
+      query = e.target.value;
+      const grid = root.querySelector<HTMLElement>("[data-ob-services]");
+      if (grid) grid.innerHTML = serviceTilesHTML({ services, waiting: waitingService, failed: connectFailed, query });
+    }
   }, { signal });
   wireKeyField(root, { inputId: "ob-key-input", pasteSelector: '[data-ob="key-paste"]', submit: (value) => void submitKey(value), signal });
 

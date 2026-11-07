@@ -1,6 +1,7 @@
-// One connected view joins managed toolkits, private Google, custom MCP servers and the members' private skills:
+// One connected view joins managed toolkits, private Google and custom MCP servers; it holds connectors only, since a
+// member's skills are managed in that member's own panel (owner, 2026-11-07):
 // the apps that can be called now first (their number is the core's, the one the sidebar and every model's roster
-// show), then the ones that cannot, and the skills. Details group tool switches by write/read and say how many are
+// show), then the ones that cannot. Details group tool switches by write/read and say how many are
 // on; removal stays in the overflow menu. The store starts with built-in services and offers Composio as an optional catalog.
 // Existing custom MCP setup and device reauthentication stay available.
 // Secrets go directly to the core vault and never enter the render snapshot.
@@ -8,14 +9,10 @@
 import { noticeHTML } from "./missing";
 import * as api from "./api";
 import { type InventoryView, appOf, countText, isConnected, whyNot } from "./apps-inventory";
-import {
-  type SkillItem, type SkillPage, type LocalSkillSource, skillImportsHTML, loadSkillItems, skillListItems, sameSkill, skillChanged, skillDialogHTML, skillErrorText, skillPage, skillsSectionHTML,
-} from "./connection-skills";
 import { openConnectionSetup } from "./connection-setup";
-import { confirmDelete, openDialog as openMemberDialog } from "./member-dialogs";
+import { openDialog as openMemberDialog } from "./member-dialogs";
 import { managedGroup, pluginTool, storePlugin, type ManagedConnector } from "./plugins-data";
 import { openMcpImport } from "./mcp-import";
-import { type SkillSet, type SkillMarketplace, skillSetDialogHTML } from "./skill-sets";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { dayLabel, describeError, formatClock } from "./format";
 import { getLocale, t } from "./i18n";
@@ -115,15 +112,6 @@ export interface ConnectionsView {
   inventory: InventoryView;
   /** Which section each row took when this visit first read it. */
   placed?: ReadonlyMap<string, boolean | null>;
-  /** The private skills of the members, beside the apps. */
-  skills: SkillItem[] | "loading" | "failed";
-  /** The page of a skill that is open over the list. */
-  skill: SkillPage | null;
-  skillSources?: LocalSkillSource[] | "loading" | "failed";
-  skillSets?: SkillSet[];
-  skillSet?: number | null;
-  skillMarketplaces?: SkillMarketplace[];
-  skillActionBusy?: boolean;
   audit: AuditEntry[];
   tab: Tab;
   /** What was typed in the search box. */
@@ -156,8 +144,6 @@ export const emptyConnectionsView = (): ConnectionsView => ({
   catalog: "loading",
   composioCatalog: "loading",
   inventory: "loading",
-  skills: "loading",
-  skill: null,
   audit: [],
   tab: "installed",
   search: "",
@@ -318,19 +304,12 @@ function itemHTML(g: ConnectionGroup, v: ConnectionsView): string {
   );
 }
 
-/** The private skills the search leaves: none while they are read, and the failure to read them is told where they would be. */
-function skillItems(v: ConnectionsView): SkillItem[] {
-  return Array.isArray(v.skills) ? skillListItems(v.skills).filter(({ member, skill, grants }) => matches(v.search, skill.name, skill.description, member.name, ...(grants ?? []).map(each => each.member.name))) : [];
-}
-
 function installedHTML(v: ConnectionsView): string {
   if (v.groups === "loading") return `<p class="settings-loading" role="status">${esc(t("conn.loading"))}</p>`;
   if (v.groups === "failed") return `<div class="alert core-note">${st("err", t("conn.loadFailed"))}${btn(esc(t("plugins.retry")), "sm", ' data-conn="retry-connections"')}</div>`;
   const shown = v.groups.filter((g) => matches(v.search, g.name, g.description ?? "", entryOf(g, v) ? words(entryOf(g, v)!.summary) : where(g)));
-  const skills = skillItems(v);
-  const skillsFailed = v.skills === "failed";
-  if (!v.groups.length && !skillsFailed && !(Array.isArray(v.skills) && v.skills.length) && !v.skillSets?.length) return noticeHTML("emptyApps", "store", "apps") + skillsSectionHTML([]);
-  if (!shown.length && !skills.length && !skillsFailed && !v.skillSets?.length) return `<p class="cs-none">${esc(t("conn.noMatch"))}</p>` + skillsSectionHTML([]);
+  if (!v.groups.length) return noticeHTML("emptyApps", "store", "apps");
+  if (!shown.length) return `<p class="cs-none">${esc(t("conn.noMatch"))}</p>`;
   // The apps that can be called now first, then the ones that cannot (waiting for a sign-in, failed, off, a second way to an app already
   // counted): each still has its switch and its dialog. While the inventory is not read, or cannot be, they are one list as before.
   // A row keeps its section for the whole visit: flipping its switch must not move it from under the pointer.
@@ -338,12 +317,11 @@ function installedHTML(v: ConnectionsView): string {
   const counted = shown.filter(connected);
   const others = shown.filter((g) => !connected(g));
   const list = (groups: ConnectionGroup[], key: string): string => `<div class="cs-list" data-stagger="${key}">${groups.map((g) => itemHTML(g, v)).join("")}</div>`;
-  const named = others.length > 0 || skills.length > 0 || skillsFailed;
+  const named = others.length > 0;
   const section = (title: string, body: string): string => `<section class="cs-sec"><h2>${esc(title)}</h2>${body}</section>`;
   return (
     (counted.length ? (named ? section(t("conn.apps"), list(counted, "installed")) : list(counted, "installed")) : "") +
-    (others.length ? section(t("conn.notConnected"), list(others, "installed-not")) : "") +
-    skillsSectionHTML(skills, skillsFailed, v.skillSets)
+    (others.length ? section(t("conn.notConnected"), list(others, "installed-not")) : "")
   );
 }
 
@@ -749,24 +727,9 @@ export function connectionsHTML(v: ConnectionsView): string {
   const g = openGroup(v);
   // A device login started from a service's dialog shows its code there instead.
   const device = g && v.login?.target === g.id ? "" : deviceHTML(v);
-  const skill = openSkill(v);
-  const set = v.skillSets?.find(item => item.id === v.skillSet);
   const entries = storeEntries(v);
-  return `<div class="cs${v.tab === "store" ? " cs-store" : ""}">${device}${barHTML(v, entries)}<div class="cs-body" data-cs-body>${bodyHTML(v, entries)}</div></div>` + (v.skillSources !== undefined ? `<div class="cs-scrim" data-conn="scrim" data-dialog="skill-import"><div class="cs-dialog wide cs-skill-import" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>${skillImportsHTML(v.skillSources, closeButton(), dialogNoticeHTML(v), v.skillMarketplaces, v.skillActionBusy)}</div></div>` : set ? `<div class="cs-scrim" data-conn="scrim" data-dialog="skill-set:${set.id}"><div class="cs-dialog wide" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>${skillSetDialogHTML(set, closeButton(), dialogNoticeHTML(v), !!v.skillActionBusy)}</div></div>` : v.keyOpen ? keyDialogHTML(v) : g ? dialogHTML(g, v) : skill ? skillScrimHTML(skill.item, skill.page, dialogNoticeHTML(v)) : "");
+  return `<div class="cs${v.tab === "store" ? " cs-store" : ""}">${device}${barHTML(v, entries)}<div class="cs-body" data-cs-body>${bodyHTML(v, entries)}</div></div>` + (v.keyOpen ? keyDialogHTML(v) : g ? dialogHTML(g, v) : "");
 }
-
-/** The skill whose page is open, if it is still there. */
-const openSkill = (v: ConnectionsView): { item: SkillItem; page: SkillPage } | undefined => {
-  const page = v.skill;
-  const item = page && Array.isArray(v.skills) ? skillListItems(v.skills).find((each) => sameSkill(each, page.memberId, page.id)) : undefined;
-  return page && item ? { item, page } : undefined;
-};
-
-/** The page of a skill over the tab, in the dialog an app has (wider: it holds a document). */
-const skillScrimHTML = (item: SkillItem, page: SkillPage, notice: string): string =>
-  `<div class="cs-scrim" data-conn="scrim" data-dialog="skill:${item.member.id}:${item.skill.id}">` +
-  `<div class="cs-dialog wide" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>` +
-  skillDialogHTML(item, page, closeButton(), btn(esc(t("plugins.retry")), "sm", ' data-conn="skill-retry"'), notice) + `</div></div>`;
 
 // ---------- doing ----------
 
@@ -825,12 +788,6 @@ export function createConnections(host: ConnectionsHost): Connections {
   let composioCatalog: ConnectionsView["composioCatalog"] = "loading";
   let inventory: InventoryView = "loading";
   const placed = new Map<string, boolean | null>();
-  let skills: ConnectionsView["skills"] = "loading";
-  let skill: SkillPage | null = null;
-  let skillSources: ConnectionsView["skillSources"];
-  let skillSets: SkillSet[] = [], skillMarketplaces: SkillMarketplace[] = [];
-  let skillSet: number | null = null, skillActionBusy = false, skillRequest = 0;
-  let skillLoads = 0;
   let audit: AuditEntry[] = [];
   let tab: Tab = "installed";
   let search = "";
@@ -855,19 +812,12 @@ export function createConnections(host: ConnectionsHost): Connections {
   let closing = false;
   let stopOutside: (() => void) | null = null;
 
-  /** A dialog is over the list: an app's, or a skill's. */
-  const dialogOpen = (): boolean => skillSources !== undefined || skillSet !== null || keyOpen || open?.tab === "installed" || skill !== null;
+  /** A dialog is over the list: an app's or the key's. */
+  const dialogOpen = (): boolean => keyOpen || open?.tab === "installed";
 
   const redraw = (): void => {
     storePaint++;
-    // The page is drawn again whole: the document that is being edited keeps its caret, its selection and its scroll.
-    const area = typeof document !== "undefined" ? document.querySelector<HTMLTextAreaElement>("#skill-text") : null;
-    const kept = area && document.activeElement === area ? { start: area.selectionStart, end: area.selectionEnd, top: area.scrollTop } : null;
     if (host.visible()) host.redraw();
-    if (kept) {
-      const next = document.querySelector<HTMLTextAreaElement>("#skill-text");
-      if (next) { next.focus(); next.setSelectionRange(kept.start, kept.end); next.scrollTop = kept.top; }
-    }
     if (dialogOpen() && !stopOutside && typeof document !== "undefined") {
       const root = host.root ?? document.querySelector("#cs-dialog")?.parentElement?.parentElement;
       if (root) stopOutside = registerDismissal(() => root.querySelector<HTMLElement>("#cs-dialog"), closeDialog);
@@ -882,7 +832,7 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   const view = (): ConnectionsView => ({
     configured, categories, category, keyOpen, keyBusy, keyError,
-    groups, catalog, composioCatalog, inventory, placed, skills, skill, skillSources, skillSets, skillSet, skillMarketplaces, skillActionBusy, audit, tab, search, storePage, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, device, loginError, dialogNotice, form, now: Date.now(),
+    groups, catalog, composioCatalog, inventory, placed, audit, tab, search, storePage, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, device, loginError, dialogNotice, form, now: Date.now(),
   });
 
   /** Prepare the default first screen while the installed catalog is being read. */
@@ -921,7 +871,7 @@ export function createConnections(host: ConnectionsHost): Connections {
   const groupById = (id: string): ConnectionGroup | undefined => (Array.isArray(groups) ? groups.find((g) => g.id === id) : undefined);
   const entryById = (id: string): StoreService | undefined => ([...(Array.isArray(catalog) ? catalog : []), ...uniqueComposio(view())].find(s => s.id === id));
 
-  async function load(withSkills = true): Promise<void> {
+  async function load(): Promise<void> {
     const mine = ++loads;
     const [list, status, recent, counted, builtins] = await Promise.allSettled([api.toolsetsList(), api.connectorsStatus(), api.integrationsAudit(AUDIT_READ), api.integrationsInventory(), api.integrationsCatalog()]);
     if (mine !== loads) return;
@@ -952,26 +902,7 @@ export function createConnections(host: ConnectionsHost): Connections {
     }
     prepareStore();
     redraw();
-    if (withSkills) void loadSkills();
     if (configured && status.status === "fulfilled" && !Array.isArray(composioCatalog)) await loadCatalog();
-  }
-
-  /** The private skills of the members: read again whenever the list is, and when a skill is changed anywhere (`MembersChanged`). */
-  async function loadSkills(): Promise<void> {
-    const mine = ++skillLoads;
-    try {
-      const { items, sets } = await loadSkillItems();
-      if (mine !== skillLoads) return;
-      skills = items;
-      skillSets = sets;
-      if (skillSet !== null && !sets.some(set => set.id === skillSet)) skillSet = null;
-    } catch {
-      if (mine !== skillLoads) return;
-      if (!Array.isArray(skills)) skills = "failed";
-    }
-    // the page that is open belongs to a skill that is gone (deleted elsewhere): back to the list
-    if (skill && Array.isArray(skills) && !skills.some((item) => sameSkill(item, skill!.memberId, skill!.id))) skill = null;
-    redraw();
   }
 
   async function loadCatalog(): Promise<void> {
@@ -1048,7 +979,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       notify(describeError(err), "err");
     }
     busy.delete(id);
-    await load(false);
+    await load();
     if (open?.id === id) await loadTools(id);
   }
 
@@ -1074,31 +1005,9 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (closing) return;
     loginError = null;
     dialogNotice = null;
-    if (skillSources !== undefined) {
-      skillSources = undefined;
-      skillRequest++; skillActionBusy = false;
-      redraw(); focusOn('[data-conn="skill-discover"]'); return;
-    }
-    if (skillSet !== null) {
-      skillSet = null; skillRequest++; skillActionBusy = false;
-      redraw(); return;
-    }
     if (keyOpen) {
       keyOpen = false; keyError = ""; keySaves++; keyBusy = false;
       redraw(); focusOn('[data-conn="configure-composio"]'); return;
-    }
-    if (skill && open?.tab !== "installed") {
-      // The page of a skill goes the same way: the document that was being edited is dropped with it.
-      const page = skill;
-      closing = true;
-      leave(typeof document !== "undefined" ? document.querySelector<HTMLElement>(".cs-scrim") : null, DIALOG_OUT_MS, () => {
-        closing = false;
-        if (skill !== page) return;
-        skill = null;
-        redraw();
-        focusOn(`[data-k="cs-skill:${page.memberId}:${page.id}"]`);
-      });
-      return;
     }
     if (!open || open.tab !== "installed") return;
     const id = open.id;
@@ -1115,114 +1024,6 @@ export function createConnections(host: ConnectionsHost): Connections {
       redraw();
       focusOn(`[data-k="cs-open:${typeof CSS !== "undefined" ? CSS.escape(id) : id}"]`);
     });
-  }
-
-  // ---------- the private skills ----------
-
-  const skillOf = (memberId: number, id: number): SkillItem | undefined =>
-    Array.isArray(skills) ? skills.find((each) => sameSkill(each, memberId, id)) : undefined;
-
-  async function skillAction(work: () => Promise<void>): Promise<void> {
-    if (skillActionBusy) return;
-    const request = skillRequest;
-    skillActionBusy = true; dialogNotice = null; redraw();
-    try { await work(); }
-    catch (error) { if (request === skillRequest) dialogNotice = { text: skillErrorText(error), kind: "err" }; }
-    finally { if (request === skillRequest) { skillActionBusy = false; redraw(); } }
-  }
-
-  async function readMarketplace(repo: string): Promise<void> {
-    const request = skillRequest;
-    await skillAction(async () => {
-      const result = await api.core<{ marketplace: SkillMarketplace; sets: SkillSet[] }>("members.skills.list", { member_id: 0, marketplace: repo });
-      if (request !== skillRequest) return;
-      skillMarketplaces = [...skillMarketplaces.filter(m => m.repo !== result.marketplace.repo), result.marketplace];
-      skillSets = result.sets;
-    });
-  }
-
-  async function importSet(params: Record<string, unknown>): Promise<void> {
-    const request = skillRequest;
-    await skillAction(async () => {
-      await api.core("members.skills.import", { member_id: 0, shared: true, ...params });
-      await loadSkills();
-      if (request === skillRequest && skillSources !== undefined) closeDialog();
-    });
-  }
-
-  /** Opens the page of a skill, with the focus in it; its document is read for it. */
-  function openSkillPage(memberId: number, id: number): void {
-    dialogNotice = null;
-    skill = skillPage(memberId, id);
-    redraw();
-    focusOn("#cs-dialog");
-    void readSkill();
-  }
-
-  async function readSkill(): Promise<void> {
-    const page = skill;
-    if (!page) return;
-    page.state = "loading";
-    page.error = null;
-    redraw();
-    try {
-      const { text } = await api.membersSkillsRead(page.memberId, page.id);
-      if (skill !== page) return;
-      page.saved = page.draft = text;
-      page.state = "ready";
-    } catch {
-      if (skill !== page) return;
-      page.state = "failed";
-    }
-    redraw();
-  }
-
-  /** Keeps the edited document. The name and the line under it follow it, so the skills are read again. */
-  async function saveSkill(): Promise<void> {
-    const page = skill;
-    if (!page || page.busy || !skillChanged(page)) return;
-    page.busy = true;
-    page.error = null;
-    dialogNotice = null;
-    redraw();
-    try {
-      await api.membersSkillsEdit(page.memberId, page.id, page.draft);
-      if (skill === page) page.saved = page.draft = page.draft.replace(/\r\n/g, "\n");
-      notify(t("conn.skill.saved"));
-    } catch (err) {
-      if (skill === page) page.error = skillErrorText(err);
-    }
-    if (skill === page) page.busy = false;
-    redraw();
-    await loadSkills();
-  }
-
-  /** The owner asks to delete a skill: after the shared question, it and its trigger are gone. */
-  async function deleteSkill(memberId: number, id: number): Promise<void> {
-    const item = skillOf(memberId, id);
-    if (!item || !(await confirmDelete(item.skill.name))) return;
-    try {
-      await api.membersSkillsDelete(memberId, id);
-      skill = null;
-      dialogNotice = null;
-      notify(t("conn.skill.deleted", { p0: item.skill.name }));
-    } catch (err) {
-      notify(describeError(err), "err");
-      return;
-    }
-    await loadSkills();
-  }
-
-  /** The switch of a skill: on, the member is told when to use it; off, it is not. */
-  async function toggleSkill(memberId: number, id: number): Promise<void> {
-    const item = skillOf(memberId, id);
-    if (!item) return;
-    try {
-      await api.membersSkillsUpdate(memberId, id, !item.skill.enabled);
-    } catch (err) {
-      notify(describeError(err), "err");
-    }
-    await loadSkills();
   }
 
   function disconnect(id: string): void {
@@ -1255,7 +1056,7 @@ export function createConnections(host: ConnectionsHost): Connections {
         const label = dialog.el.querySelector<HTMLInputElement>("[data-account-name]")!.value.trim();
         if (!label) return;
         button.setAttribute("disabled", "");
-        void api.core("connectors.label", {id, account_id: account.id, label}).then(() => {dialog.close(); return load(false);}).catch(error => {
+        void api.core("connectors.label", {id, account_id: account.id, label}).then(() => {dialog.close(); return load();}).catch(error => {
           const notice = dialog.el.querySelector<HTMLElement>('[role="alert"]')!; notice.textContent = describeError(error); notice.hidden = false; button.removeAttribute("disabled");
         });
       }});
@@ -1295,7 +1096,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       if (!fromDialog || (open === fromDialog && !closing)) loginError = { target: key, kind: result.error ?? "error" };
       if (!fromDialog) notify(result.error === "toolkit_not_allowed" ? failureText(result.error) : t("plugins.connectFailed"), "err");
     }
-    await load(false);
+    await load();
     if (result.connected) {
       const group = groupById(result.connector?.id || (key.startsWith("composio:") || key === "google" ? key : "composio:" + key));
       const account = result.connector?.accounts?.find(account => !previousAccounts.has(account.id)) || group?.accounts?.find(account => !previousAccounts.has(account.id));
@@ -1330,13 +1131,11 @@ export function createConnections(host: ConnectionsHost): Connections {
       open = null;
       notify(t("conn.connected", { p0: entry.name }));
     }
-    await load(false);
+    await load();
   }
 
   function followEvent(event: MainEvent): void {
-    if (event.type === "ConnectionsChanged" && host.visible()) { void load(false); return; }
-    // a skill was imported, switched, edited or deleted, in the member's own tab or by Raphael: the list follows it
-    if (event.type === "MembersChanged" && host.visible()) { void loadSkills(); return; }
+    if (event.type === "ConnectionsChanged" && host.visible()) { void load(); return; }
     if (event.type !== "DeviceCode" || !login) return;
     device = { catalog_id: event.catalog_id, user_code: event.user_code, verification_uri: event.verification_uri };
     redraw();
@@ -1386,14 +1185,14 @@ export function createConnections(host: ConnectionsHost): Connections {
       form = null; // the values were sent to the core's vault: nothing of them stays here
       tab = "installed";
       notify(t("conn.connected", { p0: request.name }));
-      await load(false);
+      await load();
       return;
     } catch (err) {
       f.busy = false;
       const text = describeError(err);
       f.error = () => text;
     }
-    await load(false);
+    await load();
     redraw();
   }
 
@@ -1626,64 +1425,14 @@ export function createConnections(host: ConnectionsHost): Connections {
         break;
       case "configure-composio": keyOpen = true; keyError = ""; redraw(); focusOn("#conn-key"); break;
       case "save-key": void saveKey(); break;
-      case "skill-discover":
-        skillRequest++; skillActionBusy = false; dialogNotice = null; skillSet = null;
-        skillSources = "loading"; redraw(); focusOn("#cs-dialog");
-        { const request = skillRequest; void api.core<{ sources: LocalSkillSource[]; marketplaces?: SkillMarketplace[] }>("members.skills.list", { member_id: 0, discover: true }).then(result => { if (request === skillRequest && skillSources === "loading") { skillSources = result.sources; skillMarketplaces = result.marketplaces ?? []; redraw(); } }, () => { if (request === skillRequest && skillSources === "loading") { skillSources = "failed"; redraw(); } }); }
-        break;
-      case "marketplace-add": void readMarketplace(document.querySelector<HTMLInputElement>("#skill-marketplace")?.value.trim() ?? ""); break;
-      case "marketplace-refresh": { const repo = skillMarketplaces[Number(button.dataset.market)]?.repo; if (repo) void readMarketplace(repo); break; }
-      case "marketplace-install": {
-        const market = skillMarketplaces[Number(button.dataset.market)];
-        const plugin = market?.plugins[Number(button.dataset.plugin)];
-        if (market && plugin?.installable) void importSet({ marketplace: market.repo, name: plugin.name });
-        break;
-      }
       case "account-label": {
         const account = groupById(id)?.accounts?.find(a => a.id === button.dataset.account);
         if (account) nameAccount(id, account);
         break;
       }
       case "add-account": { const group = groupById(id); if (group) void signIn({id}, group.name, true); break; }
-      case "set-open": skillSet = Number(id); skill = null; skillSources = undefined; skillRequest++; dialogNotice = null; redraw(); focusOn("#cs-dialog"); break;
-      case "set-update": void importSet({ set_id: Number(id) }); break;
-      case "set-delete": {
-        const set = skillSets.find(item => item.id === Number(id));
-        if (set) void (async () => { if (await confirmDelete(set.name)) await skillAction(async () => { await api.core("members.skills.delete", { member_id: 0, shared: true, set_id: set.id }); skillSet = null; await loadSkills(); }); })();
-        break;
-      }
-      case "set-mcp": {
-        const server = skillSets.find(item => item.id === Number(id))?.mcp_servers[Number(button.dataset.server)];
-        if (!server) break;
-        const card = button.closest("[data-set-mcp]");
-        const field = (name: string, fallback: string): string => card?.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-mcp-field="${name}"]`)?.value ?? fallback;
-        form = { ...emptyForm(), type: server.transport, name: field("name", server.name), command: field("command", server.command), args: field("args", server.args.join("\n")), url: field("url", server.url), pairLines: field(server.transport === "http" ? "headers" : "env", (server.transport === "http" ? server.headers : server.env).join(", ")).split(",").map(name => name.trim()).filter(Boolean).map(name => `${name}=`).join("\n") };
-        skillSet = null; redraw(); focusOn("#conn-name"); break;
-      }
-      case "skill-import-alone": {
-        const source = Array.isArray(skillSources) ? skillSources[Number(button.dataset.source)]?.skills?.[Number(button.dataset.child)]?.source : undefined;
-        if (source) void skillAction(async () => { await api.membersSkillsImport(-1, source); await loadSkills(); closeDialog(); });
-        break;
-      }
-      case "skill-import-local": {
-        const source = Array.isArray(skillSources) ? skillSources[Number(button.dataset.source)] : undefined;
-        if (source?.kind === "plugin") void importSet({ source: source.source, plugin: true });
-        else if (source) void skillAction(async () => { await api.membersSkillsImport(-1, source.source); await loadSkills(); closeDialog(); });
-        break;
-      }
-      case "skill-reimport": {
-        const item = skillOf(Number(button.dataset.member), Number(id));
-        if (item) void api.membersSkillsImport(item.member.id, item.skill.source).then(() => loadSkills()).catch(error => notify(skillErrorText(error)));
-        break;
-      }
-      case "skill-open": openSkillPage(Number(button.dataset.member), Number(id)); break;
-      case "skill-enable": void toggleSkill(Number(button.dataset.member), Number(id)); break;
-      case "skill-save": void saveSkill(); break;
-      case "skill-delete": void deleteSkill(Number(button.dataset.member), Number(id)); break;
-      case "skill-retry": void readSkill(); break;
-      case "retry-skills": void loadSkills(); break;
       case "retry-connections": void load(); break;
-      case "retry-builtin-store": void load(false); break;
+      case "retry-builtin-store": void load(); break;
       case "store-group":
         if (id === category && storePage === 0) { revealChip(button); break; }
         category = id; storePage = 0; repaintBody(); break;
@@ -1704,16 +1453,6 @@ export function createConnections(host: ConnectionsHost): Connections {
       return true;
     }
     if (el.id === "conn-key") return true;
-    if (el.id === "skill-text") {
-      // The document is edited in place: only the button that keeps it changes, so that the caret stays where it is.
-      if (skill?.state === "ready") {
-        skill.draft = el.value;
-        skill.error = null;
-        const save = typeof document !== "undefined" ? document.querySelector<HTMLButtonElement>('[data-conn="skill-save"]') : null;
-        if (save) save.disabled = !skillChanged(skill) || skill.busy;
-      }
-      return true;
-    }
     if (!form || !el.id.startsWith("conn-")) return false;
     switch (el.id) {
       case "conn-pairs": form.pairLines = el.value; break;
@@ -1759,7 +1498,7 @@ export function createConnections(host: ConnectionsHost): Connections {
           choices: [{ value: "custom", label: t("mcp.add") }, { value: "paste", label: t("mcp.paste") }, { value: "import", label: t("mcp.fromApps") }],
           current: "", // nothing is checked: it is an act, not a state
           pick: (value) => {
-            if (value === "paste" || value === "import") { openMcpImport(value === "import", () => void load(false)); return; }
+            if (value === "paste" || value === "import") { openMcpImport(value === "import", () => void load()); return; }
             if (value !== "custom" || form?.busy) return;
             open = null;
             form = emptyForm();
@@ -1798,7 +1537,6 @@ export function createConnections(host: ConnectionsHost): Connections {
     confirming = null;
     form = null;
     open = null;
-    skill = null; // a document that was being edited is dropped with the page
     toolsOpen = false;
     auditOpen = false;
     closing = false;

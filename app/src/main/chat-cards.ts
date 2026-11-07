@@ -10,6 +10,7 @@ import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
 import { type MemberTemplate, type ScanFinding, templateContents } from "./member-templates";
 import { connectionMarkHTML } from "./secret-card";
+import { slimeFaceHTML } from "./slime";
 import type { AgentTurn, PairingCard, TemplateCard } from "./types";
 import { btn, esc, ico, toaster } from "./ui";
 
@@ -52,7 +53,7 @@ function templateCardHTML(card: TemplateCard): string {
     body: card.description || undefined,
     content: `<p class="card-body template-facts">${facts.map((fact) => `<span>${esc(fact)}</span>`).join("")}</p>`,
     actions,
-    cls: "template-card", attrs: ` data-template-card-id="${esc(card.id)}" data-card-state="${esc(card.state)}"`,
+    cls: "template-card", attrs: ` data-template-card-id="${esc(card.id)}" data-card-state="${esc(card.state)}" data-template-avatar="${esc(card.avatar ?? "")}"`,
   });
 }
 
@@ -62,9 +63,10 @@ export function chatCardsHTML(turn: AgentTurn): string {
 }
 
 /** The template card's snapshot, reviewed as the export review shows a recipe. */
-async function viewTemplate(id: string): Promise<void> {
+async function viewTemplate(id: string, avatar = ""): Promise<void> {
   const { template, findings = [] } = await api.core<{ template: MemberTemplate; findings?: ScanFinding[] }>("members.template_card", { id });
-  const dialog = openDialog({ title: t("store.review"), cls: "template-preview template-card-review", body: templateContents(template, findings),
+  const face = avatar ? slimeFaceHTML({ id: -1, avatar }, 64) : "";
+  const dialog = openDialog({ title: t("store.review"), cls: "template-preview template-card-review", body: templateContents(template, findings, { face }),
     actions: { primary: { label: esc(t("common.close")), attrs: ' data-dlg="close"' } },
     onAct(action) { if (action === "close") dialog.close(); } });
 }
@@ -89,7 +91,7 @@ export function chatCardAction(act: HTMLElement): boolean {
     return true;
   }
   if (!template) return false;
-  if (kind === "template-view") { void viewTemplate(template).catch((error) => toaster.info(describeError(error))); return true; }
+  if (kind === "template-view") { void viewTemplate(template, card?.dataset.templateAvatar ?? "").catch((error) => toaster.info(describeError(error))); return true; }
   if (kind === "template-save") {
     run(async () => { const { text } = await api.core<{ text: string }>("members.template_card_export", { id: template }); await api.memberTemplateFile("save", text); });
     return true;

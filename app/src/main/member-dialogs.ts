@@ -366,7 +366,7 @@ export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions): v
       actions
         .map((action, i) => `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-pick="${i}"><span class="mt">${esc(action.label)}</span></button>`)
         .join(""),
-    { className: "menu mb-avpop", role: "menu", label: t("settings.avatar") },
+    { className: "menu mb-avpop", role: "menu", label: t("settings.avatar"), placement: "center" },
   );
   el.addEventListener("click", (e) => {
     const target = (e.target as Element).closest<HTMLElement>("button");

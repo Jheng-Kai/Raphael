@@ -205,7 +205,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const routineNavigation = element.matches('.chat-message .routine-origin > button.routine-run-link[data-act="open-routine"]');
       if (!navigation && !routineNavigation && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder) violation('R-UI-18', 'Text action button has no frame');
     }
-    if (element.matches('.action-row')) {
+    // The guide's two pills are stacked, the black primary over the grey way back (Grok Bot's first run, owner 2026-11-07).
+    if (element.matches('.action-row:not(.ob-actions)')) {
       const buttons = [...element.querySelectorAll('button')].filter(visible);
       const primary = buttons.find(button => button.matches('.pri'));
       if (primary && buttons.some(button => button !== primary && button.getBoundingClientRect().right > primary.getBoundingClientRect().left + 1)) violation('R-UI-27', 'Primary action is not rightmost');

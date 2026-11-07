@@ -4,7 +4,7 @@ import { emptyCliBrainsView, type CliBrainsView } from "../cli-brains";
 import { setLocale } from "../i18n";
 import type { CliBrain, ModelProvider, ProviderKind, StoreService } from "../types";
 import { emptyProvidersView } from "../providers";
-import { abilitiesHTML, asideHTML, servicesHTML, toolCards, toolsHTML, topHTML, welcomeHTML } from "./screens";
+import { abilitiesHTML, matchServices, serviceTilesHTML, servicesHTML, toolCards, toolsHTML, welcomeHTML } from "./screens";
 
 const WORDS = { "zh-TW": "", en: "", ja: "" };
 const service = (id: string, name: string, over: Partial<StoreService> = {}): StoreService => ({
@@ -24,7 +24,7 @@ const dom = (html: string): HTMLElement => {
   host.innerHTML = html;
   return host;
 };
-const items = (host: HTMLElement): string[] => [...host.querySelectorAll<HTMLElement>(".ob-item")].map((el) => el.dataset.item!);
+const items = (host: HTMLElement): string[] => [...host.querySelectorAll<HTMLElement>(".ob-tile")].map((el) => el.dataset.item!);
 
 beforeEach(() => setLocale("en"));
 afterEach(() => setLocale("zh-TW"));
@@ -32,7 +32,7 @@ afterEach(() => setLocale("zh-TW"));
 describe("every screen", () => {
   test("is real buttons and the app's own switches: no native select and no link-looking text", () => {
     const html = [
-      welcomeHTML({ rerun: false, languageSelect: '<button type="button" class="sel"></button>' }),
+      welcomeHTML({ languageSelect: '<button type="button" class="sel"></button>' }),
       toolsHTML(accounts(), noKey, ""),
       servicesHTML({ services: [service("notion", "Notion")], waiting: null, failed: null }),
       abilitiesHTML('<section class="sgroup svc"></section>'),
@@ -45,45 +45,52 @@ describe("every screen", () => {
     for (const html of [toolsHTML(accounts(), noKey, ""), servicesHTML({ services: "loading", waiting: null, failed: null }), abilitiesHTML("")]) {
       const host = dom(html);
       expect(host.querySelectorAll("h2")).toHaveLength(1);
-      expect(host.querySelector(".ob-sub")).toBeNull();
+      expect(host.querySelector(".ob-sub, .ob-line")).toBeNull();
+    }
+  });
+
+  test("two small slimes float by each step's title, as decoration only: no side, no bubble, no progress bar", () => {
+    for (const html of [toolsHTML(accounts(), noKey, ""), servicesHTML({ services: "loading", waiting: null, failed: null }), abilitiesHTML("")]) {
+      const host = dom(html);
+      const floaters = host.querySelector(".ob-floaters")!;
+      expect(floaters.getAttribute("aria-hidden")).toBe("true");
+      expect(floaters.querySelectorAll(".slime-surface")).toHaveLength(2);
+      expect(host.querySelector("h2")!.closest(".ob-floaters")).toBeNull();
+      expect(host.querySelector(".ob-aside, .ob-say, .ob-bar-steps, [role=progressbar]")).toBeNull();
     }
   });
 });
 
-describe("the top and Raphael's side", () => {
-  test("a way back and nothing else: no progress bar (owner, 2026-11-07) and no way to skip", () => {
-    const host = dom(topHTML({ back: true }));
-    expect(host.querySelector('[data-ob="back"]')).not.toBeNull();
-    expect(host.querySelector(".ob-bar-steps, [role=progressbar]")).toBeNull();
-    expect(host.querySelector('[data-ob="skip"]')).toBeNull();
-    expect(dom(topHTML({ back: false })).querySelector('[data-ob="back"]')).toBeNull();
-  });
-
-  test("Raphael is his first blue slime with one sentence for each step", () => {
-    const lines = (["welcome", "tools", "services", "abilities"] as const).map((step) => {
-      const host = dom(asideHTML(step));
-      expect(host.querySelector(".slime-surface")).not.toBeNull();
-      expect(host.querySelector("canvas, .emb")).toBeNull();
-      return host.querySelector(".ob-say")!.textContent;
-    });
-    expect(new Set(lines).size).toBe(4);
-    expect(lines.every((line) => line && line.length > 0)).toBe(true);
+describe("the welcome", () => {
+  test("is Raphael's emblem, his name, one promise and the language dropdown with no label", () => {
+    const host = dom(welcomeHTML({ languageSelect: '<button type="button" class="sel" aria-label="Language"></button>' }));
+    expect(host.querySelector('.ob-emblem[aria-hidden="true"] canvas.ob-emb')).not.toBeNull();
+    expect(host.querySelector("h2")!.textContent).toBe("Raphael");
+    expect(host.querySelector(".ob-line")!.textContent!.length).toBeGreaterThan(0);
+    expect(host.querySelectorAll(".ob-lang .sel")).toHaveLength(1);
+    expect(host.querySelector("label, .ob-lang-label")).toBeNull();
+    expect(host.querySelector(".ob-floaters, .slime-surface")).toBeNull();
   });
 });
 
 describe("step 1: the AI tools", () => {
-  test("lists ChatGPT, the three command-line tools and OpenRouter, each with its name and one control", () => {
+  test("lists ChatGPT, the three command-line tools and OpenRouter, each a tile with its name and one control", () => {
     const host = dom(toolsHTML(accounts(), noKey, ""));
     expect(items(host)).toEqual(["chatgpt", "claude", "codex", "gemini", "openrouter"]);
-    expect([...host.querySelectorAll(".ob-item .nm")].map((el) => el.textContent)).toEqual(["ChatGPT", "Claude Code", "Codex", "Antigravity", "OpenRouter"]);
-    for (const el of host.querySelectorAll(".ob-item")) expect(el.querySelector(".ob-ctl")!.children.length).toBeGreaterThan(0);
+    expect([...host.querySelectorAll(".ob-tile .nm")].map((el) => el.textContent)).toEqual(["ChatGPT", "Claude Code", "Codex", "Antigravity", "OpenRouter"]);
+    for (const el of host.querySelectorAll(".ob-tile")) expect(el.querySelector(".ob-ctl")!.children.length).toBeGreaterThan(0);
+    expect(host.querySelector("[data-ob-tools]")!.classList.contains("ob-grid")).toBe(true);
+    expect(host.querySelector("[data-ob-tools]")!.classList.contains("two")).toBe(true);
+    expect(host.querySelector('[data-item="openrouter"]')!.classList.contains("wide")).toBe(true);
   });
 
-  test("what is ready says so, and what is not has the button the account controller listens to", () => {
+  test("what is ready says so and has the check; what is not has the button the account controller listens to", () => {
     const host = dom(toolsHTML(accounts(), noKey, ""));
     const control = (id: string) => host.querySelector(`[data-item="${id}"] .ob-ctl`)!;
     expect(control("claude").querySelector(".st .dot.ok")).not.toBeNull();
     expect(control("claude").querySelector("button")).toBeNull();
+    expect(host.querySelector('[data-item="claude"].on .ob-tick')).not.toBeNull();
+    expect(host.querySelector('[data-item="codex"]')!.classList.contains("on")).toBe(false);
     expect(control("chatgpt").querySelector('button[data-chatgpt="sign-in"]')).not.toBeNull();
     expect(control("codex").querySelector('button[data-cli="codex"]')?.textContent).toBe("Connect");
     expect(control("gemini").querySelector('button[data-cli="gemini"]')?.textContent).toBe("Install guide");
@@ -115,26 +122,25 @@ describe("step 1: the AI tools", () => {
     expect(replacing.querySelector('[data-ob="key-cancel"]')).not.toBeNull();
   });
 
-  test("a refused key and a failed sign-in are told as alerts, each under its own list", () => {
+  test("a refused key and a failed sign-in are told as alerts, each under its own grid", () => {
     const host = dom(toolsHTML(accounts(), { ...noKey, error: "That key was refused" }, "Sign-in did not finish"));
     expect([...host.querySelectorAll('[role="alert"]')].map((el) => el.textContent)).toEqual(["Sign-in did not finish", "That key was refused"]);
     expect(host.querySelector("#ob-key-input")!.getAttribute("aria-invalid")).toBe("true");
   });
 
-  test("one per row: the accounts, then every provider of the catalog, connected ones to manage, others to connect", () => {
+  test("one tile each: the accounts, then every provider of the catalog, connected ones to manage, others to connect", () => {
     const kind = (id: string, name: string, group: "official" | "gateway" | "local", available = true) =>
       ({ kind: id, name, group, available, fields: ["key"], default_base_url: null, docs_url: null, local_context_hint: false }) as unknown as ProviderKind;
     const providers = { ...emptyProvidersView(), state: "ready" as const,
       kinds: [kind("ollama", "Ollama", "local"), kind("openrouter", "OpenRouter", "gateway"), kind("xai", "xAI", "official"), kind("anthropic", "Anthropic", "official"), kind("future", "Future AI", "official", false)],
       providers: [{ id: "p1", kind: "anthropic", name: "Anthropic", enabled: true, status: "ok", models: 3 } as unknown as ModelProvider] };
     const host = dom(toolsHTML(accounts(), noKey, "", providers));
-    expect(host.querySelector(".ob-grid")).toBeNull();
-    // OpenRouter is its own key row; the catalog follows it by group, each group by name, under its own label
+    // OpenRouter is its own key tile; the catalog follows it by group, each group by name, under its own label
     expect(host.querySelector('[data-ob-key] [data-item="openrouter"]')).not.toBeNull();
     expect(host.querySelectorAll(".ob-subsection")).toHaveLength(2);
-    expect([...host.querySelectorAll("[data-ob-providers] .ob-item")].map((el) => el.getAttribute("data-item"))).toEqual(["provider:anthropic", "provider:future", "provider:xai", "provider:ollama"]);
+    expect([...host.querySelectorAll("[data-ob-providers] .ob-tile")].map((el) => el.getAttribute("data-item"))).toEqual(["provider:anthropic", "provider:future", "provider:xai", "provider:ollama"]);
     expect([...host.querySelectorAll("[data-ob-providers]")].map((el) => el.getAttribute("data-ob-providers"))).toEqual(["official", "local"]);
-    expect(host.querySelector('[data-item="provider:anthropic"] [data-pv="open"][data-id="p1"]')).not.toBeNull();
+    expect(host.querySelector('[data-item="provider:anthropic"].on [data-pv="open"][data-id="p1"]')).not.toBeNull();
     expect(host.querySelector('[data-item="provider:xai"] [data-pv="add"][data-id="xai"]')).not.toBeNull();
     expect(host.querySelector<HTMLButtonElement>('[data-item="provider:future"] [data-pv="add"]')!.disabled).toBe(true);
   });
@@ -143,19 +149,25 @@ describe("step 1: the AI tools", () => {
 describe("step 2: the services", () => {
   const view = (over = {}) => ({ services: [service("gmail", "Gmail"), service("notion", "Notion", { server_id: "n1" }), service("slack", "Slack")], waiting: null as string | null, failed: null as string | null, ...over });
 
-  test("one item for each service with its mark, name and a sign-in or its connected state", () => {
+  test("a search box and one tile for each service with its mark and name; the whole tile signs in, a connected one has the check", () => {
     const host = dom(servicesHTML(view()));
+    expect(host.querySelector('.ob-find input#ob-find[aria-label]')).not.toBeNull();
     expect(items(host)).toEqual(["gmail", "notion", "slack"]);
-    for (const el of host.querySelectorAll(".ob-item")) expect(el.querySelector(".ob-ic .mono")).not.toBeNull();
-    expect(host.querySelector('[data-item="gmail"] button[data-ob="conn-login"][data-service="gmail"]')).not.toBeNull();
-    expect(host.querySelector('[data-item="notion"] .dot.ok')).not.toBeNull();
+    for (const el of host.querySelectorAll(".ob-tile")) expect(el.querySelector(".ob-ic .mono")).not.toBeNull();
+    const gmail = host.querySelector('button.ob-tile[data-item="gmail"]')!;
+    expect(gmail.getAttribute("data-ob")).toBe("conn-login");
+    expect(gmail.getAttribute("data-service")).toBe("gmail");
+    expect(gmail.getAttribute("aria-label")).toBe("Sign in Gmail");
+    expect(host.querySelector('[data-item="notion"].on .dot.ok')).not.toBeNull();
+    expect(host.querySelector('[data-item="notion"].on .ob-tick')).not.toBeNull();
     expect(host.querySelector('[data-item="notion"] button')).toBeNull();
+    expect(host.querySelector("[data-ob-services]")!.classList.contains("ob-grid")).toBe(true);
   });
 
   test("while one login is open it can be cancelled and the others wait", () => {
     const host = dom(servicesHTML(view({ waiting: "gmail" })));
     expect(host.querySelector('[data-item="gmail"] [data-ob="conn-cancel"]')).not.toBeNull();
-    expect(host.querySelector('[data-item="slack"] [data-ob="conn-login"]')!.hasAttribute("disabled")).toBe(true);
+    expect(host.querySelector('button.ob-tile[data-item="slack"]')!.hasAttribute("disabled")).toBe(true);
   });
 
   test("a managed app's login cannot be cancelled, as in the store", () => {
@@ -167,6 +179,20 @@ describe("step 2: the services", () => {
     expect(dom(servicesHTML({ services: "loading", waiting: null, failed: null })).querySelector(".spin")).not.toBeNull();
     expect(dom(servicesHTML({ services: "failed", waiting: null, failed: null })).querySelector('[data-ob="conn-reload"]')).not.toBeNull();
     expect(dom(servicesHTML(view({ failed: "The sign-in did not finish" }))).querySelector('[role="alert"]')?.textContent).toBe("The sign-in did not finish");
+    expect(dom(servicesHTML({ services: "loading", waiting: null, failed: null })).querySelector(".ob-find")).toBeNull();
+  });
+
+  test("the search narrows the tiles by name or id, ignoring case and spaces, and says when none match", () => {
+    const list = [service("gmail", "Gmail"), service("googlecalendar", "Google Calendar"), service("notion", "Notion")];
+    expect(matchServices(list, "").map((s) => s.id)).toEqual(["gmail", "googlecalendar", "notion"]);
+    expect(matchServices(list, " GOOGLE cal ").map((s) => s.id)).toEqual(["googlecalendar"]);
+    expect(matchServices(list, "mail").map((s) => s.id)).toEqual(["gmail"]);
+    const host = dom(servicesHTML({ services: list, waiting: null, failed: null, query: "notion" }));
+    expect(items(host)).toEqual(["notion"]);
+    expect(host.querySelector<HTMLInputElement>("#ob-find")!.value).toBe("notion");
+    const none = dom(`<div>${serviceTilesHTML({ services: list, waiting: null, failed: null, query: "zzz" })}</div>`);
+    expect(none.querySelector(".ob-tile")).toBeNull();
+    expect(none.querySelector(".ob-state")!.textContent).toBe("No service matches");
   });
 });
 

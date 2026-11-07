@@ -25,7 +25,8 @@
 .cr-tabs { width: min(460px, 100%); }
 @media (max-width: 760px) { .store-grid, .store-featured { grid-template-columns: minmax(0, 1fr); } }
 /* A member template as Grok Bot's dialogs show things (owner, 2026-11-07): who it is, then short cards of rows. */
-.tpl-hero { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.tpl-hero { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 2px; text-align: center; }
+.tpl-face { display: flex; justify-content: center; margin-bottom: var(--sp-2); }
 .tpl-hero b { font: 500 var(--fs-md)/1.35 var(--display); color: var(--text); }
 .tpl-hero span { font-size: var(--fs-sm); color: var(--text-2); }
 .tpl-alert { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-3); border-radius: var(--r-md); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-sm); line-height: 1.55; }

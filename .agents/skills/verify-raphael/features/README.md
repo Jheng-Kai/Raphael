@@ -32,9 +32,7 @@ native/live and network-backed judge remain deferred.
 See [Members](members.md#plugin-sets-and-github-marketplaces-2026-11-04) for
 R-SKILL-06/07: one installed plugin entry, bounded whole-set import/update/removal,
 pinned GitHub marketplace sources, inherited member grants, commands, and explicit
-MCP setup cards. Migration 62 follows rooms 60 and shared grants 61. Offline look
-adds skills-plugin-entry, skills-marketplace, skills-plugin-set,
-skills-plugin-update and skills-plugin-details to the existing 15-scene skill scope.
+MCP setup cards. Migration 62 follows rooms 60 and shared grants 61. Their Connect apps scenes were retired on 2026-11-07 (connectors only, R-SKILL-05).
 Synthetic HTTP/CLI tests do not establish GitHub, installed-CLI or live acceptance.
 
 ## Primary-contact owner management (2026-11-05)
@@ -54,9 +52,7 @@ See [Conversation](conversation.md#long-busy-conversations-and-bounded-mounting-
 See [Members](members.md#shared-installed-skills-2026-11-04) for R-SKILL-01 through
 R-SKILL-05, shared/member scope, whole local package import, source refresh,
 one shared package row with member grants in its dialog, readable source labels,
-Raphael command parity and native CLI skill delivery. Review follow-up 3 authorizes
-the selected offline look matrix, including skills-installed-sources,
-skills-import-shared, skills-member-grants and skills-source-changed. The Members
+Raphael command parity and native CLI skill delivery. The Connect apps scenes this history named were retired on 2026-11-07 (R-SKILL-05). The Members
 entry maps actions, IPC outcomes and visual comparisons. Native and live acceptance
 remain separate; judge requires external references and authorized subscription use.
 
