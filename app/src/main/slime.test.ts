@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { faceHTML } from "./members";
+import { crownedId, crownPrimary } from "./crown";
 import { followSlimeRoster, handOver, isSlimeAvatar, parseSlime, pickSlime, seasonalHat, setSlimeState, slimeFaceHTML, slimePickerHTML, slimeSVG, type SlimeState } from "./slime";
 
 const css = readFileSync(resolve(__dirname, "slime.css"), "utf8");
@@ -18,6 +19,22 @@ const keyframes = css.split("@keyframes ").slice(1).map(chunk => {
 const stateIn = (el: Element): string | undefined => el.querySelector<SVGElement>("svg.slime")?.dataset.state;
 const plain = { now: new Date(2026, 5, 1) }, witch = { now: new Date(2026, 9, 31) };
 const same = (text: string): string => text;
+
+test("the primary member's slime wears the gold crown on its edge, in place of a season's hat; nobody else's does", () => {
+  crownPrimary({ members: [{ id: 3 }, { id: 4 }], team_context: { primary_id: 3 } });
+  const crowned = slimeFaceHTML({ id: 3, avatar: "slime:color:teal" }, 40), other = slimeFaceHTML({ id: 4, avatar: "slime:color:teal" }, 40);
+  expect(crowned).toContain('fill="#F6C141"');
+  expect(crowned).toContain("rotate(30)");
+  expect(other).not.toContain("#F6C141");
+  // two horns hold it upright between them
+  expect(slimeSVG({ character: "benimaru" }, { ...plain, crown: true })).toContain("translate(50 29.2) rotate(0)");
+  // a plain slime gives its hat up for the crown
+  expect(slimeSVG({ color: "teal" }, { ...witch, crown: true })).not.toContain("#554177");
+  // a primary the roster does not have is Raphael's again
+  crownPrimary({ members: [{ id: 4 }], team_context: { primary_id: 9 } });
+  expect(crownedId()).toBe(0);
+  expect(faceHTML({ id: 0, name: "Raphael" }, 40)).toContain("#F6C141");
+});
 
 test('sampled eyes share pixel fitting instead of fitting every hidden pose separately', () => {
   const host = document.createElement('div');

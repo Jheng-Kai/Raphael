@@ -3,13 +3,14 @@
  * of its own with one or two marks of who it is, so Shion is lavender with a horn and nothing more. Loop motion is
  * CSS keyed on `data-state` (slime.css); finite handovers use explicit keyframes from JS pose/timing state.
  * Nothing in script runs per animation frame: it only changes state and admits deferred strips.
- * Raphael keeps his own emblem and never comes here (members.ts `faceHTML`).
+ * Raphael is the first blue slime (`rimuru`, members.ts `faceHTML`); the primary member wears a gold crown (crown.ts).
  * A member's `avatar` is `slime:<character>` or `slime:color:<color>`; one without a picture gets a colour from its id.
  */
 import "./slime.css";
 import { t } from "./i18n";
 import { motionStrips } from "./slime-cels";
 import { loopState, LOOPS, sample, easing } from "./slime-motion";
+import { crownedId } from "./crown";
 
 export type SlimeState = "idle" | "thinking" | "working" | "searching" | "computer" | "waiting" | "blocked" | "done" | "error" | "sleeping" | "arriving";
 type Hat = "witch" | "santa";
@@ -81,6 +82,30 @@ const CHARACTERS = {
 } as const satisfies Record<string, { name: string; color: string; back?: string; marks?: string }>;
 export type SlimeCharacter = keyof typeof CHARACTERS;
 
+// ---------- the crown of the primary member ----------
+
+/** One gold shape, no gem and no shine (owner, 2026-11-07), drawn with its base's middle at (50, 30). */
+const CROWN_GOLD = "#F6C141";
+const CROWN = fill("M 37 32.4 L 36.2 18 L 43.6 23.8 L 50 14.2 L 56.4 23.8 L 63.8 18 L 63 32.4 Q 50 28 37 32.4 Z", CROWN_GOLD).replace("/>", ` stroke="${CROWN_GOLD}" stroke-width="1.8" stroke-linejoin="round"/>`) +
+  `<circle cx="36.2" cy="17.2" r="2.4" fill="${CROWN_GOLD}"/><circle cx="50" cy="13.2" r="2.6" fill="${CROWN_GOLD}"/><circle cx="63.8" cy="17.2" r="2.4" fill="${CROWN_GOLD}"/>`;
+type CrownSpot = readonly [x: number, y: number, turn: number, size: number];
+/** Stuck on the outline, not worn: on the upper right, its base square to the edge, tilted down the slope. */
+const CROWN_EDGE: CrownSpot = [70.4, 35.6, 30, 0.62];
+/**
+ * A character whose own marks are there gets a spot of its own: two horns hold it upright between them (owner,
+ * 2026-11-07), Shizu's mask and Gobta's goggles push it down the edge, Diablo's streaks to the left, and the ears and
+ * wings of Ranga and Ramiris to the top. One horn in the middle leaves the edge free.
+ */
+const CROWN_SPOTS: Partial<Record<SlimeCharacter, CrownSpot>> = {
+  benimaru: [50, 29.2, 0, 0.55], veldora: [50, 29.2, 0, 0.55], shuna: [50, 29.4, 0, 0.5],
+  shizu: [78, 41.6, 44, 0.6], gobta: [80, 44, 48, 0.58], diablo: [29.6, 34.8, -32, 0.6],
+  ranga: [50, 29, 8, 0.6], ramiris: [57, 29.4, 14, 0.62],
+};
+function crownMark(slime: Slime): string {
+  const [x, y, turn, size] = ("character" in slime && CROWN_SPOTS[slime.character]) || CROWN_EDGE;
+  return loose(`<g transform="translate(${x} ${y}) rotate(${turn}) scale(${size}) translate(-50 -30)">${CROWN}</g>`, x, y, 0.6);
+}
+
 const CHARACTER_IDS = Object.keys(CHARACTERS) as SlimeCharacter[];
 const COLOR_IDS = Object.keys(COLORS) as SlimeColor[];
 const isCharacter = (id: string): id is SlimeCharacter => id in CHARACTERS;
@@ -144,14 +169,15 @@ function strips(state: SlimeState, drawing: {back: string; worn: string}): [stri
   return loopState(state) ? motionStrips(state,BODY,EYES,FACE_SCALE,drawing.back,drawing.worn) : ['',''];
 }
 
-export interface SlimeDrawing { now?: Date; state?: SlimeState; delay?: number; tempo?: number; since?: number; member?: number }
+export interface SlimeDrawing { now?: Date; state?: SlimeState; delay?: number; tempo?: number; since?: number; member?: number; crown?: boolean }
 
 /** The shared vector surface; `slimeFaceHTML` supplies the member's fixed avatar box. */
-export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay = 0, tempo = 1, since, member }: SlimeDrawing = {}): string {
+export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay = 0, tempo = 1, since, member, crown = false }: SlimeDrawing = {}): string {
   hearThePointer();
   const look: { color: string; back?: string; marks?: string } = "character" in slime ? CHARACTERS[slime.character] : { color: COLORS[slime.color] };
-  const hat = "character" in slime ? null : seasonalHat(now);
-  const worn = (look.marks ?? "") + (hat ? loose(`<g transform="translate(0 ${HAT_LIFT})">${HATS[hat]}</g>`, 50, 30, 0.6) : "");
+  // The primary member wears the crown in any season: a plain slime's hat gives way to it.
+  const hat = "character" in slime || crown ? null : seasonalHat(now);
+  const worn = (look.marks ?? "") + (hat ? loose(`<g transform="translate(0 ${HAT_LIFT})">${HATS[hat]}</g>`, 50, 30, 0.6) : "") + (crown ? crownMark(slime) : "");
   const key = `${look.back ?? ''}|${worn}`;
   let drawingId = drawingIds.get(key);
   if (!drawingId) { drawingId=String(drawings.size);drawingIds.set(key,drawingId);drawings.set(drawingId,{back:look.back ?? '',worn}); }
@@ -492,7 +518,7 @@ export function slimeFaceHTML(member: SlimeFacts & { avatar?: string | null }, s
   const state = member.waiting ? "blocked" : activity.get(member.id) ?? rest, now = performance.now(), start = began.get(member.id);
   const label = labels.get(member.id) ?? "";
   return `<span class="av mb-av mb-av-slime${cls ? ` ${cls}` : ""}" data-presence-member="${member.id}"${label ? ` data-tooltip="${label.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;")}"` : ""} style="--av:${Math.round(size)}px" aria-hidden="true">` +
-    slimeSVG(slime, { state, member: member.id, delay: delayOf(member.id, now), tempo: tempoOf(member.id), since: start === undefined ? undefined : -Math.round(now - start) }) + `</span>`;
+    slimeSVG(slime, { state, member: member.id, crown: member.id === crownedId(), delay: delayOf(member.id, now), tempo: tempoOf(member.id), since: start === undefined ? undefined : -Math.round(now - start) }) + `</span>`;
 }
 
 // ---------- the picture menu ----------

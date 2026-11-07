@@ -4,6 +4,7 @@
 
 import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { withWindowHotkeyPause } from "./window-hotkeys";
+import { crownPrimary } from "./crown";
 import type { DesktopState, DesktopSession } from "./desktop-viewer";
 import type { LanguageGroup } from "./languages";
 import type { TelegramStatus } from "./messaging";
@@ -222,7 +223,11 @@ export const agentVoice = (edge: "down" | "up", memberId = 0, conversationId?: n
 // ---------- members, their groups and their routines (the 拉斐爾 page) ----------
 
 /** Raphael (member 0, his name in `uiLanguage`) and the members, and the groups. */
-export const membersList = (uiLanguage?: string): Promise<MembersList> => core("members.list", uiLanguage ? { ui_language: uiLanguage } : {});
+export const membersList = async (uiLanguage?: string): Promise<MembersList> => {
+  const list = await core<MembersList>("members.list", uiLanguage ? { ui_language: uiLanguage } : {});
+  crownPrimary(list);
+  return list;
+};
 /**
  * Adds a member; the core answers with it and, for a member of a group with places to look, the
  * routine it offers (「每天早上的進度」, in `ui_language`), which only `routinesCreate` makes: the
