@@ -1943,6 +1943,33 @@ pub async fn open_team_file(app: AppHandle, webview: Webview, path: String) -> R
     show_in_folder(found)
 }
 
+/// Open a file a member delivered (its Library) at the owner's press. The core resolves only a handle of that member's
+/// Library to a checked file of a type it opens (`members.library_file`); anything else is refused there.
+#[tauri::command]
+pub async fn open_library_file(
+    app: AppHandle,
+    webview: Webview,
+    member_id: u64,
+    id: String,
+) -> Result<(), String> {
+    require_main(&webview)?;
+    let core = app
+        .try_state::<Arc<CoreProcess>>()
+        .ok_or(CORE_NOT_RUNNING)?;
+    let result = core
+        .call(
+            "members.library_file",
+            json!({"member_id": member_id, "id": id}),
+        )
+        .await
+        .map_err(|_| "file unavailable".to_owned())?;
+    let found = result
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or("file unavailable")?;
+    launch_link(found)
+}
+
 fn show_in_folder(path: &str) -> Result<(), String> {
     #[cfg(windows)]
     {
@@ -2344,6 +2371,7 @@ mod tests {
                 "mic_access",
                 "open_attachment",
                 "open_external_url",
+                "open_library_file",
                 "open_link",
                 "open_team_file",
                 "pick_output_folder",

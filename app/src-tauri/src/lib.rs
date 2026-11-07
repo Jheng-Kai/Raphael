@@ -205,6 +205,7 @@ pub fn run() {
             commands::attachment_source,
             updates::update_control,
             commands::open_team_file,
+            commands::open_library_file,
             commands::hotkeys_pause,
             commands::window_hotkey,
             commands::main_window_forward,

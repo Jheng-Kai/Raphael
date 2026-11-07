@@ -301,8 +301,24 @@ export function checkRendered(name, context = {}) {
     } else if (name === 'member-panel-details-empty') {
       require(!panel.querySelector('.mb-panel-tasks') && panel.querySelector('.mb-panel-routines .mp-empty'), 'an empty Details is one quiet routine line and no work list');
     } else if (name === 'member-panel-library' || name === 'member-panel-library-more') {
-      require(panel.querySelectorAll('.team-file[data-panel-file]').length === (name.endsWith('-more') ? 15 : 12), 'library reuses file chips and its bounded next page');
-      require(panel.querySelector('.mb-tab-body').textContent.includes('本週') && panel.querySelector('.mb-tab-body').textContent.includes('更早'), 'library groups recent and earlier files/pages');
+      // Only what the member delivered, by day (owner, 2026-11-07 night, Grok Bot's Library): pictures as thumbnails,
+      // every other deliverable a row with its kind's icon, title and time; a bounded Show more.
+      const body = panel.querySelector('.mb-tab-body'), days = [...body.querySelectorAll('.lib-day')];
+      require(body.querySelectorAll('[data-panel-file]').length === (name.endsWith('-more') ? 15 : 12), 'the library and its bounded next page');
+      require(days[0].querySelector('.mb-dh').textContent === '今天' && days[1].querySelector('.mb-dh').textContent === '昨天', 'grouped by day, newest first: 今天, 昨天, then dates');
+      const pictures = [...days[0].querySelectorAll('.lib-pics > .lib-pic')];
+      require(pictures.length === 3 && pictures.every(tile => tile.tagName === 'BUTTON' && tile.querySelector('img[src]') && Math.abs(tile.getBoundingClientRect().width - tile.getBoundingClientRect().height) <= 1), "today's three pictures are square thumbnails, loaded, each a button");
+      require(new Set(pictures.map(tile => Math.round(tile.getBoundingClientRect().top))).size === 1, 'three to a row');
+      const rows = [...body.querySelectorAll('.lib-row')];
+      require(rows.every(row => row.tagName === 'BUTTON' && visible(row.querySelector('.lib-icon .i')) && row.querySelector('.lib-title').textContent && /\d{2}:\d{2}/.test(row.querySelector('time').textContent)), 'every other deliverable is a row: its icon, title and time');
+      require(rows.find(row => row.dataset.panelFile === 'delivered-file:bundle')?.querySelector('.lib-icon').dataset.kind === 'archive', 'the kind sets the icon');
+      for (const row of rows) { const style = getComputedStyle(row); require(parseFloat(style.borderTopWidth) === 0 && (row.matches(':hover') || style.backgroundColor === 'rgba(0, 0, 0, 0)'), 'rows are not framed'); }
+      require(!rows.some(row => row.dataset.panelFile.startsWith('attachment:')), 'pictures are not listed as rows');
+      require(!body.querySelector('.team-file'), 'no file chips any more');
+    } else if (name === 'member-panel-library-open') {
+      const opened = window.__look.state?.openedLibraryFile ?? window.__look.openedLibraryFile;
+      require(opened?.id === 'delivered-file:bundle' && opened.member_id === 1, `the delivered file opens by its Library handle, never a path (${JSON.stringify(opened)})`);
+      require(visible(document.querySelector('.media-lightbox img')), 'a picture opens large');
     } else if (name === 'member-panel-library-empty') {
       require(panel.querySelector('.mb-tab-body').textContent === '還沒有檔案或頁面', 'library has one empty sentence');
     } else if (name === 'member-panel-computer-live') {

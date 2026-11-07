@@ -1,5 +1,23 @@
 # Member computer (Phases A and B)
 
+## Library: only what the member delivered (owner, 2026-11-07 night)
+
+This supersedes the Library notes below (team-file chips, the workspace/team scan, This week / Earlier). The owner found
+the Library a wall of working screenshots; as Grok Bot's, it now lists only deliverables, read from `members.library`
+(core brief 10: media cards and files or links its replies handed over, pages it published with their first day, verified
+receipts in the owner's output folder; never owner uploads, scratch files or undelivered screenshots). member-panel-work.ts
+groups them by `day`, newest first, under 今天 / 昨天 / a date: pictures as square thumbnails three to a row (a delivered
+attachment loads through `attachments.get` like a chat's; one with no stored copy keeps a tile with the picture icon), every
+other deliverable a row with its kind's icon (document, page, video, audio, archive, file, link), its title and the time;
+nothing framed. Show more adds 12 up to 100. A press opens a picture in the lightbox, a page at the reply that published it,
+a link in the browser, an attachment with `open_attachment`, and a delivered file with the new `open_library_file` command,
+which hands the member id and the Library handle to `members.library_file` (never a path, never `computer.team_file`).
+Delivered file names are data for the look audit's language check (`.lib-title`).
+
+```powershell
+npm run look -- member-panel-library member-panel-library-open member-panel-library-empty details --theme both --width 1120,720,1920x1080
+```
+
 ## Bare screen while the computer is not showing its screen (owner, 2026-11-07)
 
 This supersedes every earlier note below that describes words, the member face, preparation progress, a state sentence,

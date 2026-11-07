@@ -984,6 +984,34 @@ export function installMock(fixture, config = {}, target = window) {
         return { learned };
       }
       case "dictionary.delete": data.dictionary = data.dictionary.filter(item => item.id !== p.id); return { deleted: true };
+      case "members.library": {
+        // As the core since brief 10: only what the member delivered, newest first, with the day it was handed over.
+        if (!variant.memberPanelFiles) return { files: [], has_more: false };
+        const sample = data.memberPanelSample, now = Date.now(), limit = p.limit ?? 12;
+        const dayOf = at => { const d = new Date(at); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+        // Three pictures it sent in its replies, stored as attachments (drawn here, read back through attachments.get).
+        const picture = index => {
+          const id = `${String(index + 1).repeat(32)}.png`;
+          if (!data.keptFiles?.[id]) {
+            const canvas = document.createElement("canvas"); canvas.width = canvas.height = 160;
+            const ctx = canvas.getContext("2d"), hues = ["#e9c46a", "#84a98c", "#9d8ec7"];
+            ctx.fillStyle = "#f4f1ea"; ctx.fillRect(0, 0, 160, 160); ctx.fillStyle = hues[index];
+            ctx.fillRect(24, 30 + index * 8, 112, 100 - index * 16); ctx.fillStyle = "#2b2b2b"; ctx.fillRect(24, 136, 80 - index * 20, 8);
+            data.keptFiles = { ...(data.keptFiles ?? {}), [id]: { mime: "image/png", data: canvas.toDataURL("image/png").split(",")[1] } };
+          }
+          return id;
+        };
+        const hour = 3600000, dayMs = 24 * hour;
+        const items = [
+          ...[0, 1, 2].map(index => ({ id: `attachment:${picture(index)}`, attachment_id: picture(index), title: `版面草圖 ${index + 1}.png`, kind: "image", mime: "image/png", at_ms: now - index * 60000, turn_id: 2, conversation_id: 11 })),
+          { id: "page:weekly", title: sample.page, kind: "page", at_ms: now - hour, turn_id: 2, conversation_id: 11 },
+          { id: "delivered-file:notes", title: sample.files[0], kind: "document", at_ms: now - 2 * hour, turn_id: 2, conversation_id: 11 },
+          { id: "delivered-file:bundle", title: "交付素材.zip", kind: "archive", at_ms: now - dayMs, turn_id: 2, conversation_id: 11 },
+          { id: "link:report", title: "https://example.com/weekly-report", url: "https://example.com/weekly-report", kind: "link", at_ms: now - dayMs - hour, turn_id: 2, conversation_id: 11 },
+          ...Array.from({ length: 8 }, (_, index) => ({ id: `delivered-file:old-${index}`, title: sample.files[index % 3], kind: "document", at_ms: now - (index < 4 ? 10 : 12) * dayMs - index * hour, turn_id: 2, conversation_id: 11 })),
+        ].map(item => ({ ...item, name: item.title, day: dayOf(item.at_ms) }));
+        return { files: items.slice(0, limit), has_more: items.length > limit };
+      }
       case "members.list": {
         if ('panel_member_id' in p) {
           const sample = data.memberPanelSample, now = Date.now();
@@ -1842,6 +1870,7 @@ export function installMock(fixture, config = {}, target = window) {
         state.urls.push(args.url); return;
       }
       if (command === "open_team_file") { state.openedTeamFile = args.path; return; }
+      if (command === "open_library_file") { state.openedLibraryFile = { member_id: args.memberId, id: args.id }; return; }
       if (command === "pick_output_folder") return variant.folderCancel ? null : data.colleagueSample.path;
       if (command === "member_template_file") {
         if (args.action === "open") return JSON.stringify(data.colleagueSample.template);

@@ -543,6 +543,8 @@ export const updateControl = (action: "status" | "check" | "install"): Promise<U
 export interface MemoryImportResult { kept: string[]; refused: { index: number; reason: string }[]; }
 export const importMemory = (text: string): Promise<MemoryImportResult> => core("memory.import", { text });
 export const openTeamFile = (path: string): Promise<void> => invoke("open_team_file", { path });
+/** Opens a file a member delivered, by the handle its Library gave (`members.library_file`, checked by the core). */
+export const openLibraryFile = (memberId: number, id: string): Promise<void> => invoke("open_library_file", { memberId, id });
 
 export const usageAllowances = (): Promise<CliAllowances> => core("usage.allowances");
 export const pickOutputFolder = (): Promise<string | null> => invoke("pick_output_folder");

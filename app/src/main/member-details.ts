@@ -30,6 +30,8 @@ import {
 import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
 import { closeMenu, esc, ico, iconButton, openMenu, patchHTML, sel, tg, toaster } from "./ui";
 import { eventRead } from './event-read';
+import { createAttachmentMedia } from "./attachment-media";
+import { openMediaLightbox } from "./media-lightbox";
 import { panelLibraryHTML, readPanelWork, type PanelWork } from './member-panel-work';
 import { tabs } from './ui';
 import { describeError } from "./format";
@@ -88,6 +90,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   const body = el.querySelector<HTMLElement>(".mb-tab-body")!;
   const closeButton = el.querySelector<HTMLElement>('[data-det="close"]')!;
   const backButton = el.querySelector<HTMLElement>('[data-det="back"]')!;
+  // The Library's pictures load as a chat's attachments do, when they scroll into view.
+  const libraryMedia = createAttachmentMedia(el.querySelector<HTMLElement>(".mb-det-scroll")!, id => api.core("attachments.get", { id }));
   let drawn = "";
 
   let tab: DetailsTab = "details";
@@ -387,7 +391,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         const suggest = body.querySelector<HTMLElement>('.mb-panel-suggest');
         if (suggest) patchHTML(suggest, suggestHTML());
       } else if (tab === 'library') {
-        conversationHost.remove(); patchHTML(body, panelLibraryHTML(work, workFailed));
+        conversationHost.remove(); patchHTML(body, panelLibraryHTML(work, workFailed)); libraryMedia.sync();
       } else if (tab === 'computer') {
         conversationHost.remove(); patchHTML(body, '');
       } else {
@@ -486,9 +490,17 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     if (target.closest('[data-panel-more]')) { fileLimit = Math.min(100, fileLimit + 12); void loadWork(); return; }
     const fileButton = target.closest<HTMLElement>('[data-panel-file]');
     if (fileButton) {
+      // A deliverable opens as it was handed over: a picture large, a page at the reply that published it, a link in the
+      // browser, an attachment or a delivered file with the computer's own program.
       const file = work?.files.find(file => file.id === fileButton.dataset.panelFile);
-      if (file?.kind === 'page' && file.turn_id) host.openTurn?.(host.member().id, file.conversation_id, file.turn_id);
-      else if (file?.path) void api.openTeamFile(file.path).catch(() => toaster.info(t('agent.fileUnavailable')));
+      const unavailable = (): void => { toaster.info(t('agent.fileUnavailable')); };
+      const picture = fileButton.querySelector<HTMLImageElement>('img[src]');
+      if (!file) return;
+      if (file.kind === 'image' && picture) openMediaLightbox(fileButton, picture.src);
+      else if (file.kind === 'page' && file.turn_id) host.openTurn?.(host.member().id, file.conversation_id ?? undefined, file.turn_id);
+      else if (file.kind === 'link' && file.url) void api.openExternalUrl(file.url).catch(unavailable);
+      else if (file.attachment_id) void api.openAttachment(file.attachment_id).catch(unavailable);
+      else void api.openLibraryFile(host.member().id, file.id).catch(unavailable);
       return;
     }
     if (memories.some((list) => list.click(target))) return;

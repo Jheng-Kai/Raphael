@@ -109,12 +109,12 @@ describe("a member's panel", () => {
   });
   test('a late library read cannot put another member files into the selected panel', async () => {
     let resolve!: (value: unknown) => void;
-    api.core.mockImplementation(async (method, params) => method === 'members.list'
-      ? params.panel_member_id === 3 ? new Promise(done => {resolve = done;}) : {tasks:[],files:[],has_more:false}
+    api.core.mockImplementation(async (method, params) => method === 'members.library'
+      ? params.member_id === 3 ? new Promise(done => {resolve = done;}) : {files:[],has_more:false}
       : {});
     const panel = mount(false); await flush();
     current = 4; panel.showMember(); panel.select('library'); await flush();
-    resolve({tasks:[],files:[{id:'stale',name:'Stale file',kind:'file',at_ms:1}],has_more:false}); await flush();
+    resolve({files:[{id:'stale',title:'Stale file',name:'Stale file',kind:'file',at_ms:1,day:'1970-01-01'}],has_more:false}); await flush();
     expect(panel.el.textContent).not.toContain('Stale file');
     expect(panel.el.querySelector('.mb-tab-body')?.textContent).toBe(t('members.panelNoFiles'));
   });
