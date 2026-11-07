@@ -1684,6 +1684,74 @@ PRAGMA user_version = 69;
 COMMIT;
 """
 
+# Conversation cards retain only nonsecret account links and immutable recipe snapshots.
+_MIGRATIONS[70] = """
+BEGIN;
+DROP TRIGGER clear_secret_cards;
+ALTER TABLE secret_cards RENAME TO secret_cards_previous;
+CREATE TABLE secret_cards (
+    id TEXT PRIMARY KEY,
+    turn_id INTEGER NOT NULL,
+    member_id INTEGER NOT NULL,
+    conversation_id INTEGER,
+    server_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('env','header','login','messaging')),
+    secret TEXT NOT NULL,
+    name TEXT NOT NULL,
+    language TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('pending','failed','saved','resuming','resumed','cancelled','expired')),
+    error TEXT NOT NULL DEFAULT '',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    done TEXT NOT NULL DEFAULT '[]',
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    expires_at_ms INTEGER NOT NULL,
+    resumed_at_ms INTEGER,
+    UNIQUE(turn_id, server_id, kind, secret)
+);
+INSERT INTO secret_cards SELECT * FROM secret_cards_previous;
+DROP TABLE secret_cards_previous;
+CREATE TRIGGER clear_secret_cards AFTER DELETE ON agent_turns BEGIN
+  DELETE FROM secret_cards WHERE turn_id=OLD.id;
+END;
+CREATE TABLE messaging_card_accounts (
+    account TEXT PRIMARY KEY,
+    card_id TEXT NOT NULL REFERENCES secret_cards(id) ON DELETE CASCADE
+);
+CREATE TABLE messaging_pairing_cards (
+    id TEXT PRIMARY KEY,
+    card_id TEXT NOT NULL REFERENCES secret_cards(id) ON DELETE CASCADE,
+    account TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    member_id INTEGER NOT NULL,
+    code TEXT NOT NULL,
+    who TEXT NOT NULL,
+    expires_at_ms INTEGER NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('pending','approved','rejected','expired'))
+);
+CREATE TABLE member_template_cards (
+    id TEXT PRIMARY KEY,
+    turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE,
+    member_id INTEGER NOT NULL,
+    template TEXT NOT NULL,
+    findings TEXT NOT NULL,
+    avatar TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('draft','saved','published')),
+    url TEXT
+);
+CREATE TRIGGER clear_conversation_cards AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM messaging_pairing_cards WHERE card_id IN (SELECT id FROM secret_cards WHERE turn_id=OLD.id);
+    DELETE FROM messaging_card_accounts WHERE card_id IN (SELECT id FROM secret_cards WHERE turn_id=OLD.id);
+    DELETE FROM member_template_cards WHERE turn_id=OLD.id;
+END;
+CREATE TRIGGER clear_messaging_card_links AFTER DELETE ON secret_cards BEGIN
+    DELETE FROM messaging_card_accounts WHERE card_id=OLD.id;
+    DELETE FROM messaging_pairing_cards WHERE card_id=OLD.id;
+END;
+PRAGMA user_version = 70;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

@@ -490,6 +490,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "messaging.member.remove_user",
     "messaging.member.disconnect",
     "messaging.accounts",
+    "messaging.pairing.answer",
     "messaging.slack.status",
     "messaging.slack.connect",
     "messaging.slack.set_enabled",
@@ -570,6 +571,9 @@ const ALLOWED_METHODS: &[&str] = &[
     "members.voices",
     "members.duplicate",
     "members.template",
+    "members.template_card",
+    "members.template_card_export",
+    "members.template_card_publish",
     "connectors.label",
     "members.mark_all_read",
     "members.unread",
@@ -1039,6 +1043,7 @@ pub async fn agent_ask_text(
     quote: Option<Value>,
     conversation_id: Option<u64>,
     destination: Option<String>,
+    intent: Option<String>,
 ) -> Result<(), String> {
     require_main(&webview)?;
     if request_id.as_deref().is_some_and(|id| !is_question_id(id)) {
@@ -1055,6 +1060,7 @@ pub async fn agent_ask_text(
     let turn = desk
         .0
         .ask_conversation(TypedQuestion {
+            intent,
             text,
             attachments,
             member: member_id.unwrap_or(0),
@@ -2192,6 +2198,26 @@ mod tests {
     use std::sync::Mutex;
 
     // ---- which window may call a command ----
+
+    #[test]
+    fn conversation_setup_and_template_card_methods_are_main_window_only() {
+        for method in [
+            "messaging.pairing.answer",
+            "members.template_card",
+            "members.template_card_export",
+            "members.template_card_publish",
+        ] {
+            assert!(is_allowed_method(method));
+        }
+        for method in [
+            "messaging.pairing",
+            "messaging.pairing.send",
+            "members.template_card_delete",
+            "members.template_card_publish_extra",
+        ] {
+            assert!(!is_allowed_method(method));
+        }
+    }
 
     #[test]
     fn floating_controls_are_allowlisted_only_for_their_own_passive_windows() {

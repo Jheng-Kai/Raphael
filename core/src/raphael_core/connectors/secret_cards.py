@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 # The only moves a card's state makes.
 MOVES: dict[str, tuple[str, ...]] = {
     "pending": ("saved", "failed", "cancelled", "expired"),
-    "failed": ("saved", "cancelled", "expired"),
+    "failed": ("failed", "saved", "cancelled", "expired"),
     "saved": ("resuming", "cancelled", "expired"),
     "resuming": ("resumed", "saved"),
     "resumed": (),
@@ -80,7 +80,15 @@ class SecretCard:
         """The card as the window draws it: the connection and the secret it declares, never a value."""
         return {"id": self.id, "name": self.name, "secret": self.secret, "state": self.state,
                 "error": self.error or None, "expires_at_ms": self.expires_at_ms, "resumed": self.resumed,
-                **({"login": True} if self.kind == "login" else {})}
+                **({"login": True} if self.kind == "login" else {}),
+                **self.messaging_view()}
+
+
+    def messaging_view(self):
+        if self.kind != "messaging":
+            return {}
+        from ..messaging.cards import LINKS
+        return {"platform": self.server_id, "link": LINKS[self.server_id]}
 
 
 def _card(row: sqlite3.Row) -> SecretCard:
@@ -213,12 +221,33 @@ class SecretCards:
         self._reported_failures = set()
         self._tasks: set[asyncio.Task] = set()
         self.logins = None
+        self.messaging = None
+        self._save_locks = {}
 
     def register(self, router) -> None:
         router.register("integrations.card_save", self._save)
         router.register("integrations.card_resume", self._retry)
 
     # --- what the agent asks ----------------------------------------------------------------------
+
+    def show_messaging(self, *, turn_id, member_id, conversation_id, platform, language, done=()):
+        from ..messaging.cards import LINKS, NAMES
+        if not isinstance(platform, str) or platform not in LINKS:
+            raise invalid_params("platform must be telegram, slack or discord")
+        if self.messaging is None or member_id not in self.messaging._members():
+            raise LookupError("messaging")
+        view = self.messaging._member_view(member_id, platform)
+        if view["connected"] and view["running"]:
+            return None, view
+        return self.store.open(turn_id=turn_id, member_id=member_id, conversation_id=conversation_id,
+            server_id=platform, kind="messaging", secret="bot_token", name=NAMES[platform], language=language, done=done), view
+
+    def messaging_notes(self, cards):
+        if self.messaging is None:
+            return ()
+        return tuple(f"{card.name}: @{view['bot']['username']}" for card in cards
+                     if card.kind == "messaging" and card.state in ("saved", "resuming", "resumed")
+                     and (view := self.messaging._member_view(card.member_id, card.server_id))["connected"])
 
     def show_login(self, *, turn_id, member_id, conversation_id, site, language, done=()):
         from ..computer.logins import origin
@@ -275,9 +304,13 @@ class SecretCards:
         return card
 
     async def _save(self, params: dict) -> dict:
-        """Keep the value in the card's secret, straight in the vault. Nothing between the check of the
-        card and its move to `saved` waits, so a replay cannot slip in; a card that no longer waits for
-        a value (saved, cancelled, expired) does not touch the vault."""
+        card = self._card(params)
+        lock = self._save_locks.setdefault(card.id, asyncio.Lock())
+        async with lock:
+            return await self._save_locked(params)
+
+    async def _save_locked(self, params: dict) -> dict:
+        """Serialize saves, and recheck asynchronous messaging validation before writing the vault."""
         card = self._card(params)
         value = params.get("value")
         if not isinstance(value, str):
@@ -290,7 +323,19 @@ class SecretCards:
             error = "invalid"
         else:
             try:
-                if card.kind == "login" and self.logins is not None:
+                if card.kind == "messaging":
+                    if self.messaging is None:
+                        raise ValueError("messaging unavailable")
+                    def active():
+                        current = self.store.get(card.id)
+                        return current is not None and current.state in ("pending", "failed") and self._conn.execute("SELECT 1 FROM agent_turns WHERE id=?", (card.turn_id,)).fetchone() is not None
+                    kind = self.messaging._member_type(card.member_id, card.server_id)
+                    result = await self.messaging._connect(kind, {"token": value}, guard=active, card_id=card.id)
+                    if not result["ok"]:
+                        if result["reason"] == "cancelled":
+                            return {"card": (self.store.get(card.id) or card).view(), "saved": False}
+                        error = "offline" if result["reason"] == "network" else "invalid"
+                elif card.kind == "login" and self.logins is not None:
                     self.logins.save(card.server_id, value, member=card.member_id, site=card.name)
                     self.logins.load(card.member_id, card.name, card.server_id)
                 else:
@@ -308,7 +353,8 @@ class SecretCards:
         if error:
             failed = self.store.move(card.id, "failed", error=error) or card
             self._changed(failed)
-            self._report_failure(card.turn_id, classify({"kind": "tool_broken" if error == "vault" else "not_found" if error == "gone" else "refused",
+            if card.kind != "messaging":
+                self._report_failure(card.turn_id, classify({"kind": "tool_broken" if error == "vault" else "not_found" if error == "gone" else "refused",
                                                          "message": f"The secret could not be saved ({error})."}))
             return {"card": failed.view(), "saved": False}
         moved = self.store.move(card.id, "saved")

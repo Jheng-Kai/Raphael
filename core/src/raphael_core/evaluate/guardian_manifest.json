@@ -61,6 +61,14 @@
         "connector_card"
       ]
     },
+    "raphael/core/connect_messaging": {
+      "scenario_ids": ["S14.messaging.telegram", "S14.messaging.slack", "S14.messaging.discord"],
+      "expected_assertions": ["messaging_card", "owner_text_preserved"]
+    },
+    "raphael/core/share_template": {
+      "scenario_ids": ["S21.templates.share"],
+      "expected_assertions": ["template_snapshot", "owner_text_preserved"]
+    },
     "raphael/core/request_secret": {
       "scenario_ids": [
         "S15.secret"

@@ -328,7 +328,7 @@ async def test_member_attachments_and_confirmation_refusal_use_the_same_owner_bo
     assert calls[1][1] == {"id": "permission", "approved": False}
 
 
-@pytest.mark.parametrize("session", ["member:0:telegram:1", "member:01:telegram:1", "member:x:telegram:1", "member:1:slack:1", "member:1:telegram:"])
+@pytest.mark.parametrize("session", ["member:0:telegram:1", "member:01:telegram:1", "member:x:telegram:1", "member:1:unsupported:1", "member:1:telegram:"])
 async def test_malformed_member_sessions_never_fall_back_to_raphael(rig, session):
     assert session_target(session) is None and not rig.app.messaging.handles(session)
     with pytest.raises(RpcError):

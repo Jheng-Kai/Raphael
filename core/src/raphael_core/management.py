@@ -301,6 +301,9 @@ def destructive(name, arguments, retention=None):
 # propose a card, but may not answer it or handle its credentials.
 OWNER_ONLY = {
     "members.template": "The owner previews, imports and exports portable member recipes.",
+    **dict.fromkeys(("members.template_card", "members.template_card_export", "members.template_card_publish"),
+                   "Only the owner reviews, saves and publishes member recipe snapshot cards."),
+    "messaging.pairing.answer": "Only the owner approves or rejects a messaging pairing card.",
     "connectors.label": "The owner names a connected account after sign-in.",
     **dict.fromkeys(("vault.list", "vault.add", "vault.update", "vault.remove", "vault.preview", "vault.cancel", "vault.import"),
                    "Owner-only vault metadata, private value writes, sharing and transient CSV import; no private value read or export RPC exists."),

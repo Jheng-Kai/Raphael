@@ -125,7 +125,7 @@ def session_target(session: str) -> tuple[int, str, str] | None:
     if session.startswith("member:"):
         parts = session.split(":", 3)
         if (len(parts) != 4 or not parts[1].isascii() or not parts[1].isdigit()
-                or len(parts[1]) > 20 or parts[1].startswith("0") or parts[2] != "telegram" or not parts[3]):
+                or len(parts[1]) > 20 or parts[1].startswith("0") or parts[2] not in ("telegram", "slack", "discord") or not parts[3]):
             return None
         return int(parts[1]), parts[2], parts[3]
     parts = split_session(session)

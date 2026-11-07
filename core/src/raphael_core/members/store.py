@@ -345,7 +345,7 @@ def _voice(value: Any) -> str:
 
 
 PROFILE_FIELDS: dict[str, Callable[[Any], Any]] = {
-    "blurb": lambda value: _text(value, "blurb", 200),
+    "blurb": lambda value: _text(value, "blurb", 280),
     "reply_style": _reply_style,
     "voice": _voice,
     **{name: _boolean for name in ("notify", "ask_before_members", "pinned", "hidden", "draft_first")},

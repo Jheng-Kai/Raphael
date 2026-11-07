@@ -6,7 +6,7 @@ from ..clock import wall_clock_ms
 from ..protocol import invalid_params
 
 ASK_OWNER = "ask_owner"
-OWNER_CARDS = frozenset((ASK_OWNER, "connect_app", "request_secret", "email_draft", "slack_draft", "show_page"))
+OWNER_CARDS = frozenset((ASK_OWNER, "connect_app", "connect_messaging", "request_secret", "email_draft", "slack_draft", "show_page"))
 BACKGROUND_TOOLS = OWNER_CARDS | {"update_page", "find_app"}
 
 

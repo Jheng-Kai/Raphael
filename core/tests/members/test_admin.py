@@ -516,7 +516,7 @@ async def test_removing_all_drafts_creates_nothing_and_finishes_cleanly(setup, c
         [{"name": "拉斐爾", "role": "COO"}],
         [{"name": "X" * 17, "role": "COO"}],
         [{"name": "Valid", "role": "X" * 25}],
-        [{"name": "Valid", "role": "COO", "blurb": "X" * 201}],
+        [{"name": "Valid", "role": "COO", "blurb": "X" * 281}],
         [{"name": "Valid", "role": "COO", "personality": "X" * 2001}],
         [{"name": "Valid", "role": "COO", "instructions": "X" * 2001}],
         [{"name": "Valid", "role": "COO", "group": "X" * 25}],

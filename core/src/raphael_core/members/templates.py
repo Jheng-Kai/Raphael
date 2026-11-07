@@ -23,9 +23,9 @@ def findings(value):
                 result.append({"kind": "injection", "path": path})
         elif isinstance(item, dict):
             for key, child in item.items():
-                if key not in (*FIELDS, "skills", "routines", "connections", "text", "files", "prompt", "title", "format", "version", "schedule", "when"):
+                if key not in (*FIELDS, "description", "skills", "routines", "connections", "text", "files", "prompt", "title", "format", "version", "schedule", "when"):
                     walk(key, f"{path}.fileName")
-                walk(child, f"{path}.{key}" if key in (*FIELDS, "skills", "routines", "connections", "text", "files", "prompt", "title") else f"{path}.file")
+                walk(child, f"{path}.{key}" if key in (*FIELDS, "description", "skills", "routines", "connections", "text", "files", "prompt", "title") else f"{path}.file")
         elif isinstance(item, list):
             for index, child in enumerate(item):
                 walk(child, f"{path}[{index}]")
@@ -33,13 +33,21 @@ def findings(value):
     return result
 
 
+def description(value):
+    if not isinstance(value, str) or len(value.strip()) > 280:
+        raise invalid_params("description must be a string of at most 280 characters")
+    return value.strip()
+
+
 def checked(value, *, review=False):
-    if not isinstance(value, dict) or set(value) != {"format", "version", *FIELDS, "skills", "routines", "connections"}:
+    if not isinstance(value, dict) or set(value) - {"description"} != {"format", "version", *FIELDS, "skills", "routines", "connections"}:
         raise invalid_params("Invalid member template fields")
     if value["format"] != "raphael-member" or type(value["version"]) is not int or value["version"] != 1:
         raise invalid_params("Unsupported member template")
     if max(len(json.dumps(value).encode()), len(json.dumps(value, ensure_ascii=False, indent=2).encode()) + 1) > MAX_BYTES:
         raise invalid_params("Member template is too large")
+    if "description" in value:
+        value = {**value, "description": description(value["description"])}
     clean_name(value["name"])
     clean_role(value["role"])
     clean_personality(value["personality"])
@@ -136,6 +144,7 @@ async def handle(service, params):
         raise invalid_params("Invalid template action")
     # Nothing is installed or granted during preview. Imports get no connection tools.
     made = await service._create({**{key: value[key] for key in FIELDS},
+                                  **({"blurb": value["description"]} if "description" in value else {}),
                                   "name": params.get("name", value["name"]), "tools": [],
                                   "avatar": params.get("avatar", "slime:color:blue"),
                                   "group_id": params.get("group_id"), "greet": True,

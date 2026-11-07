@@ -290,6 +290,8 @@ class MembersService:
         from .webhooks import Webhooks
         from ..integrations.vault import MemoryVault
         self.webhooks = Webhooks(self, vault if vault is not None else MemoryVault())
+        from .template_cards import TemplateCards
+        self.template_cards = TemplateCards(self)
         self.sync_homes()
         if memory is not None:
             from .skill_review import SkillReview
@@ -309,6 +311,7 @@ class MembersService:
 
     def register(self, router: Router) -> None:
         self._management_rpc = router.call
+        self.template_cards.register(router)
         methods = {
             "members.skills.list": self._skills_list,
             "members.skills.read": self._skills_read,

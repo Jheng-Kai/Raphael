@@ -236,7 +236,7 @@ class RpcDriver:
                             "conversation_scope": conversation, "outcome": "ok" if outcome.ok else outcome.kind,
                             "gate_passed": outcome.ok, "source": "production_loop"})
 
-    async def ask(self, prompt, *, member=0, conversation=None, quick=False, model=None, session=""):
+    async def ask(self, prompt, *, member=0, conversation=None, quick=False, model=None, session="", intent=None):
         """The owner's request: typed in a thread (`conversation`, else its main one), or with `quick`
         as the Alt+Space hotkey sends it, spoken with the quick destination. A CLI turn counts here;
         the transport counts API calls."""
@@ -244,6 +244,8 @@ class RpcDriver:
             self.budget.take()
         params = {"session_id": "-".join(filter(None, ("guardian", self.nonce, session))),
                   "text": prompt, "ui_language": "zh-TW", "member_id": member}
+        if intent is not None:
+            params["intent"] = intent
         if quick:
             params["destination"] = "quick"
         else:
@@ -314,6 +316,8 @@ class RpcDriver:
             reasons, result = await self.quick_scenario()
         elif cell.driver == 'connect-gmail':
             reasons, result = await self.connect_gmail_scenario()
+        elif cell.driver.startswith("panel-"):
+            reasons, result = await self.panel_card_scenario(cell)
         elif cell.driver == 'secret-card':
             reasons, result = await self.secret_scenario()
         elif cell.driver == 'computer-card':
@@ -468,6 +472,42 @@ class RpcDriver:
         if not turns or result.get("status") not in {"done", "denied", "error"}:
             reasons.append("no_terminal_owner_result")
         return reasons, turns
+
+    async def panel_card_scenario(self, cell):
+        """Exercise the panel intent through the real loop; never save a real bot credential."""
+        member = (await self.app.call("members.create", {"name": "Card" + self.nonce, "role": "Public guide editor",
+                  "instructions": "Make public guides clear.", "greet": False}))["member"]["id"]
+        sharing = cell.driver == "panel-share"
+        platform = cell.driver.removeprefix("panel-")
+        tool = "share_template" if sharing else "connect_messaging"
+        result = await self.ask(cell.prompt, member=member, intent="share-template" if sharing else "setup-" + platform)
+        turn = await self.turn_of(member, result.get("turn_id"))
+        reasons = []
+        if turn.get("question") != cell.prompt:
+            reasons.append("owner_text_preserved")
+        if not any(trace["name"] == tool and trace["outcome"] == "ok" for trace in self.traces):
+            reasons.append("missing_successful_tool:" + tool)
+        if sharing:
+            cards = turn.get("templates", [])
+            if len(cards) != 1 or cards[0]["state"] != "draft":
+                reasons.append("template_snapshot")
+            else:
+                identifier = cards[0]["id"]
+                review = await self.app.call("members.template_card", {"id": identifier})
+                self.app.members.store.update_member(member, instructions="Changed after the card was shown.")
+                saved = await self.app.call("members.template_card_export", {"id": identifier})
+                latest = await self.turn_of(member, turn["id"])
+                if (json.loads(saved["text"]) != review["template"]
+                        or review["template"]["instructions"] != "Make public guides clear."
+                        or latest["templates"][0]["state"] != "saved"):
+                    reasons.append("template_snapshot")
+        else:
+            from ..messaging.cards import LINKS
+            cards = turn.get("secrets", [])
+            if (len(cards) != 1 or cards[0]["state"] != "pending" or cards[0].get("platform") != platform
+                    or cards[0].get("link") != LINKS[platform] or cards[0]["secret"] != "bot_token"):
+                reasons.append("messaging_card")
+        return reasons, {**result, "viewer": member}
 
     async def seed_team(self):
         return [(await self.app.call('members.create', {'name':name, 'role':role}))['member']['id']

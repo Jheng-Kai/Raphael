@@ -1037,6 +1037,10 @@ class App(Router):
             members=lambda: {0: self.members.name_of(0) or "Raphael", **{
                 member.id: member.name for member in self.members.store.members() if member.id not in self.members.deleting}},
         )
+        from .messaging.cards import MessagingCards
+        self.messaging.cards = MessagingCards(self._conn, self.messaging, self._agent_notice)
+        self.secret_cards.messaging = self.messaging
+        self.register("messaging.pairing.answer", self.messaging.cards.answer)
         self.messaging.register(self)
         self.members.remove_messaging = self.messaging.remove_member
 

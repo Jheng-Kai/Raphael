@@ -190,7 +190,7 @@ from .drafts import DraftError, clean_field, is_mail_sender, is_slack_sender
 from .pages import Pages, PageError
 from .public_events import event_record
 from .harness_tools import (
-    CALENDAR_LIST, CALENDAR_TOOLS, CONNECTION_TOOLS, CONNECT_APP, FIND_APP, DEFINITIONS as HARNESS_TOOLS, EMAIL_DRAFT, SLACK_DRAFT, REQUEST_SECRET, ROUTINE_TOOLS, SET_MY_JOB, HarnessToolError,
+    CALENDAR_LIST, CALENDAR_TOOLS, CONNECTION_TOOLS, CONNECT_APP, CONNECT_MESSAGING, SHARE_TEMPLATE, FIND_APP, DEFINITIONS as HARNESS_TOOLS, EMAIL_DRAFT, SLACK_DRAFT, REQUEST_SECRET, ROUTINE_TOOLS, SET_MY_JOB, HarnessToolError,
     tool as harness_tool,
 )
 from ..own_calendar import CalendarError, OwnCalendar, means_own_calendar
@@ -433,6 +433,7 @@ class _Ask:
     # The files handed with the request, in memory only.
     attachments: list[Attachment] = field(default_factory=list)
     quote: dict[str, str] | None = None
+    intent: str | None = None
     # Who answers: Raphael, or a member of the team (`speaker`), in whose thread the turn is.
     speaker: Speaker = RAPHAEL
     # For a request one member hands another (`answer_for`): the one who asked. The turn is then an
@@ -506,6 +507,7 @@ class Resumption:
     apps: tuple[str, ...]
     done: frozenset[tuple[str, str]]
     secrets: tuple[str, ...] = ()
+    messaging: tuple[str, ...] = ()
     report: "ComputerReport | None" = None
     made: list[tuple[str, str]] = field(default_factory=list, compare=False)
     failure: Failure | None = None
@@ -535,6 +537,8 @@ class Resumption:
                          " in <question>, which was asked earlier and resumes now, once. It is in the secure vault and the"
                          " connection uses it by itself: you never see it. Do it now with the connection's tools, and do not"
                          " ask for the key again.")
+        if self.messaging:
+            parts.append("Messaging connected: " + ", ".join(self.messaging) + ". Tell the owner to send the bot any message now to pair. Never ask for its token again.")
         if self.report is not None:
             report = self.report
             parts.append(
@@ -1019,6 +1023,8 @@ class AgentService:
             member_id = 0
         if type(member_id) is not int or member_id < 0:
             raise invalid_params("member_id must be a whole number of 0 or more")
+        from .intents import checked as check_intent
+        intent = check_intent(params.get("intent"), member_id)
         session = _str(params, "session_id")
         text = _str(params, "text", blank=True)
         language = _str(params, "ui_language")
@@ -1051,6 +1057,7 @@ class AgentService:
             quote=quote,
             conversation_id=conversation_id,
             quick=quick,
+            intent=intent,
             transcript_ms=params.get("transcript_ms"),
         )
 
@@ -1101,6 +1108,7 @@ class AgentService:
         quick: bool = False,
         transcript_ms: float | None = None,
         resumption: Resumption | None = None,
+        intent: str | None = None,
     ) -> dict:
         """One request, as `agent.ask` answers it. `attachments` are the files handed with it
         (`services.attachments.Attachment`, at most MAX_ATTACHMENTS), saved on typed admission; with
@@ -1121,8 +1129,11 @@ class AgentService:
             expanded, skill_loaded = resolve(member_id, text) if resolve is not None else (expand(member_id, text), False)
             if expanded != text:
                 original_text, text = text, expanded
+        from .intents import checked as check_intent
+        intent = check_intent(intent, member_id)
         ask = _Ask(
             session_id=session_id,
+            intent=intent,
             started_at_ms=self._now_ms(),
             original_text=original_text,
             memory_untrusted=skill_loaded,
@@ -2054,6 +2065,8 @@ class AgentService:
             )
             if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 user += NEW_MEMBER_STEP
+            from .intents import instruction as intent_instruction
+            user += intent_instruction(ask.intent)
             if ask.resumption is not None:
                 user += ask.resumption.note()
             if brain_ref(settings.model):
@@ -2292,7 +2305,7 @@ class AgentService:
                 changed=lambda: self._action_changed(ask)))
             async def observed_execute(call_id: str, name: str, args: dict) -> ToolOutcome:
                 waiting = "apps" if ask.waiting_apps else "secrets" if ask.waiting_secrets else "computer" if ask.waiting_computer else None
-                if waiting is not None and {CONNECT_APP: "apps", REQUEST_SECRET: "secrets"}.get(name) != waiting:
+                if waiting is not None and {CONNECT_APP: "apps", REQUEST_SECRET: "secrets", CONNECT_MESSAGING: "secrets"}.get(name) != waiting:
                     return ToolOutcome(False, "waiting_for_connection", instruction=_WAITING_NOTES[waiting])
                 ref = snapshot.refs.get(name)
                 key = ref.key if ref is not None else name
@@ -2818,7 +2831,7 @@ class AgentService:
             return PASS
         if tool.key in HARNESS_TOOLS:
             # A card only shows a card: the owner's own sign-in, or the key they type, is the consent.
-            if tool.key in ("ask_owner", "routine_list", CALENDAR_LIST, "team_overview", "show", "computer", "show_page", "update_page", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SLACK_DRAFT, SET_MY_JOB, "connections_list", "add_mcp_server"):
+            if tool.key in ("ask_owner", "routine_list", CALENDAR_LIST, "team_overview", "show", "computer", "show_page", "update_page", FIND_APP, CONNECT_APP, CONNECT_MESSAGING, SHARE_TEMPLATE, REQUEST_SECRET, EMAIL_DRAFT, SLACK_DRAFT, SET_MY_JOB, "connections_list", "add_mcp_server"):
                 return PASS
             return await self._gate.screen(Proposed(tool.key, tool.description, summarize(call.arguments), narrow_scope(tool.key)), language=ask.language, ledger=ledger)
         if tool.key in TEAM_TOOLS:
@@ -3005,6 +3018,17 @@ class AgentService:
                 data = await self._cards.find(args.get("query"))
                 if means_own_calendar(ask.text):
                     data = {"apps": [app for app in data["apps"] if "calendar" not in app["id"].lower()], "note": OWN_CALENDAR_NOTE}
+            elif name == CONNECT_MESSAGING:
+                if ask.resumption and ask.resumption.failure:
+                    raise HarnessToolError("owner_action_required")
+                data = self._show_messaging(ask, args)
+            elif name == SHARE_TEMPLATE:
+                if ask.speaker.id == 0 or ask.nested or ask.quick or ask.scope != "private" or ask.source not in AT_A_CHAT:
+                    raise HarnessToolError("private_chat_only")
+                cards = getattr(self._team, "template_cards", None)
+                if cards is None or not ask.turn_id:
+                    raise HarnessToolError("unavailable")
+                data = cards.show(ask.turn_id, ask.speaker.id, args.get("description"))
             elif name == REQUEST_SECRET:
                 if ask.resumption and ask.resumption.failure:
                     raise HarnessToolError("owner_action_required")
@@ -3264,6 +3288,20 @@ class AgentService:
             f"A card to connect {app.name} is shown to the owner in this chat.{asks} End this turn now with one short "
             "sentence. This request resumes by itself, once, after the owner connects; never claim its data now.")}
 
+    def _show_messaging(self, ask, args):
+        if self._secret_cards is None or not ask.turn_id:
+            raise HarnessToolError("unavailable")
+        if ask.nested or ask.quick or ask.scope != "private" or ask.source not in AT_A_CHAT:
+            raise HarnessToolError("private_chat_only")
+        card, view = self._secret_cards.show_messaging(turn_id=ask.turn_id, member_id=ask.speaker.id,
+            conversation_id=ask.conversation_id, platform=args.get("platform"), language=ask.language, done=ask.made)
+        if card is None:
+            return {"text": f"@{view['bot']['username']} is already connected and running. Nothing is needed."}
+        ask.waiting_secrets.append(card.name)
+        ask.owner_card_ids = [card.id]
+        self._turn_changed(ask.turn_id, ask.speaker.id)
+        return {"text": f"The {card.name} bot-token card is shown. Explain how to create the bot and copy its token to the card. Never ask for it in chat. End this turn; saving resumes it once."}
+
     def _show_secret(self, ask: _Ask, args: Mapping[str, Any]) -> dict:
         """`request_secret`: the card of a key a connection declares and the vault holds none of, in
         this private chat, holding what the request already did. The model names the connection and,
@@ -3377,7 +3415,7 @@ class AgentService:
         if not result.ok:
             return result
         card = None
-        if name in (CONNECT_APP, REQUEST_SECRET) and ask.owner_card_ids:
+        if name in (CONNECT_APP, REQUEST_SECRET, CONNECT_MESSAGING) and ask.owner_card_ids:
             card = {"kind": name, "id": ask.owner_card_ids[0], "ids": ask.owner_card_ids}
         elif name in (EMAIL_DRAFT, SLACK_DRAFT):
             drafts = self._drafts.store.shown_in([task.turn_id]).get(task.turn_id, [])
@@ -3400,7 +3438,7 @@ class AgentService:
             card = self._cards.store.get(identifier)
             if card:
                 self._cards.store.move(identifier, "cancelled" if card.state == "authorizing" else "expired")
-        elif kind == REQUEST_SECRET and self._secret_cards:
+        elif kind in (REQUEST_SECRET, CONNECT_MESSAGING) and self._secret_cards:
             for card_id in question.get("card_ids", [identifier]):
                 self._secret_cards.store.move(card_id, "cancelled")
         elif kind in (EMAIL_DRAFT, SLACK_DRAFT) and self._drafts:
@@ -3426,7 +3464,7 @@ class AgentService:
                     state = "cancelled"
                 else:
                     continue
-            elif kind == REQUEST_SECRET and self._secret_cards:
+            elif kind in (REQUEST_SECRET, CONNECT_MESSAGING) and self._secret_cards:
                 cards = [card for card_id in question.get("card_ids", [identifier]) if (card := self._secret_cards.store.get(card_id))]
                 if not cards or any(card.state in ("cancelled", "expired") for card in cards):
                     state = "cancelled"
@@ -3486,7 +3524,8 @@ class AgentService:
                                 frozenset({*(done for card in [*apps, *keys] for done in card.done),
                                            *(tuple(done) for row in proposed for done in json.loads(row["done"])),
                                            *(report.done if report is not None else ())}),
-                                secrets=tuple(dict.fromkeys(card.name for card in keys if card.state in ("saved", "resuming", "resumed"))),
+                                secrets=tuple(dict.fromkeys(card.name for card in keys if card.kind != "messaging" and card.state in ("saved", "resuming", "resumed"))),
+                                messaging=self._secret_cards.messaging_notes(keys) if self._secret_cards is not None else (),
                                 report=report, failure=failure)
         language = report.language if report is not None else (apps or keys)[0].language if apps or keys else proposed[0]["language"]
         result = await self.ask((f"failure-{turn_id}" if failure else f"connect-{turn_id}") + (f"-{attempt}" if attempt > 1 else ""), origin.question, language, RESUMED,
@@ -4994,6 +5033,10 @@ class AgentService:
         hands = self._handbacks.views([*ids, *resumed]) if self._handbacks is not None else {}
         permitted = self._permissions.views(ids) if self._permissions is not None else {}
         drafted = self._drafts.views(ids) if self._drafts is not None else {}
+        template_cards = getattr(self._team, "template_cards", None)
+        templates = template_cards.views(ids) if template_cards else {}
+        messaging = getattr(self._secret_cards, "messaging", None)
+        pairings = messaging.cards.views(ids) if messaging and messaging.cards else {}
         pages = self.pages.store.shown_in(ids)
         from ..voice_chat import call_views
         call_links, call_summaries = call_views(self._conn, ids)
@@ -5057,6 +5100,8 @@ class AgentService:
                     **({"permissions": permitted[turn.id or 0]} if permitted.get(turn.id or 0) else {}),
                     **({"drafts": drafted[turn.id or 0]} if drafted.get(turn.id or 0) else {}),
                     "pages": pages.get(turn.id or 0, []),
+                    **({"templates": templates[turn.id]} if templates.get(turn.id) else {}),
+                    **({"pairings": pairings[turn.id]} if pairings.get(turn.id) else {}),
                     **({"owner_questions": owner_questions} if (owner_questions := self._background.owner_questions.for_turn(turn.id)
                         if hasattr(self._background, "owner_questions") else []) else {}),
                     "messages": messages.get(turn.id or 0, []),

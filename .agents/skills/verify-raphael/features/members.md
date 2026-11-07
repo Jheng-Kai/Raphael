@@ -995,3 +995,40 @@ compare preview rows with member panel rows and disclosures with existing cards.
 Run the selected tests and frontend verify once at the end. Judge uses the same
 selected run; missing external reference images are blocked, never design PASS.
 No core, Rust, native, OS vault or live-provider acceptance is implied.
+
+## Conversation setup and sharing: backend contract (2026-11-07)
+
+The panel sends one owner message with optional agent.ask intent: setup-telegram,
+setup-slack, setup-discord or share-template. The trusted panel step sits beside
+the owner message, like R-JOB-01; visible history retains the owner's original text.
+Raphael supports platform setup, while sharing is members-only. The named
+member_recipe parity exception documents that restriction; all remaining work
+tools retain speaker parity. The four new card RPCs are owner-only boundaries.
+
+connect_messaging is a T0 owner card. The existing secret-card save validates the
+speaker's account through the shared messaging service, keeps tokens only in its
+existing vault keys, and resumes once with the bot name and pairing instruction.
+Failed tokens remain editable; offline checks report offline. Only card-connected
+accounts attach pending/approved/rejected/expired pairing cards to the original
+turn. agent.turn invalidation carries those updates through the history delta.
+Member Telegram, Slack and Discord accounts use member:<id>:<platform> keys and
+sessions; omitted platform keeps the Telegram default.
+
+share_template saves a recipe snapshot and findings on a draft card. Review,
+export and catalog-publish RPCs use that snapshot even after the member changes.
+Secret findings block export and publishing. Optional version-1 description is
+trimmed and bounded to 280 characters, and imports become the member's blurb.
+Catalog publishing prepares the existing local package and review URL; it does
+not upload or approve a catalog entry.
+
+Offline acceptance: core/tests/test_chat_setup_share.py, messaging member-account
+and background owner-card/snapshot tests, the full core suite, Rust library tests
+and warning-free Clippy. Core/Rust-only ownership leaves frontend scenes, real
+app journeys, look/judge and live provider verification to the window integration.
+The window landed the same day: chat-setup-cards, chat-pairing-allowed, member-template-export and
+template-export-review drive the cards (see conversation.md and the panel notes above).
+
+Guardian maps connect_messaging to S14.messaging.telegram/slack/discord and
+share_template to S21.templates.share. These production-loop contracts check
+panel intents, owner text, secure-card metadata and immutable snapshot read-back;
+they do not save platform credentials or prove a real platform connection.

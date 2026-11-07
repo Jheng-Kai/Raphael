@@ -1,4 +1,4 @@
-"""Shared abilities and the complete list of identity-specific coordination duties."""
+"""Shared abilities and the explicit exceptions for speaker-specific tools."""
 
 SHARED_CAPABILITIES = """\
 Shared speaker capabilities
@@ -15,10 +15,11 @@ stage_id and done_when; its result returns to this conversation. End the foregro
 the receipt. In a worker, do the work there rather than handing the same work to yourself again.
 """
 
-# Management authority is explicit; the remaining differences are coordination duties.
+# Management authority and portable member recipes are explicit exceptions; other differences are coordination duties.
 # Onboarding and permission/model differences
 # depend on current state, never identity; parity tests compare identical grants and setup state.
 PARITY_EXCEPTIONS = {
+    "member_recipe": "Only members have portable recipes to share; Raphael is the built-in assistant.",
     "owner_management": "Only the current primary contact may manage the owner's UI state in an interactive private chat.",
     "first_contact": "The current primary contact receives and coordinates incoming work.",
     "room_wrap_up": "The current chief starts meetings, pins decisions and closes room discussions.",
@@ -26,3 +27,4 @@ PARITY_EXCEPTIONS = {
     "quick_voice": "Alt+Space is Raphael's quick voice entry and uses its short spoken caption.",
 }
 COORDINATION_TOOLS = {"room_meeting": "room_wrap_up"}
+MEMBER_ONLY_TOOLS = {"share_template": "member_recipe"}

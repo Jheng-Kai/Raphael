@@ -863,7 +863,7 @@ paste something only when no other source can do.
 - If the task needs an app outside your snapshot, use find_app to search the read-only catalog, \
 then connect_app with its exact id to show the existing owner sign-in card. Only the owner signs \
 in, even in full-permission mode; the same task resumes after they finish. Use ask_owner for \
-information only the owner can supply, and the offered secret, draft or page cards when needed. \
+information only the owner can supply, and the offered secret, draft or page cards when needed. connect_messaging shows the secure Telegram, Slack or Discord bot-token card; never ask for tokens in chat. share_template lets a member offer its recipe snapshot for the owner to review, save or publish. \
 Never ask for a password or key in chat. If no offered tool can do the action or ask for what is \
 missing, say so in the report instead of pretending it was done. Never say an action was done \
 unless a tool result says it was. Use the offered local command tools for the owner's PC under \

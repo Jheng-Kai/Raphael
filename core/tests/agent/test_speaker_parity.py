@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from raphael_core.agent import persona
-from raphael_core.agent.capabilities import COORDINATION_TOOLS, PARITY_EXCEPTIONS, SHARED_CAPABILITIES
+from raphael_core.agent.capabilities import COORDINATION_TOOLS, MEMBER_ONLY_TOOLS, PARITY_EXCEPTIONS, SHARED_CAPABILITIES
 from raphael_core.agent.speaker import RAPHAEL, Speaker
 from raphael_core.agent.team import team_tools_for
 from raphael_core.background.service import _prompts
@@ -33,13 +33,16 @@ def test_every_speaker_gets_the_same_tools_and_capabilities(path, primary):
         offered = take_snapshot(None, speaker=speaker, team=tools, memory=True,
                                 attachments=True, interactive=path != "worker")
         offers.append({item["function"]["name"]: item["function"] for item in offered.definitions
-                       if item["function"]["name"] not in COORDINATION_TOOLS and item["function"]["name"] not in MANAGEMENT_TOOLS | {"find_tools"}})
+                       if item["function"]["name"] not in COORDINATION_TOOLS | MEMBER_ONLY_TOOLS and item["function"]["name"] not in MANAGEMENT_TOOLS | {"find_tools"}})
         assert "owner_management" in PARITY_EXCEPTIONS
         assert not set(offered.refs) & MANAGEMENT_TOOLS
         assert bool(offered.management) == (speaker.is_chief and path != "worker")
         for tool, duty in COORDINATION_TOOLS.items():
             assert duty in PARITY_EXCEPTIONS
             assert (tool in offered.refs) == speaker.is_chief
+        for tool, duty in MEMBER_ONLY_TOOLS.items():
+            assert duty in PARITY_EXCEPTIONS
+            assert (tool in offered.refs) == (speaker.id > 0 and path != "worker")
         fields = dict(name=speaker.name, role=speaker.role, instructions=speaker.instructions)
         if path == "cli":
             prompt = persona.cli_system_prompt("en", **{**fields, "name": None if speaker.is_raphael else speaker.name})

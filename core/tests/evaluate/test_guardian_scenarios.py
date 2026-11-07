@@ -695,3 +695,19 @@ async def test_p04_short_wrapup_and_stop_through_production_paths(tmp_path,monke
             assert any(event[0]=='guardian.stop_timings' for event in driver.events)
     finally:
         await driver.aclose()
+
+
+@pytest.mark.parametrize("operation", ["telegram", "slack", "discord", "share"])
+async def test_panel_card_contracts_use_production_intents_and_snapshot_readback(tmp_path, operation):
+    sharing = operation == "share"
+    identifier = "S21.templates.share" if sharing else "S14.messaging." + operation
+    tool = "share_template" if sharing else "connect_messaging"
+    arguments = {"description": "I clarify public guides."} if sharing else {"platform": operation}
+    driver = RpcDriver(tmp_path, "fake/model",
+                       FakeClient([("", [(tool, arguments)]), ("請使用對話中的卡片。", [])]), Budget(5))
+    try:
+        reasons, turns = await driver.execute(selected(identifier))
+        assert not reasons, reasons
+        assert turns and driver.recorder.receipts == []
+    finally:
+        await driver.aclose()

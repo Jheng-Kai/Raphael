@@ -12,7 +12,7 @@ from .conftest import call, report, turn, until
 
 def test_background_offers_owner_cards_without_desktop_tools():
     names = set(take_snapshot(None, "help").refs)
-    assert {"find_app", "ask_owner", "connect_app", "request_secret", "email_draft", "show_page", "update_page", "routine_list", "routine_create"} <= names
+    assert {"find_app", "ask_owner", "connect_app", "connect_messaging", "request_secret", "email_draft", "show_page", "update_page", "routine_list", "routine_create"} <= names
     assert not names & {"computer", "open", "copy_text", "launch_app"}
 
 
@@ -80,7 +80,7 @@ async def test_restart_keeps_question_and_never_runs_until_answered(make_rig):
     assert "Blue" in restarted.client.chat_calls[-1]["messages"][-1]["content"]
 
 
-@pytest.mark.parametrize("name", ["connect_app", "request_secret", "email_draft", "show_page"])
+@pytest.mark.parametrize("name", ["connect_app", "connect_messaging", "request_secret", "email_draft", "show_page"])
 async def test_existing_background_card_waits_for_its_real_outcome(make_rig, name):
     rig = make_rig()
     assert hasattr(rig.service, "use_owner_tools")

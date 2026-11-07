@@ -19,8 +19,8 @@ def with_window(tokens):
                          variable_price=False, context_length=tokens, created_at_ms=None, capabilities=frozenset({"tool_calling"}))]
 
 
-def looking(n, prompt_tokens):
-    answer = turn("Looking.", [call("Notes__look", {"topic": f"{ARGUMENT} {n}"}, f"c{n}")])
+def looking(n, prompt_tokens, detail=""):
+    answer = turn("Looking.", [call("Notes__look", {"topic": f"{ARGUMENT} {n}{detail}"}, f"c{n}")])
     answer.prompt_tokens = prompt_tokens
     return answer
 
@@ -30,7 +30,9 @@ async def test_a_long_task_is_shrunk_by_the_window_of_its_model_and_a_checkpoint
     rig.service._known_models = lambda: with_window(8_000)
     rig.client.search_text = "## Goal\nLook it up.\n## Completed actions\n1. LOOK the topic — found it"
     await rig.plugins.connect(look="T0")
-    rig.client.replies = [*(looking(n, 7_000) for n in range(6)), report("All looked up.")]
+    # Real history must exceed the retained tail even when shared prompt text grows.
+    # The fake lookup echoes this detail into its result.
+    rig.client.replies = [*(looking(n, 7_000, " detail" * 600) for n in range(6)), report("All looked up.")]
     rig.submit()
     [done] = await rig.wait_for_reports()
     assert done["state"] == "done"

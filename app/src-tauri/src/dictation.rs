@@ -287,6 +287,7 @@ pub struct Busy;
 /// A question from the composer, including its attachments and conversation context. `quick` is
 /// one typed in Raphael's quick conversation.
 pub struct TypedQuestion<'a> {
+    pub intent: Option<String>,
     pub text: &'a str,
     pub attachments: Vec<Value>,
     pub member: u64,
@@ -299,6 +300,7 @@ pub struct TypedQuestion<'a> {
 
 /// The first agent call for a typed or spoken question, with optional transcription timing.
 struct AgentQuestion<'a> {
+    intent: Option<String>,
     text: &'a str,
     target_app: Option<String>,
     source: Option<&'a str>,
@@ -1804,6 +1806,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             .converse(
                 &id,
                 AgentQuestion {
+                    intent: None,
                     text: question,
                     target_app,
                     source: None,
@@ -1846,6 +1849,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
         quote: Option<Value>,
     ) -> Result<JoinHandle<()>, Busy> {
         self.ask_composed_in(TypedQuestion {
+            intent: None,
             text,
             attachments,
             member,
@@ -1876,6 +1880,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
     /// that runs the question, which ends when its turn is over.
     pub fn ask_composed_in(&self, question: TypedQuestion<'_>) -> Result<JoinHandle<()>, Busy> {
         let TypedQuestion {
+            intent,
             text,
             attachments,
             member,
@@ -1900,6 +1905,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                     text: &text,
                     target_app: None,
                     source: Some(TYPED_SOURCE),
+                    intent,
                     attachments,
                     member,
                     replace_turn_id,
@@ -1984,6 +1990,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
     /// words, nor anything of the attachments.
     async fn converse(&self, id: &str, question: AgentQuestion<'_>) {
         let AgentQuestion {
+            intent,
             text,
             target_app,
             source,
@@ -2001,6 +2008,9 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             "ui_language": self.language.get(),
             "target_app": target_app,
         });
+        if let Some(intent) = intent {
+            params["intent"] = json!(intent);
+        }
         if let Some(ms) = transcript_ms {
             params["transcript_ms"] = json!(ms);
         }
@@ -6507,6 +6517,7 @@ mod tests {
     async fn a_composed_request_names_its_conversation_and_voice_keeps_the_default() {
         let c = agent(answer("Answer", "Hello"));
         c.ask_composed_in(TypedQuestion {
+            intent: None,
             text: "Explain",
             attachments: Vec::new(),
             member: 3,
@@ -6537,9 +6548,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn composed_panel_intents_pass_through_without_changing_owner_text() {
+        for intent in [
+            "setup-telegram",
+            "setup-slack",
+            "setup-discord",
+            "share-template",
+        ] {
+            let c = agent(answer("Answer", "Ready"));
+            c.ask_composed_in(TypedQuestion {
+                intent: Some(intent.to_owned()),
+                text: "Set up",
+                attachments: Vec::new(),
+                member: 3,
+                request_id: None,
+                replace_turn_id: None,
+                quote: None,
+                conversation_id: Some(42),
+                quick: false,
+            })
+            .unwrap()
+            .await
+            .unwrap();
+            let params = c.core().call_params("agent.ask");
+            assert_eq!(params["intent"], intent);
+            assert_eq!(params["text"], "Set up");
+            assert_eq!(params["member_id"], 3);
+        }
+        let c = agent(answer("Answer", "Ready"));
+        c.ask_typed("Hello").unwrap().await.unwrap();
+        assert!(c.core().call_params("agent.ask").get("intent").is_none());
+    }
+
+    #[tokio::test]
     async fn a_question_typed_in_the_quick_conversation_names_the_quick_destination() {
         let c = agent(answer("Answer", "Hello"));
         c.ask_composed_in(TypedQuestion {
+            intent: None,
             text: "And tomorrow?",
             attachments: Vec::new(),
             member: 0,
@@ -6967,6 +7012,7 @@ mod tests {
         run(&c, DictationDown, 0).await;
         let typed = c
             .ask_composed_in(TypedQuestion {
+                intent: None,
                 text: "Confirm",
                 attachments: Vec::new(),
                 member: 3,
@@ -7036,6 +7082,7 @@ mod tests {
             let c = controller_in(mode, core, FakePaster::pasting("notepad.exe"));
             let typed = c
                 .ask_composed_in(TypedQuestion {
+                    intent: None,
                     text: "Typed",
                     attachments: Vec::new(),
                     member: 0,
@@ -7072,6 +7119,7 @@ mod tests {
         let c = controller(core, FakePaster::pasting("notepad.exe"));
         let first = c
             .ask_composed_in(TypedQuestion {
+                intent: None,
                 text: "First",
                 attachments: Vec::new(),
                 member: 3,
@@ -7084,6 +7132,7 @@ mod tests {
             .unwrap();
         let second = c
             .ask_composed_in(TypedQuestion {
+                intent: None,
                 text: "Second",
                 attachments: Vec::new(),
                 member: 3,
@@ -7195,6 +7244,7 @@ mod tests {
         let c = controller(core, FakePaster::pasting("notepad.exe"));
         let first = c
             .ask_composed_in(TypedQuestion {
+                intent: None,
                 text: "First",
                 attachments: Vec::new(),
                 member: 3,
@@ -7208,6 +7258,7 @@ mod tests {
         until_stage(&c, AgentStage::Asking).await;
         let second = c
             .ask_composed_in(TypedQuestion {
+                intent: None,
                 text: "Second",
                 attachments: Vec::new(),
                 member: 3,

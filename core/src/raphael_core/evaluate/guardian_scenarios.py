@@ -82,6 +82,13 @@ def cells(registry=(), catalog=(), *, servers=()):
         SCENARIOS[13].assertions, 'P08a', 'connect-gmail'))
     result.append(ScenarioCell('S14.instagram', 'Connect Instagram in chat (P08d scope)', SCENARIOS[13].prompt,
         SCENARIOS[13].assertions, 'P08d'))
+    for platform in ("telegram", "slack", "discord"):
+        result.append(ScenarioCell("S14.messaging." + platform, "Set up " + platform + " in chat",
+                                  "Help me set up my bot.", ("messaging_card", "owner_text_preserved"),
+                                  "chat-setup-share", "panel-" + platform))
+    result.append(ScenarioCell("S21.templates.share", "Share a member recipe in chat",
+                              "Help me share my member recipe.", ("template_snapshot", "owner_text_preserved"),
+                              "chat-setup-share", "panel-share"))
     # S05's halves: the draft of a mail edited, handed to a colleague and sent once on the generic send path, every send
     # recorded and never real (P08c), and Gmail's own draft and send (P08d), which keeps the parent open until it has a driver.
     result.append(ScenarioCell('S05.draft-handoff', 'Email draft hand-off (P08c scope)',

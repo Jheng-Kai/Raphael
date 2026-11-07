@@ -8,7 +8,7 @@ from ..integrations.vault import secret_name
 ABOUT_INDEX = """About Raphael (read raphael_help for details):
 1. Connections: Composio managed apps, Google OAuth, and installed MCP servers.
 2. Keys: Windows Credential Manager; self_check reports presence only.
-3. Cards: connect_app and request_secret pause a request for the owner.
+3. Cards: connect_app, connect_messaging and request_secret pause a request for the owner. share_template offers a member recipe snapshot for review, saving or publishing.
 4. Continuation: successful cards resume once; failures return their classified reason.
 5. Brains: API providers and signed-in subscription CLIs share Raphael tools.
 6. Usage: plan windows and credits are separate; available credits permit work.
@@ -51,7 +51,11 @@ ABOUT = ABOUT_INDEX + """
 Connections use Composio when its API key is configured. For supported Google apps, a configured
 Google OAuth client takes priority. Generic installed MCP servers declare their own environment
 and header secrets. Keys go to the secure vault, never to the member or conversation.
-connect_app shows a connection card; request_secret shows a vault-entry card. The owner signs in,
+connect_app shows a connection card; request_secret shows a vault-entry card. connect_messaging uses
+the same secure card to connect the speaker's Telegram, Slack or Discord bot, then asks the owner
+to message it and approve its pairing card in this conversation. A rejected token stays editable;
+an offline check can be retried. share_template offers a members-only immutable recipe card for
+review, saving or publishing; private credential findings block export and publishing. The owner signs in,
 grants consent, or saves the value. Successful cards resume the original request in its own thread
 once, preserving receipts so completed actions are not repeated. A failed card returns a classified
 reason to the same member, who diagnoses it and explains the owner-only step without making a new card.
@@ -72,7 +76,9 @@ in the routine's editor or in Google. For what repeats, use a routine.
 # Executable reference links: tests reject renamed product entry points and panes.
 REFERENCES = {
     "connectors/cards.py": ("connect_app", "integrations.card_connect", "claim_resume"),
-    "connectors/secret_cards.py": ("request_secret", "integrations.card_save"),
+    "connectors/secret_cards.py": ("request_secret", "integrations.card_save", "show_messaging"),
+    "messaging/cards.py": ("MessagingCards", "answer", "expires_at_ms"),
+    "members/template_cards.py": ("members.template_card", "members.template_card_export", "members.template_card_publish"),
     "integrations/vault.py": ("Windows Credential Manager", "secret_name"),
     "agent/cli/discovery.py": ("logged_in", "codex", "claude", "gemini"),
     "agent/quota.py": ("credit_state", "allowances"),

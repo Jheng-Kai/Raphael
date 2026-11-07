@@ -28,7 +28,7 @@ def test_members_and_rooms_do_not_create_brain_loops():
 def test_only_primary_is_offered_management_and_everyone_keeps_work_tools():
     """Management follows the current primary capability; work tools retain parity."""
     from raphael_core.agent.speaker import Speaker
-    from raphael_core.agent.capabilities import COORDINATION_TOOLS
+    from raphael_core.agent.capabilities import COORDINATION_TOOLS, MEMBER_ONLY_TOOLS
     from raphael_core.agent.team import team_tools_for
     from raphael_core.management import MANAGEMENT_TOOLS
 
@@ -47,8 +47,10 @@ def test_only_primary_is_offered_management_and_everyone_keeps_work_tools():
             assert (set(ADMIN) - {"team_overview"} <= tools.keys()) == chief
             if not chief:
                 assert not set(tools) & MANAGEMENT_TOOLS
+            for name in MEMBER_ONLY_TOOLS:
+                assert (name in tools) == (identifier > 0)
             assert "member_id" not in tools["routine_create"]["parameters"]["properties"]
-            offered[(identifier, chief)] = ({name: item["parameters"] for name, item in tools.items() if name not in MANAGEMENT_TOOLS},
+            offered[(identifier, chief)] = ({name: item["parameters"] for name, item in tools.items() if name not in MANAGEMENT_TOOLS | MEMBER_ONLY_TOOLS.keys()},
                                             sorted(set(team_tools_for(Team(), speaker, always=True)) - COORDINATION_TOOLS.keys() - MANAGEMENT_TOOLS))
             assert ("room_meeting" in team_tools_for(Team(), speaker, always=True)) == chief
     assert len({repr(value) for value in offered.values()}) == 1

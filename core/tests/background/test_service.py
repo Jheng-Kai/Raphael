@@ -82,7 +82,7 @@ async def test_the_model_is_given_the_task_the_tools_of_the_snapshot_and_the_res
     assert "2026-10-21 14:05" in user["content"] and user["content"].rstrip().endswith("English only.")
     assert [t["function"]["name"] for t in first["tools"]] == [
         "weather", "web_search", "local_time", "web_read", "generate_audio", "self_check", "raphael_help",
-        "calendar_list", "calendar_add", "calendar_update", "calendar_delete", "connections_list", "ask_owner", "connect_app", "email_draft", "find_app", "request_secret", "show_page", "update_page", "routine_create", "routine_delete", "routine_list", "routine_update", "find_tools", "Notes__look",
+        "calendar_list", "calendar_add", "calendar_update", "calendar_delete", "connections_list", "ask_owner", "connect_app", "connect_messaging", "email_draft", "find_app", "request_secret", "show_page", "update_page", "routine_create", "routine_delete", "routine_list", "routine_update", "find_tools", "Notes__look",
     ]  # fmt: skip
     result = second["messages"][-1]
     assert result["role"] == "tool" and result["tool_call_id"] == "c1"

@@ -13,6 +13,8 @@ def legacy(tmp_path, monkeypatch):
     with monkeypatch.context() as old:
         old.setattr(db, 'LATEST_VERSION', 68)
         conn = db.connect(path)
+    # This regression isolates migration 69; later migrations may add unrelated tables.
+    monkeypatch.setattr(db, "LATEST_VERSION", 69)
     turn = AgentHistory(conn).add(session_id='old', question='Owner', route='answer', prefix='', text='Reply', status='done')
     with conn:
         room = conn.execute("INSERT INTO rooms(name,created) VALUES('Old room',1)").lastrowid

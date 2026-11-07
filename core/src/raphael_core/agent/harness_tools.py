@@ -1,5 +1,6 @@
 """Tool descriptions shared by the interactive harness and the safety gate."""
 
+from .capabilities import MEMBER_ONLY_TOOLS
 from .commands import COMMANDS
 from .plugins import PluginTool
 from .policy import Tier
@@ -9,6 +10,8 @@ from ..members.schedule import KINDS
 from .owner_questions import ASK_OWNER
 
 CONNECT_APP = "connect_app"
+CONNECT_MESSAGING = "connect_messaging"
+SHARE_TEMPLATE = "share_template"
 FIND_APP = "find_app"
 REQUEST_SECRET = "request_secret"
 EMAIL_DRAFT = "email_draft"
@@ -62,6 +65,8 @@ CALENDAR_FIELDS = {
 
 
 DEFINITIONS = {
+    CONNECT_MESSAGING: definition("Show the owner a secure bot-token card in this conversation for Telegram, Slack or Discord. Never ask for the token in chat. The current speaker owns the bot; saving validates it and resumes this turn once. If already running, nothing is needed.", {"platform": {"type": "string", "enum": ["telegram", "slack", "discord"]}}, ["platform"]),
+    SHARE_TEMPLATE: definition("Offer your member recipe as a snapshot card for the owner to review, save or publish. Describe what you do for strangers in one or two sentences in the owner's language; no names, private facts, credentials, internal URLs or customer data. Members only.", {"description": {"type": "string", "maxLength": 280}}, ["description"]),
     SHOW_PAGE: definition(
         "Show an operable page inside this conversation: a product page, form, interactive comparison or small tool. "
         "Prefer plain text or a table for a simple answer or static comparison. Supply an HTML fragment or full document, "
@@ -161,7 +166,7 @@ for name, command in COMMANDS.items():
     DEFINITIONS[name] = definition(command.guidance + " Only for an owner at this computer. Open a browser only when explicitly asked to open it.", properties, required)
 
 DEFINITIONS.update(MEMORY_DEFINITIONS)
-TIERS = {name: Tier.T0 if name in (ASK_OWNER, "self_check", "raphael_help", "show", "routine_list", CALENDAR_LIST, "computer", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SLACK_DRAFT, SHOW_PAGE, UPDATE_PAGE, SET_MY_JOB) or name in MEMORY_DEFINITIONS and name not in GROWTH_WRITES else Tier.T1 for name in DEFINITIONS if name not in COMMANDS}
+TIERS = {name: Tier.T0 if name in (ASK_OWNER, "self_check", "raphael_help", "show", "routine_list", CALENDAR_LIST, "computer", FIND_APP, CONNECT_APP, CONNECT_MESSAGING, SHARE_TEMPLATE, REQUEST_SECRET, EMAIL_DRAFT, SLACK_DRAFT, SHOW_PAGE, UPDATE_PAGE, SET_MY_JOB) or name in MEMORY_DEFINITIONS and name not in GROWTH_WRITES else Tier.T1 for name in DEFINITIONS if name not in COMMANDS}
 ROUTINE_TOOLS = frozenset(name for name in DEFINITIONS if name.startswith("routine_"))
 DEFINITIONS.update(ADMIN_TOOLS)
 TIERS.update(ADMIN_TIERS)
@@ -173,6 +178,8 @@ def definitions_for(speaker):
     from ..management import MANAGEMENT_TOOLS
     for name, item in DEFINITIONS.items():
         if name in MANAGEMENT_TOOLS and (not speaker.is_chief or speaker.depth):
+            continue
+        if name in MEMBER_ONLY_TOOLS and speaker.id == 0:
             continue
         if name == SET_MY_JOB and not speaker.has_no_job:
             continue
