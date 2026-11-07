@@ -94,12 +94,15 @@ export function cropDialog(url: string): Promise<AvatarCrop | null> {
       `<div class="av-crop" role="dialog" aria-modal="true" aria-labelledby="av-crop-title" style="--stage:${STAGE_PX}px">` +
       `<h2 id="av-crop-title">${esc(t("settings.avatar"))}</h2>` +
       `<div class="av-crop-view" tabindex="0" aria-label="${esc(t("settings.avatarFrame"))}">` +
-      `<img src="${esc(url)}" alt="" draggable="false"><div class="av-crop-frame" hidden><span class="av-crop-grid"></span>${corners}</div></div>` +
+      // The picture shows in a circle everywhere, so the frame is a circle, as Google's avatar crop (owner, 2026-11-07):
+      // the ring dims what falls outside it; the square frame over it only carries the corners that resize it.
+      `<img src="${esc(url)}" alt="" draggable="false"><div class="av-crop-ring" hidden><span class="av-crop-grid"></span></div><div class="av-crop-frame" hidden>${corners}</div></div>` +
       actionRow({ cls: "av-crop-act", secondary: btn(esc(t("common.cancel")), "", ' data-act="crop-cancel"'), primary: { label: esc(t("settings.avatarDone")), attrs: ' data-act="crop-done"' } }) +
       `</div>`;
     const stage = scrim.querySelector<HTMLElement>(".av-crop-view")!;
     const img = stage.querySelector("img")!;
     const frame = stage.querySelector<HTMLElement>(".av-crop-frame")!;
+    const ring = stage.querySelector<HTMLElement>(".av-crop-ring")!;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     let stopOutside = (): void => {};
     let stopLocale = (): void => {};
@@ -108,8 +111,8 @@ export function cropDialog(url: string): Promise<AvatarCrop | null> {
       if (!view) return;
       const [w, h] = size();
       img.style.cssText = `left:${view.ox}px;top:${view.oy}px;width:${w * view.s}px;height:${h * view.s}px`;
-      frame.style.cssText = `left:${view.fx}px;top:${view.fy}px;width:${view.f}px;height:${view.f}px`;
-      frame.hidden = false;
+      frame.style.cssText = ring.style.cssText = `left:${view.fx}px;top:${view.fy}px;width:${view.f}px;height:${view.f}px`;
+      frame.hidden = ring.hidden = false;
     };
     const start = (): void => {
       const [w, h] = size();

@@ -2224,9 +2224,12 @@ export function checkRendered(name, context = {}) {
     require(frame.querySelectorAll('.av-crop-corner').length === 4, "the frame has its four corners");
     const s = stage.getBoundingClientRect(), f = frame.getBoundingClientRect(), p = img.getBoundingClientRect();
     require(Math.abs(f.width - f.height) < 0.5, "the frame is square");
+    // The picture shows in a circle, so the dim leaves a circle the size of the frame (owner, 2026-11-07).
+    const ring = stage.querySelector('.av-crop-ring'), r = ring?.getBoundingClientRect();
+    require(visible(ring) && getComputedStyle(ring).borderRadius !== '0px' && Math.abs(r.left - f.left) < 0.5 && Math.abs(r.width - f.width) < 0.5, "the frame shows the circle the picture will be cut to");
     require(f.left >= s.left && f.top >= s.top && f.right <= s.right && f.bottom <= s.bottom, "the frame stays inside the stage");
     require(p.left <= f.left + 0.5 && p.top <= f.top + 0.5 && p.right >= f.right - 0.5 && p.bottom >= f.bottom - 0.5, "the picture covers the whole frame");
-    const thirds = getComputedStyle(frame.querySelector('.av-crop-grid')).opacity;
+    const thirds = getComputedStyle(ring.querySelector('.av-crop-grid')).opacity;
     if (name === "avatar-crop-frame") {
       require(thirds === "0", "the thirds hide while nothing is held");
       require(f.width < Math.min(p.width, p.height) - 20, "a corner drag made the frame smaller");
