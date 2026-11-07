@@ -289,7 +289,7 @@ test("the allowances refresh on completed activity while visible, and are destro
   expect(page.el.querySelector('[data-models-tab="models"][aria-selected="true"]')).not.toBeNull();
 });
 
-test("the shared tabs support arrow keys and usage search selects and focuses the usage control", async () => {
+test("the shared tabs support arrow keys, and Settings has no search (owner, 2026-11-07)", async () => {
   await mount();
   const modelTab = page.el.querySelector<HTMLElement>('[data-models-tab="models"]')!;
   modelTab.focus(); modelTab.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })); await flush();
@@ -297,11 +297,7 @@ test("the shared tabs support arrow keys and usage search selects and focuses th
   expect(document.activeElement?.getAttribute("aria-selected")).toBe("true");
   document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
   expect((document.activeElement as HTMLElement).dataset.modelsTab).toBe("models");
-  const search = page.el.querySelector<HTMLInputElement>("#set-search")!;
-  search.value = "API key"; search.dispatchEvent(new Event("input", { bubbles: true }));
-  click('.set-hit[data-hit="0"]'); await flush();
-  expect(page.el.querySelector('[data-models-tab="usage"][aria-selected="true"]')).not.toBeNull();
-  expect((document.activeElement as HTMLElement).closest('[data-row="openrouter-key"]')).not.toBeNull();
+  expect(page.el.querySelector("#set-search")).toBeNull();
 });
 
 test("show awaits the initial allowance reading and leaving during it disposes the stale view", async () => {
@@ -340,15 +336,12 @@ test("activity during the initial reading is coalesced into one refresh", async 
   expect(api.usageAllowances).toHaveBeenCalledTimes(2);
 });
 
-test("provider search focuses the Models add action and opens its searchable dialog", async () => {
+test("the Models add action opens its searchable dialog of providers", async () => {
   api.providersKinds.mockResolvedValue({ kinds: [{ kind: "openai", name: "OpenAI", fields: ["key"], group: "official", available: true }] });
-  await mount("usage");
-  const search = page.el.querySelector<HTMLInputElement>("#set-search")!;
-  search.value = "OpenAI"; search.dispatchEvent(new Event("input", { bubbles: true }));
-  click('.set-hit[data-hit="0"]'); await flush();
+  await mount("models");
+  await flush();
   expect(page.pane()).toBe("models");
-  expect((document.activeElement as HTMLElement).dataset.pv).toBe("directory");
-  expect(document.activeElement).toBe(page.el.querySelector(".pv > .pv-grid")?.lastElementChild);
+  expect(page.el.querySelector('[data-pv="directory"]')).toBe(page.el.querySelector(".pv > .pv-grid")?.lastElementChild);
   click('[data-pv="directory"]');
   expect(page.el.querySelector('[role="dialog"] #pv-kind-search')).not.toBeNull();
   click('[data-pv="add"]');
@@ -432,13 +425,3 @@ test("vision keeps its primary image picker without fallback controls", async ()
   expect(api.settingsSet).toHaveBeenCalledWith("vision_model", "@p4:local:8b");
 });
 
-
-test("computer location search closes Settings and opens the member computer panel", async () => {
-  await mount("general");
-  const field = page.el.querySelector<HTMLInputElement>("#set-search")!;
-  field.value = "遠端"; field.dispatchEvent(new Event("input", { bubbles: true }));
-  expect(page.el.querySelectorAll(".set-hit")).toHaveLength(1);
-  click(".set-hit");
-  expect(closeSettings).toHaveBeenCalledOnce();
-  expect(go).toHaveBeenCalledExactlyOnceWith("agent", "computer");
-});

@@ -310,7 +310,7 @@ export async function drive(name, context) {
   }
   if (name === "appearance") {
     await click(page, '#nav [data-go="settings"]');
-    await click(page, '.modal-scrim [data-pane="appearance"]');
+    await click(page, '.modal-scrim [data-pane="general"]');
     await wait(page, '.appearance-settings');
     result.appearance = [];
     for (const width of [1120, 720, 1920]) {
@@ -872,7 +872,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     await page.setViewport({ width: 1120, height: 900 });
     await click(page, '#nav [data-go="settings"]');
     await perform(page, { action: "settle-motion" });
-    await click(page, '.modal-scrim [data-pane="appearance"]');
+    await click(page, '.modal-scrim [data-pane="general"]');
     frame = await frameNow();
     if (await inFrame(frame, "#loaded") !== loaded) throw new Error("Opening Settings reloaded the page");
     await click(page, '[data-k="appearance"]');
@@ -1520,7 +1520,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     result.deviceNames = deviceNames;
     for (const locale of ["en", "ja", "zh-TW"]) {
       await click(page, '#nav [data-go="settings"]');
-      await click(page, '.modal-scrim [data-pane="appearance"]');
+      await click(page, '.modal-scrim [data-pane="general"]');
       await click(page, '[data-k="ui-language"]');
       await click(page, `#app-popover [data-value="${locale}"]`);
       await page.waitForFunction(locale => document.documentElement.lang === locale, {}, locale);

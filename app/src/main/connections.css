@@ -1,8 +1,7 @@
 /* The 「連接」 tab of the settings, drawn like Codex's page of plugins: quiet tabs and a search, one
    rounded list of the connected services, a dialog for each over the settings, and the store as cards
    in two columns. Colours are the app's tokens. */
-.cs { width: 100%; max-width: var(--layout-reading-max); margin-top: var(--sp-4); container: connections / inline-size; }/* The store's column layout does not collapse margins; the purpose line alone spaces the tabs on both views. */
-.set-purpose + .cs { margin-top: 0; }
+.cs { width: 100%; max-width: var(--layout-reading-max); margin-top: var(--sp-4); container: connections / inline-size; }
 .cs h2.big { margin: 0; font: 600 var(--fs-lg)/1.3 var(--display); }
 .cs h2 { margin: 0 0 var(--sp-2) var(--sp-1); font-size: var(--fs-md); font-weight: 600; }
 .cs h3, .cs-skill-import h3 { margin: 0 0 var(--sp-2) var(--sp-1); font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); }

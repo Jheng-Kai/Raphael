@@ -54,7 +54,6 @@ import {
   closeMenu,
   copyButton,
   esc,
-  ico,
   iconBtn,
   menuIsOpenFor,
   openConfirmMenu,
@@ -82,7 +81,6 @@ import {
   canonicalPane,
   PANES,
   STANDALONE_PANE,
-  type SearchHit,
   SIZES,
   type SettingsView,
   type ModelsTab,
@@ -98,8 +96,6 @@ import {
   priceTexts,
   retentionChoices,
   retentionOf,
-  searchResultsHTML,
-  searchSettings,
   sttEngine,
   sttModel,
 } from "./settings-view";
@@ -165,10 +161,6 @@ export interface SettingsPage extends Page {
   /** Reads ahead, so that the first opening has nothing to wait for either. */
   preload(): Promise<void>;
 }
-/** How long a row the search jumped to stays lit. */
-const FOUND_MS = 1600;
-
-
 export function createSettings(app: AppContext): SettingsPage {
   const el = document.createElement("div");
   el.className = "modal-scrim";
@@ -177,14 +169,12 @@ export function createSettings(app: AppContext): SettingsPage {
   el.innerHTML =
     `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="set-title">` +
     `<nav class="modal-nav" aria-label="${esc(t("nav.settings"))}">` +
-    `<label class="field set-search">${ico("search")}<input id="set-search" type="text" autocomplete="off" spellcheck="false"></label>` +
     `<div class="set-list"></div>` +
     `</nav>` +
     `<div class="modal-body"></div>` +
     `${iconBtn("x", t("common.close"), ' data-act="close"', "modal-x")}` +
     `</div>`;
   const body = el.querySelector<HTMLElement>(".modal-body")!;
-  const searchField = el.querySelector<HTMLInputElement>("#set-search")!;
   const navList = el.querySelector<HTMLElement>(".set-list")!;
   let pane: SettingsPane = "general";
   let modelsTab: ModelsTab = "models";
@@ -193,10 +183,6 @@ export function createSettings(app: AppContext): SettingsPage {
   let usage: UsageAnalyticsMount | null = null;
   let usageRefresh: Promise<void> | null = null;
   let usageAgain = false;
-  /** What 「搜尋設定」 found for what is typed in it; the tabs are listed again when it is empty. */
-  let hits: SearchHit[] = [];
-  /** A row the search chose, to be lit once its tab is drawn with its rows (not while it is being read). */
-  let pendingJump: SearchHit | null = null;
 
   let brain: BrainSettings | null = null;
   const memoryImport = createMemoryImport(() => { if (visible) render(); });
@@ -258,7 +244,7 @@ export function createSettings(app: AppContext): SettingsPage {
   });
   app.onEvent((event) => connections.followEvent(event));
   /** Telegram, in the 「訊息平台」 tab: it keeps its own state too. */
-  const messaging = createMessaging({ visible: () => visible && pane === "messaging", redraw: () => render() });
+  const messaging = createMessaging({ visible: () => visible && pane === "general", redraw: () => render() });
   const memoryHost = { visible: () => visible && pane === "general", redraw: () => render() };
   const memoryShared = createMemory({ ...memoryHost, space: "shared" });
   const memories = [memoryShared];
@@ -463,25 +449,19 @@ export function createSettings(app: AppContext): SettingsPage {
       if (anchor && openK === "languages") openLanguages(anchor);
       else if (anchor && menu) showMenu(anchor, menu);
     }
-    if (pendingJump && !(loading && pane !== "about")) light(pendingJump);
   }
 
-  // ---------- the tabs and 「搜尋設定」 ----------
+  // ---------- the tabs ----------
 
-  /** The list on the left: the tabs in their groups, or, while something is typed, what the search found. */
+  /** The list on the left: the six tabs, flat, as Grok Bot's. */
   function paintNav(): void {
     // A tab chosen with Enter is drawn anew here: the keyboard stays on it, and Esc still closes.
-    repaintKeepingFocus(navList, document.activeElement, () => {
-      navList.innerHTML = searchField.value.trim() ? searchResultsHTML(hits) : paneListHTML();
-    });
+    repaintKeepingFocus(navList, document.activeElement, () => { navList.innerHTML = paneListHTML(); });
     navList.querySelectorAll<HTMLElement>("[data-pane]").forEach((b) => b.setAttribute("aria-current", b.dataset.pane === pane ? "page" : "false"));
   }
 
   function translateNav(): void {
     el.querySelector(".modal-nav")!.setAttribute("aria-label", t("nav.settings"));
-    searchField.placeholder = t("settings.search");
-    searchField.setAttribute("aria-label", t("settings.search"));
-    hits = searchSettings(searchField.value);
     paintNav();
   }
   translateNav();
@@ -490,7 +470,6 @@ export function createSettings(app: AppContext): SettingsPage {
   function openPane(next: SettingsPane, tab?: ModelsTab): void {
     closeMenu();
     const hadUsage = usage !== null;
-    const jumping = pendingJump !== null;
     if (next === "usage") modelsTab = "usage";
     else if (tab) modelsTab = tab;
     pane = canonicalPane(next);
@@ -498,10 +477,9 @@ export function createSettings(app: AppContext): SettingsPage {
     if (pane !== "models") destroyUsage();
     if (pane === "connections") void connections.load();
     else connections.reset();
-    if (pane === "messaging") void messaging.load();
-    else messaging.reset();
-    if (pane === "general") for (const list of memories) void list.load();
-    else for (const list of memories) list.reset();
+    // Messaging and memory are sections of 一般 (owner, 2026-11-07).
+    if (pane === "general") { void messaging.load(); for (const list of memories) void list.load(); }
+    else { messaging.reset(); for (const list of memories) list.reset(); }
     if (pane === "safety") { void rules.load(); void vault.load(); }
     else { rules.reset(); vault.reset(); }
     services.reset();
@@ -511,7 +489,9 @@ export function createSettings(app: AppContext): SettingsPage {
     syncMonitor();
     body.scrollTop = 0;
     render();
-    if (!jumping) body.scrollTop = 0;
+    body.scrollTop = 0;
+    // A link to messaging of before lands on its section of 一般.
+    if (next === "messaging") body.querySelector<HTMLElement>('[data-section="messaging"]')?.scrollIntoView({ block: "start" });
     if (hadUsage && pane === "models" && modelsTab === "usage") refreshUsage();
     paintNav();
     replay(body, "pane-in");
@@ -529,75 +509,6 @@ export function createSettings(app: AppContext): SettingsPage {
     if (next === "models") void providers.load();
     else if (hadUsage) refreshUsage();
   }
-
-  /** Goes where a hit of the search is: its tab, then its row, which is lit for a moment and gets the focus. */
-  function jump(hit: SearchHit): void {
-    if (hit.target === "computer") { app.closeSettings(); app.go("agent", "computer"); return; }
-    searchField.value = "";
-    hits = [];
-    pendingJump = hit.label ? hit : null;
-    openPane(hit.pane, hit.label && canonicalPane(hit.pane) === "models" ? hit.pane === "usage" ? "usage" : "models" : undefined);
-    if (!hit.label) el.querySelector<HTMLElement>("#set-title")?.focus();
-  }
-
-  /** Lights the row a jump was for, if its tab shows it, scrolls it into view and focuses its control. */
-  function light(hit: SearchHit): void {
-    pendingJump = null;
-    if (pane !== canonicalPane(hit.pane)) return;
-    if (hit.label === "providers.add") {
-      const button = body.querySelector<HTMLButtonElement>('[data-pv="directory"]');
-      if (button?.disabled && providers.view().state !== "failed") { pendingJump = hit; return; }
-      button?.scrollIntoView({ block: "center" }); button?.focus({ preventScroll: true });
-      return;
-    }
-    const rows = Array.from(body.querySelectorAll<HTMLElement>(".row"));
-    const found =
-      rows.find((r) => r.querySelector(":scope > .lbl > .t")?.textContent?.trim() === hit.text) ??
-      // a capability of 服務 is a row of the rounded list, named by its `.nm`
-      Array.from(body.querySelectorAll<HTMLElement>(".cs-item.svc-item")).find((r) => r.querySelector(".nm")?.textContent?.trim() === hit.text);
-    if (!found) {
-      // A hit that names a whole section (電腦操作) brings its heading into view and lights its list.
-      const list = Array.from(body.querySelectorAll<HTMLElement>(".sgroup")).find((g) => g.querySelector(":scope > h2")?.textContent?.trim() === hit.text)?.querySelector<HTMLElement>(":scope > .slist, :scope > .cs-list");
-      if (!list) return;
-      list.scrollIntoView({ block: "center" });
-      list.classList.add("found");
-      setTimeout(() => list.classList.remove("found"), FOUND_MS);
-      return;
-    }
-    const control = found.querySelector<HTMLElement>(":scope > .ctl :is(button, input):not([disabled]), :scope > .cs-open");
-    control?.focus({ preventScroll: true });
-    found.scrollIntoView({ block: "center" });
-    found.classList.add("found");
-    setTimeout(() => found.classList.remove("found"), FOUND_MS);
-  }
-
-  searchField.addEventListener("input", () => {
-    hits = searchSettings(searchField.value);
-    paintNav();
-  });
-  searchField.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && hits.length) {
-      e.preventDefault();
-      jump(hits[0]);
-    } else if (e.key === "ArrowDown" && hits.length) {
-      e.preventDefault();
-      navList.querySelector<HTMLElement>(".set-hit")?.focus();
-    } else if (e.key === "Escape" && searchField.value) {
-      // Esc empties the search first; the next one closes the settings.
-      e.preventDefault();
-      searchField.value = "";
-      hits = [];
-      paintNav();
-    }
-  });
-  navList.addEventListener("keydown", (e) => {
-    const items = Array.from(navList.querySelectorAll<HTMLElement>(".set-hit"));
-    const i = items.indexOf(document.activeElement as HTMLElement);
-    if (i < 0 || (e.key !== "ArrowDown" && e.key !== "ArrowUp")) return;
-    e.preventDefault();
-    if (e.key === "ArrowUp" && i === 0) searchField.focus();
-    else items[Math.min(items.length - 1, Math.max(0, i + (e.key === "ArrowDown" ? 1 : -1)))].focus();
-  });
 
   onLocaleChange(() => {
     translateNav();
@@ -1151,12 +1062,6 @@ export function createSettings(app: AppContext): SettingsPage {
       openPane(paneButton.dataset.pane as SettingsPane);
       return;
     }
-    const hit = target.closest<HTMLElement>("[data-hit]");
-    if (hit) {
-      const chosen = hits[Number(hit.dataset.hit)];
-      if (chosen) jump(chosen);
-      return;
-    }
 
     if (target.closest("[data-cli], [data-cli-menu], [data-chatgpt], [data-chatgpt-menu]")) { void cliBrains.click(target); return; }
     if (providers.click(target)) return;
@@ -1390,14 +1295,10 @@ export function createSettings(app: AppContext): SettingsPage {
       providers.reset();
       if (pane === "about") void checkUpdate();
       if (pane === "connections") void connections.load();
-      if (pane === "messaging") void messaging.load();
-      if (pane === "general") for (const list of memories) void list.load();
+      if (pane === "general") { void messaging.load(); for (const list of memories) void list.load(); }
       if (pane === "safety") { void rules.load(); void vault.load(); }
       if (pane === "tools") void services.load();
       if (pane === "models" && modelsTab === "models") void providers.load();
-      searchField.value = "";
-      hits = [];
-      pendingJump = null;
       body.scrollTop = 0;
       closeMenu();
       render();

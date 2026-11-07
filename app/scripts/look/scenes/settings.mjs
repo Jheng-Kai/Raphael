@@ -21,7 +21,6 @@ export default [
   scene("settings-speech-service", "Shared speech setup owns its key while the voice and preview belong to member details", [...settings("tools"),click('[data-svc="open"][data-id="voice"]'),wait('#svc-dialog'),click('[data-k="svc-svc:fish"]'),wait('#svc-dialog [type="password"]'),check('settings-speech-service')]),
 
 
-  scene("settings-computer-search", "Computer location search opens the member computer panel", [...settings("general"), type('#set-search', '遠端'), wait('.set-hit'), check('settings-computer-result'), key('Enter'), wait('.mb-det:not([hidden]) [data-computer-location]'), check('settings-computer-open')]),
   scene("settings-owner", "Owner identity and shared memory share General, with no weather city to set", [...settings("general"), wait('[data-mem-space="shared"] .mem-entry'), check('settings-owner')]),
 
   scene("settings-memory", "Shared owner memory belongs in General", [...settings("general"), wait('[data-mem-space="shared"] .mem-entry'), scroll('[data-mem-space="shared"]'), check("settings-memory")]),

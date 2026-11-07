@@ -6,18 +6,16 @@
 // The rules for every row: a choice among options is a dropdown (`sel`, never the options
 // in a row), an action is a button with a shape (`btn`, never a word that can be clicked), and a
 // line under a row's name only where the setting would otherwise be set wrong. Each tab opens with
-// its name and one line on what it is for, then its rows in a few named groups.
+// its name, then its rows in a few named sections, each a rounded card (Grok Bot's settings, owner 2026-11-07).
 //
-// The tabs sit on the left in four groups: basics, team, integrations and account (Models & usage, Data, About).
-// Settings search finds a row in any tab by its name in any of the three languages, and jumps to
-// it (`SEARCH_INDEX`, `searchSettings`).
+// Six tabs sit flat on the left, as Grok Bot's: 一般 (account, appearance, the bot's timezone and folder, messaging,
+// memory), 聽寫與快捷鍵, 工具, 安全, 模型與用量 and 關於. No group names, no search, no line under a tab's name.
 
-import { catalogs, t } from "../i18n";
+import { t } from "../i18n";
 import { updateHTML } from "../updates";
 import { createMemoryImport } from "../memory-import";
 import { detectedTimezone, zoneLabel } from "../timezones";
 import { ownerProfileHTML } from "../owner-settings";
-import type { MessageKey } from "../i18n/zh-TW";
 
 import { brandIcon } from "../brand";
 import { type ConnectionsView, connectionsAddHTML, connectionsHTML } from "../connections";
@@ -80,32 +78,19 @@ export const RETENTIONS: Choice[] = [1, 7, 30, 365, KEEP_FOREVER_DAYS].map((days
 
 const PRICES_LOADING = () => t("settings.026");
 
-/** Settings groups follow their shared purpose. */
-export type PaneGroup = "basics" | "team" | "integrations" | "account";
-
-/** The localized group names above their tabs. */
-export const PANE_GROUPS: Record<PaneGroup, () => string> = {
-  basics: () => t("settings.navBasics"),
-  team: () => t("settings.navTeam"),
-  integrations: () => t("settings.navIntegrations"),
-  account: () => t("settings.navAccount"),
-};
-
 /**
- * The tabs on the left of the panel, in order and in their groups, each with the line under its name
- * that says what it is for. Shared services and safety belong to the team.
+ * The tabs on the left of the panel, flat and in order, as Grok Bot's six (owner, 2026-11-07): appearance and messaging
+ * are sections of 一般 now, and 連結應用程式 is no tab.
  */
-export const PANES: { id: SettingsPane; group: PaneGroup; icon: IconName; title: () => string; purpose: (d: DeviceSettings) => string }[] = [
-  { id: "general", group: "basics", icon: "gear", title: () => t("settings.paneGeneral"), purpose: () => t("settings.purposeGeneral") },
-  { id: "appearance", group: "basics", icon: "grid", title: () => t("skin.title"), purpose: () => t("skin.about") },
-  { id: "dictation", group: "basics", icon: "mic", title: () => t("settings.paneDictation"), purpose: () => t("settings.purposeDictation") },
-  { id: "tools", group: "team", icon: "steps", title: () => t("settings.paneTools"), purpose: () => t("settings.purposeTools") },
-  { id: "safety", group: "team", icon: "lock", title: () => t("settings.paneSafety"), purpose: () => t("settings.purposeSafety") },
+export const PANES: { id: SettingsPane; icon: IconName; title: () => string }[] = [
+  { id: "general", icon: "gear", title: () => t("settings.paneGeneral") },
+  { id: "dictation", icon: "mic", title: () => t("settings.paneDictation") },
+  { id: "tools", icon: "steps", title: () => t("settings.paneTools") },
+  { id: "safety", icon: "lock", title: () => t("settings.paneSafety") },
+  { id: "models", icon: "bot", title: () => t("settings.paneUsage") },
+  { id: "about", icon: "info", title: () => t("common.about") },
   // Not a tab: the sidebar's 連結應用程式 opens it as a dialog of its own, its only way in (owner, 2026-11-06; R-UI-111).
-  { id: "connections", group: "integrations", icon: "plug", title: () => t("nav.apps"), purpose: () => t("settings.purposeConnections") },
-  { id: "messaging", group: "integrations", icon: "send", title: () => t("settings.paneMessaging"), purpose: () => t("settings.purposeMessaging") },
-  { id: "models", group: "account", icon: "bot", title: () => t("settings.paneUsage"), purpose: () => t("providers.about") },
-  { id: "about", group: "account", icon: "info", title: () => t("common.about"), purpose: () => t("settings.purposeAbout") },
+  { id: "connections", icon: "plug", title: () => t("nav.apps") },
 ];
 
 /** The pane that is not a tab of Settings but a dialog of its own, opened only from the sidebar. */
@@ -115,143 +100,12 @@ export const STANDALONE_PANE: SettingsPane = "connections";
 const paneButton = (p: (typeof PANES)[number]): string =>
   `<button type="button" class="nav" data-pane="${p.id}" aria-current="false">${ico(p.icon)}<span>${esc(p.title())}</span></button>`;
 
-/** The tabs in their groups, each group under its small grey name. */
-export const paneListHTML = (): string =>
-  (Object.keys(PANE_GROUPS) as PaneGroup[])
-    .map((group) => {
-      const name = PANE_GROUPS[group]();
-      return (name ? `<div class="nav-group">${esc(name)}</div>` : "") + PANES.filter((p) => p.group === group && p.id !== STANDALONE_PANE).map(paneButton).join("");
-    })
-    .join("");
+/** The tabs, flat, as Grok Bot's list. */
+export const paneListHTML = (): string => PANES.filter((p) => p.id !== STANDALONE_PANE).map(paneButton).join("");
 
-// ---------- 搜尋設定 ----------
-
-/**
- * A row the search can find: its tab, the key of its name (found by that name in every language,
- * and on the page by the name in the window's language) and, for a row whose name is not what one
- * would type ("快捷鍵" for 聽寫's keys), a key of more words to find it by, or words that are the
- * same in every language (a brand). A row with no `label` is the tab itself.
- */
-export interface SearchEntry {
-  pane: SettingsPane;
-  target?: "computer";
-  label?: MessageKey;
-  also?: MessageKey;
-  words?: string[];
-}
-
-/**
- * Everything 「搜尋設定」 can find: every tab, and the rows of each. A row added to a tab is one more
- * entry here (its name's key), or the search does not know it.
- */
-export const SEARCH_INDEX: readonly SearchEntry[] = [
-  { pane: "general", label: "owner.name" },
-  { pane: "general", label: "import.title" },
-  { pane: "about", label: "update.title" },
-  { pane: "about", label: "update.auto" },
-  { pane: "general", label: "output.folder" },
-  { pane: "general", label: "zone.title" },
-  ...PANES.filter((p) => p.id !== STANDALONE_PANE).map((p) => ({ pane: p.id })),
-  { pane: "appearance", label: "settings.059" },
-  { pane: "appearance", label: "settings.067", words: ["dark", "light"] },
-  { pane: "general", label: "settings.rerunGuide" },
-  { pane: "dictation", label: "home.020", also: "settings.searchShortcut" },
-  { pane: "dictation", label: "home.021", also: "settings.searchShortcut" },
-  { pane: "dictation", label: "settings.055" },
-  { pane: "dictation", label: "transcription.title" },
-  { pane: "dictation", label: "common.microphone", words: ["mic"] },
-  { pane: "dictation", label: "settings.agentKeys", also: "settings.searchShortcut" },
-  { pane: "general", label: "mem.shared", also: "settings.searchMemory" },
-  { pane: "safety", label: "rules.title" },
-  { pane: "safety", label: "vault.title", words: ["Chrome", "1Password", "CSV"] },
-  { pane: "safety", label: "settings.computerUse" },
-  { pane: "safety", target: "computer", label: "desktop.host", also: "desktop.remoteSearch" },
-  { pane: "safety", label: "local.title" },
-  { pane: "tools", label: "services.title" },
-  { pane: "tools", label: "services.search", words: ["Brave", "Tavily", "Exa", "SearXNG"] },
-  { pane: "tools", label: "services.read", words: ["Jina", "Firecrawl"] },
-  { pane: "tools", label: "services.vision" },
-  { pane: "tools", label: "services.pdf", words: ["PDF"] },
-  { pane: "tools", label: "services.voice", words: ["Fish Audio", "TTS"] },
-  { pane: "messaging", words: ["Telegram"] },
-  { pane: "models", label: "providers.add", words: ["OpenAI", "Anthropic", "Gemini", "Azure", "Bedrock", "Ollama", "LM Studio", "OpenRouter", "LiteLLM", "Portkey", "Vercel", "Nebius", "Bifrost", "Groq", "DeepSeek", "Mistral"] },
-  { pane: "usage", label: "common.apiKey", words: ["OpenRouter"] },
-  { pane: "usage", label: "settings.050", words: ["budget", "spend"] },
-  { pane: "models", label: "settings.031", also: "settings.searchModel" },
-  { pane: "models", label: "settings.035", also: "settings.searchModel" },
-  { pane: "models", label: "settings.quickModel", also: "settings.searchModel", words: ["Alt", "Space"] },
-  { pane: "models", label: "media.image", words: ["image", "drawing"] },
-  { pane: "models", label: "media.video", words: ["video"] },
-  { pane: "dictation", label: "data.retention", also: "settings.searchHistory" },
-  { pane: "about", label: "settings.078" },
-  { pane: "about", label: "nav.help" },
-  { pane: "about", label: "settings.079" },
-];
-
-/** A row the search found: where it is, and its name in the window's language. */
-export interface SearchHit {
-  pane: SettingsPane;
-  target?: "computer";
-  /** The key of the row's name; none for a tab itself. */
-  label?: MessageKey;
-  /** What the hit says: the row's name, or the tab's. */
-  text: string;
-}
-
-/** How many hits are listed at most. */
-const SEARCH_SHOWN = 12;
-
-/** `t` for a key chosen at run time, with no placeholders. */
-const tr = t as unknown as (key: MessageKey) => string;
-
-/** The texts of `key` in every language, for the search. */
-const allLanguages = (key: MessageKey): string[] => Object.values(catalogs).map((catalog) => catalog[key]);
-
-/** The keys of the tabs' names, in every language. */
-const PANE_TITLE_KEYS: Record<SettingsPane, MessageKey> = {
-  appearance: "skin.title",
-  general: "settings.paneGeneral", dictation: "settings.paneDictation", agent: "settings.paneTools", tools: "settings.paneTools", safety: "settings.paneSafety", connections: "settings.paneConnections",
-  messaging: "settings.paneMessaging", models: "settings.paneUsage", usage: "settings.paneUsage", data: "settings.paneDictation", about: "common.about",
-};
-
-/**
- * The rows and tabs whose name (in any of the three languages), extra words or brand contain
- * `query`, ignoring case: the tabs first, then the rows, in the order of the tabs.
- */
-export function searchSettings(query: string): SearchHit[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
-  const found = SEARCH_INDEX.filter((entry) => {
-    const texts = [
-      ...allLanguages(entry.label ?? PANE_TITLE_KEYS[entry.pane]),
-      ...(entry.also ? allLanguages(entry.also) : []),
-      ...(entry.words ?? []),
-    ];
-    return texts.some((text) => text.toLowerCase().includes(q));
-  });
-  return found.slice(0, SEARCH_SHOWN).map((entry) => ({
-    pane: entry.pane,
-    target: entry.target,
-    label: entry.label,
-    text: entry.label ? tr(entry.label) : paneTitle(entry.pane),
-  }));
-}
-
-/** What the search found, as buttons in place of the tabs (each names its tab under it), or that it found nothing. */
-export function searchResultsHTML(hits: SearchHit[]): string {
-  if (!hits.length) return `<p class="set-none" role="status">${esc(t("settings.searchNone"))}</p>`;
-  return hits
-    .map(
-      (hit, i) =>
-        `<button type="button" class="nav set-hit" data-hit="${i}"><span class="hit-t">${esc(hit.text)}</span>` +
-        (hit.label ? `<span class="hit-p">${esc(hit.target === "computer" ? t("card.pcTitle") : paneTitle(hit.pane))}</span>` : "") +
-        `</button>`,
-    )
-    .join("");
-}
-
-/** Legacy links select Models or the shared Tools pane. */
-export const canonicalPane = (id: SettingsPane): SettingsPane => id === "usage" ? "models" : id === "agent" ? "tools" : id === "data" ? "dictation" : id;
+/** Where a link to a tab of before lands: Models for usage, Tools for the agent, 聽寫 for data, 一般 for appearance and messaging. */
+export const canonicalPane = (id: SettingsPane): SettingsPane =>
+  id === "usage" ? "models" : id === "agent" ? "tools" : id === "data" ? "dictation" : id === "appearance" || id === "messaging" ? "general" : id;
 /** The name of a tab, in the language of the window. */
 export const paneTitle = (id: SettingsPane): string => PANES.find((p) => p.id === canonicalPane(id))!.title();
 export type ModelsTab = "models" | "usage";
@@ -558,9 +412,9 @@ const altgrNote = (v: SettingsView, bindings: readonly string[]): string[] =>
  * The pane title receives focus when settings open. Actions share its row.
  */
 export const headingHTML = (v: SettingsView, actions = ""): string => {
+  // A tab is its name alone, as Grok Bot's: no line under it (owner, 2026-11-07).
   const title = `<h1 id="set-title" tabindex="-1">${esc(paneTitle(v.pane))}</h1>`;
-  return (actions ? `<div class="set-head">${title}${actions}</div>` : title) +
-    `<p class="set-purpose">${esc(PANES.find(p => p.id === canonicalPane(v.pane))!.purpose(v.device))}</p>`;
+  return actions ? `<div class="set-head">${title}${actions}</div>` : title;
 };
 
 /** What the tabs that need the core say when it does not answer. */
@@ -568,16 +422,26 @@ const coreNote = (v: SettingsView): string => (v.brain === null ? `<div class="a
 
 // ---------- the tabs ----------
 
-/** 一般: the language of the window, and how Raphael looks and starts on this computer. */
+/**
+ * 一般, in Grok Bot's order of sections: who you are, how the window looks, what Raphael works with (the timezone of
+ * routines and the folder of what is delivered), where he can be reached (messaging), what he remembers, and the guide.
+ */
 function generalHTML(v: SettingsView): string {
   return (
     headingHTML(v) +
-    coreNote(v) + `<section class="sgroup"><h2>${esc(t("settings.ownerSection"))}</h2>` + ownerProfileHTML(v.brain) +
-    `<div class="slist">` +
-    row(t("zone.title"), t("zone.help"), sel([{value:v.brain?.routine_timezone ?? "",label:v.brain?.routine_timezone ? zoneLabel(v.brain.routine_timezone) : `${t("zone.auto")} · ${zoneLabel(detectedTimezone())}`}], v.brain?.routine_timezone ?? "", t("zone.title"), ' data-k="routine-timezone"' + (v.brain === null ? ' disabled' : ''))) +
-    row(t("output.folder"), t("output.help"), fieldHTML(t("output.empty"), v.brain?.owner_output_folder ?? "", { id: "owner-output-folder", label: t("output.folder"), w: 200, disabled: v.brain === null }) + btn(ico("folder") + esc(t("output.pick")), "sm", ` data-act="output-pick"${v.brain === null ? " disabled" : ""}`)) + `</div>` +
+    coreNote(v) + `<section class="sgroup set-account"><h2>${esc(t("settings.ownerSection"))}</h2>` + ownerProfileHTML(v.brain) + `</section>` +
+    `<div class="appearance-settings">` + section(t("skin.title"), [
+      row(t("settings.067"), "", sel(APPEARANCES, v.device.appearance, t("settings.067"), ' data-k="appearance"')),
+      row(t("settings.059"), "", sel(UI_LANGUAGES, v.device.ui_language, t("settings.059"), ' data-k="ui-language"')),
+    ]) + `</div>` +
+    section(t("agent.title"), [
+      row(t("zone.title"), t("zone.help"), sel([{value:v.brain?.routine_timezone ?? "",label:v.brain?.routine_timezone ? zoneLabel(v.brain.routine_timezone) : `${t("zone.auto")} · ${zoneLabel(detectedTimezone())}`}], v.brain?.routine_timezone ?? "", t("zone.title"), ' data-k="routine-timezone"' + (v.brain === null ? ' disabled' : ''))),
+      row(t("output.folder"), t("output.help"), fieldHTML(t("output.empty"), v.brain?.owner_output_folder ?? "", { id: "owner-output-folder", label: t("output.folder"), w: 200, disabled: v.brain === null }) + btn(ico("folder") + esc(t("output.pick")), "sm", ` data-act="output-pick"${v.brain === null ? " disabled" : ""}`)),
+    ]) +
+    // Messaging was a tab of its own until 2026-11-07: Telegram, Slack and Discord are a section of 一般 now.
+    `<section class="sgroup set-messaging" data-section="messaging"><h2>${esc(t("settings.paneMessaging"))}</h2>${messagingHTML(v.messaging)}</section>` +
     (v.memoryShared ? memoryHTML(v.memoryShared) : "") +
-    (v.memoryImportHTML ?? createMemoryImport(() => {}).html()) + `</section>` +
+    (v.memoryImportHTML ?? createMemoryImport(() => {}).html()) +
     // The emblem's size, its subtitles and starting with Windows are fixed (device-fixed.ts, owner 2026-11-06), and the
     // weather city is the member's to ask when it needs it: none of them is a setting any more.
     section(t("settings.groupStartup"), [
@@ -660,11 +524,6 @@ function connectionsTabHTML(v: SettingsView): string {
   return headingHTML(v, connectionsAddHTML()) + connectionsHTML(v.connections);
 }
 
-/** 訊息平台: Telegram, where Raphael can be reached from a phone (Slack and Discord to come here too). */
-function messagingTabHTML(v: SettingsView): string {
-  return headingHTML(v) + messagingHTML(v.messaging);
-}
-
 /** The dictation history's retention: the choices, with the one in force too if it is none of them. */
 export function retentionChoices(v: SettingsView): Choice[] {
   const current = retentionOf(v);
@@ -714,10 +573,7 @@ function aboutHTML(v: SettingsView): string {
 export function paneHTML(v: SettingsView): string {
   switch (v.pane) {
     case "appearance":
-      return headingHTML(v) + coreNote(v) + `<div class="appearance-settings">` + section("", [
-        row(t("settings.067"), "", sel(APPEARANCES, v.device.appearance, t("settings.067"), ' data-k="appearance"')),
-        row(t("settings.059"), "", sel(UI_LANGUAGES, v.device.ui_language, t("settings.059"), ' data-k="ui-language"')),
-      ]) + `</div>`;
+    case "messaging":
     case "general":
       return generalHTML(v);
     case "data":
@@ -730,8 +586,6 @@ export function paneHTML(v: SettingsView): string {
       return safetyHTML(v);
     case "connections":
       return connectionsTabHTML(v);
-    case "messaging":
-      return messagingTabHTML(v);
     case "usage":
     case "models":
       return modelsHTML(v);

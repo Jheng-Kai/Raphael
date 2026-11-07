@@ -16,8 +16,11 @@
 
 .data-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-3); }
 .data-heading h2 { margin: 0; }
-
-.set-purpose { margin: var(--sp-2) 0 var(--sp-5); color: var(--text-3); font-size: var(--fs-sm); }
+/* A tab's name alone heads it, as Grok Bot's; its first section keeps the gap of the others. */
+.modal-body > h1 + .sgroup, .modal-body > .set-head + .sgroup, .modal-body > h1 + div > .sgroup:first-child { margin-top: var(--sp-5); }
+/* The sections of 一般 that hold sections of their own (messaging): their cards follow one another under one name. */
+.set-messaging > .sgroup { margin-top: var(--sp-2); }
+.set-messaging > h2 + .sgroup { margin-top: 0; }
 
 /* Grok Bot's settings rows (2026-11-05): a choice is its value and a chevron on the row's right edge, with no box
    and no fill, not even under the pointer (owner, 2026-11-06); only its words brighten. The chevrons line up. */

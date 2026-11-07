@@ -30,6 +30,6 @@ export default [
   ]),
   scene("stable-settings-controls", "Existing Settings panes and Models tabs remain fixed", [
     ...settings("models"), stableClick('[data-models-tab="usage"]'), stableClick('[data-models-tab="models"]'),
-    stableClick('[data-pane="appearance"]'), stableClick('[data-pane="dictation"]'),
+    stableClick('.modal-scrim [data-pane="general"]'), stableClick('.modal-scrim [data-pane="dictation"]'),
   ]),
 ];

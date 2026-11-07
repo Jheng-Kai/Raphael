@@ -5,7 +5,6 @@ const api = vi.hoisted(() => ({ core: vi.fn() }));
 vi.mock("./api", () => api);
 
 import { type RulesView, type SafetyRule, createRules, emptyRulesView, ruleProblem, rulesHTML, verdictChoices } from "./safety-rules";
-import { searchSettings } from "./pages/settings-view";
 import type { UndoableAction } from "./undo";
 
 afterEach(() => setLocale("zh-TW"));
@@ -96,11 +95,6 @@ describe("the safety rules section", () => {
   test("while it loads, and when it cannot be read", () => {
     expect(rulesHTML(view({ status: "loading" }))).toContain('role="status"');
     expect(rulesHTML(view({ status: "failed" }))).toContain('role="alert"');
-  });
-
-  test("search finds the shared rules in Settings > Safety", () => {
-    const hits = searchSettings("安全規則");
-    expect(hits.some((h) => h.pane === "safety")).toBe(true);
   });
 });
 

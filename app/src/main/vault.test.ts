@@ -4,7 +4,6 @@ const api = vi.hoisted(() => ({ core: vi.fn(), membersList: vi.fn() }));
 vi.mock("./api", () => api);
 import { createVault, vaultHTML, type VaultEntry } from "./vault";
 import { closeMenu } from "./ui";
-import { searchSettings } from "./pages/settings-view";
 
 const entries: VaultEntry[] = [
   { id: "login", kind: "login", label: "<Travel>", hint: "Travel only", origin: "https://travel.example", members: "all" },
@@ -22,9 +21,8 @@ const setup = async () => {
 };
 const click = (root: ParentNode, selector: string) => root.querySelector<HTMLElement>(selector)!.click();
 
-it("finds Vault under Safety and escapes labels and hints while preserving filter counts", async () => {
+it("escapes labels and hints while preserving filter counts", async () => {
   const { root } = await setup();
-  expect(searchSettings("保管箱")[0].pane).toBe("safety");
   expect(root.innerHTML).toContain("&lt;Travel&gt;");
   expect(root.querySelectorAll(".vault-row")).toHaveLength(3);
   expect(root.querySelector('.tabs.plain[role="tablist"]')).not.toBeNull();

@@ -1792,9 +1792,12 @@ export function checkRendered(name, context = {}) {
     const card = document.querySelector('.appearance-settings .slist');
     require(visible(card) && card.getBoundingClientRect().width <= 640, "appearance keeps a narrow reading measure");
     require(card.querySelectorAll('.row').length === 2 && card.querySelectorAll('.sel').length === 2, "theme and language share the row/dropdown component");
+    // A section of 一般 since 2026-11-07, on Grok Bot's rounded card: the card holds the inner padding of its rows.
+    const edge=card.getBoundingClientRect();
+    require(parseFloat(getComputedStyle(card).borderTopLeftRadius)>=12&&getComputedStyle(card).backgroundColor!=='rgba(0, 0, 0, 0)',"appearance is a rounded card");
     for(const row of card.querySelectorAll('.row')){
-      const box=row.getBoundingClientRect(), label=row.querySelector('.lbl').getBoundingClientRect(), picker=row.querySelector('.sel').getBoundingClientRect();
-      require(label.left-box.left>=12&&box.right-picker.right>=12,"settings rows keep shared inner padding");
+      const label=row.querySelector('.lbl').getBoundingClientRect(), picker=row.querySelector('.sel').getBoundingClientRect();
+      require(label.left-edge.left>=12&&edge.right-picker.right>=4,"settings rows keep the card's inner padding");
     }
     require(!document.querySelector('.skin-preview, [data-skin-choice]'), "preview gallery is retired");
     const choices=[...document.querySelectorAll('.menu [data-value]')];
@@ -2279,10 +2282,8 @@ export function checkRendered(name, context = {}) {
     else require(panel.querySelector('input')?.value === 'studio-mini' && visible(panel.querySelector('[role="alert"]')), "remote failure stays in its host popover");
     return {check:name};
   }
-  if (["settings-computer-result", "settings-computer-open", "settings-owner", "settings-tools", "settings-raphael-memory", "settings-raphael-voice", "settings-draft-grouped", "settings-speech-service"].includes(name)) {
-    if (name === 'settings-computer-result') require(document.querySelectorAll('.set-hit').length === 1, "computer location has one search result");
-    else if (name === 'settings-computer-open') require(!!document.querySelector('.modal-scrim[hidden]') && visible(document.querySelector('.mb-det [data-computer-location]')), "search closes Settings and opens the computer panel");
-    else if (name === 'settings-owner') require(visible(document.querySelector('[data-owner="owner_name"]')) && !document.querySelector('#agent-city') && !!document.querySelector('[data-mem-space="shared"]'), "the owner's profile keeps shared memory, and no weather city is asked for (owner, 2026-11-06)");
+  if (["settings-owner", "settings-tools", "settings-raphael-memory", "settings-raphael-voice", "settings-draft-grouped", "settings-speech-service"].includes(name)) {
+    if (name === 'settings-owner') require(visible(document.querySelector('[data-owner="owner_name"]')) && !document.querySelector('#agent-city') && !!document.querySelector('[data-mem-space="shared"]'), "the owner's profile keeps shared memory, and no weather city is asked for (owner, 2026-11-06)");
     else if (name === 'settings-tools') require(document.querySelector('[data-pane="tools"]')?.getAttribute('aria-current') === 'page' && !document.querySelector('[data-pane="agent"]'), "legacy agent pane resolves to Tools");
     else if (name === 'settings-raphael-memory') require(visible(document.querySelector('.mb-det [data-mem-space="own"]')) && document.querySelector('.mb-det [data-mem-space="own"]').textContent.includes('拉斐爾'), "Raphael memory belongs to the member panel");
     else if (name === 'settings-raphael-voice') { require(visible(document.querySelector('.mb-det #svc-voice-id')), "Raphael voice uses the member resource controls"); require(window.__look.calls.some(call => call.method === 'tts.preview') && window.__look.calls.some(call => call.method === 'settings.set' && call.params.key === 'tts_fish_voice'), 'preview retains its existing settings and RPC boundaries'); }
@@ -2666,7 +2667,7 @@ export function checkRendered(name, context = {}) {
     for (const selector of labels) require(!host.querySelector(selector)?.closest('.row')?.querySelector('.d'), "self-explanatory settings have no helper paragraph");
     require(!host.querySelector('.models-purpose-note, .run-retained, [data-price="note"]'), "skin, model and usage helpers are absent");
     if (pane === 'data') require(!host.querySelector('.foot'), "data has no helper footer");
-    if (pane === 'messaging') require(!host.querySelector('.msg > .foot'), "Telegram keeps its controls without a setup paragraph");
+    if (host.querySelector('.set-messaging')) require(!host.querySelector('.msg > .foot'), "Telegram keeps its controls without a setup paragraph");
     return { check: name, pane };
   }
   if (name === "models-responsive") {
@@ -4740,6 +4741,12 @@ export function checkRendered(name, context = {}) {
     require(getComputedStyle(modal).borderTopLeftRadius === "12px", "settings uses the dialog radius rather than a pill");
     const box = close.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
     require(close === hit || close.contains(hit), "rounded corners do not clip the close control");
+    // Grok Bot's settings (owner, 2026-11-07): six flat tabs, no group names, no search and no line under a tab's name.
+    const scrim = modal.closest('.modal-scrim');
+    if (!scrim.hasAttribute('data-standalone')) {
+      require(scrim.querySelectorAll('.modal-nav [data-pane]').length === 6 && !scrim.querySelector('.nav-group, #set-search'), "six tabs sit flat, with no group names and no search");
+      require(!scrim.querySelector('.set-purpose'), "a tab is its name alone, with no line under it");
+    }
     return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius };
   }
   if (name === "sidebar-hidden-folder") {

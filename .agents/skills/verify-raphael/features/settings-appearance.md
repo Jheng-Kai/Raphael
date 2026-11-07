@@ -1,5 +1,22 @@
 # Settings and appearance
 
+## Grok Bot's six tabs (owner, 2026-11-07, R-UI-115)
+
+Settings has six flat tabs, as Grok Bot's: 一般, 聽寫與快捷鍵, 工具, 安全, 模型與用量 and 關於. There are no
+group names, no search box and no line under a tab's name. Each tab is its name, then sections: a small name
+over one rounded card (`--panel`) of rows with no lines between them, the name left and the control right.
+一般 holds, in order: 關於你 (the owner's picture, name and about me), 外觀 (theme and language), 拉斐爾 (the
+routines' time zone and the output folder), 訊息平台 (Telegram, Slack, Discord), the shared memory and its
+import, and 啟動 (the guide). Links of before land on their section: `appearance` and `messaging` open 一般
+(messaging scrolled to its section). 連結應用程式 stays a dialog of its own from the sidebar (R-UI-111).
+This supersedes the About-you grouping and the search notes below.
+
+```powershell
+npm run look -- profile appearance messaging dictation tools safety models about settings-owner settings-memory appearance-menu work-messaging-setup --theme both --width 1120,720,1920x1080
+```
+
+`settings-shell` refuses group names, the search and a line under a tab's name on every settings scene.
+
 ## Signed updates and owner memory import (2026-11-05)
 
 General > About you > Import memory shows a copyable handover prompt, an answer field
@@ -70,7 +87,7 @@ Computer search opens that member's panel. Host checks and copyable repair
 commands use the location popover, never the retired settings pane.
 
 ```powershell
-npm run look -- settings-raphael-memory settings-raphael-voice desktop-host-local desktop-host-error settings-speech-service settings-computer-search settings-owner --theme both --width 1120,720,1920x1080
+npm run look -- settings-raphael-memory settings-raphael-voice desktop-host-local desktop-host-error settings-speech-service settings-owner --theme both --width 1120,720,1920x1080
 ```
 
 ## Owner output folder in General (2026-11-05)
@@ -302,7 +319,7 @@ profile, settings-owner, settings-memory, appearance, dictation, tools, safety,
 models, connections, messaging, about, settings-speech-service,
 local-command-settings, local-command-setting-always, local-command-setting-never,
 menu-settings-redraw, missing-vision, missing-search, missing-search-repair,
-missing-voice, missing-voice-repair, settings-computer-search,
+missing-voice, missing-voice-repair,
 speaker-draft-chief, speaker-draft-member, speaker-draft-profile,
 settings-raphael-memory, settings-raphael-voice, desktop-host-local,
 desktop-host-remote, desktop-host-invalid, desktop-host-error, desktop-install,
