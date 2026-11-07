@@ -30,25 +30,18 @@ beforeEach(()=>{
   api.keepAwakeGet.mockResolvedValue(false);api.keepAwakeSet.mockResolvedValue(true);api.roomsList.mockResolvedValue({rooms:[]});api.settingsGet.mockResolvedValue({settings:{agent_model:"openai/shared-model"}});
 });
 
-test.each([0, 1, 2])("routine history and test results use relative days and minutes (%s days ago)", async days => {
+test("the routine editor is wide and short: title with its switch and the instructions beside when it runs, no test run, history or who", async () => {
   setLocale("zh-TW");
-  const now = new Date(2026, 10, 5, 12).getTime();
-  const started = new Date(2026, 10, 5 - days, 8, 0, 37).getTime();
-  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
-  const label = ["今天", "昨天", "11 月 3 日"][days];
-  const routine = { ...plan, id: 1001 + days };
-  api.routineRuns.mockResolvedValue({runs:[{id:501,routine_id:routine.id,started,finished:started+1000,status:"done",summary:"Completed",cost:0,turn_id:12}]});
-  api.routinesRun.mockResolvedValue({run_id:501});
-  try {
-    const dialog = openRoutineDialog({members, routine});
-    await flush();
-    expect(document.querySelector('[data-run-status="done"]')?.textContent).toBe(`成功 · ${label} 08:00Completed`);
-    click('[data-dlg="test"]');
-    await flush();
-    expect(document.querySelector('.au-test-status')?.textContent).toBe(`成功 · ${label} 08:00 · Completed`);
-    expect(document.querySelector('.au-run-section')?.textContent).not.toContain("08:00:37");
-    dialog.close();
-  } finally { clock.mockRestore(); }
+  const dialog = openRoutineDialog({members, routine: plan});
+  await flush();
+  const grid = document.querySelector(".au-routine-grid")!;
+  expect(grid.querySelectorAll(":scope > .au-col")).toHaveLength(2);
+  expect(grid.querySelector(".au-col-what .au-title-row #au-title")).not.toBeNull();
+  expect(grid.querySelector('.au-col-what .au-title-row [data-dlg="enabled"]')).not.toBeNull();
+  expect(grid.querySelector(".au-col-what #au-prompt")).not.toBeNull();
+  expect(document.querySelector('[data-dlg="test"], .au-run-section, [data-dlg="member"]')).toBeNull();
+  expect(api.routineRuns).not.toHaveBeenCalled();
+  dialog.close();
 });
 
 test("monthly and minute choices save through the existing routine dialog", async () => {
@@ -311,7 +304,8 @@ test("routine editor saves the chosen weekdays, owner, date and end count",async
 
 test("routine editing preserves an until date and never changes the member",async()=>{
   openRoutineDialog({members,routine:{...plan,schedule:{kind:"weekdays",time:"08:30",start_date:"2030-01-01",until:"2030-12-31"}}});
-  expect(document.querySelector<HTMLButtonElement>('[data-dlg="member"]')!.disabled).toBe(true);
+  // A routine is always its member's: no one else can be picked.
+  expect(document.querySelector('[data-dlg="member"]')).toBeNull();
   click('[data-dlg="save"]');await flush();
   expect(api.routinesUpdate).toHaveBeenCalledWith(1,expect.objectContaining({schedule:{kind:"weekdays",time:"08:30",start_date:"2030-01-01",until:"2030-12-31",timezone:Intl.DateTimeFormat().resolvedOptions().timeZone}}));
 });
@@ -419,7 +413,7 @@ test("calendar accepts member drops with date and hour but ignores unrelated dra
  const slot=page.el.querySelector<HTMLElement>('[data-slot][data-hour="9"]')!;
  const drop=(value:string):void=>{const event=new Event("drop",{bubbles:true,cancelable:true});Object.defineProperty(event,"dataTransfer",{value:{getData:()=>value}});slot.dispatchEvent(event);};
  drop("");expect(document.querySelector('.au-routine-dialog')).toBeNull();drop("2");
- expect(document.querySelector('[data-dlg="member"][aria-pressed="true"]')!.textContent).toContain("Bob");expect(document.querySelector('[data-dlg="date"]')!.textContent).toBe(slot.dataset.slot);expect(document.querySelector<HTMLInputElement>('#au-time')!.value).toBe("09:00");page.hide();
+ expect(document.querySelector('.au-routine-dialog')).not.toBeNull();expect(document.querySelector('[data-dlg="member"]')).toBeNull();expect(document.querySelector('[data-dlg="date"]')!.textContent).toBe(slot.dataset.slot);expect(document.querySelector<HTMLInputElement>('#au-time')!.value).toBe("09:00");page.hide();
 });
 
 test("future calendar windows account for occurrences before the visible range",()=>{

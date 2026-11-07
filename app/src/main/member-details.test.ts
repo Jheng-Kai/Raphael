@@ -670,18 +670,12 @@ describe("primary changes do not add face badges", () => {
 });
 
 
-test("the details routine editor uses the same relative history timestamp", async () => {
-  const now = new Date(2026, 10, 5, 12).getTime();
-  const started = new Date(2026, 10, 4, 8, 0, 37).getTime();
-  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
-  api.routineRuns.mockResolvedValue({ runs: [{ id: 1, routine_id: ROUTINE.id, started, finished: started + 1000, status: "done", summary: "Completed", cost: 0, turn_id: 1 }] });
-  try {
-    const panel = mount(false);
-    await flush();
-    panel.el.querySelector<HTMLElement>('[data-det="routine-open"]')!.click();
-    await flush();
-    expect(document.querySelector('[data-run-status="done"]')?.textContent).toBe("成功 · 昨天 08:00Completed");
-    expect(document.querySelector('.au-run-history')?.textContent).not.toContain("08:00:37");
-    document.querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();
-  } finally { clock.mockRestore(); }
+test("a routine row opens the wide editor with its instructions and no history", async () => {
+  const panel = mount(false);
+  await flush();
+  panel.el.querySelector<HTMLElement>('[data-det="routine-open"]')!.click();
+  await flush();
+  expect(document.querySelector<HTMLTextAreaElement>(".au-routine-grid #au-prompt")!.value).toBe(ROUTINE.prompt);
+  expect(document.querySelector(".au-run-history, .au-run-section")).toBeNull();
+  document.querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();
 });
