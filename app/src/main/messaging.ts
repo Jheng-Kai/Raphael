@@ -143,10 +143,11 @@ export function messagingHTML(v: MessagingView): string {
   const badge = s.pending.length ? `<span class="msg-badge num" title="${esc(t("msg.tg.pairing"))}">${s.pending.length}</span>` : "";
   const head = row(
     // The mark says the platform; the name is the bot (the panel is narrow since the bots moved there, 2026-11-07).
-    headName(bot, dotHTML(dot, label) + badge, kind),
+    // The whole name is the button that opens the details, with no arrow, and the switch stands alone on the right,
+    // in line with the 「設定」 buttons under it (owner, 2026-11-07).
+    `<button type="button" class="btn msg-open" data-msg="expand" aria-expanded="${open}">${headName(bot, dotHTML(dot, label) + badge, kind)}</button>`,
     "",
-    tg(s.enabled, words("msg.tg.switch", kind), ` data-msg="enable"${v.busy ? " disabled" : ""}`) +
-      iconButton("down", t("msg.tg.details"), ` data-msg="expand" aria-expanded="${open}"`, "msg-more"),
+    tg(s.enabled, words("msg.tg.switch", kind), ` data-msg="enable"${v.busy ? " disabled" : ""}`),
     { cls: "msg-head" },
   );
   // 中斷連線 is a row of the card like any other setting, never a button left under it.
@@ -167,11 +168,15 @@ export function messagingHTML(v: MessagingView): string {
  * the platform and 「設定」, which opens the member's conversation where it sets the bot up with the owner (chat-ask.ts).
  * No token field is drawn on the panel.
  */
-export function chatChannelsHTML(views: readonly (readonly [MessagingKind, MessagingView])[]): string {
+/** A panel button the member is still working on: a spinner, and no second press (chat-ask.ts). */
+export const busySetupButton = (label: string, attrs: string, busy: boolean): string =>
+  btn((busy ? `<span class="spin" aria-hidden="true"></span>` : "") + esc(label), "sm", attrs + (busy ? ' disabled aria-busy="true"' : ""));
+
+export function chatChannelsHTML(views: readonly (readonly [MessagingKind, MessagingView])[], busy: (intent: `setup-${MessagingKind}`) => boolean = () => false): string {
   const connected = ([, v]: readonly [MessagingKind, MessagingView]): boolean => typeof v.status === "object" && v.status.connected;
   const setUp = views.filter(connected).map(([kind, v]) => messagingHTML({ ...v, kind })).join("");
   const rows = views.filter((entry) => !connected(entry)).map(([kind, v]) =>
-    row(headName(title(kind), "", kind), "", v.status === "loading" ? `<span class="spin" role="status" aria-label="${esc(t("conn.loading"))}"></span>` : btn(esc(t("members.setUp")), "sm", ` data-det="setup" data-intent="setup-${kind}" data-k="det-setup:${kind}" aria-label="${esc(`${t("members.setUp")} ${title(kind)}`)}"`), { cls: "msg-head", attrs: ` data-msg-kind="${kind}"` }));
+    row(headName(title(kind), "", kind), "", v.status === "loading" ? `<span class="spin" role="status" aria-label="${esc(t("conn.loading"))}"></span>` : busySetupButton(t("members.setUp"), ` data-det="setup" data-intent="setup-${kind}" data-k="det-setup:${kind}" aria-label="${esc(`${t("members.setUp")} ${title(kind)}`)}"`, busy(`setup-${kind}`)), { cls: "msg-head", attrs: ` data-msg-kind="${kind}"` }));
   return setUp + (rows.length ? `<section class="sgroup msg msg-chat-setup"><div class="slist">${rows.join("")}</div></section>` : "");
 }
 

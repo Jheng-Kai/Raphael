@@ -28,13 +28,13 @@ import {
   sourceLabel,
 } from "./members";
 import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
-import { btn, esc, ico, iconButton, openMenu, patchHTML, sel, tg, toaster } from "./ui";
+import { esc, ico, iconButton, openMenu, patchHTML, sel, tg, toaster } from "./ui";
 import { eventRead } from './event-read';
 import { panelLibraryHTML, readPanelWork, type PanelWork } from './member-panel-work';
 import { tabs } from './ui';
 import { describeError } from "./format";
-import { askInChat } from "./chat-ask";
-import { type Messaging, type MessagingKind, chatChannelsHTML, createMemberChannel, createRaphaelChannel } from "./messaging";
+import { askInChat, askPending, onAskPending } from "./chat-ask";
+import { type Messaging, type MessagingKind, busySetupButton, chatChannelsHTML, createMemberChannel, createRaphaelChannel } from "./messaging";
 
 export type DetailsTab = "details" | "library" | "computer" | "settings" | "memory" | "skills" | "commands" | "voice";
 
@@ -68,6 +68,8 @@ export interface DetailsPanel {
   refreshRoutines(): void;
   refreshMemory(memberId: number, space?: "own" | "shared"): void;
   refreshResources(): void;
+  /** The member stopped working: its bots may have been set up in the conversation, so their rows are read again. */
+  refreshChannels(): void;
   /** Work moved: a task changed state, or a turn of the selected member changed (only files can follow from that). */
   refreshWork(cause: 'task' | 'turn'): void;
 }
@@ -241,9 +243,11 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   const channelViews = (memberId: number): (readonly [MessagingKind, ReturnType<Messaging["view"]>])[] => KINDS.map((kind) => [kind, channelsOf(memberId)[kind].view()] as const);
   function suggestHTML(): string {
     const id = host.member().id;
-    return `<div class="mb-dh"><span>${esc(t("settings.paneMessaging"))}</span></div><div class="member-msg">${chatChannelsHTML(channelViews(id))}</div>` +
-      `<div class="mb-panel-row mb-panel-setup"><span class="mb-panel-row-copy"><span>${esc(t("members.setupWhat"))}</span></span>${btn(esc(t("members.setUp")), "sm", ' data-det="setup" data-intent="settings" data-k="det-setup:settings"')}</div>`;
+    return `<div class="mb-dh"><span>${esc(t("settings.paneMessaging"))}</span></div><div class="member-msg">${chatChannelsHTML(channelViews(id), (intent) => askPending(id, intent))}</div>` +
+      `<div class="mb-panel-row mb-panel-setup"><span class="mb-panel-row-copy"><span>${esc(t("members.setupWhat"))}</span></span>${busySetupButton(t("members.setUp"), ' data-det="setup" data-intent="settings" data-k="det-setup:settings"', askPending(id, "settings"))}</div>`;
   }
+  // A press the member is working on draws its button busy; the end of it frees the button (chat-ask.ts).
+  onAskPending(() => { if (!el.hidden) draw(); });
 
   /**
    * A long field, closed to its name and its first line (or 「未填寫」) behind a real button; open,
@@ -293,7 +297,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     const face = faceHTML(member, 64).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
     const signature = JSON.stringify([member, face, host.list()?.groups, counts, routines, work, workFailed, tab, [...openFields], getLocale(), !!host.openConversation, host.conversationOf?.(member.id), tab === "memory" ? memories.map(list => list.view()) : null,
       // The bot cards redraw on their own state.
-      tab === "details" ? channelViews(member.id).map(([kind, view]) => [kind, { ...view, token: "" }]) : null]);
+      tab === "details" ? channelViews(member.id).map(([kind, view]) => [kind, { ...view, token: "" }]) : null,
+      (["setup-telegram", "setup-slack", "setup-discord", "settings", "share-template"] as const).map((intent) => askPending(member.id, intent))]);
     if (drawn === signature) return;
     drawn = signature;
     el.dataset.detailsTab = tab;
@@ -303,6 +308,12 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     backButton.title = t('members.panelBack'); backButton.setAttribute('aria-label', backButton.title);
     const share = el.querySelector<HTMLElement>('[data-det="share"]')!;
     share.title = t("template.export"); share.setAttribute("aria-label", share.title);
+    const sharing = askPending(member.id, "share-template");
+    if ((share.getAttribute("aria-busy") === "true") !== sharing) {
+      share.innerHTML = sharing ? `<span class="spin" aria-hidden="true"></span>` : ico("share");
+      share.toggleAttribute("disabled", sharing);
+      if (sharing) share.setAttribute("aria-busy", "true"); else share.removeAttribute("aria-busy");
+    }
     // Raphael is the app's own: he is not shared as a template; the old settings page's back arrow keeps its place.
     share.hidden = member.id === RAPHAEL_ID || !['details', 'library', 'computer'].includes(tab);
     el.setAttribute("aria-label", t("members.panel"));
@@ -574,6 +585,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     overview() { select('details'); },
     select,
     refreshRoutines() { void loadRoutines(); },
+    refreshChannels() { if (!el.hidden && tab === "details") for (const channel of Object.values(channelsOf(host.member().id))) void channel.load(); },
     refreshResources() { void loadCounts(true); void resources?.refresh(true); if (tab === 'details' || tab === 'library') void loadWork(true); },
     refreshWork(cause) { if (!el.hidden && (tab === 'library' || (cause === 'task' && tab === 'details'))) scheduleWork(); },
     refreshMemory(memberId, space) {

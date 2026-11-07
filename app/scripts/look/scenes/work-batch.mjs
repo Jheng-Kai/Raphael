@@ -10,7 +10,7 @@ const login = [member(1), wait('[data-secret-card="card-login"]')];
 const raphael = [member(0), { action: "open-details" }];
 
 export default [
-  scene("work-messaging-setup", "Raphael's panel: a work chat not set up is one row whose 設定 asks him in the conversation, with no token field (owner, 2026-11-07)", [...raphael, wait('.mb-panel-suggest [data-intent="setup-slack"]'), click('.mb-panel-suggest [data-intent="setup-slack"]'), check("work-messaging")], { workMessaging: { slack: disconnected, discord: disconnected } }),
+  scene("work-messaging-setup", "Raphael's panel: a work chat not set up is one row whose 設定 asks him in the conversation, with no token field (owner, 2026-11-07)", [...raphael, wait('.mb-panel-suggest [data-intent="setup-slack"]'), click('.mb-panel-suggest [data-intent="setup-slack"]'), click('.mb-panel-suggest [data-intent="setup-slack"]'), check("work-messaging")], { workMessaging: { slack: disconnected, discord: disconnected } }),
   scene("work-messaging-pairing", "Slack and Discord have independent pairing codes in Raphael's panel and no remote approval", [...raphael, scroll('.mb-panel-suggest [data-msg-kind="discord"]'), wait('[data-msg-kind="discord"] [data-code="DC1234"]'), check("work-pairing")], { workMessaging: channels }),
   scene("computer-file-changes", "The existing computer panel exposes a readable before/after file diff", [...review, check("file-changes")], desktop),
   scene("computer-file-partial", "Uncovered files are named without claiming they can be restored", [...review, check("file-partial")], { ...desktop, checkpointPartial: true }),

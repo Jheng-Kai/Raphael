@@ -1298,7 +1298,11 @@ export function checkRendered(name, context = {}) {
       require(!document.querySelector('.mb-det input[type=password]'), 'no token field in the panel');
       for (const kind of ['slack', 'discord']) require(visible(document.querySelector(`.mb-panel-suggest [data-intent=setup-${kind}]`)), `${kind} not set up is one row with 設定`);
       const asks = window.__look.calls.filter(call => call.command === 'agent_ask_text');
-      require(asks.length === 1 && asks[0].intent === 'setup-slack' && asks[0].text.includes('Slack') && !asks[0].memberId, "設定 asks Raphael in his conversation with the setup intent beside the words");
+      require(asks.length === 1 && asks[0].intent === 'setup-slack' && asks[0].text.includes('Slack') && !asks[0].memberId, "設定 asks Raphael in his conversation with the setup intent beside the words, once for two presses");
+      // While he works on it the button is busy: a spinner and no second press (owner, 2026-11-07).
+      const busy = document.querySelector('.mb-panel-suggest [data-intent=setup-slack]');
+      require(busy.disabled && busy.getAttribute('aria-busy') === 'true' && visible(busy.querySelector('.spin')), 'the pressed 設定 is busy with a spinner');
+      require(!document.querySelector('.mb-panel-suggest [data-intent=setup-discord]').disabled, 'the other platforms stay pressable');
     }
     if (name === 'work-pairing') {
       require(document.querySelector('[data-msg-kind=slack] [data-code=SL1234]') && document.querySelector('[data-msg-kind=discord] [data-code=DC1234]'), 'pairing codes stay with their own platform');

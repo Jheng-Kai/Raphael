@@ -14,6 +14,7 @@
 // leaves Raphael alone in the column: the page works as it did before.
 
 import * as api from "./api";
+import { settleAsks } from "./chat-ask";
 import { shortcut, openCommandPalette, type Command } from "./shortcuts";
 import { eventRead } from './event-read';
 import { describeError } from "./format";
@@ -556,6 +557,9 @@ export function createMembers(host: MembersHost): MembersShell {
         details.refreshMemory(event.member_id, event.space);
       } else if (event.type === "MemberActivity") {
         setSlimeState(event.member_id, event.state, event.label);
+        // A press of a panel button ends when the member stops; the bot it set up shows at once (owner, 2026-11-07).
+        settleAsks(event.member_id, event.state);
+        if (event.member_id === current && open && ["idle", "done", "error", "waiting", "blocked"].includes(event.state)) details.refreshChannels();
       } else if (event.type === 'AgentTurn' && (event.member_id ?? 0) === current && open) {
         // Skills, commands and memory change through their own events; a streaming turn can only add files.
         details.refreshWork('turn');
