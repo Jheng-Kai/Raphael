@@ -30,7 +30,7 @@ describe("rendered look checks", () => {
 
   it("rejects recipe frontmatter, raw service ids and an unfolded default skill", () => {
     const browser = new Window();
-    browser.document.body.innerHTML = '<div class="template-preview"><div class="template-skill"><div class="row"><span class="t">Check sources</span><span class="val">Check before publishing</span></div><button data-card-disclosure aria-expanded="false"></button><div class="card-detail" hidden>Keep this body.</div></div><div data-template-connection="gmail"><b class="card-title">Gmail</b></div></div>';
+    browser.document.body.innerHTML = '<div class="template-preview"><div class="tpl-row" data-tpl-skill><div class="tpl-row-t"><b>Check sources</b><span>Check before publishing</span><div class="card-disclosure"><button data-card-disclosure aria-expanded="false"></button><div class="card-detail" hidden>Keep this body.</div></div></div></div><div data-template-connection="gmail"><b class="card-title">Gmail</b></div></div>';
     vi.stubGlobal('document',browser.document);
     try {
       expect(() => checkRendered('template-content')).not.toThrow();
@@ -86,21 +86,30 @@ describe("rendered look checks", () => {
       textInset = 50; expect(() => checkRendered("host-settings-layout")).toThrow("left-aligned");
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });
-  it("rejects a low-contrast Docker download on the desktop wallpaper", () => {
+  it("rejects words, a face or a recovery button drawn over an absent computer's wallpaper", () => {
+    // Owner ruling 2026-11-07: an offline computer shows its wallpaper alone and the whole screen is the one press that starts it.
     const browser = new Window();
-    browser.document.body.innerHTML = '<section class="desktop-panel"><div class="desktop-message">Docker Desktop</div><button data-act="docker-download">Download Docker Desktop</button></section>';
+    const markup = extra => `<header class="desktop-location-header"><button data-computer-location>This computer</button></header><section class="desktop-panel"><div class="desktop-screen"><img class="desktop-wallpaper"><div class="desktop-placeholder">${extra}</div><button data-desktop="enlarge"><span class="desktop-open-pill">Open</span></button></div></section>`;
     browser.__look = { calls: [] };
-    for (const element of browser.document.querySelectorAll("*")) { element.checkVisibility = () => true; element.getBoundingClientRect = () => ({ width: 120, height: 32 }); }
-    let backgroundColor = "rgb(255, 255, 255)";
-    vi.stubGlobal("window", browser); vi.stubGlobal("document", browser.document);
-    vi.stubGlobal("getComputedStyle", () => ({ color: "rgb(240, 240, 240)", backgroundColor }));
+    const run = extra => {
+      browser.document.body.innerHTML = markup(extra);
+      for (const element of browser.document.querySelectorAll("*")) {
+        element.checkVisibility = () => !element.matches(".desktop-open-pill");
+        element.getBoundingClientRect = () => ({ width: 120, height: 32 });
+      }
+      return () => checkRendered("desktop-absent");
+    };
+    vi.stubGlobal("window", browser); vi.stubGlobal("document", browser.document); vi.stubGlobal("NodeFilter", browser.NodeFilter);
+    vi.stubGlobal("getComputedStyle", () => ({ color: "rgb(240, 240, 240)", backgroundColor: "rgb(23, 23, 23)" }));
     try {
-      expect(() => checkRendered("desktop-absent")).toThrow("readable contrast");
-      backgroundColor = "rgb(23, 23, 23)";
-      expect(() => checkRendered("desktop-absent")).not.toThrow();
+      expect(run("")).not.toThrow();
+      expect(run('<div class="desktop-message">Docker Desktop is missing</div>')).toThrow("carries no words");
+      expect(run('<div class="desktop-boot-face"></div>')).toThrow("draws no face");
+      expect(run('<button data-act="docker-download"></button>')).toThrow("draws no face, progress, sentence or recovery button");
+      expect(run('<button data-desktop="retry">Retry</button>')).toThrow("carries no words");
+      expect(run('<button class="other"></button>')).toThrow("no button but its own cover");
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
-  });
-  it("accepts a typed host name as data while still rejecting untranslated controls", () => {
+  });  it("accepts a typed host name as data while still rejecting untranslated controls", () => {
     const window = new Window();
     window.document.body.innerHTML = '<button data-computer-location><span>studio-mini</span></button><button>Save</button>';
     for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 120, bottom: 32, width: 120, height: 32 });

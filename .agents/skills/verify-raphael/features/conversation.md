@@ -1844,7 +1844,7 @@ Allow first, then Deny; `messaging.pairing.answer`) and a template card (what it
 and View contents on the core's snapshot; a key inside stops saving and publishing). chat-cards.ts draws the last two.
 
 ```powershell
-npm run look -- chat-setup-cards chat-pairing-allowed --theme both --width 1120,720,1920x1080
+npm run look -- chat-setup-cards chat-pairing-allowed chat-pairing-bottom --theme both --width 1120,720,1920x1080
 ```
 
 ## Complete replies and envelope boundaries (2026-11-07)

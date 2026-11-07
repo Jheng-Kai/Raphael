@@ -179,7 +179,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     drawn = signature; drawnInline = inline;
     lifecycle.draw();
     paint(panel, "hidden", !visible || !state);
-    paint(panel.querySelector<HTMLElement>('.desktop-caption')!, 'textContent', t("desktop.screenOf", { p0: options.name() }));
+    // The computer carries no words, face or buttons until its screen is up (owner, 2026-11-07): no caption under it.
+    paint(panel.querySelector<HTMLElement>('.desktop-caption')!, 'hidden', true);
     options.status?.(state?.state === "running");
     paint(frame, "title", t("desktop.open"));
     const asleep = isAsleep(state);
@@ -236,8 +237,9 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(panel.querySelector<HTMLElement>('[data-desktop="menu"]')!, "hidden", watching || filesOnly); paint(action, "disabled", changing);
     // A sleeping computer, as Grok Bot's: its face and one short line, and the whole screen wakes it (owner, 2026-11-07).
     paint(retry, "textContent", t(state?.error === 'docker_stopped' ? 'desktop.startDocker' : state?.state === 'missing' && state.image === false ? 'desktop.prepareImage' : "desktop.retry"));
-    paint(retry, "hidden", (!!running && !stalled) || !!preparing || asleep || state?.state === "absent" || state?.error === 'remote_unavailable'); paint(retry, "disabled", opening);
-    paint(enlarge, 'hidden', expanded || !!preparing || !running && !asleep);
+    // One press on the screen starts it, whatever stopped it (the cover's click below); no button is drawn on it.
+    paint(retry, "hidden", true); paint(retry, "disabled", opening);
+    paint(enlarge, 'hidden', expanded || !!preparing);
     paint(enlarge, 'disabled', asleep && opening);
     paint(revoke, "textContent", t("desktop.revoke")); paint(revoke, "hidden", !state?.granted || owner || !!preparing);
     const source = ownWallpaper ?? `/wallpapers/${period}.svg`;
@@ -250,16 +252,10 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(last, "hidden", !picture);
     if (picture && last.src !== picture) paint(last, "src", picture);
     paint(placeholder, "hidden", (!!running && connected) || (!!picture && !stalled));
-    const character = document.createElement('template'); character.innerHTML = face;
-    for (const node of character.content.querySelectorAll('[data-presence-member], [data-tooltip]')) { node.removeAttribute('data-presence-member'); node.removeAttribute('data-tooltip'); }
-    for (const node of character.content.querySelectorAll('.slime-surface, svg.slime')) { node.setAttribute('data-state', state?.state === 'stopped' || state?.state === 'missing' ? 'sleeping' : preparing ? 'working' : 'idle'); node.removeAttribute('data-slime-member'); }
-    // While a stream is on its way the screen says so, and says when it cannot be reached; never that a member works there.
-    const reaching = running && !connected && (!!session || opening || stalled);
-    const sentence = reaching ? t(stalled ? "desktop.streamStalled" : "desktop.connecting") : computerStateText(state);
-    patchHTML(stateContent, preparing ? preparationHTML(state!, face) : `<div class="desktop-boot-face" aria-hidden="true">${character.innerHTML}</div><span class="desktop-message">${esc(sentence)}</span>`);
-    patchHTML(stateRecovery, state?.error === 'docker_stopped' || state?.error === 'remote_unavailable'
-      ? btn(esc(t('desktop.useRemote')), 'sm', ' data-desktop-location')
-      : state?.state === 'absent' && state.error !== 'disabled' && !location.isRemote() ? btn(esc(t('desktop.download')), 'sm', ' data-act="docker-download"') : '');
+    // Nothing is written or drawn over a computer that is not showing its screen, asleep, starting or stopped (owner,
+    // 2026-11-07): the wallpaper alone, and a press anywhere starts it. Its state stays in the panel's data and labels.
+    patchHTML(stateContent, '');
+    patchHTML(stateRecovery, '');
     if (!running && frame.hasAttribute('src')) { frame.remove(); frame.removeAttribute('src'); connected = interactive = false; }
     if (running && session && !frame.hasAttribute('src') && active()) { paint(frame, "src", session.url); panel.querySelector('.desktop-screen')!.append(frame); }
     if (inline) {
@@ -425,7 +421,10 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   // Opening never waits for the stream: a screen that is still connecting opens large and connects there.
   enlarge.addEventListener('click', () => {
     if (isAsleep(state)) { wake(); return; }
+    // A stopped engine, a missing image or a failure: the same one press starts it again (owner, 2026-11-07).
+    if (state && state.state !== 'running') { if (!opening && !state.lifecycle) retry.click(); return; }
     if (state?.state !== 'running') return;
+    if (stalled) { retry.click(); return; }
     watching = true; suspended = false;
     send(false);
     document.documentElement.setAttribute('data-desktop-watch', '');

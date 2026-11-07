@@ -2,6 +2,25 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  // Owner ruling 2026-11-07: a computer that is not showing its live screen draws nothing over its wallpaper: no words, face,
+  // progress, status sentence, recovery button, Open pill or caption. One press anywhere on the screen (its cover) starts it.
+  const shownText = root => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let text = '';
+    while (walker.nextNode()) if (walker.currentNode.textContent.trim() && visible(walker.currentNode.parentElement)) text += walker.currentNode.textContent;
+    return text.trim();
+  };
+  const requireBareScreen = (screen, context = 'the screen') => {
+    require(visible(screen.querySelector('.desktop-wallpaper')), `${context} shows its wallpaper`);
+    require(shownText(screen) === '', `${context} carries no words ("${shownText(screen).slice(0, 40)}")`);
+    require(![...screen.querySelectorAll('.desktop-boot-face, .desktop-preparation, .desktop-message, .desktop-stage, .desktop-first-build, progress, svg.slime, .av, [data-act="docker-download"], [data-desktop-location], [data-desktop="retry"]')].some(visible), `${context} draws no face, progress, sentence or recovery button`);
+    const buttons = [...screen.querySelectorAll('button')].filter(visible);
+    require(buttons.every(button => button.matches('[data-desktop="enlarge"]') || button.parentElement === screen), `${context} has no button but its own cover`);
+    require(![...screen.querySelectorAll('.desktop-open-pill')].some(visible), `${context} shows no Open pill`);
+  };
+  /** The state the panel keeps in data for a fixture, now that nothing says it in words. */
+  const expectedDesktopState = state => state.lifecycle || ['starting', 'building', 'preparing'].includes(state.state) ? state.state
+    : ['stopped', 'missing'].includes(state.state) ? 'stopped' : 'unavailable';
   if (name === "template-content" || name === "template-content-expanded") {
     const dialog = document.querySelector('.template-preview');
     // One row per skill: its name, one line, and its text behind a disclosure (owner, 2026-11-07: Grok Bot's cards of rows).
@@ -245,7 +264,8 @@ export function checkRendered(name, context = {}) {
     require([...panel.querySelectorAll('.mb-tabs [role="tab"]')].map(node => node.textContent).join('/') === '詳細資料/檔案庫/電腦', 'the shared tabs name the three destinations');
     require(selected?.dataset.tab === tab, 'the intended tab is selected');
     require(visible(panel.querySelector('.mb-panel-identity')), 'member face, name and role stay above the tabs');
-    const face = panel.querySelector('.mb-panel-identity > .av').getBoundingClientRect(), named = panel.querySelector('.mb-panel-identity > b').getBoundingClientRect();
+    // The face sits inside the avatar button since 415811f0 (a bot opens from its name), so it is found beneath the identity.
+    const face = panel.querySelector('.mb-panel-identity .av').getBoundingClientRect(), named = panel.querySelector('.mb-panel-identity > b').getBoundingClientRect();
     require(face.width >= 56 && face.bottom <= named.top + 1 && Math.abs(face.left + face.width / 2 - (named.left + named.width / 2)) <= 1, 'a large face stands centred above the name, as Grok Bot\'s');
     for (const button of [...panel.querySelectorAll('.mb-det-head .btn.icon'), ...document.querySelectorAll('.page-agent .mb-head .btn.icon, .page-agent .cmp-bar .cmp-attach')].filter(visible)) {
       const style = getComputedStyle(button), box = button.getBoundingClientRect();
@@ -261,9 +281,13 @@ export function checkRendered(name, context = {}) {
     if (tab === 'computer') {
       const live = visible(panel.querySelector('.desktop-screen iframe'));
       const phase = panel.querySelector('.desktop-panel')?.dataset.desktopState, cover = panel.querySelector('[data-desktop="enlarge"]');
-      const runs = ['member', 'owner', 'connecting'].includes(phase), asleep = !!cover?.hasAttribute('data-asleep');
-      require(!!visible(cover) === (runs || asleep) && (!asleep || phase === 'stopped'), 'the preview opens the larger view whenever the computer runs, and wakes it while it sleeps');
+      const runs = ['member', 'owner', 'connecting'].includes(phase), asleep = !!cover?.hasAttribute('data-asleep'), preparing = ['starting', 'building', 'preparing'].includes(phase);
+      // The whole screen is the one press: it opens the larger view while the computer runs and starts it in every other state but getting ready.
+      require(!!visible(cover) === !preparing && (!asleep || phase === 'stopped'), 'the screen is the one press that opens or starts the computer, except while it is getting ready');
       require(!visible(panel.querySelector('[data-desktop="take"]')), 'Take control waits in the larger view, never under the preview');
+      require(!visible(panel.querySelector('.desktop-caption')), 'no caption stands under the screen');
+      require(!!visible(panel.querySelector('.computer-lifecycle-state')) === runs, 'the header names the state only once the computer runs');
+      if (!runs) requireBareScreen(panel.querySelector('.desktop-screen'));
       if (live) require(panel.querySelector('[data-computer-state-text]')?.textContent === '執行中', 'the live header names the running state');
     }
     if (tab === 'details') require([...panel.querySelectorAll('.mb-dh')].filter(node => visible(node) && node.textContent === '對話').length === (panel.querySelector('[data-slot="conversations"]') ? 1 : 0), 'Details names the conversation section once, and only for Raphael');
@@ -286,15 +310,17 @@ export function checkRendered(name, context = {}) {
       const open = panel.querySelector('[data-desktop="enlarge"]'), screen = panel.querySelector('.desktop-screen').getBoundingClientRect(), cover = open.getBoundingClientRect(), caption = panel.querySelector('.desktop-caption');
       require(visible(open) && Math.abs(cover.width - screen.width) <= 2 && Math.abs(cover.height - screen.height) <= 2, 'the whole preview is the button that opens the larger view');
       require(getComputedStyle(open.querySelector('.desktop-open-pill')).opacity === '0', 'the Open pill shows only under the pointer');
-      require(visible(caption) && caption.textContent.endsWith('的畫面') && caption.getBoundingClientRect().top >= screen.bottom, 'the screen is captioned below with whose it is, as in Grok Bot');
+      require(!visible(caption), 'no caption stands under the screen (owner, 2026-11-07)');
     } else if (name === 'member-panel-computer-docker-stopped') {
-      require(panel.querySelector('.desktop-message').textContent.includes('Docker Desktop'), 'the real local engine failure names Docker Desktop');
-      require(panel.querySelector('[data-desktop="retry"]').textContent === '啟動 Docker Desktop' && panel.querySelector('[data-desktop-location]').textContent === '改用遠端電腦', 'both contextual recovery actions are offered');
+      // The engine failure is not said on the screen; the screen is the press that starts Docker Desktop.
+      require(!shownText(panel).includes('Docker Desktop') &&!visible(panel.querySelector('[data-desktop="retry"]')) && !visible(panel.querySelector('[data-desktop-location]')), 'neither Docker Desktop nor a recovery button is drawn');
+      require(visible(panel.querySelector('[data-desktop="enlarge"]')) && !panel.querySelector('[data-desktop="enlarge"]').hasAttribute('data-asleep'), 'the whole screen is the press that starts Docker');
       require(!window.__look.calls.some(call => call.params?.start_docker), 'reading never starts Docker');
     } else if (name === 'member-panel-computer-docker-missing') {
-      require(visible(panel.querySelector('[data-act="docker-download"]')), 'missing installation retains the download action');
+      require(!panel.querySelector('[data-act="docker-download"]'), 'a missing installation draws no download button');
     } else if (name === 'member-panel-computer-remote') {
-      require(panel.querySelector('.desktop-message').textContent.includes('studio-mini'), 'remote failure names the configured host');
+      require(!shownText(panel.querySelector('.desktop-screen')).includes('studio-mini'), 'a remote failure does not write the host on the screen');
+      require(visible(panel.querySelector('.desktop-location-header [data-computer-location]')), 'the location control still names where the computer lives');
     } else if (name === 'member-panel-docker-start') {
       const calls = window.__look.calls.filter(call => call.params?.start_docker);
       require(calls.length === 1 && calls[0].params.host === '' && calls[0].params.member_id === 1, 'one explicit press starts only the captured local engine');
@@ -311,42 +337,28 @@ export function checkRendered(name, context = {}) {
     return {check:name, tab};
   }
   if (name === 'panel-state-layout') {
-    const screen = document.querySelector('.desktop-panel .desktop-screen');
-    const sentence = screen?.querySelector('.desktop-message, .missing-note, .desktop-stage');
-    require(visible(screen) && visible(sentence), 'the screen contains its state sentence');
-    const bounds = screen.getBoundingClientRect(), text = sentence.getBoundingClientRect();
-    const inside = box => box.left >= bounds.left - 1 && box.right <= bounds.right + 1 && box.top >= bounds.top - 1 && box.bottom <= bounds.bottom + 1;
-    require(inside(text), 'the state sentence stays inside the screen');
+    // Nothing is written over a computer that is not showing its screen (owner, 2026-11-07): the wallpaper alone, and the
+    // state stays in the panel's data. The one press that starts it is the cover, which is the screen itself.
+    const panel = document.querySelector('.desktop-panel'), screen = panel?.querySelector('.desktop-screen');
+    require(visible(screen), 'the computer screen is shown');
     // The fake core answers an absent Docker when the scene sets no computer, as the real core does without Docker.
     const state = window.__look.data.desktop ?? { state: 'absent' };
-    const phase = state.lifecycle ?? (['docker_stopped', 'remote_unavailable'].includes(state.error) || ['absent','unavailable','incompatible'].includes(state.state) || state.state === 'missing' && state.image === false ? 'unavailable'
-      : ['stopped','missing'].includes(state.state) ? 'sleeping' : state.state === 'building' ? 'updating' : 'starting');
-    const words = {sleeping:'休眠中',starting:'啟動中',waking:'喚醒中',updating:'更新中',repairing:'修復中',unavailable:'無法使用'};
-    const header = document.querySelector('[data-computer-state-text]');
-    require(visible(header) && header.textContent === words[phase], 'the short header word agrees with the screen state');
-    const walker = document.createTreeWalker(document.querySelector('.mb-det'), NodeFilter.SHOW_TEXT);
-    let occurrences = 0;
-    while (walker.nextNode()) if (visible(walker.currentNode.parentElement)) occurrences += walker.currentNode.textContent.split(sentence.textContent).length - 1;
-    require(occurrences === 1, 'the full state sentence appears only once');
-    const location = document.querySelector('.desktop-location-header [data-computer-location]').getBoundingClientRect();
-    const word = header.getBoundingClientRect();
-    require(word.top < location.bottom && word.bottom > location.top, 'the short state stays on the location control row');
-    require(visible(screen.querySelector('.desktop-boot-face')), 'each offline state uses the member face');
-    // A sleeping screen is itself the press that wakes it (R-PANEL-03): that cover is the screen, not a button over the words.
-    const buttons = [...screen.querySelectorAll('button:not([data-desktop="enlarge"])')].filter(visible);
-    for (const button of buttons) {
-      const box = button.getBoundingClientRect();
-      require(inside(box), 'each state button stays inside the screen');
-      require(box.right <= text.left || box.left >= text.right || box.bottom <= text.top || box.top >= text.bottom, 'the state sentence and buttons never overlap');
-      require(box.top >= text.bottom, 'state actions follow the sentence');
-      for (const other of buttons.filter(other => other !== button)) {
-        const next = other.getBoundingClientRect();
-        require(box.right <= next.left || box.left >= next.right || box.bottom <= next.top || box.top >= next.bottom, 'state buttons never overlap one another');
-      }
+    const phase = expectedDesktopState(state);
+    require(panel.dataset.desktopState === phase, `the panel keeps its state in data (${panel.dataset.desktopState} vs ${phase})`);
+    requireBareScreen(screen);
+    require(!visible(panel.querySelector('.computer-lifecycle-state')) && !visible(panel.querySelector('.desktop-caption')), 'neither the header nor a caption says the state in words');
+    const location = document.querySelector('.desktop-location-header [data-computer-location]');
+    require(visible(location), 'the location control stays on the header row');
+    const cover = panel.querySelector('[data-desktop="enlarge"]'), bounds = screen.getBoundingClientRect();
+    if (['starting', 'building', 'preparing'].includes(phase)) require(!visible(cover), 'a computer that is getting ready is not pressable');
+    else {
+      const box = cover.getBoundingClientRect();
+      require(visible(cover) && Math.abs(box.width - bounds.width) <= 2 && Math.abs(box.height - bounds.height) <= 2, 'the whole screen is the one press that starts the computer');
+      require(cover.hasAttribute('data-asleep') === (phase === 'stopped' && state.image !== false), 'only a sleeping computer is the wake press');
     }
+    require(Math.abs(bounds.height - bounds.width * 900 / 1280) <= 2, 'the bare screen keeps the running screen proportions');
     return {check:name};
-  }
-  if (name.startsWith("app-update-")) {
+  }  if (name.startsWith("app-update-")) {
     const section = document.querySelector("[data-updates]");
     require(visible(section) && section.textContent.includes("1.1.0"), "new version is visible");
     require(section.textContent.includes("改善更新安裝"), "release notes remain readable");
@@ -504,9 +516,12 @@ export function checkRendered(name, context = {}) {
   if (name === 'computer-header-layout') {
     const header = document.querySelector('.desktop-location-header');
     require(visible(header), 'the member panel header is visible');
+    // The state word shows only once the computer runs (owner, 2026-11-07); before that the header keeps location and overflow.
+    const running = ['member', 'owner', 'connecting'].includes(document.querySelector('.desktop-panel')?.dataset.desktopState);
     const selectors = ['.computer-lifecycle-state', '[data-computer-location]', '[data-computer-menu]'];
+    require(!!visible(header.querySelector('.computer-lifecycle-state')) === running, 'the header names the state only while the computer runs');
     const nodes = selectors.map(selector => header.querySelector(selector)).filter(node => visible(node) && (node.matches('button') || node.textContent.trim()));
-    require(nodes.length === 3 && visible(document.querySelector('[data-det="gear"]')) && visible(document.querySelector('[data-det="close"]')), 'computer controls stay in their tab while gear and close remain available');
+    require(nodes.length === (running ? 3 : 2) && visible(document.querySelector('[data-det="share"]')) && visible(document.querySelector('[data-det="close"]')), 'computer controls stay in their tab while share and close remain available (the gear is hidden since 415811f0)');
     const bounds = header.getBoundingClientRect(), boxes = nodes.map(node => node.getBoundingClientRect());
     for (let i = 0; i < boxes.length; i++) {
       const box = boxes[i];
@@ -540,12 +555,14 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }
   if (name.startsWith('computer-state-')) {
-    // Since the panel tabs the header keeps a short word and the screen says the state once, with the member's face.
-    const phase = name.slice('computer-state-'.length), status = document.querySelector('.computer-lifecycle-state'), panel = document.querySelector('.mb-det');
+    // Nothing says the state in words, face or header (owner, 2026-11-07); the panel keeps it in data and the screen is bare.
+    const phase = name.slice('computer-state-'.length), panel = document.querySelector('.mb-det');
+    const dataState = {sleeping:'stopped', waking:'preparing', updating:'preparing', repairing:'preparing'}[phase];
+    require(panel.querySelector('.desktop-panel')?.dataset.desktopState === dataState, `the panel keeps the ${phase} state in data`);
+    require(!visible(panel.querySelector('.computer-lifecycle-state')), 'the header does not name the computer state');
+    requireBareScreen(panel.querySelector('.desktop-screen'), `the ${phase} screen`);
     const words = {sleeping:'電腦在休眠',waking:'正在喚醒',updating:'正在更新',repairing:'正在修復'};
-    require(visible(status) && status.textContent.trim(), 'the header names the computer state in a short word');
-    require(panel.textContent.includes(words[phase]), 'the screen says the computer state');
-    require(panel.querySelector(`.desktop-boot-face svg.slime[data-state="${phase === 'sleeping' ? 'sleeping' : 'working'}"]`), 'the existing body state conveys sleeping or waking');
+    require(!shownText(panel).includes(words[phase]), 'no sentence says the computer state');
     return {check:name};
   }
   if (name === 'computer-low-disk') {
@@ -755,38 +772,29 @@ export function checkRendered(name, context = {}) {
     for (const image of [...document.querySelectorAll('.desktop-wallpaper[data-own]')].filter(visible)) {
       require(image.complete && image.naturalWidth > 0, 'the picture decoded');
       require(getComputedStyle(image).objectPosition === '50% 50%', 'the picture is centred as the guest zooms it');
-      const pill = image.parentElement.querySelector('.desktop-preparation').getBoundingClientRect(), box = image.parentElement.getBoundingClientRect();
-      require(pill.top >= box.top + box.height * 0.3 && pill.bottom <= box.bottom, 'the stage leaves the upper third of the picture clear');
+      // The owner's picture is all that shows: nothing stands on it while the computer starts (owner, 2026-11-07).
+      requireBareScreen(image.parentElement, 'the screen over the owner picture');
     }
     return {check:name};
   }  if (name.startsWith('desktop-boot') || name.startsWith('desktop-period-')) {
     const panel = document.querySelector('.desktop-panel');
     const screen = name === 'desktop-boot-inline' ? document.querySelector('[data-card-desktop-screen], [data-card-screen]') : panel.querySelector('.desktop-screen');
-    const preparation = screen.querySelector('.desktop-preparation');
     const wallpaper = screen.querySelector('.desktop-wallpaper');
-    require(visible(preparation) && visible(wallpaper), 'the current stage stands on the full wallpaper');
+    require(visible(wallpaper), 'the full wallpaper fills the screen');
     require(getComputedStyle(wallpaper).objectPosition === '50% 100%', 'the slimes at the bottom stay in view');
-    require(getComputedStyle(wallpaper).opacity === '1' && getComputedStyle(screen.querySelector('.desktop-placeholder')).backgroundColor === 'rgba(0, 0, 0, 0)', 'only the small status pill dims the picture');
-    const box = screen.getBoundingClientRect(), pill = preparation.getBoundingClientRect();
-    require(pill.top >= box.top && pill.bottom <= box.bottom && pill.left >= box.left && pill.right <= box.right, 'the entire status pill fits inside the screen');
-    require(!preparation.querySelector('ol, li, .spin, .desktop-build-progress'), 'one current stage replaces console details');
-    require(visible(preparation.querySelector('.desktop-stage')), 'the current stage is readable');
-    const face = preparation.querySelector('.av');
-    require(visible(face), 'the member character is visible');
-    // A slim pill (owner, 2026-11-07): the face beside its stage, small in the panel and a little larger in the larger view.
-    require(Math.abs(face.getBoundingClientRect().width - (panel.hasAttribute('data-expanded') && name !== 'desktop-boot-inline' ? 32 : 24)) < 1, 'the character has its slim pill size');
-    const stage = preparation.querySelector('.desktop-stage').getBoundingClientRect(), faceBox = face.getBoundingClientRect();
-    require(faceBox.right <= stage.left + 1 && Math.abs((faceBox.top + faceBox.bottom) / 2 - (stage.top + stage.bottom) / 2) < 4, 'the face stands beside its stage on one line');
-    require(pill.height <= (panel.dataset.desktopState === 'building' ? 96 : 48), `the pill is slim (${Math.round(pill.height)} px)`);
-    // Raphael is the first blue slime outside voice since 2026-11-07, so every face here is a slime in its working motion.
-    require(!!face.querySelector('svg.slime[data-state="working"]'), 'the member uses the shared working motion');
-    require(!!preparation.querySelector('.desktop-first-build') === (panel.dataset.desktopState === 'building'), 'only a first build adds its quiet explanation');
-    require(!preparation.querySelector('progress:not([value])'), 'no indeterminate progress line');
+    require(getComputedStyle(wallpaper).opacity === '1' && getComputedStyle(screen.querySelector('.desktop-placeholder')).backgroundColor === 'rgba(0, 0, 0, 0)', 'nothing dims the picture');
+    // No status pill, stage, face or progress: a getting-ready computer is the wallpaper alone, and its state stays in data.
+    requireBareScreen(screen, 'the booting screen');
+    require(!screen.querySelector('.desktop-preparation, .desktop-stage, .desktop-first-build, progress'), 'no preparation markup is written');
+    if (name !== 'desktop-boot-inline') {
+      require(['starting', 'building', 'preparing'].includes(panel.dataset.desktopState), `the panel keeps the booting state in data (${panel.dataset.desktopState})`);
+      require(!visible(panel.querySelector('[data-desktop="enlarge"]')) && !visible(panel.querySelector('.computer-lifecycle-state')), 'a computer that is getting ready is not pressable and not named in the header');
+    }
+    const box = screen.getBoundingClientRect();
     if (!panel.hasAttribute('data-expanded') && name !== 'desktop-boot-inline') require(Math.abs(box.width / box.height - 1280 / 900) < .02, 'boot retains the running desktop aspect ratio');
     if (name.startsWith('desktop-period-')) require(wallpaper.getAttribute('src') === `/wallpapers/${name.slice('desktop-period-'.length)}.svg`, 'the fixed fixture hour selects its expected period');
     return {check:name};
-  }
-  if(name === "daily-newest") {require(document.querySelector('.conversation-caption').textContent==='Newest sample','the newest standard conversation opens');return {check:name};}
+  }  if(name === "daily-newest") {require(document.querySelector('.conversation-caption').textContent==='Newest sample','the newest standard conversation opens');return {check:name};}
   if(name === "daily-copy") {const copied={"zh-TW":"已複製",en:"Copied",ja:"コピーしました"}[document.documentElement.lang];const tick=[...document.querySelectorAll('.thread button, .cn-setup-dialog button, .au-routine-dialog button')].find(el=>el.getAttribute('aria-label')===copied);require(tick&&tick.querySelector('svg'),'the pressed copy control displays its tick and copied name');require(tick.scrollWidth<=tick.clientWidth,'copied words fit in the fixed button width');return {check:name};}
   if(name === "daily-marks") {require(document.querySelectorAll('.sidebar-app-marks .mono').length===3,'three connected known apps show bare marks');return {check:name};}
   if(name === "daily-draft-member" || name === "daily-draft-room") {const input=document.querySelector(name.endsWith('room')?'#room-message':'.page-agent .mb-chat:not([hidden]) .cmp-input');require(input.value==='Unfinished sample draft','navigation restores this composer words');require(input.selectionStart===input.value.length,'caret returns to the end');return {check:name};}
@@ -911,7 +919,8 @@ export function checkRendered(name, context = {}) {
       if (name === 'level-off') {
         const screen = desktop.querySelector('.desktop-screen'), cover = desktop.querySelector('[data-desktop="enlarge"]');
         require(visible(desktop.querySelector('.desktop-wallpaper')) && !desktop.querySelector('iframe'), 'the sleeping screen keeps its wallpaper');
-        require(desktop.querySelector('.desktop-message')?.textContent === '電腦在休眠' && !visible(desktop.querySelector('[data-desktop="retry"]')), 'as Grok Bot: one short line and no Open button');
+        requireBareScreen(screen, 'the sleeping screen');
+        require(!visible(desktop.querySelector('.desktop-caption')) && !visible(desktop.querySelector('.computer-lifecycle-state')), 'neither a caption nor a header word names the sleeping state');
         require(visible(cover) && cover.hasAttribute('data-asleep') && getComputedStyle(cover.querySelector('.desktop-open-pill')).display === 'none', 'the whole screen wakes the computer, with no pill');
         const box = screen.getBoundingClientRect();
         require(Math.abs(box.height - box.width * 900 / 1280) <= 2, 'the sleeping screen keeps the running screen proportions instead of stretching');
@@ -2272,13 +2281,13 @@ export function checkRendered(name, context = {}) {
   if (name.startsWith("computer-") || ['desktop-owner','desktop-handback','desktop-viewer','desktop-offline','desktop-absent'].includes(name)) {
     const panel=document.querySelector('.desktop-panel'), frame=document.querySelector('iframe[data-desktop-stream]'), calls=window.__look.calls;
     if(name==='desktop-absent'){
-      require(visible(panel)&&visible(panel.querySelector('.desktop-message')),'absent Docker says what is missing in the existing panel');
-      require(visible(panel.querySelector('[data-act="docker-download"]')),'absent Docker offers its download in the computer panel');
-      const downloadStyle = getComputedStyle(panel.querySelector('[data-act="docker-download"]'));
-      const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(Number).map(channel => channel / 255).map(channel => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4).reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
-      const ink = luminance(downloadStyle.color), surface = luminance(downloadStyle.backgroundColor);
-      require((Math.max(ink, surface) + 0.05) / (Math.min(ink, surface) + 0.05) >= 4.5, 'Docker download text retains readable contrast over the desktop frame');
-      require(!panel.querySelector('.desktop-message').textContent.includes('設定 › 拉斐爾'),'Docker recovery never points to the removed Settings pane');
+      // Absent Docker is a bare wallpaper (owner, 2026-11-07): no reason, no download button; the screen is the press.
+      require(visible(panel)&&visible(panel.querySelector('.desktop-screen')),'the absent computer keeps its panel and screen');
+      requireBareScreen(panel.querySelector('.desktop-screen'),'the absent computer screen');
+      require(!panel.querySelector('[data-act="docker-download"]'),'absent Docker draws no download button');
+      require(!shownText(panel).includes('Docker'),'absent Docker is not explained in words');
+      require(visible(panel.querySelector('[data-desktop="enlarge"]')),'the whole screen is the press that tries again');
+      require(visible(document.querySelector('.desktop-location-header [data-computer-location]')),'the location control stays so the owner can choose another computer');
       require(!calls.some(call=>call.method==='computer.viewer_open'),'reading the missing state never starts a computer');
       return {check:name};
     }
@@ -2315,17 +2324,12 @@ export function checkRendered(name, context = {}) {
       }
     if(name==='desktop-offline'){
       require(!frame,'offline screen has no blank frame');
-      if(['starting','building','preparing'].includes(panel.dataset.desktopState)) {
-        require(visible(panel.querySelector('.desktop-stage')) && !panel.querySelector('.desktop-preparation li'), 'preparation names only the current stage');
-        require(!!panel.querySelector('progress[value]') === (panel.dataset.desktopState === 'building'), 'only a real fixture percent draws progress');
-      }
-      else if (panel.dataset.desktopState === 'stopped') require(!visible(panel.querySelector('[data-desktop="retry"]')) && visible(panel.querySelector('[data-desktop="enlarge"][data-asleep]')), 'a sleeping screen wakes with a press on the screen itself');
-      else require(visible(panel.querySelector('[data-desktop="retry"]')),'failure offers contextual retry');
-      const bounds = panel.querySelector('.desktop-screen').getBoundingClientRect();
-      for (const content of panel.querySelectorAll('.desktop-preparation > *')) {
-        const box = content.getBoundingClientRect();
-        require(box.top >= bounds.top && box.bottom <= bounds.bottom, 'preparation words and progress stay inside the screen');
-      }
+      // No state is written over an offline screen (owner, 2026-11-07): preparation shows no stage, face or progress.
+      requireBareScreen(panel.querySelector('.desktop-screen'), 'the offline screen');
+      require(!visible(panel.querySelector('[data-desktop="retry"]')) && !visible(panel.querySelector('.computer-lifecycle-state')), 'no recovery button or header word is drawn');
+      if(['starting','building','preparing'].includes(panel.dataset.desktopState)) require(!visible(panel.querySelector('[data-desktop="enlarge"]')) && !panel.querySelector('progress, .desktop-preparation'), 'a computer that is getting ready is not pressable and writes no progress');
+      else if (panel.dataset.desktopState === 'stopped') require(visible(panel.querySelector('[data-desktop="enlarge"][data-asleep]')), 'a sleeping screen wakes with a press on the screen itself');
+      else require(visible(panel.querySelector('[data-desktop="enlarge"]')) && !panel.querySelector('[data-desktop="enlarge"]').hasAttribute('data-asleep'),'a failure is started again with a press on the screen itself');
     }else require(visible(frame)||name==='computer-takeover-done','the active view streams the live screen or retains its settled card');
     return {check:name};
   }
@@ -2385,8 +2389,10 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "desktop-install") {
-    const buttons = document.querySelectorAll('[data-act="docker-download"]');
-    require(buttons.length === 1 && visible(buttons[0]) && !buttons[0].disabled, "one usable Docker download action");
+    // The download button was removed with every other word over the screen (owner, 2026-11-07).
+    require(document.querySelectorAll('[data-act="docker-download"]').length === 0, "no Docker download button is drawn");
+    requireBareScreen(document.querySelector('.desktop-panel .desktop-screen'), 'the absent computer screen');
+    require(visible(document.querySelector('.desktop-panel [data-desktop="enlarge"]')), "the screen itself is the press that tries again");
     return { check: name };
   }
   if (name === "desktop-frame") {

@@ -22,6 +22,8 @@
 .btn.desktop-open:active .desktop-open-pill { background: var(--desktop-frame-bg); }
 /* Asleep, the same cover wakes the computer and says nothing: the screen already shows the face and its one line. */
 .btn.desktop-open[data-asleep] .desktop-open-pill { display: none; }
+/* No words over a computer that is not showing its screen (owner, 2026-11-07): the press starts it, with no label. */
+.desktop-panel:is([data-desktop-state="stopped"], [data-desktop-state="unavailable"]) .btn.desktop-open .desktop-open-pill { display: none; }
 @media (prefers-reduced-motion: reduce) { .desktop-open-pill { transition: none; } }
 .computer-lifecycle { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; width: 100%; }
 .computer-lifecycle-state { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); }

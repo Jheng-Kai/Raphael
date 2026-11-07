@@ -1,5 +1,20 @@
 # Member computer (Phases A and B)
 
+## Bare screen while the computer is not showing its screen (owner, 2026-11-07)
+
+This supersedes every earlier note below that describes words, the member face, preparation progress, a state sentence,
+recovery buttons (Start Docker, Use remote, Download, Retry), the Open pill, the caption under the screen or the header
+state word for an offline computer. While a computer is not showing its live screen (sleeping, starting, waking, updating,
+repairing, stopped Docker, missing installation, remote failure, missing image) the panel draws only the wallpaper: no text,
+face, button, pill or caption inside the screen, and the header state label (computer-lifecycle-state) is hidden until the
+computer runs. The state stays in `data-desktop-state`. The location menu and the overflow menu remain.
+
+One press anywhere on the screen (the `[data-desktop="enlarge"]` cover, visible in every state except while it is getting
+ready) starts it: asleep wakes it, a stopped engine starts Docker through `computer.viewer_status {start_docker:true}`, a
+stalled or unreachable stream reopens, and a running screen opens the larger view as before. Rendered checks use the shared
+`requireBareScreen` helper in scripts/look/checks.mjs. desktop-install and member-panel-remote-location keep their names but
+now cover the absent computer's bare screen and the header location control; no scene was retired.
+
 ## Three-tab member panel and local engine recovery (2026-11-05)
 
 Owner request of 2026-11-05: use Grok Bot's clear Details / Library / Computer hierarchy and explain the actual unavailable-computer reason. This section supersedes earlier landing-panel and first-build-caption guidance for this panel.
