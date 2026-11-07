@@ -103,8 +103,13 @@ npm run look -- sidebar-rail sidebar-rail-dragged-open sidebar-dragged-wider pan
 
 Select a member, then click the stacked header title for details.
 At compact width open the sidebar drawer to select a member first. The same title
-closes the panel; its close button updates the same remembered session state. Details has the avatar, edit pencil and resource
-panes. The sidebar plus is the member creation entry; verify the
+closes the panel; its close button updates the same remembered session state. Details holds the face (a press shows
+every picture and colour at once, no pencil), the routines, Raphael's conversations, 訊息平台 (each Telegram, Slack and
+Discord bot not set up is one row with 設定; a connected one is its card with pairing) and one row 「技能、記憶、聲音和
+權限」 with 設定. Every 設定 and the header's share send the owner's words into that member's conversation with an
+`intent` (chat-ask.ts): the member sets it up there, with a card for a token, and share answers with a template card.
+Nothing is typed into the panel and Settings holds no bot (owner, 2026-11-07). Scenes: details, raphael-details,
+member-avatar, slime-picker, work-messaging-setup, work-messaging-pairing, messaging-paired-aligned. The sidebar plus is the member creation entry; verify the
 complete flow for creation changes.
 
 ## Driving it with look

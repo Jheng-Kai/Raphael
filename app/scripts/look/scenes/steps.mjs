@@ -17,7 +17,7 @@ export const rightClick = selector => ({ action: "right-click", selector });
 export const page = name => click(name === "agent" ? ".mb-chief" : `#nav [data-go="${name}"]`);
 // 連結應用程式 is no tab of Settings: its one way in is the sidebar's button, which opens it as a dialog of its own (R-UI-111).
 // Appearance and messaging are sections of 一般 since 2026-11-07 (Grok Bot's six tabs): their scenes open 一般 at that section.
-const SECTION_OF = { appearance: ".appearance-settings", messaging: '[data-section="messaging"]' };
+const SECTION_OF = { appearance: ".appearance-settings" };
 export const settings = pane => {
   if (pane === "connections") return [click("#nav .sidebar-apps"), wait(".modal-scrim[data-standalone=\"connections\"] .modal-body .cs"), check("settings-shell")];
   const tab = SECTION_OF[pane] ? "general" : pane;

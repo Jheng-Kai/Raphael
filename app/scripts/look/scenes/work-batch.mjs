@@ -1,4 +1,4 @@
-import { scene, member, settings, click, type, wait, waitGone, scroll, check } from "./steps.mjs";
+import { scene, member, click, type, wait, waitGone, scroll, check } from "./steps.mjs";
 
 const disconnected = { connected: false, enabled: false, running: false, error: null, bot: null, allowed: [], pending: [] };
 const connected = (name, code) => ({ connected: true, enabled: true, running: true, error: null, bot: { username: name }, allowed: [], pending: [{ code, name: "Owner", expires_in_s: 120 }] });
@@ -6,11 +6,12 @@ const channels = { slack: connected("Research", "SL1234"), discord: connected("R
 const desktop = { desktop: { state: "running", ready: true, control: "member" }, checkpoints: true };
 const review = [member(1), {action:'open-details'}, click('[data-det="tab"][data-tab="computer"]'), wait('.desktop-panel[data-desktop-state="member"]'), click('[data-desktop="enlarge"]'),click('[data-desktop="take"]'),wait('.desktop-panel[data-expanded][data-interactive="true"]'),click('[data-desktop="menu"]'),click('#app-popover [data-pick="files"]'), wait('.checkpoint'), scroll('.checkpoint'), click('.checkpoint summary'), wait('.checkpoint details[open] pre')];
 const login = [member(1), wait('[data-secret-card="card-login"]')];
+// Raphael's bots live in his panel since 2026-11-07, not in Settings.
+const raphael = [member(0), { action: "open-details" }];
 
 export default [
-  scene("work-messaging-setup", "Three work-chat entries use the same setup rows and masked token fields", [...settings("messaging"), wait('[data-msg-kind="discord"] input[type="password"]'), click('[data-msg-kind="slack"] [data-msg="setup-link"]'), click('[data-msg-kind="discord"] [data-msg="setup-link"]'), check("work-messaging")], { workMessaging: { slack: disconnected, discord: disconnected } }),
-  scene("work-messaging-pairing", "Slack and Discord have independent pairing codes and no remote approval", [...settings("messaging"), scroll('[data-msg-kind="discord"]'), wait('[data-msg-kind="discord"] [data-code="DC1234"]'), check("work-pairing")], { workMessaging: channels }),
-  scene("work-slack-connect", "A Slack token crosses only its connection call and leaves the masked field", [...settings("messaging"), type('#msg-token-slack', 'fake-look-slack-token'), click('[data-msg-kind="slack"] [data-msg="connect"]'), waitGone('#msg-token-slack'), check("work-connected")], { workMessaging: { slack: disconnected, discord: disconnected } }),
+  scene("work-messaging-setup", "Raphael's panel: a work chat not set up is one row whose 設定 asks him in the conversation, with no token field (owner, 2026-11-07)", [...raphael, wait('.mb-panel-suggest [data-intent="setup-slack"]'), click('.mb-panel-suggest [data-intent="setup-slack"]'), check("work-messaging")], { workMessaging: { slack: disconnected, discord: disconnected } }),
+  scene("work-messaging-pairing", "Slack and Discord have independent pairing codes in Raphael's panel and no remote approval", [...raphael, scroll('.mb-panel-suggest [data-msg-kind="discord"]'), wait('[data-msg-kind="discord"] [data-code="DC1234"]'), check("work-pairing")], { workMessaging: channels }),
   scene("computer-file-changes", "The existing computer panel exposes a readable before/after file diff", [...review, check("file-changes")], desktop),
   scene("computer-file-partial", "Uncovered files are named without claiming they can be restored", [...review, check("file-partial")], { ...desktop, checkpointPartial: true }),
   scene("computer-file-confirm", "Restore waits for the existing destructive confirmation dialog", [...review, click('[data-checkpoint-restore]'), wait('.mb-confirm'), check("file-confirm")], desktop),

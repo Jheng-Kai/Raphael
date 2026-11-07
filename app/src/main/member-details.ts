@@ -2,6 +2,7 @@
 // behind the gear; fields being typed in survive live member updates.
 
 import { noticeHTML } from "./missing";
+import "./messaging.css";
 import { openRoutineDialog } from "./routine-dialog";
 import { mountConversationList } from "./conversation-list";
 import * as api from "./api";
@@ -27,13 +28,13 @@ import {
   sourceLabel,
 } from "./members";
 import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
-import { esc, ico, iconButton, openMenu, patchHTML, sel, tg, toaster } from "./ui";
+import { btn, esc, ico, iconButton, openMenu, patchHTML, sel, tg, toaster } from "./ui";
 import { eventRead } from './event-read';
 import { panelLibraryHTML, readPanelWork, type PanelWork } from './member-panel-work';
 import { tabs } from './ui';
 import { describeError } from "./format";
-import { exportMemberTemplate } from "./member-templates";
-import { createMemberTelegram, messagingHTML } from "./messaging";
+import { askInChat } from "./chat-ask";
+import { type Messaging, type MessagingKind, chatChannelsHTML, createMemberChannel, createRaphaelChannel } from "./messaging";
 
 export type DetailsTab = "details" | "library" | "computer" | "settings" | "memory" | "skills" | "commands" | "voice";
 
@@ -75,8 +76,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   const el = document.createElement("aside");
   el.className = "mb-det";
   el.innerHTML =
-    // Share on the left edge and close on the right, apart (owner, 2026-11-07): the gear and its settings page gave way
-    // to one dialog opened from the member's face; share sends the member as a template, until the store comes.
+    // Share on the left edge and close on the right, apart (owner, 2026-11-07). Share asks the member, in its own
+    // conversation, to package itself as a template, as Grok Bot's Create a copy does; the template card comes there.
     // `gear` stays only as an unshown entry for the old settings page, which nothing on screen opens any more.
     `<div class="mb-det-head">${iconButton("left", t("members.panelBack"), ' data-det="back" hidden', "mb-tool")}${iconButton("share", t("template.export"), ' data-det="share"', "mb-tool")}${iconButton("gear", t("computer.settings"), ' data-det="gear" hidden tabindex="-1"', "mb-tool")}<span class="mb-det-fill"></span>${iconButton("x", t("members.close"), ' data-det="close"', "mb-tool")}</div>` +
     `<div class="mb-det-scroll"><div class="mb-who"></div><div class="mb-tabs"></div><div class="mb-tab-body" role="tabpanel" id="member-panel-body"></div></div>`;
@@ -185,8 +186,9 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   // ---------- drawing ----------
 
   function whoHTML(member: Member): string {
-    // The face is the way into every setting: under the pointer a pencil shows on it, and a press opens the one dialog.
-    if (tab !== 'settings') return `<span class="mb-panel-identity"><button type="button" class="btn mb-face-edit" data-det="edit" data-k="det-face-edit" aria-label="${esc(t("members.profile.edit"))}">${faceHTML(member, 64)}<span class="mb-face-pencil" aria-hidden="true">${ico("pencil")}</span></button><b>${esc(member.name)}</b>${member.role ? `<small>${esc(member.role)}</small>` : ''}</span>`;
+    // A press on the face shows every picture at once and one press changes it, as Grok Bot's avatar picker (owner,
+    // 2026-11-07): no pencil, no words, no dialog in between.
+    if (tab !== 'settings') return `<span class="mb-panel-identity"><button type="button" class="btn mb-face-edit" data-det="avatar" data-k="det-face-edit" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}">${faceHTML(member, 64)}</button><b>${esc(member.name)}</b>${member.role ? `<small>${esc(member.role)}</small>` : ''}</span>`;
     // The face is the button that changes its picture.
     const face =
       `<span class="mb-who-face"><button type="button" class="btn mb-avbtn" data-det="avatar" data-k="det-avatar" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}" title="${esc(t("members.changeAvatar"))}">` +
@@ -222,11 +224,25 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     return head + `<div class="mb-rts">${routines.map(routineRowHTML).join("")}</div>`;
   }
 
-  // 建議, as Grok Bot's member panel suggests Add to Slack (owner, 2026-11-07): the member's own Telegram bot, so the
-  // owner can message this member directly; Slack and Discord come later. Raphael's own bot stays in Settings.
-  const telegram = createMemberTelegram({ visible: () => el.isConnected && !el.hidden && tab === "details", redraw: () => draw() }, () => host.member().id);
+  // 訊息平台: the member's own Telegram, Slack and Discord bots, Raphael's too (Settings no longer holds them). One that is
+  // not set up is a row with 「設定」, which the member does with the owner in its conversation (owner, 2026-11-07);
+  // under them one row for the rest of its settings, done the same way.
+  const KINDS: readonly MessagingKind[] = ["telegram", "slack", "discord"];
+  const channelHost = { visible: () => el.isConnected && !el.hidden && tab === "details", redraw: () => draw() };
+  let channelsFor = -1;
+  let channels: Record<MessagingKind, Messaging> | null = null;
+  function channelsOf(memberId: number): Record<MessagingKind, Messaging> {
+    if (channels && channelsFor === memberId) return channels;
+    if (channels) for (const channel of Object.values(channels)) channel.reset();
+    channelsFor = memberId;
+    channels = Object.fromEntries(KINDS.map((kind) => [kind, memberId === RAPHAEL_ID ? createRaphaelChannel(channelHost, kind) : createMemberChannel(channelHost, () => memberId, kind)])) as Record<MessagingKind, Messaging>;
+    return channels;
+  }
+  const channelViews = (memberId: number): (readonly [MessagingKind, ReturnType<Messaging["view"]>])[] => KINDS.map((kind) => [kind, channelsOf(memberId)[kind].view()] as const);
   function suggestHTML(): string {
-    return `<div class="mb-dh"><span>${esc(t("members.suggested"))}</span></div><div class="member-msg">${messagingHTML(telegram.view())}</div>`;
+    const id = host.member().id;
+    return `<div class="mb-dh"><span>${esc(t("settings.paneMessaging"))}</span></div><div class="member-msg">${chatChannelsHTML(channelViews(id))}</div>` +
+      `<div class="mb-panel-row mb-panel-setup"><span class="mb-panel-row-copy"><span>${esc(t("members.setupWhat"))}</span></span>${btn(esc(t("members.setUp")), "sm", ' data-det="setup" data-intent="settings" data-k="det-setup:settings"')}</div>`;
   }
 
   /**
@@ -276,8 +292,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     }
     const face = faceHTML(member, 64).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
     const signature = JSON.stringify([member, face, host.list()?.groups, counts, routines, work, workFailed, tab, [...openFields], getLocale(), !!host.openConversation, host.conversationOf?.(member.id), tab === "memory" ? memories.map(list => list.view()) : null,
-      // The bot card redraws on its own state; the token being typed never redraws it.
-      tab === "details" && member.id !== RAPHAEL_ID ? { ...telegram.view(), token: "" } : null]);
+      // The bot cards redraw on their own state.
+      tab === "details" ? channelViews(member.id).map(([kind, view]) => [kind, { ...view, token: "" }]) : null]);
     if (drawn === signature) return;
     drawn = signature;
     el.dataset.detailsTab = tab;
@@ -349,8 +365,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         if (!body.querySelector('.mb-panel-routines') || !!body.querySelector('[data-slot="conversations"]') !== chief) {
           conversationHost.remove();
           patchHTML(body, `<section class="mb-panel-routines" data-k="panel-routines"></section>` +
-            (chief ? `<section><div class="mb-dh"><span data-panel-conversations-heading>${esc(t('members.panelConversations'))}</span></div><div data-slot="conversations" data-k="panel-conversations"></div></section>`
-              : `<section class="mb-panel-suggest" data-k="panel-suggest"></section>`));
+            (chief ? `<section><div class="mb-dh"><span data-panel-conversations-heading>${esc(t('members.panelConversations'))}</span></div><div data-slot="conversations" data-k="panel-conversations"></div></section>` : "") +
+            `<section class="mb-panel-suggest" data-k="panel-suggest"></section>`);
         }
         // The skeleton is kept across draws, so its heading follows a language change here.
         const heading = body.querySelector<HTMLElement>('[data-panel-conversations-heading]');
@@ -459,7 +475,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       return;
     }
     if (memories.some((list) => list.click(target))) return;
-    if (target.closest(".member-msg") && telegram.click(target)) return;
+    const channelKind = target.closest<HTMLElement>(".member-msg [data-msg-kind]")?.dataset.msgKind as MessagingKind | undefined;
+    if (channelKind && !target.closest('[data-det="setup"]') && channelsOf(host.member().id)[channelKind]?.click(target)) return;
     const act = target.closest<HTMLElement>("[data-det]");
     if (!act || (act as HTMLButtonElement).disabled) return;
     const member = host.member();
@@ -468,7 +485,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         host.close();
         break;
       case "edit": host.edit?.(member); break;
-      case "share": void exportMemberTemplate(member.id).catch((error) => toaster.info(describeError(error))); break;
+      case "share": askInChat(member.id, "share-template"); break;
+      case "setup": askInChat(member.id, act.dataset.intent as api.AskIntent); break;
       case "draft": void host.update(member.id, { draft_first: !(member.draft_first ?? true) }); break;
       case "gear": tab = "settings"; draw(); break;
       case "back": tab = tab === "settings" ? "details" : "settings"; draw(); break;
@@ -520,11 +538,9 @@ export function createDetails(host: DetailsHost): DetailsPanel {
 
   el.addEventListener("input", (e) => {
     const target = e.target as HTMLInputElement | HTMLTextAreaElement;
-    if (target instanceof HTMLInputElement && telegram.input(target)) return;
     for (const list of memories) if (list.input(target)) break;
   });
   el.addEventListener("keydown", (e) => {
-    if (telegram.key(e)) return;
     if (memories.some((list) => list.key(e))) return;
     const target = e.target as HTMLElement;
     if (tabBar.contains(target) && target.matches('[role="tab"]') && ['ArrowLeft','ArrowRight','Home','End'].includes(e.key)) {
@@ -572,8 +588,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     },
     showMember() {
       tab = "details";
-      telegram.reset();
-      if (host.member().id !== RAPHAEL_ID) void telegram.load();
+      for (const channel of Object.values(channelsOf(host.member().id))) { channel.reset(); void channel.load(); }
       work = null; workFailed = false; fileLimit = 12; void loadWork();
       counts = {skills: 0, commands: 0, memory: 0};
       void loadCounts();

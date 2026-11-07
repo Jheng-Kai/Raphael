@@ -40,23 +40,20 @@
 /* Grok Bot's panel head (2026-11-06): a large face centred above the name, the job quiet under it. */
 .mb-panel-identity { display: flex; flex-direction: column; align-items: center; gap: var(--sp-1); min-width: 0; width: 100%; }
 .mb-panel-identity > .av { margin-bottom: var(--sp-1); }
-/* The face opens every setting: a bare button (no frame or fill), a pencil on it under the pointer (owner, 2026-11-07). */
-.mb-panel-identity > .btn.mb-face-edit { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 0; margin-bottom: var(--sp-1); padding: 0; border: 0; background: transparent; overflow: clip; overflow-clip-margin: 8px; }
+/* A press on the face shows every picture (owner, 2026-11-07): a bare button, no frame, fill or pencil. */
+.mb-panel-identity > .btn.mb-face-edit { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 0; margin-bottom: var(--sp-1); padding: 0; border: 0; background: transparent; }
 .mb-panel-identity > .btn.mb-face-edit:hover:not(:disabled), .mb-panel-identity > .btn.mb-face-edit:active:not(:disabled) { background: transparent; }
-.mb-face-pencil { position: absolute; right: -6px; bottom: 0; display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--r-pill); background: var(--panel); color: var(--text); box-shadow: 0 0 0 2px var(--content); opacity: 0; transition: opacity 0.12s ease; pointer-events: none; }
-.mb-face-pencil .i { width: 16px; height: 16px; }
-.btn.mb-face-edit:hover .mb-face-pencil, :root[data-keys] .btn.mb-face-edit:focus-visible .mb-face-pencil { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { .mb-face-pencil { transition: none; } }
-/* 建議: the member's own Telegram card, the Settings card in the panel's width. */
+/* 訊息平台 and the row for the rest of the settings: each is done in the conversation, so a row is its name and 「設定」. */
 .mb-panel-suggest { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin-top: var(--sp-4); }
+.mb-panel-suggest .member-msg { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .mb-panel-suggest .member-msg .sgroup { margin: 0; }
-/* The panel is narrow: the bot's name keeps its width, and the token field and 連接 share one line with no label column
-   (the field carries the label for screen readers). */
-.mb-panel-suggest .msg-head > .lbl { flex: 1 0 auto; }
-.mb-panel-suggest .msg-token-row > .lbl { display: none; }
-.mb-panel-suggest .msg-token-row > .ctl { flex: 1; min-width: 0; }
-.mb-panel-suggest .msg-token { display: flex; flex-wrap: nowrap; }
-.mb-panel-suggest .msg-token .field { flex: 1; width: auto; min-width: 0; }
+.mb-panel-suggest .msg-chat-setup .msg-head > .lbl { flex: 1 0 auto; }
+/* A connected bot's name gives way before its switch: it is cut with an ellipsis in the narrow panel. */
+.mb-panel-suggest .msg-head .lbl > .t { display: flex; min-width: 0; }
+.mb-panel-suggest .msg-head .msg-name { display: flex; min-width: 0; max-width: 100%; }
+.mb-panel-suggest .msg-head .msg-name > :not(.msg-bot) { flex: none; }
+.mb-panel-suggest .msg-head .msg-bot { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-panel-setup { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); font-size: var(--fs-sm); line-height: 1.4; }
 .mb-panel-identity > :is(b, small) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mb-panel-identity > b { font-size: var(--fs-md); font-weight: var(--weight-semibold); }
 .mb-panel-identity > small { color: var(--text-3); font-size: var(--fs-xs); }

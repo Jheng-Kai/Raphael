@@ -21,6 +21,9 @@ const api = vi.hoisted(() => ({
   avatarGet: vi.fn(),
   memberMessagingStatus: vi.fn(),
   memberMessagingConnect: vi.fn(),
+  telegramStatus: vi.fn(),
+  messagingCall: vi.fn(),
+  agentAskText: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("./api", () => api);
 
@@ -226,8 +229,8 @@ describe("a member's panel", () => {
     expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
     current = 0;
     panel.showMember();
-    // Raphael's face opens the same one dialog, and he cannot be hidden or shared.
-    expect(panel.el.querySelector('[data-det="edit"]')!.classList.contains("mb-face-edit")).toBe(true);
+    // Raphael's face shows the pictures as every member's does, and he cannot be hidden or shared.
+    expect(panel.el.querySelector('.mb-panel-identity [data-det="avatar"]')).not.toBeNull();
     expect(panel.el.querySelector('[data-det="hide"]')).toBeNull();
     expect(panel.el.querySelector<HTMLElement>('[data-det="share"]')!.hidden).toBe(true);
   });
@@ -646,36 +649,39 @@ test("resource rows count saved skills including disabled ones and only active r
   expect(panel.el.querySelector('[data-det="routine-menu"]')).toBeNull();
 });
 
-test("建議 offers the member its own Telegram bot, connected with a BotFather token through the member's own calls", async () => {
+test("訊息平台: a bot not set up is one row whose 設定 asks the member in its conversation; a connected one is its card; Raphael's too", async () => {
   const off = { connected: false, enabled: false, running: false, error: null, bot: null, allowed: [], pending: [], member_id: current, kind: "telegram", paired: false };
-  api.memberMessagingStatus.mockResolvedValue(off);
-  api.memberMessagingConnect.mockResolvedValue({ ok: true, status: { ...off, connected: true, enabled: true, running: true, bot: { username: "shion_bot" } } });
+  api.memberMessagingStatus.mockImplementation(async (_id: number, platform?: string) => platform === "slack" ? { ...off, connected: true, enabled: true, running: true, bot: { username: "shion_slack" } } : off);
   const panel = mount(false); await flush();
-  expect(api.memberMessagingStatus).toHaveBeenCalledWith(current);
+  expect(api.memberMessagingStatus).toHaveBeenCalledWith(current, undefined);
+  expect(api.memberMessagingStatus).toHaveBeenCalledWith(current, "slack");
   const suggest = panel.el.querySelector<HTMLElement>(".mb-panel-suggest")!;
-  expect(suggest.querySelector(".mb-dh")!.textContent).toBe("建議");
-  const field = suggest.querySelector<HTMLInputElement>("#msg-token-member")!;
-  expect(suggest.querySelector('[data-msg="botfather"]')).not.toBeNull();
-  field.value = "123:abc"; field.dispatchEvent(new Event("input", { bubbles: true }));
-  suggest.querySelector<HTMLButtonElement>('[data-msg="connect"]')!.click();
-  await flush();
-  expect(api.memberMessagingConnect).toHaveBeenCalledWith(current, "123:abc");
-  expect(panel.el.querySelector(".mb-panel-suggest")!.textContent).toContain("@shion_bot");
-  // Raphael's own bot stays in Settings: his panel has no 建議.
+  expect(suggest.querySelector(".mb-dh")!.textContent).toBe("訊息平台");
+  // Nothing is typed into the panel (owner, 2026-11-07).
+  expect(suggest.querySelector("input")).toBeNull();
+  expect(suggest.textContent).toContain("@shion_slack");
+  expect([...suggest.querySelectorAll<HTMLElement>('[data-det="setup"]')].map((button) => button.dataset.intent)).toEqual(["setup-telegram", "setup-discord", "settings"]);
+  suggest.querySelector<HTMLButtonElement>('[data-intent="setup-telegram"]')!.click(); await flush();
+  expect(api.agentAskText).toHaveBeenCalledWith("幫我設定 Telegram", [], current, { intent: "setup-telegram" });
+  suggest.querySelector<HTMLButtonElement>('[data-intent="settings"]')!.click(); await flush();
+  expect(api.agentAskText).toHaveBeenLastCalledWith("我想調整你的設定", [], current, { intent: "settings" });
+  // Raphael's own bots are in his panel now, Settings no longer holds them.
   current = 0; panel.showMember(); await flush();
-  expect(panel.el.querySelector(".mb-panel-suggest")).toBeNull();
+  expect(panel.el.querySelectorAll('.mb-panel-suggest [data-det="setup"]').length).toBeGreaterThan(0);
 });
 
-test("the panel has no gear: share on the left, and the face with a pencil opens every setting", async () => {
+test("the panel has no gear: share asks the member to package itself in its conversation, and the face shows the pictures", async () => {
   const panel = mount(false); await flush();
   const share = panel.el.querySelector<HTMLButtonElement>('.mb-det-head [data-det="share"]')!;
   expect(share.hidden).toBe(false);
   expect(share.getAttribute("aria-label")).toBe("分享為範本");
   expect([...panel.el.querySelectorAll<HTMLElement>('.mb-det-head button')].filter(button => !button.hidden).map(button => button.dataset.det)).toEqual(["share", "close"]);
+  share.click(); await flush();
+  expect(api.agentAskText).toHaveBeenCalledWith("把你自己打包成範本，讓別人也能用", [], current, { intent: "share-template" });
   const face = panel.el.querySelector<HTMLButtonElement>(".mb-panel-identity .mb-face-edit")!;
-  expect(face.querySelector(".mb-face-pencil")).not.toBeNull();
-  face.click();
-  expect(host.edit).toHaveBeenCalledWith(LIST.members.find(member => member.id === current));
+  expect(face.querySelector(".mb-face-pencil")).toBeNull();
+  expect(face.dataset.det).toBe("avatar");
+  expect(face.getAttribute("aria-haspopup")).toBe("menu");
 });
 
 test("a routine's switch turns it on or off from the row without opening the editor", async () => {

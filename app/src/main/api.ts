@@ -182,7 +182,9 @@ export const agentHistorySearch = (query: string, memberId = 0, conversationId?:
  * own thread instead of Raphael (`agent.ask`'s `member_id`); it goes only when it is not 0.
  * `destination: "quick"` names Raphael's quick conversation, which the core never picks by default.
  */
-export const agentAskText = (text: string, attachments: WireAttachment[] = [], memberId = 0, options: { requestId?: string; replaceTurnId?: number; quote?: import("./types").MessageQuote; conversationId?: number; destination?: "quick" } = {}): Promise<void> =>
+/** What a button pressed on a panel asks of the member, beside the words it sends (core agent/intents.py). */
+export type AskIntent = "setup-telegram" | "setup-slack" | "setup-discord" | "share-template" | "settings";
+export const agentAskText = (text: string, attachments: WireAttachment[] = [], memberId = 0, options: { requestId?: string; replaceTurnId?: number; quote?: import("./types").MessageQuote; conversationId?: number; destination?: "quick"; intent?: AskIntent } = {}): Promise<void> =>
   invoke("agent_ask_text", {
     text,
     ...(attachments.length > 0 ? { attachments } : {}),
@@ -456,14 +458,17 @@ export interface MemberMessagingStatus extends TelegramStatus {
 export interface MemberMessagingAccount extends MemberMessagingStatus { member_name: string }
 export type MemberMessagingConnectResult = { ok: true; status: MemberMessagingStatus } |
   { ok: false; reason: "invalid_token" | "network" | "bot_in_use" };
-export const memberMessagingStatus = (member_id: number): Promise<MemberMessagingStatus> => core("messaging.member.status", { member_id });
+/** A member's bot on one platform; Telegram is the default the core assumed before Slack and Discord. */
+export type MessagingPlatform = "telegram" | "slack" | "discord";
+const onPlatform = (member_id: number, platform: MessagingPlatform = "telegram"): { member_id: number; platform?: MessagingPlatform } => (platform === "telegram" ? { member_id } : { member_id, platform });
+export const memberMessagingStatus = (member_id: number, platform?: MessagingPlatform): Promise<MemberMessagingStatus> => core("messaging.member.status", onPlatform(member_id, platform));
 /** Validates the member's bot token and keeps it only in the existing vault. */
-export const memberMessagingConnect = (member_id: number, token: string): Promise<MemberMessagingConnectResult> => core("messaging.member.connect", { member_id, token });
-export const memberMessagingDisconnect = (member_id: number): Promise<MemberMessagingStatus> => core("messaging.member.disconnect", { member_id });
-export const memberMessagingSetEnabled = (member_id: number, enabled: boolean): Promise<MemberMessagingStatus> => core("messaging.member.set_enabled", { member_id, enabled });
-export const memberMessagingApprove = (member_id: number, code: string): Promise<{ approved: boolean; status: MemberMessagingStatus }> => core("messaging.member.approve", { member_id, code });
-export const memberMessagingReject = (member_id: number, code: string): Promise<MemberMessagingStatus> => core("messaging.member.reject", { member_id, code });
-export const memberMessagingRemoveUser = (member_id: number, user_id: string): Promise<MemberMessagingStatus> => core("messaging.member.remove_user", { member_id, user_id });
+export const memberMessagingConnect = (member_id: number, token: string, platform?: MessagingPlatform): Promise<MemberMessagingConnectResult> => core("messaging.member.connect", { ...onPlatform(member_id, platform), token });
+export const memberMessagingDisconnect = (member_id: number, platform?: MessagingPlatform): Promise<MemberMessagingStatus> => core("messaging.member.disconnect", onPlatform(member_id, platform));
+export const memberMessagingSetEnabled = (member_id: number, enabled: boolean, platform?: MessagingPlatform): Promise<MemberMessagingStatus> => core("messaging.member.set_enabled", { ...onPlatform(member_id, platform), enabled });
+export const memberMessagingApprove = (member_id: number, code: string, platform?: MessagingPlatform): Promise<{ approved: boolean; status: MemberMessagingStatus }> => core("messaging.member.approve", { ...onPlatform(member_id, platform), code });
+export const memberMessagingReject = (member_id: number, code: string, platform?: MessagingPlatform): Promise<MemberMessagingStatus> => core("messaging.member.reject", { ...onPlatform(member_id, platform), code });
+export const memberMessagingRemoveUser = (member_id: number, user_id: string, platform?: MessagingPlatform): Promise<MemberMessagingStatus> => core("messaging.member.remove_user", { ...onPlatform(member_id, platform), user_id });
 export const messagingAccounts = (): Promise<{ accounts: MemberMessagingAccount[] }> => core("messaging.accounts");
 
 // ---------- the device side of the core ----------

@@ -21,14 +21,12 @@ import "../settings-polish.css";
 import "../connections.css";
 import "../services.css";
 import "../providers.css";
-import "../messaging.css";
 import "../memory.css";
 import { createMemory } from "../memory-view";
 import "../safety-rules.css";
 import { createRules } from "../safety-rules";
 import { createVault } from "../vault";
 import { createConnections } from "../connections";
-import { createMessaging } from "../messaging";
 import { DICTATION_MODES, isDictationMode } from "../dictation";
 import { describeError, keyReasonText, parseLimit } from "../format";
 import { wireKeyField } from "../keyfield";
@@ -243,14 +241,6 @@ export function createSettings(app: AppContext): SettingsPage {
     tryPrompt: (text) => app.go("agent", `draft:${text}`),
   });
   app.onEvent((event) => connections.followEvent(event));
-  /** Telegram, in the 「訊息平台」 tab: it keeps its own state too. */
-  const messaging = createMessaging({ visible: () => visible && pane === "general", redraw: () => render() });
-  // Which members have their own bot (each set up in its panel's 建議); Raphael's own is the card above them.
-  let memberAccounts: api.MemberMessagingAccount[] = [];
-  async function loadMemberAccounts(): Promise<void> {
-    try { memberAccounts = (await api.messagingAccounts()).accounts ?? []; } catch { memberAccounts = []; }
-    if (visible && pane === "general") render();
-  }
   const memoryHost = { visible: () => visible && pane === "general", redraw: () => render() };
   const memoryShared = createMemory({ ...memoryHost, space: "shared" });
   const memories = [memoryShared];
@@ -278,7 +268,7 @@ export function createSettings(app: AppContext): SettingsPage {
     update, memoryImportHTML: memoryImport.html(),
     pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
     replacingKey, keyBusy, keyError, limitDraft, limitError, languageGroups, now: Date.now(),
-    connections: connections.view(), messaging: messaging.view(), memberAccounts, memoryShared: memoryShared.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
+    connections: connections.view(), memoryShared: memoryShared.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
 
   /** The item at the foot of the microphones' menu that looks for them again. */
@@ -483,9 +473,9 @@ export function createSettings(app: AppContext): SettingsPage {
     if (pane !== "models") destroyUsage();
     if (pane === "connections") void connections.load();
     else connections.reset();
-    // Messaging and memory are sections of 一般 (owner, 2026-11-07).
-    if (pane === "general") { void messaging.load(); void loadMemberAccounts(); for (const list of memories) void list.load(); }
-    else { messaging.reset(); for (const list of memories) list.reset(); }
+    // Memory is a section of 一般 (owner, 2026-11-07); the bots moved to the members' panels.
+    if (pane === "general") { for (const list of memories) void list.load(); }
+    else { for (const list of memories) list.reset(); }
     if (pane === "safety") { void rules.load(); void vault.load(); }
     else { rules.reset(); vault.reset(); }
     services.reset();
@@ -496,8 +486,6 @@ export function createSettings(app: AppContext): SettingsPage {
     body.scrollTop = 0;
     render();
     body.scrollTop = 0;
-    // A link to messaging of before lands on its section of 一般.
-    if (next === "messaging") body.querySelector<HTMLElement>('[data-section="messaging"]')?.scrollIntoView({ block: "start" });
     if (hadUsage && pane === "models" && modelsTab === "usage") refreshUsage();
     paintNav();
     replay(body, "pane-in");
@@ -1089,7 +1077,7 @@ export function createSettings(app: AppContext): SettingsPage {
       return;
     }
 
-    if (connections.click(target) || messaging.click(target) || memories.some((list) => list.click(target)) || rules.click(target) || services.click(target)) return;
+    if (connections.click(target) || memories.some((list) => list.click(target)) || rules.click(target) || services.click(target)) return;
 
     if (target.closest('.tg[data-k="autostart"]')) {
       void changeDevice({ autostart: !app.device().autostart });
@@ -1177,7 +1165,7 @@ export function createSettings(app: AppContext): SettingsPage {
   el.addEventListener("input", (e) => {
     const input = e.target as HTMLInputElement;
     providers.input(input);
-    if (connections.input(input) || messaging.input(input) || memories.some((list) => list.input(input)) || rules.input(input)) return;
+    if (connections.input(input) || memories.some((list) => list.input(input)) || rules.input(input)) return;
     if (input.id === "limit-input") limitDraft = input.value;
   });
   el.addEventListener("keydown", (e) => {
@@ -1187,7 +1175,7 @@ export function createSettings(app: AppContext): SettingsPage {
       switchModelsTab(e.key === "Home" ? "models" : e.key === "End" ? "usage" : modelsTab === "models" ? "usage" : "models");
       return;
     }
-    void (connections.key(e) || messaging.key(e) || memories.some((list) => list.key(e)) || rules.key(e) || services.key(e) || providers.key(e));
+    void (connections.key(e) || memories.some((list) => list.key(e)) || rules.key(e) || services.key(e) || providers.key(e));
   });
   // Menus consume their own Escape; the panel and native window controls share one Tab loop.
   const settingsKey = (e: KeyboardEvent): void => {
@@ -1299,7 +1287,6 @@ export function createSettings(app: AppContext): SettingsPage {
       if (open === "usage" || open === "models") modelsTab = open;
       if (pane !== "models") destroyUsage();
       connections.reset();
-      messaging.reset();
       for (const list of memories) list.reset();
       rules.reset();
       vault.reset();
@@ -1307,7 +1294,7 @@ export function createSettings(app: AppContext): SettingsPage {
       providers.reset();
       if (pane === "about") void checkUpdate();
       if (pane === "connections") void connections.load();
-      if (pane === "general") { void messaging.load(); for (const list of memories) void list.load(); }
+      if (pane === "general") { for (const list of memories) void list.load(); }
       if (pane === "safety") { void rules.load(); void vault.load(); }
       if (pane === "tools") void services.load();
       if (pane === "models" && modelsTab === "models") void providers.load();
@@ -1377,7 +1364,6 @@ export function createSettings(app: AppContext): SettingsPage {
       cliBrains.stop();
       destroyUsage();
       connections.reset();
-      messaging.reset();
       for (const list of memories) list.reset();
       rules.reset();
       vault.reset();

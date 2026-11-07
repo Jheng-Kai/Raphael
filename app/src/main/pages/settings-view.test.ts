@@ -4,7 +4,6 @@ import { Window } from "happy-dom";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { emptyConnectionsView } from "../connections";
-import { emptyMessagingView } from "../messaging";
 import { emptyMemoryView } from "../memory-view";
 import { emptyRulesView } from "../safety-rules";
 import { emptyServicesView } from "../services";
@@ -106,7 +105,7 @@ const view = (over: Partial<SettingsView> = {}): SettingsView => ({
   pane: "general", device, brain, hasKey: true, openrouter, spend, catalog, checkingOpenrouter: false,
   devices: { devices: [{ index: 0, name: REALTEK, is_default: true }], selected: null, automatic_device: REALTEK },
   altgr: false, version: "0.1.0", replacingKey: false, keyBusy: false, keyError: null, limitDraft: null, limitError: null,
-  languageGroups: GROUPS, now: NOW, connections: emptyConnectionsView(), messaging: emptyMessagingView(),
+  languageGroups: GROUPS, now: NOW, connections: emptyConnectionsView(),
   localModels: LOCAL_MODELS, localDownload: null, ...over,
 });
 
@@ -121,11 +120,9 @@ test("appearance is a section of 一般: one theme dropdown and the language, wi
   }
   expect(canonicalPane("appearance")).toBe("general");
 });
-test("Telegram is a section of 一般, and only there", () => {
-  expect(tab("general")).toContain("data-msg-section");
-  expect(tab("general")).toContain('data-section="messaging"');
+test("no bot is set in Settings: Telegram, Slack and Discord live in each member's panel (owner, 2026-11-07)", () => {
+  for (const id of ["general", "dictation", "agent", "connections", "usage", "about"] as const) expect(tab(id)).not.toContain("data-msg");
   expect(canonicalPane("messaging")).toBe("general");
-  for (const id of ["dictation", "agent", "connections", "usage", "about"] as const) expect(tab(id)).not.toContain("data-msg");
 });
 
 test("shared owner memory lives in General, while own memory stays out of Settings", () => {
@@ -134,11 +131,10 @@ test("shared owner memory lives in General, while own memory stays out of Settin
   expect(html).toContain('data-mem-space="shared"');
   const document = new Window().document;
   document.body.innerHTML = html;
-  // Grok Bot's order of sections: the account first, then appearance, Raphael, messaging, memory and the guide.
+  // Grok Bot's order of sections: the account first, then appearance, Raphael, memory and the guide.
   expect(document.querySelector(".set-account > h2")?.textContent).toBe("關於你");
   expect(document.querySelector("[data-memory-import]")).not.toBeNull();
   expect(html.indexOf("data-memory-import")).toBeGreaterThan(html.indexOf('data-mem-space="shared"'));
-  expect(html.indexOf('data-mem-space="shared"')).toBeGreaterThan(html.indexOf('data-section="messaging"'));
   expect(document.querySelector('[data-k="routine-timezone"]')).not.toBeNull();
   expect(document.querySelector('[data-row="output-folder"] [data-act="output-pick"]')).not.toBeNull();
   for (const pane of ["tools", "safety", "dictation"] as const) expect(tab(pane, { memoryShared })).not.toContain("data-mem-section");
@@ -330,19 +326,10 @@ describe("一般", () => {
     expect(buttons(chosen)).toHaveLength(1);
     expect(chosen).not.toMatch(/title="/);
   });
-  test("messaging lists the members that have a bot of their own, one row each, after Raphael's card", () => {
-    const account = { member_id: 4, member_name: "紫苑", kind: "telegram" as const, paired: true, connected: true, enabled: true, running: true, error: null, bot: { username: "shion_bot" }, allowed: [], pending: [] };
-    const html = tab("general", { memberAccounts: [account, { ...account, member_id: 5, member_name: "紅丸", connected: false }] });
-    const section = html.slice(html.indexOf('class="sgroup msg-accounts"'));
-    expect(section).toContain("成員的帳號");
-    expect(section).toContain("紫苑");
-    expect(section).toContain("@shion_bot");
-    expect(section).not.toContain("紅丸");
-    expect(tab("general", { memberAccounts: [] })).not.toContain("msg-accounts");
-  });
-  test("General is Grok Bot's sections: you, appearance, Raphael, messaging, then memory and the guide", () => {
+  test("General is Grok Bot's sections: you, appearance, Raphael, then memory and the guide; the bots live in the panels", () => {
     const html = tab("general");
-    expect(groups(html).slice(0, 4)).toEqual(["關於你", t("skin.title"), t("agent.title"), t("settings.paneMessaging")]);
+    expect(html).not.toContain("data-msg-section");
+    expect(groups(html).slice(0, 3)).toEqual(["關於你", t("skin.title"), t("agent.title")]);
     expect(groups(html).slice(-2)).toEqual([t("members.profile.memory"), "啟動"]);
     // Importing is one row with a short button beside its name, never a heading over a button that repeats it.
     expect(names(html)).toContain("匯入記憶");
@@ -624,12 +611,6 @@ describe("Models", () => {
     const row = rowOf(tab("models", { brain: { ...brain, cleanup_model: "x/old" } }), "整理文字");
     expect(row).toContain('<strong class="mp-tname">old</strong>');
     expect(row).toContain('data-price="model">價格未知</span>');
-  });
-});
-
-describe("訊息平台", () => {
-  test("is a section of 一般 holding Telegram, in rows like the others", () => {
-    expect(tab("general")).toMatch(/<section class="sgroup set-messaging" data-section="messaging"><h2>訊息平台<\/h2><section class="sgroup msg" data-msg-section data-msg-kind="telegram" aria-label="Telegram"><div class="slist"><div class="row msg-head">/);
   });
 });
 

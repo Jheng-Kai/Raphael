@@ -777,7 +777,7 @@ the light theme and the text colour in the dark theme. Never use a letter substi
 Selected matrix, from app/:
 
 ```powershell
-npm run look -- work-messaging-setup work-messaging-pairing work-slack-connect computer-file-changes computer-file-partial computer-file-confirm computer-file-restored computer-file-bypass computer-login-card computer-login-saved chat-secret-masked delete desktop-owner --theme both --width 1120,720,1920x1080
+npm run look -- work-messaging-setup work-messaging-pairing computer-file-changes computer-file-partial computer-file-confirm computer-file-restored computer-file-bypass computer-login-card computer-login-saved chat-secret-masked delete desktop-owner --theme both --width 1120,720,1920x1080
 ```
 
 Compare login with chat-secret-masked, restore confirmation with delete, and panel

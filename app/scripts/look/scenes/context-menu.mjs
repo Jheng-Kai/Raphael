@@ -17,7 +17,9 @@ const ownSummaryMore = '.mb-det [data-mem-space="own"] [data-mem="summary-more"]
 const withSummary = { memorySummary: { text: "進行中：規劃週末", updated_at_ms: 1792807200000 } };
 const usageKey = [...settings("models"), click('[data-models-tab="usage"]'), wait('[data-act="key-menu"]')];
 const paired = { messaging: { connected: true, enabled: true, running: true, error: null, bot: { username: "raph_bot" }, allowed: [{ user_id: "42", name: "小晴" }], pending: [] } };
-const pairedUser = [...settings("messaging"), click('[data-msg="expand"]'), wait('[data-msg="user-menu"]'), click('[data-msg="user-menu"]'), wait('#app-popover [data-pick="remove"]')];
+// Raphael's Telegram is in his panel since 2026-11-07.
+const raphaelBots = [member(0), { action: "open-details" }, wait('.mb-panel-suggest [data-msg-kind="telegram"] [data-msg="expand"]')];
+const pairedUser = [...raphaelBots, click('[data-msg="expand"]'), wait('[data-msg="user-menu"]'), click('[data-msg="user-menu"]'), wait('#app-popover [data-pick="remove"]')];
 
 export default [
   scene("context-menu-member", "A right click on a member's row opens the menu of its ⋯ at the pointer", rightClicked('.mb-col [data-member-item="2"]', [column])),
@@ -40,7 +42,7 @@ export default [
   scene("memory-summary-done", "The second press clears the summary and its row goes", [...memoryTab, ...confirmed(ownSummaryMore), waitGone(".mb-det .mem-summary"), check("memory-summary-done")], withSummary),
   scene("usage-key-menu", "移除金鑰 waits in the key row's ⋯; its first press asks once more", [...usageKey, ...asked('[data-act="key-menu"]')]),
   scene("usage-key-removed", "The second press removes the key and the row asks for one", [...usageKey, ...confirmed('[data-act="key-menu"]'), wait("#key-input"), check("usage-key-removed")]),
-  scene("messaging-paired-aligned", "A paired person's face and name start on the bot's left edge, not set in", [...settings("messaging"), click('[data-msg="expand"]'), wait('[data-msg="user-menu"]'), check("messaging-paired-aligned")], paired),
+  scene("messaging-paired-aligned", "A paired person's face and name start on the bot's left edge, not set in", [...raphaelBots, click('[data-msg="expand"]'), wait('[data-msg="user-menu"]'), check("messaging-paired-aligned")], paired),
   scene("messaging-user-menu", "Removing a person from Telegram waits in their row's ⋯", pairedUser, paired),
   scene("messaging-user-removed", "移除 in the ⋯ takes the person off the list", [...pairedUser, click('#app-popover [data-pick="remove"]'), waitGone('[data-msg="user-menu"]'), check("messaging-user-removed")], paired),
 ];

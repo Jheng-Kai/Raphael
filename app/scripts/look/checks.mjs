@@ -1284,27 +1284,24 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, operations: calls.map(call => call.params.operation) };
   }
-  if (["work-messaging", "work-pairing", "work-connected"].includes(name)) {
-    const sections = document.querySelectorAll('[data-msg-kind]');
-    require(sections.length === 3, 'all three channels use the existing settings group');
+  if (["work-messaging", "work-pairing"].includes(name)) {
+    const sections = document.querySelectorAll('.mb-panel-suggest [data-msg-kind]');
+    require(sections.length === 3, "all three channels are in Raphael's panel");
     const slackMark = document.querySelector('[data-msg-kind=slack] .msg-name .logo-mono');
     const slackFills = [...(slackMark?.querySelectorAll('svg path') ?? [])].map(path => path.getAttribute('fill')?.toUpperCase());
     require(visible(slackMark) && slackMark.querySelector('svg path')?.getAttribute('d').startsWith('M5.042 15.165')
       && new Set(slackFills).size === 4 && ['#E01E5A', '#36C5F0', '#2EB67D', '#ECB22E'].every(fill => slackFills.includes(fill)),
     'Slack uses its real mark in its four official colours in both themes (R-UI-97)');
     if (name === 'work-messaging') {
-      require(document.querySelectorAll('[data-msg-kind] input[type=password]').length === 3, 'each token has its own masked field');
-      for (const kind of ['slack', 'discord']) require(visible(document.querySelector(`[data-msg-kind=${kind}] [data-msg=setup-link]`)), 'each work channel has the shared setup button');
-      const links = window.__look.calls.filter(call => call.command === 'open_link').map(call => call.url);
-      require(links.includes('https://api.slack.com/apps') && links.includes('https://discord.com/developers/applications'), 'setup buttons open only their fixed platform URLs');
+      // Set up in the conversation (owner, 2026-11-07): no token is typed into the panel.
+      require(!document.querySelector('.mb-det input[type=password]'), 'no token field in the panel');
+      for (const kind of ['slack', 'discord']) require(visible(document.querySelector(`.mb-panel-suggest [data-intent=setup-${kind}]`)), `${kind} not set up is one row with 設定`);
+      const asks = window.__look.calls.filter(call => call.command === 'agent_ask_text');
+      require(asks.length === 1 && asks[0].intent === 'setup-slack' && asks[0].text.includes('Slack') && !asks[0].memberId, "設定 asks Raphael in his conversation with the setup intent beside the words");
     }
     if (name === 'work-pairing') {
       require(document.querySelector('[data-msg-kind=slack] [data-code=SL1234]') && document.querySelector('[data-msg-kind=discord] [data-code=DC1234]'), 'pairing codes stay with their own platform');
       require(!window.__look.calls.some(call => String(call.method ?? '').endsWith('.approve')), 'viewing never approves a pairing');
-    }
-    if (name === 'work-connected') {
-      const calls = window.__look.calls.filter(call => call.method === 'messaging.slack.connect');
-      require(calls.length === 1 && !document.querySelector('#msg-token-slack'), 'one Slack connect call clears its token');
     }
     return {check:name};
   }
