@@ -672,9 +672,11 @@ async def test_the_dictated_text_and_the_reply_are_never_logged(make_svc, fake_c
 def test_the_prompt_is_package_data_with_one_placeholder_at_its_end():
     file = resources.files("raphael_core.brain.prompts").joinpath("cleanup_system.md")
     text = file.read_text(encoding="utf-8")
-    # The owner's shorter prompt of 2026-11-07: a short prompt is faster and cheaper.
+    # The owner's shorter prompt of 2026-11-07: a short prompt is faster and cheaper. The rules added the same night
+    # (other-language recognition slips, repeats said again, no ？ without a question word, nothing but the text) cost
+    # about 230 characters.
     assert text.startswith("You edit dictated text.")
-    assert len(text) < 3500
+    assert len(text) < 3700
     assert text.count("{dictionary}") == 1 and text.rstrip().endswith("\n{dictionary}")
     assert text.count("{target_app}") == 1
     assert text.count("{languages}") == 1 and text.count("{script_rules}") == 1
@@ -943,7 +945,8 @@ def test_an_answer_written_as_a_list_is_still_too_long():
 
 def languages_line(prompt):
     (line,) = [line for line in prompt.splitlines() if "The speaker's languages: " in line]
-    return line.split("The speaker's languages: ", 1)[1].split(". ", 1)[0]
+    # The mixed-English instruction follows the configured language labels in prompt C.
+    return line.split("The speaker's languages: ", 1)[1].split(", with English words mixed in.", 1)[0].split(". ", 1)[0]
 
 
 def test_the_prompt_names_the_speakers_languages_in_their_order():
@@ -1015,7 +1018,7 @@ def test_without_chinese_or_english_there_is_no_script_rule_for_them():
     prompt = build_system_prompt([], [], languages=["ja-JP", "ko-KR"])
     assert languages_line(prompt) == "日本語, 한국어"
     assert "Write Chinese" not in prompt and "Write English" not in prompt
-    assert "Leave Japanese in Japanese script." in prompt
+    assert "Japanese script." in prompt
 
 
 def test_the_rest_of_the_prompt_is_the_same_for_every_selection():

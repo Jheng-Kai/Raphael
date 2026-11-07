@@ -41,7 +41,7 @@ def test_shipped_candidate_uses_the_real_renderer_and_matches_production():
     original = build_system_prompt([], [])
     template = (PROMPTS / "cleanup_candidate.md").read_text(encoding="utf-8")
     assert template == (PROMPTS / "cleanup_system.md").read_text(encoding="utf-8")
-    assert len(template) < 3500
+    assert len(template) < 3700  # the same bound as the shipped prompt (tests/brain/test_cleanup.py)
     synthetic = case("嗯請找 Zinnia")
     synthetic = replace(synthetic, dictionary=["Zinnia", "{target_app}"])
     rendered = compare.render(template, synthetic)

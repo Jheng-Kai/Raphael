@@ -840,9 +840,9 @@ def test_the_prompt_still_has_its_general_rules():
         "Keep every point, name, number, condition, negation and aside",
         "Never drop a sentence, never summarize, never add anything",
         "Turn a word into a name only when the context clearly means that product",
-        "When a word or phrase is restarted, keep only the final form",
+        "write it once, in its final form",
         "On a self-correction keep only the correction",
-        "Wrong Simplified-to-Traditional conversions",
+        "wrong Traditional conversions",
     ):
         assert kept in prompt, kept
     assert len(prompt) < 5_000, "general rules must stay within the short cleanup prompt"
