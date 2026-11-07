@@ -4,10 +4,11 @@ export function checkRendered(name, context = {}) {
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
   if (name === "template-content" || name === "template-content-expanded") {
     const dialog = document.querySelector('.template-preview');
-    const skills = [...dialog.querySelectorAll('.template-skill')];
+    // One row per skill: its name, one line, and its text behind a disclosure (owner, 2026-11-07: Grok Bot's cards of rows).
+    const skills = [...dialog.querySelectorAll('[data-tpl-skill]')];
     require(skills.length > 0, "skills have named rows and full-text disclosures");
     for (const skill of skills) {
-      require(skill.querySelector('.row .t')?.textContent.trim() && skill.querySelector('.row .val')?.textContent.trim(), "skill name and description remain on the shared row");
+      require(skill.querySelector('.tpl-row-t > b')?.textContent.trim() && skill.querySelector('.tpl-row-t > span')?.textContent.trim(), "skill name and description stay on its row");
       const detail = skill.querySelector('.card-detail'), toggle = skill.querySelector('[data-card-disclosure]');
       require(!/^\s*---\s*\n(?:name|description):/m.test(detail.textContent) && !/^description:/m.test(detail.textContent), "skill full text omits frontmatter");
       const expanded = name.endsWith('-expanded');
@@ -54,7 +55,7 @@ export function checkRendered(name, context = {}) {
         require(text.top - heading.bottom <= 8, "full text follows its heading with compact spacing");
       }
       const template = window.__look.data.colleagueSample.template;
-      require(dialog.textContent.includes(template.personality) && dialog.querySelector('.template-skill .card-detail').textContent.includes('先查證來源，再完成報告。') && dialog.textContent.includes(template.routines[0].prompt), "full personality, skill body and routine text");
+      require(dialog.textContent.includes(template.personality) && dialog.querySelector('[data-tpl-skill] .card-detail').textContent.includes('先查證來源，再完成報告。') && dialog.textContent.includes(template.routines[0].prompt), "full personality, skill body and routine text");
       if (name === "store-export") {
         // The template card (owner, 2026-11-07) reviews in this dialog and saves from the card.
         require(!window.__look.exportedTemplate && (visible(dialog.querySelector('[data-dlg="export"]')) || visible(document.querySelector('[data-template-card-id] [data-act="template-save"]'))), "review precedes file save");
@@ -63,7 +64,7 @@ export function checkRendered(name, context = {}) {
         require(dialog.querySelectorAll('[data-dlg="connect"]').length === template.connections.length && [...dialog.querySelectorAll('[data-dlg="connect"]')].every(b => b.disabled), "one disabled connect action per app");
         require(dialog.textContent.includes("09:00"), "actual schedule visible");
         if (name === "store-warning") {
-          const warning = dialog.querySelector('.template-warnings[role="status"]');
+          const warning = dialog.querySelector('.tpl-alert[role="status"]');
           require(warning && !warning.textContent.includes("template.") && !/[。.]\s*·/.test(warning.textContent), "one warning block uses localized sentences without stray punctuation");
           const lines = [...warning.querySelectorAll('p')];
           require(lines.length === 2 && lines[1].getBoundingClientRect().top - lines[0].getBoundingClientRect().bottom <= 8, "third-party and scan risks share compact spacing");
@@ -129,7 +130,9 @@ export function checkRendered(name, context = {}) {
       const noticeBox = notice.getBoundingClientRect(), footerBox = preview.querySelector('.mb-dlg-act').getBoundingClientRect();
       require(noticeBox.top >= footerBox.top && noticeBox.bottom <= preview.querySelector('[data-dlg="import"]').getBoundingClientRect().top, "the entire import notice stays visible above the buttons");
       require(!preview.querySelector('.card-status, .card-well'), "no invented template or connection status and no padded list boxes");
-      require(preview.querySelectorAll('.list .row').length === 2 && [...preview.querySelectorAll('.list .row')].every(row => row.querySelector('.t') && row.querySelector('.ctl .val')), "skills and paused routines reuse compact named list rows with muted detail");
+      // One row per skill and per paused routine: its name, then one muted line (owner, 2026-11-07).
+      const rows = [...preview.querySelectorAll('[data-tpl-skill], [data-tpl-routine]')];
+      require(rows.length === 2 && rows.every(row => row.querySelector('.tpl-row-t > b')?.textContent.trim() && row.querySelector('.tpl-row-t > span')?.textContent.trim()), "skills and paused routines are named rows with one muted line");
     }
     if (name === "colleague-imported") {
       require(calls.some(call => call.method === "members.template" && call.params.action === "import"), "import follows explicit action");

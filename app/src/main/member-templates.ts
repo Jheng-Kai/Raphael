@@ -8,7 +8,8 @@ import { slimeFaceHTML } from "./slime";
 import { routineSentenceHTML } from "./members";
 import { SERVICE_ICONS } from "./service-icons";
 import type { Member, NewMember, Routine } from "./types";
-import { btn, esc, row, toaster } from "./ui";
+import { appMarkHTML } from "./connector-card";
+import { btn, esc, ico, toaster } from "./ui";
 
 export interface MemberTemplate {
   format: "raphael-member"; version: 1;
@@ -81,30 +82,59 @@ function skillContents(text: string): { name: string; description: string; body:
   return {name: values.name?.trim() || t("template.skill"), description: values.description?.trim() || "", body: frontmatter ? text.slice(frontmatter[0].length) : text};
 }
 
-export function templateContents(template: MemberTemplate, warnings: ScanFinding[] = []): string {
+/**
+ * What a member template holds, as Grok Bot's dialogs show things (owner, 2026-11-07): who it is, then each part as a
+ * short card of rows: the instructions and personality as a few lines that open in full, one row per skill (its name and
+ * one line; its text behind 顯示內容), one row per routine (its name and when), the apps it needs by their marks. A
+ * warning stands at the top only when there is something to warn of: a third-party template being added, or a secret
+ * or an injected instruction found in it.
+ */
+export function templateContents(template: MemberTemplate, warnings: ScanFinding[] = [], o: { thirdParty?: boolean } = {}): string {
   const full = (text: string): string => `<pre class="template-text">${esc(text || t("template.none"))}</pre>`;
   const risks = [...new Set(warnings.map(w => t(w.kind === "secret" ? "store.secret" : "store.injection", {p0:scanLocation(w)})))];
-  return `<div class="note template-warnings" role="status"><p>${esc(t("store.thirdParty"))}</p>` +
-    (warnings.some(w => w.kind === "injection") ? "" : `<p>${esc(t("store.injectionNote"))}</p>`) + risks.map(text => `<p>${esc(text)}</p>`).join("") + `</div>` +
-    `<section class="template-section"><h3>${esc(t("store.facts"))}</h3><div class="template-field"><h4>${esc(t("members.instructions"))}</h4>${full(template.instructions)}</div><div class="template-field"><h4>${esc(t("members.personality"))}</h4>${full(template.personality)}</div></section>` +
-    `<section class="template-section"><h3>${esc(t("store.skills"))}</h3><p class="note">${esc(t("store.arriveOff"))}</p><div class="list">` +
-    (template.skills.map((skill, index) => {
+  const notes = [...(o.thirdParty ? [t("store.thirdParty")] : []), ...risks];
+  const alert = notes.length ? `<div class="tpl-alert${risks.length ? " is-risk" : ""}" role="status">${ico("shield")}<div>${notes.map(text => `<p>${esc(text)}</p>`).join("")}</div></div>` : "";
+  const text = (label: string, value: string): string => value.trim()
+    ? `<section class="tpl-sec"><h4>${esc(label)}</h4><div class="tpl-card"><p class="tpl-quote" data-tpl-text>${esc(value.trim())}</p>` +
+      (value.trim().split(/\n/).length > 4 || value.trim().length > 220 ? btn(esc(t("chat.showAll")), "tpl-more", ' data-tpl-more aria-expanded="false"') : "") + `</div></section>`
+    : "";
+  const count = (label: string, n: number): string => `<h4>${esc(label)}<span class="tpl-count num">${n}</span></h4>`;
+  const skills = template.skills.length ? `<section class="tpl-sec">${count(t("store.skills"), template.skills.length)}<div class="tpl-card">` +
+    template.skills.map((skill, index) => {
       const {name, description, body} = skillContents(skill.text);
-      return `<div class="template-skill">` + row(esc(name), "", `<span class="val">${esc(description)}</span>`) +
-        cardDisclosureHTML(`template-skill-${index}`, full(body) + Object.entries(skill.files || {}).map(([path, content]) => `<div class="template-field"><h4>${esc(path)}</h4>${full(content)}</div>`).join("")) + `</div>`;
-    }).join("") || esc(t("template.none"))) + `</div></section>` +
-    `<section class="template-section"><h3>${esc(t("template.routines"))}</h3><div class="list">` + (template.routines.map(r => row(esc(r.title), "", `<span class="val">${routineSentenceHTML(r)} · ${esc(t("computer.routinePaused"))}</span>`) + full(r.prompt)).join("") || esc(t("template.none"))) + `</div></section>`;
+      return `<div class="tpl-row" data-tpl-skill>${ico("steps")}<div class="tpl-row-t"><b>${esc(name)}</b>${description ? `<span>${esc(description)}</span>` : ""}` +
+        cardDisclosureHTML(`template-skill-${index}`, full(body) + Object.entries(skill.files || {}).map(([path, content]) => `<div class="template-field"><h4>${esc(path)}</h4>${full(content)}</div>`).join("")) + `</div></div>`;
+    }).join("") + `</div><p class="tpl-foot">${esc(t("store.arriveOff"))}</p></section>` : "";
+  const routines = template.routines.length ? `<section class="tpl-sec">${count(t("template.routines"), template.routines.length)}<div class="tpl-card">` +
+    template.routines.map((r, index) => `<div class="tpl-row" data-tpl-routine>${ico("repeat")}<div class="tpl-row-t"><b>${esc(r.title)}</b><span>${routineSentenceHTML(r)} · ${esc(t("computer.routinePaused"))}</span>` +
+      // A prompt that only repeats the instructions shown above opens nothing new, so it has no disclosure.
+      (r.prompt.trim() && r.prompt.trim() !== template.instructions.trim() ? cardDisclosureHTML(`template-routine-${index}`, full(r.prompt)) : "") + `</div></div>`).join("") + `</div></section>` : "";
+  const apps = template.connections.length ? `<section class="tpl-sec"><h4>${esc(t("template.connections"))}</h4><div class="tpl-apps">` +
+    template.connections.map(app => `<span class="tpl-app">${appMarkHTML(app)}<span>${esc(connectionName(app))}</span></span>`).join("") + `</div></section>` : "";
+  return `<div class="tpl-hero"><b>${esc(template.name)}</b>${template.role && template.role !== template.name ? `<span>${esc(template.role)}</span>` : ""}</div>` +
+    alert + text(t("members.instructions"), template.instructions) + text(t("members.personality"), template.personality) + skills + routines + apps;
 }
+
+// 顯示全部 opens a long instruction or personality in full, and 收起 closes it again.
+if (typeof document !== "undefined") document.addEventListener("click", event => {
+  const more = (event.target as Element).closest?.<HTMLElement>("[data-tpl-more]");
+  if (!more) return;
+  const open = more.getAttribute("aria-expanded") !== "true";
+  more.setAttribute("aria-expanded", String(open));
+  more.textContent = t(open ? "chat.showLess" : "chat.showAll");
+  more.parentElement?.querySelector("[data-tpl-text]")?.toggleAttribute("data-open", open);
+});
 
 export async function previewTemplate(raw: unknown, avatar: string, create: (member: NewMember) => Promise<Member | null>, groupId: number | null, done: () => void, catalogId?: string): Promise<void> {
   try {
     const {template, findings = []} = await api.core<{template: MemberTemplate; findings?: ScanFinding[]}>("members.template", catalogId ? {action: "catalog-preview", catalog_id: catalogId} : {action: "preview", template: raw});
     let made: Member | null = null, busy = false;
     const connected = new Set<string>();
-    const body = (): string => cardHTML({title: template.role || template.name, status: "ready", hideStatus: true, attrs: " data-member-template",
-      content: `<label class="mp-label">${esc(t("members.name"))}<input class="mb-fin" data-template-name maxlength="24" value="${esc(made?.name || template.name)}"${made ? " disabled" : ""}></label>` +
-        templateContents(template, findings) +
-        `<section class="template-section"><h3>${esc(t("template.connections"))}</h3>${template.connections.map(app => cardHTML({title: connectionName(app), status: "done", statusText: t("conn.signedIn"), hideStatus: !connected.has(app), attrs: ` data-template-connection="${esc(app)}" data-connected="${connected.has(app)}"`, body: made ? t("template.connectHelp") : undefined, actions: btn(esc(t(connected.has(app) ? "conn.signedIn" : "template.connect")), "sm", ` data-dlg="connect" data-app="${esc(app)}"${!made || busy || connected.has(app) ? " disabled" : ""}`)})).join("") || `<p>${esc(t("template.none"))}</p>`}</section>`});
+    // The name to give it, then what it holds, in the dialog itself rather than inside another card (owner, 2026-11-07).
+    const body = (): string => `<div class="tpl-import" data-member-template>` +
+      `<label class="mp-label">${esc(t("members.name"))}<input class="mb-fin" data-template-name maxlength="24" value="${esc(made?.name || template.name)}"${made ? " disabled" : ""}></label>` +
+      templateContents({...template, connections: []}, findings, {thirdParty: true}) +
+      (template.connections.length ? `<section class="tpl-sec"><h4>${esc(t("template.connections"))}</h4>${template.connections.map(app => cardHTML({title: connectionName(app), status: "done", statusText: t("conn.signedIn"), hideStatus: !connected.has(app), attrs: ` data-template-connection="${esc(app)}" data-connected="${connected.has(app)}"`, body: made ? t("template.connectHelp") : undefined, actions: btn(esc(t(connected.has(app) ? "conn.signedIn" : "template.connect")), "sm", ` data-dlg="connect" data-app="${esc(app)}"${!made || busy || connected.has(app) ? " disabled" : ""}`)})).join("")}</section>` : "") + `</div>`;
     const dialog = openDialog({title: t("template.preview"), cls: "template-preview", body: body(),
       actions: {secondary: `<p class="note" data-template-notice>${esc(t("template.noGrants"))}</p>` + btn(esc(t("common.close")), "", ' data-dlg="close"'), primary: {label: esc(t("template.import")), attrs: ' data-dlg="import"'}}, canClose: () => !busy,
       onAct(action, button) {
@@ -167,8 +197,7 @@ export async function exportMemberTemplate(id: number): Promise<void> {
   const {template, findings = []} = await api.core<{template: MemberTemplate; findings: ScanFinding[]}>("members.template", {action: "review", id});
   let busy = false;
   const blocked = findings.some(w => w.kind === "secret");
-  const dialog = openDialog({title: t("store.review"), cls: "template-preview template-export-review", body: templateContents(template, findings) +
-    `<h3>${esc(t("template.connections"))}</h3><p>${esc(template.connections.map(connectionName).join(", ") || t("template.none"))}</p>`,
+  const dialog = openDialog({title: t("store.review"), cls: "template-preview template-export-review", body: templateContents(template, findings),
     actions: {secondary: btn(esc(t("store.publish")), "", ` data-dlg="publish"${blocked ? " disabled" : ""}`), primary: {label: esc(t("store.export")), attrs: ` data-dlg="export"${blocked ? " disabled" : ""}`}},
     canClose: () => !busy,
     onAct(action, button) {

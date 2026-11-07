@@ -27,9 +27,11 @@ test("preview shows skills, paused routines and a disabled card per requested co
   expect(dialog.textContent!.split(t("template.noGrants"))).toHaveLength(2);
   expect(dialog.querySelector(".mb-dlg-act")!.firstElementChild!.matches("[data-template-notice]")).toBe(true);
   expect(dialog.querySelectorAll(".card-status, .card-well")).toHaveLength(0);
-  expect(dialog.querySelectorAll(".list .row")).toHaveLength(2);
-  expect(dialog.querySelector(".list .ctl")!.textContent).toBe(t("template.developerGoal"));
-  expect(dialog.querySelectorAll(".list")[1].textContent).toContain(t("computer.routinePaused"));
+  // One row per skill and per routine (owner, 2026-11-07: the review reads as Grok Bot's cards of rows).
+  const rows = dialog.querySelectorAll(".tpl-row");
+  expect(rows).toHaveLength(2);
+  expect(rows[0].querySelector(".tpl-row-t > span")!.textContent).toBe(t("template.developerGoal"));
+  expect(rows[1].textContent).toContain(t("computer.routinePaused"));
   expect(create).not.toHaveBeenCalled(); expect(api.connectorsConnect).not.toHaveBeenCalled();
   document.querySelector<HTMLButtonElement>('[data-dlg="import"]')!.click();
   for (let i=0;i<12;i++) await Promise.resolve();
@@ -57,9 +59,9 @@ test.each(["\n", "\r\n"])("skill preview separates quoted and folded metadata fr
   const text = ["---", 'name: "Check sources"', "description: >-", "  Check sources", "  before publishing.", "---", "# Method", "Keep this body.", "---", "name: body example"].join(newline);
   const template = {...starterTemplate(0), skills:[{text,files:{"scripts/check.py":"print('<checked>')"}}]};
   document.body.innerHTML = templateContents(template);
-  const skill = document.querySelector('.template-skill')!;
-  expect(skill.querySelector('.t')!.textContent).toBe("Check sources");
-  expect(skill.querySelector('.val')!.textContent).toBe("Check sources before publishing.");
+  const skill = document.querySelector('.tpl-row')!;
+  expect(skill.querySelector('.tpl-row-t > b')!.textContent).toBe("Check sources");
+  expect(skill.querySelector('.tpl-row-t > span')!.textContent).toBe("Check sources before publishing.");
   const detail = skill.querySelector<HTMLElement>('.card-detail')!;
   expect(detail.hidden).toBe(true);
   expect(detail.querySelector('.template-text')!.textContent).toBe(["# Method", "Keep this body.", "---", "name: body example"].join(newline));
@@ -74,16 +76,16 @@ test.each(["\n", "\r\n"])("skill preview separates quoted and folded metadata fr
 test("skill text without a complete frontmatter block stays intact", () => {
   for (const text of ["# Plain method\nname: body example", "---\nname: Unclosed\nKeep every line."]) {
     document.body.innerHTML = templateContents({...starterTemplate(0),skills:[{text}]});
-    expect(document.querySelector('.template-skill .t')!.textContent).toBe(t("template.skill"));
-    expect(document.querySelector('.template-skill .template-text')!.textContent).toBe(text);
+    expect(document.querySelector('.tpl-row .tpl-row-t > b')!.textContent).toBe(t("template.skill"));
+    expect(document.querySelector('.tpl-row .template-text')!.textContent).toBe(text);
   }
 });
 
 test("skill delimiters accept the whitespace allowed by the skill store", () => {
   const text = ' \t--- \t\nname: Check sources\ndescription: Check before publishing\n \t--- \t\nKeep this body.';
   document.body.innerHTML = templateContents({...starterTemplate(0),skills:[{text}]});
-  expect(document.querySelector('.template-skill .t')!.textContent).toBe('Check sources');
-  expect(document.querySelector('.template-skill .template-text')!.textContent).toBe('Keep this body.');
+  expect(document.querySelector('.tpl-row .tpl-row-t > b')!.textContent).toBe('Check sources');
+  expect(document.querySelector('.tpl-row .template-text')!.textContent).toBe('Keep this body.');
 });
 
 test("store filtering stays local and install carries catalogue identity", async () => {
@@ -136,13 +138,13 @@ test("scan warnings name the visible section without exposing internal translati
   const template = starterTemplate(3);
   api.core.mockResolvedValue({template,findings:[{kind:"injection",path:"template.instructions"}]});
   await previewTemplate(template, "slime:diablo", vi.fn(), null, vi.fn());
-  const warning = document.querySelector('.template-preview .note[role="status"]')!;
+  const warning = document.querySelector('.template-preview .tpl-alert[role="status"]')!;
   expect(warning).not.toBeNull();
   expect(warning.textContent).not.toContain("template.");
   expect(warning.textContent).not.toMatch(/[。.]\s*·/);
   expect(warning.textContent).toContain(t("store.injection", {p0:t("members.instructions")}));
   expect(warning.querySelectorAll("p")).toHaveLength(2);
-  expect(warning.compareDocumentPosition(document.querySelector(".template-field")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(warning.compareDocumentPosition(document.querySelector(".tpl-sec")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test("export rechecks the reviewed generation before file save", async () => {
