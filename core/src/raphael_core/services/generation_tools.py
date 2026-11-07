@@ -30,7 +30,8 @@ class GenerationTools:
 
     def choices_for(self, kind, selected):
         selected, _ = split_api_ref(selected)
-        return [row for row in self.service.providers.media_choices(kind) if row["reference"] == selected]
+        choices = self.service.media_choices(kind, selected) if hasattr(self.service, "media_choices") else self.service.providers.media_choices(kind)
+        return [row for row in choices if row["reference"] == selected]
 
     def offered_for(self, member):
         tools = []
@@ -100,7 +101,7 @@ class GenerationTools:
             result = PluginResult(True, text=json.dumps(data), billing={"model": data["model"], "cost_usd": data["cost_usd"]})
         except ServiceError as error:
             label = "drawing" if kind == "image" else "video"
-            result = PluginResult(False, error.kind, f"No available {label} model is chosen. Choose one in Settings > Models & usage > {label} model. This is a separate paid API call billed by the provider; no model is chosen automatically." if error.kind == "not_configured" else "Media generation did not finish; no file was delivered.",
+            result = PluginResult(False, error.kind, f"No available {label} model is chosen. Choose one in Settings > Models & usage > {label} model. This is a separate paid API call billed by the provider; no model is chosen automatically." if error.kind == "not_configured" else f"Media generation{(' with ' + error.service) if error.service else ''} did not finish ({error.kind}); no file was delivered.",
                                   billing={"model": selected, "cost_usd": ledger.total if ledger.calls[-1]["outcome"] != "cost_unknown" else None} if ledger and ledger.calls else None)
         if self.audit:
             outcome = "ok" if result.ok else result.kind if result.kind in ("timeout", "denied", "expired", "blocked") else "error"

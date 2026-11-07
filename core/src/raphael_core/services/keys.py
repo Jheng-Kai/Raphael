@@ -20,7 +20,12 @@ from ..brain.secrets import CredentialKeyStore, KeyStore, MemoryKeyStore
 logger = logging.getLogger(__name__)
 
 # The services that take a key of the owner's. Jina works without one, with lower limits.
-KEYED_SERVICES = ("brave", "tavily", "exa", "firecrawl", "jina", "fish")
+KEYED_SERVICES = (
+    "brave", "tavily", "exa", "firecrawl", "jina", "fish", "parallel", "keenable",
+    "perplexity", "openai", "openrouter-media", "xai", "elevenlabs", "mistral", "gemini",
+    "deepinfra", "groq", "fal", "krea", "meta-ai", "firecrawl-selfhosted", "browserbase", "browserbase-project",
+    "browser-use", "modal-token-id", "modal-token-secret", "daytona", "vercel",
+)
 # The longest key taken: far more than any service issues, and well within a credential.
 MAX_KEY_CHARS = 512
 # The target name of each key's credential is this, a space and the service.

@@ -17,28 +17,52 @@ from ..brain.model_ref import split_api_ref
 from .attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from .common import ServiceError
 from .fetch import PageFetcher
+from .keys import credential_keys
+from . import media_backends
+from .backends import credential_service
 
 
 class Generation:
     poll_seconds = 1
     timeout_seconds = 1800
 
-    def __init__(self, providers, store, *, fetcher=None):
+    def __init__(self, providers, store, *, fetcher=None, keys=None, transport=None):
         self.providers, self.store = providers, store
+        self._keys = keys if keys is not None else credential_keys()
+        self._transport, self._http = transport, None
         self.fetcher = fetcher or PageFetcher(media=True, media_types=("image/png", "image/jpeg", "image/webp", "video/mp4"), max_bytes=MAX_FILE_BYTES, max_seconds=120)
 
     async def aclose(self):
-        # PageFetcher creates and closes its own bounded client for each fetch.
-        pass
+        http, self._http = self._http, None
+        if http is not None:
+            await http.aclose()
+
+    def media_choices(self, kind, selected_model=""):
+        rows = list(self.providers.media_choices(kind))
+        selected, _ = split_api_ref(selected_model)
+        extra = media_backends.choice(kind, selected)
+        if extra is not None:
+            rows.append(extra)
+        return rows
+
+    def _client(self):
+        if self._http is None:
+            self._http = httpx.AsyncClient(transport=self._transport, trust_env=False)
+        return self._http
 
     async def make(self, kind, arguments, *, selected_model, progress=None, ledger=None):
-        choices = self.providers.media_choices(kind)
+        choices = self.media_choices(kind, selected_model)
         selected, _ = split_api_ref(selected_model)
         choice = next((row for row in choices if row["reference"] == selected), None)
         if choice is None:
             raise ServiceError("not_configured")
         if arguments.get("model", selected) != selected or not isinstance(arguments.get("prompt"), str) or not 1 <= len(arguments["prompt"].strip()) <= 12000:
             raise ServiceError("bad_arguments")
+        route = media_backends.selected(kind, selected)
+        if route is not None:
+            if arguments.get("images"):
+                raise ServiceError("bad_arguments", service=route[0])
+            return await self._backend(kind, route, selected, arguments["prompt"], progress, ledger)
         ids = arguments.get("images", [])
         if not isinstance(ids, list) or len(ids) > 4 or ids and not choice.get("image_input"):
             raise ServiceError("bad_arguments")
@@ -95,6 +119,37 @@ class Generation:
                 ledger.add(model=choice["reference"], cost_usd=billing["cost_usd"] or 0,
                            prompt_tokens=billing["prompt_tokens"], completion_tokens=billing["completion_tokens"],
                            outcome="ok" if billing["cost_usd"] is not None else "cost_unknown")
+
+    async def _backend(self, kind, route, reference, prompt, progress, ledger):
+        service, model = route
+        billing = {"cost_usd": None, "prompt_tokens": 0, "completion_tokens": 0}
+        contacted = False
+        def charge(data):
+            nonlocal contacted
+            contacted = True
+            found = media_cost(data, {})
+            if found["cost_usd"] is not None or billing["cost_usd"] is None:
+                billing.update(found)
+        try:
+            async with asyncio.timeout(self.timeout_seconds):
+                attachment = await media_backends.generate(kind, service, model, prompt,
+                    http=self._client(), key=self._keys.get(credential_service(service)), asset=self._asset, raw_asset=self._bytes,
+                    charge=charge, progress=progress, poll_seconds=self.poll_seconds)
+                await asyncio.sleep(0)
+                saved = self.store.save(attachment)
+                return {"attachment": saved.metadata(), "model": reference, **billing}
+        except ServiceError as error:
+            error.service = service
+            raise
+        except (ValueError, TypeError, KeyError, IndexError):
+            raise ServiceError("bad_response", service=service) from None
+        except TimeoutError:
+            raise ServiceError("timeout", service=service) from None
+        finally:
+            if contacted and ledger is not None:
+                ledger.add(model=reference, cost_usd=billing["cost_usd"] or 0,
+                    prompt_tokens=billing["prompt_tokens"], completion_tokens=billing["completion_tokens"],
+                    outcome="ok" if billing["cost_usd"] is not None else "cost_unknown")
 
     async def _json(self, provider, method, path, **kwargs):
         body = kwargs.pop("body", None)

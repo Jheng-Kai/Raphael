@@ -12,6 +12,13 @@ tools reach the services through it alone.
 
 RPC methods (the choice itself is `settings.set`, like any other setting):
 
+- `services.status {include_backends: true}` adds the complete tool backend inventory
+  (`backend_schema: 1`), including rows needing keys, installation, settings or
+  engine integration. Each option retains the four legacy fields and adds `name`,
+  `description_id`, `billing`, `key_service`, `integration`, `implementation` and
+  `selection_supported`. This is metadata, not permission to execute a tool.
+  Existing calls without this opt-in retain their original response contract.
+
 - `services.status` -> `{search, read, pdf, vision, voice}`. `search`, `read` and `pdf` are each
   `{enabled, service, options: [{id, needs_key, has_key, key_optional}]}`: whether the capability
   is on (a capability that is off is not used at all), the service chosen, and each one
@@ -49,6 +56,7 @@ from ..brain.settings import DEFAULTS, SettingsStore, api_model, hosted_provider
 from ..protocol import INTERNAL_ERROR, INVALID_PARAMS, RpcError, invalid_params
 from ..router import Router
 from . import pdf, tts, web
+from . import backends
 from .attachments import Attachment
 from .file_reader import read_file, Transcribe
 from .common import ServiceError
@@ -76,15 +84,17 @@ SEARCH_OPTIONS = (
     Option("tavily", needs_key=True),
     Option("exa", needs_key=True),
     Option("searxng"),
+    *(Option(row.id, bool(row.key_service), row.key_optional) for row in backends.SEARCH),
 )
 READ_OPTIONS = (
     Option("builtin"),
     Option("jina", key_optional=True),
     Option("firecrawl", needs_key=True),
     Option("tavily", needs_key=True),
+    *(Option(row.id, bool(row.key_service), row.key_optional) for row in backends.READ if row.id != "firecrawl"),
 )
 PDF_OPTIONS = (Option("builtin"), Option("openrouter"))
-TTS_OPTIONS = (Option("fish", needs_key=True),)
+TTS_OPTIONS = (Option("fish", needs_key=True), *(Option(row.id, bool(row.key_service)) for row in backends.VOICE))
 
 # The capabilities that can be turned off, and the setting that holds the switch of each.
 CAPABILITIES = {
@@ -174,7 +184,7 @@ class ServiceHub:
         return _setting(self._settings, "pdf_service", PDF_OPTIONS)
 
     def tts_service(self) -> str:
-        """Who speaks Raphael's answers aloud: "fish". Whether he speaks at all is `enabled("voice")`."""
+        """The selected speaker; settings owns which choices can be persisted."""
         return _setting(self._settings, "tts_service", TTS_OPTIONS)
 
     def enabled(self, capability: str) -> bool:
@@ -204,6 +214,10 @@ class ServiceHub:
             return ""
         return value.strip() if isinstance(value, str) else ""
 
+    def _optional_text(self, key: str) -> str:
+        # The sole registry is extended by its owner, not by this service layer.
+        return self._text(key) if key in DEFAULTS else ""
+
     def _sees(self, model: str) -> bool | None:
         try:
             entries = None if self._models is None else self._models()
@@ -221,7 +235,8 @@ class ServiceHub:
         service = self.search_service()
         key = self._keys.get(service) if service in KEYED_SERVICES else None
         found = await web.search(
-            service, query, http=self._client(), key=key, searxng_url=self._text("searxng_url")
+            service, query, http=self._client(), key=key, searxng_url=self._text("searxng_url"),
+            firecrawl_url=self._optional_text("firecrawl_url"),
         )
         return service, found
 
@@ -230,7 +245,8 @@ class ServiceHub:
         service = self.read_service()
         key = self._keys.get(service) if service in KEYED_SERVICES else None
         page = await web.read(
-            service, url, http=self._client(), fetcher=self.fetcher, read_pdf=pdf.read_pdf, key=key
+            service, url, http=self._client(), fetcher=self.fetcher, read_pdf=pdf.read_pdf, key=key,
+            firecrawl_url=self._optional_text("firecrawl_url"),
         )
         return service, page
 
@@ -257,8 +273,8 @@ class ServiceHub:
             text,
             http=self._client(),
             key=key,
-            voice=self._text("tts_fish_voice") if voice is None else voice,
-            model=self._text("tts_fish_model"),
+            voice=(self._text("tts_fish_voice") if service == "fish" else self._optional_text("tts_voice")) if voice is None else voice,
+            model=self._text("tts_fish_model") if service == "fish" else self._optional_text("tts_model"),
         )
 
     async def audio_file(self, text: str, *, voice: str | None = None) -> Attachment:
@@ -305,7 +321,28 @@ class ServiceHub:
             return "pdf", found
         if attachment.is_image:
             return "image", await self.vision.look([attachment], question, ledger)
-        return await read_file(attachment, self._transcribe)
+        callback = self.transcribe if self._optional_text("stt_service") else self._transcribe
+        return await read_file(attachment, callback)
+
+    async def transcribe(self, audio: bytes, language: str = "auto") -> str:
+        from .speech_backends import transcribe
+        service = self._optional_text("stt_service")
+        key = self._keys.get(service) if service in KEYED_SERVICES else None
+        return await transcribe(service, audio, language, http=self._client(), key=key,
+                                model=self._optional_text("stt_model"))
+
+    async def x_search(self, query: str) -> dict:
+        # An agent registration/grant remains the responsibility of the tool owner.
+        from .web_backends import x_search
+        async def call(method, url, **kwargs):
+            return await web._call(self._client(), method, url, **kwargs)
+        try:
+            return await x_search(query, key=self._keys.get("xai"), call=call)
+        except ServiceError as error:
+            error.service = "xai"
+            raise
+        except (ValueError, TypeError, KeyError, AttributeError, IndexError):
+            raise ServiceError("bad_response", service="xai") from None
 
     async def look(self, images: Sequence[Attachment], question: str, ledger: Ledger) -> dict:
         """What the vision model sees in several images at once, for `question`: one call."""
@@ -319,7 +356,7 @@ class ServiceHub:
             keyed = option.id in KEYED_SERVICES
             view: dict[str, Any] = {
                 "id": option.id,
-                "needs_key": option.needs_key,
+                "needs_key": option.needs_key and not option.key_optional,
                 "has_key": keyed and self._keys.has(option.id),
                 "key_optional": option.key_optional,
             }
@@ -328,18 +365,18 @@ class ServiceHub:
             views.append(view)
         return views
 
-    def status(self) -> dict[str, Any]:
+    def status(self, *, include_backends: bool = False) -> dict[str, Any]:
         model, sees = self.vision_model()
-        return {
+        result = {
             "search": {
                 "enabled": self.enabled("search"),
                 "service": self.search_service(),
-                "options": self._options(SEARCH_OPTIONS),
+                "options": self._options(SEARCH_OPTIONS if include_backends else SEARCH_OPTIONS[:5]),
             },
             "read": {
                 "enabled": self.enabled("read"),
                 "service": self.read_service(),
-                "options": self._options(READ_OPTIONS),
+                "options": self._options(READ_OPTIONS if include_backends else READ_OPTIONS[:4]),
             },
             "pdf": {
                 "enabled": self.enabled("pdf"),
@@ -355,13 +392,69 @@ class ServiceHub:
             "voice": {
                 "enabled": self.enabled("voice"),
                 "service": self.tts_service(),
-                "options": self._options(TTS_OPTIONS),
+                "options": self._options(TTS_OPTIONS if include_backends else TTS_OPTIONS[:1]),
                 "fish_voice_set": bool(self._text("tts_fish_voice")),
             },
         }
+        if include_backends:
+            from ..brain.settings import WEB_SEARCH_SERVICES, WEB_READ_SERVICES, TTS_SERVICES
+            choices = {"search": WEB_SEARCH_SERVICES, "read": WEB_READ_SERVICES, "voice": TTS_SERVICES}
+            result["backend_schema"] = 1
+            for category, rows in backends.GROUPS.items():
+                group = result.setdefault(category, {"enabled": False, "service": "", "options": []})
+                options = group["options"]
+                for row in rows:
+                    view = next((option for option in options if option["id"] == row.id), None)
+                    if view is None:
+                        view = {"id": row.id, "needs_key": bool(row.key_service) and not row.key_optional,
+                                "has_key": bool(row.key_service and self._keys.has(row.key_service)), "key_optional": row.key_optional}
+                        options.append(view)
+                    view.update({"name": row.name, "description_id": f"tool_backend.{category}.{row.id}",
+                        "billing": row.billing, "key_service": row.key_service or None,
+                        "integration": row.integration,
+                        "selection_supported": row.id in choices.get(category, ()) if category in choices else row.integration == "ready"})
+                    view["implementation"] = "missing" if row.integration == "oauth_required" or category == "execution" or category == "browser" and row.id in ("local", "lightpanda") else "adapter"
+                    if view["selection_supported"] and row.integration == "settings_required":
+                        view["integration"] = "ready"
+                    if category in ("image", "video"):
+                        view["model_reference_prefix"] = f"@service:{row.id}/" if row.integration == "ready" else None
+                        view["model_required"] = True
+                        view["configuration_fields"] = [category + "_model"]
+                    elif category == "voice":
+                        view["configuration_fields"] = ["tts_voice", "tts_model"]
+                    elif category == "transcription":
+                        view["configuration_fields"] = ["stt_service", "stt_model"]
+                    if row.id == "firecrawl-selfhosted":
+                        view["configuration_fields"] = ["firecrawl_url"]
+                        view["url_set"] = bool(self._optional_text("firecrawl_url"))
+                    package = {"edge": "edge_tts", "piper": "piper", "kittentts": "kittentts", "whisper": "faster_whisper"}.get(row.id)
+                    if package and category in ("voice", "transcription"):
+                        from importlib.util import find_spec
+                        view["runtime_dependency"] = package
+                        view["runtime_available"] = find_spec(package) is not None
+                    if row.id == "browserbase":
+                        view["credential_services"] = ["browserbase", "browserbase-project"]
+                    elif row.id == "modal":
+                        view["credential_services"] = ["modal-token-id", "modal-token-secret"]
+                for view in options:
+                    view.setdefault("name", {"openrouter": "OpenRouter", "brave": "Brave Search", "tavily": "Tavily", "exa": "Exa", "searxng": "SearXNG", "builtin": "Built-in Reader", "jina": "Jina Reader", "fish": "Fish Audio"}.get(view["id"], view["id"]))
+                    view.setdefault("description_id", f"tool_backend.{category}.{view['id']}")
+                    view.setdefault("integration", "ready")
+                    view.setdefault("selection_supported", True)
+                    view.setdefault("billing", {"openrouter": "model", "brave": "free_tier", "tavily": "metered", "exa": "metered", "searxng": "self_hosted", "builtin": "local", "jina": "free_tier", "fish": "metered"}.get(view["id"], "unknown"))
+            result["transcription"]["service"] = self._optional_text("stt_service")
+            result["transcription"]["enabled"] = bool(result["transcription"]["service"])
+            for kind in ("image", "video"):
+                result[kind]["model"] = self._text(kind + "_model")
+                result[kind]["enabled"] = bool(result[kind]["model"])
+            result["toolsets"] = [{"id": id, "name": name, "description_id": f"tool_backend.toolsets.{id}",
+                                   "integration": integration} for id, name, integration in backends.TOOLSETS]
+        return result
 
     async def _status(self, params: dict) -> dict:
-        return self.status()
+        if "include_backends" in params and type(params["include_backends"]) is not bool:
+            raise invalid_params("include_backends must be a boolean")
+        return self.status(include_backends=params.get("include_backends", False))
 
     @staticmethod
     def _service(params: dict) -> str:

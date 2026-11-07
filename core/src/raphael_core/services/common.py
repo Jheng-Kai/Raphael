@@ -27,9 +27,10 @@ class ServiceError(Exception):
       "no_text" (a PDF with no text that could be read).
     """
 
-    def __init__(self, kind: str) -> None:
+    def __init__(self, kind: str, *, service: str | None = None) -> None:
         super().__init__(kind)
         self.kind = kind
+        self.service = service
 
 
 def fit(text: str, budget: int = TEXT_BUDGET) -> tuple[str, bool]:

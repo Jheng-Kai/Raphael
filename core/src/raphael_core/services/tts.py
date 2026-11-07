@@ -1,8 +1,8 @@
 """Text to speech: the services that turn Raphael's answer into sound, one provider at a time.
 
-Only Fish Audio is built (`FISH_URL`), with the owner's own voice model; the others the settings
-could one day name (Edge TTS, ElevenLabs, OpenAI, a GPT-SoVITS server of the owner's own) are each
-another branch of `stream`, as the search engines are of `web.search`. A provider gives the sound
+Fish Audio (`FISH_URL`) streams the owner's voice model directly; additional
+explicit providers live in `speech_backends`, which normalizes their output to the
+same PCM contract. A provider gives the sound
 as it is made: raw PCM, in chunks (`stream`), which `playback` writes to the sound device as they
 arrive. Nothing is written to disk.
 
@@ -84,7 +84,8 @@ def stream(
     one that needs a key and has none, and the kinds above."""
     if service == "fish":
         return _fish(text, http=http, key=key, voice=voice, model=model)
-    return _refused()
+    from .speech_backends import speech
+    return speech(service, text, http=http, key=key, voice=voice, model=model)
 
 
 async def _refused() -> AsyncIterator[bytes]:
