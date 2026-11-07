@@ -230,7 +230,8 @@ const clocks = new WeakMap<SVGElement, SlimeClock>();
 /** Hydrate once at mount; subsequent handovers only consult the JS clock and cached parts. */
 function clockOf(svg: SVGElement): SlimeClock {
   let clock = clocks.get(svg);
-  if (clock) return clock;
+  // A clock belongs to the drawing it was made for: one carried into another face is made again (ui.ts patchHTML).
+  if (clock && clock.surface === svg.parentElement && clock.drawingKey === (clock.surface.dataset.slimeDrawing ?? '')) return clock;
   const surface = svg.parentElement!;
   const drawingKey = surface.dataset.slimeDrawing ?? '';
   const size = parseFloat(svg.closest<HTMLElement>('.mb-av-slime')?.style.getPropertyValue('--av') ?? '');

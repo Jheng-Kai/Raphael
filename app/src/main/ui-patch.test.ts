@@ -115,3 +115,15 @@ test("a changed row preserves its slime clock and active transition", async () =
   expect(part.classList.contains("slime-in-between")).toBe(true); expect(root.querySelector("b")!.textContent).toBe("New reply");
   expect(records).toHaveLength(0);
 });
+
+test("a face never becomes another member's: Raphael's face where Testarossa's stood is a new one, so her bow cannot move on him (owner, 2026-11-07)", () => {
+  const root=document.createElement('div');
+  patchHTML(root,`<button>${slimeSVG({character:'testarossa'},{state:'idle',member:7})}</button>`);
+  const before=root.querySelector('svg.slime');
+  patchHTML(root,`<button>${slimeSVG({character:'rimuru'},{state:'working',member:0,crown:true})}</button>`);
+  const after=root.querySelector('svg.slime')!;
+  expect(after).not.toBe(before);
+  expect(after.getAttribute('data-slime-member')).toBe('0');
+  expect(root.querySelectorAll('.slime-surface')).toHaveLength(1);
+  expect(root.innerHTML).not.toContain('#3FBF94');
+});

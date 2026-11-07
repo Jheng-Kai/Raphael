@@ -15,6 +15,11 @@ const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;"
 /** Text as it can go into HTML, in an attribute too. */
 export const esc = (s: unknown): string => String(s).replace(/[&<>"']/g, (c) => ESCAPES[c]);
 
+/** Whose a generated face is. The same member's new colour or character keeps its face (slime.ts makes its clock again). */
+function faceIdentity(surface: Element): string {
+  return surface.querySelector("svg.slime")?.getAttribute("data-slime-member") ?? "";
+}
+
 /** Update generated markup without discarding its live controls. */
 export function patchHTML(root: Element, html: string): void {
   const faces = new Map<string, Element[]>(), retained: Element[] = [];
@@ -60,6 +65,14 @@ export function patchHTML(root: Element, html: string): void {
         live.insertBefore(node, at);
       } else {
         if (node !== at) live.insertBefore(node, at);
+        // A face never turns into someone else's: its clock remembers the drawing it was made with, so morphing
+        // Testarossa's into Raphael's drew her bow on him while he moved (owner, 2026-11-07). Another member takes the
+        // fresh face whole.
+        if (node instanceof Element && fresh instanceof Element && node.matches(".slime-surface") && fresh.matches(".slime-surface") && faceIdentity(node) !== faceIdentity(fresh)) {
+          live.replaceChild(fresh, node);
+          at = fresh.nextSibling;
+          continue;
+        }
         if (node instanceof Element && fresh instanceof Element) {
           const oldFace = face(node), nextFace = face(fresh);
           const sameDrawing = node.matches('.slime-surface[data-slime-drawing]') && node.getAttribute('data-slime-drawing') === fresh.getAttribute('data-slime-drawing') && (oldFace as SVGElement | null)?.style.getPropertyValue('--slime-color') === (nextFace as SVGElement | null)?.style.getPropertyValue('--slime-color');
