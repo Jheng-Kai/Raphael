@@ -835,16 +835,17 @@ def test_the_prompt_holds_no_case_input_and_none_of_the_old_examples():
 
 def test_the_prompt_still_has_its_general_rules():
     prompt = brain_cleanup.build_system_prompt([], [])
+    # The owner's version C (2026-11-07) words the same general rules more briefly.
     for kept in (
-        "Use canonical spellings only for the same identified name",
-        "Do not guess, expand, shorten or substitute a name to fit a familiar entity",
-        "Only an explicit correction revokes earlier content",
-        "a restart does not cancel distinct details",
-        "Repair wrong Traditional conversions",
-        "explicitly abandoned drafting",
+        "Keep every point, name, number, condition, negation and aside",
+        "Never drop a sentence, never summarize, never add anything",
+        "Turn a word into a name only when the context clearly means that product",
+        "When a word or phrase is restarted, keep only the final form",
+        "On a self-correction keep only the correction",
+        "Wrong Simplified-to-Traditional conversions",
     ):
         assert kept in prompt, kept
-    assert len(prompt) < 7_000, "general rules must stay within the short cleanup prompt"
+    assert len(prompt) < 5_000, "general rules must stay within the short cleanup prompt"
 
 
 @pytest.mark.parametrize("name", ["Hermes agent", "Hermes Agent", "Hermes agents"])
