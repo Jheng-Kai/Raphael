@@ -167,8 +167,6 @@ export const en = {
   "update.signatureError": "The update has no valid signature or was tampered with. Installation refused.",
   "update.feedError": "Could not check for updates. Try again later.",
   "update.installed": "Updated to {p0}.",
-  "routine.test": "Test once",
-  "routine.testing": "Running test…",
   "routine.running": "Running",
   "routine.succeeded": "Succeeded",
   "routine.failed": "Failed",

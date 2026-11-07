@@ -40,6 +40,13 @@
 /* Grok Bot's panel head (2026-11-06): a large face centred above the name, the job quiet under it. */
 .mb-panel-identity { display: flex; flex-direction: column; align-items: center; gap: var(--sp-1); min-width: 0; width: 100%; }
 .mb-panel-identity > .av { margin-bottom: var(--sp-1); }
+/* The face opens every setting: a bare button (no frame or fill), a pencil on it under the pointer (owner, 2026-11-07). */
+.mb-panel-identity > .btn.mb-face-edit { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 0; margin-bottom: var(--sp-1); padding: 0; border: 0; background: transparent; }
+.mb-panel-identity > .btn.mb-face-edit:hover:not(:disabled), .mb-panel-identity > .btn.mb-face-edit:active:not(:disabled) { background: transparent; }
+.mb-face-pencil { position: absolute; right: -6px; bottom: 0; display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--r-pill); background: var(--panel); color: var(--text); box-shadow: 0 0 0 2px var(--content); opacity: 0; transition: opacity 0.12s ease; pointer-events: none; }
+.mb-face-pencil .i { width: 16px; height: 16px; }
+.btn.mb-face-edit:hover .mb-face-pencil, :root[data-keys] .btn.mb-face-edit:focus-visible .mb-face-pencil { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .mb-face-pencil { transition: none; } }
 .mb-panel-identity > :is(b, small) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mb-panel-identity > b { font-size: var(--fs-md); font-weight: 600; }
 .mb-panel-identity > small { color: var(--text-3); font-size: var(--fs-xs); }

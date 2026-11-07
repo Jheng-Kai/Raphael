@@ -167,8 +167,6 @@ export const ja = {
   "update.signatureError": "有効な署名がないか、更新が改ざんされています。インストールを拒否しました。",
   "update.feedError": "更新を確認できません。後でもう一度お試しください。",
   "update.installed": "{p0} に更新しました。",
-  "routine.test": "試しに実行",
-  "routine.testing": "テスト実行中…",
   "routine.running": "実行中",
   "routine.succeeded": "成功",
   "routine.failed": "失敗",

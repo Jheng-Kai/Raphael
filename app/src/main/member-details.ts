@@ -32,6 +32,7 @@ import { eventRead } from './event-read';
 import { panelLibraryHTML, readPanelWork, type PanelWork } from './member-panel-work';
 import { tabs } from './ui';
 import { describeError } from "./format";
+import { exportMemberTemplate } from "./member-templates";
 
 export type DetailsTab = "details" | "library" | "computer" | "settings" | "memory" | "skills" | "commands" | "voice";
 
@@ -73,8 +74,10 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   const el = document.createElement("aside");
   el.className = "mb-det";
   el.innerHTML =
-    // Settings on the left edge and close on the right, apart (owner, 2026-11-07).
-    `<div class="mb-det-head">${iconButton("left", t("members.panelBack"), ' data-det="back" hidden', "mb-tool")}${iconButton("gear", t("computer.settings"), ' data-det="gear"', "mb-tool")}<span class="mb-det-fill"></span>${iconButton("x", t("members.close"), ' data-det="close"', "mb-tool")}</div>` +
+    // Share on the left edge and close on the right, apart (owner, 2026-11-07): the gear and its settings page gave way
+    // to one dialog opened from the member's face; share sends the member as a template, until the store comes.
+    // `gear` stays only as an unshown entry for the old settings page, which nothing on screen opens any more.
+    `<div class="mb-det-head">${iconButton("left", t("members.panelBack"), ' data-det="back" hidden', "mb-tool")}${iconButton("share", t("template.export"), ' data-det="share"', "mb-tool")}${iconButton("gear", t("computer.settings"), ' data-det="gear" hidden tabindex="-1"', "mb-tool")}<span class="mb-det-fill"></span>${iconButton("x", t("members.close"), ' data-det="close"', "mb-tool")}</div>` +
     `<div class="mb-det-scroll"><div class="mb-who"></div><div class="mb-tabs"></div><div class="mb-tab-body" role="tabpanel" id="member-panel-body"></div></div>`;
   const who = el.querySelector<HTMLElement>(".mb-who")!;
   const tabBar = el.querySelector<HTMLElement>(".mb-tabs")!;
@@ -181,7 +184,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   // ---------- drawing ----------
 
   function whoHTML(member: Member): string {
-    if (tab !== 'settings') return `<span class="mb-panel-identity">${faceHTML(member, 64)}<b>${esc(member.name)}</b>${member.role ? `<small>${esc(member.role)}</small>` : ''}</span>`;
+    // The face is the way into every setting: under the pointer a pencil shows on it, and a press opens the one dialog.
+    if (tab !== 'settings') return `<span class="mb-panel-identity"><button type="button" class="btn mb-face-edit" data-det="edit" data-k="det-face-edit" aria-label="${esc(t("members.profile.edit"))}">${faceHTML(member, 64)}<span class="mb-face-pencil" aria-hidden="true">${ico("pencil")}</span></button><b>${esc(member.name)}</b>${member.role ? `<small>${esc(member.role)}</small>` : ''}</span>`;
     // The face is the button that changes its picture.
     const face =
       `<span class="mb-who-face"><button type="button" class="btn mb-avbtn" data-det="avatar" data-k="det-avatar" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}" title="${esc(t("members.changeAvatar"))}">` +
@@ -271,8 +275,10 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     closeButton.title = t("members.close");
     backButton.hidden = ['details', 'library', 'computer'].includes(tab);
     backButton.title = t('members.panelBack'); backButton.setAttribute('aria-label', backButton.title);
-    const gear = el.querySelector<HTMLElement>('[data-det="gear"]')!;
-    gear.title = t("computer.settings"); gear.setAttribute("aria-label", gear.title);
+    const share = el.querySelector<HTMLElement>('[data-det="share"]')!;
+    share.title = t("template.export"); share.setAttribute("aria-label", share.title);
+    // Raphael is the app's own: he is not shared as a template; the old settings page's back arrow keeps its place.
+    share.hidden = member.id === RAPHAEL_ID || !['details', 'library', 'computer'].includes(tab);
     el.setAttribute("aria-label", t("members.panel"));
     const typingIn = focused && el.contains(focused) && (focused.matches("input, textarea") ? focused.id : null);
     const scroll = el.querySelector<HTMLElement>(".mb-det-scroll")!;
@@ -448,6 +454,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         host.close();
         break;
       case "edit": host.edit?.(member); break;
+      case "share": void exportMemberTemplate(member.id).catch((error) => toaster.info(describeError(error))); break;
       case "draft": void host.update(member.id, { draft_first: !(member.draft_first ?? true) }); break;
       case "gear": tab = "settings"; draw(); break;
       case "back": tab = tab === "settings" ? "details" : "settings"; draw(); break;

@@ -166,8 +166,6 @@ export const zhTW = {
   "update.signatureError": "更新缺少有效簽章或內容已被更動，已拒絕安裝。",
   "update.feedError": "無法取得更新，請稍後重試。",
   "update.installed": "已更新至 {p0}。",
-  "routine.test": "試跑一次",
-  "routine.testing": "試跑中…",
   "routine.running": "執行中",
   "routine.succeeded": "成功",
   "routine.failed": "失敗",

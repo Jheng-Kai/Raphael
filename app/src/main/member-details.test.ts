@@ -48,6 +48,7 @@ function mount(settings = true) {
     list: () => LIST,
     update: vi.fn(async (_id: number, _patch: MemberPatch) => true),
     close: vi.fn<() => void>(),
+    edit: vi.fn(),
   };
   const panel = createDetails(host);
   document.body.append(panel.el);
@@ -223,8 +224,10 @@ describe("a member's panel", () => {
     expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
     current = 0;
     panel.showMember();
-    expect(panel.el.querySelector('[data-det="edit"]')).toBeNull();
+    // Raphael's face opens the same one dialog, and he cannot be hidden or shared.
+    expect(panel.el.querySelector('[data-det="edit"]')!.classList.contains("mb-face-edit")).toBe(true);
     expect(panel.el.querySelector('[data-det="hide"]')).toBeNull();
+    expect(panel.el.querySelector<HTMLElement>('[data-det="share"]')!.hidden).toBe(true);
   });
 
   test("a personality draft survives redraws and is saved to its original member on switching", async () => {
@@ -639,6 +642,18 @@ test("resource rows count saved skills including disabled ones and only active r
   // Each routine carries its own switch, on for the active one only, and no ⋯ menu.
   expect([...panel.el.querySelectorAll('[data-det="routine-toggle"]')].map(toggle => toggle.getAttribute("aria-checked"))).toEqual(["true", "false"]);
   expect(panel.el.querySelector('[data-det="routine-menu"]')).toBeNull();
+});
+
+test("the panel has no gear: share on the left, and the face with a pencil opens every setting", async () => {
+  const panel = mount(false); await flush();
+  const share = panel.el.querySelector<HTMLButtonElement>('.mb-det-head [data-det="share"]')!;
+  expect(share.hidden).toBe(false);
+  expect(share.getAttribute("aria-label")).toBe("分享為範本");
+  expect([...panel.el.querySelectorAll<HTMLElement>('.mb-det-head button')].filter(button => !button.hidden).map(button => button.dataset.det)).toEqual(["share", "close"]);
+  const face = panel.el.querySelector<HTMLButtonElement>(".mb-panel-identity .mb-face-edit")!;
+  expect(face.querySelector(".mb-face-pencil")).not.toBeNull();
+  face.click();
+  expect(host.edit).toHaveBeenCalledWith(LIST.members.find(member => member.id === current));
 });
 
 test("a routine's switch turns it on or off from the row without opening the editor", async () => {

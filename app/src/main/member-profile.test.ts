@@ -292,7 +292,7 @@ test("editing a saved routine from the profile preserves schedule end conditions
   vi.mocked(api.routinesList).mockResolvedValue({ routines: [{ ...routine, schedule: { ...routine.schedule, days: [1, 3] } }] });
   vi.mocked(api.routinesUpdate).mockResolvedValue({ routine: { ...routine, schedule: { ...routine.schedule, days: [1, 3] } } });
   const dialog = openEditMemberDialog(host(), member, "routines"); await flush();
-  click(dialog.el, '[data-dlg="routine-menu"]'); click(document, '#app-popover [data-pick="edit"]');
+  click(dialog.el, '[data-dlg="routine-edit"]');
   const form = document.querySelector<HTMLElement>(".au-routine-dialog")!;
   expect(form.querySelector<HTMLInputElement>("#au-count")!.value).toBe("12");
   fill(form, "#au-title", "Updated review"); click(form, '[data-dlg="save"]'); await flush();
@@ -340,7 +340,7 @@ test("an event routine edits a readable filter without losing its read tool argu
   vi.mocked(api.routinesUpdate).mockResolvedValue({ routine });
   const dialog = openEditMemberDialog(host(), member, "routines"); await flush();
   expect(dialog.el.textContent).toContain("client@example.com");
-  click(dialog.el, '[data-dlg="routine-menu"]'); click(document, '#app-popover [data-pick="edit"]');
+  click(dialog.el, '[data-dlg="routine-edit"]');
   const form = document.querySelector<HTMLElement>(".au-routine-dialog")!;
   expect(form.querySelector("#au-time")).toBeNull();
   expect(form.textContent).not.toContain('"arguments"');
