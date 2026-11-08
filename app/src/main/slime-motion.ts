@@ -65,7 +65,19 @@ export const LOOPS = {
   error: {body:6, eyes:6, ease:'ease-in', gaze:'linear'},
 } as const;
 export type LoopState = keyof typeof LOOPS;
-export const CEL_COUNT = 12;
+/** The eye should see about this many frames per second from a sampled strip. */
+export const CEL_RATE = 24;
+export const MIN_CELS = 12;
+export const MAX_CELS = 48;
+/** Gaze and accessory sway travel only a few pixels, so coarse rows read as smooth and keep the strips small. */
+export const GAZE_ROWS = 8;
+export const PROP_ROWS = 8;
+/** Body cels per loop follow the loop's length: long loops need more frames to keep the same frame rate. */
+export const celCount = (state: LoopState): number => Math.min(MAX_CELS, Math.max(MIN_CELS, Math.round(LOOPS[state].body * CEL_RATE)));
+export const gazeRows = (state: LoopState): number => state === 'thinking' || state === 'searching' || state === 'computer' || state === 'waiting' ? GAZE_ROWS : 1;
+/** How many sampled poses one part of a small avatar steps through per loop. */
+export const celsOf = (state: LoopState, kind: 'body' | 'eyes' | 'mark'): number =>
+  kind === 'eyes' ? gazeRows(state) : kind === 'mark' && (state === 'thinking' || state === 'searching') ? PROP_ROWS : celCount(state);
 export const loopState = (state: string): state is LoopState => state in LOOPS;
 export function poseTransform(pose: Pose): string {
   return `translate(${pose.translate.join(' ')}) rotate(${pose.rotate[0]}) scale(${pose.scale.join(' ')})`;

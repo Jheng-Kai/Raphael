@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { faceHTML } from "./members";
+import { GAZE_ROWS, PROP_ROWS, celCount } from "./slime-motion";
 import { crownedId, crownPrimary } from "./crown";
 import { followSlimeRoster, handOver, isSlimeAvatar, parseSlime, pickSlime, seasonalHat, setSlimeState, slimeFaceHTML, slimePickerHTML, slimeSVG, type SlimeState } from "./slime";
 
@@ -40,7 +41,7 @@ test('sampled eyes share pixel fitting instead of fitting every hidden pose sepa
   const host = document.createElement('div');
   host.innerHTML = slimeSVG({character:'shion'}, {...plain, state:'thinking'});
   const eyes = host.querySelector('.slime-loop-eyes')!;
-  expect(eyes.querySelectorAll('.slime-cel-eye')).toHaveLength(576);
+  expect(eyes.querySelectorAll('.slime-cel-eye')).toHaveLength(celCount('thinking') * GAZE_ROWS * 4);
   expect(eyes.querySelectorAll('.slime-face')).toHaveLength(0);
 });
 
@@ -49,7 +50,7 @@ test.each(['thinking','working','searching','computer','waiting','blocked','erro
   host.innerHTML = slimeSVG({ character: 'shion' }, { ...plain, state });
   expect(host.querySelector('.slime-idle')).toBeNull();
   const bodies = host.querySelectorAll('.slime-loop-body .slime-cel-body');
-  expect(bodies).toHaveLength(['thinking','searching'].includes(state)?12*12:12);
+  expect(bodies).toHaveLength(celCount(state) * (['thinking','searching'].includes(state) ? PROP_ROWS : 1));
   for (const body of bodies) expect(body.parentElement!.innerHTML).toContain('#363140');
   expect(host.querySelector('.slime-loop-eyes .slime-cel-eye')).not.toBeNull();
 });
@@ -63,15 +64,15 @@ test('working uses only its twelve body poses without a Cartesian DOM expansion'
 test.each(['thinking','searching'] as const)('%s does not repeat a plain body for nonexistent independent marks', state => {
   const host = document.createElement('div');
   host.innerHTML = slimeSVG({color:'lavender'},{...plain,state});
-  expect(host.querySelectorAll('.slime-cel-body')).toHaveLength(12);
+  expect(host.querySelectorAll('.slime-cel-body')).toHaveLength(celCount(state));
   expect(host.querySelector('.slime-prop-cels')).toBeNull();
-  expect(host.querySelectorAll('.slime-cel-eye')).toHaveLength(12*12*4);
+  expect(host.querySelectorAll('.slime-cel-eye')).toHaveLength(celCount(state) * GAZE_ROWS * 4);
 });
 
 test('thinking cels avoid transient transform wrappers that inflate collection work', () => {
   const host=document.createElement('div');
   host.innerHTML=slimeSVG({character:'shion'},{...plain,state:'thinking'});
-  expect(host.querySelectorAll('*').length).toBeLessThan(2000);
+  expect(host.querySelectorAll('*').length).toBeLessThan(3600);
   expect(host.querySelector('.slime-loop .slime-correction, .slime-loop .slime-counterturn')).toBeNull();
 });
 
@@ -249,10 +250,15 @@ test("only whole-frame cel strips use composited transforms (R-UI-63, R-PERF-01)
   expect(keyframes.length).toBeGreaterThan(20);
   const composited = keyframes.filter(({ body }) => /(^|[{;\s])transform:/.test(body));
   expect(composited.map(({ name }) => name).sort()).toEqual(["slime-loop-blink", "slime-loop-x", "slime-loop-y"].sort());
-  for (const { body } of composited) for (const [, value] of body.matchAll(/transform: translateX\((-?[\d.]+)%\)/g)) {
-    const frame = Number(value) * (body.includes('translateX(-4.16666667%)') ? 24 : body.includes('translateX(-8.33333333%)') ? 12 : 7) / 100;
-    expect(Math.abs(frame - Math.round(frame))).toBeLessThan(0.00001);
+  // A strip slides once across all its cels while steps() lands on whole frames, so any cel count stays on the compositor.
+  for (const name of ['slime-loop-x', 'slime-loop-y']) {
+    const body = composited.find(frame => frame.name === name)!.body;
+    expect([...body.matchAll(/(\d+%|from|to)\s*\{/g)].map(match => match[1])).toEqual(['from', 'to']);
+    expect(body).toMatch(/translate[XY]\(-100%\)/);
   }
+  expect(css).toMatch(/\.slime-loop \.slime-cels \{[^}]*steps\(var\(--loop-cels\), end\)/);
+  expect(css).toMatch(/\.slime-eye-cels \{[^}]*steps\(var\(--loop-gaze\), end\)/);
+  expect(css).toMatch(/\.slime-prop-cels \{[^}]*steps\(var\(--loop-prop-rows\), end\)/);
   expect(css).not.toMatch(/will-change|filter:/);
   expect(css).not.toMatch(/\.slime-in-between[^{]*\{[^}]*\btransform:/);
 });

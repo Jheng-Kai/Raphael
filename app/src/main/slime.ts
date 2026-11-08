@@ -9,7 +9,7 @@
 import "./slime.css";
 import { t } from "./i18n";
 import { motionStrips } from "./slime-cels";
-import { loopState, LOOPS, sample, easing } from "./slime-motion";
+import { celsOf, loopState, LOOPS, sample, easing } from "./slime-motion";
 import { crownedId } from "./crown";
 
 export type SlimeState = "idle" | "thinking" | "working" | "searching" | "computer" | "waiting" | "blocked" | "done" | "error" | "sleeping" | "arriving";
@@ -282,8 +282,9 @@ function statePose(clock: SlimeClock, kind: 'body' | 'eyes' | 'mark', now: numbe
     const loop = LOOPS[state], period = (kind === 'eyes' ? loop.eyes : kind === 'mark' && state === 'thinking' ? 3.6 : loop.body) * clock.tempo * 1000;
     const lag = kind === 'mark' ? state === 'thinking' ? 140 : state === 'searching' ? 120 : 0 : 0;
     const phase = Math.max(0, elapsed - clock.delay - lag) / period;
-    // Small avatars display twelve sampled poses, with independently timed eyes and props.
-    const sampled = clock.sampled && now >= clock.transitionUntil ? Math.floor(((phase % 1) + 1) % 1 * 12) / 12 : phase;
+    // Small avatars display sampled poses (about 24 a second), with independently timed eyes and props.
+    const cels = celsOf(state, kind);
+    const sampled = clock.sampled && now >= clock.transitionUntil ? Math.floor(((phase % 1) + 1) % 1 * cels) / cels : phase;
     pose = sample(`slime-${state}-${kind === 'eyes' ? 'gaze' : kind}`, sampled, kind === 'eyes' ? loop.gaze : loop.ease);
     if (state === 'blocked' && kind === 'eyes') pose.translate = [0, -6];
     if (state === 'error' && kind === 'body') pose.scale = [1.08, .62];

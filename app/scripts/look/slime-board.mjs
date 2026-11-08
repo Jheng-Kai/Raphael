@@ -11,13 +11,15 @@ export function paintedSlime(svg) {
     const frame=bodyStrip.parentElement.clientWidth, index=Math.round(-new DOMMatrix(getComputedStyle(bodyStrip).transform).e/frame);
     const props=bodyStrip.querySelector('.slime-prop-cels');
     const row=props?Math.round(-new DOMMatrix(getComputedStyle(props).transform).f/frame):0;
-    const bodyCell=(props??bodyStrip).firstElementChild.children[row*12+index];
+    // Each state carries as many cels as its loop needs; the strip says how many.
+    const cels=Number(getComputedStyle(bodyStrip.parentElement).getPropertyValue('--loop-cels'))||12;
+    const bodyCell=(props??bodyStrip).firstElementChild.children[row*cels+index];
     const eye=surface.querySelector('.slime-eye-cels'), blink=surface.querySelector('.slime-blink-cels');
     const eyeIndex=Math.round(-new DOMMatrix(getComputedStyle(eye.parentElement).transform).e/frame);
     const count=bodyStrip.parentElement.classList.contains('has-blink')?4:1;
     const gazeIndex=Math.round(-new DOMMatrix(getComputedStyle(eye).transform).f/(frame*count));
     const blinkIndex=Math.round(-new DOMMatrix(getComputedStyle(blink).transform).f/frame);
-    const eyeCell=blink.firstElementChild.children[(gazeIndex*12+eyeIndex)*count+blinkIndex];
+    const eyeCell=blink.firstElementChild.children[(gazeIndex*cels+eyeIndex)*count+blinkIndex];
     return {body:bodyCell.querySelector('.slime-cel-body'),eyes:eyeCell.matches('.slime-cel-eye')?eyeCell:eyeCell.querySelector('.slime-cel-eye'),marks:[...bodyCell.querySelectorAll('.slime-mark')]};
   }
   return fallback();

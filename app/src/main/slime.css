@@ -362,10 +362,11 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
 
 /* Sampled SVG poses stay sharp; only whole-frame HTML translations loop at small sizes. */
 .slime-loop { display: none; position: absolute; left: -25%; top: -25%; width: 150%; height: 150%; overflow: hidden; contain: layout paint; pointer-events: none; }
-.slime-loop .slime-cels { width: 1200%; animation: slime-loop-x calc(var(--loop-body) * var(--slime-tempo)) steps(1, end) var(--slime-delay) infinite both; }
-.slime-eye-cels { display: block; width: 100%; height: calc(100% * var(--loop-rows)); animation: slime-loop-y calc(var(--loop-eyes) * var(--slime-tempo)) steps(1, end) var(--slime-delay) infinite both; }
+/* Each strip holds as many cels as its loop needs for about 24 frames a second (--loop-cels, --loop-gaze, --loop-prop-rows), and one whole-strip slide steps through them. */
+.slime-loop .slime-cels { width: calc(100% * var(--loop-cels)); animation: slime-loop-x calc(var(--loop-body) * var(--slime-tempo)) steps(var(--loop-cels), end) var(--slime-delay) infinite both; }
+.slime-eye-cels { display: block; width: 100%; height: calc(100% * var(--loop-rows)); animation: slime-loop-y calc(var(--loop-eyes) * var(--slime-tempo)) steps(var(--loop-gaze), end) var(--slime-delay) infinite both; }
 .slime-loop-eyes:is([data-state="working"], [data-state="blocked"], [data-state="error"]) .slime-eye-cels { animation: none; }
-.slime-prop-cels { display: block; width: 100%; height: 1200%; animation: slime-loop-y calc(var(--loop-props) * var(--slime-tempo)) steps(1, end) calc(var(--slime-delay) + var(--loop-prop-delay)) infinite both; }
+.slime-prop-cels { display: block; width: 100%; height: calc(100% * var(--loop-prop-rows)); animation: slime-loop-y calc(var(--loop-props) * var(--slime-tempo)) steps(var(--loop-prop-rows), end) calc(var(--slime-delay) + var(--loop-prop-delay)) infinite both; }
 .slime-prop-cels > svg { display: block; width: 100%; height: 100%; }
 .slime-blink-cels { display: block; width: 100%; height: 100%; }
 .slime-blink-cels > svg { display: block; width: 100%; height: 100%; }
@@ -395,33 +396,12 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime-loop { display: none !important; }
   .slime-surface > .slime, .slime .slime-body, .slime .slime-eyes, .slime .slime-back, .slime .slime-marks { visibility: visible !important; }
 }
+/* Two keyframes and a steps() count slide a strip through its cels on the compositor, whatever their number. */
 @keyframes slime-loop-x {
-  0.00000000% { transform: translateX(0.00000000%); }
-  8.33333333% { transform: translateX(-8.33333333%); }
-  16.66666667% { transform: translateX(-16.66666667%); }
-  25.00000000% { transform: translateX(-25.00000000%); }
-  33.33333333% { transform: translateX(-33.33333333%); }
-  41.66666667% { transform: translateX(-41.66666667%); }
-  50.00000000% { transform: translateX(-50.00000000%); }
-  58.33333333% { transform: translateX(-58.33333333%); }
-  66.66666667% { transform: translateX(-66.66666667%); }
-  75.00000000% { transform: translateX(-75.00000000%); }
-  83.33333333% { transform: translateX(-83.33333333%); }
-  91.66666667% { transform: translateX(-91.66666667%); }
-  100% { transform: translateX(0%); }
+  from { transform: translateX(0%); }
+  to { transform: translateX(-100%); }
 }
 @keyframes slime-loop-y {
-  0.00000000% { transform: translateY(0.00000000%); }
-  8.33333333% { transform: translateY(-8.33333333%); }
-  16.66666667% { transform: translateY(-16.66666667%); }
-  25.00000000% { transform: translateY(-25.00000000%); }
-  33.33333333% { transform: translateY(-33.33333333%); }
-  41.66666667% { transform: translateY(-41.66666667%); }
-  50.00000000% { transform: translateY(-50.00000000%); }
-  58.33333333% { transform: translateY(-58.33333333%); }
-  66.66666667% { transform: translateY(-66.66666667%); }
-  75.00000000% { transform: translateY(-75.00000000%); }
-  83.33333333% { transform: translateY(-83.33333333%); }
-  91.66666667% { transform: translateY(-91.66666667%); }
-  100% { transform: translateY(0%); }
+  from { transform: translateY(0%); }
+  to { transform: translateY(-100%); }
 }
