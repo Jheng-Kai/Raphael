@@ -3,6 +3,12 @@ import re
 from dataclasses import dataclass
 
 
+def room_reply_text(text):
+    """Remove only a trailing protocol suffix; an exact pass remains an exact pass."""
+    match = re.fullmatch(r'(\S[\s\S]*?)\s*[(（]\s*pass\s*[)）][.。]?\s*', text.strip(), re.I)
+    return match.group(1).rstrip() if match else text
+
+
 def address_text(text):
     return re.sub(r'```[\s\S]*?```|`[^`\n]*`|(?m:^\s*>.*$)|[“「][^”」]*[”」]|"[^"\n]*"',
                   lambda match: ' ' * len(match.group()), text)

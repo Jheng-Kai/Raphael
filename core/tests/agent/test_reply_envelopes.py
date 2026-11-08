@@ -1,4 +1,4 @@
-"""Every CLI foreground route consumes the same reply envelope before persistence."""
+"""Written CLI routes retain literal envelopes; structured callers consume them."""
 import json
 from types import SimpleNamespace
 
@@ -25,7 +25,7 @@ def test_shared_parser_accepts_plain_code_and_unwraps_nested_reply_words(plain):
 
 
 @pytest.mark.parametrize("route", ["normal", "quick", "resumed", "failure"])
-async def test_cli_reply_envelope_is_unwrapped_on_every_foreground_route(make_rig, monkeypatch, tmp_path, route):
+async def test_written_cli_reply_envelope_is_literal_on_every_foreground_route(make_rig, monkeypatch, tmp_path, route):
     brains = CliBrains(home=tmp_path, environ={}, commands={"codex": ["never-spawn"]})
     monkeypatch.setattr(brains, "available", lambda *args, **kwargs: True)
     async def run(driver, **kwargs):
@@ -49,6 +49,6 @@ async def test_cli_reply_envelope_is_unwrapped_on_every_foreground_route(make_ri
         result = await rig.call("agent.ask", {"session_id": "envelope", "text": "Read Gmail", "ui_language": "en", "source": "app",
             "conversation_id": conversation, **({"destination": "quick"} if route == "quick" else {})})
         turn = rig.history.get(result["turn_id"])
-    assert turn.text == "Gmail needs a connection."
+    assert turn.text == ENVELOPE
     replies = rig.service._conn.execute("SELECT text FROM agent_messages WHERE turn_id=? AND kind='reply'", (turn.id,)).fetchall()
-    assert replies and all("Gmail needs a connection." in row[0] and '"messages"' not in row[0] for row in replies)
+    assert replies and all(ENVELOPE in row[0] for row in replies)

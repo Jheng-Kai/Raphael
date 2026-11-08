@@ -87,13 +87,14 @@ def row(name, rpc, description, properties=None, required=(), *, destructive=Fal
 
 ACTIONS = (
     row("member_create", "members.create", "Create a member with the same defaults as the UI. Use its returned ID. Templates' CreateAgent maps to this tool.", PROFILE, ("name", "role"), service="member"),
-    row("member_update", "members.update", "Edit supplied profile fields, preferences, model/effort, pin/hide, folder or position. ID 0 is the first Bot. Change models only when the owner explicitly requests it.", {"id": MEMBER_ID, **PROFILE}, ("id",), service="member"),
+    row("member_update", "members.update", "Edit supplied profile fields, preferences, model/effort, pin/hide, folder or position. ID 0 is the first Bot. Change models only when the owner explicitly requests it.", {"id": MEMBER_ID, **PROFILE, "cover": {"type": ["string", "null"], "pattern": "^pattern:[a-z0-9-]{1,24}$"}}, ("id",), service="member"),
     row("member_delete", "members.delete", "Permanently delete a member, conversations, memories, routines and resources.", {"id": ID}, ("id",), destructive=True),
     row("member_primary", "members.set_primary", "Make this member the default primary contact; all members retain the same owner-private management abilities.", {"id": MEMBER_ID}, ("id",), destructive=True),
     row("member_duplicate", "members.duplicate", "Duplicate a member using the UI service.", {"id": ID}, ("id",)),
     row("member_read", "members.read", "Mark a member's conversation read.", {"id": MEMBER_ID}, ("id",)),
     row("members_mark_all_read", "members.mark_all_read", "Mark every member read."),
     row("member_avatar", "members.set_avatar", "Set a member's image through the same checked image upload as the UI.", {"id": MEMBER_ID, "name": TEXT, "mime": TEXT, "data": TEXT}, ("id", "name", "mime", "data")),
+    row("member_cover", "members.set_cover", "Set a member cover through the same checked image upload as its avatar; keep its original aspect ratio.", {"id": MEMBER_ID, "name": TEXT, "mime": TEXT, "data": TEXT}, ("id", "name", "mime", "data")),
     row("member_history_clear", "agent.history.clear", "Clear all recorded conversations of the named member.", {"member_id": MEMBER_ID}, ("member_id",), destructive=True),
     row("member_history_delete", "agent.history.delete", "Delete a recorded conversation turn.", {"turn_id": ID, "member_id": MEMBER_ID, "conversation_id": ID}, ("turn_id", "member_id", "conversation_id"), destructive=True),
     row("group_create", "groups.create", "Create a sidebar folder.", {"name": TEXT}, ("name",)),
@@ -209,7 +210,7 @@ TIERS.update({name: item.tier for name, item in GROUPED_TOOLS.items()})
 # Like team_tools_for, use the owner's request to offer only relevant areas.
 # The full catalog remains discoverable; these words never grant authority.
 _AREA_WORDS = {
-    "members": r"\b(?:members?|assistants?|bots?|createagent|teammates?|teams?|company|roles?|profiles?|skills?|commands?|routines?|first bot)\b|\b(?:name|rename|call)\s+yourself\b|成員|助手|隊員|團隊|公司|技能|例行|メンバー|スキル",
+    "members": r"\b(?:members?|assistants?|bots?|createagent|teammates?|teams?|company|roles?|profiles?|covers?|skills?|commands?|routines?|first bot)\b|\b(?:name|rename|call)\s+yourself\b|成員|助手|隊員|團隊|公司|技能|例行|封面|メンバー|スキル|カバー",
     "folders": r"\b(?:folders?|company|teams?)\b|\bgroups?\b(?!\s+chats?\b)|資料夾|文件夾|團隊|公司|フォルダ",
     "rooms": r"\b(?:group chats?|rooms?)\b|群聊|群組|グループ",
     "conversations": r"\b(?:conversations?|quick chat|chat history)\b|對話|交談|聊天紀錄|会話",
@@ -332,7 +333,6 @@ OWNER_ONLY = {
     "connectors.label": "The owner names a connected account after sign-in.",
     **dict.fromkeys(("vault.list", "vault.add", "vault.update", "vault.remove", "vault.preview", "vault.cancel", "vault.import"),
                    "Owner-only vault metadata, private value writes, sharing and transient CSV import; no private value read or export RPC exists."),
-    "memory.import": "Only the owner explicitly imports outside memory through the checked shared-memory writer.",
     **dict.fromkeys(("owner_questions.answer", "owner_questions.bring", "background.answer", "pages.tool_call",
                      "integrations.card_connect", "integrations.card_cancel", "integrations.card_save", "integrations.card_resume",
                      "integrations.card_done", "integrations.card_stop", "integrations.card_allow", "integrations.card_always", "integrations.card_deny",
@@ -405,11 +405,11 @@ OWNER_ONLY["routines.webhook"] = "Webhook addresses and secrets are owner-only."
 
 
 SELF_ACTIONS = frozenset({
-    "member_update", "member_avatar", "member_skill_import", "member_skill_update",
+    "member_update", "member_avatar", "member_cover", "member_skill_import", "member_skill_update",
     "member_skill_delete", "member_skill_read", "member_command_save", "member_command_delete",
     "memory_document_read", "memory_document_update", "member_skills_list", "member_commands_list",
 })
-SELF_PROFILE_FIELDS = frozenset({"id", "name", "role", "personality", "instructions", "voice"})
+SELF_PROFILE_FIELDS = frozenset({"id", "name", "role", "personality", "instructions", "voice", "cover"})
 VOICE_SETTINGS = frozenset({"tts_enabled", "tts_fish_voice", "tts_service", "tts_fish_model", "tts_language"})
 
 
@@ -422,7 +422,7 @@ def self_action(member_id, name, arguments):
         return member_id == 0 and item.setting in VOICE_SETTINGS
     if item.name not in SELF_ACTIONS or values.get("shared") or values.get("space", "own") != "own":
         return False
-    target = values.get("id") if item.name in {"member_update", "member_avatar"} else values.get("member_id", 0)
+    target = values.get("id") if item.name in {"member_update", "member_avatar", "member_cover"} else values.get("member_id", 0)
     return (type(target) is int and target == member_id
             and (item.name != "member_update" or not set(values) - SELF_PROFILE_FIELDS))
 
@@ -439,7 +439,7 @@ def self_definitions(member_id):
                 continue
             definition = deepcopy(definition)
             definition["parameters"]["properties"]["action"]["enum"] = [item.name for item in items]
-            definition["description"] = "Manage only your own skills, commands and picture. Deletions require the owner's yes.\n" + "\n".join(
+            definition["description"] = "Manage only your own skills, commands, picture and cover. Deletions require the owner's yes.\n" + "\n".join(
                 item.name + ": " + item.description + " Schema: " + json.dumps(item.schema) for item in items)
         elif name == "settings_update" and member_id == 0:
             definition = deepcopy(definition)
@@ -454,7 +454,7 @@ def self_definitions(member_id):
             continue
         definition = deepcopy(definition)
         props = definition["parameters"]["properties"]
-        key = "id" if name in {"member_update", "member_avatar"} else "member_id"
+        key = "id" if name in {"member_update", "member_avatar", "member_cover"} else "member_id"
         if key in props:
             props[key] = {"type": "integer", "enum": [member_id]}
         if "shared" in props:

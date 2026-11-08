@@ -108,7 +108,13 @@ def _sentence(tool, arguments, language, *, server=None):
         action = "private"
     elif short in ("local_exec", "vm_exec", "exec_command", "run_command", "execute_command") or server == "computer" and short in ("exec", "command", "shell"):
         action = "command" if short == "local_exec" else "computer_command"
-        target = _command(args.get("command", args.get("cmd", ""))) or with_ui_words({"en": "a command", "ja": "コマンド"}).get(language, "指令")
+        if short == "local_exec":
+            from ..failures import redact
+            command = str(args.get("command") or "").splitlines()
+            target = (_command(command[0]) if _SENSITIVE.search(command[0]) else redact(command[0].strip())) if command else ""
+        else:
+            target = _command(args.get("command", args.get("cmd", "")))
+        target = target or with_ui_words({"en": "a command", "ja": "コマンド"}).get(language, "指令")
     elif short == "local_job":
         action = "job"
     elif short in ("read_file", "Read", "read_document", "write_file", "Write", "edit_file", "Edit", "apply_patch", "read_attachment"):

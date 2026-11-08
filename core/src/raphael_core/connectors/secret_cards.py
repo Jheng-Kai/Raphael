@@ -237,7 +237,7 @@ class SecretCards:
         if self.messaging is None or member_id not in self.messaging._members():
             raise LookupError("messaging")
         view = self.messaging._member_view(member_id, platform)
-        if view["connected"]:
+        if view["connected"] and view.get("token_present") is not False:
             if self.messaging.cards:
                 self.messaging.cards.watch(self.messaging._member_type(member_id, platform), turn_id)
             return None, view

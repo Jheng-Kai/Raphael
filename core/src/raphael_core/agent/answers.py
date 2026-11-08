@@ -210,6 +210,9 @@ def build_user_message(
     if recall:
         parts.append(recall)
     from .card_context import source_text
+    if source in {"telegram", "slack", "discord", "connector", "member"}:
+        from .owner_language import reply_context
+        parts.append(reply_context(language))
     if current := source_text(source) + messaging:
         parts.append(current)
     parts.append(f"<question>\n{question}\n</question>")
@@ -386,22 +389,23 @@ def _reply_words(value: Any) -> str:
     return ""
 
 
-def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = False, default_prefix: str | None = None) -> Reply:
+def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = False, default_prefix: str | None = None, literal: bool = False) -> Reply:
     """Keep every authored message and the full durable text; normalize persona frames only
     on the corresponding display path. Empty answers require memory edits or a lookup.
     """
     if isinstance(data, str):
-        data = _reply_input(data, default_prefix)
+        data = {"text": data, "prefix": default_prefix} if literal else _reply_input(data, default_prefix)
     if not isinstance(data, Mapping):
         raise AgentFailure("error")
     memory = _memory_items(data.get("memory"))
     search = _need(data.get("need"))
+    words_of = _one_line_text if literal else _reply_words
     items = data.get("messages")
     messages = (
-        [text for item in items for text in split_messages(_plain_text(_reply_words(item)))]
+        [text for item in items for text in split_messages(_plain_text(words_of(item)))]
         if isinstance(items, list) else []
     )
-    words = _reply_words(data.get("text"))
+    words = words_of(data.get("text"))
     explicit_messages = bool(messages) or len(message_parts(words)) > 1
     full = _plain_text(words)
     prefix = data.get("prefix")

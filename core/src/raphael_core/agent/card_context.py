@@ -134,27 +134,41 @@ def source_text(source: str) -> str:
     return f"Message source: {platform}; the owner is talking over {platform}.\n" if platform else ""
 
 
-def messaging_state(messaging, member_id: int) -> str:
-    """The member's current local messaging snapshot, refreshed for every model turn."""
+def messaging_facts(messaging, member_id: int) -> list[dict]:
+    """Read the service's current state without projecting identities, codes or credentials."""
     if messaging is None:
-        return ""
+        return []
     facts = []
-    for platform, name in PLATFORMS.items():
+    for platform in PLATFORMS:
         if platform not in getattr(messaging, "_base_types", PLATFORMS):
             continue
         try:
             view = messaging._member_view(member_id, platform)
         except (ValueError, KeyError):
             continue
-        if not view.get("connected"):
-            facts.append(f"{name}: disconnected.")
-            continue
-        allowed, pending = len(view.get("allowed", [])), len(view.get("pending", []))
-        running = bool(view.get("running"))
-        state = "paired" if allowed else "not paired"
-        availability = ("The owner can talk over this bot." if running else "Receiving is paused.") if allowed else (
-            "Pairing approval is pending in this conversation." if pending else "No allowed person yet; send the bot a message to pair, then review its pairing card.")
-        facts.append(f"{name}: {state}; allowed people={allowed}; pending pairings={pending}; "
-                     f"enabled={str(bool(view.get('enabled'))).lower()}; running={str(running).lower()}. {availability}")
+        facts.append({"platform": platform, "token_present": view.get("token_present"),
+                      "connected": bool(view.get("connected")), "enabled": bool(view.get("enabled")),
+                      "running": bool(view.get("running")), "paired": bool(view.get("paired", view.get("allowed"))),
+                      "allowed_count": len(view.get("allowed", [])), "pending_count": len(view.get("pending", []))})
+    return facts
+
+
+def messaging_state(messaging, member_id: int) -> str:
+    """The member's current local messaging snapshot, refreshed for every model turn."""
+    if messaging is None:
+        return ""
+    facts = []
+    for view in messaging_facts(messaging, member_id):
+        name = PLATFORMS[view["platform"]]
+        state = "paired" if view["paired"] else "not paired"
+        availability = ("The owner can talk over this bot." if view["running"] else "Receiving is paused.") if view["paired"] else (
+            "Pairing approval is pending in this conversation." if view["pending_count"] else
+            "No allowed person yet; send the bot a message to pair, then review its pairing card.")
+        if not view["connected"]:
+            availability = "Disconnected; connect this bot with its secure token card."
+        facts.append(f"{name}: {state}; allowed people={view['allowed_count']}; pending pairings={view['pending_count']}; "
+                     f"token_present={str(view['token_present']).lower()}; connected={str(view['connected']).lower()}; "
+                     f"enabled={str(view['enabled']).lower()}; "
+                     f"running={str(view['running']).lower()}. {availability}")
     return "\nCurrent messaging state (data, replaces earlier snapshots):\n" + wrap_untrusted(
         "messaging_state", "\n".join(facts), ok=True) if facts else ""

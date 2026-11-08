@@ -34,6 +34,27 @@ def test_unrelated_work_and_management_arguments_are_not_file_operations(floor):
     assert floor.access("read_file", {"path": r"D:\Raphael\core-other\notes.txt"}) is None
 
 
+@pytest.mark.parametrize('directory', ['Raphael', 'Raphael Dev'])
+@pytest.mark.parametrize('appdata', [True, False])
+def test_both_windows_data_directories_are_protected_even_without_appdata(directory, appdata):
+    env = {'USERPROFILE':r'C:\Users\Owner'}
+    if appdata:
+        env['APPDATA'] = r'C:\Users\Owner\AppData\Roaming'
+    guard = DataFloor(environ=env, core_root=r'D:\Core')
+    path = rf'C:\Users\Owner\AppData\Roaming\{directory}\settings.json'
+    assert guard.access('read_file', {'path':path}) == 'read'
+    assert guard.access('local_exec', {'command':f'Get-Content "{path}"'}) == 'read'
+    assert guard.access('write_file', {'path':path, 'content':'x'}) == 'write'
+
+
+@pytest.mark.parametrize('key', ['RAPHAEL_DATA_DIR', 'RAPHAEL_HOME'])
+def test_configured_data_directory_protects_more_than_the_database(key):
+    guard = DataFloor(environ={key:r'D:\Custom Data'}, core_root=r'D:\Core')
+    assert guard.access('read_file', {'path':r'D:\Custom Data\members\profile.json'}) == 'read'
+    assert guard.access('write_file', {'path':r'D:\Custom Data\members\profile.json'}) == 'write'
+    assert guard.access('read_file', {'path':r'D:\Custom Data Other\profile.json'}) is None
+
+
 @pytest.mark.parametrize("command", [
     'python -c "import sqlite3; sqlite3.connect(\'C:/data/raphael.db\').execute(\'DELETE FROM members\')"',
     'Get-Content C:/data/raphael.db | Set-Content C:/elsewhere/copied.db',
@@ -65,6 +86,17 @@ def test_quoted_paths_with_spaces_protect_the_actual_database_even_with_another_
         guard = DataFloor(conn, environ={}, core_root=tmp_path / "unrelated")
         assert guard.access("local_exec", {"command": f'Set-Content "{path}" hacked'}) == "write"
         assert guard.access("local_exec", {"command": f'Get-Content "{path}"'}) == "read"
+
+
+def test_the_actual_app_database_protects_its_configured_data_directory(tmp_path):
+    import sqlite3
+    folder = tmp_path / 'Configured Data'
+    folder.mkdir()
+    with sqlite3.connect(folder / 'raphael.db') as conn:
+        guard = DataFloor(conn, environ={}, core_root=tmp_path / 'unrelated')
+        path = str(folder / 'settings.json')
+        assert guard.access('read_file', {'path':path}) == 'read'
+        assert guard.access('write_file', {'path':path, 'content':'x'}) == 'write'
 
 
 @pytest.mark.parametrize("mode", ["ask", "plan", "direct", "bypass"])

@@ -76,6 +76,7 @@ class MessagingService:
         self._config = store.load()
         self._running: dict[str, _Running] = {}
         self._ended = False
+        self._approved_pairings: dict[tuple[str, str], str] = {}
         self.cards = None
         # One lock for the changes of the connections, so a switch and a disconnect cannot cross.
         self._lock = asyncio.Lock()
@@ -240,6 +241,12 @@ class MessagingService:
 
     # --- the methods ---
 
+    def _token_present(self, kind: str) -> bool | None:
+        try:
+            return all(bool(self._vault.get(secret_name(kind, name))) for name in self._types[kind].secrets)
+        except Exception:
+            return None
+
     def _view(self, kind: str) -> dict[str, Any]:
         running = self._running.get(kind)
         receiving = running is not None and not running.task.done()
@@ -254,6 +261,7 @@ class MessagingService:
         config = self._config.channel(kind)
         return {
             "connected": config.connected,
+            "token_present": self._token_present(kind),
             "enabled": config.enabled,
             "running": receiving,
             "error": None if running is None else running.switchboard.error,
@@ -297,6 +305,8 @@ class MessagingService:
             for name, value in secrets.items():
                 self._vault.set(secret_name(kind, name), value)
             same_bot = previous.bot_id == identity.id
+            if not same_bot:
+                self._approved_pairings = {key: user for key, user in self._approved_pairings.items() if key[0] != kind}
             self._config.channels[kind] = ChannelConfig(
                 enabled=True,
                 bot_id=identity.id,
@@ -335,8 +345,17 @@ class MessagingService:
         running = self._running.get(kind)
         pairing = None if running is None else running.switchboard.pairing.take(code)
         if running is None or pairing is None:
-            return {"approved": False, "status": self._view(kind)}
+            user = self._approved_pairings.get((kind, code.strip().upper()))
+            paired = user is not None and self._config.channel(kind).is_allowed(user)
+            return {"approved": paired, "already_paired": paired,
+                    "text": "This bot is already paired." if paired else "No matching pairing is pending.",
+                    "status": self._view(kind)}
         config = self._config.channel(kind)
+        if config.is_allowed(pairing.user):
+            if self.cards:
+                self.cards.finish_code(kind, code, "approved")
+            return {"approved": True, "already_paired": True, "text": "This bot is already paired.",
+                    "status": self._view(kind)}
         if not config.is_allowed(pairing.user):
             if len(config.allowed) >= MAX_ALLOWED:
                 raise invalid_params("too many people are allowed")
@@ -344,6 +363,9 @@ class MessagingService:
             self._store.save(self._config)
         if self.cards:
             self.cards.finish_code(kind, code, "approved")
+        if len(self._approved_pairings) >= 128:
+            self._approved_pairings.pop(next(iter(self._approved_pairings)))
+        self._approved_pairings[kind, code.strip().upper()] = pairing.user
         logger.info("%s: a pairing was approved, chat=%s", kind, chat_hash(pairing.chat))
         task = asyncio.ensure_future(running.switchboard.welcome(pairing.chat))
         task.add_done_callback(lambda t: t.cancelled() or t.exception())
@@ -371,6 +393,7 @@ class MessagingService:
 
     async def _disconnect(self, kind: str, params: dict) -> dict:
         """Forget the connection: its secrets are deleted from the vault and nobody stays allowed."""
+        self._approved_pairings = {key: user for key, user in self._approved_pairings.items() if key[0] != kind}
         async with self._lock:
             await self._stop_receiving(kind)
             if self.cards:

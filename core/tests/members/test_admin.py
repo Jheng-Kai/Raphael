@@ -236,7 +236,7 @@ async def test_admin_turn_updates_groups_profiles_routines_and_commands_and_emit
     ]
     done = await typed(rig, "Set up COO reports", 0, language="en")  # 自動: made as the model asks, no card
     assert done["status"] == "done" and done["text"] == "Updated COO."
-    roster = await team.members.admin_tool(0, "team_overview", {})
+    roster = await team.members.admin_tool(0, "team_overview", {'member_id':one.id})
     coo = next(item for item in roster["members"] if item["id"] == one.id)
     assert (coo["group"], coo["blurb"], coo["commands_count"]) == ("Company", "Operations lead", 1)
     assert coo["routines"][0]["title"] == "Report"

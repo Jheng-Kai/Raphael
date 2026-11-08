@@ -6,7 +6,7 @@ The RPC methods (the main window only, through the shell's allow-list):
 - `members.list {ui_language?}` -> `{members, groups}`. `members` is Raphael first (`id` 0, his name
   in the language, his picture when the owner chose one: `avatar_url`, a data URL, and
   `avatar_crop`), then every member in its place: `{id, name, role, personality, instructions, avatar,
-  avatar_url?, group_id, model, tools, position, created, unread, unread_from, waiting, preview, last_at}`.
+  avatar_url?, cover?, group_id, model, tools, position, created, unread, unread_from, waiting, preview, last_at}`.
   `preview` is the last line of its thread (one line, cut) and `last_at` when it was said; `unread`
   says the thread has news the owner has not seen (`members.read` clears it), `unread_from` names
   its first unseen turn when known, and `waiting` that a
@@ -30,6 +30,10 @@ The RPC methods (the main window only, through the shell's allow-list):
 - `members.set_avatar {id, name, mime, data}` -> `{member}`: a picture of the owner's own, in
   base64, checked as the images of a request are (`services.attachments`), copied into
   `<local>\\avatars\\members\\` under a name of its own: the path it came from is never known here.
+- `members.set_cover {id, name, mime, data}` -> `{member}`: the same checked image upload, kept
+  unchanged in `<local>/avatars/covers/`. `members.update {id, cover: "pattern:<id>" | null}`
+  selects a built-in pattern or clears it. Views omit an unset cover; otherwise return
+  `{kind:"pattern", id}` or `{kind:"image", url}`. Both support Raphael (id 0).
 - `members.read {id}` -> `{}`; `members.viewing {id | null}` -> `{}`: which thread is on screen now
   (null for none), so that what arrives there is not news.
 - `members.tool_choices {}` -> `{tools, connections}`: Raphael's own tools a member may be given, by
@@ -91,6 +95,7 @@ from ..router import Router
 from ..services.attachments import IMAGE_TYPES, MAX_IMAGE_BYTES, AttachmentError, checked, sniff_ok
 from .capabilities import MemberCapabilities, download_skills
 from .schedule import Schedule, next_run
+from .covers import Covers, selection as cover_selection
 from .store import (
     ROUTINE_RUN_STATUS_SQL,
     PROMPT_MAX,
@@ -141,6 +146,23 @@ _ASCII_WORD = re.compile(r"[A-Za-z0-9 ._-]+")
 def _rpc_error(error: MemberError) -> RpcError:
     """A refusal of the store as a bad request whose data names the field."""
     return RpcError(INVALID_PARAMS, f"Invalid params: {error}", {"kind": error.kind})
+
+
+def _uploaded_picture(params, kind):
+    name, mime, data = params.get("name"), params.get("mime"), params.get("data")
+    if not isinstance(name, str) or not isinstance(mime, str) or not isinstance(data, str):
+        raise invalid_params("name, mime and data must be strings")
+    if len(data) > (MAX_IMAGE_BYTES * 4) // 3 + 8:
+        raise RpcError(INVALID_PARAMS, f"Invalid params: {kind} (size)", {"kind": "size"})
+    try:
+        raw = base64.b64decode(data, validate=True)
+        picture = checked(name, mime, raw, max_bytes=MAX_IMAGE_BYTES)
+    except (binascii.Error, ValueError) as error:
+        reason = error.kind if isinstance(error, AttachmentError) else "data"
+        raise RpcError(INVALID_PARAMS, f"Invalid params: {kind} ({reason})", {"kind": reason}) from None
+    if not picture.is_image:
+        raise RpcError(INVALID_PARAMS, f"Invalid params: {kind} (type)", {"kind": "type"})
+    return picture
 
 
 def _whole(params: dict, name: str, *, least: int = 0) -> int:
@@ -284,6 +306,7 @@ class MembersService:
         self._avatars = local_dir / AVATARS_DIR
         self._raphael_avatar = local_dir / RAPHAEL_AVATAR_DIR
         self._pictures: dict[Path, _Picture] = {}
+        self._covers = Covers(self._avatars / "covers", self._data_url, self._pictures.pop)
         self._viewing: int | None = None
         self.activity.viewing = lambda: self._viewing
         self._waiting_sources: list[Callable[[], Iterable[int]]] = []
@@ -340,6 +363,7 @@ class MembersService:
             "members.delete": self._delete,
             "members.set_primary": self._set_primary,
             "members.set_avatar": self._set_avatar,
+            "members.set_cover": self._set_cover,
             "members.read": self._read,
             "members.unread": self._unread,
             "members.viewing": self._viewing_now,
@@ -618,6 +642,8 @@ class MembersService:
         url = self._avatar_url(member.avatar) if member.avatar else None
         if url is not None:
             view["avatar_url"] = url
+        if cover := self._covers.view(member.id):
+            view["cover"] = cover
         return view
 
     def _raphael_view(
@@ -654,6 +680,8 @@ class MembersService:
         view["profile_ready"] = bool(profile)
         if picture is not None:
             view["avatar_url"], view["avatar_crop"] = picture
+        if cover := self._covers.view(0):
+            view["cover"] = cover
         return view
 
     def view_of(self, member: Member) -> dict[str, Any]:
@@ -1007,6 +1035,11 @@ class MembersService:
         return {"role": saved["member"]["role"], "note": "Saved. The owner can see it in your details."}
 
     async def _update(self, params: dict) -> dict:
+        cover = cover_selection(params['cover']) if 'cover' in params else None
+        if type(params.get('id')) is int and params['id'] == 0 and set(params) == {'id', 'cover'}:
+            self._save_cover(0, cover)
+            self._changed()
+            return {'member': self._raphael_view(self._language(), {}, set(), {})}
         if type(params.get("id")) is int and params["id"] == 0 and set(params) == {"id", "draft_first"}:
             try:
                 self._settings.set("raphael_draft_first", params["draft_first"])
@@ -1030,7 +1063,10 @@ class MembersService:
             fields["model"] = ""
         old = self.store.member(member_id)
         try:
-            member = self.store.update_member(member_id, **fields)
+            with self.store.transaction():
+                member = self.store.update_member(member_id, **fields)
+                if "cover" in params:
+                    self._save_cover(member_id, cover)
         except MemberError as error:
             raise _rpc_error(error) from None
         if old is not None and "avatar" in fields and old.avatar != member.avatar:
@@ -1065,6 +1101,7 @@ class MembersService:
             # Uploaded avatars can be shared by a duplicated profile.
             if not any(other.id != member_id and other.avatar == member.avatar for other in self.store.members()):
                 self._remove_picture(member.avatar)
+            self._save_cover(member_id, None)
             deleted = self.store.delete_member(member_id)
             if self._viewing == member_id:
                 self._viewing = None
@@ -1088,23 +1125,42 @@ class MembersService:
             self._changed()
         return {"primary_id": member_id}
 
+    def _save_cover(self, member_id, value):
+        try:
+            self._covers.save(member_id, value)
+        except OSError:
+            raise RpcError(INVALID_PARAMS, "Invalid params: cover (io)", {"kind": "io"}) from None
+
+    async def _set_cover(self, params: dict) -> dict:
+        member_id = _whole(params, 'id')
+        if member_id:
+            self._member_id(params)
+        picture = _uploaded_picture(params, 'cover')
+        stored = f"{member_id}-{secrets.token_hex(6)}.{_EXTENSIONS[picture.mime]}"
+        writing = asyncio.create_task(asyncio.to_thread(self._covers.stage, stored, picture.data))
+        try:
+            await asyncio.shield(writing)
+            if member_id:
+                self._member_id(params)
+            self._save_cover(member_id, {'kind': 'image', 'file': stored})
+        except BaseException as error:
+            if not writing.done():
+                try:
+                    await writing
+                except Exception:
+                    pass
+            self._covers.remove_image(stored)
+            if isinstance(error, OSError):
+                raise RpcError(INVALID_PARAMS, "Invalid params: cover (io)", {"kind": "io"}) from None
+            raise
+        self._changed()
+        return {'member': self.view_of(self.store.member(member_id)) if member_id else self._raphael_view(self._language(), {}, set(), {})}
+
     async def _set_avatar(self, params: dict) -> dict:
         member_id = _whole(params, "id")
         if member_id:
             self._member_id(params)
-        name, mime, data = params.get("name"), params.get("mime"), params.get("data")
-        if not isinstance(name, str) or not isinstance(mime, str) or not isinstance(data, str):
-            raise invalid_params("name, mime and data must be strings")
-        if len(data) > (MAX_IMAGE_BYTES * 4) // 3 + 8:
-            raise RpcError(INVALID_PARAMS, "Invalid params: avatar (size)", {"kind": "size"})
-        try:
-            raw = base64.b64decode(data, validate=True)
-            picture = checked(name, mime, raw, max_bytes=MAX_IMAGE_BYTES)
-        except (binascii.Error, ValueError) as error:
-            kind = error.kind if isinstance(error, AttachmentError) else "data"
-            raise RpcError(INVALID_PARAMS, f"Invalid params: avatar ({kind})", {"kind": kind}) from None
-        if not picture.is_image:
-            raise RpcError(INVALID_PARAMS, "Invalid params: avatar (type)", {"kind": "type"})
+        picture = _uploaded_picture(params, "avatar")
         if member_id == 0:
             def write_first_picture():
                 self._raphael_avatar.mkdir(parents=True, exist_ok=True)
@@ -1647,24 +1703,36 @@ class MembersService:
         if name == "team_overview":
             from ..computer.grants import ComputerGrants
             roster = await self._list({})
+            detail_id = arguments.get('member_id')
+            if 'member_id' in arguments and (type(detail_id) is not int or not any(item['id'] == detail_id for item in roster['members'])):
+                raise invalid_params('member_id must identify an existing member')
             groups = {group["id"]: group["name"] for group in roster["groups"]}
             members = []
             for item in roster["members"]:
                 identifier = item["id"]
+                if detail_id is not None and identifier != detail_id:
+                    continue
                 speaker = self.speaker(identifier)
                 model = speaker.model or self._starting_model()
+                routines = (await self._routines_list({"member_id": identifier}))["routines"]
+                counts = {"skills_count": len(self.capabilities.skills(identifier)),
+                          "commands_count": len(self.capabilities.commands(identifier)) if identifier else 0,
+                          "routines_count": len(routines)}
+                if detail_id is None:
+                    members.append({"id":identifier, "name":item['name'], "role":item['role'][:160], "model":model,
+                                    "group":groups.get(item['group_id']), **counts})
+                    continue
                 capabilities = getattr(self._background, "capabilities_for", lambda speaker: {"tools": [], "brain": {"model": model}})(speaker)
                 members.append({**{field: item[field] for field in ("id", "name", "role", "blurb")},
                                 **capabilities,
                                 "computer": {"allowed": ComputerGrants(self._conn).allowed(identifier),
                                              "local_commands": self._settings.get("local_commands_mode")},
                                 "group": groups.get(item["group_id"]),
-                                "skills_count": len(self.capabilities.skills(identifier)),
-                                "commands_count": len(self.capabilities.commands(identifier)) if identifier else 0,
-                                "routines": (await self._routines_list({"member_id": identifier}))["routines"]})
+                                **counts, "model":model, "routines": routines})
             rooms = getattr(self, "rooms", None)
             return {"members": members, "groups": roster["groups"], "primary_id": roster["team_context"]["primary_id"],
-                    "rooms": rooms.member_rooms(member_id)["rooms"] if rooms else []}
+                    "rooms": rooms.member_rooms(member_id)["rooms"] if rooms else [],
+                    "detail": "Call team_overview with member_id for one member's full details."}
         if name in ("member_create", "member_update"):
             params = dict(arguments)
             if "effort" in params:
@@ -1673,6 +1741,8 @@ class MembersService:
                 model = params.get("model", current.model if current else "") or self._starting_model()
                 params["model"] = model.partition("?effort=")[0] + "?effort=" + params.pop("effort")
             if name == "member_update" and params.get("id") == 0:
+                if set(params) == {"id", "cover"}:
+                    return await self._update(params)
                 from ..brain.settings import checked
 
                 changes = {key: value for key, value in params.items() if key in ("name", "role", "personality", "instructions")}
@@ -1682,8 +1752,9 @@ class MembersService:
                 for field in ("blurb", "group", "avatar_preset"):
                     if params.get(field) == "":
                         params.pop(field)
-                if set(params) - {"id", "name", "role", "personality", "instructions", *preferences}:
+                if set(params) - {"id", "name", "role", "personality", "instructions", "cover", *preferences}:
                     raise invalid_params("This field is not editable for the first Bot")
+                cover = cover_selection(params["cover"]) if "cover" in params else None
                 # Validate the whole request before any profile/preference write.
                 for field, setting in preferences.items():
                     if field in params:
@@ -1699,6 +1770,8 @@ class MembersService:
                 with self.store.transaction():
                     self._conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                                        (key, json.dumps(profile)))
+                    if "cover" in params:
+                        self._save_cover(0, cover)
                 self._changed()
                 for field, setting in preferences.items():
                     if field in params:

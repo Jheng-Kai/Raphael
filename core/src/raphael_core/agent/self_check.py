@@ -1,5 +1,9 @@
 """Read-only product knowledge and bounded runtime checks shared by all brains."""
 
+import os
+import re
+from pathlib import Path
+
 from ..failures import RECENT, classify, redact
 from ..connectors.composio import KEY
 from ..connectors.google import PREFIX
@@ -35,6 +39,8 @@ a brief useful closing sentence after the last block. Mermaid must be self-conta
 click handlers, external resources, styling directives or configuration. Remote Markdown images
 require the owner to click before loading. Code blocks display text only; commands still require
 the existing tool permission flow. Overlay subtitles and external messaging remain plain text.
+For "what happened / help me check" about Raphael itself, use self_check first on every brain.
+Its diagnostics name the real local log path; never start with a whole-profile recursive scan.
 When something fails, read the classified reason and run one self_check. Fix what you can;
 change approach at most once before reporting the blocker. Ask the owner only for sign-in,
 keys or consent, naming exactly what is needed and why. Never claim that a failed call succeeded.
@@ -63,7 +69,7 @@ General holds account, appearance, interface language, time zone, output folder,
 Dictation holds transcription, microphone, hotkeys and retention; Tools holds work capabilities; Safety holds
 permissions; Models holds providers, subscriptions, choices and usage; About holds version information.
 Connected apps have their own entry. Telegram, Slack and Discord belong to each member's panel; setup,
-pairing, approval and rejection happen through cards in that member's conversation, not a settings page. Native logs are written to logs/raphael.log in Raphael's data directory.
+pairing, approval and rejection happen through cards in that member's conversation, not a settings page. self_check names the log path supplied by this native app.
 self_check reads existing state only: it does not sign in, refresh credentials, probe a provider,
 run a model, change settings, create a card or send a request over the network.
 Unknown/unreadable key presence or sign-in is unknown, not false. Report it honestly.
@@ -86,6 +92,38 @@ REFERENCES = {
 PANES = ("general", "dictation", "tools", "safety", "models", "about", "connections")
 SAFE_SETTINGS = ("agent_model", "quick_model", "action_mode", "monthly_limit_usd", "stt_engine",
                  "web_search_enabled", "web_read_enabled", "vision_enabled", "pdf_enabled", "tts_enabled")
+
+
+def requested(text):
+    """Recognize a narrow troubleshooting request, not general owner-PC questions."""
+    text = text.strip()
+    if re.search(r"CPU|memory usage|disk usage|\u96fb\u8166|\u7535\u8111|\u30d1\u30bd\u30b3\u30f3", text, re.I):
+        return False
+    issue = re.search(r"what (?:happened|went wrong)|\u767c\u751f[\u4ec0\u751a]\u9ebc\u4e8b|\u53d1\u751f\u4ec0\u4e48\u4e8b|\u4f55\u304c\u8d77\u304d", text, re.I)
+    named = re.search(r"Raphael|\u62c9\u6590\u723e|\u30e9\u30d5\u30a1\u30a8\u30eb", text, re.I)
+    generic = re.fullmatch(r"(?:what (?:happened|went wrong)(?: here)?|(?:\u53ef\u4ee5)?(?:\u5e6b\u6211\u67e5\u4e00\u4e0b(?:\u662f)?)?\u767c\u751f[\u4ec0\u751a]\u9ebc\u4e8b(?:\u60c5)?(?:\u4e86)?(?:\u55ce)?)[?\uff1f\u3002!\s]*", text, re.I)
+    help_request = re.search(r"help me check|\u5e6b\u6211\u67e5\u4e00\u4e0b|\u5e2e\u6211\u67e5\u4e00\u4e0b", text, re.I)
+    return bool(generic or named and (issue or help_request))
+
+
+def log_diagnostics(service):
+    """Read only the bounded tail of the path supplied by this native app."""
+    store = getattr(service, "_attachment_store", None)
+    configured = os.environ.get("RAPHAEL_LOG_PATH")
+    path = Path(configured) if configured else store.root.parent / "logs" / "raphael.log" if store is not None else None
+    lines = []
+    if path is not None:
+        try:
+            with path.open("rb") as stream:
+                stream.seek(0, 2)
+                size = stream.tell()
+                stream.seek(max(0, size - 32768))
+                tail = stream.read(32768).decode("utf-8", errors="replace")
+            lines = [redact(line)[:1000] for line in tail.splitlines()
+                     if re.search(r"\b(?:WARN|ERROR|failed|panic)\b", line, re.I)][-10:]
+        except OSError:
+            pass
+    return {"path": str(path) if path is not None else None, "recent_failures": lines}
 
 
 def _presence(read):
@@ -141,7 +179,11 @@ def snapshot(service, ask):
                 (ask.speaker.id, ask.conversation_id)):
             cards.append({"type": table, "state": row["state"],
                           "failure": classify(row["error"], record=False).wire() if row["error"] else None})
+    from .card_context import messaging_facts
+    messaging = getattr(service._secret_cards, "messaging", None)
     return {"connections": connections, "keys_present": keys, "brains": brains, "cards": cards,
+            "logs": log_diagnostics(service) if private else {"path": None, "recent_failures": []},
+            "messaging": messaging_facts(messaging, ask.speaker.id) if private else [],
             "memory": service._memory.health() if service._memory is not None and hasattr(service._memory, "health") else {"status": "unknown"},
             "settings": {name: service._settings.get(name) for name in SAFE_SETTINGS},
             "recent_failures": [redact(line) for line in list(RECENT)[-10:]]}

@@ -7,6 +7,7 @@ The member service owns validation, persistence, defaults and live notifications
 
 from raphael_core.ui_words import ui_word, with_ui_words
 from dataclasses import dataclass
+import re
 from typing import Any
 
 from .policy import Tier
@@ -61,12 +62,37 @@ def definition(description, properties=None, required=()):
 
 # The overview is shared work context, not management authority.
 DEFINITIONS = {
-    "team_overview": definition("Read member IDs, roles, brains, grants, groups, skills, commands and routines. Rooms are limited to the caller's own membership."),
+    "team_overview": definition("Read a compact complete roster: IDs, names, roles, models and counts. Supply member_id for that member's full brain, grants, tools, skills, commands and routines. Rooms are limited to the caller's own membership.",
+                                {"member_id": {"type": "integer", "minimum": 0}}),
     **MANAGEMENT_DEFINITIONS,
 }
 TIERS = {"team_overview": Tier.T0, **MANAGEMENT_TIERS}
 BATCH_TOOLS = {"member_create", "create_member", "member_update", "group_create", "group_rename"}
 CONFIRM_TOOLS = (set(DEFINITIONS) - {"team_overview"}) | {"create_member", "routine_create", "routine_update", "routine_delete"}
+
+DELEGATED_MANAGEMENT_GUIDANCE = (
+    "Member management cannot be delegated through ask_member or handoff. Every member has management tools "
+    "in the owner's private chat. Make the requested member changes yourself there; in a room, ask the owner "
+    "to continue in your private chat. Do not try file, database or shell workarounds."
+)
+
+
+def delegated_management(request):
+    """Recognize an operational member-management request before creating another member's task."""
+    if not isinstance(request, str):
+        return False
+    operation = r'(?:\b(?:create|add|update|edit|change|rename|remove|delete|set|assign|move|enable|disable)\b|新增|建立|修改|更改|更新|刪除|删除|設定|设置|改名|調整|调整|移動|移动|追加|変更|削除)'
+    subject = r'(?:members?\b|teammates?\b|bots?\b|groups?\b|成員|成员|群組|群组|メンバー|グループ)'
+    from ..management import ACTIONS
+    tools = '|'.join(re.escape(item.name) for item in ACTIONS if item.name.startswith(('member_', 'group_')))
+    # Source-code work and questions about a tool are not app-state management.
+    if re.search(r'\b(?:implementation|code|tests?|regression|documentation)\b|程式碼|實作|測試|測试|ソースコード', request, re.I):
+        return False
+    request = re.sub(r"(?:do not|don't|never|不要|不得|勿)[^.;。\n]*", '', request, flags=re.I)
+    return bool(re.search(r'\b(?:call|use|invoke|run|execute)\b.{0,40}\b(?:' + tools + r'|create_member)\b', request, re.I)
+                or re.search(operation + r'.{0,60}' + subject, request, re.I)
+                or re.search(subject + r'.{0,40}' + operation, request, re.I)
+                or re.search(operation + r'.{0,40}(?:model|instructions|personality|模型|指令|性格).{0,20}(?:\bto\b|為|为|成)', request, re.I))
 
 LEADERSHIP = (
     "\nEvery member has the same management tools in the owner's private chat. Use team_overview and your team administration tools to create "

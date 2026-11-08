@@ -213,7 +213,6 @@ class MemoryService(Growth):
         methods = {
             "memory.get": self._get,
             "memory.update": self._update,
-            "memory.import": self._import,
             "memory.clear": self._clear,
             "memory.summary_clear": self._summary_clear,
         }
@@ -803,30 +802,6 @@ class MemoryService(Growth):
 
     async def _get(self, params: dict) -> dict:
         return self._view(params)
-
-    async def _import(self, params: dict) -> dict:
-        """Explicit owner import, through the shared writer and its existing secret scan.
-
-        Refused text is never returned: it can contain the secret that was refused.
-        Each paragraph or bullet is independent, so one refusal does not hide the rest.
-        """
-        text = params.get("text")
-        if not isinstance(text, str) or not text.strip() or len(text) > MAX_DOCUMENT_CHARS:
-            raise invalid_params("text must contain 1 to 64000 characters")
-        entries = [re.sub(r"^\s*(?:[-*•]|\d+[.)])\s+", "", line).strip()
-                   for line in re.split(r"\n\s*\n|\n(?=\s*(?:[-*•]|\d+[.)])\s)", text)]
-        memory = self.space("shared", 0)
-        kept, refused = [], []
-        for index, entry in enumerate(entries, 1):
-            if not entry:
-                continue
-            memory.reset_failures()
-            result = memory.apply([{"action": "add", "content": entry}])
-            if result["success"]:
-                kept.append(entry)
-            else:
-                refused.append({"index": index, "reason": result.get("kind", "invalid")})
-        return {"kept": kept, "refused": refused}
 
     async def _update(self, params: dict) -> dict:
         text, revision = params.get("text"), params.get("revision")

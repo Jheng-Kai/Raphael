@@ -64,9 +64,10 @@ def _number(value: Any, default: int) -> int:
 
 async def _post(http: httpx2.AsyncClient, url: str, data: dict[str, str]) -> dict[str, Any]:
     try:
-        reply = await http.post(url, data=data)
-        body = reply.json()
-    except httpx2.TimeoutException:
+        async with asyncio.timeout(REQUEST_TIMEOUT_S):
+            reply = await http.post(url, data=data)
+            body = reply.json()
+    except (TimeoutError, httpx2.TimeoutException):
         raise McpFailure("timeout") from None
     except httpx2.HTTPError:
         raise McpFailure("network") from None

@@ -21,7 +21,7 @@ async def test_room_roles_do_not_dispatch_rounds_or_an_automatic_conclusion(rig,
     source = exchange._history.add(session_id="meeting",question="Meet",route="answer",prefix="",text="",status="running",member_id=rig.service.primary_id())
     await exchange.meeting({"member_ids": [0, *ids], "agenda": "Discuss the release",
                             "roles": {str(ids[0]): "moderator", str(ids[1]): "con"}}, "en", source)
-    assert [row["member_id"] for row in rig.background.submitted] == [ids[1]]
+    assert [row["member_id"] for row in rig.background.submitted] == [0]
     prompt = rig.background.submitted[-1]["text"].split("TeamContextSnapshot")[0]
     assert "Room-only roles" in prompt and "Everyone reads every message" in prompt
     assert "two rounds" not in prompt and "chief concludes" not in prompt
@@ -31,8 +31,10 @@ async def test_room_roles_do_not_dispatch_rounds_or_an_automatic_conclusion(rig,
         assert "coordinates room conclusions" not in roster
         assert "no automatic conclusion" in roster
     await finish(rig, exchange, "Test first.")
+    await finish(rig, exchange, "(pass)")
+    await finish(rig, exchange, "(pass)")
     assert (await history(rig, room))["exchange"]["state"] == "done"
-    assert len(rig.background.submitted) == 1
+    assert len(rig.background.submitted) == 3
     assert rig.service.speaker(ids[0]).role == "PM"
 
 
@@ -59,7 +61,8 @@ async def test_meeting_requires_the_current_chief_without_adding_raphael(rig, ex
     assert result["member_ids"] == ids
     assert [row["member_id"] for row in rig.background.submitted] == [ids[0]]
     await finish(rig, exchange, "Ready.")
-    assert len(rig.background.submitted) == 1
+    await finish(rig, exchange, "(pass)")
+    assert len(rig.background.submitted) == 2
 
 
 async def test_everyone_reads_and_those_who_care_most_speak_first(rig, exchange):

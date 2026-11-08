@@ -1,7 +1,5 @@
 """CLI reports and public progress share the owner's Chinese script boundary."""
 
-import json
-
 import pytest
 
 from raphael_core.agent.cli.loop import CliLoop
@@ -28,9 +26,7 @@ async def test_cli_background_report_and_progress_use_owner_script(make_rig, mon
     async def work(loop):
         loop.progress(authored)
         assert [data["text"] for method, data in rig.notifications if method == "worker.progress"] == [expected]
-        loop._queue.put_nowait(Outcome("done", final=json.dumps({
-            "text": authored, "messages": [authored, "学校へ行きます。"], "detail": authored,
-        })))
+        loop._queue.put_nowait(Outcome("done", final=authored + "\n\n" + "学校へ行きます。"))
 
     monkeypatch.setattr(CliLoop, "_work", work)
     task_id = rig.service.submit(session_id="cli-script", text="Check", language="en", model="cli:" + brain)
@@ -41,4 +37,4 @@ async def test_cli_background_report_and_progress_use_owner_script(make_rig, mon
     assert task.state == "done"
     assert done["text"] == expected + " 学校へ行きます。"
     assert task.report_text == history.get(turn_id).text == expected_text
-    assert task.report_detail == history.get(turn_id).detail == expected
+    assert task.report_detail == history.get(turn_id).detail is None

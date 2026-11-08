@@ -21,6 +21,7 @@ from .local_patterns import DANGEROUS_PATTERNS
 
 LOCAL_PREFIX = "mcp:local/"
 BACKGROUND_WAIT_S = 30 * 60
+FOREGROUND_TIMEOUT_S = 120
 _CONTEXT = ContextVar("local_command_context", default=(None, True, False, ""))
 _DANGEROUS = [re.compile(pattern, re.I | re.S) for pattern, _ in DANGEROUS_PATTERNS]
 # These patterns are best effort, not a shell parser or sandbox. The owner card is the real gate.
@@ -28,9 +29,9 @@ _SECRET = re.compile(r"\.env(?:[.\\/\s'\"]|$)|\.codex[\\/]auth\.json|\.claude[\\
 _OPAQUE = re.compile(r"-(?:enc(?:odedcommand)?|file)\b|\b(?:iex|invoke-expression|Start-Process|Invoke-Command)\b|\b(?:claude|codex|python|node|ruby|perl|powershell|pwsh)(?:\.exe)?\b|\.(?:ps1|cmd|bat|exe)\b", re.I)
 
 EXEC_DESCRIPTION = (
-    "Run one command on the owner's Windows PC: use first for CPU, memory, disk, processes, network, files, "
-    "installed programs and logs. Services use connected apps; desktops are for seeing/clicking. Approval is enforced. "
-    "No interactive/full-screen programs. Long installed claude -p or codex exec work uses background and the same card; it spends the owner's subscription."
+    "Run one command on the owner's Windows PC for CPU, memory, disk, processes, network, files and logs. "
+    "For Raphael itself use self_check first, never a whole-profile scan. Approval is enforced; foreground max 120 s. "
+    "No interactive programs. Long claude -p or codex exec work uses background and the same card; it spends the owner's subscription."
 )
 EXEC_SCHEMA = {"type": "object", "properties": {
     "command": {"type": "string", "minLength": 1, "maxLength": 16000},
@@ -43,6 +44,26 @@ JOB_SCHEMA = {"type": "object", "properties": {"job_id": {"type": "string"}, "st
 
 def is_local(key):
     return key.startswith(LOCAL_PREFIX)
+
+
+def command_of(arguments):
+    """Find the literal command in a native CLI permission envelope."""
+    if not isinstance(arguments, dict):
+        return ""
+    command = arguments.get("command")
+    if isinstance(command, str):
+        return command
+    for key in ("input", "tool_input", "toolCall", "args", "details"):
+        value = arguments.get(key)
+        if isinstance(value, dict):
+            command = value.get("command")
+            if isinstance(command, str):
+                return command
+            for nested in ("input", "args"):
+                part = value.get(nested)
+                if isinstance(part, dict) and isinstance(part.get("command"), str):
+                    return part["command"]
+    return ""
 
 
 def requires_command_approval(settings, command, *, external):
@@ -164,7 +185,10 @@ class LocalTools:
                 return PluginResult(False, "disabled", "Local commands are disabled in this test environment.")
             if approver == "none" or self.requires_approval(arguments) and approver != "user":
                 return result
-            params = {"cwd": arguments.get("cwd") or str(Path.home()), "timeout_seconds": arguments.get("timeout_seconds", 60)}
+            timeout = arguments.get("timeout_seconds", 60 if arguments.get("background") else FOREGROUND_TIMEOUT_S)
+            if not arguments.get("background"):
+                timeout = min(timeout, FOREGROUND_TIMEOUT_S)
+            params = {"cwd": arguments.get("cwd") or str(Path.home()), "timeout_seconds": timeout}
             if arguments.get("background"):
                 if len(self.jobs) >= 64:
                     for old, job in list(self.jobs.items()):

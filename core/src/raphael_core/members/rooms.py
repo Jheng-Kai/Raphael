@@ -31,8 +31,6 @@ def _role_part(role):
     return next((part for part, words in _ROLE_WORDS if isinstance(role, str) and words.search(role)), 'participant')
 
 
-# A reply's trailing protocol token, when the reply also says something.
-_TRAILING_PASS = re.compile(r'(\S[\s\S]*?)\s*[(（]\s*pass\s*[)）][.。]?\s*$', re.IGNORECASE)
 # The owner's Stop, and a new owner message that preempts the exchange.
 _OWNER_STOPS = ('owner', 'interjection')
 # An unfinished reply in words, by the reason its intent was blocked for; any other reason is an error.
@@ -40,11 +38,11 @@ _UNFINISHED = {'cli_rate_limited':'rate_limit', 'cli_quota':'quota', 'cli_login'
                'cost':'budget', 'reply_budget':'budget', 'revoked':'removed', 'restart':'restart'}
 _UNFINISHED_WORDS = with_ui_words({
     'zh-TW':{'rate_limit':'請求太頻繁而被限流', 'quota':'訂閱額度已用完', 'login':'需要登入 CLI', 'budget':'預算已用完',
-             'removed':'已不在房間', 'restart':'重新啟動後中斷', 'error':'發生錯誤'},
+             'removed':'已不在房間', 'restart':'重新啟動後中斷', 'error':'發生錯誤', 'unavailable':'暫時無法回應'},
     'en':{'rate_limit':'rate-limited (too many requests)', 'quota':'subscription quota used up', 'login':'CLI sign-in needed',
-          'budget':'budget exhausted', 'removed':'no longer in the room', 'restart':'interrupted by a restart', 'error':'an error occurred'},
+          'budget':'budget exhausted', 'removed':'no longer in the room', 'restart':'interrupted by a restart', 'error':'an error occurred', 'unavailable':'unavailable'},
     'ja':{'rate_limit':'リクエスト過多で制限中', 'quota':'サブスクリプションの上限', 'login':'CLI のログインが必要', 'budget':'予算の上限',
-          'removed':'ルームから外れました', 'restart':'再起動で中断', 'error':'エラーが発生'},
+          'removed':'ルームから外れました', 'restart':'再起動で中断', 'error':'エラーが発生', 'unavailable':'応答できません'},
 })
 
 
@@ -325,10 +323,13 @@ class RoomsService:
             room = (await self._create({'member_ids': ids, 'name': arguments.get('name')}))['room']
         room = (await self._update({'room_id': room['id'], 'roles': roles}))['room']
         result = self.post(source.member_id or 0,{'room_id':room['id'],'text':agenda.strip()},source_turn_id,language)
-        self._exchanges.update(result['message_id'],meeting=0)
-        await self._exchanges.drive(room['id'])
+        if not result['duplicate']:
+            self._exchanges.update(result['message_id'],meeting=1,
+                pending=json.dumps([{'member':member,'reply_to':None,'reply_to_member':None,'handoff':False} for member in ids]))
+            await self._exchanges.drive(room['id'])
         return {'room_id':room['id'],'name':room['name'],'message_id':result['message_id'],
-                'member_ids':room['member_ids'],'duplicate':result['duplicate']}
+                'member_ids':ids,'duplicate':result['duplicate'],
+                'state':self._exchanges.get(result['message_id']).state}
 
     @staticmethod
     def _responder(value, ids):
@@ -411,7 +412,8 @@ class RoomsService:
         words = _UNFINISHED_WORDS.get(language, _UNFINISHED_WORDS['en'])
         rows = self._conn.execute("SELECT recipient_name, reason FROM room_reply_intents WHERE origin_message_id=? "
                                   "AND state='blocked' ORDER BY id", (origin,))
-        return list(dict.fromkeys((row[0], words[_UNFINISHED.get(row[1], 'error')]) for row in rows if row[1] not in _OWNER_STOPS))
+        return list(dict.fromkeys((row[0], (words['unavailable'] + ' (' + row[1][9:] + ')' if row[1].startswith('listener_')
+                                          else words[_UNFINISHED.get(row[1], 'error')])) for row in rows if row[1] not in _OWNER_STOPS))
 
     async def wait_idle(self):
         await self._exchanges.wait_idle()
@@ -485,8 +487,8 @@ class RoomsService:
             if self.turn_view is not None:
                 message["turn"] = self.turn_view(turn)
             message["text"] = (turn.detail or turn.text) if turn.status != 'running' else ''
-            if (trailing := _TRAILING_PASS.fullmatch(message["text"])):
-                message["text"] = trailing.group(1)
+            from ..background.final import room_reply_text
+            message['text'] = room_reply_text(message['text'])
             if turn.status == 'done':
                 from ..background.final import validate_terminal
                 room = dict(self._conn.execute('SELECT * FROM rooms WHERE id=?',(message['room_id'],)).fetchone())
@@ -654,7 +656,9 @@ class RoomsService:
         decisions = [{'id':r['id'],'member_id':r['member_id'],'text':r['text']} for r in self._conn.execute(
             "SELECT id,member_id,text FROM room_messages WHERE room_id=? AND thread_id=? AND kind='decision' "
             "AND (? IS NULL OR id<=?) ORDER BY id DESC LIMIT 12", (room_id,thread_id,through,through))]
-        return {'board':board,'decisions':list(reversed(decisions))}
+        exchange = self._exchanges.latest(room_id, thread_id)
+        meeting = {key:exchange[key] for key in ('origin_message_id','state','meeting','turns_taken','reason')} if exchange else None
+        return {'board':board,'decisions':list(reversed(decisions)), 'meeting':meeting}
 
     def _submit_exchange_turn(self, room, exchange, target, kind, attachments):
         member_id = target["member"]

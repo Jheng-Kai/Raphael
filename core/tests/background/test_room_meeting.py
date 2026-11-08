@@ -242,10 +242,40 @@ async def test_cli_members_choose_silence_on_their_own_brain(meeting,monkeypatch
     observed=[]
     async def choose(loop):
         observed.append(loop)
-        assert loop.tools==[] and loop.structured and loop.speech_max_turns==1
+        assert loop.tools==[] and loop.structured and loop.speech_max_turns==3
         loop._queue.put_nowait(Outcome('done',final=json.dumps({'speak':False,'urgency':0})))
     monkeypatch.setattr(CliLoop,'_work',choose)
     await rooms._send({'room_id':room['id'],'text':'Thanks','request_id':'quiet'})
     assert len(observed)==1 and observed[0].model=='cli:claude:fixture'
     assert not rig.client.chat_calls
     assert not rig.conn.execute('SELECT 1 FROM worker_tasks').fetchone()
+
+
+async def test_a_reply_with_pass_suffix_is_saved_as_words_in_the_room_and_turn(meeting):
+    rig, members, rooms, room, alice = meeting
+    rig.client.replies.append(report('The source confirms the release date. (pass)'))
+    await rooms._send({'room_id':room['id'],'text':'@Alice review','request_id':'suffix','ui_language':'en'})
+    await until(lambda: rig.conn.execute("SELECT 1 FROM agent_turns WHERE scope='room' AND status='done'").fetchone())
+    await rooms.wait_idle()
+    row = rig.conn.execute('SELECT * FROM room_messages WHERE member_id=?', (alice.id,)).fetchone()
+    saved = AgentHistory(rig.conn).get(row['turn_id'])
+    assert row['text'] == saved.text == 'The source confirms the release date.'
+    assert (await rooms._messages({'room_id':room['id']}))['messages'][-1]['text'] == saved.text
+
+
+@pytest.mark.parametrize('brain', ['claude','codex','gemini'])
+async def test_structured_listener_reads_each_cli_result_without_an_api_fallback(meeting, monkeypatch, brain):
+    from raphael_core.agent.cli.loop import CliLoop
+    from raphael_core.worker.loop import Outcome
+    from raphael_core.agent.ledger import Ledger
+    rig, members, rooms, room, alice = meeting
+    rig.service.use_cli(object())
+    async def choose(loop):
+        assert loop.speech_max_turns >= 2 and loop.model == f'cli:{brain}:fixture'
+        assert loop.resume_session is False
+        payload = json.dumps({'speak':True,'urgency':.7})
+        loop._queue.put_nowait(Outcome('done', final='```json\n' + payload + '\n```' if brain == 'gemini' else payload))
+    monkeypatch.setattr(CliLoop,'_work',choose)
+    result = await rig.service.room_listener(member={'id':alice.id}, colleagues=[], transcript=[],
+        model=f'cli:{brain}:fixture', ledger=Ledger(None))
+    assert result == {'speak':True,'urgency':.7} and not rig.client.chat_calls

@@ -20372,4 +20372,16 @@ WORDS = {'This version cannot connect compatibly to {name}. Update Raphael. If i
                'vi': 'không hiển thị',
                'th': 'ไม่แสดง',
                'id': 'tidak ditampilkan',
-               'tr': 'gösterilmedi'}}
+               'tr': 'gösterilmedi'},
+ 'unavailable': {'zh-CN': '暂时无法回应',
+                 'ko': '응답할 수 없음',
+                 'es': 'no disponible',
+                 'fr': 'indisponible',
+                 'de': 'nicht verfügbar',
+                 'pt-BR': 'indisponível',
+                 'it': 'non disponibile',
+                 'ru': 'недоступен',
+                 'vi': 'không thể phản hồi',
+                 'th': 'ไม่สามารถตอบกลับได้',
+                 'id': 'tidak tersedia',
+                 'tr': 'kullanılamıyor'}}

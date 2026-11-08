@@ -68,6 +68,16 @@ class Event:
     data: dict = field(default_factory=dict)
 
 
+def assistant_error(packet):
+    """Provider-generated assistant placeholders are diagnostics, never authored speech."""
+    message = packet.get("message") or packet
+    if (packet.get("isApiErrorMessage") or message.get("isApiErrorMessage")
+            or message.get("model") == "<synthetic>" or packet.get("model") == "<synthetic>"
+            or message.get("status") in ("failed", "ERROR") or message.get("state") == "ERROR" or message.get("error")):
+        return message.get("error") or message.get("content") or message.get("text") or "CLI assistant error"
+    return None
+
+
 class Driver:
     def __init__(self, name, command, *, model=None, effort=None, environ=None, quota=None, home=None):
         self.name, self.command, self.model = name, list(command), model
@@ -119,6 +129,8 @@ class Driver:
             if tail:
                 detail += "\n\nstderr:\n" + "\n".join(redact(line, secrets=self._diagnostic_secrets, limit=160) for line in tail.decode("utf-8", errors="replace").splitlines()[-12:])
             failure = classify({**failure.wire(), "detail": detail[:4000]}, secrets=self._diagnostic_secrets, record=False)
+            if tail:
+                logger.warning("CLI %s failure detail: %s", self.name, failure.detail)
             if self.exhausted and failure.kind not in ("credits", "auth_expired", "refused"):
                 failure = classify({**failure.wire(), "kind": "usage_limit", "message": failure.reason})
             if failure.kind == "usage_limit" and self.reset_at_ms:
@@ -140,7 +152,7 @@ class Driver:
             await self.child.kill()
         self._close_steers()
 
-    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=(), computer_endpoint=None, structured=None, skills=(), no_tools=False):
+    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=(), computer_endpoint=None, structured=None, skills=(), no_tools=False, fresh_context=None):
         files = PrivateFiles()
         codex_auth = None
         self._diagnostic_secrets = [token]
@@ -210,6 +222,9 @@ class Driver:
                         json.dump(auth, stream)
                 child_cwd = str(home / "workspace")
                 # Only sessions issued by the isolated driver may cross this boundary.
+                if session and not session.startswith(CODEX_SESSION_PREFIX) and fresh_context is not None:
+                    user = fresh_context()
+                    yield Event("context_reset")
                 session = session.removeprefix(CODEX_SESSION_PREFIX) if session and session.startswith(CODEX_SESSION_PREFIX) else None
                 overrides = {**CODEX_ISOLATION, "mcp_servers.raphael.url": endpoint,
                              "mcp_servers.raphael.bearer_token_env_var": "RAPHAEL_MCP_TOKEN"}
@@ -276,7 +291,7 @@ class Driver:
                     path = files.path / f"image-{number}{suffix}"
                     path.write_bytes(image.data)
                     image_paths.append(str(path.resolve()))
-                async for event in self._rpc(user, system, endpoint, token, session, permission, image_paths):
+                async for event in self._rpc(user, system, endpoint, token, session, permission, image_paths, fresh_context=fresh_context):
                     if event.kind == "error":
                         await self.interrupt()
                         event = self._event("error", event.data)
@@ -359,6 +374,9 @@ class Driver:
                     if block.get("type") == "tool_use":
                         yield Event("tool_start", data={"id": block.get("id"), "name": block.get("name", "tool")})
             elif kind == "assistant":
+                if error := assistant_error(packet):
+                    yield self._event("error", error)
+                    return
                 for block in packet.get("message", {}).get("content", []):
                     if block.get("type") == "text":
                         if not partial:
@@ -382,7 +400,12 @@ class Driver:
                 if packet.get("session_id"):
                     self.session = packet["session_id"]
                     yield Event("session", self.session)
-                yield Event("usage", data=packet.get("usage", {}))
+                usage = dict(packet.get("usage") or {})
+                windows = [value.get("contextWindow") for value in (packet.get("modelUsage") or {}).values()
+                           if isinstance(value, dict) and type(value.get("contextWindow")) is int]
+                if windows:
+                    usage["context_window"] = min(windows)
+                yield Event("usage", data=usage)
                 if packet.get("is_error") or packet.get("subtype") != "success":
                     # api_error_status is the HTTP status of the API error that ended the turn.
                     yield self._event("error", {"error": packet.get("result") or packet.get("errors") or "CLI failed",
@@ -403,6 +426,9 @@ class Driver:
             elif kind == "step_update":
                 step = packet.get("step_update") or {}
                 if step.get("step_type") == "agent_response":
+                    if error := assistant_error(step):
+                        yield self._event("error", error)
+                        return
                     if step.get("text_delta"):
                         text += step["text_delta"]
                         yield Event("text_delta", step["text_delta"])
@@ -428,7 +454,7 @@ class Driver:
                     yield self._event("final", result.get("response") or "")
                 return
 
-    async def _rpc(self, user, system, endpoint, token, session, permission, image_paths=()):
+    async def _rpc(self, user, system, endpoint, token, session, permission, image_paths=(), *, fresh_context=None):
         """Codex app-server: JSON-RPC over stdio."""
         pending = {}
         sequence = 0
@@ -460,6 +486,9 @@ class Driver:
                     if label == "session" and session:
                         # A removed private home must not send us looking in the owner's sessions.
                         session = None
+                        if fresh_context is not None:
+                            user = fresh_context()
+                            yield Event("context_reset")
                         arguments.pop("threadId", None)
                         await request("thread/start", arguments, "session")
                         continue
@@ -513,6 +542,9 @@ class Driver:
             elif method in ("item/started", "item/completed"):
                 item = params.get("item", {})
                 if item.get("type") == "agentMessage":
+                    if error := assistant_error(item):
+                        yield self._event("error", error)
+                        return
                     if method == "item/started":
                         final_text = ""
                     else:
@@ -527,7 +559,11 @@ class Driver:
                         "name": item.get("tool", item["type"]), "effect": item["type"] == "fileChange",
                         "ok": item.get("status") == "completed"})
             elif method == "thread/tokenUsage/updated":
-                yield Event("usage", data=(params.get("tokenUsage") or {}).get("last", {}))
+                usage = params.get("tokenUsage") or {}
+                # Native context accounting, including history, is separate from ledger's last call.
+                yield Event("usage", data={**usage.get("last", {}),
+                    "context_tokens": (usage.get("last") or {}).get("totalTokens", 0),
+                    "context_window": usage.get("modelContextWindow")})
             elif method == "turn/started":
                 self.turn = (params.get("turn") or {}).get("id")
             elif method == "turn/completed":

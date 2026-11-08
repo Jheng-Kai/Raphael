@@ -14,6 +14,33 @@ def bodies(rig, turn_id):
         "SELECT text FROM agent_messages WHERE turn_id=? AND kind='reply' ORDER BY seq", (turn_id,))])
 
 
+@pytest.mark.parametrize("brain", ["codex", "claude", "gemini"])
+async def test_cli_provider_error_packets_never_become_background_replies(make_rig, monkeypatch, tmp_path, brain):
+    from agent.test_cli_context import recorded_error_packets
+    from raphael_core.agent.cli.discovery import CliBrains
+    from raphael_core.agent.cli.drivers import Driver
+    from .conftest import until
+
+    rig = make_rig()
+    brains = CliBrains(home=tmp_path, environ={})
+    monkeypatch.setattr(brains, "command", lambda name: ["fake"])
+    monkeypatch.setattr(brains, "available", lambda *args, **kwargs: True)
+    monkeypatch.setattr(Driver, "run", recorded_error_packets)
+    rig.service.use_cli(brains)
+    history = AgentHistory(rig.conn)
+    turn_id = history.add(session_id="error-packet", question="Check a synthetic outline", route="delegate",
+                          prefix="", text="", status="running")
+    task_id = rig.service.submit(session_id="error-packet", language="en", text="Check a synthetic outline", model=f"cli:{brain}:fake")
+    rig.service.attach_turn(task_id, turn_id)
+    try:
+        await until(lambda: rig.task(task_id).state in ("done", "failed"), timeout=15)
+        assert rig.task(task_id).state == "failed"
+        assert history.get(turn_id).status == "error"
+        assert all("Prompt is too long" not in message for message in bodies(rig, turn_id))
+    finally:
+        await brains.aclose()
+
+
 @pytest.mark.parametrize("routine", [False, True])
 async def test_background_replies_arrive_before_each_tool_and_do_not_repeat_at_the_end(make_rig, routine):
     rig = make_rig()

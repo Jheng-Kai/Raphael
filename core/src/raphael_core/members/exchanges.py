@@ -5,6 +5,7 @@ returns through report cards; no member dispatches another member's speech.
 """
 import asyncio
 import json
+import logging
 import re
 from dataclasses import dataclass
 
@@ -22,6 +23,7 @@ MAX_PAIR_REPLIES = 2
 LISTEN_TIMEOUT_S = 20.0
 # Bound the listener's recent public context; speech itself reads its cursor delta.
 LISTEN_MESSAGES = 40
+logger = logging.getLogger(__name__)
 
 
 def is_pass(text):
@@ -161,19 +163,30 @@ class RoomExchanges:
 
     async def _heard(self, speaker, model, colleagues, transcript, ledger, unanswered):
         """What one member decided: whether it speaks, how much that matters, and why it could not say, if so."""
-        try:
-            listener = self.rooms._background.room_listener if model.startswith('cli:') else self.decision.room_listener
-            answer = await asyncio.wait_for(listener(
-                member={"id":speaker.id,"name":speaker.name or 'Raphael', "role":speaker.role, "personality":speaker.personality},
-                colleagues=colleagues, transcript=transcript, model=model.split("?effort=")[0],
-                ledger=ledger, unanswered=unanswered), LISTEN_TIMEOUT_S)
-        except TimeoutError:
-            return {"member":speaker.id, "speak":False, "urgency":0, "failure":"timeout"}
-        except Exception:
-            return {"member":speaker.id, "speak":False, "urgency":0, "failure":"unavailable"}
+        failures = []
+        for attempt in range(2):
+            try:
+                listener = self.rooms._background.room_listener if model.startswith('cli:') else self.decision.room_listener
+                answer = await asyncio.wait_for(listener(
+                    member={"id":speaker.id,"name":speaker.name or 'Raphael', "role":speaker.role, "personality":speaker.personality},
+                    colleagues=colleagues, transcript=transcript, model=model if model.startswith('cli:') else model.split('?effort=')[0],
+                    ledger=ledger, unanswered=unanswered), LISTEN_TIMEOUT_S)
+                if (not isinstance(answer, dict) or type(answer.get('speak')) is not bool
+                        or type(answer.get('urgency')) not in (int, float)):
+                    raise ValueError('invalid_listener_result')
+                break
+            except Exception as error:
+                data = getattr(error, 'data', None)
+                kind = ('timeout' if isinstance(error, TimeoutError) else
+                        data.get('kind') if isinstance(data, dict) else type(error).__name__)
+                kind = re.sub(r'[^a-zA-Z0-9_]', '_', str(kind))[:64]
+                failures.append(kind)
+                logger.warning('Room listener failed: member=%s kind=%s attempt=%d', speaker.id, kind, attempt + 1)
+        else:
+            return {"member":speaker.id, "speak":False, "urgency":0, "failure":failures[-1], "failures":failures}
         urgency = answer.get("urgency")
         return {"member":speaker.id, "speak":answer.get("speak") is True,
-                "urgency":urgency if type(urgency) in (int, float) else 0, "failure":""}
+                "urgency":urgency if type(urgency) in (int, float) else 0, "failure":"", "failures":failures}
 
     async def listen(self, room, exchange, candidates, *, first=False, unanswered=False):
         """Everyone in `candidates` reads the room and decides for themselves, each on their own model. Returns those who will
@@ -206,15 +219,27 @@ class RoomExchanges:
         speaking = [one["member"] for one in sorted(heard, key=lambda one: -one["urgency"]) if one["speak"]]
         current = self.get(exchange.origin_message_id)
         if current:
+            previous = json.loads(current.routing)
+            listened = {one['member']: one for one in previous.get('listened', [])}
+            listened.update((one['member'], one) for one in heard)
             self.update(current.origin_message_id, cost=current.cost + ledger.total,
-                        routing=json.dumps({"listened":heard, "themselves":themselves, "fallback":""}))
+                        routing=json.dumps({"listened":list(listened.values()), "themselves":themselves, "fallback":""}))
+            for one in heard:
+                if one['failure']:
+                    self.intents(current.origin_message_id, current.origin_message_id, [one['member']])
+                    with self.conn:
+                        self.conn.execute("UPDATE room_reply_intents SET state='blocked',reason=? WHERE origin_message_id=? "
+                            "AND recipient_id=? AND state='queued'", ('listener_' + one['failure'], current.origin_message_id, one['member']))
         return speaking + themselves, bool(themselves) or any(not one["failure"] for one in heard)
 
     async def first_speakers(self, room, exchange, ids):
         """Who speaks on an owner's message that addresses no one. If no one can be heard, the room's saved default, which the
         room says. If everyone stays quiet, the chief of staff still does not leave a request unanswered; thanks get nothing."""
+        if exchange.meeting:
+            return ids, False
         if room["default_responder"] != "auto":
-            return self.fallback(room), False
+            failed = {one['member'] for one in json.loads(self.get(exchange.origin_message_id).routing).get('listened', []) if one['failure']}
+            return [member for member in self.fallback(room) if member not in failed], False
         speaking, heard = await self.listen(room, exchange, ids, first=True)
         if speaking:
             self.update(exchange.origin_message_id, chime_ins=1)
@@ -223,10 +248,12 @@ class RoomExchanges:
             current = self.get(exchange.origin_message_id)
             if current:
                 self.update(current.origin_message_id, routing=json.dumps({**json.loads(current.routing), "fallback":"unavailable"}))
-            return self.fallback(room), False
+            failed = {one['member'] for one in json.loads(self.get(exchange.origin_message_id).routing).get('listened', []) if one['failure']}
+            return [member for member in self.fallback(room) if member not in failed], False
         self.update(exchange.origin_message_id, chime_ins=MAX_ROUNDS)
         chief = self.rooms._members.primary_id()
-        if chief not in ids:
+        failed = {one['member'] for one in json.loads(self.get(exchange.origin_message_id).routing).get('listened', []) if one['failure']}
+        if chief not in ids or chief in failed:
             return [], False
         speaking, _ = await self.listen(room, exchange, [chief], first=True, unanswered=True)
         return speaking, True
@@ -234,21 +261,26 @@ class RoomExchanges:
     async def start(self, room, origin, language, attachments, recipient=None):
         # A new owner message takes priority without replaying completed actions.
         thread = self.conn.execute('SELECT thread_id FROM room_messages WHERE id=?', (origin,)).fetchone()[0]
+        previous = self.latest(room['id'], thread)
+        meeting = int(bool(previous and previous['meeting'] == 1 and not previous['stop_requested']))
         with self.conn:
             # Owner interjections take priority, but already accepted explicit addresses survive.
             self.conn.execute("UPDATE room_exchanges SET chime_ins = ?, pending = '[]', reason='interjection' "
                               "WHERE room_id = ? AND state IN ('queued','running') "
                               "AND origin_message_id IN (SELECT id FROM room_messages WHERE thread_id=?)", (MAX_ROUNDS, room["id"],thread))
-            self.conn.execute("INSERT INTO room_exchanges (origin_message_id, room_id, state, language, pending) "
-                              "VALUES (?, ?, 'queued', ?, ?)",
+            self.conn.execute("INSERT INTO room_exchanges (origin_message_id, room_id, state, language, pending, meeting) "
+                              "VALUES (?, ?, 'queued', ?, ?, ?)",
                               (origin, room["id"], language, json.dumps([{"member":recipient,"reply_to_member":None,
-                               "reply_to":origin,"handoff":False}]) if recipient is not None else None))
+                               "reply_to":origin,"handoff":False}]) if recipient is not None else None, meeting))
         text = self.conn.execute("SELECT text FROM room_messages WHERE id=?", (origin,)).fetchone()[0]
         targets = list(dict.fromkeys(
             ([recipient] if recipient is not None else []) + self.rooms._targets(room, text)))
         self.intents(origin, origin, targets)
         if targets:
             self.update(origin, pending="[]")
+        if meeting:
+            self.update(origin, pending=json.dumps([{'member':member,'reply_to':None,'reply_to_member':None,'handoff':False}
+                                                   for member in self.rooms._ids(room)]))
         self.attachments[origin] = attachments
         await self.drive(room["id"])
 
@@ -367,7 +399,7 @@ class RoomExchanges:
                 pending = [p for p in json.loads(exchange.pending or '[]') if not p.get('round')]
                 intents = self.conn.execute("SELECT * FROM room_reply_intents WHERE origin_message_id=? AND state='queued' ORDER BY id",
                                             (exchange.origin_message_id,)).fetchall()
-                if exchange.pending is None and not intents:
+                if exchange.pending is None and (exchange.meeting or not intents):
                     chosen, unanswered = await self.first_speakers(room,exchange,ids)
                     pending = [{'member':i,'reply_to':None,'reply_to_member':None,'handoff':False,'unanswered':unanswered} for i in chosen]
                 for intent in intents:
@@ -388,8 +420,9 @@ class RoomExchanges:
                     pending = [p for p in pending if p.get('intent_id')]
                 rounds = self.conn.execute('SELECT COALESCE(MAX(round),0) FROM room_exchange_turns WHERE origin_message_id=?',
                                            (exchange.origin_message_id,)).fetchone()[0]
-                round_cap = 1 if exchange.meeting == 2 else MAX_ROUNDS
-                if not pending or rounds >= round_cap or current.turns_taken >= MAX_TURNS:
+                round_cap = max(MAX_ROUNDS, len(ids)) if exchange.meeting else MAX_ROUNDS
+                turn_cap = max(MAX_TURNS, len(ids)) if exchange.meeting else MAX_TURNS
+                if not pending or rounds >= round_cap or current.turns_taken >= turn_cap:
                     capped = bool(pending)
                     if capped:
                         self.block(exchange.origin_message_id,'reply_budget')
@@ -405,8 +438,10 @@ class RoomExchanges:
                                          (room_id,origin[0])).fetchone()[0]
                 # Freeze public board, decisions and the delta before submitting any speaker.
                 public = self.rooms.speech_context(room_id,origin[0],seen)
-                self.update(exchange.origin_message_id,state='running',pending='[]',chime_ins=rounds+1)
-                for target in pending[:MAX_TURNS-current.turns_taken]:
+                selected = pending[:1] if exchange.meeting else pending[:turn_cap-current.turns_taken]
+                remaining = pending[1:] if exchange.meeting else []
+                self.update(exchange.origin_message_id,state='running',pending=json.dumps(remaining),chime_ins=rounds+1)
+                for target in selected:
                     try:
                         turn = self.rooms._submit_exchange_turn(room,current,{**target,'seen_through':seen,'public':public},'message',
                                                                 self.attachments.get(exchange.origin_message_id,()))

@@ -117,6 +117,8 @@ class Crew:
 
 
 async def test_an_existing_team_works_at_once_and_waits_for_the_computer(tmp_path):
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "device.json").write_text('{"ui_language":"en"}', encoding="utf-8")
     crew = Crew()
     driver = RpcDriver(tmp_path, "fake/model", crew, Budget(200))
     app = driver.app

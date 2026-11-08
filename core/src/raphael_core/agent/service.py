@@ -120,7 +120,7 @@ answered, a city or a key: only routes, kinds, latencies and costs.
 from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 from pathlib import Path
-from ..computer.local_tools import ask_context, command_context, is_local
+from ..computer.local_tools import ask_context, command_context, command_of, is_local
 import hashlib
 import json
 import logging
@@ -167,7 +167,7 @@ from ..services.urls import SeenUrls
 from ..messaging.words import compose
 from ..worker.loop import Stop, ToolOutcome, WAITING
 from ..worker.guards import MAX_ARGUMENT_CHARS, canonical
-from .answers import Reply, Voice, build_user_message, owner_script
+from .answers import Reply, Voice, build_user_message, owner_script, turn_text
 from .attribution import labelled_lines, owner_lines, relayed_answer
 from .narration import NarratedLoop
 from ..members.activity import Activity, member_turn, step as activity_step, tool_step
@@ -300,6 +300,8 @@ RESUMED = "connector"
 # The sources of the requests made at this computer: a new one replaces every question that waits.
 _QUICK_SOURCES = (VOICE, "overlay")
 _AT_THIS_COMPUTER = frozenset({*_QUICK_SOURCES, TYPED})
+# Private owner management has the same offer across authenticated chat transports.
+_OWNER_CHAT_SOURCES = _AT_THIS_COMPUTER | {"telegram", "slack", "discord", RESUMED}
 # Routing and answering share this deadline while the voice overlay waits. A turn said into a conversation is not
 # waited on there, and has the time a typed one has: a brain thinking hard takes minutes, and the composer can stop it.
 VOICE_TURN_TIMEOUT_S = 180.0
@@ -335,7 +337,12 @@ _QUOTES = (
 class _Silent(dict):
     """The reply of `agent.ask` or `agent.confirm` that Raphael does not speak: the owner's own
     "no" or Esc answered back, a question that ran out, a run that was stopped. It is an ordinary
-    dict on the wire; only the voice (`AgentService._said`) tells it apart."""
+    dict on the wire; empty completed replies carry a silent marker for the native controller."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.get("status") == "done" and not str(self.get("text", "")).strip():
+            self["silent"] = True
 
 
 def _ms_since(began: float) -> int:
@@ -710,6 +717,7 @@ class AgentService:
         permissions: "PermissionCards | None" = None,
         drafts: "EmailDrafts | None" = None,
         calendar: OwnCalendar | None = None,
+        owner_language: Callable[[], str] | None = None,
     ) -> None:
         self._calendar = calendar if calendar is not None else OwnCalendar(conn, notify=notify, now_ms=now_ms, tz=tz)
         self._tool_observer = tool_observer
@@ -843,6 +851,9 @@ class AgentService:
         # session id -> when agent.cancel named it (the monotonic clock).
         self._cancelled: dict[str, float] = {}
         self._last_language = DEFAULT_LANGUAGE
+        self._owner_language = owner_language or (lambda: DEFAULT_LANGUAGE)
+        if background is not None:
+            background.owner_language = lambda: self.language
         # turn id -> the member whose thread it is in (None: not known yet): the turns that were
         # written but are not announced to the app (`agent.turn`) until the voice is ready.
         self._held: dict[int, int | None] = {}
@@ -859,8 +870,8 @@ class AgentService:
 
     @property
     def language(self) -> str:
-        """The language of the latest question: what a message from elsewhere is answered in."""
-        return self._last_language
+        """The configured owner language for unattended and external conversations."""
+        return normalize_language(self._owner_language())
 
     def turn(self, turn_id: int) -> Turn | None:
         """A turn of the history, for a caller that needs the longer text of an answer."""
@@ -1164,6 +1175,8 @@ class AgentService:
             if not isinstance(source, str) or not _SOURCE.fullmatch(source):
                 raise invalid_params("source must be a short lower-case word")
             ask.source = source
+        if ask.source in {"telegram", "slack", "discord", RESUMED}:
+            ask.language = self.language
         if len(ask.attachments) > MAX_ATTACHMENTS:
             raise RpcError(
                 INVALID_PARAMS, "Invalid params: attachments (count)", {"kind": "count"}
@@ -2105,26 +2118,36 @@ class AgentService:
                            "They manage members, folders, group chats, conversations, connections, models and settings. "
                            "Destructive and permission changes always wait for the owner's approval.")
                 system += "\nGrok template CreateAgent instructions map to member_create (legacy alias: create_member)."
-            user = build_user_message(
-                labelled_lines(ask.exchange_speakers[0], ask.text) if ask.exchange_speakers else ask.text,
-                self._moment(), context.turns, [], ask.language,
-                background_block(self._briefs(ask.speaker.id)), summary=context.summary, say_ja=say_ja, narrated=True,
+            message_args = dict(
+                question=labelled_lines(ask.exchange_speakers[0], ask.text) if ask.exchange_speakers else ask.text,
+                moment=self._moment(), context=context.turns, tools=[], language=ask.language,
+                background=background_block(self._briefs(ask.speaker.id)), summary=context.summary, say_ja=say_ja, narrated=True,
                 quote=ask.quote,
                 recall=self._recall(ask), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
             )
+            user = build_user_message(**message_args)
+            native_base = user
+            # Native history already holds this conversation; memory changes travel separately below.
+            native_turn = build_user_message(**{**message_args, "context": [], "summary": "", "recall": ""}) if brain_ref(settings.model) else None
+            native_sections = {}
             if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 user += NEW_MEMBER_STEP
             from .intents import instruction as intent_instruction
             user += intent_instruction(ask.intent)
+            from .self_check import requested as diagnosis_requested
+            if ask.scope == "private" and not ask.nested and diagnosis_requested(ask.text):
+                self._record(ask, "answer", "", "", "running", None, ledger)
+                diagnosis = await self._make_call(ask, PlannedCall(harness_tool("self_check"), {}), None, ledger)
+                self._record(ask, "answer", "", "", "running", None, ledger)
+                user += "\n\n<self_check>\n" + json.dumps(diagnosis.data, ensure_ascii=False) + "\n</self_check>"
+                user += "\nThese read-only diagnostics were checked first. Answer from them; do not start a whole-profile log scan."
             if ask.resumption is not None:
                 user += ask.resumption.note()
             if brain_ref(settings.model):
                 # A resumed CLI thread keeps the instructions it began with (live, a renamed member and a
                 # removed app stayed in its answers), so each turn carries the team as it is now.
-                user += "\n\nThe team as it is now, which replaces any earlier snapshot:" + roster_prompt(
-                    self._team, ask.speaker, ask.language)
-                if memory is not None:
-                    user += "\n\nYour memory files as they are now, which replace any earlier copy:\n" + str(memory)
+                native_sections["Team"] = roster_prompt(self._team, ask.speaker, ask.language)
+                native_sections["Memory"] = str(memory) if memory is not None else "No memory files."
             earlier = self._earlier_files(context.turns, ask.attachments)
             if earlier:
                 user += "\nFiles the owner handed over earlier in this conversation, newest first: " + json.dumps([
@@ -2406,6 +2429,10 @@ class AgentService:
             if brain_ref(settings.model):
                 common["execute"] = cli_execute
                 loop = CliLoop(brains=self._cli_brains, sessions=self._cli_sessions,
+                    owner_text=ask.text, resume_user=native_turn + user[len(native_base):],
+                    context_sections=native_sections, context_summary=context.summary, turn_id=ask.turn_id,
+                    context_turns=[(turn.id, turn_text(turn, detail=turn.route == "discuss"))
+                                   for turn in context.turns if turn.id is not None],
                     skills=getattr(self._team, "native_skills", lambda member: [])(ask.speaker.id),
                     attachments=ask.attachments, resume_session=not ask.nested,
                     rate_limit_waits=() if ask.quick else None,
@@ -2497,6 +2524,7 @@ class AgentService:
                       thinking=lambda text: None, execute=refuse)
         if brain_ref(settings.model):
             loop = CliLoop(brains=self._cli_brains, sessions=self._cli_sessions, member_id=ask.speaker.id,
+                           owner_text=ask.text,
                            conversation_id=ask.conversation_id, quota=self.quotas.record, resume_session=False,
                            no_tools=True, rate_limit_waits=(), event=lambda text: None, **common)
             self._cli_loops.add(loop)
@@ -2545,9 +2573,13 @@ class AgentService:
             return ToolOutcome(True, None)
         operation = args.get("command") or args.get("tool_name") or (args.get("toolCall") or {}).get("title") or args.get("method", "CLI action")
         shown = {"operation": operation, "details": args}
+        if command := command_of(args):
+            shown["command"] = command
         call = PlannedCall(PluginTool("cli_permission", BUILTIN_SERVER, "cli_permission", "CLI native action", {}, Tier.T2), shown)
         loop.response = self._ask_plugin(ask, call, [], ledger, screening)
         self._followups[loop.response["confirm"]["id"]].loop = loop
+        if shown.get("command"):
+            loop.approval_wait_s = float("inf")
         raise Stop(WAITING)
 
     async def _answer_with_tools(
@@ -3172,7 +3204,7 @@ class AgentService:
     @staticmethod
     def _management_chat(ask) -> bool:
         return (ask.scope == "private" and not ask.nested and ask.speaker.depth == 0
-                and ask.exchange_speakers is None and ask.source in _AT_THIS_COMPUTER
+                and ask.exchange_speakers is None and ask.source in _OWNER_CHAT_SOURCES
                 and not ask.background_owner)
 
     @staticmethod
@@ -3374,8 +3406,10 @@ class AgentService:
         card, view = self._secret_cards.show_messaging(turn_id=ask.turn_id, member_id=ask.speaker.id,
             conversation_id=ask.conversation_id, platform=args.get("platform"), language=ask.language, done=ask.made)
         if card is None:
-            return {"connected": True, "enabled": view["enabled"], "running": view["running"],
+            return {"connected": True, "token_present": view["token_present"], "paired": view["paired"],
+                    "enabled": view["enabled"], "running": view["running"],
                     "text": f"@{view['bot']['username']} is already connected. Do not ask for a token or explain creating a new bot. "
+                    + ("This bot is already paired; no new pairing is needed. " if view["paired"] else "")
                     + ("A waiting pairing card is shown in this conversation; approve or reject it here. " if view["pending"] else
                        "Message this bot to request pairing; its pairing card will arrive in this conversation. " if view["running"] and not view["allowed"] else "")
                     + ("Receiving is off or unavailable. " if not view["running"] else "")
@@ -3646,6 +3680,25 @@ class AgentService:
             )
         finally:
             APP_TOOL_CALL.reset(context)
+        if ask is not None and is_local(call.tool.key) and outcome.kind == "timeout":
+            notice = {
+                "en": "The local command exceeded its time limit and was stopped.",
+                "zh-TW": "\u672c\u6a5f\u6307\u4ee4\u57f7\u884c\u8d85\u904e\u6642\u9650\uff0c\u5df2\u505c\u6b62\u3002",
+                "ja": "\u30ed\u30fc\u30ab\u30eb\u30b3\u30de\u30f3\u30c9\u306f\u5236\u9650\u6642\u9593\u3092\u8d85\u3048\u305f\u305f\u3081\u505c\u6b62\u3057\u307e\u3057\u305f\u3002",
+                "zh-CN": "本机命令执行超过时限，已停止。",
+                "ko": "로컬 명령이 제한 시간을 초과하여 중지되었습니다.",
+                "es": "El comando local superó el tiempo límite y se detuvo.",
+                "fr": "La commande locale a dépassé le délai et a été arrêtée.",
+                "de": "Der lokale Befehl hat das Zeitlimit überschritten und wurde gestoppt.",
+                "pt-BR": "O comando local excedeu o limite de tempo e foi interrompido.",
+                "it": "Il comando locale ha superato il limite di tempo ed è stato interrotto.",
+                "ru": "Локальная команда превысила лимит времени и была остановлена.",
+                "vi": "Lệnh cục bộ đã vượt quá giới hạn thời gian và bị dừng.",
+                "id": "Perintah lokal melampaui batas waktu dan dihentikan.",
+                "th": "คำสั่งในเครื่องเกินเวลาที่กำหนดและถูกหยุดแล้ว",
+                "tr": "Yerel komut zaman sınırını aştı ve durduruldu.",
+            }.get(ask.language, "The local command exceeded its time limit and was stopped.")
+            self._message(ask, "reply", notice, PREFIXES[ask.language].notice)
         if outcome.page is not None and ask is not None and ask.turn_id and ask.scope == "private" and not ask.nested and not ask.quick and ask.source in _AT_THIS_COMPUTER:
             try:
                 page = self.pages.store.write(turn_id=ask.turn_id, member_id=ask.speaker.id,
@@ -3719,7 +3772,7 @@ class AgentService:
             if local:
                 first = not self._settings.get("local_commands_seen")
                 card = _CardSpec("app" if first else "step", ask.speaker.name or "Raphael", call.tool.name,
-                                 question, str(call.arguments.get("cwd") or Path.home()), first and not ask_context(ask)[1])
+                                 question, str(call.arguments.get("cwd") or Path.home()), first and not ask_context(ask)[1] and self._tier_now(call) < Tier.T3)
         action = Action(call.tool.key, dict(call.arguments))
         reply = self._open_question(ask, action, "answer", text, ledger, card=card)
         self._followups[reply["confirm"]["id"]] = _Followup(
@@ -3976,6 +4029,9 @@ class AgentService:
         request = arguments.get("request")
         if not isinstance(wanted, str) or not isinstance(request, str) or not request.strip():
             return ToolResult(name, False, None, "bad_arguments")
+        from .team_admin import delegated_management, DELEGATED_MANAGEMENT_GUIDANCE
+        if delegated_management(request):
+            return ToolResult(name, False, None, 'delegated_management', instruction=DELEGATED_MANAGEMENT_GUIDANCE)
         try:
             target = team.find(wanted)
         except sqlite3.Error as exc:
@@ -4036,7 +4092,7 @@ class AgentService:
         ask = _Ask(
             session_id=session_id,
             text=request,
-            language=language,
+            language=self.language,
             source=EXCHANGE_SOURCE,
             speaker=target.asked_by(asker),
             conversation_id=self.conversations.main(target.id),
@@ -4220,6 +4276,9 @@ class AgentService:
         if now is None or now > pending.tier:
             approval = None
         steps: list[Step] = []
+        if approval is not None and (is_local(call.tool.key) or call.tool.key == "cli_permission" and command_of(call.arguments)):
+            # Publish admission before a local command can wait on its subprocess.
+            self._record(followup.ask, "answer", "", "", "running", None, ledger)
         if isinstance(followup.loop, CliLoop) and approval is None:
             kind = "expired" if expired else "denied"
             self._gate.record_unrun(call.tool.key, outcome=kind)
@@ -4469,7 +4528,15 @@ class AgentService:
         # The tier the yes is for is that of this very call: `_confirm_plugin` compares it with the tier the call
         # has after the yes (`_tier_now`, with the arguments), so the two are told the same way.
         tier = max(Tier.T2, self._gate.tier(action.tool, action.args))
-        local = is_local(action.tool)
+        command = command_of(action.args)
+        local = is_local(action.tool) or action.tool == "cli_permission" and bool(command)
+        if local:
+            label = with_ui_words({"en": "Local commands", "zh-TW": "\u672c\u6a5f\u6307\u4ee4", "ja": "\u30ed\u30fc\u30ab\u30eb\u30b3\u30de\u30f3\u30c9"}).get(language, "Local commands")
+            text = label + "\n" + command
+            if card is None:
+                reason = action.args.get("details", {}).get("reason", "")
+                card = _CardSpec("step", ask.speaker.name or "Raphael", "local_exec",
+                                 command, reason if isinstance(reason, str) else "", False)
         prefix = PREFIXES[language].question
         turn_id = self._record(ask, route, prefix, "" if local else text, "confirm", None, ledger)
         pending = self._confirmations.open(ask.session_id, turn_id, action, tier, language,
@@ -4478,34 +4545,38 @@ class AgentService:
             "id": pending.id,
             "tier": tier.name,
             "prefix": prefix,
-            "text": with_ui_words({"en": "Local commands", "zh-TW": "本機指令", "ja": "ローカルコマンド"}).get(language, "Local commands") if local else text,
+            "text": text,
             "yes": phrase(language, "yes"),
             "no": phrase(language, "no"),
             "timeout_ms": 0 if local else CONFIRM_TIMEOUT_MS,
         }
-        # A call that cannot be undone (T3) keeps the gold card that is held to confirm: a click is not enough for it.
-        if (card is not None and self._permissions is not None and turn_id and (tier < Tier.T3 or action.tool.endswith("/fill_card"))
+        # T3 keeps held confirmation except for the explicit local-command and payment permission cards.
+        if (card is not None and self._permissions is not None and turn_id and (tier < Tier.T3 or local or action.tool.endswith("/fill_card"))
                 and permission_cards_for(source=ask.source, quick=ask.quick, nested=ask.nested, scope=ask.scope)):
             self._permissions.show(
                 card_id=pending.id, turn_id=turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
                 source="ask", kind=card.kind, service=card.service, tool=card.tool, summary=card.summary,
-                reason=card.reason, digest=pending.digest, always=card.always, language=language,
+                reason=card.reason, digest=pending.digest, always=card.always and tier < Tier.T3, language=language,
                 wait_ms=0 if local else round(pending.wait_s * 1000), message=card.message)
             confirm["digest"] = pending.digest
-            if card.always:
+            if card.always and tier < Tier.T3:
                 labels = answer_labels(language)
                 confirm.update(yes=labels["once"], no=labels["deny"], always=labels["always"])
         elif turn_id:
             self._confirmation_cards.open(
                 card_id=pending.id, turn_id=turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
-                source="ask", kind="tool", service="", tool=action.tool, summary=text, reason="",
+                source="ask", kind="step" if local else "tool", service="", tool="local_exec" if local else action.tool,
+                summary=command if local else text, reason=card.reason if local and card else "",
                 digest=pending.digest, always=False, language=language,
-                wait_ms=0 if local else round(pending.wait_s * 1000), context_only=True)
+                wait_ms=0 if local else round(pending.wait_s * 1000),
+                context_only=not (local and permission_cards_for(source=ask.source, quick=ask.quick, nested=ask.nested, scope=ask.scope)))
         return {"status": "confirm", "turn_id": turn_id, "confirm": confirm}
 
     async def _confirm(self, params: dict) -> dict:
         """Resolve a question; only a quick voice turn may speak its answer."""
         reply = await self._resolve(params)
+        if reply.get("status") == "done" and isinstance(reply.get("text"), str) and not reply["text"].strip():
+            reply["silent"] = True
         turn = self._history.get(reply.get("turn_id"))
         return await self._said(
             reply, source=turn.source if turn else None,
@@ -4546,7 +4617,8 @@ class AgentService:
         if digest is not None and not isinstance(digest, str):
             raise invalid_params("digest must be text")
         waiting_local = self._followups.get(confirm_id)
-        if waiting_local is not None and is_local(waiting_local.call.tool.key):
+        if waiting_local is not None and (is_local(waiting_local.call.tool.key) or
+                waiting_local.call.tool.key == "cli_permission" and command_of(waiting_local.call.arguments)):
             if params.get("source", "app") not in _AT_THIS_COMPUTER:
                 raise invalid_params("Local commands are approved at this computer only")
         run = None if self._computer is None else self._computer.for_question(confirm_id)

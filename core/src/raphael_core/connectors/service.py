@@ -28,6 +28,7 @@ _TOOL = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 COMPOSIO_SERVER = "connectors_composio"
 GOOGLE_SERVER = "connectors_google"
 _CALENDAR_READ = ContextVar("calendar_read", default=None)
+RPC_TIMEOUT_S = 30.0
 
 
 def _text(params: dict, key: str, *, optional=False) -> str:
@@ -90,6 +91,7 @@ class ConnectorsService:
         self.open_browser, self.sleep, self.now = open_browser, sleep, now
         self.poll_timeout = poll_timeout
         self._lock = asyncio.Lock()
+        self._connect_task: asyncio.Task | None = None
         self._tool_catalog: dict[str, list[dict]] = {}
         self._tool_load_locks: dict[str, asyncio.Lock] = {}
         self._store_catalog: tuple[float, dict] | None = None
@@ -113,12 +115,35 @@ class ConnectorsService:
         self._notify = lambda: router.notify("connectors.changed", {})
 
     def _handler(self, handler, name):
-        async def run(params):
-            try:
-                if name == "status":
+        async def operation(params):
+            # A whole operation has a ceiling, including pagination, lock acquisition and browser launch.
+            budget = self.poll_timeout + RPC_TIMEOUT_S if name == "connect" else 120 + RPC_TIMEOUT_S if name == "google.connect" else RPC_TIMEOUT_S
+            async with asyncio.timeout(budget):
+                if name in {"catalog", "categories", "toolkit", "status"}:
                     return await handler(params)
                 async with self._lock:
                     return await handler(params)
+
+        async def run(params):
+            try:
+                if name not in {"connect", "google.connect"}:
+                    return await operation(params)
+                builtin = self.hub._login
+                if self.login_pending or self._lock.locked() or (builtin is not None and not builtin.done()):
+                    raise ConnectorFailure("busy")
+                task = asyncio.create_task(operation(params))
+                self._connect_task = task
+                try:
+                    return await task
+                except asyncio.CancelledError:
+                    if asyncio.current_task().cancelling():
+                        raise
+                    return {"connected": False, "error": "cancelled"}
+                finally:
+                    if self._connect_task is task:
+                        self._connect_task = None
+            except TimeoutError:
+                return {"ok": False, "error": "timeout", "http_status": None}
             except ConnectorFailure as error:
                 return {"ok": False, "error": error.kind, "http_status": error.status or None,
                         **({"failure": error.diagnostic.wire()} if error.diagnostic else {})}
@@ -129,6 +154,16 @@ class ConnectorsService:
                 # vault, browser, callback or HTTP exception messages reach that path.
                 raise RpcError(INTERNAL_ERROR, "Connector operation failed") from None
         return run
+
+    @property
+    def login_pending(self):
+        return self._connect_task is not None and not self._connect_task.done()
+
+    def cancel_connect(self):
+        if not self.login_pending:
+            return False
+        self._connect_task.cancel()
+        return True
 
     def _save(self):
         self.store.save()

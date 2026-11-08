@@ -23,7 +23,8 @@ async def test_team_overview_uses_each_members_brain_grants_and_actual_tool_cata
     ComputerGrants(conn).set(reader.id, False)
     ComputerGrants(conn).set(writer.id, True)
     await rig.plugins.connect(look="T0", note="T1")
-    rows = {row["id"]: row for row in (await members.admin_tool(reader.id, "team_overview", {}))["members"]}
+    rows = {identifier: (await members.admin_tool(reader.id, "team_overview", {'member_id':identifier}))["members"][0]
+            for identifier in (reader.id, writer.id)}
     assert rows[reader.id]["brain"]["native_files"] == "read-only"
     assert rows[reader.id]["brain"]["attached_images"] == "native"
     assert rows[writer.id]["brain"]["model"] == "cli:claude:synthetic"

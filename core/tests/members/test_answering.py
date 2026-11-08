@@ -530,6 +530,19 @@ async def test_a_consultation_stays_out_of_pages_but_the_respondent_can_search_i
     assert [turn["turn"] for turn in recalled.data["turns"]] == [exchange["id"]]
 
 
+@pytest.mark.parametrize('management_request', ['Update member 2 instructions.', '請修改成員的模型。'])
+async def test_management_consultation_is_refused_before_answering_for_a_colleague(setup, management_request, monkeypatch):
+    rig, team = setup
+    a, b = (member(team, name=n).speaker() for n in ('Manager', 'Writer'))
+    async def forbidden(*args, **kwargs):
+        pytest.fail('a management consultation must not start another member turn')
+    monkeypatch.setattr(rig.service, 'answer_for', forbidden)
+    result = await rig.service.team_tool(a, 'ask_member', {'member':b.name, 'request':management_request},
+                                         language='en', ledger=None, session_id='s')
+    assert not result.ok and result.error == 'delegated_management'
+    assert "yourself" in result.instruction and "private chat" in result.instruction
+
+
 async def test_a_chain_is_at_most_two_deep_and_never_comes_back(setup):
     rig, team = setup
     a, b, c = (member(team, name=n).speaker() for n in ("小財務", "小研究", "小行程"))

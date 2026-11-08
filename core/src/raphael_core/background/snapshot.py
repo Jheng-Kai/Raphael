@@ -292,8 +292,10 @@ class Snapshot:
             return [], [f"{query} (yours already)"]
         own = scored([harness_tool(name) for name in CALENDAR_TOOLS if name in self.refs], query)
         lines = [f"{tool.name} (yours already): {first_sentence(tool.description, 90)}" for score, tool in own if score > 0]
-        from ..management import tools_for_request
+        from ..management import MANAGEMENT_TOOLS, tools_for_request
         matching = tools_for_request(query)
+        if (matching or query in MANAGEMENT_TOOLS) and not self.management:
+            lines.append("member management is not offered in this chat")
         candidates = [name for name in self.management if name not in self.refs and (not matching or name in matching)]
         candidates += [name for name in self.work if name not in self.refs]
         catalog = {**self.management, **self.work}

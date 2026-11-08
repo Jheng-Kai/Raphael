@@ -411,11 +411,28 @@ class TaskStore:
                                (str(root),task_id,call_id,artifact.relative_to(root).as_posix()))
         return digest
 
+    def capture_file(self, task_id, path):
+        """Persist the hand-off baseline; it is not evidence that work happened."""
+        path = path.resolve(strict=True)
+        if not path.is_file() or path.stat().st_size > MAX_ARTIFACT_BYTES:
+            raise ValueError('artifact_size')
+        self.record_evidence(task_id, 'file_before', kind='file_before', uri=str(path), digest=_artifact_digest(path), mime="application/octet-stream")
+
+    def file_changed(self, item):
+        path = Path(item['uri']).resolve(strict=True)
+        return (path.is_file() and path.stat().st_size <= MAX_ARTIFACT_BYTES
+                and _artifact_digest(path) != item['digest'])
+
     def completion_reason(self, task, *, verifiable=True, said=""):
         """Validate receipts and explicit file requirements, even without a member workspace."""
-        evidence = self.evidence(task.id)
+        receipts = self.evidence(task.id)
+        evidence = [item for item in receipts if item['kind'] not in ('file_before', 'artifact_note')]
+        before = {item['uri']: item for item in receipts if item['kind'] == 'file_before'}
         artifacts = [item for item in evidence if item['kind'] == 'artifact']
-        requires_artifact = task.requires_artifact
+        waived = [Path(item['uri']).name.lower() for item in receipts if item['kind'] == 'artifact_note']
+        expected = [name for name in FILE_NAMES.findall(task.done_when) if not any(
+            found == name.lower() or found.endswith(' ' + name.lower()) for found in waived)] if task.requires_artifact else []
+        requires_artifact = task.requires_artifact and (not waived or bool(expected) or bool(before))
         if requires_artifact and not artifacts:
             return 'missing_artifact'
         if not evidence:
@@ -427,9 +444,10 @@ class TaskStore:
                 if (not path.is_relative_to(root) or not path.is_file() or path.stat().st_size > MAX_ARTIFACT_BYTES
                         or _artifact_digest(path) != item['digest']):
                     return 'artifact_changed'
+                if str(path) in before and not self.file_changed(before[str(path)]):
+                    return 'missing_artifact'
             except (OSError, TypeError, ValueError):
                 return 'missing_artifact'
-        expected = FILE_NAMES.findall(task.done_when) if requires_artifact else []
         names = [Path(item['uri']).name.lower() for item in artifacts]
         # A filename extracted from prose can be the last word of a named path containing spaces.
         if any(not any(found == name.lower() or (found in task.done_when.lower() and found.endswith(' ' + name.lower()))

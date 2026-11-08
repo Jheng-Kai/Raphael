@@ -25,6 +25,25 @@ async def unused(*args,**kwargs):
     pytest.fail('handoff must use the shared background contract')
 
 
+@pytest.mark.parametrize('management_request', ['Update member 2 model to cli:claude.', '請幫成員修改模型與指令。',
+                                    'Call member_update for member 2.'])
+async def test_member_management_is_refused_before_a_delegate_task_exists(make_rig, management_request):
+    rig = make_rig()
+    target, source = setup(rig)
+    before = rig.conn.execute('SELECT COUNT(*) FROM worker_tasks').fetchone()[0]
+    result = rig.service.handoff(RAPHAEL, args(target, request=management_request), source_turn_id=source.id, language='en')
+    assert not result.ok and result.error == 'delegated_management'
+    assert "Every member" in result.instruction and "yourself" in result.instruction and "private chat" in result.instruction
+    assert rig.conn.execute('SELECT COUNT(*) FROM worker_tasks').fetchone()[0] == before
+
+
+@pytest.mark.parametrize('work_request', ['Implement member_update validation and add regression tests.',
+    'Write documentation about member_update.', 'Read the launch notes; do not change any members.'])
+def test_member_management_guidance_does_not_block_ordinary_work(work_request):
+    from raphael_core.agent.team_admin import delegated_management
+    assert not delegated_management(work_request)
+
+
 def team_of(target,*others):
     found = {person.id:person for person in (RAPHAEL,target,*others)}
     return SimpleNamespace(speaker=found.get,roster=lambda:list(found.values()),has_members=lambda:True,

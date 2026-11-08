@@ -38,6 +38,7 @@ result.
 """
 
 import asyncio
+import json
 import math
 import time
 from collections.abc import Awaitable, Callable, Sequence
@@ -111,6 +112,11 @@ WRAP_UP = (
     "This task has reached a limit and stops here; you can use no more tools. Reply once, in plain text and in the "
     "language of the request, with the complete work result and three parts: what is done (name the files, ids or links that show it), "
     "what is not done, and the next step to take."
+)
+FINAL_REPORT = (
+    "Write your final report now from the work already done, in the requested reply language. "
+    "Use no tools and do not repeat actions. Say what was completed, what remains incomplete, and any evidence. "
+    "Reply once in plain text."
 )
 # The longest that one call may take, and the most of the conversation it is shown beyond the first two messages.
 WRAP_UP_S = 120.0
@@ -376,6 +382,11 @@ async def _run_task(
                 if pending:
                     messages.extend(pending)
                     continue
+                if _missing_words(said):
+                    said = await _wrap_up(host, messages, cancelled, clock, instruction=FINAL_REPORT)
+                    model_calls += 1
+                    if cancelled.is_set():
+                        raise Stop("cancelled")
                 return Outcome("done", said, None, None, model_calls, tool_calls)
             last_failed = False
             dispatched = False
@@ -464,14 +475,34 @@ def _settled(messages: Sequence[dict]) -> list[dict]:
     return out
 
 
+def _missing_words(text):
+    if not text.strip():
+        return True
+    candidate = text.strip()
+    for opening in ("```json\n", "```\n"):
+        if candidate.startswith(opening) and candidate.endswith("```"):
+            candidate = candidate[len(opening):-3].strip()
+            break
+    try:
+        value = json.loads(candidate)
+    except ValueError:
+        return False
+    if isinstance(value, dict):
+        messages = value.get('messages')
+        return not (isinstance(value.get('text'), str) and value['text'].strip()
+                    or isinstance(messages, list) and any(isinstance(item, str) and item.strip() for item in messages))
+    return isinstance(value, list)
+
+
 async def _wrap_up(
-    host: Host, messages: Sequence[dict], cancelled: asyncio.Event, clock: Callable[[], float]
+    host: Host, messages: Sequence[dict], cancelled: asyncio.Event, clock: Callable[[], float],
+    *, instruction: str = WRAP_UP,
 ) -> str:
     """What a task that reached a ceiling says of where it stands: one more model call with no
     tools. "" when none could be had (the owner stopped it, the model failed): the ceiling stays the end."""
     if cancelled.is_set():
         return ""
-    asked = [*_settled(messages), {"role": "user", "content": WRAP_UP}]
+    asked = [*_settled(messages), {"role": "user", "content": instruction}]
     try:
         turn = await _until(host.chat(asked, []), cancelled, clock() + WRAP_UP_S, clock)
     except Exception:  # a Stop of the host, or whatever else went wrong: not a second failure

@@ -58,7 +58,7 @@ from ..protocol import INTERNAL_ERROR, RpcError, invalid_params
 from ..router import Router
 from . import catalog
 from .audit import LIST_DEFAULT, AuditLog
-from .client import CALL_TOTAL_S, LOGIN_TIMEOUT_S, LoginResult, McpConnector, McpFailure
+from .client import CALL_TOTAL_S, LOGIN_TIMEOUT_S, REFRESH_TOTAL_S, LoginResult, McpConnector, McpFailure
 from .config import (
     MAX_NAME_CHARS,
     ConfigStore,
@@ -267,7 +267,7 @@ class IntegrationsService:
     async def _connect(self, params: dict) -> dict:
         """Sign in to a service of the store, or to a server again. Waits for the user in the
         browser, so it can take minutes; `connect_cancel` ends it."""
-        if self._login is not None and not self._login.done():
+        if (self._login is not None and not self._login.done()) or (self.managed and self.managed.login_pending):
             raise invalid_params("A login is under way already")
         ident = params.get("id")
         if ident is not None:
@@ -291,26 +291,39 @@ class IntegrationsService:
             )
             new = True
         self._connector.invalidate(server.id)  # a login again: the old one is not to be used
-        if server.auth == "none":
-            # A public server: there is no login, so the browser stays shut and the tools are read at once.
-            job = self._join_public(server)
-        else:
-            job = self._connector.login(
-                server, self._open_browser, timeout_s=self._login_timeout_s, on_code=self._code_sender(server)
-            )
-        self._login = asyncio.create_task(job)
+        async def bounded_login():
+            if server.auth == "device":
+                from .device import TOTAL_S
+                budget = TOTAL_S + REFRESH_TOTAL_S
+            else:
+                budget = self._login_timeout_s + REFRESH_TOTAL_S
+            async with asyncio.timeout(budget):
+                if server.auth == "none":
+                    # Public servers read their tools without opening a browser.
+                    return await self._join_public(server)
+                return await self._connector.login(
+                    server, self._open_browser, timeout_s=self._login_timeout_s, on_code=self._code_sender(server)
+                )
+
+        login = self._login = asyncio.create_task(bounded_login())
         self._login_for = server.id
         try:
-            result = await self._login
+            result = await login
+        except TimeoutError:
+            return self._login_failed(server, new, "timeout")
         except McpFailure as failure:
             return self._login_failed(server, new, failure.kind)
         except asyncio.CancelledError:
             task = asyncio.current_task()
             if task is not None and task.cancelling():  # the core is closing, not the user cancelling
-                self._login.cancel()
+                login.cancel()
                 self._wipe_login(server, new)
                 raise
             return self._login_failed(server, new, "cancelled")
+        finally:
+            if self._login is login:
+                self._login = None
+                self._login_for = ""
         if not new and self._config.get(server.id) is not server:
             return {"connected": False, "error": "cancelled"}  # removed while the browser was open
         server.tools = result.tools
@@ -367,10 +380,11 @@ class IntegrationsService:
 
     async def _connect_cancel(self, params: dict) -> dict:
         task = self._login
-        if task is None or task.done():
-            return {"cancelled": False}
-        task.cancel()
-        return {"cancelled": True}
+        cancelled = task is not None and not task.done()
+        if cancelled:
+            task.cancel()
+        managed = self.managed.cancel_connect() if self.managed else False
+        return {"cancelled": cancelled or managed}
 
     async def _add(self, params: dict) -> dict:
         try:

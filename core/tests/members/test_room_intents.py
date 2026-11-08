@@ -77,7 +77,7 @@ async def test_a_trailing_pass_is_not_shown(rig, exchange):
     assert alice['text'] == '看起來沒問題。'
 
 
-async def test_when_no_one_can_be_heard_the_room_says_so_and_its_default_answers(rig, exchange, monkeypatch):
+async def test_when_no_one_can_be_heard_the_room_reports_failures_without_default_speech(rig, exchange, monkeypatch):
     room, ids = await team(rig)
     class Slow(Decision):
         async def room_listener(self, **kwargs):
@@ -87,7 +87,8 @@ async def test_when_no_one_can_be_heard_the_room_says_so_and_its_default_answers
     await send(rig, room, 'Choose')
     routing = (await history(rig, room))['exchange']['routing']
     assert routing['fallback'] == 'unavailable' and {one['failure'] for one in routing['listened']} == {'timeout'}
-    assert rig.background.submitted[-1]['member_id'] == 0
+    assert not rig.background.submitted
+    assert (await history(rig,room))['exchange']['state'] == 'stopped'
 
 
 async def test_source_replay_and_rename_cannot_extend_the_reply_budget(rig, exchange):
@@ -306,25 +307,31 @@ async def test_a_named_moderator_has_no_scheduled_turns_or_conclusion(rig, excha
     assert rig.service.speaker(ids[0]).role == 'PM'
 
 
-async def test_a_meeting_answers_explicit_addresses_without_dispatching_rounds(rig, exchange):
+async def test_a_meeting_keeps_every_participant_before_explicit_followup_addresses(rig, exchange):
     room, (alice, bob, carol) = await three(rig)
     await exchange.meeting({'member_ids':[0,alice,bob,carol], 'agenda':'@Bob review the launch',
                             'roles':{str(alice):'moderator',str(bob):'pro',str(carol):'con'}}, 'en', meeting_source(rig, 47))
-    assert [s['member_id'] for s in rig.background.submitted] == [bob]
+    assert [s['member_id'] for s in rig.background.submitted] == [0]
+    await finish(rig, exchange, '(pass)')
+    assert rig.background.submitted[-1]['member_id'] == alice
+    await finish(rig, exchange, 'Evidence reviewed.')
+    assert rig.background.submitted[-1]['member_id'] == bob
     await finish(rig, exchange, 'Test first. @Carol what do you think?')
     assert rig.background.submitted[-1]['member_id'] == carol
     await finish(rig, exchange, 'Agreed.')
     result = await history(rig, room)
     assert result['exchange']['state'] == 'done'
     assert [(m['member_id'],m['kind']) for m in result['messages'] if m['member_id'] is not None] == [
-        (0,'message'),(bob,'message'),(carol,'message')]
+        (0,'message'),(alice,'message'),(bob,'message'),(carol,'message')]
 
 
 async def test_a_meeting_with_no_one_speaking_has_no_automatic_open_or_close(rig, exchange):
     room, ids = await team(rig)
     await exchange.meeting({'member_ids':[0,*ids], 'agenda':'Thanks everyone',
                             'roles':{str(ids[0]):'moderator',str(ids[1]):'con'}}, 'en', meeting_source(rig, 48))
-    assert not rig.background.submitted
+    for _ in [0,*ids]:
+        await finish(rig, exchange, '(pass)')
+    assert [s['member_id'] for s in rig.background.submitted] == [0,*ids]
     assert (await history(rig, room))['exchange']['state'] == 'done'
 
 
@@ -333,7 +340,7 @@ async def test_a_reused_meeting_keeps_only_the_roles_the_owner_requested(rig, ex
     await rig.call('rooms.update', {'room_id':room['id'], 'roles':{str(ids[0]):'moderator'}})
     await exchange.meeting({'member_ids':[0,*ids], 'agenda':'Next release'}, 'en', meeting_source(rig, 49))
     assert (await rig.call('rooms.list'))['rooms'][0]['roles'] == {}
-    assert not rig.background.submitted
+    assert rig.background.submitted[0]['member_id'] == 0
 
 
 async def test_meeting_reuses_exact_members_and_has_one_agenda(rig, exchange):
@@ -343,7 +350,8 @@ async def test_meeting_reuses_exact_members_and_has_one_agenda(rig, exchange):
     second = await exchange.meeting(args, 'en', meeting_source(rig, 42))
     assert first['room_id'] == second['room_id'] == room['id']
     assert second['duplicate']
-    assert len([m for m in (await history(rig, room))['messages'] if m['member_id'] == 0]) == 1
+    assert len([m for m in (await history(rig, room))['messages'] if m['text'] == 'Review evidence']) == 1
+    assert len(rig.background.submitted) == 1
 
 
 async def test_meeting_roles_accept_names_and_a_supporting_part(rig, exchange):

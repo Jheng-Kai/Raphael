@@ -50,10 +50,12 @@ async def test_named_owner_path_is_verified_from_bytes(make_rig, tmp_path, locat
     folder = tmp_path / "Owner output"
     folder.mkdir()
     output = folder / filename
-    output.write_text("Synthetic completed work", encoding="utf8")
     named = f'"{output}"' if quoted else f'{output} as requested.'
     condition = f'Save {named}' if location == "condition" else "Save the report at the named absolute path."
-    rig.client.replies.append(report(f'Saved {named}'))
+    def saved(**kwargs):
+        output.write_text("Synthetic completed work", encoding="utf8")
+        return report(f'Saved {named}')
+    rig.client.replies.append(saved)
     receipt = rig.service.handoff(RAPHAEL, args(target, done_when=condition, requires_artifact=True),
                                   source_turn_id=source.id, language="en")
     assert receipt.ok
@@ -71,12 +73,14 @@ async def test_named_owner_path_uses_the_task_timestamp_grace(make_rig, tmp_path
     rig.wall.now += 789
     target, source = setup(rig)
     output = tmp_path / "artifact.txt"
-    output.write_text("Synthetic completed work", encoding="utf8")
     modified = (rig.wall() + offset_ms) / 1000
-    os.utime(output, (modified, modified))
     rig.service.use_workspaces(lambda member: tmp_path if workspace else None)
     condition = f'Save "{output}"' if location == "condition" else "Save the report."
-    rig.client.replies.append(report(f'Saved "{output}"'))
+    def saved(**kwargs):
+        output.write_text("Synthetic completed work", encoding="utf8")
+        os.utime(output, (modified, modified))
+        return report(f'Saved "{output}"')
+    rig.client.replies.append(saved)
     receipt = rig.service.handoff(RAPHAEL, args(target, done_when=condition, requires_artifact=True),
                                   source_turn_id=source.id, language="en")
     task_id = receipt.data["task_id"]

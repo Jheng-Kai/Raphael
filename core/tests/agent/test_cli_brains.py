@@ -52,6 +52,49 @@ print(json.dumps({"type": "result", "subtype": "success", "result": "",
     assert events[-1].kind == "final" and json.loads(events[-1].text) == {"actions": []}
 
 
+async def test_claude_listener_budget_allows_the_structured_result_turn(tmp_path):
+    from raphael_core.agent.cli.drivers import Driver
+    script = tmp_path / 'listener_protocol.py'
+    script.write_text('''import json, sys
+schema = json.loads(sys.argv[sys.argv.index('--json-schema') + 1])
+assert schema['required'] == ['speak', 'urgency']
+budget = int(sys.argv[sys.argv.index('--max-turns') + 1])
+json.loads(sys.stdin.readline())
+if budget < 2:
+    print(json.dumps({'type':'result','subtype':'error_max_turns','is_error':True,'result':'Reached max turns'}), flush=True)
+else:
+    print(json.dumps({'type':'result','subtype':'success','result':'',
+                      'structured_output':{'speak':True,'urgency':0.8}}), flush=True)
+''', encoding='utf-8')
+    schema = {'type':'object','required':['speak','urgency'],'properties':{'speak':{'type':'boolean'},'urgency':{'type':'number'}}}
+    for budget in [1,3]:
+        driver = Driver('claude',[sys.executable,str(script),'--max-turns',str(budget)])
+        events = [event async for event in driver.run(user='Synthetic room',system='Listen',
+            endpoint='http://127.0.0.1:1/mcp',token='ephemeral',permission=None,structured=schema)]
+        assert events[-1].kind == ('error' if budget == 1 else 'final')
+        if budget > 1:
+            assert json.loads(events[-1].text) == {'speak':True,'urgency':.8}
+
+
+async def test_claude_early_exit_logs_scrubbed_stderr_and_keeps_failure_detail(tmp_path, caplog):
+    from raphael_core.agent.cli.drivers import Driver
+    script = tmp_path / "missing_resume.py"
+    script.write_text('''import sys
+sys.stdin.readline()
+print("No conversation found with session ID: missing", file=sys.stderr, flush=True)
+print("Authorization: Bearer synthetic-private-credential", file=sys.stderr, flush=True)
+sys.exit(1)
+''', encoding="utf-8")
+    driver = Driver("claude", [sys.executable, str(script)])
+    events = [event async for event in driver.run(user="Synthetic question", system="Synthetic persona",
+        endpoint="http://127.0.0.1:1/mcp", token="synthetic-private-credential", permission=None, session="missing")]
+    error = events[-1]
+    assert error.kind == "error" and error.text == "cli_stopped"
+    assert "No conversation found with session ID" in error.data["detail"]
+    assert "No conversation found with session ID" in caplog.text
+    assert "synthetic-private-credential" not in caplog.text + json.dumps(error.data)
+
+
 async def test_discovery_uses_fake_process_and_auth_existence_only(tmp_path):
     script = tmp_path / "fake.py"
     script.write_text("print('fake 1.2.3')", encoding="utf-8")
@@ -225,15 +268,18 @@ for line in sys.stdin:
         assert resumed and "threadId" not in msg["params"]
         send({"id":msg["id"], "result":{"thread":{"id":"new"}}})
     elif method == "turn/start":
+        assert msg["params"]["input"][0]["text"] == "<question>Keep the original request.</question>"
         send({"method":"item/completed", "params":{"item":{"type":"agentMessage", "text":"Fresh"}}})
         send({"method":"turn/completed", "params":{"turn":{"status":"completed"}}})
         break
 ''', encoding="utf-8")
     events = [event async for event in Driver("codex", [sys.executable, str(script)]).run(
         user="Continue", system="Persona", endpoint="http://127.0.0.1:1/mcp", token="ephemeral",
+        fresh_context=lambda: "<question>Keep the original request.</question>",
         session="raphael-codex-v1:missing", cwd=str(tmp_path), permission=None)]
     assert events[-1].kind == "final" and events[-1].text == "Fresh"
     assert next(event.text for event in events if event.kind == "session") == "raphael-codex-v1:new"
+    assert any(event.kind == "context_reset" for event in events)
 
 
 @pytest.mark.parametrize("cancel", [False, True])

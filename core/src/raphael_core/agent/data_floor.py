@@ -68,6 +68,9 @@ class DataFloor:
         path = self.resolved(value, cwd)
         env = {key.casefold(): value for key, value in self.environ.items()}
         roots = [self.core_root, ntpath.join(env.get("userprofile") or env.get("home") or str(Path.home()), ".raphael")]
+        home = env.get('userprofile') or env.get('home') or str(Path.home())
+        # Native CLI environments may omit APPDATA; both Windows app names still belong to Raphael.
+        roots.extend(ntpath.join(home, 'AppData', 'Roaming', name) for name in ('Raphael', 'Raphael Dev'))
         roots.extend(env[key] for key in ("raphael_data_dir", "raphael_home") if env.get(key))
         if getattr(sys, "frozen", False):
             roots.extend([Path(sys.executable).parent, getattr(sys, "_MEIPASS", Path(sys.executable).parent)])
@@ -83,8 +86,12 @@ class DataFloor:
                 return True
         if self.conn is not None:
             for row in self.conn.execute("PRAGMA database_list"):
-                if row[2] and path in {self.resolved(row[2] + suffix) for suffix in ("", "-wal", "-shm")}:
-                    return True
+                if row[2]:
+                    database = self.resolved(row[2])
+                    parent = ntpath.dirname(database)
+                    if (path in {self.resolved(row[2] + suffix) for suffix in ("", "-wal", "-shm")}
+                            or ntpath.basename(database) == 'raphael.db' and (path == parent or path.startswith(parent + '\\'))):
+                        return True
         return bool(_DATABASE.search(path))
 
     def _paths(self, text):

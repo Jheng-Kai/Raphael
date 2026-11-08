@@ -962,6 +962,7 @@ class App(Router):
         self.members.use_speech(self.speaker)
         self.memory.member_exists = self.members.member_exists
         self.memory.language = lambda: self.agent.language
+        from .agent.owner_language import configured_language
         self.agent = AgentService(
             self._conn,
             self.client,
@@ -986,6 +987,7 @@ class App(Router):
             permissions=self.permissions,
             drafts=self.drafts,
             calendar=self.calendar,
+            owner_language=lambda: configured_language(data_dir),
         )
         self.agent.register(self)
         self.rooms.turn_view = lambda turn: self.agent._turn_views([turn])[0]

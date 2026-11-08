@@ -165,6 +165,7 @@ class CallbackListener:
         self._server: asyncio.Server | None = None
         self._port = 0
         self._state: str | None = None
+        self._writers: set[asyncio.StreamWriter] = set()
         self._done: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
 
     @property
@@ -192,12 +193,18 @@ class CallbackListener:
             with contextlib.suppress(Exception):
                 await self._server.wait_closed()
             self._server = None
+        for writer in list(self._writers):
+            writer.close()
+            with contextlib.suppress(Exception):
+                async with asyncio.timeout(_REQUEST_READ_S):
+                    await writer.wait_closed()
         if not self._done.done():
             self._done.cancel()
         elif not self._done.cancelled():
             self._done.exception()  # read, so that an unread failure is not reported later
 
     async def _serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        self._writers.add(writer)
         try:
             try:
                 async with asyncio.timeout(_REQUEST_READ_S):
@@ -208,12 +215,15 @@ class CallbackListener:
                 return
             status, page = self._answer(head)
             writer.write(http_response(status, page))
-            with contextlib.suppress(ConnectionError):
-                await writer.drain()
+            with contextlib.suppress(ConnectionError, TimeoutError):
+                async with asyncio.timeout(_REQUEST_READ_S):
+                    await writer.drain()
         finally:
             with contextlib.suppress(Exception):
                 writer.close()
-                await writer.wait_closed()
+                async with asyncio.timeout(_REQUEST_READ_S):
+                    await writer.wait_closed()
+            self._writers.discard(writer)
 
     def _answer(self, head: bytes) -> tuple[str, SignInPage | None]:
         lines = head.decode("latin-1").split("\r\n")
@@ -362,7 +372,9 @@ async def revoke(storage: VaultTokenStorage, revocation_url: str, *, timeout_s: 
     try:
         checked_url(revocation_url)
         done = False
-        async with httpx2.AsyncClient(timeout=timeout_s, follow_redirects=False, headers={"User-Agent": USER_AGENT}) as http:
+        async with asyncio.timeout(timeout_s), httpx2.AsyncClient(
+            timeout=timeout_s, follow_redirects=False, headers={"User-Agent": USER_AGENT}
+        ) as http:
             for token, hint in ((refresh, "refresh_token"), (access, "access_token")):
                 if token is None:
                     continue

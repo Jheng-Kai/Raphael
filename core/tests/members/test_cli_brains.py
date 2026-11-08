@@ -11,6 +11,58 @@ from .test_answering import client, setup, member, typed  # noqa: F401
 
 
 @pytest.mark.parametrize("member_id", [0, 1])
+async def test_native_service_sends_only_new_context_after_restart(setup, tmp_path, member_id):
+    from raphael_core.agent.cli.loop import Sessions
+
+    rig, team = setup
+    if member_id:
+        assert member(team, model="cli:claude").id == member_id
+    else:
+        rig.settings.set("agent_model", "cli:claude")
+    record = tmp_path / "prompts.jsonl"
+    fake_brain(rig, tmp_path, '''import json, sys
+from pathlib import Path
+packet = json.loads(sys.stdin.readline())
+with Path(RECORD).open("a", encoding="utf-8") as out:
+    out.write(json.dumps(packet["message"]["content"]) + "\\n")
+print(json.dumps({"type":"result", "subtype":"success", "session_id":"same", "result":"Complete."}), flush=True)
+'''.replace("RECORD", repr(str(record))))
+    await typed(rig, "First synthetic request", member_id, language="en")
+    rig.service._cli_sessions = Sessions(rig.conn)
+    await typed(rig, "Second synthetic request", member_id, language="en")
+    rig.service._cli_sessions.clear_member(member_id)
+    await typed(rig, "Third synthetic request", member_id, language="en")
+    first, resumed, fresh = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
+    assert "First synthetic request" in first
+    assert "Second synthetic request" in resumed and "First synthetic request" not in resumed
+    assert "Memory: unchanged." in resumed
+    assert "Third synthetic request" in fresh and "First synthetic request" in fresh
+
+
+@pytest.mark.parametrize("member_id", [0, 1])
+async def test_synthetic_cli_error_never_becomes_a_stored_reply(setup, tmp_path, member_id):
+    rig, team = setup
+    if member_id:
+        assert member(team, model="cli:claude").id == member_id
+    else:
+        rig.settings.set("agent_model", "cli:claude")
+    fake_brain(rig, tmp_path, '''import json, sys
+json.loads(sys.stdin.readline())
+print(json.dumps({"type":"assistant", "isApiErrorMessage":True, "message":{"model":"<synthetic>",
+    "content":[{"type":"text", "text":"Prompt is too long"}], "stop_reason":"end_turn"}}), flush=True)
+print(json.dumps({"type":"result", "is_error":True, "subtype":"error_during_execution",
+    "result":"Prompt is too long"}), flush=True)
+''')
+    result = await typed(rig, "Compare the synthetic outline", member_id, language="en")
+    assert "Prompt is too long" not in result["text"]
+    loop = next(iter(rig.service._cli_sessions.locks))
+    assert loop[0] == member_id
+    [turn] = (await rig.call("agent.history.list", {"member_id": member_id}))["turns"]
+    assert turn["status"] == "error"
+    assert not any(message["kind"] == "reply" and "Prompt is too long" in message["text"] for message in turn["messages"])
+
+
+@pytest.mark.parametrize("member_id", [0, 1])
 async def test_claude_progress_is_stored_with_one_prefix(setup, tmp_path, member_id):
     rig, team = setup
     if member_id:
@@ -95,7 +147,8 @@ print(json.dumps({"type":"result", "subtype":"success", "result":ANSWER}),flush=
     else:
         assert turn["status"] == "error"
         assert result["text"] == "Claude Code stopped before finishing its answer."
-        assert [message["text"] for message in turn["messages"] if message["kind"] == "progress"] == ["Still checking."]
+        # The one wrap-up ask runs the fake once more; neither narration is a public reply.
+        assert [message["text"] for message in turn["messages"] if message["kind"] == "progress"] == ["Still checking."] * 2
         assert replies == [result["text"]]
 
 

@@ -50,7 +50,8 @@ class Loopback:
         for writer in list(self.writers):
             writer.close()
             with contextlib.suppress(Exception):
-                await writer.wait_closed()
+                async with asyncio.timeout(5):
+                    await writer.wait_closed()
         if not self.done.done():
             self.done.cancel()
         elif not self.done.cancelled():
@@ -95,14 +96,16 @@ class Loopback:
             body = b"Sign-in complete. You can close this tab and return to Raphael."
             writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nCache-Control: no-store\r\n"
                          b"Connection: close\r\nContent-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body)
-            await writer.drain()
+            async with asyncio.timeout(5):
+                await writer.drain()
         except Exception as error:
             if self.claimed and not self.done.done():
                 self.done.set_exception(error if isinstance(error, ConnectorFailure) else ConnectorFailure("protocol"))
         finally:
             writer.close()
             with contextlib.suppress(Exception):
-                await writer.wait_closed()
+                async with asyncio.timeout(5):
+                    await writer.wait_closed()
             self.writers.discard(writer)
 
 
@@ -151,15 +154,19 @@ class GoogleClient:
         verifier = secrets.token_urlsafe(64)
         challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).decode().rstrip("=")
         state = secrets.token_urlsafe(32)
-        async with self.listener(state, timeout) as listener:
-            params = {"client_id": client["client_id"], "redirect_uri": listener.redirect_uri,
-                      "response_type": "code", "scope": " ".join(scopes), "state": state,
-                      "code_challenge": challenge, "code_challenge_method": "S256",
-                      "access_type": "offline", "prompt": "consent"}
-            await open_browser(AUTH + "?" + urlencode(params))
-            code = await listener.wait()
-            data = await self.http.json("POST", TOKEN, data={**client, "grant_type": "authorization_code",
-                                       "code": code, "code_verifier": verifier, "redirect_uri": listener.redirect_uri})
+        try:
+            async with asyncio.timeout(timeout):
+                async with self.listener(state, timeout) as listener:
+                    params = {"client_id": client["client_id"], "redirect_uri": listener.redirect_uri,
+                              "response_type": "code", "scope": " ".join(scopes), "state": state,
+                              "code_challenge": challenge, "code_challenge_method": "S256",
+                              "access_type": "offline", "prompt": "consent"}
+                    await open_browser(AUTH + "?" + urlencode(params))
+                    code = await listener.wait()
+                    data = await self.http.json("POST", TOKEN, data={**client, "grant_type": "authorization_code",
+                                               "code": code, "code_verifier": verifier, "redirect_uri": listener.redirect_uri})
+        except TimeoutError:
+            raise ConnectorFailure("timeout") from None
         # Missing granted scopes is not evidence of a grant. Fail closed until re-consent.
         if not isinstance(data.get("scope"), str):
             raise ConnectorFailure("missing_scopes")

@@ -62,7 +62,7 @@ from .catalog import (
     choice_problem,
     find,
 )
-from .cleanup import CleanupResult, CleanupService, already_clean_short, join_parts, split_for_cleanup
+from .cleanup import CleanedPart, CleanupResult, CleanupService, already_clean_short, join_parts, split_for_cleanup
 from .cloud_stt import CloudTranscriber
 from .dictionary import DictionaryStore, Learned
 from .history import HistoryItem, HistoryStore
@@ -408,7 +408,10 @@ class Brain:
             self._cleaning[session_id] = False
         try:
             if incomplete:
-                result = CleanupResult(normalized, False, "incomplete_stt", None, 0, 0)
+                result, chunks = await self._clean_incomplete_dictation(
+                    raw_text, marker, rules, chinese, audio_seconds, target_app,
+                    lambda: self._cleaning.get(session_id, False),
+                )
             elif already_clean_short(raw_text.strip()) and already_clean_short(normalized):
                 result = CleanupResult(normalized, True, None, None, 0, 0)
             else:
@@ -426,7 +429,7 @@ class Brain:
         if result.model is not None and not result.model.startswith("@") and self._openrouter.state == "ok":
             # The model answered, so the time it took is a round trip to OpenRouter.
             self._openrouter.latency_ms = result.llm_ms
-        if result.cleaned:
+        if result.cleaned or (incomplete and result.parts):
             words = self._dictionary.hint_words()
             if result.parts:
                 guarded = tuple(
@@ -443,9 +446,16 @@ class Brain:
                 result = replace(result, text=guarded_text)
             if rejected:
                 # Preserve model billing/timing, but never claim unsupported output was cleaned.
-                result = replace(result, text=normalized, cleaned=False, fallback_reason="suspicious", parts=())
+                if incomplete:
+                    result = replace(result, parts=tuple(
+                        replace(part, text=chunks[index][0], cleaned=False)
+                        if part.cleaned and not part.text.strip() else part
+                        for index, part in enumerate(guarded)
+                    ))
+                else:
+                    result = replace(result, text=normalized, cleaned=False, fallback_reason="suspicious", parts=())
         if result.parts:
-            # All pieces succeeded. Finish each and retain its sentence/paragraph boundary.
+            # Finish successful heard pieces; incomplete speech keeps literal gap parts.
             def finish_part(index, part):
                 if not part.cleaned:
                     return remove_stutters(part.text)
@@ -500,6 +510,44 @@ class Brain:
             "fallback_reason": result.fallback_reason,
             "llm_ms": result.llm_ms,
         }
+
+    async def _clean_incomplete_dictation(self, raw, marker, rules, chinese, seconds, target_app, is_cancelled):
+        """Clean isolated heard regions without giving a model a gap or context across one."""
+        regions = raw.split(marker)
+        total = max(1, sum(len(region.strip()) for region in regions))
+        parts, chunks, results = [], [], []
+        for index, region in enumerate(regions):
+            body = region.strip()
+            if body:
+                pieces = split_for_cleanup(body)
+                aligned = [(normalize_transcript(piece, rules, chinese=chinese), apply_replacements(piece, rules)) for piece in pieces]
+                normalized = normalize_transcript(body, rules, chinese=chinese)
+                if already_clean_short(body) and already_clean_short(normalized):
+                    result = CleanupResult(normalized, True, None, None, 0, 0)
+                else:
+                    result = await self._cleanup.clean(
+                        normalized, heard=apply_replacements(body, rules),
+                        audio_seconds=seconds * len(body) / total, target_app=target_app,
+                        chunks=aligned if len(aligned) > 1 else None, is_cancelled=is_cancelled,
+                    )
+                results.append(result)
+                if result.parts:
+                    parts.extend(result.parts)
+                    chunks.extend(aligned)
+                else:
+                    parts.append(CleanedPart(result.text, result.cleaned))
+                    chunks.append((normalized, apply_replacements(body, rules)))
+                parts[-1] = replace(parts[-1], after=region[len(region.rstrip()):])
+            if index + 1 < len(regions):
+                following = regions[index + 1]
+                parts.append(CleanedPart(marker, False, following[:len(following) - len(following.lstrip())]))
+                chunks.append((marker, marker))
+        # Even when every heard region succeeds, missing speech must remain visibly incomplete.
+        return CleanupResult(
+            join_parts(parts), False, "incomplete_stt",
+            next((result.model for result in results if result.model), None),
+            sum(result.cost_usd for result in results), sum(result.llm_ms for result in results), tuple(parts),
+        ), chunks
 
     async def _normalize_transcript(self, params: dict) -> dict:
         """`{raw_text}` -> `{text}`: what speech-to-text heard, with the dictionary's replacements

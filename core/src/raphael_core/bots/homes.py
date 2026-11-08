@@ -183,7 +183,7 @@ class BotHomes:
             return self._change(member_id, relative, data, expected_hash)
 
     def keep(self, member_id: int, relative: str, text: str) -> str:
-        """Core store adapter: callers already validated a memory or owner import."""
+        """Core store adapter: callers already validated the memory document."""
         with _LOCK:
             path = self.path(member_id, relative)
             old = path.read_bytes() if path.exists() else None

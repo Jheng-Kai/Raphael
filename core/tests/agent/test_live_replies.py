@@ -20,6 +20,20 @@ def bodies(rig):
     return plain_replies(replies(rig))
 
 
+@pytest.mark.parametrize("brain", ["codex", "claude", "gemini"])
+async def test_cli_provider_error_packets_never_become_foreground_replies(make_rig, monkeypatch, brain):
+    from .test_cli_context import recorded_error_packets
+
+    rig = make_rig()
+    rig.settings.set("agent_model", f"cli:{brain}:fake")
+    monkeypatch.setattr(rig.service._cli_brains, "command", lambda name: ["fake"])
+    monkeypatch.setattr(rig.service._cli_brains, "available", lambda *args, **kwargs: True)
+    monkeypatch.setattr(cli.Driver, "run", recorded_error_packets)
+    await typed(rig)
+    assert rig.history.latest_by_member()[0].status == "error"
+    assert all("Prompt is too long" not in message for message in replies(rig))
+
+
 @pytest.mark.parametrize("envelope", [False, True])
 async def test_three_replies_are_stored_and_notified_around_two_tools(make_rig, client, envelope):
     snapshots = []
@@ -87,6 +101,37 @@ async def test_cli_messages_are_live_and_the_terminal_echo_is_not_added_again(ma
     monkeypatch.setattr(cli, "Driver", FakeDriver)
     await typed(rig)
     assert bodies(rig) == words
+
+
+@pytest.mark.parametrize("brain", ["codex", "claude", "gemini"])
+@pytest.mark.parametrize("ending", ["empty", "error", "eof"])
+async def test_empty_terminal_after_real_messages_ends_without_an_error_after_one_wrap_up(
+    make_rig, monkeypatch, brain, ending,
+):
+    rig = make_rig()
+    rig.settings.set("agent_model", f"cli:{brain}:fake")
+    monkeypatch.setattr(rig.service._cli_brains, "command", lambda name: ["fake"])
+    monkeypatch.setattr(rig.service._cli_brains, "available", lambda *args, **kwargs: True)
+    attempts = []
+
+    async def run(driver, **kwargs):
+        attempts.append(kwargs)
+        if len(attempts) == 1:
+            yield Event("message", "The recorded result.", data={"id": "answer", "final": True})
+            assert bodies(rig) == ["The recorded result."]
+            yield Event("final", "")
+        else:
+            if ending == "error":
+                yield Event("error", "cli_stopped")
+            elif ending == "empty":
+                yield Event("final", "")
+
+    monkeypatch.setattr(cli.Driver, "run", run)
+    result = await typed(rig)
+    assert len(attempts) == 2
+    assert attempts[1]["no_tools"] is True and "final report" in attempts[1]["user"]
+    assert result["status"] == "done" and result["text"] == "The recorded result."
+    assert bodies(rig) == ["The recorded result."]
 
 
 async def test_only_explicit_public_reply_fields_are_published(make_rig, client):

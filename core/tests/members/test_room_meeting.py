@@ -62,6 +62,7 @@ async def test_a_digest_cannot_extend_itself_by_reposting(rig,exchange):
     source=exchange._history.add(session_id='private-review',question='Review',route='answer',prefix='',text='',status='running')
     exchange.post(0,{'room_id':room['id'],'text':'A new finding.'},source)
     await exchange.wait_idle()
+    await finish(rig,exchange,'(pass)')
     speech=rig.background.attached[-1][1]
     exchange.post(ids[0],{'room_id':room['id'],'text':'Acknowledged with a follow-up question.'},speech)
     await exchange.wait_idle()
@@ -75,5 +76,6 @@ async def test_chief_targets_an_existing_superset_room_without_faking_owner_inpu
                                   'en',meeting_source(rig,'target-existing'))
     assert result['room_id']==room['id'] and result['member_ids']==[0,*ids]
     messages=(await history(rig,room))['messages']
-    assert len(messages)==1 and messages[0]['member_id']==0
+    assert sum(m['text']=='Review the release.' for m in messages)==1 and messages[0]['member_id']==0
+    assert all(m['author_kind']=='member' for m in messages)
     assert not rig.conn.execute('SELECT 1 FROM room_exchanges WHERE reason=\'interjection\'').fetchone()

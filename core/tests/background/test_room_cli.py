@@ -25,7 +25,7 @@ def submit_room(rig):
 
 
 @pytest.mark.parametrize("room", [True, False], ids=["room", "background"])
-async def test_cli_envelopes_are_unwrapped_before_room_or_background_storage(make_rig, monkeypatch, room):
+async def test_written_cli_envelopes_stay_literal_in_room_or_background_storage(make_rig, monkeypatch, room):
     rig = make_rig()
     async def work(loop):
         loop._queue.put_nowait(Outcome("done", final=json.dumps({"text": "The plan is ready.", "messages": ["The plan is ready."]})))
@@ -38,9 +38,10 @@ async def test_cli_envelopes_are_unwrapped_before_room_or_background_storage(mak
         turn = None
     await until(lambda: rig.task(task).state in ("done", "failed"))
     assert rig.task(task).state == "done"
-    assert rig.task(task).report_text == "The plan is ready."
+    expected = json.dumps({"text": "The plan is ready.", "messages": ["The plan is ready."]})
+    assert rig.task(task).report_text == expected
     if turn:
-        assert AgentHistory(rig.conn).get(turn).text == "The plan is ready."
+        assert AgentHistory(rig.conn).get(turn).text == expected
 
 
 async def test_cli_room_turn_uses_shared_tools_and_keeps_private_sessions_separate(make_rig, monkeypatch):

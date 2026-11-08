@@ -11,7 +11,7 @@ from collections import Counter
 from contextlib import aclosing
 from dataclasses import replace
 
-from ...worker.loop import Call, Outcome, Stop, ToolOutcome, WAITING
+from ...worker.loop import Call, Outcome, Stop, ToolOutcome, WAITING, FINAL_REPORT
 from ...members.activity import StreamSteps, current, tool_step
 from ...worker.guards import wrap_untrusted
 from ...worker.tool_guardrails import ToolGuardrails
@@ -24,6 +24,7 @@ from ..policy import CONFIRM_TIMEOUT_S
 from ..persona import phrase
 from .discovery import NAMES, brain_ref, brain_effort
 from .drivers import Driver
+from .context import CONTEXT_HEADROOM, DEFAULT_CONTEXT_TOKENS, context_tokens, fresh_user, line_hashes, resumed_user, should_compact
 from .process import secure_directory
 from .native_diagnostics import capture as native_capture, directory as native_directory
 from ...failures import Failure, KINDS, TRANSIENT, RETRY_WAITS, PATIENT_WAITS, classify, tool_failure
@@ -60,6 +61,8 @@ class Sessions:
         self.conversations = Conversations(conn)
         conn.execute("CREATE TABLE IF NOT EXISTS agent_cli_sessions (member_id INTEGER NOT NULL, brain TEXT NOT NULL, session_id TEXT NOT NULL, PRIMARY KEY(member_id, brain))")
         conn.execute("CREATE TRIGGER IF NOT EXISTS delete_member_cli_sessions AFTER DELETE ON members BEGIN DELETE FROM agent_cli_sessions WHERE member_id=OLD.id; END")
+        conn.execute("CREATE TABLE IF NOT EXISTS agent_conversation_cli_contexts (conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, brain TEXT NOT NULL, session_id TEXT NOT NULL, state TEXT NOT NULL, PRIMARY KEY(conversation_id, brain))")
+        conn.execute("CREATE TRIGGER IF NOT EXISTS delete_native_cli_context AFTER DELETE ON agent_conversation_cli_sessions BEGIN DELETE FROM agent_conversation_cli_contexts WHERE conversation_id=OLD.conversation_id AND brain=OLD.brain; END")
         # Existing native resume IDs belong only to the member's default conversation.
         with conn:
             conn.execute("INSERT OR IGNORE INTO agent_conversation_cli_sessions SELECT c.id, s.brain, s.session_id FROM agent_cli_sessions s JOIN conversations c ON c.member_id=s.member_id AND c.is_default=1")
@@ -82,6 +85,7 @@ class Sessions:
 
     def clear(self):
         with self.conn:
+            self.conn.execute("DELETE FROM agent_conversation_cli_contexts")
             self.conn.execute("DELETE FROM agent_conversation_cli_sessions")
             self.conn.execute("DELETE FROM agent_cli_sessions")
 
@@ -102,12 +106,31 @@ class Sessions:
             )
             self.conn.execute("DELETE FROM agent_cli_sessions WHERE member_id = ?", (member_id,))
 
+    def get_context(self, member, brain, session, conversation_id=None):
+        if conversation_id is None:
+            conversation_id = self.conversations.main(member)
+        if self.get(member, brain, conversation_id) != session:
+            return None
+        row = self.conn.execute("SELECT state FROM agent_conversation_cli_contexts WHERE conversation_id=? AND brain=? AND session_id=?",
+                                (conversation_id, brain, session)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def put_context(self, member, brain, session, state, conversation_id=None):
+        if conversation_id is None:
+            conversation_id = self.conversations.main(member)
+        if self.get(member, brain, conversation_id) != session:
+            return
+        with self.conn:
+            self.conn.execute("INSERT OR REPLACE INTO agent_conversation_cli_contexts VALUES (?, ?, ?, ?)",
+                              (conversation_id, brain, session, json.dumps(state)))
+
 
 class CliLoop:
     def __init__(self, *, brains, sessions, member_id, model, ledger, language, plain,
                  system, user, tools, progress, thinking, event, execute, expire=None, spoken=False,
                  conversation_id=None, quota=None, attachments=(), wait_timeout_s=None, resume_session=True,
-                 rate_limit_waits=None, structured=None, alive=lambda: None, skills=(), no_tools=False, reply=None):
+                 rate_limit_waits=None, structured=None, alive=lambda: None, skills=(), no_tools=False, reply=None,
+                 owner_text=None, resume_user=None, context_sections=None, context_turns=(), context_summary="", turn_id=None):
         self.brains, self.sessions, self.member_id, self.model = brains, sessions, member_id, model
         # Told whenever the CLI does anything (a word, a tool): whoever watches for a stalled turn hears it.
         self.alive = alive
@@ -138,7 +161,7 @@ class CliLoop:
         # Only Claude Code asks through `approve` (its --permission-prompt-tool); Codex and Antigravity ask natively. Live,
         # a Codex model offered it called it itself to ask for permission: a question about no action at all.
         if structured is not None:
-            self.system = system + "\nThis is a tool-less memory pass. Return only JSON matching this schema:\n" + json.dumps(structured)
+            self.system = system + "\nThis is a tool-less structured turn. Return only JSON matching this schema:\n" + json.dumps(structured)
         if no_tools and structured is None:
             self.system = system + MESSAGE_RULES
         from ...worker.owner_input import OwnerInput
@@ -146,6 +169,15 @@ class CliLoop:
         self._steering = set()
         self.user = user
         self._original_user = user
+        self.owner_text = user if owner_text is None else owner_text
+        self.attachments = attachments
+        self.resume_user = resume_user
+        self.context_sections = context_sections or {}
+        self.context_turns, self.context_summary, self.turn_id = context_turns, context_summary, turn_id
+        self._context_state = {}
+        self._context_window = None
+        self._submitted_user = user
+        self._turn_user = user
         self.tools = [] if no_tools else list(tools) + ([APPROVE] if structured is None and (brain_ref(model) or ("",))[0] == "claude" else [])
         self.images = [attachment for attachment in attachments if attachment.is_image]
         self.progress, self.thinking, self.event, self.execute = progress, thinking, event, execute
@@ -166,6 +198,7 @@ class CliLoop:
         self._publish_reply, self._published, self._message_ids = reply, [], set()
         self._completed_buffer, self._separated = False, []
         self._thought = ""
+        self._final_nudged = False
         self._calls = 0
         self._acted = False
         self._session = None
@@ -199,7 +232,9 @@ class CliLoop:
     def _publish(self, text, *, final=False, previous=()):
         if self._publish_reply is None:
             return
-        reply = public_reply(text, self.language, plain=self.plain)
+        reply = (self._written_reply(text)
+                 if text.strip() and not self.spoken and self.structured is None
+                 else public_reply(text, self.language, plain=self.plain))
         if reply is None:
             return
         lines = reply.messages or [reply.text]
@@ -464,8 +499,32 @@ class CliLoop:
 
     def _recovery_user(self):
         owner_messages = [message["content"] for message in self.tool_messages if message["role"] == "user"]
-        request = "\n\n".join([self._original_user, *owner_messages])
+        base = f"<question>\n{self.owner_text}\n</question>" if self._session else self._turn_user
+        request = "\n\n".join([base, *owner_messages])
         return request + "\n\n" + RECOVER + "\n" + self._recovery_block()
+
+    def _fresh_user(self):
+        window = self._usage.get("context_window") or self._context_state.get("window") or self._context_window
+        if type(window) is not int or window <= 0:
+            window = DEFAULT_CONTEXT_TOKENS
+        self._context_window = window
+        user = fresh_user(self.owner_text, self.attachments,
+            [message["content"] for message in self.tool_messages if message["role"] == "user"],
+            RECOVER, self._recovery_block(8000), turns=self.context_turns,
+            summary=self.context_summary, sections=self.context_sections,
+            byte_limit=max(0, int(window * CONTEXT_HEADROOM) - len(self.system.encode("utf-8"))))
+        self._fresh_sections = {name: text for name, text in self.context_sections.items() if text and text in user}
+        return user
+
+    def _save_context(self):
+        if not self.resume_session or not self._session or self.resume_user is None:
+            return
+        state = {"turn": max([self.turn_id or 0, *(identifier for identifier, _ in self.context_turns)]),
+                 "sections": {name: line_hashes(text) for name, text in getattr(self, "_fresh_sections", self.context_sections).items()},
+                 "tokens": context_tokens(self._usage),
+                 "estimated_tokens": self._context_state.get("estimated_tokens", 0) + len(self._submitted_user.encode("utf-8")),
+                 "window": self._usage.get("context_window") or self._context_state.get("window") or self._context_window}
+        self.sessions.put_context(self.member_id, self.model, self._session, state, self.conversation_id)
 
     def _handed_off(self):
         """Whether the turn handed work off. If so, the task now waits for that work, however the turn ended:
@@ -508,30 +567,68 @@ class CliLoop:
                 await secure_directory(workspace)
                 async with RaphaelMcp(lambda: getattr(self, "refresh_tools", lambda: self.tools)(), self._tool) as server:
                     self._session = self.sessions.get(self.member_id, self.model, self.conversation_id) if self.resume_session else None
+                    if self.context_sections:
+                        self.user += "\n\n" + "\n\n".join(self.context_sections.values())
+                    if self._session and self.resume_user is not None:
+                        self._context_state = self.sessions.get_context(self.member_id, self.model, self._session, self.conversation_id) or {}
+                        self._context_window = self._context_state.get("window")
+                        # Old mappings have no delivery cursor. Rebuild once rather than replaying history into them.
+                        if not self._context_state:
+                            self.sessions.forget(self.member_id, self.model, self.conversation_id)
+                            self._session = None
+                        else:
+                            self.user = resumed_user(self.resume_user, self.context_sections, self.context_turns, self._context_state)
+                    self._submitted_user = self.user
+                    self._turn_user = self.user
+                    if should_compact(self._context_state, self.system, self.user):
+                        self.sessions.forget(self.member_id, self.model, self.conversation_id)
+                        self._session = None
+                        self._context_state = {}
+                        self._fresh_context = True
                     quick = tuple(RATE_LIMIT_WAITS_S if self.rate_limit_waits is None else self.rate_limit_waits)
                     outage = Outage(quick, (), patient_ok=False)
                     recovery_outage = None
                     told = False
                     recovering = False
-                    fresh_context = False
+                    fresh_context = getattr(self, "_fresh_context", False)
                     while True:
                         resumed = self._session is not None
                         failure = await self._attempt(name, command, model, server, self._session, workspace, recovering=recovering)
-                        if failure == "context_overflow" and resumed and not fresh_context:
+                        if self._final_nudged and failure not in (None, "tools_changed", "owner_input"):
+                            self._missing_terminal()
+                            failure = None
+                            break
+                        missing_session = bool(failure and self.failure_reason and re.search(
+                            r"no conversation found with session id|(?:session|conversation|thread)[^\n]{0,120}(?:not found|does not exist)",
+                            self.failure_reason.detail or self.failure_reason.reason, re.I))
+                        if missing_session:
+                            if not resumed or fresh_context:
+                                break
+                            # A deleted native history gets one fresh attempt with bounded receipts.
+                            self.sessions.forget(self.member_id, self.model, self.conversation_id)
+                            self._session = None
+                            self._context_state = {}
+                            fresh_context = self._fresh_context = True
+                            recovering = True
+                            continue
+                        if failure == "context_overflow" and not fresh_context:
                             # One bounded fresh attempt can escape an oversized native history without replaying effects.
                             self.sessions.forget(self.member_id, self.model, self.conversation_id)
                             self._session = None
+                            self._context_state = {}
                             fresh_context = self._fresh_context = True
                             recovering = True
-                            self.progress(with_ui_words({
-                                'zh-TW': '續接的對話內容過長，正在以簡短工作紀錄啟動新的工作階段。',
-                                'ja': '再開する履歴が長すぎるため、短い作業記録で新しいセッションを開始します。',
-                             "en": 'The resumed history is too long; starting a fresh session with a short work record.'}, lambda _ui_language: ui_word('The resumed history is too long; starting a fresh session with a short work record.', _ui_language)).get(self.language, 'The resumed history is too long; starting a fresh session with a short work record.'))
+                            if resumed:
+                                self.progress(with_ui_words({
+                                    'zh-TW': '續接的對話內容過長，正在以簡短工作紀錄啟動新的工作階段。',
+                                    'ja': '再開する履歴が長すぎるため、短い作業記録で新しいセッションを開始します。',
+                                    "en": 'The resumed history is too long; starting a fresh session with a short work record.'}, lambda _ui_language: ui_word('The resumed history is too long; starting a fresh session with a short work record.', _ui_language)).get(self.language, 'The resumed history is too long; starting a fresh session with a short work record.'))
                             continue
                         if failure in ("tools_changed", "owner_input"):
                             self.catalog_changed = False
-                            if failure == "tools_changed" and not self.user.startswith(self.reload_note):
-                                self.user = self.reload_note + "\n" + self.user
+                            if failure == "tools_changed":
+                                self.user = (FINAL_REPORT + "\n" + self._recovery_user() if self._final_nudged else
+                                    self.reload_note + "\n" + (RECOVER + "\n" + self._recovery_block() if self._session else self.user))
                             continue
                         if failure not in TRANSIENT:
                             break
@@ -561,8 +658,11 @@ class CliLoop:
                 frame = traceback.extract_tb(error.__traceback__)[-1]
                 logger.warning("CLI turn failed: %s at %s:%d", type(error).__name__, frame.name, frame.lineno)
                 if not self._handed_off():
-                    self.failure_reason = classify(error)
-                    self._failure(self.failure_reason.kind, NAMES[name])
+                    if self._final_nudged:
+                        self._missing_terminal()
+                    else:
+                        self.failure_reason = classify(error)
+                        self._failure(self.failure_reason.kind, NAMES[name])
             finally:
                 if self.driver:
                     await self.driver.interrupt()
@@ -584,13 +684,20 @@ class CliLoop:
                 if pending:
                     self.user += "\n\n" + "\n\n".join(message["content"] for message in pending)
                 if getattr(self, '_fresh_context', False):
-                    owner = '\n\n'.join(message['content'] for message in self.tool_messages if message['role'] == 'user')
-                    user = self._original_user[-4000:] + '\n\n' + owner[-4000:] + "\n\n" + RECOVER + "\n" + self._recovery_block(8000)
+                    user = self._fresh_user()
+                    if self._final_nudged:
+                        user = FINAL_REPORT + "\n\n" + user
                 else:
                     user = self._recovery_user() if recovering else self.user
+                self._submitted_user = user
             with StreamSteps(lambda: self.activity_turn) as steps:
                 self.catalog_changed = False
                 return await self._stream_attempt(name, command, model, server, session, workspace, steps, user=user)
+        except ValueError as error:
+            if str(error) != "context_overflow":
+                raise
+            self.failure_reason = classify("context_overflow")
+            return "context_overflow"
         except (EOFError, ConnectionError, asyncio.IncompleteReadError) as error:
             if self._handed_off():
                 return None
@@ -602,11 +709,13 @@ class CliLoop:
         """Run the CLI once for this turn: None once its answer is queued, else why it failed."""
         self._buffer = self._thought = ""
         self._completed_buffer, self._separated = False, []
+        self._usage = {}
         if getattr(self,"speech_only",False) and name == "claude":
             command = [*command,"--max-turns",str(getattr(self,"speech_max_turns",4))]
         self.driver = Driver(name, command, model=model, effort=brain_effort(self.model), environ=self.brains.environ, quota=self.quota, home=self.brains.home)
         stream_records = {}
         async with aclosing(self.driver.run(user=user, system=self.system, endpoint=server.url,
+                fresh_context=self._fresh_user,
                 **({"skills": self.skills} if self.skills else {}),
                 **({"structured": self.structured} if self.structured is not None else {}),
                 **({"no_tools": True} if self.no_tools else {}),
@@ -622,6 +731,9 @@ class CliLoop:
                     self._session = event.text
                     if self.resume_session:
                         self.sessions.put(self.member_id, self.model, event.text, self.conversation_id)
+                elif event.kind == "context_reset":
+                    self._context_state = {}
+                    self._submitted_user = self._fresh_user()
                 elif event.kind == "model":
                     self.actual_model = event.text
                 elif event.kind == "text_delta":
@@ -637,11 +749,12 @@ class CliLoop:
                         self._buffer = parts[-1]
                 elif event.kind == "message" and self._publish_reply is not None:
                     key = (self._attempts, event.data.get("id"))
+                    public = bool(event.data.get("final") or public_reply(event.text, self.language, plain=self.plain, explicit=True))
                     if not key[1] or key not in self._message_ids:
-                        if event.data.get("final") or public_reply(event.text, self.language, plain=self.plain, explicit=True):
+                        if public:
                             self._publish(event.text, previous=self._separated)
                         self._message_ids.add(key)
-                    self._buffer = event.text
+                    self._buffer = "" if public else event.text
                     self._completed_buffer, self._separated = True, []
                 elif event.kind == "thinking":
                     self._thought = (self._thought + event.text)[-240:]
@@ -690,19 +803,36 @@ class CliLoop:
                             self.catalog_changed = True
                             return "tools_changed"
                         self._publish(final, final=True)
+                        self._save_context()
                         self._buffer = ""
                         self.owner_input.closed = True
                         self._queue.put_nowait(Outcome("done", final=final))
                         return None
                     self._progress()
-                    self.failure_reason = classify("CLI ended without an answer")
-                    return self.failure_reason.kind
+                    return self._missing_terminal()
         if self._handed_off():
             return None
         if self.catalog_changed:
             return "tools_changed"
+        if self._final_nudged:
+            return self._missing_terminal()
         self.failure_reason = Failure("cli_stopped", "CLI stream ended before completion")
         return "cli_stopped"
+
+    def _missing_terminal(self):
+        if not self._final_nudged:
+            self._final_nudged = True
+            self.no_tools, self.tools = True, []
+            self.reload_note = FINAL_REPORT
+            self.catalog_changed = True
+            return "tools_changed"
+        self.owner_input.closed = True
+        if self._published:
+            self._save_context()
+            self._queue.put_nowait(Outcome("done", final="\n<<<next message>>>\n".join(self._published)))
+            return None
+        self._queue.put_nowait(Outcome("stopped", kind="missing_terminal"))
+        return None
 
     async def _native_permission(self, args):
         if self.no_tools:
@@ -715,4 +845,16 @@ class CliLoop:
             return decision
 
     def reply(self, outcome):
-        return parse_reply(outcome.final, self.language, plain=self.plain, long=True)
+        text = outcome.final
+        if outcome.kind == "missing_terminal" and not text:
+            self.failure = "cli_stopped"
+            text = Failure("cli_stopped", "CLI ended without an answer after the wrap-up ask").sentence(
+                NAMES[brain_ref(self.model)[0]], self.language)
+        return self._written_reply(text)
+
+    def _written_reply(self, text):
+        literal = not self.spoken and self.structured is None
+        if literal and len(parts := message_parts(text)) > 1:
+            # Split authored boundaries before normalizing each persona frame. JSON and fenced code stay literal.
+            text = {"messages": parts}
+        return parse_reply(text, self.language, plain=self.plain, long=True, literal=literal)

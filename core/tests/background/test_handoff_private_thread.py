@@ -41,7 +41,7 @@ async def test_work_has_private_replies_steps_and_a_separate_ordered_exchange(ma
         rig.service.use_cli(object())
         async def work(loop):
             captured.append(loop.system + loop.user)
-            loop._publish(json.dumps({"messages": [opening]}), final=True)
+            loop._publish(opening, final=True)
             assert (await loop._tool("check", "Notes__look", {"topic": "source"})).ok
             loop._queue.put_nowait(Outcome("done", final=full))
         monkeypatch.setattr(CliLoop, "_work", work)

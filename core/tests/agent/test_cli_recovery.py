@@ -89,7 +89,8 @@ async def test_oversized_resumed_history_gets_one_fresh_bounded_attempt(monkeypa
 
     rig = recovery_rig(monkeypatch, tmp_path, play)
     rig.loop.sessions.put(5, rig.loop.model, "oversized-session", 7)
-    rig.loop.user = rig.loop._original_user = "Earlier context. " * 100000 + " Check the saved draft."
+    rig.loop.owner_text = "Check the saved draft."
+    rig.loop.user = rig.loop._original_user = "Earlier context. " * 1000 + " Check the saved draft."
     result = await rig.loop.run()
     assert len(rig.calls) == 2 and len(rig.effects) == 1
     assert rig.calls[0]["session"] == "oversized-session" and rig.calls[1]["session"] is None
@@ -99,6 +100,61 @@ async def test_oversized_resumed_history_gets_one_fresh_bounded_attempt(monkeypa
     assert (rig.loop.failure == "context_overflow") == fails_again
     if not fails_again:
         assert result.final == "Checked the saved draft."
+
+
+@pytest.mark.parametrize("fails_again", [False, True])
+async def test_missing_claude_resume_gets_one_fresh_bounded_attempt(monkeypatch, tmp_path, fails_again):
+    async def play(loop, attempt):
+        if attempt == 1:
+            await loop._tool("save", "save_draft", {"path": "draft.txt"})
+        if attempt == 1 or fails_again:
+            yield Event("error", {"kind": "cli_stopped", "message": "CLI process ended before completion",
+                "detail": "stderr:\nNo conversation found with session ID: missing"})
+        else:
+            yield Event("final", "Checked the saved draft.")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain="claude")
+    rig.loop.sessions.put(5, rig.loop.model, "missing", 7)
+    rig.loop.owner_text = "Check the saved draft."
+    rig.loop.user = rig.loop._original_user = "Earlier context. " * 1000 + rig.loop.owner_text
+    result = await rig.loop.run()
+    assert len(rig.calls) == 2 and len(rig.effects) == 1
+    assert rig.calls[0]["session"] == "missing" and rig.calls[1]["session"] is None
+    assert rig.loop.sessions.get(5, rig.loop.model, 7) is None
+    prompt = rig.calls[1]["user"]
+    assert len(prompt) < 18000
+    assert all(text in prompt for text in ("Check the saved draft.", "Saved receipt 17", "Do not repeat"))
+    assert (rig.loop.failure == "cli_stopped") == fails_again
+    if not fails_again:
+        assert result.final == "Checked the saved draft."
+
+
+async def test_turns_sharing_a_native_session_are_serialized(monkeypatch, tmp_path):
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def play(loop, attempt):
+        if attempt == 1:
+            entered.set()
+            await release.wait()
+        yield Event("final", "Finished.")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain="claude")
+    second_loop = cli.CliLoop(
+        brains=rig.loop.brains, sessions=rig.loop.sessions, member_id=5, conversation_id=7,
+        model="cli:claude:fake", ledger=SimpleNamespace(add=lambda **kwargs: None), language="en", plain=True,
+        system="Keep the owner's scope.", user="A second task.", tools=[], progress=lambda text: None,
+        thinking=lambda text: None, event=lambda value: None, execute=rig.loop.execute)
+    first = asyncio.create_task(rig.loop.run())
+    await asyncio.wait_for(entered.wait(), 5)
+    # Two turns for the same persistent session cannot start native children concurrently.
+    second = asyncio.create_task(second_loop.run())
+    try:
+        await asyncio.sleep(.05)
+        assert len(rig.calls) == 1
+    finally:
+        release.set()
+        await asyncio.gather(first, second)
+    assert len(rig.calls) == 2
 
 
 async def test_recovery_lists_current_connections_without_replaying_a_completed_call(monkeypatch, tmp_path):
@@ -147,7 +203,7 @@ async def test_recovery_is_bounded_and_final_failure_accounts_for_work(monkeypat
     assert rig.events == [] and rig.loop.failure == "overloaded"
 
 
-@pytest.mark.parametrize("failure", ["auth_expired", "usage_limit", "credits", "context_overflow"])
+@pytest.mark.parametrize("failure", ["auth_expired", "usage_limit", "credits"])
 async def test_permanent_failure_after_work_stops_immediately(monkeypatch, tmp_path, failure):
     async def play(loop, attempt):
         await loop._tool("save", "save_draft", {})

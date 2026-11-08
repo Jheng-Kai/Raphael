@@ -1,11 +1,14 @@
 """HTTP boundary with deliberately value-free failures and diagnostics."""
 
+import asyncio
 import logging
 import zlib
 from typing import Any
 
 import httpx
 from ..failures import classify
+
+REQUEST_TIMEOUT_S = 20.0
 
 
 class ConnectorFailure(Exception):
@@ -34,7 +37,9 @@ class PrivateHttp:
     async def response(self, method: str, url: str, *, max_bytes: int | None = None, **kwargs: Any) -> httpx.Response:
         try:
             headers = {"Accept-Encoding": "gzip"} if max_bytes is not None else None
-            async with httpx.AsyncClient(transport=self.transport, timeout=20, follow_redirects=False, headers=headers) as client:
+            async with asyncio.timeout(REQUEST_TIMEOUT_S), httpx.AsyncClient(
+                transport=self.transport, timeout=REQUEST_TIMEOUT_S, follow_redirects=False, headers=headers
+            ) as client:
                 if max_bytes is not None:
                     async with client.stream(method, url, **kwargs) as response:
                         encoding = response.headers.get("content-encoding", "identity").lower().strip()
@@ -68,7 +73,7 @@ class PrivateHttp:
                 response = await client.request(method, url, **kwargs)
         except ConnectorFailure:
             raise
-        except httpx.TimeoutException:
+        except (TimeoutError, httpx.TimeoutException):
             raise ConnectorFailure("timeout") from None
         except Exception:
             raise ConnectorFailure("network") from None

@@ -13,7 +13,7 @@ from raphael_core.protocol import INVALID_PARAMS, RpcError
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 32
 WEBP = b"RIFF\x10\0\0\0WEBPVP8 " + b"\0" * 16
 METHODS = {
-    "members.list", "members.create", "members.update", "members.delete", "members.set_avatar",
+    "members.list", "members.create", "members.update", "members.delete", "members.set_avatar", "members.set_cover",
     "members.read", "members.viewing", "members.tool_choices",
     "groups.create", "groups.update", "groups.delete",
     "routines.list", "routines.create", "routines.update", "routines.delete", "routines.template",

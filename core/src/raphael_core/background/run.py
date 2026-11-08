@@ -85,7 +85,7 @@ from ..retry_utils import MODEL_SILENCE_S, Outage
 from ..services.attachments import Attachment
 from ..services.urls import SeenUrls
 from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_window, smaller_output
-from ..worker.loop import MORE_ROOM, REPLY_TOKENS, WAITING, WRAP_UP, ToolOutcome, result_text
+from ..worker.loop import MORE_ROOM, REPLY_TOKENS, WAITING, WRAP_UP, FINAL_REPORT, ToolOutcome, result_text
 from ..members.activity import current, tool_step
 from ..own_calendar import CalendarError
 from .snapshot import BUILTIN, FIND, MCP, Snapshot, ToolRef
@@ -494,7 +494,7 @@ class TaskRun:
             else:
                 request_chars += len(json.dumps(message, ensure_ascii=False))
         async with self._turn:
-            if messages[-1].get("role") == "user" and messages[-1].get("content") == WRAP_UP:
+            if messages[-1].get("role") == "user" and messages[-1].get("content") in (WRAP_UP, FINAL_REPORT):
                 return await self._wrap_up(messages, request_chars)
             # A conversation's length is the worker's to keep to the window (`worker.context`), and the provider's
             # to refuse: it is no reason to stop a job. Screenshots have no window to answer to.

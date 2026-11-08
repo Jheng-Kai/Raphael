@@ -5,6 +5,7 @@ from ..agent.cli import loop as cli_loop
 from ..agent.cli.loop import CliLoop
 from ..protocol import RpcError
 from ..worker.loop import WRAP_UP, Stop, ToolOutcome
+from ..worker.guards import wrap_untrusted
 from ..computer.local_tools import is_local, BACKGROUND_WAIT_S
 
 # How many calls a task that reached a ceiling may make after being asked to report, before it is ended.
@@ -18,6 +19,7 @@ class RoomCliSessions:
         self.locks = {}
         self.conversations = SimpleNamespace(resolve=lambda member, conversation: conversation)
         self._sessions = {}
+        self._contexts = {}
 
     def get(self, member, brain, conversation_id=None):
         return self._sessions.get((member, brain, conversation_id))
@@ -27,6 +29,15 @@ class RoomCliSessions:
 
     def forget(self, member, brain, conversation_id=None):
         self._sessions.pop((member, brain, conversation_id), None)
+        self._contexts.pop((member, brain, conversation_id), None)
+
+    def get_context(self, member, brain, session, conversation_id=None):
+        saved_session, state = self._contexts.get((member, brain, conversation_id), (None, None))
+        return state if saved_session == session else None
+
+    def put_context(self, member, brain, session, state, conversation_id=None):
+        if self.get(member, brain, conversation_id) == session:
+            self._contexts[(member, brain, conversation_id)] = (session, state)
 
 
 def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
@@ -73,12 +84,14 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
         elif outcome.tools:
             # Tools find_tools showed: the loop lists them, and the CLI starts again to read its list.
             loop.tools.extend(outcome.tools)
-            loop.reload_note, loop.catalog_changed = cli_loop.TOOLS_FOUND, True
+            loop.reload_note = cli_loop.TOOLS_FOUND + '\n' + wrap_untrusted('find_tools', outcome.content, ok=outcome.ok)
+            loop.catalog_changed = True
         return outcome
 
     loop = CliLoop(brains=brains, sessions=RoomCliSessions(), member_id=task.member_id,
         conversation_id=f"room-task-{task.id}", model=run.model, ledger=run.ledger,
         language=task.language, plain=True, system=spec["system"], user=spec["user"],
+        owner_text=task.text,
         tools=spec["tools"], skills=spec.get("skills", ()), attachments=run.attachments, progress=progress,
         thinking=lambda text: None, event=progress, reply=getattr(run, "_reply", None), execute=execute, quota=quota, wait_timeout_s=wait_s,
         rate_limit_waits=cli_loop.ROOM_RATE_LIMIT_WAITS_S, alive=run.touch)
