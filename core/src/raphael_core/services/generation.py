@@ -46,6 +46,26 @@ class Generation:
             rows.append(extra)
         return rows
 
+    async def refresh_image_choices(self, reference):
+        """Read missing image metadata once, without submitting a generation or changing the choice."""
+        selected, _ = split_api_ref(reference)
+        pid, _ = self.providers.resolve(selected)
+        try:
+            await self.providers.discover(pid)
+            return self.media_choices("image", reference)
+        except OpenRouterError as error:
+            kind = "network" if error.kind in ("offline", "network") else error.kind if error.kind in (
+                "timeout", "auth", "credits", "rate_limit", "content_policy") else "catalog_unavailable"
+            raise ServiceError(kind) from None
+        except (TimeoutError, httpx.TimeoutException):
+            raise ServiceError("timeout") from None
+        except httpx.TransportError:
+            raise ServiceError("network") from None
+        except (ValueError, KeyError, TypeError, OSError):
+            raise ServiceError("catalog_unavailable") from None
+        except Exception:
+            raise ServiceError("catalog_unavailable") from None
+
     def _client(self):
         if self._http is None:
             self._http = httpx.AsyncClient(transport=self._transport, trust_env=False)

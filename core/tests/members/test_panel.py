@@ -45,9 +45,33 @@ def test_reply_files_screenshots_and_links_require_explicit_delivery(conn, tmp_p
     history, identifier = turn(conn)
     history.add_message(identifier, 'reply', '[Screenshot](screenshot.png) [Notes](notes.md) [Site](https://example.com/result)')
     result = snapshot(conn, 0, [('workspace', tmp_path)])
-    assert {item['name'] for item in result['files']} == {'Screenshot', 'Notes', 'Site'}
-    assert {item['kind'] for item in result['files']} == {'image', 'document', 'link'}
+    assert {item['name'] for item in result['files']} == {'Screenshot', 'Notes'}
+    assert {item['kind'] for item in result['files']} == {'image', 'document'}
     assert all(item['turn_id'] == identifier for item in result['files'])
+
+
+def test_reply_links_and_url_only_pages_do_not_fill_the_library_or_paging(conn):
+    history, identifier = turn(conn, text='[Old result](https://example.com/old)')
+    history, current = turn(conn, at=2000)
+    history.add_message(current, 'reply', ' '.join(
+        f'[View result {index}](https://example.com/pages/{index})' for index in range(105)))
+    media(history, current, 'Delivered screenshot.png')
+    result = snapshot(conn, 0, limit=1)
+    assert len(result['files']) == 1 and not result['has_more']
+    assert result['files'][0]['attachment_id'] == 'a' * 32 + '.png'
+    assert result['files'][0]['kind'] == 'image'
+
+
+@pytest.mark.parametrize('target', ['attachment:{key}', '{key}', 'attachments/{key}'])
+def test_screenshot_embedded_in_reply_keeps_attachment_and_turn(conn, target):
+    key = 'b' * 32 + '.png'
+    history, identifier = turn(conn)
+    history.add_message(identifier, 'reply', f'Here is the screen: ![YouTube screenshot]({target.format(key=key)})')
+    files = snapshot(conn, 0)['files']
+    assert len(files) == 1
+    assert files[0]['kind'] == 'image' and files[0]['attachment_id'] == key
+    assert files[0]['turn_id'] == identifier
+    assert files[0]['thumbnail'] == {'method': 'attachments.path', 'params': {'id': key}}
 
 
 def test_pages_and_legacy_replies_retain_turn_and_original_delivery_date(conn, tmp_path):

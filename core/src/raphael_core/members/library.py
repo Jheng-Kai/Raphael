@@ -89,6 +89,12 @@ def snapshot(conn, member, workspaces=(), limit=12, *, output_folder='', tz=None
         if paths is not None:
             paths[identifier] = (path, receipt)
 
+    def attachment(key, name, mime, row, at_ms):
+        if not isinstance(key, str) or not ID.fullmatch(key) or not isinstance(name, str) or not isinstance(mime, str):
+            return
+        keep('attachment:' + key, identifier='attachment:' + key, name=name, mime=mime, row=row,
+             at_ms=at_ms, attachment_id=key, open={'method': 'attachments.path', 'params': {'id': key}})
+
     # Owner uploads live in agent_turns.attachments and are deliberately not read.
     for row in conn.execute(
         "SELECT m.kind,m.text,m.at_ms,t.id AS turn_id,t.conversation_id FROM agent_messages m "
@@ -98,16 +104,12 @@ def snapshot(conn, member, workspaces=(), limit=12, *, output_folder='', tz=None
             try:
                 payload = json.loads(row['text'])
                 file = payload['attachment']
-                key, name, mime = file['id'], file['name'], file['mime']
-                if not isinstance(key, str) or not ID.fullmatch(key) or not isinstance(name, str) or not isinstance(mime, str):
-                    continue
-                keep('attachment:' + key, identifier='attachment:' + key, name=name, mime=mime, row=row,
-                     at_ms=row['at_ms'], attachment_id=key, open={'method': 'attachments.path', 'params': {'id': key}})
+                attachment(file['id'], file['name'], file['mime'], row, row['at_ms'])
             except (ValueError, TypeError, KeyError):
                 continue
         else:
             for title, link in _links(row['text']):
-                _reply_link(link, title, roots, local_file, keep, row, row['at_ms'])
+                _reply_link(link, title, roots, local_file, attachment, row, row['at_ms'])
 
     # Older turns can predate the durable reply-message stream.
     for row in conn.execute(
@@ -116,7 +118,7 @@ def snapshot(conn, member, workspaces=(), limit=12, *, output_folder='', tz=None
         "AND NOT EXISTS(SELECT 1 FROM agent_messages m WHERE m.turn_id=t.id AND m.kind='reply') "
         "ORDER BY t.id DESC LIMIT ?", (member, SCAN_LIMIT)):
         for title, link in _links(row['text']):
-            _reply_link(link, title, roots, local_file, keep, row, row['at_ms'])
+            _reply_link(link, title, roots, local_file, attachment, row, row['at_ms'])
 
     for row in conn.execute(
         "SELECT p.id,p.title,p.turn_id,p.conversation_id,p.created_at_ms FROM pages p JOIN agent_turns t ON t.id=p.turn_id "
@@ -147,15 +149,17 @@ def snapshot(conn, member, workspaces=(), limit=12, *, output_folder='', tz=None
     return dict(files=ordered[:limit], has_more=len(ordered) > limit and limit < 100)
 
 
-def _reply_link(link, title, roots, local_file, keep, row, at_ms):
+def _reply_link(link, title, roots, local_file, attachment, row, at_ms):
     try:
+        key = link.removeprefix('attachment:').removeprefix('attachments/')
+        if ID.fullmatch(key):
+            attachment(key, title or key, mimetypes.guess_type(key)[0] or 'application/octet-stream', row, at_ms)
+            return
         url = urlsplit(link)
+        # A URL alone is not a delivered file or a published page.
         if url.scheme in ('http', 'https'):
-            if url.hostname and url.username is None and url.password is None:
-                keep('url:' + link, identifier='link:' + hashlib.sha256(link.encode()).hexdigest()[:32],
-                     name=title or link, mime='text/uri-list', kind='link', row=row, at_ms=at_ms, url=link,
-                     open={'url': link})
-        elif path := _local(link, roots):
+            return
+        if path := _local(link, roots):
             local_file(path, title, row, at_ms)
     except ValueError:
         return
