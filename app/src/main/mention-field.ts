@@ -8,8 +8,17 @@ import { esc } from "./ui";
 import { linkRanges, shortenLinks, wholeLinks } from "./composer-links";
 import { mentionChipHTML, mentionRanges, type MentionTarget } from "./mention-text";
 
-/** A stretch of the words drawn as a chip: an address when it has a target, otherwise a link. */
+/** A stretch of the words drawn as a chip: an address when it has a target, otherwise a link or a skill. */
 interface ChipRange { start: number; end: number; target?: MentionTarget }
+
+/** A skill or command called by its name, `/name`, at the start of the words or after a space (owner, 2026-11-08: it is
+ * blue like a link). A path such as /usr/bin is not one: the name ends at a space or the end of the words. */
+export function skillRanges(text: string): ChipRange[] {
+  return [...text.matchAll(/(^|\s)(\/[A-Za-z0-9][\w-]{0,63})(?=\s|$)/gu)].map(match => {
+    const start = match.index! + match[1]!.length;
+    return { start, end: start + match[2]!.length };
+  });
+}
 
 export interface MentionField { refresh(): void }
 
@@ -34,7 +43,9 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
     // Long restored/typed drafts use the textarea's own paint instead of a second large DOM.
     if (text.length >= 2000) { ranges = []; field.classList.remove("has-mentions"); mirror.textContent = ""; return; }
     const links = linkRanges(text), mentions = /[@＠]/u.test(text) ? mentionRanges(text, targets()) : [];
-    ranges = [...links, ...mentions.filter(item => !links.some(link => link.start < item.end && item.start < link.end))].sort((a, b) => a.start - b.start);
+    const free = (item: ChipRange, taken: readonly ChipRange[]): boolean => !taken.some(other => other.start < item.end && item.start < other.end);
+    const chips = [...links, ...mentions.filter(item => free(item, links))];
+    ranges = [...chips, ...(text.includes("/") ? skillRanges(text).filter(item => free(item, chips)) : [])].sort((a, b) => a.start - b.start);
     field.classList.toggle("has-mentions", ranges.length > 0);
     if (!ranges.length) { mirror.textContent = ""; return; }
     let html = "", at = 0;

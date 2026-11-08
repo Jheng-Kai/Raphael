@@ -11,7 +11,8 @@
 .store-entry .store-summary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .store-entry > button { align-self: center; }
 .template-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 0; }
-.template-preview { width: min(calc(600px + 2 * var(--pa-dlg-pad)), calc(100vw - 32px)); }
+/* As narrow as Grok Bot's template review (owner, 2026-11-08: the dialogs were too wide). */
+.template-preview { width: min(calc(480px + 2 * var(--pa-dlg-pad)), calc(100vw - 32px)); }
 .template-preview .mb-dlg-body { align-content: start; }
 .template-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .template-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }

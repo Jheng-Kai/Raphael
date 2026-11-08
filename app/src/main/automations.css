@@ -6,7 +6,7 @@
 .mb-scrim:has(> .au-routine-dialog) { overflow-y: auto; scrollbar-width: none; place-items: start center; }
 .mb-scrim > .au-routine-dialog { margin-block: auto; }
 /* Wide and short (owner, 2026-11-07): what it does on the left, when it runs on the right; one column when narrow. */
-.au-routine-dialog.mb-dialog { width: min(880px, calc(100vw - 40px)); max-height: none; overflow: visible; }
+.au-routine-dialog.mb-dialog { width: min(640px, calc(100vw - 40px)); max-height: none; overflow: visible; }
 .au-routine-dialog .mb-dlg-body { display: flex; flex-direction: column; flex: none; overflow: visible; gap: var(--sp-4); padding: var(--sp-5) var(--sp-5); }
 .au-routine-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: var(--sp-6, 32px); align-items: start; }
 .au-col { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }

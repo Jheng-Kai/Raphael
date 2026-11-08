@@ -38,6 +38,16 @@ test("the words become chips only where they address someone, and then the texta
   expect(mirror.textContent!.replace("​", "")).toBe("hi @小森 and @Nobody and @Notion ");
 });
 
+test("a skill called by its name is a blue chip like a link, and a path is not (owner, 2026-11-08)", () => {
+  typeText("/poteto-mode 幫我看一下 /usr/bin/node");
+  expect(chips()).toEqual(["/poteto-mode"]);
+  expect(mirror.querySelector(".url-chip")!.textContent).toBe("/poteto-mode");
+  typeText("先 /research-summary 再說");
+  expect(chips()).toEqual(["/research-summary"]);
+  typeText("a/b 不是");
+  expect(chips()).toEqual([]);
+});
+
 test("every write of the words redraws them: a restored draft, a send that empties the field, a paste", () => {
   input.value = "請 @小晴 幫忙";
   expect(chips()).toEqual(["@小晴"]);

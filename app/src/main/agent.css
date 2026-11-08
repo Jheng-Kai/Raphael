@@ -43,7 +43,7 @@
   --pa-chat-pad: calc(24px + 8 * var(--pa-u));
   --pa-colw: var(--layout-thread-max);
   --pa-bw: 60ch;
-  --pa-ctl: calc(34px + 10 * var(--pa-u));
+  --pa-ctl: calc(30px + 4 * var(--pa-u));
   --pa-pill-h: calc(32px + 20 * var(--pa-u));
   --pa-pill-av: calc(22px + 14 * var(--pa-u));
   --pa-pill-fs: var(--fs-sm);

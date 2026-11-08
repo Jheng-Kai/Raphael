@@ -23,7 +23,8 @@
   --fs-2xs: 12px; --fs-xs: 13px; --fs-sm: 14px; --fs-md: 15px; --fs-lg: 18px; --fs-h1: 22px;
   --weight-regular: 400; --weight-medium: 500; --weight-semibold: 500;
   --r-sm: 8px; --r-md: 12px; --r-lg: 12px; --r-pill: 999px;
-  --h-ctl: 34px; --h-ctl-sm: 28px; --h-row: 48px; --h-tab: 26px;
+  /* Controls are slim, as Grok Bot's (owner, 2026-11-08: 「button 都太胖了，能變小就變小」). */
+  --h-ctl: 30px; --h-ctl-sm: 26px; --h-row: 48px; --h-tab: 26px;
   /* official brand colours of service logos: the only colours outside the app palette */
   --brand-telegram: #26a5e4;
   /* marks drawn over a photo (the picture crop frame): one set for both themes, as the photo under them is the same */
@@ -259,7 +260,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .sel:disabled { opacity: 0.55; cursor: default; }
 .sel:disabled:hover { border-color: var(--btn-edge); }
 .sel .i { color: var(--text-2); }
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); min-height: var(--h-ctl); padding: var(--sp-1) var(--sp-3); border-radius: var(--r-sm); border: 1px solid var(--btn-edge); background: var(--btn); font-size: var(--fs-sm); line-height: 1.4; color: var(--text); white-space: nowrap; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); min-height: var(--h-ctl); padding: 3px calc(var(--sp-2) + 2px); border-radius: var(--r-sm); border: 1px solid var(--btn-edge); background: var(--btn); font-size: var(--fs-xs); line-height: 1.4; color: var(--text); white-space: nowrap; }
 /* Every action is a button with a shape: an edge at rest, a fill under the pointer, a deeper one
    when pressed. Never a word alone that can be clicked. */
 .btn:hover:not(:disabled) { background: var(--hover); }
