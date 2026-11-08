@@ -71,7 +71,7 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
         conversation_id=f"room-task-{task.id}", model=run.model, ledger=run.ledger,
         language=task.language, plain=True, system=spec["system"], user=spec["user"],
         tools=spec["tools"], skills=spec.get("skills", ()), attachments=run.attachments, progress=progress,
-        thinking=lambda text: None, event=progress, execute=execute, quota=quota, wait_timeout_s=wait_s,
+        thinking=lambda text: None, event=progress, reply=getattr(run, "_reply", None), execute=execute, quota=quota, wait_timeout_s=wait_s,
         rate_limit_waits=cli_loop.ROOM_RATE_LIMIT_WAITS_S, alive=run.touch)
     def refresh_tools():
         run.snapshot.refresh_plugins(run._gate.plugins, task.member_id)

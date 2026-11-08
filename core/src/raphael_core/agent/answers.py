@@ -290,6 +290,20 @@ def loose_reply(text: str) -> dict | None:
 MESSAGE_BREAK = "<<<next message>>>"
 
 
+def message_parts(text: str) -> list[str]:
+    """Split explicit public message boundaries outside authored code fences."""
+    parts, current, fenced = [], [], False
+    for line in text.splitlines(keepends=True):
+        if not fenced and line.strip() == MESSAGE_BREAK:
+            parts.append("".join(current))
+            current = []
+            continue
+        current.append(line)
+        if _REPLY_OPEN.sub("", line.lstrip()).startswith(("```", "~~~")):
+            fenced = not fenced
+    return [*parts, "".join(current)]
+
+
 def split_messages(text):
     """Keep complete paragraphs and code blocks; a large block remains whole."""
     if not text:
@@ -333,7 +347,7 @@ def _reply_input(value: str, default_prefix: str | None = None) -> dict:
             raise AgentFailure("error") from None
     if re.match(r'^```(?:json)?\s*[\{\[]', text) and text.count("```") == 1:
         raise AgentFailure("error")
-    parts = [part.strip() for part in re.split(rf"^\s*{re.escape(MESSAGE_BREAK)}\s*$", text, flags=re.M) if part.strip()]
+    parts = [part.strip() for part in message_parts(text) if part.strip()]
     return {"prefix": default_prefix, "text": text, "messages": parts}
 
 
@@ -413,6 +427,51 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
         say_ja=japanese_line(data.get("say_ja")),
         messages=messages,
     )
+
+
+def public_reply(content: str, language: str, *, plain: bool = False) -> Reply | None:
+    """Read complete public speech only, never a narration-only or unfinished protocol object."""
+    text = content.strip()
+    if not text:
+        return None
+    envelope = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n?```", text, re.S)
+    candidate = envelope[1].strip() if envelope else text
+    try:
+        value = json.loads(candidate)
+    except ValueError:
+        if candidate.startswith(("{", "[")) or text.startswith("```json"):
+            return None
+        value = text
+    if isinstance(value, dict) and not ("text" in value or "messages" in value):
+        return None
+    try:
+        reply = parse_reply(value, language, plain=plain, long=True)
+    except AgentFailure:
+        return None
+    return reply if reply.text else None
+
+
+def pending_replies(previous: Sequence[str], messages: Sequence[str]) -> list[str]:
+    """Remove only an ordered terminal echo, preserving separately authored repeated messages."""
+    from ..messaging.words import plain_replies
+    before, after = ([text.strip() for text in plain_replies(items)] for items in (previous, messages))
+    for overlap in range(min(len(before), len(after)), 0, -1):
+        if before[-overlap:] == after[:overlap]:
+            return list(messages[overlap:])
+    if after:
+        # Some CLI results concatenate their completed messages instead of returning an array.
+        for overlap in range(len(before), 0, -1):
+            prefix = "\n\n".join(before[-overlap:])
+            if after[0] == prefix:
+                return list(messages[1:])
+            if after[0].startswith(prefix + "\n\n"):
+                rest = after[0][len(prefix) + 2:]
+                original = messages[0].strip()
+                frame = _REPLY_FRAME.fullmatch(original)
+                if frame:
+                    rest = original[:frame.start(2)] + rest + original[frame.end(2):]
+                return [rest, *messages[1:]]
+    return list(messages)
 
 
 def _with_sources(detail: str | None, tools: Sequence[ToolResult], language: str) -> str | None:

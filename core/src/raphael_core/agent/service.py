@@ -455,9 +455,9 @@ class _Ask:
     replies: list[str] = field(default_factory=list)
     ledger: Ledger | None = None
     # Whether Raphael will say the answer aloud (`AgentService._voiced`): then the model is asked
-    # for its Japanese rendering too, and the turn is announced to the app when the voice is ready.
+    # for its Japanese rendering too; completion waits for the voice, while public messages remain live.
     voiced: bool = False
-    # The turn whose announcement to the app is held until the voice is ready (`_turn_changed`).
+    # The turn whose terminal announcement is held until the voice is ready (`_turn_changed`).
     held: int | None = None
     member_creates: int = 0
     quick: bool = False
@@ -667,8 +667,9 @@ class AgentService:
     Raphael himself at this computer (spoken or typed) is said aloud, with its prefix, in Japanese
     (the voice speaks nothing else: the line itself on a Japanese screen, else a fixed phrase's
     Japanese wording or the Japanese the answer model wrote in the same call), and the reply is
-    returned, and its turn announced to the app, when the voice is ready to begin (at most
-    `speaker.FIRST_AUDIO_WAIT_S` later; with no voice that can be heard nothing waits). A member's
+    returned, and its terminal status announced to the app, when the voice is ready to begin (at most
+    `speaker.FIRST_AUDIO_WAIT_S` later; with no voice that can be heard nothing waits). Complete public
+    messages are stored and announced as they arrive, before speech readiness. A member's
     reply, an exchange between members, a routine's result, a cancel, a denial, a question that ran out, a request from a messaging app, a report of the background
     worker and a question waiting for a yes are not. Any new request at this computer
     and `agent.cancel` stop what is being said.
@@ -1598,6 +1599,10 @@ class AgentService:
         if self._memory is None or not reply.wants_lookup:
             return reply, tools
         shown = [turn.id for turn in context.turns if turn.id is not None]
+        if reply.text:
+            if not ask.turn_id:
+                self._record(ask, route, "", "", "running", None, ledger)
+            self._publish_reply(ask, reply)
         found = [*tools, *self._look_up(ask, reply, shown)]
         again = await word(found, True)
         if not again.memory:
@@ -1695,6 +1700,9 @@ class AgentService:
             text = phrase(language, "secret_not_kept" if secret else "not_remembered")
         if not text:
             raise AgentFailure("error")  # a lookup and nothing after it, or a note it could not take
+        if not ask.turn_id and reply.text:
+            self._record(ask, route, "", "", "running", None, ledger)
+        self._publish_reply(ask, reply, final=True)
         ask.replies = reply.messages
         result = self._finish(ask, route, which, text, ledger, detail=reply.detail)
         if text == reply.text:  # not a fixed phrase in its place: the model's own line
@@ -1980,11 +1988,27 @@ class AgentService:
         if state == "done":
             self._speech_traces.pop(turn_id, None)
 
+    def _publish_reply(self, ask: _Ask, reply: Reply, *, final: bool = False) -> None:
+        """Commit each complete authored message before any subsequent tool or terminal state."""
+        from .answers import pending_replies
+        current = self._history.get(ask.turn_id) if ask.turn_id else None
+        if current is None or current.status not in ("running", "confirm") or self._was_cancelled(ask.session_id):
+            return
+        reply = owner_script(reply, chinese_variant(self._settings.get("languages")))
+        lines = reply.messages or ([reply.text] if reply.text else [])
+        if final:
+            saved = [item["text"] for item in self._history.messages([ask.turn_id]).get(ask.turn_id, [])
+                     if item["kind"] == "reply"]
+            lines = pending_replies(saved, lines)
+        for number, line in enumerate(lines):
+            self._message(ask, "reply", line, reply.prefix if ask.speaker.is_raphael else "",
+                          first=number == 0, last=number == len(lines) - 1)
+
     def _message(self, ask: _Ask, kind: str, text: str, prefix: str = "", *, first: bool = True, last: bool = True) -> None:
         """Publish only public words; each commit is visible before the next model/tool call."""
         if not ask.turn_id or not text.strip():
             return
-        if kind in ("progress", "thinking"):
+        if kind in ("progress", "thinking", "reply"):
             text = authored_chinese(text, chinese_variant(self._settings.get("languages")))
         if kind == "progress" and prefix:
             opening = compose(prefix, "", None)[:-1]
@@ -2002,7 +2026,7 @@ class AgentService:
             if self._notify and ask.quick:
                 self._notify("agent.progress", {"session_id": ask.session_id, "turn_id": ask.turn_id,
                     "member_id": ask.speaker.id, "text": line, "language": ask.language})
-        # Only the spoken final waits for its voice; progress and events remain live.
+        # Complete public messages remain live; the terminal status may still wait for speech.
         self._turn_changed(ask.turn_id, ask.speaker.id,
                            hold=kind == "reply" and ask.held == ask.turn_id)
 
@@ -2358,6 +2382,7 @@ class AgentService:
                 system=system, user=user, tools=snapshot.definitions,
                 progress=lambda text: self._message(ask, "progress", text, PREFIXES[ask.language].notice),
                 thinking=lambda text: self._message(ask, "thinking", text),
+                reply=lambda value: self._publish_reply(ask, value),
                 execute=observed_execute,
             )
             if brain_ref(settings.model):
@@ -5351,8 +5376,11 @@ class AgentService:
         replies = []
         if (ask.source != VOICE or not ask.speaker.is_raphael) and status != "confirm":
             replies = ask.replies or [text]
-            for number, line in enumerate(replies):
-                self._message(ask, "reply", line, prefix, first=number == 0, last=number == len(replies) - 1)
+            from .answers import pending_replies
+            saved = [item["text"] for item in self._history.messages([turn_id]).get(turn_id, []) if item["kind"] == "reply"]
+            pending = pending_replies(saved, replies)
+            for number, line in enumerate(pending):
+                self._message(ask, "reply", line, prefix, first=number == 0, last=number == len(pending) - 1)
             ask.replies = []
         result = {"status": "done", "turn_id": turn_id, "prefix": prefix, "text": text}
         if len(replies) > 1:

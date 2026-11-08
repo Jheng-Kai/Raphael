@@ -59,7 +59,7 @@ async def test_a_member_with_an_old_empty_tool_list_can_search_and_create_a_rout
     assert team.members.store.routines(0) == []
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     messages = [m for m in turn["messages"] if not is_action(m["text"])]
-    assert [m["kind"] for m in messages] == ["thinking", "progress", "progress", "event", "reply"]
+    assert [m["kind"] for m in messages] == ["thinking", "progress", "reply", "progress", "event", "reply"]
     receipt = json.loads(messages[-2]["text"])
     assert receipt["text"] == "已建立例行任務 · 每天 08:00 日文練習"
     assert receipt["type"] == "routine" and receipt["id"] == routine.id and receipt["name"] == routine.title

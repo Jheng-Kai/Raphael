@@ -258,6 +258,7 @@ class TaskRun:
         owner_tool=None,
         attachment_store=None,
         artifact=lambda payload: None,
+        reply=None,
     ) -> None:
         self._attachment_store, self._artifact = attachment_store, artifact
         self.activity = current()
@@ -319,7 +320,7 @@ class TaskRun:
         self._monthly_limit = monthly_limit
         self._city = city
         self._changed = changed
-        self._progress = progress
+        self._progress, self._reply = progress, reply
         self.public_progress = ""
         self.action = lambda name, arguments: nullcontext()
         self._clock = clock
@@ -617,6 +618,10 @@ class TaskRun:
         )
         self._step(kind="model", outcome="ok", cost_usd=cost, ms=_ms(began))
         if turn.calls and turn.content.strip():
+            from ..agent.answers import public_reply
+            authored = public_reply(turn.content, self.language, plain=True)
+            if authored is not None and self._reply is not None:
+                self._reply(authored)
             text = " ".join(turn.content.split())[:200]
             text = public_line(text, "auto")
             if text:

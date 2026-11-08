@@ -32,7 +32,7 @@ async def test_desktop_permission_resumes_the_same_harness_turn(operating, clien
     assert done['status'] == 'done' and done['turn_id'] == asked['turn_id']
     assert done['text'] == '已按下七。'
     [turn] = await operating.turns(quick=False)
-    assert [m['kind'] for m in turn['messages']] == ['progress', 'event', 'event', 'reply']
+    assert [m['kind'] for m in turn['messages']] == ['reply', 'progress', 'event', 'event', 'reply']
     assert all(json.loads(m['text'])['type'] == 'action' for m in turn['messages'] if m['kind'] == 'event')
     assert any(op == 'act' for op, args in shell.requests)
     assert client.chat_calls[-1]['messages'][-1]['role'] == 'tool'
@@ -49,7 +49,8 @@ async def test_cancel_a_desktop_permission_finishes_the_existing_turn_once(opera
     await asyncio.sleep(0)
     [turn] = await operating.turns(quick=False)
     assert turn["status"] == "denied"
-    assert len([m for m in turn["messages"] if m["kind"] == "reply"]) == 1
+    assert len([m for m in turn["messages"] if m["kind"] == "reply"]) == 2
+    assert turn["messages"][0]["text"] == "《Answer. Checking the calculator.》"
     assert not any(op == "act" for op, args in shell.requests)
 
 

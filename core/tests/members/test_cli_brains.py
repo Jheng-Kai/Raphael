@@ -78,7 +78,7 @@ else:
 
 
 @pytest.mark.parametrize("answer", ["", "The final answer."])
-async def test_progress_only_turn_fails_and_terminal_answer_is_authoritative(setup, tmp_path, monkeypatch, answer):
+async def test_completed_messages_survive_while_the_terminal_answer_is_authoritative(setup, tmp_path, monkeypatch, answer):
     rig, team = setup
     teacher = member(team, model="cli:claude")
     monkeypatch.setattr("raphael_core.agent.cli.loop.RATE_LIMIT_WAITS_S", ())
@@ -91,12 +91,12 @@ print(json.dumps({"type":"result", "subtype":"success", "result":ANSWER}),flush=
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     replies = [message["text"] for message in turn["messages"] if message["kind"] == "reply"]
     if answer:
-        assert result["text"] == answer and replies == [answer]
+        assert result["text"] == answer and replies == ["Still checking.", answer]
     else:
         assert turn["status"] == "error"
         assert result["text"] == "Claude Code stopped before finishing its answer."
         assert [message["text"] for message in turn["messages"] if message["kind"] == "progress"] == ["Still checking."]
-        assert "Still checking." not in replies
+        assert replies == ["Still checking.", result["text"]]
 
 
 async def test_cli_failure_detail_is_saved_without_a_duplicate_public_event(setup, tmp_path, monkeypatch):

@@ -224,14 +224,14 @@ async def test_background_report_and_progress_use_owner_script(make_rig, conn, v
     assert expected in replies[0] and "学校へ行きます。" in replies[1]
 
 
-async def test_public_progress_reaches_status_only_before_the_next_model_call(make_rig, conn):
+async def test_public_replies_reach_history_while_progress_still_reaches_status(make_rig, conn):
     rig = make_rig()
     history = AgentHistory(conn, rig.wall)
     turn_id = history.add(session_id="s", question=TASK_TEXT, route="delegate", prefix="",
                           text="", status="running")
 
     async def finish(**kwargs):
-        assert not [m for m in history.messages([turn_id])[turn_id] if not is_action(m["text"])]
+        assert [m["kind"] for m in history.messages([turn_id])[turn_id] if not is_action(m["text"])] == ["reply"]
         assert any(is_action(m["text"]) for m in history.messages([turn_id])[turn_id])
         assert any(method == "worker.progress" and data["turn_id"] == turn_id for method, data in rig.notifications)
         assert rig.service.tasks_for_turns([turn_id])[turn_id][0]["progress"] == "I will check the time."
@@ -242,7 +242,7 @@ async def test_public_progress_reaches_status_only_before_the_next_model_call(ma
     task_id = rig.submit()
     rig.service.attach_turn(task_id, turn_id)
     await rig.wait_for_reports()
-    assert [m["kind"] for m in history.messages([turn_id])[turn_id] if not is_action(m["text"])] == ["reply"]
+    assert [m["kind"] for m in history.messages([turn_id])[turn_id] if not is_action(m["text"])] == ["reply", "reply"]
     assert rig.task(task_id).state == "done"
     assert [json.loads(m["text"])["state"] for m in history.messages([turn_id])[turn_id] if is_action(m["text"])] == ["running", "done"]
 

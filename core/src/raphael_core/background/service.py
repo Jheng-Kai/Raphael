@@ -90,7 +90,7 @@ from datetime import tzinfo
 from pathlib import Path
 from typing import Any
 
-from ..agent.answers import Reply, owner_script, parse_reply
+from ..agent.answers import Reply, owner_script, parse_reply, pending_replies
 from ..brain.textnorm import authored_chinese
 from ..languages import chinese_variant
 from ..agent.failure import KINDS, AgentFailure
@@ -1451,6 +1451,7 @@ class BackgroundService:
             city=lambda: self._text_setting("agent_city"),
             changed=lambda: self._changed(task.id, RUNNING),
             progress=lambda text: self._progress(task, text),
+            reply=lambda value: self._reply(task, value),
             clock=self._clock,
             memory=memory,
             request=task.text,
@@ -2262,6 +2263,27 @@ class BackgroundService:
             self._changed(task.id, RUNNING)
         self._notify('worker.progress', {'task_id':task.id,'turn_id':task.turn_id,'room_id':task.room_id,'text':text,'kind':'progress'})
 
+    def _reply(self, task: Task, reply: Reply, *, final: bool = False) -> None:
+        """Publish only complete public messages of the current, still-owned task generation."""
+        if task.id in self._discarded or not self._has_linked_turn(task):
+            return
+        current = self._store.get(task.id)
+        run = self._runs.get(task.id)
+        if (current is None or current.state not in ("queued", "running", "waiting")
+                or current.generation != task.generation or self._history.get(task.turn_id) is None):
+            return
+        if run is not None and (run.cancelled or current.generation != run.generation):
+            return
+        reply = owner_script(reply, chinese_variant(self._settings.get("languages")))
+        lines = reply.messages or ([reply.text] if reply.text else [])
+        if final:
+            saved = [item["text"] for item in self._history.messages([task.turn_id]).get(task.turn_id, [])
+                     if item["kind"] == "reply"]
+            lines = pending_replies(saved, lines)
+        for line in lines:
+            self._history.add_message(task.turn_id, "reply", compose(reply.prefix if task.member_id == 0 else "", line, None))
+            self._notify("agent.turn", {"turn_id": task.turn_id, "member_id": task.member_id})
+
     def _computer_notice(self, task: Task, text: str) -> None:
         if task.id in self._discarded or task.scope != 'private' or not self._has_linked_turn(task):
             return
@@ -2322,6 +2344,7 @@ class BackgroundService:
                 said_why = 'work_only_words' if failure == 'work_without_action' else 'work_file_missing'
                 self._conclude(task,run,'failed','',phrase(language,said_why) + '\n\n' + report.text,report.detail,failure)
                 return
+            self._reply(task, report, final=True)
             if plain:
                 self._conclude(task, run, "done", report.prefix, report.text, report.detail, None, replies=report.messages)
             else:
@@ -2484,7 +2507,9 @@ class BackgroundService:
                     self._history.publish_terminal(task.turn_id,prefix=prefix,text=turn_text,detail=turn_detail,
                         status=_TURN_STATUS.get(state,'error'),cost_usd=max(0.0, cost - prior_cost - getattr(run, "conversation_cost", 0.0)),
                         model=run.ledger.model if run is not None else None,
-                        replies=[compose(prefix,line,None) for line in terminal_replies if line])
+                        replies=pending_replies(
+                            [item["text"] for item in self._history.messages([task.turn_id]).get(task.turn_id, []) if item["kind"] == "reply"],
+                            [compose(prefix,line,None) for line in terminal_replies if line]))
             self._store.finish(task.id, state, prefix=prefix, text=text, detail=detail, reason=reason,publish=publish)
             if run is not None:
                 from ..brain.runs import save_metrics

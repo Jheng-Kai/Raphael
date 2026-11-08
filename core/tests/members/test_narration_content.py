@@ -115,7 +115,7 @@ async def test_live_prompt_keeps_narration_and_replies_independent_of_ui_languag
     result = await typed(rig, "Explain the article", speaker_id, language=language)
     system = client.chat_calls[0]["messages"][0]["content"]
     user = client.chat_calls[0]["messages"][1]["content"]
-    assert system.count('content must be ONLY {"thinking": "...", "progress": "..."}') == 1
+    assert system.count('content must be one public object with thinking, progress and optional messages') == 1
     assert system.count("Final content must be ONLY one JSON object") == 1
     assert "no code fences, no prose before or after" in system
     assert "no separate thinking object" in system

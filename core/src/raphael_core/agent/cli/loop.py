@@ -8,12 +8,13 @@ import traceback
 import time
 from collections import Counter
 from contextlib import aclosing
+from dataclasses import replace
 
 from ...worker.loop import Call, Outcome, Stop, ToolOutcome, WAITING
 from ...members.activity import StreamSteps, current, tool_step
 from ...worker.guards import wrap_untrusted
 from ...worker.tool_guardrails import ToolGuardrails
-from ..answers import MESSAGE_BREAK, parse_reply
+from ..answers import MESSAGE_BREAK, message_parts, parse_reply, public_reply, pending_replies
 from ..conversations import Conversations
 from ..mcp_server import RaphaelMcp
 from ...brain.textnorm import public_line
@@ -105,7 +106,7 @@ class CliLoop:
     def __init__(self, *, brains, sessions, member_id, model, ledger, language, plain,
                  system, user, tools, progress, thinking, event, execute, expire=None, spoken=False,
                  conversation_id=None, quota=None, attachments=(), wait_timeout_s=None, resume_session=True,
-                 rate_limit_waits=None, structured=None, alive=lambda: None, skills=(), no_tools=False):
+                 rate_limit_waits=None, structured=None, alive=lambda: None, skills=(), no_tools=False, reply=None):
         self.brains, self.sessions, self.member_id, self.model = brains, sessions, member_id, model
         # Told whenever the CLI does anything (a word, a tool): whoever watches for a stalled turn hears it.
         self.alive = alive
@@ -161,6 +162,8 @@ class CliLoop:
         self._serial = asyncio.Lock()
         self._handoff_pending = False
         self._buffer = ""
+        self._publish_reply, self._published, self._message_ids = reply, [], set()
+        self._completed_buffer, self._separated = False, []
         self._thought = ""
         self._calls = 0
         self._acted = False
@@ -192,10 +195,26 @@ class CliLoop:
         effort = brain_effort(self.model)
         return f"cli:{brain_ref(self.model)[0]}:{self.actual_model}" + (f"?effort={effort}" if effort else "")
 
+    def _publish(self, text, *, final=False, previous=()):
+        if self._publish_reply is None:
+            return
+        reply = public_reply(text, self.language, plain=self.plain)
+        if reply is None:
+            return
+        lines = reply.messages or [reply.text]
+        lines = pending_replies(self._published if final else previous, lines)
+        if lines:
+            self._publish_reply(replace(reply, messages=lines, text="\n\n".join(lines)))
+            self._published.extend(lines)
+        return lines
+
     def _progress(self):
+        if self._publish_reply is not None and not self._completed_buffer:
+            self._publish(self._buffer)
         if line := public_line(self._buffer, "auto"):
             self.progress(line[:400])
         self._buffer = ""
+        self._completed_buffer, self._separated = False, []
 
     @tool_step(lambda self, identifier, name, args: name,
                scope=lambda self, *args: self.activity_turn)
@@ -583,6 +602,7 @@ class CliLoop:
     async def _stream_attempt(self, name, command, model, server, session, workspace, steps, *, user):
         """Run the CLI once for this turn: None once its answer is queued, else why it failed."""
         self._buffer = self._thought = ""
+        self._completed_buffer, self._separated = False, []
         if getattr(self,"speech_only",False) and name == "claude":
             command = [*command,"--max-turns",str(getattr(self,"speech_max_turns",4))]
         self.driver = Driver(name, command, model=model, effort=brain_effort(self.model), environ=self.brains.environ, quota=self.quota, home=self.brains.home)
@@ -606,7 +626,23 @@ class CliLoop:
                 elif event.kind == "model":
                     self.actual_model = event.text
                 elif event.kind == "text_delta":
-                    self._buffer = (self._buffer + event.text)[-64000:]
+                    if self._completed_buffer:
+                        self._buffer = ""
+                        self._completed_buffer = False
+                    self._buffer += event.text
+                    if self._publish_reply is not None:
+                        # An explicit message separator completes the preceding message, not a token chunk.
+                        parts = message_parts(self._buffer)
+                        for complete in parts[:-1]:
+                            self._separated.extend(self._publish(complete) or [])
+                        self._buffer = parts[-1]
+                elif event.kind == "message" and self._publish_reply is not None:
+                    key = (self._attempts, event.data.get("id"))
+                    if not key[1] or key not in self._message_ids:
+                        self._publish(event.text, previous=self._separated)
+                        self._message_ids.add(key)
+                    self._buffer = event.text
+                    self._completed_buffer, self._separated = True, []
                 elif event.kind == "thinking":
                     self._thought = (self._thought + event.text)[-240:]
                 elif event.kind in ("tool_start", "permission"):
@@ -653,6 +689,8 @@ class CliLoop:
                             self.reload_note = check
                             self.catalog_changed = True
                             return "tools_changed"
+                        self._publish(final, final=True)
+                        self._buffer = ""
                         self.owner_input.closed = True
                         self._queue.put_nowait(Outcome("done", final=final))
                         return None

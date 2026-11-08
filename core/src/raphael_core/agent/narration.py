@@ -18,7 +18,7 @@ from ..background.run import estimate_cost, summary_reply
 from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_window, smaller_output
 from ..worker.loop import REPLY_TOKENS, UNLIMITED, Call, Outcome, Stop, ToolOutcome, Turn, run_task
 from ..worker.tool_guardrails import ToolGuardrails
-from .answers import Reply, loose_reply, parse_reply
+from .answers import Reply, loose_reply, parse_reply, public_reply
 from .failure import AgentFailure, failure_kind
 from .ledger import Ledger
 from .tools import ToolResult
@@ -43,8 +43,12 @@ answer directly in a single model reply.
 """
 
 NARRATION_RULES = PUBLIC_PROGRESS_RULES + """
-Before tool calls, content must be ONLY {"thinking": "...", "progress": "..."},
-with no code fences, no prose before or after, and no other objects.
+Before tool calls, content must be one public object with thinking, progress and optional messages:
+{"thinking": "...", "progress": "...", "messages": ["A complete message for the owner."]}.
+Use messages for your own findings, explanations and replies as they become ready between actions.
+Each complete message is delivered immediately. Progress remains the short action line.
+Do not repeat already delivered messages in the final answer; finish with only the new result.
+Use no code fences, no prose before or after, and no other objects.
 "thinking" is at most 2 sentences (about 60 CJK characters) about the practical choice or next decision that helps
 the owner's goal. It is a public explanation, never private reasoning, chain of thought or tool
 names. "progress" is the short action sentence described above. After results, add thinking only
@@ -116,6 +120,7 @@ class NarratedLoop:
         fallbacks: Sequence[str] | None = None,
         reasoning_effort: str = "none",
         context_window: int | None = None,
+        reply: Callable[[Reply], None] | None = None,
     ) -> None:
         self.client, self.model, self.ledger = client, model, ledger
         self.reasoning_effort = reasoning_effort
@@ -124,7 +129,7 @@ class NarratedLoop:
         self.language, self.plain = language, plain
         self.system, self.user, self.tools = system + NARRATION_RULES, user, list(tools)
         self.progress, self.execute = progress, execute
-        self.thinking = thinking
+        self.thinking, self.publish_reply = thinking, reply
         self.fallbacks = list(fallbacks or ())
         self.model_calls = self.tool_calls = 0
         self.messages: list[dict] | None = None
@@ -209,6 +214,9 @@ class NarratedLoop:
                     text = public_line(_public_text(public.get(kind), limit, sentences=2 if kind == "thinking" else None), "auto")
                     if text:
                         emit(text)
+            authored = public_reply(answer.content, self.language, plain=self.plain) if answer.calls else None
+            if authored is not None and self.publish_reply is not None:
+                self.publish_reply(authored)
             if answer.calls and not objects and prose:
                 text = public_line(_public_text(prose, 60), "auto")
                 if text:

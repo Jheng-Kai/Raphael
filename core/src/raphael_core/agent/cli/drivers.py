@@ -336,7 +336,7 @@ class Driver:
                     self.quota(self.name, data)
 
     async def _claude(self):
-        partial = False
+        partial, text, completed = False, "", 0
         while True:
             packet = await self._read()
             kind = packet.get("type")
@@ -348,18 +348,28 @@ class Driver:
                 delta = event.get("delta", {})
                 if delta.get("type") == "text_delta":
                     partial = True
+                    text += delta.get("text", "")
                     yield Event("text_delta", delta.get("text", ""))
+                elif event.get("type") == "content_block_stop" and text:
+                    yield Event("message", text)
+                    text = ""
+                    completed += 1
                 elif event.get("type") == "content_block_start":
                     block = event.get("content_block", {})
                     if block.get("type") == "tool_use":
                         yield Event("tool_start", data={"id": block.get("id"), "name": block.get("name", "tool")})
             elif kind == "assistant":
                 for block in packet.get("message", {}).get("content", []):
-                    if block.get("type") == "text" and not partial:
-                        yield Event("text_delta", block.get("text", ""))
+                    if block.get("type") == "text":
+                        if not partial:
+                            yield Event("text_delta", block.get("text", ""))
+                        if completed:
+                            completed -= 1
+                        else:
+                            yield Event("message", block.get("text", ""))
                     elif block.get("type") == "tool_use":
                         yield Event("tool_start", data={"id": block.get("id"), "name": block.get("name", "tool")})
-                partial = False
+                partial, text, completed = False, "", 0
             elif kind == "user":
                 for block in packet.get("message", {}).get("content", []):
                     if isinstance(block, dict) and block.get("type") == "tool_result":
@@ -379,6 +389,7 @@ class Driver:
                 return
 
     async def _antigravity(self):
+        text = ""
         while True:
             packet = await self._read()
             kind = packet.get("event")
@@ -387,11 +398,17 @@ class Driver:
                 yield Event("session", self.session)
             elif kind == "step_update":
                 step = packet.get("step_update") or {}
-                if step.get("step_type") == "agent_response" and step.get("text_delta"):
-                    yield Event("text_delta", step["text_delta"])
+                if step.get("step_type") == "agent_response":
+                    if step.get("text_delta"):
+                        text += step["text_delta"]
+                        yield Event("text_delta", step["text_delta"])
+                    if step.get("state") in ("DONE", "COMPLETED"):
+                        yield Event("message", step.get("text") or text, data={"id": step.get("id")})
+                        text = ""
                 elif step.get("step_type") == "tool":
                     name = step.get("tool_name") or "tool"
                     if step.get("state") == "ACTIVE":
+                        text = ""
                         yield Event("tool_start", data={"name": name})
                     elif step.get("state") in ("DONE", "ERROR"):
                         yield Event("tool_end", data={"name": name, "ok": step.get("state") == "DONE"})
@@ -496,6 +513,7 @@ class Driver:
                     else:
                         # Phase-less legacy messages are answers only after the most recent tool.
                         final_text = "" if item.get("phase") == "commentary" else item.get("text", "")
+                        yield Event("message", item.get("text", ""), data={"id": item.get("id")})
                 if item.get("type") in ("commandExecution", "fileChange", "mcpToolCall", "webSearch"):
                     if method == "item/started":
                         final_text = ""

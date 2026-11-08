@@ -4,7 +4,7 @@ network.
 
 The voice speaks Japanese only: on a Japanese screen the line is spoken as shown; on another, a fixed
 phrase is spoken in its Japanese wording and any other line as the `say_ja` the answer model wrote in
-the same call. The reply, and the announcement of its turn to the app, wait for the voice to be ready."""
+the same call. Public messages arrive live; the RPC result and terminal announcement wait for the voice."""
 
 import asyncio
 import json
@@ -409,7 +409,7 @@ async def test_a_quick_narrated_final_speaks_japanese_and_waits_for_voice_but_pr
 
     async def finish(**kwargs):
         assert speaker.said == []
-        assert announced[-1] == ("running", ["progress"])
+        assert announced[-1] == ("running", ["reply", "progress"])
         return chat(json.dumps({"prefix": prefix, "text": shown, "say_ja": japanese, "detail": ""}))
 
     client.decisions.append(decision("answer"))
@@ -428,13 +428,13 @@ async def test_a_quick_narrated_final_speaks_japanese_and_waits_for_voice_but_pr
     assert (result["prefix"], result["text"]) == (prefix, shown)
     assert speaker.said == [("解", japanese)]
     assert len(announced) == count + 1
-    assert announced[-1] == ("done", ["progress", "reply"])
+    assert announced[-1] == ("done", ["reply", "progress", "reply"])
     assert len(client.chat_calls) == 2 and client.json_calls == []
     first = client.chat_calls[0]["messages"]
     assert '"say_ja"' in first[0]["content"]
     assert first[1]["content"].rstrip().endswith('in Japanese for the configured voice; this does not change the reply language.')
     [turn] = await rig.turns()
-    assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["progress", "reply"]
+    assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["reply", "progress", "reply"]
     assert japanese not in repr(result) + repr(turn) + caplog.text
     assert japanese not in repr([tuple(row) for row in rig.conn.execute("SELECT * FROM agent_messages")])
 
@@ -462,7 +462,7 @@ async def test_the_reply_waits_for_the_voice_and_comes_when_it_is_ready(timed_ri
     assert result["text"] == "台北現在 24 度。"
 
 
-async def test_the_turn_is_announced_to_the_app_when_the_voice_is_ready_not_before(
+async def test_public_reply_arrives_before_voice_while_completion_waits(
     timed_rig, announced, client, speaker
 ):
     speaker.gate = asyncio.Event()
@@ -470,10 +470,11 @@ async def test_the_turn_is_announced_to_the_app_when_the_voice_is_ready_not_befo
     client.replies.append(with_japanese())
     asking = asyncio.ensure_future(timed_rig.ask("台北幾度"))
     await until(lambda: speaker.waiting)
-    assert [m for m, _ in announced] == []  # written, but the conversation does not show it yet
+    assert [m for m, _ in announced] == ["agent.turn", "agent.turn"]  # running turn, then live reply
+    assert len(timed_rig.history.messages([1])[1]) == 1
     speaker.gate.set()
     result = await asyncio.wait_for(asking, 2)
-    assert announced == [("agent.turn", {"turn_id": result["turn_id"], "member_id": 0})]
+    assert announced == [("agent.turn", {"turn_id": result["turn_id"], "member_id": 0})] * 3
 
 
 async def test_the_answer_to_a_yes_is_announced_when_the_voice_is_ready_too(
@@ -501,7 +502,7 @@ async def test_with_no_voice_the_reply_and_its_announcement_do_not_wait(
     client.replies.append(spoken("答", "好。"))
     result = await asyncio.wait_for(rig.ask("你好"), 2)
     assert result["text"] == "好。" and speaker.said == []
-    assert announced == [("agent.turn", {"turn_id": result["turn_id"], "member_id": 0})]
+    assert announced == [("agent.turn", {"turn_id": result["turn_id"], "member_id": 0})] * 3
 
 
 async def test_a_message_from_a_phone_is_announced_at_once(timed_rig, announced, client, speaker):
@@ -530,7 +531,7 @@ async def test_a_cancel_while_the_voice_is_awaited_still_announces_the_turn(
     asking.cancel()
     with pytest.raises(asyncio.CancelledError):
         await asking
-    assert [m for m, _ in announced] == ["agent.turn"]  # never left unannounced
+    assert [m for m, _ in announced] == ["agent.turn"] * 3  # running, live reply, then released completion
 
 
 @pytest.mark.parametrize(("member", "source", "quick"), [
