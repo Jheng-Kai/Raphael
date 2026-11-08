@@ -58,6 +58,8 @@ DEFAULTS: dict[str, Any] = {
     "routine_run_window": [],
     "owner_photo": "",
     "monthly_limit_usd": 10.0,
+    "memory_threshold_tokens_cap": 24000,
+    "memory_max_unused_days": 90,
     # Chosen from the cleanup eval of 2026-10-18 for its cost and its speed (~1.25 s on average).
     # The cases and the prompt have changed since, so no pass rate is claimed for it: compare the
     # models again with `python -m raphael_core.evaluate.cleanup`.
@@ -351,6 +353,8 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
     if value is None and key in _NULLABLE:
         return key, None
     value = _allowed(key, _checked(key, value))
+    if key in ("memory_threshold_tokens_cap", "memory_max_unused_days") and value < 0:
+        raise ValueError("Memory limits cannot be negative; zero disables the limit")
     if key in ("routine_timezone", "routine_detected_timezone") and value:
         from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
         try:

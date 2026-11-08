@@ -130,7 +130,8 @@ class CliLoop:
                  system, user, tools, progress, thinking, event, execute, expire=None, spoken=False,
                  conversation_id=None, quota=None, attachments=(), wait_timeout_s=None, resume_session=True,
                  rate_limit_waits=None, structured=None, alive=lambda: None, skills=(), no_tools=False, reply=None,
-                 owner_text=None, resume_user=None, context_sections=None, context_turns=(), context_summary="", turn_id=None):
+                 owner_text=None, resume_user=None, context_sections=None, context_turns=(), context_summary="",
+                 context_summary_through=0, turn_id=None):
         self.brains, self.sessions, self.member_id, self.model = brains, sessions, member_id, model
         # Told whenever the CLI does anything (a word, a tool): whoever watches for a stalled turn hears it.
         self.alive = alive
@@ -174,6 +175,7 @@ class CliLoop:
         self.resume_user = resume_user
         self.context_sections = context_sections or {}
         self.context_turns, self.context_summary, self.turn_id = context_turns, context_summary, turn_id
+        self.context_summary_through = context_summary_through
         self._context_state = {}
         self._context_window = None
         self._submitted_user = user
@@ -512,6 +514,7 @@ class CliLoop:
             [message["content"] for message in self.tool_messages if message["role"] == "user"],
             RECOVER, self._recovery_block(8000), turns=self.context_turns,
             summary=self.context_summary, sections=self.context_sections,
+            current_user=self.resume_user,
             byte_limit=max(0, int(window * CONTEXT_HEADROOM) - len(self.system.encode("utf-8"))))
         self._fresh_sections = {name: text for name, text in self.context_sections.items() if text and text in user}
         return user
@@ -577,7 +580,8 @@ class CliLoop:
                             self.sessions.forget(self.member_id, self.model, self.conversation_id)
                             self._session = None
                         else:
-                            self.user = resumed_user(self.resume_user, self.context_sections, self.context_turns, self._context_state)
+                            self.user = resumed_user(self.resume_user, self.context_sections, self.context_turns, self._context_state,
+                                                     summary=self.context_summary, summary_through_turn_id=self.context_summary_through)
                     self._submitted_user = self.user
                     self._turn_user = self.user
                     if should_compact(self._context_state, self.system, self.user):

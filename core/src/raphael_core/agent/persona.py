@@ -422,6 +422,30 @@ PHRASES: dict[str, Phrases] = with_ui_words({
 })
 
 
+_MONTHLY_BUDGET = {
+    "zh-TW": "已達你設定的本月支出上限 US${limit}。請到「設定 › 模型與用量」調整上限，或改用訂閱制 CLI 模型。",
+    "en": "Your configured monthly spending limit of US${limit} has been reached. Change it in Settings > Models & usage, or use a subscription CLI model.",
+    "ja": "設定した今月の支出上限 US${limit} に達しました。「設定 › モデルと使用量」で上限を変更するか、サブスクリプションの CLI モデルを使ってください。",
+    "zh-CN": "已达到你设置的本月支出上限 US${limit}。请到「设置 › 模型与用量」调整上限，或改用订阅制 CLI 模型。",
+    "ko": "설정한 월 지출 한도 US${limit}에 도달했습니다. 설정 > 모델 및 사용량에서 한도를 변경하거나 구독형 CLI 모델을 사용하세요.",
+    "es": "Se alcanzó el límite mensual de gasto configurado de US${limit}. Cámbialo en Configuración > Modelos y uso, o usa un modelo CLI por suscripción.",
+    "fr": "La limite de dépenses mensuelles fixée à US${limit} est atteinte. Modifiez-la dans Paramètres > Modèles et utilisation, ou utilisez un modèle CLI par abonnement.",
+    "de": "Das festgelegte monatliche Ausgabenlimit von US${limit} ist erreicht. Ändere es unter Einstellungen > Modelle und Nutzung oder verwende ein CLI-Modell mit Abonnement.",
+    "pt-BR": "O limite mensal de gastos definido de US${limit} foi atingido. Altere-o em Configurações > Modelos e uso ou use um modelo CLI por assinatura.",
+    "it": "È stato raggiunto il limite di spesa mensile impostato di US${limit}. Modificalo in Impostazioni > Modelli e utilizzo oppure usa un modello CLI in abbonamento.",
+    "ru": "Достигнут установленный месячный лимит расходов US${limit}. Измените его в разделе «Настройки › Модели и использование» или используйте модель CLI по подписке.",
+    "vi": "Đã đạt giới hạn chi tiêu hằng tháng US${limit} bạn đã đặt. Hãy đổi giới hạn trong Cài đặt > Mô hình và mức sử dụng, hoặc dùng mô hình CLI theo gói đăng ký.",
+    "th": "ใช้จ่ายถึงวงเงินรายเดือน US${limit} ที่คุณตั้งไว้แล้ว เปลี่ยนวงเงินได้ที่ การตั้งค่า > โมเดลและการใช้งาน หรือใช้โมเดล CLI แบบสมัครสมาชิก",
+    "id": "Batas pengeluaran bulanan US${limit} yang Anda tetapkan telah tercapai. Ubah di Pengaturan > Model dan penggunaan, atau gunakan model CLI berlangganan.",
+    "tr": "Belirlediğiniz aylık US${limit} harcama sınırına ulaşıldı. Ayarlar > Modeller ve kullanım bölümünden sınırı değiştirin veya abonelikli bir CLI modeli kullanın.",
+}
+
+
+def monthly_budget_notice(language: str, limit: float) -> str:
+    """Distinguish Raphael's configured spending cap from a provider's own allowance."""
+    return _MONTHLY_BUDGET[fixed_language(language)].format(limit=f"{limit:g}")
+
+
 def phrase(language: str, name: str, **fields: str) -> str:
     """The fixed phrase `name` in `language`, with its `{fields}` filled in (the ones that have
     fields; the fields' own text is never read as a template)."""
@@ -1073,7 +1097,7 @@ def cli_system_prompt(
         language_rule = REPLY_LANGUAGE
     prompt = "\n\n".join((persona, interface_context(language) + _SHARED_CONTRACT, _FACT_RULES, language_rule))
     if memory:
-        prompt += ("\n\nMemory\n" + _MEMORY_FILES.replace("here as they were when this turn began", "in each message as they were when that turn began")
+        prompt += ("\n\nMemory\n" + _MEMORY_FILES.replace("here as they were when this turn began", "in the initial snapshot and later change records")
                    + "\n" + _MEMORY_EDITS + "\nEdit them with memory_update; memory_log keeps a daily work log; "
                    "session_search and session_read find earlier turns.")
     return prompt

@@ -155,7 +155,7 @@ from ..languages import chinese_variant
 from ..brain.spend import SpendTracker
 from ..protocol import INVALID_PARAMS, RpcError, invalid_params
 from ..router import Router as RpcRouter
-from ..memory.conversation import Conversation, asks_to_remember
+from ..memory.conversation import DEFAULT_CONTEXT_WINDOW, Conversation, asks_to_remember
 from ..memory.store import MemorySnapshot
 from ..memory.growth import TOOLS as GROWTH_TOOLS, WRITE_TOOLS as GROWTH_WRITES
 from ..services.attachment_store import AttachmentStore
@@ -206,6 +206,7 @@ from .persona import (
     normalize_language,
     parenthesized,
     phrase,
+    monthly_budget_notice,
     member_system_prompt,
     spoken_line,
     system_prompt,
@@ -717,7 +718,7 @@ class AgentService:
         permissions: "PermissionCards | None" = None,
         drafts: "EmailDrafts | None" = None,
         calendar: OwnCalendar | None = None,
-        owner_language: Callable[[], str] | None = None,
+        owner_language: Callable[[], str | None] | None = None,
     ) -> None:
         self._calendar = calendar if calendar is not None else OwnCalendar(conn, notify=notify, now_ms=now_ms, tz=tz)
         self._tool_observer = tool_observer
@@ -851,9 +852,9 @@ class AgentService:
         # session id -> when agent.cancel named it (the monotonic clock).
         self._cancelled: dict[str, float] = {}
         self._last_language = DEFAULT_LANGUAGE
-        self._owner_language = owner_language or (lambda: DEFAULT_LANGUAGE)
+        self._owner_language = owner_language or (lambda: None)
         if background is not None:
-            background.owner_language = lambda: self.language
+            background.owner_language = lambda: self._owner_language()
         # turn id -> the member whose thread it is in (None: not known yet): the turns that were
         # written but are not announced to the app (`agent.turn`) until the voice is ready.
         self._held: dict[int, int | None] = {}
@@ -871,7 +872,7 @@ class AgentService:
     @property
     def language(self) -> str:
         """The configured owner language for unattended and external conversations."""
-        return normalize_language(self._owner_language())
+        return normalize_language(self._owner_language() or DEFAULT_LANGUAGE)
 
     def turn(self, turn_id: int) -> Turn | None:
         """A turn of the history, for a caller that needs the longer text of an answer."""
@@ -1175,8 +1176,8 @@ class AgentService:
             if not isinstance(source, str) or not _SOURCE.fullmatch(source):
                 raise invalid_params("source must be a short lower-case word")
             ask.source = source
-        if ask.source in {"telegram", "slack", "discord", RESUMED}:
-            ask.language = self.language
+        if ask.source in {"telegram", "slack", "discord", RESUMED} and (configured := self._owner_language()):
+            ask.language = normalize_language(configured)
         if len(ask.attachments) > MAX_ATTACHMENTS:
             raise RpcError(
                 INVALID_PARAMS, "Invalid params: attachments (count)", {"kind": "count"}
@@ -1588,7 +1589,7 @@ class AgentService:
         with what was found. AgentFailure as `Voice.reply` raises it. A member of the team reads
         its own conversation and memory, and speaks as itself."""
         member_id = ask.speaker.id
-        context = self._memory_context(ask.speaker, ask.conversation_id, quick=ask.quick)
+        context = self._memory_context(ask.speaker, ask.conversation_id)
         memory = None if self._memory is None else self._memory.snapshot(member_id)
 
         async def word(results: list[ToolResult], looked_up: bool) -> Reply:
@@ -1609,7 +1610,7 @@ class AgentService:
                 say_ja=ask.voiced,
                 roster=roster_prompt(self._team, ask.speaker, ask.language) + owner_context(self._settings),
                 reasoning_effort=self._effort(settings),
-                recall=self._recall(ask), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
+                recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
             )
             return owner_script(reply, chinese_variant(self._settings.get("languages")))
 
@@ -1789,7 +1790,7 @@ class AgentService:
         writes no note, now or later: its turn holds what the model read on the screen, which is
         untrusted, and a note is written only from the owner's own words (see `_remember`, and the
         reflection pass, which reads only the owner's question of an `operate` turn)."""
-        context = self._conversation_of(speaker.id, conversation_id).context(quick=True)
+        context = self._conversation_of(speaker.id, conversation_id).context()
         index = "" if self._memory is None else self._memory.snapshot(speaker.id)
         if isinstance(index, MemorySnapshot):  # USER.md, then the speaker's own file
             index = "\n".join(part for part in (index.shared, index.own) if part)
@@ -1943,7 +1944,7 @@ class AgentService:
                                  status=run.final.status, detail=run.final.detail)
 
     def _over_budget(self, limit_usd: float) -> bool:
-        return False
+        return self._spend.is_over(limit_usd)
 
     async def _open_for_run(self, name: str) -> str | None:
         """Open the app of the Start menu that `name` names, for a run, through the gate like the
@@ -2084,7 +2085,7 @@ class AgentService:
             prepare = getattr(self._plugins, "prepare", None)
             if prepare is not None:
                 await prepare(ask.speaker.id)
-            context = self._memory_context(ask.speaker, ask.conversation_id, quick=ask.quick)
+            context = self._memory_context(ask.speaker, ask.conversation_id)
             memory = None if self._memory is None else self._memory.snapshot(ask.speaker.id)
             say_ja = ask.voiced
             if brain_ref(settings.model):
@@ -2100,7 +2101,9 @@ class AgentService:
                     instructions=ask.speaker.instructions, personality=ask.speaker.personality,
                     memory_snapshot=memory, narrated=True,
                 )
-            system += roster_prompt(self._team, ask.speaker, ask.language) + owner_context(self._settings)
+            if not brain_ref(settings.model):
+                system += roster_prompt(self._team, ask.speaker, ask.language)
+            system += owner_context(self._settings)
             if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 system += NEW_MEMBER
             if self._gate.plan_first:
@@ -2123,12 +2126,12 @@ class AgentService:
                 moment=self._moment(), context=context.turns, tools=[], language=ask.language,
                 background=background_block(self._briefs(ask.speaker.id)), summary=context.summary, say_ja=say_ja, narrated=True,
                 quote=ask.quote,
-                recall=self._recall(ask), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
+                recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
             )
             user = build_user_message(**message_args)
             native_base = user
             # Native history already holds this conversation; memory changes travel separately below.
-            native_turn = build_user_message(**{**message_args, "context": [], "summary": "", "recall": ""}) if brain_ref(settings.model) else None
+            native_turn = build_user_message(**{**message_args, "context": [], "summary": ""}) if brain_ref(settings.model) else None
             native_sections = {}
             if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 user += NEW_MEMBER_STEP
@@ -2144,8 +2147,7 @@ class AgentService:
             if ask.resumption is not None:
                 user += ask.resumption.note()
             if brain_ref(settings.model):
-                # A resumed CLI thread keeps the instructions it began with (live, a renamed member and a
-                # removed app stayed in its answers), so each turn carries the team as it is now.
+                # The initial snapshot is sent once; checkpoints carry only later edits.
                 native_sections["Team"] = roster_prompt(self._team, ask.speaker, ask.language)
                 native_sections["Memory"] = str(memory) if memory is not None else "No memory files."
             earlier = self._earlier_files(context.turns, ask.attachments)
@@ -2389,6 +2391,10 @@ class AgentService:
                     return ToolOutcome(False, "already_done", instruction=(
                         "This exact action was already done before the pause. Do not do it again."))
                 result = await execute(call_id, name, args)
+                from ..memory.tool_events import record as record_tool_event
+                record_tool_event(self._conn, ask.turn_id, call_id, name, args, result.content,
+                                  ok=result.ok, kind=result.kind, external=bool(ask.memory_untrusted or ref and
+                                      (ref.kind == MCP or ref.name in ("web_read", "web_search", "read_attachment"))))
                 if result.ok and (name == "generate_audio" or ref is not None and (ref.server == "media" or ref.server == "computer" and ref.name in ("attach_file", "dataset"))):
                     from ..services.artifacts import artifact_payload
                     payload = artifact_payload(result.content, self._attachment_store)
@@ -2431,6 +2437,7 @@ class AgentService:
                 loop = CliLoop(brains=self._cli_brains, sessions=self._cli_sessions,
                     owner_text=ask.text, resume_user=native_turn + user[len(native_base):],
                     context_sections=native_sections, context_summary=context.summary, turn_id=ask.turn_id,
+                    context_summary_through=context.summary_through_turn_id,
                     context_turns=[(turn.id, turn_text(turn, detail=turn.route == "discuss"))
                                    for turn in context.turns if turn.id is not None],
                     skills=getattr(self._team, "native_skills", lambda member: [])(ask.speaker.id),
@@ -3842,22 +3849,28 @@ class AgentService:
 
     # --- the team ---------------------------------------------------------------------------------
 
-    def _recall(self, ask):
+    def _recall(self, ask, context):
         if self._memory is None:
             return ""
-        text, external = self._memory.recall_result(ask.speaker.id, ask.text, private=ask.scope == "private", conversation_id=ask.conversation_id)
+        conversation_id = ask.conversation_id or self._conversation_of(ask.speaker.id, ask.conversation_id)._conversation_id()
+        text, external = self._memory.recall_result(ask.speaker.id, ask.text, private=ask.scope == "private", conversation_id=conversation_id,
+                                                   exclude=tuple(turn.id for turn in context.turns))
         ask.memory_untrusted = ask.memory_untrusted or external
         if external:
             ask.steps.append(self._step("tool", "session_search", BUILTIN_SERVER, "ok", time.perf_counter(), None, "external_content"))
         return text
 
-    def _memory_context(self, speaker, conversation_id, *, quick=False):
+    def _memory_context(self, speaker, conversation_id):
         conversation = self._conversation_of(speaker.id, conversation_id)
         model = self._read_settings(speaker, conversation_id).model
-        conversation.context_window = context_window(self._tool_support._catalog() or [], model) or conversation.context_window
+        catalog = self._tool_support._catalog() or []
+        conversation.context_window = context_window(catalog, model) or DEFAULT_CONTEXT_WINDOW
+        entry = find(catalog, LLM, model)
+        conversation.max_output_tokens = getattr(entry, "max_output_tokens", None) or 0
         if self._memory is not None:
+            self._memory.configure_conversation(conversation)
             conversation._client = self._memory._brain(speaker.id)
-        return conversation.context(quick=quick)
+        return conversation.context()
 
     def _conversation_of(self, member_id: int, conversation_id: int | None = None) -> Conversation:
         """The conversation of the thread of `member_id`: Raphael's for 0. A request of it that did
@@ -4088,7 +4101,7 @@ class AgentService:
         respondent = target.name or "Raphael"
         origin = self._history.get(source_turn_id) if source_turn_id else next(
             (t for t in reversed(self._history.for_session(session_id)) if t.member_id == asker.id and t.scope != "quarantine"), None)
-        sources = owner_lines(self._conversation_of(target.id).context(quick=False).turns)
+        sources = owner_lines(self._conversation_of(target.id).context().turns)
         ask = _Ask(
             session_id=session_id,
             text=request,
@@ -5464,6 +5477,8 @@ class AgentService:
         """The known provider prerequisite, a failed key-store read, or None."""
         if brain_ref(settings.model):
             return None
+        if self._over_budget(settings.limit_usd):
+            return "monthly_budget"
         try:
             if isinstance(self._client, ProviderRouter):
                 return None if self._client.available(settings.model) else AgentFailure("auth_expired", diagnostic=self._client.missing(settings.model), model=settings.model)
@@ -5498,7 +5513,10 @@ class AgentService:
         if diagnostic is not None:
             name = RAPHAEL_NAMES[ask.language] if ask.speaker.is_raphael else ask.speaker.name
             return self._finish(ask, route, "negative", diagnostic.sentence(name, ask.language), ledger, status="error")
-        text = classify(kind, record=False).sentence(RAPHAEL_NAMES[ask.language], ask.language) if kind in ("context_overflow", "payload_too_large", "content_policy") else phrase(ask.language, kind)
+        if kind == "monthly_budget":
+            text = monthly_budget_notice(ask.language, self._settings.get("monthly_limit_usd"))
+        else:
+            text = classify(kind, record=False).sentence(RAPHAEL_NAMES[ask.language], ask.language) if kind in ("context_overflow", "payload_too_large", "content_policy") else phrase(ask.language, kind)
         return self._finish(ask, route, "negative", text, ledger, status="error")
 
     def _finish(
@@ -5735,8 +5753,12 @@ class AgentService:
         if self._memory is not None and not ask.nested and ask.source != "greeting" and status not in ("running", "confirm"):
             try:
                 # The fold and, for Raphael's, the reflection pass, in the background.
-                if ask.conversation_id != self.conversations.main(member_id) and self._memory.may_spend(member_id):
-                    self._conversation_of(member_id, ask.conversation_id).schedule_fold(self._read_settings(ask.speaker, ask.conversation_id).model, self._memory.ledger)
+                model = self._read_settings(ask.speaker, ask.conversation_id).model
+                if ask.conversation_id != self.conversations.main(member_id) and (self._memory.may_spend(member_id) or self._memory.summary_model(model) != model):
+                    conversation = self._conversation_of(member_id, ask.conversation_id)
+                    self._memory.configure_conversation(conversation)
+                    conversation._client = self._memory._brain(member_id)
+                    conversation.schedule_fold(model, self._memory.ledger)
                 if member_id:
                     self._memory.after_turn(member_id)
                 else:

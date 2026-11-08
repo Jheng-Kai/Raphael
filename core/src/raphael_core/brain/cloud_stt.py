@@ -219,9 +219,12 @@ class CloudTranscriber:
             logger.warning(
                 "Cloud speech-to-text failed: kind=%s status=%s", error.kind, error.status
             )
-            raise _refusal(
+            refusal = _refusal(
                 INTERNAL_ERROR, error.kind, f"Cloud speech-to-text failed: {error.kind}"
-            ) from None
+            )
+            if type(error.retry_after) in (int, float) and math.isfinite(error.retry_after) and error.retry_after > 0:
+                refusal.data["retry_after"] = error.retry_after
+            raise refusal from None
         except Exception as exc:  # anything else the client lets out; its message may hold a key
             logger.warning("Cloud speech-to-text failed unexpectedly: %s", type(exc).__name__)
             raise _refusal(INTERNAL_ERROR, "unexpected", "Cloud speech-to-text failed") from None

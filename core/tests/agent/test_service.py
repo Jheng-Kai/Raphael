@@ -989,17 +989,17 @@ async def test_without_a_key_the_commands_still_work_and_the_rest_is_refused_wit
     assert [t["status"] for t in await rig.turns()] == ["error", "done"]
 
 
-async def test_over_the_monthly_limit_answers_are_still_available(
+async def test_over_the_monthly_limit_free_commands_work_but_paid_answers_are_blocked(
     rig, client, actions
 ):
     rig.settings.set("monthly_limit_usd", 1)
     rig.spend.record(purpose="cleanup", model="m", cost_usd=1.0, prompt_tokens=1, completion_tokens=1)
     assert (await rig.ask("open youtube.com", language="en"))["prefix"] == "Understood"
     assert did(actions) == [("open_url", "https://youtube.com/")]
-    client.replies.extend([completion(classification()), completion({"prefix": "Answer", "text": "Still here.", "detail": ""})])
     result = await rig.ask("hello", language="en")
-    assert result["text"] == "Still here."
-    assert client.calls > 0
+    assert rig.history.get(result["turn_id"]).status == "error" and "monthly spending limit of US$1" in result["text"]
+    assert "Settings > Models & usage" in result["text"]
+    assert client.calls == 0
 
 
 async def test_offline_the_commands_still_work_and_the_rest_is_refused_with_the_reason(

@@ -208,8 +208,8 @@ async def test_s07_meeting_goes_on_when_one_cli_member_is_rate_limited(tmp_path,
         assert {tuple(i) for i in intents if i['state'] != 'done'} == {(5, 'blocked', 'cli_rate_limited')}
         spoken = conn.execute("SELECT m.member_id FROM room_messages m JOIN agent_turns t ON t.id=m.turn_id "
                               "WHERE m.origin_message_id=? AND m.kind='message' AND t.status='done'", (origin,)).fetchall()
-        assert {row[0] for row in spoken} == {1, 4}
-        # HiKari already authored the agenda; it does not answer its own post.
+        # Every participant, including the agenda author, gets a review turn.
+        assert {row[0] for row in spoken} == {1, 3, 4}
         assert conn.execute('SELECT member_id FROM room_messages WHERE id=?', (origin,)).fetchone()[0] == 3
         [notice] = conn.execute("SELECT t.question,t.text,t.model,t.cost_usd FROM room_messages m "
             "JOIN agent_turns t ON t.id=m.turn_id WHERE m.origin_message_id=? AND m.kind='wrapup'", (origin,)).fetchall()

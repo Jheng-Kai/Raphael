@@ -69,7 +69,7 @@ async def test_quick_context_keeps_complete_conversation_below_half_window(growi
     memory, _ = growing
     for n in range(24):
         add_turn(history, f"step {n}")
-    context = memory.conversation.context(quick=True, context_window=32000)
+    context = memory.conversation.context(context_window=32000)
     assert len(context.turns) == 24
 
 
@@ -114,6 +114,28 @@ async def test_room_search_and_read_recheck_membership(growing, conn):
     assert not memory.session_read(2, f"room:{identifier}").ok
     assert not memory.session_search(2, "heliotrope").data["hits"]
     assert not events
+
+
+async def test_room_index_tracks_message_moves_edits_and_deletion(growing, conn):
+    memory, _ = growing
+    with conn:
+        old = conn.execute("INSERT INTO rooms(name,created) VALUES ('Old',0)").lastrowid
+        new = conn.execute("INSERT INTO rooms(name,created) VALUES ('New',0)").lastrowid
+        conn.execute('INSERT INTO room_members(room_id,member_id) VALUES (?,2)', (old,))
+        conn.execute('INSERT INTO room_members(room_id,member_id) VALUES (?,3)', (new,))
+        identifier = conn.execute("INSERT INTO room_messages(room_id,text,created) VALUES (?,'amber first',0)", (old,)).lastrowid
+    assert memory.session_search(2, 'amber').data['hits']
+    with conn:
+        thread = conn.execute('SELECT id FROM room_threads WHERE room_id=?', (new,)).fetchone()[0]
+        conn.execute("UPDATE room_messages SET room_id=?,thread_id=?,text='violet revised' WHERE id=?", (new, thread, identifier))
+    assert not memory.session_read(2, f'room:{identifier}').ok
+    assert not memory.session_search(2, 'violet').data['hits']
+    assert memory.session_read(3, f'room:{identifier}').untrusted
+    assert memory.session_search(3, 'violet').data['hits']
+    assert not memory.session_search(3, 'amber').data['hits']
+    with conn:
+        conn.execute('DELETE FROM room_messages WHERE id=?', (identifier,))
+    assert not memory.session_search(3, 'violet').data['hits']
 
 
 async def test_private_capture_uses_member_brain_confidence_and_deduplication(growing, conn, history):

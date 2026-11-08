@@ -104,14 +104,18 @@ consumers and the selected matrix are in conversation.md#durable-owner-inbox-202
 
 Owner follow-up (2026-11-08, meetings-and-delegation): an explicit meeting keeps
 meeting=1 and gives every participant a speech turn in order, even when earlier
-members pass. Owner corrections re-open that ordered queue. Ordinary room chats
+members pass. The agenda author also receives a review turn. Owner corrections re-open
+that ordered queue; an explicitly addressed follow-up schedules only its recipients.
+Serial meeting rounds use the existing turn budget, including follow-up mentions,
+so the smaller parallel-round cap cannot truncate a normal meeting. Ordinary room chats
 retain their independent speak/pass listeners. A failed listener records only its
 exception kind, retries once, and retains routing evidence; persistent failure
 creates a blocked intent and a public unavailable reason rather than being heard.
 CLI structured listeners allow three Claude turns and read structured_output.
 Listeners use nonpersistent native sessions; persistent turns sharing a member and
 conversation serialize through the existing session lock. An early CLI exit retains
-and logs bounded, scrubbed stderr. A missing resume session gets one fresh attempt
+bounded, scrubbed stderr in private failure details; normal logs retain only the kind.
+A missing resume session gets one fresh attempt
 with bounded recovery receipts, without replaying completed tool effects.
 Completed room rows preserve authored text with a trailing (pass) suffix removed;
 an exact pass stays silent. Fresh TeamContextSnapshot.meetings and work_status
@@ -133,6 +137,10 @@ app/src/main/room-meeting.test.ts and group-chats.test.ts.
 The existing Guardian driver reads private work/report destinations and report_task_id,
 seeds meetings from actual private chief turns, and stops self-handoff work through
 the same production path. Its fake CLI listeners return their own structured choice.
+The driver also verifies the work turn belongs to the assignee's main private conversation even
+when the hand-off started in another member's private chat. The exchange remains an audit.
+Owner-private management discovery is shared by members; it does not authorize
+delegating member management through handoff or ask_member, which remains refused.
 guardian_manifest.json maps the read-only work_status tool to S08.completion.
 
 Follow-up 1 authorizes the selected offline look matrix below. Network and paid APIs

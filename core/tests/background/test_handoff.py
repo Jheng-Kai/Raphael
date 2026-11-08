@@ -26,10 +26,11 @@ async def unused(*args,**kwargs):
 
 
 @pytest.mark.parametrize('management_request', ['Update member 2 model to cli:claude.', '請幫成員修改模型與指令。',
-                                    'Call member_update for member 2.'])
-async def test_member_management_is_refused_before_a_delegate_task_exists(make_rig, management_request):
+                                    'Call member_update for member 2.', 'Call member_create to add Amber.'])
+@pytest.mark.parametrize('room', [False, True])
+async def test_member_management_is_refused_before_a_delegate_task_exists(make_rig, management_request, room):
     rig = make_rig()
-    target, source = setup(rig)
+    target, source = setup(rig, room=room)
     before = rig.conn.execute('SELECT COUNT(*) FROM worker_tasks').fetchone()[0]
     result = rig.service.handoff(RAPHAEL, args(target, request=management_request), source_turn_id=source.id, language='en')
     assert not result.ok and result.error == 'delegated_management'

@@ -76,7 +76,7 @@ else:
             assert json.loads(events[-1].text) == {'speak':True,'urgency':.8}
 
 
-async def test_claude_early_exit_logs_scrubbed_stderr_and_keeps_failure_detail(tmp_path, caplog):
+async def test_claude_early_exit_keeps_stderr_private_and_logs_failure_kind(tmp_path, caplog):
     from raphael_core.agent.cli.drivers import Driver
     script = tmp_path / "missing_resume.py"
     script.write_text('''import sys
@@ -91,7 +91,8 @@ sys.exit(1)
     error = events[-1]
     assert error.kind == "error" and error.text == "cli_stopped"
     assert "No conversation found with session ID" in error.data["detail"]
-    assert "No conversation found with session ID" in caplog.text
+    assert "No conversation found with session ID" not in caplog.text
+    assert "cli_stopped" in caplog.text
     assert "synthetic-private-credential" not in caplog.text + json.dumps(error.data)
 
 

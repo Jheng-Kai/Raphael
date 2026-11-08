@@ -278,7 +278,7 @@ class RoomExchanges:
         self.intents(origin, origin, targets)
         if targets:
             self.update(origin, pending="[]")
-        if meeting:
+        if meeting and not targets and recipient is None:
             self.update(origin, pending=json.dumps([{'member':member,'reply_to':None,'reply_to_member':None,'handoff':False}
                                                    for member in self.rooms._ids(room)]))
         self.attachments[origin] = attachments
@@ -420,8 +420,9 @@ class RoomExchanges:
                     pending = [p for p in pending if p.get('intent_id')]
                 rounds = self.conn.execute('SELECT COALESCE(MAX(round),0) FROM room_exchange_turns WHERE origin_message_id=?',
                                            (exchange.origin_message_id,)).fetchone()[0]
-                round_cap = max(MAX_ROUNDS, len(ids)) if exchange.meeting else MAX_ROUNDS
                 turn_cap = max(MAX_TURNS, len(ids)) if exchange.meeting else MAX_TURNS
+                # Meeting turns are serial: each speaker consumes one round, including follow-ups.
+                round_cap = turn_cap if exchange.meeting else MAX_ROUNDS
                 if not pending or rounds >= round_cap or current.turns_taken >= turn_cap:
                     capped = bool(pending)
                     if capped:

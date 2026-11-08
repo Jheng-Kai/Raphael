@@ -69,7 +69,7 @@ def test_context_diffs_include_deletions_and_new_lines_without_old_roster():
     diff = section_delta("Team", "Renamed member\nUnchanged member", line_hashes(old))
     assert "[0:2]" in diff and "Renamed member" in diff
     assert "Removed member" not in diff and "Unchanged member" not in diff
-    assert section_delta("Team", old, line_hashes(old)) == "Team: unchanged."
+    assert section_delta("Team", old, line_hashes(old)) == ""
 
 
 def test_resumed_context_includes_only_unseen_turns_and_changed_memory():
@@ -147,7 +147,7 @@ async def test_sixty_native_turns_submit_flat_deltas_and_fresh_gets_full_context
     assert all(call["session"] == "same-native-session" for call in calls[1:])
     assert len({len(call["user"]) for call in calls[1:]}) == 1
     assert all("Earlier question" not in call["user"] for call in calls[1:])
-    assert all("Team: unchanged." in call["user"] and "Memory: unchanged." in call["user"] for call in calls[1:])
+    assert all("Team snapshot" not in call["user"] and "Memory snapshot" not in call["user"] for call in calls[1:])
     # A separate native session still receives the entire available history.
     sessions.forget(5, f"cli:{brain}:fake", 7)
     loop.task = None

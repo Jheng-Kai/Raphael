@@ -6,13 +6,13 @@ from pathlib import Path
 from ..ui_languages import LANGUAGES, normalize_language
 
 
-def configured_language(data_dir: Path) -> str:
+def configured_language(data_dir: Path) -> str | None:
     try:
         document = json.loads((data_dir / "device.json").read_text(encoding="utf-8-sig"))
         value = document.get("ui_language") if isinstance(document, dict) else None
     except (OSError, ValueError):
         value = None
-    return normalize_language(value if isinstance(value, str) and value in LANGUAGES else "zh-TW")
+    return normalize_language(value) if isinstance(value, str) and value in LANGUAGES else None
 
 
 def reply_context(language: str) -> str:

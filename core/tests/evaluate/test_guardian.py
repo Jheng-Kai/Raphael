@@ -116,7 +116,8 @@ async def test_cli_fake_brain_calls_real_authenticated_mcp(conn, tmp_path, monke
                 headers = {"Authorization": "Bearer " + token}
                 listing = await http.post(endpoint, headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
                 names = {tool["name"] for tool in listing.json()["result"]["tools"]}
-                assert "routine_list" in names and "member_create" not in names
+                # Owner-private members share the management catalog; listing it grants no delegation authority.
+                assert {"routine_list", "member_create"} <= names
                 response = await http.post(endpoint, headers=headers, json={"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "routine_list", "arguments": {}}})
                 assert response.status_code == 200
                 assert "寫作" in response.text

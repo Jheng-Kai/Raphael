@@ -61,6 +61,8 @@ def test_the_defaults_are_the_documented_ones():
         "action_mode": "direct",
         "router_model": "",
         "memory_model": "",
+        "memory_threshold_tokens_cap": 24000,
+        "memory_max_unused_days": 90,
         "pdf_model": "",
         "agent_fallbacks": [],
         "cleanup_fallbacks": [],

@@ -624,13 +624,20 @@ async def test_a_decision_in_one_members_thread_never_reaches_another(setup, cli
     rig, team = setup
     a = member(team, name="小財務")
     b = member(team, name="小研究")
-    # In A's thread the owner decides something, and asks A to remember it for everyone.
+    # The model proposes shared storage, but this thread's decision must stay with A.
     client.decisions.append(decision("chat"))
-    note = {"target": "user", "action": "add", "content": "我們決定預算是三萬元。", "old_text": ""}
-    client.chats.append(live_said("", memory=[note]))
-    await typed(rig, "記住，我們決定預算是三萬", a.id)
+    client.chats.extend([
+        chat("I will save the decision.", ("memory_update", {"target": "user", "operations": [
+            {"action": "add", "content": "我們決定預算是三萬元。"}]})),
+        live_said("已記下。"),
+    ])
+    result = await typed(rig, "記住，我們決定預算是三萬", a.id)
+    assert result["status"] == "done"
     assert team.memory.shared.read() == ""  # a decision is not macro knowledge: it stayed with A
     assert "三萬" in team.memory.own(a.id).read()
+    assert team.memory.own(b.id).read() == ""
+    assert any(step.tool == "memory_update" and step.outcome == "ok"
+               for step in AgentHistory(conn).steps([result["turn_id"]])[result["turn_id"]])
     # B is asked, and looks back in its past: none of it is there.
     client.decisions.append(decision("discuss"))
     client.chats.append(chat("先找找之前的決定。", ("history_search", {"query": "預算"})))

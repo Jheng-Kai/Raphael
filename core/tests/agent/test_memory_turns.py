@@ -134,7 +134,13 @@ async def test_a_request_to_remember_the_router_misplaced_is_answered_where_note
     client.decisions.append(decision(route))
     client.replies.append(reply(memory=[note("主人 2026-10-31 去東京")]))
     if route == "unclear":
-        client.chats.append(chat(json.dumps(client.replies.pop().data)))
+        # Unclear routing uses the narrated tool protocol rather than legacy reply.memory.
+        client.replies.pop()
+        client.chats.extend([
+            chat("I will save the dated plan.", ("memory_update", {"target": "memory", "operations": [
+                {"action": "add", "content": "主人 2026-10-31 去東京"}]})),
+            chat(json.dumps({"prefix": "了", "text": "已記下。", "detail": ""})),
+        ])
     result = await rig.ask("記住我下週六要去東京")
     assert result["text"] == "已記下。" and background.submitted == []
     assert "主人 2026-10-31 去東京" in memory.own(0).read()
@@ -248,7 +254,7 @@ async def test_a_search_finds_a_turn_the_context_no_longer_holds(rig, client, me
     rig.seed("Conversation opening", "Hello.")
     rig.seed("Project opening", "Ready.")
     old = rig.seed("上次的會議在哪裡", "在三樓的會議室。")
-    memory.conversation._save("Earlier project discussion.", old)
+    rig.service._conversation_of(0, rig.service.conversations.quick())._save("Earlier project discussion.", old)
     for n in range(40):
         rig.seed(f"別的事 {n}", "好。")
     client.decisions.append(decision("chat"))

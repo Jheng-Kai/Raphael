@@ -47,6 +47,9 @@ async def test_tool_narration_is_progress_and_only_final_is_a_reply(make_rig, cl
     assert turn["messages"][-1]["text"] == "《Answer. It is Friday.》"
     assert len({data["turn_id"] for method, data in notes if method == "agent.turn"}) == 1
     assert turn["cost_usd"] == pytest.approx(0.9)
+    events = rig.conn.execute('SELECT turn_id,tool,outcome FROM turn_tool_events ORDER BY id').fetchall()
+    # This fixture reuses call id "0"; retries replace that event instead of duplicating it.
+    assert [tuple(event) for event in events] == [(turn['id'], 'local_time', 'ok')]
 
 
 async def test_a_permission_pauses_the_sequence_and_yes_continues_the_same_turn(make_rig, plugins, calls, client):

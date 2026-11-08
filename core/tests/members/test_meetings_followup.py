@@ -83,6 +83,19 @@ async def test_every_meeting_participant_gets_a_turn_and_corrections_wake_them_a
     assert (await history(rig, room))['meeting']['state'] == 'done'
 
 
+async def test_an_addressed_meeting_followup_only_schedules_its_recipient(rig, exchange):
+    room, ids = await team(rig)
+    await exchange.meeting({'room_id':room['id'], 'agenda':'Review this release'}, 'en', meeting_source(rig, 'addressed'))
+    for _ in [0, *ids]:
+        await finish(rig, exchange, '(pass)')
+    before = len(rig.background.submitted)
+    await send(rig, room, '@Alice Execute your assigned work now', key='execute')
+    assert [row['member_id'] for row in rig.background.submitted[before:]] == [ids[0]]
+    await finish(rig, exchange, '(pass)')
+    assert len(rig.background.submitted) == before + 1
+    assert (await history(rig, room))['exchange']['state'] == 'done'
+
+
 async def test_compact_overview_keeps_twelve_members_under_the_smallest_result_guard(rig):
     from raphael_core.worker.guards import wrap_untrusted, MIN_RESULT_CHARS
     for i in range(11):

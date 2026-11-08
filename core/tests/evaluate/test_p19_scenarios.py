@@ -49,6 +49,8 @@ class HonestBrain(FakeClient):
 
 
 def honest_cli(monkeypatch, sessions=None):
+    histories = {}
+
     class Driver:
         def __init__(self, name, command, *, model, **kwargs):
             self.model = model
@@ -56,9 +58,13 @@ def honest_cli(monkeypatch, sessions=None):
         async def run(self, *, system, user, session, **kwargs):
             if sessions is not None:
                 sessions.append(session)
+            native = session or f"thread-{len(histories) + 1}"
+            history = histories.setdefault(native, [])
+            answer = honest(system + "\n" + "\n".join(history), user)
+            history.extend((user, answer))
             yield Event("model", self.model)
-            yield Event("session", session or f"thread-{id(self)}")
-            yield Event("final", honest(system, user))
+            yield Event("session", native)
+            yield Event("final", answer)
 
         async def interrupt(self):
             pass

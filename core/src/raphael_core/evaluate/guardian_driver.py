@@ -565,7 +565,11 @@ class RpcDriver:
         for task in tasks:
             if task['state']!='done' or task['ready_at_ms']!=task['created_at_ms'] or task['dispatch_policy']!='immediate' or task['started_at_ms'] is None:
                 reasons.append('immediate_start')
-            if task['scope']!=('private' if room else 'exchange') or task['model_ref']!=self.model:
+            work_turn = self.app._conn.execute('SELECT scope,member_id,conversation_id FROM agent_turns WHERE id=?', (task['turn_id'],)).fetchone()
+            # A hand-off runs in the assignee's own private conversation; the exchange is only its audit.
+            if (task['scope']!='private' or task['model_ref']!=self.model or work_turn is None
+                    or work_turn['scope']!='private' or work_turn['member_id']!=target
+                    or work_turn['conversation_id']!=self.app.agent.conversations.main(target)):
                 reasons.append('work_scope_or_model')
             if task['report_room_id']!=room_id or task['room_id'] is not None or self.nonce not in (task['report_text'] or '')+(task['report_detail'] or ''):
                 reasons.append('result_destination_or_nonce')

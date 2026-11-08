@@ -660,6 +660,12 @@ class TaskRun:
                     task = self._store.get(self.task_id)
                     with background_management(task.member_id if task else 0):
                         reply = await self._tool(name, arguments, call_id if isinstance(call_id, str) else "")
+                    if task and task.turn_id:
+                        from ..memory.tool_events import record as record_tool_event
+                        ref = self.snapshot.refs.get(name)
+                        record_tool_event(self._store._conn, task.turn_id, call_id, name, arguments, reply.get("content", ""),
+                                          ok=reply.get("ok", False), kind=reply.get("kind"),
+                                          external=bool(ref and (ref.kind == MCP or ref.name in ("web_read", "web_search", "read_attachment"))))
                     if status is not None:
                         status.update(outcome="ok" if reply.get("ok") else "error", reason=reason_of("ok" if reply.get("ok") else "error", reply.get("kind")))
                     return reply

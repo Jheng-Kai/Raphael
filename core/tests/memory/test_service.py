@@ -170,7 +170,7 @@ async def test_memory_work_keeps_the_selected_brain(memory, history, model, conn
     settings.set("agent_model", model_id)
     settings.set("assistant_model", "anthropic/claude-haiku-5.5")
     if work == "fold":
-        memory.conversation.context_window = 300
+        memory.conversation.context_window = 200
         from raphael_core.memory.conversation import FOLD_AT_TURNS
         for number in range(FOLD_AT_TURNS + 1):
             add_turn(history, f"Question {number}")

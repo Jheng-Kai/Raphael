@@ -437,6 +437,7 @@ def test_an_entry_has_what_the_picker_shows():
         "free": False,
         "variable_price": False,
         "context_length": 1_050_000,
+        "max_output_tokens": 128000,
         "created_at_ms": 1_790_100_786_000,
         "capabilities": {
             "structured_output": True,

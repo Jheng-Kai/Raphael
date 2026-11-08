@@ -172,7 +172,7 @@ async def test_latency_logs_only_timings_and_waits_for_actual_sound(make_rig, cl
 
 
 @pytest.mark.parametrize("source", ["voice", "app"])
-async def test_quick_cli_passes_effort_and_resumes_its_native_session(make_rig, client, tmp_path, monkeypatch, source):
+async def test_quick_cli_passes_effort_rebuilds_a_legacy_session_then_resumes(make_rig, client, tmp_path, monkeypatch, source):
     from raphael_core.agent.cli.discovery import CliBrains
     from raphael_core.agent.cli.drivers import Event
     from raphael_core.agent.cli import loop as production
@@ -206,10 +206,14 @@ async def test_quick_cli_passes_effort_and_resumes_its_native_session(make_rig, 
     result = await rig.call("agent.ask", {"session_id": "cli", "text": "Hello", "ui_language": "en", "source": source,
         "destination": "quick", "conversation_id": quick})
     assert result["text"] == "Quick answer."
-    assert calls[0]["session"] == "unbounded-native-history" and calls[0]["effort"] == "low"
+    assert calls[0]["session"] is None and calls[0]["effort"] == "low"
     assert "FORMAL_SENTINEL" not in calls[0]["user"] and "quick-seed-00" in calls[0]["user"]
     assert "quick-seed-11" in calls[0]["user"]
     assert rig.service._cli_sessions.get(0, model, quick) == "new-native-session"
+    await rig.call("agent.ask", {"session_id": "cli-next", "text": "Continue", "ui_language": "en", "source": source,
+        "destination": "quick", "conversation_id": quick})
+    assert calls[1]["session"] == "new-native-session" and calls[1]["effort"] == "low"
+    assert "quick-seed-00" not in calls[1]["user"] and "quick-seed-11" not in calls[1]["user"]
     assert not client.decide_calls and not client.json_calls
 
 

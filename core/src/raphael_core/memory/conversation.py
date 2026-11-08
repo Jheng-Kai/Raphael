@@ -14,17 +14,16 @@ the next, for the provider's prompt cache):
   not finish, with why and what its steps already did (a short note, `attribution.unfinished_note`),
   never with the apology it ended with as if it were an answer. One that waits for a yes, or still
   runs, says nothing yet; a routine that failed is not the owner's request.
-- The summary (`conversation_summaries`) covers the turns before them. When the turns after it pass
-  half the selected model context window, their middle is folded into it by one
-  call to the member's own brain (`fold`), down to a tail of KEEP_TOKENS (about 6K) or KEEP_TURNS. The
-  summary is updated in place, not written anew from a summary of a summary, and is held to
-  SUMMARY_MAX_TOKENS (about 1,500 tokens) by code.
+- The summary (`conversation_summaries`) covers the turns before them. Hermes' effective input
+  threshold is capped at 24K by default. Oldest unread turns are folded in bounded passes with the
+  owner's auxiliary quick model, retaining the opening and latest 20 messages and a 20% token tail.
+  The rolling summary takes 20% of each pass, bounded between 2K and 10K tokens.
 - Some turns are never folded yet (`protected`): a question that waits for a yes or a no, a turn
   whose background task has not reported, the owner's last four turns, and a turn where the owner
   corrected Raphael that the reflection pass has not read yet (it may hold a preference to keep).
   The fold stops before the first of them: the summary always covers a run of turns from the start.
-- What a tool returned is never in a turn (only its steps are kept), so it is never summarised: it is
-  dropped, which works better than summarising it (DeepSeek's "discard-all" result).
+- Tool results stay in a private, redacted table linked to their turn. Summaries receive placeholders;
+  session_read can recover the bounded result as untrusted data within the same privacy scope.
 - A fold that fails keeps the summary as it was and folds nothing; the next turn tries again after a
   pause that grows (60 s, 5 min, 15 min).
 - A fold waits for the model for seconds, and the summary may be cleared meanwhile (the owner
@@ -33,7 +32,7 @@ the next, for the provider's prompt cache):
   start again from 1 once the conversation is cleared, the summary's own progress
   (`through_turn_id`, 0 both before and after a clear during the first fold) cannot tell. Its call
   is in the spend all the same, since it was paid for.
-- Quick routes use the same full history and half-window budget as other routes. The opening
+- Quick routes use the same full history and effective threshold budget as other routes. The opening
   turns and recent turns remain verbatim when the middle is folded.
 
 Folded turns are not deleted: the conversation view shows them and the search finds them. The
@@ -67,29 +66,28 @@ from ..brain.providers.base import ModelProvider
 from ..brain.providers.registry import for_purpose
 from ..clock import wall_clock_ms
 from .terms import estimate_tokens
+from .compression import DEFAULT_THRESHOLD_CAP, PROTECT_LAST_MESSAGES, message_count, summary_budget, threshold_tokens
 
 logger = logging.getLogger(__name__)
 
-# The turns after the summary are folded into it when they pass either of these...
-FOLD_AT_TOKENS = 12_000
+# The default cap; the trigger also respects the model's effective input window.
+FOLD_AT_TOKENS = DEFAULT_THRESHOLD_CAP
 FOLD_AT_TURNS = 30
-# ... down to the newest turns that make up these.
-KEEP_TOKENS = 6_000
-KEEP_TURNS = 16
+# Default tail budget and whole-turn equivalent of the protected 20 messages.
+KEEP_TOKENS = int(DEFAULT_THRESHOLD_CAP * .20)
+KEEP_TURNS = PROTECT_LAST_MESSAGES // 2
 # The owner's latest turns, always kept as they were said.
 KEEP_OWNER_TURNS = 4
 # The summary, at most.
-SUMMARY_MAX_TOKENS = 1_500
-# The most of the turns one fold reads (the newest of those it folds).
+SUMMARY_MAX_TOKENS = 10_000
+# The most of the oldest unread turns one summariser pass reads.
 FOLD_INPUT_TOKENS = 16_000
 # The most of a discussion's longer text a recent turn shows, in characters.
 DETAIL_CHARS = 400
-# How many recent turns the quick routes read.
-QUICK_TURNS = 6
 # The pauses after a fold that failed, one after another; the last one repeats.
 FOLD_PAUSES_S = (60.0, 300.0, 900.0)
 FOLD_TIMEOUT_S = 30.0
-FOLD_MAX_TOKENS = 2_400
+FOLD_MAX_TOKENS = 10_200
 SUMMARY_PURPOSE = "memory"
 DEFAULT_CONTEXT_WINDOW = 32_000
 KEEP_START_TURNS = 2
@@ -214,6 +212,18 @@ def cap_summary(text: str, max_tokens: int = SUMMARY_MAX_TOKENS) -> str:
     return cut.strip()
 
 
+def token_prefix(text: str, budget: int) -> str:
+    """A contiguous prefix for a giant turn, without silently skipping the remainder."""
+    low, high = 0, len(text)
+    while low < high:
+        middle = (low + high + 1) // 2
+        if estimate_tokens(text[:middle]) <= budget:
+            low = middle
+        else:
+            high = middle - 1
+    return text[:low]
+
+
 @dataclass(frozen=True)
 class Summary:
     text: str
@@ -228,29 +238,34 @@ class Context:
 
     summary: str
     turns: list[Turn]
+    summary_through_turn_id: int = 0
 
 
 def plan_fold(
-    turns: Sequence[Turn], protected: set[int], *, context_window: int | None = None
+    turns: Sequence[Turn], protected: set[int], *, context_window: int | None = None,
+    max_output: int = 0, threshold_cap: int = DEFAULT_THRESHOLD_CAP, summary_tokens: int = 0,
 ) -> tuple[list[Turn], int] | None:
     """Which of `turns` (every turn after the summary, oldest first, whatever its status) to fold
     into the summary now, and the id of the last turn the summary will cover; None when it is not
     time to fold, or nothing may be folded yet.
 
-    It is time when the turns the model reads (`is_readable`: the answered ones and the requests that
-    did not finish) pass FOLD_AT_TOKENS or FOLD_AT_TURNS. The newest turns are kept, as many as make
-    KEEP_TOKENS or KEEP_TURNS and never fewer than KEEP_OWNER_TURNS; the fold then stops before the
+    It is time when readable turns and the summary pass the Hermes effective-window trigger.
+    Keep at least the newest 20 messages and the owner's last four turns, with a tail budget
+    of 20% of the trigger. The fold stops before the
     first turn in `protected`, so that the summary covers a run of turns from the start."""
     readable = [turn for turn in turns if is_readable(turn)]
     total = sum(_turn_tokens(turn) for turn in readable)
-    threshold = FOLD_AT_TOKENS if context_window is None else context_window // 2
-    if total <= threshold and (context_window is not None or len(readable) <= FOLD_AT_TURNS):
+    threshold = threshold_tokens(context_window or DEFAULT_CONTEXT_WINDOW, max_output, threshold_cap)
+    total += summary_tokens
+    if total <= threshold:
         return None
-    kept, kept_tokens = 0, 0
+    kept, kept_tokens, messages = 0, 0, 0
+    tail_budget = int(threshold * .20)
     for turn in reversed(turns):
-        if kept >= KEEP_OWNER_TURNS and (kept_tokens >= KEEP_TOKENS or kept >= KEEP_TURNS):
+        if kept >= KEEP_OWNER_TURNS and messages >= PROTECT_LAST_MESSAGES and kept_tokens >= tail_budget:
             break
         kept += 1
+        messages += message_count(turn)
         kept_tokens += _turn_tokens(turn) if is_readable(turn) else 0
     candidates = list(turns[: len(turns) - kept])
     for index, turn in enumerate(candidates):
@@ -299,6 +314,9 @@ class Conversation:
         # How many times the summary was cleared: a fold that began at another count is stale.
         self._clears = 0
         self.context_window = DEFAULT_CONTEXT_WINDOW
+        self.max_output_tokens = 0
+        self.threshold_cap = DEFAULT_THRESHOLD_CAP
+        self.summary_model: Callable[[str], str] = lambda model: model
         # Says whether a step changed something (`ToolGate.step_changes`), for the note of a request
         # that did not finish; the service sets it. Without it every step counts as a change.
         self.changes: Callable[[Step], bool] | None = None
@@ -357,6 +375,7 @@ class Conversation:
         """Forget the summary; whether there was one. The turns stay, and are read again from the
         start within the limits. A fold that waits for the model meanwhile will write nothing."""
         self._clears += 1
+        self._save_fragment(0, 0)
         if self.conversation_id is not None:
             with self._conn:
                 cursor = self._conn.execute("DELETE FROM conversation_context_summaries WHERE conversation_id = ?", (self.conversation_id,))
@@ -380,8 +399,8 @@ class Conversation:
         read: a long conversation may hold many failed ones, with many steps)."""
         return self._history.with_work(turns, self.changes)
 
-    def context(self, *, quick: bool = False, context_window: int | None = None) -> Context:
-        """Full history below half the model window; opening and recent turns otherwise.
+    def context(self, *, context_window: int | None = None) -> Context:
+        """Full history below the effective trigger; opening and protected recent turns otherwise.
 
         Reading context never folds, saves state or emits change notifications.
         """
@@ -396,22 +415,42 @@ class Conversation:
             return Context("", [])
         shown: list[Turn] = []
         tokens = sum(_turn_tokens(turn) for turn in start) + estimate_tokens(summary.text)
-        budget = (context_window or self.context_window) // 2
+        budget = threshold_tokens(context_window or self.context_window, self.max_output_tokens, self.threshold_cap)
+        protected = self.protected(answered)
+        tail_messages = 0
         for turn in reversed(tail):
             cost = _turn_tokens(turn)
-            if shown and tokens + cost > budget:
+            if shown and tail_messages >= PROTECT_LAST_MESSAGES and len(shown) >= KEEP_OWNER_TURNS and tokens + cost > budget and turn.id not in protected:
                 break
             shown.append(turn)
             tokens += cost
+            tail_messages += message_count(turn)
+        # Old pending approvals and unread corrections remain visible even beyond the ordinary budget.
+        shown_ids = {turn.id for turn in shown}
+        shown.extend(turn for turn in tail if turn.id in protected and turn.id not in shown_ids)
+        shown.sort(key=lambda turn: turn.id or 0, reverse=True)
         shown.reverse()
         # Cards can settle after their originating turn was folded or fell outside the window.
         # Keep only fresh card facts for those turns, attached to their IDs, not their old text.
         from ..agent.card_context import outcomes_text
         visible = {turn.id for turn in start + shown}
         folded = [f"Turn {turn.id}: {fact}" for turn in answered if turn.id not in visible for fact in turn.card_outcomes]
-        return Context(summary.text + outcomes_text(folded), start + shown)
+        return Context(summary.text + outcomes_text(folded), start + shown, summary.through_turn_id)
 
     # --- folding ---------------------------------------------------------------------------------
+
+    def _fragment_key(self):
+        return f'summary_fragment:{self.member_id}:{self._conversation_id() or 0}'
+
+    def _fragment(self):
+        rows = dict(self._conn.execute('SELECT key,value FROM memory_state WHERE key IN (?,?)',
+                                      (self._fragment_key(), self._fragment_key() + ':turn')))
+        return rows.get(self._fragment_key() + ':turn', 0), rows.get(self._fragment_key(), 0)
+
+    def _save_fragment(self, turn_id, offset):
+        with self._conn:
+            self._conn.executemany('INSERT INTO memory_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+                                   [(self._fragment_key(), offset), (self._fragment_key() + ':turn', turn_id)])
 
     def protected(self, turns: Sequence[Turn]) -> set[int]:
         """The ids of `turns` that may not be folded yet (see the module)."""
@@ -420,7 +459,7 @@ class Conversation:
         for turn in turns:
             if turn.id is None:
                 continue
-            if turn.status == "confirm":
+            if turn.status in ("confirm", "running", "pending"):
                 ids.add(turn.id)
             elif turn.id > reflected and is_correction(turn.question):
                 ids.add(turn.id)
@@ -449,7 +488,9 @@ class Conversation:
         summary = self.summary()
         all_turns = self._read()
         turns = self._worked([turn for turn in all_turns[KEEP_START_TURNS:] if (turn.id or 0) > summary.through_turn_id])
-        return plan_fold(turns, self.protected(turns), context_window=self.context_window)
+        return plan_fold(turns, self.protected(turns), context_window=self.context_window,
+                         max_output=self.max_output_tokens, threshold_cap=self.threshold_cap,
+                         summary_tokens=estimate_tokens(summary.text) + sum(_turn_tokens(turn) for turn in all_turns[:KEEP_START_TURNS] if is_readable(turn)))
 
     def schedule_fold(self, model: str, ledger_for: Callable[[], Ledger]) -> None:
         """Fold in the background if it is time and no fold runs or waits out a pause. Needs the
@@ -469,7 +510,11 @@ class Conversation:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return
-        self._folding = loop.create_task(self.fold(model, ledger_for()))
+        self._folding = loop.create_task(self._fold_batches(model, ledger_for))
+
+    async def _fold_batches(self, model, ledger_for):
+        while await self.fold(model, ledger_for()):
+            await asyncio.sleep(0)
 
     async def wait_for_fold(self) -> None:
         """Wait for the fold that runs, if one does (the tests, and the shutdown)."""
@@ -494,44 +539,74 @@ class Conversation:
             self._save(summary.text, through)
             return True
         moment = time.strftime("%Y-%m-%d (%A)", time.localtime(self._now_ms() / 1000))
-        # A long backlog (the first fold after an upgrade, or after the model failed for a while)
-        # is read from its newest turns, as many as FOLD_INPUT_TOKENS; the older ones are covered
-        # without being read, and the search still finds them.
+        # Reserve room for the prior summary, bounded opening context, output and envelope.
+        start = self._worked([turn for turn in self._read() if is_readable(turn)][:KEEP_START_TURNS])
+        opening = '\n'.join(token_prefix(f'[{turn_time(turn.created_at_ms)}]\n{turn_text(turn, detail=True)}', 2000) for turn in start)
+        available = DEFAULT_CONTEXT_WINDOW - estimate_tokens(summary.text) - estimate_tokens(opening) - 1400
+        input_budget = min(FOLD_INPUT_TOKENS, max(1, min(available - 2000, int(available / 1.2))))
+        # Read the oldest contiguous batch. A giant turn advances a durable character offset
+        # but is not marked covered until its final fragment has actually been summarised.
         kept: list[Turn] = []
         tokens = 0
-        for turn in reversed(folded):
-            tokens += _turn_tokens(turn)
-            if kept and tokens > FOLD_INPUT_TOKENS:
+        rendered = []
+        fragment_turn, fragment_offset = self._fragment()
+        progress = (0, 0)
+        from .tool_events import placeholders
+        for turn in folded:
+            body = f"[{turn_time(turn.created_at_ms)}]\n{turn_text(turn, detail=True)}\n{placeholders(self._conn, turn.id)}"
+            offset = fragment_offset if fragment_turn == turn.id else 0
+            body = body[offset:]
+            cost = estimate_tokens(body)
+            if kept and tokens + cost > input_budget:
+                break
+            if cost > input_budget:
+                body = token_prefix(body, input_budget)
+                progress = (turn.id, offset + len(body))
+                rendered.append('[Partial turn; the remainder is not covered yet]\n' + body)
+                kept.append(turn)
+                tokens += estimate_tokens(body)
                 break
             kept.append(turn)
-        folded = kept[::-1]
+            rendered.append(body)
+            tokens += cost
+        folded = kept
+        completed = folded[:-1] if progress[0] else folded
+        through = min(through, completed[-1].id) if completed else summary.through_turn_id
+        budget = summary_budget(tokens)
         # Each turn with its own time: the relative dates in it are read against the day it was said.
-        turns = "\n\n".join(
-            f"[{turn_time(turn.created_at_ms)}]\n{turn_text(turn, detail=True)}" for turn in folded
-        )
+        turns = "\n\n".join(rendered)
         user = (
             f"Today: {moment}\n\n"
             f"<summary_so_far>\n{summary.text or '(none yet)'}\n</summary_so_far>\n\n"
             f"<turns>\n{turns}\n</turns>"
         )
-        start = self._worked([turn for turn in self._read() if is_readable(turn)][:KEEP_START_TURNS])
-        user += "\n\nVerbatim conversation start (retained separately, for context):\n" + "\n".join(
-            f"[{turn_time(turn.created_at_ms)}]\n{turn_text(turn, detail=True)}" for turn in start)
-        try:
-            completion = await asyncio.wait_for(
+        user += "\n\nVerbatim conversation start (bounded context, retained separately):\n" + opening
+        selected_model = self.summary_model(model)
+        async def request(chosen):
+            return await asyncio.wait_for(
                 self._client.complete_json(
-                    model=model,
+                    model=chosen,
                     fallbacks=[],
-                    system=_SUMMARY_SYSTEM.format(max_tokens=SUMMARY_MAX_TOKENS),
+                    system=_SUMMARY_SYSTEM.format(max_tokens=budget),
                     user=user,
                     schema=_SUMMARY_SCHEMA,
                     schema_name="raphael_summary",
                     timeout_s=FOLD_TIMEOUT_S,
-                    max_tokens=FOLD_MAX_TOKENS,
+                    max_tokens=budget + 200,
                     reasoning_effort="none",
                 ),
                 FOLD_TIMEOUT_S,
             )
+        try:
+            try:
+                completion = await request(selected_model)
+            except (OpenRouterError, TimeoutError, AgentFailure) as error:
+                if selected_model == model:
+                    raise
+                from .brain import failure_summary
+                kind, _ = failure_summary(error)
+                logger.warning("Memory auxiliary summariser failed; retaining member brain: %s", kind)
+                completion = await request(model)
         except (OpenRouterError, TimeoutError, AgentFailure) as error:
             self._failed(type(error).__name__)
             return False
@@ -551,9 +626,10 @@ class Conversation:
             return False
         # The turns may have changed while the model wrote: the summary covers what it was given,
         # and nothing at all when it was cleared meanwhile (with the conversation, maybe).
-        if self._clears != clears or self.summary().through_turn_id != summary.through_turn_id:
+        if self._clears != clears or self.summary() != summary:
             return False
-        self._save(cap_summary(text), through)
+        self._save(cap_summary(text, budget), through)
+        self._save_fragment(*progress)
         self._failures = 0
         logger.info("The conversation was folded: %d turns", len(folded))
         return True

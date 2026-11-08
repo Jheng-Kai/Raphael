@@ -183,7 +183,9 @@ class MemoryService(Growth):
         self.homes = BotHomes(root.parent)
         self.homes.migrate(root)
         legacy.migrate(self.homes, told_name=self._told_name)
-        self.shared = MemoryFile(self.homes, None, on_change=lambda: self._changed(0, "shared"))
+        import threading
+        self._owner_thread = threading.get_ident()
+        self.shared = MemoryFile(self.homes, None, on_change=lambda: self._changed(0, "shared"), conn=conn, now_ms=now_ms, owner_thread=self._owner_thread)
         self._files: dict[int, MemoryFile] = {}
         self._history = AgentHistory(conn, now_ms)
         self._settings = SettingsStore(conn)
@@ -201,6 +203,7 @@ class MemoryService(Growth):
         self._running: asyncio.Task[None] | None = None
         self._failed_at: float | None = None
         self._failure_count = self._state("background_failures")
+        self._sync_log_index()
         # How many times the conversation was cleared: a pass that began at another count is stale.
         self._turn_clears = 0
 
@@ -220,6 +223,18 @@ class MemoryService(Growth):
             router.register(method, handler)
 
     # --- the state ---------------------------------------------------------------------------------
+
+    def _sync_log_index(self):
+        """Backfill existing logs once at startup; normal appends update the same index directly."""
+        from .recall_index import write_document
+        for folder in self.homes.safe(self.homes.root / 'bots').glob('*'):
+            if not folder.name.isdigit():
+                continue
+            member_id = int(folder.name)
+            for path in self.homes.safe(folder / 'memory/log').glob('*.md'):
+                safe = self.homes.path(member_id, 'memory/log/' + path.name)
+                write_document(self._conn, 'log', 'memory/log/' + path.name, member_id,
+                               safe.read_text(encoding='utf-8'), int(safe.stat().st_mtime * 1000))
 
     def _state(self, key: str) -> int:
         try:
@@ -246,7 +261,7 @@ class MemoryService(Growth):
         """The MEMORY.md of `member_id`."""
         memory = self._files.get(member_id)
         if memory is None:
-            memory = MemoryFile(self.homes, member_id, on_change=lambda: self._changed(member_id))
+            memory = MemoryFile(self.homes, member_id, on_change=lambda: self._changed(member_id), conn=self._conn, now_ms=self._now_ms, owner_thread=self._owner_thread)
             self._files[member_id] = memory
         return memory
 
@@ -327,6 +342,8 @@ class MemoryService(Growth):
                 self._conn.execute(
                     "DELETE FROM memory_state WHERE key = ?", (_watermark(member_id),)
                 )
+                self._conn.execute("DELETE FROM memory_search_documents WHERE kind='log' AND member_id=?", (member_id,))
+                self._conn.execute("DELETE FROM memory_entry_metadata WHERE scope=?", (f'member:{member_id}',))
         except sqlite3.Error as exc:
             logger.warning("Could not delete a member's summary: %s", type(exc).__name__)
         for folder in (self.homes.home(member_id), self.homes.state(member_id)):
@@ -346,9 +363,11 @@ class MemoryService(Growth):
         USER.md alone without a member (`SharedMemory`). It is text, so nothing the turn writes changes it,
         and the next turn reads what the files say then. A new turn may try a failed edit again."""
         self.shared.reset_failures()
+        self.shared.metadata.recalled(self.shared.entries())
         if member_id is None:
             return MemorySnapshot(shared=self.shared.prompt_text(), own=None, shared_usage=self.shared.usage())
         own = self.own(member_id)
+        own.metadata.recalled(own.entries())
         own.reset_failures()
         return MemorySnapshot(shared=self.shared.prompt_text(), own=own.prompt_text(),
                               shared_usage=self.shared.usage(), own_usage=own.usage())
@@ -475,6 +494,28 @@ class MemoryService(Growth):
         from .brain import MemoryBrain
         return MemoryBrain(self, member_id)
 
+    def summary_model(self, member_model):
+        """Use the owner's auxiliary choice, or explicitly retain the member's own brain."""
+        quick = self._settings.get("quick_model")
+        reason = "not_configured"
+        if quick:
+            from ..agent.cli.discovery import brain_ref
+            try:
+                ref = brain_ref(quick)
+                usable = (self._cli_brains is not None and self._cli_brains.available(ref[0])) if ref else (
+                    self._base_client.available(quick) if isinstance(self._base_client, ProviderRouter) else bool(self._keys.get()))
+                if usable:
+                    return quick
+                reason = "unavailable"
+            except Exception as error:
+                reason = type(error).__name__
+        logger.info("Memory summariser retains member brain: quick_model %s", reason)
+        return member_model
+
+    def configure_conversation(self, conversation):
+        conversation.threshold_cap = self._settings.get("memory_threshold_tokens_cap")
+        conversation.summary_model = self.summary_model
+
     def may_spend(self, member_id: int = 0) -> bool:
         """Whether a call of the memory's own may be made: there is a key."""
         try:
@@ -498,8 +539,9 @@ class MemoryService(Growth):
         """A turn was written in the thread of `member_id`: fold its conversation if it is time,
         and run the reflection pass now if enough turns wait for one, or once the conversation has
         been quiet for a while."""
-        if self.may_spend(member_id):
+        if self.may_spend(member_id) or self.summary_model(self._model(member_id)) != self._model(member_id):
             conversation = self.conversation_for(member_id)
+            self.configure_conversation(conversation)
             conversation._client = self._brain(member_id)
             conversation.schedule_fold(self._model(member_id), self.ledger)
         skill_due = self.skill_review is not None and self.skill_review.due()
@@ -609,7 +651,8 @@ class MemoryService(Growth):
         return [(self.shared, 0), *((self.own(member_id), member_id) for member_id in self._agents())]
 
     def _filling(self) -> list[tuple[MemoryFile, int]]:
-        return [(memory, member_id) for memory, member_id in self._spaces() if memory.fill() >= FULL_FROM]
+        return [(memory, member_id) for memory, member_id in self._spaces() if memory.fill() >= FULL_FROM
+                or memory.stale_entries(self._today(), self._settings.get('memory_max_unused_days'))]
 
     def consolidation_due(self) -> bool:
         if not self._filling():
@@ -638,7 +681,7 @@ class MemoryService(Growth):
         if self._failed_at is not None and self._clock() - self._failed_at < self._retry_s():
             self._arm_next()
             return
-        if not any(self.may_spend(member_id) for member_id in self._agents()):
+        if not any(self.may_spend(member_id) for member_id in self._agents()) and not self.consolidation_due():
             delay = self._next_due_s()
             if delay is not None:
                 self._arm(max(delay, RETRY_S))
@@ -724,6 +767,11 @@ class MemoryService(Growth):
         once the model has answered for each."""
         total = Applied()
         for memory, member_id in self._filling():
+            stale = memory.prune_stale(self._today(), self._settings.get('memory_max_unused_days'))
+            if stale is not None:
+                logger.info('Memory stale-entry cleanup: %s', 'applied' if stale.get('success') else stale.get('kind', 'refused'))
+            if memory.fill() < FULL_FROM:
+                continue
             if not self.may_spend(member_id):
                 continue
 

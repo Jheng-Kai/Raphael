@@ -35,7 +35,10 @@ print(json.dumps({"type":"result", "subtype":"success", "session_id":"same", "re
     first, resumed, fresh = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
     assert "First synthetic request" in first
     assert "Second synthetic request" in resumed and "First synthetic request" not in resumed
-    assert "Memory: unchanged." in resumed
+    assert all(marker not in resumed for marker in (
+        "Memory: unchanged.", "Team: unchanged.", "Memory (current snapshot", "Team (current snapshot",
+        "Memory changed", "Team changed",
+    ))
     assert "Third synthetic request" in fresh and "First synthetic request" in fresh
 
 

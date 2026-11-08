@@ -314,12 +314,19 @@ class AgentHistory:
         saved = self._conn.execute(
             "SELECT kind, text FROM agent_messages WHERE turn_id = ? ORDER BY seq", (turn_id,)
         ).fetchall()
-        terms = index_terms(question, text, (detail or "") + "\n" + "\n".join(event_text(row["text"]) if row["kind"] == "event" else row["text"] for row in saved if not (row["kind"] == "event" and is_action(row["text"]))))
+        tools = self._conn.execute("SELECT tool,redacted_args,substr(redacted_result,1,8192) FROM turn_tool_events WHERE turn_id=? ORDER BY id", (turn_id,)) if self._conn.execute("SELECT 1 FROM sqlite_master WHERE name='turn_tool_events'").fetchone() else ()
+        tool_text = "\n".join(" ".join(row) for row in tools)
+        terms = index_terms(question, text, (detail or "") + "\n" + tool_text + "\n" + "\n".join(event_text(row["text"]) if row["kind"] == "event" else row["text"] for row in saved if not (row["kind"] == "event" and is_action(row["text"]))))
         self._conn.execute("DELETE FROM agent_turns_fts WHERE rowid = ?", (turn_id,))
         self._conn.execute(
             "INSERT INTO agent_turns_fts (rowid, pairs, chars) VALUES (?, ?, ?)",
             (turn_id, terms.pairs, terms.chars),
         )
+
+    def reindex(self, turn_id):
+        row = self._conn.execute("SELECT question,text,detail FROM agent_turns WHERE id=?", (turn_id,)).fetchone()
+        if row:
+            self._index(turn_id, row[0], row[1], row[2])
 
     def add_steps(self, turn_id: int, steps: Sequence[Step]) -> None:
         """Add steps to a turn that is already stored: the call made after a yes, say. They come
@@ -684,7 +691,7 @@ class AgentHistory:
         with self._conn:
             self._conn.execute("DELETE FROM agent_messages")
             self._conn.execute("DELETE FROM agent_steps")
-            self._conn.execute("DELETE FROM agent_turns_fts")
+            self._conn.execute("DELETE FROM agent_turns_fts WHERE rowid > 0")
             cursor = self._conn.execute("DELETE FROM agent_turns")
         return cursor.rowcount
 

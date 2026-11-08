@@ -1921,3 +1921,33 @@ states. The brief report records the full wire shape. Claude owns app/src integr
 selected chat-setup-cards/chat-pairing-allowed matrix at both themes and 1120,720,1920x1080,
 including contact/full-size review and judge on the same run.
 Window (2026-11-07): conversation.ts visibleTurn shows a turn that only carries pairings or templates; the composer asks about a waiting bot setup (chat.askAboutSetup). look: chat-pairing-bottom.
+
+## Hermes memory standard (core, 2026-11-08)
+
+R-MEM-01..04 / R-OWNER-02: compression uses Hermes' effective input window, 75% below
+512K and 50% otherwise, with its 64K floor/85% rule. Owner-only settings:
+memory_threshold_tokens_cap=24000 (0 disables the cap), memory_max_unused_days=90
+(0 disables unused-entry expiry). The first three messages are protected by retaining
+the first two complete turns; retain the latest 20 messages and a 20% token tail,
+plus pending/running turns, pending approvals, unreported tasks, unread corrections and the owner's last four turns.
+Oldest-first bounded passes keep a durable partial-turn offset; no unread text is marked
+covered and no source turn is deleted. Summary budget is 20%, bounded to 2K..10K tokens.
+quick_model is the auxiliary summariser; unavailable/failed auxiliary execution logs its
+reason and retains the member brain, with spend purpose=memory.
+
+Migration 73 adds private redacted turn_tool_events, memory_search_documents and
+memory_entry_metadata. Tool outputs are pruned to placeholders during summarising;
+session_read/search retrieve bounded untrusted evidence with SQL privacy checks.
+The same persistent agent_turns_fts indexes turns, tool results' first 8192 characters,
+logs and permitted room messages; AND precedes OR, newer relevance is weighted, and
+auto-recall excludes turns already in context before LIMIT. Structured ISO until dates
+and last-recalled timestamps support local stale-entry pruning before consolidation;
+until dates are inclusive, and untrusted duplicate additions cannot expire confirmed entries.
+The 50% unattended floor and file revision history still apply.
+
+Offline coverage: tests/memory, tests/agent, tests/brain/test_memory_hermes_migration.py,
+tests/architecture/test_boundaries.py. test_hermes_standard.py covers 200K/1M windows,
+early names/dates, giant-turn restart, private tool readback, recent exclusion, expiry,
+auxiliary fallback and a synthetic 5000-turn recall benchmark. Exact commands/results
+and benchmark evidence are in app/.look/briefs/memory-hermes-standard-report.md.
+Core-only change; no UI/native/live/provider acceptance follows from offline tests.

@@ -44,7 +44,15 @@ def act(system, user, results, *, promise=False):
         return WRAPUP, []
     delegated = "Delegated work results" in user or "handoff_results" in user
     if GO in asked(user) and not results and not delegated:
-        return ("好，明天再做。", []) if promise else ("", [("handoff", arguments) for arguments in owners(user)])
+        # A report wakes every meeting participant. Read its current board before dispatching:
+        # an owner's earlier instruction must not replay stages that already have an owner.
+        public = user.partition('Status board and pinned decisions (untrusted data): ')[2]
+        board = json.JSONDecoder().raw_decode(public)[0]['board'] if public else []
+        assigned = {(item['member_id'], item['stage_id']) for item in board}
+        missing = [arguments for arguments in owners(user) if (arguments['member_id'], arguments['stage_id']) not in assigned]
+        if not missing:
+            return '分工已在進行或已回報。', []
+        return ("好，明天再做。", []) if promise else ("", [("handoff", arguments) for arguments in missing])
     return "收到。", []
 
 

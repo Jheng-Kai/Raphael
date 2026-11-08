@@ -162,6 +162,7 @@ class CatalogEntry:
     capabilities: frozenset[str]  # those of CAPABILITIES[kind] that it has
     reasoning_efforts: tuple[str, ...] | None = None
     default_effort: str | None = None
+    max_output_tokens: int | None = None
 
     @property
     def free(self) -> bool:
@@ -428,6 +429,7 @@ def _entry(model: Mapping, kind: str, makers: Mapping[str, str]) -> CatalogEntry
         # A router has no price of its own: the list gives it -1.
         variable_price=any((_number(pricing.get(f)) or 0) < 0 for f in ("prompt", "completion")),
         context_length=_positive_int(model.get("context_length")) if kind == LLM else None,
+        max_output_tokens=_positive_int((model.get("top_provider") or {}).get("max_completion_tokens")) if isinstance(model.get("top_provider"), dict) else None,
         created_at_ms=None if created is None else created * _MS_PER_SECOND,
         capabilities=_capabilities(model, kind),
         reasoning_efforts=listed_efforts(model, kind),
@@ -481,6 +483,7 @@ def entry_to_json(entry: CatalogEntry) -> dict[str, Any]:
         "output_per_mtok": entry.price.output_per_mtok,
         "variable_price": entry.variable_price,
         "context_length": entry.context_length,
+        "max_output_tokens": entry.max_output_tokens,
         "created_at_ms": entry.created_at_ms,
         "capabilities": sorted(entry.capabilities),
         "reasoning_efforts": list(entry.reasoning_efforts) if entry.reasoning_efforts is not None else None,
@@ -514,6 +517,7 @@ def entry_from_json(data: object) -> CatalogEntry | None:
         ),
         variable_price=data["variable_price"],
         context_length=_positive_int(data.get("context_length")),
+        max_output_tokens=_positive_int(data.get("max_output_tokens")),
         created_at_ms=_positive_int(data.get("created_at_ms")),
         capabilities=frozenset(c for c in capabilities if c in CAPABILITIES[kind]),
         reasoning_efforts=tuple(data["reasoning_efforts"]) if isinstance(data.get("reasoning_efforts"), list)
@@ -548,6 +552,7 @@ def entry_view(entry: CatalogEntry) -> dict[str, Any]:
         "free": entry.free,
         "variable_price": entry.variable_price,
         "context_length": entry.context_length,
+        "max_output_tokens": entry.max_output_tokens,
         "created_at_ms": entry.created_at_ms,
         "capabilities": {name: name in entry.capabilities for name in CAPABILITIES[entry.kind]},
         "reasoning_efforts": list(entry.reasoning_efforts) if entry.reasoning_efforts is not None else None,

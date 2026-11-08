@@ -1797,6 +1797,73 @@ PRAGMA user_version = 72;
 COMMIT;
 """
 
+# Hermes-style private tool transcripts and one persistent recall index.
+_MIGRATIONS[73] = """
+BEGIN;
+CREATE TABLE turn_tool_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE,
+    call_id TEXT NOT NULL,
+    tool TEXT NOT NULL,
+    redacted_args TEXT NOT NULL,
+    redacted_result TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    external INTEGER NOT NULL DEFAULT 0 CHECK(external IN (0,1)),
+    created_at_ms INTEGER NOT NULL,
+    UNIQUE(turn_id,call_id)
+);
+CREATE INDEX turn_tool_events_by_turn ON turn_tool_events(turn_id,id);
+CREATE TRIGGER clear_turn_tool_events AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM turn_tool_events WHERE turn_id=OLD.id;
+END;
+CREATE TABLE memory_search_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL CHECK(kind IN ('log','room')),
+    source_key TEXT NOT NULL,
+    member_id INTEGER NOT NULL DEFAULT -1,
+    room_id INTEGER,
+    body TEXT NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    UNIQUE(kind,source_key,member_id)
+);
+CREATE INDEX memory_search_documents_by_owner ON memory_search_documents(member_id,kind);
+CREATE TRIGGER memory_document_insert AFTER INSERT ON memory_search_documents BEGIN
+    INSERT INTO agent_turns_fts(rowid,pairs,chars)
+        VALUES(-NEW.id,raphael_search_pairs(NEW.body),raphael_search_chars(NEW.body));
+END;
+CREATE TRIGGER memory_document_update AFTER UPDATE ON memory_search_documents BEGIN
+    DELETE FROM agent_turns_fts WHERE rowid=-OLD.id;
+    INSERT INTO agent_turns_fts(rowid,pairs,chars)
+        VALUES(-NEW.id,raphael_search_pairs(NEW.body),raphael_search_chars(NEW.body));
+END;
+CREATE TRIGGER memory_document_delete AFTER DELETE ON memory_search_documents BEGIN
+    DELETE FROM agent_turns_fts WHERE rowid=-OLD.id;
+END;
+CREATE TRIGGER memory_room_insert AFTER INSERT ON room_messages BEGIN
+    INSERT INTO memory_search_documents(kind,source_key,room_id,body,updated_at_ms)
+        VALUES('room',CAST(NEW.id AS TEXT),NEW.room_id,NEW.text,NEW.created);
+END;
+CREATE TRIGGER memory_room_update AFTER UPDATE OF text,room_id,created ON room_messages BEGIN
+    UPDATE memory_search_documents SET body=NEW.text,room_id=NEW.room_id,updated_at_ms=NEW.created
+        WHERE kind='room' AND source_key=CAST(NEW.id AS TEXT);
+END;
+CREATE TRIGGER memory_room_delete AFTER DELETE ON room_messages BEGIN
+    DELETE FROM memory_search_documents WHERE kind='room' AND source_key=CAST(OLD.id AS TEXT);
+END;
+INSERT INTO memory_search_documents(kind,source_key,room_id,body,updated_at_ms)
+    SELECT 'room',CAST(id AS TEXT),room_id,text,created FROM room_messages;
+CREATE TABLE memory_entry_metadata (
+    scope TEXT NOT NULL,
+    entry_id TEXT NOT NULL,
+    until_date TEXT,
+    created_at_ms INTEGER NOT NULL,
+    last_recalled_at_ms INTEGER,
+    PRIMARY KEY(scope,entry_id)
+);
+PRAGMA user_version = 73;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 
@@ -1822,6 +1889,9 @@ def migrate(conn: sqlite3.Connection) -> None:
     A database that is already current is left alone, so reopening a file is safe. Each migration
     is its own transaction: one that fails leaves the database at the version before it.
     """
+    from ..memory.terms import index_terms
+    conn.create_function("raphael_search_pairs", 1, lambda text: index_terms(text or "", "", "").pairs, deterministic=True)
+    conn.create_function("raphael_search_chars", 1, lambda text: index_terms(text or "", "", "").chars, deterministic=True)
     (version,) = conn.execute("PRAGMA user_version").fetchone()
     for target in sorted(target for target in _MIGRATIONS if version < target <= LATEST_VERSION):
         step = _MIGRATIONS[target]

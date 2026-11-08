@@ -252,6 +252,19 @@ async def test_a_model_whose_connection_stays_silent_is_a_timeout(rig, monkeypat
 # --- the tools of the plugins ---------------------------------------------------------------------
 
 
+async def test_background_tool_result_is_linked_to_its_private_turn(rig):
+    from raphael_core.agent.history import AgentHistory
+    identifier = AgentHistory(rig.conn).add(session_id='synthetic', question='Read a note', route='delegate',
+                                           prefix='', text='', status='running')
+    with rig.conn:
+        rig.conn.execute('UPDATE worker_tasks SET turn_id=? WHERE id=?', (identifier, rig.task_id))
+    await rig.plugins.connect(look='T0')
+    rig.resnap()
+    assert (await rig.tool('Notes__look', {'topic': 'synthetic'}))['ok']
+    event = rig.conn.execute('SELECT turn_id,tool,outcome,external FROM turn_tool_events').fetchone()
+    assert tuple(event) == (identifier, 'Notes__look', 'ok', 1)
+
+
 async def test_a_tool_of_a_plugin_is_called_through_the_gate_and_audited_with_the_task(rig, calls):
     await rig.plugins.connect(look="T0")
     rig.resnap()

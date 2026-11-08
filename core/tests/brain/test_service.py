@@ -84,6 +84,38 @@ async def test_incomplete_transcript_keeps_gap_marker_in_paste_and_history(
     assert latest["item"]["text"] == result["text"]
 
 
+@pytest.mark.parametrize("fail_second", [False, True])
+async def test_incomplete_speech_cleans_heard_regions_without_showing_a_gap_to_the_model(
+    router, fake_client, keys, fail_second,
+):
+    keys.set(KEY)
+    await router.call("settings.set", {"key": "languages", "value": ["en-US"]})
+    marker = "(this part was not heard)"
+    before = "um schedule the review for tomorrow at four"
+    after = "uh send the summary to the review team"
+
+    async def clean(**kwargs):
+        fake_client.calls.append(kwargs)
+        user = kwargs["user"]
+        assert marker not in user and marker not in kwargs["system"]
+        if before in user:
+            assert after not in user
+            return completion({"text": "Schedule the review for tomorrow at four."})
+        assert after in user and before not in user
+        if fail_second:
+            raise OpenRouterError(503, "server", "Synthetic unavailable")
+        return completion({"text": "Send the summary to the review team."})
+
+    fake_client.complete_json = clean
+    result = await finalize(router, raw_text=f"{before}\n\n{marker}\n\n{after}", incomplete=True, ui_language="en")
+    assert result["text"].startswith("Schedule the review for tomorrow at four.\n\n" + marker + "\n\n")
+    assert result["text"].endswith("send the summary to the review team" if fail_second else "Send the summary to the review team.")
+    assert not result["cleaned"] and result["fallback_reason"] == "incomplete_stt"
+    latest = (await router.call("history.latest"))["item"]
+    assert latest["text"] == result["text"] and not latest["cleaned"]
+    assert latest["fallback_reason"] == "incomplete_stt" and latest["cost_usd"] > 0
+
+
 @pytest.mark.parametrize("text", ["Hello world.", "明天見。", "Is this ready?", "準備好了！"])
 async def test_short_punctuated_sentence_needs_no_model(router, fake_client, keys, text):
     keys.set(KEY)

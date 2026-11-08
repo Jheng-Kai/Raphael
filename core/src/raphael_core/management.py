@@ -373,6 +373,8 @@ INTERACTION_RPCS = {
 # Native device settings such as auto_update stay owner-only in DeviceStore;
 # they are not core settings or accepted by the model's settings_update tool.
 OWNER_ONLY_SETTINGS = {
+    "memory_threshold_tokens_cap": "Conversation compression policy is chosen by the owner.",
+    "memory_max_unused_days": "Automatic forgetting policy is chosen by the owner.",
     "routine_timezone": "The owner's routine time zone preference is never model-editable.",
     "routine_detected_timezone": "Internal detected device time zone, never model-editable.",
     "chatgpt.registrations.v1": "Internal provider registration state, never model-editable.",

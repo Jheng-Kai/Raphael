@@ -59,6 +59,11 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
     from raphael_core.background.host import WorkerHost
     from background.conftest import Links
     model='cli:codex:owner-model?effort=high' if brain=='cli' else 'fake/model'
+    def already_assigned(user):
+        # Report delivery wakes participants with the owner's old instruction still in context.
+        _, marker, public = user.rpartition('Status board and pinned decisions (untrusted data): ')
+        board = json.JSONDecoder().raw_decode(public.lstrip())[0]['board'] if marker else []
+        return any(item['stage_id']=='mail-triage' and item['member_id']==2 for item in board)
     class Client(FakeClient):
         async def chat_tools(self,**kwargs):
             messages=kwargs['messages']
@@ -70,7 +75,8 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
             elif speech and 'handoff 立即交給' not in asked(str(messages[-1]['content'])):
                 calls=[]
             else:
-                calls=[] if any(m['role']=='tool' for m in messages) or 'handoff_results' in str(messages) or 'where this has landed' in messages[0]['content'] or 'where this has landed' in str(messages) else [('handoff',arguments())]
+                context='\n'.join(str(message.get('content') or '') for message in messages[1:])
+                calls=[] if any(m['role']=='tool' for m in messages) or 'handoff_results' in str(messages) or 'where this has landed' in messages[0]['content'] or 'where this has landed' in str(messages) or already_assigned(context) else [('handoff',arguments())]
             self.turns=iter([('已讀取信件。'+driver.nonce if not calls else '',calls)])
             return await super().chat_tools(**kwargs)
     def arguments():
@@ -89,7 +95,7 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
             if 'You are speaking in a meeting' in system and 'handoff 立即交給' not in asked(user):
                 yield Event('final','已核對目前狀態。')
                 return
-            if child or ('Delegated work results' not in user and 'where this has landed' not in user):
+            if child or ('Delegated work results' not in user and 'where this has landed' not in user and not already_assigned(user)):
                 async with httpx.AsyncClient() as http:
                     response=await http.post(endpoint,headers={'Authorization':'Bearer '+token},json={
                         'jsonrpc':'2.0','id':1,'method':'tools/call','params':{

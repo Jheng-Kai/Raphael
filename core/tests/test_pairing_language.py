@@ -5,7 +5,7 @@ import pytest
 from agent.test_narration import chat
 from agent.test_service import until
 from members.test_answering import live_said
-from raphael_core.agent.answers import parse_reply
+from raphael_core.agent.answers import MESSAGE_BREAK, parse_reply
 from raphael_core.agent.cli.drivers import Driver, Event
 from raphael_core.messaging.cards import LINKS
 from raphael_core.messaging.service import member_account
@@ -150,14 +150,16 @@ async def test_owner_script_covers_api_cli_messages_and_public_narration(rig, mo
             yield Event("thinking", text=original)
             yield Event("tool_start", data={"id": "time", "name": "local_time"})
             yield Event("tool_end", data={"id": "time", "name": "local_time", "ok": True})
-            yield Event("final", text=payload)
+            # Ordinary CLI turns author plain messages, not the API's JSON reply envelope.
+            yield Event("final", text=f"{original}\n{MESSAGE_BREAK}\n{japanese}")
 
         monkeypatch.setattr(Driver, "run", run)
     result = await rig.agent.call("agent.ask", {"session_id": "script", "member_id": owner, "source": "app",
                                                "text": "Please check", "ui_language": "en"})
     saved = rig.agent.history.get(result["turn_id"])
     assert result["text"] == saved.text == expected + "\n\n" + japanese
-    assert result["messages"] == [expected, japanese] and saved.detail == expected
+    assert result["messages"] == [expected, japanese]
+    assert saved.detail == (expected if brain == "api" else None)
     messages = rig.agent.history.messages([saved.id])[saved.id]
     for kind in ("thinking", "progress"):
         lines = [m["text"] for m in messages if m["kind"] == kind]

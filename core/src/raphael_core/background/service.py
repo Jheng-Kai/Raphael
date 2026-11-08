@@ -763,7 +763,7 @@ class BackgroundService:
         if self._host.disabled:
             raise Refused("worker_disabled")
         if configured := getattr(self, "owner_language", None):
-            language = configured()
+            language = configured() or language
         task_id = self._store.create(
             session_id=session_id,
             language=language,
@@ -786,7 +786,7 @@ class BackgroundService:
 
     def handoff(self, speaker, arguments, *, source_turn_id, language):
         if configured := getattr(self, "owner_language", None):
-            language = configured()
+            language = configured() or language
         """The single API/CLI hand-off contract. Never wait for the assignee in this call."""
         from ..agent.policy import NotApproved, UnknownTool
         name = 'handoff'

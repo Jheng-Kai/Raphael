@@ -1705,6 +1705,63 @@ async def test_unrecoverable_gap_is_marked_in_pasted_text_for_any_engine_error(
     assert result["ui_language"] == language
 
 
+async def test_rate_limited_middle_audio_is_retained_through_final_retry_and_heard_regions_are_cleaned(
+    rig, router, conn,
+):
+    from raphael_core.brain.openrouter import Completion
+    from raphael_core.brain.secrets import MemoryKeyStore
+    from raphael_core.brain.service import Brain
+
+    before = "um schedule the review for tomorrow at four"
+    after = "uh send the summary to the review team"
+    missing_audio = []
+    calls = []
+
+    class Client:
+        async def complete_json(self, **kwargs):
+            calls.append(kwargs)
+            user = kwargs["user"]
+            assert "this part was not heard" not in user
+            if before in user:
+                assert after not in user
+                text = "Schedule the review for tomorrow at four."
+            else:
+                assert after in user and before not in user
+                text = "Send the summary to the review team."
+            return Completion({"text": text}, "synthetic-cleanup", .0002, 120, 30, 10)
+
+    class Engine:
+        name, gate = "synthetic-stt", None
+
+        def transcribe(self, samples, **kwargs):
+            if samples.size == RATE:
+                missing_audio.append(samples)
+                raise RpcError(INTERNAL_ERROR, "Synthetic rate limit", {"kind": "rate_limit"})
+            return before if samples.size == 2 * RATE else after
+
+    keys = MemoryKeyStore()
+    keys.set("synthetic-key")
+    core = Brain(conn, Client(), keys)
+    await core._settings_set({"key": "languages", "value": ["en-US"]})
+    router._handlers["brain.finalize_dictation"] = core._finalize_dictation
+    rig.engine = Engine()
+    rig.recorder.chunks = [chunk(2), chunk(1), chunk(3)]
+    try:
+        await router.call("dictation.start", {"session_id": "s1", "ui_language": "en"})
+        await rig.recorder.fed(3)
+        result = await stop(router)
+        assert result["text"] == "Schedule the review for tomorrow at four. (this part was not heard) Send the summary to the review team."
+        assert result["incomplete"] and not result["cleaned"]
+        assert result["fallback_reason"] == "incomplete_stt"
+        assert len(missing_audio) >= 2 and all(audio is missing_audio[0] for audio in missing_audio)
+        assert len(calls) == 2
+        item = core._history.latest()
+        assert item.fallback_reason == "incomplete_stt" and not item.cleaned
+        assert item.text == result["text"] and item.cost_usd == pytest.approx(.0004)
+    finally:
+        await core.aclose()
+
+
 async def test_a_segmenter_that_fails_ends_the_recording_with_an_error(rig, router):
     rig.segmenter.fail_on_accept = True
     rig.recorder.chunks = [chunk(1.0)] * 2

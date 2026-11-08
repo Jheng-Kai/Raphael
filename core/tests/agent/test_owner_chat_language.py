@@ -9,6 +9,20 @@ from .test_service import make_rig  # noqa: F401
 
 
 @pytest.mark.parametrize("source", ["telegram", "slack", "discord", "connector"])
+@pytest.mark.parametrize("language", ["en", "ja"])
+async def test_unconfigured_external_turn_uses_its_own_language(make_rig, client, source, language):
+    rig = make_rig(owner_language=lambda: None)
+    rig.service._last_language = "zh-TW"
+    def reply(**kwargs):
+        assert f"Owner's configured reply language: {language}" in str(kwargs["messages"])
+        return chat("Done.")
+    client.chats = [reply]
+    result = await rig.call("agent.ask", {"session_id": "unconfigured", "text": "Check",
+        "ui_language": language, "source": source})
+    assert result["status"] == "done"
+
+
+@pytest.mark.parametrize("source", ["telegram", "slack", "discord", "connector"])
 async def test_external_turn_uses_owner_language_after_an_english_turn(make_rig, client, source):
     rig = make_rig(owner_language=lambda: "zh-TW")
     client.chats = [chat("English answer.")]
