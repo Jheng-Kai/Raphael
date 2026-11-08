@@ -34,12 +34,12 @@ def test_every_speaker_gets_the_same_tools_and_capabilities(path, primary):
                                 attachments=True, interactive=path != "worker")
         offers.append({item["function"]["name"]: item["function"] for item in offered.definitions
                        if item["function"]["name"] not in COORDINATION_TOOLS | MEMBER_ONLY_TOOLS and item["function"]["name"] not in MANAGEMENT_TOOLS | {"find_tools"}})
-        assert "owner_management" in PARITY_EXCEPTIONS
+        assert "owner_management" not in PARITY_EXCEPTIONS
         assert not set(offered.refs) & MANAGEMENT_TOOLS
         assert bool(offered.management) == (path != "worker")
         for tool, duty in COORDINATION_TOOLS.items():
             assert duty in PARITY_EXCEPTIONS
-            assert (tool in offered.refs) == speaker.is_chief
+            assert tool in offered.refs
         for tool, duty in MEMBER_ONLY_TOOLS.items():
             assert duty in PARITY_EXCEPTIONS
             assert (tool in offered.refs) == (speaker.id > 0 and path != "worker")

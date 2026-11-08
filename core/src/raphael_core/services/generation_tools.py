@@ -1,5 +1,6 @@
 """One pinned media tool table for API, authenticated CLI MCP and worker snapshots."""
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import json
 
 from jsonschema import Draft202012Validator
@@ -46,7 +47,7 @@ class GenerationTools:
             schema = {"type": "object", "properties": properties, "required": ["prompt"], "additionalProperties": False}
             description = ("Generate or edit an image and deliver its attachment in this conversation. " if kind == "image" else
                            "Generate a video in an existing background task; delegate this long job first. Task Stop cancels polling and delivery. ")
-            description += "Uses only the owner's explicit paid media model setting, independent of the conversational brain. If unset or unavailable, call once to show the existing media model row; never choose or substitute a model."
+            description += "Uses only the owner's explicit media model setting, independent of the conversational brain. The selected source bills API or subscription usage. If unset or unavailable, call once to show the existing media model row; never choose or substitute a model."
             tools.append(PluginTool(tool_key("media", kind + "_generate"), "media", kind + "_generate", description, schema, Tier.T1, pinned=True))
         return [*self.delegate.offered_for(member), *tools]
 
@@ -93,16 +94,24 @@ class GenerationTools:
             progress, language = _NOTE.get()
             def update(state):
                 if progress:
-                    line = {"zh-TW": "正在製作影片", "ja": "動画を生成しています", "en": "Generating the video"}.get(language, "Generating the video")
+                    line = with_ui_words({"zh-TW": "正在製作影片", "ja": "動画を生成しています", "en": "Generating the video"}).get(language, "Generating the video")
                     value = state.get("progress")
                     progress(line + (f" · {int(value)}%" if isinstance(value, (int, float)) and 0 <= value <= 100 else ""))
             ledger = Ledger(SpendTracker(self.conn), purpose=kind) if self.conn is not None else None
             data = await self.service.make(kind, arguments, selected_model=selected, progress=update, ledger=ledger)
             result = PluginResult(True, text=json.dumps(data), billing={"model": data["model"], "cost_usd": data["cost_usd"]})
+            if data.get("billing_source") == "subscription":
+                result.billing["billing_source"] = "subscription"
         except ServiceError as error:
             label = "drawing" if kind == "image" else "video"
-            result = PluginResult(False, error.kind, f"No available {label} model is chosen. Choose one in Settings > Models & usage > {label} model. This is a separate paid API call billed by the provider; no model is chosen automatically." if error.kind == "not_configured" else f"Media generation{(' with ' + error.service) if error.service else ''} did not finish ({error.kind}); no file was delivered.",
+            result = PluginResult(False, error.kind, f"No available {label} model is chosen. Choose one in Settings > Models & usage > {label} model. The selected source uses paid API billing or subscription usage; no model is chosen automatically." if error.kind == "not_configured" else f"Media generation{(' with ' + error.service) if error.service else ''} did not finish ({error.kind}); no file was delivered.",
                                   billing={"model": selected, "cost_usd": ledger.total if ledger.calls[-1]["outcome"] != "cost_unknown" else None} if ledger and ledger.calls else None)
+            if ledger and ledger.calls and ledger.calls[-1].get("billing_source") == "subscription":
+                result.billing.update(cost_usd=None, billing_source="subscription")
+            if error.service == "codex" and error.kind == "auth_expired":
+                from ..failures import Missing
+                result.text = json.dumps({"missing": Missing("codex", "cli", "missing", "models").wire(),
+                                          "target": {"pane": "models", "resource": "codex"}})
         if self.audit:
             outcome = "ok" if result.ok else result.kind if result.kind in ("timeout", "denied", "expired", "blocked") else "error"
             self.audit.add(server="media", tool=tool.name, tier="T1", approver=approver, outcome=outcome, task_id=task_id)

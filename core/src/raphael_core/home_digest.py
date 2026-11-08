@@ -1,5 +1,6 @@
 """Daily Home facts and tool-less prose on Raphael's selected brain."""
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import json
 import logging
@@ -195,6 +196,8 @@ class DailyNarratives:
 
 def health(members, language):
     """Project only the existing offline self_check observations; never probe a provider."""
+    from .ui_languages import fixed_language
+    language = fixed_language(language)
     from .agent.cli.discovery import NAMES, brain_ref
     from .brain.providers.presets import OPTIONAL_KEY_KINDS
     read = getattr(members._background, "diagnostics", None)
@@ -207,7 +210,7 @@ def health(members, language):
         return {"checks": [], "reason": "self_check_unavailable"}
     checks = []
 
-    words = {
+    words = with_ui_words({
         "zh-TW": {"memory": "記憶", "provider": "模型供應商", "connection": "連線",
                   "unknown": "狀態不明。", "key_missing": "尚未設定憑證。", "brain_unavailable": "模型未就緒或需要登入。",
                   "connection_unavailable": "連線尚未就緒。", "memory_unavailable": "記憶服務需要檢查。"},
@@ -217,7 +220,7 @@ def health(members, language):
         "en": {"memory": "Memory", "provider": "Model provider", "connection": "Connection",
                "unknown": "State is unknown.", "key_missing": "Credential is not configured.", "brain_unavailable": "Model is unavailable or needs sign-in.",
                "connection_unavailable": "Connection is not ready.", "memory_unavailable": "Memory needs attention."},
-    }[language]
+    })[language]
 
     def add(identifier, name, label, ok, detail, *, error=False):
         checks.append({"id": identifier, "name": name, "label_key": label, "status": "ok" if ok else "warn",

@@ -22,7 +22,7 @@ async def test_export_preview_and_import_keep_only_the_recipe(rig):
     service = rig.service
     original = (await rig.call("members.create", {"name": "Writer", "role": "Editor", "instructions": "Publish a clear guide", "avatar": "slime:shuna"}))["member"]
     identifier = original["id"]
-    skill = service.capabilities.keep_recipe(identifier, "---\nname: Editing\ndescription: Check clarity\n---\nVerify claims.", {"references/check.md": "Check the source", "scripts/check.py": "print('checked')"})
+    skill = service.capabilities.keep_recipe(identifier, "---\nname: editing\ndescription: Check clarity\n---\nVerify claims.", {"references/check.md": "Check the source", "scripts/check.py": "print('checked')"})
     service.capabilities.homes.keep(identifier, "MEMORY.md", "PRIVATE-MEMORY")
     await rig.call("routines.create", {"member_id": identifier, "title": "Review", "prompt": "Review the goal", "schedule": {"kind": "daily", "time": "09:00"}})
     exported = await rig.call("members.template", {"action": "export", "id": identifier})
@@ -34,7 +34,7 @@ async def test_export_preview_and_import_keep_only_the_recipe(rig):
     assert len(service.store.members()) == before
     copied = (await rig.call("members.template", {"action": "import", "template": value, "name": "Editor"}))["member"]
     assert copied["tools"] == [] and copied["role"] == "Editor"
-    assert service.capabilities.skills(copied["id"])[0]["name"] == "Editing"
+    assert service.capabilities.skills(copied["id"])[0]["name"] == "editing"
     copied_skill = service.capabilities.owned_skills(copied["id"])[0]
     assert (service.capabilities._path(copied["id"], copied_skill["id"]).parent / "scripts/check.py").read_text() == "print('checked')"
     [routine] = service.store.routines(copied["id"])
@@ -99,7 +99,7 @@ async def test_explicit_app_list_wins_over_all_inferred_uses(rig, app_connection
 
 async def test_template_reads_skill_requirements_and_references_without_private_memory(rig, app_connections):
     member = (await rig.call("members.create", {"name": "Researcher"}))["member"]["id"]
-    rig.service.capabilities.keep_recipe(member, "---\nname: Research\ndescription: Check sources\nrequires: [huggingface]\n---\nRead the attached reference.",
+    rig.service.capabilities.keep_recipe(member, "---\nname: research\ndescription: Check sources\nrequires: [huggingface]\n---\nRead the attached reference.",
                                         {"references/source.md": "Read Google Drive documents."})
     rig.service.capabilities.homes.keep(member, "MEMORY.md", "Use Notion and GitHub privately.")
     value = (await rig.call("members.template", {"action": "export", "id": member}))["template"]

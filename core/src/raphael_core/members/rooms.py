@@ -1,4 +1,5 @@
 """Room messages and settings, with bounded exchanges on the shared member worker."""
+from raphael_core.ui_words import ui_word, with_ui_words
 import base64
 import binascii
 import json
@@ -37,14 +38,14 @@ _OWNER_STOPS = ('owner', 'interjection')
 # An unfinished reply in words, by the reason its intent was blocked for; any other reason is an error.
 _UNFINISHED = {'cli_rate_limited':'rate_limit', 'cli_quota':'quota', 'cli_login':'login', 'cli_missing':'login',
                'cost':'budget', 'reply_budget':'budget', 'revoked':'removed', 'restart':'restart'}
-_UNFINISHED_WORDS = {
+_UNFINISHED_WORDS = with_ui_words({
     'zh-TW':{'rate_limit':'請求太頻繁而被限流', 'quota':'訂閱額度已用完', 'login':'需要登入 CLI', 'budget':'預算已用完',
              'removed':'已不在房間', 'restart':'重新啟動後中斷', 'error':'發生錯誤'},
     'en':{'rate_limit':'rate-limited (too many requests)', 'quota':'subscription quota used up', 'login':'CLI sign-in needed',
           'budget':'budget exhausted', 'removed':'no longer in the room', 'restart':'interrupted by a restart', 'error':'an error occurred'},
     'ja':{'rate_limit':'リクエスト過多で制限中', 'quota':'サブスクリプションの上限', 'login':'CLI のログインが必要', 'budget':'予算の上限',
           'removed':'ルームから外れました', 'restart':'再起動で中断', 'error':'エラーが発生'},
-}
+})
 
 
 class RoomsService:
@@ -308,8 +309,9 @@ class RoomsService:
         if not isinstance(agenda, str) or not agenda.strip() or len(agenda) > 9000:
             raise invalid_params('agenda must contain 1 to 9000 characters')
         source = self._history.get(source_turn_id)
-        if not source or source.scope != 'private' or not self._members.speaker(source.member_id or 0).is_chief:
-            raise invalid_params('only the chief in a private conversation may start a meeting')
+        if (not source or source.scope != 'private' or source.source == 'member'
+                or self._members.speaker(source.member_id or 0) is None):
+            raise invalid_params('only an owner-private conversation may start a meeting')
         roles = self._roles(self._meeting_roles(arguments.get('roles', {}), ids), ids)
         if target_room is not None:
             room = target_room
@@ -367,16 +369,16 @@ class RoomsService:
             if owner is None:
                 continue
             language = exchange['language']
-            words = {'zh-TW':('已停止本次工作，已完成的動作保留。','沒有已驗證的交付成果。','等待你的新指示。','本次討論沒有全部完成。','：'),
+            words = with_ui_words({'zh-TW':('已停止本次工作，已完成的動作保留。','沒有已驗證的交付成果。','等待你的新指示。','本次討論沒有全部完成。','：'),
                 'en':('Work stopped. Completed actions are preserved.','No verified deliverables.','Awaiting your next instruction.','This discussion did not fully finish.',': '),
-                'ja':('作業を停止しました。完了した操作は保持されます。','検証済みの成果物はありません。','次の指示をお待ちしています。','今回の議論はすべては完了しませんでした。','：')}
+                'ja':('作業を停止しました。完了した操作は保持されます。','検証済みの成果物はありません。','次の指示をお待ちしています。','今回の議論はすべては完了しませんでした。','：')})
             stopped,empty,awaiting,unfinished,separator = words.get(language,words['en'])
-            states = {'zh-TW':{'done':'已交付','failed':'未完成','cancelled':'已取消','limit':'已達上限','interrupted':'已中斷'},
+            states = with_ui_words({'zh-TW':{'done':'已交付','failed':'未完成','cancelled':'已取消','limit':'已達上限','interrupted':'已中斷'},
                 'en':{'done':'Delivered','failed':'Incomplete','cancelled':'Cancelled','limit':'Limit reached','interrupted':'Interrupted'},
-                'ja':{'done':'納品済み','failed':'未完了','cancelled':'取消済み','limit':'上限到達','interrupted':'中断'}}
-            reasons = {'zh-TW':{'owner':'你已停止本次工作。','cost':'本次預算已用完。','blocked_intents':'部分回覆無法完成。','worker':'工作未完成，請決定是否重試。'},
+                'ja':{'done':'納品済み','failed':'未完了','cancelled':'取消済み','limit':'上限到達','interrupted':'中断'}})
+            reasons = with_ui_words({'zh-TW':{'owner':'你已停止本次工作。','cost':'本次預算已用完。','blocked_intents':'部分回覆無法完成。','worker':'工作未完成，請決定是否重試。'},
                 'en':{'owner':'You stopped this work.','cost':'The budget was exhausted.','blocked_intents':'Some replies could not finish.','worker':'Work is incomplete; decide whether to retry.'},
-                'ja':{'owner':'作業を停止しました。','cost':'予算の上限に達しました。','blocked_intents':'一部の返信は完了できませんでした。','worker':'作業は未完了です。再試行するか判断してください。'}}
+                'ja':{'owner':'作業を停止しました。','cost':'予算の上限に達しました。','blocked_intents':'一部の返信は完了できませんでした。','worker':'作業は未完了です。再試行するか判断してください。'}})
             state_words=states.get(language,states['en'])
             reason_words=reasons.get(language,reasons['en'])
             delivered=[]

@@ -16,6 +16,7 @@ user, whom it calls 主人, マスター or Master, and sparingly. Never chatty,
 marks, never "as an AI".
 """
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import json
 import re
 import string
@@ -27,13 +28,13 @@ from ..memory.store import UNCONFIRMED, MemorySnapshot
 from ..memory.doctrine import DOCTRINE as MEMORY_DOCTRINE
 from .capabilities import SHARED_CAPABILITIES
 from .speaker import Speaker
+from ..ui_languages import LANGUAGES, LANGUAGE_NAMES, fixed_language, interface_context, normalize_language
 
-ACTIVITY_LABELS = {
+ACTIVITY_LABELS = with_ui_words({
     "zh-TW": {"queued": "正在等候執行", "colleague": "等 {name} 的結果", "thinking": "正在思考", "working": "正在處理", "searching": "正在搜尋網路", "computer": "正在使用電腦", "blocked": "等你回答", "waiting": "正在等候同事或排程", "error": "需要你處理"},
     "en": {"queued": "Waiting in the queue", "colleague": "Waiting for {name}’s result", "thinking": "Thinking", "working": "Working", "searching": "Searching the web", "computer": "Using the computer", "blocked": "Waiting for your answer", "waiting": "Waiting for a colleague or a queue", "error": "Needs your attention"},
     "ja": {"queued": "順番を待っています", "colleague": "{name}の結果を待っています", "thinking": "考えています", "working": "作業しています", "searching": "ウェブを検索しています", "computer": "コンピューターを操作しています", "blocked": "あなたの回答を待っています", "waiting": "同僚または順番を待っています", "error": "対応が必要です"},
-}
-LANGUAGES = ("zh-TW", "en", "ja")
+})
 DEFAULT_LANGUAGE = "zh-TW"
 
 
@@ -43,17 +44,6 @@ REPLY_LANGUAGE = (
     "of the owner's message or established conversation. The interface language never selects your speaking "
     "language or Chinese script. Preserve quotations and examples in their original language."
 )
-
-
-def normalize_language(value: str) -> str:
-    """The UI language `value` stands for: zh-TW for any Chinese, ja for Japanese, and English for
-    English and for any language Raphael does not speak."""
-    code = value.strip().replace("_", "-").casefold()
-    if code.startswith("zh"):
-        return "zh-TW"
-    if code.startswith("ja"):
-        return "ja"
-    return "en"
 
 
 class Prefixes(NamedTuple):
@@ -68,6 +58,18 @@ PREFIXES: dict[str, Prefixes] = {
     "zh-TW": Prefixes("答", "告", "否", "了", "問"),
     "ja": Prefixes("解", "告", "否", "了", "問"),
     "en": Prefixes("Answer", "Notice", "Negative", "Understood", "Question"),
+    "zh-CN": Prefixes("解", "告", "否", "了", "问"),
+    "ko": Prefixes("답변", "알림", "거절", "확인", "질문"),
+    "es": Prefixes("Respuesta", "Aviso", "No", "Entendido", "Pregunta"),
+    "fr": Prefixes("Réponse", "Avis", "Non", "Compris", "Question"),
+    "de": Prefixes("Antwort", "Hinweis", "Nein", "Verstanden", "Frage"),
+    "pt-BR": Prefixes("Resposta", "Aviso", "Não", "Entendido", "Pergunta"),
+    "it": Prefixes("Risposta", "Avviso", "No", "Capito", "Domanda"),
+    "ru": Prefixes("Ответ", "Уведомление", "Нет", "Понятно", "Вопрос"),
+    "vi": Prefixes("Trả lời", "Thông báo", "Không", "Đã hiểu", "Câu hỏi"),
+    "th": Prefixes("คำตอบ", "แจ้งให้ทราบ", "ไม่", "เข้าใจแล้ว", "คำถาม"),
+    "id": Prefixes("Jawaban", "Pemberitahuan", "Tidak", "Dipahami", "Pertanyaan"),
+    "tr": Prefixes("Yanıt", "Bildirim", "Hayır", "Anlaşıldı", "Soru"),
 }
 
 # What a model might wrap around or after a prefix: brackets, a full stop, a colon.
@@ -75,6 +77,7 @@ _PREFIX_MARKS = "《》「」[]()（）.。:：,，、 \t"
 _INDEX_OF_PREFIX = {
     prefix.casefold(): index for prefixes in PREFIXES.values() for index, prefix in enumerate(prefixes)
 }
+_INDEX_OF_PREFIX["no"] = 2
 
 
 def canonical_prefix(said: object, language: str, *, default: str) -> str:
@@ -186,7 +189,7 @@ class Phrases:
 # register of the language: formal written Chinese, polite and terse Japanese, formal English
 # without contractions. None of them addresses the user: that is left to the greeting and to the
 # model, which use it sparingly.
-PHRASES: dict[str, Phrases] = {
+PHRASES: dict[str, Phrases] = with_ui_words({
     "zh-TW": Phrases(
         unclear="無法辨識指示。請再說一次。",
 
@@ -416,13 +419,13 @@ PHRASES: dict[str, Phrases] = {
         worker_waiting_self="あなたの対応を待っている件があります。",
         worker_expired="10分以内に応答がなかったため、その操作をせずにタスクを終えました。",
     ),
-}
+})
 
 
 def phrase(language: str, name: str, **fields: str) -> str:
     """The fixed phrase `name` in `language`, with its `{fields}` filled in (the ones that have
     fields; the fields' own text is never read as a template)."""
-    text = getattr(PHRASES[language], name)
+    text = getattr(PHRASES[fixed_language(language)], name)
     return text.format(**fields) if fields else text
 
 
@@ -432,7 +435,7 @@ def _templates(language: str) -> tuple[tuple[str, "re.Pattern[str]", tuple[str, 
     any text in the place of each `{field}`, and the names of its fields."""
     found = []
     for name in Phrases.__dataclass_fields__:
-        template = getattr(PHRASES[language], name)
+        template = getattr(PHRASES[fixed_language(language)], name)
         if not template:
             continue
         pattern, fields = "", []
@@ -461,7 +464,7 @@ def fixed_line(language: str, text: str, target: str) -> str | None:
         found = pattern.fullmatch(text)
         if found is None:
             continue
-        template = getattr(PHRASES[target], name)
+        template = getattr(PHRASES[fixed_language(target)], name)
         return template.format(**{field: found.group(field) for field in fields}) if fields else template
     return None
 
@@ -500,7 +503,7 @@ def parenthesized(language: str, text: str) -> str:
     there is no text."""
     if not text:
         return ""
-    return f" ({text})" if language == "en" else f"（{text}）"
+    return f"（{text}）" if language in ("zh-TW", "zh-CN", "ja") else f" ({text})"
 
 
 # --- how much is said ----------------------------------------------------------------------------
@@ -509,8 +512,8 @@ def parenthesized(language: str, text: str) -> str:
 # model is asked for the first; one a little longer is let through, and a longer one is cut at the
 # last sentence that fits within the second (or at the first where there is none), with the rest
 # going to the history.
-TARGET_LENGTH = {"zh-TW": 80, "ja": 80, "en": 40}
-HARD_LENGTH = {"zh-TW": 90, "ja": 90, "en": 45}
+TARGET_LENGTH = {language: 40 for language in LANGUAGES} | {"zh-TW": 80, "zh-CN": 80, "ja": 80, "ko": 120, "th": 160}
+HARD_LENGTH = {language: 45 for language in LANGUAGES} | {"zh-TW": 90, "zh-CN": 90, "ja": 90, "ko": 140, "th": 180}
 
 _SENTENCE_END = "。！？!?."
 _CJK = "　-ヿ㐀-䶿一-鿿＀-￯"
@@ -521,14 +524,14 @@ def _one_line(text: str, language: str) -> str:
     line = " ".join(text.split())
     # A line break between two Chinese or Japanese characters left a space that is no part of the
     # writing.
-    return line if language == "en" else _SPACE_BETWEEN_CJK.sub("", line)
+    return _SPACE_BETWEEN_CJK.sub("", line) if language in ("zh-TW", "zh-CN", "ja") else line
 
 
 def fit_text(text: str, language: str) -> tuple[str, str]:
     """`(line, rest)`: `text` as one line of at most about the length Raphael speaks, and what had
     to be left out of it (empty when nothing was)."""
     text = _one_line(text, language)
-    if language == "en":
+    if language not in ("zh-TW", "zh-CN", "ja", "ko", "th"):
         words = text.split(" ") if text else []
         if len(words) <= HARD_LENGTH[language]:
             return text, ""
@@ -567,6 +570,7 @@ _LANGUAGE_NAMES = {
     "zh-TW": "Traditional Chinese as written in Taiwan (never Simplified characters)",
     "en": "English",
     "ja": "Japanese",
+    **LANGUAGE_NAMES,
 }
 # One progress line as it should read, so that the language and the length are shown, not told.
 _PROGRESS_EXAMPLE = {
@@ -576,6 +580,7 @@ _PROGRESS_EXAMPLE = {
 }
 # How Raphael addresses the user, in each language.
 ADDRESS = {"zh-TW": "主人", "ja": "マスター", "en": "Master"}
+ADDRESS.update({language: "Master" for language in LANGUAGES if language not in ADDRESS})
 # How each language is written in his voice.
 _REGISTER = {
     "zh-TW": (
@@ -594,6 +599,10 @@ _TONE = {
     "ja": "二つ目の案が最適です。コストは三割低く、リスクは同等です。",
     "en": "The second option is optimal. It costs thirty percent less at the same risk.",
 }
+for _language in LANGUAGES:
+    _REGISTER.setdefault(_language, "Write concise, formal declarative sentences in the reply language selected by the persona and owner.")
+    _TONE.setdefault(_language, _TONE["en"])
+    _PROGRESS_EXAMPLE.setdefault(_language, _PROGRESS_EXAMPLE["en"])
 
 _FINAL_FORMAT = (
     "Final content must be ONLY one JSON object with the fields below, with "
@@ -880,7 +889,7 @@ def worker_system_prompt(language: str, *, model_calls: int, tool_calls: int, sp
     prefixes = PREFIXES[language]
     return _WORKER_PROMPT.format(
         persona=_raphael_persona(language, speaker),
-        contract=_SHARED_CONTRACT,
+        contract=interface_context(language) + _SHARED_CONTRACT,
         work=_WORK_RULES.format(model_calls=model_calls, tool_calls=tool_calls),
         language=_LANGUAGE_NAMES[language],
         address=ADDRESS[language],
@@ -909,6 +918,8 @@ _MEMBER_REGISTER = {
     "ja": "Write natural, polite Japanese (です and ます).",
     "en": "Write natural, clear English.",
 }
+_MEMBER_REGISTER.update({language: "Write naturally and clearly in the reply language selected by the persona and owner."
+                         for language in LANGUAGES if language not in _MEMBER_REGISTER})
 
 _MEMBER_PERSONA = """\
 <persona>
@@ -1031,7 +1042,7 @@ def _member_fields(language: str, name: str, role: str, instructions: str, perso
             name=name, role=f"Your role: {role}." if role else "",
             personality=personality.strip() or "(unspecified)", instructions=instructions.strip() or "(none)",
         ),
-        "contract": _SHARED_CONTRACT,
+        "contract": interface_context(language) + _SHARED_CONTRACT,
         "language_policy": REPLY_LANGUAGE,
         "facts": _FACT_RULES,
         "name": name,
@@ -1060,7 +1071,7 @@ def cli_system_prompt(
         fields = _member_fields(language, name, role, instructions, personality)
         persona = fields["persona"]
         language_rule = REPLY_LANGUAGE
-    prompt = "\n\n".join((persona, _SHARED_CONTRACT, _FACT_RULES, language_rule))
+    prompt = "\n\n".join((persona, interface_context(language) + _SHARED_CONTRACT, _FACT_RULES, language_rule))
     if memory:
         prompt += ("\n\nMemory\n" + _MEMORY_FILES.replace("here as they were when this turn began", "in each message as they were when that turn began")
                    + "\n" + _MEMORY_EDITS + "\nEdit them with memory_update; memory_log keeps a daily work log; "
@@ -1144,7 +1155,7 @@ def system_prompt(
     prefixes = PREFIXES[language]
     prompt = _SYSTEM_PROMPT.format(
         persona=_raphael_persona(language, speaker),
-        contract=_SHARED_CONTRACT,
+        contract=interface_context(language) + _SHARED_CONTRACT,
         facts=_FACT_RULES,
         final_format=_FINAL_FORMAT,
         reply_text=_NARRATED_REPLY_TEXT if narrated else (

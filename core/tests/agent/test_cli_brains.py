@@ -129,6 +129,7 @@ for line in sys.stdin:
         cwd=str(tmp_path / "workspace"))]
     assert events[-1].kind == "final", events
     result = json.loads(record.read_text(encoding="utf-8"))
+    assert result["thread"]["params"]["config"] == {"features.shell_tool": False, "features.apply_patch_freeform": False}
     child_env = result["environment"]
     home = Path(child_env["CODEX_HOME"])
     assert home != owner and home.is_relative_to(tmp_path / ".raphael")

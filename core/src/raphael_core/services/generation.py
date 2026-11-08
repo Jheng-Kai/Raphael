@@ -27,8 +27,12 @@ class Generation:
     poll_seconds = 1
     timeout_seconds = 1800
 
-    def __init__(self, providers, store, *, fetcher=None, keys=None, transport=None):
+    def __init__(self, providers, store, *, fetcher=None, keys=None, transport=None, subscription_images=None):
         self.providers, self.store = providers, store
+        from ..agent.cli.images import CodexImages
+        self.subscriptions = subscription_images or CodexImages(settings=getattr(providers, "settings", None))
+        if providers is not None:
+            providers.image_subscriptions = self.subscriptions
         self._keys = keys if keys is not None else credential_keys()
         self._transport, self._http = transport, None
         self.fetcher = fetcher or PageFetcher(media=True, media_types=("image/png", "image/jpeg", "image/webp", "video/mp4"), max_bytes=MAX_FILE_BYTES, max_seconds=120)
@@ -40,15 +44,27 @@ class Generation:
 
     def media_choices(self, kind, selected_model=""):
         rows = list(self.providers.media_choices(kind))
+        if kind == "image":
+            rows.extend(row for row in self.subscriptions.choices() if not any(
+                existing["reference"] == row["reference"] for existing in rows))
         selected, _ = split_api_ref(selected_model)
         extra = media_backends.choice(kind, selected)
         if extra is not None:
             rows.append(extra)
         return rows
 
+    @staticmethod
+    def is_subscription_image(reference):
+        from ..agent.cli.images import REFERENCE
+        return reference == REFERENCE
+
     async def refresh_image_choices(self, reference):
         """Read missing image metadata once, without submitting a generation or changing the choice."""
         selected, _ = split_api_ref(reference)
+        if self.is_subscription_image(selected):
+            if not await self.subscriptions.refresh():
+                raise ServiceError("auth_expired", service="codex")
+            return self.media_choices("image", reference)
         pid, _ = self.providers.resolve(selected)
         try:
             await self.providers.discover(pid)
@@ -72,6 +88,10 @@ class Generation:
         return self._http
 
     async def make(self, kind, arguments, *, selected_model, progress=None, ledger=None):
+        if kind == "image" and self.is_subscription_image(selected_model):
+            if arguments.get("model", selected_model) != selected_model or not isinstance(arguments.get("prompt"), str) or not 1 <= len(arguments["prompt"].strip()) <= 12000 or arguments.get("images"):
+                raise ServiceError("bad_arguments")
+            return await self._subscription(arguments, selected_model, ledger)
         choices = self.media_choices(kind, selected_model)
         selected, _ = split_api_ref(selected_model)
         choice = next((row for row in choices if row["reference"] == selected), None)
@@ -142,6 +162,24 @@ class Generation:
                 ledger.add(model=choice["reference"], cost_usd=billing["cost_usd"] or 0,
                            prompt_tokens=billing["prompt_tokens"], completion_tokens=billing["completion_tokens"],
                            outcome="ok" if billing["cost_usd"] is not None else "cost_unknown")
+
+    async def _subscription(self, arguments, reference, ledger):
+        contacted, incoming, outgoing = False, 0, 0
+        def charge(usage):
+            nonlocal contacted, incoming, outgoing
+            contacted = True
+            incoming = token_count(usage.get("input_tokens")) or 0
+            outgoing = token_count(usage.get("output_tokens")) or 0
+        try:
+            attachment = await self.subscriptions.generate(arguments["prompt"], square=arguments.get("square", False), charge=charge)
+            await asyncio.sleep(0)
+            saved = self.store.save(attachment)
+            return {"attachment": saved.metadata(), "model": reference, "cost_usd": None,
+                    "billing_source": "subscription", "prompt_tokens": incoming, "completion_tokens": outgoing}
+        finally:
+            if contacted and ledger is not None:
+                ledger.add(model=reference, cost_usd=0, prompt_tokens=incoming, completion_tokens=outgoing,
+                           outcome="subscription", billing_source="subscription")
 
     async def _backend(self, kind, route, reference, prompt, progress, ledger, *, square=False):
         service, model = route

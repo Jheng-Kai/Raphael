@@ -369,6 +369,10 @@ class Driver:
                             yield Event("message", block.get("text", ""))
                     elif block.get("type") == "tool_use":
                         yield Event("tool_start", data={"id": block.get("id"), "name": block.get("name", "tool")})
+                if packet.get("message", {}).get("stop_reason") == "end_turn":
+                    answer = "\n\n".join(block.get("text", "") for block in packet["message"].get("content", []) if block.get("type") == "text")
+                    if answer:
+                        yield Event("message", answer, data={"id": packet["message"].get("id"), "final": True})
                 partial, text, completed = False, "", 0
             elif kind == "user":
                 for block in packet.get("message", {}).get("content", []):
@@ -465,7 +469,8 @@ class Driver:
                 if label == "initialize":
                     await self.child.send({"jsonrpc": "2.0", "method": "initialized", "params": {}})
                     arguments = {"developerInstructions": system, "approvalPolicy": "untrusted",
-                                 "sandbox": "read-only", "cwd": self.child.cwd}
+                                 "sandbox": "read-only", "cwd": self.child.cwd,
+                                 "config": {"features.shell_tool": False, "features.apply_patch_freeform": False}}
                     if self.model:
                         arguments["model"] = self.model
                     if session:
@@ -513,7 +518,7 @@ class Driver:
                     else:
                         # Phase-less legacy messages are answers only after the most recent tool.
                         final_text = "" if item.get("phase") == "commentary" else item.get("text", "")
-                        yield Event("message", item.get("text", ""), data={"id": item.get("id")})
+                        yield Event("message", item.get("text", ""), data={"id": item.get("id"), "final": item.get("phase") == "final_answer"})
                 if item.get("type") in ("commandExecution", "fileChange", "mcpToolCall", "webSearch"):
                     if method == "item/started":
                         final_text = ""

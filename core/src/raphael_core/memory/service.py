@@ -309,7 +309,7 @@ class MemoryService(Growth):
         return (self._now() if self._now is not None else datetime.now().astimezone()).date()
 
     def _mark(self) -> str:
-        return UNCONFIRMED.get(self.language(), UNCONFIRMED["zh-TW"])
+        return UNCONFIRMED.get(self.language(), UNCONFIRMED["en"])
 
     async def forget_member(self, member_id: int) -> None:
         """A member was deleted: its own memory folder goes, with its conversation's summary and

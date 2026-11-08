@@ -65,6 +65,7 @@ app alone.
 Nothing here logs a name, a role, an instruction, a routine's title or prompt, or a result.
 """
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import base64
 import binascii
@@ -123,17 +124,17 @@ RAPHAEL_AVATAR_DIR = "avatar"
 _EXTENSIONS = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}
 # The template of the routine offered to a member of a group with places to look.
 TEMPLATE_TIME = "09:00"
-_TEMPLATE_TITLE = {"zh-TW": "每天早上的進度", "en": "Morning progress", "ja": "毎朝の進捗"}
-_TEMPLATE_PROMPT = {
+_TEMPLATE_TITLE = with_ui_words({"zh-TW": "每天早上的進度", "en": "Morning progress", "ja": "毎朝の進捗"})
+_TEMPLATE_PROMPT = with_ui_words({
     "zh-TW": "用已連接的 GitHub 與 Notion 工具，查看下列地方從昨天到現在的進度，整理成一份簡短的進度報告：",
     "en": (
         "Using the connected GitHub and Notion tools, check the progress since yesterday at the "
         "places below and write a short progress report:"
     ),
     "ja": "接続済みの GitHub と Notion のツールで、以下の場所の昨日からの進捗を確認し、短い進捗報告にまとめてください：",
-}
+})
 _SOURCE_LABEL = {"github": "GitHub", "notion": "Notion"}
-_COLON = {"zh-TW": "：", "en": ": ", "ja": "："}
+_COLON = with_ui_words({"zh-TW": "：", "en": ": ", "ja": "："})
 _ASCII_WORD = re.compile(r"[A-Za-z0-9 ._-]+")
 
 
@@ -192,6 +193,8 @@ def routine_template(sources: Sequence[Source], language: str) -> dict[str, Any]
     when the group has no place."""
     if not sources:
         return None
+    from ..ui_languages import fixed_language
+    language = fixed_language(language)
     prompt = _TEMPLATE_PROMPT[language]
     for source in sources:
         line = f"\n- {_SOURCE_LABEL[source.kind]}{_COLON[language]}{source.ref}"
@@ -683,13 +686,25 @@ class MembersService:
     def native_skills(self, member_id: int) -> list[dict]:
         return self.capabilities.native_skills(member_id)
 
-    def skill_learned(self, member_id, skill, turn_id=None):
+    def learn_skill(self, member_id, args, turn_id=None):
+        cap = self.capabilities
+        identifier = args.get("id")
+        # Compare stored text and references, not timestamps or newline-only revisions.
+        before = None if identifier is None else (
+            cap.document(member_id, identifier)[1], cap.reference_hashes(member_id, identifier))
+        skill = cap.manage_skill(member_id, args)
+        after = (cap.document(member_id, skill["id"])[1], cap.reference_hashes(member_id, skill["id"]))
+        self.skill_learned(member_id, skill, turn_id, existed=before is not None, changed=before != after)
+        return skill
+
+    def skill_learned(self, member_id, skill, turn_id=None, *, existed, changed=True):
         self._changed("members.skills.changed", member_id)
         self._changed()
-        if turn_id and skill["provenance"] == "learned":
+        if changed and turn_id and skill["provenance"] == "learned":
             turn = self._history.get(turn_id)
             if turn is not None and turn.member_id == member_id:
-                self._history.add_message(turn_id, "event", json.dumps({"type": "skill_learned", "name": skill["name"]}, ensure_ascii=False))
+                self._history.add_message(turn_id, "event", json.dumps({"type": "skill_learned", "name": skill["name"],
+                    "action": "updated" if existed else "created"}, ensure_ascii=False))
                 if self._notify:
                     self._notify("agent.turn", {"turn_id": turn_id, "member_id": member_id})
 
@@ -1264,7 +1279,7 @@ class MembersService:
             raise invalid_params("unknown routine tool")
         target = _whole(arguments, "member_id") if "member_id" in arguments else member_id
         if target != member_id:
-            raise invalid_params("Use primary-contact management tools in the owner's interactive chat for another member's routines")
+            raise invalid_params("Use member-management tools in the owner's interactive private chat for another member's routines")
         params = {**arguments, "member_id": target}
         if name in ("routine_update", "routine_delete"):
             routine_id = self._routine_id(params)
@@ -1278,22 +1293,24 @@ class MembersService:
 
     def admin_confirmation(self, name: str, arguments: dict, language: str, *, question: bool = True) -> str:
         from ..agent.team_admin import confirmation
+        from ..ui_languages import fixed_language
+        language = fixed_language(language)
         from ..management import resolve
 
         action, values = resolve(name, arguments)
         traditional = {"member_create", "member_update", "member_delete", "group_create", "group_rename",
                        "member_skill_import", "member_command_save"}
         if action is not None and name not in traditional:
-            labels = {"en": "Affected target", "zh-TW": "影響對象", "ja": "対象"}
+            labels = with_ui_words({"en": "Affected target", "zh-TW": "影響對象", "ja": "対象"})
             target = self.management_target(name, arguments)
             values = {key: value for key, value in values.items() if key != "data"}
             if "data" in arguments:
                 values["image"] = arguments.get("name", "uploaded image")
-            heading = {"en": "Requested change", "zh-TW": "要求的變更", "ja": "変更内容"}[language]
+            heading = with_ui_words({"en": "Requested change", "zh-TW": "要求的變更", "ja": "変更内容"})[language]
             scope = action.description if language == "en" else self.management_label(action.name, language)
             return (f"{heading}: {scope}\n{labels[language]}: {target}\n"
                     + json.dumps(values, ensure_ascii=False, indent=2)
-                    + ({"en": "\nAllow this change?", "zh-TW": "\n允許這項變更嗎？", "ja": "\nこの変更を許可しますか？"}[language] if question else ""))
+                    + (with_ui_words({"en": "\nAllow this change?", "zh-TW": "\n允許這項變更嗎？", "ja": "\nこの変更を許可しますか？"})[language] if question else ""))
 
         identifier = arguments.get("member_id", 0) if name.startswith("routine_") else arguments.get("member_id", arguments.get("id"))
         target = ""
@@ -1317,7 +1334,7 @@ class MembersService:
         extra = {key: value for key, value in arguments.items() if key not in original_fields}
         if extra:
             text += "\n" + json.dumps(extra, ensure_ascii=False, indent=2)
-        return text + ({"en": "\nAllow this change?", "zh-TW": "\n允許這項變更嗎？", "ja": "\nこの変更を許可しますか？"}[language] if question else "")
+        return text + (with_ui_words({"en": "\nAllow this change?", "zh-TW": "\n允許這項變更嗎？", "ja": "\nこの変更を許可しますか？"})[language] if question else "")
 
     async def admin_drafts(self, operations: list[dict]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """Build structured member and group drafts for a pending team administration batch."""
@@ -1471,7 +1488,7 @@ class MembersService:
         """Apply the approved list atomically and publish only committed roster changes."""
         from ..agent.team_admin import BATCH_TOOLS
 
-        if not interactive or not self.store.is_chief(member_id) or not operations or any(op["name"] not in BATCH_TOOLS for op in operations):
+        if not interactive or not self.store.exists(member_id) or not operations or any(op["name"] not in BATCH_TOOLS for op in operations):
             raise invalid_params("invalid team administration batch")
         planned = self.plan_admin_batch(operations, drafts=drafts, groups=groups)
         allowed_targets = {op["arguments"].get("id") for op in operations if op["name"] == "member_update"}
@@ -1560,7 +1577,7 @@ class MembersService:
             if turn is not None:
                 target += " / " + turn.question
         if name == "member_primary":
-            target += f" / authority moves from {self.name_of(self.primary_id())}"
+            target += f" / default contact moves from {self.name_of(self.primary_id())}"
         if name == "group_delete":
             target += " / folder only; members remain ungrouped"
         if name == "room_delete":
@@ -1594,13 +1611,14 @@ class MembersService:
     def authorize_management(self, member_id, name, arguments, *, interactive=False, approval=None):
         """Recheck live authority and the consumed exact-action gate token before a write."""
         from ..agent.team_admin import DEFINITIONS
-        from ..management import REGISTRY, destructive, self_action
+        from ..management import REGISTRY, destructive, BACKGROUND_MEMBER_TOOLS, background_actor, background_requires_approval
         from ..agent.policy import Approval, action_digest
 
         if not self.store.exists(member_id) or name not in DEFINITIONS and name not in REGISTRY:
             raise invalid_params("unknown team administration tool")
-        if name != "team_overview" and (not interactive or not (self.store.is_chief(member_id) or self_action(member_id, name, arguments))):
-            raise invalid_params("Only the current primary contact can manage the team in the owner's interactive private chat")
+        background = background_actor() == member_id and name in BACKGROUND_MEMBER_TOOLS
+        if name != "team_overview" and not (background or interactive):
+            raise invalid_params("Team management requires the owner's interactive private chat or an approved background member action")
         schema = DEFINITIONS[name]["parameters"] if name in DEFINITIONS else REGISTRY[name].schema
         if (set(arguments) - set(schema["properties"]) or
                 any(field not in arguments for field in schema["required"])):
@@ -1610,9 +1628,11 @@ class MembersService:
             validate(arguments, schema)
             item, values = resolve(name, arguments)
             validate(values, item.schema)
-            if destructive(name, arguments, self._settings.get("history_retention_days")):
+            if destructive(name, arguments, self._settings.get("history_retention_days")) or background_requires_approval(name, arguments):
+                # The legacy alias names the same exact creation, never a broader permission.
+                aliases = (name, "create_member") if name == "member_create" else (name,)
                 if (not isinstance(approval, Approval) or not approval.spent
-                        or approval.digest != action_digest(name, arguments)):
+                        or approval.digest not in {action_digest(alias, arguments) for alias in aliases}):
                     raise invalid_params("This destructive change requires the owner's approval for this exact action")
                 used = getattr(self, "_management_approvals", set())
                 if approval.pending_id in used:
@@ -1767,7 +1787,7 @@ class MembersService:
     async def _routine_run(self, params: dict) -> dict:
         routine = self.store.routine(self._routine_id(params))
         if self.routine_busy(routine.id):
-            words = {"zh-TW": "這個例行任務仍在執行，請等候完成。", "ja": "このルーティンは実行中です。完了をお待ちください。", "en": "This routine is still running. Wait for it to finish."}
+            words = with_ui_words({"zh-TW": "這個例行任務仍在執行，請等候完成。", "ja": "このルーティンは実行中です。完了をお待ちください。", "en": "This routine is still running. Wait for it to finish."})
             return {"status": "refused", "reason": words.get(self._language(), words["en"])}
         before = self._conn.execute("SELECT COALESCE(MAX(id),0) FROM routine_runs").fetchone()[0]
         self._run(routine, test_run=True)
@@ -1939,11 +1959,11 @@ class MembersService:
         return ran
 
     def _guard_reason(self, kind: str) -> str:
-        messages = {
+        messages = with_ui_words({
             "zh-TW": {"absence": "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。", "member": "此成員最近一小時已執行 200 次，稍後自動重試。", "total": "團隊最近一小時已執行 300 次，稍後自動重試。"},
             "ja": {"absence": "30 日間利用がないため停止しました。確認して再開してください。", "member": "このメンバーは過去 1 時間に 200 回実行しました。後で再試行します。", "total": "チームは過去 1 時間に 300 回実行しました。後で再試行します。"},
             "en": {"absence": "Paused after 30 days without owner activity. Review and enable to resume.", "member": "This member reached 200 runs in the last hour. Retrying later.", "total": "The team reached 300 runs in the last hour. Retrying later."},
-        }
+        })
         return messages.get(self._language(), messages["en"])[kind]
 
     def pause_absent_routines(self) -> None:

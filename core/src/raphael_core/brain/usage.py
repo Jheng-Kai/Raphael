@@ -137,7 +137,7 @@ class UsageAnalytics:
             member["share"] = member["cost_usd"] / member_total if member_total else 0
             member["models"] = sorted(member["models"].values(), key=lambda m: (-m["cost_usd"], -m["turns"], m["model"]))
             for model in member["models"]:
-                if not model["cost_usd"] and model["model"].startswith(("cli:", "@chatgpt:")):
+                if not model["cost_usd"] and model["model"].startswith(("cli:", "@chatgpt:", "@codex:")):
                     model["cost_usd"] = None
         calls = []
         tool_labels = {}

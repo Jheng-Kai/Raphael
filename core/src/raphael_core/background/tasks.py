@@ -133,7 +133,7 @@ class Task:
     def quiet(self) -> bool:
         """Whether its report stays in its thread: a member's task, or a routine's run, is never
         said on the overlay (the owner reads it in the app)."""
-        return self.member_id != 0 or self.routine_id is not None or self.scope != "private" or self.report_room_id is not None
+        return self.member_id != 0 or self.routine_id is not None or self.scope != "private" or self.report_room_id is not None or self.mode == "work"
 
 
 @dataclass
@@ -218,10 +218,10 @@ class TaskStore:
                     (rerun_of, cursor.lastrowid, rerun_of))
                 self._conn.execute("UPDATE worker_tasks SET (report_room_id,report_thread_id,source_turn_id,stage_id,from_member_id,model_ref)="
                     "(SELECT report_room_id,report_thread_id,source_turn_id,stage_id,from_member_id,model_ref FROM worker_tasks WHERE id=?) "
-                    "WHERE id=? AND EXISTS(SELECT 1 FROM worker_tasks WHERE id=? AND report_room_id IS NOT NULL)",
+                    "WHERE id=? AND EXISTS(SELECT 1 FROM worker_tasks WHERE id=? AND source_turn_id IS NOT NULL)",
                     (rerun_of,cursor.lastrowid,rerun_of))
                 self._conn.execute("UPDATE task_stage_owners SET owner_task_id=?,state='queued',reason='' WHERE owner_task_id=? "
-                    "AND EXISTS(SELECT 1 FROM worker_tasks WHERE id=? AND report_room_id IS NOT NULL)",
+                    "AND EXISTS(SELECT 1 FROM worker_tasks WHERE id=? AND source_turn_id IS NOT NULL)",
                     (cursor.lastrowid,rerun_of,rerun_of))
         assert cursor.lastrowid is not None
         return cursor.lastrowid
@@ -267,7 +267,7 @@ class TaskStore:
             if parent and self.get(parent.id).state not in ('running', 'queued'):
                 raise Refused('cancelled')
         own_lane = source.scope == 'private' and assignee == source.member_id
-        lane = source.scope == 'room' or bool(parent and parent.report_room_id) or own_lane
+        lane = mode == 'work' or source.scope == 'room' or bool(parent and parent.report_room_id) or own_lane
         report_room = source.room_id if source.scope == 'room' else parent.report_room_id if parent else None
         report_thread = source.thread_id if source.scope == 'room' else parent.report_thread_id if parent else None
         conversation = source.conversation_id if own_lane and source.conversation_id is not None else Conversations(self._conn, self._now_ms).main(assignee)
@@ -292,15 +292,38 @@ class TaskStore:
             if not changed:
                 raise Refused('stage_conflict')
             self._conn.execute("UPDATE worker_tasks SET root_task_id=COALESCE(root_task_id,id) WHERE id=?", (task_id,))
+            exchange_id = None
+            if mode == 'work' and assignee != source.member_id:
+                exchange_id = self._work_exchange(task_id, source, assignee, request, model, conversation, now)
+            work_at = max(now, source.created_at_ms) + 1 if mode == 'work' else now
             cursor = self._conn.execute("INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status,"
                 "source,member_id,peer_id,scope,room_id,thread_id,source_turn_id,model,conversation_id) "
                 "VALUES (?,?,?,?, '','','running',?,?,?,?,?,?,?,?,?)",
-                (now,f'work:{task_id}',request,'worker' if lane else 'exchange','worker' if lane else 'member',
+                (work_at,f'work:{task_id}','' if mode == 'work' else request,'worker' if lane else 'exchange','worker' if lane else 'member',
                  assignee,source.member_id,'private' if lane else 'exchange',None,None,source.id,model,conversation))
             self._conn.execute("UPDATE worker_tasks SET turn_id=? WHERE id=?", (cursor.lastrowid,task_id))
+            if exchange_id is not None:
+                self._conn.execute('UPDATE agent_turns SET session_id=? WHERE id=?',
+                                   (f'handoff:{cursor.lastrowid}',exchange_id))
             self._conn.execute("INSERT INTO task_outbox VALUES (?,?, 'queued',?,?,?,?,NULL,NULL)",
                 (f'{task_id}:queued',task_id,source.id,source.room_id,source.thread_id,now))
         return task_id, False
+
+    def _work_exchange(self, task_id, source, assignee, request, model, conversation, now):
+        """A separate audit of the brief, inserted before the owner's work turn."""
+        cursor = self._conn.execute("INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status,"
+            "source,member_id,peer_id,scope,source_turn_id,model,conversation_id) "
+            "VALUES (?,?,?,'exchange','','','running','member',?,?,'exchange',?,?,?)",
+            (max(now, source.created_at_ms),f'handoff-pending:{task_id}',request,assignee,source.member_id,source.id,model,conversation))
+        return cursor.lastrowid
+
+    def exchange_turn_id(self, task_id):
+        task = self.get(task_id)
+        if task is None or task.turn_id is None:
+            return None
+        row = self._conn.execute("SELECT id FROM agent_turns WHERE session_id=? AND scope='exchange' AND source='member'",
+                                 (f'handoff:{task.turn_id}',)).fetchone()
+        return row[0] if row else None
 
     def asker(self, source, *, model, language):
         """The task a conversation turn that consults colleagues waits as, made once for the turn.

@@ -1,6 +1,10 @@
 """ChatGPT plan inference through public Responses, in Raphael's own guarded tool loop."""
 
+import asyncio
+import base64
+import binascii
 import json
+import logging
 import time
 
 import httpx
@@ -11,6 +15,8 @@ from ..openrouter import (
 )
 from ..streams import Packets
 from .chatgpt_auth import RESOURCE, failure
+
+logger = logging.getLogger(__name__)
 
 
 def _answering(packet):
@@ -59,6 +65,75 @@ def _cut_by_output_limit(response):
 class ChatGPTProvider:
     def __init__(self, auth):
         self.auth = auth
+        self._unlisted_efforts = set()
+
+    def _effort(self, model, requested):
+        if requested != "none":
+            return requested
+        row = next((row for row in self.auth.model_rows if row.get("id") == model), None)
+        levels = row.get("reasoning_efforts", []) if row else []
+        least = next((effort for effort in EFFORTS if effort in levels), None)
+        if least is None and model not in self._unlisted_efforts:
+            self._unlisted_efforts.add(model)
+            logger.debug("ChatGPT reasoning metadata unavailable for %s; retaining backend default", model)
+        return least
+
+    async def generate_image(self, *, model, prompt, square=False, timeout_s=240):
+        """Request one hosted image on this plan, without borrowing Codex or API credentials."""
+        from ...services.attachments import Attachment, MAX_IMAGE_BYTES, sniff_ok
+
+        token = await self.auth.access_token()
+        session = self.auth.session()
+        body = {"model": model, "input": [{"role": "user", "content": prompt}],
+                "instructions": "Generate exactly one image. Do not call other tools.",
+                "store": False, "stream": True, "tools": [{"type": "image_generation",
+                    "output_format": "png", **({"size": "1024x1024"} if square else {})}],
+                "tool_choice": {"type": "image_generation"}}
+        completed, output = None, []
+        try:
+            async with asyncio.timeout(timeout_s):
+                async with self.auth.http().stream("POST", RESOURCE + "/responses", json=body,
+                        headers={"Authorization": "Bearer " + token}, timeout=timeout_s,
+                        follow_redirects=False) as response:
+                    if not response.is_success:
+                        await response.aread()
+                        try:
+                            error = response.json()
+                        except ValueError:
+                            error = {}
+                        raise failure(response.status_code, error, response.headers.get("x-request-id"))
+                    async for packet in Packets(response, timeout_s, lambda packet: False):
+                        kind = packet.get("type")
+                        if kind in ("response.failed", "response.incomplete", "error"):
+                            raise failure(200, packet.get("response", packet))
+                        if kind == "response.output_item.done":
+                            output.append(packet["item"])
+                        elif kind == "response.completed":
+                            completed = packet["response"]
+            self.auth.check_session(session)
+            if not isinstance(completed, dict) or completed.get("status") != "completed":
+                raise OpenRouterError(200, "bad_response", "ChatGPT returned no completed image")
+            items = completed.get("output") or output
+            if any(part.get("type") == "refusal" for item in items if isinstance(item, dict)
+                   for part in item.get("content", []) if isinstance(part, dict)):
+                raise OpenRouterError(200, "content_policy", "ChatGPT declined the image")
+            images = [item for item in items if isinstance(item, dict) and item.get("type") == "image_generation_call"]
+            if len(images) != 1 or images[0].get("status") != "completed":
+                raise ValueError
+            encoded = images[0].get("result")
+            if not isinstance(encoded, str) or len(encoded) > 4 * ((MAX_IMAGE_BYTES + 2) // 3):
+                raise ValueError
+            raw = base64.b64decode(encoded, validate=True)
+            mime = next(mime for mime in ("image/png", "image/jpeg", "image/webp") if sniff_ok(mime, raw))
+            if len(raw) > MAX_IMAGE_BYTES:
+                raise ValueError
+            return Attachment("generated." + {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}[mime], mime, raw)
+        except (TimeoutError, httpx.TimeoutException):
+            raise OpenRouterError(0, "timeout", "ChatGPT image timed out") from None
+        except httpx.TransportError:
+            raise OpenRouterError(0, "network", "ChatGPT image was interrupted") from None
+        except (ValueError, TypeError, KeyError, StopIteration, binascii.Error):
+            raise OpenRouterError(200, "bad_response", "ChatGPT returned no valid image") from None
 
     async def models(self, timeout_s=5):
         token = await self.auth.access_token()
@@ -85,16 +160,21 @@ class ChatGPTProvider:
         self.auth.model_rows = rows
         return rows
 
-    async def chat_tools(self, *, model, messages, tools, timeout_s, max_tokens, fallbacks=(), reasoning_effort="none"):
+    async def chat_tools(self, *, model, messages, tools, timeout_s, max_tokens, fallbacks=(), reasoning_effort="none",
+                         _retain_reasoning=True, _cache_key=None):
         token = await self.auth.access_token()
         session = self.auth.session()
         items, instructions = _input(messages)
-        body = {"model": model, "input": items, "store": False, "stream": True,
-                "include": ["reasoning.encrypted_content"]}
+        body = {"model": model, "input": items, "store": False, "stream": True}
+        if _retain_reasoning:
+            body["include"] = ["reasoning.encrypted_content"]
+        if _cache_key:
+            body["prompt_cache_key"] = _cache_key
         if instructions:
             body["instructions"] = instructions
-        if reasoning_effort != "none":
-            body["reasoning"] = {"effort": reasoning_effort}
+        effort = self._effort(model, reasoning_effort)
+        if effort is not None:
+            body["reasoning"] = {"effort": effort}
         if tools:
             body["tools"] = [{"type": "namespace", "name": "raphael",
                 "description": "Raphael's local guarded tools", "tools": [
@@ -174,12 +254,14 @@ class ChatGPTProvider:
             int((time.perf_counter() - started) * 1000), usage_known=True, responses_output=output,
             finish_reason="length" if cut else "")
 
-    async def chat_text(self, *, model, system, user, timeout_s, max_tokens, fallbacks=(), plugins=(), reasoning_effort="none"):
+    async def chat_text(self, *, model, system, user, timeout_s, max_tokens, fallbacks=(), plugins=(), reasoning_effort="none",
+                        _cache_key="raphael-text"):
         if plugins:
             raise OpenRouterError(0, "unsupported", "ChatGPT does not support OpenRouter plugins")
         result = await self.chat_tools(model=model, messages=[{"role": "system", "content": system},
             {"role": "user", "content": user}], tools=[], timeout_s=timeout_s,
-            max_tokens=max_tokens, reasoning_effort=reasoning_effort)
+            max_tokens=max_tokens, reasoning_effort=reasoning_effort,
+            _retain_reasoning=False, _cache_key=_cache_key)
         return TextCompletion(result.content, result.model, 0.0, result.prompt_tokens,
                               result.completion_tokens, result.latency_ms, [], usage_known=True)
 
@@ -187,7 +269,8 @@ class ChatGPTProvider:
         import jsonschema
 
         result = await self.chat_text(system=system + "\nReturn only a JSON object matching this schema: " + json.dumps(schema),
-                                      user=user, **kwargs)
+                                      user=user, _cache_key="raphael-cleanup" if schema_name == "cleaned_dictation"
+                                      else "raphael-json-" + schema_name, **kwargs)
         try:
             from ..structured import structured_object
             data = structured_object(result.text, schema)
@@ -199,7 +282,7 @@ class ChatGPTProvider:
 
     async def plan_tools(self, *, system, user, **kwargs):
         result = await self.chat_tools(messages=[{"role": "system", "content": system},
-            {"role": "user", "content": user}], **kwargs)
+            {"role": "user", "content": user}], _retain_reasoning=False, _cache_key="raphael-planner", **kwargs)
         return ToolPlan([ToolCall(call.name, call.arguments) for call in result.calls], result.model,
                         0.0, result.prompt_tokens, result.completion_tokens, result.latency_ms)
 

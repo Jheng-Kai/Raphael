@@ -19,11 +19,11 @@ tool an alias is stays here in the core. The snapshot holds:
 - and, when there is a memory, `history_search`, which only reads: a task may look up what was said
   before; what it writes after reading what services return goes in marked (`memory.store`).
 - shared team work tools (`agent.team`), including `ask_member` when there is someone to ask.
-  Peer/shared management, including `create_member`, is reserved for the primary contact's
-  interactive owner chat; any member may manage itself there. Background tasks never receive it.
+  Every member has the same management catalog in an interactive owner-private chat.
+  Private background member management requires an explicit owner approval card.
 
-A task of a member of the owner's team is offered what Raphael's is (`Speaker.uses`,
-`Speaker.uses_plugin` say yes to everything): the same web tools and the same connections.
+A task of a member has the same built-in abilities; connection tools follow its current
+owner-selected allowlist (`Speaker.uses_plugin`).
 
 The three tools of Composio's router are pinned (`PluginTool.pinned`): they are shown to every task
 whatever it says, since the one that executes shares no word with any request.
@@ -131,7 +131,7 @@ _DEFINITIONS: dict[str, dict[str, Any]] = {
     "find_tools": {
         "description": (
             "Find available tools by task or name (for example: search pages, delete a folder). "
-            "Self management is available to each member in the owner's chat; peer/shared management only to the primary contact. "
+            "Every member has the same management tools in the owner's private chat, subject to owner approvals. "
             "Found tools can then be called."
         ),
         "parameters": {
@@ -190,6 +190,7 @@ class Snapshot:
     _aliases: dict[str, str] = field(default_factory=dict, repr=False)
     sealed: bool = False
     management: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
+    tool_allowed: Any = field(default=lambda _key: True, repr=False)
     work: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
 
     def show_management(self, names):
@@ -218,7 +219,7 @@ class Snapshot:
         shown = {alias for alias, ref in self.refs.items() if ref.kind == MCP}
         try:
             tools = [tool for tool in getattr(plugins, "offered_for", lambda _: plugins.offered())(member_id)
-                     if tool.tier <= self.max_tier or getattr(plugins, "is_computer_tool", lambda _: False)(tool.key)]
+                     if self.tool_allowed(tool.key) and (tool.tier <= self.max_tier or getattr(plugins, "is_computer_tool", lambda _: False)(tool.key))]
         except Exception:
             tools = []
         native = {alias for alias, ref in self.refs.items() if ref.kind != MCP}
@@ -286,6 +287,9 @@ class Snapshot:
         their definitions and a line about each for the worker to read. The calendar is the task's
         already, but a model that looks for one by the owner's words is told it is there, not sent to
         connect another."""
+        # An exact tool already in the offer needs no additional fuzzy discoveries.
+        if query in self.refs:
+            return [], [f"{query} (yours already)"]
         own = scored([harness_tool(name) for name in CALENDAR_TOOLS if name in self.refs], query)
         lines = [f"{tool.name} (yours already): {first_sentence(tool.description, 90)}" for score, tool in own if score > 0]
         from ..management import tools_for_request
@@ -325,6 +329,7 @@ def take_snapshot(
     turned_off: Collection[str] = (),
     owner_management: bool = True,
     management_tools: Collection[str] | None = None,
+    background_management: bool = False,
 ) -> Snapshot:
     """The tools a task starting now may use: with `memory`, the memory's tools that read too (the
     conversation search only with `history`: a room's turn has no conversation of its own), and
@@ -353,13 +358,13 @@ def take_snapshot(
     definitions.append({"type": "function", "function": {"name": "generate_audio", **_DEFINITIONS["generate_audio"]}})
     for name in team:
         if name == "create_member":
-            # The management catalog offers member_create to the primary owner chat.
+            # The management catalog offers member_create to every owner-private chat.
             # Its legacy team alias must not consume a second native tool slot.
             continue
         if name in TEAM_TOOLS:
             refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, TEAM_TIER)
             definitions.append(worker_definition(name))
-    snapshot = Snapshot(refs, definitions, max_tier=max_tier)
+    snapshot = Snapshot(refs, definitions, max_tier=max_tier, tool_allowed=speaker.uses_plugin)
     # What every path has, a task that runs by itself too: the owner's daily routine adds what it finds to today.
     everywhere = ("self_check", "raphael_help", *CALENDAR_TOOLS, "connections_list",
                   *((*sorted(BACKGROUND_TOOLS), *sorted(ROUTINE_TOOLS)) if not interactive else ()))
@@ -394,6 +399,10 @@ def take_snapshot(
             native = harness_tool(name)
             refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, native.tier)
             definitions.append({"type": "function", "function": {"name": name, **item}})
+    if background_management:
+        from ..management import BACKGROUND_MEMBER_TOOLS, DEFINITIONS as management_definitions
+        snapshot.management.update({name: item for name, item in management_definitions.items() if name in BACKGROUND_MEMBER_TOOLS})
+        snapshot.show_management(wanted_management)
     requested = words(question)
     snapshot._show_native(snapshot.work, [name for name in snapshot.work if words(name.replace("_", " ")) & requested])
     if plugins is not None:

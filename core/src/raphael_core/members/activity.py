@@ -69,9 +69,9 @@ class Activity:
         return state, self.label(member_id, state, tasks=tasks)
 
     def label(self, member_id, state=None, *, tasks=None):
-        from ..agent.persona import ACTIVITY_LABELS
+        from ..agent.persona import ACTIVITY_LABELS, normalize_language
         state = state or self.state(member_id)
-        words = ACTIVITY_LABELS.get(self.language(), ACTIVITY_LABELS["zh-TW"])
+        words = ACTIVITY_LABELS[normalize_language(self.language())]
         if state == "waiting":
             tasks = self.task_list(member_id) if tasks is None else tasks
             name = next((task.get("waiting_for") for task in tasks if task.get("waiting_for")), None)

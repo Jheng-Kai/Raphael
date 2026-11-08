@@ -295,6 +295,7 @@ class TaskRun:
         # The files of the task, by number from 1, and the addresses it has seen (see the module).
         self.attachments = list(attachments)
         self.seen_urls = SeenUrls([request])
+        self.tool_allowed = lambda _key: True
         self.task_id = task_id
         self.language = language
         self.model = model
@@ -619,7 +620,7 @@ class TaskRun:
         self._step(kind="model", outcome="ok", cost_usd=cost, ms=_ms(began))
         if turn.calls and turn.content.strip():
             from ..agent.answers import public_reply
-            authored = public_reply(turn.content, self.language, plain=True)
+            authored = public_reply(turn.content, self.language, plain=True, explicit=True)
             if authored is not None and self._reply is not None:
                 self._reply(authored)
             text = " ".join(turn.content.split())[:200]
@@ -655,7 +656,10 @@ class TaskRun:
         async with self._turn:
             try:
                 with self.action(name, arguments) as status:
-                    reply = await self._tool(name, arguments, call_id if isinstance(call_id, str) else "")
+                    from ..management import background_management
+                    task = self._store.get(self.task_id)
+                    with background_management(task.member_id if task else 0):
+                        reply = await self._tool(name, arguments, call_id if isinstance(call_id, str) else "")
                     if status is not None:
                         status.update(outcome="ok" if reply.get("ok") else "error", reason=reason_of("ok" if reply.get("ok") else "error", reply.get("kind")))
                     return reply
@@ -675,6 +679,8 @@ class TaskRun:
                 return {**_refused(), "content": "This tool is no longer enabled or connected. Read connections_list for current access; do not retry its old alias."}
             if getattr(self,'room_speech',False):
                 return {**_refused(),'instruction':'Start this as private work with handoff.','content':'This room is for speech only.'}
+            if ref is None:
+                return {**_refused(), "content": "This tool is not available to this member. The owner may have disabled its connection in the member's tool list; use find_tools for currently allowed tools."}
             return _refused()
         sent: int | None = None
         detail: str | None = None
@@ -777,6 +783,11 @@ class TaskRun:
     async def _plugin(
         self, ref: ToolRef, arguments: dict, alias: str = "", call_id: str = ""
     ) -> tuple[dict, str, str | None, int | None]:
+        from ..agent.data_floor import WRITE_REFUSAL
+        if not self.tool_allowed(ref.key):
+            return {"ok": False, "kind": "tool_disabled", "content": "The owner disabled this connection for this member. Ask the owner to change the member's tool list.", "truncated": False}, "blocked", None, None
+        if self._gate.data_floor.access(ref.key, arguments) == "write":
+            return {"ok": False, "kind": "protected_data", "content": WRITE_REFUSAL, "truncated": False}, "blocked", None, None
         if ref.key.startswith("mcp:computer-access-"):
             self._gate.record_unrun(ref.key, outcome="blocked", task_id=self.task_id)
             return {"ok": False, "kind": "computer_permission_required", "content": (
@@ -864,7 +875,9 @@ class TaskRun:
                scope=lambda self, *args, **kwargs: self.activity)
     @command_context(lambda self, *args, **kwargs: run_context(self))
     async def answer_call(self, waiting: Waiting, approval: Approval | None, action: Action | None) -> str:
-        with self.action(waiting.alias, waiting.arguments) as status:
+        from ..management import background_management
+        task = self._store.get(self.task_id)
+        with self.action(waiting.alias, waiting.arguments) as status, background_management(task.member_id if task else 0):
             return await self._answered_call(waiting, approval, action, status)
 
     async def _answered_call(self, waiting: Waiting, approval: Approval | None, action: Action | None, status) -> str:
@@ -902,6 +915,8 @@ class TaskRun:
             if status is not None:
                 status.update(outcome=outcome, reason=reason_of(outcome, result.error))
             return result_text(waiting.alias, ToolOutcome(result.ok, result.error, content))
+        if not self.tool_allowed(ref.key):
+            return result_text(waiting.alias, ToolOutcome(False, "tool_disabled", "The owner disabled this connection for this member."))
         now = self._gate.tier_now(ref.key, waiting.arguments)
         # The yes is for the tier the question was asked at: a tool that has none now, or a higher
         # one, is not covered by it.
@@ -1022,8 +1037,12 @@ class TaskRun:
     async def _lookup(self, name: str, arguments: dict, *, approval: Approval | None = None, action: Action | None = None) -> ToolResult:
         """One of Raphael's own lookups. It never raises for a failure of the world."""
         try:
+            if name == "cli_permission":
+                self._gate.check_for(action, name, arguments, approval)
+                return ToolResult(name, True, {"approved": True})
             from ..agent.harness_tools import CONNECTION_TOOLS, ROUTINE_TOOLS
-            if name in CONNECTION_TOOLS or name in ROUTINE_TOOLS:
+            from ..management import BACKGROUND_MEMBER_TOOLS
+            if name in CONNECTION_TOOLS or name in ROUTINE_TOOLS or name in BACKGROUND_MEMBER_TOOLS:
                 return await self._owner_tool(name, arguments, approval=approval, action=action) if self._owner_tool else ToolResult(name, False, None, "unavailable")
             from ..memory.growth import TOOLS as GROWTH_TOOLS
             if name in GROWTH_TOOLS:

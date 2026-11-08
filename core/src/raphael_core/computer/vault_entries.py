@@ -1,5 +1,6 @@
 """Owner-managed metadata and transient import previews; private values stay in the OS vault."""
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import csv
 import io
@@ -17,8 +18,8 @@ FIELDS = {"login": ("username", "password"), "contact": ("name", "address", "pho
 
 def payment_question(arguments, language):
     label, site, amount = (str(arguments.get(key, "")) for key in ("label", "site", "amount"))
-    return {"zh-TW": f"允許使用「{label}」在 {site} 填入付款資料？金額：{amount or '頁面未顯示'}。最後付款由你完成。",
-            "ja": f"{site} で「{label}」を入力しますか？金額：{amount or '表示なし'}。最後の支払いはあなたが行います。"}.get(language,
+    return with_ui_words({"zh-TW": f"允許使用「{label}」在 {site} 填入付款資料？金額：{amount or '頁面未顯示'}。最後付款由你完成。",
+            "ja": f"{site} で「{label}」を入力しますか？金額：{amount or '表示なし'}。最後の支払いはあなたが行います。", "en": f"Allow {label} to fill payment details at {site}? Amount: {amount or 'not shown'}. You complete the final payment."}, lambda _ui_language: ui_word('Allow {p0} to fill payment details at {p1}? Amount: {p2}. You complete the final payment.', _ui_language).format(p0=label, p1=site, p2=amount or ui_word('not shown', _ui_language))).get(language,
             f"Allow {label} to fill payment details at {site}? Amount: {amount or 'not shown'}. You complete the final payment.")
 
 

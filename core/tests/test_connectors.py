@@ -895,11 +895,11 @@ async def test_service_switch_preserves_tools_and_updates_offers_without_restart
     assert names
 
     async def assert_brain_offers(available):
-        for speaker in (Speaker(), Speaker(id=7, tools=frozenset())):
+        for speaker in (Speaker(), Speaker(id=7, tools=frozenset()), Speaker(id=8, tools=frozenset({server}))):
             # API and CLI receive the same fresh production snapshot on each turn.
             snapshot = take_snapshot(hub, speaker=speaker, interactive=True, max_tier=Tier.T3)
             refs = [ref for ref in snapshot.refs.values() if ref.key.startswith(tool_key(server, ""))]
-            assert bool(refs) is available
+            assert bool(refs) is (available and speaker.uses_plugin(tool_key(server, names[0])))
             bridge = RaphaelMcp(lambda: snapshot.definitions, None)
             listed = await bridge._dispatch({"method": "tools/list"})
             api_names = {item["function"]["name"] for item in snapshot.definitions}

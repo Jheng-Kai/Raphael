@@ -568,7 +568,7 @@ async def test_a_chain_is_at_most_two_deep_and_never_comes_back(setup):
         a, "create_member", {"name": "x", "role": "", "instructions": ""},
         language="zh-TW", ledger=None, session_id="s",
     )  # fmt: skip
-    assert not created.ok and team.members.find("x") is None  # only the primary in an interactive owner turn may create
+    assert not created.ok and team.members.find("x") is None  # creation still requires a trusted interactive owner turn
 
 
 async def test_the_fast_tier_separates_durable_handoffs_from_bounded_consultation(setup):
@@ -578,7 +578,7 @@ async def test_the_fast_tier_separates_durable_handoffs_from_bounded_consultatio
     assert team_tools_for(team.members, a, "問小財務") == []  # itself
     assert team_tools_for(team.members, b.asked_by(a), "問小財務") == ["handoff"]  # a work graph has its own durable bound
     assert team_tools_for(team.members, a, "今天天氣") == []
-    assert team_tools_for(team.members, a, always=True) == ["skill_read", "skills_list", "skill_manage", "handoff", "room_list", "room_post", "ask_member"]
+    assert team_tools_for(team.members, a, always=True) == ["skill_read", "skills_list", "skill_manage", "handoff", "room_list", "room_post", "ask_member", "create_member", "room_meeting"]
     assert team_tools_for(team.members, b.asked_by(a), always=True) == ["skill_read", "skills_list", "skill_manage", "handoff", "room_list", "room_post", "ask_member"]
 
 

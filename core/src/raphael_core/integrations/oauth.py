@@ -21,6 +21,7 @@ The SDK takes over a second to import, so it is imported when it is first needed
 token, a code, a state, an address or a client registration.
 """
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import contextlib
 import functools
@@ -132,16 +133,16 @@ class VaultTokenStorage:
 
 # --- the end of the login --------------------------------------------------------------------
 
-_PAGE = {
+_PAGE = with_ui_words({
     "en": ("You are signed in", "You can close this tab and go back to Raphael."),
     "zh": ("登入完成", "你可以關閉這個分頁，回到拉斐爾。"),
     "ja": ("ログインが完了しました", "このタブを閉じて、Raphael に戻ってください。"),
-}
-_PAGE_FAILED = {
+})
+_PAGE_FAILED = with_ui_words({
     "en": ("Not signed in", "The login was not finished. You can close this tab and try again in Raphael."),
     "zh": ("沒有登入", "登入沒有完成。你可以關閉這個分頁，回到拉斐爾再試一次。"),
     "ja": ("ログインできませんでした", "ログインが完了しませんでした。このタブを閉じて、Raphael でもう一度お試しください。"),
-}
+})
 
 
 def _page(accept_language: str, *, ok: bool) -> SignInPage:

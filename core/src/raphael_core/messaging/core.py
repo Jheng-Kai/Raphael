@@ -18,6 +18,7 @@ What goes in the log: counts, kinds and a short hash of a chat id. Never a messa
 transcript, a name, a file's name or id, or a secret.
 """
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import hashlib
 import logging
@@ -465,9 +466,9 @@ class Switchboard:
                     break
                 if not await self._channel.send_attachment(chat, file):
                     language = self._language()
-                    note = {"zh-TW": f"「{file.name}」超過 Telegram 的檔案大小限制，請在 Raphael 的原對話中開啟附件。",
+                    note = with_ui_words({"zh-TW": f"「{file.name}」超過 Telegram 的檔案大小限制，請在 Raphael 的原對話中開啟附件。",
                             "ja": f"「{file.name}」は Telegram のサイズ制限を超えています。Raphael の元の会話で添付ファイルを開いてください。",
-                            "en": f'"{file.name}" exceeds Telegram’s file size limit. Open the attachment in the original conversation in Raphael.'}
+                            "en": f'"{file.name}" exceeds Telegram’s file size limit. Open the attachment in the original conversation in Raphael.'}, lambda _ui_language: ui_word('"{p0}" exceeds Telegram’s file size limit. Open the attachment in the original conversation in Raphael.', _ui_language).format(p0=file.name))
                     await self._reply(chat, note.get(language, note["en"]).replace("Telegram", self._channel.kind.title()))
         except ChannelError as error:
             logger.warning("%s: could not send a report (%s)", self._channel.kind, error.kind)

@@ -8,7 +8,7 @@
   "reply_style": "full",
   "skills": [
     {
-      "text": "---\nname: 資料核對\ndescription: 檢查來源與結論\n---\n先查證來源，再完成報告。"
+      "text": "---\nname: source-check\ndescription: 檢查來源與結論\n---\n先查證來源，再完成報告。"
     }
   ],
   "routines": [

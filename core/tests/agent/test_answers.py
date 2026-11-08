@@ -101,7 +101,7 @@ async def test_the_model_is_asked_for_json_with_a_little_reasoning(voice, client
     call = client.json_calls[0]
     assert call["model"] == "openai/gpt-6-luna"
     assert call["fallbacks"] == []  # the owner's brain answers as itself, never a fallback model
-    assert call["system"] == persona.system_prompt("zh-TW", "answer")
+    assert call["system"] == persona.system_prompt("zh-TW", "answer") + answers_module.MESSAGE_RULES
     assert call["schema_name"] == "raphael_reply"
     assert call["reasoning_effort"] == "none"
     assert call["max_tokens"] == REPLY_MAX_TOKENS
@@ -122,7 +122,7 @@ def test_the_schema_offers_the_prefixes_of_the_language_and_requires_every_field
 async def test_the_system_prompt_is_the_one_of_the_route(voice, client, ledger, route):
     client.replies.append(completion(spoken()))
     await reply(voice, ledger, route=route, language="ja")
-    assert client.json_calls[0]["system"] == persona.system_prompt("ja", route)
+    assert client.json_calls[0]["system"] == persona.system_prompt("ja", route) + answers_module.MESSAGE_RULES
 
 
 async def test_the_fast_voice_answer_keeps_raphaels_owner_instructions(voice, client, ledger):
@@ -418,7 +418,7 @@ async def test_the_voice_asks_for_the_japanese_in_the_same_call_when_told_to(voi
     assert len(client.json_calls) == 1 and got.say_ja == "はい。"
     call = client.json_calls[0]
     assert "say_ja" in call["schema"]["properties"]
-    assert call["system"] == persona.system_prompt("zh-TW", "answer", say_ja=True)
+    assert call["system"] == persona.system_prompt("zh-TW", "answer", say_ja=True) + answers_module.MESSAGE_RULES
     assert call["user"].endswith(persona.language_reminder("zh-TW", say_ja=True))
 
 

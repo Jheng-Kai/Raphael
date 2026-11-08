@@ -39,7 +39,7 @@ def test_all_system_contracts_require_owner_approval_for_outward_vm_actions(lang
 
 
 def test_raphael_speaks_traditional_chinese_english_and_japanese():
-    assert LANGUAGES == ("zh-TW", "en", "ja")
+    assert LANGUAGES == ("zh-TW", "en", "ja", "zh-CN", "ko", "es", "fr", "de", "pt-BR", "it", "ru", "vi", "th", "id", "tr")
     assert DEFAULT_LANGUAGE == "zh-TW"
 
 
@@ -63,7 +63,7 @@ def test_a_ui_language_is_taken_for_the_one_of_the_three_it_stands_for(given, la
     assert normalize_language(given) == language
 
 
-@pytest.mark.parametrize("given", ["", "fr", "ko-KR", "klingon", "x"])
+@pytest.mark.parametrize("given", ["", "ar", "he", "klingon", "x"])
 def test_an_unknown_ui_language_is_english(given):
     assert normalize_language(given) == "en"
 
@@ -117,6 +117,9 @@ def test_every_language_has_every_phrase():
     names = {field.name for field in dataclasses.fields(persona.Phrases)}
     assert names  # the dataclass is not empty
     assert set(PHRASES) == set(LANGUAGES)
+    for language in LANGUAGES:
+        for name in names:
+            assert phrase(language, name) == getattr(PHRASES[persona.fixed_language(language)], name)
     for language, phrases in PHRASES.items():
         for name in names:
             text = getattr(phrases, name)
@@ -189,7 +192,7 @@ def test_only_a_question_asks_and_every_other_line_states(language):
         if name in _QUESTIONS:
             assert text.endswith(("？", "?")), name
         else:
-            assert text.endswith(("。", ".")), name
+            assert language == "th" or text.endswith(("。", ".")), name
             assert "？" not in text and "?" not in text, name
 
 
@@ -205,7 +208,7 @@ def test_the_fixed_lines_leave_the_address_to_the_greeting_and_the_model():
 
 
 def test_the_hand_off_names_the_owner_in_the_word_of_its_language():
-    for language in LANGUAGES:
+    for language in ("zh-TW", "en", "ja"):
         assert persona.ADDRESS[language] in phrase(language, "computer_handoff")
     assert phrase("zh-TW", "computer_handoff") == "這一步需要主人親自操作。"
 
@@ -215,8 +218,15 @@ def test_the_fixed_lines_are_brief(language):
     for name in _LINES:
         text = phrase(language, name)
         repair = name in {"budget", "credits", "worker_model", "worker_limit_model", "worker_limit_tool", "worker_limit_time", "worker_limit_cost", "worker_limit_month", "vision_off", "pdf_off", "failed", "open_not_found", "computer_watch", "computer_unavailable", "computer_refused_app"}
-        if language == "en":
+        if language == "vi":
+            # Vietnamese spaces separate syllables as well as words.
+            assert len(text.split()) <= (90 if repair else 40), name
+        elif language not in ("zh-TW", "zh-CN", "ja", "ko", "th"):
             assert len(text.split()) <= (45 if repair else 16), name
+        elif language == "ko":
+            assert len(text) <= (190 if repair else 90), name
+        elif language == "th":
+            assert len(text) <= (260 if repair else 150), name
         else:
             assert len(text) <= (140 if repair else 40), name
 
@@ -401,7 +411,7 @@ def test_every_fixed_phrase_is_found_again_in_its_japanese_wording(language):
     fields = {"server": "S", "tool": "T", "what": "W", "steps": "3", "member": "小行程", "rule": "R",
               "app": "A", "target": "G", "keys": "K"}  # fmt: skip
     for name in persona.Phrases.__dataclass_fields__:
-        shown = phrase(language, name, **{k: v for k, v in fields.items() if "{" + k + "}" in getattr(PHRASES[language], name)})
+        shown = phrase(language, name, **{k: v for k, v in fields.items() if "{" + k + "}" in getattr(PHRASES[persona.fixed_language(language)], name)})
         expected = phrase("ja", name, **{k: v for k, v in fields.items() if "{" + k + "}" in getattr(PHRASES["ja"], name)})
         assert persona.fixed_line(language, shown, "ja") == expected, name
 

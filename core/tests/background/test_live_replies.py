@@ -34,11 +34,11 @@ async def test_background_replies_arrive_before_each_tool_and_do_not_repeat_at_t
     rig.service._notify = notify
     async def second(**kwargs):
         assert bodies(rig, turn_id) == words[:1]
-        return turn(words[1], [call("local_time", {}, "two")])
+        return turn(json.dumps({"messages": [words[1]]}), [call("local_time", {}, "two")])
     async def final(**kwargs):
         assert bodies(rig, turn_id) == words[:2]
         return turn(json.dumps({"prefix": "Notice", "messages": words, "detail": "Receipt"}))
-    rig.client.replies = [turn(words[0], [call("local_time", {}, "one")]), second, final]
+    rig.client.replies = [turn(json.dumps({"messages": [words[0]]}), [call("local_time", {}, "one")]), second, final]
     from raphael_core.members.store import MemberStore
     routine_id = MemberStore(rig.conn, rig.wall).create_routine(
         member_id=0, title="Prepare", prompt="Prepare it", schedule={"kind": "every", "hours": 1},
@@ -64,7 +64,7 @@ async def test_a_failed_tool_keeps_the_first_message(make_rig, monkeypatch):
         return {"ok": False, "kind": "tool_broken", "content": "RAW PRIVATE TOOL FAILURE"}
     from raphael_core.background.run import TaskRun
     monkeypatch.setattr(TaskRun, "tool", fail)
-    rig.client.replies = [turn("I will check it.", [call("local_time", {}, "one")]), turn("The check failed.")]
+    rig.client.replies = [turn(json.dumps({"messages": ["I will check it."]}), [call("local_time", {}, "one")]), turn("The check failed.")]
     task_id = rig.service.submit(session_id="fail", language="en", text="Check", model="fake/model")
     rig.service.attach_turn(task_id, turn_id)
     await rig.wait_for_reports(timeout=15)
@@ -88,7 +88,7 @@ async def test_background_cli_publishes_each_complete_message(make_rig, monkeypa
     async def run(driver, **kwargs):
         for index, word in enumerate(words):
             yield Event("text_delta", word)
-            yield Event("message", word, data={"id": str(index)})
+            yield Event("message", word, data={"id": str(index), "final": True})
             assert bodies(rig, turn_id) == words[:index + 1]
             assert history.get(turn_id).status == "running"
             if index < 2:
@@ -125,3 +125,25 @@ async def test_a_late_background_reply_cannot_revive_a_stopped_generation(make_r
         history.delete(turn_id)
     rig.service._reply(task, Reply("Notice", "LATE", None))
     assert "LATE" not in " ".join(bodies(rig, turn_id))
+
+
+async def test_five_tool_narrations_stay_progress_before_explicit_background_message(make_rig):
+    rig = make_rig()
+    history = AgentHistory(rig.conn)
+    turn_id = history.add(session_id="quiet", question="Check sources", route="delegate", prefix="", text="", status="running")
+    async def progress(**kwargs):
+        assert bodies(rig, turn_id) == []
+        return turn("Checking and routing around a file error.", [call("local_time", {"round": len(rig.client.chat_calls)}, str(len(rig.client.chat_calls)))])
+    async def message(**kwargs):
+        assert bodies(rig, turn_id) == []
+        return turn(json.dumps({"messages": ["The deadline is confirmed."]}), [call("local_time", {}, "last")])
+    async def final(**kwargs):
+        assert bodies(rig, turn_id) == ["The deadline is confirmed."]
+        return turn("The result is ready.")
+    rig.client.replies = [progress] * 5 + [message, final]
+    task_id = rig.service.submit(session_id="quiet", language="en", text="Check sources", model="fake/model")
+    rig.service.attach_turn(task_id, turn_id)
+    await rig.wait_for_reports(timeout=15)
+    assert rig.task(task_id).state == "done"
+    assert bodies(rig, turn_id) == ["The deadline is confirmed.", "The result is ready."]
+    assert any(method == "worker.progress" for method, data in rig.notifications)

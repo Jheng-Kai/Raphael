@@ -61,6 +61,7 @@ that cannot be undone (T3) and for what is built in.
 Nothing here logs an action, its arguments or a rule: only counts, the verdict and timings.
 """
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import json
 import logging
@@ -97,11 +98,11 @@ DESCRIPTION_CHARS = 300
 SUMMARY_CHARS = 400
 
 # The three rules of the first run, in each language of the app.
-SEEDS: dict[str, tuple[str, ...]] = {
+SEEDS: dict[str, tuple[str, ...]] = with_ui_words({
     "zh-TW": ("付款結帳", "刪除檔案", "寄信或傳訊息給別人"),
     "en": ("Pay or check out", "Delete files", "Send an email or a message to someone else"),
     "ja": ("支払い・購入の確定", "ファイルの削除", "他の人へのメールやメッセージの送信"),
-}
+})
 _SEEDED = "seeded"
 
 
@@ -275,7 +276,7 @@ class SafetyRules:
             "SELECT 1 FROM safety_state WHERE key = ?", (_SEEDED,)
         ).fetchone():
             return
-        seeds = SEEDS[normalize_language(language)]
+        seeds = SEEDS.get(normalize_language(language), SEEDS["en"])
         with self._conn:
             empty = self._conn.execute("SELECT count(*) FROM safety_rules").fetchone()[0] == 0
             if empty:

@@ -39,11 +39,12 @@ def test_a_delegated_work_turn_keeps_its_delivery_conversation(conn):
     turn = history.get(tasks.get(task_id).turn_id)
     assert turn.conversation_id == conversations.main(member.id)
     # Work handed over stays with whoever does it.
-    assert [t.id for t in history.list(member_id=member.id, conversation_id=turn.conversation_id, exchanges=True)] == [turn.id]
+    audit_id = tasks.exchange_turn_id(task_id)
+    assert [t.id for t in history.list(member_id=member.id, conversation_id=turn.conversation_id, exchanges=True)] == [turn.id, audit_id]
     other = conversations.main()
     assert [t.id for t in history.list(member_id=0, conversation_id=other, exchanges=True)] == [source_id]
     conn.execute("DELETE FROM conversations WHERE id=?", (turn.conversation_id,))
-    assert history.get(turn.id) is None
+    assert history.get(turn.id) is None and history.get(audit_id) is None
     assert tasks.get(task_id).turn_id is None
 
 

@@ -1,5 +1,6 @@
 """Keep a CLI and its MCP requests alive across the existing inline approval cards."""
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import json
 import logging
@@ -14,7 +15,7 @@ from ...worker.loop import Call, Outcome, Stop, ToolOutcome, WAITING
 from ...members.activity import StreamSteps, current, tool_step
 from ...worker.guards import wrap_untrusted
 from ...worker.tool_guardrails import ToolGuardrails
-from ..answers import MESSAGE_BREAK, message_parts, parse_reply, public_reply, pending_replies
+from ..answers import MESSAGE_RULES, MESSAGE_BREAK, message_parts, parse_reply, public_reply, pending_replies
 from ..conversations import Conversations
 from ..mcp_server import RaphaelMcp
 from ...brain.textnorm import public_line
@@ -139,7 +140,7 @@ class CliLoop:
         if structured is not None:
             self.system = system + "\nThis is a tool-less memory pass. Return only JSON matching this schema:\n" + json.dumps(structured)
         if no_tools and structured is None:
-            self.system = system
+            self.system = system + MESSAGE_RULES
         from ...worker.owner_input import OwnerInput
         self.owner_input = OwnerInput()
         self._steering = set()
@@ -209,8 +210,6 @@ class CliLoop:
         return lines
 
     def _progress(self):
-        if self._publish_reply is not None and not self._completed_buffer:
-            self._publish(self._buffer)
         if line := public_line(self._buffer, "auto"):
             self.progress(line[:400])
         self._buffer = ""
@@ -292,7 +291,7 @@ class CliLoop:
         outcome = await self._execute("permission", "cli_permission", args)
         if outcome.kind == "expired":
             return "expired"
-        return ("always" if self.permission_always else "once") if outcome.ok else "deny"
+        return "once" if outcome.ok else "deny"  # Native permissions must be rechecked for protected data each time.
 
     def continue_with(self, outcome):
         self.response = None
@@ -524,10 +523,10 @@ class CliLoop:
                             self._session = None
                             fresh_context = self._fresh_context = True
                             recovering = True
-                            self.progress({
+                            self.progress(with_ui_words({
                                 'zh-TW': '續接的對話內容過長，正在以簡短工作紀錄啟動新的工作階段。',
                                 'ja': '再開する履歴が長すぎるため、短い作業記録で新しいセッションを開始します。',
-                            }.get(self.language, 'The resumed history is too long; starting a fresh session with a short work record.'))
+                             "en": 'The resumed history is too long; starting a fresh session with a short work record.'}, lambda _ui_language: ui_word('The resumed history is too long; starting a fresh session with a short work record.', _ui_language)).get(self.language, 'The resumed history is too long; starting a fresh session with a short work record.'))
                             continue
                         if failure in ("tools_changed", "owner_input"):
                             self.catalog_changed = False
@@ -639,7 +638,8 @@ class CliLoop:
                 elif event.kind == "message" and self._publish_reply is not None:
                     key = (self._attempts, event.data.get("id"))
                     if not key[1] or key not in self._message_ids:
-                        self._publish(event.text, previous=self._separated)
+                        if event.data.get("final") or public_reply(event.text, self.language, plain=self.plain, explicit=True):
+                            self._publish(event.text, previous=self._separated)
                         self._message_ids.add(key)
                     self._buffer = event.text
                     self._completed_buffer, self._separated = True, []

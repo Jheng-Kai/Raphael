@@ -165,7 +165,7 @@ async def test_a_rule_the_owner_wrote_first_keeps_the_seeds_away(rules):
 
 
 async def test_an_unknown_language_seeds_in_the_one_raphael_falls_back_to(rules):
-    rules.ensure_seeded("fr")
+    rules.ensure_seeded("ar")
     assert [r.action for r in rules.rules()] == list(SEEDS["en"])
 
 

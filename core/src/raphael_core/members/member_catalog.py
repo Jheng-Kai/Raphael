@@ -1,5 +1,6 @@
 """Signed, bounded member catalogue; inspired by OpenMausBot (Apache-2.0), see NOTICES.md."""
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import base64
 import hashlib
@@ -24,11 +25,11 @@ PUBLIC_KEYS = ("cc1a2f06ea541dc3d558b78ef3d29363ec806e9c42d76340bf08e20c3a563139
                "9b91d6bdba80a8f774ed816aa3f0ddbbf4adb22e20db66e8473c9b8fc5262dc1c")
 INDEX_CAP = 256 * 1024
 MAX_INDEX_AGE = 7 * 24 * 60 * 60
-STALE_INDEX = {
+STALE_INDEX = with_ui_words({
     "zh-TW": "請連上網路後再加入，以確認範本沒有被撤銷",
     "en": "Connect to the internet before adding this template to check that it has not been revoked",
     "ja": "テンプレートが取り消されていないことを確認するため、インターネットに接続してから追加してください",
-}
+})
 CATEGORIES = ("engineering", "sales", "marketing", "design", "personal", "hr", "product", "operations")
 AVATARS = ("rimuru", "souei", "shuna", "diablo", "benimaru", "hakurou", "shion", "gobta")
 

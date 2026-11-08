@@ -6,15 +6,35 @@ Owner-only boundaries live beside the registry so new UI mutations require a dec
 
 from dataclasses import dataclass
 from contextvars import ContextVar
+from contextlib import contextmanager
 import json
 import re
 from typing import Any
 
 from .agent.policy import Tier
+from .members.skill_names import SKILL_NAME_RULE
 
 # Trusted execution context, never an RPC/model argument. Clearing the very chat
 # that requested a change must not cancel or await its own executing tool.
 ORIGIN_TURN = ContextVar("management_origin_turn", default=None)
+_BACKGROUND_MEMBER = ContextVar("background_management_member", default=None)
+
+
+@contextmanager
+def background_management(member_id):
+    token = _BACKGROUND_MEMBER.set(member_id)
+    try:
+        yield
+    finally:
+        _BACKGROUND_MEMBER.reset(token)
+
+
+def background_actor():
+    return _BACKGROUND_MEMBER.get()
+
+
+def background_requires_approval(name, arguments):
+    return background_actor() is not None and name in BACKGROUND_MEMBER_TOOLS
 
 
 def obj(properties=None, required=()):
@@ -29,6 +49,7 @@ STRINGS = {"type": "array", "items": TEXT}
 IDS = {"type": "array", "items": MEMBER_ID}
 NULL_ID = {"type": ["integer", "null"], "minimum": 1}
 PROFILE = {
+    "tools": {"type": ["array", "null"], "items": TEXT},
     **{key: TEXT for key in ("name", "role", "blurb", "personality", "instructions", "group", "avatar_preset", "model", "voice")},
     **{key: BOOL for key in ("notify", "ask_before_members", "draft_first", "pinned", "hidden")},
     "reply_style": {"type": "string", "enum": ["full", "conversational"]},
@@ -65,10 +86,10 @@ def row(name, rpc, description, properties=None, required=(), *, destructive=Fal
 
 
 ACTIONS = (
-    row("member_create", "members.create", "Create a member with the same defaults as the UI. Use its returned ID.", PROFILE, ("name", "role"), service="member"),
+    row("member_create", "members.create", "Create a member with the same defaults as the UI. Use its returned ID. Templates' CreateAgent maps to this tool.", PROFILE, ("name", "role"), service="member"),
     row("member_update", "members.update", "Edit supplied profile fields, preferences, model/effort, pin/hide, folder or position. ID 0 is the first Bot. Change models only when the owner explicitly requests it.", {"id": MEMBER_ID, **PROFILE}, ("id",), service="member"),
     row("member_delete", "members.delete", "Permanently delete a member, conversations, memories, routines and resources.", {"id": ID}, ("id",), destructive=True),
-    row("member_primary", "members.set_primary", "Move the primary contact and management authority to this member.", {"id": MEMBER_ID}, ("id",), destructive=True),
+    row("member_primary", "members.set_primary", "Make this member the default primary contact; all members retain the same owner-private management abilities.", {"id": MEMBER_ID}, ("id",), destructive=True),
     row("member_duplicate", "members.duplicate", "Duplicate a member using the UI service.", {"id": ID}, ("id",)),
     row("member_read", "members.read", "Mark a member's conversation read.", {"id": MEMBER_ID}, ("id",)),
     row("members_mark_all_read", "members.mark_all_read", "Mark every member read."),
@@ -87,8 +108,8 @@ ACTIONS = (
     row("room_stop", "rooms.stop", "Stop all work belonging to a group chat.", {"room_id": ID}, ("room_id",)),
     row("room_delete", "rooms.delete", "Delete a group chat, messages and associated room state.", {"room_id": ID}, ("room_id",), destructive=True),
     row("conversation_clear", "conversations.clear", "Clear the selected conversation. Read conversations.list for the permanent quick conversation ID.", {"id": ID}, ("id",), destructive=True),
-    row("member_skill_import", "members.skills.import", "Import a member's skill package through the UI importer.", {"member_id": MEMBER_ID, "shared": BOOL, "source": TEXT}, ("member_id", "source")),
-    row("member_skill_update", "members.skills.update", "Edit a member skill document or turn it on/off.", {"member_id": MEMBER_ID, "shared": BOOL, "id": ID, "enabled": BOOL, "text": TEXT, "expected_hash": TEXT}, ("member_id", "id")),
+    row("member_skill_import", "members.skills.import", "Import a member's skill package through the UI importer. " + SKILL_NAME_RULE + ".", {"member_id": MEMBER_ID, "shared": BOOL, "source": TEXT}, ("member_id", "source")),
+    row("member_skill_update", "members.skills.update", "Edit a member skill document or turn it on/off. " + SKILL_NAME_RULE + ". Keep an existing name unchanged when editing.", {"member_id": MEMBER_ID, "shared": BOOL, "id": ID, "enabled": BOOL, "text": TEXT, "expected_hash": TEXT}, ("member_id", "id")),
     row("member_skill_undo", "members.skills.update", "Undo the last skill document change at the specified revision.", {"member_id": MEMBER_ID, "shared": BOOL, "undo": TEXT}, ("member_id", "undo"), destructive=True),
     row("member_skill_delete", "members.skills.delete", "Delete a member or shared skill package and grants.", {"member_id": MEMBER_ID, "shared": BOOL, "id": ID}, ("member_id", "id"), destructive=True),
     row("member_command_save", "members.commands.save", "Save a member's slash command template containing {input}.", {"member_id": MEMBER_ID, "id": ID, **{key: TEXT for key in ("name", "description", "template")}}, ("member_id", "name", "template")),
@@ -179,6 +200,7 @@ DEFINITIONS = {item.name: item.definition for item in ACTIONS if not item.settin
 DEFINITIONS[SETTINGS_TOOL.name] = SETTINGS_TOOL.definition
 DEFINITIONS.update({name: item.definition for name, item in GROUPED_TOOLS.items()})
 MANAGEMENT_TOOLS = frozenset(REGISTRY) | {"create_member"}
+BACKGROUND_MEMBER_TOOLS = frozenset(name for name in DEFINITIONS if name.startswith("member_")) | {"create_member"}
 TIERS = {item.name: item.tier for item in ACTIONS}
 TIERS[SETTINGS_TOOL.name] = SETTINGS_TOOL.tier
 TIERS.update({name: item.tier for name, item in GROUPED_TOOLS.items()})
@@ -187,7 +209,7 @@ TIERS.update({name: item.tier for name, item in GROUPED_TOOLS.items()})
 # Like team_tools_for, use the owner's request to offer only relevant areas.
 # The full catalog remains discoverable; these words never grant authority.
 _AREA_WORDS = {
-    "members": r"\b(?:members?|assistants?|teammates?|teams?|company|roles?|profiles?|skills?|commands?|routines?|first bot)\b|\b(?:name|rename|call)\s+yourself\b|成員|助手|隊員|團隊|公司|技能|例行|メンバー|スキル",
+    "members": r"\b(?:members?|assistants?|bots?|createagent|teammates?|teams?|company|roles?|profiles?|skills?|commands?|routines?|first bot)\b|\b(?:name|rename|call)\s+yourself\b|成員|助手|隊員|團隊|公司|技能|例行|メンバー|スキル",
     "folders": r"\b(?:folders?|company|teams?)\b|\bgroups?\b(?!\s+chats?\b)|資料夾|文件夾|團隊|公司|フォルダ",
     "rooms": r"\b(?:group chats?|rooms?)\b|群聊|群組|グループ",
     "conversations": r"\b(?:conversations?|quick chat|chat history)\b|對話|交談|聊天紀錄|会話",
@@ -278,6 +300,8 @@ def validate(value, schema):
 def destructive(name, arguments, retention=None):
     # Tier discovery must remain total for malformed model arguments; the
     # service rejects them with a readable schema error before any mutation.
+    if name in {"member_create", "member_update", "create_member"} and "tools" in arguments:
+        return True
     key = arguments.get("key")
     item = (SETTINGS.get(key) if isinstance(key, str) else None) if name == "settings_update" else REGISTRY.get(name)
     if name in GROUPS:

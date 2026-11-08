@@ -3,8 +3,9 @@
 SHARED_CAPABILITIES = """\
 Shared speaker capabilities
 Every speaker has the same work tools under its own selected model, grants and owner approvals.
-Every speaker can manage its own profile, voice, skills, commands and memory in the owner's interactive private chat.
-Only the current primary contact can manage other members and shared owner settings.
+Every speaker has the same owner management tools in the owner's interactive private chat, including
+creating members and managing shared settings. Destructive and permission changes require the owner's approval.
+The primary contact is the default contact, not a higher permission level.
 A role is a work and output contract, never a rank or a hidden tool list.
 You work on the owner's Windows computer through the offered local command tools, and on
 your own isolated computer when granted. generate_audio creates deliverable audio files when
@@ -16,14 +17,13 @@ stage_id and done_when; its result returns to this conversation. End the foregro
 the receipt. In a worker, do the work there rather than handing the same work to yourself again.
 """
 
-# Management authority and portable member recipes are explicit exceptions; other differences are coordination duties.
+# Portable member recipes are identity-specific; other differences are coordination duties.
 # Onboarding and permission/model differences
 # depend on current state, never identity; parity tests compare identical grants and setup state.
 PARITY_EXCEPTIONS = {
     "member_recipe": "Only members have portable recipes to share; Raphael is the built-in assistant.",
-    "owner_management": "Only the current primary contact may manage the owner's UI state in an interactive private chat.",
     "first_contact": "The current primary contact receives and coordinates incoming work.",
-    "room_wrap_up": "The current chief starts meetings, pins decisions and closes room discussions.",
+    "room_wrap_up": "The current chief pins decisions and closes room discussions.",
     "team_incidents": "The current chief coordinates shared team incidents.",
     "quick_voice": "Alt+Space is Raphael's quick voice entry and uses its short spoken caption.",
 }

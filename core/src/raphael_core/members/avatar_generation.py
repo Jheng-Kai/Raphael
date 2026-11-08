@@ -36,6 +36,9 @@ class AvatarGeneration:
             direct = reference.startswith("@service:")
             data.update(missing=Missing(resource, "key" if kind == "missing_secret" else "provider", "missing", "models").wire(),
                         target={"pane": "models", "field": "service" if direct else "provider", "id": resource})
+            if resource == "codex":
+                data.update(missing=Missing("codex", "cli", "missing", "models").wire(),
+                            target={"pane": "models", "resource": "codex"})
         return RpcError(BUSY if kind == "busy" else NOT_CONFIGURED, "Avatar generation failed", data)
 
     async def generate(self, params):
@@ -83,7 +86,8 @@ class AvatarGeneration:
                 route = media_backends.selected("image", selected)
             except ValueError:
                 raise self.failure("image_model_missing") from None
-            if route is None:
+            subscription = hasattr(service, "is_subscription_image") and service.is_subscription_image(selected)
+            if route is None and not subscription:
                 providers = service.providers
                 try:
                     pid, _ = providers.resolve(selected)

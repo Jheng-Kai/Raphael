@@ -887,7 +887,10 @@ class App(Router):
         from .services.generation_tools import GenerationTools
         from .services.fetch import PageFetcher
         from .services.attachments import MAX_FILE_BYTES
+        from .agent.cli.images import CodexImages
+        from .agent.cli.discovery import CliBrains
         self.generation = Generation(self.providers, self.attachment_store,
+            subscription_images=CodexImages(brains=CliBrains(commands={}) if fake_llm else None, settings=self.providers.settings),
             fetcher=PageFetcher(media=True, media_types=("image/png", "image/jpeg", "image/webp", "video/mp4"), max_bytes=MAX_FILE_BYTES, max_seconds=120,
                                 transport=offline_transport() if fake_llm else None))
         self.tool_hub = GenerationTools(self.tool_hub, self.generation, self._conn)

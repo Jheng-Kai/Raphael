@@ -18,14 +18,14 @@ from ..background.run import estimate_cost, summary_reply
 from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_window, smaller_output
 from ..worker.loop import REPLY_TOKENS, UNLIMITED, Call, Outcome, Stop, ToolOutcome, Turn, run_task
 from ..worker.tool_guardrails import ToolGuardrails
-from .answers import Reply, loose_reply, parse_reply, public_reply
+from .answers import MESSAGE_RULES, Reply, loose_reply, parse_reply, public_reply
 from .failure import AgentFailure, failure_kind
 from .ledger import Ledger
 from .tools import ToolResult
 from ..failures import PATIENT_WAITS, RETRY_WAITS, classify, tool_failure
 from ..retry_utils import MODEL_SILENCE_S, Outage
 
-PUBLIC_PROGRESS_RULES = """
+PUBLIC_PROGRESS_RULES = MESSAGE_RULES + """
 This is a live conversation: your owner sees your messages while you work.
 Before EVERY batch of tool calls, provide a public progress update.
 Thinking, progress and replies follow the speaker's own language instructions, otherwise the owner's words.
@@ -45,7 +45,7 @@ answer directly in a single model reply.
 NARRATION_RULES = PUBLIC_PROGRESS_RULES + """
 Before tool calls, content must be one public object with thinking, progress and optional messages:
 {"thinking": "...", "progress": "...", "messages": ["A complete message for the owner."]}.
-Use messages for your own findings, explanations and replies as they become ready between actions.
+Use messages only for an important result or owner question worth reading now, never routine narration.
 Each complete message is delivered immediately. Progress remains the short action line.
 Do not repeat already delivered messages in the final answer; finish with only the new result.
 Use no code fences, no prose before or after, and no other objects.
@@ -214,7 +214,7 @@ class NarratedLoop:
                     text = public_line(_public_text(public.get(kind), limit, sentences=2 if kind == "thinking" else None), "auto")
                     if text:
                         emit(text)
-            authored = public_reply(answer.content, self.language, plain=self.plain) if answer.calls else None
+            authored = public_reply(answer.content, self.language, plain=self.plain, explicit=True) if answer.calls else None
             if authored is not None and self.publish_reply is not None:
                 self.publish_reply(authored)
             if answer.calls and not objects and prose:

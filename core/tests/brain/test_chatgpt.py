@@ -127,7 +127,10 @@ class Rig:
             body = json.loads(request.content)
             self.body_checks.append(body)
             assert body["store"] is False and body["stream"] is True
-            assert body["include"] == ["reasoning.encrypted_content"]
+            if "prompt_cache_key" not in body:
+                assert body["include"] == ["reasoning.encrypted_content"]
+            else:
+                assert "include" not in body
             assert not set(body) & {"max_output_tokens", "max_tokens", "temperature", "previous_response_id", "provider"}
             assert all(item.get("role") != "system" for item in body["input"])
             if request.headers["Authorization"] == "Bearer rotated-access":
@@ -712,6 +715,51 @@ async def test_model_provider_text_json_and_planning_use_responses(rig):
     assert (await provider.chat_text(**args)).text == "Text"
     assert (await provider.complete_json(**args, schema={"type": "object"}, schema_name="reply")).data == {"answer": "JSON"}
     assert (await provider.plan_tools(**args, tools=[])).calls[0].name == "calendar_read"
+
+
+@pytest.mark.parametrize("levels,requested,expected", [
+    (["low", "none", "minimal"], "none", "none"),
+    (["medium", "low"], "none", "low"),
+    (["low", "minimal"], "none", "minimal"),
+    (["none", "low", "high"], "high", "high"),
+    (None, "none", None),
+])
+async def test_cleanup_asks_for_the_least_listed_reasoning(rig, levels, requested, expected, caplog):
+    import logging
+
+    await rig.sign_in()
+    rig.auth.model_rows = [] if levels is None else [{"id": "chosen-model", "reasoning_efforts": levels}]
+    rig.responses = [sse([message('{"cleaned":"Synthetic."}')])] * 2
+    with caplog.at_level(logging.DEBUG, logger="raphael_core.brain.providers.chatgpt"):
+        for _ in range(2):
+            result = await rig.registry.chatgpt.complete_json(model="chosen-model", system="Synthetic instructions",
+                user="Synthetic.", schema={"type": "object", "required": ["cleaned"]},
+                schema_name="cleaned_dictation", timeout_s=2, max_tokens=50, reasoning_effort=requested)
+            assert result.data == {"cleaned": "Synthetic."}
+    bodies = [json.loads(r.content) for r in rig.requests if r.url.path == "/v1/responses"]
+    assert len(bodies) == 2
+    for body in bodies:
+        assert body.get("reasoning") == ({"effort": expected} if expected else None)
+        assert body["prompt_cache_key"] == "raphael-cleanup" and "include" not in body
+        assert body["model"] == "chosen-model" and "tools" not in body
+    assert caplog.text.count("reasoning metadata unavailable") == (1 if levels is None else 0)
+
+
+async def test_reasoning_continuity_is_kept_only_for_the_guarded_conversation(rig):
+    await rig.sign_in()
+    rig.auth.model_rows = [{"id": "chosen-model", "reasoning_efforts": ["low", "high"]}]
+    rig.responses = [sse([message("Text")])] * 3
+    provider = rig.registry.chatgpt
+    args = dict(model="chosen-model", timeout_s=2, max_tokens=50, reasoning_effort="high")
+    await provider.chat_tools(messages=[], tools=[], **args)
+    await provider.chat_text(system="System", user="User", **args)
+    await provider.plan_tools(system="System", user="User", tools=[], **args)
+    bodies = [json.loads(r.content) for r in rig.requests if r.url.path == "/v1/responses"]
+    assert bodies[0]["include"] == ["reasoning.encrypted_content"]
+    assert "prompt_cache_key" not in bodies[0]
+    assert all(body["reasoning"] == {"effort": "high"} for body in bodies)
+    assert [body.get("prompt_cache_key") for body in bodies[1:]] == ["raphael-text", "raphael-planner"]
+    assert all("include" not in body for body in bodies[1:])
 
 
 @pytest.mark.parametrize("scope,kind", [(None, "auth_expired"), ("openid", "chatgpt_scope")])

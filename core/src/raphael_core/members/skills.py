@@ -101,12 +101,13 @@ class GrowingSkills:
         from ..bots.homes import redact_secrets
         if len(text.encode("utf-8")) > MAX_SKILL_BYTES or "\x00" in text:
             raise HomeError("skill must be bounded UTF-8 text")
-        name, _ = skill_metadata(redact_secrets(text))
         identifier = args.get("id")
         if identifier is not None:
             self.require_owned(member_id, identifier)
         skills = self.owned_skills(member_id)
-        source = next((s["source"] for s in skills if s["id"] == identifier), "")
+        previous = next((s for s in skills if s["id"] == identifier), {})
+        name, _ = skill_metadata(redact_secrets(text), writing=True, previous_name=previous.get("name"))
+        source = previous.get("source", "")
         if any(s["id"] != identifier and s["name"].casefold() == name.casefold() and s.get("plugin", "").casefold() == skill_plugin(text, source).casefold() for s in skills):
             raise HomeError("a skill with that name already exists")
         if identifier is None and len(skills) >= MAX_SKILLS:

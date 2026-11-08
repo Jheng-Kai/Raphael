@@ -89,7 +89,7 @@ class Crew:
             return self.turn(reply, [], kwargs)
         if me == 0:
             offered = {tool["function"]["name"] for tool in kwargs["tools"]}
-            assert not {"create_member", "member_create", "member_delete"} & offered
+            assert "member_create" in offered and "create_member" not in offered
             work = [("Builder", "build", "Build office.html in the workspace", "office.html exists in the workspace"),
                     ("Tester", "test", "Look at the screen and test the page", "Report what the test run showed")]
             calls = [self.call("handoff", member_id=self.ids[name], stage_id=stage, request=request, done_when=done, requires_artifact=name == "Builder")

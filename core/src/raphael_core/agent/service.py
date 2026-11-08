@@ -117,6 +117,7 @@ clipboard, PowerShell) run on worker threads. Nothing here logs what the user sa
 answered, a city or a key: only routes, kinds, latencies and costs.
 """
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 from pathlib import Path
 from ..computer.local_tools import ask_context, command_context, is_local
@@ -316,7 +317,7 @@ MAX_REQUEST_URLS = 2
 # How much of what a call is given a permission card says, in characters (the overlay's question keeps its short line).
 CARD_PREVIEW_CHARS = 240
 # What a request of only files asks, in the language of the request.
-_LOOK_AT_THIS = {"zh-TW": "看這個", "en": "Look at this", "ja": "これを見て"}
+_LOOK_AT_THIS = with_ui_words({"zh-TW": "看這個", "en": "Look at this", "ja": "これを見て"})
 # The routes that word a reply, which read the pages and the files of the request first.
 _READING_ROUTES = ("answer", "discuss", "chat")
 # The routes that give an answer a later "copy that" can copy. Small talk ("不客氣。") is none.
@@ -580,7 +581,7 @@ OWN_CALENDAR_NOTE = (
 )
 # What the model is told when one of Raphael's own tools refuses it, by the kind of the refusal.
 _HARNESS_NOTES = {
-    "primary_private_chat_only": "Only the current primary contact can manage the owner's UI state in the owner's interactive private chat.",
+    "owner_private_chat_only": "Management tools require the owner's interactive private chat or an approved background member action.",
     "owner_model_request_required": "Only change a model or effort when the owner explicitly asks for that change. A failure does not authorize switching models.",
     "private_chat_only": (
         "This is not for this conversation: a card or a draft belongs to the owner's private chat typed at this computer. "
@@ -1606,7 +1607,10 @@ class AgentService:
         if reply.text:
             if not ask.turn_id:
                 self._record(ask, route, "", "", "running", None, ledger)
-            self._publish_reply(ask, reply)
+            if reply.explicit_messages:
+                self._publish_reply(ask, reply)
+            else:
+                self._message(ask, "progress", reply.text)
         found = [*tools, *self._look_up(ask, reply, shown)]
         again = await word(found, True)
         if not again.memory:
@@ -2095,15 +2099,12 @@ class AgentService:
             from ..management import tools_for_request
             management_tools = tools_for_request(ask.text, member_named=bool(
                 self._team and getattr(self._team, "named_in", lambda _: [])(ask.text)))
-            if self._management_chat(ask) and ask.speaker.is_chief:
+            if self._management_chat(ask):
                 system += (LEADERSHIP if management_tools else
-                           "\nYou are the current primary contact. Find owner management tools with find_tools when needed. "
+                           "\nEvery member has the same owner-private management tools. Find them with find_tools when needed. "
                            "They manage members, folders, group chats, conversations, connections, models and settings. "
-                           "Destructive changes always wait for the owner's approval.")
-            if self._management_chat(ask) and not ask.speaker.is_chief:
-                system += ("\nFind your own profile, voice, skills, commands and memory tools with find_tools. "
-                           "Act only on yourself; peer and shared management belongs to the primary contact. "
-                           "Permission changes belong to the owner. Deletions always wait for the owner's yes.")
+                           "Destructive and permission changes always wait for the owner's approval.")
+                system += "\nGrok template CreateAgent instructions map to member_create (legacy alias: create_member)."
             user = build_user_message(
                 labelled_lines(ask.exchange_speakers[0], ask.text) if ask.exchange_speakers else ask.text,
                 self._moment(), context.turns, [], ask.language,
@@ -2172,6 +2173,8 @@ class AgentService:
             ]])
             checked_batch = None
             screenings: dict[str, Screening] = {}
+
+            snapshot.tool_allowed = lambda key: bool((current := self._speaker(ask.speaker.id)) and current.uses_plugin(key))
 
             def plan(name: str, args: dict) -> PlannedCall | None:
                 if name not in snapshot.refs:
@@ -2264,7 +2267,8 @@ class AgentService:
                 screened = [screenings[call_id]] if call_id in screenings else None
                 if name in BATCH_TOOLS and ask.nested:
                     return ToolOutcome(False, "owner_confirmation_required")
-                if planned is not None and name in BATCH_TOOLS and ask.speaker.is_chief and not ask.nested:
+                if (planned is not None and name in BATCH_TOOLS and self._management_chat(ask)
+                        and not self._gate.firm_confirmation(name, args)):
                     screening = screened[0] if screened else await self._screen_call(ask, planned, ledger)
                     screened = [screening]
                     if screening.verdict == DENY:
@@ -2339,7 +2343,7 @@ class AgentService:
                         found = self._look_up(ask, reply, [t.id for t in context.turns if t.id is not None])
                         result = found[0] if found else ToolResult(name, False, None, "not_found")
                     else:
-                        return ToolOutcome(False, "unknown_tool")
+                        return ToolOutcome(False, "unknown_tool", instruction="This tool is not available to this member. The owner may have disabled its connection in the member's tool list; use find_tools for currently allowed tools.")
                 ask.memory_untrusted = ask.memory_untrusted or result.untrusted
                 loop.seen.append(result)
                 if result.ok and name == CREATE_MEMBER:
@@ -2512,7 +2516,7 @@ class AgentService:
         why = next((screening for screening in ask.admin_screenings if screening.verdict == ASK), None)
         if why is not None:
             text = asked_with(ask.language, why, text)
-        text += {"en": "\n\nAllow all these changes?", "zh-TW": "\n\n允許以上所有變更嗎？", "ja": "\n\nすべての変更を許可しますか？"}[ask.language]
+        text += with_ui_words({"en": "\n\nAllow all these changes?", "zh-TW": "\n\n允許以上所有變更嗎？", "ja": "\n\nすべての変更を許可しますか？"})[ask.language]
         drafts, groups = await self._team.admin_drafts(operations)
         action = Action("team_admin_batch", {"operations": operations, "drafts": drafts, "groups": groups})
         result = self._open_question(ask, action, "answer", text, ledger)
@@ -2524,6 +2528,10 @@ class AgentService:
     async def _cli_permission(self, ask: _Ask, args: dict, ledger: Ledger, loop: CliLoop) -> ToolOutcome:
         if len(canonical(args)) > MAX_ARGUMENT_CHARS:
             return ToolOutcome(False, "bad_arguments")
+        from .data_floor import WRITE_REFUSAL
+        access = self._gate.data_floor.access("cli_permission", args)
+        if access == "write":
+            return ToolOutcome(False, "protected_data", instruction=WRITE_REFUSAL)
         if not self._gate.full_permission and (ask.source not in _AT_THIS_COMPUTER or ask.nested):
             return ToolOutcome(False, "presence_required")
         if ask.declined:  # the owner said no in this request: the CLI's own actions wait for a new one
@@ -2532,7 +2540,7 @@ class AgentService:
         if screening.verdict == DENY:
             self._gate.record_unrun("cli_permission", outcome="denied")
             return ToolOutcome(False, "blocked")
-        if self._gate.full_permission:
+        if access != "read" and (self._gate.full_permission or self._gate.waived(Action("cli_permission", args))):
             self._gate.record_builtin("cli_permission", outcome="ok", approver="user")
             return ToolOutcome(True, None)
         operation = args.get("command") or args.get("tool_name") or (args.get("toolCall") or {}).get("title") or args.get("method", "CLI action")
@@ -2706,7 +2714,7 @@ class AgentService:
         (it asks nobody in turn). A team that cannot be read offers none."""
         try:
             tools = team_tools_for(self._team, ask.speaker, ask.text)
-            return [name for name in tools if name != CREATE_MEMBER or self._management_chat(ask)]
+            return [name for name in tools if name not in (CREATE_MEMBER, "room_meeting") or self._management_chat(ask)]
         except sqlite3.Error as exc:
             logger.warning("Could not read the members: %s", type(exc).__name__)
             return []
@@ -2822,7 +2830,9 @@ class AgentService:
                                           instruction=_HARNESS_NOTES["owner_model_request_required"]))
                 continue
             tier = self._tier_now(call)
-            if call.tool.key in BATCH_TOOLS and ask.speaker.is_chief and not ask.nested and (self._gate.ask_first or screening.verdict == ASK):
+            if (call.tool.key in BATCH_TOOLS and self._management_chat(ask)
+                    and not self._gate.firm_confirmation(call.tool.key, call.arguments)
+                    and (self._gate.ask_first or screening.verdict == ASK)):
                 creates = sum(queued.tool.key in ("member_create", "create_member") for queued in ask.admin_pending)
                 if call.tool.key in ("member_create", "create_member") and ask.member_creates + creates >= 10:
                     results.append(ToolResult(call.tool.key, False, None, "member_create_limit"))
@@ -2871,6 +2881,12 @@ class AgentService:
         """What the owner's safety rules say of a call of a plugin's tool or a team tool: PASS for a
         tool its server says only reads. Member contact preferences can require the owner's yes."""
         tool = call.tool
+        from .data_floor import WRITE_REFUSAL
+        access = self._gate.data_floor.access(tool.key, call.arguments)
+        if access == "write":
+            return Screening(DENY, WRITE_REFUSAL)
+        if access == "read":
+            return Screening(ASK)
         if is_local(tool.key):
             return PASS
         if tool.key in GROWTH_TOOLS:
@@ -3000,14 +3016,14 @@ class AgentService:
                 self._message(ask, "event", phrase(ask.language, "remembered_unconfirmed" if result.data.get("marked") else "remembered"))
             return result
         if call.tool.key in HARNESS_TOOLS:
-            return await self._harness_call(ask, call, approval, action, steps=steps)
+            return await self._harness_call(ask, call, approval, action, steps=steps, ledger=ledger)
         if call.tool.key in TEAM_TOOLS:
             return await self._team_call(ask, call, ledger, approval=approval, action=action, steps=steps)
         return await self._plugin_call(call, approval, action, steps=ask.steps if steps is None else steps, ask=ask, ledger=ledger)
 
     async def _harness_call(
         self, ask: _Ask, call: PlannedCall, approval: Approval | None, action: Action | None,
-        *, steps: list[Step] | None = None,
+        *, steps: list[Step] | None = None, ledger: Ledger | None = None,
     ) -> ToolResult:
         """Native writes use the same screening, approval and metadata-only audit as plugins."""
         name, args = call.tool.key, call.arguments
@@ -3015,11 +3031,11 @@ class AgentService:
         try:
             # Authorization comes before screening/approval consumption and is
             # checked again by MembersService immediately before persistence.
-            from ..management import MANAGEMENT_TOOLS, self_action
+            from ..management import MANAGEMENT_TOOLS
             if name in MANAGEMENT_TOOLS:
                 current = self._speaker(ask.speaker.id)
-                if not current or not self._management_chat(ask) or not (current.is_chief or self_action(current.id, name, args)):
-                    raise HarnessToolError("primary_private_chat_only")
+                if not self._can_manage(ask, name, args):
+                    raise HarnessToolError("owner_private_chat_only")
             self._gate.check_for(action or Action(name, args), name, args, approval)
             if name in ADMIN_TOOLS:
                 if self._team is None:
@@ -3028,8 +3044,8 @@ class AgentService:
                     raise HarnessToolError("member_create_limit")
                 from ..management import REGISTRY
                 current = self._speaker(ask.speaker.id)
-                if name != "team_overview" and (not current or not self._management_chat(ask) or not (current.is_chief or self_action(current.id, name, args))):
-                    raise HarnessToolError("primary_private_chat_only")
+                if name != "team_overview" and (not self._can_manage(ask, name, args)):
+                    raise HarnessToolError("owner_private_chat_only")
                 if self._changes_model(name, args) and not self._owner_requested_model(ask.text):
                     raise HarnessToolError("owner_model_request_required")
                 if name in REGISTRY and REGISTRY[name].service == "connection":
@@ -3046,6 +3062,8 @@ class AgentService:
                         ORIGIN_TURN.reset(token)
                 if name == "member_create":
                     ask.member_creates += 1
+                    if created_name := (data.get("member") or {}).get("name"):
+                        self._message(ask, "event", phrase(ask.language, "member_created", member=created_name))
             elif name in ROUTINE_TOOLS:
                 if self._team is None:
                     raise HarnessToolError("unavailable")
@@ -3078,7 +3096,7 @@ class AgentService:
                 cards = getattr(self._team, "template_cards", None)
                 if cards is None or not ask.turn_id:
                     raise HarnessToolError("unavailable")
-                data = cards.show(ask.turn_id, ask.speaker.id, args.get("description"))
+                data = await cards.show(ask.turn_id, ask.speaker.id, args.get("description"), ledger=ledger)
             elif name == REQUEST_SECRET:
                 if ask.resumption and ask.resumption.failure:
                     raise HarnessToolError("owner_action_required")
@@ -3141,9 +3159,19 @@ class AgentService:
                                   approver="auto" if approval is None else "user")
         return result
 
+    def _can_manage(self, ask, name, arguments):
+        from ..management import BACKGROUND_MEMBER_TOOLS, background_actor
+        current = self._speaker(ask.speaker.id)
+        if current is None:
+            return False
+        if self._management_chat(ask):
+            return True
+        return (ask.background_owner and ask.scope == "private" and name in BACKGROUND_MEMBER_TOOLS
+                and background_actor() == current.id)
+
     @staticmethod
     def _management_chat(ask) -> bool:
-        return (ask.scope == "private" and not ask.nested
+        return (ask.scope == "private" and not ask.nested and ask.speaker.depth == 0
                 and ask.exchange_speakers is None and ask.source in _AT_THIS_COMPUTER
                 and not ask.background_owner)
 
@@ -3455,7 +3483,10 @@ class AgentService:
     async def background_owner_tool(self, task, name, arguments, *, approval=None, action=None):
         """Use read-only app discovery and existing card services without granting desktop presence."""
         from .owner_questions import BACKGROUND_TOOLS
-        if name not in BACKGROUND_TOOLS | ROUTINE_TOOLS | CONNECTION_TOOLS or not task.turn_id:
+        from ..management import BACKGROUND_MEMBER_TOOLS, background_management
+        if name not in BACKGROUND_TOOLS | ROUTINE_TOOLS | CONNECTION_TOOLS | BACKGROUND_MEMBER_TOOLS or not task.turn_id:
+            return ToolResult(name, False, None, "blocked")
+        if name in BACKGROUND_MEMBER_TOOLS and task.scope != "private":
             return ToolResult(name, False, None, "blocked")
         origin = self._history.get(task.turn_id)
         speaker = self._speaker(task.member_id)
@@ -3466,7 +3497,8 @@ class AgentService:
         ask = _Ask(task.session_id, task.text, task.language, conversation_id=origin.conversation_id,
             turn_id=task.turn_id, speaker=speaker, scope=task.scope, room_id=task.room_id,
             source=RESUMED, background_owner=True)
-        result = await self._harness_call(ask, PlannedCall(harness_tool(name), arguments), approval, action)
+        with background_management(task.member_id):
+            result = await self._harness_call(ask, PlannedCall(harness_tool(name), arguments), approval, action)
         if not result.ok:
             return result
         card = None
@@ -3602,6 +3634,8 @@ class AgentService:
         the answer is shown it. `approval` is the yes for it, if it had to be asked about; a call
         that the door refuses is not made, and the hub writes down that it was refused. The call
         is added to `steps`, whatever came of it."""
+        if ask is not None and not ((current := self._speaker(ask.speaker.id)) and current.uses_plugin(call.tool.key)):
+            return ToolResult(call.tool.name, False, None, "tool_disabled", instruction="The owner disabled this connection for this member. Ask the owner to change the member's tool list.")
         action = action or Action(call.tool.key, call.arguments)
         began = time.perf_counter()
         from ..integrations.client import APP_TOOL_CALL
@@ -3811,7 +3845,7 @@ class AgentService:
         `steps` (the request's own when none is given), whatever came of it."""
         began = time.perf_counter()
         if call.tool.key == CREATE_MEMBER and not self._management_chat(ask):
-            result = ToolResult(CREATE_MEMBER, False, None, "primary_private_chat_only")
+            result = ToolResult(CREATE_MEMBER, False, None, "owner_private_chat_only")
         elif call.tool.key == CREATE_MEMBER and ask.member_creates >= 10:
             result = ToolResult(CREATE_MEMBER, False, None, "member_create_limit")
         else:
@@ -3860,10 +3894,10 @@ class AgentService:
         if name not in (*SKILL_TOOLS, "handoff", "work_status", *ROOM_TOOLS) and not speaker.may_ask:
             return ToolResult(name, False, None, "blocked", instruction="This consultation chain is at its depth limit. Answer with what you have and name what is missing; do not ask another colleague in this chain.")
         current = self._speaker(speaker.id)
-        if name in (CREATE_MEMBER, "room_meeting") and (current is None or not current.is_chief or speaker.depth):
+        if name in (CREATE_MEMBER, "room_meeting") and (current is None or speaker.depth):
             return ToolResult(name, False, None, "blocked")
         if name == CREATE_MEMBER and not owner_interactive:
-            return ToolResult(name, False, None, "primary_private_chat_only")
+            return ToolResult(name, False, None, "owner_private_chat_only")
         try:
             self._gate.check_for(action or Action(name, dict(arguments)), name, arguments, approval)
         except (UnknownTool, NotApproved):
@@ -3893,7 +3927,8 @@ class AgentService:
             return ToolResult(name,True,rooms.speech_context(source.room_id,source.thread_id))
         if name == "room_meeting":
             source = self._history.get(source_turn_id) if source_turn_id else None
-            if not speaker.is_chief or not source or source.scope != 'private' or source.member_id != speaker.id:
+            if (not source or source.scope != 'private' or source.member_id != speaker.id
+                    or not (owner_interactive or current.is_chief)):
                 return ToolResult(name,False,None,'blocked')
             rooms = getattr(team, 'rooms', None)
             if rooms is None or not source_turn_id:
@@ -3909,14 +3944,13 @@ class AgentService:
             if not result['duplicate']:
                 self._history.add_message(source_turn_id, 'event', json.dumps({
                     'type': 'meeting', 'room_id': result['room_id'], 'name': result['name']}, ensure_ascii=False))
-                self._turn_changed(source_turn_id, 0)
+                self._turn_changed(source_turn_id, speaker.id)
             return ToolResult(name, True, result)
         if name in ("skills_list", "skill_manage"):
             try:
                 if name == "skills_list":
                     return ToolResult(name, True, {"skills": team.capabilities.skills(speaker.id)}, untrusted=True)
-                skill = team.capabilities.manage_skill(speaker.id, dict(arguments))
-                team.skill_learned(speaker.id, skill, source_turn_id)
+                skill = team.learn_skill(speaker.id, dict(arguments), source_turn_id)
                 return ToolResult(name, True, {"skill": skill})
             except (ValueError, OSError) as exc:
                 return ToolResult(name, False, None, "bad_arguments", instruction=str(exc))
@@ -3929,7 +3963,7 @@ class AgentService:
             try:
                 # The trusted caller already checked the interactive owner scope;
                 # quick voice creation can precede its first persisted turn.
-                created = await team.admin_tool(speaker.id, "member_create", dict(arguments), interactive=True)
+                created = await team.admin_tool(speaker.id, "member_create", dict(arguments), interactive=True, approval=approval)
             except RpcError as error:
                 return ToolResult(name, False, {"field": (error.data or {}).get("kind", "")}, "bad_arguments")
             except sqlite3.Error as exc:
@@ -4148,23 +4182,23 @@ class AgentService:
             self._write(lambda: self._history.add_steps(pending.turn_id, [step]))
             followup.ask.admin_pending.clear()
             if created_names and not updated_names:
-                text = {
+                text = with_ui_words({
                     "en": "Created " + ", ".join(created_names),
                     "zh-TW": "已建立 " + "、".join(created_names),
                     "ja": "、".join(created_names) + " を作成しました",
-                }[language]
+                }, lambda _ui_language: ui_word('Created ', _ui_language) + ', '.join(created_names)).get(language, "Created " + ", ".join(created_names))
             elif updated_names and not created_names:
-                text = {
+                text = with_ui_words({
                     "en": "Updated " + ", ".join(updated_names),
                     "zh-TW": "已更新 " + "、".join(updated_names),
                     "ja": "、".join(updated_names) + " を更新しました",
-                }[language]
+                }, lambda _ui_language: ui_word('Updated ', _ui_language) + ', '.join(updated_names)).get(language, "Updated " + ", ".join(updated_names))
             else:
-                text = {"en": "Applied: ", "zh-TW": "已套用：", "ja": "適用済み："}[language] + ", ".join(names)
+                text = with_ui_words({"en": "Applied: ", "zh-TW": "已套用：", "ja": "適用済み："}).get(language, "Applied: ") + ", ".join(names)
             detail = "\n".join(detail_lines) if detail_lines else None
             chief_after = self._team.speaker(0).name
             if chief_after and chief_after != chief_before:
-                text = {"en": "Renamed to ", "zh-TW": "已重新命名為 ", "ja": "名前を変更："}[language] + chief_after
+                text = with_ui_words({"en": "Renamed to ", "zh-TW": "已重新命名為 ", "ja": "名前を変更："}).get(language, "Renamed to ") + chief_after
             if followup.carry is not None:
                 return await self._go_on_after_admin(followup, step, made, text, detail, ledger)
             return self._outcome(pending, "understood", text, "done", detail=detail, cost_usd=ledger.total)
@@ -4444,7 +4478,7 @@ class AgentService:
             "id": pending.id,
             "tier": tier.name,
             "prefix": prefix,
-            "text": {"en": "Local commands", "zh-TW": "本機指令", "ja": "ローカルコマンド"}[language] if local else text,
+            "text": with_ui_words({"en": "Local commands", "zh-TW": "本機指令", "ja": "ローカルコマンド"}).get(language, "Local commands") if local else text,
             "yes": phrase(language, "yes"),
             "no": phrase(language, "no"),
             "timeout_ms": 0 if local else CONFIRM_TIMEOUT_MS,
@@ -4751,7 +4785,7 @@ class AgentService:
 
     def _computer_refusal(self, pending, kind):
         if pending.action.tool.startswith("mcp:computer-access-"):
-            return {"zh-TW": "未取得電腦使用授權，我無法使用電腦。", "ja": "許可を得ていないため、コンピューターを使用できません。"}.get(
+            return with_ui_words({"zh-TW": "未取得電腦使用授權，我無法使用電腦。", "ja": "許可を得ていないため、コンピューターを使用できません。", "en": "Computer access was not granted, so I cannot use the computer."}, lambda _ui_language: ui_word('Computer access was not granted, so I cannot use the computer.', _ui_language)).get(
                 pending.language, "Computer access was not granted, so I cannot use the computer.")
         return phrase(pending.language, kind)
 
@@ -5125,6 +5159,7 @@ class AgentService:
                     **({"voice_call_id": call_links[turn.id]["id"], "voice_call_summary_id": call_links[turn.id]["summary_id"]} if turn.id in call_links else {}),
                     **({"voice_call": call_summaries[turn.id]} if turn.id in call_summaries else {}),
                     "created_at_ms": turn.created_at_ms,
+                    **self._exchange_order(turn),
                     "session_id": turn.session_id,
                     "source": turn.source,
                     "question": turn.question,
@@ -5172,11 +5207,26 @@ class AgentService:
             )
         return views
 
+    def _exchange_order(self, turn):
+        if turn.scope != "exchange" or not turn.session_id.startswith("handoff:"):
+            return {}
+        work_id = turn.session_id.removeprefix("handoff:")
+        if not work_id.isdigit():
+            return {}
+        work = self._history.get(int(work_id))
+        if work is not None and (work.scope != "private" or work.source != "worker"
+                or work.member_id != turn.member_id or work.source_turn_id != turn.source_turn_id):
+            work = None
+        messages = self._history.messages([turn.id]).get(turn.id, [])
+        return {"brief_at_ms":turn.created_at_ms,"work_turn_id":work.id if work else None,
+                "work_created_at_ms":work.created_at_ms if work else None,
+                "report_at_ms":max((m["at_ms"] for m in messages if m["kind"] == "reply"), default=None)}
+
     def _colleague_events(self, turn: Turn, asked: list[Turn]) -> list[dict]:
         """What a turn asked or handed colleagues, as its centred lines: its durable hand-offs, and
         each quick question (`ask_member`), which has no task, read from the colleague's record."""
         views = self._background.handoff_views(source_turn_id=turn.id)
-        tasked = {view["work_turn_id"] for view in views}
+        tasked = {view[key] for view in views for key in ("work_turn_id", "exchange_turn_id") if view.get(key)}
         for exchange in asked:
             if exchange.id in tasked:
                 continue

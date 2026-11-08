@@ -13,6 +13,7 @@ from jsonschema import Draft202012Validator
 from ..agent.plugins import PluginResult, PluginTool, tool_key
 from ..agent.permissions import qualifies
 from ..agent.policy import Tier
+from ..agent.data_floor import DataFloor, WRITE_REFUSAL
 from ..brain.settings import SettingsStore
 from ..integrations.audit import AuditLog
 from .local_host import LocalHost, Output
@@ -79,6 +80,7 @@ class LocalTools:
     def __init__(self, delegate, conn, *, host=None, enabled=True):
         self.delegate, self.conn = delegate, conn
         self.settings, self.audit = SettingsStore(conn), AuditLog(conn)
+        self.data_floor = DataFloor(conn)
         self.host, self.enabled = host or LocalHost(), enabled
         self.jobs = {}
 
@@ -101,7 +103,8 @@ class LocalTools:
         return self.settings.get("action_mode") == "bypass"
 
     def requires_approval(self, arguments):
-        return requires_command_approval(self.settings, arguments.get("command", ""), external=_CONTEXT.get()[1])
+        return (self.data_floor.access("local_exec", arguments) is not None
+                or requires_command_approval(self.settings, arguments.get("command", ""), external=_CONTEXT.get()[1]))
 
     def tier_for_call(self, key, arguments):
         if not is_local(key):
@@ -136,6 +139,9 @@ class LocalTools:
             schema = JOB_SCHEMA if key.endswith("/local_job") else EXEC_SCHEMA
             if key not in (tool_key("local", "local_exec"), tool_key("local", "local_job")) or not Draft202012Validator(schema).is_valid(arguments):
                 return PluginResult(False, "bad_arguments")
+            access = self.data_floor.access(key, arguments)
+            if access == "write":
+                return PluginResult(False, "protected_data", WRITE_REFUSAL)
             if (not present and not self._full_permission()) or owner is None:
                 return PluginResult(False, "presence_required", "Local commands need a card in a private conversation in the desktop app. A quick question, a group, a phone or Telegram cannot show one, so tell the owner to ask in a conversation.")
             if key.endswith("/local_job"):
@@ -152,7 +158,7 @@ class LocalTools:
                 return result
             if self.settings.get("local_commands_mode") == "never":
                 return PluginResult(False, "disabled", "Local commands are off. Enable them in Settings > Raphael > Local commands.")
-            if _SECRET.search(arguments["command"]) or _SECRET.search(arguments.get("cwd", "")):
+            if access is None and (_SECRET.search(arguments["command"]) or _SECRET.search(arguments.get("cwd", ""))):
                 return PluginResult(False, "secret_store", "Reading secret stores is refused.")
             if not self.enabled:
                 return PluginResult(False, "disabled", "Local commands are disabled in this test environment.")

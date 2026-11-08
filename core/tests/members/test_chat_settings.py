@@ -30,7 +30,7 @@ async def test_settings_intent_is_next_to_owner_message(setup, client, identifie
     ("member_command_save", {"name": "draft", "template": "Draft {input}"}),
 ])
 @pytest.mark.parametrize("other", [False, True])
-async def test_nonprimary_can_change_only_itself_through_fake_brain(setup, client, action, fields, other):
+async def test_nonprimary_can_change_itself_or_peers_in_the_owner_private_chat(setup, client, action, fields, other):
     rig, team = setup
     team.members.register(rig.rpc)
     own, peer = member(team), member(team, name="Peer")
@@ -50,11 +50,9 @@ async def test_nonprimary_can_change_only_itself_through_fake_brain(setup, clien
     public, values = publish(action, args)
     client.chats = [chat("Find my tool", ("find_tools", {"query": public})),
                     chat("Make the requested change", (public, values)), live_said("Changed.")]
-    result = await typed(rig, "Change your own skills, commands or voice", own.id, language="en")
+    result = await typed(rig, "Change the requested member skills, commands or voice", own.id, language="en")
     assert result["status"] == "done"
-    assert bool(writes) == (not other)
-    if writes:
-        assert writes == [args]
+    assert writes == [args]
 
 
 @pytest.mark.parametrize("name,args", [
@@ -67,7 +65,7 @@ def test_self_scope_excludes_shared_models_and_global_voice(name, args):
     assert not self_action(1, name, args)
 
 
-async def test_self_delete_needs_exact_yes_and_settings_voice_is_raphael_only(setup):
+async def test_self_delete_needs_exact_yes_and_self_scope_classifier_stays_narrow(setup):
     rig, team = setup
     own = member(team)
     with pytest.raises(RpcError, match="owner's approval"):
@@ -126,7 +124,7 @@ async def test_raphael_can_change_own_picture_after_primary_moves(setup):
 
 
 @pytest.mark.parametrize("other", [False, True])
-async def test_cli_self_management_uses_the_same_execution_boundary(setup, monkeypatch, other):
+async def test_cli_owner_private_management_uses_the_same_execution_boundary(setup, monkeypatch, other):
     from raphael_core.agent.cli.loop import CliLoop
     from raphael_core.worker.loop import Outcome
     rig, team = setup
@@ -139,9 +137,9 @@ async def test_cli_self_management_uses_the_same_execution_boundary(setup, monke
         assert found.ok
         name, values = publish("member_command_save", {"member_id": target, "name": "draft", "template": "Draft {input}"})
         changed = await loop._tool("save", name, values)
-        assert changed.ok == (not other)
+        assert changed.ok
         loop._queue.put_nowait(Outcome("done", final="Finished."))
     monkeypatch.setattr(CliLoop, "_work", work)
-    assert (await typed(rig, "Save your draft command", own.id, language="en"))["status"] == "done"
+    assert (await typed(rig, "Save the requested member draft command", own.id, language="en"))["status"] == "done"
     assert len(team.members.capabilities.commands(own.id)) == (0 if other else 1)
-    assert not team.members.capabilities.commands(peer.id)
+    assert len(team.members.capabilities.commands(peer.id)) == (1 if other else 0)

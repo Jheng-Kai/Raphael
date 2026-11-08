@@ -673,13 +673,26 @@ def test_the_prompt_is_package_data_with_one_placeholder_at_its_end():
     file = resources.files("raphael_core.brain.prompts").joinpath("cleanup_system.md")
     text = file.read_text(encoding="utf-8")
     # The owner's shorter prompt of 2026-11-07: a short prompt is faster and cheaper. The rules added the same night
-    # (other-language recognition slips, repeats said again, no ？ without a question word, nothing but the text) cost
+    # (other-language recognition slips, repeats said again, spoken sentence types, nothing but the text) cost
     # about 230 characters.
     assert text.startswith("You edit dictated text.")
     assert len(text) < 3700
     assert text.count("{dictionary}") == 1 and text.rstrip().endswith("\n{dictionary}")
     assert text.count("{target_app}") == 1
     assert text.count("{languages}") == 1 and text.count("{script_rules}") == 1
+
+
+def test_the_prompt_keeps_all_spoken_particles_without_inventing_questions():
+    text = build_system_prompt([], [])
+    rule = next(line for line in text.splitlines() if line.startswith("3. "))
+    assert "all spoken particles/tags" in rule and "words, not fillers" in rule
+    assert "never delete or move them" in rule
+    assert "Never add a particle, question or question mark" in rule
+    assert "only for a spoken question" in rule
+    assert all(particle in rule for particle in ("嗎", "呢", "吧", "嘛", "啊", "不是嗎", "對吧"))
+    assert "never add an unspoken 嗎" not in text and "are not 嗎" not in text
+    first = next(line for line in text.splitlines() if line.startswith("  → "))
+    assert json.loads(first.split("→ ", 1)[1])["text"].endswith("亂碼啊，大概就這樣")
 
 
 def test_the_examples_of_the_prompt_reply_in_valid_json_with_real_line_breaks():

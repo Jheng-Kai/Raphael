@@ -1,12 +1,13 @@
 """What Raphael says in a messaging app, in the three languages of the app."""
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import re
 from collections.abc import Sequence
 
 # The longest stretch of a transcript that is echoed back to show what was heard.
 HEARD_CHARS = 80
 
-_WORDS: dict[str, dict[str, str]] = {
+_WORDS: dict[str, dict[str, str]] = with_ui_words({
     "zh-TW": {
         "queued": "已排隊，會依序回答。",
         "intro": "我是拉斐爾。直接傳訊息給我，我會像在電腦前一樣回答你。傳 /stop 可以中斷正在跑的背景任務。",
@@ -55,7 +56,7 @@ _WORDS: dict[str, dict[str, str]] = {
         "voice_empty": "何も聞こえませんでした。",
         "voice_large": "この音声メッセージは大きすぎます（上限 {mb} MB）。",
     },
-}
+})
 
 
 def words(language: str, key: str, **values: str) -> str:
@@ -100,13 +101,13 @@ def plain_replies(texts: Sequence[str]) -> list[str]:
 
 def compose(prefix: str, text: str, detail: str | None) -> str:
     """The answer as one message: the line as the overlay and the app show it, 《prefix。text》, and,
-    when there is more, the longer text. The prefix of the English persona is a word ("Answer"),
-    the others one character (答), each followed by the stop of its script. With no prefix (a
+    when there is more, the longer text. CJK lead characters use their script's stop; other
+    localized lead words use a period and a space. With no prefix (a
     member, who speaks plainly) the text goes as it is."""
     mark = prefix.strip().strip("《》").rstrip("。.").strip()
     body = text.strip()
     if mark:
-        stop = ". " if mark.isascii() else "。"
+        stop = "。" if mark in ("答", "解", "告", "否", "了", "問", "问") else ". "
         line = f"《{mark}{stop}{body}》"
     else:
         line = body

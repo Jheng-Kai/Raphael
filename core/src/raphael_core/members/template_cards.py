@@ -1,10 +1,12 @@
 """Immutable member recipes offered for the owner to review in their conversation."""
 
+import asyncio
 import json
 import secrets
 
 from ..protocol import invalid_params
-from .templates import checked, description, export, findings
+from .templates import checked, description
+from .template_author import write
 
 
 class TemplateCards:
@@ -30,17 +32,25 @@ class TemplateCards:
         if self.service._notify:
             self.service._notify("agent.turn", {"turn_id": row["turn_id"], "member_id": row["member_id"]})
 
-    def show(self, turn_id, member_id, text):
+    async def show(self, turn_id, member_id, text, *, ledger=None):
         text = description(text)
         member = self.service.store.member(member_id)
         turn = self.service._history.get(turn_id)
         if not member_id or member is None or turn is None or turn.member_id != member_id or turn.scope != "private":
             raise invalid_params("Only a member's own conversation can share its template")
-        value = checked({**export(self.service, member_id, review=True), "description": text}, review=True)
+        def current():
+            latest = self.service._history.get(turn_id)
+            task = asyncio.current_task()
+            if task and task.cancelling():
+                raise asyncio.CancelledError
+            if (self.service.store.member(member_id) is None or latest is None
+                    or latest.status not in ("queued", "running")):
+                raise invalid_params("The member conversation is no longer running")
+        value, warnings = await write(self.service, member_id, text, ledger=ledger, current=current)
         identifier = secrets.token_hex(8)
         with self.conn:
             self.conn.execute("INSERT INTO member_template_cards (id,turn_id,member_id,template,findings,avatar,state) VALUES (?,?,?,?,?,?,'draft')",
-                              (identifier, turn_id, member_id, json.dumps(value, ensure_ascii=False), json.dumps(findings(value)), member.avatar))
+                              (identifier, turn_id, member_id, json.dumps(value, ensure_ascii=False), json.dumps(warnings), member.avatar))
         self._changed(self._row({"id": identifier}))
         return {"id": identifier, "text": "Your template card is shown in this conversation. The owner can review, save or publish this snapshot. End with one short sentence."}
 

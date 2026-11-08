@@ -62,7 +62,10 @@ logging.getLogger("httpx").addFilter(_KeepPlacesOutOfTheLog())
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 # The language Open-Meteo names the place in, for each language Raphael speaks.
-_GEOCODING_LANGUAGE = {"zh-TW": "zh", "en": "en", "ja": "ja"}
+_GEOCODING_LANGUAGE = {
+    "zh-TW": "zh", "zh-CN": "zh", "en": "en", "ja": "ja", "ko": "ko", "es": "es", "fr": "fr",
+    "de": "de", "pt-BR": "pt", "it": "it", "ru": "ru", "vi": "vi", "th": "th", "id": "id", "tr": "tr",
+}
 # The kind of failure of a tool whose capability the owner turned off.
 DISABLED = "disabled"
 # The weather, both requests together, and each stage of a request.

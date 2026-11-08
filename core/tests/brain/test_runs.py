@@ -8,6 +8,24 @@ import pytest
 from raphael_core.brain.runs import RunAnalytics
 
 
+async def test_subscription_image_receipts_have_no_dollar_price_even_without_token_usage(conn):
+    from raphael_core.agent.ledger import Ledger
+    from raphael_core.brain.runs import save_metrics
+    from raphael_core.brain.spend import SpendTracker
+
+    now = at('2026-10-24')
+    conn.execute("INSERT INTO agent_turns(id,created_at_ms,session_id,question,route,prefix,text,status,cost_usd,model) VALUES(1,?,'s','Draw','answer','','ok','done',.001,'api/model')", (now,))
+    ledger = Ledger(SpendTracker(conn, lambda: now))
+    ledger.add(model='api/model', cost_usd=.001)
+    ledger.include_media({'model': '@codex:gpt-image-2', 'cost_usd': None, 'billing_source': 'subscription'})
+    save_metrics(conn, 'turn', 1, now, now + 100, ledger.calls)
+    result = await RunAnalytics(conn, lambda: now).read({'range': 'all'})
+    groups = {g['label']: g for g in result['groups']['model']}
+    assert groups['@codex:gpt-image-2']['cost_usd'] is None
+    assert groups['api/model']['cost_usd'] == .001
+    assert result['summary']['cost_usd'] == .001
+
+
 @pytest.mark.parametrize("kind", ["turn", "task", "routine"])
 async def test_model_spans_keep_subscription_tokens_and_router_cost_separate(conn, kind):
     from raphael_core.brain.runs import save_metrics

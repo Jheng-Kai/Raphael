@@ -373,9 +373,13 @@ async def test_the_lines_of_the_run_are_in_the_owners_language(make_run, shell):
 
 
 def test_the_prompt_asks_for_the_owners_language():
-    assert "Japanese only" in run_module.system_prompt("ja")
-    assert "Traditional Chinese" in run_module.system_prompt("zh-TW")
-    assert "English only" in run_module.system_prompt("en")
+    from raphael_core.agent.persona import REPLY_LANGUAGE
+    from raphael_core.ui_languages import LANGUAGES
+    for language in LANGUAGES:
+        prompt = run_module.system_prompt(language)
+        assert REPLY_LANGUAGE in prompt
+        assert f"Interface locale: {language} " in prompt
+        assert "This selects fixed UI labels only." in prompt
 
 
 async def test_nothing_of_the_screen_is_logged(make_run, shell, caplog):

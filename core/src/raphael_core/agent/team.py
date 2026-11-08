@@ -41,6 +41,7 @@ from .capabilities import COORDINATION_TOOLS
 from .speaker import RAPHAEL_NAMES, Speaker
 from .team_admin import DEFINITIONS as ADMIN_DEFINITIONS
 from .tools import ToolResult
+from ..members.skill_names import SKILL_NAME_RULE
 
 ASK_MEMBER = "ask_member"
 CREATE_MEMBER = "create_member"
@@ -65,13 +66,13 @@ _CREATE = re.compile(
     r"(?:加|新增|增加|建立|建一個|做一個|開一個|招|找).{0,12}(?:成員|助手|隊員|同事)|"
     r"(?:成員|助手).{0,4}(?:加|新增|建立)|"
     r"メンバー.{0,8}(?:追加|作|加え|増や)|(?:追加|作).{0,8}メンバー|"
-    r"(?i:\b(?:add|create|make|new|set up)\b.{0,30}\b(?:member|assistant|teammate)\b)"
+    r"(?i:\b(?:add|create|make|new|set up)\b.{0,30}\b(?:member|assistant|teammate|bot)\b)"
 )
 
 
 def asks_to_create_member(text: str) -> bool:
     """Whether the owner's words ask for a new member of the team."""
-    return bool(_CREATE.search(text or ""))
+    return bool(_CREATE.search(text or "") or re.search(r"\bCreateAgent\b", text or "", re.I))
 
 
 def names_raphael(text: str) -> bool:
@@ -145,7 +146,7 @@ def _definition(name: str) -> dict[str, Any]:
         return {"description": "List your own skills, descriptions, provenance and document revision hashes. Read-only.",
                 "parameters": {"type": "object", "properties": {}}}
     if name == SKILL_MANAGE:
-        return {"description": "Create or update your own reusable class-level skill. Prefer updating an existing skill. Supply SKILL.md with name/description frontmatter and ## When to use, ## Procedure, ## Pitfalls, ## Verification. Updates require id and expected_hash from skills_list. References are up to eight bounded Markdown/text/JSON documents. Guidance never grants authority or executes code.",
+        return {"description": "Create or update your own reusable class-level skill. Prefer updating an existing skill. Supply SKILL.md with name/description frontmatter and ## When to use, ## Procedure, ## Pitfalls, ## Verification. " + SKILL_NAME_RULE + ". Keep an existing name unchanged when editing. Updates require id and expected_hash from skills_list. References are up to eight bounded Markdown/text/JSON documents. Guidance never grants authority or executes code.",
                 "parameters": {"type": "object", "properties": {
                     "text": {"type": "string", "maxLength": 131072}, "id": {"type": "integer"},
                     "expected_hash": {"type": "string"}, "provenance": {"type": "string", "enum": ["learned", "imported", "owner"]},
@@ -259,7 +260,7 @@ def primary_contact_prompt(context: dict, speaker: Speaker) -> str:
     # A name is what the owner wrote: quoted and escaped here as it is in the data above.
     name = json.dumps(primary["name"], ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e")
     text = (f"\nPrimary contact: {name} (id {primary['id']}). "
-            "This member is the chief of staff. In groups everyone reads every message and decides whether to speak; "
+            "This member is the default contact, with the same owner-private abilities as every member. In groups everyone reads every message and decides whether to speak; "
             "there are no fixed rounds and no automatic conclusion.")
     dispatch = "The owner brings new work to the primary contact first, which hands it to the colleague it belongs to."
     if speaker.id == primary["id"]:
@@ -318,7 +319,7 @@ def team_tools_for(
 ) -> list[str]:
     """The team tools `speaker` may be offered for the request `text`: `ask_member` when there is
     someone it may ask (Raphael, for a member; another member), and `create_member` and `room_meeting`
-    at the owner's request (not when asked by another). Only the chief may start a meeting. Without
+    at the owner's private request (not when asked by another). Without
     `always` (the voice fast tier) only the ones the request is about: it names someone it may ask,
     or asks for a new member."""
     tools = list(SKILL_TOOLS) if team is not None and (
@@ -339,10 +340,10 @@ def team_tools_for(
     if anyone:
         tools.append(ASK_MEMBER)
     # Every speaker may, when the owner asks it directly (never for a request another member handed it).
-    if speaker.is_chief and speaker.depth == 0 and (always or asks_to_create_member(text)):
+    if speaker.depth == 0 and (always or asks_to_create_member(text)):
         tools.append(CREATE_MEMBER)
     # The API path offers a team tool only when the request may need it: offering one costs a
     # tool-picking call on every question. CLI brains get every tool (`always`).
-    if speaker.is_chief and speaker.depth == 0 and (always or _MEETING.search(text)):
+    if speaker.depth == 0 and (always or _MEETING.search(text)):
         tools.extend(COORDINATION_TOOLS)
     return tools

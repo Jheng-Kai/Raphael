@@ -37,7 +37,16 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
             # Native shell/file permission is not an alternative to Raphael's tool gate, unless the owner gave them all.
             if task.scope == "room":
                 return ToolOutcome(False,"room_speech_only",instruction="Start this as private work with handoff.")
-            return ToolOutcome(True, None) if getattr(run._gate, "full_permission", False) else ToolOutcome(False, "use_mcp_tools")
+            from ..agent.data_floor import WRITE_REFUSAL
+            access = run._gate.data_floor.access(name, arguments)
+            if access == "write":
+                return ToolOutcome(False, "protected_data", instruction=WRITE_REFUSAL)
+            if access == "read":
+                from .snapshot import BUILTIN, ToolRef
+                from ..agent.policy import Tier
+                run.snapshot.refs[name] = ToolRef(BUILTIN, name, "Raphael", name, Tier.T3)
+            else:
+                return ToolOutcome(True, None) if getattr(run._gate, "full_permission", False) else ToolOutcome(False, "use_mcp_tools")
         try:
             result = await run.tool({"call_id":call_id, "name":name, "arguments":arguments})
         except RpcError as error:

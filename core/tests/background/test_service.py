@@ -231,7 +231,7 @@ async def test_public_replies_reach_history_while_progress_still_reaches_status(
                           text="", status="running")
 
     async def finish(**kwargs):
-        assert [m["kind"] for m in history.messages([turn_id])[turn_id] if not is_action(m["text"])] == ["reply"]
+        assert [m["kind"] for m in history.messages([turn_id])[turn_id] if not is_action(m["text"])] == []
         assert any(is_action(m["text"]) for m in history.messages([turn_id])[turn_id])
         assert any(method == "worker.progress" and data["turn_id"] == turn_id for method, data in rig.notifications)
         assert rig.service.tasks_for_turns([turn_id])[turn_id][0]["progress"] == "I will check the time."
@@ -242,7 +242,7 @@ async def test_public_replies_reach_history_while_progress_still_reaches_status(
     task_id = rig.submit()
     rig.service.attach_turn(task_id, turn_id)
     await rig.wait_for_reports()
-    assert [m["kind"] for m in history.messages([turn_id])[turn_id] if not is_action(m["text"])] == ["reply", "reply"]
+    assert [m["kind"] for m in history.messages([turn_id])[turn_id] if not is_action(m["text"])] == ["reply"]
     assert rig.task(task_id).state == "done"
     assert [json.loads(m["text"])["state"] for m in history.messages([turn_id])[turn_id] if is_action(m["text"])] == ["running", "done"]
 

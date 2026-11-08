@@ -1,4 +1,4 @@
-"""Primary management is discovered, or offered for the owner's matching request."""
+"""Owner-private management is discovered, or offered for the owner's matching request."""
 
 import json
 
@@ -46,8 +46,7 @@ def test_shared_slack_discovery_never_grants_owner_management(primary, interacti
     assert not offered.find("slack_draft")[0]
     assert not offered.refs.keys() & MANAGEMENT_TOOLS
     assert bool(offered.management) == interactive
-    if not primary:
-        assert "manage_connection" not in offered.management
+    assert ("manage_connection" in offered.management) == interactive
     by_intent = take_snapshot(None, "Draft a Slack reply", speaker=speaker, interactive=interactive)
     assert "slack_draft" in by_intent.refs
 
@@ -86,6 +85,9 @@ def test_every_management_tool_can_be_discovered_by_name_without_plugins(name):
     assert name in {item["function"]["name"] for item in added}
     assert offered.refs[name].kind == BUILTIN
     assert len(added) <= FIND_MAX and lines
+    before = set(offered.refs)
+    assert not offered.find(name)[0]  # Repeating an exact tool name must not grow the offer.
+    assert set(offered.refs) == before
     assert not offered.show_management([name])  # A second lookup never duplicates the schema.
 
 
@@ -102,7 +104,7 @@ def test_request_intent_adds_only_the_matching_management_areas(question, expect
     assert expected in offered.refs and absent not in offered.refs
 
 
-def test_management_cannot_be_discovered_outside_the_owner_primary_chat():
+def test_management_cannot_be_discovered_outside_the_owner_private_chat():
     for offered in (snapshot(owner_management=False),
                     take_snapshot(None, "Delete a folder", speaker=Speaker(capabilities=frozenset({"chief"})))):
         assert not offered.management

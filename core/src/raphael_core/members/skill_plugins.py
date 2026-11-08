@@ -136,7 +136,7 @@ def component_paths(manifest, kind):
     return [kind, *[relative_path(p) for p in extra]]
 
 
-def plugin_parts(files):
+def plugin_parts(files, *, existing_names=None):
     from .capabilities import MAX_SKILL_BYTES, skill_metadata
     from ..bots.homes import redact_secrets
 
@@ -164,7 +164,8 @@ def plugin_parts(files):
             match = re.search(r"^description:[ \t]*([^\r\n]+)", text[:4096], re.M)
             description = match[1].strip().strip("\"'") if match else name
             text = "---\nname: " + json.dumps(name) + "\ndescription: " + json.dumps(description) + "\n---\n" + text
-        name, description = skill_metadata(text)
+        key = str(PurePosixPath(path).parent) if kind == "skill" else path
+        name, description = skill_metadata(text, writing=True, previous_name=(existing_names or {}).get(key))
         parts.append({"key": path, "kind": kind, "name": name, "description": description, "text": text})
     if len(parts) > 40 or len({p["name"].casefold() for p in parts}) != len(parts):
         raise MemberError("source", "plugin has too many or duplicate skill and command names")
@@ -429,12 +430,13 @@ class PluginSets:
         from .capabilities import MAX_SKILLS
         from .skills import stored_skill_name
 
-        manifest, parts = plugin_parts(files)
+        manifest = manifest_from(files)
         if len(files) > MAX_PACKAGE_FILES or sum(len(data) for data in files.values()) > MAX_PACKAGE_BYTES:
             raise MemberError("size", "plugin package is too large")
         identity = f"github:{marketplace}:{manifest['name']}" if marketplace else "local:" + str(Path(source[6:]).parent)
         previous = self.conn.execute("SELECT * FROM skill_sets WHERE identity=?", (identity,)).fetchone()
         old = {row["set_key"]: dict(row) for row in self.conn.execute("SELECT * FROM member_skills WHERE set_id=?", (previous["id"],))} if previous else {}
+        _, parts = plugin_parts(files, existing_names={key: row["name"].partition(":")[2] for key, row in old.items()})
         current = self.conn.execute("SELECT COUNT(*) FROM member_skills WHERE member_id=-1").fetchone()[0]
         if current - len(old) + len(parts) > MAX_SKILLS:
             raise MemberError("full", "shared skill limit reached")

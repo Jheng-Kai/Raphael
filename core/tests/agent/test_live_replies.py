@@ -34,7 +34,7 @@ async def test_three_replies_are_stored_and_notified_around_two_tools(make_rig, 
     rig = make_rig(notify=notify)
     words = ["I will prepare the template.", "One reusable memory belongs in it.", "The template is ready."]
     def content(index):
-        return json.dumps({"messages": [words[index]], "thinking": "Public choice.", "progress": "Checking."}) if envelope else words[index]
+        return json.dumps({"messages": [words[index]], "thinking": "Public choice.", "progress": "Checking."}) if envelope else "```json\n" + json.dumps({"messages": [words[index]]}) + "\n```"
     async def second(**kwargs):
         assert bodies(rig) == words[:1] and snapshots == [words[:1]]
         return chat(content(1), ("local_time", {}))
@@ -53,7 +53,7 @@ async def test_three_replies_are_stored_and_notified_around_two_tools(make_rig, 
 async def test_a_model_failure_keeps_the_already_published_reply(make_rig, client):
     from raphael_core.brain.openrouter import OpenRouterError
     rig = make_rig()
-    client.chats = [chat("I will check the saved setup.", ("local_time", {})), OpenRouterError(401, "auth", "Fake sign-in failure")]
+    client.chats = [chat(json.dumps({"messages": ["I will check the saved setup."]}), ("local_time", {})), OpenRouterError(401, "auth", "Fake sign-in failure")]
     await typed(rig)
     assert bodies(rig)[0] == "I will check the saved setup."
     assert rig.history.latest_by_member()[0].status == "error"
@@ -77,7 +77,7 @@ async def test_cli_messages_are_live_and_the_terminal_echo_is_not_added_again(ma
                 assert bodies(rig) == words[:index]
                 yield Event("text_delta", word[4:])
                 before = notes.count("agent.turn")
-                yield Event("message", word, data={"id": str(index)})
+                yield Event("message", word, data={"id": str(index), "final": True})
                 assert notes.count("agent.turn") == before + 1
                 assert bodies(rig) == words[:index + 1]
                 if index < 2:
@@ -116,7 +116,7 @@ async def test_each_message_uses_owner_script_without_rewriting_code_or_japanese
         monkeypatch.setattr(rig.service._cli_brains, "available", lambda *args, **kwargs: True)
         async def run(driver, **kwargs):
             for index, word in enumerate(original):
-                yield Event("message", word, data={"id": str(index)})
+                yield Event("message", word, data={"id": str(index), "final": True})
                 assert bodies(rig) == expected[:index + 1]
             yield Event("final", "Done.")
         monkeypatch.setattr(cli.Driver, "run", run)
@@ -162,7 +162,7 @@ async def test_explicit_cli_separator_is_live_and_a_literal_code_marker_stays_wh
         assert bodies(rig) == [first]
         yield Event("text_delta", "Second.")
         assert bodies(rig) == [first]
-        yield Event("message", combined, data={"id": "complete"})
+        yield Event("message", combined, data={"id": "complete", "final": True})
         assert bodies(rig) == [first, "Second."]
         yield Event("final", combined)
     monkeypatch.setattr(cli.Driver, "run", run)
@@ -191,7 +191,7 @@ async def test_structured_reply_before_a_lookup_is_not_held_for_the_final_json(m
         assert rig.history.latest_by_member()[0].status == "running"
         return completion({"messages": [first, last]})
     client.decisions.append(decision("chat"))
-    client.replies = [completion({"text": first, "need": {"search": "earlier"}}), finish]
+    client.replies = [completion({"messages": [first], "need": {"search": "earlier"}}), finish]
     try:
         await rig.ask("Check our earlier discussion", language="en")
         assert bodies(rig) == [first, last]

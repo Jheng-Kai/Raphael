@@ -75,6 +75,7 @@ Everything runs on the event loop, which owns the database. Nothing here logs wh
 what it said: only ids, states, counts and costs.
 """
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import dataclasses
 import json
@@ -200,8 +201,8 @@ HANDED_WORK_BACK = (
     "with what you told the owner you would do. If anything is left (parts not joined, a check you promised, something "
     "a colleague could not verify), hand the next piece to the right colleague now with handoff and end your turn; you "
     "come back with its result. Speak to the owner only when nothing is left, or when something stops the work that "
-    "only the owner can settle. Then pass the complete requested result to the owner, including colleagues' full answers when they are the deliverable. "
-    "You may add one line of your own, plus file paths, checks and anything unfinished. Never replace the result with a recap."
+    "only the owner can settle. Then tell the owner briefly what finished and where to read each colleague's work in their private conversation. "
+    "Keep the chief's conversation brief; do not copy colleagues' full work here. Include checks, artifact handles and anything unfinished."
 )
 HANDLES_REQUEST = (
     "\nWhen you report, give handles anyone can check: the URL, the id or the absolute path of what you made or changed. "
@@ -931,11 +932,13 @@ class BackgroundService:
         with conn:
             if event['type']=='result':
                 conn.execute('INSERT OR IGNORE INTO task_inbox(event_id,parent_task_id) VALUES (?,?)',(event['event_id'],task.parent_task_id))
+                if task.mode == 'work':
+                    self._publish_work_report(task, allowed=allowed)
                 if allowed and report_room is not None:
                     source_message = conn.execute('SELECT id,member_id,origin_message_id FROM room_messages WHERE turn_id=? AND room_id=? AND thread_id=?',
                         (task.source_turn_id,report_room,report_thread)).fetchone()
                     # Only a short public result is projected. Private history, steps and owner cards stay private.
-                    text = ' '.join((task.full_report).split())[:600]
+                    text = self._work_report(task) if task.mode == 'work' else ' '.join((task.full_report).split())[:600]
                     conn.execute("INSERT INTO room_messages(room_id,thread_id,member_id,text,created,turn_id,request_id,reply_to,reply_to_member,origin_message_id,kind,report_task_id) "
                         "VALUES (?,?,?,?,?,?,?,?,?,?,'report',?) ON CONFLICT(room_id,request_id) DO NOTHING",
                         (report_room,report_thread,task.member_id,text,self._now_ms(),task.turn_id,'handoff-'+str(task.id),
@@ -948,6 +951,8 @@ class BackgroundService:
         if event['type']=='result' and task.parent_task_id:
             parents.add(task.parent_task_id)
         if allowed:
+            if event['type'] == 'result' and task.mode == 'work' and (exchange_id := self._store.exchange_turn_id(task.id)):
+                self._notify('agent.turn',{'turn_id':exchange_id,'member_id':task.member_id})
             self._notify('agent.turn',{'turn_id':source.id,'member_id':source.member_id})
             if report_room:
                 self._notify('rooms.changed',{'room_id':report_room})
@@ -958,6 +963,39 @@ class BackgroundService:
                     else:
                         # Settle existing stopped exchanges after private lanes end, without a new round.
                         rooms._exchanges.schedule(report_room)
+
+    def _work_report(self, task):
+        """A bounded report; the full result belongs only to the owner's work turn."""
+        text = ' '.join(task.full_report.split())
+        first = re.split(r'(?<=[.!?。！？])\s+|(?<=[。！？])', text, maxsplit=1)[0]
+        return first if len(first) <= 240 else first[:237] + '...'
+
+    def _work_location(self, task):
+        work = self._history.get(task.turn_id) if task.turn_id else None
+        return {'member_id':task.member_id,'conversation_id':work.conversation_id if work else None,
+                'work_turn_id':task.turn_id}
+
+    def _work_order(self, task):
+        exchange_id = self._store.exchange_turn_id(task.id)
+        brief = self._history.get(exchange_id) if exchange_id else None
+        work = self._history.get(task.turn_id) if task.turn_id else None
+        messages = self._history.messages([exchange_id]).get(exchange_id, []) if exchange_id else []
+        return {'exchange_turn_id':exchange_id,'brief_at_ms':brief.created_at_ms if brief else None,
+                'work_created_at_ms':work.created_at_ms if work else None,
+                'report_at_ms':max((m['at_ms'] for m in messages if m['kind']=='reply'), default=None)}
+
+    def _publish_work_report(self, task, *, allowed=True):
+        exchange_id = self._store.exchange_turn_id(task.id)
+        exchange = self._history.get(exchange_id) if exchange_id else None
+        if exchange is None or exchange.status not in ('running','confirm'):
+            return
+        work = self._history.get(task.turn_id)
+        messages = self._history.messages([task.turn_id]).get(task.turn_id, [])
+        report_at = max(self._now_ms(),task.finished_at_ms or 0,work.created_at_ms if work else 0,
+                        max((m['at_ms'] for m in messages), default=0)) + 1
+        text = self._work_report(task) if allowed else ''
+        AgentHistory(self._metrics_conn, lambda:report_at).publish_terminal(exchange_id,prefix='',text=text,detail=None,
+            status=_TURN_STATUS.get(task.state,'error') if allowed else 'denied',cost_usd=0,replies=[text] if text else [],model=task.model_ref)
 
     def handoff_views(self, *, room_id=None, thread_id=None, source_turn_id=None):
         rows = self._metrics_conn.execute("SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND "
@@ -977,7 +1015,9 @@ class BackgroundService:
                 'conversation_id':self._history.get(task.turn_id).conversation_id if task.turn_id and self._history.get(task.turn_id) else None,
                 'ready_at_ms':task.ready_at_ms,'dispatch_policy':task.dispatch_policy,'mode':task.mode,
                 'request':task.text,
-                'result':((task.full_report)[:600] if room_id is not None else task.full_report) if not withheld and task.state=='done' else '',
+                **(self._work_order(task) if task.mode == 'work' else {}),
+                **({'work_location':self._work_location(task)} if task.mode == 'work' else {}),
+                'result':(self._work_report(task) if task.mode == 'work' else (task.full_report)[:600] if room_id is not None else task.full_report) if not withheld and task.state=='done' else '',
                 'evidence':self._store.evidence(task.id) if not withheld else [],
                 'completion_state':(stage['state'] if (stage:=self._metrics_conn.execute('SELECT state FROM task_stage_owners WHERE owner_task_id=?',(task.id,)).fetchone()) else task.state)})
         return result
@@ -1409,6 +1449,8 @@ class BackgroundService:
         private = task.scope != "room" and (task.scope == "private" or task.mode == "consult")
         memory = self._memory_of(task.member_id) if private else self._shared_memory()
         team = team_tools_for(self._team, speaker, always=True) if self._team_tool else []
+        # Background room coordination keeps its existing boundary; owner-private turns have parity.
+        team = [name for name in team if name != "room_meeting" or speaker.is_chief]
         if task.scope == 'room':
             from ..agent.team import worker_definition
             from .snapshot import ToolRef, BUILTIN
@@ -1424,7 +1466,8 @@ class BackgroundService:
                 await prepare(speaker.id)
             snapshot = take_snapshot(self._gate.plugins,task.text,memory=memory is not None,history=private,
                 attachments=bool(files),speaker=speaker,team=team,turned_off=self._tools.turned_off(),
-                max_tier=Tier.T3 if self._gate.full_permission else SNAPSHOT_MAX_TIER)
+                max_tier=Tier.T3 if self._gate.full_permission else SNAPSHOT_MAX_TIER,
+                background_management=task.scope == "private")
         # With more tools than fit, the task is shown the ones it needs, not the first few.
         if not room_cli and task.scope != "room":
             await refine(snapshot, self._picker, task.text, context, model=model, ledger=ledger)
@@ -1460,6 +1503,8 @@ class BackgroundService:
             artifact=lambda payload: self._artifact(task, payload),
         )
         from ..agent.actions import action_scope
+        run.tool_allowed = lambda key: bool((current := self._speaker(task.member_id)) and current.uses_plugin(key))
+        snapshot.tool_allowed = run.tool_allowed
         run.room_speech = task.scope == "room"
         run.action = lambda name, arguments: action_scope(self._history, task.turn_id, language,
             snapshot.refs[name].name if name in snapshot.refs else name, arguments,
@@ -1504,11 +1549,22 @@ class BackgroundService:
                        'Speak briefly or say exactly (pass). Never ask for approval in this room.')
         if self._gate.full_permission and task.scope != 'room':
             system += FULL_PERMISSION
+        if task.scope == "private":
+            system += ("\nMember management tools are available through find_tools. Use member_create, member_update and "
+                       "member_routine tools instead of reading or changing Raphael's database or core files. "
+                       "Changes to members wait for the owner's approval card, even in allow-all mode.")
         if task.mode:
             system += '\nAcceptance criteria (untrusted data): '+neutralize(task.done_when)
             system += ('\nCompletion requires a verified file. Include its absolute path in your report.' if task.requires_artifact else
                        '\nNo file artifact is required for completion; a substantive written review or answer can satisfy the task.')
             system += HANDLES_REQUEST
+        if task.mode == 'work':
+            system += ('\nThis is owner-facing work in your own private conversation. The brief is from a colleague, '
+                       'not a new owner message. First send a useful short acknowledgment addressed to the owner as an '
+                       'explicit public message; use your own persona and the owner language. Do the work here, with '
+                       'its actions, cards, attachments and full result here. Start the final result with a short '
+                       'report of what you actually accomplished. Only that short report and work location go back '
+                       'to the colleague; do not send the full work into their conversation.')
         if task.mode == 'consult':
             asker = self._speaker(task.from_member_id) if task.from_member_id is not None else None
             system += ('\nThe task is a question from your colleague ' + neutralize(asker.name if asker and asker.name else 'Raphael')
@@ -1811,10 +1867,11 @@ class BackgroundService:
             child = self._store.get(row[0])
             withheld = self._metrics_conn.execute("SELECT 1 FROM task_outbox WHERE task_id=? AND disposition='withheld'",(child.id,)).fetchone()
             state = 'withheld' if withheld else RESULT_STATE.get(child.state, 'error')
-            said = '' if withheld else child.full_report
+            said = '' if withheld else self._work_report(child) if child.mode == 'work' else child.full_report
             result.append({'task_id':child.id,'member_id':child.member_id,'state':state,
                 'reason':'' if withheld or state == 'completed' else child.reason or '',
                 'result':said or ('Completed without a text response.' if state == 'completed' else ''),
+                **({'work_location':self._work_location(child),**self._work_order(child)} if child.mode == 'work' else {}),
                 'evidence':[] if withheld else self._store.evidence(child.id)})
         return result
 
@@ -1868,7 +1925,7 @@ class BackgroundService:
             asked = self._team.admin_confirmation(ref.name, waiting.arguments, language)
         text = asked_with(language, waiting.screening, asked)
         if local:
-            text = {"en": "Local commands", "zh-TW": "本機指令", "ja": "ローカルコマンド"}[language]
+            text = with_ui_words({"en": "Local commands", "zh-TW": "本機指令", "ja": "ローカルコマンド"}).get(language, "Local commands")
         now = self._now_ms()
         question = Question(
             id=pending.id, task_id=task.id, member_id=member_id, prefix=prefix, text=text,
@@ -2612,13 +2669,22 @@ class BackgroundService:
         except Refused as refused:
             raise RpcError(BUSY, "The background worker cannot take a task now", {"kind": refused.kind}) from None
         try:
-            turn_id = self._history.add(
-                session_id=old.session_id,
-                question=old.text,
-                route="delegate",
+            source = self._history.get(old.source_turn_id) if old.source_turn_id else None
+            exchange_id = None
+            if old.mode == 'work' and source and source.member_id != old.member_id:
+                with self._metrics_conn:
+                    exchange_id = self._store._work_exchange(new_id,source,old.member_id,old.text,old.model_ref,
+                        earlier.conversation_id if earlier else None,self._now_ms())
+            work_at = max(self._now_ms(),source.created_at_ms if source else 0) + 1
+            history = AgentHistory(self._metrics_conn,lambda:work_at) if old.mode == 'work' else self._history
+            turn_id = history.add(
+                session_id=f'work:{new_id}' if old.mode == 'work' else old.session_id,
+                question='' if old.mode == 'work' else old.text,
+                route="worker" if old.mode == "work" else "delegate",
                 prefix=PREFIXES[old.language].understood if speaker.is_raphael else "",
-                text=phrase(old.language, "handoff"),
-                status="done",
+                text="" if old.mode == "work" else phrase(old.language, "handoff"),
+                status="running" if old.mode == "work" else "done",
+                conversation_id=earlier.conversation_id if earlier is not None else None,
                 # A routine's run started again is the owner's doing, in the app.
                 source=VOICE
                 if earlier is None
@@ -2632,6 +2698,9 @@ class BackgroundService:
                 source_turn_id=earlier.source_turn_id if earlier is not None else None,
             )
             self._store.attach_turn(new_id, turn_id)
+            if exchange_id is not None:
+                with self._metrics_conn:
+                    self._metrics_conn.execute('UPDATE agent_turns SET session_id=? WHERE id=?',(f'handoff:{turn_id}',exchange_id))
         except sqlite3.Error as exc:
             logger.warning("Could not write the turn of a rerun: %s", type(exc).__name__)
         self._changed(new_id, QUEUED)

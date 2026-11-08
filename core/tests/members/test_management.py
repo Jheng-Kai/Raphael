@@ -1,4 +1,4 @@
-﻿"""Management follows the live primary, while destructive writes await exact approval."""
+﻿"""Owner-private management is equal, while destructive writes await exact approval."""
 
 import pytest
 
@@ -17,7 +17,7 @@ from raphael_core.protocol import RpcError
     "Disconnect Sample", "Reconnect Sample", "Manage the MCP connection",
 ])
 @pytest.mark.parametrize("primary", [0, 7])
-def test_connection_intent_offers_management_only_to_the_interactive_primary(prompt, primary):
+def test_connection_intent_offers_management_to_every_owner_private_member(prompt, primary):
     from raphael_core.agent.speaker import Speaker
     from raphael_core.background.snapshot import take_snapshot
 
@@ -26,7 +26,7 @@ def test_connection_intent_offers_management_only_to_the_interactive_primary(pro
         for interactive, owner_management in ((True, True), (True, False), (False, True)):
             snapshot = take_snapshot(None, prompt, speaker=speaker, interactive=interactive,
                                      owner_management=owner_management)
-            allowed = identifier == primary and interactive and owner_management
+            allowed = interactive and owner_management
             assert ({"manage_connection", "add_mcp_server"} <= snapshot.refs.keys()) == allowed
             snapshot.find("manage_connection")
             assert ("manage_connection" in snapshot.refs) == allowed
@@ -104,23 +104,21 @@ async def test_every_destructive_row_shows_a_card_and_waits_for_the_exact_yes(se
     assert len(writes) == 1
 
 
-async def test_nonprimary_and_stale_primary_cannot_write_even_if_the_model_calls_directly(setup):
+async def test_owner_private_management_stays_equal_after_the_primary_contact_moves(setup):
     rig, team = setup
     team.members.register(rig.rpc)
     other = member(team)
     old = team.members.speaker(0)
-    with pytest.raises(RpcError, match="current primary contact"):
-        await team.members.admin_tool(other.id, "group_create", {"name": "Denied"}, interactive=True)
+    made = await team.members.admin_tool(other.id, "group_create", {"name": "Ordinary"}, interactive=True)
+    assert made["group"]["name"] == "Ordinary"
     await rig.call("members.set_primary", {"id": other.id})
-    assert "group_create" in dict(definitions_for(old))
-    from raphael_core.management import self_definitions
-    assert set(dict(definitions_for(team.members.speaker(0)))) & MANAGEMENT_TOOLS == self_definitions(0).keys()
-    assert "group_create" in dict(definitions_for(team.members.speaker(other.id)))
-    with pytest.raises(RpcError, match="current primary contact"):
-        await team.members.admin_tool(old.id, "group_create", {"name": "Stale"}, interactive=True)
-    with pytest.raises(RpcError, match="interactive private chat"):
-        await team.members.admin_tool(other.id, "group_create", {"name": "Worker"})
-    assert (await team.members.admin_tool(other.id, "group_create", {"name": "Allowed"}, interactive=True))["group"]["name"] == "Allowed"
+    for actor in (old.id, other.id):
+        from raphael_core.management import DEFINITIONS
+        assert DEFINITIONS.keys() <= dict(definitions_for(team.members.speaker(actor))).keys()
+        result = await team.members.admin_tool(actor, "group_create", {"name": f"Folder {actor}"}, interactive=True)
+        assert result["group"]["name"] == f"Folder {actor}"
+        with pytest.raises(RpcError, match="interactive private chat"):
+            await team.members.admin_tool(actor, "group_create", {"name": "Worker"})
 
 
 @pytest.mark.parametrize("name", DESTRUCTIVE)
@@ -205,10 +203,10 @@ async def test_registry_routes_rooms_conversations_skills_dictionary_and_setting
         conversation = (await run("conversation_list", member_id=person["id"]))["conversations"][0]
         await run("conversation_clear", id=conversation["id"])
         assert [item["id"] for item in (await app.call("conversations.list", {"member_id": person["id"]}))["conversations"]] == [conversation["id"]]
-        skill = app.members.capabilities.keep_skill(person["id"], "local-test", "---\nname: Review\ndescription: Read reports\n---\nRead carefully.")
-        await run("member_skill_update", member_id=person["id"], id=skill["id"], text="---\nname: Review\ndescription: Read reports\n---\nCheck evidence.", expected_hash=skill["revision"], enabled=False)
+        skill = app.members.capabilities.keep_skill(person["id"], "local-test", "---\nname: review\ndescription: Read reports\n---\nRead carefully.")
+        await run("member_skill_update", member_id=person["id"], id=skill["id"], text="---\nname: review\ndescription: Read reports\n---\nCheck evidence.", expected_hash=skill["revision"], enabled=False)
         assert not app.members.capabilities.skills(person["id"])[0]["enabled"]
-        assert "Review" in app.members.admin_confirmation("member_skill_delete", {"member_id": person["id"], "id": skill["id"]}, "en")
+        assert "review" in app.members.admin_confirmation("member_skill_delete", {"member_id": person["id"], "id": skill["id"]}, "en")
         await run("member_skill_delete", member_id=person["id"], id=skill["id"])
         assert not app.members.capabilities.skills(person["id"])
         await run("dictionary_add", word="Raphael")

@@ -31,6 +31,7 @@ A draft holds the owner's own words for the mail; they are shown in their chat a
 like the rest of the conversation, and never logged.
 """
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import hashlib
 import json
 import logging
@@ -585,8 +586,8 @@ class EmailDrafts:
 
 
 # What a colleague's chat says (to the model, never as a bubble) when a draft was handed to it.
-_RECEIVED: Mapping[str, str] = {
+_RECEIVED: Mapping[str, str] = with_ui_words({
     "zh-TW": "{name}把一封郵件草稿「{subject}」交給你，等主人編輯後寄出。",
     "en": "{name} handed you an email draft, \"{subject}\", for the owner to edit and send.",
     "ja": "{name}からメールの下書き「{subject}」が届きました。オーナーが編集して送信します。",
-}
+})

@@ -1,5 +1,7 @@
 """Growing skills remain private, bounded, revisioned and silent on reads."""
 
+import json
+
 import pytest
 from raphael_core.agent.steps import Step
 from raphael_core.agent.conversations import Conversations
@@ -50,6 +52,36 @@ async def test_generated_skill_requires_sections_and_bounded_safe_references(rig
     assert "Owner workflow" in cap.read_skill(0, skill["name"])
 
 
+async def test_learning_distinguishes_creation_content_and_reference_updates_from_identical_writes(rig):
+    member = (await rig.call("members.create", {"name": "Ada"}))["member"]["id"]
+    service = rig.service
+    turn = service._history.add(session_id="skills", question="Learn", route="answer", prefix="", text="", status="running", member_id=member)
+    def events():
+        return [json.loads(m["text"]) for m in service._history.messages([turn])[turn] if m["kind"] == "event"]
+    skill = service.learn_skill(member, {"text": DOCUMENT, "references": {"sources.md": "Check one source"}}, turn)
+    assert events() == [{"type": "skill_learned", "name": "research-summary", "action": "created"}]
+    updated = DOCUMENT.replace("Check the", "Verify the")
+    skill = service.learn_skill(member, {"id": skill["id"], "expected_hash": skill["revision"], "text": updated}, turn)
+    assert [e["action"] for e in events()] == ["created", "updated"]
+    skill = service.learn_skill(member, {"id": skill["id"], "expected_hash": skill["revision"], "text": updated}, turn)
+    assert len(events()) == 2
+    skill = service.learn_skill(member, {"id": skill["id"], "expected_hash": skill["revision"], "text": updated,
+                                        "references": {"sources.md": "Check two sources"}}, turn)
+    assert [e["action"] for e in events()] == ["created", "updated", "updated"]
+    service.learn_skill(member, {"id": skill["id"], "expected_hash": skill["revision"], "text": updated,
+                                 "references": {"sources.md": "Check two sources"}}, turn)
+    assert len(events()) == 3
+
+
+async def test_newline_normalization_and_learning_provenance_alone_do_not_make_a_skill_event(rig):
+    cap = rig.service.capabilities
+    skill = cap.keep_skill(0, "owner/repository", DOCUMENT.replace("\n", "\r\n"))
+    turn = rig.service._history.add(session_id="skills", question="Keep", route="answer", prefix="", text="", status="running")
+    learned = rig.service.learn_skill(0, {"id": skill["id"], "expected_hash": skill["revision"], "text": DOCUMENT}, turn)
+    assert learned["provenance"] == "learned"
+    assert not rig.service._history.messages([turn]).get(turn)
+
+
 async def test_learning_an_imported_skill_preserves_source_and_undo_restores_crlf(rig):
     cap = rig.service.capabilities
     original = DOCUMENT.replace("\n", "\r\n")
@@ -81,10 +113,11 @@ async def test_review_counts_thread_tools_uses_member_brain_and_reuses_skill(rig
         return history.add(session_id="skills", question="Summarize checked research", route="answer", prefix="", text="Checked summary", status="done", member_id=member, conversation_id=conversation,
                            steps=[Step("tool", "local_time", "Raphael", "ok", 0) for _ in range(count)])
     calls = []
+    changes = [{"text": DOCUMENT}]
     class Brain:
         async def complete_json(self, **kwargs):
             calls.append(kwargs)
-            return Completion(data={"changes": [{"text": DOCUMENT}]}, model=kwargs["model"], cost_usd=0, prompt_tokens=0, completion_tokens=0, latency_ms=0)
+            return Completion(data={"changes": changes}, model=kwargs["model"], cost_usd=0, prompt_tokens=0, completion_tokens=0, latency_ms=0)
     rig.memory._base_client = Brain()
     turn(9)
     reviewer = rig.memory.skill_review
@@ -99,6 +132,15 @@ async def test_review_counts_thread_tools_uses_member_brain_and_reuses_skill(rig
     assert rig.service.skill_read(member, skill["name"]) == DOCUMENT
     messages = history.messages([last])[last]
     assert any('"type": "skill_learned"' in m["text"] for m in messages)
+    assert [json.loads(m["text"])["action"] for m in messages if m["kind"] == "event"] == ["created"]
+    updated = DOCUMENT.replace("Check the", "Verify the")
+    for text, actions in ((updated, ["updated"]), (updated, [])):
+        changes[:] = [{"id": skill["id"], "text": text}]
+        last = turn(10)
+        await reviewer.run_due()
+        messages = history.messages([last]).get(last, [])
+        assert [json.loads(m["text"])["action"] for m in messages if m["kind"] == "event"] == actions
+        assert not reviewer.due()
 
 
 async def test_review_pauses_after_three_failures_and_recovers_after_restart(rig, monkeypatch):

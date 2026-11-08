@@ -274,7 +274,8 @@ async def test_the_roster_names_the_primary_to_each_kind_of_speaker(rig):
     for_bob = says(roster_prompt(rig.service, rig.service.speaker(bob), "en"))
     for_raphael = says(roster_prompt(rig.service, rig.service.speaker(0), "en"))
     for text in (for_alice, for_bob, for_raphael):
-        assert text.startswith('"Alice" (id %d).' % alice) and "This member is the chief of staff" in text
+        assert text.startswith('"Alice" (id %d).' % alice) and "This member is the default contact" in text
+        assert "same owner-private abilities as every member" in text
     # the primary dispatches what it is given
     assert "That is you" in for_alice and "handoff" in for_alice and "do only your own work yourself" in for_alice
     # another member forwards work to the colleague it belongs to, and what it cannot place to the primary

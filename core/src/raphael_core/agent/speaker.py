@@ -5,8 +5,8 @@ the same router, the same answer, the same gate and tiers, the same background w
 `Speaker` that says whose persona speaks (`name`, `role`, `personality` and work `instructions`),
 which model answers (`model`, "" for the answer model) and whose conversation and memory are read
 (`id`). Every speaker shares work capabilities under the same safety gate; owner management
-belongs to the live primary contact in an interactive owner chat. Stored `tools` lists
-are retained for compatibility and do not restrict tools. Raphael is the speaker with id 0.
+uses approved management tools. An owner-set `tools` list restricts connected tools;
+built-in harness abilities remain shared. Raphael is the speaker with id 0.
 
 `depth` is how the speaker was reached, and `chain` who asked on the way. 0 is the owner (a message
 in its thread, a routine, a task handed to the background); 1 is another assistant asking it
@@ -23,7 +23,10 @@ from .policy import PLUGIN_PREFIX
 
 RAPHAEL_ID = 0
 # Raphael's name in each language: what `ask_member` takes for him, and what the member column shows.
-RAPHAEL_NAMES = {"zh-TW": "拉斐爾", "en": "Raphael", "ja": "ラファエル"}
+RAPHAEL_NAMES = {"zh-TW": "拉斐爾", "en": "Raphael", "ja": "ラファエル",
+                 "zh-CN": "拉斐尔", "ko": "라파엘", "es": "Raphael", "fr": "Raphael",
+                 "de": "Raphael", "pt-BR": "Raphael", "it": "Raphael", "ru": "Рафаэль",
+                 "vi": "Raphael", "th": "ราฟาเอล", "id": "Raphael", "tr": "Raphael"}
 # Legacy tool ids retained for the stored member settings API.
 BUILTIN_TOOL_IDS = ("web_search", "web_read", "weather", "local_time")
 # How deep a chain of `ask_member` may go: the owner's assistant asks one (1), which may ask one
@@ -54,7 +57,7 @@ class Speaker:
     role: str = ""
     instructions: str = ""
     model: str = ""
-    # Compatibility data; capability decisions ignore this field.
+    # Allowed connections; None means all, an empty set means no connected tools.
     tools: frozenset[str] | None = None
     depth: int = 0
     # The ids of the assistants that asked on the way to this one (not this one itself).
@@ -83,11 +86,15 @@ class Speaker:
 
     def uses(self, tool: str) -> bool:
         """All speakers share the built-in tools; authorization belongs to the safety gate."""
-        return True  # Stored per-member tool lists are compatibility data, not capability gates.
+        return True  # Built-in harness tools are not connection grants.
 
     def uses_plugin(self, key: str) -> bool:
-        """All speakers may use enabled connections under the same tool tiers and approvals."""
-        return True
+        """Respect owner-selected connections without restricting built-in harness tools."""
+        server = plugin_server(key)
+        if self.tools is None or server is None or server in {"local", "computer", "media"} or server.startswith("computer-access-"):
+            return True
+        allowed = {(plugin_server(item) or item).casefold() for item in self.tools}
+        return server.casefold() in allowed
 
     @property
     def may_ask(self) -> bool:
@@ -106,6 +113,6 @@ class Speaker:
         return replace(self, depth=asker.depth + 1, chain=asker.chain | {asker.id})
 
 
-# Identity alone grants no management authority. Live callers resolve the primary
-# capability from MembersService.speaker and the store's current primary_id.
+# Live callers recheck member existence, owner-private scope and approvals.
+# The chief capability is a coordination duty, not a management permission level.
 RAPHAEL = Speaker()

@@ -1,6 +1,7 @@
 """Local desktops as a PluginHub adapter, under the existing gate and snapshots."""
 # Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses/NOTICES.md.
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import base64
 import itertools
@@ -45,11 +46,11 @@ def plain_read(command):
                            words[0] == "date" and all(word.startswith("+") for word in words[1:]))
 
 # The line a member shows while another has the desktop (one line per wait, never one per poll).
-WAITING_FOR = {
+WAITING_FOR = with_ui_words({
     "zh-TW": "正在等 {who} 用完電腦",
     "ja": "{who} がコンピューターを使い終わるのを待っています",
     "en": "Waiting for {who} to finish with the computer",
-}
+})
 
 
 @contextmanager
@@ -178,7 +179,7 @@ class VmTools:
     def _repair_notice(self, target):
         progress, language = _NOTE.get()
         if progress:
-            progress({"zh-TW": "已自動修復電腦連線，工作區與登入資料已保留", "ja": "接続を自動修復しました。ワークスペースとログインは保持されています"}.get(language,
+            progress(with_ui_words({"zh-TW": "已自動修復電腦連線，工作區與登入資料已保留", "ja": "接続を自動修復しました。ワークスペースとログインは保持されています", "en": "Repaired the computer connection; workspace and sign-ins were kept"}, lambda _ui_language: ui_word('Repaired the computer connection; workspace and sign-ins were kept', _ui_language)).get(language,
                 "Repaired the computer connection; workspace and sign-ins were kept"))
 
     async def _disk_notice(self, target):
@@ -193,14 +194,14 @@ class VmTools:
             return  # Disk diagnostics never block the owner's work.
         if folders:
             names = ", ".join(f"{path} ({size / 1024:.0f} MiB)" for size, path in folders)
-            publish({"zh-TW": f"電腦磁碟快滿了。最大的資料夾：{names}。要我清理哪些？刪除前會先徵求你的同意。",
-                "ja": f"ディスクの空き容量が少なくなっています。大きいフォルダー：{names}。削除する前に確認します。どれを整理しますか？"}.get(language,
+            publish(with_ui_words({"zh-TW": f"電腦磁碟快滿了。最大的資料夾：{names}。要我清理哪些？刪除前會先徵求你的同意。",
+                "ja": f"ディスクの空き容量が少なくなっています。大きいフォルダー：{names}。削除する前に確認します。どれを整理しますか？", "en": f"The computer disk is nearly full. Largest folders: {names}. Which should I clean up? I will ask before deleting anything."}, lambda _ui_language: ui_word('The computer disk is nearly full. Largest folders: {p0}. Which should I clean up? I will ask before deleting anything.', _ui_language).format(p0=names)).get(language,
                 f"The computer disk is nearly full. Largest folders: {names}. Which should I clean up? I will ask before deleting anything."))
 
     def _rebuild_notice(self, target):
         progress, language = _NOTE.get()
         if progress:
-            progress({"zh-TW": "正在更新電腦映像，工作區與登入資料會保留", "ja": "コンピューターを更新します。ワークスペースとログインは保持されます"}.get(language,
+            progress(with_ui_words({"zh-TW": "正在更新電腦映像，工作區與登入資料會保留", "ja": "コンピューターを更新します。ワークスペースとログインは保持されます", "en": "Updating the computer image; workspace and sign-ins will be preserved"}, lambda _ui_language: ui_word('Updating the computer image; workspace and sign-ins will be preserved', _ui_language)).get(language,
                 "Updating the computer image; workspace and sign-ins will be preserved"))
 
     def bind_computer_gate(self, gate):
@@ -440,7 +441,7 @@ class VmTools:
         async def announce():
             await asyncio.sleep(self.read_progress_s)
             if progress:
-                progress({"zh-TW": "仍在讀取電腦畫面", "ja": "画面を読み取り中です"}.get(language, "Still reading the computer screen"))
+                progress(with_ui_words({"zh-TW": "仍在讀取電腦畫面", "ja": "画面を読み取り中です", "en": "Still reading the computer screen"}, lambda _ui_language: ui_word('Still reading the computer screen', _ui_language)).get(language, "Still reading the computer screen"))
         notice = asyncio.create_task(announce()) if reading else None
         try:
             result = await self._call(key, arguments, approver=approver, task_id=task_id, pool=pool)

@@ -3,6 +3,7 @@
 import pytest
 
 from raphael_core.home_digest import health
+from raphael_core.ui_words import NEW_LANGUAGES, ui_word
 
 
 def observe(rig, **data):
@@ -129,3 +130,23 @@ async def test_member_selection_also_keeps_the_openrouter_key_when_provider_is_d
         {"id": "openrouter", "name": "OpenRouter", "enabled": False, "has_key": False, "status": "auth"}])
     assert [check["id"] for check in checks] == ["brain:openrouter", "memory"]
     assert checks[0]["status"] == "warn"
+
+
+@pytest.mark.parametrize("language", NEW_LANGUAGES)
+async def test_health_uses_translated_names_and_failure_details_for_every_new_locale(rig, language):
+    rig.language = language
+    checks = observe(rig, brains=[{"id": "codex", "installed": True, "signed_in": False}],
+                     connections=[{"id": "test", "name": "Test", "state": "error"}],
+                     memory={"status": "unknown"})
+    assert checks[-1]["name"] == ui_word("Memory", language)
+    assert checks[-1]["detail"] == ui_word("Memory needs attention.", language)
+    assert checks[0]["detail"] == ui_word("Model is unavailable or needs sign-in.", language)
+    assert checks[1]["detail"] == ui_word("Connection is not ready.", language)
+    assert all(check["detail"] != "State is unknown." for check in checks)
+
+
+async def test_unknown_health_locale_uses_english_as_insurance(rig):
+    rig.language = "unknown"
+    checks = observe(rig, memory={"status": "unknown"})
+    assert checks[-1]["name"] == "Memory"
+    assert checks[-1]["detail"] == "Memory needs attention."

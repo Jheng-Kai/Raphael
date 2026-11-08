@@ -103,7 +103,7 @@ async def test_the_store_lists_every_service_and_which_are_added(rpc):
     assert [s["id"] for s in listed] == [s.id for s in catalog.SERVICES]
     assert all(s["server_id"] is None for s in listed)
     notion = by_id(listed)["notion"]
-    assert set(notion["examples"]) == {"zh-TW", "en", "ja"} and notion["url"].startswith("https://")
+    assert set(notion["examples"]) == set(catalog.LANGUAGES) and notion["url"].startswith("https://")
 
 
 # --- a login from the store ---------------------------------------------------------------------

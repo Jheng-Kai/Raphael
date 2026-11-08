@@ -32,8 +32,9 @@ class MemoryBrainError(OpenRouterError):
 
 
 class MemoryBrain:
-    def __init__(self, memory, member_id):
+    def __init__(self, memory, member_id, *, ledger=None):
         self.memory, self.member_id = memory, member_id
+        self.ledger = ledger
 
     async def complete_json(self, **kwargs):
         model = kwargs["model"]
@@ -44,7 +45,13 @@ class MemoryBrain:
             client = self.memory._base_client
             if hasattr(client, "for_purpose"):
                 client = client.for_purpose("agent")
-            return await client.complete_json(**kwargs)
+            result = await client.complete_json(**kwargs)
+            if self.ledger is not None:
+                self.ledger.add(model=result.model, cost_usd=result.cost_usd,
+                                prompt_tokens=result.prompt_tokens, completion_tokens=result.completion_tokens,
+                                ms=result.latency_ms,
+                                billing_source="subscription" if model.startswith("@chatgpt:") else None)
+            return result
         from ..agent.cli.loop import CliLoop
         from ..background.cli import RoomCliSessions
         from ..agent.ledger import Ledger
@@ -55,7 +62,7 @@ class MemoryBrain:
 
         loop = CliLoop(brains=self.memory._cli_brains, sessions=RoomCliSessions(), member_id=self.member_id,
                        conversation_id=f"memory-{self.member_id}", model=model,
-                       ledger=Ledger(self.memory._spend, "memory"), language="en", plain=True,
+                       ledger=self.ledger if self.ledger is not None else Ledger(self.memory._spend, "memory"), language="en", plain=True,
                        system=kwargs["system"], user=kwargs["user"], tools=[],
                        progress=lambda text: None, thinking=lambda text: None, event=lambda text: None,
                        execute=refuse, resume_session=False, rate_limit_waits=(), structured=kwargs["schema"], no_tools=True)

@@ -58,6 +58,8 @@ else:
     events = [event async for event in Driver(name, [sys.executable, str(script), name, str(stream)]).run(
         user="Prepare", system="Persona", endpoint="http://127.0.0.1:1/mcp", token="fake", permission=None)]
     assert [event.text for event in events if event.kind == "message"] == ["First.", "Second.", "Third."]
+    if name == "codex":
+        assert [event.data.get("final", False) for event in events if event.kind == "message"] == [False, False, True]
     sequence = [event.kind for event in events if event.kind in ("message", "tool_start", "tool_end")]
     assert sequence == ["message", "tool_start", "tool_end", "message", "tool_start", "tool_end", "message"]
     assert events[-1].kind == "final" and events[-1].text == "Third."

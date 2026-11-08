@@ -25,8 +25,8 @@ def test_members_and_rooms_do_not_create_brain_loops():
                 assert getattr(node.func, "id", "") not in {"NarratedLoop", "CliLoop", "OpenRouterClient"}, path
 
 
-def test_only_primary_is_offered_management_and_everyone_keeps_work_tools():
-    """Management follows the current primary capability; work tools retain parity."""
+def test_every_owner_private_speaker_has_the_same_management_and_work_tools():
+    """Owner-private management and work tools retain parity after primary changes."""
     from raphael_core.agent.speaker import Speaker
     from raphael_core.agent.capabilities import COORDINATION_TOOLS, MEMBER_ONLY_TOOLS
     from raphael_core.agent.team import team_tools_for
@@ -44,16 +44,14 @@ def test_only_primary_is_offered_management_and_everyone_keeps_work_tools():
         for chief in (True, False):
             speaker = Speaker(id=identifier, capabilities=frozenset({"chief"}) if chief else frozenset(), role="r")
             tools = dict(definitions_for(speaker))
-            assert (set(ADMIN) - {"team_overview"} <= tools.keys()) == chief
-            if not chief:
-                from raphael_core.management import self_definitions
-                assert set(tools) & MANAGEMENT_TOOLS == self_definitions(identifier).keys()
+            assert set(ADMIN) <= tools.keys()
+            assert set(ADMIN) - {"team_overview"} == set(tools) & MANAGEMENT_TOOLS
             for name in MEMBER_ONLY_TOOLS:
                 assert (name in tools) == (identifier > 0)
             assert "member_id" not in tools["routine_create"]["parameters"]["properties"]
             offered[(identifier, chief)] = ({name: item["parameters"] for name, item in tools.items() if name not in MANAGEMENT_TOOLS | MEMBER_ONLY_TOOLS.keys()},
                                             sorted(set(team_tools_for(Team(), speaker, always=True)) - COORDINATION_TOOLS.keys() - MANAGEMENT_TOOLS))
-            assert ("room_meeting" in team_tools_for(Team(), speaker, always=True)) == chief
+            assert "room_meeting" in team_tools_for(Team(), speaker, always=True)
     assert len({repr(value) for value in offered.values()}) == 1
     assert "ask_member" in set(next(iter(offered.values()))[1])
 

@@ -273,7 +273,8 @@ async def test_parent_releases_slot_real_file_result_and_resume_once(make_rig,tm
     assert rig.conn.execute('SELECT COUNT(*) FROM task_executions WHERE task_id=?',(parent,)).fetchone()[0]==2
     rig.service._deliver_handoffs()
     assert not rig.service._store.resume_from_inbox(parent)
-    assert AgentHistory(rig.conn).list(10,member_id=target.id)==[]
+    assert [t.id for t in AgentHistory(rig.conn).list(10,member_id=target.id)] == [child.turn_id]
+    assert AgentHistory(rig.conn).get(child.turn_id).question == ''
     assert '已核對成果' in AgentHistory(rig.conn).get(source.id).text
 
 
@@ -471,7 +472,7 @@ async def test_a_stopped_conversation_turn_stops_the_questions_it_sent(make_rig,
 
 
 @pytest.mark.parametrize('room',[True,False])
-async def test_assigned_work_reads_the_shared_notes_but_never_the_assignees_private_ones(make_rig,tmp_path,room):
+async def test_assigned_work_reads_its_own_private_context_and_shared_notes(make_rig,tmp_path,room):
     # Hand-offs read no memory at all, so a fact the owner gave the whole team never reached the work.
     rig=make_rig()
     target,source=setup(rig,room=room)
@@ -482,9 +483,9 @@ async def test_assigned_work_reads_the_shared_notes_but_never_the_assignees_priv
     [assigned]=rig.client.chat_calls
     shown=json.dumps(assigned['messages'],ensure_ascii=False)
     assert '品牌主色是金色' in shown
-    assert ('PRIVATE-CHAT' in shown) is room and ('PRIVATE-NOTE' in shown) is room
+    assert 'PRIVATE-CHAT' in shown and 'PRIVATE-NOTE' in shown
     tools=[tool['function']['name'] for tool in assigned['tools']]
-    assert 'memory_read' not in tools and ('history_search' in tools) is room
+    assert 'memory_read' not in tools and 'history_search' in tools
 
 
 @pytest.mark.parametrize('room',[True,False])

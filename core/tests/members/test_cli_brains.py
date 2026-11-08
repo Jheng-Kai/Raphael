@@ -78,7 +78,7 @@ else:
 
 
 @pytest.mark.parametrize("answer", ["", "The final answer."])
-async def test_completed_messages_survive_while_the_terminal_answer_is_authoritative(setup, tmp_path, monkeypatch, answer):
+async def test_completed_narration_stays_progress_and_the_terminal_answer_is_authoritative(setup, tmp_path, monkeypatch, answer):
     rig, team = setup
     teacher = member(team, model="cli:claude")
     monkeypatch.setattr("raphael_core.agent.cli.loop.RATE_LIMIT_WAITS_S", ())
@@ -91,12 +91,12 @@ print(json.dumps({"type":"result", "subtype":"success", "result":ANSWER}),flush=
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     replies = [message["text"] for message in turn["messages"] if message["kind"] == "reply"]
     if answer:
-        assert result["text"] == answer and replies == ["Still checking.", answer]
+        assert result["text"] == answer and replies == [answer]
     else:
         assert turn["status"] == "error"
         assert result["text"] == "Claude Code stopped before finishing its answer."
         assert [message["text"] for message in turn["messages"] if message["kind"] == "progress"] == ["Still checking."]
-        assert replies == ["Still checking.", result["text"]]
+        assert replies == [result["text"]]
 
 
 async def test_cli_failure_detail_is_saved_without_a_duplicate_public_event(setup, tmp_path, monkeypatch):
@@ -288,7 +288,7 @@ for line in sys.stdin:
     pending = await typed(rig, "Say hello", teacher.id)
     assert pending["status"] == "confirm", pending
     result = await rig.call("agent.confirm", {"id": pending["confirm"]["id"], "approved": decision != "no", "always": decision == "always"})
-    assert result["text"] == {"yes": "accept", "no": "decline", "always": "acceptForSession"}[decision]
+    assert result["text"] == {"yes": "accept", "no": "decline", "always": "accept"}[decision]
     turn = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"][0]
     assert turn["id"] == pending["turn_id"] and turn["status"] == "done"
     assert any(step["tool"] == "cli_permission" for step in turn["steps"])
@@ -440,9 +440,7 @@ for number, (name, arguments) in enumerate(CALLS,1):
     if name=="approve":
         content=json.loads(response["result"]["content"][0]["text"])
         assert content["behavior"]==("allow" if ALLOWED else "deny")
-        if ALLOWED=="always":
-            assert content["updatedPermissions"][0]["destination"]=="session"
-            assert content["updatedPermissions"][0]["rules"]==[{"toolName":arguments["tool_name"]}]
+        assert "updatedPermissions" not in content  # Recheck the app-data floor on every native call.
     else:
         assert response["result"]["isError"] is (not ALLOWED)
 print(json.dumps({"type":"result","subtype":"success","result":"Finished."}),flush=True)

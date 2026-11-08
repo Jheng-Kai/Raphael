@@ -87,6 +87,8 @@ class ToolGate:
         now_ms: Callable[[], int] = wall_clock_ms,
         safety: SafetyGuard | None = None,
     ) -> None:
+        from .data_floor import DataFloor
+        self.data_floor = DataFloor(conn)
         self._plugins = plugins
         bind_computer = getattr(plugins, "bind_computer_gate", None)
         if bind_computer:
@@ -122,9 +124,10 @@ class ToolGate:
         return self._plugins
 
     def firm_confirmation(self, name, arguments) -> bool:
-        from ..management import destructive
+        from ..management import destructive, background_requires_approval
         retention = self._settings.get("history_retention_days") if self._settings else None
-        return name.endswith("/fill_card") or name == "routine_delete" or destructive(name, arguments, retention)
+        return (self.data_floor.access(name, arguments) == "read" or background_requires_approval(name, arguments)
+                or name.endswith("/fill_card") or name == "routine_delete" or destructive(name, arguments, retention))
 
     @property
     def ask_first(self) -> bool:
@@ -146,13 +149,14 @@ class ToolGate:
     def tier(self, name: str, arguments: Mapping[str, Any] | None = None) -> Tier:
         """The tier of a tool or command now, for the call with `arguments` when they are given (a
         plugin may tier a call by what it is given). UnknownTool if it has none."""
-        return self._registry.tier(name, arguments)
+        tier = self._registry.tier(name, arguments)
+        return Tier.T3 if self.data_floor.access(name, arguments or {}) == "read" else tier
 
     def tier_now(self, name: str, arguments: Mapping[str, Any] | None = None) -> Tier | None:
         """The tier a tool has now, or None if it has none (a plugin's tool that was blocked, whose
         plugin was turned off or that the plugin describes differently since)."""
         try:
-            return self._registry.tier(name, arguments)
+            return self.tier(name, arguments)
         except UnknownTool:
             return None
 
@@ -196,6 +200,8 @@ class ToolGate:
     def _door(self, action: Action, approval: Approval | None) -> str:
         """The registry's check, and who said yes to the action: "user" for a yes of this very
         action or the owner's standing Always for its tool, "auto" for an action that needs none."""
+        if self.data_floor.access(action.tool, action.args) == "write":
+            raise NotApproved("Raphael data writes require management tools")
         try:
             self._registry.check(action, approval)
         except NotApproved:
@@ -210,6 +216,8 @@ class ToolGate:
         undone: its questions of the tier T2 and of the global 先詢問 switch are waived. The rules that ask
         and forbid are the screening's (`screen`), which every path asks before it makes a call that
         changes something."""
+        if self.data_floor.access(action.tool, action.args) is not None or self.firm_confirmation(action.tool, action.args):
+            return False
         if action.tool.startswith(("mcp:computer-access-", "mcp:local/")):
             return False
         tier = self.tier_now(action.tool, action.args)
@@ -315,6 +323,10 @@ class ToolGate:
         was refused. `pool` keeps the connection to the tool's server open for the calls after
         this one. Never raises for a failure of the call: the result says what came of it (a
         cancellation is the exception, as everywhere)."""
+        from .data_floor import WRITE_REFUSAL
+        if self.data_floor.access(key, arguments) == "write":
+            self.record_unrun(key, outcome="blocked", task_id=task_id)
+            return PluginResult(False, "protected_data", WRITE_REFUSAL)
         plugins = self._plugins
         if plugins is None:
             return PluginResult(False, "blocked")
@@ -324,6 +336,10 @@ class ToolGate:
                 raise NotApproved(key)  # the call is not the action that was said yes to
             approver = self._door(action, approval)
         except (UnknownTool, NotApproved):
+            if self.data_floor.access(key, arguments) == "read":
+                from .data_floor import READ_CONSENT
+                self.record_unrun(key, outcome="blocked", task_id=task_id)
+                return PluginResult(False, "approval_required", READ_CONSENT)
             approver = "none"
         kept = {} if pool is None else {"pool": pool}  # a hub of a test may not know it
         try:

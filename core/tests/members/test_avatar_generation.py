@@ -17,6 +17,44 @@ from raphael_core.services.common import ServiceError
 PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==')
 
 
+@pytest.mark.parametrize('signed_in', [True, False])
+async def test_codex_avatar_uses_subscription_backend_and_shared_sign_in_repair(rig, tmp_path, signed_in):
+    from raphael_core.agent.cli.images import REFERENCE
+    from raphael_core.services.attachments import Attachment
+    from raphael_core.services.attachment_store import AttachmentStore
+    from raphael_core.services.generation import Generation
+
+    class Subscription:
+        def choices(self):
+            return [{'reference': REFERENCE, 'media': ['image']}] if signed_in else []
+
+        async def refresh(self):
+            return signed_in
+
+        async def generate(self, prompt, *, square, charge):
+            assert square and 'round avatar' in prompt
+            charge({'input_tokens': 5})
+            return Attachment('generated.png', 'image/png', PNG)
+
+    service = Generation(SimpleNamespace(media_choices=lambda kind: []), AttachmentStore(tmp_path), subscription_images=Subscription())
+    rig.rpc.generation = service
+    rig.service._settings.set('image_model', REFERENCE)
+    member = (await rig.call('members.create', {'name': 'Moss', 'greet': False}))['member']
+    if signed_in:
+        result = await rig.call('members.avatar_generate', {'member_id': member['id'], 'prompt': 'A fox'})
+        assert result['model'] == REFERENCE and result['candidate']['mime'] == 'image/png'
+        assert base64.b64decode(result['candidate']['data']) == PNG
+        assert rig.service.store.member(member['id']).avatar == ''
+        assert tuple(rig.conn.execute('SELECT purpose,model,cost_usd FROM spend').fetchone()) == ('image', REFERENCE, 0)
+    else:
+        with pytest.raises(RpcError) as caught:
+            await rig.call('members.avatar_generate', {'member_id': 0, 'prompt': 'A fox'})
+        assert caught.value.data['kind'] == 'auth_expired'
+        assert caught.value.data['missing'] == {'resource': 'codex', 'requirement': 'cli', 'state': 'missing', 'repair': 'models'}
+        assert caught.value.data['target'] == {'pane': 'models', 'resource': 'codex'}
+    await service.aclose()
+
+
 def backend(rig, *, reference='@chosen:picture', mime='image/png', raw=PNG):
     providers = SimpleNamespace(resolve=lambda ref: ('chosen', 'picture'),
                                 config=lambda pid: {'kind': 'openai', 'enabled': True},

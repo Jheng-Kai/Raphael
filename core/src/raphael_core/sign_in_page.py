@@ -4,6 +4,7 @@ It loads nothing and asks nothing, and it never repeats what the address carried
 the one-time code as soon as it is read, so that the browser's history does not keep it.
 """
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import html
 import secrets
 from dataclasses import dataclass
@@ -40,7 +41,7 @@ a:focus-visible{outline:2px solid var(--text);outline-offset:2px}
 @media(prefers-reduced-motion:reduce){main,.mark path{animation:none}}
 """
 
-_CHATGPT = {
+_CHATGPT = with_ui_words({
     "zh": {
         "ok": ("已連上 ChatGPT", "可以關閉這個分頁，回到拉斐爾。"),
         "no_plan": ("還不能使用方案額度", "這次登入沒有允許使用 ChatGPT 方案。回到拉斐爾再按一次，並在 OpenAI 的頁面允許。"),
@@ -86,7 +87,7 @@ _CHATGPT = {
                   "利用分は ChatGPT プランに計上され、いつでも切断できます。"),
         "usage": "利用状況を管理",
     },
-}
+})
 USAGE_URL = "https://chatgpt.com/settings/usage"
 
 
@@ -97,9 +98,10 @@ class SignInPage:
 
 
 def language_of(value: str) -> str:
-    """"zh-TW", "ja-JP,ja;q=0.9" or anything else as the page's language."""
-    lower = (value or "").lower()
-    return "zh" if lower.startswith("zh") else "ja" if lower.startswith("ja") else "en"
+    """Resolve the first requested UI locale, retaining the original Traditional Chinese key."""
+    from .ui_languages import normalize_language
+    language = normalize_language((value or "").split(",")[0].split(";")[0])
+    return "zh" if language == "zh-TW" else language
 
 
 def _icon(paths: str) -> str:
@@ -110,7 +112,7 @@ def sign_in_page(language: str, *, ok: bool, title: str, text: str, who: str = "
                  facts: tuple[tuple[str, str], ...] = (), link: tuple[str, str] | None = None) -> SignInPage:
     """The page, in `language` (see `language_of`); every word and address is escaped here."""
     nonce = secrets.token_urlsafe(16)
-    lang = {"zh": "zh-Hant", "ja": "ja"}.get(language, "en")
+    lang = "zh-Hant" if language == "zh" else language_of(language)
     rows = "".join(f"<li>{_icon(paths)}<span>{html.escape(words)}</span></li>" for paths, words in facts)
     body = (
         f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><title>{html.escape(title)}</title>'
@@ -128,6 +130,7 @@ def sign_in_page(language: str, *, ok: bool, title: str, text: str, who: str = "
 
 def chatgpt_page(language: str, outcome: str, who: str = "") -> SignInPage:
     """What became of a sign-in with ChatGPT. An outcome this page has no words for is a failed check."""
+    language = language_of(language)
     words = _CHATGPT[language]
     if outcome == "ok":
         title, text = words["ok"]

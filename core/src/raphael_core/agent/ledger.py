@@ -33,6 +33,8 @@ class Ledger:
         self.total += cost if isinstance(cost, (int, float)) and math.isfinite(cost) and cost >= 0 else 0
         self.calls.append({"model": billing["model"], "at_ms": self._spend._now_ms(), "ms": 0,
                            "tokens": 0, "cost_usd": cost or 0, "outcome": "ok" if cost is not None else "cost_unknown"})
+        if billing.get("billing_source") == "subscription":
+            self.calls[-1].update(cost_usd=None, outcome="subscription", billing_source="subscription")
 
     def add(
         self,
@@ -43,6 +45,7 @@ class Ledger:
         completion_tokens: int = 0,
         ms: int = 0,
         outcome: str = "ok",
+        billing_source: str | None = None,
     ) -> None:
         """Write down a call that was paid for. A cost the spend refuses (negative, not a number)
         is counted as nothing, and a database that fails does not lose the request: both are
@@ -55,6 +58,8 @@ class Ledger:
         self.calls.append({"model": model or "", "at_ms": self._spend._now_ms(), "ms": max(0, int(ms)),
                            "tokens": max(0, prompt_tokens) + max(0, completion_tokens),
                            "cost_usd": cost_usd, "outcome": outcome})
+        if billing_source == "subscription":
+            self.calls[-1].update(cost_usd=None, billing_source="subscription")
         if model:
             self.model = model
         try:

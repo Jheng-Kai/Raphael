@@ -69,6 +69,7 @@ class ProviderRegistry:
         self._successful_models = self._load(SUCCESSES_KEY, {})
         self.settings = SettingsStore(conn)
         self.chatgpt = ChatGPTProvider(ChatGPTAuth(conn, self._credential, http=self._http))
+        self.image_subscriptions = None
 
     def record_success(self, reference):
         """Remember only models that actually answered, never model-list discoveries."""
@@ -402,6 +403,8 @@ class ProviderRegistry:
                 reference = row["id"] if pid == "openrouter" else f"@{pid}:{row['id']}"
                 if kind in row.get("media", []) and self.available(reference):
                     choices.append({**row, "reference": reference})
+        if kind == "image" and self.image_subscriptions is not None:
+            choices.extend(self.image_subscriptions.choices())
         return choices
 
     def remember_openrouter_media(self, rows):
@@ -432,6 +435,8 @@ class ProviderRegistry:
         return entries
 
     async def refresh_catalog(self):
+        if self.image_subscriptions is not None:
+            await self.image_subscriptions.refresh()
         async def fetch(pid):
             try:
                 await self.discover(pid)

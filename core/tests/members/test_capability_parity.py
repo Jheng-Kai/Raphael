@@ -41,7 +41,7 @@ async def test_production_turns_offer_every_speaker_the_same_abilities(setup, cl
             assert duty in PARITY_EXCEPTIONS
             assert (tool in names) == (index > 0)
         assert "set_my_job" not in names
-        assert ("room_meeting" in names) == (index == 2)
+        assert "room_meeting" in names
         assert not names & MANAGEMENT_TOOLS
         assert "find_tools" in names  # Every speaker can discover deferred shared work tools.
         offers.append({item["function"]["name"]: item["function"] for item in tools

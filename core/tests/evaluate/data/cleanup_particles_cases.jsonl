@@ -1,0 +1,6 @@
+{"id":"spoken-tag","input":"這樣分層比較容易維護不是嗎下一步先補文件","must_contain":["不是嗎","補文件"],"must_not_contain":[]}
+{"id":"spoken-ma-tone","input":"先讓圖示小一點嘛其他地方維持原樣","must_contain":["嘛","維持原樣"],"must_not_contain":["嗎","？","?"]}
+{"id":"spoken-ba","input":"先用舊版設定吧明天再一起確認","must_contain":["吧","明天"],"must_not_contain":["嗎","？","?"]}
+{"id":"spoken-ne","input":"這份清單的順序呢先別改內容","must_contain":["呢","別改內容"],"must_not_contain":["嗎"]}
+{"id":"spoken-a","input":"這個結果很清楚啊先保存起來","must_contain":["啊","保存起來"],"must_not_contain":["嗎","？","?"]}
+{"id":"statement-no-particle","input":"我想把字體放大一點今天先不用調顏色","must_contain":["字體","不用調顏色"],"must_not_contain":["嗎","？","?"]}

@@ -151,6 +151,7 @@ class RunAnalytics:
         groups = {}
         for grouping in ("member", "model", "day", "provider", "routine"):
             values = defaultdict(lambda: {"tokens": 0, "cost_usd": 0, "runs": 0})
+            subscription_models = set()
             for row in rows:
                 if grouping == "model":
                     spans = row.get("model_spans") or [row]
@@ -160,7 +161,9 @@ class RunAnalytics:
                         entry = values[label]
                         entry["tokens"] += span.get("tokens") or 0
                         # Old single-model metrics omitted the cost; their run total is attributable.
-                        entry["cost_usd"] += span.get("cost_usd", row["cost_usd"] if len(spans) == 1 else 0)
+                        if span.get("billing_source") == "subscription":
+                            subscription_models.add(label)
+                        entry["cost_usd"] += span.get("cost_usd", row["cost_usd"] if len(spans) == 1 else 0) or 0
                         if label not in seen:
                             entry["runs"] += 1
                             seen.add(label)
@@ -175,8 +178,8 @@ class RunAnalytics:
                 entry["cost_usd"] += row["cost_usd"]
                 entry["runs"] += 1
             if grouping == "model":
-                for value in values.values():
-                    if value["tokens"] and not value["cost_usd"]:
+                for label, value in values.items():
+                    if (value["tokens"] or label in subscription_models) and not value["cost_usd"]:
                         value["cost_usd"] = None
             groups[grouping] = sorted([{"label": label, **value} for label, value in values.items()], key=lambda v: (-v["tokens"], -(v["cost_usd"] or 0), v["label"]))
         return {"range": period, "start_day": start.isoformat() if start else None, "end_day": (end-timedelta(days=1)).isoformat(),

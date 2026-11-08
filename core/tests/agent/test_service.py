@@ -257,9 +257,9 @@ async def test_the_other_methods_check_their_params(rig, method, params):
 @pytest.mark.parametrize(
     ("given", "prefix"),
     [("zh-TW", "了"), ("zh", "了"), ("zh-Hant-TW", "了"), ("ja", "了"), ("en", "Understood"),
-     ("en-US", "Understood"), ("fr", "Understood")],
+     ("en-US", "Understood"), ("fr", "Compris")],
 )  # fmt: skip
-async def test_the_ui_language_is_taken_for_one_of_the_three(rig, client, given, prefix):
+async def test_the_ui_language_selects_its_translated_words(rig, client, given, prefix):
     client.decisions.append(decision("command", "volume_mute"))
     assert (await rig.ask("mute", language=given))["prefix"] == prefix
 

@@ -51,11 +51,12 @@ async def test_empty_overview_preserves_service_numbers_and_has_no_connector(hom
 
 
 @pytest.mark.parametrize("kind", ["routine", "calendar", "meeting", "skill_learned"])
-async def test_home_and_sidebar_do_not_read_receipt_transport_as_a_report(home, rig, kind):
+@pytest.mark.parametrize("action", ["created", "updated"])
+async def test_home_and_sidebar_do_not_read_receipt_transport_as_a_report(home, rig, kind, action):
     member = (await rig.call("members.create", {"name": "Sample colleague"}))["member"]["id"]
     turn_id = add(rig, member)
     history = rig.service._history
-    raw = json.dumps({"type": kind, "action": "created", "id": 987654321, "name": "Sample orchard"})
+    raw = json.dumps({"type": kind, "action": action, "id": 987654321, "name": "Sample orchard"})
     history.add_message(turn_id, "event", raw)
     value = await rig.call("home.overview")
     rows = (await rig.call("members.list"))["members"]

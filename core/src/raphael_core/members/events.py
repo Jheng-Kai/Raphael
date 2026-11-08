@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 
 from ..agent.policy import Tier
 from ..worker.guards import wrap_untrusted
+from ..ui_languages import normalize_language
+from ..ui_words import NEW_LANGUAGES, ui_word
 
 POLL_MS = 180_000
 BURST = 5
@@ -66,6 +68,11 @@ def clean_when(value):
 
 
 def failure_message(language, name, *, stop=False):
+    language = normalize_language(language)
+    if language in NEW_LANGUAGES:
+        source = ("{name} connection or read permission is missing. Open Settings > Connections to reconnect and enable its read tool."
+                  if stop else "Could not check {name}; retrying later.")
+        return ui_word(source, language).format(name=name)
     if language == "zh-TW":
         message = f"{name} 連接或讀取權限無法使用。請到設定 › 連接加入或重新連接，並開啟讀取工具；可開啟連接設定。" if stop else f"{name} 檢查失敗，稍後重試。"
     elif language == "ja":

@@ -498,7 +498,9 @@ class RpcDriver:
                 saved = await self.app.call("members.template_card_export", {"id": identifier})
                 latest = await self.turn_of(member, turn["id"])
                 if (json.loads(saved["text"]) != review["template"]
-                        or review["template"]["instructions"] != "Make public guides clear."
+                        or not review["template"]["instructions"].strip()
+                        or not review["template"].get("description", "").strip()
+                        or review["findings"]
                         or latest["templates"][0]["state"] != "saved"):
                     reasons.append("template_snapshot")
         else:

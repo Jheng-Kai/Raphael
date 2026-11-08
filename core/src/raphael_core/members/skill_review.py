@@ -7,6 +7,7 @@ import logging
 from ..bots.homes import redact_secrets
 from ..memory.brain import failure_summary
 from ..memory.doctrine import DOCTRINE
+from .skill_names import SKILL_NAME_RULE
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ At most three changes; an empty array is valid. Each text is a SKILL.md with nam
 and exactly these required level-two headings: When to use, Procedure, Pitfalls, Verification.
 Capture reusable procedures, never private owner facts, credentials or permission grants. No tools are available.
 
-""" + DOCTRINE
+""" + SKILL_NAME_RULE + ". Keep an existing name unchanged when editing.\n\n" + DOCTRINE
 
 
 class SkillReview:
@@ -110,8 +111,7 @@ class SkillReview:
                     identifiers.add(identifier)
                     proposals.append(args)
                 for args in proposals:
-                    learned = cap.manage_skill(member, args)
-                    self.members.skill_learned(member, learned, turns[-1].id)
+                    self.members.learn_skill(member, args, turns[-1].id)
                 self.memory._set_state(self._key(member, conversation, "through"), turns[-1].id)
                 self.memory._set_state(failure_key, 0)
             except Exception as error:

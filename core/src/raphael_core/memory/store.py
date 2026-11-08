@@ -39,6 +39,7 @@ never change confirmed entries. Only matching owner words or the owner document 
 Nothing here logs an entry.
 """
 
+from raphael_core.ui_words import ui_word, with_ui_words
 import hashlib
 import logging
 import re
@@ -70,7 +71,7 @@ _BLANK_LINE = re.compile(r"\n[ \t]*(?:\n[ \t]*)+")
 _TOLD = re.compile(r" — [^\n—]{1,60} · \d{4}-\d{2}-\d{2}$")
 
 # The mark of an entry nobody confirmed, in the language of the owner's screen.
-UNCONFIRMED = {"zh-TW": "（待確認）", "ja": "（未確認）", "en": "(unconfirmed) "}
+UNCONFIRMED = with_ui_words({"zh-TW": "（待確認）", "ja": "（未確認）", "en": "(unconfirmed) "})
 _UNCONFIRMED_MARKS = tuple(UNCONFIRMED.values())
 
 

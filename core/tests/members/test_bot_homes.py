@@ -15,21 +15,19 @@ async def test_member_brain_is_used_instead_of_the_global_brain(rig):
     assert rig.service.speaker(member["id"]).model == "cli:codex"
 
 
-async def test_management_moves_with_primary_and_work_tools_stay_with_everyone(rig):
+async def test_default_contact_moves_while_management_and_work_tools_stay_equal(rig):
     member = (await rig.call("members.create", {"name": "Alice"}))["member"]
     await rig.call("members.set_primary", {"id": member["id"]})
     assert rig.service.team_context(0, "en")["chief_id"] == member["id"]
-    from raphael_core.management import MANAGEMENT_TOOLS, self_definitions
-    # Work context and self administration remain available; peer administration follows the primary.
+    from raphael_core.management import MANAGEMENT_TOOLS, DEFINITIONS
+    # Management and work stay available to both owner-private speakers.
     for speaker in (member["id"], 0):
         assert "team_overview" in dict(definitions_for(rig.service.speaker(speaker)))
         assert (await rig.service.admin_tool(speaker, "team_overview", {}))["members"]
         available = set(dict(definitions_for(rig.service.speaker(speaker)))) & MANAGEMENT_TOOLS
         assert "member_manage" in available
-        if speaker == 0:
-            assert available == set(dict(self_definitions(0)))
-    with pytest.raises(Exception, match="current primary contact"):
-        await rig.service.admin_tool(0, "group_create", {"name": "Denied"}, interactive=True)
+        assert available == set(DEFINITIONS)
+    assert (await rig.service.admin_tool(0, "group_create", {"name": "Ordinary"}, interactive=True))["group"]
     assert (await rig.service.admin_tool(member["id"], "group_create", {"name": "Allowed"}, interactive=True))["group"]
     with pytest.raises(Exception):
         await rig.service.admin_tool(999, "team_overview", {})
@@ -66,7 +64,7 @@ def test_no_member_may_rewrite_who_it_is(tmp_path):
 
 
 async def test_raphael_has_the_same_skill_store_and_home(rig):
-    skill = rig.service.capabilities.keep_skill(0, "owner", "---\nname: Review\ndescription: Review work\n---\nRead carefully.\n")
+    skill = rig.service.capabilities.keep_skill(0, "owner", "---\nname: review\ndescription: Review work\n---\nRead carefully.\n")
     assert rig.service.enabled_skills(0)[0]["id"] == skill["id"]
     assert rig.service.capabilities._path(0, skill["id"]).is_relative_to(rig.local / "bots" / "0" / "skills")
 
@@ -74,7 +72,7 @@ async def test_raphael_has_the_same_skill_store_and_home(rig):
 async def test_skill_enable_revision_can_be_reverted_without_changing_the_document(rig):
     from raphael_core.bots.homes import HomeError, digest
     capabilities = rig.service.capabilities
-    skill = capabilities.keep_skill(0, "owner", "---\nname: Review\ndescription: Review work\n---\nRead carefully.\n")
+    skill = capabilities.keep_skill(0, "owner", "---\nname: review\ndescription: Review work\n---\nRead carefully.\n")
     capabilities.update_skill(0, skill["id"], False)
     entry = capabilities.homes.journal(0)[-1]
     state = capabilities.homes.state(0) / "skills.json"
@@ -83,7 +81,7 @@ async def test_skill_enable_revision_can_be_reverted_without_changing_the_docume
         capabilities.revert_state(0, entry["id"], expected_hash="stale")
     capabilities.revert_state(0, entry["id"], expected_hash=current)
     assert capabilities.skills(0)[0]["enabled"]
-    assert capabilities.read_skill(0, "Review").endswith("Read carefully.\n")
+    assert capabilities.read_skill(0, "review").endswith("Read carefully.\n")
 
 
 async def test_owner_can_explicitly_share_a_team_decision(rig):

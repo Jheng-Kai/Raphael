@@ -409,7 +409,7 @@ async def test_a_quick_narrated_final_speaks_japanese_and_waits_for_voice_but_pr
 
     async def finish(**kwargs):
         assert speaker.said == []
-        assert announced[-1] == ("running", ["reply", "progress"])
+        assert announced[-1] == ("running", ["progress"])
         return chat(json.dumps({"prefix": prefix, "text": shown, "say_ja": japanese, "detail": ""}))
 
     client.decisions.append(decision("answer"))
@@ -428,13 +428,13 @@ async def test_a_quick_narrated_final_speaks_japanese_and_waits_for_voice_but_pr
     assert (result["prefix"], result["text"]) == (prefix, shown)
     assert speaker.said == [("解", japanese)]
     assert len(announced) == count + 1
-    assert announced[-1] == ("done", ["reply", "progress", "reply"])
+    assert announced[-1] == ("done", ["progress", "reply"])
     assert len(client.chat_calls) == 2 and client.json_calls == []
     first = client.chat_calls[0]["messages"]
     assert '"say_ja"' in first[0]["content"]
     assert first[1]["content"].rstrip().endswith('in Japanese for the configured voice; this does not change the reply language.')
     [turn] = await rig.turns()
-    assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["reply", "progress", "reply"]
+    assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["progress", "reply"]
     assert japanese not in repr(result) + repr(turn) + caplog.text
     assert japanese not in repr([tuple(row) for row in rig.conn.execute("SELECT * FROM agent_messages")])
 

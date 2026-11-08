@@ -174,15 +174,11 @@ TIERS.update({"connections_list": Tier.T0})
 
 
 def definitions_for(speaker):
-    """Shared work tools, self administration and primary-only peer management."""
-    from ..management import MANAGEMENT_TOOLS, self_definitions
-    own = self_definitions(speaker.id)
+    """Shared work and owner-private administration, independent of primary contact."""
+    from ..management import MANAGEMENT_TOOLS
     for name, item in DEFINITIONS.items():
-        if name in MANAGEMENT_TOOLS:
-            if speaker.depth or (not speaker.is_chief and name not in own):
-                continue
-            if not speaker.is_chief:
-                item = own[name]
+        if name in MANAGEMENT_TOOLS and speaker.depth:
+            continue
         if name in MEMBER_ONLY_TOOLS and speaker.id == 0:
             continue
         if name == SET_MY_JOB and not speaker.has_no_job:

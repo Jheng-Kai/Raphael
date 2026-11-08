@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.conftest import FakeActions, FakeOpenRouter
+from agent.conftest import FakeActions, FakeOpenRouter, completion
 from agent.test_narration import chat
 from agent.test_service import Rig as AgentRig
 from members.test_answering import Team, live_said
@@ -26,10 +26,19 @@ from raphael_core.messaging.service import MessagingService, member_account, sec
 from raphael_core.protocol import INVALID_PARAMS, RpcError
 
 
+def public_recipe(**changes):
+    return {"format": "raphael-member", "version": 1, "name": "Guide editor", "role": "Writer",
+            "personality": "Clear and patient", "instructions": "Help anyone write clear public guides.",
+            "reply_style": "full", "description": "I clarify public guides.", "skills": [],
+            "routines": [], "connections": [], **changes}
+
+
 @pytest.fixture
 async def rig(conn, tmp_path):
     team = Team(conn, tmp_path)
     brain = FakeOpenRouter()
+    team.memory._base_client = brain
+    brain.replies = [completion(public_recipe())]
     vault, events, checks, channels = MemoryVault(), [], [], {}
     hub = IntegrationsService(conn, tmp_path, vault)
     now = [1_800_000_000_000]
@@ -253,7 +262,8 @@ async def test_template_card_is_snapshot_with_review_export_publish_and_descript
     assert view["counts"] == {"skills": 0, "routines": 0} and view["avatar"] == "slime:shuna"
     rig.team.members.store.update_member(rig.member.id, instructions="Changed after snapshot")
     review = await rig.agent.call("members.template_card", {"id": view["id"]})
-    assert review["template"]["instructions"] == "Make public guides clear"
+    assert review["template"]["instructions"] == "Help anyone write clear public guides."
+    assert len(rig.brain.json_calls) == 1
     saved = await rig.agent.call("members.template_card_export", {"id": view["id"]})
     assert json.loads(saved["text"]) == review["template"] and "\n  " in saved["text"]
     assert rig.team.members.template_cards.views([result["turn_id"]])[result["turn_id"]][0]["state"] == "saved"
@@ -277,10 +287,13 @@ async def test_template_card_is_snapshot_with_review_export_publish_and_descript
 
 async def test_secret_findings_block_snapshot_export_and_publish_even_after_live_member_is_clean(rig):
     rig.team.members.store.update_member(rig.member.id, instructions="api_key: synthetic_private_credential_123456789")
+    rig.brain.replies = [completion(public_recipe(instructions="api_key: synthetic_private_credential_123456789")) for _ in range(2)]
     rig.brain.chats = [chat("", ("share_template", {"description": "I write guides."})), live_said("Review first.")]
     result = await rig.ask("share-template")
     [view] = rig.team.members.template_cards.views([result["turn_id"]])[result["turn_id"]]
     assert view["findings"] == [{"kind": "secret", "path": "template.instructions"}]
+    assert len(rig.brain.json_calls) == 2
+    assert "gate_reasons" in rig.brain.json_calls[1]["user"]
     rig.team.members.store.update_member(rig.member.id, instructions="Clean now")
     for method in ("members.template_card_export", "members.template_card_publish"):
         with pytest.raises(RpcError, match="Remove private credentials from the member recipe first"):
@@ -299,7 +312,88 @@ def test_tools_have_owner_card_tier_and_member_only_share_offer():
 @pytest.mark.parametrize("value", [True, 7, None, "x" * 281])
 async def test_template_description_validation_has_no_card_side_effect(rig, value):
     with pytest.raises(RpcError):
-        rig.team.members.template_cards.show(1, rig.member.id, value)
+        await rig.team.members.template_cards.show(1, rig.member.id, value)
+    assert not rig.conn.execute("SELECT * FROM member_template_cards").fetchall()
+
+
+@pytest.mark.parametrize("panel", [False, True])
+async def test_member_authors_a_public_recipe_on_its_own_model_before_any_card(rig, monkeypatch, panel):
+    member = rig.member.id
+    service = rig.team.members
+    service.store.update_member(member, model="test/own-writer?effort=high",
+                                instructions="Help owner Alice at alice@private.example. api_key: synthetic_private_credential_123456789")
+    service.capabilities.keep_recipe(member, "---\nname: review\ndescription: Review drafts\n---\nSend drafts to alice@private.example.",
+                                     {"references/steps.md": "Check wording and private account ABC-123."})
+    service.capabilities.homes.keep(member, "MEMORY.md", "PRIVATE-MEMORY-NEVER-READ")
+    service.store.create_routine(member_id=member, title="Morning review", prompt="Review Gmail for alice@private.example",
+                                 schedule={"kind": "daily", "time": "07:13"}, next_run_ms=None)
+    monkeypatch.setattr(service, "_connections", lambda: [{"id": "gmail", "name": "Gmail", "services": ["gmail"]}])
+    entered, release = asyncio.Event(), asyncio.Event()
+    async def author(**kwargs):
+        rig.brain.json_calls.append(kwargs)
+        entered.set()
+        await release.wait()
+        return completion(public_recipe(connections=["Gmail"], skills=[{"text": "---\nname: review\ndescription: Review drafts\n---\nCheck wording."}],
+                                         routines=[{"title": "Review", "prompt": "Review the selected inbox", "schedule": {"kind": "daily", "time": "09:00"}, "when": None}]),
+                          model=kwargs["model"], cost=.0007)
+    monkeypatch.setattr(rig.brain, "complete_json", author)
+    rig.brain.chats = [chat("", ("share_template", {"description": "Share my work"})), live_said("Review my public recipe.")]
+    args = {"session_id": "share", "member_id": member, "source": "app", "text": "Share your template", "ui_language": "en"}
+    if panel:
+        args["intent"] = "share-template"
+    task = asyncio.create_task(rig.agent.call("agent.ask", args))
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        assert not service.template_cards.views([1])
+        assert rig.conn.execute("SELECT status FROM agent_turns ORDER BY id DESC").fetchone()[0] == "running"
+        release.set()
+        result = await task
+    finally:
+        release.set()
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+    [call] = rig.brain.json_calls
+    assert call["model"] == "test/own-writer?effort=high" and call["fallbacks"] == []
+    assert call["schema_name"] == "public_member_template"
+    assert "references/steps.md" in call["user"] and "07:13" in call["user"] and "Gmail" in call["user"]
+    assert "PRIVATE-MEMORY-NEVER-READ" not in call["user"]
+    assert "synthetic_private_credential_123456789" not in call["user"]
+    [view] = service.template_cards.views([result["turn_id"]])[result["turn_id"]]
+    review = await service.template_cards.review({"id": view["id"]})
+    assert not review["findings"] and view["counts"] == {"skills": 1, "routines": 1}
+    saved = await service.template_cards.save({"id": view["id"]})
+    assert "alice@private.example" not in saved["text"] and "Alice" not in saved["text"]
+    published = await service.template_cards.publish({"id": view["id"]})
+    assert published["url"]
+    calls = json.loads(rig.conn.execute("SELECT * FROM run_metrics WHERE kind='turn' AND run_id=?", (result["turn_id"],)).fetchone()[-1])
+    assert any(call["model"] == "test/own-writer?effort=high" and call["cost_usd"] == .0007 for call in calls)
+
+
+async def test_private_first_draft_gets_one_rewrite_and_then_a_clean_card(rig):
+    rig.brain.replies = [completion(public_recipe(instructions="Write to alice@private.example")), completion(public_recipe())]
+    rig.brain.chats = [chat("", ("share_template", {"description": "Share"})), live_said("Review my recipe.")]
+    result = await rig.ask("share-template")
+    [view] = rig.team.members.template_cards.views([result["turn_id"]])[result["turn_id"]]
+    assert not view["findings"] and len(rig.brain.json_calls) == 2
+    assert '"path": "template.instructions"' in rig.brain.json_calls[1]["user"]
+    assert rig.brain.json_calls[0]["model"] == rig.brain.json_calls[1]["model"]
+
+
+@pytest.mark.parametrize("failure", ["error", "cancel", "delete"])
+async def test_author_failure_or_invalidated_turn_never_copies_a_recipe(rig, monkeypatch, failure):
+    service = rig.team.members
+    turn = service._history.add(session_id="share", question="Share", route="answer", prefix="", text="", status="running", member_id=rig.member.id)
+    async def author(**kwargs):
+        if failure == "error":
+            raise TimeoutError()
+        if failure == "cancel":
+            raise asyncio.CancelledError()
+        service._history.delete(turn)
+        return completion(public_recipe())
+    monkeypatch.setattr(rig.brain, "complete_json", author)
+    with pytest.raises({"error": TimeoutError, "cancel": asyncio.CancelledError, "delete": RpcError}[failure]):
+        await service.template_cards.show(turn, rig.member.id, "Share")
     assert not rig.conn.execute("SELECT * FROM member_template_cards").fetchall()
 
 

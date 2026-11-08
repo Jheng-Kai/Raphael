@@ -1,5 +1,6 @@
 """The owner's standing computer permission, independent of the shared VM target."""
 
+from raphael_core.ui_words import ui_word, with_ui_words
 from ..clock import wall_clock_ms
 
 
@@ -37,17 +38,17 @@ class ComputerGrants:
 
 
 def refusal(language):
-    return {
+    return with_ui_words({
         "en": "Computer access is not granted. This routine cannot use the computer. Grant access in this member's private chat or press Start in its computer panel.",
         "zh-TW": "未取得電腦使用授權，此排程無法使用電腦。請在此成員的私人對話中授權，或按電腦面板的啟動。",
         "ja": "許可がないため、この定期実行はコンピューターを使用できません。このメンバーとの個別チャットで許可するか、パネルで起動してください。",
-    }.get(language, "Computer access is not granted. This routine cannot use the computer.")
+    }).get(language, "Computer access is not granted. This routine cannot use the computer.")
 
 
 def request_question(language, member, reason):
-    template = {
+    template = with_ui_words({
         "en": "Allow {member} to use the computer until you revoke access? {reason}",
         "zh-TW": "允許 {member} 使用電腦，直到你撤銷授權嗎？{reason}",
         "ja": "許可を取り消すまで、{member} にコンピューターの使用を許可しますか？{reason}",
-    }.get(language, "Allow {member} to use the computer until you revoke access? {reason}")
+    }).get(language, "Allow {member} to use the computer until you revoke access? {reason}")
     return template.format(member=member, reason=reason)

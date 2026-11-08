@@ -25,6 +25,12 @@ HANG_GUARD_S = 60
 
 
 class FakeClient(GuardianFakeClient):
+    async def complete_json(self, **kwargs):
+        from raphael_core.brain.openrouter import Completion
+        from test_chat_setup_share import public_recipe
+        assert kwargs["schema_name"] == "public_member_template" and kwargs["fallbacks"] == []
+        return Completion(public_recipe(), kwargs["model"], .001, 10, 10, 1)
+
     async def decide(self, **kwargs):
         from raphael_core.brain.openrouter import Decision
         return Decision(answers={key: {"type": "noul", "noul": 0.0} for key in kwargs["questions"]},

@@ -161,7 +161,7 @@ async def download_skills(source: object) -> list[tuple[str, str]]:
         raise MemberError("download", "could not download the repository's skill Markdown") from None
 
 
-def skill_metadata(text: str) -> tuple[str, str]:
+def skill_metadata(text: str, *, writing=False, previous_name=None) -> tuple[str, str]:
     """Read only plain metadata; YAML tags and object constructors are never interpreted."""
     lines = text.splitlines()
     values: dict[str, str] = {}
@@ -182,6 +182,9 @@ def skill_metadata(text: str) -> tuple[str, str]:
                     field = key
                 else:
                     values[key] = value.strip("\"'")
+    if writing:
+        from .skill_names import validate_skill_name
+        validate_skill_name(values.get("name", ""), previous_name=previous_name)
     name = _text(values.get("name", ""), "name", 100, blank=False)
     description = _text(values.get("description", ""), "description", 1000, blank=False)
     return name, description
@@ -232,7 +235,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         if len(text.encode("utf-8")) > MAX_SKILL_BYTES:
             raise MemberError("size", "skill document is too large")
         text = redact_secrets(text)
-        name, description = skill_metadata(text)
+        name, description = skill_metadata(text, writing=True)
         if len(self.owned_skills(member_id)) >= MAX_SKILLS:
             raise MemberError("full", "member skill limit reached")
         if any(skill["name"].casefold() == name.casefold() and skill.get("plugin", "").casefold() == skill_plugin(text, source).casefold() for skill in self.owned_skills(member_id)):
@@ -324,7 +327,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         change with it; the next `read_skill` gives the new text at once. The old document stays when the new
         one cannot be kept."""
         self.require_owned(member_id, skill_id)
-        self._skill(member_id, skill_id)
+        current = self._skill(member_id, skill_id)
         if not isinstance(text, str):
             raise MemberError("skill", "skill must be a UTF-8 Markdown document")
         text = redact_secrets(text.replace("\r\n", "\n"))
@@ -332,8 +335,8 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
             raise MemberError("size", "skill document is too large")
         if not text.strip() or "\x00" in text:
             raise MemberError("skill", "skill must be a UTF-8 Markdown document")
-        name, description = skill_metadata(text)
-        source = self._skill(member_id, skill_id)["source"]
+        name, description = skill_metadata(text, writing=True, previous_name=current["name"])
+        source = current["source"]
         if any(other["id"] != skill_id and other["name"].casefold() == name.casefold() and other.get("plugin", "").casefold() == skill_plugin(text, source).casefold() for other in self.owned_skills(member_id)):
             raise MemberError("taken", "a skill with that name already exists")
         path = self._path(member_id, skill_id)

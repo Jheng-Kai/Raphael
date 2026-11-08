@@ -158,7 +158,7 @@ def _to_turn(row: sqlite3.Row) -> Turn:
 _EXCHANGES = "scope = 'exchange' AND peer_id IS NOT NULL"
 # What its own page lists of them: work handed to it, since that is where it does the work. A question is the asker's
 # record alone (`_colleague_events`): a member the owner never spoke to would otherwise fill up with other members' talk.
-_HANDED = _EXCHANGES + " AND EXISTS (SELECT 1 FROM worker_tasks w WHERE w.turn_id = agent_turns.id AND w.mode = 'work')"
+_HANDED = _EXCHANGES + " AND (session_id GLOB 'handoff:[0-9]*' OR EXISTS (SELECT 1 FROM worker_tasks w WHERE w.turn_id = agent_turns.id AND w.mode = 'work'))"
 # The turns the model reads as the conversation (`is_readable`), as SQL.
 _READABLE = (
     f"(status = 'done' OR (status IN ({', '.join(repr(status) for status in UNFINISHED)})"

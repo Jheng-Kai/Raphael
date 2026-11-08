@@ -1,10 +1,11 @@
-"""Primary-contact administration contracts, generated from the owner UI registry.
+"""Owner-private administration contracts, generated from the owner UI registry.
 
 Member data: name, role, blurb, personality, instructions, group name, avatar preset.
 Targets use member IDs; groups use IDs for rename and names for member placement.
 The member service owns validation, persistence, defaults and live notifications.
 """
 
+from raphael_core.ui_words import ui_word, with_ui_words
 from dataclasses import dataclass
 from typing import Any
 
@@ -68,7 +69,7 @@ BATCH_TOOLS = {"member_create", "create_member", "member_update", "group_create"
 CONFIRM_TOOLS = (set(DEFINITIONS) - {"team_overview"}) | {"create_member", "routine_create", "routine_update", "routine_delete"}
 
 LEADERSHIP = (
-    "\nYou are the current primary contact. Only you have owner-chat management tools. Use team_overview and your team administration tools to create "
+    "\nEvery member has the same management tools in the owner's private chat. Use team_overview and your team administration tools to create "
     "and change members, groups, routines, skills and commands. Use returned IDs. "
     "You decide how many members the work needs. When the owner's approval setting asks first, member creates, "
     "updates and groups are proposals staged until the turn ends: collect every requested change before your final "
@@ -77,6 +78,7 @@ LEADERSHIP = (
     "work to the new members with those IDs in the same turn. Destructive changes always need approval, including allow-all mode. "
     "Change a model or effort only when the owner explicitly asks, never to recover from a failure. "
     "After creating members, report their names and roles in one short message. "
+    "Grok template instructions that say CreateAgent mean member_create here (legacy alias: create_member). "
     "Do not claim the creation interface is disconnected; attempt the provided tools and report "
     "their actual results. Never claim an action succeeded without a successful result."
 )
@@ -101,20 +103,22 @@ def proposal_operations(calls: list[dict]) -> list[dict]:
 
 def confirmation(name: str, arguments: dict, language: str, target: str = "", *, question: bool = True) -> str:
     """Complete owner-facing details; never truncate fields that the owner is approving."""
+    from ..ui_languages import fixed_language
+    language = fixed_language(language)
     if name == "create_member":
         name = "member_create"
-    actions = {
+    actions = with_ui_words({
         "en": ("Create member", "Update member", "Permanently delete member and all its data", "Create group", "Rename group", "Import member skills", "Save member command", "Create routine", "Update routine", "Delete routine"),
         "zh-TW": ("建立成員", "更新成員", "永久刪除成員及其所有資料", "建立群組", "重新命名群組", "匯入成員技能", "儲存成員指令", "建立例行任務", "更新例行任務", "刪除例行任務"),
         "ja": ("メンバーを作成", "メンバーを更新", "メンバーと全データを完全に削除", "グループを作成", "グループ名を変更", "スキルをインポート", "コマンドを保存", "定期タスクを作成", "定期タスクを更新", "定期タスクを削除"),
-    }
+    })
     names = ("member_create", "member_update", "member_delete", "group_create", "group_rename", "member_skill_import", "member_command_save", "routine_create", "routine_update", "routine_delete")
     fields = ("name", "role", "blurb", "personality", "instructions", "group", "avatar_preset", "source", "description", "template", "title", "prompt", "schedule", "enabled")
-    labels = {
+    labels = with_ui_words({
         "en": ("Name", "Role", "About", "Personality", "Instructions", "Group", "Avatar preset", "Skill source", "Description", "Template", "Title", "Prompt", "Schedule", "Enabled"),
         "zh-TW": ("名稱", "職責", "簡介", "個性", "工作指示", "群組", "預設頭像", "技能來源", "說明", "指令範本", "任務名稱", "任務內容", "排程", "啟用"),
         "ja": ("名前", "役割", "紹介", "性格", "指示", "グループ", "アバター", "スキルの取得元", "説明", "テンプレート", "タスク名", "内容", "スケジュール", "有効"),
-    }
+    })
     title = actions[language][names.index(name)] if name in names else name
     separator = ": " if language == "en" else "："
     lines = [title + (separator + target if target else "")]
@@ -127,4 +131,4 @@ def confirmation(name: str, arguments: dict, language: str, target: str = "", *,
             lines.append(f"{label}{separator}{value}")
     if "id" in arguments:
         lines.append(f"ID{separator}{arguments['id']}")
-    return "\n".join(lines) + ({"en": "\nAllow this change?", "zh-TW": "\n允許這項變更嗎？", "ja": "\nこの変更を許可しますか？"}[language] if question else "")
+    return "\n".join(lines) + (with_ui_words({"en": "\nAllow this change?", "zh-TW": "\n允許這項變更嗎？", "ja": "\nこの変更を許可しますか？"})[language] if question else "")

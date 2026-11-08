@@ -73,7 +73,8 @@ from ..agent.failure import failure_kind
 from ..agent.gate import ToolGate
 from ..agent.history import Turn
 from ..agent.ledger import Ledger
-from ..agent.persona import fit_text, phrase
+from ..agent.persona import REPLY_LANGUAGE, fit_text, phrase
+from ..ui_languages import interface_context
 from ..agent import safety as rules
 from ..agent.policy import (
     CONFIRM_TIMEOUT_S,
@@ -161,11 +162,6 @@ FORBIDDEN_BY_RULE = (
     "The owner's safety rule 「{rule}」 forbids this step, so it was not taken. Do not try it "
     "another way: do the rest of the task without it, or say what is left for the owner."
 )
-_LANGUAGE_NAMES = {
-    "zh-TW": "Traditional Chinese as written in Taiwan (never Simplified characters)",
-    "en": "English",
-    "ja": "Japanese",
-}
 
 
 @dataclass(frozen=True)
@@ -327,8 +323,8 @@ def system_prompt(language: str) -> str:
         "- Do only what the task asks: never close apps or windows, and never change a setting "
         "the task did not name.\n"
         "- When the task is done, or cannot be done, reply without calling a tool: one or two "
-        f"short sentences in {_LANGUAGE_NAMES[language]} only, saying what was done or what "
-        "stopped you, with no prefix, no greeting and no markdown."
+        "short sentences, saying what was done or what stopped you, with no prefix, no greeting and no markdown. "
+        + interface_context(language) + REPLY_LANGUAGE
     )
 
 

@@ -58,7 +58,7 @@ async def test_cli_turn_applies_or_denies_the_whole_batch_through_http_mcp(setup
             yield Event("final", "Created COO, PM and RD.")
             return
         assert "COO, PM, RD" in kwargs["user"]
-        assert "You are the current primary contact" in kwargs["system"]
+        assert "Every member has the same management tools" in kwargs["system"]
         async with httpx.AsyncClient(headers={"Authorization": "Bearer " + kwargs["token"]}, trust_env=False) as http:
             async def rpc(method, params):
                 response = await http.post(kwargs["endpoint"], json={"jsonrpc": "2.0", "id": method, "method": method, "params": params})
@@ -152,18 +152,20 @@ async def test_who_made_a_member_is_told_so_it_can_have_what_its_maker_has(setup
     assert made == [(one.id, created["member"]["id"])]
 
 
-async def test_nonprimary_keeps_work_tools_and_cannot_manage_the_team(setup, client):
+async def test_nonprimary_keeps_work_tools_and_can_manage_in_the_owner_chat(setup, client):
     from raphael_core.management import MANAGEMENT_TOOLS
     from raphael_core.protocol import RpcError
     rig, team = setup
     one, other = member(team), member(team, name="Other")
-    client.chats = [chat("Proposing.", ("member_create", {"name": "Denied", "role": "COO"})), live_said("Only the primary can manage the team.")]
-    result = await typed(rig, "Create Denied", one.id, language="en")
+    rig.settings.set("action_mode", "direct")
+    client.chats = [chat("", ("member_create", {"name": "Added", "role": "COO"})), live_said("Created Added.")]
+    result = await typed(rig, "Create an assistant called Added", one.id, language="en")
     offered = {item["function"]["name"] for item in client.chat_calls[0]["tools"]}
-    assert not offered & MANAGEMENT_TOOLS
+    assert "member_create" in offered
     assert {"routine_create", "memory_update", "connect_app", "request_secret", "ask_member", "handoff", "room_post"} <= offered
-    assert result["status"] == "done" and len(team.members.store.members()) == 2
-    with pytest.raises(RpcError, match="primary-contact"):
+    assert result["status"] == "done" and len(team.members.store.members()) == 3
+    assert team.members.find("Added").role == "COO"
+    with pytest.raises(RpcError, match="member-management"):
         await team.members.routine_tool(one.id, "routine_create", {"member_id": other.id, "title": "Denied", "prompt": "X", "schedule": {"kind": "daily", "time": "08:00"}})
 
 

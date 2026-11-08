@@ -312,7 +312,7 @@ def _log(homes, member_id: int, created, line: str) -> None:
 def migrate(homes, *, told_name: Callable[[int], str], language: str = "zh-TW") -> None:
     """Move whatever the old store left into the living files. Nothing to do costs a look at a few
     folders. The shared space goes first, so that a member's own does not repeat it."""
-    mark = UNCONFIRMED.get(language, UNCONFIRMED["zh-TW"])
+    mark = UNCONFIRMED.get(language, UNCONFIRMED["en"])
 
     def told(member: int | None, day: str) -> str:
         if member is None or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):

@@ -45,6 +45,16 @@ logger = logging.getLogger(__name__)
 ANSWER_TIMEOUT_S = 10.0
 REPLY_MAX_TOKENS = 8192
 
+MESSAGE_RULES = """
+Speak to the owner rarely and usefully. Messages are for an important result, a question,
+a brief opening when the job is long, and the final answer. Never narrate steps, retries,
+errors you route around, file trouble or tool trouble as messages; keep those in progress.
+Only use the messages field or an explicit message separator for a message worth reading
+before the work ends. Use a line containing only <<<next message>>> to mark an explicit
+message boundary in plain text. Completed narration is still progress, not a message.
+Do not repeat delivered messages in the final answer.
+"""
+
 
 # The most edits of the memory one reply may make.
 MAX_MEMORY_ITEMS = 8
@@ -65,6 +75,7 @@ class Reply:
     # line of at most SAY_JA_MAX characters, or "" when there is none or it is not Japanese. Only
     # spoken, never shown or stored.
     say_ja: str = ""
+    explicit_messages: bool = False
 
     @property
     def wants_lookup(self) -> bool:
@@ -313,6 +324,9 @@ def split_messages(text):
     """Keep complete paragraphs and code blocks; a large block remains whole."""
     if not text:
         return []
+    parts = message_parts(text)
+    if len(parts) > 1:
+        return [message for part in parts for message in split_messages(part.strip())]
     chunks, current, fenced = [], [], False
     for paragraph in text.split("\n\n"):
         if current and not fenced and len("\n\n".join([*current, paragraph])) > MEMBER_TEXT_MAX:
@@ -388,6 +402,7 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
         if isinstance(items, list) else []
     )
     words = _reply_words(data.get("text"))
+    explicit_messages = bool(messages) or len(message_parts(words)) > 1
     full = _plain_text(words)
     prefix = data.get("prefix")
     if long and not plain:
@@ -404,7 +419,7 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
         messages = [match[2].strip() if match else text for text, match in zip(messages, framed)]
         if match := _REPLY_FRAME.fullmatch(full):
             full = match[2].strip()
-    if not messages and full and (plain or long or len(split_messages(full)) > 1):
+    if not messages and full and (plain or long or len(message_parts(full)) > 1):
         messages = split_messages(full)
     if messages:
         full = "\n\n".join(messages)
@@ -420,6 +435,7 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
             memory=memory,
             search=search,
             messages=messages,
+            explicit_messages=explicit_messages,
         )
     line = full
     detail = _one_line_text(data.get("detail")).strip()
@@ -431,10 +447,11 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
         search=search,
         say_ja=japanese_line(data.get("say_ja")),
         messages=messages,
+        explicit_messages=explicit_messages,
     )
 
 
-def public_reply(content: str, language: str, *, plain: bool = False) -> Reply | None:
+def public_reply(content: str, language: str, *, plain: bool = False, explicit: bool = False) -> Reply | None:
     """Read complete public speech only, never a narration-only or unfinished protocol object."""
     text = content.strip()
     if not text:
@@ -449,6 +466,13 @@ def public_reply(content: str, language: str, *, plain: bool = False) -> Reply |
         value = text
     if isinstance(value, dict) and not ("text" in value or "messages" in value):
         return None
+    if explicit:
+        if isinstance(value, dict):
+            if not isinstance(value.get("messages"), list):
+                return None
+            value = {"messages": value["messages"], "prefix": value.get("prefix")}
+        elif not isinstance(value, str) or len(message_parts(value)) < 2:
+            return None
     try:
         reply = parse_reply(value, language, plain=plain, long=True)
     except AgentFailure:
@@ -551,7 +575,7 @@ class Voice:
             )
         else:
             system = system_prompt(language, route, memory_snapshot, say_ja=say_ja, speaker=speaker)
-        system += roster
+        system += MESSAGE_RULES + roster
         began = time.perf_counter()
         try:
             completion = await asyncio.wait_for(

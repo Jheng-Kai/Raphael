@@ -25,6 +25,17 @@ async def test_a_member_creates_lists_and_reads_a_skill_through_the_shared_harne
     assert team.members.skill_read(teacher.id, "research-summary") == DOCUMENT
     assert team.members.enabled_skills(0) == []
     assert {"skill_manage", "skills_list", "skill_read"} <= {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
+    def events(turn):
+        records = [json.loads(m["text"]) for m in rig.history.messages([turn]).get(turn, []) if m["kind"] == "event"]
+        return [event for event in records if event.get("type") == "skill_learned"]
+    assert [e["action"] for e in events(result["turn_id"])] == ["created"]
+    changed = DOCUMENT.replace("Check the", "Verify the")
+    for text, actions in ((changed, ["updated"]), (changed, [])):
+        skill = team.members.enabled_skills(teacher.id)[0]
+        client.chats = [chat("", ("skill_manage", {"id": skill["id"], "expected_hash": skill["revision"], "text": text})), live_said("Skill kept.")]
+        result = await typed(rig, "Keep this research procedure", teacher.id)
+        assert result["status"] == "done"
+        assert [e["action"] for e in events(result["turn_id"])] == actions
 
 
 async def test_ten_local_tool_calls_are_persisted_for_skill_review(setup, client):
@@ -59,7 +70,7 @@ async def test_a_member_with_an_old_empty_tool_list_can_search_and_create_a_rout
     assert team.members.store.routines(0) == []
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     messages = [m for m in turn["messages"] if not is_action(m["text"])]
-    assert [m["kind"] for m in messages] == ["thinking", "progress", "reply", "progress", "event", "reply"]
+    assert [m["kind"] for m in messages] == ["thinking", "progress", "progress", "event", "reply"]
     receipt = json.loads(messages[-2]["text"])
     assert receipt["text"] == "已建立例行任務 · 每天 08:00 日文練習"
     assert receipt["type"] == "routine" and receipt["id"] == routine.id and receipt["name"] == routine.title
