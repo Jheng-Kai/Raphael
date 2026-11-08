@@ -5,7 +5,8 @@
 .mp-dialog .mb-dlg-act { margin: 0; padding: var(--sp-4) var(--sp-5); border-top: 1px solid var(--line); }
 .mp-layout { display: grid; grid-template-columns: 180px minmax(0, 1fr); height: min(610px, calc(100vh - 185px - var(--window-controls-height))); min-height: 260px; }
 .member-profile-nav { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-4) var(--sp-2); border-right: 0; background: var(--side); overflow-y: auto; }
-.member-profile-nav .tab { justify-content: flex-start; text-align: left; white-space: normal; min-height: 38px; height: auto; padding: var(--sp-2) var(--sp-3); border-color: transparent; background: transparent; box-shadow: none; }
+/* A vertical list of pages, not a row of tab pills: full rows with the body type and a soft corner. */
+.member-profile-nav .tab { justify-content: flex-start; text-align: left; white-space: normal; min-height: 38px; height: auto; padding: var(--sp-2) var(--sp-3); border-color: transparent; border-radius: var(--r-sm); background: transparent; box-shadow: none; font-size: var(--fs-sm); }
 .member-profile-nav .tab:hover { background: var(--hover); }
 .member-profile-nav .tab[aria-selected=true] { background: var(--surface-2); color: var(--text); }
 .mp-pages { overflow-x: hidden; overflow-y: auto; padding: var(--sp-5); min-width: 0; }

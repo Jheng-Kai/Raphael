@@ -23,7 +23,7 @@
   --fs-2xs: 12px; --fs-xs: 13px; --fs-sm: 14px; --fs-md: 15px; --fs-lg: 18px; --fs-h1: 22px;
   --weight-regular: 400; --weight-medium: 500; --weight-semibold: 500;
   --r-sm: 8px; --r-md: 12px; --r-lg: 12px; --r-pill: 999px;
-  --h-ctl: 34px; --h-ctl-sm: 28px; --h-row: 48px;
+  --h-ctl: 34px; --h-ctl-sm: 28px; --h-row: 48px; --h-tab: 26px;
   /* official brand colours of service logos: the only colours outside the app palette */
   --brand-telegram: #26a5e4;
   /* marks drawn over a photo (the picture crop frame): one set for both themes, as the photo under them is the same */
@@ -54,10 +54,9 @@
   --bubble: #efefef; --on-bubble: #0a0a0a; --on-tint-light: #ffffff; --on-tint-dark: #0a0a0a;
   --ok: #15703f; --warn: #80560f; --err: #b3261e; --warn-soft: #f7f7f7; --warn-edge: #d4d4d4;
   --computer-active: #7138bd;
-  /* Usage bars: a member's lavender, as Grok Bot's coloured bar, never the black or white of the controls (owner, 2026-11-07). */
-  --meter: #905afb;
-  /* Raphael's blue, for the rings of his arrival on Home. */
+  /* Raphael's blue: his own colour, and the usage bars' (owner, 2026-11-08: the lavender of 2026-11-07 became his blue). */
   --raphael-color: #1f9fe8;
+  --meter: var(--raphael-color);
   /* Home's chart: work, messages and routines, in the order a bar stacks them (validated for colour blindness, 2026-11-08). */
   --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
   --ans-edge: #ececec;
@@ -96,8 +95,8 @@
   --bubble: #262626; --on-bubble: #f5f5f5; --on-tint-light: #ffffff; --on-tint-dark: #0a0a0a;
   --ok: #9fd7b5; --warn: #edc677; --err: #ff9aa9; --warn-soft: #2a251c; --warn-edge: #5b4e32;
   --computer-active: #b98aff;
-  --meter: #a47dff;
   --raphael-color: #5cc4ff;
+  --meter: var(--raphael-color);
   --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
   --ans-edge: #161616;
   --btn: #1f1f1f; --btn-edge: #2e2e2e; --key: #1f1f1f; --key-edge: #2e2e2e;
@@ -360,30 +359,21 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .hist-top .t .i { margin-right: var(--sp-2); vertical-align: -3px; color: var(--text-2); }
 .tools { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-5); flex-wrap: wrap; }
 .tools .field { flex: 1; min-width: 160px; max-width: 300px; margin-left: auto; }
-/* The one tab component (ui.ts tabs()). .seg narrows one list (History, Dictionary); .switch switches views. */
-.tabs .tab { white-space: nowrap; font-size: var(--fs-sm); color: var(--text-2); background: transparent; }
-.tabs .tab:hover { color: var(--text); }
-.tabs.seg { display: inline-flex; gap: var(--sp-1); padding: var(--sp-1); border-radius: var(--r-pill); background: var(--surface-2); }
-.tabs.seg .tab { height: 30px; padding: 0 var(--sp-3); border: 0; border-radius: var(--r-lg); }
+/* The one tab component (ui.ts tabs()), drawn as Grok Bot draws its tabs (owner, 2026-11-08: 「button 都太胖了」): short
+   pills of small type, each on a soft fill, the open or pressed one a step darker in the body ink. .seg narrows one list
+   (History, Dictionary, the Library), .switch and .plain switch views; all three look alike. */
+.tabs { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); }
+.tabs .tab { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); min-height: var(--h-tab); padding: 0 calc(var(--sp-2) + 2px); border: 0; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: none; white-space: nowrap; font-size: var(--fs-xs); line-height: 1.3; color: var(--text-2); }
+.tabs .tab:hover { background: var(--hover); color: var(--text); }
+.tabs .tab:is([aria-selected="true"], [aria-pressed="true"]) { background: var(--pressed); color: var(--text); }
+.tabs .tab:focus-visible { outline: none; }
+:where(:root[data-keys]) .tabs .tab:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
 .tabs.seg .tab-label { display: grid; grid-template-columns: minmax(0, 1fr); }
 .tabs.seg .tab-label > span { grid-area: 1 / 1; }
-.tabs.seg .tab[aria-pressed="true"] { background: var(--panel); color: var(--text); box-shadow: var(--tab-shadow), 0 0 0 1px var(--edge); }
-.tabs.switch { display: inline-flex; border: 1px solid var(--btn-edge); border-radius: var(--r-sm); background: var(--btn); overflow: hidden; }
-.tabs.switch .tab { min-height: 32px; padding: var(--sp-1) var(--sp-4); border: 0; border-radius: 0; }
-.tabs.switch .tab + .tab { border-left: 1px solid var(--btn-edge); }
-.tabs.switch .tab:hover { background: var(--hover); }
-.tabs.switch .tab[aria-selected="true"] { background: var(--selected); color: var(--text); }
-.tabs.switch .tab:focus-visible { outline: none; }
-:where(:root[data-keys]) .tabs.switch .tab:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
-.tabs.switch .n { margin-left: var(--sp-1); font-size: var(--fs-xs); font-weight: 400; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.tabs .n { font-size: var(--fs-2xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.tabs .tab:is([aria-selected="true"], [aria-pressed="true"]) .n { color: var(--text-2); }
 .tabs.fill { display: flex; }
-/* Quiet tabs in a bar with a search (連接): words, and a soft fill under the one that is open. */
-.tabs.plain { display: inline-flex; gap: var(--sp-1); }
-.tabs.plain .tab { min-height: 30px; padding: var(--sp-1) var(--sp-2); border: 0; border-radius: var(--r-sm); }
-.tabs.plain .tab:hover { background: var(--hover); }
-.tabs.plain .tab[aria-selected="true"] { background: var(--surface-2); color: var(--text); }
-.tabs.plain .n { margin-left: var(--sp-1); font-size: var(--fs-xs); font-weight: 500; color: var(--text-3); font-variant-numeric: tabular-nums; }
-.tabs.fill .tab { flex: 1; justify-content: center; text-align: center; }
+.tabs.fill .tab { flex: 1; text-align: center; }
 /* The day of the history that Home's activity grid opened it at, with the way back to all of them. */
 .day-row { margin-top: var(--sp-3); }
 .chip.day-chip { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }

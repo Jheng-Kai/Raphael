@@ -152,9 +152,9 @@
 .mb-brain { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2); max-width: 100%; color: var(--text-2); font-size: var(--fs-sm); }
 .mb-brain .mono.md { width: 16px; height: 16px; flex: none; }
 .mb-who-role::placeholder { color: var(--text-3); }
-/* Grok Bot's panel tabs: words side by side in the middle, the open one in a soft pill (2026-11-05). */
+/* Grok Bot's panel tabs: the shared small pills side by side in the middle (2026-11-05; slimmer since 2026-11-08). */
 .mb-tabs:has(> .tabs.plain) { display: flex; justify-content: center; }
-.mb-tabs .tabs.plain .tab { min-height: var(--pa-dtab-h); padding: 0 var(--sp-3); border-radius: var(--r-pill); font-size: var(--pa-dtab); }
+.mb-tabs .tabs.plain .tab { min-height: var(--pa-dtab-h); font-size: var(--pa-dtab); }
 /* the sections of a tab (個性, 指示, 分組, 模型, 例行任務) are set apart, each label close to its own field */
 .mb-tab-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: calc(16px + 6 * var(--pa-u)); }
 .mb-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }

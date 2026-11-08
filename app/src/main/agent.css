@@ -89,7 +89,7 @@
   --pa-dname: var(--fs-lg);
   --pa-drole: var(--fs-xs);
   --pa-dtab: var(--fs-xs);
-  --pa-dtab-h: calc(30px + 12 * var(--pa-u));
+  --pa-dtab-h: calc(var(--h-tab) + 4 * var(--pa-u));
   --pa-dlabel: var(--fs-xs);
   --pa-dfs: var(--fs-sm);
   --pa-dctl: calc(32px + 12 * var(--pa-u));
