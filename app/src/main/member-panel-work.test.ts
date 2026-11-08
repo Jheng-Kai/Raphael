@@ -25,9 +25,28 @@ test("groups by day, newest first, with pictures as thumbnails and the rest as r
   const picture = days[0]!.querySelector<HTMLElement>(".lib-pics .lib-pic")!;
   expect([picture.tagName, picture.dataset.panelFile, picture.querySelector("img")!.dataset.attachment]).toEqual(["BUTTON", "attachment:a.png", "a".repeat(32) + ".png"]);
   expect([...page.querySelectorAll<HTMLElement>(".lib-row")].map(row => [row.dataset.panelFile, row.querySelector<HTMLElement>(".lib-icon")!.dataset.kind, row.querySelector(".lib-title")!.textContent, row.querySelector("time")!.textContent]))
-    .toEqual([["page:p", "page", "Weekly page", "13:00"], ["delivered-file:z", "archive", "Bundle.zip", "13:00"], ["link:l", "link", "https://example.com/report", "12:00"], ["delivered-file:old", "document", "Notes.md", "15:00"]]);
-  expect(page.querySelector("[data-panel-more]")).not.toBeNull();
+    .toEqual([["page:p", "page", "Weekly page", "13:00"], ["delivered-file:z", "archive", "Bundle.zip", "13:00"], ["delivered-file:old", "document", "Notes.md", "15:00"]]);
+  // Never a 「顯示更多」, even when the core says there is more (owner, 2026-11-08).
+  expect(page.querySelector("[data-panel-more], .lib-more")).toBeNull();
   expect(page.querySelector(".team-file")).toBeNull();
+});
+
+test("links are never shown, and the kinds there are become one filter that narrows the list (owner, 2026-11-08)", () => {
+  const files = [
+    item("attachment:a.png", "image", "Shot.png", NOW, { attachment_id: "a".repeat(32) + ".png" }),
+    item("attachment:v.mp4", "video", "Run.mp4", NOW - 1000),
+    item("delivered-file:n", "document", "Notes.md", NOW - 2000),
+    item("link:l", "link", "查看執行結果", NOW - 3000, { url: "https://example.com" }),
+  ];
+  const all = parse(panelLibraryHTML({ files, has_more: false }, false, NOW));
+  expect(all.textContent).not.toContain("查看執行結果");
+  expect([...all.querySelectorAll<HTMLElement>(".lib-filters [data-lib-filter]")].map(b => [b.textContent, b.getAttribute("aria-pressed")]))
+    .toEqual([["全部", "true"], ["圖片", "false"], ["影片", "false"], ["檔案", "false"]]);
+  const images = parse(panelLibraryHTML({ files, has_more: false }, false, NOW, "images"));
+  expect([...images.querySelectorAll<HTMLElement>("[data-panel-file]")].map(b => b.dataset.panelFile)).toEqual(["attachment:a.png"]);
+  // One kind alone needs no filter; links alone are nothing to show.
+  expect(parse(panelLibraryHTML({ files: [files[2]!], has_more: false }, false, NOW)).querySelector(".lib-filters")).toBeNull();
+  expect(parse(panelLibraryHTML({ files: [files[3]!], has_more: false }, false, NOW)).textContent).toBe("還沒有檔案或頁面");
 });
 
 test("a delivered picture with no stored copy keeps a tile with its icon; an empty or failed Library says so in one line", () => {

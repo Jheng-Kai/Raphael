@@ -300,11 +300,20 @@ export function checkRendered(name, context = {}) {
       require(Math.abs((tabBar.left + tabBar.right) / 2 - (listBox.left + listBox.right) / 2) < 1, 'the tabs sit in the middle of the content');
     } else if (name === 'member-panel-details-empty') {
       require(!panel.querySelector('.mb-panel-tasks') && panel.querySelector('.mb-panel-routines .mp-empty'), 'an empty Details is one quiet routine line and no work list');
-    } else if (name === 'member-panel-library' || name === 'member-panel-library-more') {
-      // Only what the member delivered, by day (owner, 2026-11-07 night, Grok Bot's Library): pictures as thumbnails,
-      // every other deliverable a row with its kind's icon, title and time; a bounded Show more.
+    } else if (name === 'member-panel-library-images') {
+      const body = panel.querySelector('.mb-tab-body');
+      const pressed = [...body.querySelectorAll('[data-lib-filter]')].filter(button => button.getAttribute('aria-pressed') === 'true').map(button => button.textContent);
+      require(pressed.join() === '圖片', `the 圖片 filter is the one pressed (${pressed})`);
+      require(body.querySelectorAll('.lib-pic').length === 3 && !body.querySelector('.lib-row'), 'only the pictures stay');
+    } else if (name === 'member-panel-library') {
+      // Everything the member delivered, by day (owner, 2026-11-07 night and 11-08, as Grok Bot's Library): pictures as
+      // thumbnails, every other deliverable a row with its kind's icon, title and time; no links; a filter by kind, never
+      // a 「顯示更多」.
       const body = panel.querySelector('.mb-tab-body'), days = [...body.querySelectorAll('.lib-day')];
-      require(body.querySelectorAll('[data-panel-file]').length === (name.endsWith('-more') ? 15 : 12), 'the library and its bounded next page');
+      require(body.querySelectorAll('[data-panel-file]').length === 14 && !body.querySelector('[data-panel-more]'), 'every deliverable at once, nothing to press for more');
+      require(!body.querySelector('[data-panel-file^="link:"]') && !/example\.com/.test(body.textContent), 'no links');
+      const filters = [...body.querySelectorAll('.lib-filters [data-lib-filter]')].map(button => button.textContent);
+      require(filters.join() === '全部,圖片,檔案' && body.querySelector('.lib-filters').getBoundingClientRect().bottom <= days[0].getBoundingClientRect().top + 1, `one filter of the kinds there are above the days (${filters})`);
       require(days[0].querySelector('.mb-dh').textContent === '今天' && days[1].querySelector('.mb-dh').textContent === '昨天', 'grouped by day, newest first: 今天, 昨天, then dates');
       const pictures = [...days[0].querySelectorAll('.lib-pics > .lib-pic')];
       require(pictures.length === 3 && pictures.every(tile => tile.tagName === 'BUTTON' && tile.querySelector('img[src]') && Math.abs(tile.getBoundingClientRect().width - tile.getBoundingClientRect().height) <= 1), "today's three pictures are square thumbnails, loaded, each a button");
@@ -2968,7 +2977,7 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "home-team") {
     const rows = [...document.querySelectorAll('.page-home .ho-team .ho-member')];
-    require(rows.length === 5 && !document.querySelector('.ho-team .ho-count'), `Home shows all five members, up to eight (${rows.length})`);
+    require(rows.length === 5, `Home shows all five members (${rows.length})`);
     require(rows.map(row => row.dataset.state).join() === "needs,busy,idle,idle,idle", `the one waiting for the owner first, then the one at work: ${rows.map(row => row.dataset.state)}`);
     require(/小晴 在等你|等你回答/.test(document.querySelector('.ho-hero .ho-health').textContent), "Raphael's line says the owner is waited for");
     const words = rows[0].querySelector('.ho-row-copy span'), probe = document.createElement('i');
@@ -2982,6 +2991,16 @@ export function checkRendered(name, context = {}) {
     require(visible(next) && /\d{2}:\d{2}/.test(next.textContent) && visible(next.querySelector('.i')) && /午間資訊摘要/.test(next.getAttribute('aria-label') ?? ''), "a member's next routine shows its time with the repeat icon and names it");
     for (const row of rows) require(visible(row.querySelector('.av, .slime-surface, svg.slime')), "every member row has its face");
     return { check: name };
+  }
+  if (name === "home-all-rows") {
+    // No 「顯示更多」 or 「還有…」 anywhere (owner, 2026-11-08): every item of today and every open question is a row.
+    const page = document.querySelector('.page-home:not([hidden])'), data = window.__look.data.home;
+    const schedule = page.querySelectorAll('.ho-schedule .ho-event').length, open = page.querySelectorAll('.ho-pending .ho-row').length;
+    const questions = data.today.filter(item => item.kind === 'question').length;
+    require(schedule > 8 || open > 8, `more than eight rows in a section, all drawn (${schedule} / ${open})`);
+    require(open >= questions, `every open question is a row (${open} of ${questions})`);
+    require(!page.querySelector('.ho-more, .ho-count'), "no count or button for more");
+    return { check: name, schedule, open };
   }
   if (name === "home-digest") {
     // Yesterday in three numbers with the faces of who did the work, then Raphael's few sentences; the health check names
@@ -4116,7 +4135,7 @@ export function checkRendered(name, context = {}) {
     for (const section of sections) {
       const style = getComputedStyle(section);
       require(style.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(style.borderLeftWidth) === 0 && parseFloat(style.borderTopWidth) === 0 && style.boxShadow === 'none', `no box around a section: ${section.className}`);
-      require(section.querySelectorAll('.ho-rows > .ho-row').length <= 8, `at most eight rows, the rest counted: ${section.className}`);
+      require(!section.querySelector('.ho-more, .ho-count, [data-home-go="calendar"].btn.sm'), `nothing to press for more, every row shows: ${section.className}`);
       for (const element of [section, ...section.querySelectorAll('*')]) {
         const inner = getComputedStyle(element);
         require(!['auto', 'scroll'].includes(inner.overflowY) || element.scrollHeight <= element.clientHeight + 1, `Home has no scrolling inner panels: ${element.className}`);
@@ -4769,6 +4788,14 @@ export function checkRendered(name, context = {}) {
       for (const edge of Object.keys(before)) require(Math.abs(before[edge] - after[edge]) <= 1, `a change of state jumps in ${row.textContent.slice(0, 3)}: ${edge} moved ${Math.abs(before[edge] - after[edge]).toFixed(1)}px`);
     }
     return { check: name, rows: document.querySelectorAll(".look-slime-board > div").length };
+  }
+  if (name === "member-face-hover") {
+    const face = document.querySelector('.mb-panel-identity [data-det="avatar"]'), pencil = face.querySelector('.mb-face-pencil');
+    require(face.matches(':hover') && getComputedStyle(pencil).opacity === '1' && visible(pencil.querySelector('svg.i')), "the pencil shows under the pointer");
+    const a = face.getBoundingClientRect(), b = pencil.getBoundingClientRect();
+    require(Math.abs(a.width - b.width) <= 1 && Math.abs(a.height - b.height) <= 1 && getComputedStyle(pencil).borderTopLeftRadius !== '0px', "over the whole face, on a round dimmed circle");
+    require(pencil.querySelector('svg.i').getBoundingClientRect().width === 20, "a 20px pencil");
+    return { check: name };
   }
   if (name.startsWith("avatar-generate")) {
     // A member's face picker has two tabs, 史萊姆 · 生成 (owner, 2026-11-07 night, as Grok Bot's picker).

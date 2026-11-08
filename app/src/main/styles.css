@@ -404,7 +404,8 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .hdetail .raw { font-size: var(--fs-sm); line-height: 1.6; color: var(--text-2); overflow-wrap: anywhere; user-select: text; }
 .empty { padding: 36px 0; text-align: center; color: var(--text-3); font-size: var(--fs-sm); }
 .empty .say { font-family: var(--voice); font-weight: var(--weight-semibold); color: var(--text); font-size: var(--fs-md); margin-bottom: var(--sp-1); }
-.more { display: flex; justify-content: center; margin-top: var(--sp-3); }
+/* The end of a paged list: an empty mark that loads the next page as it comes near (no 「顯示更多」 button, owner 2026-11-08). */
+.more { display: block; height: 1px; margin-top: var(--sp-3); }
 
 /* ---------- dictionary ---------- */
 .addword { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-4); padding: var(--sp-3); }

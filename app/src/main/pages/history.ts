@@ -14,7 +14,7 @@ import { dayBounds, dayLabel, describeError, formatClock } from "../format";
 import { bindingLabels } from "../keys";
 import type { AppContext, HistoryItem, Page } from "../types";
 import { Deletions, debounce } from "../undo";
-import { btn, closeMenu, copyButton, esc, fieldHTML, ico, iconBtn, openMenuOnArrow, swapHTML, tabs, toaster } from "../ui";
+import { closeMenu, copyButton, esc, fieldHTML, ico, iconBtn, openMenuOnArrow, swapHTML, tabs, toaster } from "../ui";
 
 /** The search waits this long after the last key. */
 const SEARCH_DELAY_MS = 200;
@@ -80,13 +80,18 @@ export function createHistory(app: AppContext): HistoryPage {
     `${fieldHTML(t("history.007"), "", { icon: "search", get label() { return t("history.008"); }, id: "hist-q" })}</div>` +
     `<div class="day-row" hidden></div>` +
     `<div class="days"></div>` +
-    `<div class="more" hidden>${btn(t("history.009"), "", ' data-act="more"')}</div>` +
+    // No 「顯示更多」 anywhere (owner, 2026-11-08): the next page loads by itself as the end of the list comes near.
+    `<div class="more" hidden aria-hidden="true"></div>` +
     `<div class="empty" hidden></div>`;
   const search = el.querySelector<HTMLInputElement>("#hist-q")!;
   const dayRow = el.querySelector<HTMLElement>(".day-row")!;
   const days = el.querySelector<HTMLElement>(".days")!;
   const more = el.querySelector<HTMLElement>(".more")!;
   const empty = el.querySelector<HTMLElement>(".empty")!;
+  const nextPage = typeof IntersectionObserver === "function"
+    ? new IntersectionObserver((entries) => { if (entries.some((entry) => entry.isIntersecting) && canLoadMore && !pending) void load(true); }, { rootMargin: "400px 0px" })
+    : null;
+  nextPage?.observe(more);
 
   /** What is loaded, newest first. */
   let items: HistoryItem[] = [];
@@ -258,7 +263,6 @@ export function createHistory(app: AppContext): HistoryPage {
     }
     search.placeholder = t("history.007");
     search.setAttribute("aria-label", t("history.008"));
-    more.querySelector("button")!.textContent = t("history.009");
     render();
   });
 
@@ -277,8 +281,6 @@ export function createHistory(app: AppContext): HistoryPage {
       day = null;
       void load(false);
       el.querySelector<HTMLElement>("#hist-q")?.focus();
-    } else if (act?.dataset.act === "more") {
-      void load(true);
     } else if (act && row) {
       const id = Number(row.dataset.id);
       if (act.dataset.act === "copy") void copy(id, act);

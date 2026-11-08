@@ -80,6 +80,20 @@ describe("the 生成 tab", () => {
   });
 });
 
+test("with a model chosen, a 'missing' answer says that model cannot draw now, never that none is chosen", async () => {
+  api.settingsGet.mockResolvedValue({ settings: { image_model: "black-forest-labs/flux-3-image" } });
+  api.membersAvatarGenerate.mockRejectedValue('[1001] Avatar generation failed {"kind":"image_model_missing","repair":"models","resource":"image"}');
+  const { pane } = mount();
+  await flush();
+  press(pane, "go");
+  await flush();
+  expect(pane.querySelector(".avg-off")).toBeNull();
+  expect(pane.querySelector(".avg-note.is-failure")!.textContent).toContain("選好的圖片模型現在不能畫");
+  const fix = pane.querySelector<HTMLButtonElement>('.avg-note [data-avg="fix"]')!;
+  expect([fix.dataset.missingRepair, fix.dataset.missingResource]).toEqual(["models", "image"]);
+  expect(pane.querySelector('[data-avg="prompt"]')).not.toBeNull();
+});
+
 describe("reading the core's failure", () => {
   test("its kind and fix come from the window's error text; an unknown text is an unknown failure", () => {
     expect(generateFailure('[1001] Avatar generation failed {"kind":"image_model_missing","repair":"models","resource":"image"}'))

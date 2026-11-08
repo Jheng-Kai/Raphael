@@ -32,7 +32,7 @@ import { closeMenu, esc, ico, iconButton, openMenu, patchHTML, sel, tg, toaster 
 import { eventRead } from './event-read';
 import { createAttachmentMedia } from "./attachment-media";
 import { openMediaLightbox } from "./media-lightbox";
-import { panelLibraryHTML, readPanelWork, type PanelWork } from './member-panel-work';
+import { LIBRARY_LIMIT, panelLibraryHTML, readPanelWork, type LibraryFilter, type PanelWork } from './member-panel-work';
 import { tabs } from './ui';
 import { describeError } from "./format";
 import { askInChat, askPending, onAskPending } from "./chat-ask";
@@ -95,9 +95,11 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   let drawn = "";
 
   let tab: DetailsTab = "details";
-  let work: PanelWork | null = null, workFailed = false, workEpoch = 0, fileLimit = 12;
+  let work: PanelWork | null = null, workFailed = false, workEpoch = 0;
+  /** Which kind of deliverable the Library shows; back to 全部 for another member. */
+  let libraryFilter: LibraryFilter = "all";
   async function loadWork(fromEvent = false): Promise<void> {
-    const epoch = ++workEpoch, id = host.member().id, limit = fileLimit;
+    const epoch = ++workEpoch, id = host.member().id, limit = LIBRARY_LIMIT;
     try {
       // A burst of turns reads the Library once, as the counts below do.
       const result = await (fromEvent ? eventRead(`members.panel:${id}:${limit}`, () => readPanelWork(id, limit), host.app) : readPanelWork(id, limit));
@@ -192,9 +194,9 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   // ---------- drawing ----------
 
   function whoHTML(member: Member): string {
-    // A press on the face shows every picture at once and one press changes it, as Grok Bot's avatar picker (owner,
-    // 2026-11-07): no pencil, no words, no dialog in between.
-    if (tab !== 'settings') return `<span class="mb-panel-identity"><button type="button" class="btn mb-face-edit" data-det="avatar" data-k="det-face-edit" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}">${faceHTML(member, 64)}</button><b>${esc(member.name)}</b>${member.role ? `<small>${esc(member.role)}</small>` : ''}</span>`;
+    // A press on the face opens the picker (slimes, 生成) at once, as Grok Bot's; under the pointer a pencil shows on the
+    // face as on the owner's own photo in Settings (owner, 2026-11-08), no words and no dialog in between.
+    if (tab !== 'settings') return `<span class="mb-panel-identity"><button type="button" class="btn mb-face-edit" data-det="avatar" data-k="det-face-edit" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}">${faceHTML(member, 64)}<span class="mb-face-pencil" aria-hidden="true">${ico("pencil")}</span></button><b>${esc(member.name)}</b>${member.role ? `<small>${esc(member.role)}</small>` : ''}</span>`;
     // The face is the button that changes its picture.
     const face =
       `<span class="mb-who-face"><button type="button" class="btn mb-avbtn" data-det="avatar" data-k="det-avatar" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}" title="${esc(t("members.changeAvatar"))}">` +
@@ -300,7 +302,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       if (field && field !== focused && field.value !== value) field.value = value;
     }
     const face = faceHTML(member, 64).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([member, face, host.list()?.groups, counts, routines, work, workFailed, tab, [...openFields], getLocale(), !!host.openConversation, host.conversationOf?.(member.id), tab === "memory" ? memories.map(list => list.view()) : null,
+    const signature = JSON.stringify([member, face, host.list()?.groups, counts, routines, work, workFailed, tab, libraryFilter, [...openFields], getLocale(), !!host.openConversation, host.conversationOf?.(member.id), tab === "memory" ? memories.map(list => list.view()) : null,
       // The bot cards redraw on their own state.
       tab === "details" ? channelViews(member.id).map(([kind, view]) => [kind, { ...view, token: "" }]) : null,
       (["setup-telegram", "setup-slack", "setup-discord", "settings", "share-template"] as const).map((intent) => askPending(member.id, intent))]);
@@ -391,7 +393,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         const suggest = body.querySelector<HTMLElement>('.mb-panel-suggest');
         if (suggest) patchHTML(suggest, suggestHTML());
       } else if (tab === 'library') {
-        conversationHost.remove(); patchHTML(body, panelLibraryHTML(work, workFailed)); libraryMedia.sync();
+        conversationHost.remove(); patchHTML(body, panelLibraryHTML(work, workFailed, Date.now(), libraryFilter)); libraryMedia.sync();
       } else if (tab === 'computer') {
         conversationHost.remove(); patchHTML(body, '');
       } else {
@@ -487,7 +489,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
 
   el.addEventListener("click", (e) => {
     const target = e.target as Element;
-    if (target.closest('[data-panel-more]')) { fileLimit = Math.min(100, fileLimit + 12); void loadWork(); return; }
+    const filter = target.closest<HTMLElement>('[data-lib-filter]');
+    if (filter) { libraryFilter = filter.dataset.libFilter as LibraryFilter; draw(); return; }
     const fileButton = target.closest<HTMLElement>('[data-panel-file]');
     if (fileButton) {
       // A deliverable opens as it was handed over: a picture large, a page at the reply that published it, a link in the
@@ -622,7 +625,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     showMember() {
       tab = "details";
       for (const channel of Object.values(channelsOf(host.member().id))) { channel.reset(); void channel.load(); }
-      work = null; workFailed = false; fileLimit = 12; void loadWork();
+      work = null; workFailed = false; libraryFilter = "all"; void loadWork();
       counts = {skills: 0, commands: 0, memory: 0};
       void loadCounts();
       routines = "loading";

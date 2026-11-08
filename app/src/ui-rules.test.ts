@@ -231,9 +231,10 @@ describe("colours", () => {
 });
 
 describe("tabs", () => {
-  test("the segmented filter is used by History and Dictionary only", () => {
+  // The member Library sorts its deliverables by kind with the same filter (owner, 2026-11-08: sorted, never 「顯示更多」).
+  test("the segmented filter is used by History, Dictionary and the member Library only", () => {
     const users = sources.filter((f) => /kind: "filter"|\btabs seg\b/.test(read(f))).map(rel).sort();
-    expect(users).toEqual(["pages/dictionary.ts", "pages/history.ts", "ui.ts"]);
+    expect(users).toEqual(["member-panel-work.ts", "pages/dictionary.ts", "pages/history.ts", "ui.ts"]);
   });
 
   test("there is one tab implementation: the old class names are gone", () => {

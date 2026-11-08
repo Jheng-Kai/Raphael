@@ -20,7 +20,12 @@ export const sourceOf = (turn: AgentTurn): string => turn.source || VOICE;
 /** One line of the thread: the heading of a day, a turn, or what one colleague asked in a row. */
 export type ThreadItem =
   | { kind: "day"; key: string; label: string }
-  | { kind: "turn"; key: string; turn: AgentTurn };
+  /** `together`: the earlier exchanges with the same colleague in a row, drawn in this turn's one line. */
+  | { kind: "turn"; key: string; turn: AgentTurn; together?: AgentTurn[] };
+
+/** An exchange that is only its line: nothing waits for the owner under it. */
+const bareExchange = (turn: AgentTurn): boolean => exchangeTurn(turn) && turn.status !== "confirm" &&
+  !turn.permissions?.length && !turn.connectors?.length && !turn.secrets?.length && !turn.computers?.length;
 
 /** Whether a turn is a colleague's question or hand-off to this member, not the owner's own words. */
 export const exchangeTurn = (turn: AgentTurn): boolean =>
@@ -54,6 +59,13 @@ export function threadItems(turns: readonly AgentTurn[], nowMs: number): ThreadI
     if (previous === null || new Date(previous).toDateString() !== new Date(turn.created_at_ms).toDateString()) {
       const label = dayLabel(turn.created_at_ms, nowMs);
       items.push({ kind: "day", key: `time:${turn.id}`, label });
+    }
+    // The same colleague again, right after its last exchange on the same day: one line 「與 X 的 4 則訊息」 (owner, 2026-11-08).
+    const last = items[items.length - 1];
+    if (last?.kind === "turn" && bareExchange(turn) && bareExchange(last.turn) && (last.turn.peer_id ?? 0) === (turn.peer_id ?? 0)) {
+      items[items.length - 1] = { kind: "turn", key: `turn:${turn.id}`, turn, together: [...(last.together ?? []), last.turn] };
+      previous = turn.created_at_ms;
+      continue;
     }
     items.push({ kind: "turn", key: `turn:${turn.id}`, turn });
     previous = turn.created_at_ms;

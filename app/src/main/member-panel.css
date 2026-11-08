@@ -40,9 +40,14 @@
 /* Grok Bot's panel head (2026-11-06): a large face centred above the name, the job quiet under it. */
 .mb-panel-identity { display: flex; flex-direction: column; align-items: center; gap: var(--sp-1); min-width: 0; width: 100%; }
 .mb-panel-identity > .av { margin-bottom: var(--sp-1); }
-/* A press on the face shows every picture (owner, 2026-11-07): a bare button, no frame, fill or pencil. */
-.mb-panel-identity > .btn.mb-face-edit { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 0; margin-bottom: var(--sp-1); padding: 0; border: 0; background: transparent; }
+/* A press on the face opens the picker: a bare button, no frame or fill. Under the pointer (or the keyboard's focus) a
+   pencil on a dimmed circle shows over the face, as on the owner's photo in Settings (owner, 2026-11-08). */
+.mb-panel-identity > .btn.mb-face-edit { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 0; margin-bottom: var(--sp-1); padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; }
 .mb-panel-identity > .btn.mb-face-edit:hover:not(:disabled), .mb-panel-identity > .btn.mb-face-edit:active:not(:disabled) { background: transparent; }
+.mb-face-pencil { position: absolute; inset: 0; display: grid; place-items: center; border-radius: var(--r-pill); background: var(--photo-dim); color: var(--photo-mark); opacity: 0; transition: opacity 0.12s ease; pointer-events: none; }
+.mb-face-pencil .i { width: 20px; height: 20px; }
+.btn.mb-face-edit:hover:not(:disabled) .mb-face-pencil, .btn.mb-face-edit[aria-expanded="true"] .mb-face-pencil, :root[data-keys] .btn.mb-face-edit:focus-visible .mb-face-pencil { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .mb-face-pencil { transition: none; } }
 /* 訊息平台 and the row for the rest of the settings: each is done in the conversation, so a row is its name and 「設定」. */
 .mb-panel-suggest { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin-top: var(--sp-4); }
 .mb-panel-suggest .member-msg { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
@@ -70,6 +75,8 @@
 .mb-rts { display: grid; grid-template-columns: minmax(0, 1fr); padding: var(--sp-1); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
 /* The Library: what the member delivered, by day (Grok Bot's Library). Pictures in a grid of three square thumbnails,
    every other deliverable a quiet row: its kind's icon, its title, the time. Nothing framed; a row lights under the pointer. */
+/* The kinds there are, as one quiet segmented filter above the days (only when there is more than one kind). */
+.lib-filters { display: flex; margin-bottom: var(--sp-3); min-width: 0; }
 .lib-day { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .lib-day + .lib-day { margin-top: var(--sp-4); }
 .lib-pics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); }
@@ -84,4 +91,3 @@
 .lib-icon .i { width: 16px; height: 16px; }
 .lib-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sm); }
 .lib-row > time { font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
-.lib-more.btn { justify-self: start; margin-top: var(--sp-3); }

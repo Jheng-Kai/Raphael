@@ -21,8 +21,6 @@ import { btn, esc, ico, iconButton, patchHTML } from "../ui";
 import "../home.css";
 
 const HOUR = 3_600_000;
-/** Rows a section shows; the rest is counted below them (owner, 2026-11-07 night: everything of today at a glance). */
-const ROWS = 8;
 
 const clock = (at: number): string => new Date(at).toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", hour12: false });
 const faceHTML = (item: HomeItem, size: number): string => memberFaceHTML({ id: item.member_id, name: item.name, avatar: item.avatar }, size);
@@ -97,13 +95,10 @@ export function todaysSchedule(data: HomeOverview): { item: HomeItem; times: num
 function scheduleHTML(data: HomeOverview): string {
   const now = data.generated_at_ms, today = dateKey(new Date(now));
   const rows = todaysSchedule(data);
-  // The core's every item of today, or (an older core) a few items a day and the day's count: what is not drawn is counted.
-  const total = data.yesterday ? rows.length : Math.max(data.calendar_counts?.[today] ?? 0, rows.length);
-  const shown = rows.slice(0, ROWS), rest = total - shown.length;
+  // Every item of today, all drawn: no 「還有…」 to press (owner, 2026-11-08); a routine due often is already one row.
   const notice = googleNoticeHTML(data.calendar_google, { go: 'data-home-go="connections"', dismiss: "data-home-dismiss" });
   const body = rows.length
-    ? shown.map(({ item, times }) => eventRowHTML(item, now, times)).join("") +
-      (rest > 0 ? btn(esc(t("overview.moreEvents", { p0: rest })), "sm ho-more", ` data-home-go="calendar" data-home-date="${today}"`) : "")
+    ? rows.map(({ item, times }) => eventRowHTML(item, now, times)).join("")
     : `<p class="ho-empty">${esc(t("overview.noSchedule"))}</p>${btn(ico("plus") + esc(t("auto.create")), "sm ho-create", ` data-home-create="${today}"`)}`;
   return sectionHTML("schedule", t("home.schedule"), body + notice, iconButton("calendar", t("overview.calendar"), ' data-home-go="calendar"'));
 }
@@ -129,9 +124,8 @@ function pendingHTML(data: HomeOverview, members: readonly Member[]): string {
         avatar: who?.avatar ?? "", turn_id: turn, conversation_id: null, routine_id: null } satisfies HomeItem, words: t(STOPPED[item.state]) };
     });
   const open = [...questions.map(row => ({ row, words: undefined as string | undefined })), ...stopped, ...data.reports.map(row => ({ row, words: undefined }))];
-  const shown = open.slice(0, ROWS), rest = questions.length + stopped.length + Math.max(data.counts.reports, data.reports.length) - shown.length;
   const body = open.length
-    ? shown.map(({ row, words }) => itemRowHTML(row, words)).join("") + (rest > 0 ? `<p class="ho-count">${esc(t("home.moreItems", { p0: rest }))}</p>` : "")
+    ? open.map(({ row, words }) => itemRowHTML(row, words)).join("")
     : `<p class="ho-empty">${ico("check")}${esc(t("overview.allClear"))}</p>`;
   return sectionHTML("pending", t("home.pending"), body);
 }
@@ -147,7 +141,7 @@ function teamHTML(team: readonly Member[], data: HomeOverview): string {
   const sorted = team.map((m, i) => ({ m, i, state: memberState(m) }))
     .sort((a, b) => ORDER.indexOf(a.state.kind) - ORDER.indexOf(b.state.kind) || a.i - b.i);
   const body = sorted.length
-    ? sorted.slice(0, ROWS).map(({ m, state }) => {
+    ? sorted.map(({ m, state }) => {
         const more = details.get(m.id);
         // At work or waiting it says so in the core's words; free, it says what it did last, else what it is for.
         const words = state.kind === "needs" || state.kind === "busy" ? state.words
@@ -157,8 +151,7 @@ function teamHTML(team: readonly Member[], data: HomeOverview): string {
           `${ico("repeat")}${esc(nextAt(next.at_ms, data.generated_at_ms))}</time>` : "";
         return `<button type="button" class="btn ho-row ho-member" data-home-member="${m.id}" data-state="${state.kind}">${memberFaceHTML(m, 28)}` +
           `<span class="ho-row-copy"><strong>${esc(m.name)}</strong><span>${esc(words)}</span></span>${when}</button>`;
-      }).join("") +
-      (sorted.length > ROWS ? `<p class="ho-count">${esc(t("home.moreMembers", { p0: sorted.length - ROWS }))}</p>` : "")
+      }).join("")
     : `<p class="ho-empty">${esc(t("home.teamEmpty"))}</p>`;
   return sectionHTML("team", t("members.title"), body);
 }

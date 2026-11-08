@@ -34,7 +34,7 @@ const fixButton = (label: string, repair: string, resource: string): string =>
   btn(esc(label), "sm", ` data-avg="fix" data-missing-repair="${esc(repair)}" data-missing-resource="${esc(resource)}"`);
 
 const WORDS: Record<string, Extract<MessageKey, `avatarGen.${string}`>> = {
-  image_model_missing: "avatarGen.noModel",
+  image_model_missing: "avatarGen.noModel", model_unusable: "avatarGen.unusable", catalog_unavailable: "avatarGen.offline",
   missing_secret: "avatarGen.needsKey", auth_expired: "avatarGen.needsSignIn", auth: "avatarGen.needsSignIn",
   content_policy: "avatarGen.refused", credits: "avatarGen.credits", rate_limit: "avatarGen.busyProvider",
   network: "avatarGen.offline", timeout: "avatarGen.offline", busy: "avatarGen.inFlight",
@@ -90,6 +90,8 @@ export interface GenerateOptions {
 export function mountGenerate(pane: HTMLElement, o: GenerateOptions): { focus(): void } {
   let state: GenerateState = { step: "checking" };
   let prompt = "";
+  /** Whether the owner has chosen an image model (settings.get). */
+  let chosen = false;
   const draw = (): void => {
     pane.innerHTML = generateHTML(state, o.face, prompt);
     o.resized();
@@ -104,7 +106,9 @@ export function mountGenerate(pane: HTMLElement, o: GenerateOptions): { focus():
       state = { step: "candidate", candidate };
     } catch (error) {
       const failure = generateFailure(error);
-      state = failure.kind === "image_model_missing" ? { step: "off" } : { step: "ready", failure };
+      // With a model chosen, "missing" means that model cannot draw now: say so beside the field, never "no model chosen".
+      state = failure.kind === "image_model_missing" && !chosen ? { step: "off" }
+        : { step: "ready", failure: failure.kind === "image_model_missing" ? { ...failure, kind: "model_unusable" } : failure };
     }
     if (!pane.isConnected) return;
     draw();
@@ -130,7 +134,8 @@ export function mountGenerate(pane: HTMLElement, o: GenerateOptions): { focus():
   });
   draw();
   void api.settingsGet().then(({ settings }) => {
-    state = settings.image_model ? { step: "ready" } : { step: "off" };
+    chosen = !!settings.image_model;
+    state = chosen ? { step: "ready" } : { step: "off" };
   }, () => { state = { step: "ready" }; }).then(() => { if (pane.isConnected) { draw(); focus(); } });
   return { focus };
 }

@@ -559,6 +559,8 @@ export function answerMeta(turn: AgentTurn): string {
 
 /** How a turn is drawn besides its data. */
 export interface TurnLook {
+  /** The earlier exchanges with the same colleague in a row (conversation.ts threadItems), counted in this turn's line. */
+  exchangeTogether?: readonly AgentTurn[];
   greetingOpen?: boolean;
   deferPresence?: boolean;
   revealing?: (turnId: number) => boolean;

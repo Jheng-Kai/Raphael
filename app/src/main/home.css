@@ -50,8 +50,6 @@
 .ho-next > .i { width: 16px; height: 16px; }
 .ho-empty { display: flex; align-items: center; gap: var(--sp-2); margin: 0; padding-left: var(--sp-2); min-height: 48px; color: var(--text-3); font-size: var(--fs-sm); }
 .ho-empty .i { color: var(--ok); }
-.ho-count { margin: 0; padding-left: var(--sp-2); min-height: 32px; display: flex; align-items: center; font-size: var(--fs-xs); color: var(--text-3); }
-.page-home .ho-more.btn { justify-self: start; margin: var(--sp-1) 0 0 var(--sp-2); }
 .ho-create.btn { justify-self: start; margin-left: var(--sp-2); }
 /* What the schedule says of Google: its mark and words on one line, wrapping in a narrow column, the action under them. */
 .ho-schedule .cal-notice { flex-wrap: wrap; margin: var(--sp-2) 0 0 var(--sp-2); min-width: 0; color: var(--text-3); font-size: var(--fs-xs); }

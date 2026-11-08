@@ -24,10 +24,12 @@ export function exchangeView(turn: AgentTurn): HandoffView {
 }
 
 export function receivedLineHTML(turn: AgentTurn, look: TurnLook): string {
-  const view = exchangeView(turn), peer = view.from_member_id;
+  // The same colleague several times in a row is one line with every message counted (owner, 2026-11-08).
+  const views = [...(look.exchangeTogether ?? []), turn].map(exchangeView), view = views[views.length - 1]!, peer = view.from_member_id;
   const person = { name: look.memberName?.(peer) ?? "", face: look.memberFace?.(peer) ?? "" };
-  const count = peerCount([view]);
+  const count = peerCount(views);
   const state = view.state === "done" ? "" : peerStateWords(view);
-  return `<button type="button" class="btn event-open handoff-event exchange-event" data-act="peer-chat" data-exchange="${esc(turn.id)}" data-state="${esc(view.state)}" data-peer-keys="${esc(peerKey(view))}">` +
+  const keys = [...new Set(views.map(peerKey))].join(" ");
+  return `<button type="button" class="btn event-open handoff-event exchange-event" data-act="peer-chat" data-exchange="${esc(turn.id)}" data-state="${esc(view.state)}" data-peer-keys="${esc(keys)}">` +
     eventPeopleHTML(t(count === 1 ? "handoff.groupOne" : "handoff.group", { p0: count, p1: "\u00000\u0000" }), [person], state) + `</button>`;
 }

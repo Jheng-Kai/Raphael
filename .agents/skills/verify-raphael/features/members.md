@@ -104,7 +104,7 @@ npm run look -- sidebar-rail sidebar-rail-dragged-open sidebar-dragged-wider pan
 Select a member, then click the stacked header title for details.
 At compact width open the sidebar drawer to select a member first. The same title
 closes the panel; its close button updates the same remembered session state. Details holds the face (a press shows
-every picture and colour at once, no pencil), the routines, Raphael's conversations, 訊息平台 (each Telegram, Slack and
+every picture and colour at once; since 2026-11-08 a pencil on a dimmed circle shows on it under the pointer, as on the owner's photo in Settings), the routines, Raphael's conversations, 訊息平台 (each Telegram, Slack and
 Discord bot not set up is one row with 設定; a connected one is its card with pairing) and one row 「技能、記憶、聲音和
 權限」 with 設定. Every 設定 and the header's share send the owner's words into that member's conversation with an
 `intent` (chat-ask.ts): the member sets it up there, with a card for a token, and share answers with a template card.
@@ -122,7 +122,9 @@ the candidate stands round in the face's place with 使用 (primary) and 再生�
 (`mb-av-pic`, from `avatar_url`), the slime's place. A failure says its kind in plain words (avatar-generate.ts), with
 去設定 where the core names a fix; the window learns the kind only through commands.rs `window_error`, which passes
 `kind`, `repair` and `resource` of this one call and nothing else of the error's data. The Tauri timeout for the
-call is 300 s. Scenes: avatar-generate-off, avatar-generate, avatar-generate-used.
+call is 300 s. With a model chosen, a "missing" answer reads as that model being unable to draw now (with 去設定), never
+as no model chosen. Under the pointer the face shows a pencil on a dimmed circle (owner, 2026-11-08). Scenes:
+member-face-hover, avatar-generate-off, avatar-generate, avatar-generate-used.
 
 ## Driving it with look
 
@@ -133,7 +135,7 @@ npm run look -- sidebar-folders member-text --theme both --width 1120,720,1920x1
 npm run look -- member-delete member-conversation-sections --theme both --width 1120,720,1920x1080
 npm run look -- member-maker member-maker-chosen member-maker-greeting member-maker-made --theme both --width 1120,720,1920x1080
 npm run look -- slime-states slime-picker slime-sizes slime-gallery slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-sharp slime-pointer slime-cost --theme both --width 1120,720,1920x1080
-npm run look -- slime-picker avatar-generate-off avatar-generate avatar-generate-used --theme both --width 1120,720,1920x1080
+npm run look -- member-face-hover slime-picker avatar-generate-off avatar-generate avatar-generate-used --theme both --width 1120,720,1920x1080
 ```
 
 These walk the owner's flows to their end: `member-delete`

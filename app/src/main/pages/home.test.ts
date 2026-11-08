@@ -137,7 +137,7 @@ describe("the secretary's page", () => {
     expect(vi.mocked(membersList).mock.calls.length).toBe(reads);
   });
 
-  test("today's schedule lists today in time order with the calendar's colour, counts the rest and opens each one", async () => {
+  test("today's schedule lists today in time order with the calendar's colour, every row and nothing for more, and opens each one", async () => {
     const sample = overview(5);
     const at = (h: number, m = 0) => new Date(2026, 9, 27, h, m).getTime();
     sample.calendar_items = [
@@ -157,13 +157,12 @@ describe("the secretary's page", () => {
     expect(rows[0]!.classList.contains("is-rhythm") && !!rows[0]!.querySelector(".av")).toBe(true);
     expect(rows[1]!.classList.contains("is-past")).toBe(true);
     expect(rows[2]!.classList.contains("is-own")).toBe(true);
-    expect(page.el.querySelector(".ho-schedule .ho-more")!.textContent).toBe("還有 2 個");
+    // No 「還有…」 to press (owner, 2026-11-08): the heading's calendar icon is the way to the whole calendar.
+    expect(page.el.querySelector(".ho-schedule .ho-more, .ho-count")).toBeNull();
     rows[2]!.click();
     expect(app.go).toHaveBeenLastCalledWith("automations", "calendar:2026-10-27:own%3A4");
     page.el.querySelector<HTMLButtonElement>('.ho-schedule header [data-home-go="calendar"]')!.click();
     expect(app.go).toHaveBeenLastCalledWith("automations");
-    page.el.querySelector<HTMLButtonElement>(".ho-schedule .ho-more")!.click();
-    expect(app.go).toHaveBeenLastCalledWith("automations", "2026-10-27");
   });
 
   test("an empty day stays calm and offers to make something today", async () => {

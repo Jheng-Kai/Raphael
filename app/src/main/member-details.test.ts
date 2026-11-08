@@ -684,7 +684,8 @@ test("the panel has no gear: share asks the member to package itself in its conv
   choice.click(); await flush();
   expect(api.agentAskText).toHaveBeenCalledWith("把你自己打包成範本，讓別人也能用", [], current, { intent: "share-template" });
   const face = panel.el.querySelector<HTMLButtonElement>(".mb-panel-identity .mb-face-edit")!;
-  expect(face.querySelector(".mb-face-pencil")).toBeNull();
+  // Under the pointer a pencil shows on the face, as on the owner's photo in Settings (owner, 2026-11-08).
+  expect(face.querySelector('.mb-face-pencil[aria-hidden="true"] svg.i')).not.toBeNull();
   expect(face.dataset.det).toBe("avatar");
   expect(face.getAttribute("aria-haspopup")).toBe("menu");
 });
