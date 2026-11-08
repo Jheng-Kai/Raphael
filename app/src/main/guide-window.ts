@@ -27,6 +27,9 @@ let restore: (() => Promise<void>) | null = null;
 export async function fitGuideWindow(win: GuideWindow, controls: number, root: HTMLElement = document.documentElement): Promise<void> {
   if (restore) return;
   const maximized = await win.isMaximized();
+  // The size to give back is the window's ordinary one, read once it is no longer maximized: read while maximized it is
+  // the whole screen, and giving that back made the screen-sized window what 「還原」 returned to (owner, 2026-11-08).
+  if (maximized) await win.unmaximize();
   const size = await win.outerSize(), position = await win.outerPosition();
   restore = async () => {
     await win.setResizable(true);
@@ -35,7 +38,6 @@ export async function fitGuideWindow(win: GuideWindow, controls: number, root: H
     await win.setPosition(position);
     if (maximized) await win.maximize();
   };
-  if (maximized) await win.unmaximize();
   await win.setSize(new LogicalSize(GUIDE_WIDTH, GUIDE_HEIGHT + controls));
   await win.setResizable(false);
   await win.setMaximizable(false);

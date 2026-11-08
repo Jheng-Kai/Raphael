@@ -2,14 +2,15 @@
 import { describe, expect, test } from "vitest";
 import { fitGuideWindow, releaseGuideWindow, type GuideWindow } from "./guide-window";
 
+/** A window that, maximized, reports the whole screen as its size and place, as Windows does. */
 function fakeWindow(maximized: boolean) {
   const calls: string[] = [];
   const win: GuideWindow = {
     isMaximized: async () => maximized,
-    outerSize: async () => ({ width: 1600, height: 1000, type: "Physical" }) as never,
-    outerPosition: async () => ({ x: 40, y: 30, type: "Physical" }) as never,
-    unmaximize: async () => { calls.push("unmaximize"); },
-    maximize: async () => { calls.push("maximize"); },
+    outerSize: async () => (maximized ? { width: 1936, height: 1048, type: "Physical" } : { width: 1600, height: 1000, type: "Physical" }) as never,
+    outerPosition: async () => (maximized ? { x: -8, y: -8, type: "Physical" } : { x: 40, y: 30, type: "Physical" }) as never,
+    unmaximize: async () => { calls.push("unmaximize"); maximized = false; },
+    maximize: async () => { calls.push("maximize"); maximized = true; },
     setSize: async (size) => { calls.push(`size ${(size as { width: number }).width}x${(size as { height: number }).height}`); },
     setPosition: async (position) => { calls.push(`position ${(position as { x: number }).x},${(position as { y: number }).y}`); },
     setResizable: async (on) => { calls.push(`resizable ${on}`); },
@@ -20,7 +21,8 @@ function fakeWindow(maximized: boolean) {
 }
 
 describe("the guide's window", () => {
-  test("is the card under the control strip, fixed, and comes back as it was", async () => {
+  // A maximized window gives back its ordinary size, never the screen's, so 「還原」 still returns to it (owner, 2026-11-08).
+  test("is the card under the control strip, fixed, and comes back as it was, its ordinary size under the maximized one", async () => {
     const root = document.createElement("div");
     const { win, calls } = fakeWindow(true);
     await fitGuideWindow(win, 32, root);
