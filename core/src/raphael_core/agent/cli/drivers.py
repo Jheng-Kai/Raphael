@@ -9,6 +9,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import re
 import os
 import logging
 import uuid
@@ -92,6 +93,7 @@ class Driver:
         self.reset_at_ms = None
         self._diagnostic_secrets = []
         self._steers = {}
+        self._last_tool_error = None
 
     async def steer(self, text):
         if self.name != "codex" or not self.child or not self.session or not self.turn or not text.strip():
@@ -120,14 +122,22 @@ class Driver:
 
     def _event(self, kind, text):
         if kind == "error":
-            failure = classify(text, secrets=self._diagnostic_secrets)
             tail = getattr(self.child, "stderr_tail", b"") or b""
-            original = failure.detail.split("\n\nstderr:\n", 1)[0] if failure.detail else (text.get("error", text) if isinstance(text, dict) else str(text))
+            source = text
+            diagnostic = str(text) + '\n' + tail.decode('utf-8', errors='replace') + '\n' + str(self._last_tool_error or '')
+            missing = re.search(r'(?:unknown|unrecognized|no such|missing) (?:method or )?(?:MCP )?tool|(?:MCP |permission.prompt )?tool[^\n]{0,160}(?:not found|not available|not registered|does not exist)', diagnostic, re.I)
+            broken = self._last_tool_error or re.search(r'error (?:calling|executing|running) (?:the )?(?:MCP )?tool|MCP tool (?:call )?(?:failed|error)|tool_error', diagnostic, re.I)
+            if (missing or broken) and classify(text, secrets=self._diagnostic_secrets, record=False).kind in ('cli_stopped', 'unknown', 'tool_broken', 'not_found'):
+                text = {'kind': 'tool_broken', 'message': 'CLI tool is missing' if missing else 'CLI tool failed'}
+            failure = classify(text, secrets=self._diagnostic_secrets)
+            original = failure.detail.split("\n\nstderr:\n", 1)[0] if failure.detail else (source.get("error", source) if isinstance(source, dict) else str(source))
             if isinstance(original, dict):
                 original = original.get("message") or original.get("reason") or json.dumps(original, ensure_ascii=False, default=str)
             detail = "\n".join(redact(line, secrets=self._diagnostic_secrets, limit=1800) for line in str(original).splitlines())[:1800]
             if tail:
                 detail += "\n\nstderr:\n" + "\n".join(redact(line, secrets=self._diagnostic_secrets, limit=160) for line in tail.decode("utf-8", errors="replace").splitlines()[-12:])
+            if self._last_tool_error:
+                detail += '\n\ntool:\n' + redact(self._last_tool_error, secrets=self._diagnostic_secrets, limit=1000)
             # The stderr tail stays in the turn's private detail; the log only gets the classified kind
             # (private diagnostics reach the log only with the native opt-in, `native_diagnostic`).
             failure = classify({**failure.wire(), "detail": detail[:4000]}, secrets=self._diagnostic_secrets, record=False)
@@ -395,6 +405,7 @@ class Driver:
             elif kind == "user":
                 for block in packet.get("message", {}).get("content", []):
                     if isinstance(block, dict) and block.get("type") == "tool_result":
+                        self._last_tool_error = redact(block.get('content') or 'CLI tool failed', secrets=self._diagnostic_secrets, limit=1800) if block.get('is_error') else None
                         yield Event("tool_end", data={"id": block.get("tool_use_id"), "ok": not block.get("is_error", False)})
             elif kind == "result":
                 if packet.get("session_id"):
@@ -441,6 +452,7 @@ class Driver:
                         text = ""
                         yield Event("tool_start", data={"name": name})
                     elif step.get("state") in ("DONE", "ERROR"):
+                        self._last_tool_error = redact(step.get('error') or step.get('text') or 'CLI tool failed', secrets=self._diagnostic_secrets, limit=1800) if step.get('state') == 'ERROR' else None
                         yield Event("tool_end", data={"name": name, "ok": step.get("state") == "DONE"})
             elif kind == "result":
                 result = packet.get("result") or {}
@@ -552,6 +564,8 @@ class Driver:
                         final_text = "" if item.get("phase") == "commentary" else item.get("text", "")
                         yield Event("message", item.get("text", ""), data={"id": item.get("id"), "final": item.get("phase") == "final_answer"})
                 if item.get("type") in ("commandExecution", "fileChange", "mcpToolCall", "webSearch"):
+                    if item.get('type') == 'mcpToolCall' and method == 'item/completed':
+                        self._last_tool_error = redact(item.get('error') or 'CLI tool failed', secrets=self._diagnostic_secrets, limit=1800) if item.get('status') == 'failed' else None
                     if method == "item/started":
                         final_text = ""
                     yield Event("tool_start" if method.endswith("started") else "tool_end", data={

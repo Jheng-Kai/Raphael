@@ -20385,3 +20385,34 @@ WORDS = {'This version cannot connect compatibly to {name}. Update Raphael. If i
                  'th': 'ไม่สามารถตอบกลับได้',
                  'id': 'tidak tersedia',
                  'tr': 'kullanılamıyor'}}
+
+WORDS.update({
+    '{name} could not find a required tool. Update Raphael; if it is current, keep this conversation and report the problem.': {
+        'zh-CN': '{name} 找不到这次工作需要的工具，请更新拉斐尔；若已是最新版，请保留对话并报告问题。',
+        'ko': '{name}에서 필요한 도구를 찾지 못했습니다. 라파엘을 업데이트하고, 최신 버전이라면 이 대화를 보관하고 문제를 신고하세요.',
+        'es': '{name} no encontró una herramienta necesaria. Actualiza Raphael; si ya está actualizado, conserva esta conversación e informa del problema.',
+        'fr': '{name} ne trouve pas un outil nécessaire. Mettez Raphael à jour ; s’il est à jour, conservez cette conversation et signalez le problème.',
+        'de': '{name} konnte ein benötigtes Werkzeug nicht finden. Aktualisiere Raphael; falls es aktuell ist, bewahre diesen Chat auf und melde das Problem.',
+        'pt-BR': '{name} não encontrou uma ferramenta necessária. Atualize o Raphael; se já estiver atualizado, guarde esta conversa e relate o problema.',
+        'it': '{name} non ha trovato uno strumento necessario. Aggiorna Raphael; se è già aggiornato, conserva questa conversazione e segnala il problema.',
+        'ru': '{name} не удалось найти нужный инструмент. Обновите Raphael; если установлена последняя версия, сохраните этот разговор и сообщите о проблеме.',
+        'vi': '{name} không tìm thấy công cụ cần thiết. Hãy cập nhật Raphael; nếu đã là bản mới nhất, hãy giữ cuộc trò chuyện này và báo lỗi.',
+        'th': '{name} ไม่พบเครื่องมือที่จำเป็น โปรดอัปเดต Raphael หากเป็นเวอร์ชันล่าสุดแล้ว ให้เก็บบทสนทนานี้ไว้และรายงานปัญหา',
+        'id': '{name} tidak menemukan alat yang diperlukan. Perbarui Raphael; jika sudah terbaru, simpan percakapan ini dan laporkan masalahnya.',
+        'tr': '{name} gerekli bir aracı bulamadı. Raphael’i güncelleyin; güncelse bu konuşmayı saklayıp sorunu bildirin.',
+    },
+    '{name} encountered a tool error. Check the work details and keep this conversation for diagnosis.': {
+        'zh-CN': '{name} 调用工具时发生错误，请查看工作详情并保留对话以供检查。',
+        'ko': '{name}에서 도구 오류가 발생했습니다. 작업 세부 정보를 확인하고 진단을 위해 이 대화를 보관하세요.',
+        'es': '{name} encontró un error de herramienta. Revisa los detalles del trabajo y conserva esta conversación para el diagnóstico.',
+        'fr': '{name} a rencontré une erreur d’outil. Consultez les détails du travail et conservez cette conversation pour le diagnostic.',
+        'de': 'Bei {name} ist ein Werkzeugfehler aufgetreten. Prüfe die Arbeitsdetails und bewahre diesen Chat zur Diagnose auf.',
+        'pt-BR': '{name} encontrou um erro de ferramenta. Confira os detalhes do trabalho e guarde esta conversa para diagnóstico.',
+        'it': '{name} ha riscontrato un errore dello strumento. Controlla i dettagli del lavoro e conserva questa conversazione per la diagnosi.',
+        'ru': 'В {name} произошла ошибка инструмента. Проверьте сведения о работе и сохраните этот разговор для диагностики.',
+        'vi': '{name} gặp lỗi công cụ. Hãy kiểm tra chi tiết công việc và giữ cuộc trò chuyện này để chẩn đoán.',
+        'th': '{name} พบข้อผิดพลาดของเครื่องมือ โปรดตรวจสอบรายละเอียดงานและเก็บบทสนทนานี้ไว้เพื่อวิเคราะห์ปัญหา',
+        'id': '{name} mengalami kesalahan alat. Periksa detail pekerjaan dan simpan percakapan ini untuk diagnosis.',
+        'tr': '{name} bir araç hatasıyla karşılaştı. İş ayrıntılarını kontrol edin ve tanılama için bu konuşmayı saklayın.',
+    },
+})

@@ -296,6 +296,14 @@ class Failure:
 
     def sentence(self, name, language="en", *, now=None):
         language = _language(language)
+        if self.kind == 'tool_broken' and self.reason in ('CLI tool is missing', 'CLI tool failed'):
+            messages = (with_ui_words({'zh-TW': '{name} 找不到這次工作需要的工具，請更新拉斐爾；若已是最新版，請保留對話並回報問題。',
+                'en': '{name} could not find a required tool. Update Raphael; if it is current, keep this conversation and report the problem.',
+                'ja': '{name} は必要なツールを見つけられませんでした。ラファエルを更新し、最新版ならこの会話を残して問題を報告してください。'})
+                if self.reason == 'CLI tool is missing' else with_ui_words({'zh-TW': '{name} 呼叫工具時發生錯誤，請查看工作詳情並保留對話以供檢查。',
+                'en': '{name} encountered a tool error. Check the work details and keep this conversation for diagnosis.',
+                'ja': '{name} のツール呼び出しでエラーが発生しました。作業の詳細を確認し、この会話を残してください。'}))
+            return messages[language].format(name=name)
         if self.kind == "cli_stopped" and (server := re.search(r"required MCP servers failed to initialize:\s*([\w., -]+)", self.reason, re.I)):
             servers = server[1].strip()[:100]
             return with_ui_words({"zh-TW": "{name} 無法啟動必要的 MCP 伺服器：{servers}。", "en": "{name} could not start the required MCP server: {servers}.", "ja": "{name} は必須の MCP サーバーを起動できませんでした：{servers}。"})[language].format(name=name, servers=servers)
@@ -409,6 +417,7 @@ def classify(value: object, *, secrets=(), record=True) -> Failure:
     if kind not in KINDS or kind in ("unknown", "tool_broken", "server"):
         fallback = kind if kind in KINDS else "unknown"
         patterns = (
+            ('tool_broken', r'\bCLI tool (?:is missing|failed)\b'),
             ("cli_stopped", r"CLI (?:process|stream) ended before completion|CLI ended without an answer|required MCP servers failed to initialize"),
             ("credits", _CREDITS),
             ("usage_limit", _QUOTA),

@@ -102,7 +102,6 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
         return loop.tools
     if task.scope == 'room':
         loop.speech_only = True
-        loop.tools[:] = list(spec['tools'])
     loop.refresh_tools = refresh_tools
     return loop
 

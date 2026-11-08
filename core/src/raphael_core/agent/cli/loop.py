@@ -252,14 +252,21 @@ class CliLoop:
         self._buffer = ""
         self._completed_buffer, self._separated = False, []
 
+    def _mcp_tools(self):
+        tools = getattr(self, 'refresh_tools', lambda: self.tools)()
+        # Claude's permission-prompt flag must always name a mounted callback, even after a catalog refresh.
+        if (not self.no_tools and self.structured is None and (brain_ref(self.model) or ('',))[0] == 'claude'
+                and not any(item['function']['name'] == 'approve' for item in tools)):
+            self.tools[:] = [*tools, APPROVE]
+            return self.tools
+        return tools
+
     @tool_step(lambda self, identifier, name, args: name,
                scope=lambda self, *args: self.activity_turn)
     async def _tool(self, identifier, name, args):
         if self.no_tools:
             return ToolOutcome(False, "tools_disabled")
         async with self._serial:
-            if getattr(self, 'speech_only', False) and name == 'approve':
-                return ToolOutcome(False, 'room_speech_only', content='Start this as private work with handoff.')
             # Every hand-off of a turn starts now; anything else waits for the delegated work.
             if self._handoff_pending and name != "handoff":
                 return ToolOutcome(False, 'waiting_for_handoff')
@@ -270,7 +277,7 @@ class CliLoop:
             if name == "approve":
                 decision = await self._permission(args)
                 if decision in ("deny", "expired"):
-                    answer = {"behavior": "deny", "message": phrase(self.language, "expired") if decision == "expired" else "The owner did not approve this action."}
+                    answer = {"behavior": "deny", "message": phrase(self.language, "expired") if decision == "expired" else self._permission_denial}
                 else:
                     answer = {"behavior": "allow", "updatedInput": args.get("input", args.get("tool_input", {}))}
                     if decision == "always" and isinstance(args.get("tool_name"), str):
@@ -325,7 +332,25 @@ class CliLoop:
 
     async def _permission(self, args):
         self._progress()
+        self._permission_denial = 'The owner did not approve this action.'
+        name = args.get('tool_name')
+        if isinstance(name, str) and name.startswith('mcp__'):
+            alias = (name.removeprefix('mcp__raphael__') if name.startswith('mcp__raphael__') else
+                     'computer__' + name.removeprefix('mcp__computer__') if name.startswith('mcp__computer__') else None)
+            if name.startswith('mcp__raphael__computer__'):
+                alias = None
+            offered = {item['function']['name'] for item in self._mcp_tools()}
+            # This only admits the MCP call; its execution still enters Raphael's context-specific tool gate.
+            if alias in offered and alias != 'approve':
+                return 'once'
+            self._permission_denial = 'This MCP tool is not offered in this turn. Use the current tool list.'
+            return 'deny'
+        if getattr(self, 'speech_only', False):
+            self._permission_denial = 'Room speech only uses the offered meeting tools. Start private work with handoff for other actions.'
+            return 'deny'
         outcome = await self._execute("permission", "cli_permission", args)
+        if not outcome.ok and outcome.kind not in ('denied', 'expired'):
+            self._permission_denial = outcome.instruction or 'This native action was refused by the permission policy. Use Raphael MCP tools.'
         if outcome.kind == "expired":
             return "expired"
         return "once" if outcome.ok else "deny"  # Native permissions must be rechecked for protected data each time.
@@ -568,7 +593,7 @@ class CliLoop:
                 workspace = workspace_root / str(self.member_id) / str(self.conversation_id) / name
                 workspace.mkdir(parents=True, exist_ok=True)
                 await secure_directory(workspace)
-                async with RaphaelMcp(lambda: getattr(self, "refresh_tools", lambda: self.tools)(), self._tool) as server:
+                async with RaphaelMcp(self._mcp_tools, self._tool) as server:
                     self._session = self.sessions.get(self.member_id, self.model, self.conversation_id) if self.resume_session else None
                     if self.context_sections:
                         self.user += "\n\n" + "\n\n".join(self.context_sections.values())

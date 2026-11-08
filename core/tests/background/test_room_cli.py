@@ -1,6 +1,9 @@
 """Room CLI turns use the same background task, tool gate and approval lifecycle."""
 import asyncio
 import json
+import os
+import sys
+import httpx
 import pytest
 
 from raphael_core.agent.cli.drivers import Event
@@ -9,6 +12,7 @@ from raphael_core.agent.history import AgentHistory
 from raphael_core.background.run import RunLimits
 from raphael_core.worker.loop import Outcome
 from .conftest import Clock, until
+from .test_room_meeting import meeting  # noqa: F401
 
 
 def submit_room(rig):
@@ -243,3 +247,152 @@ async def test_cli_speech_rejects_native_permission_even_with_full_permission(ma
     task,_=submit_room(rig)
     await until(lambda:rig.task(task).state=='done')
     assert not rig.service.waiting_questions()
+
+
+@pytest.mark.parametrize('brain', ['claude', 'codex', 'gemini'])
+async def test_room_cli_board_and_permission_callback_share_the_actual_mcp_surface(meeting, monkeypatch, tmp_path, brain):
+    rig, members, rooms, room, alice = meeting
+    members.store.update_member(alice.id, model='cli:' + brain)
+    rig.service.use_cli(Brains(tmp_path))
+    observations = []
+
+    class Driver:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def run(self, *, endpoint, token, permission, **kwargs):
+            async with httpx.AsyncClient(headers={'Authorization': 'Bearer ' + token}) as http:
+                async def rpc(method, **params):
+                    response = await http.post(endpoint, json={'jsonrpc': '2.0', 'id': len(observations) + 1,
+                        'method': method, 'params': params})
+                    return response.json()
+                listing = await rpc('tools/list')
+                names = {item['name'] for item in listing['result']['tools']}
+                assert names == {'handoff', 'room_post', 'ask_member', 'work_status', *({'approve'} if brain == 'claude' else set())}
+                if brain == 'claude':
+                    allowed = await rpc('tools/call', name='approve', arguments={'tool_name': 'mcp__raphael__work_status', 'input': {}})
+                    assert not allowed['result']['isError']
+                    assert json.loads(allowed['result']['content'][0]['text'])['behavior'] == 'allow'
+                board = await rpc('tools/call', name='work_status', arguments={})
+                assert not board['result']['isError'] and 'board' in board['result']['content'][0]['text']
+                assert not rig.service.waiting_questions()
+                if brain == 'claude':
+                    for name in ('Bash', 'mcp__raphael__not_offered', 'mcp__raphael__approve'):
+                        denied = await rpc('tools/call', name='approve', arguments={'tool_name': name, 'input': {'command': 'echo synthetic'}})
+                        assert not denied['result']['isError']
+                        decision = json.loads(denied['result']['content'][0]['text'])
+                        assert decision['behavior'] == 'deny' and decision['message']
+                else:
+                    assert await permission({'tool_name': 'Bash', 'input': {'command': 'echo synthetic'}}) == 'deny'
+                observations.append(board)
+            yield Event('final', 'The board is readable; work stays private.')
+
+        async def interrupt(self):
+            pass
+
+    monkeypatch.setattr('raphael_core.agent.cli.loop.Driver', Driver)
+    await rooms._send({'room_id': room['id'], 'text': '@Alice read the board', 'request_id': 'cli-approve-' + brain, 'ui_language': 'en'})
+    await until(lambda: rooms._exchanges.latest(room['id'])['state'] == 'done')
+    assert observations and not rig.service.waiting_questions()
+    assert not rig.conn.execute("SELECT 1 FROM worker_tasks WHERE mode='work'").fetchone()
+    assert not rig.client.chat_calls
+    messages = (await rooms._messages({'room_id': room['id']}))['messages']
+    assert any(message['text'] == 'The board is readable; work stays private.' for message in messages)
+
+
+@pytest.mark.parametrize('approved', [True, False])
+async def test_background_claude_mcp_permission_still_uses_the_tool_owner_card(make_rig, monkeypatch, tmp_path, calls, approved):
+    rig = make_rig()
+    await rig.plugins.connect(look='T2')
+    rig.service.use_cli(Brains(tmp_path))
+    decisions = []
+
+    class Driver:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def run(self, *, endpoint, token, **kwargs):
+            async with httpx.AsyncClient(headers={'Authorization': 'Bearer ' + token}) as http:
+                async def call(name, arguments):
+                    response = await http.post(endpoint, json={'jsonrpc': '2.0', 'id': name,
+                        'method': 'tools/call', 'params': {'name': name, 'arguments': arguments}})
+                    return response.json()['result']
+                result = await call('approve', {'tool_name': 'mcp__raphael__Notes__look', 'input': {'topic': 'draft'}})
+                assert not result['isError'] and json.loads(result['content'][0]['text'])['behavior'] == 'allow'
+                assert not rig.service.waiting_questions() and not calls
+                result = await call('Notes__look', {'topic': 'draft'})
+                assert result['isError'] is not approved
+                decisions.append(result)
+            yield Event('final', 'The owner decision was respected.')
+
+        async def interrupt(self):
+            pass
+
+    monkeypatch.setattr('raphael_core.agent.cli.loop.Driver', Driver)
+    task = rig.submit('Review the draft', model='cli:claude')
+    await until(lambda: rig.task(task).state in ('waiting', 'failed'))
+    assert rig.task(task).state == 'waiting' and not calls
+    [question] = rig.service.waiting_questions()
+    assert rig.service.answer(task, question['id'], approved) == ('approved' if approved else 'denied')
+    await rig.wait_for_reports()
+    assert rig.task(task).state == 'done' and decisions
+    assert calls == (['look'] if approved else [])
+
+
+async def test_claude_room_child_uses_the_mounted_permission_prompt_tool(meeting, tmp_path, monkeypatch):
+    from raphael_core.agent.cli.drivers import Driver as ProductionDriver
+    errors = []
+    original = ProductionDriver._event
+    def observed(driver, kind, value):
+        event = original(driver, kind, value)
+        if kind == 'error':
+            errors.append(event.data)
+        return event
+    monkeypatch.setattr(ProductionDriver, '_event', observed)
+    rig, members, rooms, room, alice = meeting
+    members.store.update_member(alice.id, model='cli:claude')
+    script = tmp_path / 'room_claude.py'
+    script.write_text('''import http.client, json, sys, urllib.parse
+args = sys.argv
+assert args[args.index('--permission-prompt-tool') + 1] == 'mcp__raphael__approve'
+with open(args[args.index('--mcp-config') + 1], encoding='utf-8') as stream:
+    config = json.load(stream)['mcpServers']['raphael']
+json.loads(sys.stdin.readline())
+def rpc(method, **params):
+    body = json.dumps({'jsonrpc':'2.0', 'id':1, 'method':method, 'params':params}).encode()
+    url = urllib.parse.urlsplit(config['url'])
+    connection = http.client.HTTPConnection(url.hostname, url.port, timeout=5)
+    try:
+        connection.request('POST', url.path, body=body, headers={**config['headers'], 'Content-Type':'application/json'})
+        return json.loads(connection.getresponse().read())
+    finally:
+        connection.close()
+assert 'approve' in {tool['name'] for tool in rpc('tools/list')['result']['tools']}
+def approve(name):
+    result = rpc('tools/call', name='approve', arguments={'tool_name':name, 'input':{}})['result']
+    assert not result['isError']
+    return json.loads(result['content'][0]['text'])
+assert approve('mcp__raphael__work_status')['behavior'] == 'allow'
+board = rpc('tools/call', name='work_status', arguments={})['result']
+assert not board['isError'] and 'board' in board['content'][0]['text']
+assert approve('Bash')['behavior'] == 'deny'
+print(json.dumps({'type':'result', 'subtype':'success', 'session_id':'synthetic-room', 'result':'The real child read the board.'}), flush=True)
+''', encoding='utf-8')
+
+    class FakeBrains(Brains):
+        def __init__(self, home):
+            super().__init__(home)
+            # Windows socket/SSL providers need SystemRoot even in a credential-free child environment.
+            self.environ = {'SystemRoot': os.environ.get('SystemRoot', 'C:\\Windows'), 'PYTHONIOENCODING': 'utf-8'}
+
+        def command(self, name):
+            assert name == 'claude'
+            return [sys.executable, str(script)]
+
+    rig.service.use_cli(FakeBrains(tmp_path))
+    await rooms._send({'room_id': room['id'], 'text': '@Alice read the board', 'request_id': 'real-child-approve', 'ui_language': 'en'})
+    await until(lambda: errors or rooms._exchanges.latest(room['id'])['state'] == 'done')
+    assert not errors, errors
+    messages = (await rooms._messages({'room_id': room['id']}))['messages']
+    assert any(message['text'] == 'The real child read the board.' for message in messages)
+    assert not rig.service.waiting_questions() and not rig.client.chat_calls

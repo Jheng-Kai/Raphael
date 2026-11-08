@@ -13,6 +13,7 @@ from raphael_core.evaluate.guardian_driver import RpcDriver
 from raphael_core.evaluate.guardian_scenarios import cells
 
 from background.conftest import Links
+from cli_context import NativeContext
 from test_guardian import FakeBrains
 from test_guardian_scenarios import FakeClient
 
@@ -146,15 +147,19 @@ async def test_a_refused_meeting_call_tells_the_model_what_to_fix(tmp_path):
 
 def cli_brain(monkeypatch, client, scenario, limited=()):
     """A CLI that answers as the fixture brain; the members in `limited` are always rate-limited."""
+    context = NativeContext()
+
     class Driver:
         def __init__(self, *args, **kwargs):
             pass
 
-        async def run(self, *, system, user, endpoint, token, **kwargs):
+        async def run(self, *, system, user, endpoint, token, session=None, **kwargs):
             yield Event('model','owner-model')
             if 'Return only your speak choice' in system:
                 yield Event('final','{"speak":false,"urgency":0}')
                 return
+            native, effective = context.receive(system, user, session)
+            yield Event('session', native)
             if scenario=='S07.meeting' and 'You are in a group chat' not in user:
                 async with httpx.AsyncClient() as http:
                     response = await http.post(endpoint, headers={'Authorization':'Bearer ' + token}, json={
@@ -163,16 +168,18 @@ def cli_brain(monkeypatch, client, scenario, limited=()):
                             'roles':{'4':'moderator','1':'pro','5':'con'}}}})
                     assert not response.json()['result']['isError'], response.text
                 answer = '已開啟會議。'
-            elif json.loads(system.split('<team_roster>')[-1].split('</team_roster>')[0])['self_id'] in limited:
+            elif json.loads(effective.split('<team_roster>')[-1].split('</team_roster>')[0])['self_id'] in limited:
                 yield Event('error','rate_limited')
                 return
             else:
-                answer, _ = client.answer(system, user)
+                answer, _ = client.answer(effective, user)
+            context.answered(native, answer)
             yield Event('final',answer)
 
         async def interrupt(self):
             pass
     monkeypatch.setattr('raphael_core.agent.cli.loop.Driver', Driver)
+    return context
 
 
 @pytest.mark.parametrize('scenario', ['S02', 'S07.meeting'])
@@ -189,6 +196,44 @@ async def test_p02_scenarios_pass_on_both_production_brain_paths(tmp_path, monke
         reasons, turns = await driver.execute(next(cell for cell in cells() if cell.id==scenario))
         assert not reasons, (reasons, [turn.get('text') for turn in turns])
         assert turns
+    finally:
+        await driver.aclose()
+
+
+async def test_native_roster_survives_unchanged_turns_applies_updates_and_rebuilds_after_clear(tmp_path, monkeypatch):
+    context = cli_brain(monkeypatch, P02Brain('S02'), 'S02')
+    driver = RpcDriver(tmp_path, 'cli:codex:owner-model', P02Brain('S02'), Budget(40), brains=FakeBrains(tmp_path))
+    try:
+        members = await driver.seed_team()
+        await driver.install_fixture()
+        for _ in range(2):
+            assert (await driver.ask('List the current public team inventory.'))['status'] == 'done'
+        first, unchanged = context.calls
+        assert first['session'] is None and unchanged['session'] == first['native']
+        assert '<team_roster>' in first['user'] and '<team_roster>' not in first['system']
+        assert '<team_roster>' not in unchanged['user'] and 'Team changed' not in unchanged['user']
+        assert unchanged['roster'] == first['roster']
+
+        await driver.app.call('members.update', {'id': members[-1], 'name': 'Synthetic Cedar'})
+        await driver.app.call('members.set_primary', {'id': members[0]})
+        driver.app.integrations._config.remove('guardian-mail')
+        for _ in range(2):
+            assert (await driver.ask('List the updated public team inventory.'))['status'] == 'done'
+        changed, stable = context.calls[2:]
+        assert changed['session'] == stable['session'] == first['native']
+        assert 'Team changed' in changed['user']
+        assert changed['roster'] == driver.app.members.team_context(0, 'zh-TW')
+        assert changed['roster']['primary_id'] == changed['roster']['chief_id'] == members[0]
+        assert changed['roster']['connected'] < first['roster']['connected']
+        assert any(person['name'] == 'Synthetic Cedar' for person in changed['roster']['members'])
+        assert 'Team changed' not in stable['user'] and '<team_roster>' not in stable['user']
+        assert stable['roster'] == changed['roster']
+
+        await driver.app.call('agent.history.clear', {'member_id': 0})
+        assert (await driver.ask('List the current public team inventory again.'))['status'] == 'done'
+        rebuilt = context.calls[-1]
+        assert rebuilt['session'] is None and rebuilt['native'] != first['native']
+        assert '<team_roster>' in rebuilt['user'] and rebuilt['roster'] == stable['roster']
     finally:
         await driver.aclose()
 
