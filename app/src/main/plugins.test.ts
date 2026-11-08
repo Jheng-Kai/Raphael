@@ -259,9 +259,12 @@ test("managed disconnect confirms twice and private Google reconnect uses its ow
 test("only trusted remote logos are rendered and they never send a referrer", () => {
   for (const url of ["http://logos.composio.dev/a.svg", "https://composio.dev.evil/a.svg", "https://user@composio.dev/a", "javascript:alert(1)", "https://logos.composio.dev:8443/a.svg"])
     expect(pluginLogoURL(url)).toBeNull();
-  const html = connectionsHTML({ ...emptyConnectionsView(), configured: true, tab: "store", catalog: [storePlugin(toolkit, [])] });
-  expect(html).toContain('src="https://logos.composio.dev/notion.svg"');
+  // A service the app does not know shows the catalogue's picture; one it knows (Notion) its own mark (owner, 2026-11-08).
+  const unknown: Toolkit = { ...toolkit, slug: "acmecrm", name: "Acmecrm", logo: "https://logos.composio.dev/acmecrm.svg" };
+  const html = connectionsHTML({ ...emptyConnectionsView(), configured: true, tab: "store", catalog: [storePlugin(unknown, []), storePlugin(toolkit, [])] });
+  expect(html).toContain('src="https://logos.composio.dev/acmecrm.svg"');
   expect(html).toContain('referrerpolicy="no-referrer"');
+  expect(html).not.toContain('src="https://logos.composio.dev/notion.svg"');
 });
 
 

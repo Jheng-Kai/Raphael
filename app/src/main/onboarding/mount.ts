@@ -16,14 +16,15 @@ import { createProviders } from "../providers";
 import { describeError, keyReasonText } from "../format";
 import { wireKeyField } from "../keyfield";
 import { UI_LANGUAGES } from "../pages/settings-view";
+import { languageButtonHTML, openLanguagePicker } from "../language-picker";
 import { storePlugin } from "../plugins-data";
 import { modelPickerHTML, mountModelPicker, type ModelPickerLook } from "../model-picker";
 import { createServices, servicesHTML as abilityRowsHTML } from "../services";
 import type { AppContext, BrainSettings, MainEvent, ModelCatalog, StoreService } from "../types";
-import { actionRow, btn, closeMenu, esc, openMenu, openMenuOnArrow, sel, toaster } from "../ui";
+import { actionRow, btn, closeMenu, esc, openMenuOnArrow, toaster } from "../ui";
 import { pickServices } from "./helpers";
 import { type FlowState, type Mode, initialState, isLast, reduce } from "./flow";
-import { abilitiesHTML, serviceTilesHTML, servicesHTML, toolsHTML, welcomeHTML } from "./screens";
+import { DEMOS, abilitiesHTML, demoAsk, demoReply, serviceTilesHTML, servicesHTML, toolsHTML, welcomeHTML } from "./screens";
 
 /** The emblem's diameter on the welcome, in px (its canvas is 1.3 times larger, so that its rays have room). */
 const EMBLEM_PX = 96;
@@ -131,9 +132,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   function bodyHTML(): string {
     switch (flow.step) {
       case "welcome":
-        return welcomeHTML({
-          languageSelect: sel(UI_LANGUAGES, device().ui_language, t("settings.059"), ' data-ob="lang"'),
-        });
+        return welcomeHTML();
       case "tools":
         return toolsHTML(accounts.view(), { ...key, error: keyError?.() ?? null }, accountsError(), providers.view());
       case "services":
@@ -169,20 +168,53 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   function render(): void {
     closeMenu();
     stopEmblem();
+    stopTyping();
     root.dataset.step = flow.step;
+    // The language waits at the window's top left on the welcome, out of the way of what the screen says (owner,
+    // 2026-11-08: more languages are coming, and their names are long).
+    const language = flow.step === "welcome" ? `<div class="ob-lang">${languageButtonHTML(UI_LANGUAGES, device().ui_language, ' data-ob="lang"')}</div>` : "";
     root.innerHTML =
-      `<div class="ob-card"><div class="ob-pane">` +
+      `<div class="ob-card">${language}<div class="ob-pane">` +
       `<div class="ob-body"><div class="ob-col">${bodyHTML()}</div></div>` +
       `<div class="ob-foot">${footHTML()}</div>` +
       `</div></div>`;
     enterScreen();
     mountVisionPicker();
     showEmblem();
+    startTyping();
   }
 
   function stopEmblem(): void {
     emblem?.dispose();
     emblem = null;
+  }
+
+  /** The welcome types an ask a letter at a time, shows Raphael's answer, deletes the ask and types the next one. */
+  let typing: ReturnType<typeof setTimeout> | undefined;
+  function stopTyping(): void { clearTimeout(typing); typing = undefined; }
+  function startTyping(): void {
+    const typed = flow.step === "welcome" ? root.querySelector<HTMLElement>("[data-ob-typed]") : null;
+    const reply = root.querySelector<HTMLElement>("[data-ob-reply]");
+    if (!typed || !reply || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let index = 0, shown = 0;
+    const later = (ms: number, then: () => void): void => { typing = setTimeout(() => { if (!destroyed && typed.isConnected) then(); }, ms); };
+    const typeNext = (): void => {
+      const ask = [...demoAsk(DEMOS[index]!)];
+      if (shown < ask.length) { shown++; typed.textContent = ask.slice(0, shown).join(""); later(70, typeNext); return; }
+      reply.textContent = demoReply(DEMOS[index]!);
+      reply.classList.add("is-on");
+      later(2600, erase);
+    };
+    const erase = (): void => {
+      reply.classList.remove("is-on");
+      const ask = [...demoAsk(DEMOS[index]!)];
+      if (shown > 0) { shown--; typed.textContent = ask.slice(0, shown).join(""); later(28, erase); return; }
+      index = (index + 1) % DEMOS.length;
+      later(380, typeNext);
+    };
+    typed.textContent = "";
+    reply.textContent = "";
+    later(700, typeNext);
   }
 
   /** The welcome's emblem appears as it does on the desktop (with reduced motion it just stands there). */
@@ -289,6 +321,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     abilities.reset();
     closeMenu();
     stopEmblem();
+    stopTyping();
     accounts.stop();
     stopEvents();
     stopLocale();
@@ -434,13 +467,12 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     if (destroyed) return;
     const target = e.target as Element;
 
-    const choose = target.closest<HTMLElement>(".sel");
-    if (choose) {
-      if (choose.dataset.ob === "lang") {
-        openMenu(choose, UI_LANGUAGES, device().ui_language, (value) => void app.setDevice({ ui_language: value as "zh-TW" | "en" | "ja" }).catch((err) => toaster.info(describeError(err))));
-      }
+    const language = target.closest<HTMLElement>('[data-ob="lang"]');
+    if (language) {
+      openLanguagePicker(language, UI_LANGUAGES, device().ui_language, (value) => void app.setDevice({ ui_language: value as "zh-TW" | "en" | "ja" }).catch((err) => toaster.info(describeError(err))));
       return;
     }
+    if (target.closest(".sel")) return;
 
     // ChatGPT and the command-line accounts: the same controller, and the same buttons, as Settings > Models.
     if (flow.step === "tools" && target.closest("button[data-chatgpt], button[data-cli]")) {

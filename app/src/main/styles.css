@@ -610,15 +610,37 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .ob-col > h2 { margin: 0; font: 500 30px/1.3 var(--display); text-align: center; text-wrap: balance; }
 .ob-col > h2:focus { outline: none; }
 .ob[data-step="abilities"] .ob-col { width: min(100%, 560px); }
-/* The welcome is short: it stands in the middle of the card, its emblem over its name, one promise and the language. */
+/* The welcome is short: it stands in the middle of the card, its emblem over its name and an ask he answers. */
 .ob[data-step="welcome"] .ob-body { display: grid; grid-template-columns: minmax(0, 1fr); align-content: center; padding-top: var(--sp-4); }
 .ob[data-step="welcome"] .ob-col { justify-items: center; width: min(100%, 440px); text-align: center; }
 .ob[data-step="welcome"] .ob-col > h2 { margin-top: var(--sp-3); font-size: 40px; }
 .ob-emblem { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; height: 125px; }
 .ob-emblem canvas { display: block; }
-.ob-line { max-width: 360px; margin: var(--sp-2) 0 0; color: var(--text-2); font-size: var(--fs-md); line-height: 1.6; text-wrap: balance; }
+/* What the team can do, typed (owner, 2026-11-08): an ask appears a letter at a time with a caret, his answer (告。…)
+   fades in under it in a quieter grey, then the ask is deleted and the next one typed. Both lines keep their height, so
+   nothing under them moves. A reader hears one sentence instead (.ob-sr). */
+.ob-demo { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-2); width: 100%; margin-top: var(--sp-4); }
+.ob-demo-ask { display: flex; align-items: center; justify-content: center; min-height: 1.6em; margin: 0; font: 500 var(--fs-lg)/1.6 var(--voice, var(--ui)); color: var(--text); white-space: nowrap; }
+.ob-caret { display: inline-block; width: 2px; height: 1.1em; margin-left: 2px; border-radius: 1px; background: var(--text); }
+@media (prefers-reduced-motion: no-preference) { .ob-caret { animation: ob-caret 1s steps(1) infinite; } }
+@keyframes ob-caret { 50% { opacity: 0; } }
+.ob-demo-reply { min-height: 1.6em; margin: 0; font-size: var(--fs-md); line-height: 1.6; color: var(--text-3); opacity: 0; transition: opacity 0.25s ease; }
+.ob-demo-reply.is-on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .ob-demo-reply { opacity: 1; transition: none; } .ob-caret { display: none; } }
+.ob-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; }
 .ob-main { margin-top: var(--sp-5); }
-.ob-lang { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-3); margin-top: var(--sp-6); }
+/* The language at the card's top left, a quiet pill: a globe, its own name, a chevron. */
+.ob-lang { position: absolute; top: var(--sp-4); left: var(--sp-4); z-index: 2; }
+.lang-btn.btn { gap: 6px; min-height: var(--h-ctl-sm); padding: 0 var(--sp-2) 0 calc(var(--sp-2) + 2px); border: 0; border-radius: var(--r-pill); background: transparent; font-size: var(--fs-xs); color: var(--text-2); }
+.lang-btn.btn:hover:not(:disabled), .lang-btn.btn[aria-expanded="true"] { background: var(--hover); color: var(--text); }
+.lang-btn .i { width: 16px; height: 16px; }
+/* The picker: a search field once there are many languages, then each language in its own script, its English name quiet. */
+.lang-menu { min-width: 220px; max-height: min(420px, 70vh); overflow-y: auto; }
+.lang-search { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-1) var(--sp-1) var(--sp-2); padding: 0 var(--sp-2); height: var(--h-ctl-sm); border-radius: var(--r-sm); background: var(--surface-2); color: var(--text-3); }
+.lang-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: var(--fs-sm); color: var(--text); }
+.lang-search .i { width: 16px; height: 16px; }
+:where(:root[data-keys]) .lang-search:focus-within { box-shadow: inset 0 0 0 2px var(--focus); }
+.lang-none { margin: 0; padding: var(--sp-2) var(--sp-3); font-size: var(--fs-sm); color: var(--text-3); }
 /* Under the choice: one wide black pill and a grey one for the way back (Grok Bot's Next and Back). The grid fades out
    over the foot, as Grok Bot's tiles do. */
 .ob-foot { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; padding: var(--sp-3) var(--sp-6) var(--sp-5); }
@@ -628,11 +650,10 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .ob-foot .btn.pri { width: 100%; }
 .ob-foot .ob-back { border-color: var(--hover); background: var(--hover); }
 .ob-foot .ob-back:hover:not(:disabled) { background: var(--pressed); }
-/* Two small slimes float by a step's title: they take no room, and a narrow card drops them. */
+/* The team's characters float by a step's title, each where screens.ts puts it: they take no room, and a narrow card
+   drops them. */
 .ob-floaters { position: relative; height: 0; pointer-events: none; }
 .ob-fl { position: absolute; display: block; }
-.ob-fl.a { left: 3%; top: 4px; }
-.ob-fl.b { right: 2%; top: 30px; }
 /* Every choice is tiles in a grid of three (Grok Bot's "What do you use every day?"): the mark, the name with one quiet line
    and the control under them; a tile that is on has a black edge and a check. A tile that is a button is pressed whole. */
 .ob-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); }

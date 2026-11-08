@@ -32,7 +32,7 @@ afterEach(() => setLocale("zh-TW"));
 describe("every screen", () => {
   test("is real buttons and the app's own switches: no native select and no link-looking text", () => {
     const html = [
-      welcomeHTML({ languageSelect: '<button type="button" class="sel"></button>' }),
+      welcomeHTML(),
       toolsHTML(accounts(), noKey, ""),
       servicesHTML({ services: [service("notion", "Notion")], waiting: null, failed: null }),
       abilitiesHTML('<section class="sgroup svc"></section>'),
@@ -49,26 +49,32 @@ describe("every screen", () => {
     }
   });
 
-  test("two small slimes float by each step's title, as decoration only: no side, no bubble, no progress bar", () => {
+  test("three of the team's characters float by each step's title, others on every step and in other places, as decoration only", () => {
+    const seen = new Set<string>(), places = new Set<string>();
     for (const html of [toolsHTML(accounts(), noKey, ""), servicesHTML({ services: "loading", waiting: null, failed: null }), abilitiesHTML("")]) {
       const host = dom(html);
       const floaters = host.querySelector(".ob-floaters")!;
       expect(floaters.getAttribute("aria-hidden")).toBe("true");
-      expect(floaters.querySelectorAll(".slime-surface")).toHaveLength(2);
+      expect(floaters.querySelectorAll(".slime-surface")).toHaveLength(3);
+      for (const slime of floaters.querySelectorAll<HTMLElement>(".ob-fl")) { seen.add(slime.innerHTML); places.add(slime.getAttribute("style")!); }
       expect(host.querySelector("h2")!.closest(".ob-floaters")).toBeNull();
       expect(host.querySelector(".ob-aside, .ob-say, .ob-bar-steps, [role=progressbar]")).toBeNull();
     }
+    expect(seen.size).toBe(9);
+    expect(places.size).toBe(9);
   });
 });
 
 describe("the welcome", () => {
-  test("is Raphael's emblem, his name, one promise and the language dropdown with no label", () => {
-    const host = dom(welcomeHTML({ languageSelect: '<button type="button" class="sel" aria-label="Language"></button>' }));
+  test("is Raphael's emblem, his name and an ask he answers as himself, with no slogan and no language field in the column", () => {
+    const host = dom(welcomeHTML());
     expect(host.querySelector('.ob-emblem[aria-hidden="true"] canvas.ob-emb')).not.toBeNull();
     expect(host.querySelector("h2")!.textContent).toBe("Raphael");
-    expect(host.querySelector(".ob-line")!.textContent!.length).toBeGreaterThan(0);
-    expect(host.querySelectorAll(".ob-lang .sel")).toHaveLength(1);
-    expect(host.querySelector("label, .ob-lang-label")).toBeNull();
+    expect(host.querySelector(".ob-line")).toBeNull();
+    expect(host.querySelector('.ob-demo-ask[aria-hidden="true"] [data-ob-typed]')!.textContent!.length).toBeGreaterThan(0);
+    expect(host.querySelector(".ob-demo-reply")!.textContent).toMatch(/^(告|解|否)。|^(Notice|Answer|No)\./);
+    expect(host.querySelector(".ob-sr")!.textContent!.length).toBeGreaterThan(0);
+    expect(host.querySelector(".sel, .lang-btn, label")).toBeNull();
     expect(host.querySelector(".ob-floaters, .slime-surface")).toBeNull();
   });
 });

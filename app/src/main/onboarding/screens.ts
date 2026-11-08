@@ -16,19 +16,36 @@ import { btn, esc, fieldHTML, ico, st } from "../ui";
 
 export type GuideStep = "welcome" | "tools" | "services" | "abilities";
 
-/** Two small slimes of other colours float by each step's title, as Grok Bot's bots float around its questions. */
-const FLOATERS: Record<Exclude<GuideStep, "welcome">, readonly [string, string]> = {
-  tools: ["slime:color:sky", "slime:color:coral"],
-  services: ["slime:color:leaf", "slime:color:orchid"],
-  abilities: ["slime:color:lavender", "slime:color:tangerine"],
+/** A slime floating by a step's title: who it is, where (from the column's left or right edge, and down from the
+ * title's top) and how large. */
+interface Floater { avatar: string; side: "left" | "right"; x: number; y: number; px: number }
+/**
+ * The team's own characters float by each step's title, as Grok Bot's bots float around its questions: different ones on
+ * every step, never in the same places (owner, 2026-11-08: 「可以放我們特別設定好的成員…位置也可以放在不一樣的地方」).
+ */
+const FLOATERS: Record<Exclude<GuideStep, "welcome">, readonly Floater[]> = {
+  tools: [
+    { avatar: "slime:gobta", side: "left", x: 2, y: 2, px: 42 },
+    { avatar: "slime:shion", side: "right", x: 4, y: 40, px: 36 },
+    { avatar: "slime:ranga", side: "right", x: 18, y: -18, px: 28 },
+  ],
+  services: [
+    { avatar: "slime:shuna", side: "left", x: 9, y: 38, px: 36 },
+    { avatar: "slime:diablo", side: "right", x: 1, y: 6, px: 42 },
+    { avatar: "slime:benimaru", side: "left", x: 20, y: -16, px: 28 },
+  ],
+  abilities: [
+    { avatar: "slime:milim", side: "left", x: 0, y: -8, px: 38 },
+    { avatar: "slime:souei", side: "right", x: 12, y: 42, px: 32 },
+    { avatar: "slime:rigurd", side: "right", x: 0, y: -14, px: 30 },
+  ],
 };
-const FLOATER_PX = 38;
 
-/** The decoration beside a title: it takes no room and no part in the reading order. */
+/** The decoration around a title: it takes no room and no part in the reading order. */
 function floaters(step: Exclude<GuideStep, "welcome">): string {
-  const [left, right] = FLOATERS[step];
-  const one = (side: "a" | "b", avatar: string, id: number): string => `<span class="ob-fl ${side}">${slimeFaceHTML({ id, avatar }, FLOATER_PX)}</span>`;
-  return `<div class="ob-floaters" aria-hidden="true">${one("a", left, -1)}${one("b", right, -2)}</div>`;
+  const one = (floater: Floater, index: number): string =>
+    `<span class="ob-fl" style="${floater.side}:${floater.x}%;top:${floater.y}px">${slimeFaceHTML({ id: -1 - index, avatar: floater.avatar }, floater.px)}</span>`;
+  return `<div class="ob-floaters" aria-hidden="true">${FLOATERS[step].map(one).join("")}</div>`;
 }
 
 /** The title of a screen; what the step is for is the choice itself, never a line under it. */
@@ -56,16 +73,28 @@ const alert = (html: string): string => `<div class="ob-alert" role="alert">${ht
 
 // ---------- welcome ----------
 
+/** What the welcome types (owner, 2026-11-08): something the owner might ask, and Raphael's answer in his own manner,
+ * 告。, 解。 or 否。 — what the team can do, said by him rather than a slogan. */
+export const DEMOS = [
+  ["onboarding.demo1Ask", "onboarding.demo1Reply"], ["onboarding.demo2Ask", "onboarding.demo2Reply"],
+  ["onboarding.demo3Ask", "onboarding.demo3Reply"], ["onboarding.demo4Ask", "onboarding.demo4Reply"],
+  ["onboarding.demo5Ask", "onboarding.demo5Reply"], ["onboarding.demo6Ask", "onboarding.demo6Reply"],
+] as const satisfies readonly (readonly [MessageKey, MessageKey])[];
+export const demoAsk = (demo: (typeof DEMOS)[number]): string => t(demo[0]);
+export const demoReply = (demo: (typeof DEMOS)[number]): string => t(demo[1]);
+
 /**
- * Raphael's emblem (the canvas is drawn by mount.ts with the same renderer as the voice screen), his name, one promise,
- * and the language dropdown, which says what it is by its own name and has no label.
+ * Raphael's emblem (the canvas is drawn by mount.ts with the same renderer as the voice screen), his name, and under it
+ * an ask being typed with his answer: mount.ts types, deletes and moves on; with reduced motion the first pair stands.
+ * A reader hears one sentence of what the team does instead. The language is chosen at the window's top left.
  */
-export function welcomeHTML(o: { languageSelect: string }): string {
+export function welcomeHTML(): string {
   return (
     `<div class="ob-emblem" aria-hidden="true"><canvas class="ob-emb"></canvas></div>` +
     head(t("onboarding.welcomeTitle")) +
-    `<p class="ob-line">${esc(t("onboarding.promise"))}</p>` +
-    `<div class="ob-main ob-lang">${o.languageSelect}</div>`
+    `<div class="ob-demo"><p class="ob-sr">${esc(t("onboarding.demoSummary"))}</p>` +
+    `<p class="ob-demo-ask" aria-hidden="true"><span data-ob-typed>${esc(demoAsk(DEMOS[0]))}</span><span class="ob-caret"></span></p>` +
+    `<p class="ob-demo-reply" aria-hidden="true" data-ob-reply>${esc(demoReply(DEMOS[0]))}</p></div>`
   );
 }
 

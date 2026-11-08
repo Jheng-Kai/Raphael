@@ -2681,18 +2681,21 @@ export function checkRendered(name, context = {}) {
     return { check: name, expanded, height: text.clientHeight, fullHeight: text.scrollHeight };
   }
   if (name === "onboarding-welcome") {
-    // The welcome is Grok Bot's: Raphael's emblem, his name, one promise, the language dropdown and one wide black pill,
-    // all in one centred column of the fixed card (owner, 2026-11-07).
+    // The welcome is Grok Bot's: Raphael's emblem, his name, and since 2026-11-08 an ask being typed with his 告。 answer
+    // instead of a slogan, the language at the card's top left, and one wide black pill, centred in the fixed card.
     const card = document.querySelector('.ob-card').getBoundingClientRect();
     const canvas = document.querySelector('.ob-emblem canvas.ob-emb'), title = document.querySelector('.ob-col > h2');
     require(visible(canvas) && canvas.width > 0, "Raphael's emblem is on the welcome");
     require(title && title.textContent.trim().length > 0 && parseFloat(getComputedStyle(title).fontSize) >= 28, "his name is the headline");
-    const promise = document.querySelector('.ob-line');
-    require(visible(promise) && promise.textContent.trim().length > 0, "one promise line stands under the name");
-    require(visible(document.querySelector('.ob-lang .sel')) && !document.querySelector('.ob-lang label, .ob-lang-label'), "the language dropdown stands alone");
+    const promise = document.querySelector('.ob-demo-ask'), reply = document.querySelector('.ob-demo-reply');
+    require(visible(promise) && promise.getBoundingClientRect().top >= title.getBoundingClientRect().bottom - 1, "an ask is typed under the name");
+    require(!document.querySelector('.ob-line'), "no slogan under the name (owner, 2026-11-08)");
+    require(reply && document.querySelector('.ob-sr')?.textContent.trim().length > 0, "his answer has its place, and a reader hears what the team does");
+    const language = document.querySelector('.ob-lang .lang-btn'), corner = language.getBoundingClientRect();
+    require(visible(language) && corner.left - card.left <= 24 && corner.top - card.top <= 24 && !document.querySelector('.ob-col .lang-btn, .ob-col .sel'), "the language waits at the card's top left, out of the column");
     require(!document.querySelector('.ob-aside, .ob-say, .ob-floaters, .ob-top, [data-ob="back"], .ob-bar-steps'), "the welcome has no side, no slimes floating, no way back and no progress bar");
     const centre = card.left + card.width / 2;
-    for (const [what, element] of [["the emblem", canvas], ["the name", title], ["the promise", promise], ["the language dropdown", document.querySelector('.ob-lang .sel')], ["the primary pill", document.querySelector('.ob-actions > .btn.pri')]]) {
+    for (const [what, element] of [["the emblem", canvas], ["the name", title], ["the typed ask", promise], ["the primary pill", document.querySelector('.ob-actions > .btn.pri')]]) {
       const box = element.getBoundingClientRect();
       require(Math.abs(box.left + box.width / 2 - centre) <= 2, `${what} is centred in the card`);
       require(box.left >= card.left && box.right <= card.right && box.top >= card.top && box.bottom <= card.bottom + 1, `${what} stays inside the card`);
@@ -2721,7 +2724,7 @@ export function checkRendered(name, context = {}) {
     const floaters = [...document.querySelectorAll('.ob-floaters .slime-surface')];
     require(document.querySelector('.ob-floaters')?.getAttribute('aria-hidden') === 'true', "the floating slimes are decoration only");
     if (innerWidth > 640) {
-      require(floaters.length === 2 && floaters.every(visible), "two small slimes float by the title");
+      require(floaters.length === 3 && floaters.every(visible), "three of the team's characters float by the title (owner, 2026-11-08)");
       const words = title.getBoundingClientRect();
       for (const slime of floaters) {
         const at = slime.getBoundingClientRect(), titleText = document.createRange();
@@ -2914,7 +2917,7 @@ export function checkRendered(name, context = {}) {
     require(calls.some(call => call.command === "set_resizable" && call.args.value === false), "it cannot be resized");
     require(calls.some(call => call.command === "set_maximizable" && call.args.value === false), "it cannot be maximized");
     require(!visible(document.querySelector('[data-window-action="maximize"]')), "no maximize button while it is fixed");
-    require(!document.querySelector(".ob-lang-label") && document.querySelector(".ob-lang .sel"), "the language dropdown stands alone");
+    require(!document.querySelector(".ob-lang-label") && document.querySelector(".ob-lang .lang-btn"), "the language button stands alone at the top left");
     return { check: name };
   }
   if (name === "history-sent-to") {

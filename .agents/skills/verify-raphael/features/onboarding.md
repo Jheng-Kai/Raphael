@@ -6,19 +6,25 @@ While the guide is up the window is the card itself (owner, 2026-11-07, as Typel
 sizes it to 960 x 640 under the control strip, centres it, turns off resizing and maximizing (no maximize
 button, no resize edges, a double-click on the strip does nothing) and gives back the earlier size, place
 and maximized state when the guide ends; `guide-window-fixed` in the onboarding scene checks the requests.
-The welcome's language dropdown stands alone, with no 「介面語言」 label (its name is its aria-label).
+The welcome's language is a quiet button at the card's top left (globe, the language's own name, chevron; its
+name is its aria-label) that opens the language picker (language-picker.ts: each language in its own script, a
+search field once there are more than eight; owner, 2026-11-08).
 
 A welcome, then three steps that are each a choice, then entry into the usable app with first-run
 state saved. There are no practice lessons, no microphone step and no completion screen (owner,
 2026-11-07). Everything sits in one card of a designed size (at most 960 x 640) in the middle of
 the window, with no progress bar and no side, as Grok Bot's first run (owner, 2026-11-07): every
-step is one calm centred column, a title (two small aria-hidden slimes float by it, gone below
-640px wide), the choice, one wide black pill (下一步 / 開始使用) and under it a grey pill 上一步
+step is one calm centred column, a title (three of the team's own characters float by it, aria-hidden,
+others on every step and in other places — Gobta, Shion, Ranga; Shuna, Diablo, Benimaru; Milim, Souei,
+Rigurd — owner 2026-11-08; gone below 640px wide), the choice, one wide black pill (下一步 / 開始使用) and under it a grey pill 上一步
 (no back arrow at the top; a rerun's welcome has a grey 取消 that leaves the guide).
 
 0. **Welcome** (`onboarding`, check `onboarding-welcome`): Raphael's emblem (the voice screen's
-   canvas renderer, appearing as on the desktop), his name, one promise line, the language dropdown
-   and one pill, 開始. The promise line is the only line under a headline in the guide.
+   canvas renderer, appearing as on the desktop), his name, and under it what the team can do typed
+   instead of a slogan (owner, 2026-11-08): an ask appears a letter at a time with a caret, Raphael's
+   answer in his manner (告。/解。/否。) fades in under it, then the ask is deleted and the next typed (six
+   pairs, `onboarding.demo*`); with reduced motion the first pair stands; a reader hears one sentence
+   (`onboarding.demoSummary`). Then one pill, 開始.
 1. **AI tools** (`onboarding-tools`, `onboarding-tools-key`): ChatGPT sign-in, the Claude Code,
    Codex and Antigravity command-line accounts as tiles two by two (mark, name, state, its
    one button; a ready tile has the black edge and a check), then the OpenRouter key as one wide
