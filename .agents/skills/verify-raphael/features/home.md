@@ -2,57 +2,55 @@
 
 ## Sub-features
 
-### Product contract (owner, 2026-11-07 and that night, R-UI-114)
+### Product contract (owner, 2026-11-08, R-UI-114)
 
-Home is Raphael as a secretary. The owner asked for today's plans and the team's state,
-not quotas, tokens or dictation counts; no boxes; and, that night, everything needed at a
-glance: every item of today, what each member does and will do next, a summary of yesterday,
-a short word on today and what the health check actually looked at. No slime and no fly-in.
+Home is the day in numbers and pictures. The owner asked for charts, tables, numbers and a
+little text instead of lists (「我比較想要看到一些數據圖…表格啊、數據啊、文字啊」), took out the
+member rows, the open-item list, yesterday and the health check (「健康檢查的部分我晚一點會弄」),
+asked for no slime, and for Raphael to be alive with effects (「它不是一張圖片」).
 
-- **Hero.** One row read from the left: 拉斐爾大師's emblem standing still (96px, 72px when the
-  main area is 760px or narrower; `avatarHTML` with no picture, never a slime or the owner's
-  picture of him, never turning), then the date, a greeting by the time of day
-  (早安／午安／晚上好，主人) at --fs-h1 and his line: `today_plan.narrative` when it is ready,
-  else the team's health in one sentence (all members are well, or who waits for the owner).
-  A report that needs fixing (no key, OpenRouter offline, budget used up) adds its own line and
-  one fix icon; a well budget says nothing. The main window never shows the 《告。…》 caption
-  wrapper (R-UI-42), so the report's words are unwrapped with `plainReplies`. No ask-Raphael
-  icon (R-UI-43). The emblem stays the same DOM node through refreshes.
-- **Five sections** without boxes, in a grid: wide (main area over 900px) 今天的行程, 還沒解決的事
-  and 成員 in one row (the team narrower), then 昨天 (two columns wide) beside 健康檢查; medium
-  (641–900px) two columns with 昨天 across the bottom; narrow (640px or less) one column. Each is
-  a heading over a hairline and at most eight rows, the rest counted below them. Rows are plain
-  buttons that light their own background under the pointer. The page itself may scroll on a
-  small window; nothing inside it scrolls and nothing runs out sideways.
-- **Today's schedule** is the core's every item of today (`today` minus questions: calendar,
-  own events, routine runs), all-day first, then by time, in 40px rows: the time, the
-  calendar's colour as a short tick (own events ink, routines the member's slime colour, Google
-  outline grey), the title, a failed or waiting run's mark and the face or Google's mark. A
-  routine due more than twice today is one rhythm row (repeat mark, face, title, `N 次`, never a
-  time, R-CAL-03); its failed or waiting runs stay rows of their own. What is over is dimmed,
-  never a run that failed. The heading's calendar icon resumes Calendar (R-CAL-04); a row opens
-  its event; the count opens today. Empty, it says 今天沒有行程 and offers 建立. The Google line
-  (not connected, once and closable; could not be read, until it reads) sits under the rows
-  (R-UI-66). An older core without `yesterday` falls back to the month projection and its
-  daily count.
-- **What is still open** lists questions, work that stopped short (a failed, interrupted or
-  limited task or owner turn from `today_plan.items`, worded 沒有完成／中途停下／用完額度停下)
-  and reports, never routines; a row opens the conversation (at its turn when known).
-- **成員** lists every member the owner sees except Raphael, the ones who wait for the owner
-  first (in the warning colour), then the ones at work (the core's activity words), unread,
-  and standing by. Free, a member says what it did last (`上次：…`, `current_or_last`), else its
-  role. Its next enabled routine stands at the row's end (repeat icon and time, the weekday
-  when not today; the routine's name in its aria-label). A row opens that member's
-  conversation. A `MemberActivity` event redraws the row and the line without a read.
-- **昨天** is three numbers (工作, 例行, 訊息) and the faces of who did the work as small framed
-  pills with their count (the busiest first; a press opens that member), then Raphael's one
-  paragraph. While it is written it says 正在整理昨天的紀錄…; with no model he can use it says so
-  with one 選模型 button (Settings › Models); a failed attempt says the numbers stand alone.
-  Nothing is retried or worded by another model (the core's rule).
-- **健康檢查** shows each check that is not well as a row (a dot in the warning or error colour,
-  its name and the core's one-line detail) that opens where it is fixed (connections, or
-  models), then one line `N 項正常` naming every check that is fine. With no results it says
-  so.
+- **Hero.** One row read from the left: 拉斐爾大師's emblem on a canvas (the desktop's own
+  `Emblem`, surface `transparent`; 96px, 72px when the main area is 760px or narrower; the
+  canvas is 1.3 times that so the rays have room, held in the emblem's own size by negative
+  margins). Shown, he plays the appear animation and, 0.9 s later, speaks his line for 2.8 s;
+  then the canvas keeps its last frame, leaves the shared animation loop and turns by a CSS
+  transform on the compositor (`.ho-orb.is-turning`, 60 s a turn), so an open Home draws no more
+  frames on the main thread (R-PERF-01, the busy-team motion budget). Hidden, it is disposed and
+  stops turning. With reduced motion he appears still and nothing turns. The canvas stays the
+  same node through refreshes (only the hero's words and the board are patched). Then the date,
+  a greeting by the time of day (早安／午安／晚上好，主人) at --fs-h1 and his line:
+  `today_plan.narrative` when it is ready, else today's schedule and what waits for the owner
+  in one sentence (今天有 N 個行程，M 件事在等你回答。 and its three other forms). A report that
+  needs fixing adds its own line and one fix icon; the 《告。…》 wrapper never shows (R-UI-42);
+  no ask-Raphael icon (R-UI-43).
+- **Four figures** in a row between hairline dividers (two by two at 760px or narrower), each a
+  name, a large number and a few words: 行程 (today's rows; the next timed one, else that the
+  day is over; a button to Calendar), 例行工作 (done/due today; what did not finish in the error
+  colour, else how many are left), 等你回答 (questions waiting, the newest named; a button that
+  opens its conversation at its turn, plain when there are none) and 本週完成 (the last seven
+  days against the seven before, ▲ in the good colour). Without the core's `activity` the
+  routine and week figures are left out.
+- **Today's schedule** (left panel): a band of the day's hours (00–24, a hairline every six
+  hours, a calendar event as a bar as long as it lasts, an own event in the calendar's ink, a
+  routine run as a tick in the routines' chart colour, a failed run in red, the red line of
+  now; a tooltip on each mark) over a table 時間 | 事項 | 類型 in 40px rows: the core's every item
+  of today (`today` minus questions), all-day first, then by time. 類型 says 行事曆, 自己的 or
+  例行・<member> beside a dot in the band's colour; no faces. A routine due more than twice is one
+  rhythm row (repeat mark, title, `N 次`, never a time, R-CAL-03); its failed or waiting runs stay
+  rows with their mark. What is over is dimmed. Every row is drawn (no 「還有…」, owner
+  2026-11-08); a row opens its event on Calendar; the heading's calendar icon resumes Calendar
+  (R-CAL-04). Empty, it says 今天沒有行程 and offers 建立. The Google line sits under the rows
+  (R-UI-66).
+- **近兩週完成的事** (right panel): fourteen stacked bars (oldest first, today last), bottom
+  first 工作, 訊息, 例行 in `--series-1..3` (validated with the dataviz palette script for colour
+  blindness in both themes, 2026-11-08), a 2px gap between parts, round tops, a dashed scale at
+  half and a round top, today's total over its bar, day labels every other day ending in 今天,
+  a legend in the heading, the day under the pointer lit behind its bar with a tooltip of its
+  figures (and what did not finish), and the same figures as a visually hidden table. With
+  nothing finished it says 近兩週還沒有完成的事 over empty stubs.
+- **Layout.** The panels stand side by side at one width when the main area is over 760px,
+  else one under the other. No boxes around sections; the page may scroll on a small window,
+  nothing inside scrolls, nothing runs out sideways.
 
 ## How to get to it (user POV)
 
@@ -62,19 +60,19 @@ first.
 ## Driving it with look
 
 ```powershell
-npm run look -- home home-empty home-team home-many home-problem home-calendar-rhythm home-own-events home-report home-member home-calendar home-more home-event-chip home-create home-google-off home-google-closed home-google-failed home-row-hover home-arrival home-motion --theme both --width 1120,720,1920x1080
+npm run look -- home home-trend-tip home-empty home-many home-problem home-calendar-rhythm home-own-events home-calendar home-more home-event-chip home-create home-google-off home-google-closed home-google-failed home-row-hover home-motion busy-team-home daily-press-surfaces --theme both --width 1120,720,1920x1080
 ```
 
-home-hero measures the emblem at the left with the date, greeting and his line beside it;
-home-overview requires the five unboxed sections in their grid at each width, at most eight
-plain rows each, no money or percentages, no inner scroll or sideways overflow, and the emblem
-(never a slime). home-digest checks yesterday's numbers, faces and paragraph, the health line
-naming every check and his word on today; home-empty-digest the no-model state and its
-button. home-team checks the order, the warning colour, the role fallback and the next routine.
-home-arrival (the `home-show-again` action forgets the day and returns to Home) and home-motion
-prove that with motion allowed nothing flies, rings, rises or turns. The calendar scenes prove
-each way into Calendar; home-more uses a day of more than eight items. Inspect every sheet and
-the full-size images in both themes.
+home-hero measures the emblem's canvas at the left with the date, greeting and his line beside
+it; home-overview requires the figures then the panels, no member rows, open items, yesterday,
+health check or faces, unboxed sections, table rows aligned with the heading, nothing out of
+its section, no inner scroll or sideways overflow. home-figures reads each figure against the
+fixture; home-band places the marks and the line of now; home-trend checks bars on the
+baseline, gaps, the legend's colours, today's total, label spacing, the scale and the hidden
+table; home-trend-tip the tooltip beside its bar inside the window; home-empty-day the quiet
+state; home-motion that the emblem is drawn alive on its canvas; busy-team-home measures the
+motion budget with the emblem settled. Inspect every sheet and the full-size images in both
+themes.
 
 Native readable-layout inspects Home at 720, 1920x1080 and 1280x800 and opens Calendar from
 the schedule's icon; the calendar journey opens a member's event from today's schedule;
@@ -84,22 +82,19 @@ home-timing proves Home paints before the core's live allowance read finishes.
 
 ### Data and refresh boundaries
 
-home.overview carries the schedule, what is open, and since brief 9 `yesterday`, `today_plan`,
-`health` and `members[]` (see core `home.py`, `home_digest.py`); `members.list` still gives the
-live team, read through the same coalesced event read as the sidebar, and Home joins the two by
-id. The two narratives are written in the background once a day by Raphael's own model and
-cached; the overview never waits for them, and `home.changed` (forwarded as `HomeChanged`)
-reads Home again when one is ready. home.overview also carries usage, allowances and dictation
-for other callers; Home draws none of them.
+home.overview carries the schedule and, since 2026-11-08, `activity`: `days[]` (the last 14
+local days, oldest first: `work`, `routines_ok`, `routines_failed`, `messages`, `failed`, each
+piece counted once on the day it ended, deduplicated across routine run, task and turn) and
+`today` (`routines_due`, `routines_done`, `routines_failed`, `events`, `questions`), see core
+`home_digest.activity`. The core still sends `yesterday`, `health` and `members[]` for other
+callers; Home draws none of them, nor usage, allowances or dictation. `today_plan` is written in
+the background once a day by Raphael's own model; `home.changed` (`HomeChanged`) reads Home
+again when it is ready. Home no longer reads `members.list`.
 refresh=false reads local records and cached events/allowances without a CLI or provider
 request. Home paints it before the coalesced refresh=true read (at most one per five
 minutes). Member, question, conversation, routine, calendar, settings, connection and Home
 changes refresh Home. Locale changes redraw cached Home even behind Settings without an RPC or
-replacing the emblem.
-
-The health list reflects only the offline self-check, and only what is in use (brief 11): a CLI
-that is installed or chosen, a provider that is enabled or chosen, a key that something in use needs
-(one check for OpenRouter), every connection and memory; each check carries the `name` Home shows.
+replacing the canvas.
 
 Google Calendar uses connectors.status(refresh=false) and the existing private
 calendar_list_events tool only when ACTIVE/enabled; the `composio:googlecalendar` toolkit
@@ -110,4 +105,5 @@ readable. Unavailable, disabled or expired connections yield no connected events
 Offline pytest covers the projection and HTTP doubles. Browser fixtures prove the UI;
 isolated fake-brain native journeys prove the desktop path. Neither proves live
 calendar/OAuth/provider scheduling or a real narrative.
-Follow the shared [content-width contract](README.md#content-width).
+Follow the shared [content-width contract](README.md#content-width). The schedule is a table:
+its rows follow the panel's width, not the reading measure; his line keeps the reading measure.

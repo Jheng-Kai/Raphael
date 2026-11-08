@@ -627,3 +627,74 @@ async def test_health_does_not_require_sign_in_for_a_keyless_local_model(home, r
     checks = (await rig.call("home.overview"))["health"]["checks"]
     assert checks[0]["id"] == "brain:local"
     assert checks[0]["status"] == "ok" and checks[0]["detail"] is None
+
+
+def _local(value):
+    from datetime import datetime
+    return int(datetime.fromisoformat(value).timestamp() * 1000)
+
+
+async def test_activity_has_fourteen_local_days_ending_today_with_midnight_edges(home, rig):
+    rig.wall.now = _local("2026-11-07T23:59:59+08:00")
+    late = add(rig)
+    rig.wall.now = _local("2026-11-08T00:00:00+08:00")
+    midnight = add(rig, source="telegram")
+    rig.wall.now = _local("2026-10-25T23:00:00+08:00")
+    add(rig)  # the day before the fourteen
+    rig.wall.now = _local("2026-11-08T09:00:00+08:00")
+    days = (await rig.call("home.overview", {"tz": "Asia/Taipei"}))["activity"]["days"]
+    assert [day["date"] for day in days][:1] + [day["date"] for day in days][-2:] == ["2026-10-26", "2026-11-07", "2026-11-08"]
+    assert len(days) == 14
+    assert days[-2]["work"] == 1 and days[-2]["messages"] == 0
+    assert days[-1]["messages"] == 1 and days[-1]["work"] == 0
+    assert sum(day["work"] + day["messages"] for day in days) == 2
+    assert all(day == {"date": day["date"], "work": 0, "routines_ok": 0, "routines_failed": 0, "messages": 0, "failed": 0}
+               for day in days[:-2])
+    assert late and midnight
+
+
+async def test_activity_counts_linked_work_once_and_each_failure_once(home, rig):
+    routine = (await rig.call("routines.create", {"member_id": 0, "title": "Inbox", "prompt": "Check Gmail",
+              "schedule": {"kind": "daily", "time": "09:00"}}))["routine"]
+    now = rig.wall.now
+    # A routine run, its task and its turn are one routine done.
+    turn = add(rig)
+    task = rig.background.submit(session_id="run", text="Inbox", language="en", model="", routine_id=routine["id"])
+    rig.conn.execute("UPDATE worker_tasks SET state='done',turn_id=?,finished_at_ms=? WHERE id=?", (turn, now, task))
+    rig.conn.execute("INSERT INTO routine_runs(routine_id,started,finished,status,turn_id) VALUES(?,?,?,'done',?)",
+                     (routine["id"], now, now, turn))
+    # A run that went wrong, with its failed turn: one routine failed, not also a failed turn.
+    broken = add(rig, status="error")
+    rig.conn.execute("INSERT INTO routine_runs(routine_id,started,finished,status,turn_id) VALUES(?,?,?,'error',?)",
+                     (routine["id"], now, now, broken))
+    # A task that hit a limit, with its turn in error: one failure.
+    limited = add(rig, status="error")
+    stopped = rig.background.submit(session_id="limit", text="Long job", language="en", model="")
+    rig.conn.execute("UPDATE worker_tasks SET state='limit',turn_id=?,finished_at_ms=? WHERE id=?", (limited, now, stopped))
+    # A turn the owner cancelled is his decision, not a failure.
+    add(rig, status="cancelled")
+    value = (await rig.call("home.overview"))["activity"]
+    assert {key: value["days"][-1][key] for key in ("work", "routines_ok", "routines_failed", "messages", "failed")} == \
+        {"work": 0, "routines_ok": 1, "routines_failed": 1, "messages": 0, "failed": 1}
+    assert value["today"]["routines_done"] == 1 and value["today"]["routines_failed"] == 1
+    assert value["today"]["questions"] == 0
+
+
+async def test_activity_follows_a_twenty_five_hour_local_dst_day(home, rig):
+    rig.wall.now = _local("2026-11-01T23:30:00-05:00")
+    add(rig)
+    rig.wall.now = _local("2026-11-02T00:05:00-05:00")
+    days = (await rig.call("home.overview", {"tz": "America/New_York"}))["activity"]["days"]
+    assert days[-2]["date"] == "2026-11-01" and days[-2]["work"] == 1
+    assert days[-1]["date"] == "2026-11-02" and days[-1]["work"] == 0
+
+
+async def test_activity_today_counts_routines_due_events_and_questions(home, rig):
+    await rig.call("routines.create", {"member_id": 0, "title": "Hourly", "prompt": "Check",
+                   "schedule": {"kind": "every", "hours": 1}})
+    add(rig, status="confirm")
+    value = await rig.call("home.overview")
+    today = value["activity"]["today"]
+    assert today["routines_due"] == sum(item["kind"] == "routine" for item in value["today"]) > 0
+    assert today["questions"] == 1
+    assert today["events"] == 0

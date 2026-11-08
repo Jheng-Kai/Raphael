@@ -64,6 +64,14 @@ export interface HomeMember {
   next_routine: { id: number; title: string; at_ms: number } | null;
   waiting_for_owner: HomeItem[];
 }
+/** One local day of finished work as Home charts it: the owner's work, routines run well and not, messages handled, and
+ * work that failed, was interrupted or hit a limit. Each piece is counted once, on the day it ended. */
+export interface HomeActivityDay { date: string; work: number; routines_ok: number; routines_failed: number; messages: number; failed: number }
+/** Home's charts: the last fourteen days, oldest first and today last, and today's routines, events and questions. */
+export interface HomeActivity {
+  days: HomeActivityDay[];
+  today: { routines_due: number; routines_done: number; routines_failed: number; events: number; questions: number };
+}
 export interface HomeOverview {
   generated_at_ms: number;
   report: Status;
@@ -82,4 +90,5 @@ export interface HomeOverview {
   today_plan?: HomeTodayPlan;
   health?: { checks: HomeCheck[]; reason: string | null };
   members?: HomeMember[];
+  activity?: HomeActivity;
 }

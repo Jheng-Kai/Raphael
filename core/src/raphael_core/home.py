@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .clock import wall_clock_ms
 from .agent.history import UNFINISHED
 from .agent.owner_questions import OwnerQuestions
-from .home_digest import DailyNarratives, health, member_details, yesterday
+from .home_digest import DailyNarratives, activity, health, member_details, yesterday
 from .connectors.http import ConnectorFailure
 from .members.schedule import next_run
 from .members.store import ROUTINE_RUN_STATUS_SQL
@@ -87,6 +87,7 @@ class Overview(TypedDict):
     today_plan: dict[str, Any]
     health: dict[str, Any]
     members: list[dict[str, Any]]
+    activity: dict[str, Any]
 
 
 async def no_calendar_events(start_ms: int, end_ms: int) -> list[HomeItem]:
@@ -573,7 +574,9 @@ class HomeOverview:
             items += [value for value in connected if value["at_ms"] < tomorrow and value.get("end_ms", value["at_ms"] + 1) > start]
             items.sort(key=lambda value: (value["at_ms"], value["id"]))
             return {**plan, "items": [*items, *unfinished], "calendar_google": await self.google_state()}
-        return {"generated_at_ms": now, "report": status, "today": today, "reports": reports[:REPORT_LIMIT],
+        charts = activity(self.conn, people, day, zone, routines_due=sum(value["kind"] == "routine" for value in today),
+                          events=sum(value["kind"] in ("event", "own") for value in today), questions=len(questions))
+        return {"generated_at_ms": now, "report": status, "today": today, "reports": reports[:REPORT_LIMIT], "activity": charts,
                 "yesterday": self.narratives.read("yesterday", day.date().isoformat(), zone, language, previous),
                 "today_plan": self.narratives.read("today_plan", day.date().isoformat(), zone, language, plan, prepare=prepared_plan),
                 "health": health(self.members, language), "members": member_details(self.conn, roster, routines, questions),

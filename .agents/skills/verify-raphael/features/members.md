@@ -605,7 +605,7 @@ room-group-menu, room-required-chief and room-generated-name journeys click the
 plus button and open group creation at all three mapped widths.
 
 ```powershell
-npm run look -- room-group-menu room-required-chief room-generated-name home-empty home-team home-motion --theme both --width 1120,720,1920x1080
+npm run look -- room-group-menu room-required-chief room-generated-name home-empty home-motion --theme both --width 1120,720,1920x1080
 ```
 
 slime-board.test.mjs guards the static sharpness comparison: freezing animations

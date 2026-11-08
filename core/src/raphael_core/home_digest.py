@@ -16,54 +16,103 @@ def line(text):
     return " ".join(text.splitlines()[0].split())[:240] if text else ""
 
 
+MESSAGE_SOURCES = ("telegram", "slack", "discord")
+# A routine run or a turn that went wrong; denied and cancelled are the owner's own decisions, not failures.
+FAILED_TURNS = ("error", "expired")
+FAILED_TASKS = ("failed", "interrupted", "limit")
+
+
+def _ended(conn, start, end, *, ok=True):
+    """Every piece of work that ended in [start, end) once, by its completion time: a routine run, else its task, else
+    its turn. `ok` picks finished work; otherwise the work that failed, was interrupted or hit a limit."""
+    turns = ("done",) if ok else FAILED_TURNS
+    tasks = ("done",) if ok else FAILED_TASKS
+    marks = lambda values: ",".join("?" * len(values))
+    linked = set()
+    for row in conn.execute(
+            f"SELECT r.*, m.member_id, m.title FROM routine_runs r JOIN routines m ON m.id=r.routine_id"
+            f" WHERE r.status IN ({marks(turns)}) AND r.finished>=? AND r.finished<? ORDER BY r.finished,r.id", (*turns, start, end)):
+        if row["turn_id"] is not None:
+            linked.add(row["turn_id"])
+        yield {"member_id": row["member_id"], "kind": "routines", "id": f"routine_run:{row['id']}", "title": row["title"],
+               "at_ms": row["finished"], "turn_id": row["turn_id"], "source": None}
+    for row in conn.execute(
+            f"SELECT w.*,t.source FROM worker_tasks w LEFT JOIN agent_turns t ON t.id=w.turn_id"
+            f" WHERE w.state IN ({marks(tasks)}) AND w.finished_at_ms>=? AND w.finished_at_ms<?"
+            " AND NOT EXISTS (SELECT 1 FROM routine_runs r WHERE r.turn_id=w.turn_id)"
+            " ORDER BY w.finished_at_ms,w.id", (*tasks, start, end)):
+        if row["turn_id"] in linked:
+            continue
+        if row["turn_id"] is not None:
+            linked.add(row["turn_id"])
+        source = row["source"]
+        yield {"member_id": row["member_id"], "kind": "messages" if source in MESSAGE_SOURCES else "work",
+               "id": f"task:{row['id']}", "title": row["text"] or row["report_text"], "at_ms": row["finished_at_ms"],
+               "turn_id": row["turn_id"], "source": source}
+    for row in conn.execute(
+            f"SELECT t.*, COALESCE(m.finished_at_ms,t.created_at_ms) AS completed FROM agent_turns t"
+            " LEFT JOIN run_metrics m ON m.kind='turn' AND m.run_id=t.id"
+            f" WHERE t.status IN ({marks(turns)}) AND t.source!='greeting' AND COALESCE(m.finished_at_ms,t.created_at_ms)>=?"
+            " AND COALESCE(m.finished_at_ms,t.created_at_ms)<?"
+            " AND NOT EXISTS (SELECT 1 FROM worker_tasks w WHERE w.turn_id=t.id)"
+            " AND NOT EXISTS (SELECT 1 FROM routine_runs r WHERE r.turn_id=t.id) ORDER BY completed,t.id", (*turns, start, end)):
+        if row["id"] in linked:
+            continue
+        source = row["source"]
+        yield {"member_id": row["member_id"], "kind": "messages" if source in MESSAGE_SOURCES else "work",
+               "id": f"turn:{row['id']}", "title": row["question"] or row["text"], "at_ms": row["completed"],
+               "turn_id": row["id"], "source": source}
+
+
 def yesterday(conn, people, start, end):
     """Completion time wins over creation time; linked tasks/runs are counted once."""
     groups = {mid: {"member_id": mid, "name": member["name"], "items": [],
                     "counts": {"work": 0, "routines": 0, "messages": 0}} for mid, member in people.items()}
-    linked = set()
-
-    def add(mid, kind, identifier, title, at, turn_id=None, source=None):
-        if mid not in groups:
-            return
-        groups[mid]["items"].append({"id": identifier, "kind": kind, "title": line(title),
-                                     "at_ms": at, "turn_id": turn_id, "source": source})
-        groups[mid]["counts"][kind] += 1
-
-    for row in conn.execute(
-            "SELECT r.*, m.member_id, m.title FROM routine_runs r JOIN routines m ON m.id=r.routine_id"
-            " WHERE r.status='done' AND r.finished>=? AND r.finished<? ORDER BY r.finished,r.id", (start, end)):
-        add(row["member_id"], "routines", f"routine_run:{row['id']}", row["title"], row["finished"], row["turn_id"])
-        if row["turn_id"] is not None:
-            linked.add(row["turn_id"])
-    for row in conn.execute(
-            "SELECT w.*,t.source FROM worker_tasks w LEFT JOIN agent_turns t ON t.id=w.turn_id"
-            " WHERE w.state='done' AND w.finished_at_ms>=? AND w.finished_at_ms<?"
-            " AND NOT EXISTS (SELECT 1 FROM routine_runs r WHERE r.turn_id=w.turn_id)"
-            " ORDER BY w.finished_at_ms,w.id", (start, end)):
-        if row["turn_id"] in linked:
+    for done in _ended(conn, start, end):
+        group = groups.get(done["member_id"])
+        if group is None:
             continue
-        source = row["source"]
-        kind = "messages" if source in ("telegram", "slack", "discord") else "work"
-        add(row["member_id"], kind, f"task:{row['id']}", row["text"] or row["report_text"],
-            row["finished_at_ms"], row["turn_id"], source)
-        if row["turn_id"] is not None:
-            linked.add(row["turn_id"])
-    for row in conn.execute(
-            "SELECT t.*, COALESCE(m.finished_at_ms,t.created_at_ms) AS completed FROM agent_turns t"
-            " LEFT JOIN run_metrics m ON m.kind='turn' AND m.run_id=t.id"
-            " WHERE t.status='done' AND t.source!='greeting' AND COALESCE(m.finished_at_ms,t.created_at_ms)>=?"
-            " AND COALESCE(m.finished_at_ms,t.created_at_ms)<?"
-            " AND NOT EXISTS (SELECT 1 FROM worker_tasks w WHERE w.turn_id=t.id)"
-            " AND NOT EXISTS (SELECT 1 FROM routine_runs r WHERE r.turn_id=t.id) ORDER BY completed,t.id", (start, end)):
-        if row["id"] in linked:
-            continue
-        source = row["source"]
-        kind = "messages" if source in ("telegram", "slack", "discord") else "work"
-        add(row["member_id"], kind, f"turn:{row['id']}", row["question"] or row["text"], row["completed"], row["id"], source)
+        group["items"].append({key: line(done[key]) if key == "title" else done[key]
+                               for key in ("id", "kind", "title", "at_ms", "turn_id", "source")})
+        group["counts"][done["kind"]] += 1
     for group in groups.values():
         group["items"].sort(key=lambda value: (value["at_ms"], value["id"]))
     return {"members": list(groups.values()),
             "counts": {kind: sum(group["counts"][kind] for group in groups.values()) for kind in ("work", "routines", "messages")}}
+
+
+ACTIVITY_DAYS = 14
+
+
+def activity(conn, people, today, zone, *, routines_due, events, questions):
+    """Home's charts: what was finished and what failed on each of the last 14 local days (oldest first, today last,
+    every day present), and today's routines, events and questions in numbers. `today` is the local midnight that
+    starts today; each day is measured midnight to midnight in `zone`, so a DST day lasts 23 or 25 hours."""
+    from datetime import datetime, time, timedelta
+    dates = [today.date() - timedelta(days=n) for n in range(ACTIVITY_DAYS - 1, -1, -1)]
+    edges = [int(datetime.combine(day, time(), zone).timestamp() * 1000) for day in [*dates, dates[-1] + timedelta(days=1)]]
+    days = [{"date": day.isoformat(), "work": 0, "routines_ok": 0, "routines_failed": 0, "messages": 0, "failed": 0}
+            for day in dates]
+
+    def bucket(at):
+        for index in range(ACTIVITY_DAYS):
+            if edges[index] <= at < edges[index + 1]:
+                return days[index]
+        return None
+
+    for ok in (True, False):
+        for record in _ended(conn, edges[0], edges[-1], ok=ok):
+            day = record["member_id"] in people and bucket(record["at_ms"])
+            if not day:
+                continue
+            if record["kind"] == "routines":
+                day["routines_ok" if ok else "routines_failed"] += 1
+            elif ok:
+                day[record["kind"]] += 1
+            else:
+                day["failed"] += 1
+    return {"days": days, "today": {"routines_due": routines_due, "routines_done": days[-1]["routines_ok"],
+                                    "routines_failed": days[-1]["routines_failed"], "events": events, "questions": questions}}
 
 
 def member_details(conn, roster, routines, questions):

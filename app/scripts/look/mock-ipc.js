@@ -555,12 +555,6 @@ export function installMock(fixture, config = {}, target = window) {
     data.home.today.unshift(...asks.map((title, index) => ({ ...data.home.today[0], id: `question:${index + 3}`, turn_id: index + 3, title })));
     data.home.counts.today = data.home.today.length;
   }
-  if (variant.homeTeam) {
-    // Home's team section with every state at once, and more members than it shows.
-    Object.assign(data.members[1], { waiting: true, activity: "blocked", activity_label: "等你回答" });
-    Object.assign(data.members[2], { activity: "searching", activity_label: "正在搜尋網路" });
-    data.members.push(...[[4, "阿凱"], [5, "小魚"]].map(([id, name]) => ({ ...structuredClone(data.members[3]), id, name, position: id, unread: false, waiting: false })));
-  }
   if (variant.calendarSparse) data.routines = data.routines.slice(0, 1);
   // The owner has chosen an image model (Settings › Models), so the face picker's 生成 can draw.
   if (variant.imageModel) data.settings = { ...data.settings, image_model: "openrouter:sample-image" };
@@ -696,6 +690,18 @@ export function installMock(fixture, config = {}, target = window) {
     const check = (id, name, status = "ok", detail = null) => ({ id, name, label_key: `health.${id.split(":")[0]}`, status, detail, detail_key: detail ? "health.connection_unavailable" : null });
     home.health = { reason: null, checks: [check("key:OpenRouter", "OpenRouter"), check("brain:codex", "Codex"), check("brain:claude", "Claude"), check("connection:gmail", "Gmail"),
       check("connection:notion", "Notion", variant.problem ? "warn" : "ok", variant.problem ? "連線尚未就緒。" : null), check("memory", "")] };
+    // Home's charts since 2026-11-08: fourteen local days of finished work with a weekday rhythm and one day that went
+    // wrong, and today's routines, events and questions in numbers.
+    const shape = [[3, 1, 6, 0, 0], [5, 2, 6, 0, 0], [4, 0, 6, 1, 1], [6, 3, 6, 0, 0], [2, 1, 6, 0, 0], [0, 0, 4, 0, 0], [1, 0, 4, 0, 0],
+      [4, 2, 6, 0, 0], [7, 1, 6, 0, 0], [5, 4, 5, 1, 2], [6, 2, 6, 0, 0], [3, 1, 6, 0, 0], [1, 0, 4, 0, 0], [2, 1, 3, 1, 0]];
+    const dayAt = back => { const d = new Date(now - back * 86400000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+    const routinesToday = home.today.filter(item => item.kind === "routine").length;
+    home.activity = quiet
+      ? { days: Array.from({ length: 14 }, (_, i) => ({ date: dayAt(13 - i), work: 0, routines_ok: 0, routines_failed: 0, messages: 0, failed: 0 })),
+          today: { routines_due: 0, routines_done: 0, routines_failed: 0, events: 0, questions: 0 } }
+      : { days: shape.map(([work, messages, routines_ok, routines_failed, failed], i) => ({ date: dayAt(13 - i), work, routines_ok, routines_failed, messages, failed })),
+          today: { routines_due: Math.max(routinesToday, 6), routines_done: 3, routines_failed: 1, events: home.today.filter(item => item.kind === "event" || item.kind === "own").length,
+            questions: home.today.filter(item => item.kind === "question").length } };
     const last = { 1: "整理本週新聞素材", 2: "比較三家供應商報價" };
     home.members = data.members.map(member => {
       const next = data.routines.filter(routine => routine.member_id === member.id && routine.enabled && routine.next_run).sort((a, b) => a.next_run - b.next_run)[0];

@@ -818,15 +818,6 @@ export async function perform(page, step, evidenceDirectory) {
       } finally { await element.dispose(); }
       break;
     }
-    case "home-show-again": {
-      // The first Home of a new day, as it once flew Raphael in (until 2026-11-07): forget the day, leave Home and come back.
-      await page.evaluate(() => { try { localStorage.removeItem('raphael.home.arrived'); } catch { /* nothing kept either way */ } });
-      await click('#nav [data-go="dictation"]');
-      await (await visible('.page-dictation:not([hidden])')).dispose();
-      await click('#nav [data-go="home"]');
-      await (await visible('.page-home:not([hidden]) .ho-hero')).dispose();
-      return {check:'home-show-again'};
-    }
     case "touch-swipe": {
       const element = await visible(step.selector), client = await page.createCDPSession();
       try {
