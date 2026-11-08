@@ -542,8 +542,6 @@ export const attachmentSource = async (id: string): Promise<string> => convertFi
 
 export interface UpdateView { state: "idle" | "checking" | "found" | "downloading" | "ready" | "installing" | "error"; version: string; notes: string; error: string; installed?: string; }
 export const updateControl = (action: "status" | "check" | "install"): Promise<UpdateView> => invoke("update_control", { action });
-export interface MemoryImportResult { kept: string[]; refused: { index: number; reason: string }[]; }
-export const importMemory = (text: string): Promise<MemoryImportResult> => core("memory.import", { text });
 export const openTeamFile = (path: string): Promise<void> => invoke("open_team_file", { path });
 /** Opens a file a member delivered, by the handle its Library gave (`members.library_file`, checked by the core). */
 export const openLibraryFile = (memberId: number, id: string): Promise<void> => invoke("open_library_file", { memberId, id });

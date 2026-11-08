@@ -524,7 +524,6 @@ const ALLOWED_METHODS: &[&str] = &[
     // one by one, like the messaging methods: a method added to the memory later stays closed.
     "memory.get",
     "memory.update",
-    "memory.import",
     "memory.clear",
     "memory.summary_clear",
     // The services of the tools, in the settings: what is chosen and whether each key is stored
@@ -651,7 +650,7 @@ fn validate_history_search(params: &Value) -> Result<(), String> {
 /// The params of a memory method: for `memory.update`, the `text` of the document within the limit
 /// and the `revision` of the copy it was made from, if given.
 fn validate_memory_call(method: &str, params: &Value) -> Result<(), String> {
-    if method != "memory.update" && method != "memory.import" {
+    if method != "memory.update" {
         return Ok(());
     }
     match params.get("text").and_then(Value::as_str) {

@@ -128,9 +128,9 @@ class Driver:
             detail = "\n".join(redact(line, secrets=self._diagnostic_secrets, limit=1800) for line in str(original).splitlines())[:1800]
             if tail:
                 detail += "\n\nstderr:\n" + "\n".join(redact(line, secrets=self._diagnostic_secrets, limit=160) for line in tail.decode("utf-8", errors="replace").splitlines()[-12:])
+            # The stderr tail stays in the turn's private detail; the log only gets the classified kind
+            # (private diagnostics reach the log only with the native opt-in, `native_diagnostic`).
             failure = classify({**failure.wire(), "detail": detail[:4000]}, secrets=self._diagnostic_secrets, record=False)
-            if tail:
-                logger.warning("CLI %s failure detail: %s", self.name, failure.detail)
             if self.exhausted and failure.kind not in ("credits", "auth_expired", "refused"):
                 failure = classify({**failure.wire(), "kind": "usage_limit", "message": failure.reason})
             if failure.kind == "usage_limit" and self.reset_at_ms:
