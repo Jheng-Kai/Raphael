@@ -529,7 +529,7 @@ async def test_a_cleaned_list_keeps_its_line_breaks_in_the_text_and_the_history(
         {"text": "有兩件事：\n\n1. 我们开会。\n2. 拉菲爾說好。"}
     )
     r = await finalize(router, "有兩件事 第一個是我们开会 第二個是拉菲爾說好")
-    expected = "有兩件事：\n\n1. 我們開會\n2. 拉斐爾說好"
+    expected = "有兩件事：\n\n1. 我們開會。\n2. 拉斐爾說好"
     assert r["cleaned"] is True and r["text"] == expected
     assert (await router.call("history.latest", {}))["item"]["text"] == expected
 

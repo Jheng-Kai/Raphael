@@ -64,6 +64,9 @@ def test_shipped_candidate_uses_the_real_renderer_and_matches_production():
     ("我講三件事嗯工作室租金 4700 不含水電再來測試 Cedar API timeout 45 秒最後去車站如果下雨就搭計程車",
      "我講三件事：\n\n1. 工作室租金 4700，不含水電。\n2. 測試 Cedar API，timeout 45 秒。\n3. 去車站，如果下雨就搭計程車。",
      ["4700", "不含水電", "Cedar API", "timeout 45", "如果下雨", "計程車"], 3, 2),
+    ("有些事要麻煩你嗯窗簾送洗不要烘乾還有門卡留給 Neris 雨傘放入口我晚上拿",
+     "有些事要麻煩你：\n\n1. 窗簾送洗，不要烘乾。\n2. 門卡留給 Neris。\n3. 雨傘放入口，我晚上拿",
+     ["不要烘乾", "Neris", "入口", "晚上拿"], 3, 2),
 ])
 def test_synthetic_structure_and_facts(text, cleaned, needles, items, paragraphs):
     synthetic = case(text, must_contain_ci=needles)
@@ -74,6 +77,24 @@ def test_synthetic_structure_and_facts(text, cleaned, needles, items, paragraphs
     assert not result["numbers_missing_literal"]
     if items:
         assert result["lead_in"]
+
+
+def test_dictation_structure_corpus_covers_implicit_lists_and_a_single_long_topic():
+    path = Path(__file__).parent / "data/dictation_structure_cases.jsonl"
+    loaded = compare.read_cases([path])
+    assert len(loaded) == 3
+    for _, synthetic, _ in loaded:
+        assert len(synthetic.input) >= 450
+        assert len(synthetic.expected_facts) >= 7
+        if synthetic.id.startswith("implicit-"):
+            assert synthetic.structure["min_numbered_items"] == 4
+            assert "too_few_numbered_items" in compare.lexical_scores(synthetic, synthetic.input)["structure_checks_failed"]
+        else:
+            assert compare.lexical_scores(synthetic, synthetic.input)["structure_checks_failed"] == []
+            split = synthetic.input.replace("。", "。\n\n", 1)
+            assert "too_many_paragraphs" in compare.lexical_scores(synthetic, split)["structure_checks_failed"]
+            numbered = "1. " + synthetic.input
+            assert "too_many_numbered_items" in compare.lexical_scores(synthetic, numbered)["structure_checks_failed"]
 
 
 def test_literal_numbers_exclude_list_ordinals_and_flag_added_numbers():
@@ -361,7 +382,8 @@ def test_main_refuses_output_in_source_tree(tmp_path):
     assert compare.main(["--old", "absent", "--new", "absent", "--out", str(tmp_path / "source")]) == 2
 
 
-def test_one_command_entry_runs_both_prompts_without_any_api_client(tmp_path, monkeypatch):
+@pytest.mark.parametrize("codex_only", [False, True])
+def test_one_command_entry_runs_both_prompts_without_any_api_client(tmp_path, monkeypatch, codex_only):
     import raphael_core.brain.openrouter as api
     from raphael_core.brain.secrets import CredentialKeyStore
 
@@ -374,7 +396,7 @@ def test_one_command_entry_runs_both_prompts_without_any_api_client(tmp_path, mo
 
     def factory(brain, model, **kwargs):
         selected.append((brain, model))
-        return FakeCli(judge=brain == "claude")
+        return FakeCli(judge=len(selected) == 2)
 
     monkeypatch.setattr(compare, "SubscriptionCli", factory)
     paths = []
@@ -385,9 +407,11 @@ def test_one_command_entry_runs_both_prompts_without_any_api_client(tmp_path, mo
     corpus = tmp_path / "synthetic.jsonl"
     corpus.write_text(json.dumps({"id": "a", "input": "第一個看 logs 再來等核准"}), encoding="utf-8")
     out = tmp_path / "eval/data/run"
+    options = (["--cleaner-model", "gpt-6-luna", "--judge-brain", "codex", "--judge-model", "gpt-6-luna"]
+               if codex_only else [])
     assert compare.main(["--old", str(paths[0]), "--new", str(paths[1]),
-                         "--cases", str(corpus), "--out", str(out)]) == 1
-    assert selected == [("codex", "gpt-6-luna"), ("claude", "haiku")]
+                         "--cases", str(corpus), "--out", str(out), *options]) == 1
+    assert selected == [("codex", "gpt-6-luna"), ("codex", "gpt-6-luna") if codex_only else ("claude", "haiku")]
     assert (out / "summary.md").exists()
 
 

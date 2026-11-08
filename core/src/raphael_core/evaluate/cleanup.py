@@ -288,7 +288,7 @@ def failed_checks(case: Case, reply: str) -> list[str]:
 
 
 async def run_case(
-    client, model: str, case: Case, *, timeout_s: float = CALL_TIMEOUT_S
+    client, model: str, case: Case, *, timeout_s: float = CALL_TIMEOUT_S, template: str | None = None
 ) -> Outcome:
     """Have `model` clean the case, and check what the user would get.
 
@@ -306,6 +306,7 @@ async def run_case(
                 case.target_app,
                 languages=case.languages,
                 heard=sent,
+                template=template,
             ),
             user=build_user_message(sent),
             schema=CLEANUP_SCHEMA,

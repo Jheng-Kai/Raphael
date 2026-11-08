@@ -523,7 +523,7 @@ def guard_cleanup_text(raw: str, cleaned: str, *, dictionary_words: Sequence[str
     return cleaned[left:right] if right > left else ""
 
 
-def _dictation_prose(text: str, change: Callable[[str, set[int], int], str]) -> str:
+def _dictation_prose(text: str, change: Callable[[str, set[int], int], str], *, skip_kana: bool = True) -> str:
     """Edit prose lines only, retaining kana lines, code fences and inline code byte for byte."""
     fence = ""
     size = 0
@@ -540,7 +540,7 @@ def _dictation_prose(text: str, change: Callable[[str, set[int], int], str]) -> 
             protected.update(range(span.start(), span.end()))
         base = prose[0][1]
         for line, start in prose:
-            if re.search(r"[\u3040-\u30ff\u31f0-\u31ff\uff66-\uff9f]", line):
+            if skip_kana and re.search(r"[\u3040-\u30ff\u31f0-\u31ff\uff66-\uff9f]", line):
                 result.append(line)
             else:
                 begin = start - base
@@ -568,26 +568,98 @@ def _dictation_prose(text: str, change: Callable[[str, set[int], int], str]) -> 
 
 
 def finish_chinese_dictation(text: str) -> str:
-    """Replace Chinese full stops in prose with commas, omitting line-final punctuation."""
+    """Omit only the whole dictation's final prose full stop, preserving its sentences."""
+    final = len(text.rstrip()) - 1
+
     def finish(line: str, protected: set[int], offset: int) -> str:
-        output: list[tuple[str, bool]] = []
-        for index, char in enumerate(line):
-            keep = index in protected
-            if char == "。" and not keep:
-                if not line[index + 1:].strip() or line[index + 1:index + 2] in ("」", "』", "）", ")"):
-                    continue
-                char = "，"
-            if char == "，" and not keep and output and output[-1] == ("，", False):
-                continue
-            output.append((char, keep))
-        end = len(output) - 1
-        while end >= 0 and output[end][0].isspace():
-            end -= 1
-        while end >= 0 and output[end] == ("，", False):
-            del output[end]
-            end -= 1
-        return "".join(char for char, _ in output)
+        index = final - offset
+        if 0 <= index < len(line) and line[index] == "。" and index not in protected:
+            return line[:index] + line[index + 1:]
+        return line
+
     return _dictation_prose(text, finish)
+
+
+def remove_dictation_fillers(text: str) -> str:
+    """Remove unquoted hesitation syllables and repair their comma boundaries in prose."""
+    pairs = {"「": "」", "『": "』", '"': '"', "“": "”"}
+    quotes: list[str] = []
+    commas = {",", "，"}
+
+    def at_start(prefix: str) -> bool:
+        return not prefix.strip() or bool(re.fullmatch(r"[ \t]*(?:\d+[.)]|[-*])[ \t]+", prefix))
+
+    def finish(line: str, protected: set[int], offset: int) -> str:
+        for match in re.finditer(
+            r'https?://[^\s<>「」『』“”，。？！：；、"]+|www\.[^\s<>「」『』“”，。？！：；、"]+'
+            r'|[\w.+-]+@[\w.-]+\.[a-z]{2,}', line, re.I,
+        ):
+            protected.update(range(match.start(), match.end()))
+        for index, char in enumerate(line):
+            if index in protected:
+                continue
+            if quotes:
+                protected.add(index)
+            if quotes and char == quotes[-1]:
+                quotes.pop()
+            elif char in pairs:
+                protected.add(index)
+                quotes.append(pairs[char])
+        # Read quote boundaries on kana lines too, but retain the entire line byte for byte.
+        if re.search(r"[\u3040-\u30ff\u31f0-\u31ff\uff66-\uff9f]", line):
+            return line
+        removed = set()
+        for match in re.finditer(r"(?<![a-z0-9_-])(?:uh|um)(?![a-z0-9_-])", line, re.I):
+            span = set(range(match.start(), match.end()))
+            if not span & protected:
+                removed.update(span)
+        for match in re.finditer(r"[,，][ \t]*(嗯)[ \t]*(?=[,，])", line):
+            if not set(range(match.start(), match.end() + 1)) & protected:
+                removed.add(match.start(1))
+        for index, char in enumerate(line):
+            if index in protected:
+                continue
+            if char == "呃":
+                removed.add(index)
+            elif char == "欸":
+                before, after = line[:index].rstrip(), line[index + 1:]
+                if (at_start(line[:index]) or before[-1] in ",，。？！?!;；:：") and (
+                    not after.strip() or after[0].isspace() or after[0] in ",，。？！?!;；:："
+                ):
+                    removed.add(index)
+        output: list[tuple[str, bool]] = []
+        changed = bool(removed)
+        leading_separator = False
+        for index, char in enumerate(line):
+            if index in removed:
+                continue
+            keep = index in protected
+            if leading_separator and not keep and char in " \t":
+                continue
+            leading_separator = False
+            previous = len(output) - 1
+            while previous >= 0 and output[previous][0] in " \t":
+                previous -= 1
+            if not keep and char in commas:
+                if at_start("".join(value for value, _ in output)):
+                    changed = True
+                    leading_separator = True
+                    continue
+                if output[previous][0] in commas and not output[previous][1]:
+                    del output[previous + 1:]
+                    changed = True
+                    continue
+            if not keep and char in "。？！?!" and previous >= 0 and output[previous][0] in commas and not output[previous][1]:
+                del output[previous:]
+                changed = True
+            output.append((char, keep))
+        result = "".join(char for char, _ in output)
+        if changed:
+            indent = re.match(r"[ \t]*", line)[0]
+            result = indent + result.lstrip(" \t")
+        return result
+
+    return _dictation_prose(text, finish, skip_kana=False)
 
 
 def remove_unspoken_ma(raw: str, cleaned: str) -> str:

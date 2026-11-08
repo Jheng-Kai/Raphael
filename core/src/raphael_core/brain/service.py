@@ -80,6 +80,7 @@ from .textnorm import (
     finish_cleaned_text,
     finish_chinese_dictation,
     guard_cleanup_text,
+    remove_dictation_fillers,
     remove_unspoken_ma,
     normalize_transcript,
     remove_stutters,
@@ -466,6 +467,7 @@ class Brain:
             # Nobody has tidied it, so its obvious stutters go; the history keeps it as it was.
             text = remove_stutters(result.text)
 
+        text = remove_dictation_fillers(text)
         if chinese is not None:
             text = finish_chinese_dictation(text)
 
@@ -978,16 +980,20 @@ class Brain:
             for kind in ("image", "video"):
                 view[kind] = []
                 for row in self._providers.media_choices(kind):
-                    pid, _ = self._providers.resolve(row["reference"])
+                    subscription = row.get("billing_source") == "subscription"
+                    pid = row["provider"] if subscription else self._providers.resolve(row["reference"])[0]
+                    provider_name = "Codex" if subscription else self._providers.config(pid)["name"]
                     view[kind].append({"id": row["reference"], "name": row["name"],
-                        "provider": self._providers.config(pid)["name"], "provider_id": pid,
-                        "provider_name": self._providers.config(pid)["name"],
+                        "provider": provider_name, "provider_id": pid,
+                        "provider_name": provider_name,
                         "input_per_mtok": row.get("price_in"), "output_per_mtok": row.get("price_out"),
                         "image_output_per_mtok": row.get("image_output_per_mtok"),
                         "per_image": row.get("per_image"), "per_request": row.get("per_request"),
                         "per_minute": None, "free": False, "variable_price": False,
                         "context_length": row.get("context"), "created_at_ms": None,
                         "capabilities": {}, "roles": {}})
+                    if subscription:
+                        view[kind][-1]["billing_source"] = "subscription"
         return view
 
     def _replace_vanished(self, entries: list[CatalogEntry]) -> list[dict[str, str]]:

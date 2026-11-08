@@ -1031,6 +1031,20 @@ def test_the_rest_of_the_prompt_is_the_same_for_every_selection():
         assert prompt.count("  → ") >= 3
 
 
+def test_structure_rules_cover_implicit_requests_single_topics_and_existing_sentences():
+    prompt = build_system_prompt([], [], languages=["zh-TW"])
+    assert "Several separate points or requests also need numbered items even without enumeration words." in prompt
+    assert "A single topic stays one paragraph, however long." in prompt
+    assert "a topic change starts a new paragraph" in prompt
+    assert "never invent one" in prompt
+    assert "Never use a request as the lead-in; number it too." in prompt
+    assert "Keep sentence-ending 。 already in the transcript" in prompt
+    assert "omit only the whole text's final 。" in prompt
+    assert "end with ，" not in prompt
+    assert 'delete。它上面沒有那個 bar，整個很乾淨。這邊也可以參考' in prompt
+    assert '1. 幫我把窗邊的盆栽搬到走廊，不要曬太陽。' in prompt
+
+
 def test_the_prompt_is_the_same_each_time():
     selection = ["zh-HK", "en-GB", "ja-JP"]
     assert build_system_prompt(["拉斐爾"], [], "LINE.exe", languages=selection) == (

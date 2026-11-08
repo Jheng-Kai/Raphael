@@ -115,7 +115,7 @@ async def test_each_piece_uses_its_own_raw_and_any_rejected_piece_recovers_the_w
     ))
     monkeypatch.setattr(brain._cleanup, "clean", AsyncMock(return_value=result))
     reply = await brain._finalize_dictation(dict(raw_text=raw, audio_seconds=1, stt_ms=1))
-    assert reply["text"] == ("請確認 sidebar，再通知小陳" if reject_second else "請確認 sidebar\n再通知小陳")
+    assert reply["text"] == ("請確認 sidebar。再通知小陳" if reject_second else "請確認 sidebar。\n再通知小陳")
     assert reply["cleaned"] is not reject_second
     assert reply["fallback_reason"] == ("suspicious" if reject_second else None)
 

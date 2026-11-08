@@ -73,14 +73,18 @@ STRUCTURE_SCORE = object_schema({
     "enumerations_formatted": {"type": "boolean"},
 })
 STRUCTURE_EXPECTATION = object_schema({
-    "topics": {"type": "array", "minItems": 2, "items": object_schema({
+    "topics": {"type": "array", "minItems": 1, "items": object_schema({
         "id": {"type": "string", "minLength": 1},
         "meaning": {"type": "string", "minLength": 1},
         "anchors": {**STRINGS, "minItems": 1},
     })},
-    "min_numbered_items": {"type": "integer", "minimum": 2},
+    "min_numbered_items": {"type": "integer", "minimum": 0},
     "lead_sentence": {"type": "boolean"},
     "paragraphs_per_topic": {"type": "boolean"},
+})
+STRUCTURE_EXPECTATION["properties"].update({
+    "max_numbered_items": {"type": "integer", "minimum": 0},
+    "max_paragraphs": {"type": "integer", "minimum": 1},
 })
 ASSESSMENT = object_schema({
     "kept": STRINGS, "missing": STRINGS, "wrong_additions": STRINGS,
@@ -144,6 +148,10 @@ def lexical_scores(case: Case, text: str) -> dict:
     if expected:
         if len(LIST_LINE.findall(text)) < expected["min_numbered_items"]:
             structure_failures.append("too_few_numbered_items")
+        if "max_numbered_items" in expected and len(LIST_LINE.findall(text)) > expected["max_numbered_items"]:
+            structure_failures.append("too_many_numbered_items")
+        if "max_paragraphs" in expected and len(blocks) > expected["max_paragraphs"]:
+            structure_failures.append("too_many_paragraphs")
         if expected["lead_sentence"] and (not lines or LIST_LINE.match(lines[0])):
             structure_failures.append("missing_lead_paragraph")
         if expected["paragraphs_per_topic"] and len(blocks) < len(expected["topics"]) + int(expected["lead_sentence"]):
@@ -719,6 +727,8 @@ def main(argv=None):
     parser.add_argument("--out", required=True, type=Path, help="Private directory under eval/data; matching report.json resumes")
     parser.add_argument("--cases", nargs="+", type=Path, help="Defaults to both files in ../eval/")
     parser.add_argument("--noise", type=Path, help="Complete same-prompt report.json; required for a switch recommendation")
+    parser.add_argument("--cleaner-model", help="Codex subscription model; defaults to the cleanup setting")
+    parser.add_argument("--judge-brain", choices=("claude", "codex"), default="claude")
     parser.add_argument("--judge-model", default="haiku")
     parser.add_argument("--timeout", type=float, default=240)
     parser.add_argument("--seed", type=int, default=0)
@@ -734,12 +744,12 @@ def main(argv=None):
         for template in templates.values():
             if any(template.count("{" + field + "}") != 1 for field in ("languages", "script_rules", "target_app", "dictionary")):
                 raise ValueError("invalid_prompt_placeholders")
-        model = DEFAULTS["cleanup_model"].removeprefix("openai/")
-        if not DEFAULTS["cleanup_model"].startswith("openai/"):
+        model = args.cleaner_model or DEFAULTS["cleanup_model"].removeprefix("openai/")
+        if not args.cleaner_model and not DEFAULTS["cleanup_model"].startswith("openai/"):
             raise ValueError("cleanup_default_is_not_openai")
         noise = json.loads(args.noise.read_text(encoding="utf-8-sig")) if args.noise else None
         cleaner = SubscriptionCli("codex", model, timeout=args.timeout)
-        judge = SubscriptionCli("claude", args.judge_model, timeout=args.timeout)
+        judge = SubscriptionCli(args.judge_brain, args.judge_model, timeout=args.timeout)
         report = asyncio.run(compare(cases, templates, cleaner, judge, out, seed=args.seed, noise=noise))
         print(json.dumps(report["summary"], ensure_ascii=False, indent=2))
         return comparison_exit_code(report)

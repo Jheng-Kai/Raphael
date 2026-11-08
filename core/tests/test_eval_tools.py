@@ -840,7 +840,7 @@ def test_the_prompt_still_has_its_general_rules():
         "Keep every point, name, number, condition, negation and aside",
         "Never drop a sentence, never summarize, never add anything",
         "Turn a word into a name only when the context clearly means that product",
-        "write it once, in its final form",
+        "Write repeated, restarted or reworded phrases once, in their final form",
         "On a self-correction keep only the correction",
         "wrong Traditional conversions",
     ):
@@ -1064,6 +1064,22 @@ async def test_run_case_sends_the_transcript_as_heard_like_the_app_does():
     await eval_cleanup.run_case(client, "m", case)
     assert client.calls[0]["user"] == "<transcript>\n我们用这个软件 就是只要\n</transcript>"
     assert eval_cleanup.transcript_for(case) == case.input
+
+
+async def test_run_case_compares_a_template_without_replacing_the_production_prompt():
+    production = brain_cleanup.build_system_prompt([], [])
+    template = "Synthetic alternate {languages}{script_rules}\nTarget app: {target_app}\n{dictionary}"
+    case = make_case(input="Check the fan", dictionary=["Neris"])
+    client = FakeClient(["Check the fan"])
+    await eval_cleanup.run_case(client, "deepseek/deepseek-v4-flash-0731", case, template=template)
+    call = client.calls[0]
+    assert call["system"] == brain_cleanup.build_system_prompt(
+        case.prompt_words, case.prompt_hints, case.target_app,
+        languages=case.languages, heard=case.input, template=template,
+    )
+    assert call["system"].startswith("Synthetic alternate ")
+    assert call["fallbacks"] == []
+    assert brain_cleanup.build_system_prompt([], []) == production
 
 
 async def test_run_case_names_the_target_app_of_the_case():
