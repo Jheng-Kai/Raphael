@@ -1395,6 +1395,7 @@ export const en = {
   "mem.empty": "None yet",
   "mem.shared": "Shared memory",
   "skills.learnedNotice": "Learned: {p0}",
+  "skills.updatedNotice": "Updated: {p0}",
   "skills.learnedAt": "Self-taught · {p0}",
   "skills.learned": "Self-taught",
   "skills.imported": "Imported",

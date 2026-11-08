@@ -249,9 +249,14 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   const channelViews = (memberId: number): (readonly [MessagingKind, ReturnType<Messaging["view"]>])[] => KINDS.map((kind) => [kind, channelsOf(memberId)[kind].view()] as const);
   function suggestHTML(): string {
     const id = host.member().id;
-    // Only the bots have rows here: skills, memory, voice and permissions are set by asking in the conversation, with
-    // no row for them (owner, 2026-11-07).
-    return `<div class="mb-dh"><span>${esc(t("settings.paneMessaging"))}</span></div><div class="member-msg">${chatChannelsHTML(channelViews(id), (intent) => askPending(id, intent))}</div>`;
+    // The bots, then the member's own settings in the panel again (owner, 2026-11-08: 「skill 為什麼不見了…不是說會在右邊的
+    // sidebar 嗎」): its skills and memory by name, and 成員設定 for the rest (commands, voice, personality, instructions,
+    // group, hiding), each a page with a way back. Asking in the conversation still works too.
+    const settings = `<div class="mb-dh"><span>${esc(t("computer.settings"))}</span></div><nav class="mb-panel-pages" aria-label="${esc(t("computer.settings"))}">` +
+      pageRow("skills", t("members.panelSkills"), "sparkle", t("members.panelCount", { p0: counts.skills })) +
+      pageRow("memory", t("mem.title"), "memory", t("members.panelNotes", { p0: counts.memory })) +
+      pageRow("settings", t("computer.settings"), "gear") + `</nav>`;
+    return `<div class="mb-dh"><span>${esc(t("settings.paneMessaging"))}</span></div><div class="member-msg">${chatChannelsHTML(channelViews(id), (intent) => askPending(id, intent))}</div>` + settings;
   }
   // A press the member is working on draws its button busy; the end of it frees the button (chat-ask.ts).
   onAskPending(() => { if (!el.hidden) draw(); });

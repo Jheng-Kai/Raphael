@@ -105,7 +105,7 @@ async function keepFocus(page) {
 async function details(page) {
   if (await page.$('.conversation-trigger[aria-expanded="false"]')) await click(page, ".conversation-trigger");
   for (let back; (back = await page.$('.mb-det [data-det="back"]:not([hidden])')); await pause(50)) { await back.click(); await back.dispose(); }
-  await wait(page, '.mb-det[data-details-tab="details"] [data-det="gear"]');
+  await wait(page, '.mb-det[data-details-tab="details"] [data-det="tab"][data-tab="settings"]');
 }
 async function chat(page) {
   await click(page, '.mb-chief');
@@ -788,7 +788,7 @@ export async function drive(name, context) {
     result.job = { role: saved.role, instructions: saved.instructions };
     if (!saved.role || !saved.instructions) throw new Error(`The owner's answer did not become its job: ${JSON.stringify(result.job)}`);
     await details(page);
-await click(page, '[data-det="gear"]');
+await click(page, '[data-det="tab"][data-tab="settings"]');
 await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value === role, { timeout: 10000 }, saved.role);
     await capture("job-saved");
     return;
@@ -1107,7 +1107,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     await chat(page);
     await perform(page, { action: "member", id: colleague.id });
     await details(page);
-    await click(page, '[data-det="gear"]');
+    await click(page, '[data-det="tab"][data-tab="settings"]');
     await click(page, '[data-det="tab"][data-tab="memory"]');
     await page.waitForSelector('[data-mem-space="own"]');
     result.memoryHeading = await page.$eval('[data-mem-space="own"]', el => el.getAttribute("aria-label"));
@@ -1150,7 +1150,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     if (audit.agent_turns.some(t => t.cost_usd !== 0)) throw new Error("The fake skill journey recorded nonzero spend");
     await capture("learned-skill-reused");
     await details(page);
-    await click(page, '[data-det="gear"]');
+    await click(page, '[data-det="tab"][data-tab="settings"]');
     await click(page, '[data-det="tab"][data-tab="skills"]');
     await page.waitForSelector('.mp-resource');
     result.skillDate = await page.$eval('.mp-resource', el => el.textContent);

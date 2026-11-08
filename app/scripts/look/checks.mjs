@@ -3077,7 +3077,9 @@ export function checkRendered(name, context = {}) {
     require(visible(tip) && tip.querySelectorAll('.ho-tip-row').length >= 3, "the day under the pointer shows its figures");
     const box = tip.getBoundingClientRect(), bar = col.getBoundingClientRect();
     require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "inside the window");
-    require(box.bottom <= bar.top + 1 || box.top >= bar.bottom - 1, "beside its bar, never over it");
+    require(box.right <= bar.left + 1 || box.left >= bar.right - 1, "beside its bar, never over it");
+    const legend = document.querySelector('.page-home:not([hidden]) .ho-trend .ho-legend').getBoundingClientRect();
+    require(box.top >= legend.bottom - 1 || box.right <= legend.left + 1 || box.left >= legend.right - 1, "never over the legend");
     require(getComputedStyle(tip).pointerEvents === 'none', "it never takes the pointer");
     return { check: name };
   }
@@ -3108,7 +3110,7 @@ export function checkRendered(name, context = {}) {
     const note = page.querySelector('.ho-trend .ho-empty');
     require(visible(note) && note.textContent === '近兩週還沒有完成的事', "the chart says nothing was finished yet");
     require([...page.querySelectorAll('.ho-trend .ho-bar')].every(bar => bar.classList.contains('is-zero')), "every day is an empty stub");
-    require(page.querySelector('.ho-hero .ho-line').textContent === '今天沒有行程，也沒有事在等你。', "his line says the day is quiet");
+    require(page.querySelector('.ho-hero .ho-line').textContent === '告。今天沒有行程，也沒有事在等你。', "his line says the day is quiet, as himself (告。)");
     return { check: name };
   }
   if (name === "home-questions") {
@@ -4887,9 +4889,12 @@ export function checkRendered(name, context = {}) {
   if (name === "member-face-hover") {
     const face = document.querySelector('.mb-panel-identity [data-det="avatar"]'), pencil = face.querySelector('.mb-face-pencil');
     require(face.matches(':hover') && getComputedStyle(pencil).opacity === '1' && visible(pencil.querySelector('svg.i')), "the pencil shows under the pointer");
-    const a = face.getBoundingClientRect(), b = pencil.getBoundingClientRect();
-    require(Math.abs(a.width - b.width) <= 1 && Math.abs(a.height - b.height) <= 1 && getComputedStyle(pencil).borderTopLeftRadius !== '0px', "over the whole face, on a round dimmed circle");
-    require(pencil.querySelector('svg.i').getBoundingClientRect().width === 20, "a 20px pencil");
+    const a = face.getBoundingClientRect(), b = pencil.getBoundingClientRect(), icon = pencil.querySelector('svg.i').getBoundingClientRect();
+    // The face itself dims along its own outline (owner, 2026-11-08: a dimmed circle left a slime's corners uncovered).
+    const slime = face.querySelector(':scope > .av');
+    require(/brightness\(0\.5\)/.test(getComputedStyle(slime).filter), "the whole face dims along its outline");
+    require(b.width <= a.width / 2 + 1 && Math.abs((b.left + b.right) / 2 - (a.left + a.right) / 2) <= 1 && Math.abs((icon.left + icon.right) / 2 - (a.left + a.right) / 2) <= 1, "a small round chip with the pencil stands in the middle of the face, never a circle over all of it");
+    require(icon.width === 20, "a 20px pencil");
     return { check: name };
   }
   if (name.startsWith("avatar-generate")) {

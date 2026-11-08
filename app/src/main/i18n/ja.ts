@@ -1395,6 +1395,7 @@ export const ja = {
   "mem.empty": "まだありません",
   "mem.shared": "共有メモリ",
   "skills.learnedNotice": "習得しました：{p0}",
+  "skills.updatedNotice": "更新しました：{p0}",
   "skills.learnedAt": "自分で習得 · {p0}",
   "skills.learned": "自分で習得",
   "skills.imported": "インポート",

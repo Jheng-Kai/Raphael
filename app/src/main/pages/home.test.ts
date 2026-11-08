@@ -134,7 +134,10 @@ describe("Home's hero", () => {
     sample.activity = activity();
     expect(dayLine(sample)).toBe("今天有 1 個行程，1 件事在等你回答。");
     sample.today_plan = { date: "2026-10-27", items: [], narrative: "今天有兩個行程。", state: "ready", reason: null, model: null };
-    expect(parse(homeHTML(sample)).querySelector(".ho-hero .ho-line")!.textContent).toBe("今天有兩個行程。");
+    // He speaks as himself: his lead word 告。 first (owner, 2026-11-08), once, never doubled.
+    expect(parse(homeHTML(sample)).querySelector(".ho-hero .ho-line")!.textContent).toBe("告。今天有兩個行程。");
+    sample.today_plan = { ...sample.today_plan, narrative: "解。研究方向還在等你決定。" };
+    expect(parse(homeHTML(sample)).querySelector(".ho-hero .ho-line")!.textContent).toBe("解。研究方向還在等你決定。");
   });
 
   test("only a report that needs fixing speaks under his line, with its one fix and no ask", async () => {
@@ -197,7 +200,8 @@ describe("the day in numbers", () => {
     expect([...page.querySelectorAll(".ho-trend .ho-legend > span")].map(key => key.textContent)).toEqual(["工作", "訊息", "例行"]);
     const labels = [...page.querySelectorAll(".ho-xaxis > span")];
     expect(labels[13]!.textContent).toBe("今天");
-    expect(labels.filter(label => label.classList.contains("is-minor"))).toHaveLength(7);
+    // Every third day back from today is named: today and four more of the fourteen.
+    expect(labels.filter(label => label.classList.contains("is-minor"))).toHaveLength(9);
     const tip = parse(dayTipHTML(data.days[13]!));
     expect([...tip.querySelectorAll(".ho-tip-row")].map(row => row.textContent)).toEqual(["工作2", "訊息1", "例行3", "沒完成2"]);
     const table = page.querySelector(".ho-sr > table")!;
@@ -378,7 +382,7 @@ test("translates the retained Home behind Settings immediately in every locale",
     for (const locale of ["en", "ja", "zh-TW"] as const) {
       setLocale(locale);
       expect(page.el.querySelector(".ho-greet")!.textContent).toBe(t("home.greetMorning"));
-      expect(page.el.querySelector(".ho-line")!.textContent).toBe(t("home.lineQuiet"));
+      expect(page.el.querySelector(".ho-line")!.textContent).toBe(t("home.notice") + t("home.lineQuiet"));
       expect([...page.el.querySelectorAll(".ho-sec h2")].map(h => h.textContent)).toEqual([t("home.schedule"), t("home.trend")]);
       expect(page.el.querySelector('[data-stat="week"] small')!.textContent).toBe(t("home.statWeek"));
     }

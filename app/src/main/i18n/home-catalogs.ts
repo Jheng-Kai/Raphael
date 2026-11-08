@@ -6,6 +6,7 @@ export const homeZh = {
   "home.greetMorning": "早安，主人",
   "home.greetAfternoon": "午安，主人",
   "home.greetEvening": "晚上好，主人",
+  "home.notice": "告。",
   "home.lineBoth": "今天有 {p0} 個行程，{p1} 件事在等你回答。",
   "home.lineEvents": "今天有 {p0} 個行程，沒有事在等你。",
   "home.lineQuestions": "今天沒有行程，{p0} 件事在等你回答。",
@@ -46,7 +47,7 @@ export const homeZh = {
 export const homeEn: Record<keyof typeof homeZh, string> = {
   "overview.noSchedule": "Nothing scheduled today", "overview.emptyDay": "No events scheduled", "overview.moreEvents": "{p0} more", "overview.calendar": "Calendar",
   "overview.retry": "Reload", "overview.error": "The overview is unavailable. Please try again.",
-  "home.greetMorning": "Good morning, Master", "home.greetAfternoon": "Good afternoon, Master", "home.greetEvening": "Good evening, Master",
+  "home.greetMorning": "Good morning, Master", "home.greetAfternoon": "Good afternoon, Master", "home.greetEvening": "Good evening, Master", "home.notice": "Notice. ",
   "home.lineBoth": "{p0} events today, and {p1} things wait for your answer.",
   "home.lineEvents": "{p0} events today, and nothing waits for you.",
   "home.lineQuestions": "Nothing scheduled today, and {p0} things wait for your answer.",
@@ -65,7 +66,7 @@ export const homeEn: Record<keyof typeof homeZh, string> = {
 export const homeJa: Record<keyof typeof homeZh, string> = {
   "overview.noSchedule": "今日の予定はありません", "overview.emptyDay": "予定はありません", "overview.moreEvents": "他 {p0} 件", "overview.calendar": "カレンダー",
   "overview.retry": "再読み込み", "overview.error": "概要を取得できません。もう一度お試しください。",
-  "home.greetMorning": "おはようございます、マスター", "home.greetAfternoon": "こんにちは、マスター", "home.greetEvening": "こんばんは、マスター",
+  "home.greetMorning": "おはようございます、マスター", "home.greetAfternoon": "こんにちは、マスター", "home.greetEvening": "こんばんは、マスター", "home.notice": "告。",
   "home.lineBoth": "今日は予定が {p0} 件、あなたの回答を待っていることが {p1} 件あります。",
   "home.lineEvents": "今日は予定が {p0} 件あり、待っていることはありません。",
   "home.lineQuestions": "今日の予定はなく、あなたの回答を待っていることが {p0} 件あります。",

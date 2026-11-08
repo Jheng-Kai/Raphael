@@ -294,7 +294,7 @@ export async function perform(page, step, evidenceDirectory) {
       await page.waitForFunction(el => !el.isConnected || !!el.closest('[hidden]'), {timeout:2000}, dialog);
       await dialog.dispose();
       if (step.kind === 'settings') await click('#nav [data-go="settings"]');
-      else if (step.kind === 'member') { await perform(page, {action:'open-details'}, evidenceDirectory); await click('[data-det="gear"]'); await click('[data-det="edit"]'); }
+      else if (step.kind === 'member') { await perform(page, {action:'open-details'}, evidenceDirectory); await click('[data-det="tab"][data-tab="settings"]'); await click('[data-det="edit"]'); }
       else { await click('[data-room-menu]'); await click('[data-pick="delete"]'); }
       await page.evaluate(() => { window.__polishCaptionOutside = true; });
       break;

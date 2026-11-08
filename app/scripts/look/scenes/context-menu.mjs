@@ -11,7 +11,7 @@ const keyed = [{ action: "focus", selector: '.mb-col [data-member="2"]' }, { act
 const item = '#app-popover [data-confirm-item]';
 const asked = more => [click(more), wait(item), check("confirm-menu-label"), click(item), check("confirm-menu-asks")];
 const confirmed = more => [...asked(more), click(item), waitGone("#app-popover")];
-const memoryTab = [...details, click('[data-det="gear"]'),click('[data-det="tab"][data-tab="memory"]'), wait('.mb-det [data-mem-space="own"] [data-mem="section-more"]')];
+const memoryTab = [...details, click('[data-det="tab"][data-tab="settings"]'),click('[data-det="tab"][data-tab="memory"]'), wait('.mb-det [data-mem-space="own"] [data-mem="section-more"]')];
 const ownTitleMore = '.mb-det [data-mem-space="own"] [data-mem="section-more"]';
 const ownSummaryMore = '.mb-det [data-mem-space="own"] [data-mem="summary-more"]';
 const withSummary = { memorySummary: { text: "進行中：規劃週末", updated_at_ms: 1792807200000 } };

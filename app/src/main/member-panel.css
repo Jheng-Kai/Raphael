@@ -40,14 +40,20 @@
 /* Grok Bot's panel head (2026-11-06): a large face centred above the name, the job quiet under it. */
 .mb-panel-identity { display: flex; flex-direction: column; align-items: center; gap: var(--sp-1); min-width: 0; width: 100%; }
 .mb-panel-identity > .av { margin-bottom: var(--sp-1); }
-/* A press on the face opens the picker: a bare button, no frame or fill. Under the pointer (or the keyboard's focus) a
-   pencil on a dimmed circle shows over the face, as on the owner's photo in Settings (owner, 2026-11-08). */
+/* A press on the face opens the picker: a bare button, no frame or fill. Under the pointer (or the keyboard's focus) the
+   face itself dims, along its own outline (a slime's wide base and its hat, or a round picture), and a white pencil
+   stands in its middle, as on the owner's photo in Settings (owner, 2026-11-08: a dimmed circle left a slime's corners
+   uncovered). */
 .mb-panel-identity > .btn.mb-face-edit { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 0; margin-bottom: var(--sp-1); padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; }
 .mb-panel-identity > .btn.mb-face-edit:hover:not(:disabled), .mb-panel-identity > .btn.mb-face-edit:active:not(:disabled) { background: transparent; }
-.mb-face-pencil { position: absolute; inset: 0; display: grid; place-items: center; border-radius: var(--r-pill); background: var(--photo-dim); color: var(--photo-mark); opacity: 0; transition: opacity 0.12s ease; pointer-events: none; }
+.mb-face-edit > .av.mb-av { transition: filter 0.12s ease; }
+.mb-face-pencil { position: absolute; top: 50%; left: 50%; display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--r-pill); background: var(--photo-dim); color: var(--photo-mark); opacity: 0; transform: translate(-50%, -50%); transition: opacity 0.12s ease; pointer-events: none; }
 .mb-face-pencil .i { width: 20px; height: 20px; }
+:is(.btn.mb-face-edit:hover:not(:disabled), .btn.mb-face-edit[aria-expanded="true"], :root[data-keys] .btn.mb-face-edit:focus-visible) > .av.mb-av { filter: brightness(0.5); }
 .btn.mb-face-edit:hover:not(:disabled) .mb-face-pencil, .btn.mb-face-edit[aria-expanded="true"] .mb-face-pencil, :root[data-keys] .btn.mb-face-edit:focus-visible .mb-face-pencil { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { .mb-face-pencil { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .mb-face-pencil, .mb-face-edit > .av.mb-av { transition: none; } }
+/* 成員設定 stands apart from 訊息平台 above it, as one more section of the panel. */
+.mb-panel-suggest > .mb-dh ~ .mb-dh { margin-top: var(--pa-dgap); }
 /* 訊息平台 and the row for the rest of the settings: each is done in the conversation, so a row is its name and 「設定」. */
 .mb-panel-suggest { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin-top: var(--sp-4); }
 .mb-panel-suggest .member-msg { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }

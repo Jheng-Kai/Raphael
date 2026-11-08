@@ -7,7 +7,7 @@ export default [
   scene("polish-effort", "Settings and the conversation share the identical effort ruler", [...conversationRuler, key('Escape'), ...chooser, { action:'slider-stop', selector:'.mc-effort .mc-range', level:'medium' }, check('polish-effort')]),
   scene("polish-scroll", "Reopening and changing panes reset the long Settings content", [...settings('models'), scroll('[data-pv="directory"]'), check('polish-scrolled'), click('.modal-x'), ...settings('models'), check('polish-scroll'), scroll('[data-pv="directory"]'), check('polish-scrolled'), click('[data-pane="about"]'), click('[data-pane="models"]'), check('polish-scroll')]),
   ...['settings', 'member', 'confirm'].map(kind => scene(`polish-caption-${kind}`, "Window actions work once through the shared dialog dismissal", [
-    ...(kind === 'settings' ? settings('models') : kind === 'member' ? [member(1), { action: 'open-details' }, click('[data-det="gear"]'),click('[data-det="edit"]')] : [room(1), click('[data-room-menu]'), click('[data-pick="delete"]')]),
+    ...(kind === 'settings' ? settings('models') : kind === 'member' ? [member(1), { action: 'open-details' }, click('[data-det="tab"][data-tab="settings"]'),click('[data-det="edit"]')] : [room(1), click('[data-room-menu]'), click('[data-pick="delete"]')]),
     { action: 'polish-caption', kind }, check('polish-caption'),
   ], { polishData: true })),
   ...['chief', 'member', 'room'].map(kind => scene(`polish-search-${kind}`, "Search navigates exact words across unloaded history without losing the conversation", [

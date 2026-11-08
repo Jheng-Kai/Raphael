@@ -1394,6 +1394,7 @@ export const zhTW = {
   "mem.empty": "尚無記憶",
   "mem.shared": "共同記憶",
   "skills.learnedNotice": "學會了：{p0}",
+  "skills.updatedNotice": "更新了：{p0}",
   "skills.learnedAt": "自行學會 · {p0}",
   "skills.learned": "自行學會",
   "skills.imported": "匯入",

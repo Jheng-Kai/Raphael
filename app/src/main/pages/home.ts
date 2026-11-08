@@ -15,7 +15,7 @@ import { dateKey } from "../schedule-picker";
 import { plainReplies } from "../../shared/anime";
 import { openMemberThread } from "../team-navigation";
 import type { AppContext, CalendarCreate, CalendarDate, CalendarEventFocus, Page } from "../types";
-import { btn, esc, ico, iconButton, patchHTML } from "../ui";
+import { esc, ico, iconButton, patchHTML } from "../ui";
 import "../home.css";
 
 const HOUR = 3_600_000;
@@ -39,7 +39,7 @@ function greeting(at: number): string {
  * A routine due many times a day is one row with its count, as the calendar's rhythm bar (R-CAL-03). */
 export function todaysSchedule(data: HomeOverview): { item: HomeItem; times: number }[] {
   const today = dateKey(new Date(data.generated_at_ms));
-  const all = data.activity || data.yesterday ? data.today.filter(item => item.kind !== "question")
+  const all = data.activity ? data.today.filter(item => item.kind !== "question")
     : (data.calendar_items ?? data.calendar).filter(item => dateKey(new Date(item.at_ms)) === today);
   const runs = new Map<number, HomeItem[]>();
   for (const item of all) if (item.kind === "routine" && item.routine_id !== null && !item.run_status) runs.set(item.routine_id, [...(runs.get(item.routine_id) ?? []), item]);
@@ -66,13 +66,20 @@ export function dayLine(data: HomeOverview): string {
   return t("home.lineQuiet");
 }
 
+/** His line as he says it: his own lead word first (告。), unless his words already open with one (owner, 2026-11-08:
+ * Raphael's 告／否 wherever he speaks). The 《…》 caption wrapper stays the desktop's (R-UI-42). */
+export function raphaelSays(words: string): string {
+  const lead = t("home.notice");
+  return /^(告|解|否|是)。|^(Notice|Answer|No|Yes)\./.test(words.trim()) ? words : `${lead}${words}`;
+}
+
 function heroCopyHTML(data: HomeOverview): string {
   const report = buildReport(data.report, data.generated_at_ms);
   const date = new Date(data.generated_at_ms).toLocaleDateString(getLocale(), { month: "long", day: "numeric", weekday: "long" });
   // Only a report that needs fixing speaks here, with its one fix. The main window shows his words plainly (R-UI-42).
   const alert = report.action ? `<p class="ho-alert">${esc(plainReplies([report.text])[0] ?? report.text)}${iconButton(report.action.target === "retry" ? "refresh" : "info", report.action.label, ' data-home-go="report"')}</p>` : "";
-  const line = data.today_plan?.state === "ready" && data.today_plan.narrative ? data.today_plan.narrative : dayLine(data);
-  return `<p class="ho-date">${esc(date)}</p><h1 class="ho-greet">${esc(greeting(data.generated_at_ms))}</h1><p class="ho-line" role="status">${esc(line)}</p>${alert}`;
+  const words = data.today_plan?.state === "ready" && data.today_plan.narrative ? data.today_plan.narrative : dayLine(data);
+  return `<p class="ho-date">${esc(date)}</p><h1 class="ho-greet">${esc(greeting(data.generated_at_ms))}</h1><p class="ho-line" role="status">${esc(raphaelSays(words))}</p>${alert}`;
 }
 
 /** One figure: its name, the number and a few words under it. A figure that leads somewhere is a button. */
@@ -153,7 +160,7 @@ function scheduleHTML(data: HomeOverview): string {
   const table = rows.length
     ? `<div class="ho-thead" aria-hidden="true"><span>${esc(t("home.colTime"))}</span><span>${esc(t("home.colTitle"))}</span><span>${esc(t("home.colKind"))}</span></div>` +
       rows.map(({ item, times }) => eventRowHTML(item, now, times)).join("")
-    : `<p class="ho-empty">${esc(t("overview.noSchedule"))}</p>${btn(ico("plus") + esc(t("auto.create")), "sm ho-create", ` data-home-create="${today}"`)}`;
+    : `<p class="ho-empty">${esc(t("overview.noSchedule"))}${iconButton("plus", t("auto.create"), ` data-home-create="${today}"`, "ho-create")}</p>`;
   return sectionHTML("schedule", t("home.schedule"), bandHTML(data) + table + notice, iconButton("calendar", t("overview.calendar"), ' data-home-go="calendar"'));
 }
 
@@ -188,13 +195,15 @@ function trendHTML(activity: HomeActivity): string {
     const total = doneOn(day), today = index === days.length - 1;
     const parts = SERIES.map(([key]) => seriesValue(day, key) ? `<i data-s="${key}" style="flex-grow:${seriesValue(day, key)}"></i>` : "").join("");
     const bar = total ? `<span class="ho-bar" style="height:${(total / top * 100).toFixed(2)}%">${parts}</span>` : `<span class="ho-bar is-zero"></span>`;
-    const value = today && total ? `<small class="ho-bar-value" style="bottom:${(total / top * 100).toFixed(2)}%">${total}</small>` : "";
+    // Today's total stands over its bar, a 0 included (an empty day says so in a number).
+    const value = today ? `<small class="ho-bar-value" style="bottom:${(total / top * 100).toFixed(2)}%">${total}</small>` : "";
     return `<div class="ho-col${today ? " is-today" : ""}" data-tip-day="${index}">${bar}${value}</div>`;
   }).join("");
   const labels = days.map((day, index) => {
     const fromToday = days.length - 1 - index;
     const words = fromToday === 0 ? t("home.today") : dayLabel(day.date, { month: "numeric", day: "numeric" });
-    return `<span class="${fromToday === 0 ? "is-today" : fromToday % 2 ? "is-minor" : ""}">${esc(words)}</span>`;
+    // Every third day back from today is named, so the labels breathe in a narrow panel too.
+    return `<span class="${fromToday === 0 ? "is-today" : fromToday % 3 ? "is-minor" : ""}">${esc(words)}</span>`;
   }).join("");
   const grid = [top / 2, top].map(value => `<span class="ho-grid" style="bottom:${value / top * 100}%"><small>${value}</small></span>`).join("");
   const empty = days.every(day => doneOn(day) === 0) ? `<p class="ho-empty">${esc(t("home.trendEmpty"))}</p>` : "";
@@ -322,8 +331,17 @@ export function createHome(app: AppContext): Page {
     tip.innerHTML = day ? dayTipHTML(day) : esc(at.dataset.tip ?? "");
     tip.hidden = false;
     const box = at.getBoundingClientRect(), size = tip.getBoundingClientRect();
-    const left = Math.max(8, Math.min(innerWidth - size.width - 8, box.left + box.width / 2 - size.width / 2));
-    const top = box.top - size.height - 8 >= 8 ? box.top - size.height - 8 : box.bottom + 8;
+    let left: number, top: number;
+    if (day) {
+      // A day's figures stand beside its bar, inside the plot: never over the legend or the schedule above it.
+      const room = at.closest(".ho-sec")?.getBoundingClientRect() ?? { left: 0, right: innerWidth };
+      left = box.left - size.width - 8 >= room.left ? box.left - size.width - 8 : box.right + 8;
+      left = Math.max(8, Math.min(innerWidth - size.width - 8, left));
+      top = Math.max(8, Math.min(innerHeight - size.height - 8, box.top + box.height / 2 - size.height / 2));
+    } else {
+      left = Math.max(8, Math.min(innerWidth - size.width - 8, box.left + box.width / 2 - size.width / 2));
+      top = box.top - size.height - 8 >= 8 ? box.top - size.height - 8 : box.bottom + 8;
+    }
     tip.style.left = `${Math.round(left)}px`;
     tip.style.top = `${Math.round(top)}px`;
   });

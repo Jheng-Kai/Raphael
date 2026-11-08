@@ -28,7 +28,7 @@
 .ho-stat > small { font-size: var(--fs-xs); color: var(--text-3); }
 .ho-stat > b { font-size: calc(var(--fs-h1) * 1.5); font-weight: 500; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .ho-stat > b > em { margin-left: 2px; font-style: normal; font-size: var(--fs-md); color: var(--text-3); }
-.ho-stat > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); color: var(--text-2); }
+.ho-stat > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: var(--fs-xs); line-height: 1.45; color: var(--text-2); }
 .ho-stat > span.is-up { color: var(--ok); }
 .ho-stat > span.is-bad { color: var(--err); }
 .ho-stat.btn { display: grid; grid-template-columns: minmax(0, 1fr); justify-content: stretch; align-items: start; height: auto; min-height: 0; padding: var(--sp-2) var(--sp-4); border: 0; background: transparent; font: inherit; color: inherit; white-space: normal; }
@@ -83,7 +83,7 @@
 .ho-event.is-past { color: var(--text-3); }
 .ho-event.is-past > time { color: var(--text-3); }
 .ho-empty { display: flex; align-items: center; gap: var(--sp-2); margin: 0; padding-left: var(--sp-2); min-height: 40px; color: var(--text-3); font-size: var(--fs-sm); }
-.ho-create.btn { justify-self: start; margin-left: var(--sp-2); }
+.ho-empty > .ho-create { flex: none; }
 /* What the schedule says of Google: its mark and words on one line, wrapping in a narrow column, the action under them. */
 .ho-schedule .cal-notice { flex-wrap: wrap; margin: var(--sp-2) 0 0 var(--sp-2); min-width: 0; color: var(--text-3); font-size: var(--fs-xs); }
 .ho-schedule .cal-notice-words { flex: 1 1 calc(100% - 2 * var(--sp-5)); min-width: 0; text-wrap: pretty; }

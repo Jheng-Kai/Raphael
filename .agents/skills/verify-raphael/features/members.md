@@ -104,11 +104,12 @@ npm run look -- sidebar-rail sidebar-rail-dragged-open sidebar-dragged-wider pan
 Select a member, then click the stacked header title for details.
 At compact width open the sidebar drawer to select a member first. The same title
 closes the panel; its close button updates the same remembered session state. Details holds the face (a press shows
-every picture and colour at once; since 2026-11-08 a pencil on a dimmed circle shows on it under the pointer, as on the owner's photo in Settings), the routines, Raphael's conversations, 訊息平台 (each Telegram, Slack and
-Discord bot not set up is one row with 設定; a connected one is its card with pairing) and one row 「技能、記憶、聲音和
-權限」 with 設定. Every 設定 and the header's share send the owner's words into that member's conversation with an
-`intent` (chat-ask.ts): the member sets it up there, with a card for a token, and share answers with a template card.
-Nothing is typed into the panel and Settings holds no bot (owner, 2026-11-07). Scenes: details, raphael-details,
+every picture and colour at once; since 2026-11-08 under the pointer the face dims along its own outline with a white pencil in its middle, as on the owner's photo in Settings), the routines, Raphael's conversations, 訊息平台 (each Telegram, Slack and
+Discord bot not set up is one row with 設定; a connected one is its card with pairing) and, since 2026-11-08 (owner:
+「skill 為什麼不見了…不是說會在右邊的 sidebar 嗎」), 成員設定: rows for 技能 and 記憶 with their counts and 成員設定 for the rest
+(commands, voice, personality, instructions, group, hiding), each opening its page in the panel with a way back. A bot's
+設定 and the header's share send the owner's words into that member's conversation with an `intent` (chat-ask.ts): the
+member sets it up there, with a card for a token, and share answers with a template card. Settings holds no bot. Scenes: details, raphael-details,
 member-avatar, slime-picker, work-messaging-setup, work-messaging-pairing, messaging-paired-aligned. The sidebar plus is the member creation entry; verify the
 complete flow for creation changes.
 
@@ -123,7 +124,7 @@ the candidate stands round in the face's place with 使用 (primary) and 再生�
 去設定 where the core names a fix; the window learns the kind only through commands.rs `window_error`, which passes
 `kind`, `repair` and `resource` of this one call and nothing else of the error's data. The Tauri timeout for the
 call is 300 s. With a model chosen, a "missing" answer reads as that model being unable to draw now (with 去設定), never
-as no model chosen. Under the pointer the face shows a pencil on a dimmed circle (owner, 2026-11-08). Scenes:
+as no model chosen. Under the pointer the face itself dims along its outline (a slime's base and hat included, never a circle that leaves corners) with a white pencil in its middle (owner, 2026-11-08). Scenes:
 member-face-hover, avatar-generate-off, avatar-generate, avatar-generate-used.
 
 ## Driving it with look
