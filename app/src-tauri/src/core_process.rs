@@ -137,10 +137,14 @@ pub fn resolve_app_core_command(app: &tauri::AppHandle) -> Result<CoreCommand, S
         packaged_command_in(&resources)?
     };
     // Use this app's resolved log directory, including native-journey overrides.
-    let logs = app.path().app_log_dir()
+    let logs = app
+        .path()
+        .app_log_dir()
         .map_err(|err| format!("could not locate this app's logs: {err}"))?;
-    command.env.push(("RAPHAEL_LOG_PATH".to_owned(),
-                      logs.join("raphael.log").display().to_string()));
+    command.env.push((
+        "RAPHAEL_LOG_PATH".to_owned(),
+        logs.join("raphael.log").display().to_string(),
+    ));
     Ok(command)
 }
 

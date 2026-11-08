@@ -54,7 +54,10 @@ pub fn parse_reply(reply: &Value) -> Result<Reply, Malformed> {
         }
         Some("done")
             if reply.get("silent").and_then(Value::as_bool) == Some(true)
-                && reply.get("text").and_then(Value::as_str).is_some_and(|text| text.trim().is_empty()) =>
+                && reply
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .is_some_and(|text| text.trim().is_empty()) =>
         {
             Ok(Reply::Accepted)
         }
@@ -416,7 +419,10 @@ mod tests {
         assert_eq!(parse_reply(&reply), Ok(Reply::Accepted));
         assert_eq!(parse_answer(&reply), Ok(Reply::Accepted));
         for silent in [json!(false), json!("true"), json!(null)] {
-            assert!(parse_reply(&json!({"status":"done", "prefix":"", "text":"", "silent":silent})).is_err());
+            assert!(
+                parse_reply(&json!({"status":"done", "prefix":"", "text":"", "silent":silent}))
+                    .is_err()
+            );
         }
         assert!(parse_reply(&json!({"status":"error", "silent":true, "text":""})).is_err());
         assert!(parse_reply(&json!({"status":"done", "silent":true, "text":"Failure"})).is_err());

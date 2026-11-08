@@ -10260,7 +10260,10 @@ mod tests {
     #[tokio::test]
     async fn local_command_flow_silent_confirm_ends_without_ask_failed() {
         let core = agent_core(question("c-1", 30_000));
-        core.script("agent.confirm", Ok(json!({"status":"done", "prefix":"", "text":"", "silent":true})));
+        core.script(
+            "agent.confirm",
+            Ok(json!({"status":"done", "prefix":"", "text":"", "silent":true})),
+        );
         let c = controller(core, FakePaster::pasting("chrome.exe"));
         let turn = start_turn(&c).await;
         until_stage(&c, AgentStage::Asking).await;
@@ -10275,7 +10278,10 @@ mod tests {
     #[tokio::test]
     async fn local_command_flow_unmarked_empty_confirm_keeps_ask_failed() {
         let core = agent_core(question("c-1", 30_000));
-        core.script("agent.confirm", Ok(json!({"status":"done", "prefix":"", "text":""})));
+        core.script(
+            "agent.confirm",
+            Ok(json!({"status":"done", "prefix":"", "text":""})),
+        );
         let c = controller(core, FakePaster::pasting("chrome.exe"));
         let turn = start_turn(&c).await;
         until_stage(&c, AgentStage::Asking).await;
@@ -10283,5 +10289,4 @@ mod tests {
         turn.await.unwrap();
         assert!(c.overlay().events().contains(&notice(ASK_FAILED.zh)));
     }
-
 }
