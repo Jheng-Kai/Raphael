@@ -197,7 +197,7 @@ pub const GREETING: Notice = Notice {
 };
 
 /// Words learned from the user's corrections after a paste, in one notice, in `language`:
-/// 《了。「手機」、「Typeless」已加入詞典。》, `《Understood. “Typeless” added to the dictionary.》`
+/// 《了。「手機」、「Wordnote」已加入詞典。》, `《Understood. “Wordnote” added to the dictionary.》`
 /// or 《了。「手機」を辞書に追加しました。》.
 pub fn learned(words: &[String], language: &str) -> String {
     let quoted = |open: &str, close: &str, separator: &str| {
@@ -298,18 +298,18 @@ mod tests {
             learned(&one, "en"),
             "《Understood. \u{201c}手機\u{201d} added to the dictionary.》"
         );
-        let two = ["手機".to_owned(), "Typeless".to_owned()];
+        let two = ["手機".to_owned(), "Wordnote".to_owned()];
         assert_eq!(
             learned(&two, "zh-TW"),
-            "《了。「手機」、「Typeless」已加入詞典。》"
+            "《了。「手機」、「Wordnote」已加入詞典。》"
         );
         assert_eq!(
             learned(&two, "ja"),
-            "《了。「手機」、「Typeless」を辞書に追加しました。》"
+            "《了。「手機」、「Wordnote」を辞書に追加しました。》"
         );
         assert_eq!(
             learned(&two, "en"),
-            "《Understood. \u{201c}手機\u{201d}, \u{201c}Typeless\u{201d} added to the dictionary.》"
+            "《Understood. \u{201c}手機\u{201d}, \u{201c}Wordnote\u{201d} added to the dictionary.》"
         );
     }
 

@@ -288,7 +288,7 @@ print(json.dumps({"type":"result", "subtype":"success", "session_id":native, "re
 
 
 async def test_a_cli_reply_is_one_message_unless_the_model_breaks_it(setup, tmp_path, client):
-    # paragraphs are one message: only the model's own break makes several (owner, 2026-10-24)
+    # paragraphs are one message: only the model's own break makes several
     rig, team = setup
     teacher = member(team, model="cli:claude:sonnet")
     fake_brain(rig, tmp_path, """import json, sys

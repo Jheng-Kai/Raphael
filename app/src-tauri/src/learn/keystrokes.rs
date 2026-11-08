@@ -248,29 +248,29 @@ mod tests {
 
     #[test]
     fn word_backspace_and_selection_replacement_preserve_the_original_term() {
-        let mut keys = Keystrokes::new("Please use Open Mouse Bot").unwrap();
+        let mut keys = Keystrokes::new("Please use Sample Tool Ex").unwrap();
         for _ in 0..3 {
             keys.apply(EditEvent::WordBackspace);
         }
-        typed(&mut keys, "OpenMausBot");
+        typed(&mut keys, "SampleToolX");
         keys.apply(EditEvent::Enter);
         assert_eq!(
             keys.corrections(),
             [Correction {
-                word: "OpenMausBot".into(),
-                misheard: "Open Mouse Bot".into()
+                word: "SampleToolX".into(),
+                misheard: "Sample Tool Ex".into()
             }]
         );
-        let mut keys = Keystrokes::new("Please use Open Mouse Bot").unwrap();
+        let mut keys = Keystrokes::new("Please use Sample Tool Ex").unwrap();
         for _ in 0..14 {
             keys.apply(EditEvent::Left { shift: true });
         }
-        typed(&mut keys, "OpenMausBot");
+        typed(&mut keys, "SampleToolX");
         assert_eq!(
             keys.corrections(),
             [Correction {
-                word: "OpenMausBot".into(),
-                misheard: "Open Mouse Bot".into()
+                word: "SampleToolX".into(),
+                misheard: "Sample Tool Ex".into()
             }]
         );
     }

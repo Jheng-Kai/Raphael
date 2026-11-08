@@ -1,4 +1,4 @@
-// Every emoji for the reaction picker (owner, 2026-11-06, after Grok Bot's), named in the app's language from
+// Every emoji for the reaction picker, named in the app's language from
 // emojibase-data. The set is a chunk of its own, read in the first idle moment after start-up (never during it) and
 // again, if that has not happened yet, when the reaction pill opens.
 

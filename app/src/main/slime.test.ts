@@ -101,7 +101,7 @@ test("a member without a picture is a slime, its chosen one or a colour from its
   expect(face({ id: 3, name: "Ada", avatar: "slime:diablo" }).innerHTML).toContain("#EE5A64");
   expect(face({ id: 3, name: "Ada", avatar: "slime:unknown" }).querySelector(".mb-av-slime")).not.toBeNull();
   expect(face({ id: 3, name: "Ada", avatar: "preset:old", avatar_url: "data:image/png;base64,AAAA" }).querySelector(".mb-av-slime svg.slime")).not.toBeNull();
-  // Since 2026-11-07 (owner) Raphael is the very first slime, the cute blue one; his emblem shows only in voice.
+  // Raphael uses the first blue slime; his emblem shows only in voice.
   expect(face({ id: 0, name: "Raphael" }).querySelector(".mb-av-slime svg.slime")?.outerHTML).toContain("#3DB5FF");
 });
 
@@ -258,7 +258,7 @@ test("only whole-frame cel strips use composited transforms (R-UI-63, R-PERF-01)
   }
   expect(css).toMatch(/\.slime-loop \.slime-cels \{[^}]*steps\(var\(--loop-cels\), end\)/);
   // A blink lands on whole rows of the eye strip, whatever its number of rows: fixed fractions of an older strip threw
-  // the eyes up and down when the gazes changed (owner, 2026-11-08).
+  // the eyes up and down when the gazes changed.
   const blink = composited.find(frame => frame.name === 'slime-loop-blink')!.body;
   const moves = [...blink.matchAll(/translateY\(([^;}]+)\)\s*;?\s*\}/g)].map(match => match[1]!.trim());
   expect(moves.filter(move => move !== '0%')).toEqual([1, 2, 3].map(rows => `calc(-${rows * 100}% / var(--loop-rows))`));

@@ -1,3 +1,4 @@
+# Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """One pinned media tool table for API, authenticated CLI MCP and worker snapshots."""
 
 from raphael_core.ui_words import ui_word, with_ui_words

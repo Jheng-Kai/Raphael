@@ -29,7 +29,7 @@
 .mb-head-l { display: flex; align-items: center; gap: var(--sp-1); }
 .mb-head-c { width: 100%; }
 .page-agent .btn.conversation-trigger { display: flex; flex-direction: column; align-items: center; gap: var(--sp-1); min-width: 0; width: 100%; max-width: min(320px, 100%); height: auto; min-height: 52px; padding: var(--sp-1) var(--sp-3); border-color: transparent; background: transparent; box-shadow: none; border-radius: var(--r-sm); }
-/* As Grok Bot's header (owner, 2026-11-06): the face and name are one soft pill, a step lighter under the pointer, where a ›
+/* The conversation header: the face and name are one soft pill, a step lighter under the pointer, where a ›
    slides in; the button around it stays clear. */
 .page-agent .btn.conversation-trigger:is(:hover, :active):not(:disabled) { background: transparent; }
 .page-agent .btn.conversation-trigger:is(:hover, :active):not(:disabled) { background: transparent; }
@@ -51,7 +51,7 @@
 /* Fade the scroll boundary so partial message lines never meet the fixed header. */
 /* The fade is for what scrolls away: at rest the first line stands clear of it. */
 .mb-chat .ra-scroll { mask-image: linear-gradient(to bottom, transparent 16px, var(--text) 40px); padding-top: 40px; }
-/* A conversation between members (peer-chat.ts), as Grok Bot's: over the thread and its composer, the pill 「A ⇄ B」 where
+/* A conversation between members (peer-chat.ts): over the thread and its composer, the pill 「A ⇄ B」 where
    the member's pill was, each message under its speaker's face and coloured name, and 「關閉對話」 where the composer was. */
 .mb-chat > .peer-chat { position: absolute; z-index: 4; inset: calc(var(--window-controls-height) + 4px) 0 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; padding: 0 var(--pa-chat-pad); background: var(--content); animation: peer-in 160ms ease both; }
 .peer-head { display: flex; justify-content: center; min-width: 0; padding: 6px var(--sp-3); }

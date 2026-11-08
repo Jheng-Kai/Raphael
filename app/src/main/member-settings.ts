@@ -1,9 +1,9 @@
-// The settings of one member, as a page of its own in the main area where the conversation is (owner, 2026-11-08): the gear
+// The settings of one member, as a page of its own in the main area where the conversation is: the gear
 // of the member's panel opens it, the arrow at its top left (and Escape) goes back to the conversation. It reads like a
 // Notion page: a cover the owner can change (a pattern in the member's own slime colour, or a picture), the face large
 // across the cover's lower edge, the name and the role in place. Under them the settings are kinds in a column on the left,
-// as Settings' own (owner, 2026-11-08: 「左側會有一些分區…不要就這樣子長長一條」), and only the chosen kind is shown, as
-// compact sections, each a name over one tinted list of rows (Grok Bot's panel). What the panel beside it already shows
+// as Settings' own, and only the chosen kind is shown, as
+// compact sections, each a name over one tinted list of rows. What the panel beside it already shows
 // (routines, messaging) is not here. A long text (the personality, the instructions, a skill) is one line and opens in
 // place, or in a view of its own, when it is pressed; no row has a text button where an icon says it.
 import { noticeHTML } from "./missing";
@@ -223,7 +223,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     return section("", rows, "", "ms-tools");
   }
 
-  // The voice card, as Grok Bot's Voice chat: one calm card, the choice on the right of its row. The voice is the member's
+  // The voice card: one calm card, the choice on the right of its row. The voice is the member's
   // own; Raphael's is the one voice his answers are spoken in (a setting).
   function voiceHTML(member: Member): string {
     const raphael = member.id === RAPHAEL_ID;

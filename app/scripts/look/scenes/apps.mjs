@@ -48,7 +48,7 @@ export default [
     key("Enter"), check("store-group-end"),
     click('[data-conn="store-group"][data-id="productivity"]'), check("plugins-store-category"), check("plugins-store-rows"),
   ]),
-  scene("connected-apps-only", "The connected view holds connectors only: apps that can be called now, those that cannot with the reason; one count, and no skills section or import button even when members have skills (owner, 2026-11-07)", [
+  scene("connected-apps-only", "The connected view holds connectors only: apps that can be called now, those that cannot with the reason; one count, and no skills section or import button even when members have skills", [
     ...open, wait('[data-k="cs-open:composio:notion"]'), wait('[data-stagger="installed-not"] .cs-item'), check("apps-count"), check("connectors-only"),
   ], {
     managedConnectors: [

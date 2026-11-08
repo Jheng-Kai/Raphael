@@ -82,7 +82,7 @@ async def test_cpu_question_calls_local_command_without_a_desktop(make_rig, clie
 
 
 async def test_a_question_said_into_a_conversation_gets_the_card_a_typed_one_gets(make_rig, client, conn):
-    # Live, the owner said it at this computer and was told a phone cannot approve: only typing counted as being here.
+    # A voice request from this computer can approve a local command.
     hub, host = local_hub(conn)
     SettingsStore(conn).set("local_commands_seen", True)
     rig = make_rig(plugins=hub, gate=ToolGate(hub, conn=conn), permissions=PermissionCards(conn))

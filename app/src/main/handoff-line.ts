@@ -7,7 +7,7 @@ import { esc } from "./ui";
 export interface HandoffLine { task: HandoffView; face: string; name?: string }
 
 /**
- * What a turn sent colleagues, as Grok Bot's line: 「與 X 的 2 則訊息」 (the colleagues' faces and names, three at most and
+ * What a turn sent colleagues, in one line: 「與 X 的 2 則訊息」 (the colleagues' faces and names, three at most and
  * a count of the others), and the state while one is unfinished. It is a button: the conversation it counts opens in
  * place of the thread (peer-chat.ts). Task numbers, or the colleague's record for a question with no task, stay in
  * `data-handoff-group` and `data-handoff` for the code; the owner never reads them.

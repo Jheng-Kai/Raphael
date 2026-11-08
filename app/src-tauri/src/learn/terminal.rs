@@ -636,21 +636,21 @@ mod tests {
     #[test]
     fn observed_selection_delete_and_paste_keep_the_same_anchored_input() {
         let mut tracker =
-            TerminalTracker::new("> Please use Open Mouse Bot", "Please use Open Mouse Bot")
+            TerminalTracker::new("> Please use Sample Tool Ex", "Please use Sample Tool Ex")
                 .unwrap();
         assert_eq!(
             tracker.observe_input("> Please use ", true),
             TerminalDecision::Continue
         );
         assert_eq!(
-            tracker.observe_input("> Please use OpenMausBot", true),
+            tracker.observe_input("> Please use SampleToolX", true),
             TerminalDecision::Continue
         );
         assert_eq!(
             tracker.corrections(),
             [Correction {
-                word: "OpenMausBot".into(),
-                misheard: "Open Mouse Bot".into()
+                word: "SampleToolX".into(),
+                misheard: "Sample Tool Ex".into()
             }],
             "{tracker:?}"
         );
@@ -659,7 +659,7 @@ mod tests {
             tracker.observe_input("> Please use WrongOutput", true),
             TerminalDecision::Sent
         );
-        assert_eq!(tracker.corrections()[0].word, "OpenMausBot");
+        assert_eq!(tracker.corrections()[0].word, "SampleToolX");
         tracker.invalidate();
         assert!(tracker.corrections().is_empty());
     }
@@ -681,9 +681,9 @@ mod tests {
         }
     }
 
-    const PASTED: &str = "Use Tyeless and Open Router for the local command today";
-    const FIRST: &str = "Use Typeless and Open Router for the local command today";
-    const FIXED: &str = "Use Typeless and OpenRouter for the local command today";
+    const PASTED: &str = "Use Wornote and Open Router for the local command today";
+    const FIRST: &str = "Use Wordnote and Open Router for the local command today";
+    const FIXED: &str = "Use Wordnote and OpenRouter for the local command today";
 
     fn command(text: &str) -> String {
         format!("PS C:\\work> {text}")
@@ -697,8 +697,8 @@ mod tests {
             .collect()
     }
 
-    fn typeless() -> (String, String) {
-        ("Tyeless".to_owned(), "Typeless".to_owned())
+    fn sample_word() -> (String, String) {
+        ("Wornote".to_owned(), "Wordnote".to_owned())
     }
 
     /// A full-screen coding assistant: the conversation, an input in a frame, a status line.
@@ -718,15 +718,15 @@ mod tests {
     #[test]
     fn a_wrapped_paste_is_found_in_the_middle_pane_without_neighbor_text() {
         let before = "left status │╭────────────────────────────────╮│ right status\n\
-                      left output ││ › Use Tyeless and Open Router   ││ right output\n\
+                      left output ││ › Use Wornote and Open Router   ││ right output\n\
                       left output ││   for the local command today   ││ right output\n\
                       left status │╰────────────────────────────────╯│ right status";
         let mut tracker = TerminalTracker::new(before, PASTED).expect("paste in middle pane");
         assert_eq!(
-            tracker.observe(&before.replace("Tyeless", "Typeless")),
+            tracker.observe(&before.replace("Wornote", "Wordnote")),
             TerminalDecision::Continue
         );
-        assert_eq!(pairs(&tracker), vec![typeless()]);
+        assert_eq!(pairs(&tracker), vec![sample_word()]);
         assert!(!tracker.region().contains("left"));
         assert!(!tracker.region().contains("right"));
     }
@@ -774,7 +774,7 @@ mod tests {
             tracker.observe(&multiplex(FIRST, 14)),
             TerminalDecision::Continue
         );
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
     }
 
     #[test]
@@ -786,13 +786,13 @@ mod tests {
 
     #[test]
     fn repeated_prompt_markers_are_not_words_in_a_wrapped_input() {
-        let screen = "╭────────────────────────────╮\n│ › Use Tyeless and Open     │\n│ > Router for the local     │\n│ › command today            │\n╰────────────────────────────╯\nready";
+        let screen = "╭────────────────────────────╮\n│ › Use Wornote and Open     │\n│ > Router for the local     │\n│ › command today            │\n╰────────────────────────────╯\nready";
         let mut tracker = TerminalTracker::new(screen, PASTED).unwrap();
         assert_eq!(
-            tracker.observe(&screen.replace("Tyeless and Open     ", "Typeless and Open    ")),
+            tracker.observe(&screen.replace("Wornote and Open     ", "Wordnote and Open    ")),
             TerminalDecision::Continue
         );
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
     }
 
     #[test]
@@ -869,7 +869,7 @@ mod tests {
         let mut tracker = TerminalTracker::new(&initial, PASTED).unwrap();
         let first = format!(
             "unrelated rewritten history\n{}",
-            command(&PASTED.replace("Tyeless", "Typeless"))
+            command(&PASTED.replace("Wornote", "Wordnote"))
         );
         assert_eq!(tracker.observe(&first), TerminalDecision::Continue);
         assert_eq!(
@@ -879,7 +879,7 @@ mod tests {
         assert_eq!(
             pairs(&tracker),
             [
-                typeless(),
+                sample_word(),
                 ("Open Router".to_owned(), "OpenRouter".to_owned())
             ]
         );
@@ -893,7 +893,7 @@ mod tests {
         tracker.observe(&command(FIRST));
         assert_eq!(tracker.observe(&command(FIXED)), TerminalDecision::Continue);
         let output = format!(
-            "{}\r\nUse Typeless and AnotherTool for the local command today\r\nPS C:\\work> ",
+            "{}\r\nUse Wordnote and AnotherTool for the local command today\r\nPS C:\\work> ",
             command(FIXED)
         );
         assert_eq!(tracker.observe(&output), TerminalDecision::Continue);
@@ -940,34 +940,34 @@ mod tests {
 
     #[test]
     fn multiline_pastes_keep_only_their_containing_rows() {
-        let pasted = "Use Tyeless for this command today\nthen use Open Router for the next step";
+        let pasted = "Use Wornote for this command today\nthen use Open Router for the next step";
         let mut tracker =
             TerminalTracker::new(&format!("history\r\nPS> {pasted}\r\n\r\n"), pasted).unwrap();
         // The rows of one paste are one text; a break between them stands for a blank.
         assert_eq!(
             tracker.region(),
-            "PS> Use Tyeless for this command today then use Open Router for the next step"
+            "PS> Use Wornote for this command today then use Open Router for the next step"
         );
         assert_eq!(
             tracker.observe(&format!(
                 "new history\nPS> {}",
-                pasted.replace("Tyeless", "Typeless")
+                pasted.replace("Wornote", "Wordnote")
             )),
             TerminalDecision::Continue
         );
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
     }
 
     #[test]
     fn physical_wraps_can_be_found_and_edited_without_tracking_history() {
-        let initial = "history\nPS> Use Tyeless and Open Router\n for the local command today\n\n";
+        let initial = "history\nPS> Use Wornote and Open Router\n for the local command today\n\n";
         let mut tracker = TerminalTracker::new(initial, PASTED).unwrap();
         assert_eq!(
             tracker
-                .observe("history\nPS> Use Typeless and Open Router\n for the local command today"),
+                .observe("history\nPS> Use Wordnote and Open Router\n for the local command today"),
             TerminalDecision::Continue
         );
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
     }
 
     #[test]
@@ -977,11 +977,11 @@ mod tests {
         // The window got narrower: the same words, one row more.
         assert_eq!(
             tracker
-                .observe("PS C:\\work> Use Typeless and Open Router\n for the local command today"),
+                .observe("PS C:\\work> Use Wordnote and Open Router\n for the local command today"),
             TerminalDecision::Continue
         );
         assert_eq!(tracker.region(), command(FIRST));
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
         // Wider again, and one more word fixed.
         assert_eq!(tracker.observe(&command(FIXED)), TerminalDecision::Continue);
         assert_eq!(pairs(&tracker).len(), 2);
@@ -1023,29 +1023,29 @@ mod tests {
 
     #[test]
     fn huge_history_and_unicode_do_not_break_tail_boundaries() {
-        let pasted = "Please use Tyeless for this command today";
+        let pasted = "Please use Wornote for this command today";
         let buffer = format!("{}\r\nPS> {pasted}\r\n\r\n", "\u{6f22}".repeat(25_000));
         let mut tracker = TerminalTracker::new(&buffer, pasted).unwrap();
         assert_eq!(
-            tracker.observe("PS> Please use Typeless for this command today\r\n  \r\n"),
+            tracker.observe("PS> Please use Wordnote for this command today\r\n  \r\n"),
             TerminalDecision::Continue
         );
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
     }
 
     #[test]
     fn only_the_last_whitespace_variant_in_one_row_is_tracked() {
-        let pasted = "Please use Tyeless command today";
-        let buffer = format!("PS> {pasted}; Please use  Tyeless command today");
+        let pasted = "Please use Wornote command today";
+        let buffer = format!("PS> {pasted}; Please use  Wornote command today");
         let mut tracker = TerminalTracker::new(&buffer, pasted).unwrap();
         assert_eq!(tracker.places.len(), 1);
         assert_eq!(
             tracker.observe(
-                "PS> Please use Tyeless command today; Please use  Typeless command today"
+                "PS> Please use Wornote command today; Please use  Wordnote command today"
             ),
             TerminalDecision::Continue
         );
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
     }
 
     // ---------- a full-screen program ----------
@@ -1067,7 +1067,7 @@ mod tests {
             TerminalDecision::Continue
         );
         assert_eq!(tracker.region(), format!("> {FIRST}"));
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
     }
 
     #[test]
@@ -1081,7 +1081,7 @@ mod tests {
         assert_eq!(
             pairs(&tracker),
             [
-                typeless(),
+                sample_word(),
                 ("Open Router".to_owned(), "OpenRouter".to_owned())
             ]
         );
@@ -1106,7 +1106,7 @@ mod tests {
             tracker.observe(&frame(&CONVERSATION, FIRST, "thinking (9s)")),
             TerminalDecision::Continue
         );
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
     }
 
     #[test]
@@ -1120,7 +1120,7 @@ mod tests {
             TerminalDecision::Continue
         );
         assert_eq!(tracker.region(), format!("> {FIRST}"));
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
     }
 
     #[test]
@@ -1132,7 +1132,7 @@ mod tests {
             tracker.observe(&frame(&CONVERSATION, FIRST, "ready")),
             TerminalDecision::Continue
         );
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
     }
 
     #[test]
@@ -1147,7 +1147,7 @@ mod tests {
         }
         let edited = frame(&conversation[4..], FIRST, "ready");
         assert_eq!(tracker.observe(&edited), TerminalDecision::Continue);
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
     }
 
     #[test]
@@ -1160,15 +1160,15 @@ mod tests {
             )
         };
         let mut tracker =
-            TerminalTracker::new(&rows("Use Tyeless and Open Router"), PASTED).unwrap();
+            TerminalTracker::new(&rows("Use Wornote and Open Router"), PASTED).unwrap();
         assert_eq!(tracker.region(), format!("> {PASTED}"));
         // The watch compares the region with the pasted text by itself, wraps and all.
         assert!(Tracker::new(tracker.region(), PASTED).is_some());
         assert_eq!(
-            tracker.observe(&rows("Use Typeless and Open Router")),
+            tracker.observe(&rows("Use Wordnote and Open Router")),
             TerminalDecision::Continue
         );
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
     }
 
     #[test]
@@ -1221,7 +1221,7 @@ mod tests {
         );
         assert_eq!(tracker.places.len(), 1);
         assert_eq!(tracker.region(), format!("> {FIRST}"));
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
     }
 
     #[test]
@@ -1236,7 +1236,7 @@ mod tests {
         assert_eq!(tracker.places.len(), 2);
         assert_eq!(tracker.observe(&screen(FIRST)), TerminalDecision::Continue);
         assert_eq!(tracker.region(), format!("> {FIRST}"));
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
     }
 
     #[test]
@@ -1262,7 +1262,7 @@ mod tests {
         assert_eq!(tracker.region(), format!("> {PASTED}"));
         assert_eq!(tracker.observe(&screen(FIRST)), TerminalDecision::Continue);
         assert_eq!(tracker.places.len(), 1);
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
     }
 
     #[test]
@@ -1332,8 +1332,8 @@ mod tests {
 
     #[test]
     fn an_edit_that_moves_words_across_the_wraps_of_several_rows_is_one_edit() {
-        let pasted = "Use Tyeless and Open Router for the local command today please";
-        let fixed = pasted.replace("Tyeless", "Typeless");
+        let pasted = "Use Wornote and Open Router for the local command today please";
+        let fixed = pasted.replace("Wornote", "Wordnote");
         // 27 characters wide: the longer word pushes "Router" down, and with it every wrap after.
         let mut tracker = TerminalTracker::new(&wrapped_frame(pasted, 27), pasted).unwrap();
         assert_eq!(
@@ -1341,7 +1341,7 @@ mod tests {
             TerminalDecision::Continue
         );
         assert_eq!(tracker.region(), format!("> {fixed}"));
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
     }
 
     #[test]
@@ -1404,13 +1404,13 @@ mod tests {
         );
         assert_eq!(tracker.places.len(), 1);
         assert_eq!(tracker.region(), format!("> {FIRST}"));
-        assert_eq!(pairs(&tracker), [typeless()]);
+        assert_eq!(pairs(&tracker), [sample_word()]);
     }
 
     #[test]
     fn a_lookalike_row_that_scrolls_onto_the_old_place_does_not_capture_it() {
         let input = format!("> {PASTED}");
-        let lookalike = "> Use Tyeless and Open Router for the other tools today";
+        let lookalike = "> Use Wornote and Open Router for the other tools today";
         // Not close enough to be taken for the place without a look around.
         let like = likeness(&input.chars().collect::<Vec<_>>(), lookalike);
         assert!((SAME_PLACE..UNMOVED).contains(&like), "{like}");
@@ -1433,7 +1433,7 @@ mod tests {
     #[test]
     fn a_place_that_changed_a_lot_in_one_read_stays_when_nothing_looks_better() {
         let input = format!("> {PASTED}");
-        let rewritten = "> Use Tyeless and Open Router for the other tools today";
+        let rewritten = "> Use Wornote and Open Router for the other tools today";
         let mut tracker = TerminalTracker::new(&["a", &input, "ready"].join("\n"), PASTED).unwrap();
         assert_eq!(
             tracker.observe(&["a", rewritten, "ready"].join("\n")),

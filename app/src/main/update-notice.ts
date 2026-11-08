@@ -1,4 +1,4 @@
-// A new version, said at the bottom left above Connect apps (owner, 2026-11-07): 「新版本 1.3.0 · 更新」. The app checks
+// A new version, said at the bottom left above Connect apps: 「新版本 1.3.0 · 更新」. The app checks
 // on its own every hour (updates.rs, auto update on by default) and installs once the owner and every member are idle;
 // this line lets the owner update now instead. It reads the native updater's state when the window opens, every ten
 // minutes and whenever the window comes back to the front, and is hidden while there is nothing new.

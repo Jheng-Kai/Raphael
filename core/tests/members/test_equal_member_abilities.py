@@ -18,7 +18,7 @@ async def test_template_createagent_creates_members_and_same_events_for_both_con
     rig, team = setup
     team.members.register(rig.rpc)
     actor = team.members.store.create_member(name="Template member", role="Writer",
-        instructions="Use Grok CreateAgent to create bots when the owner asks.")
+        instructions="Use template CreateAgent to create bots when the owner asks.")
     rig.settings.set("action_mode", "direct")
     made = []
     team.members.member_made = lambda maker, child: made.append((maker, child))

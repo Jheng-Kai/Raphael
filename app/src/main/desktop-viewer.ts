@@ -67,8 +67,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   options: { timeline: HTMLElement; conversation: () => number | undefined; name: () => string; face?(): string; closePanel?(): void; openPanel(): void; panelVisible(): boolean; status?(active: boolean): void; changed?(): void; stop?(turnId: number): Promise<unknown>; trySkill?(text: string): void }): { show(): void; hide(close?: boolean): void; refresh(): void; sync(): void; carry(before: Element): void; takeover(): void; files(): void; waitingForOwner(turnId: number): boolean } {
   const panel = document.createElement("section");
   panel.className = "desktop-panel"; panel.id = 'member-computer-panel'; panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', 'member-tab-computer'); panel.hidden = true;
-  // As Grok Bot's: the preview is one button that opens the larger view; the larger view fills the window, folds back
-  // from beside the window buttons, and keeps what the owner does with it in one pill at the bottom (owner, 2026-11-06).
+  // The preview is one button that opens the larger view; the larger view fills the window, folds back
+  // from beside the window buttons, and keeps what the owner does with it in one pill at the bottom.
   panel.innerHTML = `<div class="desktop-location-header"></div><div class="desktop-takeover-bar" hidden>${iconButton("left", t("members.panelBack"), ' data-desktop="back" hidden')}${iconButton("shrink", t("desktop.collapse"), ' data-desktop="collapse" hidden')}` +
     `<div class="desktop-dock"><div class="desktop-mode"><span class="desktop-mode-label" role="status">${ico("eye")}<span></span></span>${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="return"')}</div>${iconButton("stop", t("agent.stop"), ' data-desktop="stop" hidden')}${iconButton("more", t("chat.more"), ' data-desktop="menu" aria-haspopup="menu" aria-expanded="false"')}</div></div><p class="desktop-request" role="status" hidden></p><div class="desktop-shell">` +
     `<div class="desktop-screen"><img class="desktop-wallpaper" alt=""><img class="desktop-last" alt="" hidden><div class="desktop-placeholder"></div>${btn("", "sm", ' data-desktop="retry" hidden')}` +
@@ -95,7 +95,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   const takeoverBar = panel.querySelector<HTMLElement>('.desktop-takeover-bar')!;
   const collapseButton = panel.querySelector<HTMLButtonElement>('[data-desktop="collapse"]')!;
   const backButton = panel.querySelector<HTMLButtonElement>('[data-desktop="back"]')!;
-  /** The larger view's fold back and Back sit in the window's own top strip, beside its buttons, as Grok Bot's: the
+  /** The larger view's fold back and Back sit in the window's own top strip, beside its buttons: the
    *  strip paints above every page, so a button left in the panel would be under it. */
   function placeStripButtons(expanded: boolean): void {
     const strip = document.querySelector<HTMLElement>('.window-chrome'), controls = strip?.querySelector('.window-controls');
@@ -137,8 +137,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     } finally { if (maintenance === operation) maintenance = undefined; if (id === member() && current === generation) { if (state) state = {...state, lifecycle: undefined}; draw(); if (state?.state === 'running' && active()) void openStream(); } }
   });
   let connected = false, interactive = false, changing = false, loading = false, opening = false, takeOnConnect = false, waking = false;
-  /** A stream that has not connected this long is said to be out of reach, with a retry (owner, 2026-11-07: a remote
-   *  computer's screen stayed on 「成員正在控制電腦」 with nothing behind it). */
+  /** A stream that has not connected this long is said to be out of reach, with a retry. */
   const STALL_MS = 20_000;
   let stalled = false, everConnected = false, stallTimer: ReturnType<typeof setTimeout> | undefined;
   let closePending: Promise<unknown> = Promise.resolve(), clickedAt = 0;
@@ -179,7 +178,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     drawn = signature; drawnInline = inline;
     lifecycle.draw();
     paint(panel, "hidden", !visible || !state);
-    // The computer carries no words, face or buttons until its screen is up (owner, 2026-11-07): no caption under it.
+    // The computer carries no words, face or buttons until its screen is up: no caption under it.
     paint(panel.querySelector<HTMLElement>('.desktop-caption')!, 'hidden', true);
     options.status?.(state?.state === "running");
     paint(frame, "title", t("desktop.open"));
@@ -235,7 +234,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(status, "textContent", t("desktop.operating")); paint(status, "hidden", !owner || !connected);
     paint(action, "textContent", t(pending() ? "desktop.done" : "desktop.release")); paint(action, "hidden", watching || !expanded || !!recording || filesOnly);
     paint(panel.querySelector<HTMLElement>('[data-desktop="menu"]')!, "hidden", watching || filesOnly); paint(action, "disabled", changing);
-    // A sleeping computer, as Grok Bot's: its face and one short line, and the whole screen wakes it (owner, 2026-11-07).
+    // A sleeping computer: its face and one short line, and the whole screen wakes it.
     paint(retry, "textContent", t(state?.error === 'docker_stopped' ? 'desktop.startDocker' : state?.state === 'missing' && state.image === false ? 'desktop.prepareImage' : "desktop.retry"));
     // One press on the screen starts it, whatever stopped it (the cover's click below); no button is drawn on it.
     paint(retry, "hidden", true); paint(retry, "disabled", opening);
@@ -252,8 +251,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(last, "hidden", !picture);
     if (picture && last.src !== picture) paint(last, "src", picture);
     paint(placeholder, "hidden", (!!running && connected) || (!!picture && !stalled));
-    // Nothing is written or drawn over a computer that is not showing its screen, asleep, starting or stopped (owner,
-    // 2026-11-07): the wallpaper alone, and a press anywhere starts it. Its state stays in the panel's data and labels.
+    // Nothing is written or drawn over a computer that is not showing its screen, asleep, starting or stopped: the wallpaper alone, and a press anywhere starts it. Its state stays in the panel's data and labels.
     patchHTML(stateContent, '');
     patchHTML(stateRecovery, '');
     if (!running && frame.hasAttribute('src')) { frame.remove(); frame.removeAttribute('src'); connected = interactive = false; }
@@ -411,7 +409,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (!returnPanelOpen) options.closePanel?.();
     draw();
   }
-  /** The press that wakes a sleeping computer; it reads 正在喚醒 until the core reports it awake, as Grok Bot's Waking up. */
+  /** The press that wakes a sleeping computer; it reads 正在喚醒 until the core reports it awake. */
   function wake(): void {
     if (!state || opening) return;
     suspended = false; closeStream();
@@ -421,7 +419,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   // Opening never waits for the stream: a screen that is still connecting opens large and connects there.
   enlarge.addEventListener('click', () => {
     if (isAsleep(state)) { wake(); return; }
-    // A stopped engine, a missing image or a failure: the same one press starts it again (owner, 2026-11-07).
+    // A stopped engine, a missing image or a failure: the same one press starts it again.
     if (state && state.state !== 'running') { if (!opening && !state.lifecycle) retry.click(); return; }
     if (state?.state !== 'running') return;
     if (stalled) { retry.click(); return; }

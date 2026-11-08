@@ -136,10 +136,10 @@ async def test_a_matching_arm64_mac_reads_only_the_two_architectures_and_passes(
 async def test_a_refused_key_login_names_the_user_ssh_logged_in_as():
     async def fake(args):
         if args[:2] == ["ssh", "-G"]:
-            return 0, "host 192.168.8.178\nuser jack2\nhostname 192.168.8.178\n", ""
-        return 255, "", "jack2@192.168.8.178: Permission denied (publickey,password)."
-    health = await host_health("192.168.8.178", run=fake)
-    assert health["checks"] == [{"kind": "ssh_key", "ok": False, "user": "jack2"}]
+            return 0, "host 192.0.2.42\nuser tester\nhostname 192.0.2.42\n", ""
+        return 255, "", "tester@192.0.2.42: Permission denied (publickey,password)."
+    health = await host_health("192.0.2.42", run=fake)
+    assert health["checks"] == [{"kind": "ssh_key", "ok": False, "user": "tester"}]
     assert "Permission denied" not in json.dumps(health)
 
 

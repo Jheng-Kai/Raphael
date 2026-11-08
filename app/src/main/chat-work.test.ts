@@ -31,7 +31,7 @@ test("completed work is one closed section above the answer; opening retains pub
   host.innerHTML = turnHTML(turn, state, false, { face: () => "" });
   expect(host.querySelector(".work-body")?.hasAttribute("hidden")).toBe(false);
   expect(host.querySelector('[data-message="4"] .message-actions [data-act="reply-message"]')).not.toBeNull();
-  // As Grok Bot's, the time lives in the thread's dividers, never beside a message.
+  // The time lives in the thread's dividers, never beside a message.
   expect(host.querySelector('[data-message="4"] time')).toBeNull();
 });
 

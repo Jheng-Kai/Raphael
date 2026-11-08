@@ -113,7 +113,7 @@ describe("the page of a member", () => {
     expect(face.querySelector('.mb-face-pencil[aria-hidden="true"] svg.i')).not.toBeNull();
     expect($<HTMLInputElement>("#ms-name").value).toBe("日文老師");
     expect($<HTMLInputElement>("#ms-role").value).toBe("N2 嚴格版");
-    // The kinds stand in a column on the left (owner, 2026-11-08); the first is shown, and only it.
+    // The kinds stand in a column on the left; the first is shown, and only it.
     expect(kinds()).toEqual(["soul", "skills", "model", "tools", "voice", "memory", "general"]);
     expect($('[data-cat="soul"]').getAttribute("aria-current")).toBe("page");
     expect(sections()).toEqual(["ms-personality", "ms-instructions"]);
@@ -413,7 +413,7 @@ describe("tools and voice", () => {
     expect($("[data-k='ms-tools'] .ms-empty").textContent).toBe(t("memberSettings.noTools"));
   });
 
-  test("the voice card is Grok Bot's: rows with a dropdown or a switch on the right", async () => {
+  test("the voice card has rows with a dropdown or a switch on the right", async () => {
     await open();
     await cat("voice");
     const card = $("[data-k='ms-voice']");

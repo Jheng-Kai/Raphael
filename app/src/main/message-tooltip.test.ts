@@ -2,7 +2,7 @@
 import { expect, test, vi } from "vitest";
 import { dropEchoTitles, messageTooltip } from "./message-tooltip";
 
-test("a tip that only repeats the words on screen never shows, outside the dictation pages (owner, 2026-11-07)", () => {
+test("a tip that only repeats the words on screen never shows, outside the dictation pages", () => {
   document.body.innerHTML = '<section><p class="work-line" data-tooltip="檔案太大，我在本機抽出那段函式。">檔案太大，我在本機抽出那段函式。</p>' +
     '<button data-tooltip="停止" aria-label="停止"><svg></svg></button></section>' +
     '<div class="page-dictation"><p data-tooltip="今天的聽寫">今天的聽寫</p></div>';

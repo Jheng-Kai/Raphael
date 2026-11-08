@@ -1,6 +1,6 @@
 // What a colleague said to a member, in that member's own chat: one centred line 「與 X 的 2 則訊息」, the same line the
 // asker's side shows (handoff-line.ts). It opens the two members' conversation in place of the thread (peer-chat.ts),
-// never an inline box under the line (owner, 2026-11-07): what was asked and what the member answered are read there.
+// never an inline box under the line: what was asked and what the member answered are read there.
 import { eventPeopleHTML } from "./event-line";
 import { t } from "./i18n";
 import { peerCount, peerKey, peerStateWords } from "./peer-chat";
@@ -24,7 +24,7 @@ export function exchangeView(turn: AgentTurn): HandoffView {
 }
 
 export function receivedLineHTML(turn: AgentTurn, look: TurnLook): string {
-  // The same colleague several times in a row is one line with every message counted (owner, 2026-11-08).
+  // The same colleague several times in a row is one line with every message counted.
   const views = [...(look.exchangeTogether ?? []), turn].map(exchangeView), view = views[views.length - 1]!, peer = view.from_member_id;
   const person = { name: look.memberName?.(peer) ?? "", face: look.memberFace?.(peer) ?? "" };
   const count = peerCount(views);

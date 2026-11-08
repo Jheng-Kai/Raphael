@@ -31,11 +31,11 @@ test("copy controls use the shared in-place feedback", () => {
 });
 const i18nFiles = mainFiles.filter((f) => f.includes(`${sep}i18n${sep}`) && !f.endsWith(".test.ts"));
 
-test("every button and every menu row takes its height from the shared controls, never a number of its own (owner, 2026-11-08)", () => {
+test("every button and every menu row takes its height from the shared controls, never a number of its own", () => {
   // Rows and tiles built from a button (a list row, a card, a day of the calendar, an emoji) and the round edge controls
   // keep their own sizes. Frozen: it may shrink, never grow.
   const TILES = /\.(?:conversation-latest|peer-latest|peer-close|draft-av-btn|attachment-file|reaction|au-day-num|cal-more|gr|cs-open|cs-main|conversation-trigger|ho-event|ho-stat|lib-row|ms-open|tpr-row|mb-fold-head|mb-panel-row|mb-chat-choice|mb-rt|question-choices|mc-source|ghost|owner-photo|pv-create|mb-tool|mb-more|mb-avbtn|sidebar-toggle|cmp-pair|cmp-attach|ra-tool|au-members|au-month-grid|ob-foot|room-row)\b|::(?:before|after)/;
-  // (`.ob-foot`: the guide keeps its own wide pills, the owner's one exception, 2026-11-08.)
+  // The guide's `.ob-foot` keeps its own wide pills.
   const bad: string[] = [];
   for (const file of mainFiles.filter((f) => f.endsWith(".css"))) {
     for (const [, selector, body] of read(file).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
@@ -57,7 +57,7 @@ test("every button and every menu row takes its height from the shared controls,
   expect(bad).toEqual([]);
 });
 
-test("closing is a ×, never a 「關閉」 text button (owner, 2026-11-08: 「上面明明就有叉叉了，為什麼下面還要有關閉」)", () => {
+test("closing is a ×, never a 「關閉」 text button", () => {
   for (const file of sources) {
     const text = read(file);
     // A text button or a dialog action labelled with the close words.
@@ -157,12 +157,12 @@ describe("buttons", () => {
       }
     }
     for (const modifier of ["pri", "sm", "row", "danger", "btn"]) classes.delete(modifier);
-    // Owner-approved caption hover exception (2026-10-25); ordinary icon controls stay frameless.
+    // Caption controls use native hover surfaces; ordinary icon controls stay frameless.
     const allowlist: readonly string[] = [
-      // Daily sidebar controls share the owner's requested round soft press surface.
+      // Daily sidebar controls share the round soft press surface.
       'sidebar.css: .side .side-foot .btn.icon[aria-current="page"]:active:not(:disabled)',
       "sidebar.css: .side .btn.icon:hover:not(:disabled)", "sidebar.css: .side .btn.icon:active:not(:disabled)",
-      // Search and plus, and the buttons on the window's edges, are Grok Bot's soft round buttons (owner, 2026-11-06).
+      // Search and plus, and the buttons on the window's edges, are soft round buttons.
       "sidebar.css: .side .btn.icon.mb-tool[data-col]:hover:not(:disabled)", "sidebar.css: .side .btn.icon.mb-tool[data-col]:active:not(:disabled)",
       ...[':is(:hover, [aria-expanded="true"]):not(:disabled)', ":active:not(:disabled)"].flatMap(state => [
         `styles.css: :is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon${state}`,
@@ -206,7 +206,7 @@ describe("type weight", () => {
   const stripComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, "");
   const sheets = (): [string, string][] => mainFiles.filter((f) => f.endsWith(".css")).map((f) => [rel(f), stripComments(read(f))]);
 
-  // Grok Bot keeps one quiet weight: emphasis is size and colour (white or grey), never heavier type (owner, 2026-11-07).
+  // Typography uses one quiet weight: emphasis is size and colour (white or grey), never heavier type.
   test("weights come from the tokens, and nothing is heavier than medium", () => {
     const bad: string[] = [];
     for (const [file, css] of sheets()) {
@@ -266,7 +266,7 @@ describe("colours", () => {
 });
 
 describe("tabs", () => {
-  // The member Library sorts its deliverables by kind with the same filter (owner, 2026-11-08: sorted, never 「顯示更多」).
+  // The member Library sorts its deliverables by kind with the same filter.
   test("the segmented filter is used by History, Dictionary and the member Library only", () => {
     const users = sources.filter((f) => /kind: "filter"|\btabs seg\b/.test(read(f))).map(rel).sort();
     expect(users).toEqual(["member-panel-work.ts", "pages/dictionary.ts", "pages/history.ts", "ui.ts"]);
@@ -312,8 +312,8 @@ describe("translations", () => {
 });
 
 describe("icons", () => {
-  // The icons are Lucide's 24 x 24 drawings with their stroke of 2 (icon-set.ts, as Grok Bot's since 2026-11-06): shown
-  // at 16 px, 18 on the round edge buttons (Grok Bot's 1.5 px lines) or 20 where a larger one is meant; at 12 to 15 px
+  // The icons are Lucide's 24 x 24 drawings with their stroke of 2 (icon-set.ts): shown
+  // at 16 px, 18 on the round edge buttons (1.5 px lines) or 20 where a larger one is meant; at 12 to 15 px
   // their lines thin out and blur. The window's own minimise, maximise and close are Windows' caption glyphs, drawn for
   // 12 px: not icons of the set.
   const SIZES = new Set(["16px", "18px", "20px"]);
@@ -334,7 +334,7 @@ describe("icons", () => {
   test("an icon is shown at 16 or 20 px, never 12 to 15", () => {
     const bad = iconRules().flatMap(({ file, selector, body }) =>
       [...body.matchAll(/(?:^|;)\s*(width|height)\s*:\s*([^;]+)/g)]
-        // The owner requested the send glyph match the adjacent voice portrait exactly.
+        // The send glyph matches the adjacent voice portrait exactly.
         .filter(([, , value]) => !SIZES.has(value.trim()) && !(file === "sidebar.css" && selector === ".room-avatar > .av > svg.i" && value.trim() === "100%") && !(file === "sidebar.css" && selector === ".sidebar-app-marks :is(svg" && value.trim() === "18px") && !(file === "agent.css" && ((selector === ".attachment-drop > .i" && value.trim() === "28px") || (selector === ".composer .cmp-pair .cmp-send .i" && value.trim() === "32px"))))
         .map(([, prop, value]) => `${file}: ${selector} { ${prop}: ${value.trim()} }`),
     );

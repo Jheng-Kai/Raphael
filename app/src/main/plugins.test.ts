@@ -58,7 +58,7 @@ function setup() {
   return { c, root, click };
 }
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
-/** The store's cards of these sources: n8n, the owner's own server, is always in the store too (owner, 2026-11-08). */
+/** The store's cards of these sources: n8n, the owner's own server, is always in the store too. */
 const apps = (root: ParentNode): Element[] => [...root.querySelectorAll(".cs-card")].filter(card => !card.querySelector('[data-id="n8n"]'));
 
 test("unifies managed, private Google and custom MCP without bridge duplicates", async () => {
@@ -153,7 +153,7 @@ test("the store deduplicates and filters broad groups locally", async () => {
     categories: [{ id: "other", name: "Other" }, { id: "docs", name: "Documents" }] });
   const { c, root, click } = setup(); await c.load(); click("tab", "store"); await settle();
   expect(root.querySelectorAll('[data-conn="store-group"]')).toHaveLength(10);
-  // Notion is connected, so it is not in the store (owner, 2026-11-08); the duplicate toolkit is gone too.
+  // Notion is connected, so it is not in the store; the duplicate toolkit is gone too.
   expect(apps(root)).toHaveLength(2);
   expect(root.querySelector('[data-conn="open-store"][data-id="notion"]')).toBeNull();
   expect(root.querySelector('[data-conn="load-more"]')).toBeNull();
@@ -261,7 +261,7 @@ test("managed disconnect confirms twice and private Google reconnect uses its ow
 test("only trusted remote logos are rendered and they never send a referrer", () => {
   for (const url of ["http://logos.composio.dev/a.svg", "https://composio.dev.evil/a.svg", "https://user@composio.dev/a", "javascript:alert(1)", "https://logos.composio.dev:8443/a.svg"])
     expect(pluginLogoURL(url)).toBeNull();
-  // A service the app does not know shows the catalogue's picture; one it knows (Notion) its own mark (owner, 2026-11-08).
+  // A service the app does not know shows the catalogue's picture; one it knows (Notion) its own mark.
   const unknown: Toolkit = { ...toolkit, slug: "acmecrm", name: "Acmecrm", logo: "https://logos.composio.dev/acmecrm.svg" };
   const html = connectionsHTML({ ...emptyConnectionsView(), configured: true, tab: "store", catalog: [storePlugin(unknown, []), storePlugin(toolkit, [])] });
   expect(html).toContain('src="https://logos.composio.dev/acmecrm.svg"');
@@ -354,7 +354,7 @@ test.each(["available", "added", "connecting", "needs-key"])("both store sources
     return root.querySelector(`[data-conn="open-store"][data-id="${item.id}"]`)?.closest<HTMLElement>(".cs-card") ?? null;
   };
   const own = render(false), managed = render(true);
-  // An app already added is not in the store at all (owner, 2026-11-08), whichever source it came from.
+  // An app already added is not in the store at all, whichever source it came from.
   if (state === "added") { expect(own).toBeNull(); expect(managed).toBeNull(); return; }
   if (!own || !managed) throw new Error("the app has no card");
   if (state === "connecting") {

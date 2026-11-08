@@ -50,7 +50,7 @@ test("Latin names before a Chinese join have a CSS gap without changing localize
   expect(last.nextSibling?.textContent).toBe("和其他 1 位 的 4 則訊息");
 });
 
-test("one exchange counts both sides as Grok Bot's line and keeps its own state while unfinished", () => {
+test("one exchange counts both sides in one line and keeps its own state while unfinished", () => {
   const line = (view: HandoffView): HTMLElement => dom(handoffGroupHTML([{ task: view, face: "" }])).firstElementChild as HTMLElement;
   const asked = { ...task(1), mode: "consult" as const, request: "Sample question" };
   expect(line(asked).textContent).toBe("與 Person 1 的 2 則訊息");

@@ -64,7 +64,7 @@ function siteMark(url: string): string {
 }
 
 /**
- * A link as Grok Bot's source chips (owner, 2026-11-08: no row of cards under a reply repeating its links): the site's
+ * A link  source chips: the site's
  * mark and the link's name, in the link colour, inside the words; the page's preview shows under the pointer
  * (`link-previews.ts`). A link with words of its own says them; a bare address says its site until the page's own
  * title is read (`data-link-title`), and an address of this machine says itself in full.

@@ -107,7 +107,7 @@ function editorHTML(v: MemoryView, doc: MemoryDocument): string {
 }
 
 /**
- * The memory as a section of its page (owner, 2026-11-09: 「有點亂…達到極致的 UI、UX」): its name over one tinted card,
+ * The memory as a section of its page: its name over one tinted card,
  * the pencil and the ⋯ beside the name, each entry a block of its own on the card with whom it was told and when under
  * it, and the conversation summary's row on a small card of its own under the document.
  */
@@ -121,7 +121,7 @@ export function memoryHTML(v: MemoryView): string {
   const doc = v.status;
   const entries = entriesOf(doc.text);
   const off = v.busy ? " disabled" : "";
-  // A pencil, not the word: what it opens is named by its label (owner, 2026-11-08: fewer words, icons for edits).
+  // A pencil, not the word: what it opens is named by its label.
   const edit = v.editing ? "" : iconButton("pencil", t("mem.editLabel", { p0: v.title }), ` data-mem="edit"${off}`);
   const menu = entries.length ? iconButton("more", t("mem.more", { p0: v.title }), ` data-mem="section-more" aria-haspopup="menu" aria-expanded="false"${off}`) : "";
   const body = v.editing

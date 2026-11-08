@@ -427,7 +427,7 @@ def _latin_stutter(match: re.Match[str]) -> str:
 def remove_stutters(text: str) -> str:
     """`text` without its obvious stutters: a word or a short run that is said again right after a
     comma, where the speaker started over. The first is dropped with the comma and the second
-    stays (as it was spelled): "Hermes，Hermes agent" is "Hermes agent", "the, the config" is "the
+    stays (as it was spelled): "Helion，Helion agent" is "Helion agent", "the, the config" is "the
     config", "任何，任何事情" is "任何事情".
 
     This is for the text that is pasted without cleanup, which is speech-to-text as it came, and it

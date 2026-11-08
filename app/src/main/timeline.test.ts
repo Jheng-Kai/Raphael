@@ -681,19 +681,19 @@ describe("a turn", () => {
 
   test.each(["openai/gpt-6-luna", "cli:claude:sonnet", "cli:codex", "cli:gemini"])("a %s member turn with thinking, progress, media cards, event chip, and multiple replies renders in order without duplicating turn.text", (model) => {
     const messages = [
-      { seq: 1, kind: "thinking" as const, text: "主人想看今天的 NHK 新聞與相關影片，先檢索重點報導。", at_ms: T0 + 1_000 },
-      { seq: 2, kind: "progress" as const, text: "先幫你找今天的 NHK 重點新聞。", at_ms: T0 + 2_000 },
+      { seq: 1, kind: "thinking" as const, text: "主人想看今天的 Example News 新聞與相關影片，先檢索重點報導。", at_ms: T0 + 1_000 },
+      { seq: 2, kind: "progress" as const, text: "先幫你找今天的 Example News 重點新聞。", at_ms: T0 + 2_000 },
       { seq: 3, kind: "thinking" as const, text: "已找到新聞頁面與 YouTube 報導影片，整理成卡片附上。", at_ms: T0 + 4_000 },
       {
         seq: 4,
         kind: "media" as const,
         text: JSON.stringify({
           type: "link",
-          url: "https://www3.nhk.or.jp/news/html/20261023/k1001.html",
-          title: "日銀維持利率不變 關注春季物價走勢",
-          site: "NHK",
-          description: "日本銀行於今日金融政策決定會議決議維持現行政策利率。",
-          thumbnail: "https://www3.nhk.or.jp/news/html/20261023/thumb.jpg",
+          url: "https://news.example.test/articles/sample-project.html",
+          title: "範例團隊公布季度進度 下一階段測試即將展開",
+          site: "Example News",
+          description: "範例團隊今日公布專案進度，並安排下一階段的功能測試。",
+          thumbnail: "https://news.example.test/articles/sample-thumb.jpg",
           embed: null,
         }),
         at_ms: T0 + 4_500,
@@ -703,18 +703,18 @@ describe("a turn", () => {
         kind: "media" as const,
         text: JSON.stringify({
           type: "video",
-          url: "https://www.youtube.com/watch?v=hJdEb0N_0sc",
-          title: "NHK ニュース解説：金融政策の行方",
-          site: "YouTube · NHK",
+          url: "https://www.youtube.com/watch?v=SampleVid01",
+          title: "Example News サンプル解説：開発計画の進め方",
+          site: "YouTube · Example News",
           description: "記者解説動画",
           thumbnail: null,
-          embed: "https://www.youtube.com/embed/hJdEb0N_0sc",
+          embed: "https://www.youtube.com/embed/SampleVid01",
         }),
         at_ms: T0 + 5_000,
       },
-      { seq: 6, kind: "event" as const, text: "已建立例行任務：每天 08:00 · 早安新聞", at_ms: T0 + 5_500 },
-      { seq: 7, kind: "reply" as const, text: "以上是今天 NHK 的頭條新聞與解說影片。", at_ms: T0 + 6_000 },
-      { seq: 8, kind: "reply" as const, text: "我也幫你設好每天早上 08:00 的早安新聞例行任務了，想考哪一段單字隨時跟我說！", at_ms: T0 + 6_500 },
+      { seq: 6, kind: "event" as const, text: "已建立例行任務：每天 08:00 · 範例晨報", at_ms: T0 + 5_500 },
+      { seq: 7, kind: "reply" as const, text: "以上是今天 Example News 的頭條新聞與解說影片。", at_ms: T0 + 6_000 },
+      { seq: 8, kind: "reply" as const, text: "我也幫你設好每天早上 08:00 的範例晨報例行任務了，需要查看哪一項進度隨時跟我說！", at_ms: T0 + 6_500 },
     ];
     // While running, only the current public action is exposed beside the avatar.
     const runningHtml = turnHTML(
@@ -727,7 +727,7 @@ describe("a turn", () => {
     expect(runningHtml).not.toContain('data-act="thinking"');
     expect(runningHtml).not.toContain("work-toggle");
     expect(runningHtml).toContain('class="live-action"');
-    expect(runningHtml).toContain("先幫你找今天的 NHK 重點新聞。");
+    expect(runningHtml).toContain("先幫你找今天的 Example News 重點新聞。");
 
     // When done: thinking block auto-collapses to 思考了 N 秒, and turn.text / turn.detail are not duplicated
     const doneHtml = turnHTML(
@@ -741,14 +741,14 @@ describe("a turn", () => {
     expect(doneHtml).not.toContain("work-toggle");
     expect(doneHtml).toContain('class="work-body think-body" id="work-20" hidden');
     expect(doneHtml).toContain('data-media-type="link"');
-    expect(doneHtml).toContain("日銀維持利率不變 關注春季物價走勢");
+    expect(doneHtml).toContain("範例團隊公布季度進度 下一階段測試即將展開");
     expect(doneHtml).toContain('data-media-type="video"');
-    expect(doneHtml).toContain('src="https://www.youtube.com/embed/hJdEb0N_0sc"');
-    expect(doneHtml).toContain('data-act="open-url" data-url="https://www3.nhk.or.jp/news/html/20261023/k1001.html"');
+    expect(doneHtml).toContain('src="https://www.youtube.com/embed/SampleVid01"');
+    expect(doneHtml).toContain('data-act="open-url" data-url="https://news.example.test/articles/sample-project.html"');
     expect(doneHtml).toContain("在網站開啟");
-    expect(doneHtml).toContain("已建立例行任務：每天 08:00 · 早安新聞");
-    expect(doneHtml).toContain("以上是今天 NHK 的頭條新聞與解說影片。");
-    expect(doneHtml).toContain("我也幫你設好每天早上 08:00 的早安新聞例行任務了");
+    expect(doneHtml).toContain("已建立例行任務：每天 08:00 · 範例晨報");
+    expect(doneHtml).toContain("以上是今天 Example News 的頭條新聞與解說影片。");
+    expect(doneHtml).toContain("我也幫你設好每天早上 08:00 的範例晨報例行任務了");
     expect(doneHtml).not.toContain("不該重複出現的文字");
     expect(doneHtml).not.toContain("不該出現的詳細");
   });
@@ -765,7 +765,7 @@ describe("a turn", () => {
               type: "image",
               url: "https://example.com/chart.png",
               title: "匯率走勢圖",
-              site: "NHK",
+              site: "Example News",
             }),
             at_ms: T0 + 1_000,
           },

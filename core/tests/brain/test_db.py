@@ -924,7 +924,7 @@ def test_the_v3_migration_turns_learned_rules_that_fail_the_test_into_hints(tmp_
         [
             ("手機", ["首機"], "learned"),  # two CJK characters: too short for a rule
             ("Claude", ["cloud", "to"], "learned"),  # one fit form, one that is not
-            ("Typeless", ["type less"], "learned"),
+            ("Typepad", ["type pad"], "learned"),
             ("meeting", ["workshop"], "learned"),  # not alike
             ("拉斐爾", ["拉菲爾", "拉非爾"], "manual"),  # typed by the user: left alone
             ("Tailscale", ["tail"], "suggested"),
@@ -937,14 +937,14 @@ def test_the_v3_migration_turns_learned_rules_that_fail_the_test_into_hints(tmp_
     assert forms == {
         "手機": [],
         "Claude": ["cloud"],
-        "Typeless": ["type less"],
+        "Typepad": ["type pad"],
         "meeting": [],
         "拉斐爾": ["拉菲爾", "拉非爾"],
         "Tailscale": ["tail"],
     }
     assert {pair for pair in store.replacements()} == {
         ("cloud", "Claude"),
-        ("type less", "Typeless"),
+        ("type pad", "Typepad"),
         ("拉菲爾", "拉斐爾"),
         ("拉非爾", "拉斐爾"),
         ("tail", "Tailscale"),
@@ -960,7 +960,7 @@ def test_the_v3_migration_turns_learned_rules_that_fail_the_test_into_hints(tmp_
         ("手機", "首機", 1, "pending"),
         ("claude", "cloud", 1, "rule"),
         ("claude", "to", 1, "pending"),
-        ("typeless", "type less", 1, "rule"),
+        ("typepad", "type pad", 1, "rule"),
         ("meeting", "workshop", 1, "pending"),
     }
     conn.close()

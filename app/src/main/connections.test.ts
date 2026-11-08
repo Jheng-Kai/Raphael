@@ -214,7 +214,7 @@ describe("the apps that cannot be called", () => {
   const all = view({ groups: [notes, custom, slack, twin, empty, off], inventory });
 
   test("the apps that can be called now come first; the others follow under their own heading, each with its switch and its dialog", () => {
-    // The 推薦 section under the list (owner, 2026-11-08) is the store's, checked on its own.
+    // The 推薦 section under the list is the store's, checked on its own.
     const html = bodyHTML(all).split('<section class="cs-sec cs-recommended">')[0]!;
     const [now, later] = html.split(`<h2>${"尚未連結"}</h2>`);
     expect(now).toContain("<h2>應用程式</h2>");
@@ -233,7 +233,7 @@ describe("the apps that cannot be called", () => {
     expect(bodyHTML(view())).not.toContain("<h2>應用程式</h2>");
   });
 
-  test("the dialog holds connectors only: no skills section, no import button, no skill rows (owner, 2026-11-07)", () => {
+  test("the dialog holds connectors only: no skills section, no import button, no skill rows", () => {
     // Skills belong to each member and are managed in that member's own panel.
     for (const state of [view(), all, view({ groups: [] }), view({ search: "zzz" }), view({ tab: "store" }), view({ open: { tab: "installed", id: "ab12" } })]) {
       const html = connectionsHTML(state);
@@ -445,7 +445,7 @@ describe("商店", () => {
     expect(filter).toHaveBeenCalledTimes(1);
   });
 
-  test("the store is one list of the apps not added yet, popular ones first (owner, 2026-11-08)", () => {
+  test("the store is one list of the apps not added yet, popular ones first", () => {
     const titles = [...html.matchAll(/<h2>([^<]+)<\/h2>/g)].map(match => match[1]);
     expect(titles).toEqual(["全部"]);
     expect([...html.matchAll(/class="nm">([^<]+)</g)].map(match => match[1])).toEqual(["Linear", "Canva", "n8n", "Sentry"]);
@@ -496,7 +496,7 @@ describe("商店", () => {
     expect(out).toMatch(/data-conn="join" data-id="sentry"[^>]*disabled/);
   });
 
-  test("a search with a typo or swapped letters still finds the app by its name, after what it finds as typed (owner, 2026-11-08)", () => {
+  test("a search with a typo or swapped letters still finds the app by its name, after what it finds as typed", () => {
     const catalog = [service("gmail", "Gmail", { icon: "gmail" }), service("gmailer", "Mailer Gmail Tools"), ...CATALOG];
     const names = (search: string): string[] => [...bodyHTML(view({ tab: "store", catalog, search })).matchAll(/class="nm">([^<]+)</g)].map((m) => m[1]!);
     expect(names("gamil")).toEqual(["Gmail", "Mailer Gmail Tools"]);

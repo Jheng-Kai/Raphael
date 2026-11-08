@@ -1,6 +1,6 @@
 /* Models shares the service list's surfaces, focus states and type scale. */
 .models-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-6); margin-top: var(--sp-5); }
-/* The two views are the shared small tab pills, as the member panel's (2026-11-05; slimmer since 2026-11-08). */
+/* The two views are the shared small tab pills, as the member panel's. */
 .models-page > .tabs.plain { justify-self: start; }
 .models-content:not([hidden]) { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-6); }
 .models-content > .sgroup { margin: 0; }

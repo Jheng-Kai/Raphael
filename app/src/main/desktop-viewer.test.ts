@@ -14,12 +14,12 @@ const panel = (): HTMLElement => host.querySelector('.desktop-panel')!;
 const frame = (): HTMLIFrameElement => host.querySelector('iframe')!;
 const take = (): HTMLButtonElement => host.querySelector('[data-desktop="take"]')!;
 const enlarge = (): HTMLButtonElement => host.querySelector('[data-desktop="enlarge"]')!;
-/** As Grok Bot's: the preview opens the larger view, and Take control there acquires input. */
+/** The preview opens the larger view, and Take control there acquires input. */
 const takeOver = async (): Promise<void> => { enlarge().click(); await flush(); take().click(); await flush(); };
 const handback = (): HTMLButtonElement => host.querySelector('[data-desktop="return"]')!;
 /** The words a reader sees: hidden elements and the cover's hover pill (hidden by CSS when the screen is not up) do not count. */
 const shownText = (node: Node): string => node.nodeType === 3 ? node.textContent! : node instanceof HTMLElement && (node.hidden || node.classList.contains('desktop-open-pill')) ? '' : [...node.childNodes].map(shownText).join('');
-/** Owner ruling 2026-11-07: a computer that is not showing its live screen carries nothing over its wallpaper. */
+/** A computer that is not showing its live screen carries nothing over its wallpaper. */
 const expectBareScreen = (scope: ParentNode): void => {
   for (const screen of scope.querySelectorAll<HTMLElement>('.desktop-placeholder')) {
     expect(shownText(screen).trim()).toBe('');
@@ -132,7 +132,7 @@ test('the captioned preview opens the larger view to watch the same stream, Esc 
   expect(enlarge().hidden).toBe(false); expect(take().hidden).toBe(true);
   expect(enlarge().getAttribute('aria-label')).toBe('開啟大畫面');
   expect(panel().querySelector('.desktop-open-pill')?.textContent).toBe('開啟');
-  // Nothing is written over the screen or under it, not even before the stream is up (owner, 2026-11-07).
+  // Nothing is written over the screen or under it, not even before the stream is up.
   expectBareScreen(panel());
   message('connected');
   expect(panel().querySelector<HTMLElement>('.computer-lifecycle-state')!.hidden).toBe(false);

@@ -58,7 +58,7 @@ export interface VoiceModeParts {
   face: () => string;
   /**
    * Whether the flyer is Raphael's emblem: then it is the corner's own renderer on a canvas, listening and following the
-   * voice exactly as the emblem over the desktop does when Alt is held (owner, 2026-11-07), not a picture of it.
+   * voice exactly as the emblem over the desktop does when Alt is held, not a picture of it.
    */
   live?: () => boolean;
   /** A click on the flyer: it ends the recording, as the key would. */

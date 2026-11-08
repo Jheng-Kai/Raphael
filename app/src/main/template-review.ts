@@ -1,4 +1,4 @@
-// A template reviewed as Grok Bot reviews one (owner, 2026-11-08): the face, the name, when it was last updated and what it
+// A template reviewed as separate pages: the face, the name, when it was last updated and what it
 // is for; then three rows that open pages - 內容 (instructions, personality, memories and skills, each skill opening its own
 // page), 例行工作 (each routine opening its description, content, trigger and what an importer is asked) and 整合 (the
 // apps it needs). A page has a back arrow and its title in the dialog's head; the dialog's own buttons stay at its foot.

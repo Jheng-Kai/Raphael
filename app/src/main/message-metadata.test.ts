@@ -7,7 +7,7 @@ import { closeMenu } from "./ui";
 beforeEach(() => { closeMenu(); document.body.innerHTML = ""; setLocale("en"); });
 const flush = async (): Promise<void> => { for (let i=0;i<8;i++) await Promise.resolve(); };
 
-test("the react button opens Grok's quick bar; a reaction only updates its message while decision cards remain untouched", async () => {
+test("the react button opens the quick bar, a reaction only updates its message while decision cards remain untouched", async () => {
   const host = document.createElement("section"); document.body.append(host);
   host.innerHTML = `<div class="chat-message"><div class="message-actions">${reactionControlHTML()}</div>${reactionRowHTML(["👍"])}</div><button data-permission>Approve</button><input data-question value="Unanswered"><textarea data-draft>Unsent</textarea>`;
   const react = vi.fn().mockResolvedValue({ok:true}), refresh = vi.fn(), fail = vi.fn();

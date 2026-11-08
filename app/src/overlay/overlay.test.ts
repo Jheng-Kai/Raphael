@@ -219,7 +219,7 @@ test("the fake page notices a caption and a line that stand in their one place t
 });
 
 test("learned words use the notice lifecycle", () => {
-  const text = "《了。「Typeless」已加入詞典。》";
+  const text = "《了。「Wordnote」已加入詞典。》";
   send({ type: "learned", text });
   expect(emblem.log).toEqual(["appear", "set:steady"]);
   vi.advanceTimersByTime(833);
@@ -574,10 +574,10 @@ test("three notices are shown one after the other, in order", () => {
   expect(emblem.log.filter((l) => l === "vanish")).toHaveLength(1);
 });
 
-// The answer the owner saw run out of the top of the window on 2026-10-27, with an address in it.
-const LONG = "1. 建立帳號並登入控制台。 2. 若設定只要求金鑰，前往「Settings → Project Settings → API Keys」取得。" +
-  "[官方說明](https://docs.composio.dev/reference/authenticating-to-composio) 3. 將金鑰填入設定頁，再回到 Gmail 連結卡完成 Google 授權。" +
-  "金鑰請只填入專用欄位，不要貼到聊天中。";
+// A synthetic numbered answer exercises caption paging and link removal.
+const LONG = "1. 建立範例帳號並登入測試控制台。 2. 若範例設定需要金鑰，前往「Settings → Project Settings → API Keys」複製。" +
+  "[範例指南](https://example.test/setup) 3. 將測試金鑰填入範例欄位，再回到連結卡查看測試結果。" +
+  "此處僅使用虛構資料，請勿填入任何真實帳號或金鑰。";
 
 test("a long voiced answer is told page by page without its address, and its last page waits for the voice", () => {
   send({ type: "say", prefix: "答", text: LONG, hold: true });

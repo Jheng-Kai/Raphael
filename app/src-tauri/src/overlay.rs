@@ -775,7 +775,7 @@ impl OverlayApi for Overlay {
 
     fn set_mode(&self, mode: Mode) {
         // Another topmost window may have come over the emblem since it appeared: the person
-        // must see it think and count up to 100 % (owner, 2026-10-23).
+        // must see it think and count up to 100 %.
         self.keep_in_sight(self.place_window());
         self.publish(OverlayEvent::Mode {
             mode,

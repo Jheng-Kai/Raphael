@@ -1,4 +1,4 @@
-// The face picker's 生成 tab (owner, 2026-11-07 night, as Grok Bot's picker): a few words, one press, one picture from
+// The face picker's 生成 tab: a few words, one press, one picture from
 // the image model the owner chose, then 使用 or another try. One picture per press and nothing behind the owner's back:
 // the core never retries or switches model, and the window only says what happened and where it is fixed.
 import * as api from "./api";

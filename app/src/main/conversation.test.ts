@@ -92,7 +92,7 @@ describe("one thread", () => {
     expect(threadItems([], now)).toEqual([]);
   });
 
-  test("work a colleague handed over twice in a row is one line in this member's chat, counting both (owner, 2026-11-08)", () => {
+  test("work a colleague handed over twice in a row is one line in this member's chat, counting both", () => {
     const handed = (id: number, when: string) => turn(id, when, { route: "exchange", source: "member", scope: "exchange", peer_id: 1 });
     const items = threadItems([handed(6, "2026-10-20T09:10:00+08:00"), handed(5, "2026-10-20T09:05:00+08:00")], now);
     expect(items.flatMap((item) => (item.kind === "turn" ? [[item.key, (item.together ?? []).map(t => t.id)]] : []))).toEqual([["turn:6", [5]]]);

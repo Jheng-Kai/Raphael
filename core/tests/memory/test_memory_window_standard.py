@@ -1,4 +1,4 @@
-"""Hermes compression and recall contracts, entirely synthetic and offline."""
+"""Compression and recall contracts, entirely synthetic and offline."""
 
 import json
 from datetime import timedelta
@@ -26,7 +26,7 @@ async def memory(conn, tmp_path, clock):
 
 
 @pytest.mark.parametrize('window,output,uncapped', [(200000,8192,143856),(1000000,8192,495904),(64000,8192,47436),(1000,0,850)])
-def test_hermes_effective_window_floor_and_cap(window, output, uncapped):
+def test_effective_window_floor_and_cap(window, output, uncapped):
     assert threshold_tokens(window, output, 0) == uncapped
     assert threshold_tokens(window, output) == min(24000, uncapped)
 

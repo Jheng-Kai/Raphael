@@ -152,7 +152,7 @@ test("profile routines use the shared editor with every recurrence and HH:MM val
   click(dialog.el, '#mp-tab-routines'); await flush();
   click(dialog.el, '[data-dlg="routine-add"]');
   const form = document.querySelector<HTMLElement>('.au-routine-dialog')!;
-  // 重複 is one dropdown of its six choices, never a row of chips that runs out of room (owner, 2026-11-08).
+  // 重複 is one dropdown of its six choices, never a row of chips that runs out of room.
   click(form, '[data-dlg="kind-menu"]');
   expect(document.querySelectorAll('#app-popover [data-value]')).toHaveLength(6);
   closeMenu();

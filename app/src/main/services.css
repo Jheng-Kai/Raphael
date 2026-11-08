@@ -6,10 +6,10 @@
 .svc-ic { display: inline-grid; place-items: center; width: 30px; flex: none; color: var(--text-2); }
 .svc-ic .i { width: 20px; height: 20px; }
 
-/* One capability or service per row, as the onboarding lists them (owner, 2026-11-07): in two columns the dialog's
+/* One capability or service per row, as the onboarding lists them: in two columns the dialog's
    names were cut and their words broke a few characters a line. */
 .svc .cs-list, .svc-view .cs-list { grid-template-columns: minmax(0, 1fr); gap: 0; }
-/* A row of the list: its name, what it does and the service it uses, whole (never cut; owner, 2026-11-07), then
+/* A row of the list: its name, what it does and the service it uses, whole (never cut), then
    the switch and the chevron */
 .svc-item { grid-template-columns: minmax(0, 1fr) auto 18px; }
 .svc-srv .nm { white-space: normal; overflow: visible; }

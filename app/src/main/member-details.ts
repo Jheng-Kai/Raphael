@@ -66,7 +66,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   const el = document.createElement("aside");
   el.className = "mb-det";
   el.innerHTML =
-    // The gear on the left edge and close on the right, apart (owner, 2026-11-08): the gear opens the member's settings as
+    // The gear on the left edge and close on the right, apart: the gear opens the member's settings as
     // a page of its own in the main area. Sharing is done from the conversation's header.
     `<div class="mb-det-head">${iconButton("gear", t("computer.settings"), ' data-det="gear"', "mb-tool")}<span class="mb-det-fill"></span>${iconButton("x", t("members.close"), ' data-det="close"', "mb-tool")}</div>` +
     `<div class="mb-det-scroll"><div class="mb-who"></div><div class="mb-tabs"></div><div class="mb-tab-body" role="tabpanel" id="member-panel-body"></div></div>`;
@@ -135,13 +135,13 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   // ---------- drawing ----------
 
   function whoHTML(member: Member): string {
-    // A press on the face opens the picker (slimes, 生成) at once, as Grok Bot's; under the pointer a pencil shows on the
-    // face as on the owner's own photo in Settings (owner, 2026-11-08), no words and no dialog in between.
+    // A press on the face opens the picker (slimes, 生成) at once; under the pointer a pencil shows on the
+    // face as on the owner's own photo in Settings, no words and no dialog in between.
     return `<span class="mb-panel-identity"><button type="button" class="btn mb-face-edit" data-det="avatar" data-k="det-face-edit" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}">${faceHTML(member, 64)}<span class="mb-face-pencil" aria-hidden="true">${ico("pencil")}</span></button><b>${esc(member.name)}</b>${member.role ? `<small>${esc(member.role)}</small>` : ''}</span>`;
   }
 
-  // A routine is its title and when it runs, with its own switch on the right as Grok Bot's Upcoming rows have
-  // (owner, 2026-11-07); the row opens the editor.
+  // A routine is its title and when it runs, with its own switch on the right
+  // The row opens the editor.
   function routineRowHTML(routine: Routine): string {
     return (
       `<div class="mb-routine-row" data-k="routine-row:${routine.id}"><button type="button" class="btn mb-rt${routine.when ? " is-event" : ""}" data-det="routine-open" data-id="${routine.id}" data-routine="${routine.id}" data-k="routine:${routine.id}">` +
@@ -157,13 +157,13 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       `</div>`;
     if (routines === "loading") return head + `<span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span>`;
     if (routines === "failed") return head + noticeHTML("routines");
-    // An empty list is one quiet line outside the tinted list, in Grok Bot's words (Ask in chat to set a routine).
+    // An empty list is one quiet line outside the tinted list, with a prompt to set a routine in chat.
     if (!routines.length) return head + `<p class="mp-empty">${esc(t("members.profile.noRoutines"))}</p>`;
     return head + `<div class="mb-rts">${routines.map(routineRowHTML).join("")}</div>`;
   }
 
   // 訊息平台: the member's own Telegram, Slack and Discord bots, Raphael's too (Settings no longer holds them). One that is
-  // not set up is a row with 「設定」, which the member does with the owner in its conversation (owner, 2026-11-07).
+  // not set up is a row with 「設定」, which the member does with the owner in its conversation.
   const KINDS: readonly MessagingKind[] = ["telegram", "slack", "discord"];
   const channelHost = { visible: () => el.isConnected && !el.hidden && tab === "details", redraw: () => draw() };
   let channelsFor = -1;

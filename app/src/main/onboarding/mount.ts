@@ -164,7 +164,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   const accountsError = (): string => accounts.view().chatgptError;
 
   /**
-   * One wide black pill, with a grey one for the way back under it (as Grok Bot's first run); a first run has nothing to
+   * One wide black pill, with a grey one for the way back under it; a first run has nothing to
    * go back to from its welcome, and a rerun's welcome leaves the guide.
    */
   function footHTML(): string {
@@ -188,8 +188,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     stopEmblem();
     stopTyping();
     root.dataset.step = flow.step;
-    // The language waits at the window's top left on the welcome, out of the way of what the screen says (owner,
-    // 2026-11-08: more languages are coming, and their names are long).
+    // The language waits at the window's top left on the welcome, out of the way of what the screen says.
     const language = flow.step === "welcome" ? `<div class="ob-lang">${languageButtonHTML(UI_LANGUAGES, device().ui_language, ' data-ob="lang"')}</div>` : "";
     root.innerHTML =
       `<div class="ob-card">${language}<div class="ob-pane">` +

@@ -2,7 +2,7 @@ import { check, click, hold, key, member, page, scene, settings, wait, waitGone 
 
 const details = [{ action: "open-details" }, wait('.mb-det:not([hidden])')];
 const open = id => [...details, click(`[data-conversation-open="${id}"]`)];
-// The voice button records a voice message while held; voice chat waits for a later release (owner, 2026-11-06).
+// The voice button records a voice message while held; voice chat waits for a later release.
 const voice = id => [click('.mb-det [data-det="close"]'), wait('.conversation-trigger[aria-expanded="false"]'), id ? hold('.cmp-voice') : click('.cmp-voice')];
 const language = locale => [click('[data-k="ui-language"]'), click(`#app-popover [data-value="${locale}"]`), wait(`html[lang="${locale}"]`), check(`locale-${locale}`)];
 // 連結應用程式 is walked from the sidebar below: it is a dialog of its own, not a tab of Settings (R-UI-111).

@@ -3,7 +3,7 @@ import { dayLabel } from "./format";
 import { getLocale, t } from "./i18n";
 import { esc, ico, tabs, type IconName } from "./ui";
 
-// The member panel's Library: only what the member delivered (owner, 2026-11-07 night, as Grok Bot's Library), never
+// The member panel's Library: only what the member delivered, never
 // the screenshots and scratch files of its work. Grouped by day, newest first: pictures as thumbnails, every other
 // deliverable as a row with its kind's icon, its title and the time. A press opens it (`members.library`, brief 10).
 export type LibraryKind = "document" | "page" | "image" | "video" | "audio" | "archive" | "file" | "link";
@@ -41,7 +41,7 @@ function rowHTML(item: LibraryItem): string {
     `<span class="lib-title">${esc(item.title)}</span><time datetime="${new Date(item.at_ms).toISOString()}">${esc(clock(item.at_ms))}</time></button>`;
 }
 
-/** The Library's kinds of deliverable (owner, 2026-11-08: sorted, and no links). */
+/** The Library's kinds of deliverable. */
 export type LibraryFilter = "all" | "images" | "videos" | "files";
 const FILTER_OF: Record<LibraryKind, Exclude<LibraryFilter, "all"> | null> = {
   image: "images", video: "videos", document: "files", page: "files", archive: "files", file: "files", audio: "files", link: null,
@@ -55,7 +55,7 @@ export function libraryFilters(files: readonly LibraryItem[]): LibraryFilter[] {
 }
 
 export function panelLibraryHTML(work: PanelWork | null, failed: boolean, now = Date.now(), filter: LibraryFilter = "all"): string {
-  // A link is no deliverable: a member is asked for it again (owner, 2026-11-08).
+  // A link is no deliverable: a member is asked for it again.
   const all = (work?.files ?? []).filter(item => FILTER_OF[item.kind] !== null);
   if (!all.length) return `<p class="mp-empty">${esc(t(failed ? "members.panelReadFailed" : work ? "members.panelNoFiles" : "common.loading"))}</p>`;
   const filters = libraryFilters(all), shown = filters.includes(filter) ? filter : "all";

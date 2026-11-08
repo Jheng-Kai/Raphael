@@ -50,7 +50,7 @@ function pinnedTileHTML(member: Member, v: ColumnView, top: boolean): string {
   );
 }
 
-/** A member's row, as Grok Bot's: its picture, name, last line and dot, with no time (R-UI-77); then its protected member
+/** A member's row: its picture, name, last line and dot, with no time (R-UI-77); then its protected member
  *  actions. */
 export function memberRowHTML(member: Member, v: Pick<ColumnView, "current" | "active" | "previews" | "fresh"> & { list?: ColumnView["list"] }): string {
   const preview = previewOf(member, v.previews.get(member.id));
@@ -90,9 +90,9 @@ function sectionHTML(section: MemberSection, v: ColumnView): string {
 export const HIDDEN_SECTION = -1;
 
 /**
- * As Grok Bot's Hidden Bots (owner, 2026-11-06): the members taken off the list sit in one more folder at its end, with
+ * The hidden-members folder: the members taken off the list sit in one more folder at its end, with
  * the hidden group chats, which group-chats.ts puts in its `[data-hidden-rooms]`. Empty, it does not show. It starts closed
- * (owner, 2026-11-07): hidden stays hidden until the owner presses its header.
+ * Hidden stays hidden until the owner presses its header.
  */
 function hiddenSectionHTML(hidden: readonly Member[], v: ColumnView): string {
   const open = v.unfolded?.has(HIDDEN_SECTION) === true, name = t("members.hiddenSection");
@@ -142,7 +142,7 @@ export interface MemberColumn {
 }
 
 export interface ActionItem { id: string; label: string; icon?: Parameters<typeof ico>[0]; submenu?: boolean }
-/** A hairline between groups of items, as Grok Bot's row menu has. */
+/** A hairline between groups of row-menu items. */
 export const SEP = "-";
 
 /** A menu of plain items under `anchor`; `onPick` gets the chosen item's `id`. */
@@ -176,7 +176,7 @@ export function openActions(anchor: HTMLElement, items: readonly (ActionItem | t
 }
 
 /**
- * A row's menu, grouped as Grok Bot's (owner, 2026-11-06): 釘選, 移到分組, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除.
+ * A row's menu, grouped into sections: 釘選, 移到分組, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除.
  * The primary sits in the top slot instead of a group and is not deleted from here: its menu ends with 換成其他成員.
  */
 export function memberMenu(id: number, anchor: HTMLElement, host: Pick<ColumnHost, "view" | "moveMember" | "deleteMember" | "memberAction">): void {
@@ -206,10 +206,10 @@ export function memberMenu(id: number, anchor: HTMLElement, host: Pick<ColumnHos
 export function createMemberColumn(host: ColumnHost): MemberColumn {
   const el = document.createElement("aside");
   el.className = "mb-col";
-  // Search and plus side by side at the top, as Grok Bot's (owner, 2026-11-06): search opens a card in the middle of the
+  // Search and plus side by side at the top: search opens a card in the middle of the
   // window instead of a field standing in the list.
   el.innerHTML =
-    // Its empty stretch moves the window, as the caption does (owner, 2026-11-08: 「左上角…按住滑鼠應該是有辦法拖移的」);
+    // Its empty stretch moves the window, as the caption does;
     // its buttons still press (window-chrome.ts leaves interactive elements alone).
     `<div class="mb-top" data-window-drag>${iconButton("search", t("chat.searchAll"), ' data-col="search" aria-haspopup="dialog"', "mb-tool")}` +
     `${iconButton("plus", t("members.add"), ' data-col="add" aria-haspopup="menu" aria-expanded="false"', "mb-tool")}</div>` +
@@ -322,8 +322,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
 
   searchButton.addEventListener("click", () => openSearch(searchButton));
 
-  // Dragging a member or a folder shows one line where it will land, between two rows, as Grok Bot's list does (owner,
-  // 2026-11-07): no box around a folder, and no see-through copy of the row over the others, only the row itself dimmed.
+  // Dragging a member or a folder shows one line where it will land, between two rows: no box around a folder, and no see-through copy of the row over the others, only the row itself dimmed.
   let drag: { kind: "member" | "group"; id: number; source: HTMLElement } | null = null;
   let landing: { group: HTMLElement; before: number | null } | null = null;
   const line = document.createElement("div");
@@ -402,7 +401,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
   }
 
   /**
-   * Grok Bot's search (owner, 2026-11-06): a card in the middle of the window with the field, every member as a two-line
+   * The member search: a card in the middle of the window with the field, every member as a two-line
    * row, what the words find in the messages, and 新增成員 at its foot. Enter takes the first row; the arrows walk them.
    */
   function openSearch(anchor: HTMLElement): void {

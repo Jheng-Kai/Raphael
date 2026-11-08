@@ -1,4 +1,4 @@
-// Each member has one conversation (2026-11-06, like Grok Bot). Raphael alone also keeps its quick
+// Each member has one conversation. Raphael alone also keeps its quick
 // questions, so its details panel shows two rows: the main conversation and the quick one.
 import * as api from "./api";
 import { eventRead } from './event-read';

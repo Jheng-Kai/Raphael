@@ -157,7 +157,7 @@ interface Notice {
   kind: "notice" | "learned" | "say";
   /** The app owns the lifetime of a voiced answer, including a delayed first sound. */
   hold?: boolean;
-  /** A refusal (《否。…》 / 《Negative. …》): Raphael's emblem is red while it shows (owner, 2026-11-07). */
+  /** A refusal (《否。…》 / 《Negative. …》): Raphael's emblem is red while it shows. */
   angry?: boolean;
 }
 

@@ -2720,7 +2720,7 @@ mod tests {
     fn usage_is_a_named_read_of_the_main_window_only() {
         assert!(is_allowed_method("home.overview"));
         assert!(validate_core_call("home.overview", &json!({"tz": "Asia/Taipei"})).is_ok());
-        // The usage page shows only subscription allowances since 2026-11-06: the analytics, runs and CSV reads are closed.
+        // The usage page shows only subscription allowances: the analytics, runs and CSV reads are closed.
         for retired in [
             "usage.analytics",
             "usage.runs",

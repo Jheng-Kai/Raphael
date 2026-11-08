@@ -21,7 +21,7 @@ function fakeWindow(maximized: boolean) {
 }
 
 describe("the guide's window", () => {
-  // A maximized window gives back its ordinary size, never the screen's, so 「還原」 still returns to it (owner, 2026-11-08).
+  // A maximized window gives back its ordinary size, never the screen's, so 「還原」 still returns to it.
   test("is the card under the control strip, fixed, and comes back as it was, its ordinary size under the maximized one", async () => {
     const root = document.createElement("div");
     const { win, calls } = fakeWindow(true);

@@ -130,7 +130,7 @@ test("the header has no computer button, and an idle computer adds nothing to th
   }
 });
 
-test("message link chips use the safe opener with the full target, and no row of cards repeats them (owner, 2026-11-08)", async () => {
+test("message link chips use the safe opener with the full target, and no row of cards repeats them", async () => {
   const url = "https://www.cwa.gov.tw/V8/C/P/Typhoon/TY_WARN.html?lang=zh-TW&full=1";
   api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { question: `看 ${url}（颱風）`, messages: [
     { seq: 1, kind: "progress", text: `檢查 ${url}。`, at_ms: 1 },
@@ -443,8 +443,8 @@ describe("a continuous typed turn", () => {
               text: JSON.stringify({
                 type: "image",
                 url: "https://example.com/photo.png",
-                title: "東京鐵塔",
-                site: "NHK",
+                title: "範例展館",
+                site: "Example News",
               }),
               at_ms: 2000,
             },
@@ -455,7 +455,7 @@ describe("a continuous typed turn", () => {
                 type: "pdf",
                 url: "https://example.com/doc.pdf",
                 title: "報告.pdf",
-                site: "NHK",
+                site: "Example News",
               }),
               at_ms: 3000,
             },

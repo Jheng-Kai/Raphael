@@ -1,4 +1,4 @@
-// The one dialog with every setting of a member (owner, 2026-11-07): opened from the member's face in its panel, which
+// The one dialog with every setting of a member: opened from the member's face in its panel, which
 // has no settings page of its own any more. No groups here; the sidebar arranges members. Raphael opens it too, with
 // what is his to change: his picture, skills and commands, memory, drafts and voice. The footer owns member fields;
 // explicit resource actions belong to the resource itself. A new member is made in member-creator.ts.

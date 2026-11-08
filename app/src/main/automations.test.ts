@@ -213,7 +213,7 @@ test("editing the scope during a read leaves a usable check button and ignores t
 test("one every routine saves and reopens its daytime window through real controls", async () => {
   openRoutineDialog({members, routine: {...plan, schedule: {kind:"every", hours:3, from:"08:00", to:"23:00"}}});
   expect(document.querySelector('[data-dlg="window-from"]')?.textContent).toContain("08:00");
-  // The hours are its times: no separate time row stands disabled beside them (owner, 2026-11-08: no dead rows).
+  // The hours are its times: no separate time row stands disabled beside them.
   expect(document.querySelector('#au-time')).toBeNull();
   click('[data-dlg="window-from"]'); click('#app-popover [data-value="07:00"]');
   click('[data-dlg="save"]'); await flush();

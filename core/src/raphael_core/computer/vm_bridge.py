@@ -1,4 +1,6 @@
-"""Cua stdio MCP client, with OpenMausBot's ping/schema/control adaptations.
+"""Cua stdio MCP client with bounded ping, schema and control handling.
+
+Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
 
 The trusted caller supplies the approval gate. No standalone unauthenticated proxy
 or model loop is created here. Writes are serialized and calls refused during a hold.

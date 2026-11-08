@@ -142,9 +142,9 @@ export function messagingHTML(v: MessagingView): string {
   const bot = s.bot?.username ? `@${s.bot.username}` : words("msg.tg.bot", kind);
   const badge = s.pending.length ? `<span class="msg-badge num" title="${esc(t("msg.tg.pairing"))}">${s.pending.length}</span>` : "";
   const head = row(
-    // The mark says the platform; the name is the bot (the panel is narrow since the bots moved there, 2026-11-07).
+    // The mark says the platform; the name is the bot.
     // The whole name is the button that opens the details, with no arrow, and the switch stands alone on the right,
-    // in line with the 「設定」 buttons under it (owner, 2026-11-07).
+    // in line with the 「設定」 buttons under it.
     `<button type="button" class="btn msg-open" data-msg="expand" aria-expanded="${open}">${headName(bot, dotHTML(dot, label) + badge, kind)}</button>`,
     "",
     tg(s.enabled, words("msg.tg.switch", kind), ` data-msg="enable"${v.busy ? " disabled" : ""}`),
@@ -164,7 +164,7 @@ export function messagingHTML(v: MessagingView): string {
 }
 
 /**
- * The bots of a member's panel (owner, 2026-11-07): a connected one is its card as above; the others are one row each,
+ * The bots of a member's panel: a connected one is its card as above; the others are one row each,
  * the platform and 「設定」, which opens the member's conversation where it sets the bot up with the owner (chat-ask.ts).
  * No token field is drawn on the panel.
  */
@@ -236,7 +236,7 @@ function raphaelOps(kind: MessagingKind): ChannelOps {
 }
 
 /**
- * A member's own bot on one platform, in its panel (owner, 2026-11-07), through `messaging.member.*`; messages to it
+ * A member's own bot on one platform, in its panel, through `messaging.member.*`; messages to it
  * land in the member's own conversation. Telegram sends no platform, as the core first knew it.
  */
 export function createMemberChannel(host: MessagingHost, memberId: () => number, kind: MessagingKind = "telegram"): Messaging {
@@ -250,7 +250,7 @@ export function createMemberChannel(host: MessagingHost, memberId: () => number,
 }
 export const createMemberTelegram = (host: MessagingHost, memberId: () => number): Messaging => createMemberChannel(host, memberId, "telegram");
 
-/** Raphael's own bot on one platform, in his panel since 2026-11-07 (Settings no longer holds it). */
+/** Raphael's own bot on one platform, in his panel (Settings no longer holds it). */
 export const createRaphaelChannel = (host: MessagingHost, kind: MessagingKind): Messaging => createChannelMessaging(host, kind);
 
 function createChannelMessaging(host: MessagingHost, kind: MessagingKind, ops: ChannelOps = raphaelOps(kind), ownTokenId?: string): Messaging {

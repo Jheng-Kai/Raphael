@@ -62,7 +62,7 @@ describe("the column, drawn", () => {
     expect(el.querySelector('[aria-current="true"]')).toBeNull();
     expect(dom(columnHTML(view({active:true}))).querySelector('[aria-current="true"]')?.getAttribute('data-member')).toBe('0');
   });
-  test("rows show no time, whatever the last message's timestamp, as Grok Bot's", () => {
+  test("rows show no time, whatever the last message's timestamp", () => {
     for (const last_at of [new Date(2026, 9, 24, 13, 45).getTime(), null, NaN, 1e20]) expect(dom(memberRowHTML(member(1, { last_at }), view())).querySelector("time")).toBeNull();
   });
 
@@ -298,7 +298,7 @@ describe("the column, used", () => {
     expect(openNewGroupChat).toHaveBeenCalled();
   });
 
-  test("a row's menu is grouped as Grok's, ending with 刪除, and a right click gives the same", () => {
+  test("a row's menu is grouped into sections, ending with 刪除, and a right click gives the same", () => {
     const column = mount();
     column.el.querySelector<HTMLElement>('[data-member-more="2"]')!.click();
     const menu = document.querySelector<HTMLElement>("#app-popover")!;

@@ -1,5 +1,5 @@
 // A single full routine editor, shared by the member panel, calendar and automation list. Wide and short, as the
-// Connect apps dialog (owner, 2026-11-07): what it does on the left (its title with its switch, and its instructions),
+// Connect apps dialog: what it does on the left (its title with its switch, and its instructions),
 // when it runs on the right. Who does it is asked only when nothing opened it for a member; no test run, no history.
 import { detectedTimezone, zonedTime } from "./timezones";
 import * as api from "./api";
@@ -100,8 +100,7 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
       `</label><div class="au-field"><span>${esc(t("auto.results"))}</span>${sel([{ value: "main", label: t("auto.mainThread") }], "main", t("auto.results"), ' data-dlg="destination"')}</div></section>` : ""));
   }
   /**
-   * When a scheduled routine runs, as rows with the name left and the choice right (owner, 2026-11-08: 「這真的太亂了，還有一些
-   * 字被隱藏起來」): 重複 as one dropdown, its start day and time, then only the row its choice needs (the days of a week,
+   * When a scheduled routine runs, as rows with the name left and the choice right: 重複 as one dropdown, its start day and time, then only the row its choice needs (the days of a week,
    * a day of the month, an interval and its hours). The sentence under them says it in words.
    */
   function scheduleHTML(kinds: [RoutineSchedule["kind"], string][]): string {

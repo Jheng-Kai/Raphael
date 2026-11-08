@@ -25,7 +25,7 @@ describe("the document", () => {
   test("reads as one card under its name, an entry to a block, with no rows and no type labels", () => {
     const html = memoryHTML(view());
     expect(html.match(/<div class="mem-entry"><p class="mem-text">/g)).toHaveLength(3);
-    // Its name stands over the card, with the pencil and the ⋯ beside it (owner, 2026-11-09).
+    // Its name stands over the card, with the pencil and the ⋯ beside it.
     expect(html).toMatch(/<div class="mem-head"><h2 class="mem-title">小晴的記憶<\/h2><span class="ctl">.*data-mem="edit".*data-mem="section-more"/s);
     expect(html.indexOf('class="mem-head"')).toBeLessThan(html.indexOf('class="mem-doc"'));
     expect(html).toContain("回答保持兩三句\n多一行說明");
@@ -42,9 +42,9 @@ describe("the document", () => {
 
   test.each([["zh-TW", "2026/10/22"], ["ja", "2026/10/22"], ["en", "Oct 22, 2026"]] as const)("a shared entry says whom the owner told and when, in the %s date", (locale, date) => {
     setLocale(locale);
-    const html = memoryHTML(view({ status: { ...DOC, text: "品牌主色是金色 — 拉斐爾 · 2026-10-22\n" } }));
+    const html = memoryHTML(view({ status: { ...DOC, text: "範例文件採用單欄 — 拉斐爾 · 2026-10-22\n" } }));
     expect(html).toContain(`<span class="mem-from">拉斐爾 · ${date}</span>`);
-    expect(visible(html)).toContain(`品牌主色是金色 拉斐爾 · ${date}`);
+    expect(visible(html)).toContain(`範例文件採用單欄 拉斐爾 · ${date}`);
   });
 
   test("nothing that destroys stands on the page (R-UI-56): 全部清除 and the summary's 清除 wait in their ⋯", () => {
@@ -63,7 +63,7 @@ describe("the document", () => {
     expect(html).not.toContain('data-mem="section-more"');
   });
 
-  test("編輯 is a pencil, not the word (owner, 2026-11-08), and every icon-only button is named in its label and tooltip", () => {
+  test("編輯 is a pencil, not the word, and every icon-only button is named in its label and tooltip", () => {
     const html = memoryHTML(view());
     for (const tag of buttons(html)) {
       expect(tag).toMatch(/^<button type="button" class="btn/);

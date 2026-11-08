@@ -18,7 +18,7 @@ const MCP_PROTOCOL = "2026-01-26";
 /** The cards a turn shows, below what it said. A card holds no frame: `mountPages` brings it. */
 export function pageCardsHTML(turn: AgentTurn): string {
   return (turn.pages ?? []).map(page => cardHTML({ title: page.title, status: "ready",
-    // A page that failed offers 重試 under what happened; the × at the card's top right puts it away (owner, 2026-11-08).
+    // A page that failed offers 重試 under what happened; the × at the card's top right puts it away.
     content: `<div class="pg-body" data-state="loading"></div><div class="pg-failed" hidden><p>${esc(page.fallback || t("page.failed"))}</p><div class="card-actions">${btn(esc(t("page.retry")), "sm pri", ' data-page-act="retry"')}</div></div>`,
     close: iconBtn("x", t("common.close"), " data-card-failed-close", "card-close pg-close"),
     actions: iconButton("expand", t("page.expand"), ' data-page-act="expand"', "pg-expand"), cls: "pg-card",
@@ -266,7 +266,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     const title = card.getAttribute("aria-label") ?? "";
     const dialog = openDialog({
       title: esc(title), body: `<div class="pg-view"></div>`, cls: "rich-view-dialog pg-view-dialog",
-      // Its × closes it, with no 「關閉」 under it (owner, 2026-11-08).
+      // Its × closes it, with no 「關閉」 under it.
       actions: {},
       onAct(_act, _target, shown) { shown.close(); },
       onClosing() {

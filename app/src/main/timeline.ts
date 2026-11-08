@@ -13,7 +13,7 @@ import { chatCardsHTML } from "./chat-cards";
 import { secretCardsHTML, secretResumedLineHTML } from "./secret-card";
 import { mcpProposalsHTML } from "./mcp-proposal";
 import { liveAction, pastStep, workActions } from "./work-actions";
-// Conversation density informed by Grok Bot; see core/packaging/licenses/NOTICES.md.
+// Shared conversation rendering and message controls.
 // A turn of the conversation as the 拉斐爾 page shows it: the person's words on the right, with a
 // their actions below each bubble; Raphael on the left, with his face and each public message
 // in order. Receipts fold into reply detail, questions mount inline, and pending work shares the live work line.
@@ -614,7 +614,7 @@ function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined,
 }
 
 /**
- * As Grok Bot's: beside the bubble, under the pointer, only react, reply and ⋯; Copy, the work, Edit and Cancel live in
+ * Beside the bubble, under the pointer, only react, reply and ⋯; Copy, the work, Edit and Cancel live in
  * the ⋯ menu and the right-click menu (agent.ts messageMenu), and the time lives in the thread's dividers. `extra` holds
  * the few controls a message needs in sight: a failed reply's Run again and a voice memo's play. A message with no menu
  * (a group's or a side thread's) keeps Copy in sight instead.
@@ -637,7 +637,7 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
   return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
     (reply && origin && sourceOf(turn) === "routine" ? routineLineHTML(turn) : "") +
     (reply ? replyContentHTML(text, query, turn.status === "running") : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`) +
-    // Its links are chips in its words, with no row of cards under it (owner, 2026-11-08; link-previews.ts).
+    // Its links are chips in its words, with no row of cards under it.
     reactionRowHTML(turn.reactions?.[key]) + messageActionsHTML(time, regenerate, undefined, reply, reply ? workActionHTML(turn, state) + retry : "") + `</div>`;
 }
 
@@ -909,7 +909,7 @@ function turnEventsHTML(turn: AgentTurn, look: TurnLook): string {
 
 /**
  * `conversation` picks the lines that stay in the conversation: a meeting this turn opened (an exchange
- * with colleagues, one line since 2026-11-05) and a skill the member learned (it changes what the member
+ * with colleagues, shown on one line) and a skill the member learned (it changes what the member
  * does next). Every other public event is work and folds into the reply.
  */
 function publicEventsHTML(turn: AgentTurn, conversation: boolean): Map<number, string> {

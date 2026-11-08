@@ -148,7 +148,7 @@ async def test_a_teacher_keeps_each_reply_and_replays_the_whole_lesson(setup, cl
 
 
 async def test_a_member_answers_with_its_selected_model(setup, client):
-    # The member brain overrides the global setting (owner, 2026-10-29).
+    # The member brain overrides the global setting.
     rig, team = setup
     one = team.members.store.create_member(name="舊的", role="r", instructions="i", model="own/model")
     client.decisions.append(decision("chat"))

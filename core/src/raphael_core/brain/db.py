@@ -1797,7 +1797,7 @@ PRAGMA user_version = 72;
 COMMIT;
 """
 
-# Hermes-style private tool transcripts and one persistent recall index.
+# Private tool transcripts and one persistent recall index.
 _MIGRATIONS[73] = """
 BEGIN;
 CREATE TABLE turn_tool_events (

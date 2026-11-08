@@ -9,7 +9,7 @@ const teaching = [member(1),{action:'open-details'},wait('.desktop-screen iframe
 const draft = [...teaching,click('[data-desktop="teach"]'),wait('.desktop-review #mp-skill-text')];
 const menu = [click('[data-desktop="menu"]'),wait('#app-popover [data-pick="files"]')];
 const boot = (state, desktopHour = 9, extra = {}) => ({desktopHour, desktop:{state,ready:false,control:'member',...extra}});
-// A booting computer says nothing (owner, 2026-11-07): the scene waits for the panel's own state in data, not for words.
+// A booting computer says nothing: the scene waits for the panel's own state in data, not for words.
 const bootEntry = (state = 'starting') => [member(1), {action:'open-details'}, wait(`.desktop-panel:not([hidden])[data-desktop-state="${state}"]`)];
 const hostHealth = [member(1),{action:'open-details'},wait('[data-computer-location]:not(:disabled)'),click('[data-computer-location]'),wait('[data-k="computer-host"]'),click('[data-k="computer-host"]'),click('.menu [data-value="remote"]'),type('#computer-ssh-alias','studio-mini'),key('Tab'),click('[data-act="computer-host-check"]'),wait('[data-computer-host-health]'),check('desktop-host-health')];
 const ownPicture = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 673"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#bfe3ff"/><stop offset="1" stop-color="#1c5fa8"/></linearGradient></defs><rect width="1200" height="673" fill="url(#g)"/><circle cx="570" cy="230" r="90" fill="#fff"/></svg>')}`;

@@ -109,7 +109,7 @@ test("the local host label follows the window language and the shared popover re
 
 test("a refused key login names the user ssh tried, so a wrong account is the first thing to check", () => {
   setLocale("zh-TW");
-  const html = computerHostHealthHTML({ host: "192.168.8.178", ok: false, checks: [{ kind: "ssh_key", ok: false, user: "jack2" }] });
-  expect(html).toContain("以 jack2 登入被拒");
+  const html = computerHostHealthHTML({ host: "192.0.2.178", ok: false, checks: [{ kind: "ssh_key", ok: false, user: "tester" }] });
+  expect(html).toContain("以 tester 登入被拒");
   expect(computerHostHealthHTML({ host: "studio-mini", ok: false, checks: [{ kind: "ssh_key", ok: false }] })).toContain(t("desktop.health.ssh_key"));
 });

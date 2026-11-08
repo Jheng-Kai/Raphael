@@ -1,5 +1,5 @@
 // Ctrl + plus / minus / zero zoom the main window by fixed steps. WebView2's own zoom keys allow
-// 25%–500%, which the owner found far too much (2026-10-25: 「正負 3 就可以」), so the app handles the
+// 25%–500%, so the app handles a narrower range through the
 // keys itself and remembers the level.
 
 /** Three steps either way of 100%. */

@@ -1,4 +1,4 @@
-// A pane's edge that the pointer drags to resize it, as Grok Bot's sidebars (owner, 2026-11-06): no handle is drawn and
+// A pane's edge that the pointer drags to resize it: no handle is drawn and
 // there is no button for it. The cursor changes over the edge and a thin line shows while it moves. From the keyboard it is
 // a separator: the arrow keys move it, and Enter does what the pane does when it is dragged as far as it goes.
 

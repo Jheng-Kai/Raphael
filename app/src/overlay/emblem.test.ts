@@ -66,7 +66,7 @@ test("a hidden emblem draws nothing", () => {
   expect(params("hidden", 0, 0)).toBeNull();
 });
 
-test("the white ring is about 5.8 px when quiet and 10.7 px when loud (R = 97): as thick as the owner's photo", () => {
+test("the white ring is about 5.8 px when quiet and 10.7 px when loud (R = 97)", () => {
   const quiet = params("listening", 0, 0)!;
   const loud = params("listening", 0, 1)!;
   expect(quiet.ringW * 97).toBeCloseTo(5.82, 1);

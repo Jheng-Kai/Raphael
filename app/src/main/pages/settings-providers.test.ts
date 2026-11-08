@@ -244,15 +244,15 @@ test("Models contains no spending and Usage mounts its allowances once, plainly,
   click('[data-models-tab="usage"]'); await flush();
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
   expect(api.usageAllowances).toHaveBeenCalledTimes(1);
-  // Only what the app itself spent: an OpenRouter account's usage is read on OpenRouter (owner, 2026-11-07).
+  // Only what the app itself spent: an OpenRouter account's usage is read on OpenRouter.
   expect(page.el.querySelector('[data-row="openrouter-usage"]')).toBeNull();
   const spend = page.el.querySelector('[data-row="raphael-spend"]')!;
   expect(spend.classList.contains("spend-card")).toBe(true);
   expect(page.el.querySelector('[data-pv="directory"]')).toBeNull();
   const node = page.el.querySelector(".usage-analytics")!;
-  // This month's spending leads, as Grok Bot's usage card, then the allowances, and nothing else is on the page.
+  // This month's spending leads in a card, then the allowances, and nothing else is on the page.
   expect(spend.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  // One refresh for the whole tab, at its top right: the allowances have none of their own (owner, 2026-11-08).
+  // One refresh for the whole tab, at its top right: the allowances have none of their own.
   expect(node.querySelector("button.icon")).toBeNull();
   expect(page.el.querySelectorAll('.set-head [data-act="models-refresh"]')).toHaveLength(1);
   expect(page.el.querySelector(".ua-chart, .run-tiles, .run-bill, [data-range], .foot")).toBeNull();
@@ -265,7 +265,7 @@ test("Models contains no spending and Usage mounts its allowances once, plainly,
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
 });
 
-test("the allowances are read once and kept across tabs and Settings closing, refresh on completed activity while visible, and read again by the refresh (owner, 2026-11-08)", async () => {
+test("the allowances are read once and kept across tabs and Settings closing, refresh on completed activity while visible, and read again by the refresh", async () => {
   const mountAnalytics = vi.spyOn(analytics, "mountUsageAnalytics");
   await mount(); click('[data-models-tab="usage"]'); await flush();
   const first = mountAnalytics.mock.results[0].value;
@@ -309,7 +309,7 @@ test("the allowances are read once and kept across tabs and Settings closing, re
   expect(page.el.querySelector('[data-models-tab="models"][aria-selected="true"]')).not.toBeNull();
 });
 
-test("the shared tabs support arrow keys, and Settings has no search (owner, 2026-11-07)", async () => {
+test("the shared tabs support arrow keys, and Settings has no search", async () => {
   await mount();
   const modelTab = page.el.querySelector<HTMLElement>('[data-models-tab="models"]')!;
   modelTab.focus(); modelTab.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })); await flush();

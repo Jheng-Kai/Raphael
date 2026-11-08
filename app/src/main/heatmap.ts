@@ -103,7 +103,7 @@ export const weeksThatFit = (width: number): number => Math.max(6, Math.min(53, 
 
 /**
  * The grid as inline SVG; the whole has a label for a screen reader. A day's words show when the day is pressed, never
- * under the pointer (owner, 2026-11-07): each day carries them in `data-tip` for the page to show.
+ * under the pointer: each day carries them in `data-tip` for the page to show.
  */
 export function heatmapSVG(grid: Grid): string {
   const weeks = grid.weeks;

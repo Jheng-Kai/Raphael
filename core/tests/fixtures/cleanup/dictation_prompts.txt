@@ -1,0 +1,30 @@
+開始測試。
+Start now.
+テストを始めます。
+合成樣本1，請檢查這份清單的標籤、數量與測試日期，再核對示範頁面上的相同資料，最後把結果寫在本機的測試記錄中，這些內容都是為了離線測試準備。
+Synthetic sample 1: check the labels, counts and dates in this practice inventory, compare the example page, and record the result in a local test note.
+合成サンプル1です。この資料のラベルと数を確認して、テスト用の記録に結果を書いてください。
+合成樣本2，請檢查這份清單的標籤、數量與測試日期，再核對示範頁面上的相同資料，最後把結果寫在本機的測試記錄中，這些內容都是為了離線測試準備。
+Synthetic sample 2: check the labels, counts and dates in this practice inventory, compare the example page, and record the result in a local test note.
+合成サンプル2です。この資料のラベルと数を確認して、テスト用の記録に結果を書いてください。
+合成樣本3，請檢查這份清單的標籤、數量與測試日期，再核對示範頁面上的相同資料，最後把結果寫在本機的測試記錄中，這些內容都是為了離線測試準備。
+Synthetic sample 3: check the labels, counts and dates in this practice inventory, compare the example page, and record the result in a local test note.
+合成サンプル3です。この資料のラベルと数を確認して、テスト用の記録に結果を書いてください。
+合成樣本4，請檢查這份清單的標籤、數量與測試日期，再核對示範頁面上的相同資料，最後把結果寫在本機的測試記錄中，這些內容都是為了離線測試準備。
+Synthetic sample 4: check the labels, counts and dates in this practice inventory, compare the example page, and record the result in a local test note.
+合成サンプル4です。この資料のラベルと数を確認して、テスト用の記録に結果を書いてください。
+合成樣本5，請檢查這份清單的標籤、數量與測試日期，再核對示範頁面上的相同資料，最後把結果寫在本機的測試記錄中，這些內容都是為了離線測試準備。
+Synthetic sample 5: check the labels, counts and dates in this practice inventory, compare the example page, and record the result in a local test note.
+合成サンプル5です。この資料のラベルと数を確認して、テスト用の記録に結果を書いてください。
+合成樣本6，請檢查這份清單的標籤、數量與測試日期，再核對示範頁面上的相同資料，最後把結果寫在本機的測試記錄中，這些內容都是為了離線測試準備。
+Synthetic sample 6: check the labels, counts and dates in this practice inventory, compare the example page, and record the result in a local test note.
+合成サンプル6です。この資料のラベルと数を確認して、テスト用の記録に結果を書いてください。
+合成樣本7，請檢查這份清單的標籤、數量與測試日期，再核對示範頁面上的相同資料，最後把結果寫在本機的測試記錄中，這些內容都是為了離線測試準備。
+Synthetic sample 7: check the labels, counts and dates in this practice inventory, compare the example page, and record the result in a local test note.
+合成サンプル7です。この資料のラベルと数を確認して、テスト用の記録に結果を書いてください。
+合成樣本8，請檢查這份清單的標籤、數量與測試日期，再核對示範頁面上的相同資料，最後把結果寫在本機的測試記錄中，這些內容都是為了離線測試準備。
+Synthetic sample 8: check the labels, counts and dates in this practice inventory, compare the example page, and record the result in a local test note.
+合成サンプル8です。この資料のラベルと数を確認して、テスト用の記録に結果を書いてください。
+合成樣本9，請檢查這份清單的標籤、數量與測試日期，再核對示範頁面上的相同資料，最後把結果寫在本機的測試記錄中，這些內容都是為了離線測試準備。
+Synthetic sample 9: check the labels, counts and dates in this practice inventory, compare the example page, and record the result in a local test note.
+合成サンプル9です。この資料のラベルと数を確認して、テスト用の記録に結果を書いてください。

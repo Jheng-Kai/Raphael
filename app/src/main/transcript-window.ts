@@ -57,7 +57,7 @@ export class TranscriptWindow {
     const target = keys.indexOf(key);
     if (target < 0) return false;
     if (keys === this.keys && target >= this.startIndex && target < this.endIndex) return true;
-    // Adapted from OpenMausBot's focusWindowRange: clamp a centered, finite range to the transcript.
+    // Adapted from OpenMausBot's focusWindowRange (Apache-2.0); see core/packaging/licenses/OpenMausBot-Apache-2.0.txt.
     const start = Math.max(0, Math.min(target - Math.floor(TRANSCRIPT_WINDOW.initial / 2), Math.max(0, keys.length - TRANSCRIPT_WINDOW.initial)));
     this.keys = keys; this.start = keys[start]; this.end = keys[Math.min(keys.length, start + TRANSCRIPT_WINDOW.initial) - 1];
     this.startIndex = start; this.endIndex = Math.min(keys.length, start + TRANSCRIPT_WINDOW.initial); this.following = false;

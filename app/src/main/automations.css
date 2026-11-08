@@ -2,17 +2,17 @@
 .au-page { display: flex; flex-direction: column; width: 100%; max-width: var(--layout-workspace-max); margin-inline: auto; min-width: 0; height: 100%; padding-top: var(--window-controls-height); overflow: hidden; background: var(--content); container: calendar / inline-size; }
 .au-empty { padding: 48px var(--sp-4); color: var(--text-3); text-align: center; }
 .au-empty > .i { width: 20px; height: 20px; }
-/* In the middle of the window like every dialog (owner, 2026-11-07); a dialog taller than the window starts at the top and scrolls. */
+/* In the middle of the window like every dialog; a dialog taller than the window starts at the top and scrolls. */
 .mb-scrim:has(> .au-routine-dialog) { overflow-y: auto; scrollbar-width: none; place-items: start center; }
 .mb-scrim > .au-routine-dialog { margin-block: auto; }
-/* Wide and short (owner, 2026-11-07): what it does on the left, when it runs on the right; one column when narrow. */
+/* Wide and short: what it does on the left, when it runs on the right; one column when narrow. */
 .au-routine-dialog.mb-dialog { width: min(640px, calc(100vw - 40px)); max-height: none; overflow: visible; }
 .au-routine-dialog .mb-dlg-body { display: flex; flex-direction: column; flex: none; overflow: visible; gap: var(--sp-4); padding: var(--sp-5) var(--sp-5); }
 .au-routine-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: var(--sp-6, 32px); align-items: start; }
 .au-col { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
 .au-title-row { display: flex; align-items: center; gap: var(--sp-3); }
 .au-title-row > .au-title { flex: 1; min-width: 0; }
-/* The instructions grow with their words, so none hides behind a scroll in the box (owner, 2026-11-08). */
+/* The instructions grow with their words, so none hides behind a scroll in the box. */
 .au-prompt-field textarea { min-height: 200px; field-sizing: content; resize: none; overflow: hidden; }
 @media (max-width: 760px) { .au-routine-grid { grid-template-columns: minmax(0, 1fr); } }
 .au-title.mb-fin { font-size: var(--fs-h1); font-weight: var(--weight-semibold); border: 0; border-bottom: 1px solid var(--edge); border-radius: 0; background: transparent; padding: var(--sp-2) 0 var(--sp-3); }
@@ -29,7 +29,7 @@
 .routine-run-link.btn { white-space: normal; height: auto; text-align: left; }
 .au-event .note { white-space: pre-line; }
 .au-event label { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
-/* When it runs: rows on one tinted list, the name left and the choice right, as Settings' rows (owner, 2026-11-08). */
+/* When it runs: rows on one tinted list, the name left and the choice right, as Settings' rows. */
 .au-rows { display: grid; grid-template-columns: minmax(0, 1fr); border-radius: var(--r-md); background: var(--surface-2); padding: var(--sp-1) var(--sp-3); }
 .au-row { display: grid; grid-template-columns: [label] minmax(0, auto) [control] minmax(0, 1fr); align-items: center; gap: var(--sp-3); min-height: calc(var(--h-ctl) + var(--sp-3)); }
 .au-row-label { color: var(--text-2); font-size: var(--fs-xs); white-space: nowrap; }
@@ -77,7 +77,7 @@
 .au-room-heading > b { font-size: var(--fs-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .au-room-faces { display: flex; gap: 0; flex-shrink: 0; }
 .au-room-pane .ra-dock .composer { width: 100%; max-width: var(--pa-colw); margin-inline: auto; }
-/* A group's message is led by its face alone (owner, 2026-11-09: the name made a meeting too long); the name stays for
+/* A group's message is led by its face alone; the name stays for
    screen readers and on the face's tooltip. */
 .au-room-author { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .au-room-meta:not(:has(.au-room-reply)) { display: none; }
@@ -242,7 +242,7 @@ button.au-room-reply { border: 0; font-family: inherit; cursor: pointer; }
 .cal-chip.btn.is-past { opacity: 0.6; }
 .cal-chip.is-own.btn.is-past, .cal-chip.is-own.btn.is-past:hover:not(:disabled) { opacity: 1; background: var(--surface-2); color: var(--text-2); }
 .cal-chip.is-own.btn.is-past:active:not(:disabled) { background: var(--pressed); }
-/* The event whose panel is open, or that Home opened, lifts as Google Calendar's does; a ring stays keyboard focus's (R-UI-31). */
+/* The event whose panel is open, or that Home opened, lifts when its details are open; a ring stays keyboard focus's (R-UI-31). */
 .cal-chip.is-home-focus, .cal-chip[aria-current="true"] { z-index: 2; box-shadow: var(--pop); }
 .cal-chip.is-event.is-home-focus, .cal-chip.is-event[aria-current="true"] { box-shadow: inset 0 0 0 1px var(--btn-edge), var(--pop); }
 .au-history-mark { position: absolute; right: var(--sp-1); bottom: var(--sp-1); width: 6px; height: 6px; border-radius: var(--r-pill); background: var(--err); pointer-events: none; }

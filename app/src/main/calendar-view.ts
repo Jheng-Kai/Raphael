@@ -72,7 +72,7 @@ export const ROUTINE_DRAWN_MS = HOUR;
 
 export const googleMark = (): string => `<span class="cal-mark" aria-hidden="true">${iconHTML("Google Calendar", "googlecalendar", "md")}</span>`;
 
-/** The colour of a chip that stands for someone: its slime's, Raphael's first blue one included (since 2026-11-07). */
+/** The colour of a chip that stands for someone: its slime's, Raphael's first blue one included. */
 export const chipColor = (member: CalendarPerson | undefined): string =>
   member ? ` style="--chip:${member.id === RAPHAEL_ID ? RAPHAEL_COLOR : slimeColorOf(member)}"` : "";
 

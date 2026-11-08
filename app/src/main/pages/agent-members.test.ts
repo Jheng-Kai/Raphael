@@ -93,7 +93,7 @@ function mount(mode: "hold" | "toggle" = "hold") {
   return agent;
 }
 const $ = <T extends HTMLElement>(q: string) => document.querySelector<T>(q)!;
-/** As Grok Bot's, Edit and Cancel live in a message's ⋯ menu (agent.ts messageMenu), not beside it. */
+/** Edit and Cancel live in a message's ⋯ menu (agent.ts messageMenu), not beside it. */
 const pickMessage = (scope: string, pick: "edit" | "cancel"): void => { $(`${scope} [data-act="more-message"]`).click(); $(`#app-popover [data-pick="${pick}"]`).click(); };
 const pick = async (id: number) => {
   $(`.mb-col [data-member="${id}"]`).click();
@@ -671,7 +671,7 @@ test.each(["edit", "cancel", "regenerate"])("%s after reload retrieves stored fi
   api.agentHistoryList.mockImplementation(async ({ member_id }: { member_id?: number }) => ({ turns: member_id === 3 ? [original] : [] }));
   api.core.mockImplementation(async (method: string) => method === "attachments.get" ? { mime: "text/csv", data: btoa("report") } : { questions: [] });
   const agent = mount(); await flush(); await pick(3);
-  // Edit, Cancel and Regenerate all live in the message's ⋯ menu, as Grok Bot's.
+  // Edit, Cancel and Regenerate all live in the message's ⋯ menu.
   $(`[data-id="8"] ${action === "regenerate" ? ".ra" : ".me"} [data-act="more-message"]`).click(); await flush();
   $(`[data-pick="${action}"]`).click(); await flush();
   expect(api.core).toHaveBeenCalledWith("attachments.get", { id });

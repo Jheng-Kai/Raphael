@@ -75,7 +75,7 @@ beforeEach(() => {
 });
 
 describe("a member's panel", () => {
-  test('Details has no list of what the member did: its routines come first (owner, 2026-11-07)', async () => {
+  test('Details has no list of what the member did: its routines come first', async () => {
     api.core.mockImplementation(async method => method === 'members.list' ? {files:[],has_more:false} : {});
     const panel = mount(); await flush();
     expect(panel.el.querySelector('.mb-panel-tasks, .mb-task-list, [data-panel-task]')).toBeNull();
@@ -271,7 +271,7 @@ describe("Raphael's panel", () => {
     await flush();
     expect(panel.el.querySelector("input, textarea")).toBeNull();
     expect(panel.el.querySelector(".mb-panel-identity > b")!.textContent).toBe("拉斐爾");
-    // The first blue slime (owner, 2026-11-07): his emblem shows only in voice.
+    // The first blue slime: his emblem shows only in voice.
     expect(panel.el.querySelector(".mb-face-edit .av.mb-av-slime svg.slime")).not.toBeNull();
     expect(panel.el.querySelector('[data-det="group"]')).toBeNull();
     expect(api.routinesList).toHaveBeenCalledWith(0);

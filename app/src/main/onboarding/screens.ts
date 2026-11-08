@@ -1,5 +1,4 @@
-// What each screen of the guide looks like, as HTML for a given state. Each screen is one calm centred column, as Grok
-// Bot's first run is (owner, 2026-11-07): a title, the choice it is about (tiles in a grid, or rows), and, drawn by
+// What each screen of the guide looks like, as HTML for a given state. Each screen is one calm centred column, with a consistent structure: a title, the choice it is about (tiles in a grid, or rows), and, drawn by
 // mount.ts, one wide black pill under it with a grey pill for the way back. Nothing here reads the window or the core,
 // so a screen can be drawn from made-up data (the browser check does).
 
@@ -22,8 +21,8 @@ export type GuideStep = "welcome" | "tools" | "services" | "abilities";
  * title's top) and how large. */
 interface Floater { avatar: string; side: "left" | "right"; x: number; y: number; px: number }
 /**
- * The team's own characters float by each step's title, as Grok Bot's bots float around its questions: different ones on
- * every step, never in the same places (owner, 2026-11-08: 「可以放我們特別設定好的成員…位置也可以放在不一樣的地方」).
+ * The team's own characters float by each step's title: different ones on
+ * every step, never in the same places.
  */
 const FLOATERS: Record<Exclude<GuideStep, "welcome">, readonly Floater[]> = {
   tools: [
@@ -53,12 +52,11 @@ function floaters(step: Exclude<GuideStep, "welcome">): string {
 /** The title of a screen; what the step is for is the choice itself, never a line under it. */
 export const head = (title: string, step?: Exclude<GuideStep, "welcome">): string => (step ? floaters(step) : "") + `<h2 tabindex="-1">${esc(title)}</h2>`;
 
-/** A check in a small black square, on a tile that is chosen or ready (as Grok Bot's chosen tiles); `word` is what a reader hears. */
+/** A check in a small black square, on a tile that is chosen or ready; `word` is what a reader hears. */
 const tick = (word: string): string => `<span class="ob-tick" role="img" aria-label="${esc(word)}">${ico("check")}</span>`;
 
 /**
- * One tile of a choice, one row as a store's app is (owner, 2026-11-09: the tiles were too tall and an email broke over
- * two lines): the mark in its square, the name over one quiet line that never wraps, and on the right the control,
+ * One tile of a choice, one row as a store's app is: the mark in its square, the name over one quiet line that never wraps, and on the right the control,
  * then the check when the tile is `on` (the word a reader hears for it). A `wide` tile spans its row and its line may
  * wrap; an `entry` tile (a key or an address being typed) spans it too, with its fields and buttons under its name, so
  * a narrow window never squeezes its words into a sliver.
@@ -78,7 +76,7 @@ const alert = (html: string): string => `<div class="ob-alert" role="alert">${ht
 
 // ---------- welcome ----------
 
-/** What the welcome types (owner, 2026-11-08): something the owner might ask, and Raphael's answer in his own manner,
+/** What the welcome types: something the owner might ask, and Raphael's answer in his own manner,
  * 告。, 解。 or 否。 — what the team can do, said by him rather than a slogan. */
 export const DEMOS = [
   ["onboarding.demo1Ask", "onboarding.demo1Reply"], ["onboarding.demo2Ask", "onboarding.demo2Reply"],
@@ -94,7 +92,7 @@ export const demoReply = (demo: (typeof DEMOS)[number]): string => t(demo[1]);
  * A reader hears one sentence of what the team does instead. The language is chosen at the window's top left.
  */
 export function welcomeHTML(): string {
-  // His name is one wordmark for every language, 「智慧之王ラファエル」 (owner, 2026-11-08: 「夠酷就好…所有語言都是一樣的」),
+  // His name is one wordmark for every language, 「智慧之王ラファエル」,
   // inked in the theme's colour through a mask; a reader hears the name in the window's language.
   return (
     `<div class="ob-emblem" aria-hidden="true"><canvas class="ob-emb"></canvas></div>` +
@@ -204,7 +202,7 @@ function keyTile(k: KeyView): string {
 
 /**
  * Every provider the app can connect, as tiles, from the core's catalog (the same as Settings › 模型與用量's 新增供應商):
- * the guide is for everyone, not only the providers one owner uses (owner, 2026-11-07). A tile's button opens the same
+ * the guide is for everyone, not only the providers one owner uses. A tile's button opens the same
  * editor as Settings. OpenRouter keeps its own key tile above them; ChatGPT is a sign-in among the accounts.
  */
 const GROUP_TITLE: Record<ProviderKind["group"], MessageKey> = { official: "providers.official", gateway: "providers.gateway", local: "providers.local" };
@@ -223,8 +221,7 @@ const tr = t as unknown as (key: MessageKey) => string;
 interface ToolTile { id: string; name: string; group: "accounts" | ProviderKind["group"]; html: string }
 
 /**
- * The tools most people reach for, the same for everyone (owner, 2026-11-08: 「所有的服務是平等的…可以放一個 popular 的
- * 區域」). The guide is a store: it never orders itself by what one owner has set up.
+ * The tools most people reach for, the same for everyone. The guide is a store: it never orders itself by what one owner has set up.
  */
 export const POPULAR_TOOLS = ["chatgpt", "claude", "codex", "openrouter", "provider:anthropic", "provider:google"] as const;
 const GROUPS = ["accounts", "official", "gateway", "local"] as const;
@@ -363,8 +360,7 @@ function serverTile(s: StoreService, mark: string, own: NonNullable<ReturnType<t
 }
 
 /**
- * Composio, before its key is set: one card across the step that unlocks the store's other apps (owner, 2026-11-09:
- * 「要讓他們先連上 Composio」). Its key is typed in the card, as OpenRouter's is on the first step.
+ * Composio, before its key is set: one card across the step that unlocks the store's other apps. Its key is typed in the card, as OpenRouter's is on the first step.
  */
 function composioTile(c: ComposioView): string {
   const entering = c.entering || c.busy || c.error !== null;
@@ -418,8 +414,7 @@ export function servicesListHTML(v: ServicesState): string {
 
 /**
  * The abilities the members share, as the same rows and dialogs as Settings › 工具 (services.ts): each says what it
- * uses now and opens the choice of service, its key and its model (owner, 2026-11-07: a switch alone did not say
- * whether Brave or OpenRouter would search).
+ * uses now and opens the choice of service, its key and its model.
  */
 export function abilitiesHTML(services: string): string {
   return head(t("onboarding.abilitiesTitle"), "abilities") + `<div class="ob-main" data-ob-abilities>${services}</div>`;

@@ -92,7 +92,7 @@ describe("step 1: the AI tools", () => {
     expect(host.querySelector('.ob-find input#ob-tools-find[aria-label]')).not.toBeNull();
   });
 
-  test("what one owner has set up never moves a tile (owner, 2026-11-08)", () => {
+  test("what one owner has set up never moves a tile", () => {
     const none = items(dom(toolsHTML(accounts({ clis: [cli("claude", { available: false }), cli("codex", { available: false }), cli("gemini", { available: false })] }), noKey, "")));
     const all = items(dom(toolsHTML(accounts({ chatgpt: { signed_in: true, email: "me@example.test", plan_scope_granted: true }, clis: [cli("claude"), cli("codex"), cli("gemini")] }), { ...noKey, has: true }, "")));
     expect(all).toEqual(none);
@@ -220,7 +220,7 @@ describe("step 2: the services", () => {
     expect(dom(servicesHTML(view({ composio: emptyComposioView() }))).querySelector(".ob-composio")).toBeNull();
   });
 
-  test("a search finds every app whatever it asks: a key opens the store's form, an own server is typed in its tile (owner, 2026-11-09: n8n was not found)", () => {
+  test("a search finds every app whatever it asks: a key opens the store's form, an own server is typed in its tile", () => {
     const list = [service("gmail", "Gmail"), service("sentry", "Sentry", { needs: "key", source: "composio" }), ...ownServerApps()];
     const state = (over = {}) => ({ services: list, waiting: null, failed: null, ...over });
     expect(items(dom(servicesHTML(state())))).toEqual(["gmail"]);
@@ -244,7 +244,7 @@ describe("step 2: the services", () => {
     expect(host.querySelector('button.ob-tile[data-item="slack"]')!.hasAttribute("disabled")).toBe(true);
   });
 
-  test("a managed app's tile can stop waiting too (owner, 2026-11-08: a cancelled login left the step stuck)", () => {
+  test("a managed app's tile can stop waiting too", () => {
     const host = dom(servicesHTML(view({ services: [service("gmail", "Gmail", { source: "composio" })], waiting: "gmail" })));
     expect(host.querySelector('[data-ob="conn-cancel"]')!.hasAttribute("disabled")).toBe(false);
   });
@@ -271,7 +271,7 @@ describe("step 2: the services", () => {
 });
 
 describe("step 3: the abilities", () => {
-  test("are Settings › Tools' own rows under the step's title (owner, 2026-11-07: a switch alone did not say which service)", () => {
+  test("are Settings › Tools' own rows under the step's title", () => {
     const host = dom(abilitiesHTML('<section class="sgroup svc" data-svc-section><h2>Services</h2><div class="cs-list"></div></section>'));
     expect(host.querySelectorAll("h2")).toHaveLength(2);
     expect(host.querySelector("[data-ob-abilities] [data-svc-section]")).not.toBeNull();

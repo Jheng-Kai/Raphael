@@ -65,7 +65,7 @@ it("core IPC has one frontend boundary", () => {
     visit(tree);
   }
   expect(violations).toEqual([]);
-  // Parsing every source takes seconds under the whole suite's load (timed out twice on 2026-11-06).
+  // Parsing every source takes seconds under the whole suite's load (previously timed out twice).
 }, 60_000);
 
 it("main templates never introduce native selects", () => {

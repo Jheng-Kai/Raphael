@@ -15,10 +15,10 @@ import { crownedId } from "./crown";
 export type SlimeState = "idle" | "thinking" | "working" | "searching" | "computer" | "waiting" | "blocked" | "done" | "error" | "sleeping" | "arriving";
 type Hat = "witch" | "santa";
 
-/** Raphael's colour: the first blue slime's, his face since 2026-11-07 (the `rimuru` character below). */
+/** Raphael's colour: the first blue slime's, his face (the `rimuru` character below). */
 export const RAPHAEL_COLOR = "#3DB5FF";
 
-/** The plain slimes' colours, as clear and saturated as Grok Bot's swatches (owner, 2026-11-06: ours read a shade too dark). */
+/** The plain slimes' colours, with clear, saturated swatches. */
 const COLORS = {
   sky: "#1EA7FD", lavender: "#905AFB", coral: "#FC2C3E", tangerine: "#F9670E", ochre: "#F69412",
   leaf: "#14C370", teal: "#13B8A3", ocean: "#1884FC", orchid: "#FB3499", charcoal: "#777777",
@@ -84,20 +84,18 @@ export type SlimeCharacter = keyof typeof CHARACTERS;
 
 // ---------- the crown of the primary member ----------
 
-/** One gold shape, no gem and no shine (owner, 2026-11-07), drawn with its base's middle at (50, 30). */
+/** One gold shape, no gem and no shine, drawn with its base's middle at (50, 30). */
 const CROWN_GOLD = "#F6C141";
 const CROWN = fill("M 37 32.4 L 36.2 18 L 43.6 23.8 L 50 14.2 L 56.4 23.8 L 63.8 18 L 63 32.4 Q 50 28 37 32.4 Z", CROWN_GOLD).replace("/>", ` stroke="${CROWN_GOLD}" stroke-width="1.8" stroke-linejoin="round"/>`) +
   `<circle cx="36.2" cy="17.2" r="2.4" fill="${CROWN_GOLD}"/><circle cx="50" cy="13.2" r="2.6" fill="${CROWN_GOLD}"/><circle cx="63.8" cy="17.2" r="2.4" fill="${CROWN_GOLD}"/>`;
 type CrownSpot = readonly [x: number, y: number, turn: number, size: number];
 /**
- * Stuck on the outline from outside, not worn: its base sits on the edge line (it never sinks into the body; owner,
- * 2026-11-07), square to it, on the upper right where the dome slopes 30 degrees. Each spot is a point of the outline
+ * Stuck on the outline from outside, not worn: its base sits square to the edge line without sinking into the body, on the upper right where the dome slopes 30 degrees. Each spot is a point of the outline
  * moved 0.7 out along its normal.
  */
 const CROWN_EDGE: CrownSpot = [71.6, 33.7, 30, 0.62];
 /**
- * A character whose own marks are there gets a spot of its own: two horns hold it upright between them (owner,
- * 2026-11-07), Shizu's mask and Gobta's goggles push it down the edge, Diablo's streaks to the left, and the ears and
+ * A character whose own marks are there gets a spot of its own: two horns hold it upright between them, Shizu's mask and Gobta's goggles push it down the edge, Diablo's streaks to the left, and the ears and
  * wings of Ranga and Ramiris to the top. One horn in the middle leaves the edge free.
  */
 const CROWN_SPOTS: Partial<Record<SlimeCharacter, CrownSpot>> = {
@@ -200,8 +198,8 @@ export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay
 let hearing = false;
 
 /**
- * Under the pointer a slime does not wiggle any more (owner, 2026-11-07): a resting one glances aside and looks back
- * at you while the pointer is on it or its row, as Grok Bot's bots do (slime.css). Here only the end of a handover.
+ * Under the pointer a slime does not wiggle any more: a resting one glances aside and looks back
+ * at you while the pointer is on it or its row (slime.css). Here only the end of a handover.
  */
 function hearThePointer(): void {
   if (hearing || typeof document === "undefined") return;

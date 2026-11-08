@@ -243,7 +243,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     `<section class="mb-chat">` +
     `<div class="page-head mb-head"><h1 class="mb-h1">${esc(t("agent.title"))}</h1><span class="mb-head-l">` +
     iconButton("search", t("agent.search"), ' data-act="search" aria-expanded="false" hidden', "ra-tool") +
-    // Search at the left and share at the right, symmetric (owner, 2026-11-08: share left the panel for the conversation).
+    // Search at the left and share at the right, symmetric.
     `</span><span class="mb-head-c"></span><div class="ra-tools">${iconButton("share", t("template.export"), ' data-act="share-member" aria-haspopup="menu" aria-expanded="false" hidden', "ra-tool")}</div></div>` +
     `<div class="ra-find" hidden></div>` +
     `<div class="ra-stage">` +
@@ -507,7 +507,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const voiceButton = composer.querySelector<HTMLButtonElement>(".cmp-voice")!;
   const sendButton = composer.querySelector<HTMLButtonElement>(".cmp-send")!;
   input.addEventListener("input", () => voiceChat.draw());
-  // Voice chat waits for a later release (owner, 2026-11-06): the voice button records voice messages only.
+  // Voice chat waits for a later release: the voice button records voice messages only.
   const VOICE_CALLS = false;
   const callEligible = (): boolean => VOICE_CALLS && !roomPane.active && memberId() > 0 && conversationId() !== undefined &&
     !input.value.trim() && !files.length && !missingFiles.length && !composerQuote && replacing === undefined && !composerTask();
@@ -530,7 +530,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   askCard.setAttribute("role", "group");
   askCard.innerHTML = cardHTML({ title: t("cards.permission", { p0: t("agent.title") }), status: "waiting", statusText: cardPromptText("permission"), cls: "ask-card",
     body: t("perm.title"),
-    // A local command is shown itself, never behind a disclosure: the owner allows what they can read (owner, 2026-11-08).
+    // A local command is shown itself, never behind a disclosure: the owner allows what they can read.
     content: `<pre class="local-command ask-cmd" hidden></pre>` + cardDisclosureHTML("approval", `<p class="ask-q card-body"></p>`),
     actions: `<button type="button" class="btn sm pri ask-yes" data-act="yes"><span class="ask-yes-t"></span></button>` +
       `<button type="button" class="btn sm ask-always" data-act="always" hidden></button>` +
@@ -704,7 +704,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    */
   function drawFaces(): void {
     drawComposerTask();
-    // Each conversation wears its member's colour, Raphael's his first blue slime's since 2026-11-07 (R-UI-81).
+    // Each conversation wears its member's colour, Raphael's his first blue slime's (R-UI-81).
     const member = members.member(), color = memberColor(member);
     patchHTML(hero, faceHTML(member, inRaphael() ? 132 : 96));
     const bubble = ownerBubble(color);
@@ -722,7 +722,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     return null;
   }
 
-  /** The thread's prompt in the window's language; while a bot's setup waits here it asks about that (owner, 2026-11-07). */
+  /** The thread's prompt in the window's language; while a bot's setup waits here it asks about that. */
   function drawComposer(): void {
     const setup = waitingSetup();
     const brand: Record<string, string> = { telegram: "Telegram", slack: "Slack", discord: "Discord" };
@@ -1846,7 +1846,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
 
   /**
-   * The ⋯ of a message and a right click on it open one menu, as Grok Bot does: beside the bubble only react, reply and ⋯
+   * The ⋯ of a message and a right click on it open one menu: beside the bubble only react, reply and ⋯
    * show, so everything else is here. A colleague's message has its reactions above Reply, Copy, its work and Regenerate
    * on the latest answer; the owner's has Reply, Copy and Edit or Cancel; a message still being sent has Copy and Cancel.
    */
@@ -2214,7 +2214,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "search":
       case "search-close":
         break;
-      // As Grok Bot's: one choice, 建立副本 · 分享範本連結, and only that asks the member to package itself (owner, 2026-11-07).
+      // One choice, 建立副本 · 分享範本連結, and only that asks the member to package itself.
       case "share-member": {
         const member = memberId();
         openMenu(act, [], "", () => {}, undefined, [{ label: t("template.copyTitle"), desc: t("template.copyHint"), icon: "copy", run() { closeMenu(); askInChat(member, "share-template"); } }]);

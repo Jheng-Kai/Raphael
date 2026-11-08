@@ -38,7 +38,7 @@ test("the words become chips only where they address someone, and then the texta
   expect(mirror.textContent!.replace("​", "")).toBe("hi @小森 and @Nobody and @Notion ");
 });
 
-test("a skill called by its name is a blue chip like a link, and a path is not (owner, 2026-11-08)", () => {
+test("a skill called by its name is a blue chip like a link, and a path is not", () => {
   typeText("/poteto-mode 幫我看一下 /usr/bin/node");
   expect(chips()).toEqual(["/poteto-mode"]);
   expect(mirror.querySelector(".url-chip")!.textContent).toBe("/poteto-mode");
@@ -46,7 +46,7 @@ test("a skill called by its name is a blue chip like a link, and a path is not (
   expect(chips()).toEqual(["/research-summary"]);
   typeText("a/b 不是");
   expect(chips()).toEqual([]);
-  // A name in any script, and a plugin's prefix, are blue too (owner, 2026-11-08: 「中文的 skill 好像不會是藍色的」).
+  // A name in any script, and a plugin's prefix, are blue too.
   typeText("/每日新聞摘要");
   expect(chips()).toEqual(["/每日新聞摘要"]);
   typeText("請 /field-notes:review 這份");

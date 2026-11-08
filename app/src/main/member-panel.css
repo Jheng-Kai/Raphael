@@ -37,13 +37,12 @@
 .mb-panel-preference { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-3); font-size: var(--fs-sm); line-height: 1.4; }
 .mb-panel-preference + .mb-panel-row.btn { border-top: 1px solid var(--line); }
 .mb-panel-preference .mb-panel-row-copy small { white-space: normal; }
-/* Grok Bot's panel head (2026-11-06): a large face centred above the name, the job quiet under it. */
+/* The panel head: a large face centred above the name, the job quiet under it. */
 .mb-panel-identity { display: flex; flex-direction: column; align-items: center; gap: var(--sp-1); min-width: 0; width: 100%; }
 .mb-panel-identity > .av { margin-bottom: var(--sp-1); }
 /* A press on the face opens the picker: a bare button, no frame or fill. Under the pointer (or the keyboard's focus) the
    face itself dims, along its own outline (a slime's wide base and its hat, or a round picture), and a white pencil
-   stands in its middle, as on the owner's photo in Settings (owner, 2026-11-08: a dimmed circle left a slime's corners
-   uncovered). */
+   stands in its middle, as on the owner's photo in Settings. */
 :is(.mb-panel-identity, .ms-id) > .btn.mb-face-edit { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 0; margin-bottom: var(--sp-1); padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; }
 :is(.mb-panel-identity, .ms-id) > .btn.mb-face-edit:hover:not(:disabled), :is(.mb-panel-identity, .ms-id) > .btn.mb-face-edit:active:not(:disabled) { background: transparent; }
 .mb-face-edit > .av.mb-av { transition: filter 0.12s ease; }
@@ -59,7 +58,7 @@
 .mb-panel-suggest .member-msg { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
 .mb-panel-suggest .member-msg .sgroup { margin: 0; }
 /* A connected platform is its own section: the hairline between rows also runs between it and the next one, so
-   Telegram, Slack and Discord read as one list (owner, 2026-11-08). */
+   Telegram, Slack and Discord read as one list. */
 .mb-panel-suggest .member-msg > .sgroup + .sgroup .slist > .row:first-child::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: var(--line); }
 .mb-panel-suggest .msg-chat-setup .msg-head > .lbl { flex: 1 0 auto; }
 /* A connected bot's name gives way before its switch: it is cut with an ellipsis in the narrow panel. */
@@ -71,7 +70,7 @@
 .mb-panel-identity > :is(b, small) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mb-panel-identity > b { font-size: var(--fs-md); font-weight: var(--weight-semibold); }
 .mb-panel-identity > small { color: var(--text-3); font-size: var(--fs-xs); }
-/* Its lists, as Grok Bot's: each heading starts where the text inside its tinted list starts, an empty section is one
+/* Its lists: each heading starts where the text inside its tinted list starts, an empty section is one
    tinted line, and the conversations are the same tinted list, so 工作, 例行任務 and 對話 read as one system. */
 .mb-det[data-details-tab="details"] .mb-tab-body > section > .mb-dh { padding-left: var(--sp-3); }
 .mb-det[data-details-tab="details"] .mb-tab-body > section > .mp-empty { margin: 0; padding: var(--sp-3); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
@@ -80,9 +79,9 @@
 .mb-det [data-slot="conversations"] .conversation-more { opacity: 0; }
 .mb-det [data-slot="conversations"] .conversation-row:is(:hover, :focus-within) .conversation-more, .mb-det [data-slot="conversations"] .conversation-more[aria-expanded="true"] { opacity: 1; }
 .mb-det .mb-who:has(.mb-panel-identity) { display: block; }
-/* Grok Bot's routine list: one quiet tinted list, no frame around each row. */
+/* The routine list: one quiet tinted list, no frame around each row. */
 .mb-rts { display: grid; grid-template-columns: minmax(0, 1fr); padding: var(--sp-1); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
-/* The Library: what the member delivered, by day (Grok Bot's Library). Pictures in a grid of three square thumbnails,
+/* The Library: what the member delivered, by day. Pictures in a grid of three square thumbnails,
    every other deliverable a quiet row: its kind's icon, its title, the time. Nothing framed; a row lights under the pointer. */
 /* The kinds there are, as one quiet segmented filter above the days (only when there is more than one kind). */
 .lib-filters { display: flex; margin-bottom: var(--sp-3); min-width: 0; }

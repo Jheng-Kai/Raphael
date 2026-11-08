@@ -1,4 +1,4 @@
-// The cards a member shows in its conversation for what the panel no longer does (owner, 2026-11-07): someone asking a
+// The cards a member shows in its conversation for what the panel no longer does: someone asking a
 // bot it set up there to pair, and the template it made of itself when the owner pressed share. Their state lives in
 // the core; a press answers there and the turn is drawn again from what the core says (`AgentTurn`). The bot token's
 // own card is the secret card (secret-card.ts, `platform`).
@@ -67,8 +67,7 @@ export function chatCardsHTML(turn: AgentTurn): string {
 async function viewTemplate(id: string, avatar = ""): Promise<void> {
   const { template, findings = [] } = await api.core<{ template: MemberTemplate; findings?: ScanFinding[] }>("members.template_card", { id });
   const face = avatar ? slimeFaceHTML({ id: -1, avatar }, 64) : "";
-  // As Grok Bot's: the review's foot is the card's own next step, 發佈 while it is a draft, else nothing: its × closes it
-  // (owner, 2026-11-08: no 「關閉」 under a ×).
+  // The review's foot is the card's own next step, 發佈 while it is a draft, else nothing: its × closes it
   const card = document.querySelector<HTMLElement>(`[data-template-card-id="${CSS.escape(id)}"]`);
   const publish = card?.querySelector<HTMLButtonElement>('[data-act="template-publish"]:not(:disabled)') ?? null;
   const dialog = openDialog({ title: t("store.review"), cls: "template-preview template-card-review", body: "",

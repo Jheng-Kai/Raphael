@@ -1,16 +1,16 @@
 import { expect, test } from "vitest";
 import { PAGE_CHARS, captionLines, captionText, pagesOf } from "./caption";
 
-// The answer the owner saw run out of the top of the window on 2026-10-27.
-const COMPOSIO = "1. 建立帳號並登入控制台。 2. 若設定只要求金鑰，前往「Settings → Project Settings → API Keys」取得。" +
-  "[官方說明](https://docs.composio.dev/reference/authenticating-to-composio) 3. 將金鑰填入設定頁，再回到 Gmail 連結卡完成 Google 授權。" +
-  "金鑰請只填入專用欄位，不要貼到聊天中。";
+// A synthetic numbered answer exercises caption paging and link removal.
+const COMPOSIO = "1. 建立範例帳號並登入測試控制台。 2. 若範例設定需要金鑰，前往「Settings → Project Settings → API Keys」複製。" +
+  "[範例指南](https://example.test/setup) 3. 將測試金鑰填入範例欄位，再回到連結卡查看測試結果。" +
+  "此處僅使用虛構資料，請勿填入任何真實帳號或金鑰。";
 const chars = (text: string): number => [...text].length;
 
 test("the corner writes no address: a link keeps its words, an address goes with its brackets", () => {
   const text = captionText(COMPOSIO);
-  expect(text).not.toMatch(/https?:|www\.|\]\(|composio\.dev/);
-  expect(text).toContain("取得。官方說明 3. 將金鑰");
+  expect(text).not.toMatch(/https?:|www\.|\]\(|example\.test/);
+  expect(text).toContain("複製。範例指南 3. 將測試金鑰");
   expect(captionText("請看說明（https://example.com/a?b=1）。")).toBe("請看說明。");
   expect(captionText("Done. See (https://example.com) for more.")).toBe("Done. See for more.");
   expect(captionText("**重點**：`settings`")).toBe("重點：settings");
@@ -34,7 +34,7 @@ test("a sentence too long for a page is cut after a comma", () => {
 
 test("Raphael's 《》 open on the first page and close on the last", () => {
   const pages = captionLines(`《答。${COMPOSIO}》`, "zh-TW");
-  expect(pages[0]!.startsWith("《答。1. 建立帳號")).toBe(true);
+  expect(pages[0]!.startsWith("《答。1. 建立範例帳號")).toBe(true);
   expect(pages[pages.length - 1]!.endsWith("》")).toBe(true);
   for (const page of pages.slice(1)) expect(page.startsWith("《")).toBe(false);
   for (const page of pages.slice(0, -1)) expect(page.endsWith("》")).toBe(false);

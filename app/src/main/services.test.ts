@@ -283,7 +283,7 @@ describe("the dialog of a capability", () => {
     const rows = d.split('<div class="cs-item svc-srv"').slice(1);
     expect(rows.map((r) => /<span class="nm">([^<]*)/.exec(r)![1])).toEqual(["OpenRouter", "Brave", "Tavily", "Exa", "SearXNG"]);
     expect(rows.map((r) => /<span class="svc-tag">(.*?)<\/span>/.exec(r)?.[1])).toEqual(["共用金鑰", "需要金鑰", "需要金鑰", "需要金鑰", "需要網址"]);
-    // every choice says in one line what it costs and needs (owner, 2026-11-07)
+    // every choice says in one line what it costs and needs
     expect(rows.every((r) => /<span class="ds">[^<]{8,}<\/span>/.test(r))).toBe(true);
     expect(rows[0]).toContain("不用另外申請");
     expect(rows[0]).toMatch(/^ data-svc="service" data-service="openrouter">/);

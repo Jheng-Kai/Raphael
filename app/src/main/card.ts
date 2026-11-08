@@ -23,7 +23,7 @@ export function cardStatusHTML(status: CardStatus, text?: string): string {
   return `<span class="card-status is-${status}" role="status"><i aria-hidden="true"></i><span data-card-status-text>${esc(text ?? t(({waiting: "cards.waiting", ready: "cards.ready", done: "cards.done", failed: "cards.failed"} as const)[status]))}</span></span>`;
 }
 
-/** The × at a card's top right that puts a failed card away (owner, 2026-11-08: a ×, never a 「關閉」 under it). */
+/** The × at a card's top right that puts a failed card away. */
 const failedClose = (): string => iconBtn("x", t("common.close"), " data-card-failed-close", "card-close");
 
 export function cardHTML(card: CardOptions): string {
@@ -65,7 +65,7 @@ export function cardFailure(card: Element | null, retry: () => void, dismiss?: (
   original.forEach(footer => { footer.hidden = true; });
   const status = card.querySelector(".card-status");
   const prior = status?.outerHTML;
-  // 重試 below what went wrong; putting it away is the × at the card's top right, not a 「關閉」 beside 重試 (owner, 2026-11-08).
+  // 重試 below what went wrong; putting it away is the × at the card's top right, not a 「關閉」 beside 重試.
   const head = card.querySelector<HTMLElement>(":scope > .card-head");
   let dismissButton = head?.querySelector<HTMLElement>("[data-card-dismiss]") ?? null;
   const clear = (): void => { failure!.remove(); dismissButton?.remove(); original.forEach(footer => { footer.hidden = false; }); if (prior) { const pill = card.querySelector(".card-status"); if (pill) pill.outerHTML = prior; } };

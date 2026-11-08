@@ -1,5 +1,5 @@
 import { visibilityGate } from "../window-visibility";
-// Home (owner, 2026-11-08): Raphael's emblem, alive, beside the greeting and his line; then the day in numbers and
+// Home: Raphael's emblem, alive, beside the greeting and his line; then the day in numbers and
 // pictures: four figures, today's hours as a band over today's schedule as a table, and what was finished on each of
 // the last two weeks as a chart. No member rows, open-item list, yesterday paragraph or health check, and no slime:
 // 「我希望它更有圖像的感覺…表格啊、數據啊、文字啊」.
@@ -66,8 +66,7 @@ export function dayLine(data: HomeOverview): string {
   return t("home.lineQuiet");
 }
 
-/** His line as he says it: his own lead word first (告。), unless his words already open with one (owner, 2026-11-08:
- * Raphael's 告／否 wherever he speaks). The 《…》 caption wrapper stays the desktop's (R-UI-42). */
+/** His line as he says it: his own lead word first (告。), unless his words already open with one. The 《…》 caption wrapper stays the desktop's (R-UI-42). */
 export function raphaelSays(words: string): string {
   const lead = t("home.notice");
   return /^(告|解|否|是)。|^(Notice|Answer|No|Yes)\./.test(words.trim()) ? words : `${lead}${words}`;
@@ -155,7 +154,7 @@ function eventRowHTML(item: HomeItem, now: number, times = 1): string {
 function scheduleHTML(data: HomeOverview): string {
   const now = data.generated_at_ms, today = dateKey(new Date(now));
   const rows = todaysSchedule(data);
-  // Every item of today, all drawn: no 「還有…」 to press (owner, 2026-11-08).
+  // Every item of today, all drawn: no 「還有…」 to press.
   const notice = googleNoticeHTML(data.calendar_google, { go: 'data-home-go="connections"', dismiss: "data-home-dismiss" });
   const table = rows.length
     ? `<div class="ho-thead" aria-hidden="true"><span>${esc(t("home.colTime"))}</span><span>${esc(t("home.colTitle"))}</span><span>${esc(t("home.colKind"))}</span></div>` +

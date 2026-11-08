@@ -488,10 +488,10 @@ async def test_short_clean_text_pastes_and_saves_traditional_speech_as_it_is(rou
 
 
 async def test_a_fallback_drops_the_obvious_stutters_but_the_history_keeps_the_raw_text(router):
-    r = await finalize(router, "之後會有 Hermes，Hermes agents 可以做任何，任何事情")
+    r = await finalize(router, "之後會有 Helion，Helion agents 可以做任何，任何事情")
     assert r["fallback_reason"] == "no_key"
-    assert r["text"] == "之後會有 Hermes agents 可以做任何事情"
-    assert r["raw_text"] == "之後會有 Hermes，Hermes agents 可以做任何，任何事情"
+    assert r["text"] == "之後會有 Helion agents 可以做任何事情"
+    assert r["raw_text"] == "之後會有 Helion，Helion agents 可以做任何，任何事情"
     row = (await router.call("history.latest", {}))["item"]
     assert row["text"] == r["text"] and row["raw_text"] == r["raw_text"]
 
@@ -510,9 +510,9 @@ async def test_a_cleaned_text_is_the_models_to_write_and_its_repeats_stay(
     router, fake_client, keys
 ):
     keys.set(KEY)
-    fake_client.next_completion = completion({"text": "Hermes, Hermes agent 好用。"})
-    r = await finalize(router, "Hermes Hermes agent 好用")
-    assert (r["cleaned"], r["text"]) == (True, "Hermes, Hermes agent 好用")
+    fake_client.next_completion = completion({"text": "Helion, Helion agent 好用。"})
+    r = await finalize(router, "Helion Helion agent 好用")
+    assert (r["cleaned"], r["text"]) == (True, "Helion, Helion agent 好用")
 
 
 async def test_a_fallback_converts_only_the_simplified_words_of_mixed_speech(router):
@@ -902,28 +902,28 @@ async def test_dictionary_learn_adds_the_corrected_words(router):
         {
             "corrections": [
                 {"word": "手機", "misheard": "首機"},
-                {"word": "Typeless", "misheard": "type less"},
+                {"word": "Typepad", "misheard": "type pad"},
             ]
         },
     )
-    assert learned == {"learned": ["手機", "Typeless"]}
+    assert learned == {"learned": ["手機", "Typepad"]}
     # The words are terms now; the forms are only hints until the pairs are seen again.
     entries = (await router.call("dictionary.list", {}))["entries"]
     assert {(e["word"], tuple(e["misheard"]), e["source"]) for e in entries} == {
         ("手機", (), "learned"),
-        ("Typeless", (), "learned"),
+        ("Typepad", (), "learned"),
     }
 
 
 async def test_dictionary_learn_reports_only_what_changed(router, conn):
-    dismiss(conn, "Typeless")
+    dismiss(conn, "Typepad")
     await router.call("dictionary.add", {"word": "手機", "misheard": ["首機"]})
     learned = await router.call(
         "dictionary.learn",
         {
             "corrections": [
                 {"word": "手機", "misheard": "首機"},  # known already
-                {"word": "Typeless", "misheard": "type less"},  # dismissed
+                {"word": "Typepad", "misheard": "type pad"},  # dismissed
                 {"word": "手機", "misheard": "手雞"},  # a new form of a known word
             ]
         },
@@ -955,21 +955,21 @@ async def test_dictionary_learn_makes_a_rule_only_when_a_pair_is_seen_again(rout
 
 
 async def test_a_single_name_correction_adds_the_term_and_repeated_forms_are_not_missed(router):
-    assert await learn(router, "OpenMausBot", "Open Mouse") == {"learned": ["OpenMausBot"]}
+    assert await learn(router, "CedarDesk", "Cedar Disk") == {"learned": ["CedarDesk"]}
     entry = (await router.call("dictionary.list", {}))["entries"][0]
-    assert entry["word"] == "OpenMausBot" and entry["source"] == "learned"
+    assert entry["word"] == "CedarDesk" and entry["source"] == "learned"
     assert entry["misheard"] == []  # First sighting is already a term, without a risky rule.
-    assert await learn(router, "OpenMausBot", "Open Mouse") == {
-        "learned": ["OpenMausBot"], "rules": ["OpenMausBot"]
+    assert await learn(router, "CedarDesk", "Cedar Disk") == {
+        "learned": ["CedarDesk"], "rules": ["CedarDesk"]
     }
-    assert await learn(router, "OpenMausBot", "open maus") == {"learned": ["OpenMausBot"]}
-    assert await learn(router, "OpenMausBot", "open maus") == {
-        "learned": ["OpenMausBot"], "rules": ["OpenMausBot"]
+    assert await learn(router, "CedarDesk", "cedar dask") == {"learned": ["CedarDesk"]}
+    assert await learn(router, "CedarDesk", "cedar dask") == {
+        "learned": ["CedarDesk"], "rules": ["CedarDesk"]
     }
-    assert await learn(router, "OpenMausBot", "Open Mouse") == {"learned": []}
+    assert await learn(router, "CedarDesk", "Cedar Disk") == {"learned": []}
     entries = (await router.call("dictionary.list", {}))["entries"]
     assert len(entries) == 1
-    assert entries[0]["misheard"] == ["Open Mouse", "open maus"]
+    assert entries[0]["misheard"] == ["Cedar Disk", "cedar dask"]
 
 
 async def test_dictionary_learn_counts_the_same_pair_once_in_a_dictation(router):

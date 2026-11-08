@@ -116,7 +116,7 @@ test("a changed row preserves its slime clock and active transition", async () =
   expect(records).toHaveLength(0);
 });
 
-test("a face never becomes another member's: Raphael's face where Testarossa's stood is a new one, so her bow cannot move on him (owner, 2026-11-07)", () => {
+test("a face never becomes another member's: Raphael's face where Testarossa's stood is a new one, so her bow cannot move on him", () => {
   const root=document.createElement('div');
   patchHTML(root,`<button>${slimeSVG({character:'testarossa'},{state:'idle',member:7})}</button>`);
   const before=root.querySelector('svg.slime');

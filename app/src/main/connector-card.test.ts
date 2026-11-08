@@ -90,7 +90,7 @@ describe("a connector card", () => {
     expect(visible(own)).toBe("連結 Orbit 等你填入 需要你自己的開發者應用程式 設定開發者應用程式");
     // A failure names what is missing and offers the form again, never a bare "retry".
     const rejected = connectorCardHTML({ ...key, state: "failed", error: "key_rejected" });
-    expect(visible(rejected)).toBe("連結 Acme 未能完成 這把金鑰沒有被接受，請再填一次 填入金鑰"); // closed by the × at its top right (owner, 2026-11-08)
+    expect(visible(rejected)).toBe("連結 Acme 未能完成 這把金鑰沒有被接受，請再填一次 填入金鑰"); // closed by the × at its top right
     expect(actions(rejected)).toEqual(["card-setup"]);
     expect(actions(connectorCardHTML({ ...key, state: "cancelled" }))).toEqual(["card-setup"]);
     expect(actions(connectorCardHTML({ ...key, state: "authorizing" }))).toEqual(["card-cancel"]);

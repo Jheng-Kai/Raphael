@@ -141,7 +141,7 @@ test("a routine receipt preserves the member who owns its inspection target", ()
   expect(root.querySelector('[data-routine="9"]')?.getAttribute("data-routine-member")).toBe("4");
 });
 
-test("a sidebar row keeps the name and its last line, without a role pill or a time, as Grok Bot's", () => {
+test("a sidebar row keeps the name and its last line, without a role pill or a time", () => {
   const root = dom(memberRowHTML({id: 1, name: "Sample", role: "Research", last_at: time} as Member, {current: 1, previews: new Map(), fresh: new Set()}));
   expect(root.querySelector(".mb-row-t i")).toBeNull();
   expect(root.querySelector("time")).toBeNull();

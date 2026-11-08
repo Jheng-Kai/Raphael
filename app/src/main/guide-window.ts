@@ -1,9 +1,9 @@
-// The guide is a card of its own size, as Typeless's is (owner, 2026-11-07): while it is up the window is exactly the
+// The guide is a card of its own size: while it is up the window is exactly the
 // card under the control strip, cannot be resized or maximized, and afterwards it returns to the size, place and
 // maximized state it had.
 import { LogicalSize, type PhysicalPosition, type PhysicalSize } from "@tauri-apps/api/window";
 
-/** The card (`.ob-card` in styles.css): roomy enough for a store of three columns (owner, 2026-11-09: 「導覽的頁面有一點點太小」). */
+/** The card (`.ob-card` in styles.css): roomy enough for a store of three columns. */
 export const GUIDE_WIDTH = 1080;
 export const GUIDE_HEIGHT = 720;
 /** The smallest the window may be (tauri.conf.json), and the edge kept free around it on a small screen. */
@@ -36,7 +36,7 @@ export async function fitGuideWindow(win: GuideWindow, controls: number, root: H
   if (restore) return;
   const maximized = await win.isMaximized();
   // The size to give back is the window's ordinary one, read once it is no longer maximized: read while maximized it is
-  // the whole screen, and giving that back made the screen-sized window what 「還原」 returned to (owner, 2026-11-08).
+  // the whole screen, and giving that back made the screen-sized window what 「還原」 returned to.
   if (maximized) await win.unmaximize();
   const size = await win.outerSize(), position = await win.outerPosition();
   restore = async () => {

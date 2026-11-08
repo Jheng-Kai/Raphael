@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Home (pages/home.ts, owner 2026-11-08): Raphael's live emblem beside the greeting and his line, four figures, today's
+// Home (pages/home.ts): Raphael's live emblem beside the greeting and his line, four figures, today's
 // hours as a band over today's schedule as a table, and the last two weeks as a chart. No member rows, open-item list,
 // yesterday paragraph or health check; no spend, allowance or dictation figures; no slime.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -119,7 +119,7 @@ describe("Home's hero", () => {
     expect(page.querySelector(".ho-orb .av, .ho-orb img, .ho-orb svg.slime")).toBeNull();
     expect(page.querySelector(".ho-date")!.textContent).toContain("27");
     expect(page.textContent).not.toMatch(/US\$|%|字/);
-    // No member rows, open-item list, yesterday or health check (owner, 2026-11-08), and no face anywhere.
+    // No member rows, open-item list, yesterday or health check, and no face anywhere.
     for (const gone of [".ho-team", ".ho-pending", ".ho-yesterday", ".ho-checks", ".ho-member", ".av", "svg.slime", ".ho-card", ".ho-spend", ".ho-dictation"])
       expect(page.querySelector(gone), gone).toBeNull();
     const evening = { ...overview(5), generated_at_ms: new Date(2026, 9, 27, 20).getTime() };
@@ -134,7 +134,7 @@ describe("Home's hero", () => {
     sample.activity = activity();
     expect(dayLine(sample)).toBe("今天有 1 個行程，1 件事在等你回答。");
     sample.today_plan = { date: "2026-10-27", items: [], narrative: "今天有兩個行程。", state: "ready", reason: null, model: null };
-    // He speaks as himself: his lead word 告。 first (owner, 2026-11-08), once, never doubled.
+    // He speaks as himself: his lead word 告。 first, once, never doubled.
     expect(parse(homeHTML(sample)).querySelector(".ho-hero .ho-line")!.textContent).toBe("告。今天有兩個行程。");
     sample.today_plan = { ...sample.today_plan, narrative: "解。研究方向還在等你決定。" };
     expect(parse(homeHTML(sample)).querySelector(".ho-hero .ho-line")!.textContent).toBe("解。研究方向還在等你決定。");
@@ -246,7 +246,7 @@ describe("today's schedule", () => {
     expect(rows[0]!.classList.contains("is-rhythm") && !rows[0]!.querySelector(".av")).toBe(true);
     expect(rows[1]!.classList.contains("is-past")).toBe(true);
     expect(rows[2]!.classList.contains("is-own")).toBe(true);
-    // No 「還有…」 to press (owner, 2026-11-08): the heading's calendar icon is the way to the whole calendar.
+    // No 「還有…」 to press: the heading's calendar icon is the way to the whole calendar.
     expect(page.el.querySelector(".ho-schedule .ho-more, .ho-count")).toBeNull();
     rows[2]!.click();
     expect(app.go).toHaveBeenLastCalledWith("automations", "calendar:2026-10-27:own%3A4");

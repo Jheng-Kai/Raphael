@@ -64,8 +64,7 @@ const MARKS: Record<string, ServiceIconId> = {
 const LOCAL_ICONS: Record<string, IconName> = { builtin: "monitor", same: "sparkle", model: "bot" };
 
 /**
- * What choosing a service means, in one line: what it costs and what it needs (owner, 2026-11-07: a choice that only says
- * 「使用」 means nothing). Shown under the service in the list and at the top of its page.
+ * What choosing a service means, in one line: what it costs and what it needs. Shown under the service in the list and at the top of its page.
  */
 const WHY: Record<string, MessageKey> = {
   "search.openrouter": "services.why.searchOpenrouter", "search.brave": "services.why.searchBrave", "search.tavily": "services.why.searchTavily",

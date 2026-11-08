@@ -1,8 +1,8 @@
 {
   "driver": "cua-driver 0.37.0 Linux",
-  "source": "Owner's real Docker tools/list, 2026-10-29; brief-member-computer-fix-2.md",
+  "source": "Pinned Linux driver tool-name contract; schemas are synthetic",
   "reported_count": 67,
-  "count_note": "The brief says 67 but enumerates 68 unique names, including Raphael's attach_file and vm_exec. Preserve every supplied name.",
+  "count_note": "The reported count is 67, while the contract lists 68 unique names including attach_file and vm_exec. Preserve every supplied name.",
   "schema_status": "Names only: the pinned Linux wheel is not available offline. Tests supply synthetic object schemas, not recorded driver schemas.",
   "raphael_tools": ["attach_file", "vm_exec"],
   "names": [

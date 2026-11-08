@@ -80,7 +80,7 @@ const responderChoices = (list: MembersList, selected: Set<number>) => [
 /**
  * A group's people as one tinted list of rows (the member settings page's lists): a face, the name and, at the right,
  * a round check (who takes part) or a bare dropdown (a role, who answers first). The chief is always in and cannot be
- * taken out (owner, 2026-11-09: these dialogs read as one calm list, not tiles and stacked fields).
+ * taken out.
  */
 const memberRowsHTML = (list: MembersList, selected: Set<number>): string =>
   `<div class="room-list" role="group" aria-label="${esc(t("rooms.members"))}">${primaryFirst(list.members, primaryIdOf(list)).map(m =>

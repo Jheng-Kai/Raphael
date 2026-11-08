@@ -99,8 +99,7 @@ export function permissionCardHTML(card: PermissionCard, answerable = true, memb
     status: waiting ? "waiting" : card.state === "allowed" || card.state === "always" ? "done" : "ready",
     statusText: waiting ? cardPromptText("permission") : t(({ allowed: "cards.allowed", always: "cards.always", denied: "cards.denied", expired: "cards.expired", cancelled: "cards.cancelled", pending: "cards.waiting" } as const)[card.state]),
     body,
-    // A command that waits is shown itself, not behind a disclosure: the owner allows what they can read (owner,
-    // 2026-11-08: 「我根本不知道指令是甚麼」). Once answered it folds away with the rest.
+    // A command that waits is shown itself, not behind a disclosure: the owner allows what they can read. Once answered it folds away with the rest.
     content: waiting && localCard(card) ? details : !waiting || card.message || !body?.includes(card.summary) ? cardDisclosureHTML(card.id, details) : "",
     actions: actionHTML(card, answerable), cls: "permission-card",
     attrs: ` data-permission-card="${esc(card.id)}" data-card-state="${esc(card.state)}" data-source="${esc(card.source)}" data-kind="${esc(card.kind)}" data-digest="${esc(card.digest)}"`,
