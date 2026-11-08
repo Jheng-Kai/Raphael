@@ -35,15 +35,6 @@ export interface HomeNarrative {
   model: string | null;
   generated_at_ms?: number;
 }
-export interface HomeWorkCounts { work: number; routines: number; messages: number }
-export interface HomeDoneItem { id: string; kind: "work" | "routines" | "messages"; title: string; at_ms: number; turn_id: number | null; source: string | null }
-export interface HomeYesterday extends HomeNarrative {
-  date: string;
-  start_ms: number;
-  end_ms: number;
-  members: { member_id: number; name: string; items: HomeDoneItem[]; counts: HomeWorkCounts }[];
-  counts: HomeWorkCounts;
-}
 /** Work still open today, beside the calendar's items: a task or an owner turn that has not finished. */
 export interface HomeUnfinished { id: string; kind: "unfinished"; member_id: number; title: string; state: string; at_ms: number }
 export interface HomeTodayPlan extends HomeNarrative {
@@ -53,17 +44,6 @@ export interface HomeTodayPlan extends HomeNarrative {
 }
 /** One thing the offline self-check looked at: a key, a model, a connected app, memory. */
 export interface HomeCheck { id: string; name?: string; label_key: string; status: "ok" | "warn" | "error"; detail: string | null; detail_key: string | null }
-/** A member as Home tells it: its state, what it does now or did last, its next routine and what waits for the owner. */
-export interface HomeMember {
-  id: number;
-  name: string;
-  avatar?: string;
-  hidden?: boolean;
-  state?: string;
-  current_or_last: string;
-  next_routine: { id: number; title: string; at_ms: number } | null;
-  waiting_for_owner: HomeItem[];
-}
 /** One local day of finished work as Home charts it: the owner's work, routines run well and not, messages handled, and
  * work that failed, was interrupted or hit a limit. Each piece is counted once, on the day it ended. */
 export interface HomeActivityDay { date: string; work: number; routines_ok: number; routines_failed: number; messages: number; failed: number }
@@ -86,9 +66,7 @@ export interface HomeOverview {
   counts: { today: number; reports: number; calendar: number };
   usage: { month_usd: number; limit_usd: number; daily: number[]; allowances: CliAllowances };
   dictation: { words: number; time_saved_seconds: number; speed_wpm: number | null; audio_seconds: number; daily: number[] };
-  yesterday?: HomeYesterday;
   today_plan?: HomeTodayPlan;
   health?: { checks: HomeCheck[]; reason: string | null };
-  members?: HomeMember[];
   activity?: HomeActivity;
 }

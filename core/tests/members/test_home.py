@@ -317,56 +317,32 @@ async def test_concurrent_home_allowance_refreshes_share_the_pending_read(home, 
     assert calls == [{}]
 
 
-async def test_yesterday_uses_local_midnights_and_actual_completion(home, rig):
-    from datetime import datetime, UTC
+async def test_activity_counts_work_on_the_local_day_it_finished(home, rig):
+    from datetime import datetime
     def at(value):
         return int(datetime.fromisoformat(value).timestamp() * 1000)
-    rig.wall.now = at("2026-11-08T00:05:00+08:00")
-    # This long-running turn began before yesterday, then finished on the local yesterday.
+    # This long-running turn began the day before, then finished at the local midnight that starts yesterday.
     rig.wall.now = at("2026-11-06T23:00:00+08:00")
     old = add(rig)
     rig.conn.execute("INSERT INTO run_metrics(kind,run_id,started_at_ms,finished_at_ms) VALUES('turn',?,?,?)",
                      (old, rig.wall.now, at("2026-11-07T00:00:00+08:00")))
     rig.wall.now = at("2026-11-07T23:59:59+08:00")
-    message = add(rig, source="telegram")
+    add(rig, source="telegram")
     rig.wall.now = at("2026-11-08T00:00:00+08:00")
-    excluded = add(rig)
+    add(rig)
     rig.wall.now = at("2026-11-08T00:05:00+08:00")
-    value = (await rig.call("home.overview", {"tz": "Asia/Taipei"}))["yesterday"]
-    assert value["date"] == "2026-11-07"
-    assert datetime.fromtimestamp(value["start_ms"] / 1000, UTC).isoformat() == "2026-11-06T16:00:00+00:00"
-    items = value["members"][0]["items"]
-    assert [item["turn_id"] for item in items] == [old, message]
-    assert excluded not in [item["turn_id"] for item in items]
-    assert value["counts"] == {"work": 1, "routines": 0, "messages": 1}
-    assert (await rig.call("home.overview"))["yesterday"]["date"] == "2026-11-07"
-
-
-async def test_yesterday_deduplicates_routine_task_and_turn(home, rig):
-    from datetime import timedelta
-    routine = (await rig.call("routines.create", {"member_id": 0, "title": "Inbox", "prompt": "Check Gmail",
-              "schedule": {"kind": "daily", "time": "09:00"}}))["routine"]
-    now = rig.wall.now
-    rig.wall.now -= int(timedelta(days=1).total_seconds() * 1000)
-    turn = add(rig)
-    task = rig.background.submit(session_id="run", text="Inbox", language="en", model="", routine_id=routine["id"])
-    rig.conn.execute("UPDATE worker_tasks SET state='done',turn_id=?,finished_at_ms=? WHERE id=?", (turn, rig.wall.now, task))
-    rig.conn.execute("INSERT INTO routine_runs(routine_id,started,finished,status,turn_id) VALUES(?,?,?,'done',?)",
-                     (routine["id"], rig.wall.now, rig.wall.now, turn))
-    rig.wall.now = now
-    value = (await rig.call("home.overview"))["yesterday"]
-    assert value["counts"] == {"work": 0, "routines": 1, "messages": 0}
-    assert value["members"][0]["items"][0]["title"] == "Inbox"
+    days = {day["date"]: day for day in (await rig.call("home.overview", {"tz": "Asia/Taipei"}))["activity"]["days"]}
+    assert (days["2026-11-06"]["work"], days["2026-11-07"]["work"], days["2026-11-07"]["messages"], days["2026-11-08"]["work"]) == (0, 1, 1, 1)
 
 
 async def test_no_model_returns_structured_only_without_writes(home, rig):
     add(rig, status="confirm")
     before = rig.conn.total_changes
     value = await rig.call("home.overview")
-    for field in ("yesterday", "today_plan"):
-        assert value[field]["narrative"] is None
-        assert value[field]["state"] == "unavailable"
-        assert value[field]["reason"] == "model_unavailable"
+    assert value["today_plan"]["narrative"] is None
+    assert value["today_plan"]["state"] == "unavailable"
+    assert value["today_plan"]["reason"] == "model_unavailable"
+    assert "yesterday" not in value and "members" not in value
     assert value["today_plan"]["items"][0]["kind"] == "question"
     assert rig.conn.total_changes == before
     assert home.narratives.tasks == {}
@@ -389,22 +365,22 @@ def narrative_model(rig, monkeypatch):
 async def test_daily_narratives_are_single_flight_cached_and_survive_restart(home, rig, narrative_model):
     from raphael_core.home_digest import DailyNarratives
     first = await rig.call("home.overview")
-    assert first["yesterday"]["state"] == first["today_plan"]["state"] == "pending"
+    assert first["today_plan"]["state"] == "pending"
     again = await rig.call("home.overview")
     assert again["today_plan"]["state"] in ("pending", "ready")
     await asyncio.gather(*list(home.narratives.tasks.values()))
     ready = await rig.call("home.overview")
-    assert ready["yesterday"]["narrative"] == "The team finished its work."
-    assert len(narrative_model) == 2
+    assert ready["today_plan"]["narrative"] == "The team finished its work."
+    assert len(narrative_model) == 1
     assert all(call["model"] == rig.memory._model(0) and call["fallbacks"] == [] for call in narrative_model)
     assert all("zh-TW" in call["system"] for call in narrative_model)
     home.narratives = DailyNarratives(rig.conn, rig.service, rig.wall)
-    assert (await rig.call("home.overview"))["yesterday"] == ready["yesterday"]
-    assert len(narrative_model) == 2
+    assert (await rig.call("home.overview"))["today_plan"]["narrative"] == ready["today_plan"]["narrative"]
+    assert len(narrative_model) == 1
     rig.wall.now += 86_400_000
-    assert (await rig.call("home.overview"))["yesterday"]["state"] == "pending"
+    assert (await rig.call("home.overview"))["today_plan"]["state"] == "pending"
     await asyncio.gather(*list(home.narratives.tasks.values()))
-    assert len(narrative_model) == 4
+    assert len(narrative_model) == 2
 
 
 async def test_overview_never_waits_for_narrative_and_shutdown_cancels_it(home, rig, narrative_model, monkeypatch):
@@ -431,9 +407,9 @@ async def test_failed_model_returns_reason_and_never_retries_or_falls_back(home,
     await rig.call("home.overview")
     await asyncio.gather(*list(home.narratives.tasks.values()))
     value = await rig.call("home.overview")
-    assert value["yesterday"]["reason"] == "generation_failed"
-    assert value["yesterday"]["narrative"] is None
-    assert len(calls) == 2 and all(call["fallbacks"] == [] for call in calls)
+    assert value["today_plan"]["reason"] == "generation_failed"
+    assert value["today_plan"]["narrative"] is None
+    assert len(calls) == 1 and all(call["fallbacks"] == [] for call in calls)
     assert "Private provider text" not in json.dumps(value)
 
 
@@ -453,18 +429,12 @@ async def test_today_includes_every_event_and_high_frequency_routine_in_time_ord
     assert [item["at_ms"] for item in value["today"]] == sorted(item["at_ms"] for item in value["today"])
 
 
-async def test_member_snapshot_has_current_work_next_routine_and_owner_questions(home, rig):
+async def test_today_plan_lists_work_that_has_not_finished(home, rig):
     add(rig, status="confirm")
     task = rig.background.submit(session_id="busy", text="Review the mail\nPrivate details", language="en", model="")
     rig.conn.execute("UPDATE worker_tasks SET state='running' WHERE id=?", (task,))
-    routine = (await rig.call("routines.create", {"member_id": 0, "title": "Later", "prompt": "Check", "schedule": {"kind": "daily", "time": "17:00"}}))["routine"]
     value = await rig.call("home.overview")
-    member = value["members"][0]
-    assert member["state"] == member["activity"]
-    assert member["current_or_last"] == "Review the mail"
-    assert member["next_routine"] == {"id": routine["id"], "title": "Later", "at_ms": rig.service.store.routine(routine["id"]).next_run_ms}
-    assert member["waiting_for_owner"][0]["kind"] == "question"
-    assert any(item["kind"] == "unfinished" for item in value["today_plan"]["items"])
+    assert any(item["kind"] == "unfinished" and item["title"].startswith("Review the mail") for item in value["today_plan"]["items"])
 
 
 async def test_health_mirrors_only_existing_self_check_observations(home, rig):
@@ -486,29 +456,18 @@ async def test_health_mirrors_only_existing_self_check_observations(home, rig):
     assert not any(check["id"] in ("core", "storage", "backup", "computer") for check in checks)
 
 
-async def test_a_delegated_turn_is_not_yesterdays_finished_work_until_its_task_finishes(home, rig):
+async def test_a_delegated_turn_counts_on_the_day_its_task_finishes(home, rig):
     now = rig.wall.now
     rig.wall.now -= 86_400_000
     turn = add(rig)
     task = rig.background.submit(session_id="long", text="Long project", language="en", model="")
     rig.conn.execute("UPDATE worker_tasks SET turn_id=?,state='done',finished_at_ms=? WHERE id=?", (turn, now, task))
     rig.wall.now = now
-    assert (await rig.call("home.overview"))["yesterday"]["counts"]["work"] == 0
-    rig.wall.now += 86_400_000
-    value = (await rig.call("home.overview"))["yesterday"]
-    assert value["counts"]["work"] == 1
-    assert value["members"][0]["items"][0]["id"] == f"task:{task}"
+    days = (await rig.call("home.overview"))["activity"]["days"]
+    assert (days[-2]["work"], days[-1]["work"]) == (0, 1)
 
 
-async def test_yesterday_follows_a_twenty_five_hour_local_dst_day(home, rig):
-    from datetime import datetime
-    rig.wall.now = int(datetime.fromisoformat("2026-11-02T00:05:00-05:00").timestamp() * 1000)
-    value = (await rig.call("home.overview", {"tz": "America/New_York"}))["yesterday"]
-    assert value["date"] == "2026-11-01"
-    assert value["end_ms"] - value["start_ms"] == 25 * 3_600_000
-
-
-async def test_durable_owner_question_is_in_today_plan_and_member_waiting(home, rig):
+async def test_durable_owner_question_is_in_today_and_today_plan(home, rig):
     from raphael_core.agent.owner_questions import OwnerQuestions
     turn = add(rig, status="running")
     task = rig.background.submit(session_id="owner", text="Research", language="en", model="")
@@ -517,7 +476,6 @@ async def test_durable_owner_question_is_in_today_plan_and_member_waiting(home, 
     value = await rig.call("home.overview")
     assert value["today"][0]["id"] == f"question:owner:{question['id']}"
     assert value["today"][0]["title"] == "Which source should I use?"
-    assert value["members"][0]["waiting_for_owner"][0]["turn_id"] == turn
     assert any(item["kind"] == "question" for item in value["today_plan"]["items"])
 
 
@@ -541,9 +499,9 @@ async def test_selected_api_model_never_uses_auxiliary_or_openrouter_availabilit
     monkeypatch.setattr(rig.memory, "_base_client", ProviderRouter(SimpleNamespace(available=available), None, "memory"))
     rig.service._settings.set("agent_model", "@chosen:owner-model")
     value = await rig.call("home.overview")
-    assert value["yesterday"]["model"] == "@chosen:owner-model"
-    assert value["yesterday"]["reason"] == "model_unavailable"
-    assert checked == ["@chosen:owner-model", "@chosen:owner-model"]
+    assert value["today_plan"]["model"] == "@chosen:owner-model"
+    assert value["today_plan"]["reason"] == "model_unavailable"
+    assert checked == ["@chosen:owner-model"]
     assert not home.narratives.tasks
 
 
@@ -565,7 +523,7 @@ async def test_selected_cli_model_is_used_with_no_api_fallback(home, rig, monkey
     await asyncio.gather(*list(home.narratives.tasks.values()))
     value = await rig.call("home.overview")
     assert value["today_plan"]["narrative"] == "Today the team will review the mail."
-    assert len(calls) == 2
+    assert len(calls) == 1
     assert all(call["model"] == "cli:codex:owner-model" and call["no_tools"] and call["tools"] == [] for call in calls)
 
 
@@ -600,16 +558,6 @@ async def test_plan_waits_for_shared_calendar_read_in_background_only(home, rig,
         await calendar.aclose()
 
 
-async def test_idle_member_shows_the_last_finished_task_instead_of_a_new_pending_turn(home, rig):
-    add(rig)
-    rig.wall.now += 1_000
-    task = rig.background.submit(session_id="finished", text="Most recent work", language="en", model="")
-    rig.conn.execute("UPDATE worker_tasks SET state='done',finished_at_ms=? WHERE id=?", (rig.wall.now, task))
-    rig.wall.now += 1_000
-    add(rig, status="confirm")
-    assert (await rig.call("home.overview"))["members"][0]["current_or_last"] == "Most recent work"
-
-
 async def test_today_keeps_recorded_runs_of_a_paused_or_exhausted_routine(home, rig):
     routine = (await rig.call("routines.create", {"member_id": 0, "title": "Completed review", "prompt": "Review", "enabled": False,
                "schedule": {"kind": "daily", "time": "09:00", "max_runs": 1}}))["routine"]
@@ -617,7 +565,6 @@ async def test_today_keeps_recorded_runs_of_a_paused_or_exhausted_routine(home, 
                      (routine["id"], rig.wall.now, rig.wall.now, rig.wall.now))
     value = await rig.call("home.overview")
     assert [item["routine_id"] for item in value["today"]] == [routine["id"]]
-    assert value["members"][0]["next_routine"] is None
 
 
 async def test_health_does_not_require_sign_in_for_a_keyless_local_model(home, rig):

@@ -664,8 +664,8 @@ export function installMock(fixture, config = {}, target = window) {
       data.status.spend.month_usd = .88;
     }
   }
-  // Home as the core sends it since brief 9 (2026-11-08): every item of today, yesterday's numbers and Raphael's words on
-  // them, his line on today, each member's last work and next routine, and what the offline health check looked at.
+  // Home as the core sends it (2026-11-08): every item of today, his line on today, the offline health check and the
+  // numbers Home charts.
   {
     const home = data.home, now = home.generated_at_ms, quiet = variant.homeSparse || variant.homeEmpty;
     const dayKey = at => { const d = new Date(at); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
@@ -679,14 +679,8 @@ export function installMock(fixture, config = {}, target = window) {
     home.counts.today = home.today.length;
     const story = narrative => quiet ? { narrative: null, state: "unavailable", reason: "model_unavailable", model: null }
       : { narrative, state: "ready", reason: null, model: "openrouter:sample", generated_at_ms: now };
-    const done = (member_id, work, routines, messages, titles) => ({ member_id, name: person(member_id).name, counts: { work, routines, messages },
-      items: titles.map((title, index) => ({ id: `turn:${member_id}${index}`, kind: index < work ? "work" : "routines", title, at_ms: now - 86400000 + index * 3600000, turn_id: null, source: null })) });
-    const groups = quiet ? [] : [done(1, 2, 2, 0, ["整理本週新聞素材", "比對兩份研究摘要", "每天早上的進度", "午間資訊摘要"]), done(2, 2, 1, 2, ["比較三家供應商報價", "更新專案時程", "每週進度檢查"])];
-    const sum = kind => groups.reduce((total, group) => total + group.counts[kind], 0);
-    home.yesterday = { date: "2026-10-23", start_ms: now - 86400000, end_ms: now, members: groups, counts: { work: sum("work"), routines: sum("routines"), messages: sum("messages") },
-      ...story("小晴整理了本週的新聞素材並比對兩份研究摘要，早上和中午的例行整理都準時完成。小森比較了三家供應商的報價、更新專案時程，也回覆了兩則 Telegram 訊息。沒有工作卡住。") };
     home.today_plan = { date: "2026-10-24", items: home.today, calendar_google: home.calendar_google,
-      ...story("今天有三個行程，中午前小晴會先整理午間資訊摘要；確認本週研究方向還在等你回答。") };
+      ...story("中午前小晴會先整理午間資訊摘要；確認本週研究方向還在等你回答。") };
     const check = (id, name, status = "ok", detail = null) => ({ id, name, label_key: `health.${id.split(":")[0]}`, status, detail, detail_key: detail ? "health.connection_unavailable" : null });
     home.health = { reason: null, checks: [check("key:OpenRouter", "OpenRouter"), check("brain:codex", "Codex"), check("brain:claude", "Claude"), check("connection:gmail", "Gmail"),
       check("connection:notion", "Notion", variant.problem ? "warn" : "ok", variant.problem ? "連線尚未就緒。" : null), check("memory", "")] };
@@ -702,13 +696,6 @@ export function installMock(fixture, config = {}, target = window) {
       : { days: shape.map(([work, messages, routines_ok, routines_failed, failed], i) => ({ date: dayAt(13 - i), work, routines_ok, routines_failed, messages, failed })),
           today: { routines_due: Math.max(routinesToday, 6), routines_done: 3, routines_failed: 1, events: home.today.filter(item => item.kind === "event" || item.kind === "own").length,
             questions: home.today.filter(item => item.kind === "question").length } };
-    const last = { 1: "整理本週新聞素材", 2: "比較三家供應商報價" };
-    home.members = data.members.map(member => {
-      const next = data.routines.filter(routine => routine.member_id === member.id && routine.enabled && routine.next_run).sort((a, b) => a.next_run - b.next_run)[0];
-      return { ...member, state: member.activity ?? "idle", current_or_last: quiet ? "" : last[member.id] ?? "",
-        next_routine: next ? { id: next.id, title: next.title, at_ms: next.next_run } : null,
-        waiting_for_owner: home.today.filter(item => item.kind === "question" && item.member_id === member.id) };
-    });
   }
   function usageBill(period) {
     // The shared fixture clock and browser run in Asia/Taipei.

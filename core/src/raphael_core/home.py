@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .clock import wall_clock_ms
 from .agent.history import UNFINISHED
 from .agent.owner_questions import OwnerQuestions
-from .home_digest import DailyNarratives, activity, health, member_details, yesterday
+from .home_digest import DailyNarratives, activity, health
 from .connectors.http import ConnectorFailure
 from .members.schedule import next_run
 from .members.store import ROUTINE_RUN_STATUS_SQL
@@ -83,10 +83,8 @@ class Overview(TypedDict):
     usage: HomeUsage
     dictation: DictationNumbers
     counts: dict[str, int]
-    yesterday: dict[str, Any]
     today_plan: dict[str, Any]
     health: dict[str, Any]
-    members: list[dict[str, Any]]
     activity: dict[str, Any]
 
 
@@ -547,9 +545,6 @@ class HomeOverview:
         stats = await self.router.call("stats.summary", {"days": 14})
         spend = status["spend"]
         language = self.members._ui_language(params)
-        yesterday_start = int((day - timedelta(days=1)).timestamp() * 1000)
-        previous = yesterday(self.conn, people, yesterday_start, start)
-        previous.update(date=(day - timedelta(days=1)).date().isoformat(), start_ms=yesterday_start, end_ms=start)
         unfinished = [{"id": f"task:{row['id']}", "kind": "unfinished", "member_id": row["member_id"],
                        "title": " ".join(row["text"].split())[:240], "state": row["state"], "at_ms": row["created_at_ms"]}
                       for row in self.conn.execute("SELECT id,member_id,text,state,created_at_ms FROM worker_tasks WHERE state IN ('queued','running','waiting','failed','interrupted','limit') ORDER BY created_at_ms,id")
@@ -577,9 +572,8 @@ class HomeOverview:
         charts = activity(self.conn, people, day, zone, routines_due=sum(value["kind"] == "routine" for value in today),
                           events=sum(value["kind"] in ("event", "own") for value in today), questions=len(questions))
         return {"generated_at_ms": now, "report": status, "today": today, "reports": reports[:REPORT_LIMIT], "activity": charts,
-                "yesterday": self.narratives.read("yesterday", day.date().isoformat(), zone, language, previous),
                 "today_plan": self.narratives.read("today_plan", day.date().isoformat(), zone, language, plan, prepare=prepared_plan),
-                "health": health(self.members, language), "members": member_details(self.conn, roster, routines, questions),
+                "health": health(self.members, language),
                 "calendar": calendar[:CALENDAR_LIMIT], "calendar_days": sorted(calendar_days), "calendar_events": events,
                 "calendar_google": google, "counts": {"today": len(today), "reports": len(reports), "calendar": len(calendar)},
                 "calendar_items": [value for key in sorted(month_items) for value in month_items[key]], "calendar_counts": month_counts,
