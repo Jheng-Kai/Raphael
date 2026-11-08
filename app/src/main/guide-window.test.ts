@@ -26,7 +26,7 @@ describe("the guide's window", () => {
     const root = document.createElement("div");
     const { win, calls } = fakeWindow(true);
     await fitGuideWindow(win, 32, root);
-    expect(calls).toEqual(["unmaximize", "size 960x672", "resizable false", "maximizable false", "center"]);
+    expect(calls).toEqual(["unmaximize", "size 1080x752", "resizable false", "maximizable false", "center"]);
     expect(root.dataset.windowFixed).toBe("true");
     calls.length = 0;
     await releaseGuideWindow(root);
@@ -45,5 +45,20 @@ describe("the guide's window", () => {
     calls.length = 0;
     await releaseGuideWindow(root);
     expect(calls).toEqual(["resizable true", "maximizable true", "size 1600x1000", "position 40,30"]);
+  });
+
+  test("on a small screen it takes what the screen has, never less than the app's smallest window", async () => {
+    const small = fakeWindow(false);
+    await fitGuideWindow(small.win, 32, document.createElement("div"), async () => ({ width: 1024, height: 700 }));
+    expect(small.calls[0]).toBe("size 992x668");
+    await releaseGuideWindow(document.createElement("div"));
+    const tiny = fakeWindow(false);
+    await fitGuideWindow(tiny.win, 32, document.createElement("div"), async () => ({ width: 600, height: 400 }));
+    expect(tiny.calls[0]).toBe("size 720x480");
+    await releaseGuideWindow(document.createElement("div"));
+    const unknown = fakeWindow(false);
+    await fitGuideWindow(unknown.win, 32, document.createElement("div"), async () => { throw new Error("no monitor"); });
+    expect(unknown.calls[0]).toBe("size 1080x752");
+    await releaseGuideWindow(document.createElement("div"));
   });
 });

@@ -70,17 +70,18 @@ export function memoryError(err: unknown): string {
   return describeError(err);
 }
 
+/** One entry: its words (a tag first when nobody confirmed it), and under them, quietly, whom it was told and when. */
 function entryHTML(entry: string): string {
   const mark = UNCONFIRMED.exec(entry)?.[0];
   let text = mark ? entry.slice(mark.length) : entry;
   const told = TOLD.exec(text);
   if (told) text = text.slice(0, told.index);
   return (
-    `<p class="mem-entry">` +
+    `<div class="mem-entry"><p class="mem-text">` +
     (mark ? `<span class="mem-tag">${esc(t("mem.unconfirmed"))}</span> ` : "") +
-    esc(text) +
-    (told ? ` <span class="mem-from">${esc(`${told[1]} · ${formatDate(told[2]!)}`)}</span>` : "") +
-    `</p>`
+    esc(text) + `</p>` +
+    (told ? `<span class="mem-from">${esc(`${told[1]} · ${formatDate(told[2]!)}`)}</span>` : "") +
+    `</div>`
   );
 }
 
@@ -105,30 +106,31 @@ function editorHTML(v: MemoryView, doc: MemoryDocument): string {
   );
 }
 
-/** The memory: its title with 編輯 and, with something to clear, a ⋯; then the document, and the summary's row. */
+/**
+ * The memory as a section of its page (owner, 2026-11-09: 「有點亂…達到極致的 UI、UX」): its name over one tinted card,
+ * the pencil and the ⋯ beside the name, each entry a block of its own on the card with whom it was told and when under
+ * it, and the conversation summary's row on a small card of its own under the document.
+ */
 export function memoryHTML(v: MemoryView): string {
-  const group = (rows: string[]): string =>
-    `<section class="sgroup mem" data-mem-section data-mem-space="${v.space}" aria-label="${esc(v.title)}"><div class="slist">${rows.join("")}</div></section>`;
-  if (v.status === "loading") {
-    return group([row(esc(v.title), "", `<span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span>`, { cls: "mem-head" })]);
-  }
-  if (v.status === "failed") return group([row(esc(v.title), "", "", { cls: "mem-head" }), note(st("err", t("mem.loadFailed")), ' role="alert"')]);
+  const head = (controls: string): string =>
+    `<div class="mem-head"><h2 class="mem-title">${esc(v.title)}</h2><span class="ctl">${controls}</span></div>`;
+  const section = (parts: string): string =>
+    `<section class="sgroup mem" data-mem-section data-mem-space="${v.space}" aria-label="${esc(v.title)}">${parts}</section>`;
+  if (v.status === "loading") return section(head(`<span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span>`));
+  if (v.status === "failed") return section(head("") + `<div class="mem-doc">${note(st("err", t("mem.loadFailed")), ' role="alert"')}</div>`);
   const doc = v.status;
   const entries = entriesOf(doc.text);
   const off = v.busy ? " disabled" : "";
   // A pencil, not the word: what it opens is named by its label (owner, 2026-11-08: fewer words, icons for edits).
   const edit = v.editing ? "" : iconButton("pencil", t("mem.editLabel", { p0: v.title }), ` data-mem="edit"${off}`);
   const menu = entries.length ? iconButton("more", t("mem.more", { p0: v.title }), ` data-mem="section-more" aria-haspopup="menu" aria-expanded="false"${off}`) : "";
-  const head = row(esc(v.title), "", edit + menu, { cls: "mem-head" });
   const body = v.editing
-    ? editorHTML(v, doc)
-    : entries.length
-      ? `<div class="mem-doc">${entries.map(entryHTML).join("")}</div>`
-      : `<div class="mem-doc"><p class="mem-none">${esc(t("mem.empty"))}</p></div>`;
+    ? `<div class="mem-doc is-editing">${editorHTML(v, doc)}</div>`
+    : `<div class="mem-doc">${entries.length ? entries.map(entryHTML).join("") : `<p class="mem-none">${esc(t("mem.empty"))}</p>`}</div>`;
   const summary = doc.summary
-    ? [row(esc(t("mem.summary")), "", iconButton("more", t("mem.more", { p0: t("mem.summary") }), ` data-mem="summary-more" aria-haspopup="menu" aria-expanded="false"${off}`), { cls: "mem-summary" })]
-    : [];
-  return group([head, body, ...summary]);
+    ? `<div class="mem-doc mem-summary-card">${row(esc(t("mem.summary")), "", iconButton("more", t("mem.more", { p0: t("mem.summary") }), ` data-mem="summary-more" aria-haspopup="menu" aria-expanded="false"${off}`), { cls: "mem-summary" })}</div>`
+    : "";
+  return section(head(edit + menu) + body + summary);
 }
 
 // ---------- state ----------

@@ -77,7 +77,10 @@
 .au-room-heading > b { font-size: var(--fs-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .au-room-faces { display: flex; gap: 0; flex-shrink: 0; }
 .au-room-pane .ra-dock .composer { width: 100%; max-width: var(--pa-colw); margin-inline: auto; }
-.au-room-author { font-size: var(--fs-2xs); color: var(--text-2); }
+/* A group's message is led by its face alone (owner, 2026-11-09: the name made a meeting too long); the name stays for
+   screen readers and on the face's tooltip. */
+.au-room-author { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.au-room-meta:not(:has(.au-room-reply)) { display: none; }
 /* Each message keeps its hover actions' row under it, which already parts it from the next. */
 .au-room-thread { padding: var(--sp-3) 0; gap: var(--sp-2); }
 .au-room-thread > .handoff-row, .au-room-thread > .room-intent-blocked { margin-block: var(--sp-2); }
@@ -143,8 +146,25 @@ button.au-room-reply { border: 0; font-family: inherit; cursor: pointer; }
 .handoff-files { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
 .handoff-files li { display: inline-flex; align-items: center; gap: var(--sp-2); min-width: 0; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); background: var(--panel); color: var(--text); font-size: var(--fs-xs); }
 .au-room-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.room-picked { display: flex; flex-wrap: wrap; gap: 6px; }
-.room-picked span { padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-pill); }
+/* A group's people (group-chats.ts memberRowsHTML): one tinted list of rows, as the member settings page's lists. */
+.room-list { display: grid; grid-template-columns: minmax(0, 1fr); padding: var(--sp-1); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.btn.room-row, .room-row { display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-width: 0; min-height: 44px; padding: 0 var(--sp-2) 0 var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; color: var(--text); font-size: var(--fs-sm); font-weight: var(--weight-regular); text-align: left; }
+.btn.room-row:hover:not(:disabled) { background: var(--hover); }
+.btn.room-row:disabled { opacity: 1; cursor: default; }
+.room-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Who takes part: a round check at the right, filled when chosen. */
+.room-row-mark { display: inline-grid; place-items: center; flex: none; width: 20px; height: 20px; border-radius: var(--r-pill); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--text) 30%, transparent); }
+.room-row-mark .i { width: 16px; height: 16px; }
+.btn.room-row[aria-pressed="true"] .room-row-mark { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+.btn.room-row:disabled .room-row-mark { opacity: 0.55; }
+/* A choice in a row is its words and a chevron, with no box (R-UI-102), as in Settings. */
+.room-row .sel { flex: none; width: auto; max-width: 60%; height: var(--h-ctl-sm); padding-inline: var(--sp-2); border-color: transparent; background-color: transparent; color: var(--text-2); justify-content: flex-end; gap: var(--sp-1); }
+.room-row .sel:hover:not(:disabled), .room-row .sel[aria-expanded="true"] { border-color: transparent; background-color: transparent; color: var(--text); }
+/* The default responder's choice sits in its own holder: the holder keeps the choice's whole words, which only a long
+   name may end in …. */
+.room-row > [data-responder] { display: inline-flex; flex: 0 1 auto; justify-content: flex-end; min-width: 0; max-width: 65%; }
+.room-row > [data-responder] .sel { max-width: 100%; }
+.room-row > [data-responder] .sel > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* The calendar: the rail on the left, the period on the right, in the app's own black and white. */
 .au-toolbar { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4) var(--sp-3); flex-shrink: 0; }

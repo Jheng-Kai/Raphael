@@ -77,7 +77,17 @@ const responderChoices = (list: MembersList, selected: Set<number>) => [
   ...primaryFirst(list.members, primaryIdOf(list)).filter(m => selected.has(m.id)).map(m => ({ value: `member:${m.id}`, label: m.name })),
   { value: "everyone", label: t("team.everyone") },
 ];
-const responderField = (list: MembersList, selected: Set<number>, value: string) => `<div class="au-field"><span>${esc(t("rooms.responder"))}</span><span data-responder>${sel(responderChoices(list,selected),value,t("rooms.responder"),' data-dlg="responder"')}</span></div>`;
+/**
+ * A group's people as one tinted list of rows (the member settings page's lists): a face, the name and, at the right,
+ * a round check (who takes part) or a bare dropdown (a role, who answers first). The chief is always in and cannot be
+ * taken out (owner, 2026-11-09: these dialogs read as one calm list, not tiles and stacked fields).
+ */
+const memberRowsHTML = (list: MembersList, selected: Set<number>): string =>
+  `<div class="room-list" role="group" aria-label="${esc(t("rooms.members"))}">${primaryFirst(list.members, primaryIdOf(list)).map(m =>
+    btn(faceHTML(m, 28) + `<span class="room-row-name">${esc(m.name)}</span><span class="room-row-mark" data-check aria-hidden="true">${selected.has(m.id) ? ico("check") : ""}</span>`,
+      "room-row", ` data-dlg="member" data-member="${m.id}" aria-pressed="${selected.has(m.id)}"${m.id === primaryIdOf(list) ? " disabled" : ""}`)).join("")}</div>`;
+const responderField = (list: MembersList, selected: Set<number>, value: string) =>
+  `<div class="room-list"><div class="room-row is-static"><span class="room-row-name">${esc(t("rooms.responder"))}</span><span data-responder>${sel(responderChoices(list,selected),value,t("rooms.responder"),' data-dlg="responder"')}</span></div></div>`;
 
 export async function openRoomsMenu(anchor: HTMLElement): Promise<void> {
   try {
@@ -98,11 +108,11 @@ export async function openNewGroupChat(opts: { onCreated?(room: Room): void } = 
     const dialog = openDialog({ title: t("rooms.new"), cls: "au-group-dialog", body:
       `<label class="au-field"><span>${esc(t("rooms.name"))}</span><input id="room-name" class="mb-fin" maxlength="24" autocomplete="off" value="${esc(list.members.find(m=>m.id===primaryIdOf(list))?.name??"Raphael")}" placeholder="${esc(t("rooms.namePlaceholder"))}" aria-label="${esc(t("rooms.name"))}"></label>` +
       `<div class="au-field"><span>${esc(t("rooms.group"))}</span>${sel(choices, group, t("rooms.group"), ' data-dlg="group"')}</div>` +
-      `<section class="au-field"><span>${esc(t("rooms.members"))}</span><div class="au-members au-room-members">${primaryFirst(list.members, primaryIdOf(list)).map(m => btn(faceHTML(m,30)+`<span>${esc(m.name)}</span><span data-check>${m.id===primaryIdOf(list)?ico("check"):""}</span>`, "", ` data-dlg="member" data-member="${m.id}" aria-pressed="${m.id===primaryIdOf(list)}"${m.id===primaryIdOf(list)?" disabled":""}`)).join("")}</div></section>` + `<div class="room-picked" data-picked>${primaryFirst(list.members, primaryIdOf(list)).filter(m=>selected.has(m.id)).map(m=>`<span>${esc(m.name)}</span>`).join("")}</div>` + responderField(list,selected,responder),
+      `<section class="au-field"><span>${esc(t("rooms.members"))}</span>${memberRowsHTML(list, selected)}</section>` + responderField(list,selected,responder),
       actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(t("rooms.create")), attrs: ' data-dlg="create"' } }, canClose: () => !saving,
       onEnter: () => void save(), onAct(act, target) {
         if (act === "cancel") dialog.close();
-        else if (act === "member") { const id=Number(target.dataset.member);if(id===primaryIdOf(list))return;if(selected.has(id))selected.delete(id);else {if(selected.size>=6){toaster.info(t("rooms.memberCount"));return;}selected.add(id);}target.setAttribute("aria-pressed",String(selected.has(id)));target.querySelector("[data-check]")!.innerHTML=selected.has(id)?ico("check"):"";if(responder===`member:${id}`&&!selected.has(id))responder="auto";dialog.el.querySelector('[data-responder]')!.innerHTML=sel(responderChoices(list,selected),responder,t("rooms.responder"),' data-dlg="responder"');dialog.el.querySelector('[data-picked]')!.innerHTML=primaryFirst(list.members, primaryIdOf(list)).filter(m=>selected.has(m.id)).map(m=>`<span>${esc(m.name)}</span>`).join("");if(!nameEdited)nameInput.value=list.members.filter(m=>selected.has(m.id)).map(m=>m.name).join(" · ").slice(0,24); }
+        else if (act === "member") { const id=Number(target.dataset.member);if(id===primaryIdOf(list))return;if(selected.has(id))selected.delete(id);else {if(selected.size>=6){toaster.info(t("rooms.memberCount"));return;}selected.add(id);}target.setAttribute("aria-pressed",String(selected.has(id)));target.querySelector("[data-check]")!.innerHTML=selected.has(id)?ico("check"):"";if(responder===`member:${id}`&&!selected.has(id))responder="auto";dialog.el.querySelector('[data-responder]')!.innerHTML=sel(responderChoices(list,selected),responder,t("rooms.responder"),' data-dlg="responder"');if(!nameEdited)nameInput.value=list.members.filter(m=>selected.has(m.id)).map(m=>m.name).join(" · ").slice(0,24); }
         else if (act === "create") void save();
         else if (act === "group") openMenu(target, choices, group, value => { group = value; target.querySelector("span")!.textContent = choices.find(c => c.value === value)!.label; });
         else if (act === "responder") { const choices=responderChoices(list,selected);openMenu(target,choices,responder,value=>{responder=value;target.querySelector('span')!.textContent=choices.find(c=>c.value===value)!.label;}); }
@@ -141,7 +151,7 @@ async function editRoomMembers(room: Room, saved: () => void): Promise<void> {
     const list = await api.membersList(getLocale()), selected = new Set([primaryIdOf(list),...room.member_ids]);
     let saving = false, responder = room.default_responder ?? "auto";
     const dialog = openDialog({ title: t("rooms.members"), cls: "au-group-dialog",
-      body: `<div class="au-members">${primaryFirst(list.members, primaryIdOf(list)).map(m => btn(faceHTML(m,30) + `<span>${esc(m.name)}</span><span data-check>${selected.has(m.id) ? ico("check") : ""}</span>`, "", ` data-dlg="member" data-member="${m.id}" aria-pressed="${selected.has(m.id)}"${m.id===primaryIdOf(list)?" disabled":""}`)).join("")}</div>` + responderField(list,selected,responder),
+      body: memberRowsHTML(list, selected) + responderField(list,selected,responder),
       actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(t("members.save")), attrs: ' data-dlg="save"' } },
       canClose: () => !saving,
       onAct(act, target) {
@@ -175,7 +185,11 @@ async function editRoomRoles(room: Room, saved: () => void): Promise<void> {
       { value: "pro", label: t("rooms.pro") }, { value: "con", label: t("rooms.con") }];
     let saving = false;
     const dialog = openDialog({ title: t("rooms.roles"), cls: "au-group-dialog",
-      body: primaryFirst(room.member_ids.map(id => ({ id })), primaryIdOf(list)).map(({ id }) => `<div class="au-field"><span>${esc(list.members.find(m => m.id === id)?.name ?? "")}</span>${sel(choices, roles[id] ?? "participant", t("rooms.roles"), ` data-dlg="role" data-member="${id}"`)}</div>`).join(""),
+      // The same list as the members': each person's face and name, the role as a bare dropdown at the right.
+      body: `<div class="room-list">${primaryFirst(room.member_ids.map(id => ({ id })), primaryIdOf(list)).map(({ id }) => {
+        const member = list.members.find(m => m.id === id);
+        return `<div class="room-row is-static">${member ? faceHTML(member, 28) : ""}<span class="room-row-name">${esc(member?.name ?? "")}</span>${sel(choices, roles[id] ?? "participant", `${t("rooms.roles")} ${member?.name ?? ""}`, ` data-dlg="role" data-member="${id}"`)}</div>`;
+      }).join("")}</div>`,
       actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(t("members.save")), attrs: ' data-dlg="save"' } },
       canClose: () => !saving,
       onAct(action, target) {
@@ -443,7 +457,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       const reactions = reactionRowHTML(m.reactions);
       const metadata = (m.reply_count ? `<button type="button" class="btn sm room-thread-chip" data-room-act="thread" data-message="${m.id}">${esc(t("rooms.threadCount", { p0: m.reply_count }))}</button>` : "");
       const preview = ` data-expandable="true"`, expanded = expandedMessages.has(m.id) ? " is-expanded" : "";
-      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${reactions}${actions}${metadata}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?reactions+actions+metadata:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn, m.member_id ? member?.name : t("agent.title")) : ""}</div></div>`}</li>`;
+      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${reactions}${actions}${metadata}</div></div>`:`<div class="ra"><span class="ra-face"${member?` data-tooltip="${esc(member.name)}"`:""}>${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?reactions+actions+metadata:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn, m.member_id ? member?.name : t("agent.title")) : ""}</div></div>`}</li>`;
     }), })).filter(line => line.html) : [{ key: "empty", html: `<li class="au-empty">${esc(t("rooms.empty"))}</li>`, turnId: undefined }];
     renderedMessages.retain(new Set(grouped.map(({entry}) => entryKey(entry))));
     const changed = patchThread(thread, wanted, drawn, {

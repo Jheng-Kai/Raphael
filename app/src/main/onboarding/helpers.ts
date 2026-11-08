@@ -23,25 +23,35 @@ export function within<T>(promise: Promise<T>, ms: number): Promise<T> {
 const identity = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 /**
- * The services the guide offers to connect, from the same lists as the store of Connect apps: the
- * built-in catalog and, when Composio is set up, its managed apps. Only what asks no more than a
- * sign-in is offered (an app that wants its own key or developer app is set up in the store, with
- * its form). The popular ones come first, in the store's own order; a built-in app wins over a
- * managed one of the same name.
+ * Every app the guide can add, from the same lists as the store of Connect apps, in order: the built-in catalog, the
+ * apps run on the owner's own server (n8n), and, when Composio is set up, its managed apps. An app listed twice is
+ * kept where it first comes, so a built-in app wins over a managed one of the same name.
  */
-export function pickServices(builtin: readonly StoreService[], managed: readonly StoreService[], limit = SERVICES_SHOWN): StoreService[] {
+export function mergeServices(...lists: readonly (readonly StoreService[])[]): StoreService[] {
   const seen = new Set<string>();
-  const unique = (list: readonly StoreService[]): StoreService[] =>
+  return lists.flatMap((list) =>
     list.filter((s) => {
       const keys = [identity(s.id), identity(s.name)];
       if (keys.some((key) => seen.has(key))) return false;
       keys.forEach((key) => seen.add(key));
       return true;
-    });
-  const all = [...unique(builtin), ...unique(managed)].filter((s) => (s.needs ?? "sign_in") === "sign_in");
+    }));
+}
+
+/**
+ * What the step shows before anything is searched: the apps that ask no more than a sign-in, the popular ones first in
+ * the store's own order. An app that wants its own key, developer app or server is a search away, set up in its tile.
+ */
+export function popularServices(all: readonly StoreService[], limit = SERVICES_SHOWN): StoreService[] {
   return all
+    .filter((s) => (s.needs ?? "sign_in") === "sign_in")
     .map((s, at) => ({ s, at }))
     .sort((a, b) => popularRank(a.s) - popularRank(b.s) || Number(b.s.popular) - Number(a.s.popular) || a.at - b.at)
     .slice(0, limit)
     .map(({ s }) => s);
+}
+
+/** The popular sign-in apps of the built-in catalog and Composio's managed apps together. */
+export function pickServices(builtin: readonly StoreService[], managed: readonly StoreService[], limit = SERVICES_SHOWN): StoreService[] {
+  return popularServices(mergeServices(builtin, managed), limit);
 }

@@ -264,7 +264,9 @@ test("a primary changes room picker order and becomes the required chief", async
  expect(chief.disabled).toBe(true); expect(chief.getAttribute('aria-pressed')).toBe('true');
  expect(document.querySelector('[data-dlg="member"][data-member="0"]')!.getAttribute('aria-pressed')).toBe('false');
  document.querySelector<HTMLElement>('[data-dlg="member"][data-member="0"]')!.click();
- expect([...document.querySelectorAll('[data-picked] > span')].map(row=>row.textContent)).toEqual(['Alice','Raphael']);
+ // The rows' own checks say who takes part (owner, 2026-11-09): no second line of picked names.
+ expect([...document.querySelectorAll<HTMLElement>('[data-dlg="member"][aria-pressed="true"]')].map(row=>row.querySelector('.room-row-name')!.textContent)).toEqual(['Alice','Raphael']);
+ expect(document.querySelector('[data-picked]')).toBeNull();
  expect(api.roomsCreate).not.toHaveBeenCalled();
  document.querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();
 });

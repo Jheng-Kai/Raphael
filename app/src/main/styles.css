@@ -605,13 +605,15 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 :root[data-window-fixed] .ob { padding: var(--window-controls-height) 0 0; background: var(--content); }
 :root[data-window-fixed] .ob-card { border: 0; border-radius: 0; box-shadow: none; }
 :root[data-window-fixed] :is([data-window-action="maximize"], [data-window-resize]) { display: none; }
-.ob-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); width: min(960px, 100%); height: min(640px, 100%); min-height: 0; overflow: hidden; border: 1px solid var(--edge-rim); border-radius: var(--r-lg); background: var(--content); box-shadow: var(--pop); }
+.ob-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); width: min(1080px, 100%); height: min(720px, 100%); min-height: 0; overflow: hidden; border: 1px solid var(--edge-rim); border-radius: var(--r-lg); background: var(--content); box-shadow: var(--pop); }
 .ob-pane { display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); min-width: 0; min-height: 0; }
 .ob-body { overflow-x: hidden; overflow-y: auto; padding: calc(var(--sp-6) + var(--sp-2)) var(--sp-6) var(--sp-5); }
 .ob-col { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; width: min(100%, 640px); min-width: 0; margin-inline: auto; }
 .ob-col > h2 { margin: 0; font: 500 30px/1.3 var(--display); text-align: center; text-wrap: balance; }
 .ob-col > h2:focus { outline: none; }
 .ob[data-step="abilities"] .ob-col { width: min(100%, 560px); }
+/* The two stores are wide enough for three tiles of one row each (owner, 2026-11-09: 「導覽的頁面有一點點太小」). */
+.ob:is([data-step="tools"], [data-step="services"]) .ob-col { width: min(100%, 900px); }
 /* The welcome is short: it stands in the middle of the card, its emblem over its name and an ask he answers. */
 .ob[data-step="welcome"] .ob-body { display: grid; grid-template-columns: minmax(0, 1fr); align-content: center; padding-top: var(--sp-4); }
 .ob[data-step="welcome"] .ob-col { justify-items: center; width: min(100%, 440px); text-align: center; }
@@ -661,39 +663,61 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
    drops them. */
 .ob-floaters { position: relative; height: 0; pointer-events: none; }
 .ob-fl { position: absolute; display: block; }
-/* Every choice is tiles in a grid of three (Grok Bot's "What do you use every day?"): the mark, the name with one quiet line
-   and the control under them; a tile that is on has a black edge and a check. A tile that is a button is pressed whole. */
-.ob-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); }
-.ob-tile { position: relative; display: grid; grid-template-columns: 28px minmax(0, 1fr); align-content: center; align-items: center; column-gap: var(--sp-3); row-gap: var(--sp-2); min-width: 0; min-height: 64px; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); color: var(--text); font: inherit; text-align: left; }
-.ob-tile.on { padding-right: 40px; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+/* Every choice is a store of tiles, three to a row where they fit (Grok Bot's "What do you use every day?"), each one row as
+   a store's app is (owner, 2026-11-09: the tiles were too tall, an email broke over two lines and the marks sat unevenly):
+   the mark in a soft square, the name over one quiet line that ends in … rather than wrapping, and on the right the
+   control, then the check of a tile that is on. A tile that is a button is pressed whole; a wide one spans its row while
+   a key or an address is typed in it. */
+.ob-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(256px, 1fr)); gap: var(--sp-2); }
+.ob-tile { position: relative; display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; column-gap: var(--sp-3); min-width: 0; min-height: 60px; padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); color: var(--text); font: inherit; text-align: left; }
+.ob-tile.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 /* No light edge in the dark theme (owner rule): a chosen tile there is a lifted fill with its tick. */
 :root[data-theme="dark"] .ob-tile.on { border-color: transparent; box-shadow: none; background: var(--surface-2); }
 button.ob-tile { cursor: pointer; }
 button.ob-tile:hover:not(:disabled) { background: var(--hover); }
 button.ob-tile:disabled { opacity: 0.55; cursor: default; }
-.ob-tile.wide { grid-column: 1 / -1; grid-template-columns: 28px minmax(0, 1fr) auto; padding-right: var(--sp-4); }
-.ob-tile.wide > .ob-tick { display: none; }
-.ob-tick { position: absolute; top: var(--sp-3); right: var(--sp-3); display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; background: var(--accent); color: var(--on-accent); }
+.ob-tile.wide { grid-column: 1 / -1; }
+.ob-tick { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; background: var(--accent); color: var(--on-accent); }
 .ob-tick svg.i { width: 16px; height: 16px; }
-.ob-ic { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; }
-.ob-ic .mono.md { width: 28px; height: 28px; }
-.ob-tx { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; min-width: 0; }
-.ob-tx .nm { font-size: var(--fs-md); font-weight: var(--weight-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ob-tx .ds { color: var(--text-2); font-size: var(--fs-sm); white-space: normal; overflow-wrap: anywhere; }
-/* A status in a tile wraps inside it in every language (owner, 2026-11-08: Japanese 「ブラウザでのログインを待って…」 ran out). */
+/* Every mark in the same soft square at the same size, so a heavy one (OpenRouter's) weighs as much as a light one. */
+.ob-ic { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: var(--r-sm); background: color-mix(in srgb, var(--text) 6%, transparent); }
+.ob-ic .mono.md { width: 20px; height: 20px; font-size: var(--fs-md); }
+.ob-ic .mono .i, .ob-ic .mono svg { width: 20px; height: 20px; }
+.ob-tx { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; min-width: 0; }
+.ob-tx .nm { font-size: var(--fs-md); font-weight: var(--weight-medium); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ob-tx .ds { color: var(--text-2); font-size: var(--fs-sm); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A status wraps inside its tile in every language (owner, 2026-11-08: Japanese 「ブラウザでのログインを待って…」 ran out). */
+.ob-tx .ds:has(> .st) { white-space: normal; }
 .ob-tx .ds .st { display: flex; align-items: flex-start; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .ob-tx .ds .st > .dot { flex: none; margin-top: 0.45em; }
-.ob-ctl { grid-column: 2; display: inline-flex; flex-wrap: wrap; align-items: center; justify-self: start; gap: var(--sp-2); min-width: 0; }
-.ob-tile.wide > .ob-ctl { grid-column: 3; grid-row: 1; justify-self: end; flex-wrap: nowrap; justify-content: flex-end; }
+/* A wide tile has room to say more: its line wraps (Composio's way to its key, an address's example). */
+.ob-tile.wide .ds { white-space: normal; overflow-wrap: anywhere; }
+.ob-ctl { display: inline-flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: var(--sp-2); min-width: 0; }
+.ob-ctl:empty { display: none; }
+/* A key or an address being typed: the name and its line on top, the fields and buttons under them from the line's
+   left edge, the fields sharing what the row has. */
+.ob-tile.entry { grid-template-columns: 36px minmax(0, 1fr); align-items: start; row-gap: var(--sp-3); padding-block: var(--sp-3); }
+.ob-tile.entry > .ob-ctl { grid-column: 2; justify-content: flex-start; flex-wrap: wrap; }
+.ob-tile.entry .field { flex: 1 1 200px; min-width: 0; max-width: 360px; }
+/* What pressing a sign-in tile does, on its right as a store's 「取得」: a word in a pill, not a second button. */
+.ob-get { display: inline-flex; align-items: center; height: var(--h-ctl-sm); padding: 0 var(--sp-3); border-radius: var(--r-pill); background: var(--hover); font-size: var(--fs-sm); font-weight: var(--weight-medium); color: var(--text); white-space: nowrap; }
+button.ob-tile:hover:not(:disabled) .ob-get { background: var(--pressed); }
+/* Composio before its key: one card across the step, above the apps that need none. */
+.ob-composio { margin-bottom: var(--sp-4); }
+.ob-composio > .ob-tile { min-height: 68px; }
+.ob-composio > .ob-alert { margin-top: var(--sp-2); }
 .ob-find { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; margin-bottom: var(--sp-4); }
 .ob-find .field { width: min(100%, 340px); height: 40px; padding: 0 var(--sp-4); gap: var(--sp-2); border-color: transparent; border-radius: 999px; background: var(--hover); font-size: var(--fs-md); }
 .ob-find .field input { font-size: var(--fs-md); }
 /* A search field shows its frame only while keys move the focus (focus-rings.test). */
 :root[data-keys] .ob-find .field:focus-within { border-color: var(--btn-edge); }
 .ob-alert { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-top: var(--sp-3); font-size: var(--fs-sm); }
+/* A refusal may be long (Composio's names its menu): it wraps in the column instead of running out of it. */
+.ob-alert > .st { display: flex; align-items: flex-start; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.ob-alert > .st > .dot { flex: none; margin-top: 0.45em; }
 .ob-grid > .ob-alert { grid-column: 1 / -1; margin-top: 0; }
 .ob-section { margin: var(--sp-5) 0 var(--sp-2); font-size: var(--fs-xs); font-weight: var(--weight-semibold); color: var(--text-3); letter-spacing: 0.02em; }
-:is(.ob-main, [data-ob-tools]) > .ob-section:first-child { margin-top: 0; }
+:is(.ob-main, [data-ob-tools], [data-ob-services-list]) > .ob-section:first-child { margin-top: 0; }
 .ob-state { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-2); min-height: 72px; margin: 0; font-size: var(--fs-sm); color: var(--text-2); }
 /* The abilities are the same rows and dialogs as Settings › 工具; the section's own heading is the step's title here. */
 .ob .svc > h2 { display: none; }

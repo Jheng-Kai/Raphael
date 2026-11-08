@@ -28,7 +28,9 @@ Settings has seven flat tabs: 一般, 記憶, 聽寫與快捷鍵, 工具, 安全
 memory (`data-mem-space="shared"`) and nothing else: there is no import from other assistants (owner, 2026-11-08:
 「匯入記憶不要這樣設計…沒有什麼實際的意義」); the memory lives in Raphael's data folder, and moving to another PC means
 keeping that folder. 一般 keeps 關於你, 外觀, 拉斐爾 and 啟動,
-with no memory. The memory lists load only while 記憶 is open. 關於's Help is an outward-arrow icon and the
+with no memory. The memory lists load only while 記憶 is open; the memory is drawn as members.md describes (its
+name as a small heading with 編輯 and ⋯, one tinted card of entry blocks, the summary as its own card; owner,
+2026-11-09). 關於's Help is an outward-arrow icon and the
 license a chevron; the shortcuts' and the OpenRouter key's 「變更」 is a pencil. This supersedes the notes below
 that place memory and its import in General.
 

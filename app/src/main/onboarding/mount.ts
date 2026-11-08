@@ -18,13 +18,17 @@ import { wireKeyField } from "../keyfield";
 import { UI_LANGUAGES } from "../pages/settings-view";
 import { languageButtonHTML, openLanguagePicker } from "../language-picker";
 import { storePlugin } from "../plugins-data";
+import { composioKeyProblem, ownServerApps, ownServerForm } from "../connections";
+import { openConnectionSetup } from "../connection-setup";
 import { modelPickerHTML, mountModelPicker, type ModelPickerLook } from "../model-picker";
 import { createServices, servicesHTML as abilityRowsHTML } from "../services";
 import type { AppContext, BrainSettings, MainEvent, ModelCatalog, StoreService } from "../types";
 import { actionRow, btn, closeMenu, esc, openMenuOnArrow, toaster } from "../ui";
-import { SERVICES_WAIT_MS, pickServices, within } from "./helpers";
+import { SERVICES_WAIT_MS, mergeServices, within } from "./helpers";
 import { type FlowState, type Mode, initialState, isLast, reduce } from "./flow";
-import { DEMOS, abilitiesHTML, demoAsk, demoReply, serviceTilesHTML, servicesHTML, toolsHTML, toolsListHTML, welcomeHTML } from "./screens";
+import {
+  type ComposioView, DEMOS, abilitiesHTML, demoAsk, demoReply, emptyComposioView, servicesHTML, servicesListHTML, toolsHTML, toolsListHTML, welcomeHTML,
+} from "./screens";
 
 /** The emblem's diameter on the welcome, in px (its canvas is 1.3 times larger, so that its rays have room). */
 const EMBLEM_PX = 96;
@@ -74,6 +78,16 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   let waitingService: string | null = null;
   let connectFailed: string | null = null;
   let query = "";
+  // Composio's key, typed in its card (never kept here), and an own-server app's address being typed in its tile
+  let composio: ComposioView = emptyComposioView();
+  let composioError: (() => string) | null = null;
+  let serverEntry: { id: string; busy: boolean } | null = null;
+  let serverError: (() => string) | null = null;
+  const servicesView = () => ({
+    services, waiting: waitingService, failed: connectFailed, query,
+    composio: { ...composio, error: composioError?.() ?? null },
+    server: serverEntry ? { ...serverEntry, error: serverError?.() ?? null } : null,
+  });
 
   /** Raphael's emblem on the welcome: drawn by the voice screen's renderer, ended with the screen. */
   let emblem: Emblem | null = null;
@@ -140,7 +154,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       case "tools":
         return toolsHTML(accounts.view(), keyView(), accountsError(), providers.view(), toolsQuery);
       case "services":
-        return servicesHTML({ services, waiting: waitingService, failed: connectFailed, query });
+        return servicesHTML(servicesView());
       case "abilities":
         return abilitiesHTML(abilityRowsHTML(abilities.view(), modelPickerHTML(visionLook()), brain));
     }
@@ -373,11 +387,11 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     if (!destroyed && flow.step === "tools") repaintBody();
   }
 
-  async function pasteKey(): Promise<void> {
-    if (key.busy) return;
-    const input = root.querySelector<HTMLInputElement>("#ob-key-input");
+  /** 貼上 sends what the field holds, or else the clipboard; a webview that cannot read it asks for Ctrl+V. */
+  async function pasteInto(inputId: string, submit: (text: string) => Promise<void>): Promise<void> {
+    const input = root.querySelector<HTMLInputElement>(`#${inputId}`);
     if (input?.value.trim()) {
-      void submitKey(input.value);
+      void submit(input.value);
       return;
     }
     let copied: string;
@@ -390,7 +404,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       return;
     }
     if (copied.trim()) {
-      void submitKey(copied);
+      void submit(copied);
     } else {
       input?.focus();
       toaster.info(t("onboarding.clipboardEmpty"));
@@ -408,6 +422,8 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       const [builtin, status] = await Promise.allSettled([within(api.integrationsCatalog(), SERVICES_WAIT_MS), within(api.connectorsStatus(), SERVICES_WAIT_MS)]);
       if (destroyed || mine !== servicesRead) return;
       if (builtin.status !== "fulfilled") throw builtin.reason;
+      // Without a word from the core about Composio its card is not offered: only what is known is said.
+      composio = { ...composio, configured: status.status === "fulfilled" ? status.value.composio_configured : null };
       let managed: StoreService[] = [];
       if (status.status === "fulfilled" && status.value.composio_configured) {
         try {
@@ -417,7 +433,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
         }
         if (destroyed || mine !== servicesRead) return;
       }
-      services = pickServices(builtin.value.services, managed);
+      services = mergeServices(builtin.value.services, ownServerApps(), managed);
       servicesLoaded = true;
     } catch {
       if (mine !== servicesRead) return;
@@ -447,6 +463,82 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       connectFailed = describeError(err);
     }
     waitingService = null;
+    if (!destroyed && flow.step === "services") repaintBody();
+  }
+
+  /** Marks an app added, under the connection it became. */
+  function added(id: string, serverId: string): void {
+    if (Array.isArray(services)) services = services.map((s) => (s.id === id ? { ...s, server_id: serverId } : s));
+  }
+
+  /** An app that asks for the owner's own key or developer app: the store's own form, then the core adds it. */
+  async function setUpService(id: string): Promise<void> {
+    const entry = Array.isArray(services) ? services.find((s) => s.id === id) : undefined;
+    if (!entry || waitingService || (entry.needs !== "key" && entry.needs !== "own_app")) return;
+    const done = await openConnectionSetup({ slug: entry.id, name: entry.name, needs: entry.needs }, {
+      connect: async (fields) => {
+        try {
+          const result = await api.connectorsConnect(entry.id, fields);
+          if (result.connected) added(id, result.connector?.id ?? `composio:${id}`);
+          return result;
+        } catch (error) {
+          return { connected: false, error: error instanceof Error ? error.message : "error" };
+        }
+      },
+    });
+    if (done) toaster.info(t("conn.connected", { p0: entry.name }));
+    if (!destroyed && flow.step === "services") repaintBody();
+  }
+
+  /** An app on the owner's own server (n8n): its address and key, typed in its tile, go to the core in one call. */
+  async function addServer(): Promise<void> {
+    const entry = serverEntry && Array.isArray(services) ? services.find((s) => s.id === serverEntry!.id) : undefined;
+    const form = entry ? ownServerForm(entry.id) : null;
+    if (!entry || !form || serverEntry!.busy) return;
+    const urlInput = root.querySelector<HTMLInputElement>("#ob-server-url");
+    const tokenInput = root.querySelector<HTMLInputElement>("#ob-server-token");
+    const url = urlInput?.value.trim() ?? "";
+    if (!url) {
+      serverError = () => t("conn.form.needUrl");
+      repaintBody();
+      root.querySelector<HTMLInputElement>("#ob-server-url")?.focus();
+      return;
+    }
+    const token = tokenInput?.value.trim() ?? "";
+    if (tokenInput) tokenInput.value = ""; // the key goes to the core's vault and stays nowhere in the page
+    serverEntry = { ...serverEntry!, busy: true };
+    serverError = null;
+    repaintBody();
+    try {
+      const result = await api.integrationsAdd({ name: form.name, transport: "http", url, headers: token ? [{ name: form.header, value: `${form.prefix}${token}` }] : [] });
+      added(entry.id, result.server.id);
+      serverEntry = null;
+      toaster.info(t("conn.connected", { p0: entry.name }));
+    } catch (err) {
+      serverEntry = { ...serverEntry!, busy: false };
+      serverError = () => describeError(err);
+    }
+    if (!destroyed && flow.step === "services") repaintBody();
+  }
+
+  /** Composio's key: saved by the core, then the store's apps are read again with Composio's among them. */
+  async function submitComposioKey(text: string): Promise<void> {
+    const typed = text.trim();
+    if (!typed || composio.busy) return;
+    composio = { ...composio, busy: true };
+    composioError = null;
+    repaintBody();
+    try {
+      await api.connectorsSetKey(typed);
+      composio = { configured: true, entering: false, busy: false, error: null };
+      toaster.info(t("common.keySaved"));
+      if (!destroyed) await loadServices();
+      return;
+    } catch (error) {
+      const kind = error instanceof Error ? error.message : "";
+      composio = { ...composio, busy: false };
+      composioError = () => composioKeyProblem(kind);
+    }
     if (!destroyed && flow.step === "services") repaintBody();
   }
 
@@ -502,7 +594,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
         back();
         break;
       case "key-paste":
-        void pasteKey();
+        if (!key.busy) void pasteInto("ob-key-input", submitKey);
         break;
       case "key-replace":
         key = { ...key, replacing: true };
@@ -528,6 +620,37 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       case "conn-reload":
         void loadServices();
         break;
+      case "conn-setup":
+        void setUpService(button.dataset.service ?? "");
+        break;
+      case "composio-open":
+        composio = { ...composio, entering: true };
+        composioError = null;
+        repaintBody();
+        root.querySelector<HTMLElement>("#ob-composio-input")?.focus();
+        break;
+      case "composio-cancel":
+        composio = { ...composio, entering: false };
+        composioError = null;
+        repaintBody();
+        break;
+      case "composio-paste":
+        if (!composio.busy) void pasteInto("ob-composio-input", submitComposioKey);
+        break;
+      case "server-open":
+        serverEntry = { id: button.dataset.service ?? "", busy: false };
+        serverError = null;
+        repaintBody();
+        root.querySelector<HTMLElement>("#ob-server-url")?.focus();
+        break;
+      case "server-cancel":
+        serverEntry = null;
+        serverError = null;
+        repaintBody();
+        break;
+      case "server-add":
+        void addServer();
+        break;
     }
   }, { signal });
 
@@ -549,11 +672,19 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     }
     if (flow.step === "services" && e.target.id === "ob-find") {
       query = e.target.value;
-      const grid = root.querySelector<HTMLElement>("[data-ob-services]");
-      if (grid) grid.innerHTML = serviceTilesHTML({ services, waiting: waitingService, failed: connectFailed, query });
+      const list = root.querySelector<HTMLElement>("[data-ob-services-list]");
+      if (list) list.innerHTML = servicesListHTML(servicesView());
     }
   }, { signal });
   wireKeyField(root, { inputId: "ob-key-input", pasteSelector: '[data-ob="key-paste"]', submit: (value) => void submitKey(value), signal });
+  wireKeyField(root, { inputId: "ob-composio-input", pasteSelector: '[data-ob="composio-paste"]', submit: (value) => void submitComposioKey(value), signal });
+  // Enter in an own-server app's address or key adds it, as its 「連接」 does.
+  root.addEventListener("keydown", (e) => {
+    const target = e.target as HTMLElement | null;
+    if (destroyed || e.key !== "Enter" || e.isComposing || (target?.id !== "ob-server-url" && target?.id !== "ob-server-token")) return;
+    e.preventDefault();
+    void addServer();
+  }, { signal });
 
   const stopLocale = onLocaleChange(() => {
     if (destroyed) return;

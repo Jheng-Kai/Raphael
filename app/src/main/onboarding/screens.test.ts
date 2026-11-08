@@ -4,7 +4,8 @@ import { emptyCliBrainsView, type CliBrainsView } from "../cli-brains";
 import { setLocale } from "../i18n";
 import type { CliBrain, ModelProvider, ProviderKind, StoreService } from "../types";
 import { emptyProvidersView } from "../providers";
-import { abilitiesHTML, matchServices, serviceTilesHTML, servicesHTML, toolCards, toolsHTML, welcomeHTML } from "./screens";
+import { ownServerApps } from "../connections";
+import { type ComposioView, abilitiesHTML, emptyComposioView, matchServices, serviceTilesHTML, servicesHTML, toolCards, toolsHTML, welcomeHTML } from "./screens";
 
 const WORDS = { "zh-TW": "", en: "", ja: "" };
 const service = (id: string, name: string, over: Partial<StoreService> = {}): StoreService => ({
@@ -105,10 +106,20 @@ describe("step 1: the AI tools", () => {
     expect(dom(toolsHTML(accounts(), noKey, "", emptyProvidersView(), "zzzz")).querySelector(".ob-state")!.textContent).toBe("No tool matches");
   });
 
+  test("each tile is one row: its mark in a square, a name over one line, the control on the right", () => {
+    const host = dom(toolsHTML(accounts({ chatgpt: { signed_in: true, email: "someone.with.a.long.address@example.test", plan_scope_granted: true } }), noKey, ""));
+    for (const el of host.querySelectorAll(".ob-tile")) {
+      expect([...el.children].map((child) => child.className)).toEqual(["ob-ic", "ob-tx", "ob-ctl"]);
+      expect(el.querySelectorAll(".ob-tx > span")).toHaveLength(2);
+    }
+    // signed in, the account is the whole line: the check says it is ready
+    expect(host.querySelector('[data-item="chatgpt"] .ds')!.textContent).toBe("someone.with.a.long.address@example.test");
+  });
+
   test("what is ready says so and has the check; what is not has the button the account controller listens to", () => {
     const host = dom(toolsHTML(accounts(), noKey, ""));
     const control = (id: string) => host.querySelector(`[data-item="${id}"] .ob-ctl`)!;
-    expect(control("claude").querySelector(".st .dot.ok")).not.toBeNull();
+    expect(control("claude").querySelector('.ob-tick[role="img"]')!.getAttribute("aria-label")).toBe("Signed in");
     expect(control("claude").querySelector("button")).toBeNull();
     expect(host.querySelector('[data-item="claude"].on .ob-tick')).not.toBeNull();
     expect(host.querySelector('[data-item="codex"]')!.classList.contains("on")).toBe(false);
@@ -141,7 +152,7 @@ describe("step 1: the AI tools", () => {
     expect(entering.querySelector('[data-item="openrouter"]')!.classList.contains("wide")).toBe(true);
     const set = dom(toolsHTML(accounts(), { ...noKey, has: true }, ""));
     expect(set.querySelector("#ob-key-input")).toBeNull();
-    expect(set.querySelector('[data-item="openrouter"] .dot.ok')).not.toBeNull();
+    expect(set.querySelector('[data-item="openrouter"].on .ob-tick')!.getAttribute("aria-label")).toBe("Set up");
     expect(set.querySelector('[data-ob="key-replace"]')).not.toBeNull();
     const replacing = dom(toolsHTML(accounts(), { ...noKey, has: true, replacing: true }, ""));
     expect(replacing.querySelector("#ob-key-input")).not.toBeNull();
@@ -178,16 +189,53 @@ describe("step 2: the services", () => {
   test("a search box and one tile for each service with its mark and name; the whole tile signs in, a connected one has the check", () => {
     const host = dom(servicesHTML(view()));
     expect(host.querySelector('.ob-find input#ob-find[aria-label]')).not.toBeNull();
-    expect(items(host)).toEqual(["gmail", "notion", "slack"]);
+    expect(items(host).sort()).toEqual(["gmail", "notion", "slack"]);
     for (const el of host.querySelectorAll(".ob-tile")) expect(el.querySelector(".ob-ic .mono")).not.toBeNull();
     const gmail = host.querySelector('button.ob-tile[data-item="gmail"]')!;
     expect(gmail.getAttribute("data-ob")).toBe("conn-login");
     expect(gmail.getAttribute("data-service")).toBe("gmail");
     expect(gmail.getAttribute("aria-label")).toBe("Sign in Gmail");
-    expect(host.querySelector('[data-item="notion"].on .dot.ok')).not.toBeNull();
-    expect(host.querySelector('[data-item="notion"].on .ob-tick')).not.toBeNull();
+    expect(gmail.querySelector('.ob-ctl .ob-get[aria-hidden="true"]')!.textContent).toBe("Sign in");
+    expect(host.querySelector('[data-item="notion"].on .ob-tick')!.getAttribute("aria-label")).toBe("Connected");
     expect(host.querySelector('[data-item="notion"] button')).toBeNull();
     expect(host.querySelector("[data-ob-services]")!.classList.contains("ob-grid")).toBe(true);
+  });
+
+  test("without Composio its card comes first, with its key typed in it; with it, or before the core has said, there is none", () => {
+    const composio = (over: Partial<ComposioView>): ComposioView => ({ ...emptyComposioView(), configured: false, ...over });
+    const host = dom(servicesHTML(view({ composio: composio({}) })));
+    expect(host.querySelector('.ob-composio [data-item="composio"].wide [data-ob="composio-open"]')!.textContent).toBe("Connect");
+    expect(host.querySelector(".ob-composio")!.compareDocumentPosition(host.querySelector("[data-ob-services]")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(host.querySelector("[data-ob-services-title]")!.textContent).toBe("Works without Composio");
+    const entering = dom(servicesHTML(view({ composio: composio({ entering: true, error: "That key was refused" }) })));
+    expect(entering.querySelector('#ob-composio-input[type="password"]')!.getAttribute("aria-invalid")).toBe("true");
+    expect(entering.querySelector('[data-ob="composio-paste"]')).not.toBeNull();
+    expect(entering.querySelector('[data-ob="composio-cancel"]')).not.toBeNull();
+    expect(entering.querySelector('.ob-composio [role="alert"]')!.textContent).toBe("That key was refused");
+    const busy = dom(servicesHTML(view({ composio: composio({ entering: true, busy: true }) })));
+    expect(busy.querySelector<HTMLButtonElement>('[data-ob="composio-paste"]')!.disabled).toBe(true);
+    const set = dom(servicesHTML(view({ composio: composio({ configured: true }) })));
+    expect(set.querySelector(".ob-composio")).toBeNull();
+    expect(set.querySelector("[data-ob-services-title]")!.textContent).toBe("Popular");
+    expect(dom(servicesHTML(view({ composio: emptyComposioView() }))).querySelector(".ob-composio")).toBeNull();
+  });
+
+  test("a search finds every app whatever it asks: a key opens the store's form, an own server is typed in its tile (owner, 2026-11-09: n8n was not found)", () => {
+    const list = [service("gmail", "Gmail"), service("sentry", "Sentry", { needs: "key", source: "composio" }), ...ownServerApps()];
+    const state = (over = {}) => ({ services: list, waiting: null, failed: null, ...over });
+    expect(items(dom(servicesHTML(state())))).toEqual(["gmail"]);
+    const found = dom(servicesHTML(state({ query: "n8n" })));
+    expect(items(found)).toEqual(["n8n"]);
+    expect(found.querySelector("[data-ob-services-title]")).toBeNull();
+    expect(found.querySelector('[data-item="n8n"] .ds')!.textContent).toBe("Needs your own server");
+    expect(found.querySelector('[data-item="n8n"] [data-ob="server-open"][data-service="n8n"]')!.textContent).toBe("Add");
+    expect(dom(servicesHTML(state({ query: "sentry" }))).querySelector('[data-item="sentry"] [data-ob="conn-setup"][data-service="sentry"]')).not.toBeNull();
+    const open = dom(servicesHTML(state({ query: "n8n", server: { id: "n8n", busy: false, error: "Enter an address" } })));
+    expect(open.querySelector('[data-item="n8n"].wide #ob-server-url')!.getAttribute("aria-invalid")).toBe("true");
+    expect(open.querySelector('#ob-server-token[type="password"]')).not.toBeNull();
+    expect(open.querySelector('[data-ob="server-add"]')).not.toBeNull();
+    expect(open.querySelector('[data-ob="server-cancel"]')).not.toBeNull();
+    expect(open.querySelector('[role="alert"]')!.textContent).toBe("Enter an address");
   });
 
   test("while one login is open it can be cancelled and the others wait", () => {

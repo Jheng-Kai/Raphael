@@ -10,6 +10,8 @@ const api = vi.hoisted(() => ({
   connectorsStatus: vi.fn(),
   connectorsCatalog: vi.fn(),
   connectorsConnect: vi.fn(),
+  connectorsSetKey: vi.fn(),
+  integrationsAdd: vi.fn(),
   servicesStatus: vi.fn(),
   settingsGet: vi.fn(),
   settingsSet: vi.fn(),
@@ -164,7 +166,7 @@ describe("step 1: the AI tools", () => {
     await open();
     await press('[data-ob="next"]');
     expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["chatgpt", "claude", "codex", "openrouter", "gemini"]);
-    expect(root.querySelector('[data-item="claude"] .dot.ok')).not.toBeNull();
+    expect(root.querySelector('[data-item="claude"].on .ob-tick')).not.toBeNull();
     expect(root.querySelector("#ob-key-input")).toBeNull();
     await press('[data-item="openrouter"] [data-ob="key-replace"]');
     expect(root.querySelector("#ob-key-input")).not.toBeNull();
@@ -238,7 +240,7 @@ describe("step 2: the services", () => {
     await toServices();
     await press('[data-item="gmail"][data-ob="conn-login"]');
     expect(api.connectorsConnect).toHaveBeenCalledWith("gmail");
-    expect(root.querySelector('[data-item="gmail"] .dot.ok')).not.toBeNull();
+    expect(root.querySelector('[data-item="gmail"].on .ob-tick')).not.toBeNull();
     expect(root.querySelector('[data-item="notion"][data-ob="conn-login"]')).not.toBeNull();
   });
 
@@ -246,7 +248,7 @@ describe("step 2: the services", () => {
     await toServices();
     await press('[data-item="notion"][data-ob="conn-login"]');
     expect(api.integrationsConnect).toHaveBeenCalledWith({ catalog_id: "notion" });
-    expect(root.querySelector('[data-item="notion"] .dot.ok')).not.toBeNull();
+    expect(root.querySelector('[data-item="notion"].on .ob-tick')).not.toBeNull();
   });
 
   test("a sign-in that did not come through is told, a cancelled one is not", async () => {
@@ -268,7 +270,7 @@ describe("step 2: the services", () => {
     expect(root.querySelector("#ob-find")).toBe(find);
     await press('[data-item="github"][data-ob="conn-login"]');
     expect(root.querySelector<HTMLInputElement>("#ob-find")!.value).toBe("git");
-    expect(root.querySelector('[data-item="github"] .dot.ok')).not.toBeNull();
+    expect(root.querySelector('[data-item="github"].on .ob-tick')).not.toBeNull();
     expect(root.querySelector('[data-item="notion"]')).toBeNull();
     const again = root.querySelector<HTMLInputElement>("#ob-find")!;
     again.value = "zzz";
@@ -315,11 +317,64 @@ describe("step 2: the services", () => {
     expect(root.querySelector('button.ob-tile[data-item="github"]')!.hasAttribute("disabled")).toBe(false);
   });
 
-  test("without Composio the built-in apps are enough", async () => {
+  test("without Composio its card comes first, then the built-in apps that need none (owner, 2026-11-09)", async () => {
     api.connectorsStatus.mockResolvedValue({ composio_configured: false, connectors: [] });
     await toServices();
-    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["notion", "github"]);
+    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["composio", "notion", "github"]);
+    expect(text("[data-ob-services-title]")).toBe("Works without Composio");
     expect(api.connectorsCatalog).not.toHaveBeenCalled();
+  });
+
+  test("Composio's key is typed in its card; once saved its apps join the list and the card goes", async () => {
+    api.connectorsStatus.mockResolvedValueOnce({ composio_configured: false, connectors: [] });
+    api.connectorsSetKey.mockResolvedValue({ configured: true });
+    await toServices();
+    await press('[data-ob="composio-open"]');
+    const field = root.querySelector<HTMLInputElement>('#ob-composio-input[type="password"]')!;
+    expect(document.activeElement).toBe(field);
+    field.value = "ak_synthetic";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await flush();
+    expect(api.connectorsSetKey).toHaveBeenCalledWith("ak_synthetic");
+    expect(root.querySelector(".ob-composio")).toBeNull();
+    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["gmail", "notion", "github"]);
+  });
+
+  test("a refused Composio key is told beside its field, which stays open", async () => {
+    api.connectorsStatus.mockResolvedValue({ composio_configured: false, connectors: [] });
+    api.connectorsSetKey.mockRejectedValue(new Error("consumer_key"));
+    await toServices();
+    await press('[data-ob="composio-open"]');
+    root.querySelector<HTMLInputElement>("#ob-composio-input")!.value = "ck_synthetic";
+    await press('[data-ob="composio-paste"]');
+    expect(root.querySelector('.ob-composio [role="alert"]')!.textContent).toContain("ck_");
+    expect(root.querySelector("#ob-composio-input")!.getAttribute("aria-invalid")).toBe("true");
+    await press('[data-ob="composio-cancel"]');
+    expect(root.querySelector("#ob-composio-input")).toBeNull();
+    expect(root.querySelector('[data-ob="composio-open"]')).not.toBeNull();
+  });
+
+  test("a search finds n8n; its address and key, typed in its tile, add it as the owner's own server (owner, 2026-11-09)", async () => {
+    api.integrationsAdd.mockResolvedValue({ server: { id: "srv-n8n" } });
+    await toServices();
+    expect(root.querySelector('[data-item="n8n"]')).toBeNull();
+    const find = root.querySelector<HTMLInputElement>("#ob-find")!;
+    find.value = "n8n";
+    find.dispatchEvent(new Event("input", { bubbles: true }));
+    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["n8n"]);
+    await press('[data-ob="server-open"][data-service="n8n"]');
+    await press('[data-ob="server-add"]');
+    expect(api.integrationsAdd).not.toHaveBeenCalled();
+    expect(text('[role="alert"]')).toBe("Enter an address");
+    root.querySelector<HTMLInputElement>("#ob-server-url")!.value = "https://flows.example.test/mcp-server/http";
+    root.querySelector<HTMLInputElement>("#ob-server-token")!.value = "synthetic-token";
+    await press('[data-ob="server-add"]');
+    expect(api.integrationsAdd).toHaveBeenCalledWith({
+      name: "n8n", transport: "http", url: "https://flows.example.test/mcp-server/http",
+      headers: [{ name: "Authorization", value: "Bearer synthetic-token" }],
+    });
+    expect(root.querySelector('[data-item="n8n"].on .ob-tick')).not.toBeNull();
+    expect(root.querySelector("#ob-server-token")).toBeNull();
   });
 });
 

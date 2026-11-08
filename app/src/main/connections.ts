@@ -183,18 +183,34 @@ const PRESET_FORMS: Record<string, Pick<ConnectionForm, "type" | "name" | "pairL
   n8n: { type: "http", name: "n8n", pairLines: "Authorization=Bearer ", urlHint: "https://n8n.example.com/mcp-server/http" },
 };
 
-/** The store entries of `PRESET_FORMS`, in the current language, marked added when a connection already is that app. */
-function presetEntries(v: ConnectionsView): StoreService[] {
-  if (!Array.isArray(v.catalog)) return [];
-  const groups = Array.isArray(v.groups) ? v.groups : [];
+/**
+ * The store entries of `PRESET_FORMS`, in the current language; `serverOf` names the connection that already is the app.
+ * The guide offers them too, with the address and the key typed in the tile (onboarding/screens.ts).
+ */
+export function ownServerApps(serverOf: (icon: string) => string | null = () => null): StoreService[] {
   // Drawn again for each language: the three required languages carry the current one's words.
   const said = (key: "store.n8nSummary" | "store.n8nAbout"): Words => { const text = t(key); return { "zh-TW": text, en: text, ja: text }; };
   const examples = [t("store.n8nTry")];
   return [{
     id: "n8n", name: "n8n", publisher: "n8n", url: "", category: "productivity", icon: "n8n", popular: false, auth: "none",
     summary: said("store.n8nSummary"), about: said("store.n8nAbout"), examples: { "zh-TW": examples, en: examples, ja: examples },
-    server_id: groups.find((g) => serviceIconOf({ name: g.name, url: g.url }) === "n8n")?.id ?? null,
+    server_id: serverOf("n8n"),
   }];
+}
+
+/** How an own-server app is reached: the name it is added as, its address's example, and its key's header with what goes before the key. */
+export function ownServerForm(id: string): { name: string; urlHint: string; header: string; prefix: string } | null {
+  const preset = PRESET_FORMS[id];
+  if (!preset) return null;
+  const [header = "Authorization", prefix = ""] = (preset.pairLines ?? "").split(/=(.*)/s);
+  return { name: preset.name, urlHint: preset.urlHint ?? "", header, prefix };
+}
+
+/** The store entries of `PRESET_FORMS`, marked added when a connection already is that app. */
+function presetEntries(v: ConnectionsView): StoreService[] {
+  if (!Array.isArray(v.catalog)) return [];
+  const groups = Array.isArray(v.groups) ? v.groups : [];
+  return ownServerApps((icon) => groups.find((g) => serviceIconOf({ name: g.name, url: g.url }) === icon)?.id ?? null);
 }
 
 // ---------- words ----------
@@ -570,6 +586,11 @@ function keyErrorMessage(kind: ConnectionsView["keyError"]): string {
   }
 }
 
+/** What a Composio key that was not saved is told as, from the core's word for why (the store and the guide alike). */
+export function composioKeyProblem(kind: string): string {
+  return keyErrorMessage(kind === "openrouter_key" || kind === "consumer_key" || kind === "auth" ? kind : kind === "network" || kind === "timeout" ? "unreachable" : "unknown");
+}
+
 /** Built-in apps win over matching managed slugs or names, regardless of the current filter. */
 function uniqueComposio(v: ConnectionsView): StoreService[] {
   if (!v.configured || !Array.isArray(v.composioCatalog)) return [];
@@ -607,7 +628,9 @@ function storeEntries(v: ConnectionsView): StoreEntries {
   return { connected, available, count: available.length };
 }
 
-const composioMark = (): string => `<span class="cs-icon md cs-composio-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h6v10H4zM14 7h6v10h-6zM10 10h4m-4 4h4"/></svg></span>`;
+/** Composio's mark, drawn in the text's colour: the store and the guide's services step both show it. */
+export const COMPOSIO_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h6v10H4zM14 7h6v10h-6zM10 10h4m-4 4h4"/></svg>`;
+const composioMark = (): string => `<span class="cs-icon md cs-composio-mark" aria-hidden="true">${COMPOSIO_SVG}</span>`;
 
 function keyDialogHTML(v: ConnectionsView): string {
   return `<div class="cs-scrim" data-conn="scrim" data-dialog="composio-key"><div class="cs-dialog" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>` +

@@ -1,14 +1,21 @@
 /* A memory in the 記憶 tab and in Raphael's tab of the settings (memory-view.ts): the title and the summary
    are the panel's own rows (styles.css); these are the few things only a memory has. Colours are the
    app's tokens. The document reads as text, and its box grows with it: neither ever scrolls by itself. */
-.mem .ctl { gap: var(--sp-2); align-items: center; }
+/* A memory is a section of its page (memory-view.ts memoryHTML): its name over one tinted card, as the member settings
+   page's lists and Settings' cards; each entry is a block of its own with whom it was told under it. */
+.mem { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); min-width: 0; }
+.mem-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-height: var(--h-ctl); padding-left: var(--sp-3); }
+.mem-title { margin: 0; font-size: var(--fs-sm); font-weight: var(--weight-medium); color: var(--text-2); }
+.mem .ctl { display: inline-flex; gap: var(--sp-1); align-items: center; }
 .mem .btn.icon { width: 32px; min-height: 32px; padding: 0; }
-.mem-doc { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); padding: var(--sp-1) 0 var(--sp-3); min-width: 0; }
-.mem-entry { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-sm); line-height: 1.65; color: var(--text); }
-.mem-none { margin: 0; font-size: var(--fs-sm); color: var(--text-3); }
-.mem-from { font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
-.mem-tag { display: inline-block; padding: 0 var(--sp-1); border-radius: var(--r-pill); background: var(--accent-soft); color: var(--accent-text); font-size: var(--fs-xs); line-height: 1.5; }
-.mem-edit { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); padding: var(--sp-1) 0 var(--sp-3); }
+.mem-doc { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; min-width: 0; padding: var(--sp-1); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.mem-entry { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; min-width: 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); }
+.mem-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-sm); line-height: 1.6; color: var(--text); }
+.mem-none { margin: 0; padding: var(--sp-3); font-size: var(--fs-sm); color: var(--text-3); }
+.mem-from { font-size: var(--fs-xs); color: var(--text-3); }
+.mem-tag { display: inline-block; margin-right: var(--sp-1); padding: 0 var(--sp-2); border-radius: var(--r-pill); background: var(--accent-soft); color: var(--accent-text); font-size: var(--fs-xs); line-height: 1.6; vertical-align: 1px; }
+.mem-summary-card > .row { min-height: 44px; padding: 0 var(--sp-2) 0 var(--sp-3); }
+.mem-edit { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); padding: var(--sp-2); }
 .mem-body { width: 100%; min-height: 8lh; field-sizing: content; overflow: hidden; resize: none; padding: var(--sp-2); border-radius: var(--r-sm); border: 1px solid var(--btn-edge); background: var(--panel); color: var(--text); font-size: var(--fs-sm); line-height: 1.65; }
 .mem-body:focus { outline: 0; }
 .mem-edit-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; }

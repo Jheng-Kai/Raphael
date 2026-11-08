@@ -1,5 +1,28 @@
 # Group chats and folders
 
+## Room CLI permission callback (core, 2026-11-09)
+
+R-ROOM-01 / R-CLI-07: Claude Code's permission-prompt callback `approve` remains mounted
+beside the four speech tools after every MCP catalog refresh. It is a permission decision,
+not an additional room action. Permission for an offered Raphael/computer MCP tool admits
+only that call to its existing context-specific gate; a board read needs no owner prompt.
+Unknown tools, callback recursion and wrong server namespaces are denied. Native shell/file
+actions remain denied in speech, including bypass mode, with guidance to hand off private work.
+Private/background tool execution still uses exact owner cards and existing protected-data rules.
+Codex uses its native permission callback; Antigravity permits only configured MCP servers in
+print mode. Neither is offered Claude's approve tool; both keep the same room/private scope.
+
+CLI termination with observed missing-tool or tool-error evidence is tool_broken with a fixed,
+localized explanation and bounded redacted private details, rather than a no-response retry.
+Bare EOF remains cli_stopped; explicit provider/auth/quota/refusal/network failures retain their
+classification. No new RPC, worker, model, schema or approval engine is introduced.
+
+Offline coverage: core/tests/background/test_room_cli.py (real room, authenticated MCP,
+three CLI brains, owner approve/deny and a synthetic Claude subprocess checking the actual
+permission-prompt flag), core/tests/agent/test_cli_failure_detail.py and existing CLI/security
+consumers. Report: app/.look/briefs/room-cli-approve-report.md. Synthetic CLI/MCP evidence does
+not establish installed Claude Code, native window or live/provider acceptance.
+
 Owner decision 2026-10-30 removes the Team page, route and spatial canvas.
 The global sidebar owns folder creation, rename, collapse, member moves and order.
 Member brain display remains in the details panel. The plus offers new members
@@ -12,6 +35,15 @@ Keep header and sidebar geometry identical; never crop the composite as one circ
 
 Keep the existing room composer, mentions, roles, Stop, reply references, source
 events and durable handoffs. The same AgentService owns member work.
+
+A room message carries no speaker name (owner, 2026-11-09: 「開會的時候不用有名字…不用顯示拉菲爾」):
+the face beside it says who spoke, its name in the face's tooltip and for a screen reader (the author
+stays in the markup, visually hidden); a message with nothing else in its meta line has no meta line.
+The room's right-click dialogs 參與成員 and 房內角色 (and the new room dialog) are one list of rows
+(`.room-list`, owner 2026-11-09): each member's face and name, a check on the right of a chosen member,
+a pressed state for a reader; in 房內角色 each row carries its role as a bare dropdown on the right.
+No separate list of picked names. Scenes: `primary-room-members`, `room-role-assignment`, `new-room`,
+`plus-create-room`, `room-replies`.
 
 Everyone in a room reads each message and decides for themselves, on their own model, through
 one small question (`room_listener`); a CLI or local brain reads an owner's message in a real turn

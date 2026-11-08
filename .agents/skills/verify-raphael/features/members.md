@@ -524,7 +524,11 @@ waited in the queue enters marked; a note past its date keeps it in its words; a
 
 The pane (`memory-view.ts`) shows each file as paragraphs, one 編輯 opens all of it in one box that grows with its
 text, and 儲存 sends the copy's revision: an edit from an old copy is refused, what was typed stays, and the next
-儲存 is made knowing it. 全部清除 and the summary's 清除 wait in their ⋯ (R-UI-56).
+儲存 is made knowing it. 全部清除 and the summary's 清除 wait in their ⋯ (R-UI-56). Since 2026-11-09 (owner: the
+memory pages looked messy) each memory is a section of its page: its name as a small heading with 編輯 and ⋯ on
+its right, then one tinted card (`.mem-doc`) whose entries are blocks of their own, the text over whom it was told
+(`.mem-from`, quiet), the 待確認 tag at the text's start; the summary is a card of its own under it. The same
+section serves the member's 記憶 kind and Settings › 記憶.
 
 ```powershell
 npm run verify -- --core

@@ -3,7 +3,9 @@
 ## Sub-features
 
 While the guide is up the window is the card itself (owner, 2026-11-07, as Typeless's): guide-window.ts
-sizes it to 960 x 640 under the control strip, centres it, turns off resizing and maximizing (no maximize
+sizes it to 1080 x 720 under the control strip (owner, 2026-11-09: 「導覽的頁面有一點點太小」; on a screen
+whose free area is smaller it takes that area less a 32 px edge, never below the app's 720 x 480), centres it,
+turns off resizing and maximizing (no maximize
 button, no resize edges, a double-click on the strip does nothing) and gives back the earlier size, place
 and maximized state when the guide ends; `guide-window-fixed` in the onboarding scene checks the requests.
 The welcome's language is a quiet button at the card's top left (globe, the language's own name, chevron; its
@@ -12,7 +14,7 @@ search field once there are more than eight; owner, 2026-11-08).
 
 A welcome, then three steps that are each a choice, then entry into the usable app with first-run
 state saved. There are no practice lessons, no microphone step and no completion screen (owner,
-2026-11-07). Everything sits in one card of a designed size (at most 960 x 640) in the middle of
+2026-11-07). Everything sits in one card of a designed size (at most 1080 x 720) in the middle of
 the window, with no progress bar and no side, as Grok Bot's first run (owner, 2026-11-07): every
 step is one calm centred column, a title (three of the team's own characters float by it, aria-hidden,
 others on every step and in other places — Gobta, Shion, Ranga; Shuna, Diablo, Benimaru; Milim, Souei,
@@ -31,19 +33,34 @@ Rigurd — owner 2026-11-08; gone below 640px wide), the choice, one wide black 
    tool equal, never ordered by what one owner set up). A search box (typos forgiven, R-FIND-01),
    then 熱門, the same for everyone (`POPULAR_TOOLS`: ChatGPT, Claude Code, Codex, OpenRouter,
    Anthropic, Google Gemini), then every other tool under its kind (subscription accounts, official,
-   gateways and clouds, this computer), each kind by name. Every tile is alike in a grid of three
-   (mark, name, state, its one button; a ready tile has the black edge and a check). OpenRouter is a
-   tile too: 連線 (or 已設定 and 更換) opens the masked field, 取消 and 貼上 across its row while the key
-   is typed. ChatGPT and the command-line tools are driven by the same account controller as
-   Settings > Models (`createCliBrains`); the key uses the same masked field, paste button and core call.
-2. **Services** (`onboarding-services`, `onboarding-service-waiting`): a search box (narrows the
-   tiles in place by name or id) and up to eighteen popular apps of the Connect apps store as tiles
-   in a grid of three, from the built-in catalog plus the Composio-managed apps when Composio is set
-   up; only apps that ask for no more than a sign-in. A tile that is not connected is one whole button
-   that opens the login; a connected one has the check and says Connected. A waiting tile keeps its
-   words inside it in every language and its 取消 stops the wait at once, even when the login never
-   answers; lists the core does not answer within 15 s turn into 重試 (owner, 2026-11-08: the step spun
-   on after a cancelled Slack sign-in).
+   gateways and clouds, this computer), each kind by name. The two store steps use a 900 px column.
+   Every tile is one row, as a store's app is (owner, 2026-11-09: the tiles were too tall, an email
+   broke over two lines and OpenRouter's heavy mark sat unevenly): the mark at 20 px in a 36 px soft
+   square, the name over one quiet line that ends in … instead of wrapping (ChatGPT signed in shows
+   only its account), and on the right its one button, then the check of a ready tile (black edge in
+   light, lifted fill in dark; the check carries the word a reader hears). Three tiles to a row where
+   each gets at least 256 px, two in a 720 px window. OpenRouter is a tile too: 連接 (or the check
+   and 更換) opens the masked field, 取消 and 貼上 across its row while the key is typed. ChatGPT and
+   the command-line tools are driven by the same account controller as Settings > Models
+   (`createCliBrains`); the key uses the same masked field, paste button and core call.
+2. **Services** (`onboarding-services`, `onboarding-service-waiting`, `onboarding-services-composio`,
+   `onboarding-composio-key`, `onboarding-composio-saved`, `onboarding-services-n8n`): a search box,
+   then, when Composio has no key, Composio's card across the step (owner, 2026-11-09: 「要讓他們先連上
+   Composio，然後如果沒有的話，才只顯示…沒有 Composio 也可以顯示的 connectors」): 連接 opens its
+   masked key field with 取消 and 貼上 in the card, and its line says where the project key is; a
+   refused key is told beside it in the store's own words, a saved one reads the store again with
+   Composio's apps and the card goes. Under it 「不用 Composio 也能連接」 (熱門 once Composio is set up)
+   and up to eighteen popular apps that ask only a sign-in, from the built-in catalog plus the
+   Composio-managed apps once it has a key. A search looks through every app the guide knows,
+   whatever it asks (typed letters first, near spellings only when nothing matches, at most thirty):
+   an app that wants its own key or developer app has 加入, which opens the store's own form
+   (connection-setup.ts); n8n, which runs on the owner's own server (connections.ts `ownServerApps`),
+   has 加入, which opens its address and access token across its tile with 取消 and 連接, and Enter
+   adds it through `integrations.add` with the store's header (owner, 2026-11-09: 「搜尋 n8n 也找不到」).
+   A tile that only signs in is one whole button with 登入 on its right; a connected one has the check.
+   A waiting tile keeps its words inside it in every language and its 取消 stops the wait at once, even
+   when the login never answers; lists the core does not answer within 15 s turn into 重試 (owner,
+   2026-11-08: the step spun on after a cancelled Slack sign-in).
 3. **Abilities** (`onboarding-abilities`, `onboarding-abilities-choice`): the shared abilities
    of Settings > Tools (web search, reading web pages, images, PDFs, speech) as the very rows and
    dialogs of that pane (`createServices`): each says which service it uses, keeps its switch and
@@ -61,14 +78,18 @@ state.
 ## Driving it with look
 
 ```powershell
-npm run look -- onboarding onboarding-tools onboarding-tools-key onboarding-services onboarding-service-waiting onboarding-abilities onboarding-abilities-choice after-onboarding --theme both --width 1120,720,1920x1080
+npm run look -- onboarding onboarding-tools onboarding-tools-key onboarding-services onboarding-service-waiting onboarding-services-composio onboarding-composio-key onboarding-composio-saved onboarding-services-n8n onboarding-abilities onboarding-abilities-choice after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
 Keep the welcome and each step's PNGs, the contact sheet and the report. Each scene presses the
 real Next button from the welcome; `onboarding-services` signs in to Gmail through the managed
 connector and `onboarding-abilities` switches reading web pages off, so the rendered checks see a
-changed state. Check that each tile keeps its mark, name, state and control inside it, that the
-tiles stand in three columns, that the controls are real buttons and switches, that the two pills
+changed state. The Composio scenes start without a key: `onboarding-composio-key` types a consumer
+key (refused beside its field), `onboarding-composio-saved` a project key (the card goes and
+Composio's apps join); `onboarding-services-n8n` searches n8n and opens its address field (check
+`onboarding-composio` for the card). Check that each tile is one row with its mark in its square,
+its name, one line and its control on the right inside it, that the tiles stand in three columns
+(two at 720), that the controls are real buttons and switches, that the two pills
 under the choice are centred and the grid fades out over them, that nothing is cut off at 720 wide
 and that the dark theme has no light edges. Native proof needs an authorized fresh `RAPHAEL_DATA_DIR`: finish the
 steps, relaunch and verify onboarding stays dismissed and the chosen tools, services and switches
@@ -86,8 +107,9 @@ remain separate checks.
 
 R-UI-35: the choice is tiles in a grid of three (rows for the abilities) with each tile's control
 inside it and clear of its name; the card keeps its designed size and sits in the middle. The
-rendered checks enforce this on `.ob-tile` (the older `.ob-item` hook of audit.mjs, control on the
-right of the name, matches no element of the guide any more: tiles keep the control under the name).
+rendered checks enforce this on `.ob-tile`: one row of at most 64 px (a wrapping status excepted),
+the 36 px mark square, the line on one line and the control on the right of the name, centred (the
+older `.ob-item` hook of audit.mjs matches no element of the guide any more).
 R-UI-37: a headline of at least 28px per screen (`.ob-col > h2`; the dialogs of the abilities keep
 their own size) and a primary action that fills the action row (`.ob-actions`, a 360px pill).
 `onboarding`, `onboarding-tools`, `onboarding-services` and `onboarding-abilities` carry the

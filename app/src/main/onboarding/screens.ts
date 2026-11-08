@@ -3,12 +3,13 @@
 // mount.ts, one wide black pill under it with a grey pill for the way back. Nothing here reads the window or the core,
 // so a screen can be drawn from made-up data (the browser check does).
 
-import { t } from "../i18n";
+import { getLocale, t } from "../i18n";
 import type { MessageKey } from "../i18n/zh-TW";
 
 import { CLIS, type CliBrainsView } from "../cli-brains";
-import { entryIcon } from "../connections";
+import { COMPOSIO_SVG, entryIcon, ownServerForm } from "../connections";
 import { nameScore } from "../find-match";
+import { popularServices } from "./helpers";
 import { providerMark } from "../provider-marks";
 import { type ProvidersView, description, emptyProvidersView, providersAddHTML } from "../providers";
 import type { ProviderKind, StoreService } from "../types";
@@ -52,20 +53,23 @@ function floaters(step: Exclude<GuideStep, "welcome">): string {
 /** The title of a screen; what the step is for is the choice itself, never a line under it. */
 export const head = (title: string, step?: Exclude<GuideStep, "welcome">): string => (step ? floaters(step) : "") + `<h2 tabindex="-1">${esc(title)}</h2>`;
 
-/** A check in a small black square, on a tile that is chosen or ready (as Grok Bot's chosen tiles). */
-const tick = `<span class="ob-tick" aria-hidden="true">${ico("check")}</span>`;
+/** A check in a small black square, on a tile that is chosen or ready (as Grok Bot's chosen tiles); `word` is what a reader hears. */
+const tick = (word: string): string => `<span class="ob-tick" role="img" aria-label="${esc(word)}">${ico("check")}</span>`;
 
 /**
- * One tile of a choice: the mark, the name with one quiet line, and the control under them; a tile that is on has the
- * check. A `wide` tile stands alone on a row with its control on the right (the OpenRouter key).
+ * One tile of a choice, one row as a store's app is (owner, 2026-11-09: the tiles were too tall and an email broke over
+ * two lines): the mark in its square, the name over one quiet line that never wraps, and on the right the control,
+ * then the check when the tile is `on` (the word a reader hears for it). A `wide` tile spans its row and its line may
+ * wrap; an `entry` tile (a key or an address being typed) spans it too, with its fields and buttons under its name, so
+ * a narrow window never squeezes its words into a sliver.
  */
-function tile(o: { id: string; mark: string; name: string; line?: string; control?: string; on?: boolean; wide?: boolean }): string {
+function tile(o: { id: string; mark: string; name: string; line?: string; lineHTML?: string; control?: string; on?: string; wide?: boolean; entry?: boolean }): string {
+  const line = o.lineHTML ?? (o.line ? esc(o.line) : "");
   return (
-    `<div class="ob-tile${o.wide ? " wide" : ""}${o.on ? " on" : ""}" data-item="${esc(o.id)}">` +
+    `<div class="ob-tile${o.wide || o.entry ? " wide" : ""}${o.entry ? " entry" : ""}${o.on ? " on" : ""}" data-item="${esc(o.id)}">` +
     `<span class="ob-ic">${o.mark}</span>` +
-    `<span class="ob-tx"><span class="nm">${esc(o.name)}</span>${o.line ? `<span class="ds">${esc(o.line)}</span>` : ""}</span>` +
-    (o.control ? `<span class="ob-ctl">${o.control}</span>` : "") +
-    (o.on ? tick : "") +
+    `<span class="ob-tx"><span class="nm">${esc(o.name)}</span>${line ? `<span class="ds">${line}</span>` : ""}</span>` +
+    `<span class="ob-ctl">${o.control ?? ""}${o.on && !o.wide && !o.entry ? tick(o.on) : ""}</span>` +
     `</div>`
   );
 }
@@ -142,20 +146,24 @@ export function toolCards(v: CliBrainsView): ToolCard[] {
       id: "chatgpt",
       mark: providerMark("openai"),
       name: "ChatGPT",
-      line: waiting ? waitLine : signing ? t("brains.chatgptSigning") : signedIn ? [t("brains.usingPlan"), chatgpt?.email].filter(Boolean).join(" · ") : chatgpt?.signed_in ? t("brains.chatgptNoPlan") : t("brains.signedOut"),
+      // Signed in, the account is the line: the check already says it is ready.
+      line: waiting ? waitLine : signing ? t("brains.chatgptSigning") : signedIn ? chatgpt?.email || t("brains.usingPlan") : chatgpt?.signed_in ? t("brains.chatgptNoPlan") : t("brains.signedOut"),
       ready: !waiting && signedIn,
-      action: waiting || signedIn ? null : signing ? { label: t("common.cancel"), attrs: ' data-chatgpt="cancel" data-k="chatgpt:cancel"' } : { label: t("brains.connect"), attrs: ' data-chatgpt="sign-in" data-k="chatgpt:sign-in"' },
+      action: waiting || signedIn ? null : signing ? { label: t("common.cancel"), attrs: ' data-chatgpt="cancel" data-k="chatgpt:cancel"' } : { label: t("providers.connect"), attrs: ' data-chatgpt="sign-in" data-k="chatgpt:sign-in"' },
     },
   ];
   for (const known of CLIS) {
     const cli = v.clis.find((c) => c.id === known.id);
     const ready = !waiting && !!cli?.available;
-    const label = t(cli?.installed ? "brains.connect" : "brains.install");
+    // Every tile of the guide says 連接 for the same act, whatever kind of tool it is.
+    const label = t(cli?.installed ? "providers.connect" : "brains.install");
+    const version = versionOf(cli?.version);
     cards.push({
       id: known.id,
       mark: providerMark(known.mark),
       name: known.name,
-      line: waiting ? waitLine : ready ? versionOf(cli?.version) : t(cli?.disconnected ? "brains.disconnected" : !cli?.installed ? "brains.missing" : "brains.signedOut"),
+      // Every tile has its quiet line, so the names stand at one height: a ready tool says so, with its version.
+      line: waiting ? waitLine : ready ? [t("brains.ready"), version].filter(Boolean).join(" · ") : t(cli?.disconnected ? "brains.disconnected" : !cli?.installed ? "brains.missing" : "brains.signedOut"),
       ready,
       action: waiting || ready ? null : { label, attrs: ` data-cli="${known.id}" data-k="cli:${known.id}" aria-label="${esc(`${label} ${known.name}`)}"${v.busy ? " disabled" : ""}` },
     });
@@ -164,24 +172,34 @@ export function toolCards(v: CliBrainsView): ToolCard[] {
 }
 
 const toolTile = (card: ToolCard): string =>
-  tile({ id: card.id, mark: card.mark, name: card.name, line: card.line, on: card.ready, control: card.ready ? st("ok", t("brains.ready")) : card.action ? btn(esc(card.action.label), "sm", card.action.attrs) : "" });
+  tile({ id: card.id, mark: card.mark, name: card.name, line: card.line, on: card.ready ? t("brains.ready") : undefined, control: !card.ready && card.action ? btn(esc(card.action.label), "sm", card.action.attrs) : "" });
 
 /**
- * The OpenRouter tile, one tile like the others: 「連線」 (or 「已設定」 and 「更換」) until it is pressed, then it spans its row
- * with the masked field, 「取消」 and 「貼上」 while the key is typed. A refused key keeps the field open with its alert.
+ * A key typed in a wide tile: the masked field, 「取消」 and 「貼上」 (「檢查中…」 while it is checked). The guide's two keys,
+ * OpenRouter's and Composio's, are typed alike; a key is sent by Enter or 貼上 only.
+ */
+function keyEntry(o: { id: string; placeholder: string; label: string; busy: boolean; invalid: boolean; cancel: string; paste: string }): string {
+  return (
+    fieldHTML(o.placeholder, "", { label: o.label, id: o.id, type: "password", invalid: o.invalid, disabled: o.busy }) +
+    btn(esc(t("common.cancel")), "sm", ` data-ob="${o.cancel}"${o.busy ? " disabled" : ""}`) +
+    btn(esc(o.busy ? t("common.checking") : t("common.paste")), "sm", ` data-ob="${o.paste}"${o.busy ? " disabled" : ""}`)
+  );
+}
+
+/**
+ * The OpenRouter tile, one tile like the others: 「連接」 (or the check and 「更換」) until it is pressed, then it spans its row
+ * with the key's field while the key is typed. A refused key keeps the field open with its alert.
  */
 function keyTile(k: KeyView): string {
   const entering = k.replacing || k.busy || k.error !== null;
   const control = entering
-    ? fieldHTML("sk-or-v1-…", "", { w: 220, get label() { return t("common.apiKeyField"); }, id: "ob-key-input", type: "password", invalid: k.error !== null, disabled: k.busy }) +
-      btn(esc(t("common.cancel")), "sm", ` data-ob="key-cancel"${k.busy ? " disabled" : ""}`) +
-      btn(esc(k.busy ? t("common.checking") : t("common.paste")), "sm", ` data-ob="key-paste"${k.busy ? " disabled" : ""}`)
+    ? keyEntry({ id: "ob-key-input", placeholder: "sk-or-v1-…", label: t("common.apiKeyField"), busy: k.busy, invalid: k.error !== null, cancel: "key-cancel", paste: "key-paste" })
     : k.has
-      ? st("ok", t("onboarding.keyIsSet")) + btn(esc(t("onboarding.keyReplace")), "sm", ' data-ob="key-replace"')
+      ? btn(esc(t("onboarding.keyReplace")), "sm", ' data-ob="key-replace"')
       : btn(esc(t("providers.connect")), "sm", ` data-ob="key-replace" aria-label="${esc(`${t("providers.connect")} OpenRouter`)}"`);
   // One short line like every other tile's: the key's own name once it is known, otherwise what it is.
   const line = k.has && !entering && k.name !== null ? t("onboarding.keyNamed", { p0: k.name }) : t("common.apiKey");
-  return tile({ id: "openrouter", mark: providerMark("openrouter"), name: "OpenRouter", line, control, wide: entering, on: k.has && !entering }) + (k.error ? alert(st("err", k.error)) : "");
+  return tile({ id: "openrouter", mark: providerMark("openrouter"), name: "OpenRouter", line, control, entry: entering, on: k.has && !entering ? t("onboarding.keyIsSet") : undefined }) + (k.error ? alert(st("err", k.error)) : "");
 }
 
 /**
@@ -194,9 +212,9 @@ const GROUP_TITLE: Record<ProviderKind["group"], MessageKey> = { official: "prov
 function providerTile(kind: ProviderKind, v: ProvidersView): string {
   const provider = v.providers.find((p) => p.kind === kind.kind);
   const control = provider
-    ? st("ok", t("providers.connected")) + btn(esc(t("providers.manage")), "sm", ` data-pv="open" data-id="${esc(provider.id)}" aria-label="${esc(`${t("providers.manage")} ${kind.name}`)}"${v.busy ? " disabled" : ""}`)
+    ? btn(esc(t("providers.manage")), "sm", ` data-pv="open" data-id="${esc(provider.id)}" aria-label="${esc(`${t("providers.manage")} ${kind.name}`)}"${v.busy ? " disabled" : ""}`)
     : btn(esc(t("providers.connect")), "sm", ` data-pv="add" data-id="${esc(kind.kind)}" aria-label="${esc(`${t("providers.connect")} ${kind.name}`)}"${kind.available && !v.busy ? "" : " disabled"}`);
-  return tile({ id: `provider:${kind.kind}`, mark: providerMark(kind.kind), name: kind.name, line: kind.available ? description(kind) : t("providers.soon"), on: !!provider, control });
+  return tile({ id: `provider:${kind.kind}`, mark: providerMark(kind.kind), name: kind.name, line: kind.available ? description(kind) : t("providers.soon"), on: provider ? t("providers.connected") : undefined, control });
 }
 
 const tr = t as unknown as (key: MessageKey) => string;
@@ -259,7 +277,23 @@ export function toolsHTML(accounts: CliBrainsView, key: KeyView, accountError: s
 
 // ---------- 2. the services ----------
 
+/** Composio, as the services step knows it. The key itself is never held here. */
+export interface ComposioView {
+  /** Whether a key is set; null until the core has said, and then the card is not drawn. */
+  configured: boolean | null;
+  /** The key's field is open. */
+  entering: boolean;
+  busy: boolean;
+  error: string | null;
+}
+
+export const emptyComposioView = (): ComposioView => ({ configured: null, entering: false, busy: false, error: null });
+
+/** The own-server app (n8n) whose address and key are being typed in its tile. */
+export interface ServerEntry { id: string; busy: boolean; error: string | null }
+
 export interface ServicesState {
+  /** Every app the guide can add (mergeServices): what is shown before a search is the popular sign-in ones. */
   services: StoreService[] | "loading" | "failed";
   /** The service whose login is open in the browser. */
   waiting: string | null;
@@ -267,37 +301,100 @@ export interface ServicesState {
   failed: string | null;
   /** What the search box holds. */
   query?: string;
+  composio?: ComposioView;
+  server?: ServerEntry | null;
 }
 
-/** The services whose name or id holds what was typed (a search is by letters, not by case or spacing). */
+/** The most a search shows: the nearest matches, the rest of the store being in 「連接」 afterwards. */
+const FOUND_SHOWN = 30;
+
+/**
+ * The services whose name or id the search finds: as typed (by letters, not by case or spacing), or, when none is,
+ * the names it nearly spells, nearest first (typos forgiven, R-FIND-01).
+ */
 export function matchServices(services: readonly StoreService[], query: string): StoreService[] {
   const text = (value: string): string => value.toLowerCase().replace(/\s+/g, "");
   const wanted = text(query.trim());
-  return wanted ? services.filter((s) => text(s.name).includes(wanted) || text(s.id).includes(wanted)) : [...services];
+  if (!wanted) return [...services];
+  const exact = services.filter((s) => text(s.name).includes(wanted) || text(s.id).includes(wanted));
+  if (exact.length) return exact;
+  return services.map((s) => ({ s, score: nameScore([s.name, s.id], query.trim()) }))
+    .filter((hit) => hit.score < Infinity).sort((a, b) => a.score - b.score).map((hit) => hit.s);
 }
 
+const summaryOf = (s: StoreService): string => s.summary[getLocale()] ?? s.summary.en ?? "";
+
+/**
+ * One app's tile. An app that asks only a sign-in is one button: pressing the tile opens its login. One that asks for
+ * the owner's own key or developer app has 「加入」, which opens the store's own form; an app on the owner's own server
+ * (n8n) has 「加入」 too, and its address and key are then typed across its row.
+ */
 function serviceTile(s: StoreService, v: ServicesState): string {
   const mark = entryIcon(s, "md");
-  const body = (line: string, extra = ""): string =>
-    `<span class="ob-ic">${mark}</span><span class="ob-tx"><span class="nm">${esc(s.name)}</span><span class="ds">${line}</span></span>${extra}`;
-  if (s.server_id !== null) return `<div class="ob-tile on" data-item="${esc(s.id)}">${body(st("ok", t("onboarding.connConnected")), tick)}</div>`;
+  const own = ownServerForm(s.id);
+  if (s.server_id !== null) return tile({ id: s.id, mark, name: s.name, line: summaryOf(s), on: t("onboarding.connConnected") });
   if (v.waiting === s.id) {
-    const cancel = `<span class="ob-ctl">${btn(esc(t("common.cancel")), "sm", ' data-ob="conn-cancel"')}</span>`;
-    return `<div class="ob-tile" data-item="${esc(s.id)}">${body(st("idle", t("onboarding.connWaiting")), cancel)}</div>`;
+    return tile({ id: s.id, mark, name: s.name, lineHTML: st("idle", t("onboarding.connWaiting")), control: btn(esc(t("common.cancel")), "sm", ' data-ob="conn-cancel"') });
   }
-  // The whole tile is the sign-in button: pressing it opens the service's login, as the row's button did.
+  if (own && v.server?.id === s.id) return serverTile(s, mark, own, v.server);
+  const need = own ? t("store.needsOwnServer") : s.needs === "key" ? t("setup.needsKey") : s.needs === "own_app" ? t("setup.needsOwnApp") : "";
+  if (need) {
+    const act = own ? "server-open" : "conn-setup";
+    return tile({ id: s.id, mark, name: s.name, line: need, control: btn(esc(t("conn.join")), "sm", ` data-ob="${act}" data-service="${esc(s.id)}" aria-label="${esc(`${t("conn.join")} ${s.name}`)}"${v.waiting || v.server?.busy ? " disabled" : ""}`) });
+  }
+  // The whole tile is the sign-in button; the word on its right says what pressing it does.
   return (
     `<button type="button" class="btn ob-tile pick" data-item="${esc(s.id)}" data-ob="conn-login" data-id="${esc(s.id)}" data-service="${esc(s.id)}"` +
-    ` aria-label="${esc(`${t("onboarding.connLogin")} ${s.name}`)}"${v.waiting ? " disabled" : ""}>${body(esc(t("onboarding.connLogin")))}</button>`
+    ` aria-label="${esc(`${t("onboarding.connLogin")} ${s.name}`)}"${v.waiting ? " disabled" : ""}>` +
+    `<span class="ob-ic">${mark}</span><span class="ob-tx"><span class="nm">${esc(s.name)}</span><span class="ds">${esc(summaryOf(s))}</span></span>` +
+    `<span class="ob-ctl"><span class="ob-get" aria-hidden="true">${esc(t("onboarding.connLogin"))}</span></span></button>`
   );
 }
 
-/** What the grid holds: the tiles of the services that match the search, or a word that none do. */
+/** An own-server app being added: its address and its key across its row, then 「取消」 and 「連接」. */
+function serverTile(s: StoreService, mark: string, own: NonNullable<ReturnType<typeof ownServerForm>>, entry: ServerEntry): string {
+  const off = entry.busy ? " disabled" : "";
+  const control =
+    fieldHTML(own.urlHint, "", { label: `${s.name} ${t("conn.form.url")}`, id: "ob-server-url", invalid: entry.error !== null, disabled: entry.busy }) +
+    fieldHTML(t("onboarding.serverToken"), "", { label: `${s.name} ${t("onboarding.serverToken")}`, id: "ob-server-token", type: "password", disabled: entry.busy }) +
+    btn(esc(t("common.cancel")), "sm", ` data-ob="server-cancel"${off}`) +
+    btn(esc(entry.busy ? t("conn.form.connecting") : t("providers.connect")), "sm", ` data-ob="server-add"${off}`);
+  return tile({ id: s.id, mark, name: s.name, line: t("store.leadOwnServer", { p0: s.name }), control, entry: true }) + (entry.error ? alert(st("err", entry.error)) : "");
+}
+
+/**
+ * Composio, before its key is set: one card across the step that unlocks the store's other apps (owner, 2026-11-09:
+ * 「要讓他們先連上 Composio」). Its key is typed in the card, as OpenRouter's is on the first step.
+ */
+function composioTile(c: ComposioView): string {
+  const entering = c.entering || c.busy || c.error !== null;
+  const control = entering
+    ? keyEntry({ id: "ob-composio-input", placeholder: "ak_…", label: t("plugins.keyPrompt"), busy: c.busy, invalid: c.error !== null, cancel: "composio-cancel", paste: "composio-paste" })
+    : btn(esc(t("providers.connect")), "sm", ` data-ob="composio-open" aria-label="${esc(`${t("providers.connect")} Composio`)}"`);
+  const mark = `<span class="mono md" aria-hidden="true">${COMPOSIO_SVG}</span>`;
+  return (
+    `<div class="ob-composio">` +
+    tile({ id: "composio", mark, name: "Composio", line: t(entering ? "onboarding.composioKeyLine" : "onboarding.composioLine"), control, wide: true, entry: entering }) +
+    (c.error ? alert(st("err", c.error)) : "") +
+    `</div>`
+  );
+}
+
+/**
+ * What the grid holds: before a search, the popular apps that ask only a sign-in; with one, every app it finds,
+ * whatever it asks, or a word that none does.
+ */
 export function serviceTilesHTML(v: ServicesState): string {
   if (!Array.isArray(v.services)) return "";
-  const shown = matchServices(v.services, v.query ?? "");
+  const shown = v.query?.trim()
+    ? matchServices(v.services, v.query).slice(0, FOUND_SHOWN)
+    : popularServices(v.services.filter((s) => !ownServerForm(s.id)));
   return shown.length ? shown.map((s) => serviceTile(s, v)).join("") : `<p class="ob-state">${esc(t("onboarding.connNone"))}</p>`;
 }
+
+/** The heading over the grid: what it is, so without Composio it says these need none. */
+const servicesHeading = (v: ServicesState): string =>
+  v.query?.trim() ? "" : `<h3 class="ob-section" data-ob-services-title>${esc(t(v.composio?.configured === false ? "onboarding.connBuiltin" : "onboarding.popular"))}</h3>`;
 
 export function servicesHTML(v: ServicesState): string {
   let body: string;
@@ -306,9 +403,15 @@ export function servicesHTML(v: ServicesState): string {
   else {
     body =
       `<div class="ob-find">${fieldHTML(t("conn.search"), v.query ?? "", { icon: "search", id: "ob-find" })}</div>` +
-      `<div class="ob-grid" data-ob-services>${serviceTilesHTML(v)}</div>` + (v.failed ? alert(st("err", v.failed)) : "");
+      (v.composio?.configured === false ? composioTile(v.composio) : "") +
+      `<div data-ob-services-list>${servicesListHTML(v)}</div>`;
   }
   return head(t("onboarding.connTitle"), "services") + `<div class="ob-main" id="ob-conn">${body}</div>`;
+}
+
+/** The heading, the grid and a login's failure: what a search or a login redraws, leaving the field and Composio's card be. */
+export function servicesListHTML(v: ServicesState): string {
+  return servicesHeading(v) + `<div class="ob-grid" data-ob-services>${serviceTilesHTML(v)}</div>` + (v.failed ? alert(st("err", v.failed)) : "");
 }
 
 // ---------- 3. the abilities ----------

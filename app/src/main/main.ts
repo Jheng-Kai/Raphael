@@ -2,7 +2,7 @@ import { installedUpdateNotice } from "./updates";
 import { watchWindowVisibility } from "./window-visibility";
 import { onLocaleChange, setLocale, t } from "./i18n";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 
 import { loadGlyphTexture } from "../overlay/emblem";
 import { dropEchoTitles } from "./message-tooltip";
@@ -378,7 +378,11 @@ watchChipRows(document.body);
     guide.hidden = false;
     // The window becomes the guide's card until it is done (guide-window.ts).
     const strip = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--window-controls-height")) || 32;
-    try { void fitGuideWindow(getCurrentWindow(), strip).catch((err) => console.warn("main: the guide window keeps its size", err)); }
+    const room = async (): Promise<{ width: number; height: number } | null> => {
+      const screen = await currentMonitor();
+      return screen ? { width: screen.workArea.size.width / screen.scaleFactor, height: screen.workArea.size.height / screen.scaleFactor } : null;
+    };
+    try { void fitGuideWindow(getCurrentWindow(), strip, document.documentElement, room).catch((err) => console.warn("main: the guide window keeps its size", err)); }
     catch (err) { console.warn("main: no native window for the guide", err); }
     tellAgentPage();
     mountOnboarding(

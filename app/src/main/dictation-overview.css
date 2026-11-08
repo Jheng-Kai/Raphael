@@ -23,9 +23,9 @@
 .page-overview .icard .v small { margin-inline: var(--sp-1); font: 500 var(--fs-xs)/1.5 var(--ui); letter-spacing: 0; color: var(--text-2); white-space: nowrap; }
 .page-overview .icard .v small:last-child { margin-right: 0; }
 .page-overview .icard .v.none { font: 400 var(--fs-md)/1.6 var(--ui); color: var(--text-3); }
-.page-overview .icard .k { font-size: var(--fs-xs); color: var(--text-3); }
+.page-overview .icard .k { font-size: var(--fs-sm); font-weight: var(--weight-medium); color: var(--text-2); }
 .page-overview .activity-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-5); }
-.page-overview .activity-sum { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); font-size: var(--fs-xs); color: var(--text-2); }
+.page-overview .activity-sum { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); font-size: var(--fs-sm); font-weight: var(--weight-medium); color: var(--text-2); }
 .page-overview .activity-nav { display: flex; gap: var(--sp-1); margin-left: auto; }
 .page-overview .activity-nav .btn.icon.row { width: 24px; }
 .page-overview .activity-nav .btn.icon.row:disabled { opacity: 0.35; cursor: default; background: transparent; }
@@ -41,8 +41,8 @@
 .heat rect[data-tip] { cursor: pointer; }
 .heat rect.is-picked { stroke: var(--text-2); stroke-width: 1; }
 /* A day with a dictation opens the history at that day. */
-.heat .ax { font: var(--fs-2xs) var(--ui); fill: var(--text-3); }
-.legend { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-1); margin-top: var(--sp-2); font-size: var(--fs-xs); color: var(--text-3); }
+.heat .ax { font: 500 var(--fs-xs) var(--ui); fill: var(--text-2); }
+.legend { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-1); margin-top: var(--sp-2); font-size: var(--fs-xs); font-weight: var(--weight-medium); color: var(--text-2); }
 .heat-foot { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-2); }
 .heat-foot .legend { margin: 0 0 0 auto; }
 .legend span:first-child { margin-right: var(--sp-1); } .legend span:last-child { margin-left: var(--sp-1); }
@@ -52,7 +52,7 @@
 /* ---------- the shortcuts ---------- */
 .page-overview .kc-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); padding: var(--sp-2) 0; border-top: 1px solid var(--line); }
 .page-overview .card-head + .kc-row { border-top: 0; }
-.page-overview .kc-name { font-size: var(--fs-sm); color: var(--text-2); }
+.page-overview .kc-name { font-size: var(--fs-sm); font-weight: var(--weight-medium); color: var(--text); }
 .page-overview .kc-keys { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--sp-1) var(--sp-1); margin-left: auto; }
 .page-overview .kc-keys > .keys { gap: var(--sp-1); }
 .page-overview .kc-keys > span:not(.keys) { font-size: var(--fs-xs); color: var(--text-3); }

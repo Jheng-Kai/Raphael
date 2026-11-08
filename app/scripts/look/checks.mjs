@@ -2753,7 +2753,7 @@ export function checkRendered(name, context = {}) {
     const title = document.querySelector('.ob-col > h2');
     require(title && parseFloat(getComputedStyle(title).fontSize) >= 28, "the headline is large");
     const card = document.querySelector('.ob-card').getBoundingClientRect();
-    require(card.width <= 962 && card.height <= 642, `the guide is one card of a designed size, not the whole window (${Math.round(card.width)} x ${Math.round(card.height)})`);
+    require(card.width <= 1082 && card.height <= 722, `the guide is one card of a designed size, not the whole window (${Math.round(card.width)} x ${Math.round(card.height)})`);
     require(Math.abs((card.left + card.right) / 2 - innerWidth / 2) <= 2, "the card sits in the middle of the window");
     require(!document.querySelector('.ob-bar-steps, .ob-aside, .ob-say, .ob-top'), "there is no progress bar, no side and no bar above the column");
     require(!document.querySelector('.ob-sub'), "a choice has no line of purpose under its headline");
@@ -2770,7 +2770,8 @@ export function checkRendered(name, context = {}) {
         require(at.left >= card.left && at.right <= card.right && at.top >= card.top && at.bottom <= words.bottom + 40, "a floating slime stays in the card, by the title");
       }
     }
-    const items = [...document.querySelectorAll(name === "onboarding-abilities" ? '.svc-item' : '.ob-tile:not([data-item^="provider:"])')].filter(visible);
+    const items = [...document.querySelectorAll(name === "onboarding-abilities" ? '.svc-item' : '.ob-tile:not([data-item^="provider:"]):not([data-item="composio"])')].filter(visible);
+    const searched = !!document.querySelector('#ob-find')?.value.trim();
     items.forEach(item => { item.dataset.item ??= item.dataset.id; });
     const expected = { "onboarding-tools": ["chatgpt", "claude", "codex", "openrouter", "gemini"], "onboarding-abilities": ["search", "read", "vision", "pdf", "voice"] }[name];
     if (name === "onboarding-tools") {
@@ -2784,36 +2785,55 @@ export function checkRendered(name, context = {}) {
       if (!document.querySelector('#ob-key-input')) require(!document.querySelector('.ob-tile.wide'), "no tile is wider than the others while nothing is being typed");
     }
     if (expected) require(JSON.stringify(items.map(item => item.dataset.item)) === JSON.stringify(expected), `the items are ${expected.join(", ")}: ${items.map(item => item.dataset.item).join(", ")}`);
-    else require(items.length >= 3 && items.length <= 18 && items.some(item => item.dataset.item === "gmail"), "the popular services of the store are offered as a grid");
+    else if (searched) require(items.length >= 1, "a search shows what it finds");
+    else require(items.length >= 3 && items.length <= 18 && (!window.__look.data.composioConfigured || items.some(item => item.dataset.item === "gmail")), "the popular services of the store are offered as a grid");
     const column = document.querySelector('.ob-col').getBoundingClientRect();
-    const tiles = name === "onboarding-abilities" ? [] : items;
+    const tiles = name === "onboarding-abilities" ? [] : [...document.querySelectorAll('.ob-tile:not([data-item^="provider:"])')].filter(visible);
+    // Each tile is one row, as a store's app is (owner, 2026-11-09: the tiles were too tall and an email broke in two):
+    // its mark in a square, its name over one line, its control on the right, centred.
     for (const item of tiles) {
-      const box = item.getBoundingClientRect(), label = item.querySelector('.ob-tx').getBoundingClientRect(), nm = item.querySelector('.ob-tx .nm'), control = item.querySelector('.ob-ctl'), wide = item.classList.contains('wide');
+      const box = item.getBoundingClientRect(), label = item.querySelector('.ob-tx').getBoundingClientRect(), nm = item.querySelector('.ob-tx .nm'), ds = item.querySelector('.ob-tx .ds'), control = item.querySelector('.ob-ctl'), wide = item.classList.contains('wide');
+      const mark = item.querySelector('.ob-ic').getBoundingClientRect();
       require(box.left >= column.left - 1 && box.right <= column.right + 1, `${item.dataset.item} stays inside the column`);
       require(nm.scrollWidth <= nm.clientWidth + 1, `${item.dataset.item} shows its whole name`);
-      require(item.querySelector('.ob-ic').getBoundingClientRect().right <= label.left + 1, `${item.dataset.item} has its mark before its name`);
-      if (control) {
+      require(mark.right <= label.left + 1 && Math.abs(mark.width - 36) <= 1 && Math.abs(mark.height - 36) <= 1, `${item.dataset.item} has its mark in its square before its name`);
+      const entry = item.classList.contains('entry');
+      if (!entry) require(Math.abs((mark.top + mark.bottom) / 2 - (box.top + box.bottom) / 2) <= 2, `${item.dataset.item} centres its mark`);
+      // A status may wrap in its tile in a long language (owner, 2026-11-08); every other line stays one line.
+      if (!wide && !ds?.querySelector('.st')) {
+        require(box.height <= 64, `${item.dataset.item} is one row (${Math.round(box.height)} px)`);
+        if (ds) require(ds.getBoundingClientRect().height <= parseFloat(getComputedStyle(ds).lineHeight) + 1, `${item.dataset.item} keeps its line on one line`);
+      }
+      if (control && visible(control)) {
         const side = control.getBoundingClientRect();
         require(side.left >= box.left - 1 && side.right <= box.right + 1 && side.bottom <= box.bottom + 1 && side.top >= box.top - 1, `${item.dataset.item} keeps its control inside its tile`);
-        require(wide ? side.left >= label.right - 1 : side.top >= label.bottom - 1, `${item.dataset.item} keeps its control clear of its name`);
-        if (wide) require(Math.abs((side.top + side.bottom) / 2 - (box.top + box.bottom) / 2) <= 2, `${item.dataset.item} centres its control`);
+        // A key or an address being typed has its fields under its words, from the same left edge (owner, 2026-11-09:
+        // in a narrow window the fields beside them squeezed the words into a sliver).
+        if (entry) require(side.top >= label.bottom - 1 && Math.abs(side.left - label.left) <= 1 && label.width >= Math.min(240, box.width / 2), `${item.dataset.item} has its fields under its words, which keep their width`);
+        else {
+          require(side.left >= label.right - 1, `${item.dataset.item} keeps its control on the right of its name`);
+          require(Math.abs((side.top + side.bottom) / 2 - (box.top + box.bottom) / 2) <= 2, `${item.dataset.item} centres its control`);
+        }
       }
-      if (item.classList.contains('on') && !wide) require(visible(item.querySelector('.ob-tick')), `${item.dataset.item} shows its check`);
+      if (item.classList.contains('on') && !wide) require(visible(item.querySelector('.ob-ctl .ob-tick')) && item.querySelector('.ob-tick').getAttribute('aria-label'), `${item.dataset.item} shows its check, and says what it means`);
     }
     const narrow = tiles.filter(item => !item.classList.contains('wide'));
     const lefts = new Set(narrow.map(item => Math.round(item.getBoundingClientRect().left)));
-    const columns = 3;
+    // Three to a row where the column has room for tiles of at least 256 px, fewer in a narrow window.
+    const columns = Math.min(3, Math.max(1, Math.floor((column.width + 8) / 264)));
     if (narrow.length >= columns) require(lefts.size === columns, `the tiles stand in a grid of ${columns} columns (${lefts.size})`);
     if (name === "onboarding-services") {
       const find = document.querySelector('.ob-find input#ob-find');
       require(find && visible(find) && find.getAttribute('aria-label'), "a search box is above the tiles");
-      require(find.getBoundingClientRect().bottom <= narrow[0].getBoundingClientRect().top, "the search box is above the first tile");
-      // The waiting scene (onboarding-service-waiting) connects nothing: it is about the waiting tile's words.
-      if (!document.querySelector('[data-ob="conn-cancel"]')) {
-        require(document.querySelector('[data-item="gmail"].on .dot.ok') && visible(document.querySelector('[data-item="gmail"].on .ob-tick')), "a connected service says so, with the check");
-        require(!document.querySelector('[data-item="gmail"] button'), "a connected service has nothing left to press");
+      const first = tiles[0];
+      require(!first || find.getBoundingClientRect().bottom <= first.getBoundingClientRect().top, "the search box is above the first tile");
+      for (const on of document.querySelectorAll('[data-ob-services] .ob-tile.on')) {
+        require(!on.querySelector('button'), `${on.dataset.item} is connected and has nothing left to press`);
       }
-      require(document.querySelector('button.ob-tile[data-ob="conn-login"]'), "a service that is not connected is one whole button");
+      if (!searched) require(document.querySelector('button.ob-tile[data-ob="conn-login"]'), "a service that is not connected is one whole button");
+      for (const login of document.querySelectorAll('button.ob-tile[data-ob="conn-login"]')) {
+        require(visible(login.querySelector('.ob-ctl .ob-get')), `${login.dataset.item} says on its right what pressing it does`);
+      }
     }
     if (name === "onboarding-abilities") {
       // The same rows as Settings › 工具: what each uses now, its switch and the way to its choice of service.
@@ -2842,6 +2862,28 @@ export function checkRendered(name, context = {}) {
     }
     require(ink.bottom <= card.bottom && grey.bottom <= card.bottom, "both pills stay inside the card");
     return { check: name, items: items.length, columns: lefts.size, headline: getComputedStyle(title).fontSize };
+  }
+  if (name === "onboarding-composio") {
+    // Without Composio its card comes first across the step, and the apps under it are the ones that need none (owner,
+    // 2026-11-09: 「要讓他們先連上 Composio，然後如果沒有的話，才只顯示…沒有 Composio 也可以顯示的 connectors」).
+    const card = document.querySelector('.ob-composio [data-item="composio"]'), grid = document.querySelector('[data-ob-services]');
+    const column = document.querySelector('.ob-col').getBoundingClientRect();
+    require(visible(card) && card.classList.contains('wide'), "Composio is one card across the step");
+    const box = card.getBoundingClientRect();
+    require(Math.abs(box.left - column.left) <= 1 && Math.abs(box.right - column.right) <= 1, "its card spans the column");
+    require(box.bottom <= grid.getBoundingClientRect().top, "its card comes before the apps");
+    require(box.top >= document.querySelector('#ob-find').getBoundingClientRect().bottom, "its card is under the search box");
+    const title = document.querySelector('[data-ob-services-title]');
+    require(title?.textContent.trim() === "不用 Composio 也能連接", `the apps under it are named as needing no Composio: ${title?.textContent}`);
+    const field = card.querySelector('#ob-composio-input');
+    if (field) {
+      require(field.type === "password" && visible(card.querySelector('[data-ob="composio-paste"]')) && visible(card.querySelector('[data-ob="composio-cancel"]')), "its key is typed in the card, masked, with 貼上 and 取消");
+      require(card.querySelector('.ds').textContent.includes("API Keys"), "while the key is typed the card says where to find it");
+    } else {
+      const open = card.querySelector('[data-ob="composio-open"]');
+      require(visible(open) && open.textContent.trim() === "連接", "its card has 連接 on its right");
+    }
+    return { check: name, entering: !!field };
   }
   if (name === "details-quick-once") {
     const quick = [...document.querySelectorAll('.mb-det [data-conversation-open]')].filter(row => visible(row) && row.textContent.includes('快速提問'));
@@ -2971,7 +3013,7 @@ export function checkRendered(name, context = {}) {
     // The guide's window is its card, fixed (owner, 2026-11-07); the language dropdown stands without a label.
     const calls = window.__look.windowCalls ?? [], size = JSON.stringify(calls.find(call => call.command === "set_size")?.args ?? {});
     require(document.documentElement.dataset.windowFixed === "true", "the window is fixed while the guide is up");
-    require(size.includes("960") && size.includes("672"), `the window is asked to be the card under the control strip: ${size}`);
+    require(size.includes("1080") && size.includes("752"), `the window is asked to be the card under the control strip: ${size}`);
     require(calls.some(call => call.command === "set_resizable" && call.args.value === false), "it cannot be resized");
     require(calls.some(call => call.command === "set_maximizable" && call.args.value === false), "it cannot be maximized");
     require(!visible(document.querySelector('[data-window-action="maximize"]')), "no maximize button while it is fixed");
@@ -3594,8 +3636,15 @@ export function checkRendered(name, context = {}) {
       const columns = selector => rows.map(item => item.querySelector(selector).getBoundingClientRect().left);
       for (const selector of ['.mlead', '.mt']) require(Math.max(...columns(selector)) - Math.min(...columns(selector)) <= 1, `${selector} aligns in one column`);
     }
-    if (name === "p02-picker") require(document.querySelectorAll(".room-picked span").length === 2, "Raphael and the selected colleague have chips");
-    if (name === "p02-fallback") require(document.querySelector(".au-room-controls").textContent.includes("預設成員"), "fallback is visible");
+    // The members are one list of rows (owner, 2026-11-09): a chosen one is pressed with its check on the right.
+    if (name === "p02-picker") {
+      const chosen = [...document.querySelectorAll('.room-list .room-row[aria-pressed="true"]')];
+      require(chosen.length === 2 && chosen.every(row => visible(row.querySelector('.room-row-mark'))), "Raphael and the selected colleague are chosen rows with their check");
+      require(!document.querySelector('.room-picked'), "no separate list of picked names");
+    }
+    // A routing fallback is the room's own business: no line about it in the room (owner, 2026-11-08, 「?」 on
+    // 「成員暫時無法判斷要不要發言，先由預設成員回覆」).
+    if (name === "p02-fallback") require(!document.body.textContent.includes("預設成員回覆"), "no line tells the owner about a routing fallback");
     if (name === "p02-blocked") {
       const lines = eventLines(3), rows = [...document.querySelectorAll('.au-room-thread > li')];
       require(lines.every(line => line.closest('.au-room-thread > li.room-intent-blocked')), "blocked replies are lines of the thread");
@@ -3961,6 +4010,9 @@ export function checkRendered(name, context = {}) {
     // Messages carry face, name and reply chip only; roles stay with the faces of the header and the member column.
     require(document.querySelectorAll('.au-room-participant[data-tooltip*=" · "]').length === 3, "header faces name each member and role");
     for (const meta of document.querySelectorAll('.au-room-meta')) require([...meta.children].every(child => child.matches('.au-room-author, .au-room-reply')), "no role tag above a message");
+    // Each message is led by its face alone; the name is for screen readers and the face's tooltip (owner, 2026-11-09).
+    require([...document.querySelectorAll('.au-room-message .au-room-author')].every(author => author.getBoundingClientRect().width <= 1 && author.textContent.trim()), "no name line above a message, but a name for screen readers");
+    require([...document.querySelectorAll('.au-room-message .ra-face')].every(face => face.dataset.tooltip), "a message's face names its member on hover");
     return { check: name, replyChips: document.querySelectorAll('.au-room-reply').length };
   }
   if (name === "room-wrapup") {
@@ -3979,6 +4031,9 @@ export function checkRendered(name, context = {}) {
     const members = [...menu.querySelectorAll('[data-value^="member:"]')].map(row => row.dataset.value);
     require(members.join() === (window.__look.data.primaryId === 1 ? 'member:1,member:0' : 'member:0,member:1'), "responder choices follow the primary display exchange");
     require(!document.querySelector('.mb-dialog select'), "responder uses the app's selector");
+    // The choice shows its whole words in its row (2026-11-09: it read 「大…」 in the members dialog).
+    const words = document.querySelector('[data-responder] .sel > span');
+    require(words && words.scrollWidth <= words.clientWidth + 1, `the default responder shows its whole choice: ${words?.textContent}`);
     return { check: name, choices: 4 };
   }
   if (name === "room-reply-cancel") {
@@ -5205,9 +5260,11 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "dictation-navigation") {
-    const nav = document.querySelector(".dictation-nav"), tabs = [...nav.querySelectorAll('[role="tab"]')];
+    const nav = document.querySelector('.dictation-nav [role="tablist"]'), tabs = [...nav.querySelectorAll('[role="tab"]')];
     const active = tabs.filter(tab => tab.getAttribute("aria-selected") === "true");
-    require(nav.getAttribute("aria-orientation") === "horizontal" && active.length === 1, "one selected horizontal tab");
+    // The app's one tab component, as the panel's and 模型與用量's (owner, 2026-11-09: buttons alike).
+    require(nav.matches(".tabs.plain") && tabs.every(tab => tab.matches(".tab")), "the tabs are the shared tabs() pills");
+    require((nav.getAttribute("aria-orientation") ?? "horizontal") === "horizontal" && active.length === 1, "one selected horizontal tab");
     const panel = document.getElementById(active[0].getAttribute("aria-controls"));
     require(visible(panel) && !panel.hidden, "selected navigation displays its panel");
     const navBox = nav.getBoundingClientRect(), panelBox = panel.getBoundingClientRect();
@@ -5335,6 +5392,9 @@ export function checkRendered(name, context = {}) {
       if (name === 'primary-room-picker') {
         const chief = document.querySelector(`[data-dlg="member"][data-member="${data.primaryId}"]`);
         require(chief.disabled && chief.getAttribute('aria-pressed') === 'true', "the current chief is required");
+        // The default responder's choice shows its whole words in its row (2026-11-09: it read 「大…」).
+        const words = document.querySelector('[data-responder] .sel > span');
+        if (words) require(words.scrollWidth <= words.clientWidth + 1, `the default responder shows its whole choice: ${words.textContent}`);
         const picked = document.querySelector('[data-picked]');
         if (picked) {
           const expected = [...rows].filter(row => row.getAttribute('aria-pressed') === 'true').map(row => data.members.find(m => m.id === Number(row.dataset.member)).name);
