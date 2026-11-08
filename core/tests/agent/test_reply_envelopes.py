@@ -1,4 +1,4 @@
-"""Written CLI routes retain literal envelopes; structured callers consume them."""
+"""Written CLI routes unwrap only strict reply envelopes and retain authored JSON."""
 import json
 from types import SimpleNamespace
 
@@ -25,11 +25,15 @@ def test_shared_parser_accepts_plain_code_and_unwraps_nested_reply_words(plain):
 
 
 @pytest.mark.parametrize("route", ["normal", "quick", "resumed", "failure"])
-async def test_written_cli_reply_envelope_is_literal_on_every_foreground_route(make_rig, monkeypatch, tmp_path, route):
+@pytest.mark.parametrize("fenced", [False, True])
+@pytest.mark.parametrize("authored", [False, True], ids=["reply", "authored-json"])
+async def test_written_cli_reply_boundary_on_every_foreground_route(make_rig, monkeypatch, tmp_path, route, fenced, authored):
+    content = ENVELOPE if authored else json.dumps({"text": "Gmail needs a connection.", "detail": "", "messages": ["Gmail needs a connection."]})
+    final = "```json\n" + content + "\n```" if fenced else content
     brains = CliBrains(home=tmp_path, environ={}, commands={"codex": ["never-spawn"]})
     monkeypatch.setattr(brains, "available", lambda *args, **kwargs: True)
     async def run(driver, **kwargs):
-        yield Event("final", ENVELOPE)
+        yield Event("final", final)
     monkeypatch.setattr("raphael_core.agent.cli.loop.Driver.run", run)
     rig = make_rig(cli_brains=brains)
     rig.settings.set("agent_model", "cli:codex:test")
@@ -49,6 +53,45 @@ async def test_written_cli_reply_envelope_is_literal_on_every_foreground_route(m
         result = await rig.call("agent.ask", {"session_id": "envelope", "text": "Read Gmail", "ui_language": "en", "source": "app",
             "conversation_id": conversation, **({"destination": "quick"} if route == "quick" else {})})
         turn = rig.history.get(result["turn_id"])
-    assert turn.text == ENVELOPE
+    expected = final if authored else "Gmail needs a connection."
+    assert turn.text == expected
+    assert turn.detail is None
     replies = rig.service._conn.execute("SELECT text FROM agent_messages WHERE turn_id=? AND kind='reply'", (turn.id,)).fetchall()
-    assert replies and all(ENVELOPE in row[0] for row in replies)
+    assert replies and all(expected in row[0] for row in replies)
+
+
+@pytest.mark.parametrize("fenced", [False, True])
+@pytest.mark.parametrize("plain", [False, True])
+@pytest.mark.parametrize("data,text,detail,messages", [
+    ({"text": "在，我在這裡。", "detail": ""}, "在，我在這裡。", None, ["在，我在這裡。"]),
+    ({"prefix": "Answer", "text": "Complete.", "detail": "Checked.", "messages": ["First.", "Second."]},
+     "First.\n\nSecond.", "Checked.", ["First.", "Second."]),
+    ({"messages": ["Only message."]}, "Only message.", None, ["Only message."]),
+    ({"text": '{"text":"Authored inner example"}'}, '{"text":"Authored inner example"}', None,
+     ['{"text":"Authored inner example"}']),
+])
+def test_literal_cli_parser_unwraps_only_the_outer_reply_envelope(fenced, plain, data, text, detail, messages):
+    from raphael_core.agent.answers import parse_reply
+    content = json.dumps(data, ensure_ascii=False)
+    final = "```json\n" + content + "\n```" if fenced else content
+    reply = parse_reply(final, "en", plain=plain, long=True, literal=True)
+    assert (reply.text, reply.detail, reply.messages) == (text, detail, messages)
+
+
+@pytest.mark.parametrize("content", [
+    '{"text":"Example", "other":"authored"}',
+    '{"text":{"nested":"data"}}',
+    '{"text":42}', '{"text":true}', '{"text":null}', '{"text":["data"]}',
+    '{"messages":["Example", {"nested":"data"}]}',
+    '{"messages":"Example"}', '{"text":"Example", "detail":[]}',
+    '{"text":"Example", "prefix":null}', '{"detail":"Authored notes"}',
+    '[{"text":"Example"}]', '{"text":"Example"}\n{"text":"Second"}',
+    'Before\n```json\n{"text":"Example"}\n```\nAfter',
+    '```json\n{"text":"Example"}\n```\nOther content',
+    '```json\n{"text":"Example"}', '```python\nprint("Example")\n```',
+    '```json\n{"text":"Example", "other":"authored"}\n```',
+])
+def test_literal_cli_parser_preserves_every_other_shape(content):
+    from raphael_core.agent.answers import parse_reply
+    reply = parse_reply(content, "en", plain=True, long=True, literal=True)
+    assert reply.text == content and reply.detail is None

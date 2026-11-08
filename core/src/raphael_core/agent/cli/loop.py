@@ -884,6 +884,6 @@ class CliLoop:
     def _written_reply(self, text):
         literal = not self.spoken and self.structured is None
         if literal and len(parts := message_parts(text)) > 1:
-            # Split authored boundaries before normalizing each persona frame. JSON and fenced code stay literal.
+            # Split authored boundaries before normalizing each persona frame. Authored JSON and code stay literal.
             text = {"messages": parts}
         return parse_reply(text, self.language, plain=self.plain, long=True, literal=literal)

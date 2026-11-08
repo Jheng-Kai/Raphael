@@ -38,6 +38,7 @@ export const journeys = [
   { name: "voice-keys", description: "The real worker: after the composer's microphone the dictation key works during the answer, one Esc ends it, the recognising light shows, and a slow brain at high depth finishes" },
   { name: "long-think", description: "The real core: a model that thinks past the old 60 second deadline finishes its turn, and the answer reaches the window" },
   { name: "every-source", description: "One real turn on every signed-in CLI: Claude Code, Codex, Antigravity, with Claude's models as the CLI lists them" },
+  { name: "room-cli", description: "The real core and the real Claude Code CLI in a group: both members addressed answer, with no 「暫時沒有回應」 (owner, 2026-11-09)" },
   { name: "openrouter-turn", description: "One real turn through the owner's OpenRouter key on a free model: no other paid request" },
   { name: "delete-conversation", description: "Delete conversations/member after real exchanges and room reports; detect stale timeline rows" },
   { name: "gmail-connect", description: "Owner-only Composio card sign-in; stop before approving Google consent" },
@@ -523,6 +524,47 @@ export async function drive(name, context) {
     const broken = outcomes.filter(outcome => outcome.status !== "done" && outcome.status !== "not available");
     if (broken.length) throw new Error(`Sources that did not answer: ${JSON.stringify(broken)}`);
     if (!outcomes.some(outcome => outcome.status === "done")) throw new Error("No source was available");
+    return;
+  }
+  if (name === "room-cli") {
+    // A group turn on Claude Code once ended at EOF because the room's tool list dropped the permission callback its
+    // command line named; the owner saw 「Claude Code 暫時沒有回應」 again and again (2026-11-09).
+    await keepFocus(page);
+    let cli;
+    for (let i = 0; i < 300; i++) {
+      cli = (await context.rpc("brains.cli", {})).clis.find(row => row.id === "claude");
+      if (cli?.available && cli.models.length) break;
+      await pause(200);
+    }
+    if (!cli?.available || !cli.models.length) throw new Error(`Claude Code is not ready: ${JSON.stringify({ installed: cli?.installed, logged_in: cli?.logged_in })}`);
+    const model = cli.models.find(row => /haiku$/.test(row.id)) ?? cli.models.at(-1);
+    const effort = model.reasoning_efforts?.includes("low") ? "low" : "";
+    const ref = model.effort_models?.[effort] ?? (effort ? `${model.id}?effort=${effort}` : model.id);
+    await context.rpc("settings.set", { key: "agent_model", value: ref });
+    const { member } = await context.rpc("members.create", { name: "NativeRoom", role: "Group check" });
+    await context.rpc("members.update", { id: member.id, model: ref });
+    const { room } = await context.rpc("rooms.create", { name: "Native CLI room", member_ids: [0, member.id] });
+    const began = Date.now();
+    await context.rpc("rooms.send", { room_id: room.id, text: "@Raphael @NativeRoom Each of you, answer in one short sentence: are you here?", request_id: `room-cli-${began}` });
+    const both = [0, member.id];
+    let turns = [];
+    for (let i = 0; i < 1440; i++) {
+      turns = (await snapshot()).agent_turns.filter(row => row.room_id === room.id && row.scope === "room");
+      if (both.every(id => turns.some(row => row.member_id === id && ["done", "error"].includes(row.status)))) break;
+      await pause(250);
+    }
+    const { messages } = await context.rpc("rooms.messages", { room_id: room.id });
+    result.roomCli = {
+      model: ref, seconds: Math.round((Date.now() - began) / 1000),
+      turns: turns.map(row => ({ member: row.member_id, status: row.status, model: row.model, text: String(row.text ?? "").slice(0, 120) })),
+      said: messages.filter(row => row.member_id !== null).map(row => ({ member: row.member_id, kind: row.kind, text: String(row.text ?? "").slice(0, 120) })),
+    };
+    await capture("room-cli");
+    const silent = messages.some(row => /暫時沒有回應|not responding|応答がありません/.test(String(row.text ?? "")));
+    const answered = both.every(id => turns.some(row => row.member_id === id && row.status === "done") && messages.some(row => row.member_id === id && String(row.text ?? "").trim()));
+    // What a member says is words, never the reply envelope it was written in (2026-11-09: {"text": …, "detail": ""}).
+    const envelope = messages.some(row => row.member_id !== null && /^\s*(?:```(?:json)?\s*)?\{\s*"(?:text|detail|prefix|messages)"\s*:/.test(String(row.text ?? "")));
+    if (silent || !answered || envelope) throw new Error(`The group on Claude Code did not answer in words: ${JSON.stringify(result.roomCli)}`);
     return;
   }
   if (name === "model-sync") {

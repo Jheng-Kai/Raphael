@@ -23,6 +23,16 @@ permission-prompt flag), core/tests/agent/test_cli_failure_detail.py and existin
 consumers. Report: app/.look/briefs/room-cli-approve-report.md. Synthetic CLI/MCP evidence does
 not establish installed Claude Code, native window or live/provider acceptance.
 
+Live proof on the installed Claude Code (owner's subscription, Haiku at low effort, isolated data):
+
+```powershell
+$env:RAPHAEL_NATIVE_BINARY = "<a --debug build of this commit>"; npm run native -- room-cli
+```
+
+A room with Raphael and a new member, both addressed, must finish both turns `done` with their words in the room
+and no 「暫時沒有回應」. First run 2026-11-09 on 6e371c0c: both answered in 6 s, but the member's words were stored
+as the raw `{"text","detail"}` envelope (app/.look/briefs/room-cli-json-envelope.md).
+
 Owner decision 2026-10-30 removes the Team page, route and spatial canvas.
 The global sidebar owns folder creation, rename, collapse, member moves and order.
 Member brain display remains in the details panel. The plus offers new members

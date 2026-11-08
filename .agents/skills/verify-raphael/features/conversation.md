@@ -1883,6 +1883,14 @@ Long replies split at paragraph boundaries without dropping messages or cutting 
 Only a whole JSON object, or one whole fenced object, is a reply envelope; quoted JSON
 inside prose stays authored content. Detail holds receipts only. Room cards retain their
 600-character boundary (R-ROOM-07/R-AG-02); the closed colleague line remains R-UI-72.
+Written CLI turns use the same strict boundary in private, room and background storage:
+only a whole object with text/messages and no keys beyond text, detail, prefix and messages
+is unwrapped. Text/detail/prefix must be strings and messages a list of strings. Other keys,
+nested data, mixed prose and authored code remain literal; envelope contents are not recursively
+unwrapped. CLI worker prompts request plain text for both Raphael and members, while API
+worker prompts retain their JSON contract. Regression evidence and commands are in
+app/.look/briefs/room-cli-json-envelope-report.md; core/tests/agent/test_reply_envelopes.py
+and core/tests/background/test_room_cli.py exercise real foreground and room storage boundaries.
 Offline coverage: core/tests/agent/test_full_replies.py, tests/background/test_full_results.py,
 tests/messaging/test_wiring.py, tests/members/test_events.py and tests/services/test_voice_chat.py.
 Window integration must verify full reply bubbles and the selected reply-split-bubbles,

@@ -29,10 +29,11 @@ def submit_room(rig):
 
 
 @pytest.mark.parametrize("room", [True, False], ids=["room", "background"])
-async def test_written_cli_envelopes_stay_literal_in_room_or_background_storage(make_rig, monkeypatch, room):
+async def test_authored_cli_json_stays_literal_in_room_or_background_storage(make_rig, monkeypatch, room):
     rig = make_rig()
+    authored = json.dumps({"text": "The plan is ready.", "example": True})
     async def work(loop):
-        loop._queue.put_nowait(Outcome("done", final=json.dumps({"text": "The plan is ready.", "messages": ["The plan is ready."]})))
+        loop._queue.put_nowait(Outcome("done", final=authored))
     monkeypatch.setattr(CliLoop, "_work", work)
     if room:
         task, turn = submit_room(rig)
@@ -42,10 +43,40 @@ async def test_written_cli_envelopes_stay_literal_in_room_or_background_storage(
         turn = None
     await until(lambda: rig.task(task).state in ("done", "failed"))
     assert rig.task(task).state == "done"
-    expected = json.dumps({"text": "The plan is ready.", "messages": ["The plan is ready."]})
+    expected = authored
     assert rig.task(task).report_text == expected
     if turn:
         assert AgentHistory(rig.conn).get(turn).text == expected
+
+
+@pytest.mark.parametrize("speaker", ["raphael", "member"])
+@pytest.mark.parametrize("fenced", [False, True])
+async def test_room_cli_reply_envelope_stores_words_and_has_no_json_prompt(meeting, monkeypatch, tmp_path, speaker, fenced):
+    rig, members, rooms, room, alice = meeting
+    if speaker == "member":
+        members.store.update_member(alice.id, model="cli:claude")
+        name, member_id = "Alice", alice.id
+    else:
+        rig.service._settings.set("agent_model", "cli:claude")
+        name, member_id = "Raphael", 0
+    rig.service.use_cli(Brains(tmp_path))
+    prompts = []
+    async def run(driver, **kwargs):
+        prompts.append((kwargs["system"], kwargs["user"]))
+        envelope = '{"text": "在，我在這裡。", "detail": ""}'
+        yield Event("final", "```json\n" + envelope + "\n```" if fenced else envelope)
+    monkeypatch.setattr("raphael_core.agent.cli.loop.Driver.run", run)
+    await rooms._send({"room_id": room["id"], "text": "@" + name + " are you here?",
+                       "request_id": "reply-envelope", "ui_language": "en"})
+    await until(lambda: rooms._exchanges.latest(room["id"])["state"] == "done")
+    messages = (await rooms._messages({"room_id": room["id"]}))["messages"]
+    [message] = [item for item in messages if item["member_id"] == member_id and item["turn_id"] is not None]
+    saved = AgentHistory(rig.conn).get(message["turn_id"])
+    assert message["text"] == saved.text == "在，我在這裡。"
+    assert saved.detail is None
+    assert prompts and all("reply with one JSON object" not in system for system, _ in prompts)
+    assert all("Never output a JSON reply envelope" in system for system, _ in prompts)
+    assert not rig.client.chat_calls
 
 
 async def test_cli_room_turn_uses_shared_tools_and_keeps_private_sessions_separate(make_rig, monkeypatch):

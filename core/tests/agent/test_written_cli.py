@@ -1,4 +1,4 @@
-"""Written CLI replies retain authored JSON examples instead of consuming envelopes."""
+"""Reading a JSON example does not change the strict written CLI reply boundary."""
 
 from pathlib import Path
 
@@ -10,9 +10,14 @@ from .test_service import make_rig  # noqa: F401
 
 
 @pytest.mark.parametrize("brain", ["codex", "claude", "gemini"])
-@pytest.mark.parametrize("text", ['{"text":"x"}', '```json\n{"text":"x"}\n```',
-    '```json\n{"text":"The selected file was updated.","messages":["Example sentence."]}\n```'])
-async def test_written_reply_keeps_the_literal_envelope_after_reading_cleanup(make_rig, monkeypatch, brain, text):
+@pytest.mark.parametrize("text,expected", [
+    ('{"text":"x"}', 'x'), ('```json\n{"text":"x"}\n```', 'x'),
+    ('```json\n{"text":"The selected file was updated.","messages":["Example sentence."]}\n```', 'Example sentence.'),
+    ('{"text":"x","kind":"example"}', None),
+    ('```json\n{"text":"x","kind":"example"}\n```', None),
+    ('The example is:\n```json\n{"text":"x"}\n```\nKeep these instructions.', None),
+])
+async def test_written_reply_boundary_after_reading_cleanup(make_rig, monkeypatch, brain, text, expected):
     rig = make_rig()
     rig.settings.set("agent_model", "cli:" + brain)
     monkeypatch.setattr(rig.service._cli_brains, "command", lambda name: ["fake"])
@@ -29,6 +34,7 @@ async def test_written_reply_keeps_the_literal_envelope_after_reading_cleanup(ma
     monkeypatch.setattr(cli.Driver, "run", run)
     result = await rig.call("agent.ask", {"session_id": "written", "text": "Read the cleanup prompt and explain the edit",
         "ui_language": "en", "source": "app"})
-    assert result["status"] == "done" and result["text"] == text
+    expected = text if expected is None else expected
+    assert result["status"] == "done" and result["text"] == expected
     replies = [item["text"] for item in rig.history.messages([result["turn_id"]])[result["turn_id"]] if item["kind"] == "reply"]
-    assert len(replies) == 1 and text in replies[0]
+    assert len(replies) == 1 and expected in replies[0]

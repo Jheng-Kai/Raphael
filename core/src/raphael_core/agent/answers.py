@@ -343,7 +343,7 @@ def split_messages(text):
     return chunks
 
 
-def _reply_input(value: str, default_prefix: str | None = None) -> dict:
+def _reply_input(value: str, default_prefix: str | None = None, *, literal: bool = False) -> dict:
     """Accept an envelope (including a fenced one) or ordinary prose at one boundary."""
     text = value.strip()
     envelope = text
@@ -356,6 +356,14 @@ def _reply_input(value: str, default_prefix: str | None = None) -> dict:
         obj = json.loads(envelope)
     except ValueError:
         obj = None
+    if literal:
+        # Written CLI replies admit only the protocol's exact outer shape; all other JSON is authored content.
+        if (isinstance(obj, dict) and ("text" in obj or "messages" in obj)
+                and obj.keys() <= {"text", "detail", "prefix", "messages"}
+                and all(isinstance(item, list) and all(isinstance(part, str) for part in item)
+                        if key == "messages" else isinstance(item, str) for key, item in obj.items())):
+            return obj
+        return {"text": value, "prefix": default_prefix}
     if isinstance(obj, dict) and ("text" in obj or "messages" in obj):
         return obj
     if loose := loose_reply(text):
@@ -394,7 +402,7 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
     on the corresponding display path. Empty answers require memory edits or a lookup.
     """
     if isinstance(data, str):
-        data = {"text": data, "prefix": default_prefix} if literal else _reply_input(data, default_prefix)
+        data = _reply_input(data, default_prefix, literal=literal)
     if not isinstance(data, Mapping):
         raise AgentFailure("error")
     memory = _memory_items(data.get("memory"))

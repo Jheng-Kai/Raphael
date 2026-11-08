@@ -39,6 +39,11 @@ async function run(options) {
   const python = process.env.RAPHAEL_CORE_PYTHON || join(root, "core/.venv/Scripts/python.exe");
   const target = process.env.CARGO_TARGET_DIR || resolve(root, "../.target");
   const executable = process.env.RAPHAEL_NATIVE_BINARY || join(target, "debug/app.exe");
+  // The installed speech models: an explicit folder, else where the app keeps them now (LOCALAPPDATA since the
+  // models moved out of the roaming profile), else the old roaming folder.
+  const installedModels = () => process.env.RAPHAEL_MODELS_DIR ||
+    [join(process.env.LOCALAPPDATA ?? "", "Raphael/models"), join(process.env.APPDATA ?? "", "Raphael/models")].find(folder => existsSync(join(folder, "silero-vad"))) ||
+    join(process.env.LOCALAPPDATA ?? "", "Raphael/models");
   let owned, browser, interrupted = false;
   const interrupt = () => { interrupted = true; void stopOwned(owned).catch(error => report.errors.push(error.message)); };
   process.on("SIGINT", interrupt); process.on("SIGTERM", interrupt);
@@ -113,7 +118,7 @@ async function run(options) {
         if (journey.name === "voice-conversation" || journey.name === "voice-keys") {
           const sample = await prepareVoiceSample(journeyDir);
           env.RAPHAEL_FAKE_AUDIO = sample.file;
-          env.RAPHAEL_MODELS_DIR = process.env.RAPHAEL_MODELS_DIR || join(process.env.APPDATA, "Raphael/models");
+          env.RAPHAEL_MODELS_DIR = installedModels();
           const { stdout } = await execute(python, ["-c", "import sys,wave; w=wave.open(sys.argv[1]); print(round(w.getnframes()/w.getframerate()*1000))", sample.file], { windowsHide: true });
           audioMs = Number(stdout.trim()); result.audio = { ...sample, milliseconds: audioMs, engine: "local qwen3-asr" };
           // Use the core's registry, before launching the app or attempting speech capture.
@@ -122,7 +127,7 @@ async function run(options) {
         } else {
           env.RAPHAEL_MODELS_DIR = join(data, "models");
           // VAD is a startup prerequisite even when no speech journey is selected.
-          const installed = process.env.RAPHAEL_MODELS_DIR || join(process.env.APPDATA, "Raphael/models");
+          const installed = installedModels();
           await cp(join(installed, "silero-vad"), join(env.RAPHAEL_MODELS_DIR, "silero-vad"), { recursive: true });
         }
         const port = await freePort();

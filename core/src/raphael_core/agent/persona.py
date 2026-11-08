@@ -899,6 +899,9 @@ _WORKER_PROMPT = """\
 You are running as a background worker for this speaker.
 {work}
 The report
+"""
+
+_WORKER_REPORT = """\
 When you are done, or cannot go on, stop calling tools and reply with one JSON object and nothing \
 else, with three fields.
 - "prefix": exactly one of {prefixes}. {notice} for a report of what was found or done; \
@@ -907,11 +910,18 @@ else, with three fields.
 - "detail": optional work receipts and supporting evidence only. The complete result belongs in "text"."""
 
 
-def worker_system_prompt(language: str, *, model_calls: int, tool_calls: int, speaker: Speaker | None = None) -> str:
+_CLI_WORKER_REPORT = """\
+When you are done, or cannot go on, stop calling tools and write your complete result as plain text \
+(Markdown is fine). Include everything requested and anything unfinished, in your own voice. \
+Never output a JSON reply envelope or separate prefix, text, detail or messages fields. \
+JSON examples and code requested by the owner remain authored content, with their code fences intact."""
+
+
+def worker_system_prompt(language: str, *, model_calls: int, tool_calls: int, speaker: Speaker | None = None, cli: bool = False) -> str:
     """The system prompt of the background worker's model, in `language`. The same arguments always
     give the same prompt, including this speaker's owner-confirmed work instructions."""
     prefixes = PREFIXES[language]
-    return _WORKER_PROMPT.format(
+    return (_WORKER_PROMPT + (_CLI_WORKER_REPORT if cli else _WORKER_REPORT)).format(
         persona=_raphael_persona(language, speaker),
         contract=interface_context(language) + _SHARED_CONTRACT,
         work=_WORK_RULES.format(model_calls=model_calls, tool_calls=tool_calls),
@@ -1008,6 +1018,9 @@ Language
 {language_policy}
 
 The report
+"""
+
+_MEMBER_WORKER_REPORT = """\
 When you are done, or cannot go on, stop calling tools and reply with one JSON object and nothing \
 else, with two fields.
 - "text": {report_text}
@@ -1140,9 +1153,10 @@ def member_worker_system_prompt(
     personality: str = "",
     model_calls: int,
     tool_calls: int,
+    cli: bool = False,
 ) -> str:
     """The system prompt of the background worker's model for a task of a member."""
-    return _MEMBER_WORKER_PROMPT.format(
+    return (_MEMBER_WORKER_PROMPT + (_CLI_WORKER_REPORT if cli else _MEMBER_WORKER_REPORT)).format(
         **_member_fields(language, name, role, instructions, personality),
         work=_WORK_RULES.format(model_calls=model_calls, tool_calls=tool_calls),
         report_text=_MEMBER_REPORT_TEXT,

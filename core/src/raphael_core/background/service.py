@@ -316,13 +316,14 @@ def _prompts(
     memory_snapshot: "str | MemorySnapshot | None" = None,
     attachments: Sequence[Attachment] = (),
     speaker: Speaker = RAPHAEL,
+    cli: bool = False,
 ) -> tuple[str, str]:
     """The system prompt and the first message of the user for a task, with the memory files as they are
     now when there is a memory (`memory_snapshot`). A task of a member of the team runs in the member's
     persona, with its own file and its own conversation."""
     if speaker.is_raphael:
         system = worker_system_prompt(
-            language, model_calls=limits.model_calls, tool_calls=limits.tool_calls, speaker=speaker
+            language, model_calls=limits.model_calls, tool_calls=limits.tool_calls, speaker=speaker, cli=cli
         )
     else:
         system = member_worker_system_prompt(
@@ -333,6 +334,7 @@ def _prompts(
             personality=speaker.personality,
             model_calls=limits.model_calls,
             tool_calls=limits.tool_calls,
+            cli=cli,
         )
     parts = [
         f"Current date and time: {moment.get('date', '')} {moment.get('time', '')}, "
@@ -1547,6 +1549,7 @@ class BackgroundService:
             memory_snapshot=None if memory is None else memory.snapshot(),
             attachments=files,
             speaker=speaker,
+            cli=room_cli,
         )
         from ..agent.owner_language import reply_context
         user += "\n" + reply_context(language)
