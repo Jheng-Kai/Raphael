@@ -1,6 +1,7 @@
 import { navZh } from "./nav-catalogs";
 import { homeZh } from "./home-catalogs";
 import { avatarGenZh } from "./avatar-gen-catalogs";
+import { reviewZh } from "./review-catalogs";
 import { missingZh } from "./missing-catalogs";
 // Traditional Chinese is the source catalogue. Placeholders are interpolated by t().
 export const zhTW = {
@@ -522,6 +523,7 @@ export const zhTW = {
   ...navZh,
   ...homeZh,
   ...avatarGenZh,
+  ...reviewZh,
   "conversations.now": "剛剛",
   "conversations.minutes": "{p0} 分鐘前",
   "conversations.hours": "{p0} 小時前",
@@ -1803,6 +1805,7 @@ export const zhTW = {
   "nav.appsCount": "連結應用程式，已連結 {p0} 個",
   "nav.appsUnknown": "連結應用程式，無法讀取已連結的數量",
   "conn.apps": "應用程式",
+  "conn.recommended": "推薦",
   "conn.notConnected": "尚未連結",
   "conn.state.duplicate": "與另一個連線重複",
   "conn.state.noTools": "工具已全部關閉",

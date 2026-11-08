@@ -4,6 +4,7 @@ import { cardDisclosureHTML, cardHTML } from "./card";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
+import { mountTemplateReview } from "./template-review";
 import { slimeFaceHTML } from "./slime";
 import { routineSentenceHTML } from "./members";
 import { SERVICE_ICONS } from "./service-icons";
@@ -15,8 +16,13 @@ export interface MemberTemplate {
   format: "raphael-member"; version: 1;
   name: string; role: string; personality: string; instructions: string; reply_style: "full" | "conversational";
   skills: { text: string; files?: Record<string, string> }[];
-  routines: Pick<Routine, "title" | "prompt" | "schedule" | "when">[];
+  routines: (Pick<Routine, "title" | "prompt" | "schedule" | "when"> & {
+    /** One line on what it does, the trigger in words and what an importer is asked (core brief 15; absent in older templates). */
+    description?: string; fires_on?: string; ask?: string[];
+  })[];
   connections: string[];
+  /** What it is for, the reusable memories it passes on and when it was last updated (core brief 15; optional). */
+  description?: string; memories?: string[]; updated_at_ms?: number;
 }
 const STARTERS = [
   ["coordinator", "rimuru", ""], ["researcher", "souei", ""], ["writer", "shuna", ""], ["developer", "diablo", "github"],
@@ -60,13 +66,13 @@ function scanLocation(warning: ScanFinding): string {
 }
 
 /** Reuse the local service catalogue's brand spelling, preserving custom server ids. */
-function connectionName(id: string): string {
+export function connectionName(id: string): string {
   const key = id.replace(/^composio:/i, "").toLowerCase();
   return Object.prototype.hasOwnProperty.call(SERVICE_ICONS, key) ? SERVICE_ICONS[key as keyof typeof SERVICE_ICONS].title : id;
 }
 
 /** Read plain skill metadata using the same scalar forms accepted by the skill store. */
-function skillContents(text: string): { name: string; description: string; body: string } {
+export function skillContents(text: string): { name: string; description: string; body: string } {
   const frontmatter = /^\uFEFF?[ \t]*---[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*---[ \t]*(?:\r?\n|$)/.exec(text);
   const values: Record<string, string> = {};
   let field = "";
@@ -89,6 +95,12 @@ function skillContents(text: string): { name: string; description: string; body:
  * warning stands at the top only when there is something to warn of: a third-party template being added, or a secret
  * or an injected instruction found in it.
  */
+/** The warnings a review shows first: a third-party template, a secret or an injected instruction found in it. */
+export function reviewNotes(warnings: ScanFinding[] = [], thirdParty = false): { text: string; risk: boolean }[] {
+  const risks = [...new Set(warnings.map(w => t(w.kind === "secret" ? "store.secret" : "store.injection", {p0:scanLocation(w)})))];
+  return [...(thirdParty ? [{ text: t("store.thirdParty"), risk: false }] : []), ...risks.map(text => ({ text, risk: true }))];
+}
+
 export function templateContents(template: MemberTemplate, warnings: ScanFinding[] = [], o: { thirdParty?: boolean; face?: string } = {}): string {
   const full = (text: string): string => `<pre class="template-text">${esc(text || t("template.none"))}</pre>`;
   const risks = [...new Set(warnings.map(w => t(w.kind === "secret" ? "store.secret" : "store.injection", {p0:scanLocation(w)})))];
@@ -197,7 +209,7 @@ export async function exportMemberTemplate(id: number, face = ""): Promise<void>
   const {template, findings = []} = await api.core<{template: MemberTemplate; findings: ScanFinding[]}>("members.template", {action: "review", id});
   let busy = false;
   const blocked = findings.some(w => w.kind === "secret");
-  const dialog = openDialog({title: t("store.review"), cls: "template-preview template-export-review", body: templateContents(template, findings, {face}),
+  const dialog = openDialog({title: t("store.review"), cls: "template-preview template-export-review", body: "",
     actions: {secondary: btn(esc(t("store.publish")), "", ` data-dlg="publish"${blocked ? " disabled" : ""}`), primary: {label: esc(t("store.export")), attrs: ` data-dlg="export"${blocked ? " disabled" : ""}`}},
     canClose: () => !busy,
     onAct(action, button) {
@@ -217,4 +229,6 @@ export async function exportMemberTemplate(id: number, face = ""): Promise<void>
         }
       })().catch(error => toaster.info(describeError(error))).finally(() => {busy = false; button.removeAttribute("disabled");});
     }});
+  // Its parts as Grok Bot's review shows them, one page each (owner, 2026-11-08).
+  mountTemplateReview(dialog, template, {face, notes: reviewNotes(findings)});
 }

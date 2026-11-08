@@ -21,6 +21,45 @@ export function checkRendered(name, context = {}) {
   /** The state the panel keeps in data for a fixture, now that nothing says it in words. */
   const expectedDesktopState = state => state.lifecycle || ['starting', 'building', 'preparing'].includes(state.state) ? state.state
     : ['stopped', 'missing'].includes(state.state) ? 'stopped' : 'unavailable';
+  if (name.startsWith("template-review-")) {
+    // A template reviewed as Grok Bot reviews one (owner, 2026-11-08): a first page of who it is and rows that open pages.
+    const dialog = document.querySelector('.mb-dialog.tpr'), body = dialog.querySelector('.mb-dlg-body'), head = dialog.querySelector('.mb-dlg-head');
+    const template = window.__look.data.colleagueSample.template;
+    const back = head.querySelector('[data-tpl-back]'), title = head.querySelector('h2');
+    if (name === "template-review-main") {
+      require(dialog.dataset.page === 'main' && !back && getComputedStyle(title).visibility === 'hidden', "the first page has no title or back arrow");
+      require(visible(body.querySelector('.tpr-hero .tpr-face')) && body.querySelector('.tpr-hero b').textContent === template.name, "the face and the name first");
+      const rows = [...body.querySelectorAll('.tpr-list > .tpr-row')];
+      require(rows.map(row => row.dataset.tplGo).join() === 'context,routines,integrations' && rows.every(row => row.tagName === 'BUTTON' && visible(row.querySelector('svg.i'))), `three rows that open pages: ${rows.map(row => row.dataset.tplGo)}`);
+      require(/指示/.test(rows[0].textContent) && rows[1].textContent.includes(template.routines[0].title), "each row says what is inside");
+      require(!body.querySelector('.tpl-card, [data-tpl-skill], .card-detail'), "no long list of everything on the first page");
+      const foot = dialog.querySelector('.mb-dlg-act .btn');
+      require(visible(foot), "the dialog's own button stays at its foot");
+    } else {
+      require(dialog.dataset.page !== 'main' && visible(back) && title.textContent.trim() && getComputedStyle(title).textAlign === 'center', "a page has a back arrow and its title in the middle of the head");
+    }
+    if (name === "template-review-context") {
+      const fields = [...body.querySelectorAll('.tpr-field > h4')].map(h => h.textContent);
+      require(fields[0] === '指示' && body.querySelector('.tpr-box').textContent.includes(template.instructions.trim().slice(0, 12)), `instructions first, in full: ${fields}`);
+      require(body.textContent.includes(template.personality.trim().slice(0, 12)), "the personality in full");
+      require(body.querySelectorAll('[data-tpl-go^="skill:"]').length === template.skills.length, "one row per skill, each opening its page");
+    }
+    if (name === "template-review-skill") {
+      require(body.textContent.includes('先查證來源，再完成報告。') && !/^---/m.test(body.textContent) && !/^description:/m.test(body.textContent), "the skill's text in full, without its front matter");
+    }
+    if (name === "template-review-routine") {
+      const routine = template.routines[0];
+      require(title.textContent === routine.title, "the routine's name is the page's title");
+      const fields = [...body.querySelectorAll('.tpr-field > h4')].map(h => h.textContent);
+      require(fields.includes('內容') && fields.includes('觸發方式') && body.textContent.includes(routine.prompt.trim().slice(0, 12)), `its content and trigger: ${fields}`);
+      require(/09:00/.test(body.textContent) && /暫停/.test(body.textContent), "the schedule in words, and that it starts paused");
+    }
+    for (const box of body.querySelectorAll('.tpr-box')) {
+      const style = getComputedStyle(box);
+      require(style.overflowY !== 'auto' && style.overflowY !== 'scroll', "no box scrolls inside");
+    }
+    return { check: name, page: dialog.dataset.page };
+  }
   if (name === "template-content" || name === "template-content-expanded") {
     const dialog = document.querySelector('.template-preview');
     // One row per skill: its name, one line, and its text behind a disclosure (owner, 2026-11-07: Grok Bot's cards of rows).
@@ -4788,6 +4827,18 @@ export function checkRendered(name, context = {}) {
       for (const edge of Object.keys(before)) require(Math.abs(before[edge] - after[edge]) <= 1, `a change of state jumps in ${row.textContent.slice(0, 3)}: ${edge} moved ${Math.abs(before[edge] - after[edge]).toFixed(1)}px`);
     }
     return { check: name, rows: document.querySelectorAll(".look-slime-board > div").length };
+  }
+  if (name === "connections-recommended") {
+    const section = document.querySelector('.cs-recommended');
+    require(visible(section) && section.querySelector('h2').textContent === '推薦', "a 推薦 section under the connected apps");
+    const cards = [...section.querySelectorAll('.cs-card')];
+    require(cards.length > 0 && cards.length <= 6, `a few popular apps (${cards.length})`);
+    require(cards.every(card => visible(card.querySelector('.cs-icon, img, svg')) && card.querySelector('[data-conn="join"]')?.tagName === 'BUTTON'), "each with its mark and an add button in place");
+    const names = cards.map(card => card.querySelector('.nm').textContent);
+    require(!names.includes('Notion') && !names.includes('Gmail'), `nothing already there is recommended: ${names}`);
+    const list = document.querySelector('.cs-list:last-of-type');
+    require(!list || section.getBoundingClientRect().top >= list.getBoundingClientRect().bottom - 1, "below the apps already there");
+    return { check: name, cards: cards.length };
   }
   if (name === "member-face-hover") {
     const face = document.querySelector('.mb-panel-identity [data-det="avatar"]'), pencil = face.querySelector('.mb-face-pencil');

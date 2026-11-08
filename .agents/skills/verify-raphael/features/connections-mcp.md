@@ -131,9 +131,15 @@ Use Store to search and Add a built-in service without configuring Composio;
 complete its existing login, then return to 已連結. Optionally use the setup row at
 the end to save a Composio project key and add its extra apps.
 
+Under the 已連結 list a 推薦 section (owner, 2026-11-08: the page looked empty) shows up to six popular store apps not
+added yet as the store's own cards with 加入 in place; an app already there is never recommended, however it was added
+(matched by id, name, description and its store entry: Notion directly, Gmail through the Google connection). It hides
+while searching; the store tab keeps the whole catalogue. Scene: connections-recommended.
+
 ## Driving it with look
 
 ```powershell
+npm run look -- connections-recommended connections --theme both --width 1120,720,1920x1080
 npm run look -- plugins-installed plugins-detail plugins-store plugins-store-category plugins-store-key plugins-store-key-openrouter plugins-store-key-consumer plugins-connecting --theme both --width 1120,720,1920x1080
 npm run look -- connections connections-hover server-menu connections-add-menu connections-command connections-test connections-url connections-edit connections-delete --theme both --width 1120,720,1920x1080
 npm run look -- connections-paste connections-paste-preview connections-discover connections-empty connections-discover-empty --theme both --width 1120,720,1920x1080

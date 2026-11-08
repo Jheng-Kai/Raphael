@@ -1,6 +1,7 @@
 import { navJa } from "./nav-catalogs";
 import { homeJa } from "./home-catalogs";
 import { avatarGenJa } from "./avatar-gen-catalogs";
+import { reviewJa } from "./review-catalogs";
 import { missingJa } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
@@ -523,6 +524,7 @@ export const ja = {
   ...navJa,
   ...homeJa,
   ...avatarGenJa,
+  ...reviewJa,
   "conversations.now": "たった今",
   "conversations.minutes": "{p0} 分前",
   "conversations.hours": "{p0} 時間前",
@@ -1804,6 +1806,7 @@ export const ja = {
   "nav.appsCount": "アプリを連携、{p0} 件接続済み",
   "nav.appsUnknown": "アプリを連携、接続数を読み取れません",
   "conn.apps": "アプリ",
+  "conn.recommended": "おすすめ",
   "conn.notConnected": "未接続",
   "conn.state.duplicate": "別の接続と同じアプリ",
   "conn.state.noTools": "すべてのツールがオフ",

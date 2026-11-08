@@ -1,6 +1,7 @@
 import { navEn } from "./nav-catalogs";
 import { homeEn } from "./home-catalogs";
 import { avatarGenEn } from "./avatar-gen-catalogs";
+import { reviewEn } from "./review-catalogs";
 import { missingEn } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
@@ -523,6 +524,7 @@ export const en = {
   ...navEn,
   ...homeEn,
   ...avatarGenEn,
+  ...reviewEn,
   "conversations.now": "Just now",
   "conversations.minutes": "{p0} min ago",
   "conversations.hours": "{p0} hr ago",
@@ -1804,6 +1806,7 @@ export const en = {
   "nav.appsCount": "Connect apps, {p0} connected",
   "nav.appsUnknown": "Connect apps, the number connected cannot be read",
   "conn.apps": "Apps",
+  "conn.recommended": "Recommended",
   "conn.notConnected": "Not connected",
   "conn.state.duplicate": "Same app as another connection",
   "conn.state.noTools": "Every tool is off",

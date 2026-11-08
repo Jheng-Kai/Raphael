@@ -214,7 +214,8 @@ describe("the apps that cannot be called", () => {
   const all = view({ groups: [notes, custom, slack, twin, empty, off], inventory });
 
   test("the apps that can be called now come first; the others follow under their own heading, each with its switch and its dialog", () => {
-    const html = bodyHTML(all);
+    // The 推薦 section under the list (owner, 2026-11-08) is the store's, checked on its own.
+    const html = bodyHTML(all).split('<section class="cs-sec cs-recommended">')[0]!;
     const [now, later] = html.split(`<h2>${"尚未連結"}</h2>`);
     expect(now).toContain("<h2>應用程式</h2>");
     expect([...now!.matchAll(/class="nm">([^<]+)</g)].map((m) => m[1])).toEqual(["Notion", "Files"]);

@@ -8,7 +8,8 @@ import { cardFailure, cardHTML } from "./card";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
-import { type MemberTemplate, type ScanFinding, templateContents } from "./member-templates";
+import { type MemberTemplate, type ScanFinding, reviewNotes } from "./member-templates";
+import { mountTemplateReview } from "./template-review";
 import { connectionMarkHTML } from "./secret-card";
 import { slimeFaceHTML } from "./slime";
 import type { AgentTurn, PairingCard, TemplateCard } from "./types";
@@ -66,9 +67,16 @@ export function chatCardsHTML(turn: AgentTurn): string {
 async function viewTemplate(id: string, avatar = ""): Promise<void> {
   const { template, findings = [] } = await api.core<{ template: MemberTemplate; findings?: ScanFinding[] }>("members.template_card", { id });
   const face = avatar ? slimeFaceHTML({ id: -1, avatar }, 64) : "";
-  const dialog = openDialog({ title: t("store.review"), cls: "template-preview template-card-review", body: templateContents(template, findings, { face }),
-    actions: { primary: { label: esc(t("common.close")), attrs: ' data-dlg="close"' } },
-    onAct(action) { if (action === "close") dialog.close(); } });
+  // As Grok Bot's: the review's foot is the card's own next step, 發佈 while it is a draft, else 關閉 (owner, 2026-11-08).
+  const card = document.querySelector<HTMLElement>(`[data-template-card-id="${CSS.escape(id)}"]`);
+  const publish = card?.querySelector<HTMLButtonElement>('[data-act="template-publish"]:not(:disabled)') ?? null;
+  const dialog = openDialog({ title: t("store.review"), cls: "template-preview template-card-review", body: "",
+    actions: { primary: publish ? { label: esc(publish.textContent?.trim() || t("store.publish")), attrs: ' data-dlg="publish"' } : { label: esc(t("common.close")), attrs: ' data-dlg="close"' } },
+    onAct(action) {
+      if (action === "publish") publish?.click();
+      dialog.close();
+    } });
+  mountTemplateReview(dialog, template, { face, notes: reviewNotes(findings) });
 }
 
 /** A press on one of these cards; true when it was one of theirs. */

@@ -976,7 +976,15 @@ verified disk cache. Installs revalidate the catalogue and recheck revocation af
 download. Offline cache proves last verified state, not current remote revocations.
 No production key or account is needed by fake HTTP or the signed synthetic fixture.
 
-npm run look -- store-home store-category store-search store-empty store-offline template-preview template-preview-warning template-export-review member-template-gallery member-template-preview member-template-imported member-template-export sidebar-plus --theme both --width 1120,720,1920x1080
+npm run look -- store-home store-category store-search store-empty store-offline template-preview template-preview-warning template-export-review template-review-pages member-template-gallery member-template-preview member-template-imported member-template-export sidebar-plus --theme both --width 1120,720,1920x1080
+
+A template card's 查看內容 and the export review read as Grok Bot's review (template-review.ts, owner 2026-11-08): a
+first page of the face, the name, 「最後更新」 (when the template carries `updated_at_ms`) and what it is for, then one
+tinted card of rows 內容 (instructions, personality, memories, skills), 例行工作 and 整合, each opening a page with a
+back arrow and its title in the head; a skill page is its description and text (no front matter), a routine page its
+description (when it has one), content, trigger in words with "starts paused", and what an importer is asked. The
+dialog's foot is the card's next step (發布 while it is a draft, else 關閉). The import preview keeps its own layout.
+Memories, routine descriptions, triggers and asks arrive with core brief 15; older templates read without them.
 
 Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
 store chips/buttons with starter gallery and sidebar-plus, and preview/export cards

@@ -710,7 +710,20 @@ function deviceHTML(v: ConnectionsView): string {
 
 /** What is under the bar: the list, or the store. */
 export function bodyHTML(v: ConnectionsView, entries?: StoreEntries, pending?: StoreService[]): string {
-  return v.tab === "installed" ? installedHTML(v) : storeHTML(v, entries, pending);
+  return v.tab === "installed" ? installedHTML(v) + recommendedHTML(v, entries ?? storeEntries(v)) : storeHTML(v, entries, pending);
+}
+
+/** Under the apps already there, a few popular ones not added yet, each addable in place (owner, 2026-11-08: the page
+ * looked empty below its list). Hidden while searching; the store keeps the whole catalogue. */
+function recommendedHTML(v: ConnectionsView, entries: StoreEntries): string {
+  if (v.search.trim() || !Array.isArray(v.groups)) return "";
+  // Never an app already there, however it was added (Notion directly, Gmail through the Google connection).
+  const fold = (text: string): string => text.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const present = v.groups.map((g) => fold(`${g.id} ${g.name} ${g.description ?? ""} ${entryOf(g, v)?.id ?? ""}`));
+  const added = (s: StoreService): boolean => [fold(s.id.replace(/^composio:/i, "")), fold(s.name)].some((key) => key.length > 2 && present.some((text) => text.includes(key)));
+  const picks = entries.available.filter((s) => popularApp(s) && !added(s)).slice(0, 6);
+  return picks.length ? `<section class="cs-sec cs-recommended"><h2>${esc(t("conn.recommended"))}</h2>` +
+    `<div class="cs-grid" data-stagger="installed:recommended">${picks.map((s) => cardHTML(s, v)).join("")}</div></section>` : "";
 }
 
 /** The connected service whose dialog is open, if it is still there. */
