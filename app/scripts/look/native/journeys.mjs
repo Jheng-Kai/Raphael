@@ -1,10 +1,11 @@
-import { perform, pressInFrame } from "../driver.mjs";
+import { perform, pressInFrame, settleMotion } from "../driver.mjs";
 import { checkRendered } from "../checks.mjs";
 import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
 import { idleCost, slimeSharp } from "../slime-board.mjs";
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { typingJourney } from "./typing.mjs";
+import { UI_LOCALES } from "../locales.mjs";
 
 export const journeys = [
   { name: "computer-speed", description: "Five warm first observations, browser opens and five-step forms; isolated disposable container, median/worst budgets, no paid model" },
@@ -104,8 +105,9 @@ async function keepFocus(page) {
 
 async function details(page) {
   if (await page.$('.conversation-trigger[aria-expanded="false"]')) await click(page, ".conversation-trigger");
-  for (let back; (back = await page.$('.mb-det [data-det="back"]:not([hidden])')); await pause(50)) { await back.click(); await back.dispose(); }
-  await wait(page, '.mb-det[data-details-tab="details"] [data-det="tab"][data-tab="settings"]');
+  // A member settings page the last step left open gives way to the conversation.
+  for (let back; (back = await page.$('.ms-pane:not([hidden]) [data-ms="back"]')); await pause(50)) { await back.click(); await back.dispose(); }
+  await wait(page, '.mb-det[data-details-tab="details"] [data-det="gear"]');
 }
 async function chat(page) {
   await click(page, '.mb-chief');
@@ -150,6 +152,8 @@ export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
     if (text.trim() === "Raphael") return;
     // Device names come from the OS, but surrounding application labels must still translate.
     let checked = text;
+      const rule = element.closest(".rules-row")?.querySelector(".rules-what")?.textContent.trim();
+      if (rule) checked = checked.split(rule).join("");
     if (element.closest('[data-k="mic"], [data-ob="mic"], .mic-ctl')) {
       // Closed controls abbreviate an OS name to its kind before the device parentheses.
       // Match only known device text; the application's Automatic/Disconnected wording stays checked.
@@ -788,8 +792,8 @@ export async function drive(name, context) {
     result.job = { role: saved.role, instructions: saved.instructions };
     if (!saved.role || !saved.instructions) throw new Error(`The owner's answer did not become its job: ${JSON.stringify(result.job)}`);
     await details(page);
-await click(page, '[data-det="tab"][data-tab="settings"]');
-await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value === role, { timeout: 10000 }, saved.role);
+await click(page, '.mb-det [data-det="gear"]');
+await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.value === role, { timeout: 10000 }, saved.role);
     await capture("job-saved");
     return;
   }
@@ -1107,12 +1111,13 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     await chat(page);
     await perform(page, { action: "member", id: colleague.id });
     await details(page);
-    await click(page, '[data-det="tab"][data-tab="settings"]');
-    await click(page, '[data-det="tab"][data-tab="memory"]');
-    await page.waitForSelector('[data-mem-space="own"]');
-    result.memoryHeading = await page.$eval('[data-mem-space="own"]', el => el.getAttribute("aria-label"));
+    await click(page, '.mb-det [data-det="gear"]');
+    await click(page, '.ms-pane [data-ms="memory"]');
+    await page.waitForSelector('.ms-pane [data-mem-space="own"]');
+    result.memoryHeading = await page.$eval('.ms-pane [data-mem-space="own"]', el => el.getAttribute("aria-label"));
     await capture("memory-heading");
     if (result.memoryHeading !== `${colleague.name}的記憶`) throw new Error(`Memory heading has unwanted spacing: ${result.memoryHeading}`);
+    await click(page, '.ms-pane [data-ms="back"]');
     await click(page, '.mb-det [data-det="close"]');
     const send = async (text, expected) => {
       const before = (await snapshot()).agent_turns.length;
@@ -1150,10 +1155,16 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     if (audit.agent_turns.some(t => t.cost_usd !== 0)) throw new Error("The fake skill journey recorded nonzero spend");
     await capture("learned-skill-reused");
     await details(page);
-    await click(page, '[data-det="tab"][data-tab="settings"]');
-    await click(page, '[data-det="tab"][data-tab="skills"]');
-    await page.waitForSelector('.mp-resource');
-    result.skillDate = await page.$eval('.mp-resource', el => el.textContent);
+    await click(page, '.mb-det [data-det="gear"]');
+    await page.waitForSelector('.ms-pane [data-ms="skill-open"]');
+    // The learned skill is the one whose view says so, with its date.
+    for (const id of await page.$$eval('.ms-pane [data-ms="skill-open"]', rows => rows.map(row => row.dataset.id))) {
+      await click(page, `.ms-pane [data-ms="skill-open"][data-id="${id}"]`);
+      await page.waitForSelector('.ms-pane .ms-meta');
+      result.skillDate = await page.$eval('.ms-pane .ms-meta', el => el.textContent);
+      if (/自行學會/.test(result.skillDate)) break;
+      await click(page, '.ms-pane [data-ms="back"]');
+    }
     await capture("learned-skill-date");
     if (!/自行學會 · \d{4}\/\d{2}\/\d{2}/.test(result.skillDate)) throw new Error("The learned-skill date does not follow the Chinese UI");
   }
@@ -1518,14 +1529,17 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     const devices = await context.rpc("audio.devices", { refresh: false });
     const deviceNames = [...new Set([devices.automatic_device, devices.selected, ...devices.devices.map(device => device.name)].filter(Boolean))];
     result.deviceNames = deviceNames;
-    for (const locale of ["en", "ja", "zh-TW"]) {
+    for (const locale of UI_LOCALES) {
       await click(page, '#nav [data-go="settings"]');
+        await settleMotion(page);
       await click(page, '.modal-scrim [data-pane="general"]');
       await click(page, '[data-k="ui-language"]');
       await click(page, `#app-popover [data-value="${locale}"]`);
       await page.waitForFunction(locale => document.documentElement.lang === locale, {}, locale);
       await pause(250);
-      for (const pane of ["general", "appearance", "connections", "models", "dictation", "tools", "safety", "messaging", "data", "about"]) {
+      const panes = await page.$$eval('.modal-scrim .nav[data-pane]', nodes => nodes.map(node => node.dataset.pane));
+      if (!panes.includes("general")) throw new Error("Settings navigation is unavailable in the locale sweep");
+      for (const pane of panes) {
         await click(page, `.modal-scrim [data-pane="${pane}"]`); await pause(180);
         const issues = await page.evaluate(wrongLanguage, locale, phrases[locale], deviceNames);
         result.visits.push({ locale, page: `settings/${pane}`, issues });

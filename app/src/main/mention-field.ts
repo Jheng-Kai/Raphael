@@ -12,9 +12,10 @@ import { mentionChipHTML, mentionRanges, type MentionTarget } from "./mention-te
 interface ChipRange { start: number; end: number; target?: MentionTarget }
 
 /** A skill or command called by its name, `/name`, at the start of the words or after a space (owner, 2026-11-08: it is
- * blue like a link). A path such as /usr/bin is not one: the name ends at a space or the end of the words. */
+ * blue like a link), in any script (「/每日新聞摘要」 too) and with a plugin's prefix (`/field-notes:review`). A path
+ * such as /usr/bin is not one: the name ends at a space or the end of the words, and holds no other slash. */
 export function skillRanges(text: string): ChipRange[] {
-  return [...text.matchAll(/(^|\s)(\/[A-Za-z0-9][\w-]{0,63})(?=\s|$)/gu)].map(match => {
+  return [...text.matchAll(/(^|\s)(\/[\p{L}\p{N}][\p{L}\p{N}_:-]{0,63})(?=\s|$)/gu)].map(match => {
     const start = match.index! + match[1]!.length;
     return { start, end: start + match[2]!.length };
   });

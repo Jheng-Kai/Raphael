@@ -67,11 +67,12 @@ export function chatCardsHTML(turn: AgentTurn): string {
 async function viewTemplate(id: string, avatar = ""): Promise<void> {
   const { template, findings = [] } = await api.core<{ template: MemberTemplate; findings?: ScanFinding[] }>("members.template_card", { id });
   const face = avatar ? slimeFaceHTML({ id: -1, avatar }, 64) : "";
-  // As Grok Bot's: the review's foot is the card's own next step, 發佈 while it is a draft, else 關閉 (owner, 2026-11-08).
+  // As Grok Bot's: the review's foot is the card's own next step, 發佈 while it is a draft, else nothing: its × closes it
+  // (owner, 2026-11-08: no 「關閉」 under a ×).
   const card = document.querySelector<HTMLElement>(`[data-template-card-id="${CSS.escape(id)}"]`);
   const publish = card?.querySelector<HTMLButtonElement>('[data-act="template-publish"]:not(:disabled)') ?? null;
   const dialog = openDialog({ title: t("store.review"), cls: "template-preview template-card-review", body: "",
-    actions: { primary: publish ? { label: esc(publish.textContent?.trim() || t("store.publish")), attrs: ' data-dlg="publish"' } : { label: esc(t("common.close")), attrs: ' data-dlg="close"' } },
+    actions: publish ? { primary: { label: esc(publish.textContent?.trim() || t("store.publish")), attrs: ' data-dlg="publish"' } } : {},
     onAct(action) {
       if (action === "publish") publish?.click();
       dialog.close();

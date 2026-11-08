@@ -93,17 +93,30 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
     return `<section class="au-field"><h3>${esc(t("auto.when"))}</h3>${sel(triggerChoices(),trigger,t("trigger.trigger"),' data-dlg="trigger"')}</section>` +
       (trigger === "webhook" ? `<section class="au-field au-webhook"><p>${routineSentenceHTML({schedule:null,when:{webhook:true}})}</p><p class="note">${esc(t("trigger.hookHelp"))}</p><p class="note">${esc(t("recipe.public"))}</p>${recipeBody()}${routine && routine.when?.webhook ? `<code class="au-hook-address">${esc(address)}</code><label class="field sc-field">${ico("lock")}<input class="au-hook-secret" readonly type="${secret ? "text" : "password"}" value="${esc(secret || "********")}" aria-label="${esc(t("trigger.secret"))}" autocomplete="off" spellcheck="false"></label><div class="au-chips">${btn(esc(t(secret ? "trigger.hideSecret" : "tunnel.key")),"sm",' data-dlg="hook-show"')}${btn(copyLabel(t("trigger.copySecret")),"sm",` data-dlg="hook-copy"${secret ? "" : " disabled"}`)}${btn(copyLabel(t("recipe.copyUrl")),"sm",' data-dlg="hook-url"')}${btn(copyLabel(t("recipe.copyHeader")),"sm",` data-dlg="hook-header"${secret ? "" : " disabled"}`)}</div>${tunnelBody()}${secret ? `<p class="note">${esc(t("tunnel.once"))}</p>` : ""}${addressChanged ? `<p role="status">${esc(t("trigger.addressChanged"))}</p>` : ""}${hookError ? `<p role="alert">${esc(hookError)}</p>` : ""}` : `<p class="note">${esc(t("trigger.hookSaved"))}</p>`}</section>` :
       trigger === "event" && (!when || eventId) ? eventBody() :
-      when && !when.webhook ? `<section class="au-field au-event"><h3>${esc(t("auto.onEvent"))}</h3><p>${routineSentenceHTML({ schedule:null, app_name:routine?.app_name, when })}</p>${when.filter.field ? `<label>${esc(t("auto.triggerFilter"))}<input class="mb-fin" id="au-filter" maxlength="300" value="${esc(when.filter.equals)}"></label>` : ""}<p class="note">${esc(t("auto.triggerHelp"))}</p><p class="note">${esc(routine ? routineStatus(routine) : "")}</p>${routine?.last_error ? btn(esc(t("auto.connections")), "sm", ' data-dlg="connections" data-missing-repair="connections"') : ""}</section>` : `<section class="au-field"><p class="au-trigger-preview">${routineSentenceHTML({schedule:currentSchedule()})}</p><div class="au-start"><span>${esc(t("auto.starts"))}</span>${btn(esc(date), "", ' data-dlg="date" aria-label="' + esc(t("auto.date")) + '"')}<input class="mb-fin au-time" id="au-time" type="text" inputmode="numeric" maxlength="5" value="${esc(kind === "every" && windowFrom ? windowFrom : time)}"${kind === "every" && windowFrom ? " disabled" : ""} aria-label="${esc(t("auto.time"))}" placeholder="00:00"></div>` +
-      `<div class="au-chips">${kinds.map(([value, label]) => btn(esc(label), "sm", ` data-dlg="kind" data-kind="${value}" aria-pressed="${kind === value}"`)).join("")}</div>` +
-      (kind === "weekly" ? `<div class="au-chips">${[1,2,3,4,5,6,0].map(n => btn(esc(dayName(n)), "sm", ` data-dlg="day" data-day="${n}" aria-pressed="${days.has(n)}"`)).join("")}</div>` : "") +
-      `<div class="au-repeat-options${kind === "every" || kind === "monthly" ? "" : " is-reserved"}"${kind === "every" || kind === "monthly" ? "" : ' inert aria-hidden="true"'}>` +
-      (kind === "monthly" ? `<label>${esc(t("trigger.monthDay"))}<input id="au-month-day" class="mb-fin" type="number" min="1" max="31" value="${esc(monthDay)}"></label>` : sel(intervalChoices(), minutes ? `m${minutes}` : String(hours), t("members.hours"), ' data-dlg="hours"')) +
-      `<div class="au-window"${kind === "monthly" ? " hidden" : ""}>${sel([{value:"",label:t("auto.anyTime")}, ...windowTimes(windowFrom || "08:00")], windowFrom, t("auto.windowFrom"), ' data-dlg="window-from"')}` +
-      `<span>–</span>${sel(windowTimes(windowTo || "23:00"), windowTo || "23:00", t("auto.windowTo"), ' data-dlg="window-to"')}</div></div></section>`) +
+      when && !when.webhook ? `<section class="au-field au-event"><h3>${esc(t("auto.onEvent"))}</h3><p>${routineSentenceHTML({ schedule:null, app_name:routine?.app_name, when })}</p>${when.filter.field ? `<label>${esc(t("auto.triggerFilter"))}<input class="mb-fin" id="au-filter" maxlength="300" value="${esc(when.filter.equals)}"></label>` : ""}<p class="note">${esc(t("auto.triggerHelp"))}</p><p class="note">${esc(routine ? routineStatus(routine) : "")}</p>${routine?.last_error ? btn(esc(t("auto.connections")), "sm", ' data-dlg="connections" data-missing-repair="connections"') : ""}</section>` : scheduleHTML(kinds)) +
       (trigger !== "schedule" ? "" : btn(ico(more ? "down" : "right") + esc(t(more ? "auto.less" : "auto.more")), "sm", ` data-dlg="more" aria-expanded="${more}"`) +
       (more ? `<section class="au-more"><label class="au-field"><span>${esc(t("auto.end"))}</span>${sel(endChoices(), ending, t("auto.end"), ' data-dlg="end"')}` +
       (ending === "after" ? `<input id="au-count" class="mb-fin" type="number" min="1" max="10000" value="${esc(count)}" aria-label="${esc(t("auto.after"))}">` : ending === "until" ? btn(esc(until), "", ' data-dlg="until"') : "") +
       `</label><div class="au-field"><span>${esc(t("auto.results"))}</span>${sel([{ value: "main", label: t("auto.mainThread") }], "main", t("auto.results"), ' data-dlg="destination"')}</div></section>` : ""));
+  }
+  /**
+   * When a scheduled routine runs, as rows with the name left and the choice right (owner, 2026-11-08: 「這真的太亂了，還有一些
+   * 字被隱藏起來」): 重複 as one dropdown, its start day and time, then only the row its choice needs (the days of a week,
+   * a day of the month, an interval and its hours). The sentence under them says it in words.
+   */
+  function scheduleHTML(kinds: [RoutineSchedule["kind"], string][]): string {
+    const row = (label: string, control: string, cls = ""): string => `<div class="au-row${cls}"><span class="au-row-label">${esc(label)}</span><span class="au-row-ctl">${control}</span></div>`;
+    const windowed = kind === "every" && !!windowFrom;
+    return `<section class="au-field au-schedule"><div class="au-rows">` +
+      row(t("auto.repeat"), sel(kinds.map(([value, label]) => ({ value, label })), kind, t("auto.repeat"), ' data-dlg="kind-menu"')) +
+      (kind === "weekly" ? row(t("auto.days"), `<span class="au-days">${[1,2,3,4,5,6,0].map(n => btn(esc(dayName(n)), "sm", ` data-dlg="day" data-day="${n}" aria-pressed="${days.has(n)}"`)).join("")}</span>`, " au-row-days") : "") +
+      (kind === "monthly" ? row(t("trigger.monthDay"), `<input id="au-month-day" class="mb-fin au-num" type="number" min="1" max="31" value="${esc(monthDay)}" aria-label="${esc(t("trigger.monthDay"))}">`) : "") +
+      (kind === "every" ? row(t("members.hours"), sel(intervalChoices(), minutes ? `m${minutes}` : String(hours), t("members.hours"), ' data-dlg="hours"')) +
+        row(t("auto.window"), `<span class="au-window">${sel([{value:"",label:t("auto.anyTime")}, ...windowTimes(windowFrom || "08:00")], windowFrom, t("auto.windowFrom"), ' data-dlg="window-from"')}` +
+          (windowFrom ? `<span>–</span>${sel(windowTimes(windowTo || "23:00"), windowTo || "23:00", t("auto.windowTo"), ' data-dlg="window-to"')}` : "") + `</span>`) : "") +
+      row(t(kind === "once" ? "auto.date" : "auto.starts"), btn(esc(date), "", ` data-dlg="date" aria-label="${esc(t("auto.date"))}"`)) +
+      (windowed ? "" : row(t("auto.time"), `<input class="mb-fin au-time" id="au-time" type="text" inputmode="numeric" maxlength="5" value="${esc(time)}" aria-label="${esc(t("auto.time"))}" placeholder="00:00">`)) +
+      `</div><p class="au-trigger-preview">${routineSentenceHTML({schedule:currentSchedule()})}</p></section>`;
   }
   function tunnelCommand(): string {
     const port = /^http:\/\/127\.0\.0\.1:(\d+)\//.exec(address)?.[1];
@@ -233,6 +246,7 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
       else if (act === "event-check") void checkEvent();
       else if (act === "hook-show" || act === "hook-copy" || act === "hook-url" || act === "hook-header") void hookAction(act, target);
       else if (act === "kind") { kind = target.dataset.kind as typeof kind; draw(); }
+      else if (act === "kind-menu") openMenu(target, [["once", t("auto.once")], ["daily", t("members.daily")], ["weekdays", t("auto.weekdays")], ["weekly", t("members.weekly")], ["monthly", t("trigger.monthly")], ["every", t("trigger.every")]].map(([value, label]) => ({ value: value!, label: label! })), kind, value => { kind = value as typeof kind; draw(); dialog.el.querySelector<HTMLElement>('[data-dlg="kind-menu"]')?.focus(); });
       else if (act === "day") { const n = Number(target.dataset.day); if (days.has(n)) days.delete(n); else days.add(n); draw(); }
       else if (act === "destination") openMenu(target, [{ value: "main", label: t("auto.mainThread") }], "main", () => {});
       else if (act === "member") { memberId = Number(target.dataset.member); if (trigger === "event" && eventId) { generation++; checking=false; when=null; eventError=""; } draw(); }

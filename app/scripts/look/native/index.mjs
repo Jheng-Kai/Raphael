@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import puppeteer from "puppeteer-core";
 import { parseOptions } from "../options.mjs";
+import { readCatalogs, foreignPhrases } from "./catalogs.mjs";
 import { saveReport } from "../report.mjs";
 import { contactSheets } from "../contact-sheet.mjs";
 import { BROWSER_ARGS, browserPath } from "../runner.mjs";
@@ -250,10 +251,5 @@ async function run(options) {
 }
 
 async function translationPhrases() {
-  const catalogs = {};
-  for (const locale of ["en", "ja", "zh-TW"]) {
-    const source = await readFile(join(app, `src/main/i18n/${locale}.ts`), "utf8");
-    catalogs[locale] = Object.fromEntries([...source.matchAll(/^  "([^"\n]+)": "((?:\\.|[^"\\])*)",?$/gm)].map(match => [match[1], JSON.parse(`"${match[2]}"`)]));
-  }
-  return Object.fromEntries(Object.keys(catalogs).map(locale => [locale, [...new Set(Object.entries(catalogs).filter(([other]) => other !== locale).flatMap(([, catalog]) => Object.entries(catalog).filter(([key, value]) => value.length > 3 && !/[<{}]/.test(value) && value !== catalogs[locale][key] && Object.values(catalogs[locale]).every(target => target !== value)).map(([, value]) => value)))]]));
+  return foreignPhrases(readCatalogs(join(app, "src/main/i18n")));
 }

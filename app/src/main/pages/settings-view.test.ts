@@ -9,6 +9,7 @@ import { emptyRulesView } from "../safety-rules";
 import { emptyServicesView } from "../services";
 import { emptyProvidersView } from "../providers";
 import { setLocale, t } from "../i18n";
+import { ico } from "../ui";
 import { computerHostHealthHTML } from "../computer-location";
 import type { LanguageGroup } from "../languages";
 import type { BrainSettings, CatalogModel, DeviceSettings, LocalModel, ModelCatalog, SettingsPane, Status } from "../types";
@@ -125,20 +126,24 @@ test("no bot is set in Settings: Telegram, Slack and Discord live in each member
   expect(canonicalPane("messaging")).toBe("general");
 });
 
-test("shared owner memory lives in General, while own memory stays out of Settings", () => {
+test("shared owner memory is the 記憶 tab of its own, while own memory stays out of Settings (owner, 2026-11-08)", () => {
   const memoryShared = { ...emptyMemoryView(), status: { text: "Owner document", revision: "r", chars: 14, entries: 1, limit: 2200, summary: null }, space: "shared" as const, title: "共同記憶" };
-  const html = tab("general", { memoryShared });
+  const html = tab("memory", { memoryShared });
   expect(html).toContain('data-mem-space="shared"');
   const document = new Window().document;
   document.body.innerHTML = html;
-  // Grok Bot's order of sections: the account first, then appearance, Raphael, memory and the guide.
-  expect(document.querySelector(".set-account > h2")?.textContent).toBe("關於你");
-  expect(document.querySelector("[data-memory-import]")).not.toBeNull();
-  expect(html.indexOf("data-memory-import")).toBeGreaterThan(html.indexOf('data-mem-space="shared"'));
-  expect(document.querySelector('[data-k="routine-timezone"]')).not.toBeNull();
-  expect(document.querySelector('[data-row="output-folder"] [data-act="output-pick"]')).not.toBeNull();
-  for (const pane of ["tools", "safety", "dictation"] as const) expect(tab(pane, { memoryShared })).not.toContain("data-mem-section");
-  expect(tab("general", { memoryShared })).not.toContain('data-mem-space="own"');
+  expect(document.querySelector("#set-title")?.textContent).toBe("記憶");
+  // 匯入記憶 is the button beside the tab's name, at the top right, as 匯入 CSV in the vault; closed, nothing else of it.
+  expect(document.querySelector('.set-head [data-import="open"]')?.textContent).toBe("匯入記憶");
+  expect(document.querySelector("[data-memory-import]")).toBeNull();
+  const open = tab("memory", { memoryShared, memoryImportAction: "", memoryImportHTML: '<section data-memory-import></section>' });
+  expect(open.indexOf("data-memory-import")).toBeGreaterThan(open.indexOf('data-mem-space="shared"'));
+  expect(open).not.toContain('data-import="open"');
+  expect(html).not.toContain('data-mem-space="own"');
+  for (const pane of ["general", "tools", "safety", "dictation"] as const) {
+    expect(tab(pane, { memoryShared })).not.toContain("data-mem-section");
+    expect(tab(pane, { memoryShared })).not.toContain("data-memory-import");
+  }
 });
 
 test("shared safety rules and local permissions live in Safety", () => {
@@ -219,12 +224,12 @@ const described = (html: string): string[] =>
   html.split(/(?=<div class="row[ "])/).filter((r) => r.includes('<div class="d">')).map((r) => /<div class="t">(.*?)<\/div>/.exec(r)![1]);
 
 describe("the tabs", () => {
-  test("are Grok Bot's six: General, Dictation, Tools, Safety, Models & usage and About, in each language", () => {
-    expect(IDS).toEqual(["general", "dictation", "tools", "safety", "models", "about", "connections"]);
+  test("are Grok Bot's six and 記憶: General, Memory, Dictation, Tools, Safety, Models & usage and About, in each language", () => {
+    expect(IDS).toEqual(["general", "memory", "dictation", "tools", "safety", "models", "about", "connections"]);
     const titles = {
-      "zh-TW": ["一般", "聽寫與快捷鍵", "工具", "安全", "模型與用量", "關於", "連結應用程式"],
-      en: ["General", "Dictation & shortcuts", "Tools", "Safety", "Models & usage", "About", "Connect apps"],
-      ja: ["一般", "音声入力とショートカット", "ツール", "安全", "モデルと使用量", "アプリ情報", "アプリを連携"],
+      "zh-TW": ["一般", "記憶", "聽寫與快捷鍵", "工具", "安全", "模型與用量", "關於", "連結應用程式"],
+      en: ["General", "Memory", "Dictation & shortcuts", "Tools", "Safety", "Models & usage", "About", "Connect apps"],
+      ja: ["一般", "記憶", "音声入力とショートカット", "ツール", "安全", "モデルと使用量", "アプリ情報", "アプリを連携"],
     };
     for (const locale of LOCALES) {
       setLocale(locale);
@@ -235,13 +240,13 @@ describe("the tabs", () => {
   test("sit flat, as Grok Bot's: no group names and no search (owner, 2026-11-07)", () => {
     const list = paneListHTML();
     // 連結應用程式 is no tab: the sidebar opens it as a dialog of its own (R-UI-111).
-    expect([...list.matchAll(/data-pane="(\w+)"/g)].map((m) => m[1])).toEqual(["general", "dictation", "tools", "safety", "models", "about"]);
+    expect([...list.matchAll(/data-pane="(\w+)"/g)].map((m) => m[1])).toEqual(["general", "memory", "dictation", "tools", "safety", "models", "about"]);
     expect(list).not.toContain("nav-group");
     expect(list).not.toContain("set-search");
   });
 
   test("every tab is a real button and links of before land on their new tab", () => {
-    expect(paneListHTML().match(/<button type="button" class="nav" data-pane="\w+" aria-current="false">/g)).toHaveLength(6);
+    expect(paneListHTML().match(/<button type="button" class="nav" data-pane="\w+" aria-current="false">/g)).toHaveLength(7);
     expect(paneListHTML()).not.toContain('data-pane="agent"');
     expect(canonicalPane("agent")).toBe("tools");
     expect(canonicalPane("appearance")).toBe("general");
@@ -258,7 +263,9 @@ describe("the tabs", () => {
         expect(html).not.toContain("set-purpose");
         // Connections' Add stands on the row of its two views, clear of the dialog's ✕ (owner, 2026-11-07).
         if (id === "connections") expect(html).toMatch(/<div class="cs-bar">.*?<\/div><button type="button" class="sel cs-add"[^>]*data-k="conn-add"/s);
-        expect(html.startsWith(head)).toBe(true);
+        // 記憶's 匯入記憶 stands beside its name, at the top right, as 匯入 CSV in the vault (owner, 2026-11-08).
+        // 模型與用量's refresh stands at its top right too: it is read once while the app runs (owner, 2026-11-08).
+        expect(html.startsWith(id === "memory" || id === "models" ? `<div class="set-head">${head}` : head)).toBe(true);
         expect(html).not.toContain('class="purpose"');
       }
     }
@@ -326,17 +333,18 @@ describe("一般", () => {
     expect(buttons(chosen)).toHaveLength(1);
     expect(chosen).not.toMatch(/title="/);
   });
-  test("General is Grok Bot's sections: you, appearance, Raphael, then memory and the guide; the bots live in the panels", () => {
+  test("General is Grok Bot's sections: you, appearance, Raphael and the guide; memory and the bots live elsewhere", () => {
     const html = tab("general");
     expect(html).not.toContain("data-msg-section");
-    expect(groups(html).slice(0, 3)).toEqual(["關於你", t("skin.title"), t("agent.title")]);
-    expect(groups(html).slice(-2)).toEqual([t("members.profile.memory"), "啟動"]);
-    // Importing and the tour are one button each, named for what they do, with no row repeating the name (owner, 2026-11-07).
-    expect(html).toMatch(/<button[^>]*data-import="open"[^>]*>匯入記憶<\/button>/);
+    expect(groups(html)).toEqual(["關於你", t("skin.title"), t("agent.title"), "啟動"]);
+    // The tour is one button, named for what it does, with no row repeating the name (owner, 2026-11-07).
     expect(html).toMatch(/<button[^>]*data-act="rerun-guide"[^>]*>導覽<\/button>/);
-    expect(names(html)).not.toContain("匯入記憶");
-    expect(html).not.toMatch(/<h2>匯入記憶<\/h2>/);
     expect(names(html).slice(0, 4)).toEqual([t("settings.067"), t("settings.059"), "時區", "輸出資料夾"]);
+    // Importing memory is one button of the 記憶 tab.
+    const memory = tab("memory");
+    expect(memory).toMatch(/<button[^>]*data-import="open"[^>]*>匯入記憶<\/button>/);
+    expect(names(memory)).not.toContain("匯入記憶");
+    expect(memory).not.toMatch(/<h2>匯入記憶<\/h2>/);
   });
 
   test("starts the guide again with a real bordered button, not a switch or a link", () => {
@@ -359,12 +367,12 @@ describe("聽寫", () => {
     expect(names(html)).toEqual(["問拉斐爾", "聽寫", "貼上上一次", "取消", "聽寫方式", "你說的語言", "麥克風", "保留聽寫紀錄"]);
   });
 
-  test("shows each shortcut as key caps, with a 變更 button on the one that can be changed here", () => {
+  test("shows each shortcut as key caps, with a pencil (變更) on the one that can be changed here", () => {
     const html = tab("dictation");
     const dictate = rowOf(html, "聽寫");
     expect(dictate).toContain('data-row="hotkey"');
     expect(dictate).toContain("<kbd>右 Alt</kbd>");
-    expect(dictate).toContain('<button type="button" class="btn" data-act="rec" data-k="rec">變更</button>');
+    expect(dictate).toContain(`<button type="button" class="btn icon row" aria-label="變更" title="變更" data-act="rec" data-k="rec">${ico("pencil")}</button>`);
     expect(rowOf(html, "貼上上一次")).toContain("<kbd>V</kbd>");
     expect(rowOf(html, "取消")).toContain("<kbd>Esc</kbd>");
     for (const name of ["貼上上一次", "取消"]) expect(buttons(rowOf(html, name))).toEqual([]);
@@ -497,12 +505,12 @@ describe("Models", () => {
     expect(unknown).not.toContain("progressbar");
   });
 
-  test("shows how OpenRouter took the key, with buttons to check again and to change it", () => {
+  test("shows how OpenRouter took the key, with a button to check again and a pencil to change it", () => {
     const key = rowOf(tab("usage"), "金鑰");
     expect(key).toContain("已連線");
     expect(key).toContain("延遲 120 ms");
-    expect(buttons(key).slice(0, 2)).toEqual(['<button type="button" class="btn" data-act="or-check">', '<button type="button" class="btn" data-act="key-replace" data-k="key">']);
-    expect(key).toContain(">變更</button>");
+    expect(buttons(key).slice(0, 2)).toEqual(['<button type="button" class="btn" data-act="or-check">', '<button type="button" class="btn icon row" aria-label="變更" title="變更" data-act="key-replace" data-k="key">']);
+    expect(key).toContain(`data-k="key">${ico("pencil")}</button>`);
     const bad = rowOf(tab("usage", { openrouter: { ...openrouter, state: "error", error: "auth" } }), "金鑰");
     expect(bad).toContain("金鑰無效，請更換");
   });
@@ -645,10 +653,13 @@ describe("dictation history retention", () => {
 });
 
 describe("關於", () => {
-  test("has the version, and the license behind a button", () => {
+  test("has the version, and help and the license behind icons, no text buttons (owner, 2026-11-08)", () => {
     const html = tab("about", { version: "0.2.0" });
     expect(rowOf(html, "版本")).toContain(">0.2.0</span>");
-    expect(rowOf(html, "開源授權")).toContain('<button type="button" class="btn" data-act="license">查看</button>');
+    expect(rowOf(html, "開源授權")).toMatch(/<button type="button" class="btn icon row" aria-label="查看"[^>]*data-act="license">/);
+    expect(rowOf(html, "開源授權")).toContain(ico("right"));
+    expect(rowOf(html, t("nav.help"))).toMatch(/<button type="button" class="btn icon row"[^>]*data-act="help">/);
+    expect(rowOf(html, t("nav.help"))).toContain(ico("external"));
   });
 
   test("shows no number while the version is not known, rather than one written in the code", () => {

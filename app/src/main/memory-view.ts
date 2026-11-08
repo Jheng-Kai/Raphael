@@ -116,7 +116,8 @@ export function memoryHTML(v: MemoryView): string {
   const doc = v.status;
   const entries = entriesOf(doc.text);
   const off = v.busy ? " disabled" : "";
-  const edit = v.editing ? "" : btn(esc(t("mem.edit")), "sm", ` data-mem="edit" aria-label="${esc(t("mem.editLabel", { p0: v.title }))}"${off}`);
+  // A pencil, not the word: what it opens is named by its label (owner, 2026-11-08: fewer words, icons for edits).
+  const edit = v.editing ? "" : iconButton("pencil", t("mem.editLabel", { p0: v.title }), ` data-mem="edit"${off}`);
   const menu = entries.length ? iconButton("more", t("mem.more", { p0: v.title }), ` data-mem="section-more" aria-haspopup="menu" aria-expanded="false"${off}`) : "";
   const head = row(esc(v.title), "", edit + menu, { cls: "mem-head" });
   const body = v.editing

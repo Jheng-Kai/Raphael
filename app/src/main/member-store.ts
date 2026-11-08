@@ -6,6 +6,7 @@ import { previewTemplate } from "./member-templates";
 import { slimeFaceHTML } from "./slime";
 import type { Member, NewMember } from "./types";
 import { btn, esc } from "./ui";
+import { findsName } from "./find-match";
 
 export interface CatalogEntry {
   id: string; name: string; creator: string; category: string; summary: string; avatar: string; featured: boolean;
@@ -32,7 +33,7 @@ export function mountMemberStore(root: HTMLElement, create: (member: NewMember) 
   function draw(): void {
     if (!root.isConnected) return;
     for (const chip of root.querySelectorAll<HTMLElement>("[data-category]")) chip.setAttribute("aria-pressed", String(chip.dataset.category === category));
-    const filtered = entries.filter(e => (!category || e.category === category) && `${e.name} ${e.creator} ${e.summary}`.toLocaleLowerCase().includes(query));
+    const filtered = entries.filter(e => (!category || e.category === category) && (`${e.name} ${e.creator} ${e.summary}`.toLocaleLowerCase().includes(query) || findsName([e.name, e.creator], query)));
     const card = (e: CatalogEntry): string => `<article class="store-entry">${slimeFaceHTML({id:-1,avatar:`slime:${e.avatar}`}, 54)}<div><h3>${esc(e.name)}</h3><p class="note">${esc(t("store.creator", {p0:e.creator}))}</p><p class="store-summary" title="${esc(e.summary)}">${esc(e.summary)}</p></div>${btn(esc(t("template.import")), "sm", ` data-dlg="store-preview" data-id="${esc(e.id)}"`)}</article>`;
     const featured = !category && !query ? filtered.filter(e => e.featured) : [];
     root.querySelector(".store-results")!.innerHTML = (offline ? `<p class="note">${esc(t(entries.length ? "store.cached" : "store.empty"))}</p>` : "") +

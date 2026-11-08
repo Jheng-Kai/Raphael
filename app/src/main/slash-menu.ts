@@ -6,13 +6,14 @@ import { t } from "./i18n";
 import type { MemberCommand, MemberSkill } from "./types";
 import { textPositionRect } from "./text-position";
 import { closeMenu, matchingChoices, menuIsOpenFor, openMenu, placeMenu, type Choice } from "./ui";
+import { findsName } from "./find-match";
 
 export interface SlashMenuOptions { memberId(): number; scope?: object }
 export interface SlashMenu { refresh(fromEvent?: boolean): Promise<void>; destroy(): void }
 const queryOf = (text: string): string | undefined => /^\/([^\s/]*)$/u.exec(text)?.[1];
 export const matchingCommands = (commands: readonly MemberCommand[], text: string): MemberCommand[] => {
-  const query = queryOf(text)?.toLocaleLowerCase();
-  return query === undefined ? [] : commands.filter(command => command.name.toLocaleLowerCase().includes(query));
+  const query = queryOf(text);
+  return query === undefined ? [] : commands.filter(command => findsName([command.name], query));
 };
 
 export function mountSlashMenu(input: HTMLTextAreaElement | HTMLInputElement, options: SlashMenuOptions): SlashMenu {

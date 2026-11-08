@@ -1,34 +1,22 @@
-// The landing view holds tasks, routines and conversations. Identity and resources live
-// behind the gear; fields being typed in survive live member updates.
+// The landing view holds tasks, routines and conversations, the member's bots, its library and its computer. Everything
+// the owner changes about a member lives on the member settings page (member-settings.ts), which the gear opens in the
+// main area where the conversation is.
 
 import { noticeHTML } from "./missing";
 import "./messaging.css";
 import { openRoutineDialog } from "./routine-dialog";
 import { mountConversationList } from "./conversation-list";
 import * as api from "./api";
-import { mountMemberResources } from "./member-profile-resources";
 import "./member-panel.css";
-import { changeRaphaelAvatar, resetRaphaelAvatar } from "./avatar-settings";
-import { currentAvatar } from "./avatar";
 import { getLocale, t } from "./i18n";
-import { groupChoices, groupFromValue, groupValue, openAvatarPicker } from "./member-dialogs";
-import { defaultSlimeAvatar } from "./slime";
-import { createMemory } from "./memory-view";
-import { memoryHTML } from "./memory-view";
+import { openMemberAvatarMenu } from "./member-avatar-menu";
 import {
-  INSTRUCTIONS_MAX,
-  NAME_MAX,
-  PERSONALITY_MAX,
   RAPHAEL_ID,
-  ROLE_MAX,
-  cleanName,
   faceHTML,
-  isMemberNameTaken,
   routineSentenceHTML, routineStatus,
-  sourceLabel,
 } from "./members";
 import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
-import { closeMenu, esc, ico, iconButton, openMenu, patchHTML, sel, tg, toaster } from "./ui";
+import { esc, ico, iconButton, patchHTML, tg, toaster } from "./ui";
 import { eventRead } from './event-read';
 import { createAttachmentMedia } from "./attachment-media";
 import { openMediaLightbox } from "./media-lightbox";
@@ -38,7 +26,7 @@ import { describeError } from "./format";
 import { askInChat, askPending, onAskPending } from "./chat-ask";
 import { type Messaging, type MessagingKind, chatChannelsHTML, createMemberChannel, createRaphaelChannel } from "./messaging";
 
-export type DetailsTab = "details" | "library" | "computer" | "settings" | "memory" | "skills" | "commands" | "voice";
+export type DetailsTab = "details" | "library" | "computer";
 
 export interface DetailsHost {
   app: AppContext;
@@ -48,11 +36,10 @@ export interface DetailsHost {
   visible?(): boolean;
   /** Changes the member and reads the list again; false (with a toast) when the core refused. */
   update(id: number, patch: MemberPatch): Promise<boolean>;
-  /** A picture of this PC for the member; then the list again. */
   /** The × of the panel. */
   close(): void;
-  edit?(member: Member): void;
-  hide?(member: Member): void;
+  /** The gear: the member settings page opens (or, when it is open, closes) in the main area. */
+  openSettings?(): void;
   openConversation?(member: number, conversation: number): void;
   openTurn?(member: number, conversation: number | undefined, turn: number): void;
   /** The conversation open with this member, undefined for their default. */
@@ -64,11 +51,10 @@ export interface DetailsPanel {
   /** Draws the panel again (the list changed, or the language). */
   draw(): void;
   overview(): void;
-  select(tab: 'details' | 'library' | 'computer'): void;
-  /** Reads the selected member's routines and memory, and opens Details. */
+  select(tab: DetailsTab): void;
+  /** Reads the selected member's routines and work, and opens Details. */
   showMember(): void;
   refreshRoutines(): void;
-  refreshMemory(memberId: number, space?: "own" | "shared"): void;
   refreshResources(): void;
   /** The member stopped working: its bots may have been set up in the conversation, so their rows are read again. */
   refreshChannels(): void;
@@ -80,16 +66,15 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   const el = document.createElement("aside");
   el.className = "mb-det";
   el.innerHTML =
-    // Share on the left edge and close on the right, apart (owner, 2026-11-07). Share asks the member, in its own
-    // conversation, to package itself as a template, as Grok Bot's Create a copy does; the template card comes there.
-    // `gear` stays only as an unshown entry for the old settings page, which nothing on screen opens any more.
-    `<div class="mb-det-head">${iconButton("left", t("members.panelBack"), ' data-det="back" hidden', "mb-tool")}${iconButton("share", t("template.export"), ' data-det="share"', "mb-tool")}${iconButton("gear", t("computer.settings"), ' data-det="gear" hidden tabindex="-1"', "mb-tool")}<span class="mb-det-fill"></span>${iconButton("x", t("members.close"), ' data-det="close"', "mb-tool")}</div>` +
+    // The gear on the left edge and close on the right, apart (owner, 2026-11-08): the gear opens the member's settings as
+    // a page of its own in the main area. Sharing is done from the conversation's header.
+    `<div class="mb-det-head">${iconButton("gear", t("computer.settings"), ' data-det="gear"', "mb-tool")}<span class="mb-det-fill"></span>${iconButton("x", t("members.close"), ' data-det="close"', "mb-tool")}</div>` +
     `<div class="mb-det-scroll"><div class="mb-who"></div><div class="mb-tabs"></div><div class="mb-tab-body" role="tabpanel" id="member-panel-body"></div></div>`;
   const who = el.querySelector<HTMLElement>(".mb-who")!;
   const tabBar = el.querySelector<HTMLElement>(".mb-tabs")!;
   const body = el.querySelector<HTMLElement>(".mb-tab-body")!;
   const closeButton = el.querySelector<HTMLElement>('[data-det="close"]')!;
-  const backButton = el.querySelector<HTMLElement>('[data-det="back"]')!;
+  const gearButton = el.querySelector<HTMLElement>('[data-det="gear"]')!;
   // The Library's pictures load as a chat's attachments do, when they scroll into view.
   const libraryMedia = createAttachmentMedia(el.querySelector<HTMLElement>(".mb-det-scroll")!, id => api.core("attachments.get", { id }));
   let drawn = "";
@@ -117,21 +102,15 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     else clearTimeout(workTimer);
     workTimer = setTimeout(() => { workTimer = undefined; if (!el.hidden) void loadWork(true); }, Math.min(1500, Math.max(0, workSince + 5000 - now)));
   }
-  function select(page: 'details' | 'library' | 'computer'): void {
+  function select(page: DetailsTab): void {
     tab = page; draw();
     el.dispatchEvent(new CustomEvent('member-panel-tab', {bubbles:true}));
     if (page !== 'computer') void loadWork();
   }
   let routines: Routine[] | "loading" | "failed" = "loading";
   let routineLoads = 0;
-  /** The long fields that are open (個性, 指示): closed, each is one line. */
-  const openFields = new Set<string>();
-  /** The member the panel was last drawn for: its fields are drawn afresh when it changes. */
+  /** The member the panel was last drawn for. */
   let drawnFor: number | null = null;
-  let counts = { skills: 0, commands: 0, memory: 0 };
-  let countEpoch = 0, countsStale = false;
-  let resources: ReturnType<typeof mountMemberResources> | null = null;
-  let resourceKey = "";
   const conversationHost = document.createElement("div");
   let conversationMember: number | null = null;
   let conversationList: ReturnType<typeof mountConversationList> | null = null;
@@ -152,62 +131,13 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       current: () => host.conversationOf?.(memberId),
     });
   }
-  async function loadCounts(fromEvent = false): Promise<void> {
-    if (el.hidden) { countsStale = true; return; }
-    const epoch = ++countEpoch, id = host.member().id;
-    const result = await Promise.allSettled([
-      fromEvent ? eventRead(`members.skills.list:${id}`,()=>api.core<{skills: unknown[]}>("members.skills.list", {member_id: id}),host.app) : api.core<{skills: unknown[]}>("members.skills.list", {member_id: id}),
-      fromEvent ? eventRead(`members.commands.list:${id}`,()=>api.core<{commands: unknown[]}>("members.commands.list", {member_id: id}),host.app) : api.core<{commands: unknown[]}>("members.commands.list", {member_id: id}),
-      fromEvent ? eventRead(`memory.get:${id}`,()=>api.core<{entries:number}>('memory.get',{member_id:id,space:'own'}),host.app) : api.core<{ entries: number }>("memory.get", { member_id: id, space: "own" }),
-    ]);
-    if (epoch !== countEpoch || id !== host.member().id) return;
-    counts = {
-      skills: result[0].status === "fulfilled" ? result[0].value?.skills?.length ?? 0 : 0,
-      commands: result[1].status === "fulfilled" ? result[1].value?.commands?.length ?? 0 : 0,
-      memory: result[2].status === "fulfilled" ? result[2].value?.entries ?? 0 : 0,
-    };
-    draw();
-  }
-  function pageRow(page: DetailsTab, label: string, icon: Parameters<typeof ico>[0], detail = ""): string {
-    return `<button type="button" class="btn mb-panel-row" data-det="tab" data-tab="${page}" data-k="det-tab:${page}">${ico(icon)}<span>${esc(label)}</span><small>${esc(detail)}</small>${ico("right")}</button>`;
-  }
-  function pageRows(member: Member): string {
-    return `<nav class="mb-panel-pages" aria-label="${esc(t("members.details"))}">` +
-      `<div class="mb-panel-row mb-panel-preference"><span class="mb-panel-row-copy"><span>${esc(t("members.profile.draft"))}</span><small>${esc(t("members.profile.draftHint"))}</small></span>${tg(member.draft_first ?? true, t("members.profile.draft"), ' data-det="draft" data-k="det-draft"')}</div>` +
-      pageRow("memory", t("mem.title"), "memory", t("members.panelNotes", {p0: counts.memory})) +
-      pageRow("skills", t("members.panelSkills"), "sparkle", t("members.panelCount", {p0: counts.skills})) +
-      pageRow("commands", t("members.panelCommands"), "steps", t("members.panelCount", {p0: counts.commands})) +
-      pageRow("voice", t("members.panelVoice"), "voice") +
-      (member.id === RAPHAEL_ID ? "" : `<button type="button" class="btn mb-panel-row" data-det="hide">${ico("eyeOff")}<span class="mb-panel-row-copy"><span>${esc(t("members.panelHide"))}</span><small>${esc(t("members.panelHideHint"))}</small></span></button>`) + `</nav>`;
-  }
-
-  const memoryHost = {
-    visible: () => el.isConnected && !el.hidden && tab === "memory",
-    redraw: () => draw(),
-    memberId: () => host.member().id,
-    ownerName: () => host.member().name,
-  };
-  const shared = createMemory({ ...memoryHost, space: "shared" });
-  const own = createMemory({ ...memoryHost, space: "own" });
-  const memories = [shared, own];
 
   // ---------- drawing ----------
 
   function whoHTML(member: Member): string {
     // A press on the face opens the picker (slimes, 生成) at once, as Grok Bot's; under the pointer a pencil shows on the
     // face as on the owner's own photo in Settings (owner, 2026-11-08), no words and no dialog in between.
-    if (tab !== 'settings') return `<span class="mb-panel-identity"><button type="button" class="btn mb-face-edit" data-det="avatar" data-k="det-face-edit" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}">${faceHTML(member, 64)}<span class="mb-face-pencil" aria-hidden="true">${ico("pencil")}</span></button><b>${esc(member.name)}</b>${member.role ? `<small>${esc(member.role)}</small>` : ''}</span>`;
-    // The face is the button that changes its picture.
-    const face =
-      `<span class="mb-who-face"><button type="button" class="btn mb-avbtn" data-det="avatar" data-k="det-avatar" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}" title="${esc(t("members.changeAvatar"))}">` +
-      faceHTML(member, 64) +
-      `</button></span>`;
-    if (member.id === RAPHAEL_ID) return face + `<b class="mb-who-name">${esc(member.name)}</b>`;
-    return (
-      face +
-      `<input class="mb-who-name mb-edit" id="mb-det-name" data-member="${member.id}" type="text" maxlength="${NAME_MAX}" value="${esc(member.name)}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false">` +
-      `<input class="mb-who-role mb-edit" id="mb-det-role" data-member="${member.id}" type="text" maxlength="${ROLE_MAX}" value="${esc(member.role)}" placeholder="${esc(t("members.role"))}" aria-label="${esc(t("members.role"))}" autocomplete="off" spellcheck="false">`
-    );
+    return `<span class="mb-panel-identity"><button type="button" class="btn mb-face-edit" data-det="avatar" data-k="det-face-edit" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}">${faceHTML(member, 64)}<span class="mb-face-pencil" aria-hidden="true">${ico("pencil")}</span></button><b>${esc(member.name)}</b>${member.role ? `<small>${esc(member.role)}</small>` : ''}</span>`;
   }
 
   // A routine is its title and when it runs, with its own switch on the right as Grok Bot's Upcoming rows have
@@ -233,8 +163,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   }
 
   // 訊息平台: the member's own Telegram, Slack and Discord bots, Raphael's too (Settings no longer holds them). One that is
-  // not set up is a row with 「設定」, which the member does with the owner in its conversation (owner, 2026-11-07);
-  // under them one row for the rest of its settings, done the same way.
+  // not set up is a row with 「設定」, which the member does with the owner in its conversation (owner, 2026-11-07).
   const KINDS: readonly MessagingKind[] = ["telegram", "slack", "discord"];
   const channelHost = { visible: () => el.isConnected && !el.hidden && tab === "details", redraw: () => draw() };
   let channelsFor = -1;
@@ -249,170 +178,59 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   const channelViews = (memberId: number): (readonly [MessagingKind, ReturnType<Messaging["view"]>])[] => KINDS.map((kind) => [kind, channelsOf(memberId)[kind].view()] as const);
   function suggestHTML(): string {
     const id = host.member().id;
-    // The bots, then the member's own settings in the panel again (owner, 2026-11-08: 「skill 為什麼不見了…不是說會在右邊的
-    // sidebar 嗎」): its skills and memory by name, and 成員設定 for the rest (commands, voice, personality, instructions,
-    // group, hiding), each a page with a way back. Asking in the conversation still works too.
-    const settings = `<div class="mb-dh"><span>${esc(t("computer.settings"))}</span></div><nav class="mb-panel-pages" aria-label="${esc(t("computer.settings"))}">` +
-      pageRow("skills", t("members.panelSkills"), "sparkle", t("members.panelCount", { p0: counts.skills })) +
-      pageRow("memory", t("mem.title"), "memory", t("members.panelNotes", { p0: counts.memory })) +
-      pageRow("settings", t("computer.settings"), "gear") + `</nav>`;
-    return `<div class="mb-dh"><span>${esc(t("settings.paneMessaging"))}</span></div><div class="member-msg">${chatChannelsHTML(channelViews(id), (intent) => askPending(id, intent))}</div>` + settings;
+    return `<div class="mb-dh"><span>${esc(t("settings.paneMessaging"))}</span></div><div class="member-msg">${chatChannelsHTML(channelViews(id), (intent) => askPending(id, intent))}</div>`;
   }
   // A press the member is working on draws its button busy; the end of it frees the button (chat-ask.ts).
   onAskPending(() => { if (!el.hidden) draw(); });
 
-  /**
-   * A long field, closed to its name and its first line (or 「未填寫」) behind a real button; open,
-   * the box under it. Open while it is being typed in, so a redraw never closes it under the owner.
-   */
-  function foldHTML(id: string, label: string, value: string, box: string): string {
-    const open = openFields.has(id);
-    const peek = value.trim().split(/\r?\n/, 1)[0] || t("members.notSet");
-    return `<section class="mb-field mb-fold-field">` +
-      `<button type="button" class="btn mb-fold-head" data-det="fold" data-field="${id}" data-k="fold:${id}" aria-expanded="${open}" aria-controls="${id}-body">` +
-      `<span class="mb-dh">${esc(label)}</span>${open ? "" : `<span class="mb-peek">${esc(peek)}</span>`}${ico("down")}</button>` +
-      `<div class="mb-fold-body" id="${id}-body"${open ? "" : " hidden"}>${box}</div></section>`;
-  }
-
-  function detailsHTML(member: Member): string {
-    if (member.id === RAPHAEL_ID) return pageRows(member);
-    const list = host.list();
-    const group = list?.groups.find((g) => g.id === member.group_id) ?? null;
-    const sources = group?.sources ?? [];
-    return (
-      `<button type="button" class="btn mb-panel-row" data-det="edit">${ico("pencil")}<span>${esc(t("members.sideEdit"))}</span></button>` + foldHTML("mb-det-personality", t("members.personality"), member.personality ?? "",
-        `<textarea id="mb-det-personality" data-member="${member.id}" class="mb-fin mb-ta" rows="3" maxlength="${PERSONALITY_MAX}" placeholder="${esc(t("members.personalityHint"))}">${esc(member.personality ?? "")}</textarea>`) +
-      foldHTML("mb-det-instr", t("members.instructions"), member.instructions ?? "",
-        `<textarea id="mb-det-instr" data-member="${member.id}" class="mb-fin mb-ta" rows="4" maxlength="${INSTRUCTIONS_MAX}">${esc(member.instructions ?? "")}</textarea>`) +
-      `<section class="mb-field"><div class="mb-dh">${esc(t("members.group"))}</div>` +
-      sel(groupChoices(list?.groups ?? []), groupValue(group ? group.id : null), t("members.group"), ' data-det="group" data-k="det-group"') +
-      `</section>` +
-      pageRows(member) +
-      (sources.length
-        ? `<section class="mb-field"><div class="mb-dh">${esc(t("members.sources"))}</div><div class="mb-chips">` +
-          sources.map((source) => `<span class="mb-chip">${esc(sourceLabel(source))}</span>`).join("") +
-          `</div></section>`
-        : "")
-    );
-  }
-
   function draw(): void {
     if (el.hidden) return;
-    if (countsStale) { countsStale = false; void loadCounts(); }
     const member = host.member();
     const sameMember = drawnFor === member.id;
     const focused = document.activeElement as HTMLElement | null;
-    if (sameMember) for (const [id, value] of [['mb-det-name', member.name], ['mb-det-role', member.role], ['mb-det-personality', member.personality ?? ''], ['mb-det-instr', member.instructions ?? '']]) {
-      const field = el.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${id}`);
-      if (field && field !== focused && field.value !== value) field.value = value;
-    }
     const face = faceHTML(member, 64).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([member, face, host.list()?.groups, counts, routines, work, workFailed, tab, libraryFilter, [...openFields], getLocale(), !!host.openConversation, host.conversationOf?.(member.id), tab === "memory" ? memories.map(list => list.view()) : null,
+    const signature = JSON.stringify([member, face, host.list()?.groups, routines, work, workFailed, tab, libraryFilter, getLocale(), !!host.openConversation, host.conversationOf?.(member.id),
       // The bot cards redraw on their own state.
       tab === "details" ? channelViews(member.id).map(([kind, view]) => [kind, { ...view, token: "" }]) : null,
-      (["setup-telegram", "setup-slack", "setup-discord", "settings", "share-template"] as const).map((intent) => askPending(member.id, intent))]);
+      (["setup-telegram", "setup-slack", "setup-discord"] as const).map((intent) => askPending(member.id, intent))]);
     if (drawn === signature) return;
     drawn = signature;
     el.dataset.detailsTab = tab;
     closeButton.setAttribute("aria-label", t("members.close"));
     closeButton.title = t("members.close");
-    backButton.hidden = ['details', 'library', 'computer'].includes(tab);
-    backButton.title = t('members.panelBack'); backButton.setAttribute('aria-label', backButton.title);
-    const share = el.querySelector<HTMLElement>('[data-det="share"]')!;
-    share.title = t("template.export"); share.setAttribute("aria-label", share.title);
-    const sharing = askPending(member.id, "share-template");
-    if ((share.getAttribute("aria-busy") === "true") !== sharing) {
-      share.innerHTML = sharing ? `<span class="spin" aria-hidden="true"></span>` : ico("share");
-      share.toggleAttribute("disabled", sharing);
-      if (sharing) share.setAttribute("aria-busy", "true"); else share.removeAttribute("aria-busy");
-    }
-    // Raphael is the app's own: he is not shared as a template; the old settings page's back arrow keeps its place.
-    share.hidden = member.id === RAPHAEL_ID || !['details', 'library', 'computer'].includes(tab);
+    gearButton.title = t("computer.settings"); gearButton.setAttribute("aria-label", gearButton.title);
     el.setAttribute("aria-label", t("members.panel"));
-    const typingIn = focused && el.contains(focused) && (focused.matches("input, textarea") ? focused.id : null);
     const scroll = el.querySelector<HTMLElement>(".mb-det-scroll")!;
     const scrollTop = scroll.scrollTop;
-    const textField = typingIn ? focused as HTMLInputElement | HTMLTextAreaElement : null;
-    const selection = textField && typeof textField.selectionStart === "number"
-      ? [textField.selectionStart, textField.selectionEnd!, textField.selectionDirection] as const : null;
     const focusKey = focused && el.contains(focused) ? focused.closest<HTMLElement>("[data-k]")?.dataset.k : undefined;
-    // the name and role are drawn afresh for another member, and left alone while they are typed in
-    if (!sameMember || !(typingIn === "mb-det-name" || typingIn === "mb-det-role")) {
-      if (!sameMember && (typingIn === "mb-det-name" || typingIn === "mb-det-role")) {
-        void saveField(focused as HTMLInputElement, true);
-      }
-      patchHTML(who, whoHTML(member));
-    } else {
-      const av = who.querySelector<HTMLElement>(".mb-avbtn");
-      if (av) patchHTML(av, faceHTML(member, 64));
-    }
-    // A focused field keeps its draft; the other field can still change remotely.
-    for (const [id, value] of [["mb-det-name", member.name], ["mb-det-role", member.role]]) {
-      const input = who.querySelector<HTMLInputElement>(`#${id}`);
-      if (input && (!sameMember || id !== typingIn) && input.value !== value) input.value = value;
-    }
+    patchHTML(who, whoHTML(member));
     drawnFor = member.id;
     who.hidden = false;
-    const mainTab = ['details', 'library', 'computer'].includes(tab);
-    tabBar.hidden = !mainTab;
+    tabBar.hidden = false;
     body.hidden = tab === 'computer';
-    patchHTML(tabBar, tabs(['details', 'library', 'computer'].map(id => ({id, label:t(({details:'members.panelTab.details', library:'members.panelTab.library', computer:'members.panelTab.computer'} as const)[id as 'details' | 'library' | 'computer']), attrs:` id="member-tab-${id}" data-det="tab" data-tab="${id}" aria-controls="${id === 'computer' ? 'member-computer-panel' : 'member-panel-body'}" tabindex="${tab === id ? 0 : -1}"`})), tab, {kind:'nav', plain:true, label:t('members.panel')}));
+    patchHTML(tabBar, tabs(['details', 'library', 'computer'].map(id => ({id, label:t(({details:'members.panelTab.details', library:'members.panelTab.library', computer:'members.panelTab.computer'} as const)[id as DetailsTab]), attrs:` id="member-tab-${id}" data-det="tab" data-tab="${id}" aria-controls="${id === 'computer' ? 'member-computer-panel' : 'member-panel-body'}" tabindex="${tab === id ? 0 : -1}"`})), tab, {kind:'nav', plain:true, label:t('members.panel')}));
     body.setAttribute('aria-labelledby', `member-tab-${tab}`);
-    const typingText = typingIn === "mb-det-instr" || typingIn === "mb-det-personality";
-    const kept = typingText ? (focused as HTMLElement).closest<HTMLElement>("section") : null;
-    if (sameMember && kept && kept.parentElement === body && tab === "settings") {
-      // Blur saves the box being typed in, so keep its section alive while the other fields update.
-      const at = Array.from(body.children).indexOf(kept);
-      const next = document.createElement("div");
-      next.innerHTML = detailsHTML(member);
-      const fresh = Array.from(next.children);
-      for (const child of Array.from(body.children)) if (child !== kept) child.remove();
-      kept.before(...fresh.slice(0, at));
-      kept.after(...fresh.slice(at + 1));
-      drawConversations();
-      if (scroll.scrollTop !== scrollTop) scroll.scrollTop = scrollTop;
-      return;
-    }
-    if (typingText) void saveField(focused as HTMLTextAreaElement, true);
-    const resourceTab = tab === "skills" || tab === "commands" || tab === "voice" ? tab : null;
-    const nextResourceKey = resourceTab ? `${member.id}:${resourceTab}` + (resourceTab === "voice" ? `:${member.voice}:${member.notify}` : "") : "";
-    if (resourceKey !== nextResourceKey) { resources?.destroy(); resources = null; resourceKey = nextResourceKey; }
-    if (resourceTab) {
-      if (!resources) {
-        body.replaceChildren();
-        resources = mountMemberResources(body, {memberId: member.id, scope: host.app, tab: resourceTab, member, standalone: true, changed: () => void loadCounts()});
-      }
-    } else {
-      if (tab === "details") {
-        const chief = member.id === RAPHAEL_ID;
-        if (!body.querySelector('.mb-panel-routines') || !!body.querySelector('[data-slot="conversations"]') !== chief) {
-          conversationHost.remove();
-          patchHTML(body, `<section class="mb-panel-routines" data-k="panel-routines"></section>` +
-            (chief ? `<section><div class="mb-dh"><span data-panel-conversations-heading>${esc(t('members.panelConversations'))}</span></div><div data-slot="conversations" data-k="panel-conversations"></div></section>` : "") +
-            `<section class="mb-panel-suggest" data-k="panel-suggest"></section>`);
-        }
-        // The skeleton is kept across draws, so its heading follows a language change here.
-        const heading = body.querySelector<HTMLElement>('[data-panel-conversations-heading]');
-        if (heading && heading.textContent !== t('members.panelConversations')) heading.textContent = t('members.panelConversations');
-        patchHTML(body.querySelector('.mb-panel-routines')!, routinesHTML());
-        const suggest = body.querySelector<HTMLElement>('.mb-panel-suggest');
-        if (suggest) patchHTML(suggest, suggestHTML());
-      } else if (tab === 'library') {
-        conversationHost.remove(); patchHTML(body, panelLibraryHTML(work, workFailed, Date.now(), libraryFilter)); libraryMedia.sync();
-      } else if (tab === 'computer') {
-        conversationHost.remove(); patchHTML(body, '');
-      } else {
+    if (tab === "details") {
+      const chief = member.id === RAPHAEL_ID;
+      if (!body.querySelector('.mb-panel-routines') || !!body.querySelector('[data-slot="conversations"]') !== chief) {
         conversationHost.remove();
-        patchHTML(body, tab === "settings" ? detailsHTML(member) : memoryHTML(shared.view()) + memoryHTML(own.view()));
+        patchHTML(body, `<section class="mb-panel-routines" data-k="panel-routines"></section>` +
+          (chief ? `<section><div class="mb-dh"><span data-panel-conversations-heading>${esc(t('members.panelConversations'))}</span></div><div data-slot="conversations" data-k="panel-conversations"></div></section>` : "") +
+          `<section class="mb-panel-suggest" data-k="panel-suggest"></section>`);
       }
+      // The skeleton is kept across draws, so its heading follows a language change here.
+      const heading = body.querySelector<HTMLElement>('[data-panel-conversations-heading]');
+      if (heading && heading.textContent !== t('members.panelConversations')) heading.textContent = t('members.panelConversations');
+      patchHTML(body.querySelector('.mb-panel-routines')!, routinesHTML());
+      const suggest = body.querySelector<HTMLElement>('.mb-panel-suggest');
+      if (suggest) patchHTML(suggest, suggestHTML());
+    } else if (tab === 'library') {
+      conversationHost.remove(); patchHTML(body, panelLibraryHTML(work, workFailed, Date.now(), libraryFilter)); libraryMedia.sync();
+    } else {
+      conversationHost.remove(); patchHTML(body, '');
     }
     drawConversations();
-    if (sameMember && typingIn && typingIn !== "mb-det-name" && typingIn !== "mb-det-role") el.querySelector<HTMLElement>(`#${CSS.escape(typingIn)}`)?.focus({ preventScroll: true });
-    else if (sameMember && focusKey) el.querySelector<HTMLElement>(`[data-k="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: true });
-    if (sameMember && selection && typingIn) {
-      const field = el.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${CSS.escape(typingIn)}`);
-      field?.setSelectionRange(selection[0], selection[1], selection[2] ?? undefined);
-    }
+    if (sameMember && focusKey) el.querySelector<HTMLElement>(`[data-k="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: true });
     if (sameMember && scroll.scrollTop !== scrollTop) scroll.scrollTop = scrollTop;
   }
 
@@ -431,63 +249,6 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       if (!Array.isArray(routines)) routines = "failed";
     }
     draw();
-  }
-
-  // ---------- the picture, the name and the role ----------
-
-  function avatarMenu(anchor: HTMLElement): void {
-    const member = host.member();
-    if (member.id === RAPHAEL_ID) {
-      openAvatarPicker(anchor, {
-        onComputer: () => void changeRaphaelAvatar(),
-        more: currentAvatar() !== null ? [{ label: t("settings.avatarReset"), run: () => void resetRaphaelAvatar() }] : [],
-      });
-      return;
-    }
-    openAvatarPicker(anchor, {
-      slimes: true,
-      current: member.avatar || defaultSlimeAvatar(member.id),
-      onSlime: (avatar) => void host.update(member.id, { avatar }),
-      generate: {
-        memberId: member.id,
-        face: faceHTML(member, 88),
-        apply: async (file) => { await api.membersSetAvatar(member.id, file); },
-      },
-    });
-  }
-
-  async function saveField(input: HTMLInputElement | HTMLTextAreaElement, replacing = false): Promise<void> {
-    if (input.dataset.saved === "1") return;
-    const memberId = input.dataset.member !== undefined ? Number(input.dataset.member) : host.member().id;
-    const member = host.list()?.members.find((m) => m.id === memberId) ?? (host.member().id === memberId ? host.member() : null);
-    if (!member || member.id === RAPHAEL_ID) return;
-    if (replacing || !input.isConnected) input.dataset.saved = "1";
-    if (input.id === "mb-det-name") {
-      const value = cleanName(input.value);
-      if (value === member.name) {
-        input.value = member.name;
-        return;
-      }
-      const others = (host.list()?.members ?? []).filter((other) => other.id !== member.id).map((other) => other.name);
-      const taken = value !== "" && isMemberNameTaken(value, others);
-      if (value === "" || taken) {
-        if (taken) toaster.info(t("members.nameTaken", { p0: value }));
-        input.value = member.name;
-        return;
-      }
-      input.value = value;
-      await host.update(member.id, { name: value });
-    } else if (input.id === "mb-det-role") {
-      const value = cleanName(input.value);
-      input.value = value;
-      if (value !== member.role) await host.update(member.id, { role: value });
-    } else if (input.id === "mb-det-personality") {
-      const value = input.value.trim();
-      if (value !== (member.personality ?? "").trim()) await host.update(member.id, { personality: value });
-    } else if (input.id === "mb-det-instr") {
-      const value = input.value.trim();
-      if (value !== (member.instructions ?? "").trim()) await host.update(member.id, { instructions: value });
-    }
   }
 
   // ---------- input ----------
@@ -511,7 +272,6 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       else void api.openLibraryFile(host.member().id, file.id).catch(unavailable);
       return;
     }
-    if (memories.some((list) => list.click(target))) return;
     const channelKind = target.closest<HTMLElement>(".member-msg [data-msg-kind]")?.dataset.msgKind as MessagingKind | undefined;
     if (channelKind && !target.closest('[data-det="setup"]') && channelsOf(host.member().id)[channelKind]?.click(target)) return;
     const act = target.closest<HTMLElement>("[data-det]");
@@ -521,38 +281,13 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       case "close":
         host.close();
         break;
-      case "edit": host.edit?.(member); break;
-      // As Grok Bot's: the share button opens one choice, 建立副本 · 分享範本連結, and only that asks the member (owner, 2026-11-07).
-      case "share":
-        openMenu(act, [], "", () => {}, undefined, [{ label: t("template.copyTitle"), desc: t("template.copyHint"), icon: "copy", run() { closeMenu(); askInChat(member.id, "share-template"); } }]);
-        break;
       case "setup": askInChat(member.id, act.dataset.intent as api.AskIntent); break;
-      case "draft": void host.update(member.id, { draft_first: !(member.draft_first ?? true) }); break;
-      case "gear": tab = "settings"; draw(); break;
-      case "back": tab = tab === "settings" ? "details" : "settings"; draw(); break;
-      case "hide": host.hide?.(member); break;
+      case "gear": host.openSettings?.(); break;
       case "avatar":
-        avatarMenu(act);
+        openMemberAvatarMenu(act, member, host.update);
         break;
-      case "fold": {
-        const field = act.dataset.field ?? "";
-        const opening = !openFields.has(field);
-        if (opening) openFields.add(field); else openFields.delete(field);
-        draw();
-        if (opening) el.querySelector<HTMLTextAreaElement>(`#${CSS.escape(field)}`)?.focus({ preventScroll: true });
-        break;
-      }
       case "tab":
-        if (['details', 'library', 'computer'].includes(act.dataset.tab!)) { select(act.dataset.tab as 'details' | 'library' | 'computer'); break; }
-        tab = act.dataset.tab as DetailsTab;
-        if (tab === "memory") for (const list of memories) void list.load();
-        draw();
-        break;
-      case "group":
-        openMenu(act, groupChoices(host.list()?.groups ?? []), groupValue(member.group_id), (value) => {
-          const groupId = groupFromValue(value);
-          if (groupId !== member.group_id) void host.update(member.id, { group_id: groupId });
-        });
+        if (['details', 'library', 'computer'].includes(act.dataset.tab!)) select(act.dataset.tab as DetailsTab);
         break;
       case "routine-add":
         openRoutineDialog({ members: host.list()?.members ?? [host.member()], memberId: member.id, onSaved: () => void loadRoutines() });
@@ -576,35 +311,14 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     }
   });
 
-  el.addEventListener("input", (e) => {
-    const target = e.target as HTMLInputElement | HTMLTextAreaElement;
-    for (const list of memories) if (list.input(target)) break;
-  });
   el.addEventListener("keydown", (e) => {
-    if (memories.some((list) => list.key(e))) return;
     const target = e.target as HTMLElement;
     if (tabBar.contains(target) && target.matches('[role="tab"]') && ['ArrowLeft','ArrowRight','Home','End'].includes(e.key)) {
       e.preventDefault(); e.stopPropagation();
       const pages = ['details','library','computer'] as const;
-      const at = pages.indexOf(tab as typeof pages[number]);
+      const at = pages.indexOf(tab);
       select(pages[e.key === 'Home' ? 0 : e.key === 'End' ? 2 : (at + (e.key === 'ArrowRight' ? 1 : 2)) % 3]);
-      tabBar.querySelector<HTMLElement>('[aria-selected="true"]')?.focus(); return;
-    }
-    if (e.key === "Enter" && !e.isComposing && target instanceof HTMLInputElement && (target.id === "mb-det-name" || target.id === "mb-det-role")) {
-      e.preventDefault();
-      target.blur();
-    } else if (e.key === "Escape" && target instanceof HTMLInputElement && (target.id === "mb-det-name" || target.id === "mb-det-role")) {
-      e.preventDefault();
-      e.stopPropagation();
-      const member = host.member();
-      target.value = target.id === "mb-det-name" ? member.name : member.role;
-      target.blur();
-    }
-  });
-  el.addEventListener("focusout", (e) => {
-    const target = e.target as HTMLElement;
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-      if (["mb-det-name", "mb-det-role", "mb-det-personality", "mb-det-instr"].includes(target.id)) void saveField(target);
+      tabBar.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
     }
   });
 
@@ -615,26 +329,13 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     select,
     refreshRoutines() { void loadRoutines(); },
     refreshChannels() { if (!el.hidden && tab === "details") for (const channel of Object.values(channelsOf(host.member().id))) void channel.load(); },
-    refreshResources() { void loadCounts(true); void resources?.refresh(true); if (tab === 'details' || tab === 'library') void loadWork(true); },
+    refreshResources() { if (tab === 'details' || tab === 'library') void loadWork(true); },
     refreshWork(cause) { if (!el.hidden && (tab === 'library' || (cause === 'task' && tab === 'details'))) scheduleWork(); },
-    refreshMemory(memberId, space) {
-      if (el.hidden) return;
-      if (memberId === host.member().id) {
-        const id=memberId;
-        void eventRead(`memory.get:${id}`,()=>api.core<{entries:number}>('memory.get',{member_id:id,space:'own'}),host.app).then(result=>{if(id===host.member().id){counts.memory=result.entries;draw();}}).catch(()=>{});
-      }
-      if (!memoryHost.visible()) return;
-      if (space !== "own") void shared.load();
-      if (space !== "shared" && memberId === host.member().id) void own.load();
-    },
     showMember() {
       tab = "details";
       for (const channel of Object.values(channelsOf(host.member().id))) { channel.reset(); void channel.load(); }
       work = null; workFailed = false; libraryFilter = "all"; void loadWork();
-      counts = {skills: 0, commands: 0, memory: 0};
-      void loadCounts();
       routines = "loading";
-      for (const list of memories) list.reset();
       draw();
       void loadRoutines();
     },

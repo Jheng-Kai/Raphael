@@ -156,7 +156,10 @@ describe("shared look IPC boundary", () => {
     const target = {}, state = installMock(fixture, {}, target);
     const url = 'https://example.com/research';
     const preview = await target.__TAURI_INTERNALS__.invoke('core_call', { method: 'links.preview', params: { url } });
-    expect(preview).toEqual({ url, site: 'example.com', title: '', description: '', thumbnail: null });
+    // example.com stands for a page that has a title, so a bare link's chip can say it (link-chips).
+    expect(preview).toEqual({ url, site: 'example.com', title: '範例網頁標題', description: '這一頁的一句摘要。', thumbnail: null });
+    const other = await target.__TAURI_INTERNALS__.invoke('core_call', { method: 'links.preview', params: { url: 'https://x.com/a' } });
+    expect(other).toEqual({ url: 'https://x.com/a', site: 'x.com', title: '', description: '', thumbnail: null });
     expect(state.errors).toEqual([]);
   });
   it("lists what the owner typed as the core does: typed private turns, newest first, a repeat in a row once, or what a scene states", async () => {

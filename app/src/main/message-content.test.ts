@@ -2,13 +2,14 @@
 import { expect, test } from "vitest";
 import { messageHTML, messagePlainText, messageUrls, shortUrl } from "./message-content";
 
-test("URLs stop at CJK punctuation, and a bare link shows its whole address", () => {
+test("URLs stop at CJK punctuation, and a bare link is a chip that says its site (owner, 2026-11-08, as Grok Bot's)", () => {
   const url = "https://www.cwa.gov.tw/V8/C/P/Typhoon/TY_WARN.html?lang=zh-TW&full=1";
   const text = `《答。${url}（颱風警報）。「https://example.com/a_(b)」》`;
   expect(messageUrls(text)).toEqual([url, "https://example.com/a_(b)"]);
   const el = document.createElement("div"); el.innerHTML = messageHTML(text);
   expect([...el.querySelectorAll("a")].map(a => a.dataset.url)).toEqual(messageUrls(text));
-  expect([...el.querySelectorAll("a")].map(a => a.textContent)).toEqual([url, "https://example.com/a_(b)"]);
+  expect([...el.querySelectorAll("a")].map(a => a.textContent)).toEqual(["cwa.gov.tw", "example.com"]);
+  expect(el.querySelector("a")!.classList.contains("link-chip")).toBe(true);
   expect(el.querySelector("a")!.getAttribute("href")).toBe(url);
   expect(el.querySelector("a")!.classList.contains("message-link")).toBe(true);
   expect(el.querySelector("a")!.hasAttribute("title")).toBe(false);
@@ -34,10 +35,10 @@ test("a file in the team folder is a real button that opens it, however the repl
   expect(el.querySelector("code")!.textContent).toBe("/home/cua/workspace/a.png");
 });
 
-test("a long bare link keeps its whole address on screen and in copied text, once", () => {
+test("a long bare link says its site on screen, opens its whole address and copies it whole, once", () => {
   const url = "https://example.com/" + "a".repeat(60) + "?secret=full#target";
   const el = document.createElement("div"); el.innerHTML = messageHTML(`See ${url}（資料）`);
-  expect(el.querySelector("a")!.textContent).toBe(url);
+  expect(el.querySelector("a")!.textContent).toBe("example.com");
   expect(el.querySelector("a")!.dataset.url).toBe(url);
   expect(messagePlainText(`See ${url}（資料）`, true)).toBe(`See ${url}（資料）`);
 });

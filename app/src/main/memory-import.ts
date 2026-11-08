@@ -10,10 +10,16 @@ export function createMemoryImport(changed: () => void) {
   let open = false, text = "", busy = false, error = "";
   let result: api.MemoryImportResult | null = null;
   return {
+    /** The button that opens it, at the top right of the 記憶 tab beside its name, as 匯入 CSV stands in the vault (owner,
+     * 2026-11-08); nothing while it is open. */
+    action(): string {
+      return open ? "" : btn(esc(t("import.title")), "", ' data-import="open"');
+    },
     html(): string {
-      return `<section class="sgroup memory-import" data-memory-import><h2>${esc(t("members.profile.memory"))}</h2>` +
-        // One button that says what it does, with no row repeating its name (owner, 2026-11-07).
-        (open ? "" : `<div class="sgroup-act">${btn(esc(t("import.title")), "", ' data-import="open"')}</div>`) +
+      // No heading of its own: it stands in the 記憶 tab, under the memory it adds to (owner, 2026-11-08); closed, it is
+      // only the button at the top of the tab.
+      if (!open && !error && !result) return "";
+      return `<section class="sgroup memory-import" data-memory-import aria-label="${esc(t("import.title"))}">` +
         (open ? `<div class="import-pair">` +
           `<div class="import-field"><div class="import-head"><label for="import-prompt">${esc(t("import.promptLabel"))}</label>${btn(esc(t("import.copy")), "sm", ' data-import="copy"')}</div><textarea id="import-prompt" class="field" rows="5" readonly data-import-prompt>${esc(t("import.prompt"))}</textarea></div>` +
           `<div class="import-field"><div class="import-head"><label for="import-answer">${esc(t("import.answer"))}</label>${btn(esc(t(busy ? "import.saving" : "import.add")), "sm", ` data-import="save"${busy || !text.trim() ? " disabled" : ""}`)}</div><textarea id="import-answer" class="field" rows="5" maxlength="64000" data-import-answer${busy ? " disabled" : ""}>${esc(text)}</textarea></div>` +

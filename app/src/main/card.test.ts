@@ -93,8 +93,11 @@ test("settled permission keeps its decision in the pill and folds the original a
 test("a failed card can be closed locally without changing the saved action", () => {
   document.body.innerHTML = cardHTML({ title: "Sample action", status: "failed", actions: '<button type="button" class="btn pri">Retry</button>' });
   const card = document.querySelector<HTMLElement>(".conversation-card")!;
-  const close = card.querySelector<HTMLButtonElement>("[data-card-failed-close]");
+  // The × at its top right, with no 「關閉」 text button in its footer (owner, 2026-11-08).
+  const close = card.querySelector<HTMLButtonElement>(".card-head [data-card-failed-close]");
   expect(close).not.toBeNull();
+  expect(close!.textContent).toBe("");
+  expect(card.querySelector("footer [data-card-failed-close]")).toBeNull();
   close!.click();
   expect(card.hidden).toBe(true);
   expect(card.querySelector(".pri")?.textContent).toBe("Retry");

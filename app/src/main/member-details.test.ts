@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-// The details panel (member-details.ts): what it shows for a member and for Raphael, and the calls
-// its edits make: the name, the role and the instructions saved when they lose the focus, the group,
-// the routines, the tools, and the two memories with the move between them.
+// The details panel (member-details.ts): what it shows for a member and for Raphael: its routines, bots, library and
+// computer, and the calls those make. What the owner changes about a member is the member settings page
+// (member-settings.test.ts); the panel's gear opens it.
 import { type Mock, beforeEach, describe, expect, test, vi } from "vitest";
 import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
 
@@ -44,21 +44,20 @@ const flush = async (): Promise<void> => {
 };
 
 let current = 3;
-let host: Parameters<typeof createDetails>[0] & { update: Mock<(id: number, patch: MemberPatch) => Promise<boolean>>; close: Mock<() => void> };
+let host: Parameters<typeof createDetails>[0] & { update: Mock<(id: number, patch: MemberPatch) => Promise<boolean>>; close: Mock<() => void>; openSettings: Mock<() => void> };
 
-function mount(settings = true) {
+function mount() {
   host = {
     app: { undo: { begin: vi.fn() } } as unknown as AppContext,
     member: () => LIST.members.find((m) => m.id === current)!,
     list: () => LIST,
     update: vi.fn(async (_id: number, _patch: MemberPatch) => true),
     close: vi.fn<() => void>(),
-    edit: vi.fn(),
+    openSettings: vi.fn<() => void>(),
   };
   const panel = createDetails(host);
   document.body.append(panel.el);
   panel.showMember();
-  if (settings) panel.el.querySelector<HTMLButtonElement>('[data-det="gear"]')!.click();
   return panel;
 }
 
@@ -72,31 +71,18 @@ beforeEach(() => {
   api.routineRuns.mockResolvedValue({ runs: [] });
   api.routinesCreate.mockResolvedValue({});
   api.routinesUpdate.mockResolvedValue({});
-  api.core.mockImplementation(async (method: string, params: { space?: string }) => {
-    if (method === "memory.get" || method === "memory.update") {
-      const shared = params?.space === "shared";
-      return { text: shared ? "主人住台北\n" : "在背單字\n\n每週三複習\n", revision: "r1", chars: 9, entries: shared ? 1 : 2, limit: shared ? 1375 : 2200, summary: null };
-    }
-    return {};
-  });
+  api.core.mockImplementation(async () => ({}));
 });
 
 describe("a member's panel", () => {
-  test('the main tab keyboard handler leaves resource tabs inside Settings alone', async () => {
-    const panel = mount(); await flush();
-    const resourceTab = document.createElement('button'); resourceTab.setAttribute('role','tab');
-    panel.el.querySelector('.mb-tab-body')!.append(resourceTab);
-    resourceTab.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
-    expect(panel.el.dataset.detailsTab).toBe('settings');
-  });
   test('Details has no list of what the member did: its routines come first (owner, 2026-11-07)', async () => {
     api.core.mockImplementation(async method => method === 'members.list' ? {files:[],has_more:false} : {});
-    const panel = mount(false); await flush();
+    const panel = mount(); await flush();
     expect(panel.el.querySelector('.mb-panel-tasks, .mb-task-list, [data-panel-task]')).toBeNull();
     expect(panel.el.querySelector('.mb-tab-body > :first-child')?.matches('.mb-panel-routines')).toBe(true);
   });
   test('the shared three tabs support arrow navigation and reset for another member', async () => {
-    const panel = mount(false); await flush();
+    const panel = mount(); await flush();
     const selected = () => panel.el.querySelector<HTMLElement>('.mb-tabs [aria-selected="true"]')!;
     expect(selected().dataset.tab).toBe('details');
     selected().focus(); selected().dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowRight',bubbles:true}));
@@ -112,31 +98,13 @@ describe("a member's panel", () => {
     api.core.mockImplementation(async (method, params) => method === 'members.library'
       ? params.member_id === 3 ? new Promise(done => {resolve = done;}) : {files:[],has_more:false}
       : {});
-    const panel = mount(false); await flush();
+    const panel = mount(); await flush();
     current = 4; panel.showMember(); panel.select('library'); await flush();
     resolve({files:[{id:'stale',title:'Stale file',name:'Stale file',kind:'file',at_ms:1,day:'1970-01-01'}],has_more:false}); await flush();
     expect(panel.el.textContent).not.toContain('Stale file');
     expect(panel.el.querySelector('.mb-tab-body')?.textContent).toBe(t('members.panelNoFiles'));
   });
-  test.each([0, 3])("member %s uses the shared draft preference switch", async id => {
-    current = id;
-    const panel = mount(); await flush();
-    const toggle = panel.el.querySelector<HTMLButtonElement>('[data-det="draft"]')!;
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
-    toggle.click(); await flush();
-    expect(toggle.closest(".mb-panel-pages")).not.toBeNull();
-    expect(host.update).toHaveBeenCalledWith(id, { draft_first: false });
-    host.member().draft_first = false; panel.draw();
-    panel.el.querySelector<HTMLButtonElement>('[data-det="draft"]')!.click(); await flush();
-    expect(host.update).toHaveBeenLastCalledWith(id, { draft_first: true });
-    delete host.member().draft_first;
-  });
-  test("the gear Back button follows a locale change", async () => {
-    const panel=mount(); await flush(); setLocale('en'); panel.draw();
-    expect(panel.el.querySelector('[data-det="back"]')?.getAttribute('aria-label')).toBe(t('members.panelBack'));
-    setLocale('zh-TW');
-  });
-  test("Raphael's gear picture follows the current custom avatar on redraw", async () => {
+  test("Raphael's face follows the current custom avatar on redraw", async () => {
     current=0; const panel=mount(); await flush();
     const avatar={url:'data:image/png;base64,c2FtcGxl',crop:{x:.5,y:.5,zoom:1}};
     setAvatar(avatar); panel.draw();
@@ -145,26 +113,13 @@ describe("a member's panel", () => {
     expect(panel.el.querySelector('.mb-who img')?.getAttribute('src')).not.toBe(avatar.url);
   });
 
-  test.each(['mb-det-name','mb-det-role','mb-det-personality','mb-det-instr'])("a rejected save restores %s after focus leaves", async id => {
-    const panel=mount(); await flush();
-    for (const button of panel.el.querySelectorAll<HTMLButtonElement>('.mb-fold-head')) button.click();
-    const input=panel.el.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${id}`)!;
-    const saved=input.value; host.update.mockImplementation(async()=>{panel.draw(); return false;});
-    input.focus(); input.value='Synthetic rejected edit'; input.blur(); await flush(); panel.draw();
-    expect(host.update).toHaveBeenCalled();
-    expect(panel.el.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${id}`)!.value).toBe(saved);
-  });
-  test("the first view has routine buttons before conversations and settings behind the gear", async () => {
-    const panel = mount(false); await flush();
+  test("the first view has the routines before conversations, and the three tabs", async () => {
+    const panel = mount(); await flush();
     expect(panel.el.querySelector('[data-det="tab"][data-tab="routines"]')).toBeNull();
     expect(panel.el.querySelector('button.mb-rt[data-det="routine-open"]')?.textContent).toContain(ROUTINE.title);
     expect(panel.el.querySelector('.mb-rt [role="switch"]')).toBeNull();
     expect(panel.el.querySelector<HTMLElement>('.mb-who')!.hidden).toBe(false);
     expect(panel.el.querySelectorAll('.mb-tabs [role="tab"]')).toHaveLength(3);
-    panel.el.querySelector<HTMLButtonElement>('[data-det="gear"]')!.click();
-    expect(panel.el.querySelector<HTMLElement>('.mb-who')!.hidden).toBe(false);
-    expect(panel.el.querySelector('[data-det="back"]:not([hidden])')).not.toBeNull();
-    expect(panel.el.querySelector('[data-det="tab"][data-tab="memory"]')).not.toBeNull();
   });
 
   test("an unchanged routine refresh keeps every node, focus and scroll untouched", async () => {
@@ -176,14 +131,8 @@ describe("a member's panel", () => {
     expect([...writes, ...observer.takeRecords()]).toHaveLength(0);
     observer.disconnect();
   });
-  test("Hide has an action icon without promising another page or submenu", () => {
-    const panel = mount();
-    const hide = panel.el.querySelector('[data-det="hide"]')!;
-    expect(hide.querySelectorAll('svg')).toHaveLength(1);
-    expect(hide.hasAttribute('aria-haspopup')).toBe(false);
-  });
   test("a member has no conversation list, and Raphael's panel switches between its conversation and quick questions", async () => {
-    const panel = mount(false);
+    const panel = mount();
     const open = vi.fn();
     host.openConversation = open;
     const original = api.core.getMockImplementation()!;
@@ -206,163 +155,38 @@ describe("a member's panel", () => {
     expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
   });
 
-  test("editing and hiding belong to settings behind the gear", async () => {
-    const panel = mount();
-    host.edit = vi.fn();
-    host.hide = vi.fn();
-    await flush();
-    const edit = panel.el.querySelector<HTMLButtonElement>('[data-det="edit"]')!;
-    expect(edit.closest(".mb-tab-body")).not.toBeNull();
-    expect(panel.el.querySelector('.mb-det-head [data-det="gear"]')).not.toBeNull();
-    expect(edit.textContent).toContain("編輯成員");
-
-    expect(panel.el.querySelector<HTMLElement>(".mb-tabs")!.hidden).toBe(true);
-    edit.click();
-    expect(host.edit).toHaveBeenCalledWith(LIST.members[1]);
-    const hide = panel.el.querySelector<HTMLButtonElement>('[data-det="hide"]')!;
-    expect(hide.closest(".mb-panel-pages")).not.toBeNull();
-    expect(hide.classList.contains("mb-panel-row")).toBe(true);
-    expect(hide.textContent).toContain("從側欄隱藏");
-    expect(hide.querySelector("small")!.textContent).toContain("設定");
-    hide.click();
-    expect(host.hide).toHaveBeenCalledWith(LIST.members[1]);
-    expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
-    current = 0;
-    panel.showMember();
-    // Raphael's face shows the pictures as every member's does, and he cannot be hidden or shared.
-    expect(panel.el.querySelector('.mb-panel-identity [data-det="avatar"]')).not.toBeNull();
-    expect(panel.el.querySelector('[data-det="hide"]')).toBeNull();
-    expect(panel.el.querySelector<HTMLElement>('[data-det="share"]')!.hidden).toBe(true);
+  test("the head is the gear on the left, apart from the × on the right, and share and hide are not here", async () => {
+    const panel = mount(); await flush();
+    expect([...panel.el.querySelectorAll<HTMLElement>('.mb-det-head button')].map(button => button.dataset.det)).toEqual(["gear", "close"]);
+    expect(panel.el.querySelector('.mb-det-head > :first-child')?.getAttribute('data-det')).toBe('gear');
+    expect(panel.el.querySelector<HTMLElement>('[data-det="gear"]')!.getAttribute('aria-label')).toBe(t('computer.settings'));
+    for (const gone of ['share', 'back', 'edit', 'hide', 'draft']) expect(panel.el.querySelector(`[data-det="${gone}"]`), gone).toBeNull();
+    // Nothing of the member's settings stands in the panel: no fields, no rows that open settings pages.
+    expect(panel.el.querySelector('input, textarea, [data-tab="settings"], [data-tab="memory"], [data-tab="skills"], [data-tab="commands"], [data-tab="voice"], [data-det="group"]')).toBeNull();
+    expect(panel.el.dataset.detailsTab).toBe('details');
   });
 
-  test("a personality draft survives redraws and is saved to its original member on switching", async () => {
-    const panel = mount();
-    await flush();
-    const box = panel.el.querySelector<HTMLTextAreaElement>("#mb-det-personality")!;
-    box.focus();
-    box.value = "嚴厲但耐心";
-    panel.draw();
-    expect(panel.el.querySelector<HTMLTextAreaElement>("#mb-det-personality")!.value).toBe("嚴厲但耐心");
-    expect(host.update).not.toHaveBeenCalled();
-    current = 4;
-    panel.showMember();
-    panel.el.querySelector<HTMLButtonElement>('[data-det="gear"]')!.click();
-    await flush();
-    expect(host.update).toHaveBeenCalledWith(3, { personality: "嚴厲但耐心" });
-    expect(panel.el.querySelector<HTMLTextAreaElement>("#mb-det-personality")!.value).toBe("");
-  });
-
-  test("stored personality is escaped, unchanged text is not saved, and clearing is saved", async () => {
-    const before = LIST.members[1];
-    LIST.members[1] = { ...before, personality: '</textarea><script>privateStyle()</script>' };
-    try {
-      const panel = mount();
-      await flush();
-      const box = panel.el.querySelector<HTMLTextAreaElement>("#mb-det-personality")!;
-      expect(box.value).toBe(LIST.members[1].personality);
-      expect(panel.el.querySelector("script")).toBeNull();
-      box.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-      expect(host.update).not.toHaveBeenCalled();
-      box.value = " ";
-      box.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-      await flush();
-      expect(host.update).toHaveBeenCalledWith(3, { personality: "" });
-    } finally {
-      LIST.members[1] = before;
+  test("the gear asks the shell for the settings page, for a member and for Raphael; the × closes the panel", async () => {
+    for (const id of [3, 0]) {
+      current = id; document.body.innerHTML = "";
+      const panel = mount(); await flush();
+      panel.el.querySelector<HTMLButtonElement>('[data-det="gear"]')!.click();
+      expect(host.openSettings).toHaveBeenCalledTimes(1);
+      panel.el.querySelector<HTMLElement>('[data-det="close"]')!.click();
+      expect(host.close).toHaveBeenCalled();
     }
   });
 
-  test("personality is separate from instructions and saved on blur", async () => {
-    const panel = mount();
-    await flush();
-    // closed, a long field is its name and its first line behind a button; open, the box
-    const head = panel.el.querySelector<HTMLButtonElement>('[data-field="mb-det-personality"]')!;
-    expect(head.getAttribute("aria-expanded")).toBe("false");
-    expect(head.textContent).toContain("個性");
-    expect(panel.el.querySelector<HTMLElement>("#mb-det-personality-body")!.hidden).toBe(true);
-    head.click();
-    const box = panel.el.querySelector<HTMLTextAreaElement>("#mb-det-personality");
-    expect(panel.el.querySelector<HTMLElement>("#mb-det-personality-body")!.hidden).toBe(false);
-    expect(document.activeElement).toBe(box);
-    expect(box!.maxLength).toBe(2000);
-    box!.value = "  嚴厲但耐心。\n直接稱呼你。  ";
-    box!.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-    await flush();
-    expect(host.update).toHaveBeenCalledWith(3, { personality: "嚴厲但耐心。\n直接稱呼你。" });
-    expect(panel.el.querySelector<HTMLTextAreaElement>("#mb-det-instr")!.value).toBe("每天出 10 題");
-    current = 0;
-    panel.showMember();
-    await flush();
-    expect(panel.el.querySelector("#mb-det-personality")).toBeNull();
-  });
-
-  test("its picture, its name and role to change in place, and the tabs", async () => {
-    const panel = mount();
-    await flush();
-    expect(panel.el.querySelector<HTMLInputElement>("#mb-det-name")!.value).toBe("日文老師");
-    expect(panel.el.querySelector<HTMLInputElement>("#mb-det-role")!.value).toBe("N2 嚴格版");
-    expect(panel.el.querySelector(".mb-avbtn .mb-av-slime svg")).not.toBeNull();
-    expect([...panel.el.querySelectorAll<HTMLElement>(".mb-panel-pages [data-tab]")].map(b => b.dataset.tab)).toEqual(["memory", "skills", "commands", "voice"]);
-    panel.el.querySelector<HTMLElement>('[data-tab="skills"]')!.click();
-    expect(panel.el.querySelector<HTMLElement>(".mb-who")!.hidden).toBe(false);
-    panel.el.querySelector<HTMLElement>('[data-det="back"]')!.click();
-    expect(panel.el.querySelector<HTMLElement>(".mb-who")!.hidden).toBe(false);
-  });
-
-  test("the name is saved when it loses the focus; a blank or a taken one goes back", async () => {
-    const panel = mount();
-    await flush();
-    const name = panel.el.querySelector<HTMLInputElement>("#mb-det-name")!;
-    name.focus();
-    name.value = "老師";
-    name.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-    await flush();
-    expect(host.update).toHaveBeenCalledWith(3, { name: "老師" });
-    host.update.mockClear();
-    name.value = "行程管家";
-    name.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-    name.value = " ";
-    name.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-    await flush();
-    expect(host.update).not.toHaveBeenCalled();
-    expect(name.value).toBe("日文老師");
-  });
-
-  test("the instructions are saved on blur, only when they changed", async () => {
-    const panel = mount();
-    await flush();
-    const box = panel.el.querySelector<HTMLTextAreaElement>("#mb-det-instr")!;
-    expect(box.value).toBe("每天出 10 題");
-    box.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-    expect(host.update).not.toHaveBeenCalled();
-    box.value = "每天出 20 題";
-    box.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-    await flush();
-    expect(host.update).toHaveBeenCalledWith(3, { instructions: "每天出 20 題" });
-  });
-
-  test("the group is a dropdown: 未分組, then the groups", async () => {
-    const panel = mount();
-    await flush();
-    panel.el.querySelector<HTMLElement>('[data-det="group"]')!.click();
-    const items = [...document.querySelectorAll<HTMLElement>("#app-popover [data-value]")];
-    expect(items.map((b) => b.textContent)).toEqual(["未分組", "學習", "專案"]);
-    items[2].click();
-    expect(host.update).toHaveBeenCalledWith(3, { group_id: 21 });
-  });
-
-  test("the brain is chosen next to the composer, not here, and the group's places are chips", async () => {
-    const panel = mount();
-    await flush();
-    expect(panel.el.querySelectorAll(".mp-trigger")).toHaveLength(0);
-    expect([...panel.el.querySelectorAll(".mb-chips .mb-chip")].map((c) => c.textContent)).toEqual(["example/app"]);
+  test("the gear's label follows a locale change", async () => {
+    const panel = mount(); await flush(); setLocale('en'); panel.draw();
+    expect(panel.el.querySelector('[data-det="gear"]')?.getAttribute('aria-label')).toBe(t('computer.settings'));
+    expect(panel.el.querySelector('[data-det="close"]')?.getAttribute('aria-label')).toBe(t('members.close'));
   });
 
   test("its routine row opens the editor where a saved switch pauses it", async () => {
     const panel = mount();
     await flush();
     expect(api.routinesList).toHaveBeenCalledWith(3);
-    panel.el.querySelector<HTMLButtonElement>('[data-det="back"]')!.click();
     const row = panel.el.querySelector<HTMLElement>('[data-routine="9"]')!;
     expect(row.textContent).toContain("每天的單字");
     expect(row.textContent).toContain("每天 08:00");
@@ -379,11 +203,10 @@ describe("a member's panel", () => {
   test("a new routine: title, a schedule from the dropdown, what to do; saved with routines.create", async () => {
     const panel = mount();
     await flush();
-    panel.el.querySelector<HTMLButtonElement>('[data-det="back"]')!.click();
     panel.el.querySelector<HTMLElement>('[data-det="routine-add"]')!.click();
     document.querySelector<HTMLInputElement>("#au-title")!.value = "每週回顧";
     document.querySelector<HTMLTextAreaElement>("#au-prompt")!.value = "整理這週";
-    document.querySelector<HTMLElement>('[data-dlg="kind"][data-kind="every"]')!.click();
+    document.querySelector<HTMLElement>('[data-dlg="kind-menu"]')!.click(); document.querySelector<HTMLElement>('#app-popover [data-value="every"]')!.click();
     // the title and the prompt typed are kept across the drawing
     expect(document.querySelector<HTMLInputElement>("#au-title")!.value).toBe("每週回顧");
     document.querySelector<HTMLElement>('[data-dlg="hours"]')!.click();
@@ -396,7 +219,6 @@ describe("a member's panel", () => {
   test("a routine without a title is not sent", async () => {
     const panel = mount();
     await flush();
-    panel.el.querySelector<HTMLButtonElement>('[data-det="back"]')!.click();
     panel.el.querySelector<HTMLElement>('[data-det="routine-add"]')!.click();
     document.querySelector<HTMLElement>('[data-dlg="save"]')!.click();
     await flush();
@@ -406,7 +228,6 @@ describe("a member's panel", () => {
   test("the shared HH:MM field rejects invalid times and saves a valid time", async () => {
     const panel = mount();
     await flush();
-    panel.el.querySelector<HTMLButtonElement>('[data-det="back"]')!.click();
     panel.el.querySelector<HTMLElement>('[data-det="routine-add"]')!.click();
     const form = document.querySelector<HTMLElement>(".au-routine-dialog")!;
     const time = form.querySelector<HTMLInputElement>("#au-time")!;
@@ -414,7 +235,7 @@ describe("a member's panel", () => {
     expect(time.placeholder).toBe("00:00");
     form.querySelector<HTMLInputElement>("#au-title")!.value = "Review";
     form.querySelector<HTMLTextAreaElement>("#au-prompt")!.value = "Summarize progress";
-    form.querySelector<HTMLElement>('[data-kind="daily"]')!.click();
+    form.querySelector<HTMLElement>('[data-dlg="kind-menu"]')!.click(); document.querySelector<HTMLElement>('#app-popover [data-value="daily"]')!.click();
     form.querySelector<HTMLInputElement>("#au-time")!.value = "25:61";
     form.querySelector<HTMLElement>('[data-dlg="save"]')!.click();
     await flush();
@@ -425,92 +246,15 @@ describe("a member's panel", () => {
     expect(api.routinesCreate).toHaveBeenCalledWith({ member_id: 3, title: "Review", prompt: "Summarize progress", schedule: expect.objectContaining({ kind: "daily", time: "08:45" }) });
   });
 
-  test("記憶: 共同記憶 and the member's own, each read with its space", async () => {
-    const panel = mount();
-    await flush();
-    panel.el.querySelector<HTMLElement>('[data-tab="memory"]')!.click();
-    await flush();
-    expect(api.core).toHaveBeenCalledWith("memory.get", { space: "shared" });
-    expect(api.core).toHaveBeenCalledWith("memory.get", { space: "own", member_id: 3 });
-    const sections = [...panel.el.querySelectorAll<HTMLElement>("[data-mem-section]")];
-    expect(sections.map((s) => [s.dataset.memSpace, s.getAttribute("aria-label")])).toEqual([["shared", "共同記憶"], ["own", "日文老師的記憶"]]);
-    expect(sections[0].textContent).toContain("主人住台北");
-    expect(sections[1].textContent).toContain("在背單字");
-  });
-
-  test("the row that opens 記憶 says how many entries the member's own file holds", async () => {
-    const panel = mount();
-    await flush();
-    expect(panel.el.querySelector<HTMLElement>('[data-tab="memory"]')!.textContent).toContain("2 則記憶");
-    expect(api.core).toHaveBeenCalledWith("memory.get", { member_id: 3, space: "own" });
-  });
-
-  test("編輯 in one section opens the box of that section alone, and 儲存 writes that file", async () => {
-    const panel = mount();
-    await flush();
-    panel.el.querySelector<HTMLElement>('[data-tab="memory"]')!.click();
-    await flush();
-    panel.el.querySelector<HTMLElement>('[data-mem-space="own"] [data-mem="edit"]')!.click();
-    const box = panel.el.querySelector<HTMLTextAreaElement>('[data-mem-space="own"] textarea.mem-body')!;
-    expect(box.value).toBe("在背單字\n\n每週三複習");
-    expect(panel.el.querySelector('[data-mem-space="shared"] textarea')).toBeNull();
-    box.value = "在背單字";
-    box.dispatchEvent(new Event("input", { bubbles: true }));
-    panel.el.querySelector<HTMLElement>('[data-mem-space="own"] [data-mem="save"]')!.click();
-    await flush();
-    expect(api.core).toHaveBeenCalledWith("memory.update", { space: "own", member_id: 3, text: "在背單字", revision: "r1" });
-  });
-
-  test("× closes it", () => {
-    const panel = mount();
-    panel.el.querySelector<HTMLElement>('[data-det="close"]')!.click();
-    expect(host.close).toHaveBeenCalled();
-  });
-
-  test("switching members while instructions are focused saves to the previous member and draws the new member", async () => {
-    const panel = mount();
-    await flush();
-    const box = panel.el.querySelector<HTMLTextAreaElement>("#mb-det-instr")!;
-    box.focus();
-    box.value = "改成每天 5 題";
-    current = 4;
-    panel.showMember();
-    panel.el.querySelector<HTMLButtonElement>('[data-det="gear"]')!.click();
-    await flush();
-    expect(host.update).toHaveBeenCalledWith(3, { instructions: "改成每天 5 題" });
-    expect(panel.el.querySelector<HTMLTextAreaElement>("#mb-det-instr")!.value).toBe("");
-  });
-
-  test("renaming a member while tabbing to role updates the face initial in the header", async () => {
-    const panel = mount();
-    await flush();
-    const name = panel.el.querySelector<HTMLInputElement>("#mb-det-name")!;
-    const role = panel.el.querySelector<HTMLInputElement>("#mb-det-role")!;
-    name.focus();
-    name.value = "老師";
-    host.update.mockImplementationOnce(async (_id, patch) => {
-      await Promise.resolve();
-      LIST.members[1] = { ...LIST.members[1], ...patch };
-      panel.draw();
-      return true;
-    });
-    name.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-    role.focus();
-    await flush();
-    expect(panel.el.querySelector(".mb-avbtn .mb-av-slime svg")).not.toBeNull();
-    LIST.members[1] = { ...LIST.members[1], name: "日文老師" };
-  });
-
   test("double-clicking routine save while create is in flight sends only one request", async () => {
     let finish!: () => void;
     api.routinesCreate.mockImplementation(() => new Promise<Record<string, never>>((r) => (finish = () => r({}))));
     const panel = mount();
     await flush();
-    panel.el.querySelector<HTMLButtonElement>('[data-det="back"]')!.click();
     panel.el.querySelector<HTMLElement>('[data-det="routine-add"]')!.click();
     document.querySelector<HTMLInputElement>("#au-title")!.value = "早報";
     document.querySelector<HTMLTextAreaElement>("#au-prompt")!.value = "摘要";
-    document.querySelector<HTMLElement>('[data-dlg="kind"][data-kind="daily"]')!.click();
+    document.querySelector<HTMLElement>('[data-dlg="kind-menu"]')!.click(); document.querySelector<HTMLElement>('#app-popover [data-value="daily"]')!.click();
     const save = document.querySelector<HTMLElement>('[data-dlg="save"]')!;
     save.click();
     save.click();
@@ -525,14 +269,11 @@ describe("Raphael's panel", () => {
     current = 0;
     const panel = mount();
     await flush();
-    expect(panel.el.querySelector("#mb-det-name")).toBeNull();
-    expect(panel.el.querySelector(".mb-who-name")!.textContent).toBe("拉斐爾");
+    expect(panel.el.querySelector("input, textarea")).toBeNull();
+    expect(panel.el.querySelector(".mb-panel-identity > b")!.textContent).toBe("拉斐爾");
     // The first blue slime (owner, 2026-11-07): his emblem shows only in voice.
-    expect(panel.el.querySelector(".mb-avbtn .av.mb-av-slime svg.slime")).not.toBeNull();
-    expect(panel.el.querySelector("#mb-det-instr")).toBeNull();
+    expect(panel.el.querySelector(".mb-face-edit .av.mb-av-slime svg.slime")).not.toBeNull();
     expect(panel.el.querySelector('[data-det="group"]')).toBeNull();
-    expect([...panel.el.querySelectorAll<HTMLElement>(".mb-panel-pages [data-tab]")].map(row => row.dataset.tab)).toEqual(["memory", "skills", "commands", "voice"]);
-    expect(api.core).toHaveBeenCalledWith("members.commands.list", { member_id: 0 });
     expect(api.routinesList).toHaveBeenCalledWith(0);
   });
 
@@ -547,41 +288,37 @@ describe("Raphael's panel", () => {
     await flush();
     expect(api.avatarPick).toHaveBeenCalled();
   });
-
-  test("his memory: 共同記憶 and 拉斐爾的記憶", async () => {
-    current = 0;
-    const panel = mount();
-    await flush();
-    panel.el.querySelector<HTMLElement>('[data-tab="memory"]')!.click();
-    await flush();
-    expect(api.core).toHaveBeenCalledWith("memory.get", { space: "own", member_id: 0 });
-    expect([...panel.el.querySelectorAll("[data-mem-section]")].map((s) => s.getAttribute("aria-label"))).toEqual(["共同記憶", "拉斐爾的記憶"]);
-  });
 });
 
-test("live routines update while instructions retain their node, draft and caret", async () => {
+test("a member's face is the button of its picture picker, with a pencil under the pointer", async () => {
+  const panel = mount(); await flush();
+  const face = panel.el.querySelector<HTMLButtonElement>(".mb-panel-identity .mb-face-edit")!;
+  expect(face.querySelector('.mb-face-pencil[aria-hidden="true"] svg.i')).not.toBeNull();
+  expect(face.dataset.det).toBe("avatar");
+  expect(face.getAttribute("aria-haspopup")).toBe("menu");
+  expect(panel.el.querySelector(".mb-panel-identity > b")!.textContent).toBe("日文老師");
+  expect(panel.el.querySelector(".mb-panel-identity > small")!.textContent).toBe("N2 嚴格版");
+});
+
+test("a late routine response cannot replace the newly selected member's routines", async () => {
   const panel = mount();
   await flush();
-  const box = panel.el.querySelector<HTMLTextAreaElement>("#mb-det-instr")!;
-  box.focus();
-  box.value = "Unsaved instructions";
-  box.setSelectionRange(2, 6);
-  api.routinesList.mockResolvedValue({ routines: [{ ...ROUTINE, title: "Changed live" }] });
+  let resolve!: (value: { routines: Routine[] }) => void;
+  api.routinesList.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
   panel.refreshRoutines();
+  current = 4;
+  api.routinesList.mockResolvedValue({ routines: [{ ...ROUTINE, id: 10, member_id: 4, title: "Other member" }] });
+  panel.showMember();
   await flush();
-  expect(panel.el.querySelector("#mb-det-instr")).toBe(box);
-  expect(document.activeElement).toBe(box);
-  expect(box.value).toBe("Unsaved instructions");
-  expect(box.selectionStart).toBe(2);
-  expect(host.update).not.toHaveBeenCalled();
-  panel.el.querySelector<HTMLButtonElement>('[data-det="back"]')!.click();
-  expect(panel.el.querySelector('.mb-rts')!.textContent).toContain('Changed live');
+  resolve({ routines: [ROUTINE] });
+  await flush();
+  expect(panel.el.querySelector(".mb-rts")!.textContent).toContain("Other member");
+  expect(panel.el.querySelector('[data-routine="9"]')).toBeNull();
 });
 
 test("a remote deletion keeps the routine draft editable and refresh failure keeps rows", async () => {
   const panel = mount();
   await flush();
-  panel.el.querySelector<HTMLButtonElement>('[data-det="back"]')!.click();
   panel.el.querySelector<HTMLElement>('[data-det="routine-open"]')!.click();
   const title = document.querySelector<HTMLInputElement>("#au-title")!;
   title.value = "Unsaved routine";
@@ -601,50 +338,9 @@ test("a remote deletion keeps the routine draft editable and refresh failure kee
   expect(panel.el.querySelector('[data-routine="9"]')).not.toBeNull();
 });
 
-test("a late routine response cannot replace the newly selected member's routines", async () => {
-  const panel = mount();
-  await flush();
-  let resolve!: (value: { routines: Routine[] }) => void;
-  api.routinesList.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
-  panel.refreshRoutines();
-  current = 4;
-  api.routinesList.mockResolvedValue({ routines: [{ ...ROUTINE, id: 10, member_id: 4, title: "Other member" }] });
-  panel.showMember();
-  await flush();
-  resolve({ routines: [ROUTINE] });
-  await flush();
-  expect(panel.el.querySelector(".mb-rts")!.textContent).toContain("Other member");
-  expect(panel.el.querySelector('[data-routine="9"]')).toBeNull();
-});
-
-
-test("a focused name keeps its draft while the remote role updates", async () => {
-  const panel = mount();
-  await flush();
-  const name = panel.el.querySelector<HTMLInputElement>("#mb-det-name")!;
-  name.focus();
-  name.value = "Draft name";
-  name.setSelectionRange(2, 4);
-  const original = host.member();
-  host.member = () => ({ ...original, role: "New remote role" });
-  panel.draw();
-  expect(panel.el.querySelector<HTMLInputElement>("#mb-det-role")!.value).toBe("New remote role");
-  expect(document.activeElement).toBe(name);
-  expect(name.value).toBe("Draft name");
-  expect(name.selectionStart).toBe(2);
-});
-
-test("resource rows count saved skills including disabled ones and only active routines", async () => {
-  api.core.mockImplementation(async (method: string) => {
-    if (method === "members.skills.list") return { skills: [{ enabled: true }, { enabled: false }] };
-    if (method === "members.commands.list") return { commands: [{ id: 1 }] };
-    return { memories: [] };
-  });
+test("routines show their own switches, on for the active one only, and no ⋯ menu", async () => {
   api.routinesList.mockResolvedValue({ routines: [ROUTINE, { ...ROUTINE, id: 10, enabled: false }] });
   const panel = mount(); await flush();
-  expect(panel.el.querySelector('[data-tab="skills"] small')!.textContent).toContain("2");
-  panel.el.querySelector<HTMLButtonElement>('[data-det="back"]')!.click();
-  // Each routine carries its own switch, on for the active one only, and no ⋯ menu.
   expect([...panel.el.querySelectorAll('[data-det="routine-toggle"]')].map(toggle => toggle.getAttribute("aria-checked"))).toEqual(["true", "false"]);
   expect(panel.el.querySelector('[data-det="routine-menu"]')).toBeNull();
 });
@@ -652,15 +348,15 @@ test("resource rows count saved skills including disabled ones and only active r
 test("訊息平台: a bot not set up is one row whose 設定 asks the member in its conversation; a connected one is its card; Raphael's too", async () => {
   const off = { connected: false, enabled: false, running: false, error: null, bot: null, allowed: [], pending: [], member_id: current, kind: "telegram", paired: false };
   api.memberMessagingStatus.mockImplementation(async (_id: number, platform?: string) => platform === "slack" ? { ...off, connected: true, enabled: true, running: true, bot: { username: "shion_slack" } } : off);
-  const panel = mount(false); await flush();
+  const panel = mount(); await flush();
   expect(api.memberMessagingStatus).toHaveBeenCalledWith(current, undefined);
   expect(api.memberMessagingStatus).toHaveBeenCalledWith(current, "slack");
   const suggest = panel.el.querySelector<HTMLElement>(".mb-panel-suggest")!;
   expect(suggest.querySelector(".mb-dh")!.textContent).toBe("訊息平台");
-  // Nothing is typed into the panel (owner, 2026-11-07).
+  // The bots are all that stands under the routines: the member's settings are a page of their own.
+  expect(suggest.querySelectorAll(".mb-dh")).toHaveLength(1);
   expect(suggest.querySelector("input")).toBeNull();
   expect(suggest.textContent).toContain("@shion_slack");
-  // Only the bots have rows: skills, memory, voice and permissions are asked for in the conversation (owner, 2026-11-07).
   expect([...suggest.querySelectorAll<HTMLElement>('[data-det="setup"]')].map((button) => button.dataset.intent)).toEqual(["setup-telegram", "setup-discord"]);
   suggest.querySelector<HTMLButtonElement>('[data-intent="setup-telegram"]')!.click(); await flush();
   expect(api.agentAskText).toHaveBeenCalledWith("幫我設定 Telegram", [], current, { intent: "setup-telegram" });
@@ -669,30 +365,9 @@ test("訊息平台: a bot not set up is one row whose 設定 asks the member in 
   expect(panel.el.querySelectorAll('.mb-panel-suggest [data-det="setup"]').length).toBeGreaterThan(0);
 });
 
-test("the panel has no gear: share asks the member to package itself in its conversation, and the face shows the pictures", async () => {
-  const panel = mount(false); await flush();
-  const share = panel.el.querySelector<HTMLButtonElement>('.mb-det-head [data-det="share"]')!;
-  expect(share.hidden).toBe(false);
-  expect(share.getAttribute("aria-label")).toBe("分享為範本");
-  expect([...panel.el.querySelectorAll<HTMLElement>('.mb-det-head button')].filter(button => !button.hidden).map(button => button.dataset.det)).toEqual(["share", "close"]);
-  // As Grok Bot's: one choice first, 建立副本 · 分享範本連結; only that asks the member (owner, 2026-11-07).
-  share.click(); await flush();
-  expect(api.agentAskText).not.toHaveBeenCalled();
-  const choice = document.querySelector<HTMLButtonElement>("#app-popover [role=menuitem]")!;
-  expect(choice.textContent).toContain("建立副本");
-  expect(choice.textContent).toContain("分享範本連結");
-  choice.click(); await flush();
-  expect(api.agentAskText).toHaveBeenCalledWith("把你自己打包成範本，讓別人也能用", [], current, { intent: "share-template" });
-  const face = panel.el.querySelector<HTMLButtonElement>(".mb-panel-identity .mb-face-edit")!;
-  // Under the pointer a pencil shows on the face, as on the owner's photo in Settings (owner, 2026-11-08).
-  expect(face.querySelector('.mb-face-pencil[aria-hidden="true"] svg.i')).not.toBeNull();
-  expect(face.dataset.det).toBe("avatar");
-  expect(face.getAttribute("aria-haspopup")).toBe("menu");
-});
-
 test("a routine's switch turns it on or off from the row without opening the editor", async () => {
   api.routinesList.mockResolvedValue({ routines: [{ ...ROUTINE, enabled: true }] });
-  const panel = mount(false); await flush();
+  const panel = mount(); await flush();
   const toggle = panel.el.querySelector<HTMLButtonElement>('[data-det="routine-toggle"]')!;
   toggle.click();
   expect(api.routinesUpdate).toHaveBeenCalledWith(ROUTINE.id, { enabled: false });
@@ -700,27 +375,22 @@ test("a routine's switch turns it on or off from the row without opening the edi
   expect(document.querySelector(".au-routine-dialog")).toBeNull();
 });
 
-
 describe("primary changes do not add face badges", () => {
   const withPrimary = (primary_id: number): MembersList => ({ ...LIST, team_context: { primary_id } as MembersList["team_context"] });
-  test.each([0, 3])("member %s keeps its picture and editable draft without a primary star", async id => {
+  test.each([0, 3])("member %s keeps its picture without a primary star", async id => {
     current = id;
     const panel = mount(); await flush();
-    const name = panel.el.querySelector<HTMLInputElement>('#mb-det-name');
-    if (name) { name.focus(); name.value = 'Draft name'; }
     for (const primary of [id, 4, 0]) {
       host.list = () => withPrimary(primary); panel.draw();
       expect(panel.el.querySelector('.mb-star')).toBeNull();
-      expect(panel.el.querySelector('.mb-who-face .mb-avbtn .av')).not.toBeNull();
-      if (name) { expect(document.activeElement).toBe(name); expect(name.value).toBe('Draft name'); }
+      expect(panel.el.querySelector('.mb-panel-identity .mb-face-edit .av')).not.toBeNull();
     }
-    if (id === 0) expect(panel.el.querySelector('.mb-who-face .mb-av-slime svg.slime')).not.toBeNull();
+    if (id === 0) expect(panel.el.querySelector('.mb-panel-identity .mb-av-slime svg.slime')).not.toBeNull();
   });
 });
 
-
 test("a routine row opens the wide editor with its instructions and no history", async () => {
-  const panel = mount(false);
+  const panel = mount();
   await flush();
   panel.el.querySelector<HTMLElement>('[data-det="routine-open"]')!.click();
   await flush();

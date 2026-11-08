@@ -114,7 +114,8 @@ import {
   wantsRefresh,
 } from "../timeline";
 import type { PageArgument, AgentQuestion, AgentTurn, AppContext, GroupDraft, MemberDraft, MessageQuote, OwnerQuestion, Page, TurnAttachment, WireAttachment } from "../types";
-import { copyButton, esc, ico, iconButton, patchHTML, toaster } from "../ui";
+import { closeMenu, copyButton, esc, ico, iconButton, openMenu, patchHTML, toaster } from "../ui";
+import { askInChat } from "../chat-ask";
 import { createRoomPane } from "../group-chats";
 import { bindActionMode, bindPageComposer, composerHTML, drawTaskSlot } from "../chat-composer";
 import { mountComposerBrain } from "../composer-brain";
@@ -233,7 +234,7 @@ interface ComposerDraft {
   quote?: MessageQuote;
 }
 
-export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loadSidebar(): Promise<void> } {
+export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loadSidebar(): Promise<void>; settingsOf(): number | null; showSettings(id: number | null): void } {
   const el = document.createElement("div");
   el.className = "page page-agent";
   el.dataset.page = "agent";
@@ -242,8 +243,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     `<section class="mb-chat">` +
     `<div class="page-head mb-head"><h1 class="mb-h1">${esc(t("agent.title"))}</h1><span class="mb-head-l">` +
     iconButton("search", t("agent.search"), ' data-act="search" aria-expanded="false" hidden', "ra-tool") +
-    // Nothing at the right end, as Grok Bot's header (owner, 2026-11-06): the computer is a tab of the panel the name opens.
-    `</span><span class="mb-head-c"></span><div class="ra-tools"></div></div>` +
+    // Search at the left and share at the right, symmetric (owner, 2026-11-08: share left the panel for the conversation).
+    `</span><span class="mb-head-c"></span><div class="ra-tools">${iconButton("share", t("template.export"), ' data-act="share-member" aria-haspopup="menu" aria-expanded="false" hidden', "ra-tool")}</div></div>` +
     `<div class="ra-find" hidden></div>` +
     `<div class="ra-stage">` +
     `<div class="ra-scroll"><div class="ra-col"><div class="ra-older" hidden></div><ol class="thread"></ol><p class="ra-none" hidden></p></div></div>` +
@@ -254,6 +255,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     `</section>`;
   const heading = el.querySelector<HTMLElement>("h1")!;
   const searchButton = el.querySelector<HTMLElement>('[data-act="search"]')!;
+  const shareButton = el.querySelector<HTMLElement>('[data-act="share-member"]')!;
   /** Whether the open member's computer is working now: a dot beside its name in the header says so. */
   let computerActive = false;
   const find = el.querySelector<HTMLElement>(".ra-find")!;
@@ -322,6 +324,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
   el.prepend(members.column);
   el.append(members.details);
+  el.append(members.settings.el);
   const desktop = mountDesktopViewer(members.details, () => members.current(), {
     timeline: el.querySelector<HTMLElement>(".thread")!, conversation: () => conversationId(),
     name: () => members.nameOf(members.current()),
@@ -1003,11 +1006,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       wait.hidden = false;
       scroller.hidden = empty.hidden = dock.hidden = true;
       searchButton.hidden = true;
+      shareButton.hidden = true;
       return;
     }
     wait.hidden = true;
     const shown = turns;
     searchButton.hidden = shown.length === 0;
+    // Raphael is the app's own: he is not shared as a template.
+    shareButton.hidden = inRaphael();
     if (shown.length === 0 && searching) closeSearch(false);
     if (isEmpty()) {
       thread.replaceChildren();
@@ -2200,6 +2206,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "search":
       case "search-close":
         break;
+      // As Grok Bot's: one choice, 建立副本 · 分享範本連結, and only that asks the member to package itself (owner, 2026-11-07).
+      case "share-member": {
+        const member = memberId();
+        openMenu(act, [], "", () => {}, undefined, [{ label: t("template.copyTitle"), desc: t("template.copyHint"), icon: "copy", run() { closeMenu(); askInChat(member, "share-template"); } }]);
+        break;
+      }
       case "steps":
         toggleSteps(act);
         break;
@@ -2582,8 +2594,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     el,
     sidebar: members.column,
     loadSidebar: () => members.load(),
+    settingsOf: () => members.settings.isOpen() ? members.current() : null,
+    showSettings(id) { if (id !== null && id === members.current()) members.openSettings(); else members.settings.close(); },
     show(arg) {
       const wasVisible = visible;
+      // The member settings page (member-settings.ts) is asked for by the gear; any other way here is the conversation.
+      const settingsFor = typeof arg === "string" && arg.startsWith("member-settings:") ? Number(arg.slice("member-settings:".length)) : null;
+      if (settingsFor === null) members.settings.close();
       if (!wasVisible) { unreadFrom = null; unreadCaptured = false; openingThread = true; }
       visible = true;
       if (arg === "computer") { if (roomPane.active) roomPane.close(); members.computer(); }
@@ -2604,7 +2621,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       const draft = draftText(arg);
       if (draft !== null) putDraft(draft);
       const refocus = (): void => {
-        if (!wasVisible || draft !== null) focusComposer();
+        if (!members.settings.isOpen() && (!wasVisible || draft !== null)) focusComposer();
       };
       // The page opens at the newest turn, and with the question that waits, if one does.
       void api
@@ -2624,6 +2641,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         refocus();
       });
       drawBackgroundQuestions();
+      if (settingsFor !== null && settingsFor === members.current()) { if (roomPane.active) roomPane.close(); members.openSettings(); }
     },
     hide() {
       releasePointer(true);

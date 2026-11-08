@@ -16,9 +16,7 @@ import { cancelGesture } from "../shared/cancel-gesture";
 import "../shared/cancel-gesture.css";
 import "../shared/task-action.css";
 import { ico } from "../main/ui";
-import { en } from "../main/i18n/en";
-import { ja } from "../main/i18n/ja";
-import { zhTW } from "../main/i18n/zh-TW";
+import { catalogs, isUiLocale, type UiLocale } from "../main/i18n";
 import { replyLine } from "../shared/anime";
 import { captionLines } from "./caption";
 import { Emblem, canvasSize, loadGlyphTexture, pictureStyle, type Mode, type Mood, type Phase, type PictureCrop } from "./emblem";
@@ -30,9 +28,9 @@ import { WAITING_LINE_MS, nextWaitingLine } from "./waiting-lines";
 import { EntranceTimer, FrameWatch, describeError, guardHandler, subscribeWithRetry, type LogLevel, type PageLog } from "./diagnostics";
 
 /** The language of every subtitle: the interface language of the app. */
-export type UiLanguage = "zh-TW" | "en" | "ja";
+export type UiLanguage = UiLocale;
 
-const isLanguage = (value: unknown): value is UiLanguage => value === "zh-TW" || value === "en" || value === "ja";
+const isLanguage = isUiLocale;
 
 /** The words of an event, which come over the IPC: a field that is not text is no words. */
 const words = (value: unknown): string => (typeof value === "string" ? value : "");
@@ -105,7 +103,7 @@ export interface EmblemControl {
  * Whether a line is one of Raphael's refusals: his notices and answers start with 告 (report) or 否 (refusal) in Chinese
  * and Japanese and `Notice.` or `Negative.` in English (notices.rs). A refusal is when he is angry.
  */
-export const isRefusal = (text: string): boolean => /^\s*《?\s*(?:否|Negative)[。.]/u.test(text);
+export const isRefusal = (text: string): boolean => /^\s*《?\s*(?:否|Negative|No|거절|Non|Nein|Não|Нет|Không|ไม่|Tidak|Hayır)[。.]/u.test(text);
 
 /** How far a pointer hold on the YES of a T3 question has come. */
 export type HoldState = "idle" | "holding" | "armed";
@@ -805,7 +803,7 @@ export function confirmationParts(text: string): { title: string; details: strin
 }
 
 const questionLabels = (language: UiLanguage) => {
-  const messages = language === "en" ? en : language === "ja" ? ja : zhTW;
+  const messages = catalogs[language];
   return {more:messages["common.showAll"],less:messages["common.showLess"],stop:messages["rooms.stop"],hint:messages["common.cancelAgain"]};
 };
 

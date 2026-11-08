@@ -11,7 +11,7 @@
 // Six tabs sit flat on the left, as Grok Bot's: 一般 (account, appearance, the bot's timezone and folder, messaging,
 // memory), 聽寫與快捷鍵, 工具, 安全, 模型與用量 and 關於. No group names, no search, no line under a tab's name.
 
-import { t } from "../i18n";
+import { LOCALES, t } from "../i18n";
 import { updateHTML } from "../updates";
 import { createMemoryImport } from "../memory-import";
 import { detectedTimezone, zoneLabel } from "../timezones";
@@ -63,11 +63,7 @@ export const SIZES: Choice[] = [
   { value: "150", get label() { return t("settings.019"); }, get desc() { return t("settings.020"); } },
   { value: "194", get label() { return t("settings.021"); }, get desc() { return t("settings.022"); } },
 ];
-export const UI_LANGUAGES: Choice[] = [
-  { value: "zh-TW", get label() { return t("settings.023"); } },
-  { value: "en", get label() { return t("locale.english"); } },
-  { value: "ja", get label() { return t("settings.024"); } },
-];
+export const UI_LANGUAGES: Choice[] = LOCALES.map(({ id, native, english }) => ({ value: id, label: native, desc: english }));
 
 /** How long the dictation history is kept: at least a day (the core only checks that it is a number); "keep" is a hundred years. */
 export const RETENTIONS: Choice[] = [1, 7, 30, 365, KEEP_FOREVER_DAYS].map((days) => ({
@@ -83,6 +79,8 @@ const PRICES_LOADING = () => t("settings.026");
  */
 export const PANES: { id: SettingsPane; icon: IconName; title: () => string }[] = [
   { id: "general", icon: "gear", title: () => t("settings.paneGeneral") },
+  // What every member remembers of the owner, a tab of its own (owner, 2026-11-08: memory out of 一般).
+  { id: "memory", icon: "memory", title: () => t("mem.title") },
   { id: "dictation", icon: "mic", title: () => t("settings.paneDictation") },
   { id: "tools", icon: "steps", title: () => t("settings.paneTools") },
   { id: "safety", icon: "lock", title: () => t("settings.paneSafety") },
@@ -116,6 +114,8 @@ export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotke
 export interface SettingsView {
   update?: import("../api").UpdateView | null;
   memoryImportHTML?: string;
+  /** The button that opens the import, at the top of the 記憶 tab; empty while it is open. */
+  memoryImportAction?: string;
   modelsTab?: ModelsTab;
   pane: SettingsPane;
   device: DeviceSettings;
@@ -344,7 +344,8 @@ function keyRow(v: SettingsView): string {
       keyStatus(v),
       actionRow({
         secondary: btn(v.checkingOpenrouter ? t("common.checking") : t("settings.046"), "", ` data-act="or-check"${v.checkingOpenrouter ? " disabled" : ""}`) +
-          btn(t("home.018"), "", ' data-act="key-replace" data-k="key"'),
+          // Changing it is the pencil, as everywhere (owner, 2026-11-08: icons over text buttons).
+          iconBtn("pencil", t("home.018"), ' data-act="key-replace" data-k="key"'),
       }) + iconButton("more", t("members.more", { p0: t("common.apiKey") }), ' data-act="key-menu" aria-haspopup="menu" aria-expanded="false"'),
       { attrs, cls: "row-key" },
     );
@@ -388,7 +389,7 @@ const section = (title: string, rows: string[], foot = ""): string =>
   `</section>`;
 
 /**
- * A shortcut: its keys as caps and, for one that can be changed here, a 「變更」 button that records
+ * A shortcut: its keys as caps and, for one that can be changed here, a pencil (「變更」) that records
  * new ones (`change` names the button for the click handler and the focus).
  */
 function shortcutRow(name: string, bindings: readonly string[], change?: { act: string; field: HotkeyField }): string {
@@ -398,7 +399,7 @@ function shortcutRow(name: string, bindings: readonly string[], change?: { act: 
   return row(
     name,
     "",
-    `<span class="caps">${caps}</span>` + (change ? btn(t("home.018"), "", ` data-act="${change.act}" data-k="${change.act}"`) : ""),
+    `<span class="caps">${caps}</span>` + (change ? iconBtn("pencil", t("home.018"), ` data-act="${change.act}" data-k="${change.act}"`) : ""),
     { cls: "row-shortcut", attrs: change ? ` data-row="${HOTKEY_ROWS[change.field]}"` : "" },
   );
 }
@@ -436,7 +437,7 @@ function outputFolderRow(v: SettingsView): string {
 
 /**
  * 一般, in Grok Bot's order of sections: who you are, how the window looks, what Raphael works with (the timezone of
- * routines and the folder of what is delivered), where he can be reached (messaging), what he remembers, and the guide.
+ * routines and the folder of what is delivered), and the guide. What he remembers is the 記憶 tab.
  */
 function generalHTML(v: SettingsView): string {
   return (
@@ -452,8 +453,6 @@ function generalHTML(v: SettingsView): string {
     ]) +
     // Telegram, Slack and Discord moved to each member's panel, Raphael's too, and are set up in the conversation
     // (owner, 2026-11-07): nothing of them is set here.
-    (v.memoryShared ? memoryHTML(v.memoryShared) : "") +
-    (v.memoryImportHTML ?? createMemoryImport(() => {}).html()) +
     // The emblem's size, its subtitles and starting with Windows are fixed (device-fixed.ts, owner 2026-11-06), and the
     // weather city is the member's to ask when it needs it: none of them is a setting any more.
     // The tour, as one button named 導覽 (owner, 2026-11-07: it is there to look at the guide while it is built).
@@ -557,12 +556,20 @@ function modelsHTML(v: SettingsView): string {
       keyRow(v),
       ...(v.keyError ? [note(st("err", v.keyError()), ' role="alert"')] : []),
     ]);
-  return headingHTML(v) + coreNote(v) + `<div class="models-page">` +
+  // Read once while the app runs; this reads it all again (owner, 2026-11-08: 「點一下右上角的那個重跑」).
+  return headingHTML(v, iconBtn("refresh", t("runs.refresh"), ' data-act="models-refresh"')) + coreNote(v) + `<div class="models-page">` +
     tabs((["models", "usage"] as const).map((id) => ({
       id, label: id === "models" ? t("providers.title") : t("models.usage"),
       attrs: ` id="models-tab-${id}" data-models-tab="${id}" data-k="models-tab:${id}" aria-controls="models-panel-${id}" tabindex="${id === selected ? 0 : -1}"`,
     })), selected, { label: t("settings.paneUsage"), kind: "nav", plain: true }) +
     (["models", "usage"] as const).map((id) => `<div class="models-content" id="models-panel-${id}" role="tabpanel" aria-labelledby="models-tab-${id}"${id === selected ? "" : " hidden"}>${id === selected ? content : ""}</div>`).join("") + `</div>`;
+}
+
+/** 記憶: what every member remembers of the owner, and bringing memory in from other apps. */
+function memoryPaneHTML(v: SettingsView): string {
+  const importer = createMemoryImport(() => {});
+  // 匯入記憶 stands at the top right beside the tab's name, as 匯入 CSV does in the vault (owner, 2026-11-08).
+  return headingHTML(v, v.memoryImportAction ?? importer.action()) + coreNote(v) + (v.memoryShared ? memoryHTML(v.memoryShared) : "") + (v.memoryImportHTML ?? importer.html());
 }
 
 /** 關於: the version, the license and the fan-project statement. */
@@ -572,9 +579,10 @@ function aboutHTML(v: SettingsView): string {
     `<div class="about-brand">${brandIcon("about-icon")}<span class="about-name">Raphael</span></div>` +
     `<div class="slist about">` +
     row(t("settings.078"), "", `<span class="val num">${esc(v.version)}</span>`) +
-    // The row names it; its button says what it does, never the same words again (R-UI flat rows, owner 2026-11-07).
-    row(t("nav.help"), "", btn(t("desktop.openShort"), "", ' data-act="help"')) +
-    row(t("settings.079"), t("settings.080"), btn(t("settings.081"), "", ' data-act="license"')) +
+    // The row names it; its control is an icon, never the same words again (owner, 2026-11-08: icons over text buttons):
+    // a page out of the app has the outward arrow, one inside it the chevron.
+    row(t("nav.help"), "", iconBtn("external", t("desktop.openShort"), ' data-act="help"')) +
+    row(t("settings.079"), t("settings.080"), iconBtn("right", t("settings.081"), ' data-act="license"')) +
     `</div>` +
     updateHTML(v.update ?? null, v.device.auto_update ?? false, v.version) +
     t("settings.082")
@@ -588,6 +596,8 @@ export function paneHTML(v: SettingsView): string {
     case "messaging":
     case "general":
       return generalHTML(v);
+    case "memory":
+      return memoryPaneHTML(v);
     case "data":
     case "dictation":
       return dictationHTML(v);

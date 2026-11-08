@@ -21,9 +21,9 @@ export default [
   scene("settings-speech-service", "Shared speech setup owns its key while the voice and preview belong to member details", [...settings("tools"),click('[data-svc="open"][data-id="voice"]'),wait('#svc-dialog'),click('[data-k="svc-svc:fish"]'),wait('#svc-dialog [type="password"]'),check('settings-speech-service')]),
 
 
-  scene("settings-owner", "Owner identity and shared memory share General, with no weather city to set", [...settings("general"), wait('[data-mem-space="shared"] .mem-entry'), check('settings-owner')]),
+  scene("settings-owner", "Owner identity leads General without memory, with no weather city to set", [...settings("general"), wait('[data-owner="owner_name"]'), check('settings-owner')]),
 
-  scene("settings-memory", "Shared owner memory belongs in General", [...settings("general"), wait('[data-mem-space="shared"] .mem-entry'), scroll('[data-mem-space="shared"]'), check("settings-memory")]),
+  scene("settings-memory", "Shared owner memory is a tab of its own", [...settings("memory"), wait('[data-mem-space="shared"] .mem-entry'), scroll('[data-mem-space="shared"]'), check("settings-memory")]),
   scene("local-command-settings", "One shared local command dropdown beside computer use", [...settings("safety"), scroll('[data-k="local-commands"]'), check("local-command-setting"), click('[data-k="local-commands"]'), wait('.menu [data-value="never"]'), check("local-command-menu")]),
   ...["always", "never"].map(mode => scene(`local-command-setting-${mode}`, `Save the shared ${mode} command permission`, [...settings("safety"), scroll('[data-k="local-commands"]'), click('[data-k="local-commands"]'), click(`.menu [data-value="${mode}"]`), check("local-command-setting-saved") ])),
   scene("theme-clarity", "Computed real-entry surfaces have no fogging veil or tinted conversation gradient", [member(1), check("theme-clarity")]),
@@ -61,12 +61,16 @@ export default [
   scene("window-hover-restore", "Restore caption keeps its centered glyph and transparent hover", [{ action: "window-control", control: "maximize", restore: true }]),
   scene("window-hover-modal", "Caption hover stays usable while settings dim the window", [...settings("models"), { action: "window-control", control: "close", hoverOnly: true }]),
   scene("connections-recommended", "Under the connected apps, a few popular ones not added yet, each addable in place (owner, 2026-11-08)", [...settings("connections"), check("connections-recommended")]),
-  ...["general", "appearance", "connections", "models", "dictation", "tools", "safety", "messaging", "about"].map(pane => scene(pane === "general" ? "profile" : pane, `${pane} settings pane`, [...settings(pane), ...(pane === "appearance" ? [check("appearance-settings")] : [])])),
+  ...["general", "memory", "appearance", "connections", "models", "dictation", "tools", "safety", "messaging", "about"].map(pane => scene(pane === "general" ? "profile" : pane, `${pane} settings pane`, [...settings(pane), ...(pane === "appearance" ? [check("appearance-settings")] : [])])),
   scene("appearance-menu", "One shared theme dropdown without a preview gallery", [...settings("appearance"), click('[data-k="appearance"]'), wait('.menu [data-value="dark"]'), check("appearance-settings")]),
   scene("appearance-keyboard", "Theme choices retain visible keyboard focus in every palette", [...settings("appearance"), click('[data-k="appearance"]'), key('Tab'), {...key('Tab'),shift:true}, key('ArrowDown'), check('appearance-settings'), check('appearance-focus')]),
   scene("plugins-installed", "Unified managed, private Google and custom MCP plugins", [...connections, wait('[data-conn="open"][data-id="composio:notion"]')]),
   scene("plugins-detail", "Managed tools grouped by write and read", [...connections, click('[data-conn="open"][data-id="composio:notion"]'), click('[data-conn="tool-list"]'), wait('[data-conn="tool"][data-tool="NOTION_SEARCH"]')]),
-  scene("plugins-store", "Search-first catalog with connected and popular apps before bounded results", [
+  scene("store-n8n", "n8n is in the store as the owner's own server, and adding it opens the form filled in (owner, 2026-11-08)", [
+    ...store, type('#conn-search', 'n8n'), wait('[data-conn="open-store"][data-id="n8n"]'), check("store-n8n"),
+    click('[data-conn="join"][data-id="n8n"]'), wait('#conn-url'), check("store-n8n-form"),
+  ]),
+  scene("plugins-store", "Search-first catalog of the apps not added yet, in bounded pages", [
     ...store, check("plugins-store"), check("plugins-store-rows"), check("plugins-store-groups"),
     type('#conn-search', '360'), wait('[data-conn="open-store"][data-id$="-359"]'), check("plugins-store-search"),
     click('[data-conn="open-store"][data-id$="-359"]'), wait('.cs-page'), check("plugins-store-last-detail"),

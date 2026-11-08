@@ -9,11 +9,11 @@
 .cb-rail { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; row-gap: 2px; min-height: 0; padding-inline-end: var(--sp-2); border-inline-end: 1px solid var(--line); overflow-y: auto; scrollbar-width: none; }
 .cb-pane { display: flex; flex-direction: column; gap: var(--sp-1); min-height: 0; min-width: 0; padding-inline-start: var(--sp-2); }
 .cb-list { display: grid; flex: 1 1 0; row-gap: 2px; grid-template-columns: minmax(0, 1fr); align-content: start; min-height: 0; overflow-y: auto; scrollbar-width: none; }
-.menu .cb-source { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: 36px; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); text-align: left; }
+.menu .cb-source { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: var(--h-menu); padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); text-align: left; }
 .menu .cb-source[aria-pressed="true"] { background: var(--hover); }
 .cb-source .mono { display: inline-grid; flex: none; place-items: center; width: 20px; height: 20px; margin: 0; }
 .cb-source .mono .logo, .cb-source .mono svg { width: 16px; height: 16px; }
-.menu .cb-row { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: 40px; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); text-align: left; }
+.menu .cb-row { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: var(--h-menu); padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); text-align: left; }
 .menu .cb-row[aria-checked="true"] { background: var(--hover); }
 .cb-name { display: grid; flex: 1; grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .cb-name b { overflow: hidden; color: var(--text); font-size: var(--fs-sm); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
@@ -21,7 +21,7 @@
 .cb-check { display: inline-grid; flex: none; place-items: center; width: 16px; height: 16px; color: var(--accent-text); }
 .cb-check .i { width: 16px; height: 16px; }
 .menu .cb-row:disabled { opacity: 0.5; cursor: default; }
-.menu .cb-all { display: flex; flex: none; align-items: center; justify-content: space-between; min-height: 32px; color: var(--text-2); font-size: var(--fs-xs); }
+.menu .cb-all { display: flex; flex: none; align-items: center; justify-content: space-between; min-height: var(--h-menu); color: var(--text-2); font-size: var(--fs-xs); }
 .cb-all .i { flex: none; width: 16px; height: 16px; color: var(--text-3); transition: transform 120ms ease; }
 .cb-all[aria-expanded="true"] .i { transform: rotate(180deg); }
 /* The way back on the left, the title in the middle of the card whatever the length of either. */

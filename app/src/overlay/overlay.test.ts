@@ -1181,7 +1181,7 @@ test("other events leave a question alone", () => {
 // ---- the waiting lines: a question being thought about ----
 
 // The app sends the phrase book of the interface language with the quiet thought; the page only rotates it.
-const BOOKS: Record<UiLanguage, string[]> = {
+const BOOKS: Record<"zh-TW" | "en" | "ja", string[]> = {
   "zh-TW": ["《告。解析中……》", "《告。並列演算中……》", "《告。檢索最適解……》", "《告。思考加速中……》", "《告。整理情報中……》"],
   ja: ["《告。解析を実行中……》", "《告。並列演算を実行中……》", "《告。最適解を検索中……》", "《告。思考を加速中……》"],
   en: ["《Notice. Analyzing…》", "《Notice. Computing in parallel…》", "《Notice. Seeking the optimum…》", "《Notice. Accelerating thought…》"],

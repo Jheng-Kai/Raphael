@@ -9,7 +9,7 @@
 .msg .btn.icon { width: 32px; min-height: 32px; padding: 0; }
 /* The connected bot's name opens its details: the whole left of the row, no arrow (owner, 2026-11-07). */
 .msg-head > .lbl { flex: 1; min-width: 0; }
-.btn.msg-open { display: flex; justify-content: flex-start; width: 100%; min-width: 0; min-height: 32px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: start; }
+.btn.msg-open { display: flex; justify-content: flex-start; width: 100%; min-width: 0; min-height: var(--h-ctl); padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: start; }
 .btn.msg-open:is(:hover, :active):not(:disabled) { background: transparent; }
 .msg-code { font-size: var(--fs-md); font-weight: var(--weight-semibold); letter-spacing: 0.14em; }
 .msg-who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }

@@ -94,7 +94,9 @@ test("a failed page can be closed without retrying its service", async () => {
   vi.mocked(api.pagesOpen).mockRejectedValueOnce(new Error("gone"));
   const { thread } = mount();
   await flush();
-  const close = thread.querySelector<HTMLButtonElement>(".pg-failed [data-card-failed-close]");
+  // The × at the card's top right, never a 「關閉」 beside 重試 (owner, 2026-11-08).
+  expect(thread.querySelector(".pg-failed [data-card-failed-close]")).toBeNull();
+  const close = thread.querySelector<HTMLButtonElement>(".pg-card > .card-head [data-card-failed-close]");
   expect(close).not.toBeNull();
   close!.click();
   expect(thread.querySelector<HTMLElement>(".pg-card")!.hidden).toBe(true);

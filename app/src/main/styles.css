@@ -23,8 +23,10 @@
   --fs-2xs: 12px; --fs-xs: 13px; --fs-sm: 14px; --fs-md: 15px; --fs-lg: 18px; --fs-h1: 22px;
   --weight-regular: 400; --weight-medium: 500; --weight-semibold: 500;
   --r-sm: 8px; --r-md: 12px; --r-lg: 12px; --r-pill: 999px;
-  /* Controls are slim, as Grok Bot's (owner, 2026-11-08: 「button 都太胖了，能變小就變小」). */
-  --h-ctl: 30px; --h-ctl-sm: 26px; --h-row: 48px; --h-tab: 26px;
+  /* Controls are slim, as Grok Bot's (owner, 2026-11-08: 「button 都太胖了，能變小就變小」): a button's height hugs its
+     words (「上下高度會剛好貼齊文字」), every button and every menu row takes its height from these and nowhere else
+     (「全部一致…共用同一個」), and a menu row is short so a menu reads at a glance. A field keeps a little more room to type. */
+  --h-ctl: 26px; --h-ctl-sm: 22px; --h-menu: 28px; --h-field: 30px; --h-row: 48px; --h-tab: 26px;
   /* official brand colours of service logos: the only colours outside the app palette */
   --brand-telegram: #26a5e4;
   /* marks drawn over a photo (the picture crop frame): one set for both themes, as the photo under them is the same */
@@ -260,7 +262,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .sel:disabled { opacity: 0.55; cursor: default; }
 .sel:disabled:hover { border-color: var(--btn-edge); }
 .sel .i { color: var(--text-2); }
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); min-height: var(--h-ctl); padding: 3px calc(var(--sp-2) + 2px); border-radius: var(--r-sm); border: 1px solid var(--btn-edge); background: var(--btn); font-size: var(--fs-xs); line-height: 1.4; color: var(--text); white-space: nowrap; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); min-height: var(--h-ctl); padding: 3px calc(var(--sp-2) + 2px); border-radius: var(--r-sm); border: 1px solid var(--btn-edge); background: var(--btn); font-size: var(--fs-xs); line-height: calc(var(--h-ctl) - 8px); color: var(--text); white-space: nowrap; }
 /* Every action is a button with a shape: an edge at rest, a fill under the pointer, a deeper one
    when pressed. Never a word alone that can be clicked. */
 .btn:hover:not(:disabled) { background: var(--hover); }
@@ -272,7 +274,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .btn.pri { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: var(--weight-semibold); }
 .btn.pri:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
 .btn.pri:active:not(:disabled) { background: var(--accent-pressed); border-color: var(--accent-pressed); }
-.btn.sm { min-height: var(--h-ctl-sm); padding: var(--sp-1) var(--sp-2); font-size: var(--fs-xs); }
+.btn.sm { min-height: var(--h-ctl-sm); padding: 1px var(--sp-2); font-size: var(--fs-xs); line-height: calc(var(--h-ctl-sm) - 4px); }
 /* Icon-only actions use color for hover and selection; keyboard focus retains its ring. */
 .btn.icon { width: var(--h-ctl); padding: 0; border-color: transparent; background: transparent; color: var(--text-2); }
 .btn.icon:hover:not(:disabled) { background: transparent; border-color: transparent; color: var(--text); }
@@ -309,7 +311,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.err { background: var(--err); }
 .dot.idle { background: transparent; border: 1.5px solid var(--text-3); }
 .st.warn { color: var(--warn); } .st.err { color: var(--err); }
-.field { display: inline-flex; align-items: center; gap: var(--sp-1); height: var(--h-ctl); padding: 0 var(--sp-2); border-radius: var(--r-sm); border: 1px solid var(--btn-edge); background: var(--panel); font-size: var(--fs-sm); }
+.field { display: inline-flex; align-items: center; gap: var(--sp-1); height: var(--h-field); padding: 0 var(--sp-2); border-radius: var(--r-sm); border: 1px solid var(--btn-edge); background: var(--panel); font-size: var(--fs-sm); }
 .field[data-invalid] { border-color: var(--err); }
 .field input { border: 0; outline: 0; background: transparent; width: 100%; min-width: 0; font-size: var(--fs-sm); }
 .field .pre { color: var(--text-3); }
@@ -510,7 +512,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   .modal-scrim { --set-nav: 160px; }
   .modal-body { padding: var(--sp-5) var(--sp-5) var(--sp-6); }
   /* Header actions use the content edge, below the corner Close control. */
-  .modal-body:has(> .set-content > .set-head) { padding-top: calc(var(--sp-6) + var(--sp-4)); }
+  .modal-body:has(> .set-content > .set-head) { padding-top: calc(var(--sp-6) + var(--sp-4) + var(--sp-2)); }
   .modal-nav { padding: var(--sp-3) var(--sp-2); }
   .modal-nav .nav { padding-inline: var(--sp-2); gap: var(--sp-2); }
   /* A long tab name (Models & usage) takes two lines rather than losing its end. */
@@ -523,7 +525,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 /* A menu is only so wide, and never wider than the window: a longer label is cut, with its whole
    text as a tooltip (ui.ts). Its right edge lines up with its button's, inside the window (placeMenu). */
 .menu { position: fixed; z-index: 130; min-width: 180px; max-width: min(360px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow-x: hidden; overflow-y: auto; padding: var(--sp-1); border-radius: var(--r-md); background: var(--menu); border: 1px solid var(--edge); box-shadow: var(--pop); }
-.menu button { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: var(--h-ctl); padding: var(--sp-1) var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; font-size: var(--fs-sm); text-align: left; }
+.menu button { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: var(--h-menu); padding: var(--sp-1) var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; font-size: var(--fs-sm); line-height: calc(var(--h-menu) - 8px); text-align: left; }
 .menu button:hover { background: var(--hover); }
 .menu button[aria-haspopup="menu"][aria-expanded="true"] { background: var(--hover); }
 .menu:has(> button[aria-haspopup="menu"][aria-expanded="true"]) > button:hover:not([aria-expanded="true"]) { background: transparent; }
@@ -542,14 +544,13 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .menu .mlead ~ .mtag { flex: none; margin-left: var(--sp-3); font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
 /* A menu whose choices have a detail (a price): the details line up on the right. */
 .menu.detailed { min-width: 340px; }
-.menu.detailed button { min-height: 38px; }
 .menu .md { flex: none; margin-left: var(--sp-4); font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
 .menu button[aria-checked="true"] .md { color: var(--text-2); }
 /* A menu whose choices say what they do: the name, and a quieter line under it. */
 .menu.described { min-width: 260px; max-width: min(340px, calc(100vw - 16px)); }
-.menu.described button { min-height: 32px; padding: var(--sp-2) var(--sp-2); align-items: flex-start; }
-.menu.described .ck { margin-top: var(--sp-1); }
-.menu .mtd { display: flex; flex: 1; flex-direction: column; gap: var(--sp-1); min-width: 0; }
+.menu.described button { align-items: flex-start; }
+.menu.described .ck { margin-top: 2px; }
+.menu .mtd { display: flex; flex: 1; flex-direction: column; gap: 0; min-width: 0; }
 .menu .mtd .mt { white-space: normal; }
 .menu .mdesc { font-size: var(--fs-xs); line-height: 1.4; color: var(--text-3); text-wrap: pretty; }
 .menu-head { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-xs); color: var(--text-3); text-align: left; border-bottom: 1px solid var(--line); margin-bottom: var(--sp-1); }
@@ -646,9 +647,10 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
    over the foot, as Grok Bot's tiles do. */
 .ob-foot { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; padding: var(--sp-3) var(--sp-6) var(--sp-5); }
 .ob-foot::before { content: ""; position: absolute; inset: auto 0 100% 0; height: 28px; background: linear-gradient(to bottom, color-mix(in srgb, var(--content) 0%, transparent), var(--content)); pointer-events: none; }
-.ob-foot .ob-actions { display: flex; flex-direction: column-reverse; flex-wrap: nowrap; align-items: stretch; justify-content: flex-start; gap: var(--sp-2); width: min(100%, 360px); }
-.ob-foot .btn { min-height: 44px; border-radius: 999px; font-size: var(--fs-md); }
-.ob-foot .btn.pri { width: 100%; }
+/* The guide's buttons are the shared ones, sized to their words and side by side (owner, 2026-11-08: every button alike). */
+.ob-foot .ob-actions { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; justify-content: center; gap: var(--sp-2); }
+.ob-foot .btn { border-radius: 999px; }
+.ob-foot .btn.pri { min-width: calc(var(--h-ctl) * 4); padding-inline: var(--sp-5); }
 .ob-foot .ob-back { border-color: var(--hover); background: var(--hover); }
 .ob-foot .ob-back:hover:not(:disabled) { background: var(--pressed); }
 /* The team's characters float by a step's title, each where screens.ts puts it: they take no room, and a narrow card
@@ -714,7 +716,6 @@ button.ob-tile:disabled { opacity: 0.55; cursor: default; }
   .page h1 { font-size: var(--fs-h1); }
   .page .lede { font-size: var(--fs-md); }
   .page kbd { height: var(--h-ctl-sm); font-size: var(--fs-md); }
-  .page .btn { min-height: 38px; font-size: var(--fs-md); }
   .page .field { height: 38px; font-size: var(--fs-md); }
   .page .field input { font-size: var(--fs-md); }
   .page .row .t { font-size: var(--fs-md); }

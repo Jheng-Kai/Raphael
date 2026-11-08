@@ -8,7 +8,15 @@ const CJK_PREFIX = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
 const TRAILING_STOP = /[。.]+$/u;
 
 /** The persona's prefixes in every language: the core's `persona.PREFIXES` (anime.test.ts keeps them one). */
-export const PREFIXES = ["答", "告", "否", "了", "問", "解", "Answer", "Notice", "Negative", "Understood", "Question"] as const;
+export const PREFIXES = [
+  "答", "告", "否", "了", "問", "解", "问", "Answer", "Notice", "Negative", "Understood", "Question",
+  "답변", "알림", "거절", "확인", "질문", "Respuesta", "Aviso", "No", "Entendido", "Pregunta",
+  "Réponse", "Avis", "Non", "Compris", "Antwort", "Hinweis", "Nein", "Verstanden", "Frage",
+  "Resposta", "Não", "Pergunta", "Risposta", "Avviso", "Capito", "Domanda",
+  "Ответ", "Уведомление", "Нет", "Понятно", "Вопрос", "Trả lời", "Thông báo", "Không", "Đã hiểu", "Câu hỏi",
+  "คำตอบ", "แจ้งให้ทราบ", "ไม่", "เข้าใจแล้ว", "คำถาม", "Jawaban", "Pemberitahuan", "Tidak", "Dipahami", "Pertanyaan",
+  "Yanıt", "Bildirim", "Hayır", "Anlaşıldı", "Soru",
+] as const;
 /** How the core opens one of Raphael's lines (`answers._REPLY_OPEN`): 《, a prefix, its stop. */
 const OPENING = new RegExp(`^《(?:${PREFIXES.join("|")})[。.：:]\\s*`, "iu");
 

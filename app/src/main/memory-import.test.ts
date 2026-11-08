@@ -6,9 +6,12 @@ vi.mock("./api", () => ({importMemory:vi.fn()}));
 
 test("owner-confirmed import preserves the draft on failure and shows redacted results", async () => {
   const root = document.createElement("div");
-  const view = createMemoryImport(() => {root.innerHTML=view.html();});
-  root.innerHTML=view.html();
+  const view = createMemoryImport(() => {root.innerHTML=view.action()+view.html();});
+  root.innerHTML=view.action()+view.html();
+  // Closed, it is only the button at the top of the 記憶 tab (owner, 2026-11-08).
+  expect(view.html()).toBe("");
   view.click(root.querySelector('[data-import="open"]')!);
+  expect(view.action()).toBe("");
   expect(root.querySelector("[data-import-prompt]")).not.toBeNull();
   const field = root.querySelector<HTMLTextAreaElement>("[data-import-answer]")!;
   field.value="Owner preferences\n\npassword is sample123";view.input(field);

@@ -4436,8 +4436,9 @@ mod tests {
             ("zh-TW", NO_MIC.zh),
             ("en", NO_MIC.en),
             ("ja", NO_MIC.ja),
-            // a language nobody offers is the default one, never a pair
-            ("fr", NO_MIC.zh),
+            ("fr", NO_MIC.text("fr")),
+            // An unknown interface locale uses English, never a pair.
+            ("ar", NO_MIC.en),
         ] {
             let c = controller(
                 FakeCore::failing("dictation.start", RpcError::new(1004, "no microphone")),

@@ -1,6 +1,6 @@
 import "./card.css";
 import { t } from "./i18n";
-import { btn, esc, ico } from "./ui";
+import { btn, esc, ico, iconBtn } from "./ui";
 
 export type CardStatus = "waiting" | "ready" | "done" | "failed";
 const CARD_PROMPTS = { key: "cards.inputWaiting", question: null, handover: "cards.answerWaiting", computer: "cards.needsYou", permission: "cards.waiting", draft: "cards.mailReady", connect: "cards.needsYou" } as const;
@@ -23,11 +23,15 @@ export function cardStatusHTML(status: CardStatus, text?: string): string {
   return `<span class="card-status is-${status}" role="status"><i aria-hidden="true"></i><span data-card-status-text>${esc(text ?? t(({waiting: "cards.waiting", ready: "cards.ready", done: "cards.done", failed: "cards.failed"} as const)[status]))}</span></span>`;
 }
 
+/** The × at a card's top right that puts a failed card away (owner, 2026-11-08: a ×, never a 「關閉」 under it). */
+const failedClose = (): string => iconBtn("x", t("common.close"), " data-card-failed-close", "card-close");
+
 export function cardHTML(card: CardOptions): string {
-  const actions = (card.actions ?? "") + (card.status === "failed" ? btn(esc(t("common.close")), "sm", " data-card-failed-close") : "");
+  const actions = card.actions ?? "";
+  const close = card.close ?? (card.status === "failed" ? failedClose() : "");
   return `<section class="conversation-card connector-card ${card.cls ?? ""}"${card.attrs ?? ""} role="group" aria-label="${esc(card.title)}">` +
     `<header class="card-head"><div class="card-heading">${card.mark ?? ""}<b class="card-title cc-name">${esc(card.title)}</b></div>` +
-    (card.hideStatus ? "" : cardStatusHTML(card.status, card.statusText)) + (card.close ?? "") + `</header>` +
+    (card.hideStatus ? "" : cardStatusHTML(card.status, card.statusText)) + close + `</header>` +
     (card.body ? `<p class="card-body cc-state">${esc(card.body)}</p>` : "") +
     (card.content ?? "") + (actions ? `<footer class="card-actions cc-actions">${actions}</footer>` : "") + `</section>`;
 }
@@ -61,10 +65,17 @@ export function cardFailure(card: Element | null, retry: () => void, dismiss?: (
   original.forEach(footer => { footer.hidden = true; });
   const status = card.querySelector(".card-status");
   const prior = status?.outerHTML;
-  const clear = (): void => { failure!.remove(); original.forEach(footer => { footer.hidden = false; }); if (prior) { const pill = card.querySelector(".card-status"); if (pill) pill.outerHTML = prior; } };
+  // 重試 below what went wrong; putting it away is the × at the card's top right, not a 「關閉」 beside 重試 (owner, 2026-11-08).
+  const head = card.querySelector<HTMLElement>(":scope > .card-head");
+  let dismissButton = head?.querySelector<HTMLElement>("[data-card-dismiss]") ?? null;
+  const clear = (): void => { failure!.remove(); dismissButton?.remove(); original.forEach(footer => { footer.hidden = false; }); if (prior) { const pill = card.querySelector(".card-status"); if (pill) pill.outerHTML = prior; } };
   if (status) status.outerHTML = cardStatusHTML("failed", t("cards.failed"));
-  failure.innerHTML = `<p role="alert">${esc(t("cards.retained"))}</p><div class="card-actions">${btn(esc(t("cards.retry")), "sm pri", " data-card-retry")}${btn(esc(t("common.close")), "sm", " data-card-dismiss")}</div>`;
+  failure.innerHTML = `<p role="alert">${esc(t("cards.retained"))}</p><div class="card-actions">${btn(esc(t("cards.retry")), "sm pri", " data-card-retry")}</div>`;
+  if (head && !dismissButton) {
+    head.insertAdjacentHTML("beforeend", iconBtn("x", t("common.close"), " data-card-dismiss", "card-close"));
+    dismissButton = head.querySelector<HTMLElement>("[data-card-dismiss]");
+  }
   failure.querySelector("[data-card-retry]")!.addEventListener("click", () => { clear(); retry(); });
-  failure.querySelector("[data-card-dismiss]")!.addEventListener("click", () => { clear(); dismiss?.(); });
+  dismissButton?.addEventListener("click", () => { clear(); dismiss?.(); }, { once: true });
   return true;
 }

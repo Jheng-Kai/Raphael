@@ -148,7 +148,8 @@ export async function previewTemplate(raw: unknown, avatar: string, create: (mem
       templateContents({...template, connections: []}, findings, {thirdParty: true}) +
       (template.connections.length ? `<section class="tpl-sec"><h4>${esc(t("template.connections"))}</h4>${template.connections.map(app => cardHTML({title: connectionName(app), status: "done", statusText: t("conn.signedIn"), hideStatus: !connected.has(app), attrs: ` data-template-connection="${esc(app)}" data-connected="${connected.has(app)}"`, body: made ? t("template.connectHelp") : undefined, actions: btn(esc(t(connected.has(app) ? "conn.signedIn" : "template.connect")), "sm", ` data-dlg="connect" data-app="${esc(app)}"${!made || busy || connected.has(app) ? " disabled" : ""}`)})).join("")}</section>` : "") + `</div>`;
     const dialog = openDialog({title: t("template.preview"), cls: "template-preview", body: body(),
-      actions: {secondary: `<p class="note" data-template-notice>${esc(t("template.noGrants"))}</p>` + btn(esc(t("common.close")), "", ' data-dlg="close"'), primary: {label: esc(t("template.import")), attrs: ' data-dlg="import"'}}, canClose: () => !busy,
+      // Its × closes it; no 「關閉」 beside 加入 (owner, 2026-11-08).
+      actions: {secondary: `<p class="note" data-template-notice>${esc(t("template.noGrants"))}</p>`, primary: {label: esc(t("template.import")), attrs: ' data-dlg="import"'}}, canClose: () => !busy,
       onAct(action, button) {
         if (action === "close") return dialog.close();
         if (busy) return;

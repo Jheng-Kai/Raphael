@@ -41,6 +41,8 @@ export const OVERFLOW_ROWS: readonly OverflowRow[] = [
   { more: '[data-act="more-message"]', row: ".chat-message" },
   { more: '[data-au="event-more"]', row: ".au-event" },
   { more: '[data-pop="more"]', row: ".au-pop-detail" },
+  { more: '[data-ms="skill-more"]', row: ".ms-subhead" },
+  { more: '[data-ms="command-more"]', row: ".ms-subhead" },
 ];
 
 /** The ⋯ of the innermost row around `target`, with that row; a ⋯ that cannot be pressed (disabled) has no menu to open. */

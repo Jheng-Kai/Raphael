@@ -21,10 +21,20 @@ interface RawEmoji { hexcode: string; label: string; unicode: string; group?: nu
 interface RawMessages { groups: { message: string; order: number }[] }
 type Source = () => Promise<[{ default: RawEmoji[] }, { default: RawMessages }]>;
 
-const SOURCES: Record<UiLocale, Source> = {
+const SOURCES: Partial<Record<UiLocale, Source>> = {
   "zh-TW": () => Promise.all([import("emojibase-data/zh-hant/compact.json"), import("emojibase-data/zh-hant/messages.json")]),
   en: () => Promise.all([import("emojibase-data/en/compact.json"), import("emojibase-data/en/messages.json")]),
   ja: () => Promise.all([import("emojibase-data/ja/compact.json"), import("emojibase-data/ja/messages.json")]),
+  "zh-CN": () => Promise.all([import("emojibase-data/zh/compact.json"), import("emojibase-data/zh/messages.json")]),
+  "ko": () => Promise.all([import("emojibase-data/ko/compact.json"), import("emojibase-data/ko/messages.json")]),
+  "es": () => Promise.all([import("emojibase-data/es/compact.json"), import("emojibase-data/es/messages.json")]),
+  "fr": () => Promise.all([import("emojibase-data/fr/compact.json"), import("emojibase-data/fr/messages.json")]),
+  "de": () => Promise.all([import("emojibase-data/de/compact.json"), import("emojibase-data/de/messages.json")]),
+  "pt-BR": () => Promise.all([import("emojibase-data/pt/compact.json"), import("emojibase-data/pt/messages.json")]),
+  "it": () => Promise.all([import("emojibase-data/it/compact.json"), import("emojibase-data/it/messages.json")]),
+  "ru": () => Promise.all([import("emojibase-data/ru/compact.json"), import("emojibase-data/ru/messages.json")]),
+  "vi": () => Promise.all([import("emojibase-data/vi/compact.json"), import("emojibase-data/vi/messages.json")]),
+  "th": () => Promise.all([import("emojibase-data/th/compact.json"), import("emojibase-data/th/messages.json")]),
 };
 
 /** The sections in Unicode's order, as a picker shows them; base emoji only (skin tones are not offered). */
@@ -46,7 +56,7 @@ const loaded = new Map<UiLocale, Promise<EmojiSection[]>>();
 export function emojiSections(locale: UiLocale = getLocale()): Promise<EmojiSection[]> {
   let sections = loaded.get(locale);
   if (!sections) {
-    sections = SOURCES[locale]().then(([data, messages]) => sectionsOf(data.default, messages.default));
+    sections = (SOURCES[locale] ?? SOURCES.en!)().then(([data, messages]) => sectionsOf(data.default, messages.default));
     // A load that failed is tried again the next time the picker opens.
     sections.catch(() => loaded.delete(locale));
     loaded.set(locale, sections);

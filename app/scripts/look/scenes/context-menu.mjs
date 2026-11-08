@@ -11,9 +11,9 @@ const keyed = [{ action: "focus", selector: '.mb-col [data-member="2"]' }, { act
 const item = '#app-popover [data-confirm-item]';
 const asked = more => [click(more), wait(item), check("confirm-menu-label"), click(item), check("confirm-menu-asks")];
 const confirmed = more => [...asked(more), click(item), waitGone("#app-popover")];
-const memoryTab = [...details, click('[data-det="tab"][data-tab="settings"]'),click('[data-det="tab"][data-tab="memory"]'), wait('.mb-det [data-mem-space="own"] [data-mem="section-more"]')];
-const ownTitleMore = '.mb-det [data-mem-space="own"] [data-mem="section-more"]';
-const ownSummaryMore = '.mb-det [data-mem-space="own"] [data-mem="summary-more"]';
+const memoryTab = [...details, click('.mb-det [data-det="gear"]'), click('.ms-pane [data-ms="memory"]'), wait('.ms-pane [data-mem-space="own"] [data-mem="section-more"]')];
+const ownTitleMore = '.ms-pane [data-mem-space="own"] [data-mem="section-more"]';
+const ownSummaryMore = '.ms-pane [data-mem-space="own"] [data-mem="summary-more"]';
 const withSummary = { memorySummary: { text: "進行中：規劃週末", updated_at_ms: 1792807200000 } };
 const usageKey = [...settings("models"), click('[data-models-tab="usage"]'), wait('[data-act="key-menu"]')];
 const paired = { messaging: { connected: true, enabled: true, running: true, error: null, bot: { username: "raph_bot" }, allowed: [{ user_id: "42", name: "小晴" }], pending: [] } };
@@ -33,11 +33,11 @@ export default [
   ])),
   scene("context-menu-message", "A right click on Raphael's answer opens the menu of its ⋯", rightClicked(".ra .chat-message[data-reply]")),
   scene("context-menu-key", "Shift+F10 on a focused member row opens the menu of its ⋯ under that button", [column, ...keyed, check("context-menu-key"), ...keyed]),
-  scene("context-menu-memory-title", "A right click on a memory section's title opens the menu of its ⋯, which holds 全部清除", rightClicked('.mb-det [data-mem-space="own"] .mem-head', memoryTab)),
-  scene("context-menu-memory-summary", "A right click on the summary's row opens the menu of its ⋯, which holds 清除", rightClicked('.mb-det [data-mem-space="own"] .mem-summary', memoryTab), withSummary),
+  scene("context-menu-memory-title", "A right click on a memory section's title opens the menu of its ⋯, which holds 全部清除", rightClicked('.ms-pane [data-mem-space="own"] .mem-head', memoryTab)),
+  scene("context-menu-memory-summary", "A right click on the summary's row opens the menu of its ⋯, which holds 清除", rightClicked('.ms-pane [data-mem-space="own"] .mem-summary', memoryTab), withSummary),
   scene("context-menu-api-key", "A right click on the key's row opens the menu of its ⋯, which holds 移除金鑰", rightClicked('.row-key', usageKey)),
   scene("memory-clear-menu", "全部清除 waits in the title's ⋯; its first press asks once more", [...memoryTab, ...asked(ownTitleMore)]),
-  scene("memory-clear-done", "The second press of 全部清除 clears this file and leaves the other alone", [...memoryTab, ...confirmed(ownTitleMore), wait('.mb-det [data-mem-space="own"] .mem-none'), check("memory-clear-done")]),
+  scene("memory-clear-done", "The second press of 全部清除 clears this file and leaves the other alone", [...memoryTab, ...confirmed(ownTitleMore), wait('.ms-pane [data-mem-space="own"] .mem-none'), check("memory-clear-done")]),
   scene("memory-summary-menu", "The summary's 清除 waits in its row's ⋯; its first press asks once more", [...memoryTab, ...asked(ownSummaryMore)], withSummary),
   scene("memory-summary-done", "The second press clears the summary and its row goes", [...memoryTab, ...confirmed(ownSummaryMore), waitGone(".mb-det .mem-summary"), check("memory-summary-done")], withSummary),
   scene("usage-key-menu", "移除金鑰 waits in the key row's ⋯; its first press asks once more", [...usageKey, ...asked('[data-act="key-menu"]')]),

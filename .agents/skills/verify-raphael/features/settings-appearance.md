@@ -1,5 +1,44 @@
 # Settings and appearance
 
+## Interface locale coverage (brief 21, 2026-11-08)
+
+The language data exposes native and English names for fifteen LTR interface locales: zh-TW, en, ja,
+zh-CN, ko, es, fr, de, pt-BR, it, ru, vi, th, id and tr. The original three catalogs retain their source
+copy. New catalogs require every source key and the same formatted fields. Korean, Simplified Chinese
+and Thai use script-specific installed font fallbacks. Localized date and number labels use Intl.
+Fixed core health, error, receipt, permission, messaging, event and store copy and native notices cover
+the same locales. Unknown locales use English. Authored member speech still follows persona/owner
+instructions and the conversation; interface metadata never overrides that policy.
+
+Use the existing appearance and appearance-menu scenes with --locale ko, th and de for representative
+script/long-label checks at both themes and 1120,720,1920x1080. The visual/native locale lists must match
+the app's exposed LOCALES. The native locale sweep covers all fifteen choices; a fixture run alone
+does not prove native settings persistence, recording, paste or provider behavior.
+
+The overlay locale scenes check installed script fonts, visible subtitles and a two-line limit.
+Korean uses a 52-character page budget so a long notice does not accumulate three Hangul lines.
+
+```powershell
+npm run look -- overlay-locale-ko overlay-locale-th overlay-locale-de --theme both --width 1120,720,1920x1080
+```
+
+## 記憶 is a tab, and About's controls are icons (owner, 2026-11-08)
+
+Settings has seven flat tabs: 一般, 記憶, 聽寫與快捷鍵, 工具, 安全, 模型與用量 and 關於. 記憶 holds the shared owner
+memory (`data-mem-space="shared"`); 匯入記憶 is a button at the top right beside the tab's name, as 匯入 CSV in the
+vault, and opens the import under the memory (`memory-import-button` keeps it on the name's line and clear of the
+dialog's ✕; below 820 px the heading row starts lower). 一般 keeps 關於你, 外觀, 拉斐爾 and 啟動,
+with no memory. The memory lists load only while 記憶 is open. 關於's Help is an outward-arrow icon and the
+license a chevron; the shortcuts' and the OpenRouter key's 「變更」 is a pencil. This supersedes the notes below
+that place memory and its import in General.
+
+```powershell
+npm run look -- profile memory about settings-owner settings-memory import-memory import-memory-result dictation models --theme both --width 1120,720,1920x1080
+```
+
+`settings-memory` requires 記憶 to be the current tab; `settings-owner` refuses memory in 一般; `app-memory-import`
+requires the import after the shared memory inside 記憶.
+
 ## Grok Bot's six tabs (owner, 2026-11-07, R-UI-115)
 
 Settings has six flat tabs, as Grok Bot's: 一般, 聽寫與快捷鍵, 工具, 安全, 模型與用量 and 關於. There are no

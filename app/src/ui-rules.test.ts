@@ -31,6 +31,40 @@ test("copy controls use the shared in-place feedback", () => {
 });
 const i18nFiles = mainFiles.filter((f) => f.includes(`${sep}i18n${sep}`) && !f.endsWith(".test.ts"));
 
+test("every button and every menu row takes its height from the shared controls, never a number of its own (owner, 2026-11-08)", () => {
+  // Rows and tiles built from a button (a list row, a card, a day of the calendar, an emoji) and the round edge controls
+  // keep their own sizes. Frozen: it may shrink, never grow.
+  const TILES = /\.(?:conversation-latest|peer-latest|peer-close|draft-av-btn|attachment-file|reaction|au-day-num|cal-more|gr|cs-open|cs-main|conversation-trigger|ho-event|ho-stat|lib-row|ms-open|tpr-row|mb-fold-head|mb-panel-row|mb-chat-choice|mb-rt|question-choices|mc-source|ghost|owner-photo|pv-create|mb-tool|mb-more|mb-avbtn|sidebar-toggle|cmp-pair|cmp-attach|ra-tool|au-members|au-month-grid)\b|::(?:before|after)/;
+  const bad: string[] = [];
+  for (const file of mainFiles.filter((f) => f.endsWith(".css"))) {
+    for (const [, selector, body] of read(file).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      // The rule must style the button itself (its last compound), not an icon inside it.
+      const last = (part: string): string => { const compounds = part.trim().split(/[\s>+~]+/); return compounds[compounds.length - 1] ?? ""; };
+      const targets = selector!.split(",").filter((part) => /\.btn\b|^button\b|menu-choice|menu-action/.test(last(part)) && /\.btn\b|\.menu\b|menu-choice|menu-action/.test(part) && !TILES.test(part) && !/\.icon\b/.test(part));
+      if (!targets.length) continue;
+      for (const [, prop, value] of body!.matchAll(/(?:^|;)\s*(min-height|height)\s*:\s*([^;]+)/g)) {
+        if (!/^(?:auto|0|100%|var\(--h-[\w-]+\))$/.test(value!.trim())) bad.push(`${rel(file)}: ${targets.join(",").trim()} { ${prop}: ${value!.trim()} }`);
+      }
+      // Nor does a padding above and below make it taller than its words: at most 3 px (a menu row's 4 px is its 28 px).
+      const menu = targets.every((part) => /\.menu\b/.test(part));
+      for (const [, prop, value] of body!.matchAll(/(?:^|;)\s*(padding(?:-block|-top|-bottom)?)\s*:\s*([^;]+)/g)) {
+        const vertical = value!.trim().split(/\s+(?![^(]*\))/)[0]!;
+        if (!(menu ? /^(?:0|0px|[1-4]px|var\(--sp-1\))$/ : /^(?:0|0px|[1-3]px)$/).test(vertical)) bad.push(`${rel(file)}: ${targets.join(",").trim()} { ${prop}: ${value!.trim()} }`);
+      }
+    }
+  }
+  expect(bad).toEqual([]);
+});
+
+test("closing is a ×, never a 「關閉」 text button (owner, 2026-11-08: 「上面明明就有叉叉了，為什麼下面還要有關閉」)", () => {
+  for (const file of sources) {
+    const text = read(file);
+    // A text button or a dialog action labelled with the close words.
+    expect(text, rel(file)).not.toMatch(/\bbtn\(\s*(?:esc\()?\s*t\(\s*"(?:common|providers)\.close"\s*\)/);
+    expect(text, rel(file)).not.toMatch(/label:\s*(?:esc\()?\s*t\(\s*"(?:common|providers)\.close"\s*\)/);
+  }
+});
+
 describe("action rows", () => {
   test("primary is last, Cancel immediately precedes it, and destruction is first", () => {
     const html = actionRow({

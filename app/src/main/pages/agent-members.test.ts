@@ -23,6 +23,7 @@ const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { st
   membersRead: vi.fn(),
   membersViewing: vi.fn(),
   membersToolChoices: vi.fn(),
+  membersSkillsList: vi.fn(), membersCommandsList: vi.fn(), membersVoices: vi.fn(),
   membersUpdate: vi.fn(),
   membersCreate: vi.fn(),
   membersGreet: vi.fn(async () => ({ turn_id: 99 })),
@@ -45,6 +46,8 @@ vi.mock("../api", () => api);
 import { Cleared } from "../cleared";
 import { createAgent } from "./agent";
 import { openGroupChat } from "../group-chats";
+import { closeMenu } from "../ui";
+import { resetAsks } from "../chat-ask";
 
 const member = (id: number, more: Partial<Member> = {}): Member => ({
   id, name: `成員${id}`, role: "", instructions: "", avatar: "", group_id: null, model: "", tools: null, position: id, created: 0, unread: false, waiting: false, preview: "", last_at: null, ...more,
@@ -124,6 +127,20 @@ test.each(["member", "page", "room"])("the first unseen turn has its own stable 
   if (leave === "room") { await openGroupChat(1); await flush(); await pick(3); }
   expect(document.querySelector('.thread-new')).toBeNull();
   agent.hide();
+});
+
+test("share sits in a member's conversation header, opposite search, and asks the member to write its template there", async () => {
+  resetAsks(); api.agentAskText.mockResolvedValue({});
+  const agent = mount(); await flush();
+  expect($('[data-act="share-member"]').hidden).toBe(true); // Raphael is the app's own
+  await pick(3);
+  const share = $('.mb-head .ra-tools [data-act="share-member"]');
+  expect(share.hidden).toBe(false);
+  expect($('.mb-head .mb-head-l [data-act="search"]')).not.toBeNull();
+  share.click();
+  $('#app-popover [data-action="0"]').click(); await flush();
+  expect(api.agentAskText).toHaveBeenCalledWith(expect.any(String), [], 3, { intent: "share-template" });
+  closeMenu(); agent.hide();
 });
 
 test("an unread boundary before the newest history page loads its original turn", async () => {
@@ -358,15 +375,20 @@ test("the details panel has no fold button: its left edge drags it, narrower tha
   agent.hide();
 });
 
-test("a closed details panel reads nothing while work runs, and opening it shows the current counts", async () => {
+test("a closed details panel reads nothing while work runs, and the settings page reads its counts only once it is opened", async () => {
   const agent = mount(); await flush(); await pick(3);
   expect(document.querySelector<HTMLElement>(".mb-det")!.hidden).toBe(true);
-  api.core.mockClear();
+  api.core.mockClear(); api.membersSkillsList.mockClear(); api.membersCommandsList.mockClear();
   send({ type: "CoreReady" } as unknown as MainEvent); await flush();
   const read = (): string[] => api.core.mock.calls.map(([method]) => method as string);
-  for (const method of ["memory.get", "members.skills.list", "members.commands.list"]) expect(read()).not.toContain(method);
+  expect(read()).not.toContain("memory.get");
+  expect(api.membersSkillsList).not.toHaveBeenCalled(); expect(api.membersCommandsList).not.toHaveBeenCalled();
+  // The panel no longer counts skills, commands or notes: those are the settings page's.
   await openDetails();
-  for (const method of ["memory.get", "members.skills.list", "members.commands.list"]) expect(read()).toContain(method);
+  expect(read()).not.toContain("memory.get"); expect(api.membersSkillsList).not.toHaveBeenCalled();
+  agent.showSettings(3); await flush();
+  expect(read()).toContain("memory.get");
+  expect(api.membersSkillsList).toHaveBeenCalledWith(3); expect(api.membersCommandsList).toHaveBeenCalledWith(3);
   agent.hide();
 });
 
@@ -377,6 +399,10 @@ test("a restarted core receives the current viewing even with an unchanged roste
   send({ type: "CoreReady" } as unknown as MainEvent); await flush();
   expect(api.membersList).toHaveBeenCalledTimes(1);
   expect(api.membersViewing).toHaveBeenCalledExactlyOnceWith(3);
+  // The open settings page reads what the member has again for the restarted core.
+  agent.showSettings(3); await flush();
+  api.core.mockClear();
+  send({ type: "CoreReady" } as unknown as MainEvent); await flush();
   await vi.waitFor(() => expect(api.core.mock.calls.some(([method]) => method === "memory.get")).toBe(true));
   agent.hide();
 });
@@ -547,6 +573,7 @@ beforeEach(() => { localStorage.clear();
   api.membersRead.mockResolvedValue({});
   api.membersViewing.mockResolvedValue({});
   api.membersToolChoices.mockResolvedValue({ tools: ["web_search", "weather"], connections: [] });
+  api.membersSkillsList.mockResolvedValue({ skills: [], undo: null }); api.membersCommandsList.mockResolvedValue({ commands: [] }); api.membersVoices.mockResolvedValue({ voices: [], configured: false });
   api.toolsetsList.mockResolvedValue({ groups: [] });
   api.routinesList.mockResolvedValue({ routines: [] });
   api.modelsCatalog.mockResolvedValue(null);
@@ -815,11 +842,11 @@ test("a chat event refreshes routines even when its explicit change notification
 });
 
 test("member notifications refresh names, groups, unread dots and the open header", async () => {
-  mount();
+  const agent = mount();
   await flush();
   await pick(3);
   await openDetails();
-  $('[data-det="gear"]').click();
+  agent.showSettings(3);
   const next = structuredClone(LIST);
   next.members[1] = { ...next.members[1], name: "Updated name", role: "Updated role", group_id: 5 };
   next.members[2] = { ...next.members[2], waiting: true, unread: true, preview: "New preview" };
@@ -828,7 +855,7 @@ test("member notifications refresh names, groups, unread dots and the open heade
   send({ type: "MembersChanged" });
   await flush();
   expect($(".mb-pill-t").textContent).toBe("Updated name");
-  expect($<HTMLInputElement>("#mb-det-name").value).toBe("Updated name");
+  expect($<HTMLInputElement>("#ms-name").value).toBe("Updated name");
   expect($(".mb-col").textContent).toContain("New group");
   expect($('.mb-col [data-member="4"]').textContent).toContain("New preview");
   expect($('.mb-col [data-member="4"] .mb-dot')).not.toBeNull();
@@ -837,12 +864,12 @@ test("member notifications refresh names, groups, unread dots and the open heade
 test("memory notifications refresh the visible own and shared lists with correct scope", async () => {
   const document = (text: string) => ({ text, revision: "r", chars: text.length, entries: text ? 1 : 0, limit: 2200, summary: null });
   api.core.mockImplementation(async (method: string) => method === "memory.get" ? document("") : { questions: [] });
-  mount();
+  const agent = mount();
   await flush();
   await pick(3);
   $(".conversation-trigger").click();
-  $('[data-det="gear"]').click();
-  $('[data-tab="memory"]').click();
+  agent.showSettings(3); await flush();
+  $('[data-ms="memory"]').click();
   await flush();
   api.core.mockClear();
   send({ type: "MemoryChanged", member_id: 4, space: "own" });
@@ -1351,18 +1378,18 @@ describe("the details panel", () => {
     expect($(".mb-det").hidden).toBe(false);
   });
 
-  test("renaming the open member in the details panel updates the composer placeholder and thread faces", async () => {
-    mount();
+  test("renaming the open member on its settings page updates the composer placeholder and thread faces", async () => {
+    const agent = mount();
     await flush();
     await pick(3);
     if ($(".mb-det").hidden) $(".conversation-trigger").click();
-    $('[data-det="gear"]').click();
+    agent.showSettings(3);
     api.membersUpdate.mockResolvedValue({ member: { ...LIST.members[1], name: "嚴格老師" } });
     api.membersList.mockResolvedValue({
       ...structuredClone(LIST),
       members: LIST.members.map((m) => (m.id === 3 ? { ...m, name: "嚴格老師" } : m)),
     });
-    const name = $<HTMLInputElement>("#mb-det-name");
+    const name = $<HTMLInputElement>("#ms-name");
     name.focus();
     name.value = "嚴格老師";
     name.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));

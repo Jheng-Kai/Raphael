@@ -263,7 +263,7 @@ test("Models contains no spending and Usage mounts its allowances once, plainly,
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
 });
 
-test("the allowances refresh on completed activity while visible, and are destroyed on pane leave or Settings close", async () => {
+test("the allowances are read once and kept across tabs and Settings closing, refresh on completed activity while visible, and read again by the refresh (owner, 2026-11-08)", async () => {
   const mountAnalytics = vi.spyOn(analytics, "mountUsageAnalytics");
   await mount(); click('[data-models-tab="usage"]'); await flush();
   const first = mountAnalytics.mock.results[0].value;
@@ -275,14 +275,16 @@ test("the allowances refresh on completed activity while visible, and are destro
   click('[data-models-tab="models"]');
   send({ type: "AgentTurn", turn_id: 43 }); await flush();
   expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 2);
+  // Leaving the tab or closing Settings keeps what was read: coming back reads nothing again.
+  click('[data-pane="general"]'); click('[data-pane="models"]'); click('[data-models-tab="usage"]'); await flush();
+  page.hide(); await page.show("models"); click('[data-models-tab="usage"]'); await flush();
   expect(destroyed).not.toHaveBeenCalled();
-  click('[data-pane="general"]');
-  expect(destroyed).toHaveBeenCalledTimes(1);
-  click('[data-pane="models"]'); await flush();
-  expect(page.el.querySelector('[data-models-tab="models"][aria-selected="true"]')).not.toBeNull();
-  click('[data-models-tab="usage"]'); await flush();
-  const secondDestroyed = vi.spyOn(mountAnalytics.mock.results[1].value, "destroy");
-  page.hide(); expect(secondDestroyed).toHaveBeenCalledTimes(1);
+  expect(mountAnalytics).toHaveBeenCalledTimes(1);
+  expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 2);
+  const providerReads = api.providersList.mock.calls.length;
+  click('[data-act="models-refresh"]'); await flush();
+  expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 3);
+  expect(api.providersList.mock.calls.length).toBe(providerReads + 1);
   await page.show("general"); click('[data-pane="models"]'); await flush();
   expect(page.el.querySelector('[data-models-tab="usage"][aria-selected="true"]')).not.toBeNull();
   await page.show("models");
@@ -300,9 +302,8 @@ test("the shared tabs support arrow keys, and Settings has no search (owner, 202
   expect(page.el.querySelector("#set-search")).toBeNull();
 });
 
-test("show awaits the initial allowance reading and leaving during it disposes the stale view", async () => {
+test("show awaits the initial allowance reading, and leaving during it keeps the reading off the page", async () => {
   const result = await api.usageAllowances();
-  const mountAnalytics = vi.spyOn(analytics, "mountUsageAnalytics");
   await mount();
   let finish!: (value: unknown) => void;
   api.usageAllowances.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
@@ -310,9 +311,7 @@ test("show awaits the initial allowance reading and leaving during it disposes t
   const showing = Promise.resolve(page.show("usage")).then(() => { ready = true; });
   await flush();
   expect(ready).toBe(false);
-  const destroyed = vi.spyOn(mountAnalytics.mock.results[0].value, "destroy");
   click('[data-pane="general"]');
-  expect(destroyed).toHaveBeenCalledTimes(1);
   finish(result); await showing; await flush();
   expect(page.pane()).toBe("general");
   expect(page.el.querySelector(".usage-analytics")).toBeNull();

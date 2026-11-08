@@ -37,7 +37,7 @@ const plain = (key: MessageKey): string => (t as (key: MessageKey) => string)(ke
  * no word of Chinese or Japanese is split across two lines (English breaks at its spaces anyway).
  */
 export function clausesHTML(text: string): string {
-  if (getLocale() === "en") return esc(text);
+  if (!["zh-TW", "zh-CN", "ja"].includes(getLocale())) return esc(text);
   return text.split(/(?<=[，、])/u).map(clause => `<span class="cc-clause">${esc(clause)}</span>`).join("");
 }
 
@@ -103,7 +103,7 @@ const APP_NAMES: Record<string, string> = { gmail: "Gmail", googlecalendar: "Goo
 export function resumedLineHTML(turn: AgentTurn): string {
   const apps = turn.resumed_apps ?? [];
   if (!apps.length) return "";
-  const names = apps.map((app, index) => turn.resumed_app_names?.[index] ?? APP_NAMES[app] ?? app).join(getLocale() === "en" ? ", " : "、");
+  const names = apps.map((app, index) => turn.resumed_app_names?.[index] ?? APP_NAMES[app] ?? app).join(["zh-TW", "zh-CN", "ja"].includes(getLocale()) ? "、" : ", ");
   return `<div class="conversation-event-line" data-resumed="${esc(turn.id)}">` +
     eventLineHTML(t("card.resumed", { p0: NAME }), appMarkHTML(apps[0], turn.resumed_app_logos?.[0]), names) + `</div>`;
 }

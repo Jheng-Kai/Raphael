@@ -4,6 +4,23 @@ Owner decision 2026-10-30: Settings > Connections is the only connected-app entr
 The sidebar has no app entry or badge. The installed tab retains the shared inventory
 count and its unknown/loading state; connection and permission behavior is unchanged.
 
+## The store is only what is not added yet; n8n is a preset (owner, 2026-11-08)
+
+The store is one list, 「全部」 (or the chosen chip's name), of the apps not added yet: no 已連結 and no 常用
+sections. Popular apps still lead it while browsing, in bounded 18-card pages. n8n is offered as the owner's
+own server (`PRESET_FORMS` in `connections.ts`): it runs at each owner's own address and has no Composio
+toolkit, so the built-in catalogue (fixed official addresses only) cannot carry it. Its row says 「需要自己的
+伺服器」; 加入 opens the server form with type http, name n8n and `Authorization=Bearer ` filled in and the
+address field focused (placeholder `https://n8n.example.com/mcp-server/http`). A connection whose name or host
+is n8n takes it out of the store.
+
+```powershell
+npm run look -- store-n8n plugins-store plugins-store-key plugins-store-all --theme both --width 1120,720,1920x1080
+```
+
+`plugins-store` requires the single section and no 已安裝 state; `store-n8n` and `store-n8n-form` check the mark,
+the need words, the filled form and the focus.
+
 
 ## Owner round 10 connected apps and chosen models
 

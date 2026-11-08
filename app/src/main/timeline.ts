@@ -35,7 +35,6 @@ import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draf
 import { messageHTML, replyContentHTML } from "./message-content";
 import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
-import { previewCardsHTML } from "./link-previews";
 import { formatUsd } from "./format";
 import { formatPerMtok } from "./pricing";
 import { SERVICE_ICONS, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
@@ -638,7 +637,8 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
   return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
     (reply && origin && sourceOf(turn) === "routine" ? routineLineHTML(turn) : "") +
     (reply ? replyContentHTML(text, query, turn.status === "running") : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`) +
-    reactionRowHTML(turn.reactions?.[key]) + messageActionsHTML(time, regenerate, undefined, reply, reply ? workActionHTML(turn, state) + retry : "") + (reply ? previewCardsHTML(text) : "") + `</div>`;
+    // Its links are chips in its words, with no row of cards under it (owner, 2026-11-08; link-previews.ts).
+    reactionRowHTML(turn.reactions?.[key]) + messageActionsHTML(time, regenerate, undefined, reply, reply ? workActionHTML(turn, state) + retry : "") + `</div>`;
 }
 
 /** A failed reply's Run again: a bare icon first among its actions, which stay in sight on the latest failure. */

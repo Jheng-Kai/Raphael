@@ -78,7 +78,6 @@
   --pa-dock-bottom: calc(28px + 8 * var(--pa-u));
   --pa-ask-face: calc(30px + 14 * var(--pa-u));
   --pa-ask-fs: var(--fs-md);
-  --pa-ask-btn: calc(32px + 12 * var(--pa-u));
   --pa-ask-r: var(--r-lg);
   --pa-hi: var(--fs-h1);
   --pa-hero-m: calc(96px + 24 * var(--pa-u));
@@ -92,7 +91,6 @@
   --pa-dtab-h: calc(var(--h-tab) + 4 * var(--pa-u));
   --pa-dlabel: var(--fs-xs);
   --pa-dfs: var(--fs-sm);
-  --pa-dctl: calc(32px + 12 * var(--pa-u));
   --pa-rt-t: var(--fs-sm);
   --pa-rt-s: var(--fs-xs);
   /* the dialogs and the menus */
@@ -103,8 +101,6 @@
   --pa-dlg-lab: calc(76px + 28 * var(--pa-u));
   --pa-new-av: calc(64px + 24 * var(--pa-u));
   --pa-preset: calc(40px + 12 * var(--pa-u));
-  --pa-menu-fs: var(--fs-sm);
-  --pa-menu-h: calc(34px + 10 * var(--pa-u));
 }
 
 /* The page's columns (the members, the chat, the details) are in members.css; the chat holds the
@@ -125,7 +121,7 @@
    ring of styles.css, which loads later, would draw a box inside the pill. */
 .ra-find-input:focus-visible { outline: 0; }
 .ra-find-count { font-size: var(--pa-sys); color: var(--text-3); }
-.page-agent .ra-find .btn.ra-tool { width: calc(30px + 8 * var(--pa-u)); min-height: calc(30px + 8 * var(--pa-u)); }
+.page-agent .ra-find .btn.ra-tool { width: var(--h-ctl); min-height: var(--h-ctl); }
 
 /* ---------- the stage ---------- */
 .ra-stage { grid-row: 3; position: relative; display: flex; flex-direction: column; min-height: 0; }
@@ -207,7 +203,7 @@
 .message-tooltip { position: fixed; z-index: 100; pointer-events: none; max-width: calc(100vw - 16px); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--panel); color: var(--text); box-shadow: var(--pop); font: var(--fs-2xs)/1.5 var(--ui); }
 .message-tooltip { white-space: pre-line; overflow-wrap: anywhere; }
 .message-tooltip[hidden], :has([data-cancel-armed="true"]) > .message-tooltip { display: none; }
-.page-agent .btn.quote-pill { position: fixed; z-index: 99; width: auto; min-height: 32px; padding: var(--sp-1) var(--sp-3); gap: var(--sp-1); border: 1px solid var(--edge); border-radius: var(--r-pill); background: var(--panel); color: var(--text); box-shadow: var(--pop); font: var(--fs-xs)/1.5 var(--ui); }
+.page-agent .btn.quote-pill { position: fixed; z-index: 99; width: auto; min-height: var(--h-ctl); padding: 3px var(--sp-3); gap: var(--sp-1); border: 1px solid var(--edge); border-radius: var(--r-pill); background: var(--panel); color: var(--text); box-shadow: var(--pop); font: var(--fs-xs)/calc(var(--h-ctl) - 8px) var(--ui); }
 .page-agent .btn.quote-pill[hidden], .cmp-quote[hidden] { display: none; }
 .message-quote { display: block; min-width: 0; max-width: 100%; padding: 0; padding-inline-start: 10px; border: 0; border-inline-start: 2px solid var(--accent-text); margin-block-end: 8px; white-space: normal; color: var(--text-2); font: var(--fs-xs)/1.5 var(--ui); }
 button.message-quote { width: 100%; text-align: start; background: none; cursor: pointer; }
@@ -227,10 +223,16 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .bubble > .btn.message-expand { margin-top: var(--sp-1); margin-inline-start: calc(-1 * var(--sp-2)); align-self: flex-start; font: inherit; color: inherit; border-color: transparent; background: transparent; padding-inline: var(--sp-2); }
 .bubble > .btn.message-expand:hover:not(:disabled) { background: color-mix(in srgb, currentColor 14%, transparent); border-color: transparent; }
 .bubble > .btn.message-expand:active:not(:disabled) { background: color-mix(in srgb, currentColor 22%, transparent); border-color: transparent; }
-.chat-message:has(> .preview-cards) { width: 100%; grid-template-columns: minmax(0, 1fr) auto; }
-.preview-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); width: min(calc(440px + 120 * var(--pa-u)), 100%); min-width: 0; }
-/* Every link card has one height, whatever its page gave: cards of two heights under one reply looked uneven. */
-.page-agent .btn.preview-card { display: flex; align-items: center; justify-content: flex-start; gap: var(--sp-3); width: 100%; height: 88px; min-height: 88px; padding: var(--sp-2) var(--sp-3); text-align: start; white-space: normal; border-inline-start: 3px solid var(--accent-text); background: var(--surface-2); border-radius: var(--r-sm); overflow: hidden; }
+/* A link is a chip in the words, as Grok Bot's source chips (owner, 2026-11-08): the site's mark, then its name. */
+.link-chip { font-weight: var(--weight-medium); }
+.link-chip .link-mark { display: inline-flex; vertical-align: -3px; margin-inline-end: var(--sp-1); color: inherit; }
+.link-chip .link-mark .i, .link-chip .link-mark .logo { display: block; width: 16px; height: 16px; }
+.link-chip .link-mark.logo-mono[style] { color: var(--brand); }
+.link-chip .link-mark.logo-art .lg-d { display: none; }
+:root[data-theme="dark"] .link-chip .link-mark.logo-art .lg-d { display: block; }
+:root[data-theme="dark"] .link-chip .link-mark.logo-art .lg-l:has(+ .lg-d) { display: none; }
+/* The page's preview, under the pointer only, drawn as a menu is: it never takes a row of the conversation. */
+.link-hover { position: fixed; z-index: 130; display: flex; align-items: center; gap: var(--sp-3); width: min(calc(360px + 60 * var(--pa-u)), calc(100vw - 16px)); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--menu); border: 1px solid var(--edge); box-shadow: var(--pop); pointer-events: none; }
 .preview-image { flex: none; width: 64px; height: 64px; object-fit: cover; border-radius: var(--r-sm); }
 .preview-meta { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); flex: 1; }
 .preview-site { font: var(--fs-2xs)/1.5 var(--ui); color: var(--accent-text); }
@@ -260,7 +262,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .media-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2); min-width: 0; }
 .media-bar > .media-meta { flex: 1 1 180px; }
 .media-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--sp-1); }
-.page-agent .btn.sm.media-open, .page-agent .btn.sm.media-expand { gap: var(--sp-1); min-height: calc(26px + 6 * var(--pa-u)); padding: var(--sp-1) var(--sp-2); font-size: var(--pa-sys); }
+.page-agent .btn.sm.media-open, .page-agent .btn.sm.media-expand { gap: var(--sp-1); }
 .media-open .i { width: 16px; height: 16px; }
 .page-agent .btn.media-img-btn { display: block; width: 100%; padding: 0; border: 0; border-radius: var(--r-sm); background: var(--surface-2); overflow: hidden; cursor: zoom-in; }
 .page-agent .btn.media-img-btn:hover:not(:disabled) { background: var(--hover); filter: brightness(0.98); }
@@ -375,7 +377,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 
 /* what was done: one line that opens on the steps */
 .steps { display: grid; grid-template-columns: minmax(0, 1fr); }
-.page-agent .btn.steps-sum { justify-self: start; gap: var(--sp-1); min-height: var(--pa-small-btn); padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-1); margin-left: -4px; border-color: transparent; background: transparent; border-radius: var(--r-sm); font-size: var(--pa-sys); color: var(--text-3); }
+.page-agent .btn.steps-sum { justify-self: start; gap: var(--sp-1); min-height: var(--h-ctl-sm); padding: 1px var(--sp-2) 1px var(--sp-1); margin-left: -4px; border-color: transparent; background: transparent; border-radius: var(--r-sm); font-size: var(--pa-sys); color: var(--text-3); }
 .page-agent .btn.steps-sum:hover:not(:disabled) { background: var(--hover); border-color: transparent; color: var(--text-2); }
 .page-agent .btn.steps-sum:active:not(:disabled) { background: var(--pressed); }
 .steps-chev { display: inline-grid; place-items: center; width: 16px; }
@@ -410,7 +412,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* a background task: a card that changes where it is */
 .task { border: 1px solid var(--edge); background: var(--panel); border-radius: var(--r-lg); padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-1); }
 .task-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); }
-.page-agent .btn.task-sum { flex: 1; justify-content: flex-start; gap: var(--sp-2); min-width: 0; min-height: calc(30px + 8 * var(--pa-u)); padding: var(--sp-1) var(--sp-1); border-color: transparent; background: transparent; font-size: var(--pa-fs-d); font-weight: var(--weight-semibold); color: var(--text); }
+.page-agent .btn.task-sum { flex: 1; justify-content: flex-start; gap: var(--sp-2); min-width: 0; min-height: var(--h-ctl); padding: 3px var(--sp-1); border-color: transparent; background: transparent; font-size: var(--pa-fs-d); font-weight: var(--weight-semibold); color: var(--text); }
 .page-agent .btn.task-sum:hover:not(:disabled) { background: var(--hover); border-color: transparent; }
 .page-agent .btn.task-sum:active:not(:disabled) { background: var(--pressed); }
 .task-mark { display: inline-grid; place-items: center; width: 16px; height: 16px; color: var(--text-3); }
@@ -423,7 +425,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .task-sum .steps-chev .i { transform: rotate(-90deg); }
 .task[data-open="true"] .task-sum .steps-chev .i { transform: none; }
 .task .steps-list { margin: var(--sp-1) 0 var(--sp-1) var(--sp-1); }
-.page-agent .btn.sm.stop, .page-agent .btn.sm.rerun { min-height: calc(26px + 6 * var(--pa-u)); padding: var(--sp-1) var(--sp-3); font-size: var(--pa-sys); }
+.page-agent .btn.sm.stop, .page-agent .btn.sm.rerun { padding-inline: var(--sp-3); }
 
 /* under way: a turning ring, and light passing over what is being done */
 .spin { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: var(--r-pill); border: 2px solid var(--track); border-top-color: var(--accent-text); animation: ra-spin 0.8s linear infinite; }
@@ -450,7 +452,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .cmp-bar { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
 .cmp-bar-fill { flex: 1; min-width: 0; }
 .cmp-model:empty { display: none; }
-.composer .btn.cmp-mode { gap: var(--sp-1); min-height: 32px; padding-inline: var(--sp-2); border-color: transparent; background: transparent; color: var(--text-2); font-size: var(--fs-xs); white-space: nowrap; }
+.composer .btn.cmp-mode { gap: var(--sp-1); min-height: var(--h-ctl); padding-inline: var(--sp-2); border-color: transparent; background: transparent; color: var(--text-2); font-size: var(--fs-xs); white-space: nowrap; }
 .composer .btn.cmp-mode:hover:not(:disabled) { color: var(--text); }
 .composer .btn.cmp-mode:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
 .composer .btn.cmp-mode .i { width: 16px; height: 16px; }
@@ -542,11 +544,11 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .attachment-picture img { display: block; width: 100%; max-height: 300px; object-fit: contain; }
 .attachment-video video { display: block; width: 100%; max-height: 300px; border-radius: var(--r-lg); background: var(--surface-2); }
 .attachment-grid.is-multiple .attachment-picture img, .attachment-grid.is-multiple video { aspect-ratio: 4 / 3; object-fit: cover; }
-.btn.attachment-open { position: absolute; top: 6px; right: 6px; width: 28px; min-height: 28px; border-radius: var(--r-sm); background: var(--panel); color: var(--text); opacity: 0; pointer-events: none; transition: opacity 0.12s ease; }
+.btn.attachment-open { position: absolute; top: 6px; right: 6px; width: var(--h-ctl); min-height: var(--h-ctl); border-radius: var(--r-sm); background: var(--panel); color: var(--text); opacity: 0; pointer-events: none; transition: opacity 0.12s ease; }
 .me-file:hover > .attachment-open, .me-file:focus-within > .attachment-open { opacity: 1; pointer-events: auto; }
 .attachment-audio { display: flex; align-items: center; gap: var(--sp-2); width: 320px; height: 64px; padding: var(--sp-1) var(--sp-3) var(--sp-1) var(--sp-2); border-radius: var(--r-pill); background: var(--surface-2); }
 .attachment-audio audio { display: none; }
-.btn.attachment-play { flex: 0 0 32px; width: 32px; min-height: 32px; border-radius: var(--r-sm); background: var(--panel); }
+.btn.attachment-play { flex: 0 0 var(--h-ctl); width: var(--h-ctl); min-height: var(--h-ctl); border-radius: var(--r-sm); background: var(--panel); }
 .attachment-audio-body { display: flex; flex-direction: column; gap: var(--sp-1); flex: 1; min-width: 0; padding-right: var(--sp-5); }
 .attachment-audio .attachment-name { font-size: var(--fs-xs); }
 .attachment-audio input { width: 100%; height: 12px; margin: 0; padding: 0; accent-color: var(--accent-text); }
@@ -560,10 +562,10 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .ask-face .av { --av: var(--pa-ask-face) !important; }
 .ask-q { margin: 0; max-height: min(42vh, 320px); overflow-y: auto; white-space: pre-wrap; font: 500 var(--pa-ask-fs)/1.6 var(--voice); color: var(--rg-ink); overflow-wrap: anywhere; }
 .ask-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
-.page-agent .btn.ask-no, .page-agent .btn.ask-always { min-height: var(--pa-ask-btn); padding: 4px calc(14px + 4 * var(--pa-u)); border-color: var(--rg-edge); background: transparent; color: var(--rg-ink); font-size: var(--fs-xs); font-weight: var(--weight-semibold); }
+.page-agent .btn.ask-no, .page-agent .btn.ask-always { min-height: var(--h-ctl); padding: 3px calc(14px + 4 * var(--pa-u)); border-color: var(--rg-edge); background: transparent; color: var(--rg-ink); font-size: var(--fs-xs); font-weight: var(--weight-semibold); }
 .page-agent .btn.ask-no:hover:not(:disabled), .page-agent .btn.ask-always:hover:not(:disabled) { background: var(--rg-glow); border-color: var(--rg-edge); }
 .page-agent .btn.ask-no:active:not(:disabled), .page-agent .btn.ask-always:active:not(:disabled) { background: var(--pressed); }
-.page-agent .btn.ask-yes { position: relative; overflow: hidden; min-height: var(--pa-ask-btn); padding: 4px calc(16px + 6 * var(--pa-u)); border-color: var(--rg-btn); background: var(--rg-btn); color: var(--rg-on); font-size: var(--fs-xs); font-weight: var(--weight-semibold); }
+.page-agent .btn.ask-yes { position: relative; overflow: hidden; min-height: var(--h-ctl); padding: 3px calc(16px + 6 * var(--pa-u)); border-color: var(--rg-btn); background: var(--rg-btn); color: var(--rg-on); font-size: var(--fs-xs); font-weight: var(--weight-semibold); }
 .page-agent .btn.ask-yes:hover:not(:disabled) { background: var(--rg-btn); border-color: var(--rg-btn); filter: brightness(1.05); }
 .page-agent .btn.ask-yes:active:not(:disabled) { background: color-mix(in srgb, var(--rg-btn) 85%, var(--text)); filter: none; }
 .ask-yes-t { position: relative; z-index: 1; }
@@ -677,7 +679,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .page-agent .btn.icon.draft-remove:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
 .draft-card-blurb { min-width: 0; }
 .draft-more { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); min-width: 0; }
-.page-agent .btn.draft-more-toggle { justify-self: start; display: inline-flex; align-items: center; gap: var(--sp-1); max-width: 100%; min-height: 26px; padding: 2px var(--sp-2) 2px var(--sp-1); border-color: transparent; background: transparent; border-radius: var(--r-sm); color: var(--text-2); font-size: var(--fs-2xs); font-weight: 500; }
+.page-agent .btn.draft-more-toggle { justify-self: start; display: inline-flex; align-items: center; gap: var(--sp-1); max-width: 100%; min-height: var(--h-ctl-sm); padding: 1px var(--sp-2) 1px var(--sp-1); border-color: transparent; background: transparent; border-radius: var(--r-sm); color: var(--text-2); font-size: var(--fs-2xs); font-weight: 500; }
 .page-agent .btn.draft-more-toggle:hover:not(:disabled) { background: var(--hover); border-color: transparent; color: var(--text); }
 .page-agent .btn.draft-more-toggle:active:not(:disabled) { background: var(--pressed); }
 .draft-more.is-open .draft-more-toggle .steps-chev .i { transform: rotate(90deg); }
@@ -690,7 +692,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 
 /* settled one-line summary in conversation */
 .draft-done { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); justify-self: start; max-width: 100%; min-width: 0; }
-.page-agent .btn.draft-done-sum { justify-self: start; display: inline-flex; align-items: center; gap: var(--sp-2); max-width: 100%; min-height: 36px; padding: var(--sp-1) var(--sp-3); border: 1px solid var(--edge); border-radius: var(--r-lg); background: var(--panel); color: var(--text); font-size: var(--fs-sm); font-weight: 500; }
+.page-agent .btn.draft-done-sum { justify-self: start; display: inline-flex; align-items: center; gap: var(--sp-2); max-width: 100%; min-height: var(--h-ctl); padding: 3px var(--sp-3); border: 1px solid var(--edge); border-radius: var(--r-lg); background: var(--panel); color: var(--text); font-size: var(--fs-sm); font-weight: 500; }
 .page-agent .btn.draft-done-sum:hover:not(:disabled) { background: var(--hover); }
 .page-agent .btn.draft-done-sum:active:not(:disabled) { background: var(--pressed); }
 .draft-done-mark { display: inline-grid; place-items: center; width: 16px; height: 16px; color: var(--ok); flex: none; }

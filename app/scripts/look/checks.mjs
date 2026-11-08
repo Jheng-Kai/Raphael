@@ -33,8 +33,9 @@ export function checkRendered(name, context = {}) {
       require(rows.map(row => row.dataset.tplGo).join() === 'context,routines,integrations' && rows.every(row => row.tagName === 'BUTTON' && visible(row.querySelector('svg.i'))), `three rows that open pages: ${rows.map(row => row.dataset.tplGo)}`);
       require(/指示/.test(rows[0].textContent) && rows[1].textContent.includes(template.routines[0].title), "each row says what is inside");
       require(!body.querySelector('.tpl-card, [data-tpl-skill], .card-detail'), "no long list of everything on the first page");
-      const foot = dialog.querySelector('.mb-dlg-act .btn');
-      require(visible(foot), "the dialog's own button stays at its foot");
+      // Its foot is its own next step (加入, 發佈) when it has one; closing is the × alone, never a 「關閉」 (owner, 2026-11-08).
+      const foot = [...dialog.querySelectorAll('.mb-dlg-act .btn')];
+      require(foot.every(visible) && !foot.some(button => button.dataset.dlg === "close" || button.textContent.trim() === "關閉"), "no 「關閉」 under the dialog's ×");
     } else {
       require(dialog.dataset.page !== 'main' && visible(back) && title.textContent.trim() && getComputedStyle(title).textAlign === 'center', "a page has a back arrow and its title in the middle of the head");
     }
@@ -431,11 +432,24 @@ export function checkRendered(name, context = {}) {
     require(section.querySelector('[data-k="auto-update"]').getAttribute("aria-checked") === (name === "app-update-auto" ? "true" : "false"), "auto updates are opt-in");
     return {check:name};
   }
+  if (name === "memory-import-button") {
+    // 匯入記憶 at the top right beside the tab's name, as 匯入 CSV in the vault (owner, 2026-11-08), clear of the dialog's ✕.
+    const button = document.querySelector('.set-head [data-import="open"]'), title = document.querySelector('#set-title');
+    require(visible(button) && button.textContent.trim() === "匯入記憶", "匯入記憶 stands in the tab's heading row");
+    const b = button.getBoundingClientRect(), h = title.getBoundingClientRect();
+    require(Math.abs((b.top + b.bottom) / 2 - (h.top + h.bottom) / 2) < 6 && b.left > h.right, "it sits beside the name, on its line, at the right");
+    const close = document.querySelector('.modal .modal-x');
+    require(visible(close), "the dialog's ✕ is there");
+    const c = close.getBoundingClientRect();
+    require(b.right <= c.left - 4 || b.top >= c.bottom + 4, "it keeps clear of the dialog's ✕");
+    require(!document.querySelector('[data-memory-import]'), "closed, nothing else of the import is drawn");
+    return { check: name };
+  }
   if (name === "app-memory-import" || name === "app-memory-result") {
     const imported = document.querySelector("[data-memory-import]");
     const owner = imported?.parentElement;
     const shared = owner?.querySelector('[data-mem-space="shared"]');
-    require(owner?.querySelector("h2")?.textContent === "關於你" && shared && !!(shared.compareDocumentPosition(imported) & Node.DOCUMENT_POSITION_FOLLOWING), "memory import follows shared memory inside About you");
+    require(document.querySelector("#set-title")?.textContent === "記憶" && shared && !!(shared.compareDocumentPosition(imported) & Node.DOCUMENT_POSITION_FOLLOWING), "memory import follows shared memory inside the 記憶 tab (owner, 2026-11-08)");
     require(visible(document.querySelector("[data-import-prompt]")), "handover prompt is visible");
     require(visible(document.querySelector("[data-import-answer]")), "owner answer field is visible");
     for (const field of document.querySelectorAll(".memory-import textarea")) {
@@ -585,7 +599,7 @@ export function checkRendered(name, context = {}) {
     const selectors = ['.computer-lifecycle-state', '[data-computer-location]', '[data-computer-menu]'];
     require(!!visible(header.querySelector('.computer-lifecycle-state')) === running, 'the header names the state only while the computer runs');
     const nodes = selectors.map(selector => header.querySelector(selector)).filter(node => visible(node) && (node.matches('button') || node.textContent.trim()));
-    require(nodes.length === (running ? 3 : 2) && visible(document.querySelector('[data-det="share"]')) && visible(document.querySelector('[data-det="close"]')), 'computer controls stay in their tab while share and close remain available (the gear is hidden since 415811f0)');
+    require(nodes.length === (running ? 3 : 2) && visible(document.querySelector('[data-det="gear"]')) && visible(document.querySelector('[data-det="close"]')), 'computer controls stay in their tab while the gear and close remain available');
     const bounds = header.getBoundingClientRect(), boxes = nodes.map(node => node.getBoundingClientRect());
     for (let i = 0; i < boxes.length; i++) {
       const box = boxes[i];
@@ -706,7 +720,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, button: Math.round(pick.width) };
   }
   if (name.startsWith("skills-") || ["growing-skills", "member-shared-source"].includes(name)) {
-    for (const label of document.querySelectorAll('[data-skill-provenance], .mp-resource p, .cs-item .ds, .cs-dialog > .cs-desc')) {
+    for (const label of document.querySelectorAll('[data-skill-provenance], .mp-resource p, .ms-meta, .cs-item .ds, .cs-dialog > .cs-desc')) {
       const text = label.textContent.trim(), title = label.getAttribute('title') ?? '';
       require(!/^(learned|owner|imported)$/i.test(text) && !/(?:local:|github:|plugin:|[/\\]plugins[/\\]cache[/\\])/i.test(text + title), "R-SKILL-08: skill origins never show raw source values or plugin cache paths");
     }
@@ -990,8 +1004,8 @@ export function checkRendered(name, context = {}) {
         require(Math.abs(box.height - box.width * 900 / 1280) <= 2, 'the sleeping screen keeps the running screen proportions instead of stretching');
       }
     } else if (name === 'level-gear') {
-      require(visible(panel.querySelector('.mb-who')) && visible(panel.querySelector('#mb-det-name')) && visible(panel.querySelector('[data-det="back"]')), 'identity and Back are available through the gear');
-      require(!visible(desktop) && !panel.querySelector('[data-tab="routines"]'), 'settings has no separate computer or routines page');
+      require(visible(document.querySelector('.ms-pane .ms-face')) && visible(document.querySelector('.ms-pane #ms-name')) && visible(document.querySelector('.ms-pane [data-ms="back"]')), 'identity and Back are on the settings page the gear opens');
+      require((innerWidth < 860 || visible(panel)) && panel.querySelector('[data-det="gear"]') && !panel.querySelector('[data-tab="routines"], [data-tab="settings"]'), 'the panel stays beside the page (a window under 860 px closes it first), with its gear and no settings tab');
     } else if (name === 'level-routine') {
       require(visible(document.querySelector('.au-routine-dialog [data-dlg="enabled"]')), 'pausing belongs inside the routine');
     } else if (name === 'level-strip') {
@@ -1028,8 +1042,8 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "menu-hide-control") {
-    const hide = document.querySelector('[data-det="hide"]');
-    require(visible(hide) && hide.querySelectorAll('svg').length === 1, "Hide has only its action icon");
+    const hide = document.querySelector('#app-popover [data-pick="hide"]');
+    require(visible(hide) && hide.querySelectorAll('svg').length === 1 && !hide.hasAttribute('aria-haspopup'), "Hide has only its action icon, and no submenu or page behind it");
     const box = hide.getBoundingClientRect();
     require(box.top >= 0 && box.bottom <= innerHeight, `the action under review is inside the screenshot (${box.top}, ${box.bottom}; height ${innerHeight})`);
     return { check: name };
@@ -1157,6 +1171,26 @@ export function checkRendered(name, context = {}) {
       return {check:name};
     }
     const form = document.querySelector('.au-routine-dialog');
+    if (name === 'moving-routine-rows') {
+      // When it runs, as rows: 重複 one dropdown, the start, the time and only the row its choice needs, every word in sight
+      // (owner, 2026-11-08: 「這真的太亂了，還有一些字被隱藏起來」).
+      const rows = [...form.querySelectorAll('.au-rows > .au-row')];
+      require(rows.length >= 3 && visible(form.querySelector('.au-rows [data-dlg="kind-menu"]')) && !form.querySelector('[data-dlg="kind"]'), "重複 is one dropdown on the first row, never a row of chips");
+      const box = form.getBoundingClientRect();
+      for (const row of rows) {
+        const r = row.getBoundingClientRect();
+        require(r.left >= box.left - 1 && r.right <= box.right + 1, "a row stays inside the dialog");
+        for (const words of row.querySelectorAll('.au-row-label, .sel > span, .btn, .au-days .btn')) {
+          require(words.scrollWidth <= words.clientWidth + 1, `no words are cut: ${words.textContent.trim()}`);
+          const w = words.getBoundingClientRect();
+          require(w.right <= r.right + 1 && w.left >= r.left - 1, `${words.textContent.trim()} stays in its row`);
+        }
+      }
+      const prompt = form.querySelector('#au-prompt');
+      require(prompt.scrollHeight <= prompt.clientHeight + 2, "the instructions show whole, with no scroll inside the box");
+      require(!form.querySelector('.is-reserved, .au-repeat-options'), "no empty reserved space");
+      return { check: name, rows: rows.length };
+    }
     if (name === 'moving-sentence') {
       const line = document.querySelector('button[data-act="open-routine"]');
       require(visible(line) && line.closest('.chat-message .routine-origin') && line.textContent.trim(), 'the routine name is a real button inside its reply');
@@ -1584,9 +1618,9 @@ export function checkRendered(name, context = {}) {
   }
   if (name.startsWith("routine-event-")) {
     if (name === "routine-event-profile") {
-      const list = document.querySelector('.mp-routine-list');
-      require(visible(list) && list.textContent.includes('Gmail') && list.textContent.includes('client@example.com') && list.textContent.includes('上次檢查'), 'the profile shares readable trigger rows');
-      require(visible(list.querySelector('[role="switch"]')), 'the profile keeps the existing switch');
+      const list = document.querySelector('.mb-rts');
+      require(visible(list) && list.textContent.includes('Gmail') && list.textContent.includes('client@example.com') && list.textContent.includes('上次檢查'), 'the panel shows readable trigger rows');
+      require(visible(list.querySelector('[data-det="routine-toggle"]')), 'each routine keeps its own switch');
       return { check: name };
     }
     const row = document.querySelector('[data-routine="90"]');
@@ -1756,7 +1790,10 @@ export function checkRendered(name, context = {}) {
         require(!pill, 'a template and its unconnected requests have no invented status');
       } else {
         require(pill && pill.textContent.trim(), 'status always has a word');
-        require(Math.abs(pill.getBoundingClientRect().right - (box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth))) < 1.5, 'pill aligns with the right padding');
+        // A failed card's × closes the head at the right (owner, 2026-11-08); otherwise the status does.
+        const end = card.querySelector(':scope > .card-head > .card-close') ?? pill;
+        require(Math.abs(end.getBoundingClientRect().right - (box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth))) < 1.5, 'the head ends at the right padding');
+        if (end !== pill) require(pill.getBoundingClientRect().right <= end.getBoundingClientRect().left + 1, 'the status stands just before the ×');
       }
       // The computer screen's own character (booting, or saying its state in one sentence) belongs to the screen.
       require(![...card.querySelectorAll('.av,.slime,.ask-face,.bgq-face,.draft-face')].some(face => !face.closest('[data-card-desktop-screen] .desktop-boot-face, [data-card-screen] .desktop-boot-face')), 'no face is inside a card outside its computer screen');
@@ -1959,7 +1996,8 @@ export function checkRendered(name, context = {}) {
     if (name === "rich-source") require(!diagram.querySelector('pre').hidden && diagram.querySelector('[data-rich-act="view-source"]').getAttribute('aria-expanded') === 'true', "source toggle reveals complete source");
     if (name === "rich-expand") {
       const dialog = document.querySelector('.rich-view-dialog');
-      require(visible(dialog?.querySelector('.diagram-view svg')) && dialog.querySelector('[data-dlg="close"]'), "expanded diagram uses the shared accessible dialog");
+      require(visible(dialog?.querySelector('.diagram-view svg')) && dialog.querySelector('.mb-dlg-head [data-dlg="close"]'), "expanded diagram uses the shared accessible dialog");
+      require(!dialog.querySelector('.mb-dlg-act'), "its × closes it, with no 「關閉」 at its foot (owner, 2026-11-08)");
       require(dialog.getBoundingClientRect().width >= Math.min(1200, innerWidth - 48) - 1, "expanded view uses the large viewport-bound dialog width");
     }
     if (name === "rich-image") require(scope.querySelector('[data-rich-act="load-image"]') && !scope.querySelector('.message-image [src]'), "a real load control precedes any image source");
@@ -2238,16 +2276,30 @@ export function checkRendered(name, context = {}) {
     require(presence.length === 1 && presence[0].getBoundingClientRect().top >= newest.getBoundingClientRect().bottom, "live work stays under the newest addition");
     return {check:name,at};
   }
-  if (name === "preview-card-wide") {
-    const cards = [...document.querySelectorAll('.thread .preview-card')].filter(visible);
-    require(cards.length === 2, `both links have a card: ${cards.length}`);
-    const room = cards[0].closest('.ra-body').getBoundingClientRect().width, widths = cards.map(card => card.getBoundingClientRect().width);
-    for (const width of widths) require(width >= Math.min(440, room) - 1, `a card is as wide as the media cards, whatever its words: ${width} of ${room}`);
-    require(widths[0] === widths[1], `an internal address and a public one are the same width: ${widths}`);
-    const internal = cards[0].querySelector('.preview-meta').innerText;
-    require(internal.split(/\n/).filter(line => line.includes("127.0.0.1")).length === 1, `the address is not repeated: ${internal}`);
-    for (const line of cards[0].querySelectorAll('.preview-meta > span')) require(line.scrollWidth <= cards[0].clientWidth, "the words stay inside the card");
-    return {check:name,widths};
+  if (name === "link-chips") {
+    // As Grok Bot's source chips (owner, 2026-11-08): each link once, in the words, with no row of cards under the reply.
+    const reply = [...document.querySelectorAll('.thread .chat-message[data-reply]')].filter(visible).at(-1);
+    const chips = [...reply.querySelectorAll('a.link-chip')];
+    require(chips.length === 2 && !document.querySelector('.preview-card, .preview-cards'), `two link chips and no cards: ${chips.length}`);
+    const line = parseFloat(getComputedStyle(reply.querySelector('.message-text')).lineHeight) || 26;
+    for (const chip of chips) {
+      const mark = chip.querySelector('.link-mark svg, .link-mark img'), box = chip.getBoundingClientRect(), icon = mark?.getBoundingClientRect();
+      require(visible(mark) && Math.round(icon.width) === 16, "each chip leads with the site's mark at 16 px");
+      require(box.height <= line * 1.25, `a chip sits on the line of the words (${box.height} of ${line})`);
+      require(getComputedStyle(chip).color === getComputedStyle(document.documentElement).getPropertyValue('--link').trim() || getComputedStyle(chip).color !== getComputedStyle(reply.querySelector('.message-text')).color, "a chip is in the link colour");
+    }
+    require(chips[0].querySelector('.link-name').textContent === "127.0.0.1:5173", `an address of this machine says itself once: ${chips[0].textContent}`);
+    require(chips[1].dataset.linkState === "ready" && !chips[1].querySelector('.link-name').textContent.includes("http"), `a bare public address says the page's title once read: ${chips[1].textContent}`);
+    return { check: name, names: chips.map(chip => chip.textContent) };
+  }
+  if (name === "link-hover") {
+    const chip = document.querySelector('.thread .chat-message[data-reply] a.link-chip[data-link-title]'), card = document.querySelector('.link-hover');
+    require(visible(card) && card.getAttribute('role') === 'tooltip' && card.querySelector('.preview-title').textContent.trim(), "the page's preview shows under the pointer");
+    const c = card.getBoundingClientRect(), k = chip.getBoundingClientRect();
+    require(c.left >= 0 && c.right <= innerWidth && c.top >= 0 && c.bottom <= innerHeight, "the preview stays in the window");
+    require(c.top >= k.bottom || c.bottom <= k.top, "the preview stands beside its chip, covering none of it");
+    for (const line of card.querySelectorAll('.preview-meta > span')) require(line.scrollWidth <= line.clientWidth + 1, "its words stay inside it");
+    return { check: name };
   }
   if (name === "owner-bubble-tinted" || name === "owner-bubble-neutral") {
     const bubble = [...document.querySelectorAll('.owner-message .bubble')].find(visible);
@@ -2425,12 +2477,12 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }
   if (["settings-owner", "settings-tools", "settings-raphael-memory", "settings-raphael-voice", "settings-draft-grouped", "settings-speech-service"].includes(name)) {
-    if (name === 'settings-owner') require(visible(document.querySelector('[data-owner="owner_name"]')) && !document.querySelector('#agent-city') && !!document.querySelector('[data-mem-space="shared"]'), "the owner's profile keeps shared memory, and no weather city is asked for (owner, 2026-11-06)");
+    if (name === 'settings-owner') require(visible(document.querySelector('[data-owner="owner_name"]')) && !document.querySelector('#agent-city') && !document.querySelector('[data-mem-space]'), "the owner's profile stands without memory (its own tab, owner 2026-11-08), and no weather city is asked for (owner, 2026-11-06)");
     else if (name === 'settings-tools') require(document.querySelector('[data-pane="tools"]')?.getAttribute('aria-current') === 'page' && !document.querySelector('[data-pane="agent"]'), "legacy agent pane resolves to Tools");
-    else if (name === 'settings-raphael-memory') require(visible(document.querySelector('.mb-det [data-mem-space="own"]')) && document.querySelector('.mb-det [data-mem-space="own"]').textContent.includes('拉斐爾'), "Raphael memory belongs to the member panel");
-    else if (name === 'settings-raphael-voice') { require(visible(document.querySelector('.mb-det #svc-voice-id')), "Raphael voice uses the member resource controls"); require(window.__look.calls.some(call => call.method === 'tts.preview') && window.__look.calls.some(call => call.method === 'settings.set' && call.params.key === 'tts_fish_voice'), 'preview retains its existing settings and RPC boundaries'); }
+    else if (name === 'settings-raphael-memory') require(visible(document.querySelector('.ms-pane [data-mem-space="own"]')) && document.querySelector('.ms-pane [data-mem-space="own"]').textContent.includes('拉斐爾'), "Raphael memory belongs to the member settings page");
+    else if (name === 'settings-raphael-voice') { const choice = document.querySelector('.ms-pane [data-ms="voice"]'); require(visible(choice) && choice.classList.contains('sel') && choice.textContent.includes('清澈女聲'), 'Raphael voice is a dropdown of the voices on the member settings page'); require(window.__look.calls.some(call => call.method === 'settings.set' && call.params.key === 'tts_fish_voice' && call.params.value === 'voice-clear') && !window.__look.calls.some(call => call.method === 'tts.preview' || call.method === 'members.update'), 'the choice writes the one existing voice setting and nothing else'); }
     else if (name === 'settings-speech-service') { require(visible(document.querySelector('#svc-dialog [type="password"]')) && !document.querySelector('#svc-voice-id, #svc-dialog [data-svc="try"]'), 'shared speech setup retains its key and leaves personal voice controls in details'); }
-    else if (name === 'settings-draft-grouped') require(!!document.querySelector('.mb-panel-pages [data-det="draft"]') && document.querySelectorAll('.mb-panel-pages').length === 1, 'the draft switch belongs to the same resource list');
+    else if (name === 'settings-draft-grouped') require(!!document.querySelector('.ms-pane .ms-list [data-ms="draft"]') && document.querySelectorAll('.ms-pane [data-ms="draft"]').length === 1, 'the draft switch is one row of the page, in the list with the group');
     return {check:name};
   }
   if (name === "host-settings-remote") {
@@ -2501,19 +2553,20 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "member-shared-source") {
-    const control = document.querySelector('[data-res="skill-toggle"][data-id="32"]'), row = control?.closest('.mp-resource');
-    require(visible(control) && control.getAttribute('aria-checked') === 'true', "member details retain the enabled shared skill switch");
-    require(row.textContent.includes('共享 · ~/.codex/skills/source-check') && !row.textContent.includes('local:'), "member details use the same readable source label");
-    require(!row.querySelector('[data-res="skill-menu"]'), "inherited skills remain editable only in the library");
+    // An inherited skill opens in its view read only, with the same readable origin as everywhere.
+    const pane = document.querySelector('.ms-pane'), text = pane.querySelector('#ms-skill-text'), meta = pane.querySelector('.ms-meta');
+    require(visible(meta) && meta.textContent.includes('共享 · ~/.codex/skills/source-check') && !meta.textContent.includes('local:'), "the skill's view uses the same readable source label");
+    require(visible(text) && text.disabled && !pane.querySelector('[data-ms="skill-save"], [data-ms="skill-more"]'), "inherited skills remain editable only in the library");
     return { check: name };
   }
   if (name === "growing-skills") {
-    require(document.querySelector('.mb-det').textContent.includes("2026/10/29"), "skill dates follow the Chinese UI rather than the browser locale");
-    const editor = document.querySelector('#mp-skill-text');
-    require(visible(editor) && editor.value.includes("## Verification"), "the actual saved skill opens in the existing member pane");
-    require(document.querySelector('.mb-det').textContent.includes("自行學會"), "learned provenance and date are shown");
-    const learned = [...document.querySelectorAll('.mb-det .mp-resource')].find(row => row.querySelector('b')?.textContent === 'research-summary');
-    require(learned?.querySelectorAll('[data-skill-provenance]').length === 1 && learned.querySelector('[data-skill-provenance]').textContent === '自行學會 · 2026/10/29', "a learned skill has exactly one localized origin and date line");
+    const pane = document.querySelector('.ms-pane');
+    require(pane.textContent.includes("2026/10/29"), "skill dates follow the Chinese UI rather than the browser locale");
+    const editor = pane.querySelector('#ms-skill-text');
+    require(visible(editor) && editor.value.includes("## Verification"), "the actual saved skill opens in the member settings page");
+    require(pane.textContent.includes("自行學會"), "learned provenance and date are shown");
+    const meta = pane.querySelector('.ms-meta');
+    require(meta.textContent.split('自行學會').length === 2 && meta.textContent.includes('自行學會 · 2026/10/29'), "a learned skill has exactly one localized origin and date line");
     const calls = window.__look.calls;
     require(calls.some(c => c.method === "members.skills.read"), "opening reads the real skill boundary");
     if (window.__look.data.skills[0].member_id === 1) require(!calls.some(c => c.method === "members.skills.update" || c.method === "members.skills.delete"), "reading the editor never mutates skills");
@@ -2533,8 +2586,8 @@ export function checkRendered(name, context = {}) {
   if (name === "memory-clear-done") {
     const clears = window.__look.calls.filter(call => call.method === "memory.clear");
     require(clears.length === 1 && clears[0].params.space === "own", "one clear, of the member's own section");
-    require(document.querySelector('.mb-det [data-mem-space="shared"] [data-mem="section-more"]'), "the shared document keeps its text and its ⋯");
-    require(!document.querySelector('.mb-det [data-mem-space="own"] [data-mem="section-more"]'), "an empty section has nothing to clear");
+    require(document.querySelector('.ms-pane [data-mem-space="shared"] [data-mem="section-more"]'), "the shared document keeps its text and its ⋯");
+    require(!document.querySelector('.ms-pane [data-mem-space="own"] [data-mem="section-more"]'), "an empty section has nothing to clear");
     return { check: name };
   }
   if (name === "memory-summary-done") {
@@ -2562,19 +2615,19 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "memory-document") {
-    const own = document.querySelector('.mb-det [data-mem-space="own"]');
+    const own = document.querySelector('.ms-pane [data-mem-space="own"]');
     const entries = [...own.querySelectorAll(".mem-doc .mem-entry")];
     require(entries.length >= 3 && entries.every(visible), "the memory reads as a document, a paragraph to an entry");
-    require(!document.querySelector('.mb-det .mem-sub, .mb-det .mem-type, .mb-det [data-mem="more"], .mb-det #mb-memory-new'), "no rows, no type labels, no menu on each line");
+    require(!document.querySelector('.ms-pane .mem-sub, .ms-pane .mem-type, .ms-pane [data-mem="more"]'), "no rows, no type labels, no menu on each line");
     require(own.querySelector(".mem-tag")?.textContent === "待確認" && !own.textContent.includes("（待確認）"), "what nobody confirmed wears a tag");
-    require(visible(own.querySelector('button[data-mem="edit"]')), "編輯 is a real button");
+    require(visible(own.querySelector('button.icon[data-mem="edit"]')) && own.querySelector('[data-mem="edit"]').textContent.trim() === '', "編輯 is a pencil, not the word");
     const body = own.querySelector(".mem-doc");
     require(!["auto", "scroll"].includes(getComputedStyle(body).overflowY) && body.scrollHeight <= body.clientHeight + 1, "the document has no scroll of its own");
     require(!window.__look.calls.some(call => call.method === "memory.update"), "reading writes nothing");
     return { check: name };
   }
   if (name === "memory-editor") {
-    const box = document.querySelector('.mb-det [data-mem-space="own"] textarea.mem-body');
+    const box = document.querySelector('.ms-pane [data-mem-space="own"] textarea.mem-body');
     require(visible(box) && document.activeElement === box, "the box is open and has the focus");
     require(box.value.includes("專案每週三檢查原型") && box.value.includes("（待確認）"), "the box holds the whole document, as the file has it");
     require(box.scrollHeight <= box.clientHeight + 1, "the box grows with its text and never scrolls");
@@ -2584,22 +2637,23 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "member-edit-memory") {
-    const box = document.querySelector("#mp-memory");
+    const box = document.querySelector('.ms-pane [data-mem-space="own"] textarea.mem-body');
     require(visible(box) && box.value.includes("專案每週三檢查原型") && box.value.includes("（待確認）"), "the box holds the member's whole document");
     require(box.scrollHeight <= box.clientHeight + 1, "the box grows with its text and never scrolls");
-    require(document.querySelectorAll('.mb-dialog [data-dlg="save"]').length === 1 && !document.querySelector('.mp-page:not([hidden]) .btn.sm'), "one 儲存, the dialog's own");
+    require(document.querySelectorAll('.ms-pane [data-mem="save"]').length === 1 && document.querySelector('.ms-pane').dataset.view === 'memory', "one 儲存, in the memory's own view");
     return { check: name };
   }
   if (name === "settings-memory") {
     const shared = document.querySelector('[data-mem-space="shared"]');
-    require(visible(shared) && !document.querySelector('[data-mem-space="own"]'), "General contains only shared owner memory");
+    require(visible(shared) && !document.querySelector('[data-mem-space="own"]'), "the 記憶 tab holds only shared owner memory");
+    require(document.querySelector('[data-pane="memory"]')?.getAttribute("aria-current") === "page", "記憶 is a tab of its own (owner, 2026-11-08)");
     require(shared.querySelector(".mem-from")?.textContent.startsWith("拉斐爾 · "), "a shared entry says whom the owner told");
     return { check: name };
   }
   if (name === "memory-saved") {
     const saved = window.__look.calls.filter(call => call.method === "memory.update");
     require(saved.length === 1 && saved[0].params.space === "own" && saved[0].params.member_id === 1 && typeof saved[0].params.revision === "string", "one write, of this member's file, from the copy it was opened on");
-    const own = document.querySelector('.mb-det [data-mem-space="own"]');
+    const own = document.querySelector('.ms-pane [data-mem-space="own"]');
     require(own.textContent.includes("使用者改過的一段") && !own.textContent.includes("上一輪檢查"), "the document reads as saved");
     return { check: name };
   }
@@ -2701,7 +2755,9 @@ export function checkRendered(name, context = {}) {
       require(box.left >= card.left && box.right <= card.right && box.top >= card.top && box.bottom <= card.bottom + 1, `${what} stays inside the card`);
     }
     const pill = document.querySelector('.ob-actions > .btn.pri'), box = pill.getBoundingClientRect();
-    require(box.width >= 240 && box.height >= 40 && parseFloat(getComputedStyle(pill).borderTopLeftRadius) >= box.height / 2 - 1, "the one button is a wide pill");
+    // The shared button, a pill sized to its words (owner, 2026-11-08: every button alike, its height hugging its words).
+    const shared = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--h-ctl'));
+    require(box.width >= shared * 4 - 1 && Math.abs(box.height - shared) <= 1 && parseFloat(getComputedStyle(pill).borderTopLeftRadius) >= box.height / 2 - 1, "the one button is the shared pill");
     const ink = getComputedStyle(pill).backgroundColor, text = getComputedStyle(document.body).color;
     require(ink !== 'rgba(0, 0, 0, 0)' && ink !== getComputedStyle(document.querySelector('.ob-card')).backgroundColor, `the pill is the solid accent, not the card's colour (${ink} on ${text})`);
     const drawn = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
@@ -2775,13 +2831,15 @@ export function checkRendered(name, context = {}) {
       }
       require(document.querySelector('[data-svc="toggle"][data-id="read"]').getAttribute('aria-checked') === 'false', "a switch that was pressed turned off");
     }
-    // Under the choice: one wide black pill that fills its row, and a grey pill for the way back below it.
-    const primary = document.querySelector('.ob-actions > .btn.pri'), back = document.querySelector('.ob-actions > .btn.ob-back'), row = document.querySelector('.ob-actions').getBoundingClientRect();
+    // Under the choice: the shared pills, sized to their words and side by side, the way back first (owner, 2026-11-08:
+    // every button alike, its height hugging its words).
+    const primary = document.querySelector('.ob-actions > .btn.pri'), back = document.querySelector('.ob-actions > .btn.ob-back');
     const ink = primary.getBoundingClientRect(), grey = back?.getBoundingClientRect();
-    require(ink.width >= row.width * .9 && ink.width >= 240 && parseFloat(getComputedStyle(primary).borderTopLeftRadius) >= ink.height / 2 - 1, "the primary action is a wide pill that fills its row");
-    require(back && grey.top >= ink.bottom - 1 && Math.abs(grey.width - ink.width) <= 1 && Math.abs((grey.left + grey.width / 2) - (ink.left + ink.width / 2)) <= 1, "the way back is a grey pill of the same width under it");
+    const shared = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--h-ctl'));
+    require(Math.abs(ink.height - shared) <= 1 && parseFloat(getComputedStyle(primary).borderTopLeftRadius) >= ink.height / 2 - 1, "the primary action is the shared pill");
+    require(back && Math.abs(grey.height - ink.height) <= 1 && Math.abs((grey.top + grey.height / 2) - (ink.top + ink.height / 2)) <= 1 && grey.right <= ink.left + 1, "the way back is a pill on the same line, before it");
     require(parseFloat(getComputedStyle(back).borderTopLeftRadius) >= grey.height / 2 - 1 && getComputedStyle(back).backgroundColor !== getComputedStyle(primary).backgroundColor, "the way back is a pill of another colour");
-    require(Math.abs(ink.left + ink.width / 2 - (card.left + card.width / 2)) <= 2, "the pills are centred in the card");
+    require(Math.abs((grey.left + ink.right) / 2 - (card.left + card.width / 2)) <= 2, "the pills, together, are centred in the card");
     require(ink.bottom <= card.bottom && grey.bottom <= card.bottom, "both pills stay inside the card");
     return { check: name, items: items.length, columns: lefts.size, headline: getComputedStyle(title).fontSize };
   }
@@ -3768,6 +3826,18 @@ export function checkRendered(name, context = {}) {
     require(row.querySelector('[data-k="quick-model"]')?.getAttribute('aria-label')?.includes("GPT-6.1"), "the row shows the chosen model");
     require(row.querySelector('[data-price="quick-model"]')?.textContent.trim() === "訂閱", "a subscription model shows it is billed by subscription");
     return { check: name, saved: sets.filter(set => set.key.startsWith("quick_")) };
+  }
+  if (name.startsWith("overlay-locale-")) {
+    const locale = name.slice("overlay-locale-".length);
+    require(document.documentElement.lang === locale, "native settings select the subtitle locale");
+    const line = document.querySelector(".subs.on .sub-line");
+    require(visible(line) && line.textContent.startsWith("《"), "localized production subtitle is visible");
+    const bounds = line.getBoundingClientRect(), style = getComputedStyle(line);
+    require(bounds.height <= 2 * parseFloat(style.lineHeight) + 1, "localized subtitle occupies at most two lines");
+    require(bounds.left >= 0 && bounds.right <= innerWidth + 1, "localized subtitle stays within the window");
+    const expected = {ko: "Malgun Gothic", th: "Leelawadee UI", de: "Inter"}[locale];
+    require(style.fontFamily.includes(expected), "subtitle uses its installed script font fallback");
+    return { check: name, locale, text: line.textContent, font: style.fontFamily };
   }
   if (name === "overlay-pages") {
     const line = document.querySelector(".subs.on .sub-line"), text = line?.textContent ?? "";
@@ -4833,6 +4903,24 @@ export function checkRendered(name, context = {}) {
       require(eye.stroke === "rgb(255, 255, 255)" && eye.d.startsWith("path("), "its eyes are the white bent path");
     }
     require(getComputedStyle(face(2).querySelector(".slime-eyes")).d.includes("48.53"), "working keeps its focused slit eyes");
+    // A blink of a small slime lands on whole rows of its eye strip at every closing step (owner, 2026-11-08: fixed
+    // fractions of an older strip threw the eyes up and down).
+    const blinkStrips = [...document.querySelectorAll(".mb-row .slime-loop.has-blink .slime-blink-cels")];
+    require(blinkStrips.length > 0, "a thinking slime in the list blinks through its eye strip");
+    for (const strip of blinkStrips) {
+      const blink = strip.getAnimations().find(running => running.animationName === "slime-loop-blink");
+      require(blink, "the blink runs as its own animation");
+      const timing = blink.effect.getTiming(), period = Number(timing.duration), delay = Number(timing.delay) || 0, was = blink.currentTime;
+      const row = strip.offsetHeight / Number(getComputedStyle(strip).getPropertyValue("--loop-rows"));
+      const turns = Math.ceil(Math.abs(delay) / period) + 1;
+      blink.pause();
+      for (const [at, rows] of [[.0875, 1], [.095, 2], [.125, 3], [.5, 0]]) {
+        blink.currentTime = delay + period * (turns + at);
+        const moved = -new DOMMatrix(getComputedStyle(strip).transform).f;
+        require(Math.abs(moved - rows * row) < 0.5, `a blink step lands on row ${rows} (moved ${moved.toFixed(2)}px, a row is ${row.toFixed(2)}px)`);
+      }
+      blink.currentTime = was; blink.play();
+    }
     const rows = [...document.querySelectorAll(".mb-row svg.slime")];
     require(rows.length >= 3, "the list shows at least three slimes");
     for (const svg of rows) {
@@ -5056,10 +5144,11 @@ export function checkRendered(name, context = {}) {
     require(getComputedStyle(modal).borderTopLeftRadius === "12px", "settings uses the dialog radius rather than a pill");
     const box = close.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
     require(close === hit || close.contains(hit), "rounded corners do not clip the close control");
-    // Grok Bot's settings (owner, 2026-11-07): six flat tabs, no group names, no search and no line under a tab's name.
+    // Grok Bot's settings (owner, 2026-11-07): flat tabs, no group names, no search and no line under a tab's name; seven
+    // since 記憶 left 一般 for a tab of its own (owner, 2026-11-08).
     const scrim = modal.closest('.modal-scrim');
     if (!scrim.hasAttribute('data-standalone')) {
-      require(scrim.querySelectorAll('.modal-nav [data-pane]').length === 6 && !scrim.querySelector('.nav-group, #set-search'), "six tabs sit flat, with no group names and no search");
+      require(scrim.querySelectorAll('.modal-nav [data-pane]').length === 7 && !scrim.querySelector('.nav-group, #set-search'), "seven tabs sit flat, with no group names and no search");
       require(!scrim.querySelector('.set-purpose'), "a tab is its name alone, with no line under it");
     }
     return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius };
@@ -5260,7 +5349,7 @@ export function checkRendered(name, context = {}) {
       require(!document.querySelector('.mb-dialog'), "the window closed");
       require(!calls.some(call => /^(rooms|routines|worker|agent)\./.test(call.method ?? '') && /(update|create|delete|rerun|cancel|ask|stop)/.test(call.method)), "no room, routine, task or conversation was touched");
       const members = visible(column) ? columnSwap() : [];
-      require(visible(document.querySelector('.mb-det .mb-who-face')), "the selected member's details remain available without a star");
+      require(visible(document.querySelector('.ms-pane .ms-face')) && !document.querySelector('.ms-pane .mb-star'), "the selected member's page remains available without a star");
       return { check: name, members };
     }
     require(sets.length === 0, "this scene only displays the existing primary");
@@ -5398,11 +5487,46 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, rows: rows.length, addClass: add[0].className };
   }
+  if (name === "typo-mention") {
+    const first = document.querySelector('#app-popover[data-team-mentions] [data-value]');
+    require(visible(first) && first.dataset.value === "Notion", `「@notoin」 finds Notion first (${first?.dataset.value})`);
+    return { check: name };
+  }
+  if (name === "conversation-share") {
+    const head = document.querySelector('.mb-chat .mb-head'), share = head?.querySelector('[data-act="share-member"]'), search = head?.querySelector('[data-act="search"]');
+    require(visible(share) && share.closest('.ra-tools'), "share is a visible tool of the conversation header");
+    const h = head.getBoundingClientRect(), s = share.getBoundingClientRect();
+    require(h.right - s.right < h.width / 4, "share sits at the header's right");
+    if (visible(search)) require(search.getBoundingClientRect().left - h.left < h.width / 4, "search sits opposite, at the left");
+    require(!document.querySelector('.mb-det [data-act="share-member"], .mb-det [data-det="share"]'), "share left the panel");
+    return { check: name };
+  }
+  if (name === "conversation-share-menu") {
+    const item = document.querySelector('#app-popover .menu-action');
+    require(visible(item) && item.textContent.trim().length > 0, "share opens one plain choice that says what it does");
+    return { check: name };
+  }
+  if (name === "store-n8n") {
+    const card = document.querySelector('[data-conn="open-store"][data-id="n8n"]')?.closest('.cs-card');
+    require(card?.querySelector('.logo-mono svg path'), "n8n carries its own mark, not the generic plug");
+    require(card?.querySelector('.need')?.textContent === "需要自己的伺服器", "its row says it needs the owner's own server");
+    require(card?.querySelector('[data-conn="join"]'), "it is added from its row like any app");
+    return { check: name };
+  }
+  if (name === "store-n8n-form") {
+    const url = document.querySelector('#conn-url'), named = document.querySelector('#conn-name'), pairs = document.querySelector('#conn-pairs');
+    require(named?.value === "n8n" && url?.value === "" && url?.placeholder.includes("/mcp-server/http"), "the form is named n8n and shows where its address is");
+    require(pairs?.value === "Authorization=Bearer ", "the access token header waits for the token");
+    require(document.activeElement === url, "the cursor waits in the address field");
+    return { check: name };
+  }
   if (name === "plugins-store") {
     const cards = [...document.querySelectorAll('.cs-card')];
     const ids = cards.map(card => card.querySelector('[data-conn="open-store"]')?.dataset.id);
     require(document.querySelectorAll('.cs-card [data-conn="join"]').length <= Number(document.querySelector('[data-k="conn-tab:store"] .n').textContent), "tab count includes all addable matches beyond the visible page");
-    require(document.querySelector('[data-stagger="store:hot"] .cs-card') && document.querySelector('[data-stagger="store:all"] .cs-card'), "popular and all built-in sections remain available");
+    require(document.querySelector('[data-stagger="store:all"] .cs-card') && document.querySelectorAll('.cs-results .cs-sec').length === 1, "the store is one list (owner, 2026-11-08: no 已連接 and no 常用 sections)");
+    require(!document.querySelector('.cs-results .cs-state'), "the store shows only apps not added yet");
+    if (!document.querySelector('.cs-store-groups [aria-pressed="true"]:not([data-id=""])')) require(document.querySelector('[data-conn="open-store"][data-id="n8n"]') || document.querySelector('.cs-store-pages'), "n8n is in the store, as the owner's own server (owner, 2026-11-08)");
     require(window.__look.calls.some(c => c.method === 'integrations.catalog'), "built-in catalog uses the real IPC boundary");
     require(!document.querySelector('#conn-key'), "key form does not replace the store");
     require(new Set(ids).size === cards.length, "duplicate apps appear once");
@@ -5473,6 +5597,98 @@ export function checkRendered(name, context = {}) {
     require(Number(caption.textContent.match(/\d+/)[0]) > 0, "native progress advances beyond the initial zero");
     require(!document.body.textContent.includes("Transcribing") && !document.body.textContent.includes("\u8f49\u9304\u4e2d"), "elapsed-time captions are absent");
     return { check: name, caption: caption.textContent };
+  }
+  if (name.startsWith("member-settings")) {
+    const pane = document.querySelector(".ms-pane");
+    const chat = document.querySelector(".page-agent .mb-chat");
+    const view = pane.dataset.view;
+    const raphael = !pane.querySelector("#ms-name");
+    if (name === "member-settings-back") {
+      require(!visible(pane) && visible(chat) && visible(chat.querySelector(".composer")), "the conversation is where the page was");
+      return { check: name };
+    }
+    require(visible(pane) && !visible(chat), "the page takes the conversation's place");
+    const scroller = pane.querySelector(".ms-scroll"), body = pane.querySelector(".ms-body");
+    require(scroller.scrollWidth <= scroller.clientWidth + 1 && pane.scrollWidth <= pane.clientWidth + 1, "nothing overflows sideways");
+    require(body.getBoundingClientRect().width <= 20 * 32 + 1, "the page is as wide as a reading page");
+    const back = pane.querySelector('[data-ms="back"]');
+    require(visible(back) && back.classList.contains("icon") && back.textContent.trim() === "" && back.querySelector("svg.i"), "the way back is an arrow icon with no words");
+    const cover = pane.querySelector(".ms-cover"), face = pane.querySelector(".ms-face");
+    if (view === "main") {
+      const edge = cover.getBoundingClientRect(), mark = face.getBoundingClientRect();
+      require(visible(cover) && edge.height >= 96 && /gradient/.test(getComputedStyle(cover).backgroundImage), "a cover with a gradient and its pattern");
+      require(visible(face) && mark.top < edge.bottom - 8 && mark.bottom > edge.bottom + 8 && mark.width >= 80, "the face is large and crosses the cover's lower edge");
+      require(face.querySelector(".mb-face-pencil svg.i") && face.getAttribute("aria-haspopup") === "menu", "the face edits with a pencil and opens the picker");
+      const sections = [...pane.querySelectorAll(".ms-section[data-k]")].filter(visible).map(section => section.dataset.k);
+      const expected = raphael ? ["ms-skills", "ms-commands", "ms-model", "ms-voice", "ms-more"]
+        : ["ms-personality", "ms-instructions", "ms-skills", "ms-commands", "ms-model", "ms-tools", "ms-voice", "ms-more"];
+      require(sections.join() === expected.join(), `the sections are ${expected.join()} (${sections.join()})`);
+      require(pane.querySelector('[data-k="ms-more"] .ms-list > :first-child')?.dataset.k === "ms-memory", "記憶 leads the last card, said once (owner, 2026-11-08)");
+      for (const section of pane.querySelectorAll(".ms-section[data-k]")) {
+        const list = section.querySelector(".ms-list"), head = section.querySelector(".ms-head");
+        require(visible(list) && getComputedStyle(list).backgroundColor !== "rgba(0, 0, 0, 0)", `${section.dataset.k} is a tinted list`);
+        if (head) require(visible(head) && head.querySelector("h2").textContent.trim(), `${section.dataset.k} has its name over the list`);
+        const lead = list.getBoundingClientRect().left, title = head?.querySelector("h2").getBoundingClientRect().left;
+        if (head) require(title > lead, `${section.dataset.k}: the name starts inside the list's edge`);
+        require(list.scrollHeight <= list.clientHeight + 1 && getComputedStyle(list).overflowY === "visible", `${section.dataset.k} does not scroll inside`);
+      }
+      // No word-buttons where an icon says it: edits, adds and menus are icons, the rest are rows or switches.
+      const words = [...pane.querySelectorAll(".ms-section button.btn, .ms-id button.btn")].filter(button => visible(button) && !button.matches(".icon, .ms-open, .mb-face-edit, .ms-add .btn.sm, [data-missing-repair]"));
+      require(words.length === 0, `no text buttons: ${words.map(button => button.textContent.trim()).join("|")}`);
+      require(![...pane.querySelectorAll("button")].some(button => visible(button) && /^(編輯|Edit|編集)$/.test(button.textContent.trim())), "no 編輯 button");
+      for (const edit of pane.querySelectorAll('[data-ms="edit"]')) require(visible(edit.querySelector("svg.i")), "a long field ends in its pencil");
+      require(![...pane.querySelectorAll(".mem-entry, [data-mem-section]")].some(visible), "the memory is never shown on the page");
+      const memory = pane.querySelector('[data-ms="memory"]');
+      require(visible(memory) && memory.querySelector("small").textContent.trim() && memory.querySelector("svg.i"), "the memory is one row with its count and a chevron");
+      const card = pane.querySelector('[data-k="ms-voice"] .ms-list'), rows = [...card.querySelectorAll(".ms-row")];
+      require(rows.length === (raphael ? 1 : 2), `the voice card has ${raphael ? 1 : 2} rows`);
+      const row = rows[0], label = row.querySelector(".ms-label").getBoundingClientRect(), choice = row.querySelector(".sel").getBoundingClientRect();
+      require(choice.left >= label.left && choice.right <= row.getBoundingClientRect().right + 1 && Math.abs((choice.top + choice.bottom) / 2 - (label.top + label.bottom) / 2) < 6, "the voice choice is a compact dropdown at the right of its row");
+      const model = pane.querySelector('[data-slot="model"] .mp-trigger');
+      require(visible(model), "the model is the composer's own dropdown, in its row");
+      if (raphael) {
+        require(visible(pane.querySelector(".ms-static")) && !pane.querySelector("#ms-name, #ms-role, [data-ms=\"group\"], [data-ms=\"tool\"]"), "Raphael's name is not typed here");
+      } else {
+        const name = pane.querySelector("#ms-name"), role = pane.querySelector("#ms-role");
+        require(visible(name) && visible(role) && name.getBoundingClientRect().left <= face.getBoundingClientRect().left + 8, "the name and the role are in place under the face");
+        require(getComputedStyle(name).borderTopColor === "rgba(0, 0, 0, 0)" || getComputedStyle(name).borderTopWidth === "1px", "the name is a bare field until it is pointed at");
+        require(pane.querySelectorAll('[data-ms="tool"]').length > 0, "the connections of the member are switches");
+        const group = pane.querySelector('[data-ms="group"]');
+        require(visible(group) && group.classList.contains("sel"), "the group is a dropdown");
+      }
+      require(!pane.querySelector('[data-det="hide"], [data-ms="hide"]') && !/從側欄隱藏|Hide from sidebar/.test(pane.textContent), "hiding from the sidebar is not here");
+      const draft = pane.querySelector('[data-ms="draft"]');
+      require(visible(draft) && draft.getAttribute("role") === "switch", "the drafts switch is on the page");
+    } else {
+      require(!visible(cover) && !visible(face), "a view of its own has no cover");
+      require(visible(pane.querySelector(".ms-subhead .ms-title")), "a view has its own title");
+    }
+    if (name === "member-settings-lower") {
+      const shown = selector => { const box = pane.querySelector(selector).getBoundingClientRect(); return box.top >= 0 && box.bottom <= innerHeight + 1; };
+      require(["[data-k=\"ms-voice\"]", "[data-k=\"ms-memory\"]", "[data-k=\"ms-more\"]"].every(shown), "the voice card, the memory row and the drafts are in sight at the foot of the page");
+      require(parseFloat(getComputedStyle(body).paddingBottom) >= 24 && scroller.scrollHeight > scroller.clientHeight, "the page scrolls, with room under its last list");
+    }
+    if (name === "member-settings-field") {
+      const box = pane.querySelector("#ms-personality");
+      require(visible(box) && document.activeElement === box, "the box opens in place and has the keyboard");
+      require(box.closest(".ms-list") && !box.closest("button"), "the box stands in the section's list");
+      require(box.getBoundingClientRect().width > 200, "the box is as wide as its list");
+    }
+    if (name === "member-settings-skill") {
+      const text = pane.querySelector("#ms-skill-text");
+      require(view === "skill" && visible(text) && text.value.length > 10, "the skill's text is in its own view");
+      require(visible(pane.querySelector('[data-ms="skill-save"]')) && visible(pane.querySelector('[data-ms="skill-more"]')), "save is the one text button; deleting waits in the menu");
+    }
+    if (name === "member-settings-command") {
+      require(view === "command" && ["#ms-command-name", "#ms-command-description", "#ms-command-template"].every(selector => visible(pane.querySelector(selector))), "the command's three fields");
+      require(visible(pane.querySelector('[data-ms="command-save"]')), "the command has its save");
+    }
+    if (name === "member-settings-memory") {
+      const documents = [...pane.querySelectorAll("[data-mem-section]")].filter(visible);
+      require(view === "memory" && documents.length === 2, "both documents are in the memory view");
+      require(documents.every(document => visible(document.querySelector('[data-mem="edit"].icon'))) && ![...pane.querySelectorAll("button")].some(button => visible(button) && button.textContent.trim() === "編輯"), "the memory's edit is a pencil");
+    }
+    return { check: name, view };
   }
   if (name === "member-details") {
     const panel = document.querySelector(".mb-det"), title = document.querySelector(".conversation-trigger");
@@ -5633,7 +5849,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, words };
   }
   if (name === "global-private-memory") {
-    const shared = document.querySelector('.mb-det [data-mem-space="shared"]'), own = document.querySelector('.mb-det [data-mem-space="own"]');
+    const shared = document.querySelector('.ms-pane [data-mem-space="shared"]'), own = document.querySelector('.ms-pane [data-mem-space="own"]');
     require(visible(shared) && visible(own), "the shared and the member's own memory are both on screen");
     require(shared.textContent.includes("品牌主色是金色") && shared.querySelector('.mem-from')?.textContent === "拉斐爾 · 2026/10/27", "the shared entry says whom the owner told it to and when in the UI date format");
     require(own.textContent.includes("專案每週三檢查原型") && !shared.textContent.includes("專案每週三檢查原型"), "the member's own entry stays in its own file");
@@ -5737,7 +5953,9 @@ export function checkRendered(name, context = {}) {
     require(!document.body.textContent.includes(key), "the key is on no page text");
     if (name === "card-composio-missing") {
       require(card.dataset.cardState === "failed" && state.includes("還沒有 Composio 金鑰"), `the card says what is missing (${state})`);
-      require(action.length === 2 && action[0].dataset.act === "card-settings" && action[0].textContent.trim() === "開啟連接設定" && action[1].hasAttribute("data-card-failed-close"), "the card offers the place to add it and a local close");
+      const footer = action.filter(button => button.closest('footer')), close = card.querySelector('.card-head [data-card-failed-close]');
+      require(footer.length === 1 && footer[0].dataset.act === "card-settings" && footer[0].textContent.trim() === "開啟連接設定", "the card offers the place to add it");
+      require(visible(close) && !close.textContent.trim(), "a local close is the × at its top right, with no 「關閉」 under it (owner, 2026-11-08)");
       return { check: name, state };
     }
     const sent = calls.filter(call => call.method === "integrations.card_connect");
@@ -5917,15 +6135,14 @@ export function checkRendered(name, context = {}) {
     return { check: name, answers: buttons.map(button => button.textContent.trim()) };
   }
   if (name === "member-draft-switch") {
-    // The preference to write mail as a draft first is a switch beside the one that asks before contacting colleagues.
-    const toggle = document.querySelector('.mb-dialog [data-dlg="draft"]');
+    // The preference to write mail as a draft first is a switch row of the member settings page.
+    const toggle = document.querySelector('.ms-pane [data-ms="draft"]');
     require(visible(toggle) && toggle.getAttribute('role') === 'switch' && toggle.classList.contains('tg'), "the draft preference is a real switch");
     require(toggle.getAttribute('aria-checked') === 'false', "this member was set to send mail itself, so the switch is off");
-    const row = toggle.closest('.mp-resource');
+    const row = toggle.closest('.ms-row');
     // Slack drafts follow the same rule as mail since 1.2.
-    require(row.querySelector('b').textContent === "郵件與 Slack 先擬成草稿，由我傳送", `the switch says what it does: ${row.querySelector('b').textContent}`);
-    require(row.querySelector('p').textContent.includes("由你按「傳送」才會送出"), "its line says that only 傳送 sends");
-    require(document.querySelectorAll('.mb-dialog .mp-resource [role="switch"]').length === 2, "it stands beside the one that asks before contacting colleagues");
+    require(row.querySelector('.ms-label').textContent === "郵件與 Slack 先擬成草稿，由我傳送", `the switch says what it does: ${row.querySelector('.ms-label').textContent}`);
+    require(row.querySelector('p, small') === null, "one line, no hint paragraph under it");
     return { check: name };
   }
   if (name === "mail-handed-first" || name.startsWith("email-draft-")) {

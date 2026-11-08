@@ -17,7 +17,7 @@ export function withOwnerRound4(scenes) {
     ...(original.name === "connector-reconnected" ? [check("conversation-scroll-edge")] : []),
     ...(["quick-cleared", "conversation-delete-main", "member-delete"].includes(original.name) ? [check("toast-clearance")] : []),
     ...(original.name === "member-conversation-sections" ? [check("details-alignment")] : []),
-    ...(["details", "raphael-details", "details-routines", "details-memory"].includes(original.name) ? [check("details-sheet")] : []),
+    ...(["details", "raphael-details", "details-routines"].includes(original.name) ? [check("details-sheet")] : []),
     ...(["profile", "dictation", "messaging", "appearance", "skins", "models", "usage"].includes(original.name) ? [check("settings-concise")] : []),
     ...(original.name === "models" ? [check("models-responsive")] : []),
     ...(original.name === "dictation-overview" ? [check("compact-action")] : []),

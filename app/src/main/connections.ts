@@ -16,7 +16,8 @@ import { openMcpImport } from "./mcp-import";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { dayLabel, describeError, formatClock } from "./format";
 import { getLocale, t } from "./i18n";
-import { STORE_GROUPS, STORE_PAGE_SIZE, popularApp, storeGroup, storeMatches } from "./store-finder";
+import { STORE_GROUPS, STORE_PAGE_SIZE, popularApp, storeGroup, storeMatches, storeNear } from "./store-finder";
+import { findsName } from "./find-match";
 import type { MessageKey } from "./i18n/zh-TW";
 import { serviceIconOf } from "./service-icons";
 import { chipSteps, revealChip } from "./chip-scroll";
@@ -79,6 +80,8 @@ export interface ConnectionForm {
   command: string;
   args: string;
   url: string;
+  /** The example address an app of `PRESET_FORMS` shows in the empty address field. */
+  urlHint?: string;
   busy: boolean;
   error: (() => string) | null;
 }
@@ -171,6 +174,29 @@ const emptyForm = (): ConnectionForm => ({
   error: null,
 });
 
+/**
+ * Apps the store offers as the owner's own server, filled in. n8n runs at each owner's own address and has no Composio
+ * toolkit, so the built-in catalogue (fixed official addresses only) cannot carry it (owner, 2026-11-08: 「為什麼
+ * connectors 那邊沒有 N8N」); its 加入 opens the server form with the type, name and header already there.
+ */
+const PRESET_FORMS: Record<string, Pick<ConnectionForm, "type" | "name" | "pairLines" | "urlHint">> = {
+  n8n: { type: "http", name: "n8n", pairLines: "Authorization=Bearer ", urlHint: "https://n8n.example.com/mcp-server/http" },
+};
+
+/** The store entries of `PRESET_FORMS`, in the current language, marked added when a connection already is that app. */
+function presetEntries(v: ConnectionsView): StoreService[] {
+  if (!Array.isArray(v.catalog)) return [];
+  const groups = Array.isArray(v.groups) ? v.groups : [];
+  // Drawn again for each language: the three required languages carry the current one's words.
+  const said = (key: "store.n8nSummary" | "store.n8nAbout"): Words => { const text = t(key); return { "zh-TW": text, en: text, ja: text }; };
+  const examples = [t("store.n8nTry")];
+  return [{
+    id: "n8n", name: "n8n", publisher: "n8n", url: "", category: "productivity", icon: "n8n", popular: false, auth: "none",
+    summary: said("store.n8nSummary"), about: said("store.n8nAbout"), examples: { "zh-TW": examples, en: examples, ja: examples },
+    server_id: groups.find((g) => serviceIconOf({ name: g.name, url: g.url }) === "n8n")?.id ?? null,
+  }];
+}
+
 // ---------- words ----------
 
 const typeChoices = (): Choice[] => [
@@ -255,7 +281,8 @@ function lineOf(g: ConnectionGroup, v: ConnectionsView): string {
 
 const matches = (query: string, ...texts: string[]): boolean => {
   const q = query.trim().toLowerCase();
-  return !q || texts.some((text) => text.toLowerCase().includes(q));
+  // As typed anywhere in its words, or its name nearly spelled (`find-match.ts`, owner 2026-11-08).
+  return !q || texts.some((text) => text.toLowerCase().includes(q)) || findsName(texts.slice(0, 1), q);
 };
 
 // ---------- the bar: the two views and the search; the menu that adds, beside the tab's name ----------
@@ -502,7 +529,8 @@ function joinControl(s: StoreService, v: ConnectionsView, deferIcon = false): st
 }
 
 /** What adding the entry asks of the owner, in words, for the row and the page to show before anything is pressed. */
-const needWords = (s: StoreService): string => s.needs === "key" ? t("setup.needsKey") : s.needs === "own_app" ? t("setup.needsOwnApp") : "";
+const needWords = (s: StoreService): string =>
+  s.needs === "key" ? t("setup.needsKey") : s.needs === "own_app" ? t("setup.needsOwnApp") : PRESET_FORMS[s.id] && !s.server_id ? t("store.needsOwnServer") : "";
 const needHTML = (text: string): string => `<b class="need">${esc(text)}</b>`;
 
 /**
@@ -563,10 +591,16 @@ interface StoreEntries {
 
 /** One filtered snapshot counts and pages every addable app, including popular apps. */
 function storeEntries(v: ConnectionsView): StoreEntries {
-  const found = (s: StoreService): boolean => storeMatches(s, v.search) && (!v.category || storeGroup(s) === v.category);
-  const builtin = (Array.isArray(v.catalog) ? v.catalog : []).filter(found);
-  const managed = uniqueComposio(v).filter(found);
-  const all = [...builtin, ...managed].sort((a, b) => a.name.localeCompare(b.name));
+  const inGroup = (s: StoreService): boolean => !v.category || storeGroup(s) === v.category;
+  const every = [...(Array.isArray(v.catalog) ? v.catalog : []), ...presetEntries(v), ...uniqueComposio(v)].filter(inGroup);
+  const all = every.filter(s => storeMatches(s, v.search)).sort((a, b) => a.name.localeCompare(b.name));
+  // After what the search finds as typed come the apps whose names it only nearly spells, nearest first (owner,
+  // 2026-11-08: a typo or swapped letters still find the app).
+  if (v.search.trim()) {
+    const found = new Set(all);
+    const near = every.filter(s => !found.has(s)).map(s => [s, storeNear(s, v.search)] as const).filter(([, score]) => score < Infinity);
+    all.push(...near.sort((a, b) => a[1] - b[1] || a[0].name.localeCompare(b[0].name)).map(([s]) => s));
+  }
   const connected = all.filter(s => s.server_id);
   const available = all.filter(s => !s.server_id);
   if (!v.search.trim() && !v.category) available.sort((a, b) => Number(popularApp(b)) - Number(popularApp(a)));
@@ -598,23 +632,20 @@ function storeHTML(v: ConnectionsView, entries: StoreEntries = storeEntries(v), 
     list.length ? `<section class="cs-sec"><h2>${esc(title)}</h2><div class="cs-grid" data-stagger="store:${key}">${list.map(card).join("")}</div></section>` : "";
   const retry = (action: string): string => `<div class="alert core-note" role="alert">${st("err", t("conn.loadFailed"))}${btn(esc(t("plugins.retry")), "sm", ` data-conn="${action}"`)}</div>`;
   const loading = `<p class="settings-loading" role="status">${esc(t("conn.loading"))}</p>`;
-  const browsing = !v.search.trim() && !v.category;
-  const connected = entries.connected.slice(0, 12);
+  // The store is only what is not added yet, in one list (owner, 2026-11-08: no 已連接 and no 常用 in it, so a page
+  // shows more apps); popular apps still come first while browsing.
   const page = Math.min(v.storePage ?? 0, Math.max(0, Math.ceil(entries.count / STORE_PAGE_SIZE) - 1));
   const shown = entries.available.slice(page * STORE_PAGE_SIZE, (page + 1) * STORE_PAGE_SIZE);
-  const popular = browsing ? shown.filter(popularApp) : [];
-  const rest = shown.filter(s => !popular.includes(s));
   const chips = `<div class="cs-store-groups-row" data-chip-row><div class="cs-store-groups" data-chip-scroll role="group" aria-label="${esc(t("plugins.category"))}">${["", ...STORE_GROUPS].map(group =>
     btn(esc(group ? tr(STORE_GROUP_LABELS[group]) : t("conn.all")), "sm", ` data-conn="store-group" data-id="${group}" aria-pressed="${v.category === group}"`)).join("")}</div>${chipSteps()}</div>`;
   let html = (v.catalog === "loading" ? loading : v.catalog === "failed" ? retry("retry-builtin-store") : "") +
-    section("connected", t("conn.tab.installed"), connected) + section("hot", t("store.popular"), popular) +
     // Under a chosen chip the list is that group, so it is named for it rather than 「全部」.
-    section("all", v.category ? tr(STORE_GROUP_LABELS[v.category]) : t("conn.all"), rest);
+    section("all", v.category ? tr(STORE_GROUP_LABELS[v.category]) : t("conn.all"), shown);
   if (entries.count > STORE_PAGE_SIZE) html += `<nav class="cs-store-pages" aria-label="${esc(t("conn.all"))}">` +
     btn(esc(t("store.previous")), "sm", ` data-conn="store-page" data-id="${page - 1}"${page === 0 ? " disabled" : ""}`) +
     `<span class="num" role="status">${page * STORE_PAGE_SIZE + 1}–${Math.min((page + 1) * STORE_PAGE_SIZE, entries.count)} / ${entries.count}</span>` +
     btn(esc(t("store.next")), "sm", ` data-conn="store-page" data-id="${page + 1}"${(page + 1) * STORE_PAGE_SIZE >= entries.count ? " disabled" : ""}`) + `</nav>`;
-  if (!connected.length && !entries.count && Array.isArray(v.catalog) && (!v.configured || Array.isArray(v.composioCatalog))) html += `<p class="cs-none" role="status">${esc(t("conn.noMatch"))}</p>`;
+  if (!entries.count && Array.isArray(v.catalog) && (!v.configured || Array.isArray(v.composioCatalog))) html += `<p class="cs-none" role="status">${esc(t("conn.noMatch"))}</p>`;
   if (v.configured) {
     if (v.composioCatalog === "loading") html += loading;
     else if (v.composioCatalog === "failed") html += retry("retry-store");
@@ -636,7 +667,8 @@ function storePageHTML(s: StoreService, v: ConnectionsView): string {
       : btn(`${ico("plus")}${esc(t("conn.join"))}`, "pri", ` data-conn="join" data-id="${esc(s.id)}"${v.login ? " disabled" : ""}`);
   const failed = loginErrorHTML(v, s.id);
   const need = s.server_id ? "" : needWords(s);
-  const needs = need ? `<p class="cs-needs"><b>${esc(need)}</b> · ${esc(t(s.needs === "own_app" ? "setup.leadOwnApp" : "setup.leadKey", { p0: s.name }))}</p>` : "";
+  const lead = s.needs === "own_app" ? "setup.leadOwnApp" : PRESET_FORMS[s.id] ? "store.leadOwnServer" : "setup.leadKey";
+  const needs = need ? `<p class="cs-needs"><b>${esc(need)}</b> · ${esc(t(lead, { p0: s.name }))}</p>` : "";
   const examples = (s.examples[getLocale()] ?? s.examples.en ?? []).map((text) => `<li>${ico("chat")}<span>${esc(text)}</span></li>`).join("");
   return (
     backHTML() +
@@ -670,7 +702,7 @@ function formHTML(f: ConnectionForm): string {
         fld(t("conn.form.command"), fieldHTML(t("conn.form.commandHint"), f.command, { id: "conn-command", label: t("conn.form.command"), disabled: off }), "", "conn-command") +
         fld(t("mcp.args"), `<textarea class="field mcp-lines" id="conn-args" rows="4" ${off ? "disabled" : ""}>${esc(f.args)}</textarea>`, "", "conn-args") +
         `</div>`
-      : fld(t("conn.form.url"), fieldHTML(t("conn.form.urlHint"), f.url, { id: "conn-url", label: t("conn.form.url"), disabled: off }), "", "conn-url");
+      : fld(t("conn.form.url"), fieldHTML(f.urlHint ?? t("conn.form.urlHint"), f.url, { id: "conn-url", label: t("conn.form.url"), disabled: off }), "", "conn-url");
   const error = f.error ? `<div class="note" role="alert">${st("err", f.error())}</div>` : "";
   const typeSel = sel(typeChoices(), f.type, t("conn.form.type"), ` data-k="conn-type"${off ? " disabled" : ""}`);
   return (
@@ -734,7 +766,7 @@ const openGroup = (v: ConnectionsView): ConnectionGroup | undefined =>
 export function connectionsHTML(v: ConnectionsView): string {
   if (v.form) return `<div class="cs cs-form">${formHTML(v.form)}</div>`;
   if (v.open?.tab === "store") {
-    const s = [...(Array.isArray(v.catalog) ? v.catalog : []), ...uniqueComposio(v)].find(x => x.id === v.open!.id);
+    const s = [...(Array.isArray(v.catalog) ? v.catalog : []), ...presetEntries(v), ...uniqueComposio(v)].find(x => x.id === v.open!.id);
     if (s) return `<div class="cs cs-page">${deviceHTML(v)}${storePageHTML(s, v)}</div>`;
   }
   const g = openGroup(v);
@@ -882,7 +914,10 @@ export function createConnections(host: ConnectionsHost): Connections {
   }
 
   const groupById = (id: string): ConnectionGroup | undefined => (Array.isArray(groups) ? groups.find((g) => g.id === id) : undefined);
-  const entryById = (id: string): StoreService | undefined => ([...(Array.isArray(catalog) ? catalog : []), ...uniqueComposio(view())].find(s => s.id === id));
+  const entryById = (id: string): StoreService | undefined => {
+    const v = view();
+    return [...(Array.isArray(catalog) ? catalog : []), ...presetEntries(v), ...uniqueComposio(v)].find(s => s.id === id);
+  };
 
   async function load(): Promise<void> {
     const mine = ++loads;
@@ -1407,6 +1442,15 @@ export function createConnections(host: ConnectionsHost): Connections {
       case "join": {
         const entry = entryById(id);
         if (!entry || entry.server_id) break;
+        const preset = PRESET_FORMS[entry.id];
+        if (preset) {
+          if (form?.busy) break;
+          open = null;
+          form = { ...emptyForm(), ...preset };
+          redraw();
+          focusOn("#conn-url");
+          break;
+        }
         // An app that asks for the owner's own key or developer app asks in its form first; the rest sign in at once.
         if (entry.needs === "key" || entry.needs === "own_app") void addWithForm(entry, entry.needs);
         else void signIn({ catalog_id: entry.id }, entry.name, false);

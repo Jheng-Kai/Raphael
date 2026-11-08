@@ -17,10 +17,12 @@ export interface Place {
   /** The one day, `2026-10-14`, that the history shows; absent for all days, and on any other page. */
   day?: string;
   tab?: DictationTab;
+  /** The member whose settings page is open over their conversation (member-settings.ts); absent for the conversation. */
+  member?: number;
 }
 
 /** Whether the page on screen is the same, whatever is open over it. */
-export const samePage = (a: Place, b: Place): boolean => a.page === b.page && a.day === b.day && a.tab === b.tab;
+export const samePage = (a: Place, b: Place): boolean => a.page === b.page && a.day === b.day && a.tab === b.tab && a.member === b.member;
 
 /** Whether the window looks the same at both: the same page, and the same tab open over it if any. */
 export const samePlace = (a: Place, b: Place): boolean => samePage(a, b) && a.pane === b.pane;

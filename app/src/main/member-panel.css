@@ -9,7 +9,7 @@
 .mb-panel-row > .i:last-child { color: var(--text-3); }
 .mb-panel-row-copy { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
 .mb-panel-row-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: var(--fs-2xs); font-weight: 400; }
-.mb-panel-back.btn { display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-1) 0; border: 0; background: transparent; }
+.mb-panel-back.btn { display: flex; align-items: center; gap: var(--sp-1); padding: 3px 0; border: 0; background: transparent; }
 .mb-chat-picker { max-width: 480px; }
 .mb-chat-choices { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); margin-top: var(--sp-3); max-height: 52vh; overflow-x: hidden; overflow-y: auto; }
 .mb-chat-choice.btn { display: flex; justify-content: flex-start; align-items: center; gap: var(--sp-3); width: 100%; text-align: left; border: 0; background: transparent; padding: var(--sp-2); }
@@ -44,8 +44,8 @@
    face itself dims, along its own outline (a slime's wide base and its hat, or a round picture), and a white pencil
    stands in its middle, as on the owner's photo in Settings (owner, 2026-11-08: a dimmed circle left a slime's corners
    uncovered). */
-.mb-panel-identity > .btn.mb-face-edit { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 0; margin-bottom: var(--sp-1); padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; }
-.mb-panel-identity > .btn.mb-face-edit:hover:not(:disabled), .mb-panel-identity > .btn.mb-face-edit:active:not(:disabled) { background: transparent; }
+:is(.mb-panel-identity, .ms-id) > .btn.mb-face-edit { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 0; margin-bottom: var(--sp-1); padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; }
+:is(.mb-panel-identity, .ms-id) > .btn.mb-face-edit:hover:not(:disabled), :is(.mb-panel-identity, .ms-id) > .btn.mb-face-edit:active:not(:disabled) { background: transparent; }
 .mb-face-edit > .av.mb-av { transition: filter 0.12s ease; }
 .mb-face-pencil { position: absolute; top: 50%; left: 50%; display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--r-pill); background: var(--photo-dim); color: var(--photo-mark); opacity: 0; transform: translate(-50%, -50%); transition: opacity 0.12s ease; pointer-events: none; }
 .mb-face-pencil .i { width: 20px; height: 20px; }

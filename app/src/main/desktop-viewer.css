@@ -132,7 +132,7 @@
 .desktop-mode-label { display: inline-flex; align-items: center; gap: 6px; padding-right: var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); white-space: nowrap; }
 .desktop-mode-label .i { width: 16px; height: 16px; }
 .desktop-mode-label[data-mode="operating"] .i { display: none; }
-.desktop-mode .btn.sm { height: 28px; min-height: 28px; padding: 0 var(--sp-3); border: 1px solid var(--text); border-radius: var(--r-pill); background: var(--text); color: var(--content); font-size: var(--fs-sm); white-space: nowrap; }
+.desktop-mode .btn.sm { height: var(--h-ctl-sm); min-height: var(--h-ctl-sm); padding: 0 var(--sp-3); border: 1px solid var(--text); border-radius: var(--r-pill); background: var(--text); color: var(--content); font-size: var(--fs-sm); white-space: nowrap; }
 .desktop-mode .btn.sm:is(:hover, :active):not(:disabled) { border-color: color-mix(in srgb, var(--text) 86%, var(--content)); background: color-mix(in srgb, var(--text) 86%, var(--content)); color: var(--content); }
 .desktop-mode .btn.sm:active:not(:disabled) { border-color: color-mix(in srgb, var(--text) 76%, var(--content)); background: color-mix(in srgb, var(--text) 76%, var(--content)); }
 .desktop-mode .btn.sm:disabled { border-color: color-mix(in srgb, var(--text) 40%, var(--content)); background: color-mix(in srgb, var(--text) 40%, var(--content)); }

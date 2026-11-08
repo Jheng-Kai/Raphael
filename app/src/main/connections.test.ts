@@ -102,7 +102,7 @@ describe("the two views", () => {
     expect(bar).toContain('class="tabs plain"');
     expect(bar).toContain('role="tablist"');
     expect(bar).toMatch(/<button[^>]*class="tab"[^>]*role="tab"[^>]*aria-selected="true"[^>]*data-id="installed"[^>]*>已連結<span class="n">2<\/span>/);
-    expect(bar).toMatch(/<button[^>]*class="tab"[^>]*role="tab"[^>]*aria-selected="false"[^>]*data-id="store"[^>]*>商店<span class="n">3<\/span>/);
+    expect(bar).toMatch(/<button[^>]*class="tab"[^>]*role="tab"[^>]*aria-selected="false"[^>]*data-id="store"[^>]*>商店<span class="n">4<\/span>/); // with n8n
     expect(bar).toContain('id="conn-search"');
     expect(connectionsHTML(view({ tab: "store" }))).toMatch(/aria-selected="true"[^>]*data-id="store"/);
     // nothing connected yet still says so: 0
@@ -418,18 +418,20 @@ describe("商店", () => {
   test("the store tab and every pager count the same addable apps, including popular apps but excluding connected ones", () => {
     const catalog = [...CATALOG, ...Array.from({ length: 38 }, (_, index) => service(`extra-${index}`, `Extra ${String(index).padStart(2, "0")}`))];
     const seen = new Set<string>();
+    // Linear, Sentry, Canva, the extras and n8n: 42.
     for (let storePage = 0; storePage < 3; storePage++) {
       const out = connectionsHTML(view({ tab: "store", catalog, storePage }));
-      expect(out).toMatch(/data-id="store"[^>]*>商店<span class="n">41<\/span>/);
-      expect(out).toContain(`${storePage * 18 + 1}–${Math.min((storePage + 1) * 18, 41)} / 41`);
+      expect(out).toMatch(/data-id="store"[^>]*>商店<span class="n">42<\/span>/);
+      expect(out).toContain(`${storePage * 18 + 1}–${Math.min((storePage + 1) * 18, 42)} / 42`);
       const ids = [...out.matchAll(/data-conn="join" data-id="([^"]+)"/g)].map(match => match[1]!);
-      expect(ids).toHaveLength(storePage < 2 ? 18 : 5);
+      expect(ids).toHaveLength(storePage < 2 ? 18 : 6);
       for (const id of ids) {
         expect(seen.has(id)).toBe(false);
         seen.add(id);
       }
     }
-    expect(seen.size).toBe(41);
+    expect(seen.size).toBe(42);
+    expect(seen.has("n8n")).toBe(true);
     expect(seen.has("linear")).toBe(true);
     expect(seen.has("notion")).toBe(false);
   });
@@ -439,19 +441,20 @@ describe("商店", () => {
     const filter = vi.spyOn(composioCatalog, "filter");
     const out = connectionsHTML(view({ tab: "store", configured: true, composioCatalog }));
     expect(out).toContain('data-k="cs-store:slack"');
-    expect(out).toMatch(/data-id="store"[^>]*>商店<span class="n">4<\/span>/);
+    expect(out).toMatch(/data-id="store"[^>]*>商店<span class="n">5<\/span>/);
     expect(filter).toHaveBeenCalledTimes(1);
   });
 
-  test("connected apps lead, followed by available popular apps and the remaining catalog", () => {
+  test("the store is one list of the apps not added yet, popular ones first (owner, 2026-11-08)", () => {
     const titles = [...html.matchAll(/<h2>([^<]+)<\/h2>/g)].map(match => match[1]);
-    expect(titles).toEqual(["已連結", "常用", "全部"]);
-    expect([...html.matchAll(/class="nm">([^<]+)</g)].map(match => match[1])).toEqual(["Notion", "Linear", "Canva", "Sentry"]);
+    expect(titles).toEqual(["全部"]);
+    expect([...html.matchAll(/class="nm">([^<]+)</g)].map(match => match[1])).toEqual(["Linear", "Canva", "n8n", "Sentry"]);
+    expect(html).not.toContain("已安裝");
     expect(html).not.toContain('data-k="conn-category"');
     expect(html.match(/data-conn="store-group"/g)).toHaveLength(10);
   });
 
-  test("a card is a container with the button that opens the page and, inside it, the button that adds, or 已安裝; no button is in a button", () => {
+  test("a card is a container with the button that opens the page and, inside it, the button that adds; no button is in a button", () => {
     const cards = html.split('<div class="cs-card">').slice(1);
     const card = cards.find((c) => c.includes('data-id="linear"'))!;
     expect(card).toMatch(/class="btn cs-main" data-conn="open-store" data-id="linear" data-k="cs-store:linear"/);
@@ -463,16 +466,25 @@ describe("商店", () => {
     for (const c of cards) expect(c.match(/<button/g)!.length).toBeLessThanOrEqual(2);
     expect(html).not.toMatch(/<button(?:(?!<\/button>).)*<button/);
     expect(card).toMatch(/<button[^>]*class="btn sm" data-conn="join" data-id="linear"[^>]*>.*加入<\/button>/);
-    const notion = cards.find((c) => c.includes('data-id="notion"'))!;
-    expect(notion).toContain("已安裝");
-    expect(notion).not.toContain('data-conn="join" data-id="notion"');
+    // Notion is connected: it is in 已連結, not in the store.
+    expect(cards.some((c) => c.includes('data-id="notion"'))).toBe(false);
+  });
+
+  test("n8n is the owner's own server: its row and page say so, and an n8n connection takes it out of the store", () => {
+    const card = html.split('<div class="cs-card">').find((c) => c.includes('data-id="n8n"'))!;
+    expect(card).toContain('<b class="need">需要自己的伺服器</b>');
+    expect(card).toMatch(/<span class="mono md logo-mono" style="--brand:#EA4B71">/);
+    expect(storePage("n8n")).toContain("n8n 架在你自己的伺服器上");
+    // a connection that already is n8n, however it was named, takes it out of the store
+    const own: ConnectionGroup = { ...custom, id: "n1", name: "Workflows", transport: "http", url: "https://n8n.example.com/mcp-server/http" };
+    expect(connectionsHTML(view({ tab: "store", groups: [...GROUPS, own] }))).not.toContain('data-id="n8n"');
   });
 
   test("a service with no bundled mark uses a plug, and known marks keep their brand colour", () => {
     expect(html).toContain(ico("plug"));
     expect(html).not.toContain(">C<");
     expect(html).toMatch(/class="mono md logo-mono" style="--brand:#5E6AD2"/); // Linear
-    expect(html).toMatch(/class="mono md logo-mono">/); // Notion: the colour of the text
+    expect(connectionsHTML(view({ tab: "store", catalog: [service("notion", "Notion", { icon: "notion" })] }))).toMatch(/class="mono md logo-mono">/); // Notion, not added: the colour of the text
     expect(html).not.toMatch(/class="mono[^"]*tile|background/);
   });
 
@@ -482,6 +494,15 @@ describe("商店", () => {
     expect(linear.slice(0, linear.indexOf("</div>"))).toContain("請在瀏覽器登入…");
     expect(linear.slice(0, linear.indexOf("</div>"))).toContain('data-conn="cancel-login"');
     expect(out).toMatch(/data-conn="join" data-id="sentry"[^>]*disabled/);
+  });
+
+  test("a search with a typo or swapped letters still finds the app by its name, after what it finds as typed (owner, 2026-11-08)", () => {
+    const catalog = [service("gmail", "Gmail", { icon: "gmail" }), service("gmailer", "Mailer Gmail Tools"), ...CATALOG];
+    const names = (search: string): string[] => [...bodyHTML(view({ tab: "store", catalog, search })).matchAll(/class="nm">([^<]+)</g)].map((m) => m[1]!);
+    expect(names("gamil")).toEqual(["Gmail", "Mailer Gmail Tools"]);
+    expect(names("linaer")).toEqual(["Linear"]);
+    expect(names("sentry")).toEqual(["Sentry"]); // as typed, nothing near is added
+    expect(names("360")).toEqual([]);
   });
 
   test("searches by name, publisher and summary, and then lists the matches once", () => {
@@ -622,6 +643,7 @@ describe("the rules for this tab", () => {
     installedPage("ab12", { groups: [{ ...notes, status: "error", error: "auth" }] }),
     storePage("linear", { loginError: { target: "linear", kind: "denied" } }),
     connectionsHTML(view({ form: form({ pairLines: "TOKEN=" }) })),
+    storePage("notion"),
   ];
 
   test("everything that does something is a button or a switch with a shape, and every choice is a dropdown", () => {
@@ -1019,6 +1041,15 @@ describe("what the tab does", () => {
     } finally { vi.unstubAllGlobals(); await browser.happyDOM.abort(); }
   });
 
+  test("加入 on n8n opens the server form with its type, name and header filled in", async () => {
+    const c = createConnections(host);
+    await c.load();
+    c.click(button("join", { id: "n8n" }));
+    expect(c.view().form).toMatchObject({ type: "http", name: "n8n", url: "", pairLines: "Authorization=Bearer " });
+    expect(connectionsHTML(c.view())).toContain('placeholder="https://n8n.example.com/mcp-server/http"');
+    expect(api.integrationsConnect).not.toHaveBeenCalled();
+  });
+
   test.each(["finish", "switch", "reset"])("store paints visible rows first and cancels stale fill on %s", async (ending) => {
     api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false, google_configured: false });
     api.integrationsCatalog.mockResolvedValue({ services: Array.from({ length: 24 }, (_, i) => service(`app-${i}`, `App ${i}`)) });
@@ -1055,7 +1086,7 @@ describe("what the tab does", () => {
       expect(browser.document.querySelector('[data-cs-pending]')).toBeNull();
       expect(browser.document.querySelectorAll('.cs-card [data-conn="open-store"]')).toHaveLength(18);
       expect(browser.document.querySelector('.cs-card [data-conn="open-store"]')).toBe(first);
-      expect(browser.document.querySelector('.cs-store-pages .num')!.textContent).toContain('/ 24');
+      expect(browser.document.querySelector('.cs-store-pages .num')!.textContent).toContain('/ 25'); // and n8n
     } finally { vi.useRealTimers(); vi.unstubAllGlobals(); await browser.happyDOM.abort(); }
   });
 

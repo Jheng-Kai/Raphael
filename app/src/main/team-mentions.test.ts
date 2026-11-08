@@ -69,6 +69,17 @@ test("without an input method the menu follows every keystroke as before", () =>
   expect(menu()).toBeNull();
 });
 
+test("a typo or swapped letters still find the app or member, the plain matches first (owner, 2026-11-08)", () => {
+  const roster = { ...list, team_context: { apps: [{ name: "Gmail", state: "ready" }, { name: "Google Calendar", state: "ready" }, { name: "Notion", state: "ready" }] } } as unknown as MembersList;
+  bindTeamMentions(input, () => ({ list: roster }));
+  for (const [typed, found] of [["@gamil", "Gmail"], ["@calender", "Google Calendar"], ["@notoin", "Notion"]] as const) {
+    input.value = typed; input.setSelectionRange(typed.length, typed.length); input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(rows()[0]).toBe(found);
+  }
+  input.value = "@no"; input.setSelectionRange(3, 3); input.dispatchEvent(new Event("input", { bubbles: true }));
+  expect(rows()).toEqual(["Notion"]); // two letters are typed right: no near misses
+});
+
 test("a recalled message ending in an @ is not typing: it opens no menu", () => {
   bindTeamMentions(input, () => ({ list }));
   input.value = "ask @小"; input.setSelectionRange(5, 5);

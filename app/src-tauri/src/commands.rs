@@ -3569,9 +3569,11 @@ mod tests {
         let err = crate::rpc::RpcError {
             code: 1001,
             message: "Avatar generation failed".into(),
-            data: Some(json!({"kind": "image_model_missing", "reason": "secret words",
+            data: Some(
+                json!({"kind": "image_model_missing", "reason": "secret words",
                 "missing": {"resource": "image", "requirement": "image_generation", "repair": "models"},
-                "target": {"pane": "models", "field": "image-model"}})),
+                "target": {"pane": "models", "field": "image-model"}}),
+            ),
         };
         let text = window_error("members.avatar_generate", &err);
         assert_eq!(
@@ -3579,9 +3581,18 @@ mod tests {
             r#"[1001] Avatar generation failed {"kind":"image_model_missing","repair":"models","resource":"image"}"#
         );
         assert!(!text.contains("secret"));
-        assert_eq!(window_error("members.update", &err), "[1001] Avatar generation failed");
-        let odd = crate::rpc::RpcError { data: Some(json!({"kind": "<b>x</b>"})), ..err };
-        assert_eq!(window_error("members.avatar_generate", &odd), "[1001] Avatar generation failed");
+        assert_eq!(
+            window_error("members.update", &err),
+            "[1001] Avatar generation failed"
+        );
+        let odd = crate::rpc::RpcError {
+            data: Some(json!({"kind": "<b>x</b>"})),
+            ..err
+        };
+        assert_eq!(
+            window_error("members.avatar_generate", &odd),
+            "[1001] Avatar generation failed"
+        );
     }
 
     #[test]

@@ -69,6 +69,15 @@ export function installMock(fixture, config = {}, target = window) {
     data.turns = data.turns.filter(turn => turn.member_id !== 1).concat(first, last);
   }
   if (variant.raphaelVoice) data.settings.tts_fish_voice = "0123456789abcdef0123456789abcdef";
+  // The member settings page (member-settings.ts): a voice service with two voices, two connections that are on, and a voice chosen.
+  if (variant.memberSettings) {
+    data.voices = { configured: true, voices: [{ id: "voice-clear", name: "清澈女聲" }, { id: "voice-calm", name: "沉穩男聲" }] };
+    data.servers.forEach(server => { server.enabled = true; });
+    data.servers.push({ ...structuredClone(data.servers[0]), id: "calendar", name: "行事曆" });
+    data.members.find(member => member.id === 1).voice = "voice-clear";
+    data.commands.push({ id: 41, member_id: 1, name: "weekly", description: "每週整理", template: "整理本週：{input}" });
+    data.settings.tts_fish_voice = "voice-calm";
+  }
   if (variant.computerHost) data.settings.computer_ssh_alias = variant.computerHost;
   if (variant.routineEmpty) data.routines = [];
 
@@ -875,7 +884,7 @@ export function installMock(fixture, config = {}, target = window) {
       case "vault.add": { const { values, ...metadata } = p; data.vaultEntries.push({ id: "new-synthetic-entry", ...metadata }); return { id: "new-synthetic-entry" }; }
       case "vault.update": Object.assign(data.vaultEntries.find(e => e.id === p.id), p); return { updated: true };
       case "vault.remove": data.vaultEntries = data.vaultEntries.filter(e => e.id !== p.id); return { removed: true };
-      case "links.preview": return { url: p.url, site: new URL(p.url).hostname, title: "", description: "", thumbnail: null };
+      case "links.preview": return new URL(p.url).hostname === "example.com" ? { url: p.url, site: "example.com", title: "範例網頁標題", description: "這一頁的一句摘要。", thumbnail: null } : { url: p.url, site: new URL(p.url).hostname, title: "", description: "", thumbnail: null };
       case "pages.open":
         if (variant.pageGone) throw { kind: "not_found", message: "gone" };
         // Not a file of the dev server, which would write its own client into the page.

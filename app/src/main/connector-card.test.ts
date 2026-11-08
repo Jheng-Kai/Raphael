@@ -90,7 +90,7 @@ describe("a connector card", () => {
     expect(visible(own)).toBe("連結 Orbit 等你填入 需要你自己的開發者應用程式 設定開發者應用程式");
     // A failure names what is missing and offers the form again, never a bare "retry".
     const rejected = connectorCardHTML({ ...key, state: "failed", error: "key_rejected" });
-    expect(visible(rejected)).toBe("連結 Acme 未能完成 這把金鑰沒有被接受，請再填一次 填入金鑰 關閉");
+    expect(visible(rejected)).toBe("連結 Acme 未能完成 這把金鑰沒有被接受，請再填一次 填入金鑰"); // closed by the × at its top right (owner, 2026-11-08)
     expect(actions(rejected)).toEqual(["card-setup"]);
     expect(actions(connectorCardHTML({ ...key, state: "cancelled" }))).toEqual(["card-setup"]);
     expect(actions(connectorCardHTML({ ...key, state: "authorizing" }))).toEqual(["card-cancel"]);
@@ -98,7 +98,7 @@ describe("a connector card", () => {
 
   test("with no Composio key the failed card says so and opens the settings, not a vague retry", () => {
     const failed = connectorCardHTML(card({ state: "failed", error: "needs_composio_key" }));
-    expect(visible(failed)).toBe("Gmail 未能完成 還沒有 Composio 金鑰，請到「設定 › 連接 › 商店」開啟 Composio 表單，依表單指引取得金鑰後填入並儲存。 開啟連接設定 關閉");
+    expect(visible(failed)).toBe("Gmail 未能完成 還沒有 Composio 金鑰，請到「設定 › 連接 › 商店」開啟 Composio 表單，依表單指引取得金鑰後填入並儲存。 開啟連接設定");
     const shared = connectorCardHTML(card({ state: "failed", error: "needs_composio_key", missing: {resource: "composio", requirement: "composio_key", state: "missing", repair: "store"} }));
     expect(visible(shared)).toContain("設定 › 連接 › 商店");
     expect(shared).toContain('data-missing-repair="store"');

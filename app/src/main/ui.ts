@@ -7,6 +7,7 @@ import { registerDismissal } from "./dismissals";
 
 import { type Notifier, UNDO_MS } from "./undo";
 import { ICON } from "./icon-set";
+import { nameScore } from "./find-match";
 
 // ---------- HTML ----------
 
@@ -889,13 +890,17 @@ export function openMenu(
   if (placement?.focus !== false && !placement?.completion) (remembered ?? el.querySelector<HTMLElement>('[aria-checked="true"]') ?? el.querySelector<HTMLElement>("button") ?? el).focus();
 }
 
-/** Stable exact, prefix, then substring matches within each section, including alternate names. */
+/** Matches within each section, best first and stable: exact, start, inside, then near misses (`find-match.ts`), by
+ * the value, the label and other names. */
 export function matchingChoices(options: Choice[], query: string): Choice[] {
-  const needle = query.toLocaleLowerCase();
-  const score = (choice: Choice): number => Math.min(...[choice.value, ...(choice.aliases ?? [])].map(value => {
-    const name = value.toLocaleLowerCase();
-    return name === needle ? 0 : name.startsWith(needle) ? 1 : name.includes(needle) ? 2 : Infinity;
+  // A space after the words ends them: 「@研究組 」 is a finished mention, and only a longer name that goes on after those
+  // words ("Google " for Google Calendar) still answers it.
+  const finished = /\s$/u.test(query) ? query.trimStart().toLocaleLowerCase() : "";
+  const scores = new Map(options.map(choice => {
+    const names = [choice.value, choice.label.replace(/^[@/]/, ""), ...(choice.aliases ?? [])];
+    return [choice, finished && !names.some(name => name.toLocaleLowerCase().startsWith(finished)) ? Infinity : nameScore(names, query)];
   }));
+  const score = (choice: Choice): number => scores.get(choice)!;
   const groups = [...new Set(options.map(option => option.group))];
   return groups.flatMap(group => options.filter(option => option.group === group && score(option) < Infinity).sort((a, b) => score(a) - score(b)));
 }

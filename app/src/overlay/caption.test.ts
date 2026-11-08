@@ -47,6 +47,14 @@ test("a short line is one page, as it was", () => {
   expect(captionLines("Remembered.", "en")).toEqual(["Remembered."]);
 });
 
+test("Korean notices page before three Hangul lines accumulate in the corner", () => {
+  const text = "《알림. 이번 달 예산을 모두 사용했습니다. 받아쓰기를 정리하지 않고 붙여넣습니다. 작업 공간과 로그인은 보존됩니다.》";
+  const pages = captionLines(text, "ko");
+  expect(pages[0]).toBe("《알림. 이번 달 예산을 모두 사용했습니다. 받아쓰기를 정리하지 않고 붙여넣습니다.");
+  expect(pages.length).toBeGreaterThan(1);
+  expect(pages.join(" ").replace(/\s/g, "")).toBe(text.replace(/\s/g, ""));
+});
+
 test("English pages join their sentences with a space and break only at a full stop before a space", () => {
   const pages = pagesOf("Version 3.5 is out. It fixes the menu. ".repeat(4).trim(), 60);
   for (const page of pages) expect(page.length).toBeLessThanOrEqual(60);

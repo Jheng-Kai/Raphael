@@ -1,5 +1,19 @@
 # Calendar and automations
 
+## The routine editor as rows (owner, 2026-11-08: 「這真的太亂了，還有一些字被隱藏起來」)
+
+When a scheduled routine runs is one tinted list of rows, the name left and the choice right: 重複 (one dropdown of
+once, daily, weekdays, weekly, monthly and every, never a row of chips that runs out of room), then only the row its
+choice needs (the days of a week as small pills, a day of the month, an interval and its hours), then 開始 or 日期 and
+時間 (no time row while hours are set: they are its times). The sentence under the rows says it in words. The
+instructions box grows with its words (no scroll inside it) and nothing is reserved empty.
+
+```powershell
+npm run look -- automation-once automation-weekly automation-every automation-long-prompt automation-monthly automation-minutes --theme both --width 1120,720,1920x1080
+```
+
+`moving-routine-rows` checks the dropdown, that every row's words are whole and inside the dialog, and the box.
+
 ## Calm conversations (owner, 2026-11-05)
 
 See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) for R-UI-101/R-CLI-07 and the selected matrix. Routine origins now name the routine inside its reply, with the existing editor target. Failures appear once; rerun shares reply/copy actions. Public work receipts collapse into reply detail; calendars and owner cards retain their behavior. This supersedes older transcript trigger-chip and between-message receipt descriptions.

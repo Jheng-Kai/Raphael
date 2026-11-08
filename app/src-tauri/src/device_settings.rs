@@ -29,7 +29,10 @@ pub const FILE_NAME: &str = "device.json";
 pub const EMBLEM_SIZES: [u32; 3] = [120, 150, 194];
 
 /// The interface languages offered by the main window.
-const UI_LANGUAGES: [&str; 3] = ["zh-TW", "en", "ja"];
+const UI_LANGUAGES: [&str; 15] = [
+    "zh-TW", "en", "ja", "zh-CN", "ko", "es", "fr", "de", "pt-BR", "it", "ru", "vi", "th", "id",
+    "tr",
+];
 
 /// Whether the overlay shows Raphael's words as subtitles, in the interface language.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -866,7 +869,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(FILE_NAME);
         let mut settings = DeviceSettings::default();
-        for language in ["en", "ja", "zh-TW"] {
+        for language in UI_LANGUAGES {
             settings
                 .apply_patch(&json!({"ui_language": language, "appearance": "dark"}))
                 .unwrap();
@@ -893,7 +896,7 @@ mod tests {
             .unwrap();
         let before = settings.clone();
         for bad in [
-            json!("zh-CN"),
+            json!("ar"),
             json!("zh-tw"),
             json!("EN"),
             json!(""),
@@ -913,7 +916,7 @@ mod tests {
     #[test]
     fn an_invalid_stored_ui_language_only_defaults_that_field() {
         for bad in [
-            json!("zh-CN"),
+            json!("ar"),
             json!("zh-tw"),
             json!("EN"),
             json!(""),

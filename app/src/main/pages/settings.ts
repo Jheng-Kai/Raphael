@@ -241,7 +241,7 @@ export function createSettings(app: AppContext): SettingsPage {
     tryPrompt: (text) => app.go("agent", `draft:${text}`),
   });
   app.onEvent((event) => connections.followEvent(event));
-  const memoryHost = { visible: () => visible && pane === "general", redraw: () => render() };
+  const memoryHost = { visible: () => visible && pane === "memory", redraw: () => render() };
   const memoryShared = createMemory({ ...memoryHost, space: "shared" });
   const memories = [memoryShared];
   app.onEvent(event => {
@@ -257,7 +257,7 @@ export function createSettings(app: AppContext): SettingsPage {
     // Closed too: Settings open at once on what they hold, and a choice made at the composer must already be in it.
     if (event.type === "SettingsChanged") void api.settingsGet().then(result => { brain = result.settings; if (visible) render(); }, () => {});
     cliBrains.followEvent(event);
-    if (event.type === "ProvidersChanged" && visible) void loadCatalog();
+    if (event.type === "ProvidersChanged" && visible) void loadCatalog(true);
     if (event.type === "ProvidersChanged" || event.type === "AgentTurn" || event.type === "QuotaChanged" || event.type === "RoutinesChanged" || event.type === "Dictation" && event.phase === "pasted") refreshUsage();
   });
 
@@ -265,7 +265,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
-    update, memoryImportHTML: memoryImport.html(),
+    update, memoryImportHTML: memoryImport.html(), memoryImportAction: memoryImport.action(),
     pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
     replacingKey, keyBusy, keyError, limitDraft, limitError, languageGroups, now: Date.now(),
     connections: connections.view(), memoryShared: memoryShared.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
@@ -369,9 +369,20 @@ export function createSettings(app: AppContext): SettingsPage {
     return anchor?.dataset.k;
   }
 
-  function destroyUsage(): void {
-    usage?.destroy(); usage = null; usageRefresh = null; usageAgain = false;
-    usageHost.remove();
+  // 模型與用量 is read once while the app runs and kept (owner, 2026-11-08: 「跑一次之後先暫存它的狀態，然後除非重新開 app，
+  // 或者是你點一下右上角的那個重跑，它才會重新 loading 一次」): its providers, the models' catalogue, this computer's speech
+  // models and the usage. A change the core tells of (a provider added) still reads again; the refresh at the tab's top
+  // right reads everything again.
+  let providersRead = false, catalogRead = false, localRead = false;
+  async function loadProviders(force = false): Promise<void> {
+    if (providersRead && !force) return;
+    await providers.load();
+    providersRead = providers.view().state === "ready";
+  }
+  function refreshModels(): void {
+    void loadCatalog(true); // and the providers with it
+    void loadLocalModels();
+    void usage?.refresh();
   }
 
   /** Coalesce activity bursts and wait for the first reading before refreshing it. */
@@ -465,43 +476,38 @@ export function createSettings(app: AppContext): SettingsPage {
   /** Goes to a tab: what the tab before it had open is dropped, and the new one comes in. */
   function openPane(next: SettingsPane, tab?: ModelsTab): void {
     closeMenu();
-    const hadUsage = usage !== null;
     if (next === "usage") modelsTab = "usage";
     else if (tab) modelsTab = tab;
     pane = canonicalPane(next);
     if (pane === "about") void checkUpdate();
-    if (pane !== "models") destroyUsage();
     if (pane === "connections") void connections.load();
     else connections.reset();
-    // Memory is a section of 一般 (owner, 2026-11-07); the bots moved to the members' panels.
-    if (pane === "general") { for (const list of memories) void list.load(); }
+    // Memory is a tab of its own (owner, 2026-11-08); the bots moved to the members' panels.
+    if (pane === "memory") { for (const list of memories) void list.load(); }
     else { for (const list of memories) list.reset(); }
     if (pane === "safety") { void rules.load(); void vault.load(); }
     else { rules.reset(); vault.reset(); }
     services.reset();
     providers.reset();
     if (pane === "tools") void services.load();
-    if (pane === "models" && modelsTab === "models") void providers.load();
+    if (pane === "models" && modelsTab === "models") void loadProviders();
     syncMonitor();
     body.scrollTop = 0;
     render();
     body.scrollTop = 0;
-    if (hadUsage && pane === "models" && modelsTab === "usage") refreshUsage();
     paintNav();
     replay(body, "pane-in");
   }
 
   function switchModelsTab(next: ModelsTab): void {
     if (next === modelsTab) return;
-    const hadUsage = usage !== null;
     closeMenu();
     modelsTab = next;
     if (next === "usage") providers.reset();
     render();
     body.scrollTop = 0;
     body.querySelector<HTMLElement>(`[data-models-tab="${next}"]`)?.focus({ preventScroll: true });
-    if (next === "models") void providers.load();
-    else if (hadUsage) refreshUsage();
+    if (next === "models") void loadProviders();
   }
 
   onLocaleChange(() => {
@@ -653,17 +659,17 @@ export function createSettings(app: AppContext): SettingsPage {
    * the pickers' lists go in when it comes, without drawing the page again (a key being typed stays).
    * A chosen model that OpenRouter no longer lists went back to its default: that is told, and drawn.
    */
-  async function loadCatalog(): Promise<void> {
+  async function loadCatalog(force = false): Promise<void> {
     const mine = loads;
     const request = ++catalogLoads;
     let next: ModelCatalog | "failed";
     try {
-      [next] = await Promise.all([api.modelsCatalog(), providers.load()]);
+      [next] = await Promise.all([api.modelsCatalog(), loadProviders(force)]);
     } catch {
       // keep a catalog read earlier; else say that the prices cannot be had
       next = typeof catalog === "object" ? catalog : "failed";
     }
-    if (typeof next === "object") rememberCatalog(next);
+    if (typeof next === "object") { rememberCatalog(next); catalogRead = true; }
     if (mine !== loads || request !== catalogLoads || !visible) return;
     catalog = next;
     if (typeof next === "object" && next.replaced.length > 0) {
@@ -699,6 +705,7 @@ export function createSettings(app: AppContext): SettingsPage {
     }
     if (mine !== loads || !visible) return;
     localModels = next;
+    localRead = Array.isArray(next);
     paintLocal();
   }
 
@@ -1103,6 +1110,9 @@ export function createSettings(app: AppContext): SettingsPage {
       case "close":
         app.closeSettings();
         break;
+      case "models-refresh":
+        refreshModels();
+        break;
       case "rerun-guide":
         app.rerunGuide();
         break;
@@ -1270,7 +1280,6 @@ export function createSettings(app: AppContext): SettingsPage {
       const repair = open?.startsWith("repair:") ? open.split(":").slice(1) : null;
       if (repair?.[0] === "computer") { app.closeSettings(); app.go("agent", "computer"); return; }
       if (repair) open = ({ search: "tools", read: "tools", vision: "tools", pdf: "tools", voice: "tools", store: "connections" } as Record<string, SettingsPane>)[repair[0]] ?? repair[0] as SettingsPane;
-      const hadUsage = usage !== null;
       visible = true;
       stopOutside();
       stopOutside = registerDismissal(el.querySelector<HTMLElement>(".modal")!, () => app.closeSettings(), () => !recording.active());
@@ -1285,7 +1294,6 @@ export function createSettings(app: AppContext): SettingsPage {
       // the first tab, unless the way in knows better (the report that says there is no key goes to the key)
       pane = open && PANES.some((p) => p.id === canonicalPane(open as SettingsPane)) ? canonicalPane(open as SettingsPane) : "general";
       if (open === "usage" || open === "models") modelsTab = open;
-      if (pane !== "models") destroyUsage();
       connections.reset();
       for (const list of memories) list.reset();
       rules.reset();
@@ -1294,10 +1302,10 @@ export function createSettings(app: AppContext): SettingsPage {
       providers.reset();
       if (pane === "about") void checkUpdate();
       if (pane === "connections") void connections.load();
-      if (pane === "general") { for (const list of memories) void list.load(); }
+      if (pane === "memory") { for (const list of memories) void list.load(); }
       if (pane === "safety") { void rules.load(); void vault.load(); }
       if (pane === "tools") void services.load();
-      if (pane === "models" && modelsTab === "models") void providers.load();
+      if (pane === "models" && modelsTab === "models") void loadProviders();
       body.scrollTop = 0;
       closeMenu();
       render();
@@ -1315,7 +1323,7 @@ export function createSettings(app: AppContext): SettingsPage {
           services.openRepair(target as "search" | "read" | "vision" | "pdf" | "voice", ["searxng", "tavily", "brave", "exa", "fish", "jina", "firecrawl"].includes(resource) ? resource : null);
           el.querySelector<HTMLElement>('#svc-dialog input, #svc-dialog button')?.focus();
         } else if (target === "models") {
-          await providers.load();
+          await loadProviders();
           if (mine !== loads || !visible) return;
           if (resource === "image" || resource === "video") {
             const control = el.querySelector<HTMLElement>(`[data-row="${resource}-model"] [data-k="${resource}-model"]`);
@@ -1335,8 +1343,8 @@ export function createSettings(app: AppContext): SettingsPage {
         }
       }
       if (!el.contains(document.activeElement)) el.querySelector<HTMLElement>("#set-title")?.focus();
-      void loadCatalog();
-      void loadLocalModels();
+      if (!catalogRead) void loadCatalog();
+      if (!localRead) void loadLocalModels();
 
       stopEvents?.();
       const stopLevels = app.onEvent((event) => {
@@ -1353,7 +1361,6 @@ export function createSettings(app: AppContext): SettingsPage {
         document.removeEventListener("visibilitychange", onVisibility);
       };
       syncMonitor();
-      if (hadUsage) refreshUsage();
       await usage?.ready;
     },
     hide() {
@@ -1362,7 +1369,8 @@ export function createSettings(app: AppContext): SettingsPage {
       stopOutside();
       for (const picker of pickers.values()) picker.close();
       cliBrains.stop();
-      destroyUsage();
+      // The usage stays mounted and read: it is read again only by its refresh or a change the core tells of.
+      usageHost.remove();
       connections.reset();
       for (const list of memories) list.reset();
       rules.reset();

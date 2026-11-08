@@ -26,6 +26,7 @@ import { bindComposerMentions, mentionTargets } from "./team-mentions";
 import { createMemberActions } from "./member-actions";
 import { createMemberColumn } from "./member-column";
 import { createDetails } from "./member-details";
+import { createMemberSettings, type MemberSettings } from "./member-settings";
 import { mountEdge, savedWidth, saveWidth } from "./edge-drag";
 
 /** The details panel's widths (px): Grok Bot's opens at about 453 and drags to about 685; narrower than PANEL_CLOSE it closes. */
@@ -70,6 +71,10 @@ export interface MembersShell {
   readonly column: HTMLElement;
   /** The details panel. */
   readonly details: HTMLElement;
+  /** The open member's settings page, which takes the conversation's place while it is open. */
+  readonly settings: MemberSettings;
+  /** Opens the settings page of the open member (the panel closes first where it covers the page). */
+  openSettings(): void;
   computer(): void;
   /** The narrow windows' dropdown of members, for the left of the chat's top row. */
   readonly picker: HTMLElement;
@@ -129,7 +134,7 @@ export function createMembers(host: MembersHost): MembersShell {
 
   // ---------- the parts ----------
 
-  const { editMember, memberAction, moveMember, deleteMember } = createMemberActions({
+  const { memberAction, moveMember, deleteMember } = createMemberActions({
     list: () => list, current: () => current, select, load, update,
     deleted: id => previews.delete(id),
   });
@@ -171,11 +176,20 @@ export function createMembers(host: MembersHost): MembersShell {
     list: () => list,
     update,
     close: () => setDetails(false),
-    edit: m => editMember(m),
-    hide: m => void memberAction(m.id, "hide"),
+    // The gear: the member's settings page in the main area, or, when it is open, back to the conversation.
+    openSettings: () => { if (settings.isOpen()) host.app.go("agent"); else host.app.go("agent", `member-settings:${current}`); },
     openConversation: host.onOpenConversation ? (member, conversation) => host.onOpenConversation!(member, conversation) : undefined,
     conversationOf: member => host.conversationOf?.(member),
     openTurn: (member, conversation, turn) => host.onOpenConversation?.(member, conversation!, turn),
+  });
+
+  // The member settings page: where the conversation is, over it, while it is open.
+  const settings: MemberSettings = createMemberSettings({
+    app: host.app,
+    member,
+    list: () => list,
+    update,
+    back: () => host.app.go("agent"),
   });
 
   // As Grok Bot's: the panel's left edge drags it wider or narrower, and dragged narrower than it can be it closes; the
@@ -225,6 +239,7 @@ export function createMembers(host: MembersHost): MembersShell {
   function drawAll(): void {
     column.draw();
     details.draw();
+    settings.draw();
     drawHead();
     // The panel joins its page after the shell is made; its width follows it there.
     placePanel();
@@ -320,6 +335,8 @@ export function createMembers(host: MembersHost): MembersShell {
   // ---------- choosing ----------
 
   function select(id: number): void {
+    // Another member (or the same one, from the sidebar) leaves the settings page for the conversation.
+    settings.close();
     if (!host.visible()) host.app.go("agent");
     if (id === current) {
       if (currentRoomId() !== null) { host.onSelect(id, true); drawAll(); void readThread(); }
@@ -351,7 +368,6 @@ export function createMembers(host: MembersHost): MembersShell {
       details.el.classList.add("is-in");
       details.overview();
       details.refreshRoutines();
-      details.refreshMemory(current);
       if (document.documentElement.hasAttribute("data-keys")) details.el.querySelector<HTMLElement>('[data-det="close"]')?.focus({ preventScroll: true });
     } else {
       details.el.classList.remove("is-in");
@@ -513,13 +529,20 @@ export function createMembers(host: MembersHost): MembersShell {
 
   window.addEventListener("raphael:new-member", () => newMember(null));
   window.addEventListener("raphael:member-store", () => newMember(null, true));
-  onLocaleChange(() => { drawAll(); details.refreshMemory(current); });
+  onLocaleChange(() => { drawAll(); });
+  // A group chat comes where the conversation is: the settings page gives way to it.
+  window.addEventListener("raphael:open-room", () => settings.close());
   details.el.hidden = !open;
   drawAll();
 
   return {
     column: column.el,
     details: details.el,
+    settings,
+    openSettings() {
+      if (innerWidth < 860) setDetails(false);
+      settings.open();
+    },
     computer() { setDetails(true); details.select('computer'); },
     picker,
     pill,
@@ -551,10 +574,13 @@ export function createMembers(host: MembersHost): MembersShell {
         refreshTimer = null;
         void load(true);
         details.refreshResources();
+        settings.refresh();
       } else if (event.type === "RoutinesChanged" && event.member_id === current) {
         details.refreshRoutines();
+      } else if (event.type === "SettingsChanged" || event.type === "BrainsChanged" || event.type === "ProvidersChanged") {
+        settings.refreshModel();
       } else if (event.type === "MemoryChanged") {
-        details.refreshMemory(event.member_id, event.space);
+        settings.refreshMemory(event.member_id, event.space);
       } else if (event.type === "MemberActivity") {
         setSlimeState(event.member_id, event.state, event.label);
         // A press of a panel button ends when the member stops; the bot it set up shows at once (owner, 2026-11-07).

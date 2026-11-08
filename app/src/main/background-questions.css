@@ -11,10 +11,10 @@
 .bgq-name { font: 500 var(--fs-2xs)/1.4 var(--ui); color: var(--rg-ink); opacity: 0.8; }
 .bgq-name + .bgq-line { font-weight: 500; }
 .bgq-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
-.btn.bgq-no { min-height: 30px; padding: var(--sp-1) var(--sp-3); border-color: var(--rg-edge); background: transparent; color: var(--rg-ink); font-weight: var(--weight-semibold); }
+.btn.bgq-no { min-height: var(--h-ctl); padding: 3px var(--sp-3); border-color: var(--rg-edge); background: transparent; color: var(--rg-ink); font-weight: var(--weight-semibold); }
 .btn.bgq-no:hover:not(:disabled) { background: var(--rg-glow); border-color: var(--rg-edge); }
 .btn.bgq-no:active:not(:disabled) { background: var(--pressed); }
-.btn.bgq-yes { min-height: 30px; padding: var(--sp-1) var(--sp-4); border-color: var(--rg-btn); background: var(--rg-btn); color: var(--rg-on); font-weight: var(--weight-semibold); }
+.btn.bgq-yes { min-height: var(--h-ctl); padding: 3px var(--sp-4); border-color: var(--rg-btn); background: var(--rg-btn); color: var(--rg-on); font-weight: var(--weight-semibold); }
 .btn.bgq-yes:hover:not(:disabled) { background: var(--rg-btn); border-color: var(--rg-btn); filter: brightness(1.05); }
 .btn.bgq-yes:active:not(:disabled) { background: color-mix(in srgb, var(--rg-btn) 85%, var(--text)); filter: none; }
 @keyframes bgq-glow { 50% { opacity: 1; } }

@@ -21,3 +21,5 @@
   .pg-body[data-state="loading"] { animation: none; }
 }
 .pg-card:has(.pg-failed:not([hidden])) .pg-expand { visibility: hidden; }
+/* The × that puts a failed page away shows only while it failed. */
+.pg-card:not(:has(.pg-failed:not([hidden]))) .pg-close { display: none; }

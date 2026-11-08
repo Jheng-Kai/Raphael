@@ -130,7 +130,7 @@ test("the header has no computer button, and an idle computer adds nothing to th
   }
 });
 
-test("message links and preview cards use the safe opener with the full target; only replies get previews", async () => {
+test("message link chips use the safe opener with the full target, and no row of cards repeats them (owner, 2026-11-08)", async () => {
   const url = "https://www.cwa.gov.tw/V8/C/P/Typhoon/TY_WARN.html?lang=zh-TW&full=1";
   api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { question: `看 ${url}（颱風）`, messages: [
     { seq: 1, kind: "progress", text: `檢查 ${url}。`, at_ms: 1 },
@@ -138,11 +138,11 @@ test("message links and preview cards use the safe opener with the full target; 
   ] })] });
   api.core.mockResolvedValue(null); api.openExternalUrl.mockResolvedValue(undefined);
   const agent = mount(); await flush();
-  expect(document.querySelectorAll(".message-link")).toHaveLength(3);
-  expect(document.querySelectorAll(".preview-card")).toHaveLength(1);
+  expect(document.querySelectorAll(".message-link.link-chip")).toHaveLength(3);
+  expect(document.querySelectorAll(".preview-card, .preview-cards")).toHaveLength(0);
   document.querySelector<HTMLAnchorElement>(".bubble a")!.click();
   expect(api.openExternalUrl).toHaveBeenLastCalledWith(url);
-  document.querySelector<HTMLButtonElement>(".preview-card")!.click();
+  document.querySelector<HTMLAnchorElement>(".ra .chat-message[data-reply] a.link-chip")!.click();
   expect(api.openExternalUrl).toHaveBeenLastCalledWith(url);
   const middle = new MouseEvent("auxclick", { button: 1, bubbles: true, cancelable: true });
   document.querySelector(".bubble a")!.dispatchEvent(middle);

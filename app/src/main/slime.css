@@ -372,11 +372,13 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
 .slime-blink-cels > svg { display: block; width: 100%; height: 100%; }
 .slime-loop.has-blink .slime-blink-cels { animation: slime-loop-blink calc(5.3s * var(--slime-tempo)) steps(1, end) var(--slime-delay) infinite both; }
 .slime-loop-eyes .slime-cel-eye { d: var(--eyes); }
+/* A blink steps one, two or three rows of the strip; a row is 1 / --loop-rows of it, whatever the number of gazes
+   (owner, 2026-11-08: fixed fractions of an older strip threw the eyes up and down when the rows changed). */
 @keyframes slime-loop-blink {
   0%, 8%, 14%, 66%, 69.4%, 75.2%, 100% { transform: translateY(0%); }
-  8.5%, 11.2%, 66.5%, 68.6%, 69.9%, 72.4% { transform: translateY(-2.083333333333333%); }
-  9%, 10%, 67%, 67.8%, 70.4%, 71.2% { transform: translateY(-4.166666666666666%); }
-  12.4%, 73.6% { transform: translateY(-6.25%); }
+  8.5%, 11.2%, 66.5%, 68.6%, 69.9%, 72.4% { transform: translateY(calc(-100% / var(--loop-rows))); }
+  9%, 10%, 67%, 67.8%, 70.4%, 71.2% { transform: translateY(calc(-200% / var(--loop-rows))); }
+  12.4%, 73.6% { transform: translateY(calc(-300% / var(--loop-rows))); }
 }
 @container (width <= 72px) {
   .slime-loop { display: block; }

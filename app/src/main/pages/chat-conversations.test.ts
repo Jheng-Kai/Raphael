@@ -23,7 +23,9 @@ test("the stacked member and conversation title toggles details with one state, 
   expect(title.querySelector<HTMLElement>(".conversation-caption")!.hidden).toBe(true);
   expect(title.querySelector("button")).toBeNull();
   expect(page.el.querySelector(".conversation-head")?.textContent).not.toContain(" / ");
-  expect(page.el.querySelector('.mb-head .ra-tools')!.children).toHaveLength(0);
+  // Share sits at the right of the header, but Raphael is the app's own and is never shared as a template.
+  expect([...page.el.querySelector('.mb-head .ra-tools')!.children].map(tool => (tool as HTMLElement).dataset.act)).toEqual(["share-member"]);
+  expect(page.el.querySelector<HTMLElement>('[data-act="share-member"]')!.hidden).toBe(true);
   expect(page.el.querySelector('.desktop-panel')?.closest('.mb-det')).not.toBeNull();
   expect(page.el.querySelector('[data-act="clear"]')).toBeNull();
   expect(title.hasAttribute("aria-haspopup")).toBe(false);

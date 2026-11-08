@@ -26,7 +26,7 @@ describe("the document", () => {
     const html = memoryHTML(view());
     expect(html.match(/<p class="mem-entry">/g)).toHaveLength(3);
     expect(html).toContain("回答保持兩三句\n多一行說明");
-    expect(visible(html)).toBe("小晴的記憶 編輯 主人住在台北 回答保持兩三句 多一行說明 待確認 新版官網十一月上線 對話摘要");
+    expect(visible(html)).toBe("小晴的記憶 主人住在台北 回答保持兩三句 多一行說明 待確認 新版官網十一月上線 對話摘要");
     expect(html).not.toContain("mem-sub");
     expect(html).not.toContain('data-mem="more"');
   });
@@ -55,12 +55,12 @@ describe("the document", () => {
 
   test("an empty document says so, can be written, and has nothing to clear", () => {
     const html = memoryHTML(view({ status: { ...DOC, text: "", entries: 0, chars: 0, summary: null } }));
-    expect(visible(html)).toBe("小晴的記憶 編輯 尚無記憶");
+    expect(visible(html)).toBe("小晴的記憶 尚無記憶");
     expect(html).toContain('data-mem="edit"');
     expect(html).not.toContain('data-mem="section-more"');
   });
 
-  test("編輯 is a real button with words, and every icon-only one is named in its label and tooltip", () => {
+  test("編輯 is a pencil, not the word (owner, 2026-11-08), and every icon-only button is named in its label and tooltip", () => {
     const html = memoryHTML(view());
     for (const tag of buttons(html)) {
       expect(tag).toMatch(/^<button type="button" class="btn/);
@@ -70,6 +70,7 @@ describe("the document", () => {
       }
     }
     expect(html).toContain('aria-label="編輯小晴的記憶"');
+    expect(buttons(html).find(tag => /data-mem="edit"/.test(tag))).toMatch(/class="btn icon/);
   });
 
   test("open, it is one box with all of it, 取消 and 儲存 and how full it is", () => {
@@ -96,9 +97,9 @@ describe("the document", () => {
 
   test("one language at a time", () => {
     setLocale("en");
-    expect(visible(memoryHTML(view()))).toBe("小晴的記憶 Edit 主人住在台北 回答保持兩三句 多一行說明 Unconfirmed 新版官網十一月上線 Conversation summary");
+    expect(visible(memoryHTML(view()))).toBe("小晴的記憶 主人住在台北 回答保持兩三句 多一行說明 Unconfirmed 新版官網十一月上線 Conversation summary");
     setLocale("ja");
-    expect(visible(memoryHTML(view()))).toBe("小晴的記憶 編集 主人住在台北 回答保持兩三句 多一行說明 未確認 新版官網十一月上線 会話の要約");
+    expect(visible(memoryHTML(view()))).toBe("小晴的記憶 主人住在台北 回答保持兩三句 多一行說明 未確認 新版官網十一月上線 会話の要約");
   });
 
   test("while it loads, and when it cannot be read", () => {

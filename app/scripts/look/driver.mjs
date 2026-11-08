@@ -294,7 +294,7 @@ export async function perform(page, step, evidenceDirectory) {
       await page.waitForFunction(el => !el.isConnected || !!el.closest('[hidden]'), {timeout:2000}, dialog);
       await dialog.dispose();
       if (step.kind === 'settings') await click('#nav [data-go="settings"]');
-      else if (step.kind === 'member') { await perform(page, {action:'open-details'}, evidenceDirectory); await click('[data-det="tab"][data-tab="settings"]'); await click('[data-det="edit"]'); }
+      else if (step.kind === 'member') { await perform(page, {action:'open-details'}, evidenceDirectory); await click('.mb-det [data-det="routine-add"]'); }
       else { await click('[data-room-menu]'); await click('[data-pick="delete"]'); }
       await page.evaluate(() => { window.__polishCaptionOutside = true; });
       break;
@@ -581,6 +581,10 @@ export async function perform(page, step, evidenceDirectory) {
       if (await page.$('.conversation-trigger[aria-expanded="true"]')) await click('.mb-det [data-det="close"]');
       await click(".conversation-trigger");
       await visible('.mb-det:not([hidden])');
+      break;
+    case "close-details-if-open":
+      // The settings page closes a panel that would cover it (a narrow window), so only an open one is closed.
+      if (await page.$('.mb-det:not([hidden]) [data-det="close"]')) { await click('.mb-det [data-det="close"]'); await page.waitForSelector('.conversation-trigger[aria-expanded="false"]'); }
       break;
     case "close-details": {
       const scrim = await page.$('.mb-det-scrim');

@@ -17,8 +17,8 @@ export async function eventStorm(page, options) {
     proto.set.call(scroller, position === "bottom" ? scroller.scrollHeight : position === "middle" ? scroller.scrollHeight / 2 : 0);
   }, { selector, position });
   await new Promise(resolve => setTimeout(resolve, 300));
-  const point = await page.$eval(hover ? `${selector} [data-id="200000"] .preview-card` : selector, element => {
-    if (element.matches(".preview-card")) element.scrollIntoView({ block: "center" });
+  const point = await page.$eval(hover ? `${selector} [data-id="200000"] a.link-chip` : selector, element => {
+    if (element.matches("a.link-chip")) element.scrollIntoView({ block: "center" });
     const rect = element.getBoundingClientRect(); return { x: rect.x + rect.width / 2, y: rect.y + Math.min(rect.height / 2, 200) };
   });
   await page.mouse.move(point.x, point.y);
@@ -27,7 +27,7 @@ export async function eventStorm(page, options) {
     const scroller = document.querySelector(selector);
     const seen = window.__storm = { replacedLines: 0, replacedCards: 0, replacedFaces: 0, scrollWrites: 0, longTaskMs: 0, keyMs: [],
       cachedMisses: 0, changedKeys: [], calls: window.__look.calls.length, top: scroller.scrollTop, clock: Date.now(), startedMs: performance.now(), typed: "",
-      hovered: hover ? scroller.querySelector('[data-id="200000"] .preview-card') : null };
+      hovered: hover ? scroller.querySelector('[data-id="200000"] a.link-chip') : null };
     if (roster) {
       // Idle and sleeping faces intentionally have no loops; visible working faces must have them.
       // A face off screen, as in the closed narrow drawer, pauses its loops to save the main thread.
@@ -52,13 +52,13 @@ export async function eventStorm(page, options) {
           const lines = [...(node.matches(".tn") ? [node] : []), ...node.querySelectorAll(".tn")];
           seen.replacedLines += lines.length;
           seen.changedKeys.push(...lines.map(line => line.dataset.key));
-          seen.replacedCards += (node.matches(".preview-card") ? 1 : 0) + node.querySelectorAll(".preview-card").length;
+          seen.replacedCards += (node.matches("a.link-chip") ? 1 : 0) + node.querySelectorAll("a.link-chip").length;
           const face = ".av, .slime, .ra-face";
           seen.replacedFaces += (node.matches(face) ? 1 : 0) + node.querySelectorAll(face).length;
         }
         for (const node of record.addedNodes) {
           if (node.nodeType !== 1 || !node.matches(".tn")) continue;
-          for (const card of node.querySelectorAll(".preview-card")) if (!card.dataset.previewState) seen.cachedMisses++;
+          for (const chip of node.querySelectorAll("a.link-chip[data-link-title]")) if (!chip.dataset.linkState) seen.cachedMisses++;
         }
       }
     });

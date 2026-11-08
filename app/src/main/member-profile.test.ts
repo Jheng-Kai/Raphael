@@ -6,6 +6,7 @@ import { openEditMemberDialog, type MemberProfileHost } from "./member-profile";
 import { mountMemberResources } from "./member-profile-resources";
 import { memberPreset, randomMemberName } from "./member-profile-presets";
 import type { Member } from "./types";
+import { closeMenu } from "./ui";
 
 vi.mock("./api", () => ({ core: vi.fn(), membersUpdate: vi.fn(), membersSkillsList: vi.fn(), membersSkillsImport: vi.fn(), membersSkillsUpdate: vi.fn(), membersSkillsDelete: vi.fn(), membersCommandsList: vi.fn(), membersCommandsSave: vi.fn(), membersCommandsDelete: vi.fn(), membersVoices: vi.fn(), routinesList: vi.fn(), routinesCreate: vi.fn(), routinesUpdate: vi.fn(), routinesDelete: vi.fn() }));
 const member: Member = { id: 7, name: "Mia", role: "Research", instructions: "Keep sources", personality: "Careful", avatar: "", group_id: null, model: "", tools: null, position: 0, created: 0, unread: false, waiting: false, preview: "", last_at: null };
@@ -151,13 +152,16 @@ test("profile routines use the shared editor with every recurrence and HH:MM val
   click(dialog.el, '#mp-tab-routines'); await flush();
   click(dialog.el, '[data-dlg="routine-add"]');
   const form = document.querySelector<HTMLElement>('.au-routine-dialog')!;
-  expect(form.querySelectorAll('[data-dlg="kind"]')).toHaveLength(6);
+  // 重複 is one dropdown of its six choices, never a row of chips that runs out of room (owner, 2026-11-08).
+  click(form, '[data-dlg="kind-menu"]');
+  expect(document.querySelectorAll('#app-popover [data-value]')).toHaveLength(6);
+  closeMenu();
   expect(form.querySelector<HTMLInputElement>('#au-time')!.type).toBe('text');
   fill(form, '#au-title', 'Review'); fill(form, '#au-prompt', 'Review updates');
   fill(form, '#au-time', '25:60'); click(form, '[data-dlg="save"]'); await flush();
   expect(form.isConnected).toBe(true);
   expect(api.routinesCreate).not.toHaveBeenCalled();
-  click(form, '[data-kind="weekly"]');
+  click(form, '[data-dlg="kind-menu"]'); click(document.body, '#app-popover [data-value="weekly"]');
   expect(form.querySelectorAll('[data-dlg="day"]')).toHaveLength(7);
   click(form, '[data-dlg="cancel"]'); dialog.close();
 });

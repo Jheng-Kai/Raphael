@@ -23,6 +23,7 @@ import { RAPHAEL_ID } from "./members";
 import type { BrainSettings, CatalogModel, CliBrain, MainEvent, Member, ModelCatalog } from "./types";
 import { closeMenu, esc, ico, iconButton, openPopover, placeMenu, toaster } from "./ui";
 import { describeError } from "./format";
+import { findsName } from "./find-match";
 
 /** A source's models fold past this many, under a button that says how many there are. */
 const COMPACT = 5;
@@ -152,7 +153,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
         : `<div class="cb-empty"><p>${esc(t("chooser.modelsFailed"))}</p><button type="button" class="btn sm" data-cb-act="retry">${esc(t("page.retry"))}</button></div>`;
     }
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    if (words.length) return item.models.filter(model => words.every(word => `${model.name} ${model.provider} ${model.id}`.toLowerCase().includes(word))).map(model => row(model)).join("") || empty;
+    if (words.length) return item.models.filter(model => findsName([model.name, model.provider, model.id], query)).map(model => row(model)).join("") || empty;
     const { rows, first } = rowsOf(item);
     return (showAll || rows.length <= COMPACT + 1 ? rows : rows.slice(0, Math.max(COMPACT, first))).map(model => row(model)).join("") || empty;
   }

@@ -6,6 +6,13 @@ import { wrongLanguage } from "./journeys.mjs";
 import { privateTimeline } from "./deletion-audit.mjs";
 
 describe("native document error capture", () => {
+  it("preserves editable rule actions while checking their surrounding interface labels", () => {
+    document.body.innerHTML = '<div class="rules-row"><span class="rules-what">付款結帳</span><button title="Options for 付款結帳"></button><button id="stale" title="設定付款結帳"></button></div><span id="outside">付款結帳</span>';
+    const geometry = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 10, height: 10 });
+    const visibility = vi.spyOn(HTMLElement.prototype, "checkVisibility").mockReturnValue(true);
+    try { expect(wrongLanguage("en", []).map(issue => issue.id)).toEqual(["outside", "stale"]); }
+    finally { geometry.mockRestore(); visibility.mockRestore(); }
+  });
   it("accepts explicit successful history-clearing notices and rejects clearing errors", () => {
     for (const text of ['Cleared the history of “Quick questions”', '已清除「快速提問」的紀錄', '「クイック質問」の履歴を消去しました']) expect(toastError(text)).toBe(false);
     for (const text of ['Could not clear history', '已清除「快速提問」的紀錄失敗', 'Cleared the history of “Quick questions” failed']) expect(toastError(text)).toBe(true);

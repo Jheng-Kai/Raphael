@@ -46,6 +46,11 @@ test("a skill called by its name is a blue chip like a link, and a path is not (
   expect(chips()).toEqual(["/research-summary"]);
   typeText("a/b 不是");
   expect(chips()).toEqual([]);
+  // A name in any script, and a plugin's prefix, are blue too (owner, 2026-11-08: 「中文的 skill 好像不會是藍色的」).
+  typeText("/每日新聞摘要");
+  expect(chips()).toEqual(["/每日新聞摘要"]);
+  typeText("請 /field-notes:review 這份");
+  expect(chips()).toEqual(["/field-notes:review"]);
 });
 
 test("every write of the words redraws them: a restored draft, a send that empties the field, a paste", () => {

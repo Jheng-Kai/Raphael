@@ -1,5 +1,6 @@
 import { t } from "./i18n";
 import { closeMenu, esc, openPopover } from "./ui";
+import { findsName } from "./find-match";
 
 function shortcutOverlayOpen(allowPalette = false): boolean {
   return Array.from(document.querySelectorAll('.mb-scrim, [role="dialog"], #app-popover')).some(element =>
@@ -43,7 +44,7 @@ export function openCommandPalette(anchor: HTMLElement, commands: Command[]): vo
   const results = panel.querySelector<HTMLElement>(".command-results")!;
   const draw = (): void => {
     const query = input.value.trim().toLocaleLowerCase();
-    const found = commands.filter(command => `${command.label} ${command.keys ?? ""}`.toLocaleLowerCase().includes(query));
+    const found = commands.filter(command => `${command.label} ${command.keys ?? ""}`.toLocaleLowerCase().includes(query) || findsName([command.label], query));
     results.innerHTML = found.map(command => `<button type="button" class="menu-action" data-command="${esc(command.id)}"><span class="mt">${esc(command.label)}</span>${command.keys ? `<span class="note">${esc(command.keys)}</span>` : ""}</button>`).join("") || `<p class="note">${esc(t("shortcuts.empty"))}</p>`;
   };
   input.addEventListener("input", draw);

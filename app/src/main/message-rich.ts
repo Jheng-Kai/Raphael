@@ -284,5 +284,6 @@ export function mountRichContent(root: HTMLElement): void {
 }
 
 function showLarge(title: string, body: string): void {
-  openDialog({ title, body, cls: "rich-view-dialog", actions: { primary: { label: esc(t("common.close")), attrs: ' data-dlg="close"' } }, onAct(_act, _target, dialog) { dialog.close(); } });
+  // A chart or a diagram, larger: its × closes it, with no 「關閉」 under it (owner, 2026-11-08).
+  openDialog({ title, body, cls: "rich-view-dialog", actions: {}, onAct(_act, _target, dialog) { dialog.close(); } });
 }

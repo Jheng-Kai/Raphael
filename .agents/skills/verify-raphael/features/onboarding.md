@@ -16,7 +16,7 @@ state saved. There are no practice lessons, no microphone step and no completion
 the window, with no progress bar and no side, as Grok Bot's first run (owner, 2026-11-07): every
 step is one calm centred column, a title (three of the team's own characters float by it, aria-hidden,
 others on every step and in other places — Gobta, Shion, Ranga; Shuna, Diablo, Benimaru; Milim, Souei,
-Rigurd — owner 2026-11-08; gone below 640px wide), the choice, one wide black pill (下一步 / 開始使用) and under it a grey pill 上一步
+Rigurd — owner 2026-11-08; gone below 640px wide), the choice, then the shared pills on one line: a grey 上一步 before the black 下一步 / 開始使用 (since 2026-11-08 sized to their words at the shared button height)
 (no back arrow at the top; a rerun's welcome has a grey 取消 that leaves the guide).
 
 0. **Welcome** (`onboarding`, check `onboarding-welcome`): Raphael's emblem (the voice screen's

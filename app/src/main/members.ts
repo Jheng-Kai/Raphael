@@ -15,6 +15,7 @@ import { esc, ico } from "./ui";
 import { formatClock, formatDate } from "./format";
 import type { MessageKey } from "./i18n/zh-TW";
 import type { Member, MemberGroup, MemberSource, MembersList, Routine, RoutineSchedule } from "./types";
+import { findsName } from "./find-match";
 
 /** Raphael's id among the members: member 0 everywhere in the core's API. */
 export const RAPHAEL_ID = 0;
@@ -52,7 +53,8 @@ const fold = (text: string): string => text.normalize("NFKC").toLocaleLowerCase(
 /** Whether a member answers the column's search: in its name or its role. Blank matches all. */
 export function memberMatches(member: Pick<Member, "id" | "name" | "role" | "blurb">, query: string): boolean {
   const q = fold(query.trim());
-  return q === "" || fold(member.name).includes(q) || fold(memberRole(member)).includes(q) || fold(member.blurb ?? "").includes(q);
+  return q === "" || fold(member.name).includes(q) || fold(memberRole(member)).includes(q) || fold(member.blurb ?? "").includes(q) ||
+    findsName([member.name, memberRole(member)], q); // a name or role nearly spelled (owner, 2026-11-08)
 }
 
 /** A section of the column: a group (null: 未分組) and its members that answer the search. */

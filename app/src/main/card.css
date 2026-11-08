@@ -23,7 +23,7 @@
 .conversation-card .btn { transform: none; }
 .conversation-card .card-actions .pri, .conversation-card .sc-form .pri, .conversation-card .question-submit .pri { background: var(--card-primary); color: var(--card-primary-ink); border: 1px solid var(--card-primary-edge); }
 .conversation-card .card-actions > .card-quiet { margin-left: auto; background: transparent; border-color: transparent; color: var(--text-2); }
-.card-disclosure-toggle.btn { display: flex; align-items: center; gap: 6px; padding: 4px 8px; margin-inline: -8px; border: 0; background: transparent; color: var(--text-2); font-size: var(--fs-xs); min-height: 30px; }
+.card-disclosure-toggle.btn { display: flex; align-items: center; gap: 6px; padding: 1px 8px; margin-inline: -8px; border: 0; background: transparent; color: var(--text-2); font-size: var(--fs-xs); min-height: var(--h-ctl-sm); }
 .card-disclosure-toggle > svg { width: 16px; height: 16px; }
 .card-disclosure-toggle[aria-expanded=true] > svg { rotate: 90deg; }
 .card-detail { margin-top: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }

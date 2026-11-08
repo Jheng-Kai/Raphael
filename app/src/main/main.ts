@@ -219,11 +219,11 @@ watchChipRows(document.body);
   let agentPageTold = false;
   /**
    * Tells the app whether the 拉斐爾 page is what the window shows: the page is the current one,
-   * with no settings over it and no guide in its place. While it is and the window is in front, a
+   * with no settings over it, no member settings page over its conversation and no guide in its place. While it is and the window is in front, a
    * question to Raphael is shown here alone, and the overlay at the bottom right stays empty.
    */
   function tellAgentPage(): void {
-    const shown = current === "agent" && !settingsOpen && guide.hidden !== false;
+    const shown = current === "agent" && !settingsOpen && guide.hidden !== false && agent.settingsOf() === null;
     if (shown === agentPageTold) return;
     agentPageTold = shown;
     void api.agentPageShown(shown).catch(() => {});
@@ -235,6 +235,8 @@ watchChipRows(document.body);
     const place: Place = { page: current };
     if (settingsOpen) place.pane = settings.pane();
     if (current === "dictation") place.tab = dictation.tab();
+    const settingsMember = current === "agent" ? agent.settingsOf() : null;
+    if (settingsMember !== null) place.member = settingsMember;
     const day = current === "dictation" && dictation.tab() === "history" ? history.day() : null;
     if (day !== null) place.day = day;
     return place;
@@ -255,6 +257,8 @@ watchChipRows(document.body);
         if (place.tab === "history" || place.page === "history") history.setDay(place.day ?? null);
         showPage(place.page);
       }
+      // A step to or from a member's settings page opens or closes it, never recording another step.
+      if (place.page === "agent") agent.showSettings(place.member ?? null);
       if (place.pane !== undefined) openSettings(place.pane);
       else closeSettings();
     },
@@ -268,7 +272,7 @@ watchChipRows(document.body);
   function go(id: PageId, arg?: PageArgument): void {
     navigation.visit(() => {
       if (id === "settings") openSettings(arg?.startsWith("draft:") ? undefined : (arg as SettingsPane | undefined));
-      else showPage(id, id === "automations" || arg?.startsWith("draft:") || id === "agent" && arg === "computer" ? arg : undefined);
+      else showPage(id, id === "automations" || arg?.startsWith("draft:") || id === "agent" && (arg === "computer" || arg?.startsWith("member-settings:")) ? arg : undefined);
     });
   }
 

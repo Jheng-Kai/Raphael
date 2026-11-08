@@ -2,6 +2,7 @@
 
 import type { Undoable } from "./undo";
 import type { Cleared } from "./cleared";
+import type { UiLocale } from "./i18n";
 
 /** `status.get` */
 export interface Status {
@@ -794,7 +795,7 @@ export interface DeviceSettings {
   /** Reports beside the emblem, on or off. (Files from before had "both", "zh" and "ja": they mean on.) */
   subtitles: "on" | "off";
   appearance: "system" | "light" | "dark";
-  ui_language: "zh-TW" | "en" | "ja";
+  ui_language: UiLocale;
   autostart: boolean;
   auto_update?: boolean;
   onboarded: boolean;
@@ -1137,7 +1138,7 @@ export type MainPageId = Exclude<PageId, "settings" | "history" | "dictionary">;
 export type DictationTab = "overview" | "history" | "dictionary";
 
 /** The tabs of the settings panel. */
-export type SettingsPane = "general" | "appearance" | "dictation" | "agent" | "tools" | "safety" | "connections" | "messaging" | "models" | "usage" | "data" | "about";
+export type SettingsPane = "general" | "memory" | "appearance" | "dictation" | "agent" | "tools" | "safety" | "connections" | "messaging" | "models" | "usage" | "data" | "about";
 
 /**
  * What the 拉斐爾 page is to put in its composer when it opens, ready to be sent or changed: the
@@ -1150,7 +1151,7 @@ export type CalendarEventFocus = `calendar:${CalendarDate}:${string}`;
 export type CalendarCreate = `calendar-new:${CalendarDate}`;
 /** Calendar on the week of that day, its usual view. */
 export type CalendarWeek = `calendar-week:${CalendarDate}`;
-export type PageArgument = "computer" | SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}`;
+export type PageArgument = "computer" | SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}` | `member-settings:${number}`;
 
 /** One of the five pages of the main window. */
 export interface Page {
@@ -1246,7 +1247,7 @@ export interface ConnectionGroup {
 }
 
 /** The words of the window, in each language the user can choose. */
-export type Words = Record<"zh-TW" | "en" | "ja", string>;
+export type Words = Record<"zh-TW" | "en" | "ja", string> & Partial<Record<UiLocale, string>>;
 
 /** What an app of the store asks of the owner before it can be added (`connectors/toolkits.py`). */
 export type AppNeeds = "sign_in" | "key" | "own_app";
@@ -1267,7 +1268,7 @@ export interface StoreService {
   popular: boolean;
   summary: Words;
   about: Words;
-  examples: Record<"zh-TW" | "en" | "ja", string[]>;
+  examples: Record<"zh-TW" | "en" | "ja", string[]> & Partial<Record<UiLocale, string[]>>;
   /** "none": a public server, added with no login. */
   auth?: "oauth" | "none" | "device";
   /** The id of the connected service it was added as; null when it is not added. */

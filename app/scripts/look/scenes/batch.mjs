@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { scene, member, room, wait, waitGone, click, type, key, check } from "./steps.mjs";
+import { scene, member, room, wait, waitGone, click, type, key, check, hover } from "./steps.mjs";
 
 const fixture = JSON.parse(readFileSync(join(import.meta.dirname, "../fixture.json"), "utf8"));
 
@@ -35,7 +35,7 @@ export default [
   scene("room-send-while-working", "A room clears sent words immediately and sends the next request in order", [room(1), wait('.au-room-thinking'), type('#room-message', "第一個範例請求"), key("Enter"), type('#room-message', "第二個範例請求"), key("Enter"), wait('.au-room-pane .chat-message'), check("room-send-while-working")], {roomThinking:true}),
   scene("composer-stop-armed-with-words", "Escape with words in the field still shows the Stop it arms, and the words stay", [member(1), wait('.composer[data-task-state="running"]'), type('.cmp-input', "還沒寫完"), key("Escape"), check("composer-slot-armed")],
     {running: true, runningMember: 1, ownerAddition: true}),
-  scene("link-card-short-reply", "A link card keeps its full width under a short reply, an internal address included", [member(1), wait('.thread .preview-card[data-preview-state]'), check("preview-card-wide")],
+  scene("link-chips", "A reply's links are chips in its words, the site's mark then its name, and the page's preview shows under the pointer (owner, 2026-11-08)", [member(1), wait('.thread a.link-chip[data-link-state]'), check("link-chips"), hover('.thread .chat-message[data-reply] a.link-chip[data-link-title]'), wait('.link-hover'), check("link-hover")],
     {turns: [turn(1, {attachments: [], text: "開好了", messages: [{seq: 1, kind: "reply", text: "開好了 http://127.0.0.1:5173/ https://example.com/a", at_ms: 1792807160000}]})]}),
   scene("dialog-caption-confirm", "A small dialog dims the caption too, and the window buttons still answer", [{action: "member-column", collapsed: false}, click('.mb-col [data-member-more="0"]'), click('#app-popover [data-pick="primary"]'), wait(".mb-dialog.mb-primary-picker"), check("dialog-caption")]),
   scene("owner-bubble-member", "The owner's bubble in a member's conversation wears that member's colour", [member(1), wait('.owner-message .bubble'), check("owner-bubble-tinted")], {turns: [plain(1), plain(0)]}),

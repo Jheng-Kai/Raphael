@@ -1,5 +1,27 @@
 # Conversation
 
+## Finding by name forgives typos (owner, 2026-11-08, R-FIND-01)
+
+Every place that finds a thing by its name uses `app/src/main/find-match.ts`: the @ and / menus, the store and the
+connected apps, members, models, languages, time zones, commands and the bot market. Plain matches come first, then a
+typo, a missing or extra letter or two swapped letters (from four letters; two typos from seven), so 「@gamil」 offers
+Gmail and 「@notoin」 Notion. Numbers and short words are typed right; a space after the words ends an @ or / query.
+
+```powershell
+npm run look -- typo-mention completion-filtered completion-mentions plugins-store-search --theme both --width 1120,720,1920x1080
+```
+
+## Share in the conversation header (owner, 2026-11-08)
+
+Share left the member panel for the conversation header: search at the left, share at the right, symmetric. It
+shows in every member's conversation once it is read, never in Raphael's (he is the app's own), and opens one
+choice that asks the member, in its own conversation, to write its template (`askInChat(..., "share-template")`).
+The panel's left tool is the settings gear.
+
+```powershell
+npm run look -- conversation-share chat search --theme both --width 1120,720,1920x1080
+```
+
 ## Private member voice chat (2026-11-05)
 
 An empty member composer keeps both gestures in its existing right-hand slot:
@@ -1151,10 +1173,12 @@ npm run look -- composer-voice-recording composer-voice-sent composer-stop-voice
 
 ## The owner's bubble and link cards (2026-11-02)
 
-The owner's bubble in a member's own conversation wears that member's colour (`owner-bubble.ts`, set in `drawFaces` so an avatar change follows at once); since 2026-11-06 Raphael's conversation wears his warm gold with dark words (R-UI-81), and group chats stay neutral. A link card under a reply is the media card's width whatever the reply says, and an address with no title reads once, in full.
+The owner's bubble in a member's own conversation wears that member's colour (`owner-bubble.ts`, set in `drawFaces` so an avatar change follows at once); since 2026-11-06 Raphael's conversation wears his warm gold with dark words (R-UI-81), and group chats stay neutral. Since 2026-11-08 a reply's links are chips in its words (the site's mark, then its name; a bare
+address says its site, then the page's title once read; an address of this machine says itself once), with no row of
+link cards under the reply, and the page's preview shows under the pointer (`link-previews.ts`, as Grok Bot's).
 
 ```powershell
-npm run look -- owner-bubble-member owner-bubble-other-member owner-bubble-light-character owner-bubble-long owner-bubble-chief owner-bubble-room link-card-short-reply --theme both --width 1120,720,1920x1080
+npm run look -- owner-bubble-member owner-bubble-other-member owner-bubble-light-character owner-bubble-long owner-bubble-chief owner-bubble-room link-chips --theme both --width 1120,720,1920x1080
 ```
 
 A dialog dims the window caption too and starts below it, and the window buttons still answer:

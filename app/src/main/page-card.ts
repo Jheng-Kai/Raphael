@@ -9,7 +9,7 @@ import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
 import type { AgentTurn, PageCard, PageOpened } from "./types";
-import { btn, esc, iconButton } from "./ui";
+import { btn, esc, iconBtn, iconButton } from "./ui";
 
 const MIN_HEIGHT = 80, MAX_HEIGHT = 2400;
 const SEND_LIMIT = 4000, SEND_GAP_MS = 1000;
@@ -18,7 +18,9 @@ const MCP_PROTOCOL = "2026-01-26";
 /** The cards a turn shows, below what it said. A card holds no frame: `mountPages` brings it. */
 export function pageCardsHTML(turn: AgentTurn): string {
   return (turn.pages ?? []).map(page => cardHTML({ title: page.title, status: "ready",
-    content: `<div class="pg-body" data-state="loading"></div><div class="pg-failed" hidden><p>${esc(page.fallback || t("page.failed"))}</p><div class="card-actions">${btn(esc(t("page.retry")), "sm pri", ' data-page-act="retry"')}${btn(esc(t("common.close")), "sm", " data-card-failed-close")}</div></div>`,
+    // A page that failed offers 重試 under what happened; the × at the card's top right puts it away (owner, 2026-11-08).
+    content: `<div class="pg-body" data-state="loading"></div><div class="pg-failed" hidden><p>${esc(page.fallback || t("page.failed"))}</p><div class="card-actions">${btn(esc(t("page.retry")), "sm pri", ' data-page-act="retry"')}</div></div>`,
+    close: iconBtn("x", t("common.close"), " data-card-failed-close", "card-close pg-close"),
     actions: iconButton("expand", t("page.expand"), ' data-page-act="expand"', "pg-expand"), cls: "pg-card",
     attrs: ` data-page="${esc(page.id)}" data-page-rev="${page.rev}" style="--pg-h:${clampHeight(page.height)}px"`,
   })).join("");
@@ -264,7 +266,8 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     const title = card.getAttribute("aria-label") ?? "";
     const dialog = openDialog({
       title: esc(title), body: `<div class="pg-view"></div>`, cls: "rich-view-dialog pg-view-dialog",
-      actions: { primary: { label: esc(t("common.close")), attrs: ' data-dlg="close"' } },
+      // Its × closes it, with no 「關閉」 under it (owner, 2026-11-08).
+      actions: {},
       onAct(_act, _target, shown) { shown.close(); },
       onClosing() {
         live.expanded = false;

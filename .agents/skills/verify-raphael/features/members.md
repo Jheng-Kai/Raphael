@@ -1,5 +1,41 @@
 # Members and sidebar
 
+## Member settings page (2026-11-08)
+
+Owner request: a member's settings are a page of their own, where the conversation is (R-PANEL-05).
+The panel keeps Details / Library / Computer and its bots; its head is the gear on the left and the
+close on the right, apart. The gear opens `member-settings.ts` over the conversation (the panel stays
+beside it, and a window narrower than 860 px closes the panel first); the arrow at the page's top left
+and Escape go back to the conversation (a skill, a command or the memory first back to the page), and
+the page is a place of the navigation history (`Place.member`, `member-settings:<id>`). It supersedes
+every older paragraph below that puts memory, skills, commands, voice, the edit dialog, hide or share
+inside the panel: share belongs to the conversation's header, hide to the sidebar's menu.
+
+The page, top to bottom: a cover from the member's own slime colour (a soft gradient with a faint dot
+pattern, tokens only), the face large across the cover's lower edge with the panel's dim-and-pencil edit
+(the same picker), the name and the role typed in place (Raphael's name is not typed, and he has no
+personality, instructions, connections or group), then sections that are each a name over one tinted
+list: 個性 and 指示 (one line each, a press opens the box in place and blur saves it), 技能 (names with
+switches, a press opens the skill's own view with its text, a plus adds one from a link, delete waits in
+a ⋯ behind a second press), 指令, 模型 (the composer's own dropdown, which writes the member's model),
+工具 (the apps that are on, as switches over the member's `tools` list), 語音 (the card: a dropdown of the
+voices and the notify switch; Raphael's dropdown writes the one `tts_fish_voice` setting), 記憶 (one row
+with its count and a chevron, never shown inline; it opens both documents in a view of its own), then
+the drafts switch and the group. There is no 編輯 button anywhere: edits are pencils, adds are pluses.
+Speed and language of the voice have no setting in the core, so the card has no rows for them.
+
+Inspect every contact sheet and, at light 720 and dark 1120, the full images of member-settings,
+member-settings-lower, member-settings-skill and member-settings-memory. Compare the dropdowns with
+Settings' rows (words and a chevron, no box), the tinted lists with the panel's routine list and the
+face edit with the panel's. The old scene names are kept and now drive the page: details-memory,
+details-skills, details-commands, details-voice, raphael-skills, memory-editing, memory-saved,
+member-edit, member-edit-memory, settings-raphael-memory, settings-raphael-voice, speaker-draft-member,
+speaker-draft-chief, member-draft-switch, global-private-memory and primary-contact-set.
+
+```powershell
+npm run look -- member-settings member-settings-raphael member-settings-lower member-settings-field member-settings-skill member-settings-command member-settings-memory member-settings-back details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
+```
+
 ## Private member voice chat (2026-11-05)
 
 An empty member composer offers Start voice chat in its existing right-hand slot;
@@ -1021,6 +1057,18 @@ compare preview rows with member panel rows and disclosures with existing cards.
 Run the selected tests and frontend verify once at the end. Judge uses the same
 selected run; missing external reference images are blocked, never design PASS.
 No core, Rust, native, OS vault or live-provider acceptance is implied.
+
+## The member's own model writes its template (owner, 2026-11-08, brief 27)
+
+Share (the conversation header's share, or the member's own share_template) waits inside the original turn while the
+member's own model writes the public version: a short introduction, general instructions, self-contained skills and a
+general schedule, from the recipe allowlist only (public fields, skill text, routines, the names of connections used),
+with credential-shaped text masked first and never MEMORY or conversation text. The output passes the JSON schema, the
+recipe validator and the secret/injection gate (emails, account labels, private paths and addresses too); a blocked
+draft goes back to the same model once, and a second failure keeps its findings on the card with save and publish
+refused. There is no copy of the raw settings as a fallback. The card stays an immutable snapshot; the extra calls are
+charged to the turn's ledger. Tests: core/tests/members/test_template_author.py and tests/test_chat_setup_share.py;
+Guardian S21 checks the public snapshot.
 
 ## Conversation setup and sharing: backend contract (2026-11-07)
 

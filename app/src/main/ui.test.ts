@@ -136,7 +136,8 @@ describe("the main window's actions", () => {
       const text = read(file).replace(/\bcard-quiet\b/g, "card-exit");
       expect(text, file).not.toMatch(/["'`][^"'`\n]*\bquiet\b[^"'`\n]*["'`]/);
       // `class=\"link\"` in the catalogs, `class="link"` in the pages, `.link` in the styles
-      expect(text, file).not.toMatch(/\.btn\.quiet|class=\\?"link\\?"|\.link\b/);
+      // (`.link` itself, not a class that only begins with it, such as a link chip's `.link-chip`)
+      expect(text, file).not.toMatch(/\.btn\.quiet|class=\\?"link\\?"|\.link(?![\w-])/);
     }
   });
 

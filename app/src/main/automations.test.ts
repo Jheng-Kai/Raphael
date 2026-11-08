@@ -46,11 +46,11 @@ test("the routine editor is wide and short: title with its switch and the instru
 
 test("monthly and minute choices save through the existing routine dialog", async () => {
   openRoutineDialog({members, routine: plan});
-  click('[data-dlg="kind"][data-kind="monthly"]');
+  click('[data-dlg="kind-menu"]'); click('#app-popover [data-value="monthly"]');
   field('#au-month-day', '31'); click('[data-dlg="save"]'); await flush();
   expect(api.routinesUpdate).toHaveBeenCalledWith(1, expect.objectContaining({schedule:expect.objectContaining({kind:'monthly',day:31})}));
   openRoutineDialog({members, routine: plan});
-  click('[data-dlg="kind"][data-kind="every"]'); click('[data-dlg="hours"]');
+  click('[data-dlg="kind-menu"]'); click('#app-popover [data-value="every"]'); click('[data-dlg="hours"]');
   click('#app-popover [data-value="m30"]'); click('[data-dlg="save"]'); await flush();
   expect(api.routinesUpdate).toHaveBeenLastCalledWith(1, expect.objectContaining({schedule:expect.objectContaining({kind:'every',minutes:30})}));
   expect(api.routinesUpdate.mock.lastCall?.[1].schedule).not.toHaveProperty('hours');
@@ -213,8 +213,8 @@ test("editing the scope during a read leaves a usable check button and ignores t
 test("one every routine saves and reopens its daytime window through real controls", async () => {
   openRoutineDialog({members, routine: {...plan, schedule: {kind:"every", hours:3, from:"08:00", to:"23:00"}}});
   expect(document.querySelector('[data-dlg="window-from"]')?.textContent).toContain("08:00");
-  expect(document.querySelector<HTMLInputElement>('#au-time')?.value).toBe("08:00");
-  expect(document.querySelector<HTMLInputElement>('#au-time')?.disabled).toBe(true);
+  // The hours are its times: no separate time row stands disabled beside them (owner, 2026-11-08: no dead rows).
+  expect(document.querySelector('#au-time')).toBeNull();
   click('[data-dlg="window-from"]'); click('#app-popover [data-value="07:00"]');
   click('[data-dlg="save"]'); await flush();
   expect(api.routinesUpdate).toHaveBeenCalledWith(1, expect.objectContaining({schedule:expect.objectContaining({kind:"every",hours:3,from:"07:00",to:"23:00"})}));
@@ -295,7 +295,7 @@ test("window occurrences restart at the first time each local day", () => {
 test("routine editor saves the chosen weekdays, owner, date and end count",async()=>{
   openRoutineDialog({members,memberId:2,date:"2030-10-24",time:"09:00"});
   field("#au-title","Morning report");field("#au-prompt","Read progress");
-  click('[data-kind="weekly"]');click('[data-day="1"]');click('[data-day="3"]');click('[data-dlg="more"]');click('[data-dlg="end"]');click('#app-popover [data-value="after"]');field("#au-count","5");
+  click('[data-dlg="kind-menu"]');click('#app-popover [data-value="weekly"]');click('[data-day="1"]');click('[data-day="3"]');click('[data-dlg="more"]');click('[data-dlg="end"]');click('#app-popover [data-value="after"]');field("#au-count","5");
   expect(document.querySelector<HTMLInputElement>("#au-title")!.value).toBe("Morning report");
   click('[data-dlg="save"]');await flush();
   expect(api.routinesCreate).toHaveBeenCalledWith(expect.objectContaining({member_id:2,title:"Morning report",prompt:"Read progress",schedule:expect.objectContaining({kind:"weekly",max_runs:5,start_date:"2030-10-24",time:"09:00"})}));

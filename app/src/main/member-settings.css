@@ -1,0 +1,99 @@
+/* The member settings page (member-settings.ts): a page of its own where the conversation is, Notion-like. A cover from the
+   member's own slime colour (--ms-tint, set by the page; tokens only), the face large across the cover's lower edge, then
+   sections, each a name over one tinted list of rows as Grok Bot's panel. Nothing here scrolls but the page itself. */
+
+.page-agent > .ms-pane { grid-column: 1; grid-row: 1; position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; background: var(--content); }
+.page-agent:has(> .ms-pane:not([hidden])) > .mb-chat { display: none; }
+.ms-pane:focus { outline: 0; }
+
+/* The way back stays in sight at the top left, over the cover and over a view's heading. */
+.ms-bar { position: absolute; z-index: 2; inset: 0 0 auto 0; display: flex; align-items: flex-end; box-sizing: border-box; height: calc(var(--window-controls-height) + var(--h-ctl) + var(--sp-3)); padding: 0 var(--sp-4) var(--sp-1); pointer-events: none; }
+.ms-bar > .btn { pointer-events: auto; }
+/* Once the page has scrolled, the arrow stands on a band of the page's own ground, so no row slides under it. */
+.ms-pane[data-scrolled] .ms-bar { background: var(--content); box-shadow: 0 1px 0 var(--line); }
+.ms-bar .btn.icon .i { width: 20px; height: 20px; }
+
+.ms-scroll { min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; }
+
+.ms-cover { height: 176px; background:
+  radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--ms-tint) 30%, transparent) 1px, transparent 1.6px) 0 0 / 18px 18px,
+  linear-gradient(135deg, color-mix(in srgb, var(--ms-tint) 36%, var(--content)), color-mix(in srgb, var(--ms-tint) 12%, var(--content)) 62%, var(--content)); }
+.ms-pane:not([data-view="main"]) .ms-cover, .ms-pane:not([data-view="main"]) .ms-id { display: none; }
+
+.ms-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); min-width: 0; }
+.ms-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); width: 100%; max-width: var(--layout-reading-max); margin-inline: auto; padding: 0 var(--sp-5) var(--sp-6); box-sizing: border-box; }
+.ms-pane:not([data-view="main"]) .ms-body { padding-top: calc(var(--window-controls-height) + var(--sp-6) + var(--sp-4)); }
+
+/* The face crosses the cover's lower edge; the name and the role are in place under it, as the owner's profile in Settings. */
+.ms-id { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; gap: var(--sp-1); margin-top: calc(-48px - var(--sp-2)); }
+.ms-name { width: 100%; font-size: var(--fs-h1); font-weight: var(--weight-semibold); line-height: 1.3; text-align: left; }
+.ms-role { width: 100%; font-size: var(--fs-md); color: var(--text-2); text-align: left; }
+.ms-id > :is(.ms-name, .ms-role) { padding-inline: calc(var(--sp-3) - 1px); }
+.ms-static { overflow-wrap: anywhere; }
+
+/* A section: its name over one tinted list. */
+.ms-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); min-width: 0; }
+.ms-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-height: var(--h-ctl-sm); padding-left: var(--sp-3); }
+.ms-head > h2 { margin: 0; font-size: var(--fs-sm); font-weight: var(--weight-medium); color: var(--text-2); }
+.ms-list { display: grid; grid-template-columns: minmax(0, 1fr); padding: var(--sp-1); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.ms-row { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; min-height: 44px; padding: 0 var(--sp-2) 0 var(--sp-3); border-radius: var(--r-md); font-size: var(--fs-sm); }
+.ms-row > .ms-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-row:has(> .ms-open) { padding-left: 0; }
+.ms-empty { margin: 0; padding: var(--sp-3); font-size: var(--fs-sm); color: var(--text-3); }
+
+/* A row that opens something is a bare button across the row, its pencil or chevron at the end. */
+.btn.ms-open { display: flex; align-items: center; gap: var(--sp-3); flex: 1; min-width: 0; width: 100%; min-height: 44px; padding: 0 var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; font-size: var(--fs-sm); font-weight: var(--weight-regular); text-align: left; color: var(--text); }
+.btn.ms-open:hover:not(:disabled) { background: var(--hover); }
+.btn.ms-open > .ms-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn.ms-open > .ms-label.is-empty { color: var(--text-3); }
+.btn.ms-open > small { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); color: var(--text-3); }
+.btn.ms-open > .i { flex: none; color: var(--text-3); }
+.ms-row > .btn.ms-open { width: auto; }
+.ms-row > .tg { margin-right: var(--sp-1); }
+.ms-row > .sel { flex: none; }
+
+/* A choice in a row is its words and a chevron, with no box (R-UI-102), as in Settings. */
+.ms-list .sel { width: auto; max-width: 60%; justify-content: flex-end; gap: var(--sp-1); height: var(--h-ctl-sm); padding-inline: var(--sp-2); border-color: transparent; background-color: transparent; color: var(--text-2); }
+.ms-list .sel:hover:not(:disabled), .ms-list .sel[aria-expanded="true"] { border-color: transparent; background-color: transparent; color: var(--text); }
+.ms-list .sel:disabled:hover { border-color: transparent; }
+
+/* The model is the composer's own chooser, here the whole row. */
+.ms-row.ms-model { padding: 0 var(--sp-1); }
+.ms-pane .ms-list .ms-model-slot { display: flex; flex: 1; min-width: 0; }
+.ms-pane .ms-list .ms-model-slot .mp-slot { display: flex; flex: 1; min-width: 0; }
+.ms-pane .ms-list .ms-model-slot .sel.mp-trigger { flex: 1; width: 100%; max-width: none; min-width: 0; min-height: 44px; justify-content: flex-start; padding: 0 var(--sp-2); border-color: transparent; background-color: transparent; color: var(--text); font-size: var(--fs-sm); }
+.ms-pane .ms-list .ms-model-slot .sel.mp-trigger:hover:not(:disabled) { background-color: var(--hover); }
+.ms-pane .ms-list .ms-model-slot .mp-source { display: none; }
+.ms-pane .ms-list .ms-model-slot :is(.mp-ttext, .mp-ttext:has(.cb-depth)) { display: flex; align-items: baseline; flex: 1; gap: var(--sp-2); min-width: 0; max-width: none; }
+.ms-pane .ms-list .ms-model-slot .mp-trigger .i { flex: none; }
+.ms-pane .ms-list .ms-model-slot .mp-tname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--weight-regular); }
+.ms-pane .ms-list .ms-model-slot .cb-depth { flex: none; color: var(--text-3); font-size: var(--fs-xs); font-weight: var(--weight-regular); }
+
+/* A long text opens in place. */
+.ms-edit { padding: var(--sp-1); }
+.ms-edit > .mb-ta { width: 100%; background: var(--content); }
+.ms-add { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-1) var(--sp-2); }
+.ms-add > .mb-fin { flex: 1; min-width: 0; background: var(--content); }
+.ms-list > .missing-note, .ms-list > .note { margin: var(--sp-1); }
+
+/* A view of its own: a skill, a command, the memory. */
+.ms-subhead { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); min-height: var(--h-ctl); }
+.ms-title { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-lg); font-weight: var(--weight-semibold); }
+.ms-meta { margin: 0; font-size: var(--fs-xs); color: var(--text-3); overflow-wrap: anywhere; }
+.ms-meta:empty { display: none; }
+.ms-text, .ms-fields > .mb-ta { width: 100%; background: var(--content); font-family: var(--mono); font-size: var(--fs-xs); }
+.ms-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.ms-fields > .mb-fin { background: var(--content); }
+.ms-actions { justify-content: flex-end; }
+/* The memory's two documents are the page's own sections: their names and their text start where the view's name does. */
+.ms-pane .sgroup { margin-top: 0; }
+.ms-pane .sgroup .slist { --slist-pad: 0px; }
+
+@media (max-width: 720px) {
+  .ms-body { padding-inline: var(--sp-4); }
+  .ms-cover { height: 136px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ms-pane:not([hidden]) { animation: ms-in 0.16s ease-out backwards; }
+}
+@keyframes ms-in { from { opacity: 0; transform: translateY(4px); } }

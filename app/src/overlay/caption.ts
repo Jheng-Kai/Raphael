@@ -4,8 +4,11 @@
 import type { UiLanguage } from "./overlay";
 import { formsPlainText } from "../shared/answer-forms";
 
-/** About two lines of the corner (380 px of 14 px type): characters of Chinese and Japanese, letters of English. */
-export const PAGE_CHARS: Record<UiLanguage, number> = { "zh-TW": 52, ja: 52, en: 110 };
+/** Script-specific page budgets for about two lines of the corner (380 px of 14 px type). */
+export const PAGE_CHARS: Record<UiLanguage, number> = {
+  "zh-TW": 52, ja: 52, en: 110, "zh-CN": 52, ko: 52, th: 80,
+  es: 110, fr: 110, de: 110, "pt-BR": 110, it: 110, ru: 110, vi: 110, id: 110, tr: 110,
+};
 
 // A markdown link keeps its words; an address goes with the brackets around it (an address is ASCII, so it ends at the
 // first Chinese or Japanese character).

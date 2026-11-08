@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { catalogs, getLocale, onLocaleChange, setLocale, t, translatedMessage } from "./index";
+import { catalogs, getLocale, isUiLocale, LOCALES, onLocaleChange, setLocale, t, translatedMessage } from "./index";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
@@ -47,6 +47,7 @@ describe("main window translations", () => {
   test("catalogues reject replacement characters and repeated question marks from damaged encoding", () => {
     for (const [locale, messages] of Object.entries(catalogs)) {
       for (const [key, value] of Object.entries(messages)) {
+        expect(value.trim(), locale + ":" + key).not.toBe("");
         expect(value, `${locale}:${key}`).not.toMatch(/\uFFFD|\?{2,}/);
       }
     }
@@ -67,6 +68,31 @@ describe("main window translations", () => {
     expect(getLocale()).toBe("zh-TW");
     setLocale("unsupported");
     expect(getLocale()).toBe("zh-TW");
+  });
+
+  test("all fifteen locales have searchable names and survive switching", () => {
+    expect(LOCALES).toHaveLength(15);
+    expect(LOCALES.map(item => item.id).sort()).toEqual(Object.keys(catalogs).sort());
+    for (const item of LOCALES) {
+      expect(item.native.trim()).not.toBe("");
+      expect(item.english).toMatch(/[a-z]/i);
+      expect(isUiLocale(item.id)).toBe(true);
+      setLocale(item.id);
+      expect(getLocale()).toBe(item.id);
+      expect(t("nav.settings")).toBe(catalogs[item.id]["nav.settings"]);
+    }
+    for (const value of ["ar", "he", "constructor", "__proto__", null]) expect(isUiLocale(value)).toBe(false);
+  });
+
+  test("new non-Chinese catalogs have no untranslated Chinese outside script examples", () => {
+    const examples = new Set(["language.note.zh-TW", "language.note.zh-HK", "language.note.zh-CN", "language.note.yue-HK"]);
+    for (const item of LOCALES.filter(item => !["zh-TW", "zh-CN", "ja", "en"].includes(item.id))) {
+      for (const [key, value] of Object.entries(catalogs[item.id])) {
+        if (!examples.has(key)) expect(value, item.id + ":" + key).not.toMatch(/[\u3400-\u9fff\u3040-\u30ff]/u);
+      }
+    }
+    expect(catalogs["zh-CN"]["nav.settings"]).toBe("设置");
+    expect(catalogs.ko["onboarding.demo1Reply"]).toMatch(/^알림\./);
   });
 
   test("notifies the open window immediately, only when the locale changes", () => {
@@ -163,7 +189,7 @@ describe("main window translations", () => {
     // A key built at run time comes from a table of literal keys (VARIANT_NAMES, the `exact` list of
     // backend.ts, ...), so each key in use is written out as a string somewhere.
     const root = path.resolve(import.meta.dirname, "..");
-    const catalogues = new Set(["zh-TW.ts", "en.ts", "ja.ts", "missing-catalogs.ts"]);
+    const catalogues = new Set([...LOCALES.map(item => item.id + ".ts"), "missing-catalogs.ts"]);
     const files = [root, path.join(root, "pages"), path.join(root, "onboarding"), path.join(root, "i18n"), path.join(root, "..", "overlay")].flatMap((dir) =>
       readdirSync(dir)
         .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && !(dir.endsWith("i18n") && catalogues.has(f)))
