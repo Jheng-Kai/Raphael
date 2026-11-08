@@ -31,9 +31,10 @@
 .ms-pane:not([data-view="main"]) .ms-cover, .ms-pane:not([data-view="main"]) .ms-id { display: none; }
 /* The cover's menu: its patterns as small covers in a row, then a picture from this PC. */
 .ms-swatches { display: grid; grid-template-columns: repeat(5, 52px); gap: var(--sp-2); padding: var(--sp-1) var(--sp-1) var(--sp-2); }
-.ms-swatch { display: block; height: 36px; padding: 0; border: 0; border-radius: var(--r-md); overflow: hidden; background: transparent; cursor: pointer; box-shadow: inset 0 0 0 1px var(--line); }
-.ms-swatch > .ms-cover { display: block; height: 100%; }
-.ms-swatch[aria-checked="true"] { box-shadow: 0 0 0 2px var(--accent); }
+/* Inside a menu, whose buttons are rows: each swatch is a small cover filling its button. */
+.menu .ms-swatch { display: flex; align-items: stretch; width: 52px; height: 36px; min-height: 0; padding: 0; border: 0; border-radius: var(--r-md); overflow: hidden; background: transparent; cursor: pointer; box-shadow: inset 0 0 0 1px var(--line); }
+.menu .ms-swatch > .ms-cover { display: block; flex: 1; height: auto; min-width: 0; }
+.menu .ms-swatch[aria-checked="true"] { box-shadow: 0 0 0 2px var(--accent); }
 :root[data-keys] .ms-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .ms-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); min-width: 0; }

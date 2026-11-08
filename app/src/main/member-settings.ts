@@ -286,8 +286,10 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       `<button type="button" role="menuitemradio" aria-checked="${id === current}" tabindex="-1" class="ms-swatch" data-cover="${id}" aria-label="${esc(t("memberSettings.coverPattern", { p0: at + 1 }))}"><span class="ms-cover" data-pattern="${id}"></span></button>`).join("");
     const action = (act: string, label: string): string => `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-cover-act="${act}"><span class="mt">${esc(label)}</span></button>`;
     const pop = openPopover(anchor,
-      `<div class="ms-swatches" style="--ms-tint: ${esc(tint)}">${swatches}</div>` + action("upload", t("members.fromPc")) + (current === "image" ? action("remove", t("providers.remove")) : ""),
+      `<div class="ms-swatches">${swatches}</div>` + action("upload", t("members.fromPc")) + (current === "image" ? action("remove", t("providers.remove")) : ""),
       { className: "menu ms-cover-menu", role: "menu", label: t("memberSettings.cover") });
+    // The menu lives outside the page, so it is given the member's colour itself.
+    pop.querySelector<HTMLElement>(".ms-swatches")?.style.setProperty("--ms-tint", tint);
     pop.addEventListener("click", (event) => {
       const target = (event.target as Element).closest<HTMLElement>("button");
       if (!target) return;

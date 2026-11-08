@@ -5621,7 +5621,12 @@ export function checkRendered(name, context = {}) {
       const menu = document.querySelector("#app-popover"), swatches = [...menu.querySelectorAll(".ms-swatch")];
       require(visible(menu) && swatches.length === 5 && swatches.every(visible), "the cover's menu shows its five patterns");
       require(swatches.filter(swatch => swatch.getAttribute("aria-checked") === "true").length === 1, "the cover in use is marked");
-      require(swatches.every(swatch => swatch.getAttribute("aria-label") && /gradient/.test(getComputedStyle(swatch.querySelector(".ms-cover")).backgroundImage) || swatch.dataset.cover === "plain"), "each pattern is a small cover of its own");
+      for (const swatch of swatches) {
+        const preview = swatch.querySelector(".ms-cover"), box = preview.getBoundingClientRect(), style = getComputedStyle(preview);
+        // A swatch is drawn: it fills its button (a menu's row styles once squeezed it to nothing) and shows its pattern.
+        require(swatch.getAttribute("aria-label") && box.width >= 40 && box.height >= 28, `${swatch.dataset.cover}: the small cover fills its swatch (${Math.round(box.width)} x ${Math.round(box.height)})`);
+        require(/gradient/.test(style.backgroundImage) || (swatch.dataset.cover === "plain" && style.backgroundColor !== "rgba(0, 0, 0, 0)"), `${swatch.dataset.cover}: the small cover shows its pattern in the member's colour`);
+      }
       const tops = new Set(swatches.map(swatch => Math.round(swatch.getBoundingClientRect().top)));
       require(tops.size === 1, "the patterns stand in one row");
       require(visible(menu.querySelector('[data-cover-act="upload"]')), "a picture from this PC is offered");
