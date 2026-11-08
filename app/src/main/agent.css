@@ -443,6 +443,9 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .ra-dock { flex: none; padding: var(--pa-dock-top) var(--pa-dock-x) var(--pa-dock-bottom); }
 .ra-dock > .composer, .ra-dock > .ask-card { max-width: var(--pa-colw); margin: 0 auto; }
 .page-agent .ask-card { width: 100%; max-width: var(--layout-reading-max); margin-inline: auto; }
+/* In the thread the question is the member's own line: it starts where its replies start and is as wide as a permission
+   card, never centred under the owner's message (owner, 2026-11-08). */
+.page-agent [data-question-turn] .ask-card { width: min(calc(400px + 100 * var(--pa-u)), 100%); margin-inline: 0 auto; }
 .composer { width: 100%; max-width: var(--layout-thread-max); margin-inline: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); background: var(--panel); border: 1px solid var(--edge); border-radius: var(--pa-cmp-r); padding: var(--pa-cmp-p) calc(var(--pa-cmp-p) + 1px) var(--pa-cmp-p) calc(var(--pa-cmp-p) + 2px); box-shadow: 0 6px 20px color-mix(in srgb, var(--text) 6%, transparent); transition: border-color 0.16s ease, box-shadow 0.16s ease; }
 /* Typing into it deepens its shadow a little; its edge keeps its colour, as no frame shows where the focus is. */
 .composer:focus-within { box-shadow: 0 6px 24px color-mix(in srgb, var(--text) 10%, transparent); }

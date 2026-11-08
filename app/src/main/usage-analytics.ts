@@ -9,7 +9,7 @@ import { getLocale, onLocaleChange, t } from "./i18n";
 import { noticeHTML } from "./missing";
 import { providerMark } from "./provider-marks";
 import type { ChatGptStatus } from "./types";
-import { btn, esc, iconButton, patchHTML, toaster } from "./ui";
+import { btn, esc, patchHTML, toaster } from "./ui";
 import type { CliAllowances } from "./usage-analytics-types";
 
 export type { CliAllowances } from "./usage-analytics-types";
@@ -21,7 +21,7 @@ export interface UsageAnalyticsApi {
 export interface UsageAnalyticsMount {
   /** The first reading has come back (a failure renders in the view). */
   ready: Promise<void>;
-  /** Reads again without a loading state; only a change redraws. */
+  /** Reads again without a loading state; only a change redraws. Rejects when the reading failed. */
   refresh(): Promise<void>;
   destroy(): void;
 }
@@ -74,8 +74,8 @@ export function mountUsageAnalytics(host: HTMLElement, api: UsageAnalyticsApi): 
     root.hidden = !busy && !cards;
     root.setAttribute("aria-busy", String(busy));
     root.setAttribute("aria-label", t("runs.allowance"));
-    // Refreshing is one plain icon, no words (owner, 2026-11-07).
-    patchHTML(root, `<header><h2 tabindex="-1">${t("runs.allowance")}</h2>${iconButton("refresh", t("runs.refresh"), ` data-run-act="allowance"${busy ? " disabled" : ""}`)}</header>${cards}`);
+    // No refresh of its own: the one at the top of 模型與用量 reads this too (owner, 2026-11-08: 「為甚麼會有兩個 icon」).
+    patchHTML(root, `<header><h2 tabindex="-1">${t("runs.allowance")}</h2></header>${cards}`);
     if (focused) root.querySelector<HTMLElement>(`[data-run-act="${focused}"]`)?.focus({ preventScroll: true });
   }
 
@@ -91,13 +91,14 @@ export function mountUsageAnalytics(host: HTMLElement, api: UsageAnalyticsApi): 
     chatgpt = !!account?.signed_in && account.plan_scope_granted !== false;
     busy = false;
     if (!quiet || JSON.stringify([allowance, failed, chatgpt]) !== before) render();
+    // The page's one refresh says when a reading failed; the first reading shows its failure in the view.
+    if (quiet && broke) throw new Error("allowance");
   }
 
   function clicked(event: MouseEvent): void {
     const button = (event.target as Element).closest<HTMLButtonElement>("button");
     if (!button || button.disabled) return;
-    if (button.dataset.runAct === "allowance") void read(false);
-    else if (button.dataset.runAct === "chatgpt-usage") void api.openExternalUrl?.(CHATGPT_USAGE_URL).catch((error) => toaster.info(describeError(error)));
+    if (button.dataset.runAct === "chatgpt-usage") void api.openExternalUrl?.(CHATGPT_USAGE_URL).catch((error) => toaster.info(describeError(error)));
   }
   root.addEventListener("click", clicked);
   const stopLocale = onLocaleChange(render);

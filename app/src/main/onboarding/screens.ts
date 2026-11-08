@@ -8,6 +8,7 @@ import type { MessageKey } from "../i18n/zh-TW";
 
 import { CLIS, type CliBrainsView } from "../cli-brains";
 import { entryIcon } from "../connections";
+import { nameScore } from "../find-match";
 import { providerMark } from "../provider-marks";
 import { type ProvidersView, description, emptyProvidersView, providersAddHTML } from "../providers";
 import type { ProviderKind, StoreService } from "../types";
@@ -89,9 +90,11 @@ export const demoReply = (demo: (typeof DEMOS)[number]): string => t(demo[1]);
  * A reader hears one sentence of what the team does instead. The language is chosen at the window's top left.
  */
 export function welcomeHTML(): string {
+  // His name is one wordmark for every language, 「智慧之王ラファエル」 (owner, 2026-11-08: 「夠酷就好…所有語言都是一樣的」),
+  // inked in the theme's colour through a mask; a reader hears the name in the window's language.
   return (
     `<div class="ob-emblem" aria-hidden="true"><canvas class="ob-emb"></canvas></div>` +
-    head(t("onboarding.welcomeTitle")) +
+    `<h2 tabindex="-1" class="ob-wordmark"><span class="ob-wm" aria-hidden="true"></span><span class="ob-name">${esc(t("onboarding.welcomeTitle"))}</span></h2>` +
     `<div class="ob-demo"><p class="ob-sr">${esc(t("onboarding.demoSummary"))}</p>` +
     `<p class="ob-demo-ask" aria-hidden="true"><span data-ob-typed>${esc(demoAsk(DEMOS[0]))}</span><span class="ob-caret"></span></p>` +
     `<p class="ob-demo-reply" aria-hidden="true" data-ob-reply>${esc(demoReply(DEMOS[0]))}</p></div>`
@@ -163,16 +166,22 @@ export function toolCards(v: CliBrainsView): ToolCard[] {
 const toolTile = (card: ToolCard): string =>
   tile({ id: card.id, mark: card.mark, name: card.name, line: card.line, on: card.ready, control: card.ready ? st("ok", t("brains.ready")) : card.action ? btn(esc(card.action.label), "sm", card.action.attrs) : "" });
 
-/** The OpenRouter tile: a field and 「貼上」 until there is a key, then 「已設定」 and 「更換」. */
+/**
+ * The OpenRouter tile, one tile like the others: 「連線」 (or 「已設定」 and 「更換」) until it is pressed, then it spans its row
+ * with the masked field, 「取消」 and 「貼上」 while the key is typed. A refused key keeps the field open with its alert.
+ */
 function keyTile(k: KeyView): string {
-  const entering = !k.has || k.replacing;
+  const entering = k.replacing || k.busy || k.error !== null;
   const control = entering
     ? fieldHTML("sk-or-v1-…", "", { w: 220, get label() { return t("common.apiKeyField"); }, id: "ob-key-input", type: "password", invalid: k.error !== null, disabled: k.busy }) +
-      (k.has ? btn(esc(t("common.cancel")), "sm", ` data-ob="key-cancel"${k.busy ? " disabled" : ""}`) : "") +
+      btn(esc(t("common.cancel")), "sm", ` data-ob="key-cancel"${k.busy ? " disabled" : ""}`) +
       btn(esc(k.busy ? t("common.checking") : t("common.paste")), "sm", ` data-ob="key-paste"${k.busy ? " disabled" : ""}`)
-    : st("ok", t("onboarding.keyIsSet")) + btn(esc(t("onboarding.keyReplace")), "sm", ' data-ob="key-replace"');
-  const line = k.has && !entering ? (k.name === null ? t("onboarding.keyStored") : t("onboarding.keyNamed", { p0: k.name })) : t("common.apiKey");
-  return tile({ id: "openrouter", mark: providerMark("openrouter"), name: "OpenRouter", line, control, wide: true, on: k.has && !entering }) + (k.error ? alert(st("err", k.error)) : "");
+    : k.has
+      ? st("ok", t("onboarding.keyIsSet")) + btn(esc(t("onboarding.keyReplace")), "sm", ' data-ob="key-replace"')
+      : btn(esc(t("providers.connect")), "sm", ` data-ob="key-replace" aria-label="${esc(`${t("providers.connect")} OpenRouter`)}"`);
+  // One short line like every other tile's: the key's own name once it is known, otherwise what it is.
+  const line = k.has && !entering && k.name !== null ? t("onboarding.keyNamed", { p0: k.name }) : t("common.apiKey");
+  return tile({ id: "openrouter", mark: providerMark("openrouter"), name: "OpenRouter", line, control, wide: entering, on: k.has && !entering }) + (k.error ? alert(st("err", k.error)) : "");
 }
 
 /**
@@ -190,23 +199,60 @@ function providerTile(kind: ProviderKind, v: ProvidersView): string {
   return tile({ id: `provider:${kind.kind}`, mark: providerMark(kind.kind), name: kind.name, line: kind.available ? description(kind) : t("providers.soon"), on: !!provider, control });
 }
 
-/** The catalog's providers by group (official, gateways and clouds, this computer), each group under its own label. */
-export function providerGroupsHTML(v: ProvidersView): string {
-  if (v.state !== "ready") return v.state === "failed" ? alert(st("err", t("providers.error"))) : "";
-  const kinds = v.kinds.filter((kind) => kind.kind !== "openrouter" && kind.kind !== "chatgpt");
-  return (["official", "gateway", "local"] as const).map((group) => {
-    const rows = kinds.filter((kind) => kind.group === group).sort((a, b) => a.name.localeCompare(b.name, "en"));
-    return rows.length ? `<h4 class="ob-subsection">${esc(tr(GROUP_TITLE[group]))}</h4><div class="ob-grid" data-ob-providers="${group}">${rows.map((kind) => providerTile(kind, v)).join("")}</div>` : "";
-  }).join("");
-}
 const tr = t as unknown as (key: MessageKey) => string;
 
-export function toolsHTML(accounts: CliBrainsView, key: KeyView, accountError: string, providers: ProvidersView = emptyProvidersView()): string {
+/** One AI tool the guide offers, whatever kind it is: a subscription account, the OpenRouter key or a catalog provider. */
+interface ToolTile { id: string; name: string; group: "accounts" | ProviderKind["group"]; html: string }
+
+/**
+ * The tools most people reach for, the same for everyone (owner, 2026-11-08: 「所有的服務是平等的…可以放一個 popular 的
+ * 區域」). The guide is a store: it never orders itself by what one owner has set up.
+ */
+export const POPULAR_TOOLS = ["chatgpt", "claude", "codex", "openrouter", "provider:anthropic", "provider:google"] as const;
+const GROUPS = ["accounts", "official", "gateway", "local"] as const;
+const groupTitle = (group: ToolTile["group"]): string => (group === "accounts" ? t("brains.accounts") : tr(GROUP_TITLE[group]));
+
+function toolTiles(accounts: CliBrainsView, key: KeyView, providers: ProvidersView): ToolTile[] {
+  const tiles: ToolTile[] = toolCards(accounts).map((card) => ({ id: card.id, name: card.name, group: "accounts", html: toolTile(card) }));
+  tiles.push({ id: "openrouter", name: "OpenRouter", group: "gateway", html: keyTile(key) });
+  if (providers.state === "ready") {
+    for (const kind of providers.kinds) {
+      if (kind.kind !== "openrouter" && kind.kind !== "chatgpt") tiles.push({ id: `provider:${kind.kind}`, name: kind.name, group: kind.group, html: providerTile(kind, providers) });
+    }
+  }
+  return tiles;
+}
+
+const toolGrid = (tiles: readonly ToolTile[], attrs: string): string => `<div class="ob-grid"${attrs}>${tiles.map((tile) => tile.html).join("")}</div>`;
+
+/**
+ * The tools as a store: 熱門 first, then every other tool under its kind, each kind by name; a search shows the tools whose
+ * name it finds (typos forgiven, R-FIND-01) in one grid instead.
+ */
+export function toolsListHTML(accounts: CliBrainsView, key: KeyView, providers: ProvidersView = emptyProvidersView(), query = ""): string {
+  const tiles = toolTiles(accounts, key, providers);
+  const wanted = query.trim();
+  if (wanted) {
+    const found = tiles.map((tile) => ({ tile, score: nameScore([tile.name, tile.id.replace(/^provider:/, "")], wanted) })).filter((hit) => hit.score < Infinity).sort((a, b) => a.score - b.score);
+    return found.length ? toolGrid(found.map((hit) => hit.tile), " data-ob-found") : `<p class="ob-state">${esc(t("onboarding.toolsNone"))}</p>`;
+  }
+  const popular = POPULAR_TOOLS.map((id) => tiles.find((tile) => tile.id === id)).filter((tile): tile is ToolTile => !!tile);
+  const rest = tiles.filter((tile) => !popular.includes(tile));
+  const byName = (a: ToolTile, b: ToolTile): number => a.name.localeCompare(b.name, "en");
+  return `<h3 class="ob-section">${esc(t("onboarding.popular"))}</h3>${toolGrid(popular, ' data-ob-group="popular"')}` +
+    GROUPS.map((group) => {
+      const shown = rest.filter((tile) => tile.group === group).sort(byName);
+      return shown.length ? `<h3 class="ob-section">${esc(groupTitle(group))}</h3>${toolGrid(shown, ` data-ob-group="${group}"`)}` : "";
+    }).join("") +
+    (providers.state === "failed" ? alert(st("err", t("providers.error"))) : "");
+}
+
+export function toolsHTML(accounts: CliBrainsView, key: KeyView, accountError: string, providers: ProvidersView = emptyProvidersView(), query = ""): string {
   return (
     head(t("onboarding.toolsTitle"), "tools") +
-    `<div class="ob-main"><h3 class="ob-section">${esc(t("brains.accounts"))}</h3><div class="ob-grid two" data-ob-tools>${toolCards(accounts).map(toolTile).join("")}</div>` +
+    `<div class="ob-main"><div class="ob-find">${fieldHTML(t("conn.search"), query, { icon: "search", id: "ob-tools-find" })}</div>` +
     (accountError ? alert(st("err", accountError)) : "") +
-    `<h3 class="ob-section">${esc(t("models.providers"))}</h3><div class="ob-grid" data-ob-key>${keyTile(key)}</div>${providerGroupsHTML(providers)}` +
+    `<div data-ob-tools>${toolsListHTML(accounts, key, providers, query)}</div>` +
     `</div>` + providersAddHTML(providers)
   );
 }
@@ -236,7 +282,7 @@ function serviceTile(s: StoreService, v: ServicesState): string {
     `<span class="ob-ic">${mark}</span><span class="ob-tx"><span class="nm">${esc(s.name)}</span><span class="ds">${line}</span></span>${extra}`;
   if (s.server_id !== null) return `<div class="ob-tile on" data-item="${esc(s.id)}">${body(st("ok", t("onboarding.connConnected")), tick)}</div>`;
   if (v.waiting === s.id) {
-    const cancel = `<span class="ob-ctl">${btn(esc(t("common.cancel")), "sm", ` data-ob="conn-cancel"${s.source ? " disabled" : ""}`)}</span>`;
+    const cancel = `<span class="ob-ctl">${btn(esc(t("common.cancel")), "sm", ' data-ob="conn-cancel"')}</span>`;
     return `<div class="ob-tile" data-item="${esc(s.id)}">${body(st("idle", t("onboarding.connWaiting")), cancel)}</div>`;
   }
   // The whole tile is the sign-in button: pressing it opens the service's login, as the row's button did.

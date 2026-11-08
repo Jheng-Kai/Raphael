@@ -237,7 +237,8 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
       if (!await saveMemory()) return;
       const okay = host.update ? await host.update(member.id, fields) : !!(await api.membersUpdate(member.id, fields));
       if (!okay) return;
-      host.saved?.({ ...member, ...fields }); dialog.close();
+      // A patch's cover is a choice ("pattern:…" or null), not the member's cover view: this dialog never sets one.
+      host.saved?.({ ...member, ...fields, cover: member.cover }); dialog.close();
     } catch (error) { toaster.info(describeError(error)); }
     finally { busy = false; setBusy(); }
   }

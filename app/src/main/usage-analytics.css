@@ -1,5 +1,15 @@
 /* What each subscription has left, one card each (usage-analytics.ts). */
 .run-allowance { margin-bottom: var(--sp-5); min-width: 0; }
+/* The one refresh of 模型與用量 (settings-view.ts modelsRefreshHTML): it turns while it reads and is a check for a moment
+   once done (owner, 2026-11-08: 「這個 Icon 沒有任何的 feedback」); with reduced motion it fades instead of turning. */
+.models-refresh[data-state="busy"] { cursor: progress; }
+.models-refresh[data-state="busy"] > .i { animation: models-refresh-turn 0.9s linear infinite; }
+.models-refresh[data-state="done"] > .i { color: var(--ok); }
+@keyframes models-refresh-turn { to { transform: rotate(360deg); } }
+@keyframes models-refresh-fade { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) {
+  .models-refresh[data-state="busy"] > .i { animation: models-refresh-fade 1.2s ease-in-out infinite; }
+}
 .run-allowance > header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; }
 /* The same small heading as every settings group, so the cards and the rows below read as one page. */
 .run-allowance > header h2 { margin: 0 0 0 var(--sp-1); font: 500 var(--fs-sm)/1.4 var(--ui); color: var(--text-2); }

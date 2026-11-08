@@ -251,6 +251,8 @@ export const desktopHostCheck = (alias: string): Promise<ComputerHostHealth> => 
 export const membersSetPrimary = (id: number): Promise<{ primary_id: number }> => core("members.set_primary", { id });
 /** A picture of this PC for a member: name, type and bytes in base64, checked by the core as the composer's images are. */
 export const membersSetAvatar = (id: number, file: WireAttachment): Promise<{ member: Member }> => core("members.set_avatar", { id, ...file });
+/** The owner's picture as the cover of the member's settings page, checked as an avatar is. */
+export const membersSetCover = (id: number, file: WireAttachment): Promise<{ member: Member }> => core("members.set_cover", { id, ...file });
 /** One picture of the member from the owner's image model, not applied: the window saves it with `membersSetAvatar`. */
 export const membersAvatarGenerate = (member_id: number, prompt: string): Promise<{ candidate: WireAttachment; model: string }> =>
   core("members.avatar_generate", { member_id, prompt });

@@ -8,9 +8,9 @@ See [Agent and external-input security boundaries](security-boundaries.md) for c
 
 The owner request of 2026-11-05 introduces R-PANEL-01 through R-PANEL-04. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for Details / Library / Computer navigation, shared file/work controls, truthful local Docker recovery, the selected scene matrix and native/judge limits. [Conversation](conversation.md#member-panel-destinations-2026-11-05) and [Daily work](daily-work.md#work-and-files-in-the-member-panel-2026-11-05) map the affected consumers.
 
-## App updates, memory import and attachment limits (2026-11-05)
+## App updates and attachment limits (2026-11-05)
 
-See [Settings and appearance](settings-appearance.md#signed-updates-and-owner-memory-import-2026-11-05)
+See [Settings and appearance](settings-appearance.md#signed-updates-2026-11-05)
 and [Conversation](conversation.md#streaming-composer-files-2026-11-05) for the selected
 matrix, signed-version requirement and native/dependency acceptance boundaries.
 

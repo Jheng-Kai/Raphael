@@ -1,5 +1,18 @@
 # Owner management
 
+Owner follow-up (2026-11-08): ask_member and handoff refuse operational delegated
+member management before another member turn/task starts, with guidance to use
+the caller's own owner-private management tools. Background CLI find_tools results
+are retained as untrusted data in the reload note across catalog restarts.
+team_overview defaults to a compact complete roster with role, selected model and
+skill/command/routine counts; optional member_id returns one full detail record.
+DataFloor protects both Windows Raphael and Raphael Dev data roots, configured
+RAPHAEL_DATA_DIR/RAPHAEL_HOME and the directory of an active raphael.db, requiring
+single-call consent for reads and refusing writes regardless of action mode.
+Offline regressions: tests/members/test_meetings_followup.py,
+tests/members/test_answering.py, tests/background/test_handoff.py,
+tests/background/test_cli_found_tools.py and tests/agent/test_data_floor.py under core/.
+
 R-AG-MGMT-01 through 03: peer/shared management belongs to the current primary contact,
 not Raphael by name. Every member can manage its own profile, picture, skills, commands,
 voice and own memory in an interactive owner chat. Identity 0 can change its own voice

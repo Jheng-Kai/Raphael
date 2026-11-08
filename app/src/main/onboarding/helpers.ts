@@ -6,6 +6,20 @@ import type { StoreService } from "../types";
 /** The services the second step offers: six rows of the three-column grid, the rest of the store being a search away. */
 export const SERVICES_SHOWN = 18;
 
+/** How long the services step waits for the store's lists before it offers 重試. */
+export const SERVICES_WAIT_MS = 15_000;
+
+/**
+ * `promise`, or a rejection after `ms`: a call the core does not answer never keeps a screen spinning (owner, 2026-11-08:
+ * the services step spun on after a sign-in was cancelled).
+ */
+export function within<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("timeout")), ms);
+    promise.then((value) => { clearTimeout(timer); resolve(value); }, (error: unknown) => { clearTimeout(timer); reject(error); });
+  });
+}
+
 const identity = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 /**

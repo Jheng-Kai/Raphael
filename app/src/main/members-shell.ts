@@ -189,6 +189,7 @@ export function createMembers(host: MembersHost): MembersShell {
     member,
     list: () => list,
     update,
+    refreshList: () => void load(),
     back: () => host.app.go("agent"),
   });
 

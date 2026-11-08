@@ -209,7 +209,9 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
   // Search and plus side by side at the top, as Grok Bot's (owner, 2026-11-06): search opens a card in the middle of the
   // window instead of a field standing in the list.
   el.innerHTML =
-    `<div class="mb-top">${iconButton("search", t("chat.searchAll"), ' data-col="search" aria-haspopup="dialog"', "mb-tool")}` +
+    // Its empty stretch moves the window, as the caption does (owner, 2026-11-08: 「左上角…按住滑鼠應該是有辦法拖移的」);
+    // its buttons still press (window-chrome.ts leaves interactive elements alone).
+    `<div class="mb-top" data-window-drag>${iconButton("search", t("chat.searchAll"), ' data-col="search" aria-haspopup="dialog"', "mb-tool")}` +
     `${iconButton("plus", t("members.add"), ' data-col="add" aria-haspopup="menu" aria-expanded="false"', "mb-tool")}</div>` +
     `<nav class="mb-scroll"><div class="mb-list"></div></nav>`;
   const rooms = createRoomsSection(() => host.view().active !== false);

@@ -102,6 +102,24 @@ consumers and the selected matrix are in conversation.md#durable-owner-inbox-202
 
 ## Meetings and private work (2026-11-04)
 
+Owner follow-up (2026-11-08, meetings-and-delegation): an explicit meeting keeps
+meeting=1 and gives every participant a speech turn in order, even when earlier
+members pass. Owner corrections re-open that ordered queue. Ordinary room chats
+retain their independent speak/pass listeners. A failed listener records only its
+exception kind, retries once, and retains routing evidence; persistent failure
+creates a blocked intent and a public unavailable reason rather than being heard.
+CLI structured listeners allow three Claude turns and read structured_output.
+Listeners use nonpersistent native sessions; persistent turns sharing a member and
+conversation serialize through the existing session lock. An early CLI exit retains
+and logs bounded, scrubbed stderr. A missing resume session gets one fresh attempt
+with bounded recovery receipts, without replaying completed tool effects.
+Completed room rows preserve authored text with a trailing (pass) suffix removed;
+an exact pass stays silent. Fresh TeamContextSnapshot.meetings and work_status
+carry persisted exchange state so a finished meeting cannot be reported as running.
+Regression evidence: core/tests/members/test_meetings_followup.py,
+core/tests/background/test_room_meeting.py and core/tests/agent/test_cli_brains.py.
+Core-only behavior; no new UI scene or provider acceptance is claimed.
+
 R-ROOM-01 through R-ROOM-07 supersede sequential-speech/normal-room-tools clauses.
 Selected speakers share one snapshot. Their private work can continue beside speech;
 status is computed per member, chief decisions are pinned, and short report cards link

@@ -16,10 +16,4 @@
 .btn.output-chosen { max-width: 220px; }
 .btn.output-chosen .output-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.memory-import .import-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); margin-block: var(--sp-2) var(--sp-3); }
-@media (max-width: 720px) { .memory-import .import-pair { grid-template-columns: minmax(0, 1fr); } }
-.memory-import .import-field { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-2); min-width: 0; font-size: var(--fs-sm); }
-.memory-import .import-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-height: var(--h-ctl-sm); color: var(--text-2); }
-.memory-import textarea { width: 100%; min-width: 0; height: auto; min-height: 140px; padding: var(--sp-3); resize: vertical; }
-.import-result { overflow-wrap: anywhere; }
 .update-notes { white-space: pre-wrap; overflow-wrap: anywhere; }

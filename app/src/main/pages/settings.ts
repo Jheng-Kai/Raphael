@@ -10,7 +10,6 @@
 import { openTimezoneMenu } from "../timezones";
 import { knownCatalog, rememberCatalog } from "../brain-lists";
 import { isUiLocale, onLocaleChange, t } from "../i18n";
-import { createMemoryImport } from "../memory-import";
 import { createOwnerControls } from "../owner-settings";
 
 import { getVersion } from "@tauri-apps/api/app";
@@ -87,6 +86,7 @@ import {
   loadingHTML,
   settingsMicrophones,
   modelPickerLook,
+  modelsRefreshHTML,
   visionPickerLook,
   paneHTML,
   paneListHTML,
@@ -179,12 +179,13 @@ export function createSettings(app: AppContext): SettingsPage {
   const usageHost = document.createElement("div");
   usageHost.dataset.usageHost = "";
   let usage: UsageAnalyticsMount | null = null;
+  /** What the one refresh of 模型與用量 is doing (`refreshModels`). */
+  let modelsRefresh: "idle" | "busy" | "done" = "idle";
   let usageRefresh: Promise<void> | null = null;
   let usageAgain = false;
 
   let brain: BrainSettings | null = null;
-  const memoryImport = createMemoryImport(() => { if (visible) render(); });
-  let update: api.UpdateView | null = null;
+ let update: api.UpdateView | null = null;
   let checkingUpdate = false;
   async function checkUpdate(action: "check" | "install" = "check"): Promise<void> {
     if (checkingUpdate) return;
@@ -265,8 +266,8 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
-    update, memoryImportHTML: memoryImport.html(), memoryImportAction: memoryImport.action(),
-    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
+    update,
+    pane, modelsTab, modelsRefresh, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
     replacingKey, keyBusy, keyError, limitDraft, limitError, languageGroups, now: Date.now(),
     connections: connections.view(), memoryShared: memoryShared.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
@@ -379,10 +380,35 @@ export function createSettings(app: AppContext): SettingsPage {
     await providers.load();
     providersRead = providers.view().state === "ready";
   }
-  function refreshModels(): void {
-    void loadCatalog(true); // and the providers with it
-    void loadLocalModels();
-    void usage?.refresh();
+  /**
+   * The one refresh of 模型與用量 (owner, 2026-11-08: 「為甚麼會有兩個 icon…沒有任何的 feedback」): it turns while everything is
+   * read again, shows a check for a moment when it is done, and a failure is said in a toast.
+   */
+  let refreshDone: ReturnType<typeof setTimeout> | undefined;
+  /** The button is kept (and its focus with it); only its icon, words and state change. */
+  function paintModelsRefresh(): void {
+    const button = el.querySelector<HTMLButtonElement>('[data-act="models-refresh"]');
+    if (!button) return;
+    const next = document.createElement("template");
+    next.innerHTML = modelsRefreshHTML(modelsRefresh);
+    const drawn = next.content.firstElementChild!;
+    button.innerHTML = drawn.innerHTML;
+    for (const name of ["aria-label", "title", "data-state", "aria-busy", "aria-disabled"]) {
+      const value = drawn.getAttribute(name);
+      if (value === null) button.removeAttribute(name); else button.setAttribute(name, value);
+    }
+  }
+  async function refreshModels(): Promise<void> {
+    if (modelsRefresh === "busy") return;
+    clearTimeout(refreshDone);
+    modelsRefresh = "busy";
+    paintModelsRefresh();
+    const results = await Promise.allSettled([loadCatalog(true), loadLocalModels(), usage?.refresh() ?? Promise.resolve()]);
+    const failedRead = catalog === "failed" || providers.view().state === "failed" || results.some(result => result.status === "rejected");
+    if (failedRead) toaster.info(t("runs.refreshFailed"));
+    modelsRefresh = failedRead ? "idle" : "done";
+    paintModelsRefresh();
+    if (!failedRead) refreshDone = setTimeout(() => { modelsRefresh = "idle"; paintModelsRefresh(); }, 1600);
   }
 
   /** Coalesce activity bursts and wait for the first reading before refreshing it. */
@@ -395,7 +421,8 @@ export function createSettings(app: AppContext): SettingsPage {
       await current.ready;
       while (usage === current && usageAgain && visible && pane === "models" && modelsTab === "usage") {
         usageAgain = false;
-        await current.refresh();
+        // A background reading that fails keeps what is shown; only the page's refresh says it failed.
+        await current.refresh().catch(() => {});
       }
     })().finally(() => { if (usage === current) usageRefresh = null; });
   }
@@ -1048,10 +1075,9 @@ export function createSettings(app: AppContext): SettingsPage {
 
   // ---------- events ----------
 
-  el.addEventListener("input", e => memoryImport.input(e.target as Element));
-  el.addEventListener("click", (e) => {
+ el.addEventListener("click", (e) => {
     const target = e.target as Element;
-    if (ownerControls.click(target) || memoryImport.click(target)) return;
+    if (ownerControls.click(target)) return;
     if (target.closest('.tg[data-k="auto-update"]')) {
       void changeDevice({ auto_update: !app.device().auto_update }).then(() => { if (app.device().auto_update) void checkUpdate(); });
       return;
@@ -1111,7 +1137,7 @@ export function createSettings(app: AppContext): SettingsPage {
         app.closeSettings();
         break;
       case "models-refresh":
-        refreshModels();
+        void refreshModels();
         break;
       case "rerun-guide":
         app.rerunGuide();
@@ -1365,8 +1391,7 @@ export function createSettings(app: AppContext): SettingsPage {
     },
     hide() {
       visible = false;
-      memoryImport.reset();
-      stopOutside();
+     stopOutside();
       for (const picker of pickers.values()) picker.close();
       cliBrains.stop();
       // The usage stays mounted and read: it is read again only by its refresh or a change the core tells of.

@@ -530,7 +530,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   askCard.setAttribute("role", "group");
   askCard.innerHTML = cardHTML({ title: t("cards.permission", { p0: t("agent.title") }), status: "waiting", statusText: cardPromptText("permission"), cls: "ask-card",
     body: t("perm.title"),
-    content: cardDisclosureHTML("approval", `<p class="ask-q card-body"></p>`),
+    // A local command is shown itself, never behind a disclosure: the owner allows what they can read (owner, 2026-11-08).
+    content: `<pre class="local-command ask-cmd" hidden></pre>` + cardDisclosureHTML("approval", `<p class="ask-q card-body"></p>`),
     actions: `<button type="button" class="btn sm pri ask-yes" data-act="yes"><span class="ask-yes-t"></span></button>` +
       `<button type="button" class="btn sm ask-always" data-act="always" hidden></button>` +
       `<button type="button" class="btn sm ask-no" data-act="no"></button>`,
@@ -866,10 +867,17 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     askCard.dataset.id = q.id;
     askCard.dataset.tier = q.tier;
     askText.textContent = q.text;
-    const copy = approvalCopy(q.text, inRaphael() ? t("agent.title") : members.nameOf(memberId()));
+    const asker = inRaphael() ? t("agent.title") : members.nameOf(memberId());
+    // The core asks a local command as its word (本機指令) and, on the next lines, the command itself.
+    const [lead = "", ...rest] = q.text.split("\n");
+    const command = lead.trim() === t("local.title") ? rest.join("\n").trim() : "";
+    const copy = command ? { title: t("cards.localCommand", { p0: asker }), body: t("cards.localReview") } : approvalCopy(q.text, asker);
     askCard.querySelector(".card-title")!.textContent = copy.title;
     askCard.querySelector(".card-body.cc-state")!.textContent = copy.body;
-    askCard.querySelector<HTMLElement>(".card-disclosure")!.hidden = q.text.trim() === copy.body || copy.title.includes(q.text.trim());
+    const commandBox = askCard.querySelector<HTMLElement>(".ask-cmd")!;
+    commandBox.textContent = command;
+    commandBox.hidden = !command;
+    askCard.querySelector<HTMLElement>(".card-disclosure")!.hidden = !!command || q.text.trim() === copy.body || copy.title.includes(q.text.trim());
     drawAskLabels();
     noButton.disabled = alwaysButton.disabled = yesButton.disabled = answering;
     yesButton.dataset.hold = "idle";

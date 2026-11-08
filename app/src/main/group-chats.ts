@@ -390,7 +390,6 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     let statusHTML=room.membership_state==="needs_adjustment"?btn(esc(t("rooms.adjustMembers")),"sm",' data-room-act="members"'):"";
     const quote=composer.el.querySelector<HTMLElement>('.cmp-quote')!;quote.hidden=!replyTo;
     patchHTML(quote, replyTo?`<span>${esc(t("rooms.replyTo",{p0:person(replyTo.member_id)?.name??t("members.title")}))}</span>${iconButton("x",t("common.cancel"),' data-room-act="cancel-reply"')}`:"");
-    if (exchange?.routing?.fallback) statusHTML += `<span role="status">${esc(t("rooms.routingFallback"))}</span>`;
     patchHTML(status, statusHTML);
     patchHTML(older, canOlder?btn(esc(t("rooms.older")),"sm",` data-room-act="older"${loadingOlder?" disabled":""}`):"");
     meetingRow.hidden = !handoffs.length && !decisions.length;

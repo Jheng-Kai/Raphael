@@ -53,7 +53,7 @@ it("renders and refreshes all allowance sources with maker marks and honest unkn
   expect(section.querySelectorAll('[role="progressbar"]')).toHaveLength(2);
   expect(section.textContent).toContain("此回報的重設時間已過");
   usageAllowances.mockResolvedValueOnce({ brains: [{ id: "claude", name: "Claude", source: "reported", windows: [{ period: "fiveHour", remaining_percent: 12, resets_at: null, status: "allowed_warning", updated_at_ms: 1792800060000 }] }] });
-  host.querySelector<HTMLButtonElement>('[data-run-act="allowance"]')!.click();
+  void view.refresh().catch(() => {});
   await vi.waitFor(() => expect(host.querySelector(".run-allowance")!.textContent).toContain("12%"));
   expect(host.querySelectorAll(".run-subscription")).toHaveLength(1);
   expect(host.querySelector(".run-subscription header")!.textContent).toBe("Claude");
@@ -71,9 +71,9 @@ it("ChatGPT sits with the other subscriptions once signed in, and its button ope
   expect(openExternalUrl).toHaveBeenCalledWith("https://chatgpt.com/settings/usage");
   for (const answer of [{ signed_in: false }, { signed_in: true, plan_scope_granted: false }]) {
     chatgptStatus.mockResolvedValueOnce(answer);
-    host.querySelector<HTMLButtonElement>('[data-run-act="allowance"]')!.click();
+    void view.refresh().catch(() => {});
     await vi.waitFor(() => expect(host.querySelector('[data-allowance="chatgpt"]')).toBeNull());
-    host.querySelector<HTMLButtonElement>('[data-run-act="allowance"]')!.click();
+    void view.refresh().catch(() => {});
     await vi.waitFor(() => expect(host.querySelector('[data-allowance="chatgpt"]')).not.toBeNull());
   }
   view.destroy();

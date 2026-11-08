@@ -559,6 +559,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "members.delete",
     "members.set_primary",
     "members.set_avatar",
+    "members.set_cover",
     // One picture candidate from the owner's image model, and what a member delivered (its Library and a file of it).
     "members.avatar_generate",
     "members.library",
@@ -2553,6 +2554,7 @@ mod tests {
             "members.delete",
             "members.set_primary",
             "members.set_avatar",
+            "members.set_cover",
             "members.read",
             "members.viewing",
             "members.tool_choices",
@@ -3160,6 +3162,7 @@ mod tests {
             "members.update",
             "members.delete",
             "members.set_avatar",
+            "members.set_cover",
             "members.avatar_generate",
             "members.library",
             "members.library_file",

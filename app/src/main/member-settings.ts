@@ -1,9 +1,11 @@
 // The settings of one member, as a page of its own in the main area where the conversation is (owner, 2026-11-08): the gear
 // of the member's panel opens it, the arrow at its top left (and Escape) goes back to the conversation. It reads like a
-// Notion page: a cover from the member's own slime colour, the face large across the cover's lower edge, the name and the
-// role in place, then compact sections, each a name over one tinted list of rows (Grok Bot's panel). A long text (the
-// personality, the instructions, a skill, the memory) is one line here and opens in place, or in a view of its own, when
-// it is pressed; no row has a text button where an icon says it. Every call is one the panel and the old dialog made.
+// Notion page: a cover the owner can change (a pattern in the member's own slime colour, or a picture), the face large
+// across the cover's lower edge, the name and the role in place. Under them the settings are kinds in a column on the left,
+// as Settings' own (owner, 2026-11-08: 「左側會有一些分區…不要就這樣子長長一條」), and only the chosen kind is shown, as
+// compact sections, each a name over one tinted list of rows (Grok Bot's panel). What the panel beside it already shows
+// (routines, messaging) is not here. A long text (the personality, the instructions, a skill) is one line and opens in
+// place, or in a view of its own, when it is pressed; no row has a text button where an icon says it.
 import { noticeHTML } from "./missing";
 import "./member-panel.css";
 import "./memory.css";
@@ -13,13 +15,14 @@ import { mountComposerBrain } from "./composer-brain";
 import { describeError } from "./format";
 import { onLocaleChange, getLocale, t } from "./i18n";
 import { openMemberAvatarMenu } from "./member-avatar-menu";
-import { groupChoices, groupFromValue, groupValue } from "./member-dialogs";
+import type { MessageKey } from "./i18n/zh-TW";
+import { groupChoices, groupFromValue, groupValue, pickPicture, readPicture } from "./member-dialogs";
 import { INSTRUCTIONS_MAX, NAME_MAX, PERSONALITY_MAX, RAPHAEL_ID, ROLE_MAX, cleanName, faceHTML, isMemberNameTaken } from "./members";
 import { type MemorySpace, createMemory, memoryHTML } from "./memory-view";
 import { skillOriginLabel } from "./skill-source";
 import { slimeColorOf } from "./slime";
 import type { AppContext, Member, MemberCommand, MemberPatch, MemberSkill, MemberVoice, MembersList } from "./types";
-import { actionRow, btn, esc, ico, iconBtn, iconButton, openConfirmMenu, openMenu, patchHTML, sel, tg, toaster } from "./ui";
+import { type IconName, actionRow, btn, closeMenu, esc, ico, iconBtn, iconButton, openConfirmMenu, openMenu, openPopover, patchHTML, sel, tg, toaster } from "./ui";
 
 export interface MemberSettingsHost {
   app: AppContext;
@@ -28,6 +31,8 @@ export interface MemberSettingsHost {
   list(): MembersList | null;
   /** Changes the member and reads the list again; false (with a toast) when the core refused. */
   update(id: number, patch: MemberPatch): Promise<boolean>;
+  /** Reads the list again after a change made by another call (a cover picture). */
+  refreshList(): void;
   /** The arrow and Escape: back to the member's conversation. */
   back(): void;
 }
@@ -47,10 +52,32 @@ export interface MemberSettings {
   refreshMemory(memberId: number, space?: MemorySpace): void;
 }
 
-type View = { kind: "main" } | { kind: "memory" } | { kind: "skill"; id: number } | { kind: "command"; id: number | null };
+type View = { kind: "main" } | { kind: "skill"; id: number } | { kind: "command"; id: number | null };
 type Field = "personality" | "instructions";
 type Loaded<T> = T | "loading" | "failed";
 interface ToolChoices { tools: string[]; connections: { id: string; name: string; enabled: boolean }[] }
+
+/** The kinds of settings in the page's left column, in order; Raphael has no personality of the owner's and no tool list. */
+type Category = "soul" | "skills" | "model" | "tools" | "voice" | "memory" | "general";
+const CATEGORIES: readonly { id: Category; icon: IconName; label: MessageKey; raphael: boolean }[] = [
+  { id: "soul", icon: "smile", label: "members.profile.soul", raphael: false },
+  { id: "skills", icon: "sparkle", label: "members.profile.skills", raphael: true },
+  { id: "model", icon: "bot", label: "memberSettings.model", raphael: true },
+  { id: "tools", icon: "plug", label: "settings.paneTools", raphael: false },
+  { id: "voice", icon: "voice", label: "members.profile.voice", raphael: true },
+  { id: "memory", icon: "memory", label: "members.profile.memory", raphael: true },
+  { id: "general", icon: "sliders", label: "settings.paneGeneral", raphael: true },
+];
+const categoriesFor = (member: Member): typeof CATEGORIES => CATEGORIES.filter(item => item.raphael || member.id !== RAPHAEL_ID);
+const tr = t as unknown as (key: MessageKey) => string;
+
+/** The cover's patterns, drawn in the member's colour by member-settings.css; the first is the page's own. */
+export const COVER_PATTERNS = ["dots", "grid", "lines", "glow", "plain"] as const;
+export function coverPattern(member: Member): string {
+  const cover = member.cover;
+  if (cover?.kind === "image") return "image";
+  return cover?.kind === "pattern" && (COVER_PATTERNS as readonly string[]).includes(cover.id) ? cover.id : COVER_PATTERNS[0];
+}
 
 const COMMAND_NAME = /^[a-z][a-z0-9_-]{0,31}$/;
 
@@ -62,9 +89,10 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   el.dataset.memberSettings = "";
   el.innerHTML =
     `<div class="ms-bar">${iconButton("left", t("chooser.back"), ' data-ms="back" data-k="ms-back"', "ms-back")}</div>` +
-    `<div class="ms-scroll"><div class="ms-cover" aria-hidden="true"></div><div class="ms-body"><div class="ms-id"></div><div class="ms-main"></div></div></div>`;
+    `<div class="ms-scroll"><div class="ms-cover"></div><div class="ms-body"><div class="ms-id"></div><div class="ms-main"></div></div></div>`;
   const backButton = el.querySelector<HTMLElement>('[data-ms="back"]')!;
   const scroll = el.querySelector<HTMLElement>(".ms-scroll")!;
+  const cover = el.querySelector<HTMLElement>(".ms-cover")!;
   const idSlot = el.querySelector<HTMLElement>(".ms-id")!;
   const main = el.querySelector<HTMLElement>(".ms-main")!;
   // The model is the composer's own control; it keeps its node across drawings.
@@ -73,6 +101,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   let brain: ReturnType<typeof mountComposerBrain> | null = null;
 
   let view: View = { kind: "main" };
+  let category: Category = "soul";
   /** The long fields that are open to be typed in: closed, each is one line. */
   const editing = new Set<Field>();
   let adding = false;
@@ -82,7 +111,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   let voices: { list: MemberVoice[]; configured: boolean } | null = null;
   let raphaelVoice = "";
   let toolChoices: Loaded<ToolChoices> = "loading";
-  let notes = 0;
   let skillText: { id: number; skill: MemberSkill; text: string; revision?: string } | "loading" | null = null;
   let skillBusy = false;
   let command: { id: number | null; name: string; description: string; template: string } = { id: null, name: "", description: "", template: "" };
@@ -92,7 +120,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   let drawnFor: number | null = null;
 
   const memberHost = {
-    visible: () => !el.hidden && view.kind === "memory",
+    visible: () => !el.hidden && view.kind === "main" && category === "memory",
     redraw: () => draw(),
     memberId: () => host.member().id,
     ownerName: () => host.member().name,
@@ -107,12 +135,11 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     const raphael = id === RAPHAEL_ID;
     // Each read is its own: one that fails (or a core that has not got it) leaves the others to answer.
     const read = <T>(call: () => Promise<T>): Promise<T> => Promise.resolve().then(call);
-    const [skillList, commandList, voiceList, tools, memory, settings] = await Promise.allSettled([
+    const [skillList, commandList, voiceList, tools, settings] = await Promise.allSettled([
       read(() => api.membersSkillsList(id)),
       read(() => api.membersCommandsList(id)),
       read(() => api.membersVoices()),
       raphael ? Promise.resolve(null) : read(() => api.membersToolChoices()),
-      read(() => api.core<{ entries: number }>("memory.get", { member_id: id, space: "own" })),
       raphael ? read(() => api.settingsGet()) : Promise.resolve(null),
     ]);
     if (mine !== epoch || id !== host.member().id || el.hidden) return;
@@ -120,7 +147,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     if (commandList.status === "fulfilled") commands = commandList.value?.commands ?? []; else if (!Array.isArray(commands)) commands = "failed";
     if (voiceList.status === "fulfilled" && Array.isArray(voiceList.value?.voices)) voices = { list: voiceList.value.voices, configured: !!voiceList.value.configured };
     if (tools.status === "fulfilled" && tools.value) toolChoices = tools.value; else if (!raphael && typeof toolChoices !== "object") toolChoices = "failed";
-    if (memory.status === "fulfilled") notes = memory.value?.entries ?? 0;
     if (settings.status === "fulfilled" && settings.value) raphaelVoice = settings.value.settings?.tts_fish_voice ?? "";
     draw();
   }
@@ -128,8 +154,9 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   // ---------- drawing ----------
 
   const spinner = (): string => `<span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span>`;
+  // A kind with one section needs no name over it: the column on the left says it.
   const section = (title: string, rows: string, tool = "", key = ""): string =>
-    `<section class="ms-section"${key ? ` data-k="${key}"` : ""}><div class="ms-head"><h2>${esc(title)}</h2>${tool}</div><div class="ms-list">${rows}</div></section>`;
+    `<section class="ms-section"${key ? ` data-k="${key}"` : ""}>${title || tool ? `<div class="ms-head">${title ? `<h2>${esc(title)}</h2>` : ""}${tool}</div>` : ""}<div class="ms-list">${rows}</div></section>`;
   const muted = (text: string): string => `<p class="ms-empty">${esc(text)}</p>`;
   const row = (label: string, control: string, key = ""): string =>
     `<div class="ms-row"${key ? ` data-k="${key}"` : ""}><span class="ms-label">${esc(label)}</span>${control}</div>`;
@@ -193,7 +220,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       const apps = toolChoices.connections.filter(connection => connection.enabled);
       rows = apps.map(app => row(app.name, tg(member.tools === null || member.tools.includes(app.id), app.name, ` data-ms="tool" data-id="${esc(app.id)}" data-k="ms-tool:${esc(app.id)}"`), `ms-app:${esc(app.id)}`)).join("") || muted(t("memberSettings.noTools"));
     }
-    return section(t("settings.paneTools"), rows, "", "ms-tools");
+    return section("", rows, "", "ms-tools");
   }
 
   // The voice card, as Grok Bot's Voice chat: one calm card, the choice on the right of its row. The voice is the member's
@@ -204,28 +231,83 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     const choices = [{ value: "", label: t("members.profile.defaultVoice") }, ...(voices?.list ?? []).map(voice => ({ value: voice.id, label: voice.name }))];
     if (current && !choices.some(choice => choice.value === current)) choices.push({ value: current, label: current });
     const ready = voices?.configured ?? false;
-    return section(t("members.panelVoice"),
+    return section("",
       row(t("members.profile.voiceLabel"), sel(choices, current, t("members.profile.voiceLabel"), ` data-ms="voice" data-k="ms-voice"${ready ? "" : " disabled"}`)) +
       (raphael ? "" : row(t("members.profile.notify"), tg(member.notify ?? false, t("members.profile.notify"), ' data-ms="notify" data-k="ms-notify"'))) +
       (voices && !ready ? noticeHTML("voice", "voice", "fish") : ""), "", "ms-voice");
   }
 
-  function mainHTML(member: Member): string {
+  /** What the chosen kind holds. */
+  function categoryHTML(member: Member): string {
     const raphael = member.id === RAPHAEL_ID;
     const list = host.list();
-    const group = list?.groups.find(item => item.id === member.group_id) ?? null;
-    return (raphael ? "" : section(t("members.personality"), fieldHTML(member, "personality"), "", "ms-personality") + section(t("members.instructions"), fieldHTML(member, "instructions"), "", "ms-instructions")) +
-      skillsHTML() + commandsHTML() +
-      section(t("memberSettings.model"), `<div class="ms-row ms-model" data-slot="model"></div>`, "", "ms-model") +
-      (raphael ? "" : toolsHTML(member)) +
-      voiceHTML(member) +
-      // The memory is never shown here, only counted: it opens in a view of its own. Its row leads the last card, with no
-      // heading of its own that would say 記憶 twice (owner, 2026-11-08: fewer words).
-      `<section class="ms-section" data-k="ms-more"><div class="ms-list">` +
-      `<button type="button" class="btn ms-open" data-ms="memory" data-k="ms-memory"><span class="ms-label">${esc(t("mem.title"))}</span><small>${esc(t("members.panelNotes", { p0: notes }))}</small>${ico("right")}</button>` +
-      row(t("members.profile.draft"), tg(member.draft_first ?? true, t("members.profile.draft"), ' data-ms="draft" data-k="ms-draft"')) +
-      (raphael ? "" : row(t("members.group"), sel(groupChoices(list?.groups ?? []), groupValue(group ? group.id : null), t("members.group"), ' data-ms="group" data-k="ms-group"'))) +
-      `</div></section>`;
+    switch (category) {
+      case "soul":
+        return section(t("members.personality"), fieldHTML(member, "personality"), "", "ms-personality") + section(t("members.instructions"), fieldHTML(member, "instructions"), "", "ms-instructions");
+      case "skills":
+        return skillsHTML() + commandsHTML();
+      case "model":
+        return section("", `<div class="ms-row ms-model" data-slot="model"></div>`, "", "ms-model");
+      case "tools":
+        return toolsHTML(member);
+      case "voice":
+        return voiceHTML(member);
+      case "memory":
+        return `<div class="ms-memory" data-k="ms-memory">${memories.map(item => memoryHTML(item.view())).join("")}</div>`;
+      case "general": {
+        const group = list?.groups.find(item => item.id === member.group_id) ?? null;
+        return section("",
+          row(t("members.profile.draft"), tg(member.draft_first ?? true, t("members.profile.draft"), ' data-ms="draft" data-k="ms-draft"')) +
+          (raphael ? "" : row(t("members.group"), sel(groupChoices(list?.groups ?? []), groupValue(group ? group.id : null), t("members.group"), ' data-ms="group" data-k="ms-group"'))),
+          "", "ms-general");
+      }
+    }
+  }
+
+  /** The kinds in a column on the left, as Settings' own, and the chosen one beside them. */
+  function mainHTML(member: Member): string {
+    const nav = categoriesFor(member).map(item =>
+      `<button type="button" class="nav" data-ms="cat" data-cat="${item.id}" data-k="ms-cat:${item.id}" aria-current="${item.id === category ? "page" : "false"}">${ico(item.icon)}<span>${esc(tr(item.label))}</span></button>`).join("");
+    return `<div class="ms-layout"><nav class="ms-nav" aria-label="${esc(t("computer.settings"))}">${nav}</nav>` +
+      `<div class="ms-content" data-cat="${category}">${categoryHTML(member)}</div></div>`;
+  }
+
+  /** The cover: its pattern or picture, and at its lower right the round button that changes it. */
+  function coverHTML(member: Member): string {
+    const image = member.cover?.kind === "image" ? `<img class="ms-cover-img" src="${esc(member.cover.url)}" alt="">` : "";
+    return image + iconButton("image", t("memberSettings.cover"), ' data-ms="cover" data-k="ms-cover" aria-haspopup="menu" aria-expanded="false"', "ms-cover-btn");
+  }
+
+  /** The cover's choices: its patterns as small covers in the member's colour, a picture from this PC, and taking a picture off. */
+  function openCoverMenu(anchor: HTMLElement, member: Member): void {
+    const current = coverPattern(member);
+    const tint = member.id === RAPHAEL_ID ? "var(--raphael-color)" : slimeColorOf(member);
+    const swatches = COVER_PATTERNS.map((id, at) =>
+      `<button type="button" role="menuitemradio" aria-checked="${id === current}" tabindex="-1" class="ms-swatch" data-cover="${id}" aria-label="${esc(t("memberSettings.coverPattern", { p0: at + 1 }))}"><span class="ms-cover" data-pattern="${id}"></span></button>`).join("");
+    const action = (act: string, label: string): string => `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-cover-act="${act}"><span class="mt">${esc(label)}</span></button>`;
+    const pop = openPopover(anchor,
+      `<div class="ms-swatches" style="--ms-tint: ${esc(tint)}">${swatches}</div>` + action("upload", t("members.fromPc")) + (current === "image" ? action("remove", t("providers.remove")) : ""),
+      { className: "menu ms-cover-menu", role: "menu", label: t("memberSettings.cover") });
+    pop.addEventListener("click", (event) => {
+      const target = (event.target as Element).closest<HTMLElement>("button");
+      if (!target) return;
+      const id = member.id;
+      if (target.dataset.cover) {
+        closeMenu();
+        // The page's own band is no cover at all.
+        void host.update(id, { cover: target.dataset.cover === COVER_PATTERNS[0] ? null : `pattern:${target.dataset.cover}` });
+      } else if (target.dataset.coverAct === "upload") {
+        closeMenu();
+        pickPicture(async (file) => {
+          const picture = await readPicture(file);
+          if (!picture) return;
+          try { await api.membersSetCover(id, picture); host.refreshList(); } catch (error) { toaster.info(describeError(error)); }
+        });
+      } else if (target.dataset.coverAct === "remove") {
+        closeMenu();
+        void host.update(id, { cover: null });
+      }
+    });
   }
 
   /** A view of its own (a skill, a command, the memory): its arrow goes back to the page, not to the conversation. */
@@ -253,7 +335,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   }
 
   function viewHTML(member: Member): string {
-    if (view.kind === "memory") return subHead(t("mem.title")) + memories.map(list => memoryHTML(list.view())).join("");
     if (view.kind === "skill") return skillHTML(view.id);
     if (view.kind === "command") return commandHTML();
     return mainHTML(member);
@@ -263,14 +344,18 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     if (el.hidden) return;
     const member = host.member();
     const sameMember = drawnFor === member.id;
+    // Raphael has no personality or tools of the owner's: another member's kind falls back to his first.
+    if (!categoriesFor(member).some(item => item.id === category)) category = categoriesFor(member)[0].id;
     const face = faceHTML(member, 96).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([member, face, host.list()?.groups, view, [...editing], adding, skills, undo, commands, voices, raphaelVoice, toolChoices, notes, skillText, skillBusy, command, getLocale(),
-      view.kind === "memory" ? memories.map(list => list.view()) : null]);
+    const signature = JSON.stringify([member, face, host.list()?.groups, view, category, [...editing], adding, skills, undo, commands, voices, raphaelVoice, toolChoices, skillText, skillBusy, command, getLocale(),
+      category === "memory" ? memories.map(list => list.view()) : null]);
     if (drawn === signature) return;
     drawn = signature;
     el.dataset.view = view.kind;
     el.setAttribute("aria-label", t("computer.settings"));
     el.style.setProperty("--ms-tint", member.id === RAPHAEL_ID ? "var(--raphael-color)" : slimeColorOf(member));
+    cover.dataset.pattern = coverPattern(member);
+    patchHTML(cover, coverHTML(member));
     backButton.title = t("chooser.back"); backButton.setAttribute("aria-label", backButton.title);
     const focused = document.activeElement as HTMLElement | null;
     const inside = !!focused && el.contains(focused);
@@ -460,7 +545,13 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
         openConfirmMenu(act, { label: t("members.profile.delete"), ask: t("conn.deleteConfirm"), run: () => void api.membersCommandsDelete(member.id, id).then(() => { back(); return reloadCommands(); }).catch(error => toaster.info(describeError(error))) });
         break;
       }
-      case "memory": view = { kind: "memory" }; for (const list of memories) void list.load(); draw(); scroll.scrollTop = 0; break;
+      case "cat": {
+        category = act.dataset.cat as Category;
+        if (category === "memory") for (const list of memories) void list.load();
+        draw();
+        break;
+      }
+      case "cover": openCoverMenu(act, member); break;
       case "draft": void host.update(member.id, { draft_first: !(member.draft_first ?? true) }); break;
       case "notify": void host.update(member.id, { notify: !(member.notify ?? false) }); break;
       case "tool": void toggleTool(act.dataset.id ?? ""); break;
@@ -530,8 +621,8 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     open() {
       if (!el.hidden) { draw(); return; }
       el.hidden = false;
-      view = { kind: "main" }; editing.clear(); adding = false; source = ""; skillText = null; skillBusy = false;
-      skills = "loading"; commands = "loading"; toolChoices = "loading"; voices = null; notes = 0; raphaelVoice = "";
+      view = { kind: "main" }; category = categoriesFor(host.member())[0].id; editing.clear(); adding = false; source = ""; skillText = null; skillBusy = false;
+      skills = "loading"; commands = "loading"; toolChoices = "loading"; voices = null; raphaelVoice = "";
       for (const list of memories) list.reset();
       drawn = ""; drawnFor = null;
       if (!brain) brain = mountComposerBrain(modelSlot, () => host.member()); else brain.reload();
@@ -553,7 +644,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       if (el.hidden) return;
       const mine = memberId === host.member().id;
       if (mine) void load();
-      if (view.kind !== "memory") return;
+      if (view.kind !== "main" || category !== "memory") return;
       // The shared file is everyone's; a member's own is read only when it is the open member's.
       if (space !== "own") void memories[0].load();
       if (space !== "shared" && mine) void memories[1].load();

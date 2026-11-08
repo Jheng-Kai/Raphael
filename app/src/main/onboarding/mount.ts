@@ -22,9 +22,9 @@ import { modelPickerHTML, mountModelPicker, type ModelPickerLook } from "../mode
 import { createServices, servicesHTML as abilityRowsHTML } from "../services";
 import type { AppContext, BrainSettings, MainEvent, ModelCatalog, StoreService } from "../types";
 import { actionRow, btn, closeMenu, esc, openMenuOnArrow, toaster } from "../ui";
-import { pickServices } from "./helpers";
+import { SERVICES_WAIT_MS, pickServices, within } from "./helpers";
 import { type FlowState, type Mode, initialState, isLast, reduce } from "./flow";
-import { DEMOS, abilitiesHTML, demoAsk, demoReply, serviceTilesHTML, servicesHTML, toolsHTML, welcomeHTML } from "./screens";
+import { DEMOS, abilitiesHTML, demoAsk, demoReply, serviceTilesHTML, servicesHTML, toolsHTML, toolsListHTML, welcomeHTML } from "./screens";
 
 /** The emblem's diameter on the welcome, in px (its canvas is 1.3 times larger, so that its rays have room). */
 const EMBLEM_PX = 96;
@@ -63,10 +63,14 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   let key = { has: false, name: null as string | null, replacing: false, busy: false };
   let keyError: (() => string) | null = null;
   let keyLoaded = false;
+  const keyView = () => ({ ...key, error: keyError?.() ?? null });
+  /** What the AI tools' search box holds. */
+  let toolsQuery = "";
 
   // the services
   let services: StoreService[] | "loading" | "failed" = "loading";
   let servicesLoaded = false;
+  let servicesRead = 0;
   let waitingService: string | null = null;
   let connectFailed: string | null = null;
   let query = "";
@@ -134,7 +138,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       case "welcome":
         return welcomeHTML();
       case "tools":
-        return toolsHTML(accounts.view(), { ...key, error: keyError?.() ?? null }, accountsError(), providers.view());
+        return toolsHTML(accounts.view(), keyView(), accountsError(), providers.view(), toolsQuery);
       case "services":
         return servicesHTML({ services, waiting: waitingService, failed: connectFailed, query });
       case "abilities":
@@ -396,23 +400,27 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   // ---------- the services ----------
 
   async function loadServices(): Promise<void> {
+    // A 重試 starts a new read; an older one that answers late changes nothing.
+    const mine = ++servicesRead;
     services = "loading";
     if (flow.step === "services") repaintBody();
     try {
-      const [builtin, status] = await Promise.allSettled([api.integrationsCatalog(), api.connectorsStatus()]);
-      if (destroyed) return;
+      const [builtin, status] = await Promise.allSettled([within(api.integrationsCatalog(), SERVICES_WAIT_MS), within(api.connectorsStatus(), SERVICES_WAIT_MS)]);
+      if (destroyed || mine !== servicesRead) return;
       if (builtin.status !== "fulfilled") throw builtin.reason;
       let managed: StoreService[] = [];
       if (status.status === "fulfilled" && status.value.composio_configured) {
         try {
-          managed = (await api.connectorsCatalog()).items.map((item) => storePlugin(item, status.value.connectors));
+          managed = (await within(api.connectorsCatalog(), SERVICES_WAIT_MS)).items.map((item) => storePlugin(item, status.value.connectors));
         } catch {
           // the managed apps are a bonus: the built-in ones are enough to go on
         }
+        if (destroyed || mine !== servicesRead) return;
       }
       services = pickServices(builtin.value.services, managed);
       servicesLoaded = true;
     } catch {
+      if (mine !== servicesRead) return;
       services = "failed";
     }
     if (!destroyed && flow.step === "services") repaintBody();
@@ -426,6 +434,8 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     repaintBody();
     try {
       const result = entry.source ? await api.connectorsConnect(id) : await api.integrationsConnect({ catalog_id: id });
+      // 取消 already stopped the wait: what the login says afterwards is not shown.
+      if (waitingService !== id) return;
       if (result.connected) {
         const serverId = "server" in result ? result.server.id : (result.connector?.id ?? `composio:${id}`);
         if (Array.isArray(services)) services = services.map((s) => (s.id === id ? { ...s, server_id: serverId } : s));
@@ -433,6 +443,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
         connectFailed = t("onboarding.connFailed");
       }
     } catch (err) {
+      if (waitingService !== id) return;
       connectFailed = describeError(err);
     }
     waitingService = null;
@@ -508,7 +519,11 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
         void connectService(button.dataset.service ?? "");
         break;
       case "conn-cancel":
-        void api.integrationsConnectCancel().catch(() => {});
+        // The tile stops waiting at once, whether or not the core's login answers its cancel (a store app has none).
+        if (!(Array.isArray(services) && services.find((s) => s.id === waitingService)?.source)) void api.integrationsConnectCancel().catch(() => {});
+        waitingService = null;
+        connectFailed = null;
+        repaintBody();
         break;
       case "conn-reload":
         void loadServices();
@@ -527,6 +542,11 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     if (destroyed || !(e.target instanceof HTMLInputElement)) return;
     if (flow.step === "tools") providers.input(e.target);
     // The search narrows the tiles where they stand: the field keeps its caret, and the page its place.
+    if (flow.step === "tools" && e.target.id === "ob-tools-find") {
+      toolsQuery = e.target.value;
+      const list = root.querySelector<HTMLElement>("[data-ob-tools]");
+      if (list) list.innerHTML = toolsListHTML(accounts.view(), keyView(), providers.view(), toolsQuery);
+    }
     if (flow.step === "services" && e.target.id === "ob-find") {
       query = e.target.value;
       const grid = root.querySelector<HTMLElement>("[data-ob-services]");

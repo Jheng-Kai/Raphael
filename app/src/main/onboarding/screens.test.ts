@@ -80,14 +80,29 @@ describe("the welcome", () => {
 });
 
 describe("step 1: the AI tools", () => {
-  test("lists ChatGPT, the three command-line tools and OpenRouter, each a tile with its name and one control", () => {
+  test("is a store: 熱門 is the same for everyone, the rest by kind and name, every tile alike with one control", () => {
     const host = dom(toolsHTML(accounts(), noKey, ""));
-    expect(items(host)).toEqual(["chatgpt", "claude", "codex", "gemini", "openrouter"]);
-    expect([...host.querySelectorAll(".ob-tile .nm")].map((el) => el.textContent)).toEqual(["ChatGPT", "Claude Code", "Codex", "Antigravity", "OpenRouter"]);
+    expect([...host.querySelectorAll("[data-ob-group]")].map((el) => el.getAttribute("data-ob-group"))).toEqual(["popular", "accounts"]);
+    expect(items(host.querySelector<HTMLElement>('[data-ob-group="popular"]')!)).toEqual(["chatgpt", "claude", "codex", "openrouter"]);
+    expect(items(host.querySelector<HTMLElement>('[data-ob-group="accounts"]')!)).toEqual(["gemini"]);
+    expect([...host.querySelectorAll(".ob-section")].map((el) => el.textContent)).toEqual(["Popular", "Subscription accounts"]);
     for (const el of host.querySelectorAll(".ob-tile")) expect(el.querySelector(".ob-ctl")!.children.length).toBeGreaterThan(0);
-    expect(host.querySelector("[data-ob-tools]")!.classList.contains("ob-grid")).toBe(true);
-    expect(host.querySelector("[data-ob-tools]")!.classList.contains("two")).toBe(true);
-    expect(host.querySelector('[data-item="openrouter"]')!.classList.contains("wide")).toBe(true);
+    expect(host.querySelector(".ob-tile.wide, .ob-grid.two")).toBeNull();
+    expect(host.querySelector('.ob-find input#ob-tools-find[aria-label]')).not.toBeNull();
+  });
+
+  test("what one owner has set up never moves a tile (owner, 2026-11-08)", () => {
+    const none = items(dom(toolsHTML(accounts({ clis: [cli("claude", { available: false }), cli("codex", { available: false }), cli("gemini", { available: false })] }), noKey, "")));
+    const all = items(dom(toolsHTML(accounts({ chatgpt: { signed_in: true, email: "me@example.test", plan_scope_granted: true }, clis: [cli("claude"), cli("codex"), cli("gemini")] }), { ...noKey, has: true }, "")));
+    expect(all).toEqual(none);
+  });
+
+  test("the search finds tools by name, forgiving a typo, in one grid", () => {
+    const host = dom(toolsHTML(accounts(), noKey, "", emptyProvidersView(), "codx"));
+    expect(items(host)[0]).toBe("codex");
+    expect(items(host)).not.toContain("openrouter");
+    expect(host.querySelector("[data-ob-found]")).not.toBeNull();
+    expect(dom(toolsHTML(accounts(), noKey, "", emptyProvidersView(), "zzzz")).querySelector(".ob-state")!.textContent).toBe("No tool matches");
   });
 
   test("what is ready says so and has the check; what is not has the button the account controller listens to", () => {
@@ -115,10 +130,15 @@ describe("step 1: the AI tools", () => {
     expect(cards.every((card) => card.action === null && !card.ready)).toBe(true);
   });
 
-  test("the key: a masked field and 貼上 until there is one, then its state and a way to replace it", () => {
+  test("the key: 連線 opens a masked field with 貼上 across its row; a set key shows its state and a way to replace it", () => {
     const empty = dom(toolsHTML(accounts(), noKey, ""));
-    expect(empty.querySelector('#ob-key-input[type="password"]')).not.toBeNull();
-    expect(empty.querySelector('[data-ob="key-paste"]')).not.toBeNull();
+    expect(empty.querySelector("#ob-key-input")).toBeNull();
+    expect(empty.querySelector('[data-item="openrouter"] [data-ob="key-replace"]')!.textContent).toBe("Connect");
+    const entering = dom(toolsHTML(accounts(), { ...noKey, replacing: true }, ""));
+    expect(entering.querySelector('#ob-key-input[type="password"]')).not.toBeNull();
+    expect(entering.querySelector('[data-ob="key-paste"]')).not.toBeNull();
+    expect(entering.querySelector('[data-ob="key-cancel"]')).not.toBeNull();
+    expect(entering.querySelector('[data-item="openrouter"]')!.classList.contains("wide")).toBe(true);
     const set = dom(toolsHTML(accounts(), { ...noKey, has: true }, ""));
     expect(set.querySelector("#ob-key-input")).toBeNull();
     expect(set.querySelector('[data-item="openrouter"] .dot.ok')).not.toBeNull();
@@ -128,7 +148,7 @@ describe("step 1: the AI tools", () => {
     expect(replacing.querySelector('[data-ob="key-cancel"]')).not.toBeNull();
   });
 
-  test("a refused key and a failed sign-in are told as alerts, each under its own grid", () => {
+  test("a refused key and a failed sign-in are told as alerts, the key's beside its field", () => {
     const host = dom(toolsHTML(accounts(), { ...noKey, error: "That key was refused" }, "Sign-in did not finish"));
     expect([...host.querySelectorAll('[role="alert"]')].map((el) => el.textContent)).toEqual(["Sign-in did not finish", "That key was refused"]);
     expect(host.querySelector("#ob-key-input")!.getAttribute("aria-invalid")).toBe("true");
@@ -141,11 +161,11 @@ describe("step 1: the AI tools", () => {
       kinds: [kind("ollama", "Ollama", "local"), kind("openrouter", "OpenRouter", "gateway"), kind("xai", "xAI", "official"), kind("anthropic", "Anthropic", "official"), kind("future", "Future AI", "official", false)],
       providers: [{ id: "p1", kind: "anthropic", name: "Anthropic", enabled: true, status: "ok", models: 3 } as unknown as ModelProvider] };
     const host = dom(toolsHTML(accounts(), noKey, "", providers));
-    // OpenRouter is its own key tile; the catalog follows it by group, each group by name, under its own label
-    expect(host.querySelector('[data-ob-key] [data-item="openrouter"]')).not.toBeNull();
-    expect(host.querySelectorAll(".ob-subsection")).toHaveLength(2);
-    expect([...host.querySelectorAll("[data-ob-providers] .ob-tile")].map((el) => el.getAttribute("data-item"))).toEqual(["provider:anthropic", "provider:future", "provider:xai", "provider:ollama"]);
-    expect([...host.querySelectorAll("[data-ob-providers]")].map((el) => el.getAttribute("data-ob-providers"))).toEqual(["official", "local"]);
+    // Anthropic is popular; the rest of the catalog follows by group, each group by name, under its own label
+    expect(items(host.querySelector<HTMLElement>('[data-ob-group="popular"]')!)).toEqual(["chatgpt", "claude", "codex", "openrouter", "provider:anthropic"]);
+    expect([...host.querySelectorAll("[data-ob-group]")].map((el) => el.getAttribute("data-ob-group"))).toEqual(["popular", "accounts", "official", "local"]);
+    expect(items(host.querySelector<HTMLElement>('[data-ob-group="official"]')!)).toEqual(["provider:future", "provider:xai"]);
+    expect(items(host.querySelector<HTMLElement>('[data-ob-group="local"]')!)).toEqual(["provider:ollama"]);
     expect(host.querySelector('[data-item="provider:anthropic"].on [data-pv="open"][data-id="p1"]')).not.toBeNull();
     expect(host.querySelector('[data-item="provider:xai"] [data-pv="add"][data-id="xai"]')).not.toBeNull();
     expect(host.querySelector<HTMLButtonElement>('[data-item="provider:future"] [data-pv="add"]')!.disabled).toBe(true);
@@ -176,9 +196,9 @@ describe("step 2: the services", () => {
     expect(host.querySelector('button.ob-tile[data-item="slack"]')!.hasAttribute("disabled")).toBe(true);
   });
 
-  test("a managed app's login cannot be cancelled, as in the store", () => {
+  test("a managed app's tile can stop waiting too (owner, 2026-11-08: a cancelled login left the step stuck)", () => {
     const host = dom(servicesHTML(view({ services: [service("gmail", "Gmail", { source: "composio" })], waiting: "gmail" })));
-    expect(host.querySelector('[data-ob="conn-cancel"]')!.hasAttribute("disabled")).toBe(true);
+    expect(host.querySelector('[data-ob="conn-cancel"]')!.hasAttribute("disabled")).toBe(false);
   });
 
   test("loading shows a spinner, a failure offers another try, a login that failed is told", () => {

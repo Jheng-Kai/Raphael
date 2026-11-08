@@ -387,7 +387,8 @@ test("a closed details panel reads nothing while work runs, and the settings pag
   await openDetails();
   expect(read()).not.toContain("memory.get"); expect(api.membersSkillsList).not.toHaveBeenCalled();
   agent.showSettings(3); await flush();
-  expect(read()).toContain("memory.get");
+  // The memory is a kind of the page's own, read when it is chosen.
+  expect(read()).not.toContain("memory.get");
   expect(api.membersSkillsList).toHaveBeenCalledWith(3); expect(api.membersCommandsList).toHaveBeenCalledWith(3);
   agent.hide();
 });
@@ -401,9 +402,9 @@ test("a restarted core receives the current viewing even with an unchanged roste
   expect(api.membersViewing).toHaveBeenCalledExactlyOnceWith(3);
   // The open settings page reads what the member has again for the restarted core.
   agent.showSettings(3); await flush();
-  api.core.mockClear();
+  api.membersSkillsList.mockClear();
   send({ type: "CoreReady" } as unknown as MainEvent); await flush();
-  await vi.waitFor(() => expect(api.core.mock.calls.some(([method]) => method === "memory.get")).toBe(true));
+  await vi.waitFor(() => expect(api.membersSkillsList).toHaveBeenCalledWith(3));
   agent.hide();
 });
 
@@ -869,7 +870,7 @@ test("memory notifications refresh the visible own and shared lists with correct
   await pick(3);
   $(".conversation-trigger").click();
   agent.showSettings(3); await flush();
-  $('[data-ms="memory"]').click();
+  $('[data-ms="cat"][data-cat="memory"]').click();
   await flush();
   api.core.mockClear();
   send({ type: "MemoryChanged", member_id: 4, space: "own" });

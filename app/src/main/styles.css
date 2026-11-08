@@ -616,6 +616,10 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .ob[data-step="welcome"] .ob-body { display: grid; grid-template-columns: minmax(0, 1fr); align-content: center; padding-top: var(--sp-4); }
 .ob[data-step="welcome"] .ob-col { justify-items: center; width: min(100%, 440px); text-align: center; }
 .ob[data-step="welcome"] .ob-col > h2 { margin-top: var(--sp-3); font-size: 40px; }
+/* Raphael's wordmark (public/brand/wordmark.svg, 425.3 × 120), one for every language, in the text's own colour. */
+.ob-col > h2.ob-wordmark { display: flex; justify-content: center; }
+.ob-wm { display: block; flex: none; width: 300px; max-width: 100%; height: 85px; background: currentColor; -webkit-mask: url(/brand/wordmark.svg) center / contain no-repeat; mask: url(/brand/wordmark.svg) center / contain no-repeat; }
+.ob-wordmark > .ob-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .ob-emblem { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; height: 125px; }
 .ob-emblem canvas { display: block; }
 /* What the team can do, typed (owner, 2026-11-08): an ask appears a letter at a time with a caret, his answer (告。…)
@@ -647,10 +651,10 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
    over the foot, as Grok Bot's tiles do. */
 .ob-foot { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; padding: var(--sp-3) var(--sp-6) var(--sp-5); }
 .ob-foot::before { content: ""; position: absolute; inset: auto 0 100% 0; height: 28px; background: linear-gradient(to bottom, color-mix(in srgb, var(--content) 0%, transparent), var(--content)); pointer-events: none; }
-/* The guide's buttons are the shared ones, sized to their words and side by side (owner, 2026-11-08: every button alike). */
-.ob-foot .ob-actions { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; justify-content: center; gap: var(--sp-2); }
-.ob-foot .btn { border-radius: 999px; }
-.ob-foot .btn.pri { min-width: calc(var(--h-ctl) * 4); padding-inline: var(--sp-5); }
+/* The guide keeps its own wide pills, the one exception to the shared button height (owner, 2026-11-08: 「這邊可以用原本的」). */
+.ob-foot .ob-actions { display: flex; flex-direction: column-reverse; flex-wrap: nowrap; align-items: stretch; justify-content: flex-start; gap: var(--sp-2); width: min(100%, 360px); }
+.ob-foot .btn { min-height: 44px; border-radius: 999px; font-size: var(--fs-md); }
+.ob-foot .btn.pri { width: 100%; }
 .ob-foot .ob-back { border-color: var(--hover); background: var(--hover); }
 .ob-foot .ob-back:hover:not(:disabled) { background: var(--pressed); }
 /* The team's characters float by a step's title, each where screens.ts puts it: they take no room, and a narrow card
@@ -660,8 +664,6 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 /* Every choice is tiles in a grid of three (Grok Bot's "What do you use every day?"): the mark, the name with one quiet line
    and the control under them; a tile that is on has a black edge and a check. A tile that is a button is pressed whole. */
 .ob-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); }
-/* The four accounts stand two by two, so that none is left alone on a row. */
-.ob-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .ob-tile { position: relative; display: grid; grid-template-columns: 28px minmax(0, 1fr); align-content: center; align-items: center; column-gap: var(--sp-3); row-gap: var(--sp-2); min-width: 0; min-height: 64px; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); color: var(--text); font: inherit; text-align: left; }
 .ob-tile.on { padding-right: 40px; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 /* No light edge in the dark theme (owner rule): a chosen tile there is a lifted fill with its tick. */
@@ -678,6 +680,9 @@ button.ob-tile:disabled { opacity: 0.55; cursor: default; }
 .ob-tx { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; min-width: 0; }
 .ob-tx .nm { font-size: var(--fs-md); font-weight: var(--weight-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ob-tx .ds { color: var(--text-2); font-size: var(--fs-sm); white-space: normal; overflow-wrap: anywhere; }
+/* A status in a tile wraps inside it in every language (owner, 2026-11-08: Japanese 「ブラウザでのログインを待って…」 ran out). */
+.ob-tx .ds .st { display: flex; align-items: flex-start; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.ob-tx .ds .st > .dot { flex: none; margin-top: 0.45em; }
 .ob-ctl { grid-column: 2; display: inline-flex; flex-wrap: wrap; align-items: center; justify-self: start; gap: var(--sp-2); min-width: 0; }
 .ob-tile.wide > .ob-ctl { grid-column: 3; grid-row: 1; justify-self: end; flex-wrap: nowrap; justify-content: flex-end; }
 .ob-find { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; margin-bottom: var(--sp-4); }
@@ -686,10 +691,9 @@ button.ob-tile:disabled { opacity: 0.55; cursor: default; }
 /* A search field shows its frame only while keys move the focus (focus-rings.test). */
 :root[data-keys] .ob-find .field:focus-within { border-color: var(--btn-edge); }
 .ob-alert { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-top: var(--sp-3); font-size: var(--fs-sm); }
-.ob-grid > .ob-alert { margin-top: 0; }
+.ob-grid > .ob-alert { grid-column: 1 / -1; margin-top: 0; }
 .ob-section { margin: var(--sp-5) 0 var(--sp-2); font-size: var(--fs-xs); font-weight: var(--weight-semibold); color: var(--text-3); letter-spacing: 0.02em; }
-.ob-main > .ob-section:first-child { margin-top: 0; }
-.ob-subsection { margin: var(--sp-4) 0 var(--sp-2); font-size: var(--fs-2xs); font-weight: 500; color: var(--text-3); }
+:is(.ob-main, [data-ob-tools]) > .ob-section:first-child { margin-top: 0; }
 .ob-state { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-2); min-height: 72px; margin: 0; font-size: var(--fs-sm); color: var(--text-2); }
 /* The abilities are the same rows and dialogs as Settings › 工具; the section's own heading is the step's title here. */
 .ob .svc > h2 { display: none; }

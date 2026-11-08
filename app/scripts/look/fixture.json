@@ -15,7 +15,6 @@
     "page": "每週工作報告"
   },
   "appUpdateSample": { "version": "1.1.0", "notes": "改善更新安裝、記憶匯入與大型附件。\n更新會保留你的設定與工作資料。" },
-  "memoryImportSample": { "kept": "我喜歡以繁體中文溝通，每週五整理研究筆記。", "answer": "我喜歡以繁體中文溝通，每週五整理研究筆記。\n\npassword is synthetic123" },
   "routineWorkflowSample": {"title":"早晨摘要", "prompt":"整理範例筆記，只在對話中回報。", "done":"已整理三則範例筆記。", "refused":"這位成員每小時已執行 200 次，請稍後再試。", "failed":"範例來源無法讀取，未使用舊資料。"},
   "routineTimezoneSample": {"timezone":"America/New_York"},
   "routineWebhookRecipes": [

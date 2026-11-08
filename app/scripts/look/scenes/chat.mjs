@@ -9,7 +9,9 @@ export const sharedSourceSkill = { id: 32, member_id: -1, name: "來源核對", 
 const details = [member(1), { action: "open-details" }, check("member-details")];
 // The gear of the panel opens the member settings page where the conversation is; its arrow goes back.
 const gear = [click('.mb-det [data-det="gear"]'), wait('.ms-pane:not([hidden]) .ms-name')];
-const settingsMemory = [click('.ms-pane [data-ms="memory"]')];
+// The member settings page shows one kind at a time, chosen in its left column (owner, 2026-11-08).
+const msKind = id => [click(`.ms-pane .ms-nav [data-cat="${id}"]`), wait(`.ms-pane .ms-nav [data-cat="${id}"][aria-current="page"]`)];
+const settingsMemory = msKind('memory');
 const closeSettings = [click('.ms-pane [data-ms="back"]'), wait('.page-agent:not([hidden]) .mb-chat .composer')];
 const composer = [click(".cmp-mode"), wait("#app-popover")];
 const dictationText = { before: "Please use Open Mouse", after: "Please use OpenMausBot" };
@@ -57,7 +59,7 @@ const voiceReply = [{ action: "main-event", event: { type: "Dictation", phase: "
   { action: "main-event", event: { type: "Dictation", phase: "processing", agent: true, member_id: 0 } }, ...quickOpen, rosterRefresh, ...stopSlot, check("pending-work")];
 export default [
   scene("settings-raphael-memory", "Raphael owns his memory in the same member details panel", [{action:'open-details'},...gear,...settingsMemory,wait('.ms-pane [data-mem-space="own"] .mem-entry'),scroll('.ms-pane [data-mem-space="own"]'),check('settings-raphael-memory')]),
-  scene("settings-raphael-voice", "Raphael owns his voice on the member settings page: a dropdown of the voices, which writes the one voice setting", [{action:'open-details'},...gear,wait('.ms-pane [data-ms="voice"]:not(:disabled)'),click('.ms-pane [data-ms="voice"]'),click('#app-popover [data-value="voice-clear"]'),wait('.ms-pane [data-ms="voice"]:not([aria-expanded="true"])'),check('settings-raphael-voice')], {raphaelVoice:true, memberSettings:true}),
+  scene("settings-raphael-voice", "Raphael owns his voice on the member settings page: a dropdown of the voices, which writes the one voice setting", [{action:'open-details'},...gear,...msKind('voice'),wait('.ms-pane [data-ms="voice"]:not(:disabled)'),click('.ms-pane [data-ms="voice"]'),click('#app-popover [data-value="voice-clear"]'),wait('.ms-pane [data-ms="voice"]:not([aria-expanded="true"])'),check('settings-raphael-voice')], {raphaelVoice:true, memberSettings:true}),
 
   scene("composer-stop-roster", "Roster refresh cannot repaint a restored running reply's Stop as an emblem", [rosterRefresh, ...stopSlot], { running: true }),
   { ...scene("composer-stop-pending", "A typed CLI request shares the running work line before its first turn", [...pendingReply, { action: "freeze-motion", at: 600 }, check("work-dots")], { stopPending: true }), motion: true },
@@ -170,17 +172,17 @@ export default [
   scene("permission-detail-label", "Permission detail labels keep one line beside a wrapping value", [wait(permCard("perm-gmail")), click(`${permCard("perm-gmail")} [data-card-disclosure]`), check("permission-detail-label")], { permissionCard: "tool" }),
   scene("composio-readable-result", "A Composio result names the action and useful fields without a raw object", [member(1), wait('.thread .chat-message'), check("composio-readable-result")], { composioResults: true }),
   scene("local-command-consent", "All-member consent names the member and keeps the exact command only in the shared card",
-    [member(1), wait(permCard("perm-local")), click(`${permCard("perm-local")} [data-card-disclosure]`), check("local-command-card")], { localCommand: "first" }),
+    [member(1), wait(permCard("perm-local")), check("local-command-card")], { localCommand: "first" }),
   scene("local-command-later", "Later command approval has Allow, Skip and settings in the same card",
-    [member(1), wait(permCard("perm-local")), click(`${permCard("perm-local")} [data-card-disclosure]`), check("local-command-card")], { localCommand: "later" }),
+    [member(1), wait(permCard("perm-local")), check("local-command-card")], { localCommand: "later" }),
   scene("local-command-background", "Background local approval uses the same member card and a thirty-minute expiry",
-    [member(1), wait(permCard("perm-local")), click(`${permCard("perm-local")} [data-card-disclosure]`), check("local-command-card")], { localCommand: "background" }),
+    [member(1), wait(permCard("perm-local")), check("local-command-card")], { localCommand: "background" }),
   ...["once", "always", "never", "deny"].map(choice => scene(`local-command-${choice}`, `The real ${choice} button settles the local command card`,
     [member(1), wait(permCard("perm-local")), click(`${permCard("perm-local")} [data-act="perm-${choice}"]`), wait(`${permCard("perm-local")}:not([data-card-state="pending"])`), check("local-command-settled")], { localCommand: "first" })),
   scene("local-command-manage", "The local card opens the shared command permission setting",
-    [member(1), wait(permCard("perm-local")), click(`${permCard("perm-local")} [data-card-disclosure]`), click(`${permCard("perm-local")} [data-act="local-settings"]`), wait('[data-k="local-commands"]'), scroll('[data-k="local-commands"]'), check("local-command-setting")], { localCommand: "later" }),
+    [member(1), wait(permCard("perm-local")), click(`${permCard("perm-local")} [data-act="local-settings"]`), wait('[data-k="local-commands"]'), scroll('[data-k="local-commands"]'), check("local-command-setting")], { localCommand: "later" }),
   scene("draft-preference-ask-first", "A member set to send mail itself still asks when the owner's rule says to ask first: the card names the rule and has no 一律允許",
-    [member(1), { action: "open-details" }, ...gear, wait('.ms-pane [data-ms="draft"]'), check("member-draft-switch"),
+    [member(1), { action: "open-details" }, ...gear, ...msKind('general'), wait('.ms-pane [data-ms="draft"]'), check("member-draft-switch"),
       ...closeSettings, { action: "close-details-if-open" },
       wait(permCard("perm-rule")), check("draft-preference-ask-first")], { permissionCard: "ask-first", memberDraftFirst: false }),
   scene("email-draft-edit", "The owner edits the copy and the subject of a member's email draft: each edit is a new version, the card holds the newest digest and nothing is sent",
@@ -256,11 +258,11 @@ export default [
   scene("details", "Title opens member details", [...details, click('.mb-det-head'), check("details-pointer-focus")]),
   scene("raphael-details", "Title opens Raphael details", [{ action: "open-details" }, check("member-details")]),
   ...[0, 1].map(id => scene(`speaker-draft-${id ? "member" : "chief"}`, "Every speaker can turn the shared draft preference off in details settings", [
-    member(id), { action: "open-details" }, ...gear, wait('.ms-pane [data-ms="draft"][aria-checked="true"]'),
+    member(id), { action: "open-details" }, ...gear, ...msKind('general'), wait('.ms-pane [data-ms="draft"][aria-checked="true"]'),
     click('.ms-pane [data-ms="draft"]'), wait('.ms-pane [data-ms="draft"][aria-checked="false"]'), check('settings-draft-grouped'),
   ])),
   scene("speaker-draft-profile", "The member settings page holds the draft preference as one switch row with the page's own words", [
-    ...details, ...gear, wait('.ms-pane [data-ms="draft"][aria-checked="true"]'),
+    ...details, ...gear, ...msKind('general'), wait('.ms-pane [data-ms="draft"][aria-checked="true"]'),
   ]),
   scene("composer-model-small", "The composer's model menu opens as a small card: the model and its depth, nothing else", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-now .mc-range'), check("composer-model-small"), check("depth-fill-covers-thumb")]),
   scene("composer-model-favorites", "What the owner starred in Settings is right there when choosing a model", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-pick'), click('.cb-pick'), wait('.cb-menu [data-cb-source="favorites"]'), check("composer-model-browse"), click('.cb-menu [data-cb-source="favorites"]'), wait('.cb-menu .cb-list small'), check("composer-model-browse"), check("composer-favorites")]),
@@ -285,9 +287,9 @@ export default [
   // Raphael's and every member's settings are one page (member-settings.ts); the old panel tabs are its rows and views.
   ...["routines", "memory", "skills", "commands", "voice"].map(tab => scene(`details-${tab}`, `Member ${tab} pane`, [...details, ...(tab === "routines" ? [] : gear), ...(tab === "memory" ? [
     ...settingsMemory, wait('.ms-pane [data-mem-space="own"] .mem-entry'), check("memory-document"),
-  ] : tab === "skills" ? [click('.ms-pane [data-ms="skill-open"][data-id="32"]'), wait('.ms-pane #ms-skill-text'), check("member-shared-source"), click('.ms-pane [data-ms="back"]'), click('.ms-pane [data-ms="skill-open"][data-id="31"]'), wait('.ms-pane #ms-skill-text'), check("growing-skills")]
-    : tab === "commands" ? [click('.ms-pane [data-ms="command-open"]'), wait('.ms-pane #ms-command-name')]
-    : tab === "voice" ? [wait('.ms-pane [data-ms="voice"]:not(:disabled)'), click('.ms-pane [data-ms="voice"]'), wait('#app-popover [data-value]')] : [])], tab === "skills" ? { skills: [learnedSkill(1), sharedSourceSkill], memberSettings: true } : { memberSettings: true })),
+  ] : tab === "skills" ? [...msKind('skills'), click('.ms-pane [data-ms="skill-open"][data-id="32"]'), wait('.ms-pane #ms-skill-text'), check("member-shared-source"), click('.ms-pane [data-ms="back"]'), click('.ms-pane [data-ms="skill-open"][data-id="31"]'), wait('.ms-pane #ms-skill-text'), check("growing-skills")]
+    : tab === "commands" ? [...msKind('skills'), click('.ms-pane [data-ms="command-open"]'), wait('.ms-pane #ms-command-name')]
+    : tab === "voice" ? [...msKind('voice'), wait('.ms-pane [data-ms="voice"]:not(:disabled)'), click('.ms-pane [data-ms="voice"]'), wait('#app-popover [data-value]')] : [])], tab === "skills" ? { skills: [learnedSkill(1), sharedSourceSkill], memberSettings: true } : { memberSettings: true })),
   scene("memory-editing", "The pencil opens the whole document in one box that grows with it", [...details, ...gear, ...settingsMemory, click('.ms-pane [data-mem-space="own"] [data-mem="edit"]'), wait('.ms-pane [data-mem-space="own"] textarea.mem-body'), check("memory-editor")]),
   scene("memory-saved", "儲存 writes the file from the copy it was opened on, and the document reads as saved", [...details, ...gear, ...settingsMemory, click('.ms-pane [data-mem-space="own"] [data-mem="edit"]'), type('.ms-pane [data-mem-space="own"] textarea.mem-body', "專案每週三檢查原型，週五彙整結果。\n\n使用者改過的一段。"), click('.ms-pane [data-mem-space="own"] [data-mem="save"]'), waitGone('.ms-pane textarea.mem-body'), check("memory-saved")]),
   scene("member-edit-memory", "The member settings page opens the member's own memory in a view of its own, in one box", [...details, ...gear, ...settingsMemory, wait('.ms-pane [data-mem-space="own"] .mem-entry'), click('.ms-pane [data-mem-space="own"] [data-mem="edit"]'), wait('.ms-pane [data-mem-space="own"] textarea.mem-body'), check("member-edit-memory")]),
@@ -296,7 +298,7 @@ export default [
   scene("chat-pairing-bottom", "A pairing code that came later is the last thing in the conversation, and the field asks about the setup that waits (owner, 2026-11-07)", [member(1), wait('[data-pairing-card="pair-late"]'), check("chat-pairing-bottom")], { chatCards: true, latePairing: true }),
   scene("chat-pairing-allowed", "Allowing a pairing answers in the card", [member(1), wait('[data-pairing-card="pair-1"]'), scroll('[data-pairing-card="pair-1"]'), click('[data-pairing-card="pair-1"] [data-act="pairing-allow"]'), wait('[data-pairing-card="pair-1"][data-card-state="approved"]')], { chatCards: true }),
   scene("member-avatar", "A press on the member's face in its panel shows every picture at once (owner, 2026-11-07)", [...details, click('.mb-panel-identity [data-det="avatar"]'), wait("#app-popover")]),
-  scene("member-edit", "The member settings page: the face, the name and the role in place, and one list per section", [...details, ...gear, wait('.ms-pane [data-k="ms-voice"]')], { memberSettings: true }),
+  scene("member-edit", "The member settings page: the face, the name and the role in place, the kinds on the left and the first one beside them", [...details, ...gear, wait('.ms-pane [data-k="ms-personality"]')], { memberSettings: true }),
   scene("work", "Expanded public work steps", [click('[data-act="thinking"]'), wait(".work-body:not([hidden])")]),
   scene("work-member-builtin", "A member's own tools in its work steps say what was done and never name Raphael; a connected service keeps its name",
     [member(1), click('.page-agent:not([hidden]) [data-act="thinking"]'), hover('.page-agent:not([hidden]) .cmp-input'),

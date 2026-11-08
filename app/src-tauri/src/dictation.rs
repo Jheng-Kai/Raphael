@@ -10257,4 +10257,31 @@ mod tests {
         assert_eq!(events[2], "mode:thinking");
         assert_eq!(c.paster().delivered(), vec!["好"]);
     }
+    #[tokio::test]
+    async fn local_command_flow_silent_confirm_ends_without_ask_failed() {
+        let core = agent_core(question("c-1", 30_000));
+        core.script("agent.confirm", Ok(json!({"status":"done", "prefix":"", "text":"", "silent":true})));
+        let c = controller(core, FakePaster::pasting("chrome.exe"));
+        let turn = start_turn(&c).await;
+        until_stage(&c, AgentStage::Asking).await;
+        c.on_confirm("c-1", true);
+        turn.await.unwrap();
+        assert_eq!(c.agent_stage(), None);
+        assert!(!c.overlay().question_open());
+        assert_eq!(c.overlay().events().last().unwrap(), "hide");
+        assert!(!c.overlay().events().contains(&notice(ASK_FAILED.zh)));
+    }
+
+    #[tokio::test]
+    async fn local_command_flow_unmarked_empty_confirm_keeps_ask_failed() {
+        let core = agent_core(question("c-1", 30_000));
+        core.script("agent.confirm", Ok(json!({"status":"done", "prefix":"", "text":""})));
+        let c = controller(core, FakePaster::pasting("chrome.exe"));
+        let turn = start_turn(&c).await;
+        until_stage(&c, AgentStage::Asking).await;
+        c.on_confirm("c-1", true);
+        turn.await.unwrap();
+        assert!(c.overlay().events().contains(&notice(ASK_FAILED.zh)));
+    }
+
 }

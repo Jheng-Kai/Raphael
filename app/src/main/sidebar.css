@@ -10,7 +10,8 @@
 .btn.sidebar-close, .btn.sidebar-toggle { display: none; }
 .sidebar-conversations { display: flex; flex: 1; min-height: 0; }
 .side .mb-col { flex: 1; width: 100%; padding-top: 0; }
-.side .mb-top { justify-content: flex-end; min-height: 40px; padding: 0 0 var(--sp-1); gap: var(--sp-1); }
+/* The top of the sidebar, its padding included, moves the window like the caption (owner, 2026-11-08). */
+.side .mb-top { justify-content: flex-end; min-height: calc(40px + var(--sp-2)); margin-top: calc(-1 * var(--sp-2)); padding: var(--sp-2) 0 var(--sp-1); gap: var(--sp-1); }
 .side .btn.mb-tool { flex: none; width: 36px; min-height: 36px; border-radius: var(--r-sm); }
 .side .mb-scroll { padding: 0 0 var(--sp-3); }
 .side .mb-list { gap: 2px; }

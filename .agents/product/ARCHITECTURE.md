@@ -68,10 +68,9 @@ installed-version receipt. A native timer contacts releases only while opted in;
 roster read and Windows idle time gate installation. Native installation/rollback acceptance
 remains separate from fake-feed tests.
 
-memory.import is a main-window-only bounded RPC, not a model turn or second writer. It splits
-owner-approved paragraphs and applies each through the existing shared MemoryFile writer;
-refusals return only indices and reason classes. No LLM call, secret bypass or private-memory
-copy occurs.
+The owner memory import was removed on 2026-11-08. Moving to another PC means keeping
+Raphael's data folder. The existing MemoryFile.apply writer remains shared by normal
+memory edits and growth; there is no separate owner-import RPC or model authority.
 
 attachments.upload handles bounded sequential chunks, validates offset and declared length,
 then atomically publishes an opaque ID. Both conversation and room admissions resolve those
@@ -157,6 +156,15 @@ invisible strips. Parsed cel templates use a bounded 16-entry LRU; mounted clone
 keep independent phase and colour. Mount timestamps are not content identity.
 
 ## Meeting speech and private work lanes (2026-11-04)
+
+Owner follow-up (2026-11-08): explicit meeting exchanges retain meeting=1 and
+submit one participant at a time from a persisted ordered queue. Each next turn
+reads the current public snapshot; owner corrections re-open the participant
+queue. Ordinary chats retain concurrent snapshot speech. Listener errors retain
+redacted kind/attempt evidence and one retry; blocked listener intents feed the
+existing room close-out. CLI listeners reuse CliLoop and structured_object with
+no tools. Fresh team snapshots and work_status expose persisted meeting state.
+No new worker, provider, model loop, RPC or database migration is introduced.
 
 Migration 60 preserves existing room rows and the compatibility active_turn column.
 room_exchange_turns is authoritative for per-round concurrent turns and seen_through;

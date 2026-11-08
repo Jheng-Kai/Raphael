@@ -56,8 +56,11 @@
 .mb-panel-suggest > .mb-dh ~ .mb-dh { margin-top: var(--pa-dgap); }
 /* 訊息平台 and the row for the rest of the settings: each is done in the conversation, so a row is its name and 「設定」. */
 .mb-panel-suggest { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin-top: var(--sp-4); }
-.mb-panel-suggest .member-msg { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.mb-panel-suggest .member-msg { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
 .mb-panel-suggest .member-msg .sgroup { margin: 0; }
+/* A connected platform is its own section: the hairline between rows also runs between it and the next one, so
+   Telegram, Slack and Discord read as one list (owner, 2026-11-08). */
+.mb-panel-suggest .member-msg > .sgroup + .sgroup .slist > .row:first-child::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: var(--line); }
 .mb-panel-suggest .msg-chat-setup .msg-head > .lbl { flex: 1 0 auto; }
 /* A connected bot's name gives way before its switch: it is cut with an ellipsis in the narrow panel. */
 .mb-panel-suggest .msg-head .lbl > .t { display: flex; min-width: 0; }

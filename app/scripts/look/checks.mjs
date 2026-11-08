@@ -432,36 +432,6 @@ export function checkRendered(name, context = {}) {
     require(section.querySelector('[data-k="auto-update"]').getAttribute("aria-checked") === (name === "app-update-auto" ? "true" : "false"), "auto updates are opt-in");
     return {check:name};
   }
-  if (name === "memory-import-button") {
-    // 匯入記憶 at the top right beside the tab's name, as 匯入 CSV in the vault (owner, 2026-11-08), clear of the dialog's ✕.
-    const button = document.querySelector('.set-head [data-import="open"]'), title = document.querySelector('#set-title');
-    require(visible(button) && button.textContent.trim() === "匯入記憶", "匯入記憶 stands in the tab's heading row");
-    const b = button.getBoundingClientRect(), h = title.getBoundingClientRect();
-    require(Math.abs((b.top + b.bottom) / 2 - (h.top + h.bottom) / 2) < 6 && b.left > h.right, "it sits beside the name, on its line, at the right");
-    const close = document.querySelector('.modal .modal-x');
-    require(visible(close), "the dialog's ✕ is there");
-    const c = close.getBoundingClientRect();
-    require(b.right <= c.left - 4 || b.top >= c.bottom + 4, "it keeps clear of the dialog's ✕");
-    require(!document.querySelector('[data-memory-import]'), "closed, nothing else of the import is drawn");
-    return { check: name };
-  }
-  if (name === "app-memory-import" || name === "app-memory-result") {
-    const imported = document.querySelector("[data-memory-import]");
-    const owner = imported?.parentElement;
-    const shared = owner?.querySelector('[data-mem-space="shared"]');
-    require(document.querySelector("#set-title")?.textContent === "記憶" && shared && !!(shared.compareDocumentPosition(imported) & Node.DOCUMENT_POSITION_FOLLOWING), "memory import follows shared memory inside the 記憶 tab (owner, 2026-11-08)");
-    require(visible(document.querySelector("[data-import-prompt]")), "handover prompt is visible");
-    require(visible(document.querySelector("[data-import-answer]")), "owner answer field is visible");
-    for (const field of document.querySelectorAll(".memory-import textarea")) {
-      require(field.getBoundingClientRect().height >= 140, "memory import fields retain room for multiple lines");
-    }
-    if (name === "app-memory-result") {
-      const result = document.querySelector(".import-result");
-      require(visible(result) && result.textContent.includes("已保留 1 項") && result.textContent.includes("未加入 1 項"), "kept and refused items are listed");
-      require(!result.textContent.includes("synthetic123"), "refused secrets are not echoed");
-    }
-    return {check:name};
-  }
   if (name === "app-attachment-count") {
     require(document.querySelectorAll(".cmp-chip").length === 20, "exactly twenty files remain");
     require(!document.querySelector(".cmp-file").textContent.includes("超過數量"), "the twenty-first file is refused");
@@ -2037,6 +2007,14 @@ export function checkRendered(name, context = {}) {
     const nav = document.getElementById("nav"), column = nav.querySelector(".mb-col"), main = document.getElementById("main");
     const compact = matchMedia("(max-width: 859px)").matches, open = document.documentElement.hasAttribute("data-sidebar-open");
     require(document.querySelectorAll(".mb-col").length === 1 && column, "one global conversation list");
+    if (!compact) {
+      // The window's top-left corner, above the sidebar's list, moves the window like the caption (owner, 2026-11-08);
+      // its search and add buttons still press.
+      const corner = document.elementFromPoint(12, 12), gap = document.elementFromPoint(40, 24);
+      require(corner?.closest('[data-window-drag]') && gap?.closest('[data-window-drag]') && !gap.closest('button'), "the top-left corner moves the window");
+      const search = nav.querySelector('[data-col="search"]'), s = search.getBoundingClientRect();
+      require(document.elementFromPoint(s.left + s.width / 2, s.top + s.height / 2)?.closest('[data-col="search"]'), "the corner's buttons still press");
+    }
     require(!document.querySelector('[data-go="team"], .team-page, [data-col="collapse"], .nav-apps, [data-go="automations"]'), "retired navigation and icon rails are absent");
     const header=nav.querySelector('.mb-top');
     const rail=document.documentElement.hasAttribute('data-sidebar-collapsed');
@@ -2640,7 +2618,7 @@ export function checkRendered(name, context = {}) {
     const box = document.querySelector('.ms-pane [data-mem-space="own"] textarea.mem-body');
     require(visible(box) && box.value.includes("專案每週三檢查原型") && box.value.includes("（待確認）"), "the box holds the member's whole document");
     require(box.scrollHeight <= box.clientHeight + 1, "the box grows with its text and never scrolls");
-    require(document.querySelectorAll('.ms-pane [data-mem="save"]').length === 1 && document.querySelector('.ms-pane').dataset.view === 'memory', "one 儲存, in the memory's own view");
+    require(document.querySelectorAll('.ms-pane [data-mem="save"]').length === 1 && document.querySelector('.ms-pane .ms-content[data-cat="memory"]'), "one 儲存, in the page's memory kind");
     return { check: name };
   }
   if (name === "settings-memory") {
@@ -2741,6 +2719,9 @@ export function checkRendered(name, context = {}) {
     const canvas = document.querySelector('.ob-emblem canvas.ob-emb'), title = document.querySelector('.ob-col > h2');
     require(visible(canvas) && canvas.width > 0, "Raphael's emblem is on the welcome");
     require(title && title.textContent.trim().length > 0 && parseFloat(getComputedStyle(title).fontSize) >= 28, "his name is the headline");
+    const mark = title.querySelector('.ob-wm'), markStyle = mark && getComputedStyle(mark);
+    require(visible(mark) && mark.getBoundingClientRect().width >= 200 && `${markStyle.maskImage} ${markStyle.webkitMaskImage}`.includes("wordmark.svg"),
+      "his name is the one wordmark 智慧之王ラファエル, the same in every language (owner, 2026-11-08)");
     const promise = document.querySelector('.ob-demo-ask'), reply = document.querySelector('.ob-demo-reply');
     require(visible(promise) && promise.getBoundingClientRect().top >= title.getBoundingClientRect().bottom - 1, "an ask is typed under the name");
     require(!document.querySelector('.ob-line'), "no slogan under the name (owner, 2026-11-08)");
@@ -2755,9 +2736,8 @@ export function checkRendered(name, context = {}) {
       require(box.left >= card.left && box.right <= card.right && box.top >= card.top && box.bottom <= card.bottom + 1, `${what} stays inside the card`);
     }
     const pill = document.querySelector('.ob-actions > .btn.pri'), box = pill.getBoundingClientRect();
-    // The shared button, a pill sized to its words (owner, 2026-11-08: every button alike, its height hugging its words).
-    const shared = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--h-ctl'));
-    require(box.width >= shared * 4 - 1 && Math.abs(box.height - shared) <= 1 && parseFloat(getComputedStyle(pill).borderTopLeftRadius) >= box.height / 2 - 1, "the one button is the shared pill");
+    // The guide keeps its wide pill, the owner's one exception to the shared button height (2026-11-08).
+    require(box.width >= 240 && box.height >= 40 && parseFloat(getComputedStyle(pill).borderTopLeftRadius) >= box.height / 2 - 1, "the one button is a wide pill");
     const ink = getComputedStyle(pill).backgroundColor, text = getComputedStyle(document.body).color;
     require(ink !== 'rgba(0, 0, 0, 0)' && ink !== getComputedStyle(document.querySelector('.ob-card')).backgroundColor, `the pill is the solid accent, not the card's colour (${ink} on ${text})`);
     const drawn = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
@@ -2792,7 +2772,17 @@ export function checkRendered(name, context = {}) {
     }
     const items = [...document.querySelectorAll(name === "onboarding-abilities" ? '.svc-item' : '.ob-tile:not([data-item^="provider:"])')].filter(visible);
     items.forEach(item => { item.dataset.item ??= item.dataset.id; });
-    const expected = { "onboarding-tools": ["chatgpt", "claude", "codex", "gemini", "openrouter"], "onboarding-abilities": ["search", "read", "vision", "pdf", "voice"] }[name];
+    const expected = { "onboarding-tools": ["chatgpt", "claude", "codex", "openrouter", "gemini"], "onboarding-abilities": ["search", "read", "vision", "pdf", "voice"] }[name];
+    if (name === "onboarding-tools") {
+      // A store (owner, 2026-11-08): a search box, 熱門 first and the same for everyone, then every other tool by kind.
+      const find = document.querySelector('.ob-find input#ob-tools-find');
+      require(find && visible(find) && find.getAttribute('aria-label'), "a search box is above the tools");
+      const groups = [...document.querySelectorAll('[data-ob-group]')].map(group => group.dataset.obGroup);
+      require(groups[0] === "popular" && groups.includes("accounts"), `熱門 comes first, then the kinds (${groups.join(", ")})`);
+      const popular = [...document.querySelectorAll('[data-ob-group="popular"] .ob-tile')].map(item => item.dataset.item);
+      require(popular.slice(0, 4).join() === "chatgpt,claude,codex,openrouter", `熱門 is ChatGPT, Claude Code, Codex and OpenRouter first (${popular.join(", ")})`);
+      if (!document.querySelector('#ob-key-input')) require(!document.querySelector('.ob-tile.wide'), "no tile is wider than the others while nothing is being typed");
+    }
     if (expected) require(JSON.stringify(items.map(item => item.dataset.item)) === JSON.stringify(expected), `the items are ${expected.join(", ")}: ${items.map(item => item.dataset.item).join(", ")}`);
     else require(items.length >= 3 && items.length <= 18 && items.some(item => item.dataset.item === "gmail"), "the popular services of the store are offered as a grid");
     const column = document.querySelector('.ob-col').getBoundingClientRect();
@@ -2812,14 +2802,17 @@ export function checkRendered(name, context = {}) {
     }
     const narrow = tiles.filter(item => !item.classList.contains('wide'));
     const lefts = new Set(narrow.map(item => Math.round(item.getBoundingClientRect().left)));
-    const columns = name === "onboarding-tools" ? 2 : 3;
+    const columns = 3;
     if (narrow.length >= columns) require(lefts.size === columns, `the tiles stand in a grid of ${columns} columns (${lefts.size})`);
     if (name === "onboarding-services") {
       const find = document.querySelector('.ob-find input#ob-find');
       require(find && visible(find) && find.getAttribute('aria-label'), "a search box is above the tiles");
       require(find.getBoundingClientRect().bottom <= narrow[0].getBoundingClientRect().top, "the search box is above the first tile");
-      require(document.querySelector('[data-item="gmail"].on .dot.ok') && visible(document.querySelector('[data-item="gmail"].on .ob-tick')), "a connected service says so, with the check");
-      require(!document.querySelector('[data-item="gmail"] button'), "a connected service has nothing left to press");
+      // The waiting scene (onboarding-service-waiting) connects nothing: it is about the waiting tile's words.
+      if (!document.querySelector('[data-ob="conn-cancel"]')) {
+        require(document.querySelector('[data-item="gmail"].on .dot.ok') && visible(document.querySelector('[data-item="gmail"].on .ob-tick')), "a connected service says so, with the check");
+        require(!document.querySelector('[data-item="gmail"] button'), "a connected service has nothing left to press");
+      }
       require(document.querySelector('button.ob-tile[data-ob="conn-login"]'), "a service that is not connected is one whole button");
     }
     if (name === "onboarding-abilities") {
@@ -2831,15 +2824,22 @@ export function checkRendered(name, context = {}) {
       }
       require(document.querySelector('[data-svc="toggle"][data-id="read"]').getAttribute('aria-checked') === 'false', "a switch that was pressed turned off");
     }
-    // Under the choice: the shared pills, sized to their words and side by side, the way back first (owner, 2026-11-08:
-    // every button alike, its height hugging its words).
-    const primary = document.querySelector('.ob-actions > .btn.pri'), back = document.querySelector('.ob-actions > .btn.ob-back');
+    // Under the choice: one wide black pill that fills its row, and a grey pill for the way back below it (the guide's
+    // own buttons, kept by the owner on 2026-11-08).
+    const primary = document.querySelector('.ob-actions > .btn.pri'), back = document.querySelector('.ob-actions > .btn.ob-back'), row = document.querySelector('.ob-actions').getBoundingClientRect();
     const ink = primary.getBoundingClientRect(), grey = back?.getBoundingClientRect();
-    const shared = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--h-ctl'));
-    require(Math.abs(ink.height - shared) <= 1 && parseFloat(getComputedStyle(primary).borderTopLeftRadius) >= ink.height / 2 - 1, "the primary action is the shared pill");
-    require(back && Math.abs(grey.height - ink.height) <= 1 && Math.abs((grey.top + grey.height / 2) - (ink.top + ink.height / 2)) <= 1 && grey.right <= ink.left + 1, "the way back is a pill on the same line, before it");
+    require(ink.width >= row.width * .9 && ink.width >= 240 && parseFloat(getComputedStyle(primary).borderTopLeftRadius) >= ink.height / 2 - 1, "the primary action is a wide pill that fills its row");
+    require(back && grey.top >= ink.bottom - 1 && Math.abs(grey.width - ink.width) <= 1 && Math.abs((grey.left + grey.width / 2) - (ink.left + ink.width / 2)) <= 1, "the way back is a grey pill of the same width under it");
     require(parseFloat(getComputedStyle(back).borderTopLeftRadius) >= grey.height / 2 - 1 && getComputedStyle(back).backgroundColor !== getComputedStyle(primary).backgroundColor, "the way back is a pill of another colour");
-    require(Math.abs((grey.left + ink.right) / 2 - (card.left + card.width / 2)) <= 2, "the pills, together, are centred in the card");
+    require(Math.abs(ink.left + ink.width / 2 - (card.left + card.width / 2)) <= 2, "the pills are centred in the card");
+    // Every word of a tile stays inside it, in every language (owner, 2026-11-08: a Japanese status ran out of its tile).
+    for (const tile of document.querySelectorAll('.ob-tile')) {
+      const t = tile.getBoundingClientRect();
+      for (const part of tile.querySelectorAll('.nm, .ds, .st, .ob-ctl > *')) {
+        const p = part.getBoundingClientRect();
+        require(p.right <= t.right + 1 && p.left >= t.left - 1, `${part.textContent.trim().slice(0, 24)} stays inside its tile`);
+      }
+    }
     require(ink.bottom <= card.bottom && grey.bottom <= card.bottom, "both pills stay inside the card");
     return { check: name, items: items.length, columns: lefts.size, headline: getComputedStyle(title).fontSize };
   }
@@ -5578,8 +5578,10 @@ export function checkRendered(name, context = {}) {
       const [r, g, b] = getComputedStyle(bar).backgroundColor.match(/[\d.]+/g).map(Number);
       require(Math.max(r, g, b) - Math.min(r, g, b) > 60, `the bar is a member's colour, not black or white: rgb(${r}, ${g}, ${b})`);
     }
-    const refresh = panel.querySelector('[data-run-act="allowance"]');
-    require(!refresh || (refresh.classList.contains('icon') && !refresh.textContent.trim()), "refreshing the allowances is one icon, no words");
+    // One refresh for the whole tab, at its top right, an icon with no words (owner, 2026-11-08: 「為甚麼會有兩個 icon」).
+    const refreshes = [...document.querySelectorAll('.set-content button')].filter(button => visible(button) && button.querySelector('svg.i') && /refresh|models-refresh/.test(button.dataset.act ?? button.dataset.runAct ?? ""));
+    require(refreshes.length === 1 && refreshes[0].closest('.set-head') && refreshes[0].classList.contains('icon') && !refreshes[0].textContent.trim(), `one refresh icon, beside the tab's name (${refreshes.length})`);
+    require(refreshes[0].dataset.state === "idle" && refreshes[0].getAttribute("aria-busy") === "false", "the refresh says it is idle when nothing is being read");
     const cards = [...panel.querySelectorAll('.run-subscription')].filter(visible), allowance = panel.querySelector('.run-allowance');
     const subscriptions = window.__look.data.allowances.brains.length;
     if (subscriptions) {
@@ -5610,26 +5612,64 @@ export function checkRendered(name, context = {}) {
     require(visible(pane) && !visible(chat), "the page takes the conversation's place");
     const scroller = pane.querySelector(".ms-scroll"), body = pane.querySelector(".ms-body");
     require(scroller.scrollWidth <= scroller.clientWidth + 1 && pane.scrollWidth <= pane.clientWidth + 1, "nothing overflows sideways");
-    require(body.getBoundingClientRect().width <= 20 * 32 + 1, "the page is as wide as a reading page");
+    require(body.getBoundingClientRect().width <= 20 * 32 + 200 + 1, "the page is a reading page and its column of kinds");
     const back = pane.querySelector('[data-ms="back"]');
     require(visible(back) && back.classList.contains("icon") && back.textContent.trim() === "" && back.querySelector("svg.i"), "the way back is an arrow icon with no words");
     const cover = pane.querySelector(".ms-cover"), face = pane.querySelector(".ms-face");
+    if (name === "member-settings-cover") {
+      // Its menu: the patterns as small covers in the member's colour, then a picture from this PC (owner, 2026-11-08).
+      const menu = document.querySelector("#app-popover"), swatches = [...menu.querySelectorAll(".ms-swatch")];
+      require(visible(menu) && swatches.length === 5 && swatches.every(visible), "the cover's menu shows its five patterns");
+      require(swatches.filter(swatch => swatch.getAttribute("aria-checked") === "true").length === 1, "the cover in use is marked");
+      require(swatches.every(swatch => swatch.getAttribute("aria-label") && /gradient/.test(getComputedStyle(swatch.querySelector(".ms-cover")).backgroundImage) || swatch.dataset.cover === "plain"), "each pattern is a small cover of its own");
+      const tops = new Set(swatches.map(swatch => Math.round(swatch.getBoundingClientRect().top)));
+      require(tops.size === 1, "the patterns stand in one row");
+      require(visible(menu.querySelector('[data-cover-act="upload"]')), "a picture from this PC is offered");
+      const box = menu.getBoundingClientRect();
+      require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the menu stays in the window");
+      return { check: name };
+    }
     if (view === "main") {
       const edge = cover.getBoundingClientRect(), mark = face.getBoundingClientRect();
       require(visible(cover) && edge.height >= 96 && /gradient/.test(getComputedStyle(cover).backgroundImage), "a cover with a gradient and its pattern");
       require(visible(face) && mark.top < edge.bottom - 8 && mark.bottom > edge.bottom + 8 && mark.width >= 80, "the face is large and crosses the cover's lower edge");
       require(face.querySelector(".mb-face-pencil svg.i") && face.getAttribute("aria-haspopup") === "menu", "the face edits with a pencil and opens the picker");
+      const change = cover.querySelector('[data-ms="cover"]'), button = change?.getBoundingClientRect();
+      require(visible(change) && change.classList.contains("icon") && change.textContent.trim() === "" && change.getAttribute("aria-haspopup") === "menu", "the cover changes from one round icon (owner, 2026-11-08)");
+      require(button.right <= edge.right && button.bottom <= edge.bottom && button.left > mark.right, "the cover's icon sits at its lower right, clear of the face");
+      // The kinds of settings in a column on the left (owner, 2026-11-08: 「左側會有一些分區…不要就這樣子長長一條」).
+      const nav = pane.querySelector(".ms-nav"), content = pane.querySelector(".ms-content");
+      const kinds = [...nav.querySelectorAll('[data-ms="cat"]')].filter(visible);
+      const expectedKinds = raphael ? ["skills", "model", "voice", "memory", "general"] : ["soul", "skills", "model", "tools", "voice", "memory", "general"];
+      require(kinds.map(item => item.dataset.cat).join() === expectedKinds.join(), `the kinds are ${expectedKinds.join()} (${kinds.map(item => item.dataset.cat).join()})`);
+      const chosen = kinds.filter(item => item.getAttribute("aria-current") === "page");
+      require(chosen.length === 1, "one kind is chosen");
+      const category = chosen[0].dataset.cat;
+      require(content.dataset.cat === category, "only the chosen kind is shown beside the column");
+      require(!pane.querySelector('.member-msg, [data-cat="routines"], [data-cat="messaging"]'), "what the panel beside the page shows (routines, messaging) is not here");
+      const wide = pane.getBoundingClientRect().width > 680;
+      const navBox = nav.getBoundingClientRect(), contentBox = content.getBoundingClientRect();
+      if (wide) {
+        require(navBox.right <= contentBox.left + 1 && Math.abs(navBox.top - contentBox.top) <= 2, "the column of kinds stands on the left of the chosen kind");
+        require(kinds.every(item => item.querySelector("svg.i")), "each kind has its icon, as Settings' own");
+        const lefts = new Set(kinds.map(item => Math.round(item.getBoundingClientRect().left)));
+        require(lefts.size === 1, "the kinds stand in one column");
+      } else {
+        require(navBox.bottom <= contentBox.top + 1, "a narrow page puts the kinds in a row above the chosen kind");
+        const rows = new Set(kinds.map(item => Math.round(item.getBoundingClientRect().top)));
+        require(rows.size <= 3 && rows.size < kinds.length, `a narrow page's kinds are pills that wrap, not a tall list (${rows.size} rows)`);
+      }
+      for (const item of kinds) require(item.querySelector("span").scrollWidth <= item.querySelector("span").clientWidth + 1, `${item.dataset.cat} shows its whole name`);
+      const expected = { soul: ["ms-personality", "ms-instructions"], skills: ["ms-skills", "ms-commands"], model: ["ms-model"], tools: ["ms-tools"], voice: ["ms-voice"], memory: [], general: ["ms-general"] }[category];
       const sections = [...pane.querySelectorAll(".ms-section[data-k]")].filter(visible).map(section => section.dataset.k);
-      const expected = raphael ? ["ms-skills", "ms-commands", "ms-model", "ms-voice", "ms-more"]
-        : ["ms-personality", "ms-instructions", "ms-skills", "ms-commands", "ms-model", "ms-tools", "ms-voice", "ms-more"];
-      require(sections.join() === expected.join(), `the sections are ${expected.join()} (${sections.join()})`);
-      require(pane.querySelector('[data-k="ms-more"] .ms-list > :first-child')?.dataset.k === "ms-memory", "記憶 leads the last card, said once (owner, 2026-11-08)");
+      require(sections.join() === expected.join(), `${category} shows ${expected.join() || "the memory"} (${sections.join()})`);
       for (const section of pane.querySelectorAll(".ms-section[data-k]")) {
         const list = section.querySelector(".ms-list"), head = section.querySelector(".ms-head");
         require(visible(list) && getComputedStyle(list).backgroundColor !== "rgba(0, 0, 0, 0)", `${section.dataset.k} is a tinted list`);
-        if (head) require(visible(head) && head.querySelector("h2").textContent.trim(), `${section.dataset.k} has its name over the list`);
-        const lead = list.getBoundingClientRect().left, title = head?.querySelector("h2").getBoundingClientRect().left;
-        if (head) require(title > lead, `${section.dataset.k}: the name starts inside the list's edge`);
+        // A kind with one section needs no name over it: the column says it.
+        if (expected.length > 1) require(visible(head) && head.querySelector("h2").textContent.trim(), `${section.dataset.k} has its name over the list`);
+        else require(!head || !head.querySelector("h2"), `${section.dataset.k} does not repeat the kind's name`);
+        if (head?.querySelector("h2")) require(head.querySelector("h2").getBoundingClientRect().left > list.getBoundingClientRect().left, `${section.dataset.k}: the name starts inside the list's edge`);
         require(list.scrollHeight <= list.clientHeight + 1 && getComputedStyle(list).overflowY === "visible", `${section.dataset.k} does not scroll inside`);
       }
       // No word-buttons where an icon says it: edits, adds and menus are icons, the rest are rows or switches.
@@ -5637,36 +5677,30 @@ export function checkRendered(name, context = {}) {
       require(words.length === 0, `no text buttons: ${words.map(button => button.textContent.trim()).join("|")}`);
       require(![...pane.querySelectorAll("button")].some(button => visible(button) && /^(編輯|Edit|編集)$/.test(button.textContent.trim())), "no 編輯 button");
       for (const edit of pane.querySelectorAll('[data-ms="edit"]')) require(visible(edit.querySelector("svg.i")), "a long field ends in its pencil");
-      require(![...pane.querySelectorAll(".mem-entry, [data-mem-section]")].some(visible), "the memory is never shown on the page");
-      const memory = pane.querySelector('[data-ms="memory"]');
-      require(visible(memory) && memory.querySelector("small").textContent.trim() && memory.querySelector("svg.i"), "the memory is one row with its count and a chevron");
-      const card = pane.querySelector('[data-k="ms-voice"] .ms-list'), rows = [...card.querySelectorAll(".ms-row")];
-      require(rows.length === (raphael ? 1 : 2), `the voice card has ${raphael ? 1 : 2} rows`);
-      const row = rows[0], label = row.querySelector(".ms-label").getBoundingClientRect(), choice = row.querySelector(".sel").getBoundingClientRect();
-      require(choice.left >= label.left && choice.right <= row.getBoundingClientRect().right + 1 && Math.abs((choice.top + choice.bottom) / 2 - (label.top + label.bottom) / 2) < 6, "the voice choice is a compact dropdown at the right of its row");
-      const model = pane.querySelector('[data-slot="model"] .mp-trigger');
-      require(visible(model), "the model is the composer's own dropdown, in its row");
+      if (category === "voice") {
+        const rows = [...pane.querySelectorAll('[data-k="ms-voice"] .ms-row')];
+        require(rows.length === (raphael ? 1 : 2), `the voice card has ${raphael ? 1 : 2} rows`);
+        const row = rows[0], label = row.querySelector(".ms-label").getBoundingClientRect(), choice = row.querySelector(".sel").getBoundingClientRect();
+        require(choice.left >= label.left && choice.right <= row.getBoundingClientRect().right + 1 && Math.abs((choice.top + choice.bottom) / 2 - (label.top + label.bottom) / 2) < 6, "the voice choice is a compact dropdown at the right of its row");
+      }
+      if (category === "model") require(visible(pane.querySelector('[data-slot="model"] .mp-trigger')), "the model is the composer's own dropdown, in its row");
+      if (category === "tools") require(pane.querySelectorAll('[data-ms="tool"]').length > 0, "the connections of the member are switches");
+      if (category === "general") {
+        const draft = pane.querySelector('[data-ms="draft"]');
+        require(visible(draft) && draft.getAttribute("role") === "switch", "the drafts switch is on the page");
+        if (!raphael) require(visible(pane.querySelector('[data-ms="group"]')) && pane.querySelector('[data-ms="group"]').classList.contains("sel"), "the group is a dropdown");
+      }
       if (raphael) {
         require(visible(pane.querySelector(".ms-static")) && !pane.querySelector("#ms-name, #ms-role, [data-ms=\"group\"], [data-ms=\"tool\"]"), "Raphael's name is not typed here");
       } else {
-        const name = pane.querySelector("#ms-name"), role = pane.querySelector("#ms-role");
-        require(visible(name) && visible(role) && name.getBoundingClientRect().left <= face.getBoundingClientRect().left + 8, "the name and the role are in place under the face");
-        require(getComputedStyle(name).borderTopColor === "rgba(0, 0, 0, 0)" || getComputedStyle(name).borderTopWidth === "1px", "the name is a bare field until it is pointed at");
-        require(pane.querySelectorAll('[data-ms="tool"]').length > 0, "the connections of the member are switches");
-        const group = pane.querySelector('[data-ms="group"]');
-        require(visible(group) && group.classList.contains("sel"), "the group is a dropdown");
+        const memberName = pane.querySelector("#ms-name"), role = pane.querySelector("#ms-role");
+        require(visible(memberName) && visible(role) && memberName.getBoundingClientRect().left <= face.getBoundingClientRect().left + 8, "the name and the role are in place under the face");
+        require(getComputedStyle(memberName).borderTopColor === "rgba(0, 0, 0, 0)" || getComputedStyle(memberName).borderTopWidth === "1px", "the name is a bare field until it is pointed at");
       }
       require(!pane.querySelector('[data-det="hide"], [data-ms="hide"]') && !/從側欄隱藏|Hide from sidebar/.test(pane.textContent), "hiding from the sidebar is not here");
-      const draft = pane.querySelector('[data-ms="draft"]');
-      require(visible(draft) && draft.getAttribute("role") === "switch", "the drafts switch is on the page");
     } else {
       require(!visible(cover) && !visible(face), "a view of its own has no cover");
       require(visible(pane.querySelector(".ms-subhead .ms-title")), "a view has its own title");
-    }
-    if (name === "member-settings-lower") {
-      const shown = selector => { const box = pane.querySelector(selector).getBoundingClientRect(); return box.top >= 0 && box.bottom <= innerHeight + 1; };
-      require(["[data-k=\"ms-voice\"]", "[data-k=\"ms-memory\"]", "[data-k=\"ms-more\"]"].every(shown), "the voice card, the memory row and the drafts are in sight at the foot of the page");
-      require(parseFloat(getComputedStyle(body).paddingBottom) >= 24 && scroller.scrollHeight > scroller.clientHeight, "the page scrolls, with room under its last list");
     }
     if (name === "member-settings-field") {
       const box = pane.querySelector("#ms-personality");
@@ -5685,7 +5719,7 @@ export function checkRendered(name, context = {}) {
     }
     if (name === "member-settings-memory") {
       const documents = [...pane.querySelectorAll("[data-mem-section]")].filter(visible);
-      require(view === "memory" && documents.length === 2, "both documents are in the memory view");
+      require(documents.length === 2 && documents.every(document => document.closest(".ms-content")), "both documents are beside the column of kinds");
       require(documents.every(document => visible(document.querySelector('[data-mem="edit"].icon'))) && ![...pane.querySelectorAll("button")].some(button => visible(button) && button.textContent.trim() === "編輯"), "the memory's edit is a pencil");
     }
     return { check: name, view };

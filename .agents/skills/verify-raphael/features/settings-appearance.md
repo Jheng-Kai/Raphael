@@ -25,19 +25,21 @@ npm run look -- overlay-locale-ko overlay-locale-th overlay-locale-de --theme bo
 ## 記憶 is a tab, and About's controls are icons (owner, 2026-11-08)
 
 Settings has seven flat tabs: 一般, 記憶, 聽寫與快捷鍵, 工具, 安全, 模型與用量 and 關於. 記憶 holds the shared owner
-memory (`data-mem-space="shared"`); 匯入記憶 is a button at the top right beside the tab's name, as 匯入 CSV in the
-vault, and opens the import under the memory (`memory-import-button` keeps it on the name's line and clear of the
-dialog's ✕; below 820 px the heading row starts lower). 一般 keeps 關於你, 外觀, 拉斐爾 and 啟動,
+memory (`data-mem-space="shared"`) and nothing else: there is no import from other assistants (owner, 2026-11-08:
+「匯入記憶不要這樣設計…沒有什麼實際的意義」); the memory lives in Raphael's data folder, and moving to another PC means
+keeping that folder. 一般 keeps 關於你, 外觀, 拉斐爾 and 啟動,
 with no memory. The memory lists load only while 記憶 is open. 關於's Help is an outward-arrow icon and the
 license a chevron; the shortcuts' and the OpenRouter key's 「變更」 is a pencil. This supersedes the notes below
 that place memory and its import in General.
 
 ```powershell
-npm run look -- profile memory about settings-owner settings-memory import-memory import-memory-result dictation models --theme both --width 1120,720,1920x1080
+npm run look -- profile memory about settings-owner settings-memory dictation models --theme both --width 1120,720,1920x1080
 ```
 
-`settings-memory` requires 記憶 to be the current tab; `settings-owner` refuses memory in 一般; `app-memory-import`
-requires the import after the shared memory inside 記憶.
+`settings-memory` requires 記憶 to be the current tab; `settings-owner` refuses memory in 一般.
+The core no longer registers an owner memory-import RPC or management boundary row.
+MemoryFile.apply and the four memory document/summary RPCs remain intact. Verify with
+core/tests/memory, the members management suites and architecture/test_boundaries.py.
 
 ## Grok Bot's six tabs (owner, 2026-11-07, R-UI-115)
 
@@ -56,18 +58,13 @@ npm run look -- profile appearance messaging dictation tools safety models about
 
 `settings-shell` refuses group names, the search and a line under a tab's name on every settings scene.
 
-## Signed updates and owner memory import (2026-11-05)
+## Signed updates (2026-11-05)
 
-General > About you > Import memory shows a copyable handover prompt, an answer field
-and Add to memory. The explicit action calls memory.import; accepted facts enter shared
-USER.md via the existing writer, while refused entries show an index and safe reason.
-Secret text is cleared after success and never echoed in refusals.
-
-Import memory stays inside General's About you section, immediately after shared memory.
+The owner memory import of this date was removed on 2026-11-08 (see above).
 Time zone and output folder keep their regrouped owner rows; updates stay in About.
 
 ```powershell
-npm run look -- about-no-updater-key update-found update-ready update-auto import-memory import-memory-result settings-owner about --theme both --width 1120,720,1920x1080
+npm run look -- about-no-updater-key update-found update-ready update-auto settings-owner about --theme both --width 1120,720,1920x1080
 ```
 
 With a compiled public key, About checks https://github.com/Jheng-Kai/Raphael/releases/latest/download/latest.json on opening.
@@ -98,15 +95,15 @@ sheet and the fallback at light 720 and dark 1120. Compare its button and row wi
 Help/License at the same theme and width. This fixture does not prove the default OS browser
 or installed-app behavior. No Rust changed for this mapping.
 
-Selected look for the original updater/import work: update-found, update-ready, update-auto, import-memory,
-import-memory-result, profile, chat, attachment-limits and attachment-too-large;
+Selected look for the original updater work: update-found, update-ready, update-auto,
+profile, chat, attachment-limits and attachment-too-large;
 zh-TW, both themes, 1120,720,1920x1080. Compare About's update actions and switch with
-General's existing controls, and import fields/buttons with the owner profile and settings.
+General's existing controls.
 Judge must use this same run and external references. Fake fixtures do not prove real
 GitHub releases, OS idle time, native asset ranges, upgrade restart or one-shot persistence.
 
-Targeted checks: updates, attachment-stream, memory-import, settings-view, agent-attach,
-chat-composer, attachment-media, architecture and catalog Vitest; memory service/import
+Targeted checks: updates, attachment-stream, settings-view, agent-attach,
+chat-composer, attachment-media, architecture and catalog Vitest; memory service
 and attachment upload/readers pytest; release-asset tests with a temporary generated key.
 Offline Rust: cargo fmt --all -- --check; cargo test --offline --locked;
 cargo clippy --offline --locked --all-targets -- -D warnings; vendored listener unchanged.

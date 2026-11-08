@@ -133,16 +133,11 @@ test("shared owner memory is the 記憶 tab of its own, while own memory stays o
   const document = new Window().document;
   document.body.innerHTML = html;
   expect(document.querySelector("#set-title")?.textContent).toBe("記憶");
-  // 匯入記憶 is the button beside the tab's name, at the top right, as 匯入 CSV in the vault; closed, nothing else of it.
-  expect(document.querySelector('.set-head [data-import="open"]')?.textContent).toBe("匯入記憶");
-  expect(document.querySelector("[data-memory-import]")).toBeNull();
-  const open = tab("memory", { memoryShared, memoryImportAction: "", memoryImportHTML: '<section data-memory-import></section>' });
-  expect(open.indexOf("data-memory-import")).toBeGreaterThan(open.indexOf('data-mem-space="shared"'));
-  expect(open).not.toContain('data-import="open"');
+  // No import from other assistants: the memory lives in the data folder (owner, 2026-11-08).
+  expect(html).not.toMatch(/data-import|data-memory-import|匯入記憶/);
   expect(html).not.toContain('data-mem-space="own"');
   for (const pane of ["general", "tools", "safety", "dictation"] as const) {
     expect(tab(pane, { memoryShared })).not.toContain("data-mem-section");
-    expect(tab(pane, { memoryShared })).not.toContain("data-memory-import");
   }
 });
 
@@ -263,9 +258,8 @@ describe("the tabs", () => {
         expect(html).not.toContain("set-purpose");
         // Connections' Add stands on the row of its two views, clear of the dialog's ✕ (owner, 2026-11-07).
         if (id === "connections") expect(html).toMatch(/<div class="cs-bar">.*?<\/div><button type="button" class="sel cs-add"[^>]*data-k="conn-add"/s);
-        // 記憶's 匯入記憶 stands beside its name, at the top right, as 匯入 CSV in the vault (owner, 2026-11-08).
-        // 模型與用量's refresh stands at its top right too: it is read once while the app runs (owner, 2026-11-08).
-        expect(html.startsWith(id === "memory" || id === "models" ? `<div class="set-head">${head}` : head)).toBe(true);
+        // 模型與用量's one refresh stands at its top right: it is read once while the app runs (owner, 2026-11-08).
+        expect(html.startsWith(id === "models" ? `<div class="set-head">${head}` : head)).toBe(true);
         expect(html).not.toContain('class="purpose"');
       }
     }
@@ -340,11 +334,8 @@ describe("一般", () => {
     // The tour is one button, named for what it does, with no row repeating the name (owner, 2026-11-07).
     expect(html).toMatch(/<button[^>]*data-act="rerun-guide"[^>]*>導覽<\/button>/);
     expect(names(html).slice(0, 4)).toEqual([t("settings.067"), t("settings.059"), "時區", "輸出資料夾"]);
-    // Importing memory is one button of the 記憶 tab.
-    const memory = tab("memory");
-    expect(memory).toMatch(/<button[^>]*data-import="open"[^>]*>匯入記憶<\/button>/);
-    expect(names(memory)).not.toContain("匯入記憶");
-    expect(memory).not.toMatch(/<h2>匯入記憶<\/h2>/);
+    // The 記憶 tab has no import (owner, 2026-11-08).
+    expect(tab("memory")).not.toContain("匯入記憶");
   });
 
   test("starts the guide again with a real bordered button, not a switch or a link", () => {

@@ -932,6 +932,8 @@ export interface Member {
   avatar_url?: string;
   /** Raphael's only: the cut of the owner's picture of him (avatar.ts `AvatarCrop`). */
   avatar_crop?: { x: number; y: number; zoom: number };
+  /** The cover of the member settings page: one of the window's patterns or the owner's picture; none is the dotted band. */
+  cover?: { kind: "pattern"; id: string } | { kind: "image"; url: string };
   /** Null: 未分組. */
   group_id: number | null;
   /** The chief capability is independent of the member's identity. */
@@ -1019,7 +1021,10 @@ export interface NewMember {
  * What `members.update` may change, beside its `id`: the avatar only as `""` or `"preset:<stem>"`
  * (a picture of the PC goes by `members.set_avatar`).
  */
-export type MemberPatch = Partial<Pick<Member, "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "voice" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">>;
+export type MemberPatch = Partial<Pick<Member, "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "voice" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">> & {
+  /** `pattern:<id>` chooses a pattern; null puts the dotted band back and forgets a picture. */
+  cover?: string | null;
+};
 
 /** The routine the core offers with a new member of a group with places to look (`members.create`, `routines.template`). */
 export interface RoutineOffer {

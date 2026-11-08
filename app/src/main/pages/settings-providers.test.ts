@@ -252,7 +252,9 @@ test("Models contains no spending and Usage mounts its allowances once, plainly,
   const node = page.el.querySelector(".usage-analytics")!;
   // This month's spending leads, as Grok Bot's usage card, then the allowances, and nothing else is on the page.
   expect(spend.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(node.querySelector('[data-run-act="allowance"]')?.classList.contains("icon")).toBe(true);
+  // One refresh for the whole tab, at its top right: the allowances have none of their own (owner, 2026-11-08).
+  expect(node.querySelector("button.icon")).toBeNull();
+  expect(page.el.querySelectorAll('.set-head [data-act="models-refresh"]')).toHaveLength(1);
   expect(page.el.querySelector(".ua-chart, .run-tiles, .run-bill, [data-range], .foot")).toBeNull();
   setLocale("ja"); await flush();
   expect(page.el.querySelector(".usage-analytics")).toBe(node);
@@ -282,8 +284,24 @@ test("the allowances are read once and kept across tabs and Settings closing, re
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
   expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 2);
   const providerReads = api.providersList.mock.calls.length;
+  // The refresh turns while it reads, keeps its place and focus, then is a check for a moment.
+  let finish!: (value: unknown) => void;
+  const settled = api.usageAllowances.getMockImplementation();
+  api.usageAllowances.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  const refresh = page.el.querySelector<HTMLButtonElement>('[data-act="models-refresh"]')!;
+  refresh.focus();
+  click('[data-act="models-refresh"]'); await flush();
+  expect(refresh.dataset.state).toBe("busy");
+  expect(refresh.getAttribute("aria-busy")).toBe("true");
+  expect(refresh.getAttribute("aria-label")).toBe(t("conn.refreshing"));
   click('[data-act="models-refresh"]'); await flush();
   expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 3);
+  finish(settled ? await settled() : { brains: [] }); await flush();
+  expect(page.el.querySelector('[data-act="models-refresh"]')).toBe(refresh);
+  expect(document.activeElement).toBe(refresh);
+  expect(refresh.dataset.state).toBe("done");
+  expect(refresh.getAttribute("aria-label")).toBe(t("runs.refreshed"));
+  expect(refresh.querySelector("svg.i")).not.toBeNull();
   expect(api.providersList.mock.calls.length).toBe(providerReads + 1);
   await page.show("general"); click('[data-pane="models"]'); await flush();
   expect(page.el.querySelector('[data-models-tab="usage"][aria-selected="true"]')).not.toBeNull();

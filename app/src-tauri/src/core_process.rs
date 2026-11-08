@@ -124,21 +124,24 @@ const PYTHON_OVERRIDE: &str = "RAPHAEL_CORE_PYTHON";
 /// `core/.venv/Scripts/python.exe -m raphael_core` from this checkout; `RAPHAEL_CORE_PYTHON`
 /// can replace that development interpreter.
 pub fn resolve_app_core_command(app: &tauri::AppHandle) -> Result<CoreCommand, String> {
-    #[cfg(debug_assertions)]
-    {
-        let _ = app;
-        resolve_core_command()
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        use tauri::Manager;
+    use tauri::Manager;
 
+    #[cfg(debug_assertions)]
+    let mut command = resolve_core_command()?;
+    #[cfg(not(debug_assertions))]
+    let mut command = {
         let resources = app
             .path()
             .resource_dir()
             .map_err(|err| format!("could not locate the packaged core's resources: {err}"))?;
-        packaged_command_in(&resources)
-    }
+        packaged_command_in(&resources)?
+    };
+    // Use this app's resolved log directory, including native-journey overrides.
+    let logs = app.path().app_log_dir()
+        .map_err(|err| format!("could not locate this app's logs: {err}"))?;
+    command.env.push(("RAPHAEL_LOG_PATH".to_owned(),
+                      logs.join("raphael.log").display().to_string()));
+    Ok(command)
 }
 
 /// Resolves a development checkout's core command. This entry point is absent from release apps.
@@ -182,13 +185,20 @@ fn command_in(repo: &Path, python: Option<OsString>) -> Result<CoreCommand, Stri
             venv_python
         }
     };
+    // The core's source of this checkout comes first on Python's path. A venv installs the core
+    // editable from whichever checkout ran `uv sync`, so a build made in another worktree would
+    // otherwise run that checkout's core, not its own (2026-11-08: a staged build ran old code).
+    let source = core_dir.join("src").display().to_string();
     Ok(CoreCommand {
         program,
         args: vec!["-m".to_owned(), "raphael_core".to_owned()],
         cwd: core_dir,
         // Python encodes what it writes to a pipe in the machine's code page (cp950 on a Taiwan
         // Windows) unless told otherwise; its log is read here as UTF-8.
-        env: vec![("PYTHONIOENCODING".to_owned(), "utf-8".to_owned())],
+        env: vec![
+            ("PYTHONIOENCODING".to_owned(), "utf-8".to_owned()),
+            ("PYTHONPATH".to_owned(), source),
+        ],
     })
 }
 
@@ -872,6 +882,9 @@ mod tests {
                 .env
                 .contains(&("PYTHONIOENCODING".to_owned(), "utf-8".to_owned()))
         );
+        // This checkout's core source, never the one the venv was installed from.
+        let source = core_dir.join("src").display().to_string();
+        assert!(command.env.contains(&("PYTHONPATH".to_owned(), source)));
     }
 
     #[test]
@@ -882,6 +895,9 @@ mod tests {
         assert_eq!(command.program, PathBuf::from(r"C:\Python312\python.exe"));
         assert_eq!(command.args, ["-m", "raphael_core"]);
         assert_eq!(command.cwd, repo.path().join("core"));
+        // Another interpreter still runs this checkout's core.
+        let source = repo.path().join("core").join("src").display().to_string();
+        assert!(command.env.contains(&("PYTHONPATH".to_owned(), source)));
     }
 
     #[test]

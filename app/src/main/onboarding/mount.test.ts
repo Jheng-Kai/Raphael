@@ -160,18 +160,31 @@ describe("the guide", () => {
 });
 
 describe("step 1: the AI tools", () => {
-  test("shows the accounts as the settings do, and the key as a field until one is saved", async () => {
+  test("shows the accounts as the settings do, and the key's field once 連線 is pressed", async () => {
     await open();
     await press('[data-ob="next"]');
-    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["chatgpt", "claude", "codex", "gemini", "openrouter"]);
+    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["chatgpt", "claude", "codex", "openrouter", "gemini"]);
     expect(root.querySelector('[data-item="claude"] .dot.ok')).not.toBeNull();
+    expect(root.querySelector("#ob-key-input")).toBeNull();
+    await press('[data-item="openrouter"] [data-ob="key-replace"]');
     expect(root.querySelector("#ob-key-input")).not.toBeNull();
+  });
+
+  test("the search narrows the tools in place and keeps its caret", async () => {
+    await open();
+    await press('[data-ob="next"]');
+    const find = root.querySelector<HTMLInputElement>("#ob-tools-find")!;
+    find.value = "open";
+    find.dispatchEvent(new Event("input", { bubbles: true }));
+    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["openrouter"]);
+    expect(root.querySelector("#ob-tools-find")).toBe(find);
   });
 
   test("a key that is checked and valid is kept, the field goes and the key is not left on the page", async () => {
     api.secretsSetOpenrouterKey.mockResolvedValue({ valid: true, label: "my-key" });
     await open();
     await press('[data-ob="next"]');
+    await press('[data-item="openrouter"] [data-ob="key-replace"]');
     const input = root.querySelector<HTMLInputElement>("#ob-key-input")!;
     input.value = "sk-or-v1-secret";
     await press('[data-ob="key-paste"]');
@@ -185,6 +198,7 @@ describe("step 1: the AI tools", () => {
     api.secretsSetOpenrouterKey.mockResolvedValue({ valid: false, reason: "invalid" });
     await open();
     await press('[data-ob="next"]');
+    await press('[data-item="openrouter"] [data-ob="key-replace"]');
     root.querySelector<HTMLInputElement>("#ob-key-input")!.value = "nope";
     await press('[data-ob="key-paste"]');
     expect(root.querySelector('[role="alert"]')).not.toBeNull();
@@ -269,6 +283,36 @@ describe("step 2: the services", () => {
     expect(root.querySelector('[data-ob="conn-reload"]')).not.toBeNull();
     await press('[data-ob="conn-reload"]');
     expect(root.querySelector(".ob-tile")).not.toBeNull();
+  });
+
+  test("a store that never answers offers another try instead of spinning on (owner, 2026-11-08)", async () => {
+    vi.useFakeTimers();
+    try {
+      api.integrationsCatalog.mockReturnValueOnce(new Promise(() => {}));
+      const opened = toServices();
+      await vi.advanceTimersByTimeAsync(100);
+      await opened;
+      expect(root.querySelector("#ob-conn .spin")).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(root.querySelector('[data-ob="conn-reload"]')).not.toBeNull();
+      root.querySelector<HTMLElement>('[data-ob="conn-reload"]')!.click();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(root.querySelector(".ob-tile")).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("取消 stops the wait at once, even when the login never answers", async () => {
+    api.integrationsConnect.mockReturnValueOnce(new Promise(() => {}));
+    api.integrationsConnectCancel.mockResolvedValue({ cancelled: false });
+    await toServices();
+    await press('[data-item="notion"][data-ob="conn-login"]');
+    expect(root.querySelector('[data-item="notion"] [data-ob="conn-cancel"]')).not.toBeNull();
+    await press('[data-ob="conn-cancel"]');
+    expect(api.integrationsConnectCancel).toHaveBeenCalled();
+    expect(root.querySelector('[data-ob="conn-cancel"]')).toBeNull();
+    expect(root.querySelector('button.ob-tile[data-item="github"]')!.hasAttribute("disabled")).toBe(false);
   });
 
   test("without Composio the built-in apps are enough", async () => {

@@ -13,7 +13,6 @@
 
 import { LOCALES, t } from "../i18n";
 import { updateHTML } from "../updates";
-import { createMemoryImport } from "../memory-import";
 import { detectedTimezone, zoneLabel } from "../timezones";
 import { ownerProfileHTML } from "../owner-settings";
 
@@ -113,10 +112,9 @@ export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotke
 /** Everything a tab is drawn from: what the panel has read, and what is being typed or done. */
 export interface SettingsView {
   update?: import("../api").UpdateView | null;
-  memoryImportHTML?: string;
-  /** The button that opens the import, at the top of the 記憶 tab; empty while it is open. */
-  memoryImportAction?: string;
   modelsTab?: ModelsTab;
+  /** What the refresh of 模型與用量 is doing. */
+  modelsRefresh?: "idle" | "busy" | "done";
   pane: SettingsPane;
   device: DeviceSettings;
   /** The brain's settings; null while the core does not answer. */
@@ -547,6 +545,15 @@ export const retentionOf = (v: SettingsView): string => String(v.brain?.history_
  * One page with model connections and usage in separate views. Legacy ids choose their own view. Usage is as plain as
  * Grok Bot's (owner, 2026-11-06): what each subscription has left, then the key and what was spent, with no charts.
  */
+/**
+ * The one refresh of 模型與用量 and what it is doing (owner, 2026-11-08: 「這個 Icon 沒有任何的 feedback」): it turns while it
+ * reads, then is a check for a moment. It stays a button that keeps the focus; a press while it reads does nothing.
+ */
+export function modelsRefreshHTML(state: "idle" | "busy" | "done"): string {
+  const label = t(state === "busy" ? "conn.refreshing" : state === "done" ? "runs.refreshed" : "runs.refresh");
+  return iconBtn(state === "done" ? "check" : "refresh", label, ` data-act="models-refresh" data-state="${state}" aria-busy="${state === "busy"}"${state === "busy" ? ' aria-disabled="true"' : ""}`, "models-refresh");
+}
+
 function modelsHTML(v: SettingsView): string {
   const providers = v.providers ?? emptyProvidersView();
   const selected = v.modelsTab ?? (v.pane === "usage" ? "usage" : "models");
@@ -557,7 +564,7 @@ function modelsHTML(v: SettingsView): string {
       ...(v.keyError ? [note(st("err", v.keyError()), ' role="alert"')] : []),
     ]);
   // Read once while the app runs; this reads it all again (owner, 2026-11-08: 「點一下右上角的那個重跑」).
-  return headingHTML(v, iconBtn("refresh", t("runs.refresh"), ' data-act="models-refresh"')) + coreNote(v) + `<div class="models-page">` +
+  return headingHTML(v, modelsRefreshHTML(v.modelsRefresh ?? "idle")) + coreNote(v) + `<div class="models-page">` +
     tabs((["models", "usage"] as const).map((id) => ({
       id, label: id === "models" ? t("providers.title") : t("models.usage"),
       attrs: ` id="models-tab-${id}" data-models-tab="${id}" data-k="models-tab:${id}" aria-controls="models-panel-${id}" tabindex="${id === selected ? 0 : -1}"`,
@@ -565,11 +572,12 @@ function modelsHTML(v: SettingsView): string {
     (["models", "usage"] as const).map((id) => `<div class="models-content" id="models-panel-${id}" role="tabpanel" aria-labelledby="models-tab-${id}"${id === selected ? "" : " hidden"}>${id === selected ? content : ""}</div>`).join("") + `</div>`;
 }
 
-/** 記憶: what every member remembers of the owner, and bringing memory in from other apps. */
+/**
+ * 記憶: what every member remembers of the owner. It lives in Raphael's own data folder; there is no import from other
+ * assistants (owner, 2026-11-08: 「匯入記憶不要這樣設計…沒有什麼實際的意義」), and moving to another PC means keeping that folder.
+ */
 function memoryPaneHTML(v: SettingsView): string {
-  const importer = createMemoryImport(() => {});
-  // 匯入記憶 stands at the top right beside the tab's name, as 匯入 CSV does in the vault (owner, 2026-11-08).
-  return headingHTML(v, v.memoryImportAction ?? importer.action()) + coreNote(v) + (v.memoryShared ? memoryHTML(v.memoryShared) : "") + (v.memoryImportHTML ?? importer.html());
+  return headingHTML(v) + coreNote(v) + (v.memoryShared ? memoryHTML(v.memoryShared) : "");
 }
 
 /** 關於: the version, the license and the fan-project statement. */

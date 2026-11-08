@@ -16,26 +16,34 @@ state saved. There are no practice lessons, no microphone step and no completion
 the window, with no progress bar and no side, as Grok Bot's first run (owner, 2026-11-07): every
 step is one calm centred column, a title (three of the team's own characters float by it, aria-hidden,
 others on every step and in other places — Gobta, Shion, Ranga; Shuna, Diablo, Benimaru; Milim, Souei,
-Rigurd — owner 2026-11-08; gone below 640px wide), the choice, then the shared pills on one line: a grey 上一步 before the black 下一步 / 開始使用 (since 2026-11-08 sized to their words at the shared button height)
+Rigurd — owner 2026-11-08; gone below 640px wide), the choice, one wide black pill (下一步 / 開始使用) and under it a grey pill 上一步 (kept by the owner on 2026-11-08 as the one exception to the shared button height; a status in a tile wraps inside it in every language)
 (no back arrow at the top; a rerun's welcome has a grey 取消 that leaves the guide).
 
 0. **Welcome** (`onboarding`, check `onboarding-welcome`): Raphael's emblem (the voice screen's
-   canvas renderer, appearing as on the desktop), his name, and under it what the team can do typed
+   canvas renderer, appearing as on the desktop), his name as one wordmark for every language,
+   「智慧之王ラファエル」 (`public/brand/wordmark.svg` through a CSS mask in the text colour; a reader
+   hears `onboarding.welcomeTitle`; owner, 2026-11-08), and under it what the team can do typed
    instead of a slogan (owner, 2026-11-08): an ask appears a letter at a time with a caret, Raphael's
    answer in his manner (告。/解。/否。) fades in under it, then the ask is deleted and the next typed (six
    pairs, `onboarding.demo*`); with reduced motion the first pair stands; a reader hears one sentence
    (`onboarding.demoSummary`). Then one pill, 開始.
-1. **AI tools** (`onboarding-tools`, `onboarding-tools-key`): ChatGPT sign-in, the Claude Code,
-   Codex and Antigravity command-line accounts as tiles two by two (mark, name, state, its
-   one button; a ready tile has the black edge and a check), then the OpenRouter key as one wide
-   tile, then the catalog's providers by group as tiles in a grid of three. ChatGPT and the command-line tools are
-   driven by the same account controller as Settings > Models (`createCliBrains`); the key uses the
-   same masked field, paste button and core call.
-2. **Services** (`onboarding-services`): a search box (narrows the tiles in place by name or id)
-   and up to eighteen popular apps of the Connect apps store as tiles in a grid of three, from the
-   built-in catalog plus the Composio-managed apps when Composio is set up; only apps that ask for
-   no more than a sign-in. A tile that is not connected is one whole button that opens the login;
-   a connected one has the check and says Connected.
+1. **AI tools** (`onboarding-tools`, `onboarding-tools-key`): a store (owner, 2026-11-08: every
+   tool equal, never ordered by what one owner set up). A search box (typos forgiven, R-FIND-01),
+   then 熱門, the same for everyone (`POPULAR_TOOLS`: ChatGPT, Claude Code, Codex, OpenRouter,
+   Anthropic, Google Gemini), then every other tool under its kind (subscription accounts, official,
+   gateways and clouds, this computer), each kind by name. Every tile is alike in a grid of three
+   (mark, name, state, its one button; a ready tile has the black edge and a check). OpenRouter is a
+   tile too: 連線 (or 已設定 and 更換) opens the masked field, 取消 and 貼上 across its row while the key
+   is typed. ChatGPT and the command-line tools are driven by the same account controller as
+   Settings > Models (`createCliBrains`); the key uses the same masked field, paste button and core call.
+2. **Services** (`onboarding-services`, `onboarding-service-waiting`): a search box (narrows the
+   tiles in place by name or id) and up to eighteen popular apps of the Connect apps store as tiles
+   in a grid of three, from the built-in catalog plus the Composio-managed apps when Composio is set
+   up; only apps that ask for no more than a sign-in. A tile that is not connected is one whole button
+   that opens the login; a connected one has the check and says Connected. A waiting tile keeps its
+   words inside it in every language and its 取消 stops the wait at once, even when the login never
+   answers; lists the core does not answer within 15 s turn into 重試 (owner, 2026-11-08: the step spun
+   on after a cancelled Slack sign-in).
 3. **Abilities** (`onboarding-abilities`, `onboarding-abilities-choice`): the shared abilities
    of Settings > Tools (web search, reading web pages, images, PDFs, speech) as the very rows and
    dialogs of that pane (`createServices`): each says which service it uses, keeps its switch and
@@ -53,7 +61,7 @@ state.
 ## Driving it with look
 
 ```powershell
-npm run look -- onboarding onboarding-tools onboarding-tools-key onboarding-services onboarding-abilities onboarding-abilities-choice after-onboarding --theme both --width 1120,720,1920x1080
+npm run look -- onboarding onboarding-tools onboarding-tools-key onboarding-services onboarding-service-waiting onboarding-abilities onboarding-abilities-choice after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
 Keep the welcome and each step's PNGs, the contact sheet and the report. Each scene presses the

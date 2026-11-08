@@ -944,7 +944,6 @@ export function installMock(fixture, config = {}, target = window) {
       case "settings.get": return { settings: data.settings };
       // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
       case "background.waiting.list": { data.waitingReads = (data.waitingReads ?? 0) + 1; return { waiting: variant.roomQuestion && (!variant.roomQuestionLate || data.waitingReads > 1) ? [{ id: "room-q", member_id: 1, member_name: "小晴", room_id: 1 }] : [] }; }
-      case "memory.import": return { kept: [data.memoryImportSample.kept], refused: [{index:2,reason:"secret"}] };
       case "attachments.get": {
         if (variant.generatedFile?.id === p.id) return {mime:variant.generatedFile.mime,data:variant.generatedData};
         if (data.keptFiles?.[p.id]) return data.keptFiles[p.id];

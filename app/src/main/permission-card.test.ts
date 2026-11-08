@@ -85,13 +85,17 @@ test("later local commands have Allow and Skip without a standing-approval butto
   expect(html).toContain("略過");
 });
 
-test("local approval explains the decision while its directory and settings stay in details", () => {
+test("a local command that waits shows the command itself, its directory and settings, with no disclosure to open", () => {
   const html = permissionCardHTML(card({ kind: "local_command", service: "Alex", summary: "Get-Process", reason: "D:\\Project", always: false }));
   expect(html).toContain('<b class="card-title cc-name">Alex 想要執行指令</b>');
   expect(html).toContain('<p class="card-body cc-state">在你的電腦執行這個指令前，需要你確認。</p>');
-  const detail = html.slice(html.indexOf('class="card-detail"'), html.indexOf('<footer'));
-  expect(detail).toContain("D:\\Project");
-  expect(detail).toContain('data-act="local-settings"');
+  // The owner allows what they can read (owner, 2026-11-08: 「我根本不知道指令是甚麼」).
+  expect(html).toContain('<pre class="local-command">Get-Process</pre>');
+  expect(html).not.toContain("data-card-disclosure");
+  expect(html).toContain("D:\\Project");
+  expect(html).toContain('data-act="local-settings"');
+  // Once answered the command folds into the details with the rest.
+  expect(permissionCardHTML(card({ kind: "local_command", service: "Alex", summary: "Get-Process", state: "allowed", always: false }))).toContain("data-card-disclosure");
 });
 
 test("settled permission pills are short and the full decision remains in details", () => {
