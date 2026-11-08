@@ -451,7 +451,8 @@ async def test_a_spoken_request_is_asked_by_the_overlay_and_has_no_card(owner, p
     client.decisions.append(decision("answer"))
     client.plans.append(tool_plan(("Notes__note", {"text": "x"})))
     result = await owner.rig.ask("記下牛奶")
-    assert result["status"] == "confirm" and owner.cards.store.for_turns([result["turn_id"]]) == {}
+    assert result["status"] == "confirm" and owner.cards.views([result["turn_id"]]) == {}
+    assert owner.cards_of(result["turn_id"])[0].context_only
     assert "digest" not in result["confirm"] and "always" not in result["confirm"]
 
 
@@ -461,6 +462,8 @@ async def test_a_call_that_cannot_be_undone_keeps_the_gold_card_that_is_held_to_
     asked = await typed(owner.rig)
     # A click is not enough for what cannot be undone: no card in the thread, no 一律允許, and the overlay's question as before.
     assert asked["status"] == "confirm" and asked["confirm"]["tier"] == "T3"
-    assert owner.cards_of(asked["turn_id"]) == [] and "always" not in asked["confirm"]
+    assert owner.cards.views([asked["turn_id"]]) == {} and "always" not in asked["confirm"]
+    [stored] = owner.cards_of(asked["turn_id"])
+    assert stored.context_only and stored.state == "pending"
     done = await owner.confirm(asked, True)
     assert done["text"] == "好了。" and calls == ["note"]

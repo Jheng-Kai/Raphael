@@ -165,6 +165,8 @@ def build_user_message(
     member: bool = False,
     quote: dict[str, str] | None = None,
     recall: str = "",
+    source: str = "",
+    messaging: str = "",
 ) -> str:
     """What the model is shown: the summary of the earlier conversation, the latest turns
     (oldest first), the date and time, the results of the tools, the question in tags, which mark it
@@ -196,6 +198,9 @@ def build_user_message(
         parts.append(quote_context(quote))
     if recall:
         parts.append(recall)
+    from .card_context import source_text
+    if current := source_text(source) + messaging:
+        parts.append(current)
     parts.append(f"<question>\n{question}\n</question>")
     if looked_up:
         parts.append(
@@ -516,6 +521,8 @@ class Voice:
         roster: str = "",
         reasoning_effort: str = "none",
         recall: str = "",
+        source: str = "",
+        messaging: str = "",
     ) -> Reply:
         """What Raphael says to `question` on `route` ("answer", "discuss" or "chat"), in
         `language`. `summary` is the summary of the earlier conversation and `context` its latest
@@ -530,7 +537,7 @@ class Voice:
         say_ja = say_ja and not plain
         user = build_user_message(
             question, moment, context, tools, language, background,
-            summary=summary, looked_up=looked_up, say_ja=say_ja, member=plain, recall=recall,
+            summary=summary, looked_up=looked_up, say_ja=say_ja, member=plain, recall=recall, source=source, messaging=messaging,
         )  # fmt: skip
         if plain:
             system = member_system_prompt(

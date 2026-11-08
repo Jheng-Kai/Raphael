@@ -361,7 +361,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 71
+LATEST = 72
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -635,7 +635,10 @@ SCHEMA_V71 = {
 }
 
 
-@pytest.mark.parametrize("start_version, expected_steps", [(62, [63, 64, 67, 68, 69, 70, 71]), (63, [64, 67, 68, 69, 70, 71]), (64, [67, 68, 69, 70, 71]), (67, [68, 69, 70, 71]), (68, [69, 70, 71]), (69, [70, 71]), (70, [71])])
+SCHEMA_V72 = {**SCHEMA_V71, "permission_cards": [*SCHEMA_V71["permission_cards"], "context_only INTEGER NOT NULL DEFAULT 0"]}
+
+
+@pytest.mark.parametrize("start_version, expected_steps", [(version, [step for step in (63, 64, 67, 68, 69, 70, 71, 72) if step > version]) for version in (62, 63, 64, 67, 68, 69, 70, 71)])
 def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(monkeypatch, tmp_path, start_version, expected_steps):
     path = tmp_path / f"v{start_version}-to-latest.db"
     with monkeypatch.context() as old:
@@ -657,7 +660,7 @@ def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries
     db.migrate(conn)
     assert steps == expected_steps
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V71.items():
+    for table, columns in SCHEMA_V72.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     entry = conn.execute("SELECT kind,label,hint,origin,members,credential FROM vault_entries WHERE id='legacy-login'").fetchone()
@@ -827,7 +830,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V71) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V72) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -848,7 +851,7 @@ def test_connect_creates_the_latest_schema(conn):
         "one_standard_conversation",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V71.items():
+    for table, columns in SCHEMA_V72.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [
@@ -1739,7 +1742,7 @@ def test_v71_preserves_pairing_states_and_separates_them_from_secret_cards(tmp_p
             conn.execute("INSERT INTO messaging_pairing_cards VALUES (?,?,?,?,?,?,?,?,?)",
                          (state, secret.id, "telegram", "telegram", 0, "CODE-" + state, "Owner", 123456, state))
     db.migrate(conn)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 71
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
     assert tuple(conn.execute("SELECT * FROM messaging_card_accounts").fetchone()) == ("telegram", turn_id)
     rows = conn.execute("SELECT id,turn_id,code,state FROM messaging_pairing_cards ORDER BY id").fetchall()
     assert [tuple(row) for row in rows] == [(state, turn_id, "CODE-" + state, state) for state in sorted(("pending", "approved", "rejected", "expired"))]

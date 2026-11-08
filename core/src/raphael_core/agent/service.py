@@ -540,7 +540,8 @@ class Resumption:
                          " connection uses it by itself: you never see it. Do it now with the connection's tools, and do not"
                          " ask for the key again.")
         if self.messaging:
-            parts.append("Messaging connected: " + ", ".join(self.messaging) + ". Tell the owner to send the bot any message now to pair, then approve or reject its pairing card in this conversation. The bot's panel row has its switch and details; ask here to remove a person or disconnect, with owner approval. Never ask for its token again.")
+            parts.append("Messaging credential saved. Use the current messaging state for pairing and availability. Never ask for its token again.\n"
+                         + wrap_untrusted("messaging_connected", ", ".join(self.messaging), ok=True))
         if self.report is not None:
             report = self.report
             parts.append(
@@ -731,6 +732,8 @@ class AgentService:
         # The permission cards of a typed private chat (`agent.permissions`), and the email drafts a member
         # writes there for the owner to edit and send (`agent.drafts`).
         self._permissions = permissions
+        from .permissions import PermissionCardStore
+        self._confirmation_cards = permissions.store if permissions is not None else PermissionCardStore(conn, now_ms)
         self._drafts = drafts
         if drafts is not None:
             drafts.approve = self._approve_by_click
@@ -803,6 +806,7 @@ class AgentService:
             return diagnostics(self, SimpleNamespace(speaker=speaker, conversation_id=row[0] if row else None,
                                                       scope=row[1] if row else "background"))
         background.diagnostics = task_diagnostics
+        background.messaging_context = self._messaging_context
         # The connections to the plugins' servers, kept for a short while: a second question about
         # the same service does not start it again.
         self._pool = McpPool(idle_s=PLUGIN_IDLE_S)
@@ -1475,7 +1479,7 @@ class AgentService:
                 decision = await self._decider.classify(
                     ask.text, self._on_its_service(settings.model),
                     ledger, background_line(self._briefs(ask.speaker.id)),
-                    context=self._before_run(ask.speaker, ask.conversation_id),
+                    context=self._before_run(ask.speaker, ask.conversation_id, source=ask.source),
                 )
             except AgentFailure as error:
                 failure = error.kind
@@ -1591,7 +1595,7 @@ class AgentService:
                 say_ja=ask.voiced,
                 roster=roster_prompt(self._team, ask.speaker, ask.language) + owner_context(self._settings),
                 reasoning_effort=self._effort(settings),
-                recall=self._recall(ask),
+                recall=self._recall(ask), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
             )
             return owner_script(reply, chinese_variant(self._settings.get("languages")))
 
@@ -1743,7 +1747,7 @@ class AgentService:
             ledger=ledger,
             over_budget=lambda: self._over_budget(limit),
             open_app=self._open_for_run,
-            background=self._before_run(ask.speaker, ask.conversation_id),
+            background=self._before_run(ask.speaker, ask.conversation_id, source=ask.source),
             clock=self._clock,
             now_ms=self._now_ms,
             # A sign-in is the owner's to do: in a private chat they are at the run waits for them
@@ -1758,7 +1762,11 @@ class AgentService:
         run.task.add_done_callback(lambda _done, run=run: self._settle_unheard(run))
         return await self._next_from_run(run)
 
-    def _before_run(self, speaker: Speaker = RAPHAEL, conversation_id: int | None = None) -> str:
+    def _messaging_context(self, member_id: int) -> str:
+        from .card_context import messaging_state
+        return messaging_state(getattr(self._secret_cards, "messaging", None), member_id)
+
+    def _before_run(self, speaker: Speaker = RAPHAEL, conversation_id: int | None = None, *, source: str = "") -> str:
         """What a run is told of what came before its request: the memory's index, and the
         conversation as a quick answer reads it (the summary and the last few turns). A run
         writes no note, now or later: its turn holds what the model read on the screen, which is
@@ -1773,7 +1781,8 @@ class AgentService:
             f"Personality: {speaker.personality}\n"
             f"Owner's instructions: {speaker.instructions}\n\n"
         )
-        return persona + owner_context(self._settings) + conversation_block(context.summary, context.turns, index)
+        from .card_context import source_text
+        return persona + owner_context(self._settings) + conversation_block(context.summary, context.turns, index) + source_text(source) + self._messaging_context(speaker.id)
 
     @member_turn(lambda self, run: run.context.speaker.id)
     @tool_step(lambda self, run: "computer")
@@ -1848,6 +1857,11 @@ class AgentService:
                 source="ask", kind="app" if question.always else "step", service="", tool="", summary=question.text,
                 reason="", digest=question.digest, always=question.always, language=language, wait_ms=CONFIRM_TIMEOUT_MS)
             confirm["digest"] = question.digest
+        elif run.turn_id:
+            self._confirmation_cards.open(
+                card_id=question.id, turn_id=run.turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
+                source="ask", kind="step", service="", tool="", summary=question.text, reason="",
+                digest=question.digest, always=False, language=language, wait_ms=CONFIRM_TIMEOUT_MS, context_only=True)
         return {"status": "confirm", "turn_id": run.turn_id, "confirm": confirm}
 
     def _write_final(self, run: ComputerRun, final: Final, steps: list[Step]) -> dict:
@@ -2095,7 +2109,7 @@ class AgentService:
                 self._moment(), context.turns, [], ask.language,
                 background_block(self._briefs(ask.speaker.id)), summary=context.summary, say_ja=say_ja, narrated=True,
                 quote=ask.quote,
-                recall=self._recall(ask),
+                recall=self._recall(ask), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
             )
             if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 user += NEW_MEMBER_STEP
@@ -4447,6 +4461,12 @@ class AgentService:
             if card.always:
                 labels = answer_labels(language)
                 confirm.update(yes=labels["once"], no=labels["deny"], always=labels["always"])
+        elif turn_id:
+            self._confirmation_cards.open(
+                card_id=pending.id, turn_id=turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
+                source="ask", kind="tool", service="", tool=action.tool, summary=text, reason="",
+                digest=pending.digest, always=False, language=language,
+                wait_ms=0 if local else round(pending.wait_s * 1000), context_only=True)
         return {"status": "confirm", "turn_id": turn_id, "confirm": confirm}
 
     async def _confirm(self, params: dict) -> dict:
@@ -4751,7 +4771,9 @@ class AgentService:
 
     def _card_state(self, card_id: str, state: str) -> None:
         """What became of the question a permission card follows, as the history keeps it (once)."""
-        if self._permissions is not None:
+        if self._permissions is None:
+            self._confirmation_cards.move(card_id, state)
+        else:
             try:
                 self._permissions.answered(card_id, state)
             except sqlite3.Error as exc:

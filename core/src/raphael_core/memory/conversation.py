@@ -161,7 +161,7 @@ def turn_time(ms: int) -> str:
     return time.strftime("%Y-%m-%d %a %H:%M", time.localtime(ms / 1000))
 
 
-def turn_text(turn: Turn, *, detail: bool) -> str:
+def turn_text(turn: Turn, *, detail: bool, untrusted: bool = False) -> str:
     """A turn as the model reads it: the question and Raphael's line (or the member's, in a
     member's thread), and with `detail` the start of the longer text it kept (when it says more
     than the line). An exchange with another member reads as a request and its answer, and a
@@ -179,6 +179,9 @@ def turn_text(turn: Turn, *, detail: bool) -> str:
     requester, speaker = turn_speakers(turn)
     heading = "(Between assistants)\n" if turn.route == "exchange" else "(Routine)\n" if turn.route == "routine" else ""
     lines = heading + labelled_lines(requester, turn.question) + "\n" + labelled_lines(speaker, said)
+    if untrusted:
+        from ..worker.guards import neutralize
+        lines = neutralize(lines)
     if turn.quote:
         from ..agent.quotes import quote_context
         lines = quote_context(turn.quote) + "\n" + lines
@@ -187,7 +190,8 @@ def turn_text(turn: Turn, *, detail: bool) -> str:
         cut = longer if len(longer) <= DETAIL_CHARS else longer[:DETAIL_CHARS].rstrip() + "…"
         lines += "\n" + labelled_lines(f"{speaker} (detail)", cut)
     from ..agent.reactions import reaction_context
-    return lines + reaction_context(turn.reactions)
+    from ..agent.card_context import outcomes_text, source_text
+    return source_text(turn.source) + lines + reaction_context(turn.reactions) + outcomes_text(turn.card_outcomes)
 
 
 def _turn_tokens(turn: Turn) -> int:
@@ -400,7 +404,12 @@ class Conversation:
             shown.append(turn)
             tokens += cost
         shown.reverse()
-        return Context(summary.text, start + shown)
+        # Cards can settle after their originating turn was folded or fell outside the window.
+        # Keep only fresh card facts for those turns, attached to their IDs, not their old text.
+        from ..agent.card_context import outcomes_text
+        visible = {turn.id for turn in start + shown}
+        folded = [f"Turn {turn.id}: {fact}" for turn in answered if turn.id not in visible for fact in turn.card_outcomes]
+        return Context(summary.text + outcomes_text(folded), start + shown)
 
     # --- folding ---------------------------------------------------------------------------------
 

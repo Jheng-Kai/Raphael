@@ -130,13 +130,40 @@ async def test_card_validation_secret_scoping_and_single_resume(rig, platform, o
     resumed = [t for t in await rig.agent.turns(member_id=owner) if t["source"] == "connector"]
     assert len(resumed) == 1
     assert "@" + platform + "_bot" in rig.brain.chat_calls[-1]["messages"][-1]["content"]
-    assert "any message now to pair" in rig.brain.chat_calls[-1]["messages"][-1]["content"]
+    prompt = rig.brain.chat_calls[-1]["messages"][-1]["content"]
+    assert platform.title() + ": not paired; allowed people=0; pending pairings=0" in prompt
+    assert "No allowed person yet; send the bot a message to pair, then review its pairing card." in prompt
+    assert "any message now to pair" not in prompt
     rows = [list(row) for row in rig.conn.execute("SELECT * FROM secret_cards")]
     assert token not in json.dumps([rows, rig.events, resumed])
     rig.brain.chats = [chat("", ("connect_messaging", {"platform": platform})), live_said("Nothing is needed.")]
     result = await rig.ask("setup-" + platform, member_id=owner, session="again")
     assert rig.cards.cards_of(result["turn_id"]) == []
     assert "@" + platform + "_bot" in json.dumps(rig.brain.chat_calls[-1])
+
+
+@pytest.mark.parametrize("platform", list(LINKS))
+@pytest.mark.parametrize("owner", [0, 1])
+async def test_approved_pairing_is_visible_to_the_next_real_harness_prompt(rig, platform, owner):
+    card = await setup_card(rig, platform, owner)
+    token = "synthetic-paired-" + platform
+    rig.brain.chats = [live_said("The bot credential is saved.")]
+    await rig.agent.call("integrations.card_save", {"id": card.id, "value": token})
+    await rig.cards.idle()
+    account = member_account(owner, platform)
+    rig.messaging._running[account].switchboard.pairing.issue("synthetic-user", "synthetic-chat", "Synthetic person")
+    row = rig.conn.execute("SELECT id FROM messaging_pairing_cards ORDER BY rowid DESC LIMIT 1").fetchone()
+    approved = await rig.agent.call("messaging.pairing.answer", {"id": row["id"], "approve": True})
+    assert approved["card"]["state"] == "approved"
+    rig.brain.chats = [live_said("Hello. You can talk over the paired bot.")]
+    result = await rig.ask(None, member_id=owner, text="Hello", session="after-pairing")
+    assert result["status"] == "done"
+    prompt = rig.brain.chat_calls[-1]["messages"][-1]["content"]
+    assert platform.title() + ' pairing card for "Synthetic person": approved.' in prompt
+    assert platform.title() + ": paired; allowed people=1; pending pairings=0" in prompt
+    assert "The owner can talk over this bot." in prompt
+    assert "send the bot" not in prompt and "any message now to pair" not in prompt
+    assert token not in prompt and approved["card"]["code"] not in prompt
 
 
 async def test_cancelled_card_while_token_check_waits_never_connects_or_resumes(rig):

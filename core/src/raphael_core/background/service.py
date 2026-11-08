@@ -95,8 +95,8 @@ from ..brain.textnorm import authored_chinese
 from ..languages import chinese_variant
 from ..agent.failure import KINDS, AgentFailure
 from ..agent.gate import ATTACHMENT_TOOLS, MEMORY_READ_TOOLS, WEB_TOOLS, ToolGate
-from ..agent.attribution import unfinished_note
-from ..agent.history import VOICE, AgentHistory, Turn, is_unfinished
+from ..memory.conversation import turn_text
+from ..agent.history import VOICE, AgentHistory, Turn
 from ..agent.ledger import Ledger
 from ..agent.narration import PUBLIC_PROGRESS_RULES
 from ..agent.persona import (
@@ -336,15 +336,8 @@ def _prompts(
         f"Current date and time: {moment.get('date', '')} {moment.get('time', '')}, "
         f"{moment.get('weekday', '')} ({moment.get('utc_offset', '')})"
     ]
-    voice = "Raphael" if speaker.is_raphael else "You"
     if context:
-        lines = [
-            neutralize(
-                f"User: {turn.question}\n{voice}: "
-                + (unfinished_note(turn) if is_unfinished(turn) else turn.text or turn.prefix)
-            )
-            for turn in context
-        ]
+        lines = [turn_text(turn, detail=False, untrusted=True) for turn in context]
         parts.append("Conversation so far (oldest first):\n" + "\n".join(lines))
     if memory_snapshot:
         shared_only = isinstance(memory_snapshot, MemorySnapshot) and memory_snapshot.own is None
@@ -1497,6 +1490,10 @@ class BackgroundService:
             attachments=files,
             speaker=speaker,
         )
+        from ..agent.card_context import source_text
+        user += "\n" + source_text(origin.source if origin else "")
+        if current := getattr(self, "messaging_context", None):
+            user += current(speaker.id)
         from ..brain.owner import owner_context
         system += roster_prompt(self._team, speaker, language) + owner_context(self._settings)
         system += ('\nAssigned work starts NOW. Deadlines or dates in documents are context, never permission to defer. '

@@ -93,6 +93,7 @@ class Turn:
     # reads the turn (`AgentHistory.with_work`), empty otherwise.
     work: str = ""
     reactions: dict = field(default_factory=dict)
+    card_outcomes: list[str] = field(default_factory=list)
 
 
 def is_unfinished(turn: Turn) -> bool:
@@ -107,8 +108,8 @@ def is_unfinished(turn: Turn) -> bool:
 
 def is_readable(turn: Turn) -> bool:
     """Whether the model reads `turn` as part of the conversation: it was answered, or it is a request
-    of the owner's that did not finish. Not a turn that is running or waits for a yes."""
-    return turn.status == "done" or is_unfinished(turn)
+    of the owner's that did not finish, or a turn carrying a card whose current state is needed."""
+    return turn.status == "done" or is_unfinished(turn) or bool(turn.card_outcomes)
 
 
 _COLUMNS = (
@@ -389,7 +390,10 @@ class AgentHistory:
     def _with_messages(self, turns: list[Turn]) -> list[Turn]:
         saved = self.messages(turn.id for turn in turns if turn.id is not None)
         from .reactions import private_reactions
+        from .card_context import card_outcomes
+        outcomes = card_outcomes(self._conn, (turn.id for turn in turns), self._now_ms())
         for turn in turns:
+            turn.card_outcomes = outcomes.get(turn.id, [])
             turn.reactions = private_reactions(self._conn, turn.id)
             turn.messages = [event_text(m["text"]) if m["kind"] == "event" else m["text"] for m in saved.get(turn.id, []) if not (m["kind"] == "event" and is_action(m["text"]))]
         return turns
@@ -532,7 +536,9 @@ class AgentHistory:
         if count <= 0:
             return []
         condition = "" if conversation_id is None else " AND (conversation_id = ? OR scope = 'exchange')"
+        from .card_context import CARD_TURNS_SQL
         said = _READABLE if unfinished else "status = 'done'"
+        said = f"({said} OR id IN ({CARD_TURNS_SQL}))"
         rows = self._conn.execute(
             f"SELECT {_COLUMNS} FROM agent_turns WHERE scope IN ('private', 'exchange') AND {said} AND member_id = ?"
             + condition + " ORDER BY id DESC LIMIT ?",

@@ -1789,6 +1789,14 @@ PRAGMA user_version = 71;
 COMMIT;
 """
 
+# Gold YES/NO confirmations use the same durable decisions without duplicating the window card.
+_MIGRATIONS[72] = """
+BEGIN;
+ALTER TABLE permission_cards ADD COLUMN context_only INTEGER NOT NULL DEFAULT 0 CHECK(context_only IN (0,1));
+PRAGMA user_version = 72;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 
