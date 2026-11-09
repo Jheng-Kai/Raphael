@@ -202,7 +202,7 @@ class NarratedLoop:
             model=answer.model, cost_usd=answer.cost_usd if answer.usage_known else max(
                 answer.cost_usd, estimate_cost(self.model, len(str(messages)))
             ),
-            prompt_tokens=answer.prompt_tokens, completion_tokens=answer.completion_tokens,
+            usage=getattr(answer, "usage", None), prompt_tokens=answer.prompt_tokens, completion_tokens=answer.completion_tokens,
             ms=int((time.perf_counter() - began) * 1000),
         )
         if answer.content.strip():
@@ -229,7 +229,7 @@ class NarratedLoop:
 
     async def summarize(self, system: str, user: str, max_tokens: int) -> str:
         reply = await summary_reply(self.client, self.model, system=system, user=user, max_tokens=max_tokens)
-        self.ledger.add(model=reply.model, cost_usd=reply.cost_usd, prompt_tokens=reply.prompt_tokens,
+        self.ledger.add(model=reply.model, cost_usd=reply.cost_usd, usage=getattr(reply, "usage", None), prompt_tokens=reply.prompt_tokens,
                         completion_tokens=reply.completion_tokens)
         return reply.text
 

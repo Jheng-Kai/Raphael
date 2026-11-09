@@ -513,7 +513,7 @@ class TaskRun:
             began = time.perf_counter()
             reply = await self._guarded(summary_reply(self._client, self.model, system=system, user=user, max_tokens=max_tokens))
             self.touch()
-            self.ledger.add(model=reply.model, cost_usd=reply.cost_usd, prompt_tokens=reply.prompt_tokens,
+            self.ledger.add(model=reply.model, cost_usd=reply.cost_usd, usage=getattr(reply, "usage", None), prompt_tokens=reply.prompt_tokens,
                             completion_tokens=reply.completion_tokens, ms=_ms(began))
             return {"text": reply.text}
 
@@ -613,7 +613,7 @@ class TaskRun:
         self.ledger.add(
             model=turn.model,
             cost_usd=cost,
-            prompt_tokens=turn.prompt_tokens,
+            usage=getattr(turn, "usage", None), prompt_tokens=turn.prompt_tokens,
             completion_tokens=turn.completion_tokens,
             ms=_ms(began),
         )

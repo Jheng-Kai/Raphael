@@ -1476,6 +1476,9 @@ class BackgroundService:
         self._store.start(task.id)
         limits = dataclasses.replace(self._limits,seconds=min(self._limits.seconds,60),model_calls=min(self._limits.model_calls,4),tool_calls=min(self._limits.tool_calls,8)) if task.scope == 'room' else self._limits
         ledger = Ledger(self._spend)
+        # What the spend calls this work (brain/meter.py): speaking in a group, a hand-off's work, a consultation.
+        ledger.job = "room" if task.scope == "room" else task.mode if task.mode in ("work", "consult") else "task"
+        ledger.member_id = task.member_id
         selected_model = self._models.pop(task.id, task.model_ref or self._settings.get("agent_model") or DEFAULTS["agent_model"])
         selected_model = speaker.model or selected_model
         recovered = json.loads(task.continuation) if task.continuation else None

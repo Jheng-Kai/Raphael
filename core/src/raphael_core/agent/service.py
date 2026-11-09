@@ -1466,6 +1466,7 @@ class AgentService:
         """One request, from the router to the reply. Never raises for a failure of the world."""
         began = time.perf_counter()
         ledger = Ledger(self._spend)
+        ledger.job, ledger.member_id = "chat", ask.speaker.id
         ask.ledger = ledger
         if not ask.text.strip():
             return self._finish(ask, "unclear", "negative", phrase(ask.language, "unclear"), ledger)

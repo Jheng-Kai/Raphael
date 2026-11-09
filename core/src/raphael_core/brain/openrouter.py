@@ -27,6 +27,8 @@ if TYPE_CHECKING:
 
 import httpx
 
+from .meter import Usage
+from .meter import chat as _chat_usage
 from .settings import DEFAULTS
 from .streams import MalformedStream, chat_completion
 from ..failures import classify, redact
@@ -75,6 +77,7 @@ class Completion:
     completion_tokens: int
     latency_ms: int  # of the HTTP call
     usage_known: bool = True
+    usage: Usage | None = field(default=None, repr=False)  # the exact split (brain/meter.py)
 
 
 @dataclass
@@ -97,6 +100,7 @@ class TextCompletion:
     latency_ms: int  # of the HTTP call
     sources: list[dict[str, str]]  # {"title", "url"} of the pages a web search drew on
     usage_known: bool = True
+    usage: Usage | None = field(default=None, repr=False)  # the exact split (brain/meter.py)
 
 
 @dataclass
@@ -153,6 +157,8 @@ class ChatTurn:
     # Why the reply ended as the provider says it ("stop", "tool_calls", "length" when the output limit
     # cut it off), or "" when it does not say.
     finish_reason: str = ""
+    # The call's exact split (brain/meter.py): cache reads and writes, reasoning, the cost the provider reported.
+    usage: Usage | None = field(default=None, repr=False)
 
 
 @dataclass
@@ -429,6 +435,7 @@ def _to_completion(reply: _Reply, requested_model: str) -> Completion:
         completion_tokens=_usage_count(usage, "completion_tokens"),
         latency_ms=reply.latency_ms,
         usage_known=body.get("_usage_known", _known_cost(usage)),
+        usage=_chat_usage(usage),
     )
 
 
@@ -496,6 +503,7 @@ def _to_text_completion(reply: _Reply, requested_model: str) -> TextCompletion:
         latency_ms=reply.latency_ms,
         sources=_sources(message.get("annotations")),
         usage_known=body.get("_usage_known", _known_cost(usage)),
+        usage=_chat_usage(usage),
     )
 
 
@@ -600,6 +608,7 @@ def _to_chat_turn(reply: _Reply, requested_model: str) -> ChatTurn:
         latency_ms=reply.latency_ms,
         usage_known=_known_cost(usage),
         finish_reason=choice["finish_reason"] if isinstance(choice.get("finish_reason"), str) else "",
+        usage=_chat_usage(usage),
     )
 
 

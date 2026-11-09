@@ -9,6 +9,7 @@ import time
 
 import httpx
 
+from ..meter import responses as responses_usage
 from ..model_ref import EFFORTS
 from ..openrouter import (
     ChatTurn, ChatToolCall, Completion, OpenRouterError, TextCompletion, ToolCall, ToolPlan, request_timeout, retry_after_of,
@@ -252,7 +253,7 @@ class ChatGPTProvider:
         return ChatTurn("".join(text), calls, completed.get("model", model), 0.0,
             int(usage.get("input_tokens", 0)), int(usage.get("output_tokens", 0)),
             int((time.perf_counter() - started) * 1000), usage_known=True, responses_output=output,
-            finish_reason="length" if cut else "")
+            finish_reason="length" if cut else "", usage=responses_usage(usage))
 
     async def chat_text(self, *, model, system, user, timeout_s, max_tokens, fallbacks=(), plugins=(), reasoning_effort="none",
                         _cache_key="raphael-text"):
@@ -263,7 +264,7 @@ class ChatGPTProvider:
             max_tokens=max_tokens, reasoning_effort=reasoning_effort,
             _retain_reasoning=False, _cache_key=_cache_key)
         return TextCompletion(result.content, result.model, 0.0, result.prompt_tokens,
-                              result.completion_tokens, result.latency_ms, [], usage_known=True)
+                              result.completion_tokens, result.latency_ms, [], usage_known=True, usage=result.usage)
 
     async def complete_json(self, *, schema, schema_name, system, user, **kwargs):
         import jsonschema
@@ -278,7 +279,8 @@ class ChatGPTProvider:
                 raise ValueError
         except (ValueError, jsonschema.ValidationError):
             raise OpenRouterError(200, "invalid_request", "ChatGPT returned invalid structured output") from None
-        return Completion(data, result.model, 0.0, result.prompt_tokens, result.completion_tokens, result.latency_ms)
+        return Completion(data, result.model, 0.0, result.prompt_tokens, result.completion_tokens, result.latency_ms,
+                          usage=result.usage)
 
     async def plan_tools(self, *, system, user, **kwargs):
         result = await self.chat_tools(messages=[{"role": "system", "content": system},

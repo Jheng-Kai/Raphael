@@ -20,6 +20,7 @@ from pathlib import Path
 from .process import Child, PrivateFiles, secure_directory
 from .native_diagnostics import capture as native_capture, directory as native_directory, enabled as native_enabled
 from ..quota import parse_quota
+from ...brain.meter import codex as codex_usage, delta as usage_delta
 from ...failures import classify, redact
 from ...clock import wall_clock_ms
 
@@ -94,6 +95,8 @@ class Driver:
         self._diagnostic_secrets = []
         self._steers = {}
         self._last_tool_error = None
+        # A Codex thread's token total before this turn's first call (brain/meter.py).
+        self._turn_base = None
 
     async def steer(self, text):
         if self.name != "codex" or not self.child or not self.session or not self.turn or not text.strip():
@@ -416,6 +419,9 @@ class Driver:
                            if isinstance(value, dict) and type(value.get("contextWindow")) is int]
                 if windows:
                     usage["context_window"] = min(windows)
+                # Every model's running total for the session, subagents' included (brain/meter.py `claude_code_rows`).
+                if isinstance(packet.get("modelUsage"), dict):
+                    usage["model_usage"] = packet["modelUsage"]
                 yield Event("usage", data=usage)
                 if packet.get("is_error") or packet.get("subtype") != "success":
                     # api_error_status is the HTTP status of the API error that ended the turn.
@@ -574,12 +580,19 @@ class Driver:
                         "ok": item.get("status") == "completed"})
             elif method == "thread/tokenUsage/updated":
                 usage = params.get("tokenUsage") or {}
+                total, last = codex_usage(usage.get("total")), codex_usage(usage.get("last"))
+                # The thread's total adds up every turn it ever had; what it held before this turn's first call
+                # is the base the turn's usage is counted from (brain/meter.py).
+                if self._turn_base is None:
+                    self._turn_base = usage_delta(total, last)
                 # Native context accounting, including history, is separate from ledger's last call.
                 yield Event("usage", data={**usage.get("last", {}),
                     "context_tokens": (usage.get("last") or {}).get("totalTokens", 0),
-                    "context_window": usage.get("modelContextWindow")})
+                    "context_window": usage.get("modelContextWindow"),
+                    "meter": usage_delta(total, self._turn_base).as_dict()})
             elif method == "turn/started":
                 self.turn = (params.get("turn") or {}).get("id")
+                self._turn_base = None
             elif method == "turn/completed":
                 self._close_steers()
                 turn = params.get("turn") or {}
