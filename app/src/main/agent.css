@@ -651,9 +651,9 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 
 /* Keep the conversation surface flat and opaque through its parent. */
 .mb-chat { background: none; }
-.ra-body > .ans { max-width: min(60ch, 100%); border: 0; border-radius: var(--r-lg); }
+.ra-body > .ans { max-width: min(60ch, 100%); border: 0; border-radius: var(--pa-br); }
 /* The message's first column holds the 60ch limit (one font for it), so the bubble and its actions meet. */
-.chat-message > .ans { max-width: 100%; border: 0; border-radius: var(--r-lg); }
+.chat-message > .ans { max-width: 100%; border: 0; border-radius: var(--pa-br); }
 
 .bubble .message-quote, .bubble .quote-author { color: var(--on-bubble); border-color: currentColor; }
 /* A link in a neutral bubble stays in the link colour; only a bubble that wears a member's colour needs its own words colour to read. */

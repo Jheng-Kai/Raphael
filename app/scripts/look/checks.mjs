@@ -5325,7 +5325,9 @@ export function checkRendered(name, context = {}) {
       require(visible(element), "owner and assistant messages are visible");
       const style = getComputedStyle(element);
       require(style.fontSize === "15px" && style.lineHeight === "22px", "messages use 15px type on a 22px line, as Grok Bot's");
-      require(style.borderTopLeftRadius === "12px", "messages use the shared card radius");
+      // A one-line bubble is a pill, as Grok Bot's (dev/u-bubble, 2026-11-10): half its line plus its padding.
+      const pill = parseFloat(style.lineHeight) / 2 + parseFloat(style.paddingTop);
+      require(Math.abs(parseFloat(style.borderTopLeftRadius) - pill) <= 1, `messages are pills: radius ${style.borderTopLeftRadius}, half a line plus padding ${pill}px`);
     }
     require(getComputedStyle(answer).borderTopWidth === "0px", "assistant bubble has no decorative border");
     plainWords();
