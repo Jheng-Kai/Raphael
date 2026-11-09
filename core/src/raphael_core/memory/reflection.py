@@ -240,16 +240,45 @@ def reflection_message(today: date, own: MemoryFile, shared: MemoryFile, turns: 
     a discussion, which a tool did not write), each with its own local date and time: a turn may be days
     old, and its relative dates are read against the day it was said."""
     parts = [f"Today: {today.isoformat()} ({today.strftime('%A')})", _block("USER.md", shared), _block("MEMORY.md", own)]
-    lines = []
-    for turn in turns:
-        foreign = turn.id in outside
-        said = OUTSIDE if foreign else turn.text or turn.prefix
-        extra = ""
-        if not foreign and turn.route in ("discuss", "chat") and turn.detail and turn.detail != said:
-            extra = f"\n{agent}, at more length: {turn.detail[:600]}"
-        lines.append(f"[turn {turn.id}, {turn_time(turn.created_at_ms)}] User: {turn.question}\n{agent}: {said}{extra}")
+    lines = [_turn_line(turn, outside, agent) for turn in turns]
     parts.append("<turns>\n" + "\n\n".join(lines) + "\n</turns>")
     return "\n\n".join(parts)
+
+
+# What one pass may read (owner, 2026-11-09: 「長度永遠不是錯誤」). A CLI member's brain starts each pass from a fresh
+# context of 16,000 characters at most (memory.compression.FRESH_CONTEXT_CHARS); a pass that was shown more failed,
+# kept its watermark and stopped the memory learning (12 times on 2026-11-09). It now reads the newest whole turns
+# that fit beside the files, each held to TURN_CHARS, and the watermark moves past the older ones it left.
+REFLECTION_CHARS = 12000
+TURN_CHARS = 2000
+
+
+def _clip(text: str) -> str:
+    return text if len(text) <= TURN_CHARS else text[:TURN_CHARS - 1] + "…"
+
+
+def _turn_line(turn: Turn, outside: Collection[int], agent: str) -> str:
+    foreign = turn.id in outside
+    said = OUTSIDE if foreign else turn.text or turn.prefix
+    extra = ""
+    if not foreign and turn.route in ("discuss", "chat") and turn.detail and turn.detail != said:
+        extra = f"\n{agent}, at more length: {turn.detail[:600]}"
+    return f"[turn {turn.id}, {turn_time(turn.created_at_ms)}] User: {_clip(turn.question)}\n{agent}: {_clip(said)}{extra}"
+
+
+def readable_turns(today: date, own: MemoryFile, shared: MemoryFile, turns: Sequence[Turn], outside: Collection[int],
+                   agent: str = "Raphael", limit: int = REFLECTION_CHARS) -> list[Turn]:
+    """The newest of `turns` whose reflection message stays within `limit` characters, oldest first; the newest
+    turn always, so that every pass reads something and moves the watermark."""
+    size = len(reflection_message(today, own, shared, [], outside, agent))
+    picked: list[Turn] = []
+    for turn in reversed(turns):
+        line = len(_turn_line(turn, outside, agent)) + 2
+        if picked and size + line > limit:
+            break
+        picked.append(turn)
+        size += line
+    return picked[::-1]
 
 
 class Reflector:
