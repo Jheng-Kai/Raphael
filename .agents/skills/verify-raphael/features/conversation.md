@@ -1186,9 +1186,15 @@ npm run look -- composer-voice-recording composer-voice-sent composer-stop-voice
 
 ## The owner's bubble and link cards (2026-11-02)
 
-The owner's bubble in a member's own conversation wears that member's colour (`owner-bubble.ts`, set in `drawFaces` so an avatar change follows at once); since 2026-11-06 Raphael's conversation wears his warm gold with dark words (R-UI-81), and group chats stay neutral. Since 2026-11-08 a reply's links are chips in its words (the site's mark, then its name; a bare
+The owner's bubble in a member's own conversation wears that member's colour (`owner-bubble.ts`, set in `drawFaces` so an avatar change follows at once); since 2026-11-07 Raphael is the first blue slime and his conversation wears that blue like any member's (R-UI-81), and group chats stay neutral. Since 2026-11-08 a reply's links are chips in its words (the site's mark, then its name; a bare
 address says its site, then the page's title once read; an address of this machine says itself once), with no row of
 link cards under the reply, and the page's preview shows under the pointer (`link-previews.ts`, as Grok Bot's).
+
+Since 2026-11-09 (owner: 「我們的太胖了」 beside Grok Bot's 36 px pill) every bubble is as slim as Grok Bot's:
+8 px above and below, 12 px at the sides (`--pa-bpy`, `--pa-bpx` in `agent.css`), and corners of half a line plus
+that padding (`--pa-br`), so a one-line message is a 38 px pill and a longer one keeps the same corners. The
+owner's bubble, a member's reply in a conversation or a group and the conversation between members share it;
+short windows no longer set their own padding.
 
 ```powershell
 npm run look -- owner-bubble-member owner-bubble-other-member owner-bubble-light-character owner-bubble-long owner-bubble-chief owner-bubble-room link-chips --theme both --width 1120,720,1920x1080

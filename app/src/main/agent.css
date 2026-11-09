@@ -54,8 +54,11 @@
   --pa-lh-b: 22px;
   --pa-fs-a: var(--fs-md);
   --pa-lh-a: 22px;
-  --pa-bpy: var(--sp-3);
-  --pa-bpx: var(--sp-4);
+  /* Bubbles as slim as Grok Bot's: a one-line message is a 38 px pill, and longer ones keep its corners
+     (owner, 2026-11-09: 「我們的太胖了」 beside Grok Bot's 36 px pill; ours was 46 px). */
+  --pa-bpy: var(--sp-2);
+  --pa-bpx: var(--sp-3);
+  --pa-br: calc(var(--pa-lh-b) / 2 + var(--pa-bpy));
   --pa-ra-face: calc(26px + 10 * var(--pa-u));
   --pa-ra-gap: calc(10px + 4 * var(--pa-u));
   /* System lines and day dividers are 12 px grey, as Grok Bot's. */
@@ -149,13 +152,13 @@
 .message-actions:has(.queued-mark) { opacity: 1; }
 .tn.is-new { animation: ra-turn-in 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .me { display: flex; align-items: flex-end; justify-content: flex-end; gap: var(--sp-1); }
-.bubble { max-width: min(var(--pa-bw), 78%); padding: var(--pa-bpy) var(--pa-bpx); border-radius: var(--r-lg); background: var(--bubble); color: var(--on-bubble); font: var(--pa-fs-b)/var(--pa-lh-b) var(--voice); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.bubble { max-width: min(var(--pa-bw), 78%); padding: var(--pa-bpy) var(--pa-bpx); border-radius: var(--pa-br); background: var(--bubble); color: var(--on-bubble); font: var(--pa-fs-b)/var(--pa-lh-b) var(--voice); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .ra { display: grid; grid-template-columns: var(--pa-ra-face) minmax(0, 1fr); gap: var(--pa-ra-gap); align-items: start; max-width: 88%; }
 .ra-face { display: block; width: var(--pa-ra-face); height: var(--pa-ra-face); margin-top: var(--sp-1); }
 .ra-face .av { --av: var(--pa-ra-face) !important; }
 .ra-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-width: 0; }
 .ans { margin: 0; font: var(--pa-fs-a)/var(--pa-lh-a) var(--voice); color: var(--text); overflow-wrap: anywhere; user-select: text; }
-.ra-body > .ans { justify-self: start; max-width: 100%; padding: var(--pa-bpy) var(--pa-bpx); border: 0; border-radius: var(--r-lg); background: var(--panel); white-space: pre-wrap; }
+.ra-body > .ans { justify-self: start; max-width: 100%; padding: var(--pa-bpy) var(--pa-bpx); border: 0; border-radius: var(--pa-br); background: var(--panel); white-space: pre-wrap; }
 .ans.progress { color: var(--text-2); }
 /* As Grok Bot's, a message's actions sit beside its bubble, centred on it: the message is one column of its parts with
    the actions in a second (a first, for the owner's), on the bubble's row. */
@@ -181,7 +184,7 @@
 /* The member's colour also marks the controls of its conversation: send and stop (memberAccent in owner-bubble.ts). */
 .mb-chat[data-member-bubble] .composer .cmp-pair { --accent-icon: var(--member-accent); --accent-text: var(--member-accent); }
 /* A reply is a fill with a barely seen edge, as every surface of Grok Bot's is; drawn inside, so no size changes. */
-.chat-message > .ans { padding: var(--pa-bpy) var(--pa-bpx); border: 0; border-radius: var(--r-lg); background: var(--panel); box-shadow: inset 0 0 0 1px var(--ans-edge); }
+.chat-message > .ans { padding: var(--pa-bpy) var(--pa-bpx); border: 0; border-radius: var(--pa-br); background: var(--panel); box-shadow: inset 0 0 0 1px var(--ans-edge); }
 .message-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .ans .message-text { white-space: normal; }
 .owner-message .message-text { white-space: pre-wrap; }
@@ -639,7 +642,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 }
 
 @media (max-height: 860px) {
-  .page-agent { --pa-gap: var(--sp-5); --pa-gap-in: var(--sp-3); --pa-bpy: var(--sp-3); }
+  .page-agent { --pa-gap: var(--sp-5); --pa-gap-in: var(--sp-3); }
   .ra-scroll { padding: var(--sp-1) var(--sp-1) var(--sp-2); }
   .ra-body { gap: var(--sp-1); }
   .ra-dock { padding-top: var(--sp-1); padding-bottom: var(--sp-3); }

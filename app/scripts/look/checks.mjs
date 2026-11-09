@@ -2293,6 +2293,9 @@ export function checkRendered(name, context = {}) {
     const [a, b] = [light(style.backgroundColor), light(style.color)], ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
     // R-UI-81: white words hold Grok Bot's 3.4:1 on a coloured bubble; dark words read at 4.5:1.
     require(ratio >= (b > a ? 3.39 : 4.5), `the words read on the bubble: ${ratio}`);
+    // As slim as Grok Bot's 36 px pill (owner, 2026-11-09: 「我們的太胖了」): one line is a 38 px pill.
+    const box = bubble.getBoundingClientRect(), lines = Math.round((box.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)) / parseFloat(style.lineHeight));
+    if (lines === 1) require(box.height <= 40 && parseFloat(style.borderTopLeftRadius) >= box.height / 2 - 1, `a one-line message is a slim pill (${Math.round(box.height)} px, radius ${style.borderTopLeftRadius})`);
     const probe = document.createElement('i'); probe.style.background = 'var(--bubble)'; document.documentElement.append(probe);
     const neutral = getComputedStyle(probe).backgroundColor; probe.remove();
     if (name === "owner-bubble-neutral") {
