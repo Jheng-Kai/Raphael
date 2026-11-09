@@ -23,25 +23,29 @@ name and the role typed in place (Raphael's name is not typed). Under them the s
 column on the left, as Settings' own, each an icon and a name, and only the chosen kind is shown beside
 it (owner, 2026-11-08: 「左側會有一些分區…不要就這樣子長長一條」); a page narrower than 680 px puts the
 kinds in a row of small pills that wrap above it. What the panel beside the page shows (routines,
-messaging) is not here. The kinds: 個性與指示 (personality and instructions, one line each, a press opens
-the box in place and blur saves it), 技能與指令 (skills as names with switches, a press opens the skill's
-own view, a plus adds one from a link, delete waits in a ⋯ behind a second press; commands), 模型 (the
-composer's own dropdown), 工具 (the apps that are on, as switches over the member's `tools` list), 語音與通知
-(a dropdown of the voices and the notify switch; Raphael's dropdown writes `tts_fish_voice`), 記憶 (both
-documents, read when the kind is chosen), 一般 (the drafts switch and the group). Raphael has no
-個性與指示 or 工具 and no group. A kind with one section has no name over its list. There is no 編輯 button
-anywhere: edits are pencils, adds are pluses. Speed and language of the voice have no setting in the core.
+messaging) is not here. The kinds are the same for every member and for Raphael, in the owner's order
+(owner, 2026-11-09): 記憶 (the member's own memory alone, read as the page opens; each entry a tinted card of one
+line that opens to its whole text when pressed; the memory everyone shares is in Settings alone), 工具 (each
+connected app with its own mark and a switch over the member's `tools` list, then the drafts switch under them),
+技能與指令 (skills as names with switches, a press opens the skill's own view, a plus adds one from a link, delete
+waits in a ⋯ behind a second press; commands), 個性與指示 (personality and instructions, one line each, a press
+opens the box in place and blur saves it; Raphael's too), 通知 (one switch). The model is chosen at the composer
+alone, members have no voice (the release has none), and the group is the sidebar's. A cover picture moves up and
+down as Notion's Reposition: 調整位置 in the cover's menu, then the picture follows the pointer and 取消 / 儲存位置
+stand where the change icon was (`members.update {cover_position}`, 0 to 100, 50 by default). Raphael's name and
+role are not typed. A kind with one section has no name over its list. There is no 編輯 button anywhere: edits are
+pencils, adds are pluses.
 
 Inspect every contact sheet and, at light 720 and dark 1120, the full images of member-settings,
-member-settings-skills, member-settings-memory and member-settings-cover. Compare the dropdowns with
+member-settings-skills, member-settings-memory, member-settings-memory-open, member-settings-tools and member-settings-cover-picture. Compare the dropdowns with
 Settings' rows (words and a chevron, no box), the tinted lists with the panel's routine list and the
 face edit with the panel's. The old scene names are kept and now drive the page: details-memory,
-details-skills, details-commands, details-voice, raphael-skills, memory-editing, memory-saved,
-member-edit, member-edit-memory, settings-raphael-memory, settings-raphael-voice, speaker-draft-member,
+details-skills, details-commands, details-notify, raphael-skills, memory-editing, memory-saved,
+member-edit, member-edit-memory, settings-raphael-memory, speaker-draft-member,
 speaker-draft-chief, member-draft-switch, global-private-memory and primary-contact-set.
 
 ```powershell
-npm run look -- member-settings member-settings-raphael member-settings-skills member-settings-model member-settings-tools member-settings-voice member-settings-general member-settings-field member-settings-skill member-settings-command member-settings-memory member-settings-cover member-settings-cover-picture member-settings-back details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
+npm run look -- member-settings member-settings-raphael member-settings-skills member-settings-tools member-settings-notify member-settings-field member-settings-skill member-settings-command member-settings-memory member-settings-memory-open member-settings-cover member-settings-cover-picture member-settings-back details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
 ```
 
 ## Private member voice chat (2026-11-05)
@@ -74,7 +78,7 @@ deletion. Restart closes interrupted calls and retains their transcript.
 Voice chat is not released yet (owner, 2026-11-06, R-UI-106): the voice button records voice messages only, and the call scenes come back with the feature.
 
 Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
-the busy dialog with dialog-caption-confirm, the settings controls with details-voice, the
+the busy dialog with dialog-caption-confirm, the settings controls with details-notify, the
 receipt shell with card-mcp-done, and the
 repair note with the existing missing-service note. A call receipt is a standalone
 history card.
@@ -99,7 +103,7 @@ live model/provider/network and native restart persistence require separate acce
 
 Member details > Voice keeps the voice choice and the notify switch only; the voice-memo
 and read-aloud switches, the reply Play/Pause control and the transcript are gone (owner
-decision). Selected scene: details-voice; unit coverage asserts no memo control or toggle.
+decision). Selected scene: details-notify; unit coverage asserts no memo control or toggle.
 
 ## Member panel tabs (2026-11-05)
 
@@ -157,30 +161,22 @@ member sets it up there, with a card for a token, and share answers with a templ
 member-avatar, slime-picker, work-messaging-setup, work-messaging-pairing, messaging-paired-aligned. The sidebar plus is the member creation entry; verify the
 complete flow for creation changes.
 
-A member's face picker in the details panel has two tabs, 史萊姆 · 生成, as Grok Bot's (owner, 2026-11-07 night), and
-keeps the slimes' width on either tab. 生成 reads `settings.get`: with no `image_model` it says so in one line with one button, 選圖片模型, that
-opens Settings › Models at the image model's row (missing.ts `data-missing-repair="models"`, resource `image`); with one
-it is the member's face, a field for a few words (Enter presses 生成) and 生成. One press is one
-`members.avatar_generate` (a spinner and no second press while it draws; the core never retries or switches model);
-the candidate stands round in the face's place with 使用 (primary) and 再生成一張, the words kept. 使用 saves it through
-`members.set_avatar` and closes the picker; the member's face is then that picture everywhere `faceHTML` draws it
-(`mb-av-pic`, from `avatar_url`), the slime's place. A failure says its kind in plain words (avatar-generate.ts), with
-去設定 where the core names a fix; the window learns the kind only through commands.rs `window_error`, which passes
-`kind`, `repair` and `resource` of this one call and nothing else of the error's data. The Tauri timeout for the
-call is 300 s. With a model chosen, a "missing" answer reads as that model being unable to draw now (with 去設定), never
-as no model chosen. Under the pointer the face itself dims along its outline (a slime's base and hat included, never a circle that leaves corners) with a white pencil in its middle (owner, 2026-11-08). Scenes:
-member-face-hover, avatar-generate-off, avatar-generate, avatar-generate-used.
+A member's face is a slime (R-UI-116, owner 2026-11-09: 「生成拿掉 我們改成把史萊姆的種類與造型大幅擴增」): its picker in
+the details panel and on the settings page shows the slimes alone, with no 生成 tab and no picture drawn by an image
+model. A picture drawn earlier still shows where it is the face (`mb-av-pic`, from `avatar_url`). Under the pointer the
+face itself dims along its outline (a slime's base and hat included, never a circle that leaves corners) with a white
+pencil in its middle (owner, 2026-11-08). Scenes: member-face-hover, slime-picker.
 
 ## Driving it with look
 
 ```powershell
 npm run look -- members-expanded sidebar-folders --theme both --width 1120,720,1920x1080
-npm run look -- details member-avatar member-edit details-memory details-routines details-skills details-commands details-voice --theme both --width 1120,720,1920x1080
+npm run look -- details member-avatar member-edit details-memory details-routines details-routine-view details-routine-hover details-skills details-commands details-notify --theme both --width 1120,720,1920x1080
 npm run look -- sidebar-folders member-text --theme both --width 1120,720,1920x1080
 npm run look -- member-delete member-conversation-sections --theme both --width 1120,720,1920x1080
 npm run look -- member-maker member-maker-chosen member-maker-greeting member-maker-made --theme both --width 1120,720,1920x1080
 npm run look -- slime-states slime-picker slime-sizes slime-gallery slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-sharp slime-pointer slime-cost --theme both --width 1120,720,1920x1080
-npm run look -- member-face-hover slime-picker avatar-generate-off avatar-generate avatar-generate-used --theme both --width 1120,720,1920x1080
+npm run look -- member-face-hover slime-picker --theme both --width 1120,720,1920x1080
 ```
 
 These walk the owner's flows to their end: `member-delete`
@@ -310,7 +306,7 @@ The primary takes Raphael's large top slot in the member column, collapsed strip
 Raphael's row has no destructive menu wherever it moves; an ordinary primary keeps its member menu at the top. Raphael can be chosen again from another member's primary picker. The primary holds the chief capability, is required in new or edited rooms and writes their single wrap-up. Existing rooms missing a newly selected chief require membership adjustment; in-flight work is not replayed. Opening the Conversation page and Alt+Space quick questions retain their existing thread behavior; this change only exchanges display positions.
 
 ```powershell
-npm run look -- members-expanded sidebar-folders member-row-menu primary-contact-column primary-contact-menu primary-contact-picker primary-contact-set primary-room-picker primary-room-members primary-calendar-members primary-routine-members primary-room-chief --theme both --width 1120,720,1920x1080
+npm run look -- members-expanded sidebar-folders member-row-menu primary-contact-column primary-contact-menu primary-contact-picker primary-contact-set primary-room-picker primary-room-members primary-calendar-members primary-room-chief --theme both --width 1120,720,1920x1080
 ```
 
 `primary-contact-column` and `primary-contact-strip` check the exchanged positions, Raphael's emblem and localized name tooltips; only the sidebar chief has a star. `member-row-menu` asserts the grouped row menu, its hairlines and the red 刪除 last. `primary-contact-menu` opens Raphael's menu while he is the primary and asserts 換成其他成員 last, after a hairline; `primary-contact-picker` opens it from 小晴's menu while she is the primary, excludes her while offering Raphael, and after 小森 is clicked has one checked choice, 取消 immediately before 設為主要 and no write before confirmation. `primary-contact-set` asserts one `members.set_primary` call, the updated top row, badge-free details and no room/task/conversation mutation. The board scene also checks top-card visibility before/after fit, natural panel heights and no overlap. Member/new-conversation/mention/calendar/routine/room scenes assert the exchanged order; room choices require the current chief and routine selection stays unchanged. The member-picker driver uses the compact picker when available and the real new-conversation picker at wide widths.
@@ -1060,7 +1056,7 @@ Chinese owner hint is shortened without changing typography (R-VAULT-01).
 The existing look checks guard metadata leakage, disclosure state, service names,
 Slack control geometry and a single-character final line in the vault hint.
 
-npm run look -- routine-trigger-slack automation-event-channel automation-event-repository automation-event-pick member-template-preview member-template-imported member-template-export member-template-starter template-preview template-preview-warning template-skill-expanded template-export-review member-panel-details calm-thread vault-list store-home member-greeting-choices reaction-row room-thread-open local-permission-card --theme both --width 1120,720,1920x1080
+npm run look -- member-template-preview member-template-imported member-template-export member-template-starter template-preview template-preview-warning template-skill-expanded template-export-review member-panel-details calm-thread vault-list store-home member-greeting-choices reaction-row room-thread-open local-permission-card --theme both --width 1120,720,1920x1080
 
 Inspect every contact sheet, full-size light 720/dark 1120 views of the seven
 review consumers, the Slack row at all sizes and the folded/expanded previews.

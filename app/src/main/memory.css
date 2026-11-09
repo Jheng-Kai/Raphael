@@ -9,8 +9,16 @@
 .mem .ctl { display: inline-flex; gap: var(--sp-1); align-items: center; }
 .mem .btn.icon { width: 32px; min-height: 32px; padding: 0; }
 .mem-doc { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; min-width: 0; padding: var(--sp-1); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
-.mem-entry { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; min-width: 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); }
-.mem-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-sm); line-height: 1.6; color: var(--text); }
+/* The entries are cards of their own on the page, not rows on one card: each a line until it is pressed open. */
+.mem-doc.mem-cards { gap: var(--sp-1); padding: 0; background: none; }
+.mem-entry { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; min-width: 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.mem-entry > .mem-sum { display: flex; align-items: flex-start; gap: var(--sp-2); min-width: 0; list-style: none; cursor: pointer; }
+.mem-entry > .mem-sum::-webkit-details-marker { display: none; }
+.mem-entry > .mem-sum > .i { flex: none; width: 16px; height: 16px; margin-top: calc((1.6em - 16px) / 2); color: var(--text-3); transition: transform 0.16s ease; }
+.mem-entry[open] > .mem-sum > .i { transform: rotate(180deg); }
+.mem-entry:not([open]) .mem-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mem-text { flex: 1; min-width: 0; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-sm); line-height: 1.6; color: var(--text); }
+@media (prefers-reduced-motion: reduce) { .mem-entry > .mem-sum > .i { transition: none; } }
 .mem-none { margin: 0; padding: var(--sp-3); font-size: var(--fs-sm); color: var(--text-3); }
 .mem-from { font-size: var(--fs-xs); color: var(--text-3); }
 .mem-tag { display: inline-block; margin-right: var(--sp-1); padding: 0 var(--sp-2); border-radius: var(--r-pill); background: var(--accent-soft); color: var(--accent-text); font-size: var(--fs-xs); line-height: 1.6; vertical-align: 1px; }

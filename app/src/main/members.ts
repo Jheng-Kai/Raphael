@@ -30,9 +30,6 @@ export const ROLE_MAX = 24;
 export const PERSONALITY_MAX = 2000;
 export const INSTRUCTIONS_MAX = 2000;
 export const GROUP_NAME_MAX = 24;
-/** The longest title and prompt of a routine (routines.*). */
-export const ROUTINE_TITLE_MAX = 40;
-export const ROUTINE_PROMPT_MAX = 1000;
 
 /** The composer's placeholder in a member's thread: the same English words in every language, as "Ask Raphael" is. */
 export const memberPlaceholder = (name: string): string => t("members.placeholder", { p0: name });
@@ -191,9 +188,6 @@ const tr = t as unknown as (key: MessageKey) => string;
 /** The name of day `n` of the week, 0 being Sunday. */
 export const dayName = (n: number): string => tr(DAY_KEYS[((n % 7) + 7) % 7]);
 
-/** A time of day as the core keeps it: `HH:MM`, 24 hours. */
-export const isTime = (text: string): boolean => /^([01]\d|2[0-3]):[0-5]\d$/.test(text);
-
 /** How a routine's schedule is said in a row: 「每天 09:00」, 「每週日 20:00」, 「每 3 小時」. */
 export type RoutineTrigger = Pick<Routine, "schedule"> & Partial<Pick<Routine, "when" | "app_name">>;
 
@@ -239,9 +233,6 @@ export function routineStatus(routine: Routine): string {
   const date = (value: number | null | undefined): string => value ? `${formatDate(value)} ${formatClock(value)}` : t("auto.notYet");
   return t("auto.triggerStatus", { p0: date(routine.last_checked), p1: date(routine.last_run) }) + (routine.last_error ? `\n${routine.last_error}` : "");
 }
-
-/** The intervals the 每隔幾小時 dropdown offers, in hours. */
-export const HOUR_STEPS: readonly number[] = [1, 2, 3, 4, 6, 8, 12, 24];
 
 // ---------- group sources ----------
 

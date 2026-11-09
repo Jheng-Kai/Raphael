@@ -406,8 +406,8 @@ test("a closed details panel reads nothing while work runs, and the settings pag
   await openDetails();
   expect(read()).not.toContain("memory.get"); expect(api.membersSkillsList).not.toHaveBeenCalled();
   agent.showSettings(3); await flush();
-  // The memory is a kind of the page's own, read when it is chosen.
-  expect(read()).not.toContain("memory.get");
+  // The memory is the page's first kind, read as the page opens (owner, 2026-11-09).
+  expect(read()).toContain("memory.get");
   expect(api.membersSkillsList).toHaveBeenCalledWith(3); expect(api.membersCommandsList).toHaveBeenCalledWith(3);
   agent.hide();
 });
@@ -819,7 +819,7 @@ test("regenerating the latest member reply asks the same question in that member
   agent.hide();
 });
 
-test("routine notifications refresh the open panel immediately and keep the routine being edited", async () => {
+test("routine notifications refresh the open panel immediately and keep the routine being read", async () => {
   mount();
   await flush();
   await pick(3);
@@ -830,19 +830,13 @@ test("routine notifications refresh the open panel immediately and keep the rout
   await flush();
   expect($(".mb-rts").textContent).toContain("Daily review");
   $('[data-det="routine-open"]').click();
-  const title = document.querySelector<HTMLInputElement>("#au-title")!;
-  title.focus();
-  title.value = "My unsaved title";
-  title.setSelectionRange(3, 5);
   const scroll = $(".mb-det-scroll");
   scroll.scrollTop = 84;
   api.routinesList.mockResolvedValue({ routines: [routine, { ...routine, id: 10, title: "New routine" }] });
   send({ type: "RoutinesChanged", member_id: 3 });
   await flush();
   expect($(".mb-rts").textContent).toContain("New routine");
-  expect(document.querySelector<HTMLInputElement>("#au-title")!.value).toBe("My unsaved title");
-  expect(document.activeElement).toBe(document.querySelector("#au-title"));
-  expect(document.querySelector<HTMLInputElement>("#au-title")!.selectionStart).toBe(3);
+  expect(document.querySelector(".mb-dialog.rv-dialog .rv-prompt")!.textContent).toBe("Review");
   expect(scroll.scrollTop).toBe(84);
 });
 
@@ -881,7 +875,7 @@ test("member notifications refresh names, groups, unread dots and the open heade
   expect($('.mb-col [data-member="4"] .mb-dot')).not.toBeNull();
 });
 
-test("memory notifications refresh the visible own and shared lists with correct scope", async () => {
+test("memory notifications refresh the member's own memory on its page, and the shared one is not there", async () => {
   const document = (text: string) => ({ text, revision: "r", chars: text.length, entries: text ? 1 : 0, limit: 2200, summary: null });
   api.core.mockImplementation(async (method: string) => method === "memory.get" ? document("") : { questions: [] });
   const agent = mount();
@@ -900,10 +894,12 @@ test("memory notifications refresh the visible own and shared lists with correct
   await flush();
   expect(api.core).toHaveBeenLastCalledWith("memory.get", { member_id: 3, space: "own" });
   expect($('[data-mem-space="own"]').textContent).toContain("Fresh note");
+  // The memory everyone shares is Settings' alone (owner, 2026-11-09): its change reads nothing here.
+  api.core.mockClear();
   send({ type: "MemoryChanged", member_id: 0, space: "shared" });
   await flush();
-  expect(api.core).toHaveBeenLastCalledWith("memory.get", { space: "shared" });
-  expect($('[data-mem-space="shared"]').textContent).toContain("Fresh note");
+  expect(api.core).not.toHaveBeenCalledWith("memory.get", { space: "shared" });
+  expect(globalThis.document.querySelector('.ms-pane [data-mem-space="shared"]')).toBeNull();
 });
 
 describe("Raphael's thread", () => {

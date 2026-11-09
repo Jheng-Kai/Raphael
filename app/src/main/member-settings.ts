@@ -3,26 +3,27 @@
 // Notion page: a cover the owner can change (a pattern in the member's own slime colour, or a picture), the face large
 // across the cover's lower edge, the name and the role in place. Under them the settings are kinds in a column on the left,
 // as Settings' own (owner, 2026-11-08: 「左側會有一些分區…不要就這樣子長長一條」), and only the chosen kind is shown, as
-// compact sections, each a name over one tinted list of rows (Grok Bot's panel). What the panel beside it already shows
-// (routines, messaging) is not here. A long text (the personality, the instructions, a skill) is one line and opens in
-// place, or in a view of its own, when it is pressed; no row has a text button where an icon says it.
-import { noticeHTML } from "./missing";
+// compact sections, each a name over one tinted list of rows (Grok Bot's panel). Every member has the same kinds, Raphael
+// too: memory, tools, skills and commands, personality and instructions, notifications (owner, 2026-11-09). The model is
+// chosen at the composer alone, and members have no voice. What the panel beside it already shows (routines, messaging)
+// is not here. A long text (the personality, the instructions, a skill) is one line and opens in place, or in a view of
+// its own, when it is pressed; no row has a text button where an icon says it.
 import "./member-panel.css";
 import "./memory.css";
 import "./member-settings.css";
 import * as api from "./api";
-import { mountComposerBrain } from "./composer-brain";
 import { describeError } from "./format";
 import { onLocaleChange, getLocale, t } from "./i18n";
 import { openMemberAvatarMenu } from "./member-avatar-menu";
 import type { MessageKey } from "./i18n/zh-TW";
-import { groupChoices, groupFromValue, groupValue, pickPicture, readPicture } from "./member-dialogs";
+import { pickPicture, readPicture } from "./member-dialogs";
 import { INSTRUCTIONS_MAX, NAME_MAX, PERSONALITY_MAX, RAPHAEL_ID, ROLE_MAX, cleanName, faceHTML, isMemberNameTaken } from "./members";
 import { type MemorySpace, createMemory, memoryHTML } from "./memory-view";
+import { entryIcon } from "./service-mark";
 import { skillOriginLabel } from "./skill-source";
 import { slimeColorOf } from "./slime";
-import type { AppContext, Member, MemberCommand, MemberPatch, MemberSkill, MemberVoice, MembersList } from "./types";
-import { type IconName, actionRow, btn, closeMenu, esc, ico, iconBtn, iconButton, openConfirmMenu, openMenu, openPopover, patchHTML, sel, tg, toaster } from "./ui";
+import type { AppContext, Member, MemberCommand, MemberPatch, MemberSkill, MembersList } from "./types";
+import { type IconName, actionRow, btn, closeMenu, esc, ico, iconBtn, iconButton, openConfirmMenu, openPopover, patchHTML, tg, toaster } from "./ui";
 
 export interface MemberSettingsHost {
   app: AppContext;
@@ -45,10 +46,8 @@ export interface MemberSettings {
   close(): void;
   /** The list changed, or the language: the page is drawn again if it is open. */
   draw(): void;
-  /** What the member has (skills, commands, tools, voices, the count of notes) is read again. */
+  /** What the member has (skills, commands, tools, the count of notes) is read again. */
   refresh(): void;
-  /** The models or the settings changed: the model row reads them again. */
-  refreshModel(): void;
   refreshMemory(memberId: number, space?: MemorySpace): void;
 }
 
@@ -57,19 +56,20 @@ type Field = "personality" | "instructions";
 type Loaded<T> = T | "loading" | "failed";
 interface ToolChoices { tools: string[]; connections: { id: string; name: string; enabled: boolean }[] }
 
-/** The kinds of settings in the page's left column, in order; Raphael has no personality of the owner's and no tool list. */
-type Category = "soul" | "skills" | "model" | "tools" | "voice" | "memory" | "general";
-const CATEGORIES: readonly { id: Category; icon: IconName; label: MessageKey; raphael: boolean }[] = [
-  { id: "soul", icon: "smile", label: "members.profile.soul", raphael: false },
-  { id: "skills", icon: "sparkle", label: "members.profile.skills", raphael: true },
-  { id: "model", icon: "bot", label: "memberSettings.model", raphael: true },
-  { id: "tools", icon: "plug", label: "settings.paneTools", raphael: false },
-  { id: "voice", icon: "voice", label: "members.profile.voice", raphael: true },
-  { id: "memory", icon: "memory", label: "members.profile.memory", raphael: true },
-  { id: "general", icon: "sliders", label: "settings.paneGeneral", raphael: true },
+/** The kinds of settings in the page's left column, in the owner's order, the same for every member (owner, 2026-11-09). */
+type Category = "memory" | "tools" | "skills" | "soul" | "notify";
+const CATEGORIES: readonly { id: Category; icon: IconName; label: MessageKey }[] = [
+  { id: "memory", icon: "memory", label: "members.profile.memory" },
+  { id: "tools", icon: "plug", label: "settings.paneTools" },
+  { id: "skills", icon: "sparkle", label: "members.profile.skills" },
+  { id: "soul", icon: "smile", label: "members.profile.soul" },
+  { id: "notify", icon: "bell", label: "memberSettings.notify" },
 ];
-const categoriesFor = (member: Member): typeof CATEGORIES => CATEGORIES.filter(item => item.raphael || member.id !== RAPHAEL_ID);
 const tr = t as unknown as (key: MessageKey) => string;
+
+/** Where a cover picture is shown, 0 (its top) to 100 (its bottom); 50 until the owner moves it. */
+export const coverPosition = (member: Member): number =>
+  member.cover?.kind === "image" && typeof member.cover.position === "number" ? Math.min(100, Math.max(0, member.cover.position)) : 50;
 
 /** The cover's patterns, drawn in the member's colour by member-settings.css; the first is the page's own. */
 export const COVER_PATTERNS = ["dots", "grid", "lines", "glow", "plain"] as const;
@@ -95,21 +95,17 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   const cover = el.querySelector<HTMLElement>(".ms-cover")!;
   const idSlot = el.querySelector<HTMLElement>(".ms-id")!;
   const main = el.querySelector<HTMLElement>(".ms-main")!;
-  // The model is the composer's own control; it keeps its node across drawings.
-  const modelSlot = document.createElement("span");
-  modelSlot.className = "cmp-model ms-model-slot";
-  let brain: ReturnType<typeof mountComposerBrain> | null = null;
 
   let view: View = { kind: "main" };
-  let category: Category = "soul";
+  let category: Category = CATEGORIES[0].id;
+  /** The cover picture being moved, as Notion's Reposition: where it was, and where it is now. */
+  let reposition: { from: number; at: number } | null = null;
   /** The long fields that are open to be typed in: closed, each is one line. */
   const editing = new Set<Field>();
   let adding = false;
   let skills: Loaded<MemberSkill[]> = "loading";
   let undo: string | null = null;
   let commands: Loaded<MemberCommand[]> = "loading";
-  let voices: { list: MemberVoice[]; configured: boolean } | null = null;
-  let raphaelVoice = "";
   let toolChoices: Loaded<ToolChoices> = "loading";
   let skillText: { id: number; skill: MemberSkill; text: string; revision?: string } | "loading" | null = null;
   let skillBusy = false;
@@ -125,29 +121,25 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     memberId: () => host.member().id,
     ownerName: () => host.member().name,
   };
-  const memories = [createMemory({ ...memberHost, space: "shared" }), createMemory({ ...memberHost, space: "own" })];
+  // Only the member's own memory: the one everyone shares is Settings' (owner, 2026-11-09: 「個別角色不用顯示共同記憶」).
+  const memory = createMemory({ ...memberHost, space: "own" });
 
   // ---------- reading ----------
 
   async function load(): Promise<void> {
     if (el.hidden) return;
     const mine = ++epoch, id = host.member().id;
-    const raphael = id === RAPHAEL_ID;
     // Each read is its own: one that fails (or a core that has not got it) leaves the others to answer.
     const read = <T>(call: () => Promise<T>): Promise<T> => Promise.resolve().then(call);
-    const [skillList, commandList, voiceList, tools, settings] = await Promise.allSettled([
+    const [skillList, commandList, tools] = await Promise.allSettled([
       read(() => api.membersSkillsList(id)),
       read(() => api.membersCommandsList(id)),
-      read(() => api.membersVoices()),
-      raphael ? Promise.resolve(null) : read(() => api.membersToolChoices()),
-      raphael ? read(() => api.settingsGet()) : Promise.resolve(null),
+      read(() => api.membersToolChoices()),
     ]);
     if (mine !== epoch || id !== host.member().id || el.hidden) return;
     if (skillList.status === "fulfilled") { skills = skillList.value?.skills ?? []; undo = skillList.value?.undo ?? null; } else if (!Array.isArray(skills)) skills = "failed";
     if (commandList.status === "fulfilled") commands = commandList.value?.commands ?? []; else if (!Array.isArray(commands)) commands = "failed";
-    if (voiceList.status === "fulfilled" && Array.isArray(voiceList.value?.voices)) voices = { list: voiceList.value.voices, configured: !!voiceList.value.configured };
-    if (tools.status === "fulfilled" && tools.value) toolChoices = tools.value; else if (!raphael && typeof toolChoices !== "object") toolChoices = "failed";
-    if (settings.status === "fulfilled" && settings.value) raphaelVoice = settings.value.settings?.tts_fish_voice ?? "";
+    if (tools.status === "fulfilled" && tools.value) toolChoices = tools.value; else if (typeof toolChoices !== "object") toolChoices = "failed";
     draw();
   }
 
@@ -212,71 +204,100 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     return section(title, rows, tool, "ms-commands");
   }
 
+  /**
+   * The apps the owner connected, each with its own mark so what the member may use is seen at a glance, and a switch: each
+   * member has its own list (owner, 2026-11-09: 「工具的部分都要放上 Icon…可以個別開放我們已經連結好的 connectors」). Under
+   * them, how it acts with mail and Slack.
+   */
   function toolsHTML(member: Member): string {
     let rows: string;
     if (toolChoices === "loading") rows = spinner();
     else if (toolChoices === "failed") rows = muted(t("mem.loadFailed"));
     else {
       const apps = toolChoices.connections.filter(connection => connection.enabled);
-      rows = apps.map(app => row(app.name, tg(member.tools === null || member.tools.includes(app.id), app.name, ` data-ms="tool" data-id="${esc(app.id)}" data-k="ms-tool:${esc(app.id)}"`), `ms-app:${esc(app.id)}`)).join("") || muted(t("memberSettings.noTools"));
+      rows = apps.map(app =>
+        `<div class="ms-row ms-app" data-k="ms-app:${esc(app.id)}">${entryIcon({ name: app.name, icon: app.id }, "md")}<span class="ms-label">${esc(app.name)}</span>` +
+        `${tg(member.tools === null || member.tools.includes(app.id), app.name, ` data-ms="tool" data-id="${esc(app.id)}" data-k="ms-tool:${esc(app.id)}"`)}</div>`).join("") || muted(t("memberSettings.noTools"));
     }
-    return section("", rows, "", "ms-tools");
-  }
-
-  // The voice card, as Grok Bot's Voice chat: one calm card, the choice on the right of its row. The voice is the member's
-  // own; Raphael's is the one voice his answers are spoken in (a setting).
-  function voiceHTML(member: Member): string {
-    const raphael = member.id === RAPHAEL_ID;
-    const current = raphael ? raphaelVoice : member.voice ?? "";
-    const choices = [{ value: "", label: t("members.profile.defaultVoice") }, ...(voices?.list ?? []).map(voice => ({ value: voice.id, label: voice.name }))];
-    if (current && !choices.some(choice => choice.value === current)) choices.push({ value: current, label: current });
-    const ready = voices?.configured ?? false;
-    return section("",
-      row(t("members.profile.voiceLabel"), sel(choices, current, t("members.profile.voiceLabel"), ` data-ms="voice" data-k="ms-voice"${ready ? "" : " disabled"}`)) +
-      (raphael ? "" : row(t("members.profile.notify"), tg(member.notify ?? false, t("members.profile.notify"), ' data-ms="notify" data-k="ms-notify"'))) +
-      (voices && !ready ? noticeHTML("voice", "voice", "fish") : ""), "", "ms-voice");
+    return section("", rows, "", "ms-tools") +
+      section("", row(t("members.profile.draft"), tg(member.draft_first ?? true, t("members.profile.draft"), ' data-ms="draft" data-k="ms-draft"')), "", "ms-draft");
   }
 
   /** What the chosen kind holds. */
   function categoryHTML(member: Member): string {
-    const raphael = member.id === RAPHAEL_ID;
-    const list = host.list();
     switch (category) {
-      case "soul":
-        return section(t("members.personality"), fieldHTML(member, "personality"), "", "ms-personality") + section(t("members.instructions"), fieldHTML(member, "instructions"), "", "ms-instructions");
-      case "skills":
-        return skillsHTML() + commandsHTML();
-      case "model":
-        return section("", `<div class="ms-row ms-model" data-slot="model"></div>`, "", "ms-model");
+      case "memory":
+        return `<div class="ms-memory" data-k="ms-memory">${memoryHTML(memory.view())}</div>`;
       case "tools":
         return toolsHTML(member);
-      case "voice":
-        return voiceHTML(member);
-      case "memory":
-        return `<div class="ms-memory" data-k="ms-memory">${memories.map(item => memoryHTML(item.view())).join("")}</div>`;
-      case "general": {
-        const group = list?.groups.find(item => item.id === member.group_id) ?? null;
-        return section("",
-          row(t("members.profile.draft"), tg(member.draft_first ?? true, t("members.profile.draft"), ' data-ms="draft" data-k="ms-draft"')) +
-          (raphael ? "" : row(t("members.group"), sel(groupChoices(list?.groups ?? []), groupValue(group ? group.id : null), t("members.group"), ' data-ms="group" data-k="ms-group"'))),
-          "", "ms-general");
-      }
+      case "skills":
+        return skillsHTML() + commandsHTML();
+      case "soul":
+        return section(t("members.personality"), fieldHTML(member, "personality"), "", "ms-personality") + section(t("members.instructions"), fieldHTML(member, "instructions"), "", "ms-instructions");
+      case "notify":
+        return section("", row(t("members.profile.notify"), tg(member.notify ?? false, t("members.profile.notify"), ' data-ms="notify" data-k="ms-notify"')), "", "ms-notify");
     }
   }
 
   /** The kinds in a column on the left, as Settings' own, and the chosen one beside them. */
   function mainHTML(member: Member): string {
-    const nav = categoriesFor(member).map(item =>
+    const nav = CATEGORIES.map(item =>
       `<button type="button" class="nav" data-ms="cat" data-cat="${item.id}" data-k="ms-cat:${item.id}" aria-current="${item.id === category ? "page" : "false"}">${ico(item.icon)}<span>${esc(tr(item.label))}</span></button>`).join("");
     return `<div class="ms-layout"><nav class="ms-nav" aria-label="${esc(t("computer.settings"))}">${nav}</nav>` +
       `<div class="ms-content" data-cat="${category}">${categoryHTML(member)}</div></div>`;
   }
 
-  /** The cover: its pattern or picture, and at its lower right the round button that changes it. */
+  /**
+   * The cover: its pattern or picture, and at its lower right the round button that changes it. While a picture is moved
+   * (Notion's Reposition) the pointer drags it up and down, and the button gives way to 取消 and 儲存位置.
+   */
   function coverHTML(member: Member): string {
-    const image = member.cover?.kind === "image" ? `<img class="ms-cover-img" src="${esc(member.cover.url)}" alt="">` : "";
-    return image + iconButton("image", t("memberSettings.cover"), ' data-ms="cover" data-k="ms-cover" aria-haspopup="menu" aria-expanded="false"', "ms-cover-btn");
+    if (member.cover?.kind !== "image") return iconButton("image", t("memberSettings.cover"), ' data-ms="cover" data-k="ms-cover" aria-haspopup="menu" aria-expanded="false"', "ms-cover-btn");
+    const at = reposition ? reposition.at : coverPosition(member);
+    const image = `<img class="ms-cover-img" src="${esc(member.cover.url)}" alt="" style="object-position: 50% ${at}%">`;
+    if (!reposition) return image + iconButton("image", t("memberSettings.cover"), ' data-ms="cover" data-k="ms-cover" aria-haspopup="menu" aria-expanded="false"', "ms-cover-btn");
+    return image + `<span class="ms-cover-hint" aria-hidden="true">${esc(t("memberSettings.dragToReposition"))}</span>` +
+      actionRow({ cls: "ms-cover-actions", secondary: btn(esc(t("common.cancel")), "sm", ' data-ms="cover-cancel" data-k="ms-cover-cancel"'), primary: { label: esc(t("memberSettings.savePosition")), kind: "sm", attrs: ' data-ms="cover-save" data-k="ms-cover-save"' } });
   }
+
+  /** The picture's overflow below the cover, in pixels, as `object-fit: cover` draws it: how far a drag can move it. */
+  function coverOverflow(): number {
+    const img = cover.querySelector<HTMLImageElement>(".ms-cover-img");
+    if (!img || !img.naturalWidth || !img.naturalHeight) return 0;
+    const box = cover.getBoundingClientRect();
+    const scale = Math.max(box.width / img.naturalWidth, box.height / img.naturalHeight);
+    return Math.max(0, img.naturalHeight * scale - box.height);
+  }
+
+  function endReposition(save: boolean): void {
+    const moved = reposition;
+    if (!moved) return;
+    reposition = null;
+    delete cover.dataset.repositioning;
+    const member = host.member();
+    draw();
+    if (save && Math.abs(moved.at - moved.from) >= 0.1) void host.update(member.id, { cover_position: Math.round(moved.at * 10) / 10 });
+  }
+
+  // The picture follows the pointer while it is held: dragged down, more of its top shows.
+  cover.addEventListener("pointerdown", (event) => {
+    const img = (event.target as Element).closest<HTMLImageElement>(".ms-cover-img");
+    if (!reposition || !img || event.button !== 0) return;
+    event.preventDefault();
+    const overflow = coverOverflow();
+    if (!overflow) return;
+    const startY = event.clientY, from = reposition.at;
+    img.setPointerCapture(event.pointerId);
+    const move = (next: PointerEvent): void => {
+      if (!reposition) return;
+      reposition.at = Math.min(100, Math.max(0, from - (next.clientY - startY) / overflow * 100));
+      img.style.objectPosition = `50% ${reposition.at}%`;
+    };
+    const up = (): void => { img.removeEventListener("pointermove", move); img.removeEventListener("pointerup", up); img.removeEventListener("pointercancel", up); };
+    img.addEventListener("pointermove", move);
+    img.addEventListener("pointerup", up);
+    img.addEventListener("pointercancel", up);
+  });
 
   /** The cover's choices: its patterns as small covers in the member's colour, a picture from this PC, and taking a picture off. */
   function openCoverMenu(anchor: HTMLElement, member: Member): void {
@@ -286,7 +307,8 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       `<button type="button" role="menuitemradio" aria-checked="${id === current}" tabindex="-1" class="ms-swatch" data-cover="${id}" aria-label="${esc(t("memberSettings.coverPattern", { p0: at + 1 }))}"><span class="ms-cover" data-pattern="${id}"></span></button>`).join("");
     const action = (act: string, label: string): string => `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-cover-act="${act}"><span class="mt">${esc(label)}</span></button>`;
     const pop = openPopover(anchor,
-      `<div class="ms-swatches">${swatches}</div>` + action("upload", t("members.fromPc")) + (current === "image" ? action("remove", t("providers.remove")) : ""),
+      `<div class="ms-swatches">${swatches}</div>` + action("upload", t("members.fromPc")) +
+      (current === "image" ? action("reposition", t("memberSettings.reposition")) + action("remove", t("providers.remove")) : ""),
       { className: "menu ms-cover-menu", role: "menu", label: t("memberSettings.cover") });
     // The menu lives outside the page, so it is given the member's colour itself.
     pop.querySelector<HTMLElement>(".ms-swatches")?.style.setProperty("--ms-tint", tint);
@@ -305,6 +327,13 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
           if (!picture) return;
           try { await api.membersSetCover(id, picture); host.refreshList(); } catch (error) { toaster.info(describeError(error)); }
         });
+      } else if (target.dataset.coverAct === "reposition") {
+        closeMenu();
+        const at = coverPosition(member);
+        reposition = { from: at, at };
+        cover.dataset.repositioning = "";
+        draw();
+        el.querySelector<HTMLElement>('[data-ms="cover-save"]')?.focus({ preventScroll: true });
       } else if (target.dataset.coverAct === "remove") {
         closeMenu();
         void host.update(id, { cover: null });
@@ -346,11 +375,11 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     if (el.hidden) return;
     const member = host.member();
     const sameMember = drawnFor === member.id;
-    // Raphael has no personality or tools of the owner's: another member's kind falls back to his first.
-    if (!categoriesFor(member).some(item => item.id === category)) category = categoriesFor(member)[0].id;
+    // Another member, or the picture taken off, ends a move of the cover that was under way.
+    if (reposition && (!sameMember || member.cover?.kind !== "image")) { reposition = null; delete cover.dataset.repositioning; }
     const face = faceHTML(member, 96).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([member, face, host.list()?.groups, view, category, [...editing], adding, skills, undo, commands, voices, raphaelVoice, toolChoices, skillText, skillBusy, command, getLocale(),
-      category === "memory" ? memories.map(list => list.view()) : null]);
+    const signature = JSON.stringify([member, face, view, category, [...editing], adding, skills, undo, commands, toolChoices, skillText, skillBusy, command, getLocale(),
+      reposition ? reposition.from : null, category === "memory" ? memory.view() : null]);
     if (drawn === signature) return;
     drawn = signature;
     el.dataset.view = view.kind;
@@ -375,10 +404,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     }
     drawnFor = member.id;
     patchHTML(main, viewHTML(member));
-    if (view.kind === "main") {
-      const slot = main.querySelector<HTMLElement>('[data-slot="model"]');
-      if (slot) { if (modelSlot.parentElement !== slot) slot.replaceChildren(modelSlot); brain?.draw(); }
-    }
     if (sameMember && typingIn) {
       const field = el.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${CSS.escape(typingIn)}`);
       if (field && document.activeElement !== field) field.focus({ preventScroll: true });
@@ -467,19 +492,12 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     const all = everything.every(item => next.includes(item)) && next.every(item => everything.includes(item));
     await host.update(member.id, { tools: all ? null : next });
   }
-  async function chooseVoice(value: string): Promise<void> {
-    const member = host.member();
-    if (member.id !== RAPHAEL_ID) { await host.update(member.id, { voice: value }); return; }
-    try {
-      const settings = (await api.settingsSet("tts_fish_voice", value)).settings;
-      raphaelVoice = settings?.tts_fish_voice ?? value;
-    } catch (error) { toaster.info(describeError(error)); }
-    draw();
-  }
 
   async function saveField(input: HTMLInputElement | HTMLTextAreaElement): Promise<void> {
     const member = host.list()?.members.find(item => item.id === Number(input.dataset.member)) ?? (host.member().id === Number(input.dataset.member) ? host.member() : null);
-    if (!member || member.id === RAPHAEL_ID) return;
+    if (!member) return;
+    // Raphael's name and role are not the owner's to type; his personality and instructions are, as everyone's.
+    if (member.id === RAPHAEL_ID && (input.id === "ms-name" || input.id === "ms-role")) return;
     if (input.id === "ms-name") {
       const value = cleanName(input.value);
       if (value === member.name) { input.value = member.name; return; }
@@ -509,7 +527,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
 
   el.addEventListener("click", (event) => {
     const target = event.target as Element;
-    if (memories.some(list => list.click(target))) return;
+    if (memory.click(target)) return;
     const act = target.closest<HTMLElement>("[data-ms]");
     if (!act || (act as HTMLButtonElement).disabled) return;
     const member = host.member();
@@ -549,31 +567,22 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       }
       case "cat": {
         category = act.dataset.cat as Category;
-        if (category === "memory") for (const list of memories) void list.load();
+        if (category === "memory") void memory.load();
         draw();
         break;
       }
       case "cover": openCoverMenu(act, member); break;
+      case "cover-save": endReposition(true); break;
+      case "cover-cancel": endReposition(false); break;
       case "draft": void host.update(member.id, { draft_first: !(member.draft_first ?? true) }); break;
       case "notify": void host.update(member.id, { notify: !(member.notify ?? false) }); break;
       case "tool": void toggleTool(act.dataset.id ?? ""); break;
-      case "voice": {
-        const current = member.id === RAPHAEL_ID ? raphaelVoice : member.voice ?? "";
-        openMenu(act, [{ value: "", label: t("members.profile.defaultVoice") }, ...(voices?.list ?? []).map(voice => ({ value: voice.id, label: voice.name }))], current, value => void chooseVoice(value));
-        break;
-      }
-      case "group":
-        openMenu(act, groupChoices(host.list()?.groups ?? []), groupValue(member.group_id), (value) => {
-          const groupId = groupFromValue(value);
-          if (groupId !== member.group_id) void host.update(member.id, { group_id: groupId });
-        });
-        break;
     }
   });
 
   el.addEventListener("input", (event) => {
     const target = event.target as HTMLInputElement | HTMLTextAreaElement;
-    for (const list of memories) if (list.input(target)) return;
+    if (memory.input(target)) return;
     if (target.id === "ms-skill-source") source = target.value;
     else if (target.id === "ms-skill-text" && skillText && skillText !== "loading") skillText.text = target.value;
     else if (target.id === "ms-command-name") command.name = target.value;
@@ -582,7 +591,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   });
 
   el.addEventListener("keydown", (event) => {
-    if (memories.some(list => list.key(event))) return;
+    if (memory.key(event)) return;
     const target = event.target as HTMLElement;
     const field = target instanceof HTMLInputElement && (target.id === "ms-name" || target.id === "ms-role") || target instanceof HTMLTextAreaElement && !!target.dataset.field;
     if (event.key === "Enter" && !event.isComposing && target instanceof HTMLInputElement && (target.id === "ms-name" || target.id === "ms-role")) {
@@ -612,7 +621,9 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     const typing = document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement;
     if (typing && el.contains(document.activeElement)) return;
     event.preventDefault();
-    if (view.kind === "main") host.back(); else back();
+    // A move of the cover is left first, the picture back where it was.
+    if (reposition) endReposition(false);
+    else if (view.kind === "main") host.back(); else back();
   });
   onLocaleChange(draw);
   scroll.addEventListener("scroll", () => { el.toggleAttribute("data-scrolled", scroll.scrollTop > 8); }, { passive: true });
@@ -623,33 +634,32 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     open() {
       if (!el.hidden) { draw(); return; }
       el.hidden = false;
-      view = { kind: "main" }; category = categoriesFor(host.member())[0].id; editing.clear(); adding = false; source = ""; skillText = null; skillBusy = false;
-      skills = "loading"; commands = "loading"; toolChoices = "loading"; voices = null; raphaelVoice = "";
-      for (const list of memories) list.reset();
+      view = { kind: "main" }; category = CATEGORIES[0].id; editing.clear(); adding = false; source = ""; skillText = null; skillBusy = false;
+      skills = "loading"; commands = "loading"; toolChoices = "loading"; reposition = null; delete cover.dataset.repositioning;
+      memory.reset();
       drawn = ""; drawnFor = null;
-      if (!brain) brain = mountComposerBrain(modelSlot, () => host.member()); else brain.reload();
       draw();
       scroll.scrollTop = 0; el.removeAttribute("data-scrolled");
       el.focus({ preventScroll: true });
       void load();
+      // The first kind is the memory: it is read as the page opens.
+      if (category === "memory") void memory.load();
     },
     close() {
       if (el.hidden) return;
       el.hidden = true;
       epoch++;
-      for (const list of memories) list.reset();
+      reposition = null; delete cover.dataset.repositioning;
+      memory.reset();
     },
     draw,
     refresh() { void load(); },
-    refreshModel() { if (!el.hidden) brain?.reload(); },
     refreshMemory(memberId, space) {
       if (el.hidden) return;
       const mine = memberId === host.member().id;
       if (mine) void load();
-      if (view.kind !== "main" || category !== "memory") return;
-      // The shared file is everyone's; a member's own is read only when it is the open member's.
-      if (space !== "own") void memories[0].load();
-      if (space !== "shared" && mine) void memories[1].load();
+      // Only the open member's own memory is on the page.
+      if (view.kind === "main" && category === "memory" && space !== "shared" && mine) void memory.load();
     },
   };
 }

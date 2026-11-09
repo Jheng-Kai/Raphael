@@ -122,7 +122,7 @@ deletion. Restart closes interrupted calls and retains their transcript.
 Voice chat is not released yet (owner, 2026-11-06, R-UI-106): the voice button records voice messages only, and the call scenes come back with the feature.
 
 Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
-the busy dialog with dialog-caption-confirm, the settings controls with details-voice, the
+the busy dialog with dialog-caption-confirm, the settings controls with details-notify, the
 receipt shell with card-mcp-done, and the
 repair note with the existing missing-service note. A call receipt is a standalone
 history card.

@@ -71,6 +71,27 @@ test("conversation key setup stays inline and sends secrets only to its own conn
   controller.disconnect();
 });
 
+// Owner, 2026-11-09: a server of the owner's own (n8n) is set up in the conversation, in its card.
+test("an own server's card asks for its address and token from the card itself and sends them only to its connection", async () => {
+  const thread = document.createElement("div"); document.body.append(thread);
+  thread.innerHTML = connectorCardHTML({ id: "n8n-card", app: "n8n", name: "n8n", state: "pending", needs: "own_server", error: null, reconnect: false, tool_count: null, expires_at_ms: 0, resumed: false,
+    fields: [{ name: "url", label: "MCP server address", required: true, secret: false }, { name: "token", label: "Access token", required: true, secret: true }] });
+  const connect = vi.fn(async (_id: string, _fields: Record<string, string>) => ({ connected: true }));
+  const controller = mountInlineConnectionSetup(thread, connect);
+  await vi.waitFor(() => expect(thread.querySelectorAll("[data-setup-field]")).toHaveLength(2));
+  expect(api.connectorsToolkit).not.toHaveBeenCalled();
+  const [url, token] = [...thread.querySelectorAll<HTMLInputElement>("[data-setup-field]")];
+  expect([url!.type, token!.type]).toEqual(["text", "password"]);
+  thread.querySelector<HTMLButtonElement>("[data-inline-submit]")!.click();
+  expect(connect).not.toHaveBeenCalled();
+  url!.value = "https://n8n.example.invalid/mcp-server/http"; token!.value = "synthetic-token";
+  thread.querySelector<HTMLButtonElement>("[data-inline-submit]")!.click();
+  await vi.waitFor(() => expect(connect).toHaveBeenCalledExactlyOnceWith("n8n-card", { url: "https://n8n.example.invalid/mcp-server/http", token: "synthetic-token" }));
+  expect(token!.value).toBe("");
+  expect(document.body.innerHTML).not.toContain("synthetic-token");
+  controller.disconnect();
+});
+
 test("a rejected setup retains the inline form node, values and folded guide", async () => {
  const setup = await import("./connection-setup");
  api.connectorsToolkit.mockResolvedValue({ slug: "sample", name: "Sample", needs: "key", fields: [{ name: "key", label: "Key", secret: true, required: true }] });

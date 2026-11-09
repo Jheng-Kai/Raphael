@@ -235,8 +235,10 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .link-chip .link-mark.logo-art .lg-d { display: none; }
 :root[data-theme="dark"] .link-chip .link-mark.logo-art .lg-d { display: block; }
 :root[data-theme="dark"] .link-chip .link-mark.logo-art .lg-l:has(+ .lg-d) { display: none; }
-/* The page's preview, under the pointer only, drawn as a menu is: it never takes a row of the conversation. */
-.link-hover { position: fixed; z-index: 130; display: flex; align-items: center; gap: var(--sp-3); width: min(calc(360px + 60 * var(--pa-u)), calc(100vw - 16px)); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--menu); border: 1px solid var(--edge); box-shadow: var(--pop); pointer-events: none; }
+/* The page's preview, under the pointer only, drawn as a menu is: it never takes a row of the conversation. It lives on
+   <body>, outside the page that sets --pa-u, so its width must not lean on it: without a width the card stretched across
+   the window to fit a whole description (owner, 2026-11-09: 「可以就用 .. 就好」). Each line ends in an ellipsis. */
+.link-hover { position: fixed; z-index: 130; display: flex; align-items: center; gap: var(--sp-3); width: min(400px, calc(100vw - 16px)); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--menu); border: 1px solid var(--edge); box-shadow: var(--pop); pointer-events: none; }
 .preview-image { flex: none; width: 64px; height: 64px; object-fit: cover; border-radius: var(--r-sm); }
 .preview-meta { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); flex: 1; }
 .preview-site { font: var(--fs-2xs)/1.5 var(--ui); color: var(--accent-text); }

@@ -44,7 +44,7 @@ import { eventRead } from '../event-read';
 import { cancelGesture } from "../../shared/cancel-gesture";
 import { openActions } from "../member-column";
 import { mountConversationFind } from "../conversation-find";
-import { openRoutineDialog } from "../routine-dialog";
+import { openRoutineView } from "../routine-view";
 import { createAttachmentMedia } from "../attachment-media";
 import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachmentLimit, readComposerFile, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
 import { closeMediaLightbox, openMediaLightbox } from "../media-lightbox";
@@ -2205,7 +2205,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "open-routine":
         void Promise.all([api.routinesList(Number(act.dataset.routineMember ?? memberId())), api.membersList()]).then(([routines, team]) => {
           const routine = routines.routines.find(r => r.id === Number(act.dataset.routine));
-          if (routine) openRoutineDialog({members:team.members, routine});
+          // To read: its member changes it in the conversation (owner, 2026-11-09).
+          if (routine) openRoutineView(routine, team.members);
           else toaster.info(t("members.profile.noRoutines"));
         }).catch(error => toaster.info(describeError(error)));
         break;
@@ -2581,10 +2582,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (!el.isConnected) return;
     if (roomPane.active) roomPane.close();
     const jump = ++memberJump;
-    const { memberId, turnId, files } = (event as CustomEvent<{ memberId: number; turnId?: number; files?: boolean }>).detail;
+    const { memberId, turnId, files, draft } = (event as CustomEvent<{ memberId: number; turnId?: number; files?: boolean; draft?: string }>).detail;
     void members.load().then(async () => {
       members.select(memberId);
       if (files) { desktop.files(); }
+      // Words handed with the member (the calendar's ask for a routine) wait in its composer once it is the open one.
+      if (typeof draft === "string" && jump === memberJump && memberId === members.current()) { putDraft(draft.slice(0, TYPED_MAX_CHARS)); focusComposer(); }
       if (!turnId) return;
       await load(false);
       const generation = loads;

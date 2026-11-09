@@ -2,60 +2,26 @@
 .au-page { display: flex; flex-direction: column; width: 100%; max-width: var(--layout-workspace-max); margin-inline: auto; min-width: 0; height: 100%; padding-top: var(--window-controls-height); overflow: hidden; background: var(--content); container: calendar / inline-size; }
 .au-empty { padding: 48px var(--sp-4); color: var(--text-3); text-align: center; }
 .au-empty > .i { width: 20px; height: 20px; }
-/* In the middle of the window like every dialog (owner, 2026-11-07); a dialog taller than the window starts at the top and scrolls. */
-.mb-scrim:has(> .au-routine-dialog) { overflow-y: auto; scrollbar-width: none; place-items: start center; }
-.mb-scrim > .au-routine-dialog { margin-block: auto; }
-/* Wide and short (owner, 2026-11-07): what it does on the left, when it runs on the right; one column when narrow. */
-.au-routine-dialog.mb-dialog { width: min(640px, calc(100vw - 40px)); max-height: none; overflow: visible; }
-.au-routine-dialog .mb-dlg-body { display: flex; flex-direction: column; flex: none; overflow: visible; gap: var(--sp-4); padding: var(--sp-5) var(--sp-5); }
-.au-routine-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: var(--sp-6, 32px); align-items: start; }
-.au-col { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
-.au-title-row { display: flex; align-items: center; gap: var(--sp-3); }
-.au-title-row > .au-title { flex: 1; min-width: 0; }
-/* The instructions grow with their words, so none hides behind a scroll in the box (owner, 2026-11-08). */
-.au-prompt-field textarea { min-height: 200px; field-sizing: content; resize: none; overflow: hidden; }
-@media (max-width: 760px) { .au-routine-grid { grid-template-columns: minmax(0, 1fr); } }
+
+
+
 .au-title.mb-fin { font-size: var(--fs-h1); font-weight: var(--weight-semibold); border: 0; border-bottom: 1px solid var(--edge); border-radius: 0; background: transparent; padding: var(--sp-2) 0 var(--sp-3); }
 .au-field { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; margin: 0; }
 .au-field > .sel { width: 100%; max-width: 100%; justify-content: space-between; }
-.au-field h3, .au-label { font-size: var(--fs-xs); font-weight: var(--weight-semibold); margin: 0; }
+.au-field h3 { font-size: var(--fs-xs); font-weight: var(--weight-semibold); margin: 0; }
 .au-event p { margin: 0; overflow-wrap: anywhere; }
 .routine-sentence { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 0 4px; }
 .routine-sentence > .i { align-self: center; flex: none; margin-right: 2px; }
 .routine-sentence strong { font-weight: var(--weight-semibold); }
 .routine-object { color: var(--text-2); font-weight: 400; }
-.au-hook-address { overflow-wrap: anywhere; user-select: text; }
-.au-webhook p { margin: 0; }
 .routine-run-link.btn { white-space: normal; height: auto; text-align: left; }
 .au-event .note { white-space: pre-line; }
 .au-event label { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 /* When it runs: rows on one tinted list, the name left and the choice right, as Settings' rows (owner, 2026-11-08). */
 .au-rows { display: grid; grid-template-columns: minmax(0, 1fr); border-radius: var(--r-md); background: var(--surface-2); padding: var(--sp-1) var(--sp-3); }
-.au-row { display: grid; grid-template-columns: [label] minmax(0, auto) [control] minmax(0, 1fr); align-items: center; gap: var(--sp-3); min-height: calc(var(--h-ctl) + var(--sp-3)); }
-.au-row-label { color: var(--text-2); font-size: var(--fs-xs); white-space: nowrap; }
-.au-row-ctl { display: flex; justify-content: flex-end; align-items: center; gap: var(--sp-1); min-width: 0; }
-.au-row-ctl > .sel { max-width: 100%; }
-.au-row-days { grid-template-columns: [label] minmax(0, 1fr); padding-block: var(--sp-1); }
-.au-row-days .au-row-ctl { justify-content: flex-start; }
 .au-days { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
 .au-days .btn { border-radius: var(--r-pill); }
 .au-days .btn[aria-pressed="true"] { background: var(--selected); border-color: var(--accent-text); }
-.au-time.mb-fin, .au-num.mb-fin { width: calc(var(--h-field) * 2.4); min-height: var(--h-ctl); text-align: center; font-variant-numeric: tabular-nums; }
-.au-schedule .au-trigger-preview { margin: 0; color: var(--text-2); font-size: var(--fs-xs); }
-.au-window { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
-.au-window .sel { min-width: 0; padding-inline: var(--sp-2); font-variant-numeric: tabular-nums; }
-.au-chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
-.au-event-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-2); }
-.au-event-fields > .mp-label { flex: 1 1 180px; }
-.au-routine-dialog .au-event .sel, .au-routine-dialog .au-event-fields .mb-fin, .au-routine-dialog .au-event-fields > .btn { height: var(--h-field); min-height: var(--h-field); }
-.au-chips .btn { border-radius: var(--r-pill); font-size: var(--fs-xs); }
-.au-chips .btn[aria-pressed="true"], .au-members .btn[aria-pressed="true"] { background: var(--selected); border-color: var(--accent-text); }
-.au-members { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); max-height: 168px; overflow-y: auto; overflow-x: hidden; }
-.au-routine-dialog .au-members { max-height: none; overflow: visible; }
-.au-members .btn { justify-content: flex-start; min-height: 50px; height: auto; padding: var(--sp-2) var(--sp-3); gap: var(--sp-2); white-space: normal; text-align: left; }
-.au-members .btn span:not(.mb-av) { min-width: 0; overflow-wrap: anywhere; }
-.au-members .btn > .i:last-child { margin-left: auto; }
-.au-more { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: var(--sp-4); padding: var(--sp-4); background: transparent; border: 0; border-radius: 0; font-size:var(--fs-xs); }
 .au-date-menu.menu { padding: var(--sp-3); width: 290px; max-width: calc(100vw - 24px); }
 .au-month-head { display: flex; gap: var(--sp-1); align-items: center; justify-content: space-between; font-size: var(--fs-xs); padding-bottom: var(--sp-2); }
 .au-month-head b { text-align: center; min-width: 0; white-space: nowrap; font-size: var(--fs-2xs); }
@@ -85,10 +51,11 @@
 /* Each message keeps its hover actions' row under it, which already parts it from the next. */
 .au-room-thread { padding: var(--sp-3) 0; gap: var(--sp-2); }
 .au-room-thread > .handoff-row, .au-room-thread > .room-intent-blocked { margin-block: var(--sp-2); }
-/* A member's face stands beside its words, mirroring the owner's face on the right: left of the first bubble and centred
-   on its first line. A private conversation draws no face and lays its replies in one column, so a room sets its own. */
-:is(.page-agent, body) :is(.au-room-thread, .room-side-thread) .tn > .ra { grid-template-columns: var(--pa-ra-face) minmax(0, 1fr); align-items: start; }
-:is(.au-room-thread, .room-side-thread) .tn > .ra > .ra-face { margin-top: max(0px, calc(var(--pa-bpy) + var(--pa-lh-a) / 2 - var(--pa-ra-face) / 2)); }
+/* A member's face is small and stands at the lower left of its words, as Grok Bot's group (owner, 2026-11-10: 「每一個 bots
+   都是比較小一個，然後是放在對話的左下角」). A private conversation draws no face and lays its replies in one column, so a room
+   sets its own. */
+:is(.page-agent, body) :is(.au-room-thread, .room-side-thread) .tn > .ra { --pa-ra-face: 24px; grid-template-columns: var(--pa-ra-face) minmax(0, 1fr); align-items: end; column-gap: var(--sp-2); }
+:is(.au-room-thread, .room-side-thread) .tn > .ra > .ra-face { margin: 0 0 var(--sp-1); }
 .au-room-thread .room-turn { white-space: nowrap; }
 .au-room-row [aria-current="true"] { background: var(--accent-soft) !important; color: var(--text); }
 .au-rooms-section { border-top: 1px solid var(--line); margin-top: var(--sp-4); padding: var(--sp-2) 0; }
@@ -108,17 +75,7 @@
 /* Raphael's wrap-up is his ordinary message: its three parts are light headings in the body. */
 .au-room-controls { display: flex; justify-content: flex-end; max-width: var(--pa-colw); margin-inline: auto; margin-bottom: var(--sp-2); }
 .au-room-controls:empty { display: none; }
-/* Wide boards use the workspace while keeping names and roles readable. */
-@media (min-width: 1400px) {
-}
-@media (max-width: 880px) {
-}
-@media (max-width: 900px) {
-}
-@media (max-width: 600px) {
-  .au-more { grid-template-columns: minmax(0, 1fr); }
-  .au-members { grid-template-columns: minmax(0, 1fr); }
-}
+
 /* System events (event-line.ts): one centred grey line with a small face or icon, never a pill or a card. */
 .event-line { flex-wrap: wrap; justify-content: center; column-gap: 6px; row-gap: 0; text-align: center; line-height: 1.6; }
 .event-people { max-width: 100%; }
@@ -334,5 +291,4 @@
 .room-board-decisions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); border-top: 1px solid var(--edge); padding-top: var(--sp-3); overflow-wrap: anywhere; }
 .room-board-decisions > p { margin: 0; }
 .room-report-files { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
-.au-recipe-fields, .au-hook-address { white-space: normal; overflow-wrap: anywhere; }
 .au-run-history p { white-space: pre-wrap; overflow-wrap: anywhere; }

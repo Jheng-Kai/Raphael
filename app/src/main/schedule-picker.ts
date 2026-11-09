@@ -1,13 +1,7 @@
 // Shared local-date picker. Its buttons and dismissal layer follow the app's menu conventions.
 import { getLocale, t } from "./i18n";
 import { dayName } from "./members";
-import { btn, closeMenu, esc, iconButton, openPopover, placeMenu, type Choice } from "./ui";
-
-export function windowTimes(current: string): Choice[] {
-  const times = Array.from({ length: 48 }, (_, n) => `${String(Math.floor(n / 2)).padStart(2, "0")}:${n % 2 ? "30" : "00"}`);
-  if (!times.includes(current)) times.push(current);
-  return times.sort().map(value => ({ value, label: value }));
-}
+import { btn, closeMenu, esc, iconButton, openPopover, placeMenu } from "./ui";
 
 export const dateKey = (day: Date): string => `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
 export const localDay = (key: string): Date => new Date(`${key}T00:00:00`);

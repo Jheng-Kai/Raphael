@@ -27,8 +27,16 @@ const FAILURES: Record<string, MessageKey> = {
   mcp_unavailable: "missing.installation",
 };
 
-/** The app asks for the owner's own key, or a developer app of their own, before it can be connected. */
-const asksMore = (card: ConnectorCard): boolean => card.needs === "key" || card.needs === "own_app";
+/** The app asks for the owner's own key, a developer app of their own, or a server of theirs, before it can be connected. */
+const asksMore = (card: ConnectorCard): boolean => card.needs === "key" || card.needs === "own_app" || card.needs === "own_server";
+
+/**
+ * The form's place in the card. A server of the owner's own (n8n) carries its fields in the card itself, as there is no
+ * catalog to read them from; the member explains each in the conversation (owner, 2026-11-09).
+ */
+const setupSlotHTML = (card: ConnectorCard): string =>
+  `<div data-inline-setup="${esc(card.id)}" data-toolkit="${esc(card.toolkit ?? card.app)}" data-needs="${esc(card.needs ?? "key")}" data-name="${esc(card.name)}"` +
+  (card.needs === "own_server" ? ` data-server-fields="${esc(JSON.stringify(card.fields ?? []))}"` : "") + `></div>`;
 
 const plain = (key: MessageKey): string => (t as (key: MessageKey) => string)(key);
 
@@ -49,7 +57,7 @@ export function appMarkHTML(app: string, logo?: string): string {
 /** What the card says of where its sign-in stands. */
 export function cardStateText(card: ConnectorCard): string {
   switch (card.state) {
-    case "pending": return card.reconnect ? plain("card.expiredAuth") : card.needs === "key" ? plain("card.needsKey") : card.needs === "own_app" ? plain("card.needsOwnApp") : "";
+    case "pending": return card.reconnect ? plain("card.expiredAuth") : card.needs === "key" || card.needs === "own_server" ? plain("card.needsKey") : card.needs === "own_app" ? plain("card.needsOwnApp") : "";
     case "authorizing": return plain("card.authorizing");
     case "connected": return t(card.reconnect ? "card.reconnected" : "card.connected", { p0: card.tool_count ?? 0 });
     case "cancelled": return plain("card.cancelled");
@@ -85,7 +93,7 @@ export function connectorCardHTML(card: ConnectorCard): string {
     status: connected ? "done" : card.state === "failed" ? "failed" : card.state === "expired" || card.state === "cancelled" ? "ready" : "waiting",
     statusText: connected ? t("cards.connected") : card.state === "authorizing" ? t("card.authorizing") : asksMore(card) && card.state === "pending" ? cardPromptText("key") : card.state === "pending" ? cardPromptText("connect") : card.state === "expired" ? t("cards.expired") : card.state === "cancelled" ? t("cards.cancelled") : undefined,
     body: state || t("cards.connectWhy"),
-    content: (card.missing ? missingHTML(card.missing) : "") + (asksMore(card) && ["pending", "failed", "cancelled"].includes(card.state) ? `<div data-inline-setup="${esc(card.id)}" data-toolkit="${esc(card.toolkit ?? card.app)}" data-needs="${esc(card.needs ?? "key")}" data-name="${esc(card.name)}"></div>` : ""),
+    content: (card.missing ? missingHTML(card.missing) : "") + (asksMore(card) && ["pending", "failed", "cancelled"].includes(card.state) ? setupSlotHTML(card) : ""),
     actions: connected ? btn(`${ico("check")}${esc(t("cards.connected"))}`, "sm", " disabled") : actionHTML(card),
     attrs: ` data-connector="${esc(card.id)}" data-card-state="${esc(card.state)}"`,
   });

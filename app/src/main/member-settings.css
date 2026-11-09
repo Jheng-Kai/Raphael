@@ -12,6 +12,10 @@
 /* Once the page has scrolled, the arrow stands on a band of the page's own ground, so no row slides under it. */
 .ms-pane[data-scrolled] .ms-bar { background: var(--content); box-shadow: 0 1px 0 var(--line); }
 .ms-bar .btn.icon .i { width: 20px; height: 20px; }
+/* Every icon on the cover has its own soft round surface, or a picture swallows it (owner, 2026-11-09: 「那個 Icon 要記得都
+   要有背景 不然根本看不到」): the way back as the cover's change icon, and the window's own buttons on a picture. */
+.ms-bar > .btn.icon.ms-back { border-radius: var(--r-pill); background: color-mix(in srgb, var(--content) 72%, transparent); color: var(--text); }
+:root:has(.ms-pane:not([hidden]):not([data-scrolled]) .ms-cover[data-pattern="image"]) .window-controls { border-bottom-left-radius: var(--r-lg); background: color-mix(in srgb, var(--content) 72%, transparent); }
 
 .ms-scroll { min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; }
 
@@ -83,24 +87,17 @@
 .btn.ms-open > .i { flex: none; color: var(--text-3); }
 .ms-row > .btn.ms-open { width: auto; }
 .ms-row > .tg { margin-right: var(--sp-1); }
-.ms-row > .sel { flex: none; }
 
-/* A choice in a row is its words and a chevron, with no box (R-UI-102), as in Settings. */
-.ms-list .sel { width: auto; max-width: 60%; justify-content: flex-end; gap: var(--sp-1); height: var(--h-ctl-sm); padding-inline: var(--sp-2); border-color: transparent; background-color: transparent; color: var(--text-2); }
-.ms-list .sel:hover:not(:disabled), .ms-list .sel[aria-expanded="true"] { border-color: transparent; background-color: transparent; color: var(--text); }
-.ms-list .sel:disabled:hover { border-color: transparent; }
+/* An app the member may use: its own mark before its name, so the list is read by its pictures. */
+.ms-row.ms-app { padding-left: var(--sp-2); }
+.ms-row.ms-app > .mono { flex: none; }
 
-/* The model is the composer's own chooser, here the whole row. */
-.ms-row.ms-model { padding: 0 var(--sp-1); }
-.ms-pane .ms-list .ms-model-slot { display: flex; flex: 1; min-width: 0; }
-.ms-pane .ms-list .ms-model-slot .mp-slot { display: flex; flex: 1; min-width: 0; }
-.ms-pane .ms-list .ms-model-slot .sel.mp-trigger { flex: 1; width: 100%; max-width: none; min-width: 0; min-height: 44px; justify-content: flex-start; padding: 0 var(--sp-2); border-color: transparent; background-color: transparent; color: var(--text); font-size: var(--fs-sm); }
-.ms-pane .ms-list .ms-model-slot .sel.mp-trigger:hover:not(:disabled) { background-color: var(--hover); }
-.ms-pane .ms-list .ms-model-slot .mp-source { display: none; }
-.ms-pane .ms-list .ms-model-slot :is(.mp-ttext, .mp-ttext:has(.cb-depth)) { display: flex; align-items: baseline; flex: 1; gap: var(--sp-2); min-width: 0; max-width: none; }
-.ms-pane .ms-list .ms-model-slot .mp-trigger .i { flex: none; }
-.ms-pane .ms-list .ms-model-slot .mp-tname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--weight-regular); }
-.ms-pane .ms-list .ms-model-slot .cb-depth { flex: none; color: var(--text-3); font-size: var(--fs-xs); font-weight: var(--weight-regular); }
+/* Moving a cover picture, as Notion's Reposition: the picture follows the pointer, a quiet line in its middle says so,
+   and 取消 / 儲存位置 stand where the change button was. */
+.ms-cover[data-repositioning] .ms-cover-img { cursor: grab; touch-action: none; user-select: none; }
+.ms-cover[data-repositioning] .ms-cover-img:active { cursor: grabbing; }
+.ms-cover-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: calc(100% - 2 * var(--sp-4)); padding: var(--sp-1) var(--sp-3); border-radius: var(--r-pill); background: color-mix(in srgb, var(--content) 72%, transparent); color: var(--text); font-size: var(--fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.ms-cover > .ms-cover-actions { position: absolute; right: var(--sp-4); bottom: var(--sp-3); }
 
 /* A long text opens in place. */
 .ms-edit { padding: var(--sp-1); }
@@ -118,7 +115,7 @@
 .ms-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .ms-fields > .mb-fin { background: var(--content); }
 .ms-actions { justify-content: flex-end; }
-/* The memory's two documents are the page's own sections: their names and their text start where the view's name does. */
+/* The member's memory is the page's own section: its name and its cards start where the view's name does. */
 .ms-pane .sgroup { margin-top: 0; }
 .ms-pane .sgroup .slist { --slist-pad: 0px; }
 

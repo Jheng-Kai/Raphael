@@ -893,7 +893,7 @@ export function installMock(fixture, config = {}, target = window) {
       case "vault.add": { const { values, ...metadata } = p; data.vaultEntries.push({ id: "new-synthetic-entry", ...metadata }); return { id: "new-synthetic-entry" }; }
       case "vault.update": Object.assign(data.vaultEntries.find(e => e.id === p.id), p); return { updated: true };
       case "vault.remove": data.vaultEntries = data.vaultEntries.filter(e => e.id !== p.id); return { removed: true };
-      case "links.preview": return new URL(p.url).hostname === "example.com" ? { url: p.url, site: "example.com", title: "範例網頁標題", description: "這一頁的一句摘要。", thumbnail: null } : { url: p.url, site: new URL(p.url).hostname, title: "", description: "", thumbnail: null };
+      case "links.preview": return new URL(p.url).hostname === "example.com" ? { url: p.url, site: "example.com", title: "範例網頁標題", description: "這一頁的摘要很長：從產品的來歷、每一種尺寸與顏色、材質與保養方式，一路說到配送、退換貨與保固的每一條細節，沒有人會在預覽裡讀完它。", thumbnail: null } : { url: p.url, site: new URL(p.url).hostname, title: "", description: "", thumbnail: null };
       case "pages.open":
         if (variant.pageGone) throw { kind: "not_found", message: "gone" };
         // Not a file of the dev server, which would write its own client into the page.

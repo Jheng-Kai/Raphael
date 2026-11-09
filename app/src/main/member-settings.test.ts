@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 // The member settings page (member-settings.ts): a cover, the face across it, the name and role in place, and one tinted
-// list per section. Long texts are one line until pressed, the memory is only counted, and every change is a call the
+// list per section. Every member has the same kinds, Raphael too: memory, tools, skills and commands, personality and
+// instructions, notifications (owner, 2026-11-09). Long texts are one line until pressed, and every change is a call the
 // panel and the old dialog already made.
 import { type Mock, beforeEach, describe, expect, test, vi } from "vitest";
 import type { AppContext, Member, MemberPatch, MembersList } from "./types";
@@ -23,8 +24,6 @@ const api = vi.hoisted(() => ({
   avatarPick: vi.fn(),
 }));
 vi.mock("./api", () => api);
-const brain = vi.hoisted(() => ({ mount: vi.fn(() => ({ draw: vi.fn(), reload: vi.fn() })) }));
-vi.mock("./composer-brain", () => ({ mountComposerBrain: brain.mount }));
 
 import { createMemberSettings, type MemberSettings } from "./member-settings";
 import { setLocale, t } from "./i18n";
@@ -77,7 +76,6 @@ beforeEach(() => {
   current = 3;
   list = LIST;
   for (const fn of Object.values(api)) fn.mockReset();
-  brain.mount.mockClear();
   api.membersSkillsList.mockResolvedValue({ skills: SKILLS, undo: null });
   api.membersSkillsRead.mockResolvedValue({ skill: { ...SKILLS[0], revision: "h1" }, text: "---\nname: research-summary\n---\n整理來源。" });
   api.membersSkillsUpdate.mockResolvedValue({});
@@ -113,34 +111,35 @@ describe("the page of a member", () => {
     expect(face.querySelector('.mb-face-pencil[aria-hidden="true"] svg.i')).not.toBeNull();
     expect($<HTMLInputElement>("#ms-name").value).toBe("日文老師");
     expect($<HTMLInputElement>("#ms-role").value).toBe("N2 嚴格版");
-    // The kinds stand in a column on the left (owner, 2026-11-08); the first is shown, and only it.
-    expect(kinds()).toEqual(["soul", "skills", "model", "tools", "voice", "memory", "general"]);
-    expect($('[data-cat="soul"]').getAttribute("aria-current")).toBe("page");
+    // The kinds stand in a column on the left, in the owner's order (owner, 2026-11-09); the first is shown, and only it.
+    expect(kinds()).toEqual(["memory", "tools", "skills", "soul", "notify"]);
+    expect($('[data-cat="memory"]').getAttribute("aria-current")).toBe("page");
+    await cat("soul");
     expect(sections()).toEqual(["ms-personality", "ms-instructions"]);
     for (const section of page.el.querySelectorAll(".ms-section[data-k]")) expect(section.querySelector(":scope > .ms-head > h2")!.textContent!.length, section.getAttribute("data-k")!).toBeGreaterThan(0);
-    // What the panel beside the page shows is not here: routines and messaging.
-    expect(page.el.querySelector('[data-cat="routines"], [data-cat="messaging"], .member-msg')).toBeNull();
-    // The model is the composer's own control, mounted once into the model row of its kind.
-    expect(brain.mount).toHaveBeenCalledTimes(1);
-    await cat("model");
-    expect($('[data-cat="model"]').getAttribute("aria-current")).toBe("page");
-    expect(sections()).toEqual(["ms-model"]);
-    expect($('[data-k="ms-model"] .ms-head')).toBeNull();
-    expect($('[data-slot="model"]').contains(page.el.querySelector(".ms-model-slot"))).toBe(true);
+    // What the panel beside the page shows is not here: routines and messaging. The model is chosen at the composer
+    // alone, members have no voice, and the group is the sidebar's.
+    expect(page.el.querySelector('[data-cat="routines"], [data-cat="messaging"], .member-msg, [data-cat="model"], [data-cat="voice"], [data-cat="general"], [data-slot="model"]')).toBeNull();
   });
 
-  test("Raphael has no name or role to type, no personality, instructions, tools or group", async () => {
+  test("Raphael has the same kinds as every member, and only his name and role are not typed", async () => {
     await open(0);
     expect(page.el.querySelector("#ms-name, #ms-role")).toBeNull();
     expect($(".ms-name").textContent).toBe("拉斐爾");
     expect(page.el.style.getPropertyValue("--ms-tint")).toBe("var(--raphael-color)");
-    expect(kinds()).toEqual(["skills", "model", "voice", "memory", "general"]);
-    expect(sections()).toEqual(["ms-skills", "ms-commands"]);
-    await cat("general");
-    expect(page.el.querySelector('[data-ms="group"]')).toBeNull();
-    expect(api.membersToolChoices).not.toHaveBeenCalled();
+    expect(kinds()).toEqual(["memory", "tools", "skills", "soul", "notify"]);
+    expect(api.membersToolChoices).toHaveBeenCalled();
     expect(api.membersSkillsList).toHaveBeenCalledWith(0);
     expect(api.membersCommandsList).toHaveBeenCalledWith(0);
+    await cat("soul");
+    await press('[data-ms="edit"][data-field="personality"]');
+    const box = $<HTMLTextAreaElement>("#ms-personality");
+    box.value = "沉著";
+    blur(box); await flush();
+    expect(host.update).toHaveBeenCalledWith(0, { personality: "沉著" });
+    await cat("notify");
+    await press('[data-ms="notify"]');
+    expect(host.update).toHaveBeenLastCalledWith(0, { notify: true });
   });
 
   test("it holds no word-button where an icon says it, in any kind: edits are pencils, adds are pluses", async () => {
@@ -183,8 +182,34 @@ describe("the page of a member", () => {
     expect(host.update).toHaveBeenLastCalledWith(3, { cover: null });
   });
 
+  // Owner, 2026-11-09: 「上方圖片要跟 Notion 類似 要可以上下調整圖片位置」.
+  test("a cover picture is shown where the owner put it, and 調整位置 moves it with 取消 and 儲存位置", async () => {
+    list = { ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, cover: { kind: "image" as const, url: "data:image/png;base64,AAAA", position: 30 } } : m) };
+    await open();
+    expect($<HTMLImageElement>(".ms-cover-img").style.objectPosition).toBe("50% 30%");
+    await press('[data-ms="cover"]');
+    document.querySelector<HTMLElement>('#app-popover [data-cover-act="reposition"]')!.click();
+    await flush();
+    expect($(".ms-cover").hasAttribute("data-repositioning")).toBe(true);
+    expect(page.el.querySelector('[data-ms="cover"]')).toBeNull();
+    expect($('[data-ms="cover-save"]').textContent).toBe(t("memberSettings.savePosition"));
+    // Nothing moved: saving changes nothing; Escape leaves the move, and the picture stays where it was.
+    await press('[data-ms="cover-save"]');
+    expect(host.update).not.toHaveBeenCalled();
+    expect($(".ms-cover").hasAttribute("data-repositioning")).toBe(false);
+    await press('[data-ms="cover"]');
+    document.querySelector<HTMLElement>('#app-popover [data-cover-act="reposition"]')!.click();
+    await flush();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await flush();
+    expect($(".ms-cover").hasAttribute("data-repositioning")).toBe(false);
+    expect(host.back).not.toHaveBeenCalled();
+    expect($<HTMLImageElement>(".ms-cover-img").style.objectPosition).toBe("50% 30%");
+  });
+
   test("personality and instructions are one line each; a press opens the box in place and blur saves it", async () => {
     await open();
+    await cat("soul");
     expect($('[data-ms="edit"][data-field="personality"]').textContent).toContain("嚴厲但耐心");
     // Only the first line of a long text is shown.
     expect($('[data-ms="edit"][data-field="instructions"]').textContent).toContain("每天出 10 題");
@@ -213,6 +238,7 @@ describe("the page of a member", () => {
   test("an empty long field says 未填寫, stored text is escaped, and Escape in the box puts the old text back", async () => {
     list = { ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, personality: "", instructions: "</textarea><script>x()</script>" } : m) };
     await open();
+    await cat("soul");
     expect($('[data-ms="edit"][data-field="personality"] .ms-label').textContent).toBe(t("members.notSet"));
     expect(page.el.querySelector("script")).toBeNull();
     await press('[data-ms="edit"][data-field="instructions"]');
@@ -252,49 +278,39 @@ describe("the page of a member", () => {
     expect(name.selectionStart).toBe(2);
   });
 
-  test("the group is a dropdown, and the draft switch writes draft_first", async () => {
+  test("the draft switch stands under the apps in 工具 and writes draft_first, Raphael's too", async () => {
     await open();
-    await cat("general");
-    await press('[data-ms="group"]');
-    const items = [...document.querySelectorAll<HTMLElement>("#app-popover [data-value]")];
-    expect(items.map((b) => b.textContent)).toEqual(["未分組", "學習", "專案"]);
-    items[2]!.click();
-    expect(host.update).toHaveBeenCalledWith(3, { group_id: 21 });
-    const draft = $('[data-ms="draft"]');
+    await cat("tools");
+    const draft = $('[data-k="ms-draft"] [data-ms="draft"]');
     expect(draft.getAttribute("aria-checked")).toBe("true");
     draft.click();
     expect(host.update).toHaveBeenLastCalledWith(3, { draft_first: false });
-  });
-
-  test("the draft switch of Raphael writes his own draft_first", async () => {
+    page.close();
     await open(0);
-    await cat("general");
+    await cat("tools");
     await press('[data-ms="draft"]');
     expect(host.update).toHaveBeenCalledWith(0, { draft_first: false });
   });
 });
 
 describe("the memory", () => {
-  test("is a kind of its own: it is read when chosen and shows both documents", async () => {
+  // Owner, 2026-11-09: 「個別角色不用顯示共同記憶 共同記憶只需要顯示在設定即可」.
+  test("is the first kind, read as the page opens, and shows the member's own memory alone, as cards", async () => {
     await open();
-    expect(page.el.querySelector("[data-mem-section], .mem-entry")).toBeNull();
-    expect(page.el.textContent).not.toContain("在背單字");
-    expect(api.core).not.toHaveBeenCalledWith("memory.get", expect.anything());
-    await cat("memory");
     expect(page.el.dataset.view).toBe("main");
-    expect(api.core).toHaveBeenCalledWith("memory.get", { space: "shared" });
     expect(api.core).toHaveBeenCalledWith("memory.get", { space: "own", member_id: 3 });
+    expect(api.core).not.toHaveBeenCalledWith("memory.get", { space: "shared" });
     const documents = [...page.el.querySelectorAll<HTMLElement>("[data-mem-section]")];
-    expect(documents.map((s) => [s.dataset.memSpace, s.getAttribute("aria-label")])).toEqual([["shared", "共同記憶"], ["own", "日文老師的記憶"]]);
-    expect(documents[1]!.textContent).toContain("在背單字");
-    // The edit is a pencil here too, and only the section pressed opens its box.
-    const edit = documents[1]!.querySelector<HTMLElement>('[data-mem="edit"]')!;
+    expect(documents.map((s) => [s.dataset.memSpace, s.getAttribute("aria-label")])).toEqual([["own", "日文老師的記憶"]]);
+    expect(documents[0]!.querySelectorAll("details.mem-entry")).toHaveLength(2);
+    expect(documents[0]!.textContent).toContain("在背單字");
+    // The edit is a pencil here too.
+    const edit = documents[0]!.querySelector<HTMLElement>('[data-mem="edit"]')!;
     expect(edit.classList.contains("icon")).toBe(true);
     expect(edit.textContent).toBe("");
     edit.click();
     const box = $<HTMLTextAreaElement>('[data-mem-space="own"] textarea.mem-body');
     expect(box.value).toBe("在背單字\n\n每週三複習");
-    expect(page.el.querySelector('[data-mem-space="shared"] textarea')).toBeNull();
     box.value = "在背單字";
     box.dispatchEvent(new Event("input", { bubbles: true }));
     $<HTMLElement>('[data-mem-space="own"] [data-mem="save"]').click();
@@ -303,11 +319,10 @@ describe("the memory", () => {
     expect($('[data-cat="memory"]').getAttribute("aria-current")).toBe("page");
   });
 
-  test("Raphael's own memory is his", async () => {
+  test("Raphael's own memory is his, and only it", async () => {
     await open(0);
-    await cat("memory");
     expect(api.core).toHaveBeenCalledWith("memory.get", { space: "own", member_id: 0 });
-    expect([...page.el.querySelectorAll("[data-mem-section]")].map((s) => s.getAttribute("aria-label"))).toEqual(["共同記憶", "拉斐爾的記憶"]);
+    expect([...page.el.querySelectorAll("[data-mem-section]")].map((s) => s.getAttribute("aria-label"))).toEqual(["拉斐爾的記憶"]);
   });
 });
 
@@ -388,11 +403,13 @@ describe("skills and commands", () => {
   });
 });
 
-describe("tools and voice", () => {
-  test("the apps that are on are switches; turning one off from 「all」 lists the rest", async () => {
+describe("tools and notifications", () => {
+  // Owner, 2026-11-09: 「工具的部分都要放上 Icon 比較容易一眼就看出來我們開放甚麼工具給他」.
+  test("the apps that are on are rows with their own mark and a switch, and turning one off from 「all」 lists the rest", async () => {
     await open();
     await cat("tools");
     expect([...page.el.querySelectorAll<HTMLElement>('[data-ms="tool"]')].map((s) => [s.dataset.id, s.getAttribute("aria-checked")])).toEqual([["gmail", "true"], ["notion", "true"]]);
+    for (const row of page.el.querySelectorAll<HTMLElement>(".ms-row.ms-app")) expect(row.firstElementChild!.classList.contains("mono"), row.textContent!).toBe(true);
     await press('[data-ms="tool"][data-id="gmail"]');
     expect(host.update).toHaveBeenCalledWith(3, { tools: ["read_file", "notion"] });
   });
@@ -413,41 +430,21 @@ describe("tools and voice", () => {
     expect($("[data-k='ms-tools'] .ms-empty").textContent).toBe(t("memberSettings.noTools"));
   });
 
-  test("the voice card is Grok Bot's: rows with a dropdown or a switch on the right", async () => {
+  // Owner, 2026-11-09: 「我們正式版是不會有語音的…語音語通知可以把語言拿掉就好 通知留著」.
+  test("notifications are one switch, and no member has a voice to choose", async () => {
     await open();
-    await cat("voice");
-    const card = $("[data-k='ms-voice']");
-    expect([...card.querySelectorAll<HTMLElement>(".ms-row > .ms-label")].map((label) => label.textContent)).toEqual([t("members.profile.voiceLabel"), t("members.profile.notify")]);
-    expect(card.querySelector<HTMLElement>('.ms-row [data-ms="voice"]')!.classList.contains("sel")).toBe(true);
-    expect(card.querySelector('.ms-row [data-ms="notify"]')!.getAttribute("role")).toBe("switch");
-    await press('[data-ms="voice"]');
-    const items = [...document.querySelectorAll<HTMLElement>("#app-popover [data-value]")];
-    expect(items.map((item) => item.textContent)).toEqual([t("members.profile.defaultVoice"), "Helix", "Nova"]);
-    items[1]!.click();
-    expect(host.update).toHaveBeenCalledWith(3, { voice: "v1" });
+    await cat("notify");
+    expect(sections()).toEqual(["ms-notify"]);
+    const row = $("[data-k='ms-notify'] .ms-row");
+    expect(row.querySelector(".ms-label")!.textContent).toBe(t("members.profile.notify"));
+    expect(row.querySelector('[data-ms="notify"]')!.getAttribute("role")).toBe("switch");
     await press('[data-ms="notify"]');
     expect(host.update).toHaveBeenLastCalledWith(3, { notify: true });
-  });
-
-  test("Raphael's voice is the one setting his answers are spoken in; he has no notify row", async () => {
-    await open(0);
-    await cat("voice");
-    expect($('[data-ms="voice"]').textContent).toContain("Nova");
-    expect(page.el.querySelector('[data-ms="notify"]')).toBeNull();
-    await press('[data-ms="voice"]');
-    [...document.querySelectorAll<HTMLElement>("#app-popover [data-value]")].find((item) => item.textContent === "Helix")!.click();
-    await flush();
-    expect(api.settingsSet).toHaveBeenCalledWith("tts_fish_voice", "v1");
-    expect(host.update).not.toHaveBeenCalled();
-    expect($('[data-ms="voice"]').textContent).toContain("Helix");
-  });
-
-  test("without a voice service the dropdown is off and the card says what is missing", async () => {
-    api.membersVoices.mockResolvedValue({ configured: false, voices: [] });
-    await open();
-    await cat("voice");
-    expect($<HTMLButtonElement>('[data-ms="voice"]').disabled).toBe(true);
-    expect(page.el.querySelector("[data-k='ms-voice'] [data-missing-repair]")).not.toBeNull();
+    for (const kind of kinds()) {
+      await cat(kind);
+      expect(page.el.querySelector('[data-ms="voice"]'), kind).toBeNull();
+    }
+    expect(api.membersVoices).not.toHaveBeenCalled();
   });
 });
 
@@ -475,22 +472,21 @@ describe("going back", () => {
     name.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     expect(name.value).toBe("日文老師");
     expect(host.back).not.toHaveBeenCalled();
-    await cat("general");
-    await press('[data-ms="group"]');
+    await press('[data-ms="cover"]');
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     expect(host.back).not.toHaveBeenCalled();
   });
 
   test("close() hides it at once without a step back, and it opens fresh for the next member", async () => {
     await open();
-    await cat("memory");
+    await cat("skills");
     page.close();
     expect(page.isOpen()).toBe(false);
     expect(page.el.hidden).toBe(true);
     current = 4;
     page.open(); await flush();
     expect(page.el.dataset.view).toBe("main");
-    expect($('[data-cat="soul"]').getAttribute("aria-current")).toBe("page");
+    expect($('[data-cat="memory"]').getAttribute("aria-current")).toBe("page");
     expect($<HTMLInputElement>("#ms-name").value).toBe("行程管家");
     expect(host.back).not.toHaveBeenCalled();
   });

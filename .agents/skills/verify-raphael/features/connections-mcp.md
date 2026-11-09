@@ -4,6 +4,19 @@ Owner decision 2026-10-30: Settings > Connections is the only connected-app entr
 The sidebar has no app entry or badge. The installed tab retains the shared inventory
 count and its unknown/loading state; connection and permission behavior is unchanged.
 
+## Setup in the conversation (owner, 2026-11-09)
+
+Owner: 「這種設定不管是 composio 還是甚麼的 一律全部都在對話中進行…除非真的是登入就結束 或是輸入金鑰匙就結束」. In the
+store, a sign-in or one key is still done at once; 加入 on anything more (a server of the owner's own such as n8n, a
+developer app of theirs) puts the owner's words 「幫我連接 <name>」 in the conversation's composer (`store.setUpInChat`)
+and its row says nothing it would have to explain. The member answers with a connect card (`connect_app`): a server
+card has `needs: "own_server"` and carries its own `fields` (n8n: `url`, `token`), which the card's inline form shows
+with no catalog read; `integrations.card_connect {id, fields}` takes them, the token field is emptied on submit, and
+the member explains each field in its reply. Scenes: store-n8n and plugins-setup-own-app (`store-in-chat`).
+
+```powershell
+npm run look -- store-n8n plugins-setup-own-app plugins-store-needs --theme both --width 1120,720,1920x1080
+```
 ## The store is only what is not added yet; n8n is a preset (owner, 2026-11-08)
 
 The store is one list, 「全部」 (or the chosen chip's name), of the apps not added yet: no 已連結 and no 常用

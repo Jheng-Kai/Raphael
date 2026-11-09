@@ -38,7 +38,7 @@ export default [
     {action:'press-feedback',selectors:['.mc-source:not([aria-pressed="true"])','.mc-source[aria-pressed="true"]']},
   ]),
   // The receipt folds into the reply's work detail (R-UI-101), so the press opens that detail first.
-  (()=>{const source=presenceScenes.find(item=>item.name==='event-routine-opens');return {...source,name:'daily-press-event',description:'An event receipt answers a press without opening during measurement',steps:[...source.steps.filter(step=>step.action!=='check'&&!String(step.selector).includes('open-routine')&&!String(step.selector).includes('au-routine-dialog')),{action:'press-feedback',selectors:['.mb-chat:not([hidden]) .btn.event-open']}]};})(),
+  (()=>{const source=presenceScenes.find(item=>item.name==='event-routine-opens');return {...source,name:'daily-press-event',description:'An event receipt answers a press without opening during measurement',steps:[...source.steps.filter(step=>step.action!=='check'&&!String(step.selector).includes('open-routine')&&!String(step.selector).includes('rv-dialog')),{action:'press-feedback',selectors:['.mb-chat:not([hidden]) .btn.event-open']}]};})(),
   scene('daily-press-card','A conversation card primary action answers before its asynchronous work',[page('agent'),wait('[data-permission-card]'),{action:'press-feedback',selectors:['[data-act="perm-once"]']}],{permissionCard:'tool'}),
   (()=>{const source=desktopScenes.find(item=>item.name==='panel-screen-routines');return {...source,name:'daily-press-desktop',description:'Desktop preview controls answer without changing geometry',steps:[...source.steps,{action:'press-feedback',selectors:['.desktop-hit']}]};})(),
   scene('daily-newest','A new window opens recent activity rather than the stable default',[page('agent'),check('daily-newest')],{conversations:[
@@ -52,11 +52,6 @@ export default [
     hover(kind==='room'?'.au-room-thread .ra .chat-message':'.mb-chat:not([hidden]) .ra .chat-message'),
     click(kind==='room'?'.au-room-thread .ra [data-room-act="copy-message"], .au-room-thread .ra [data-act="copy-message"]':'.mb-chat:not([hidden]) .ra [data-act="copy-message"]'),check('daily-copy'),
   ])),
-  scene('daily-copy-setup','A copy control with words keeps its bounds and answers in place',[
-    ...settingsScenes.find(item=>item.name==='plugins-setup-own-app').steps.filter(step=>step.action!=='check'),
-    stableClick('.cn-setup-dialog [data-dlg="copy"]'),check('daily-copy'),
-  ]),
-  (()=>{const source=automationScenes.find(item=>item.name==='automation-webhook-address-changed');return {...source,name:'daily-copy-webhook',description:'A masked webhook secret copies on its existing button and retains its address notice',steps:[...source.steps,click('[data-dlg="hook-show"]'),wait('.au-hook-secret[type="text"]'),stableClick('[data-dlg="hook-copy"]'),check('daily-copy')]};})(),
   scene('daily-draft-member','A member draft waits through other conversations and Home',[
     member(1),type(input,'Unfinished sample draft'),member(2),type(input,'Another sample draft'),member(1),page('home'),member(1),check('daily-draft-member'),
   ]),

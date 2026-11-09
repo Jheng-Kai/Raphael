@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { Window } from "happy-dom";
 import { setLocale, t } from "./i18n";
 
 const api = vi.hoisted(() => ({ core: vi.fn() }));
@@ -22,16 +23,34 @@ const visible = (html: string): string => html.replace(/<[^>]+>/g, " ").replace(
 const buttons = (html: string): string[] => [...html.matchAll(/<button\b[^>]*>/g)].map((m) => m[0]);
 
 describe("the document", () => {
-  test("reads as one card under its name, an entry to a block, with no rows and no type labels", () => {
+  // Owner, 2026-11-09: 「記憶不要全部都列出來 設計一個個 card 需要點擊才會展開比較好」.
+  test("each entry is a card of its own that is closed until it is pressed, under the memory's name", () => {
     const html = memoryHTML(view());
-    expect(html.match(/<div class="mem-entry"><p class="mem-text">/g)).toHaveLength(3);
-    // Its name stands over the card, with the pencil and the ⋯ beside it (owner, 2026-11-09).
+    expect(html.match(/<details class="mem-entry" data-mem-entry="\d+"><summary class="mem-sum"><span class="mem-text">/g)).toHaveLength(3);
+    expect(html).not.toMatch(/<details[^>]* open/);
+    // Its name stands over the cards, with the pencil and the ⋯ beside it (owner, 2026-11-09).
     expect(html).toMatch(/<div class="mem-head"><h2 class="mem-title">小晴的記憶<\/h2><span class="ctl">.*data-mem="edit".*data-mem="section-more"/s);
-    expect(html.indexOf('class="mem-head"')).toBeLessThan(html.indexOf('class="mem-doc"'));
+    expect(html.indexOf('class="mem-head"')).toBeLessThan(html.indexOf('class="mem-doc'));
     expect(html).toContain("回答保持兩三句\n多一行說明");
     expect(visible(html)).toBe("小晴的記憶 主人住在台北 回答保持兩三句 多一行說明 待確認 新版官網十一月上線 對話摘要");
     expect(html).not.toContain("mem-sub");
     expect(html).not.toContain('data-mem="more"');
+  });
+
+  test("an entry pressed open stays open when the memory is drawn again, and closes on a second press", () => {
+    const host = { visible: () => true, redraw: vi.fn(), space: "own" as const, memberId: () => 1, ownerName: () => "小晴" };
+    const panel = createMemory(host);
+    api.core.mockResolvedValueOnce(DOC);
+    const page = new Window().document;
+    return panel.load().then(() => {
+      page.body.innerHTML = memoryHTML(panel.view());
+      const summary = (): Element => page.querySelector('details[data-mem-entry="1"] > summary')! as unknown as Element;
+      expect(panel.click(summary())).toBe(true);
+      expect(memoryHTML(panel.view())).toMatch(/<details class="mem-entry" data-mem-entry="1" open>/);
+      page.body.innerHTML = memoryHTML(panel.view());
+      expect(panel.click(summary())).toBe(true);
+      expect(memoryHTML(panel.view())).not.toMatch(/ open>/);
+    });
   });
 
   test("what nobody confirmed wears a tag, and the mark is not shown as words", () => {

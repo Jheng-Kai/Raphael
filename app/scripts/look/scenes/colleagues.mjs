@@ -4,8 +4,6 @@ const maker = [{action:"member-column",collapsed:false},click('[data-col="add"]'
 const preview = [...maker,click('[data-dlg="open"]'),wait(".template-preview"),check("template-content")];
 const accountFixture = {managedConnectors:[{id:"composio:gmail",kind:"composio",name:"Gmail",description:"整理重要來信與準備回覆",status:"ACTIVE",enabled:true,enabled_tools:["GMAIL_FETCH_EMAILS"],disabled_tools:[],accounts:[{id:"work",status:"ACTIVE",label:"工作信箱 · work@example.test"},{id:"personal",status:"ACTIVE",label:"私人信箱 · personal@example.test"}]}]};
 const accounts = [...settings("connections"),click('[data-conn="open"][data-id="composio:gmail"]'),wait(".cs-accts")];
-const hookFixture = {routines:[{id:91,member_id:1,title:"表單回覆整理",prompt:"整理表單回覆，只在對話中回報。",schedule:null,when:{webhook:true},enabled:true,last_run:null,next_run:null}]};
-const hook = [member(1),{action:"open-details"},wait('[data-routine="91"]'),click('[data-det="routine-open"][data-id="91"]'),wait('.au-hook-address'),click('[data-dlg="tunnel"]'),wait('.au-tunnel')];
 
 export default [
   scene("member-template-gallery","Eight local slime colleague recipes",[...maker,check("colleague-gallery")]),
@@ -18,9 +16,6 @@ export default [
   scene("team-folder-handoff","A colleague handoff can cite context, meetings and project paths",[member(1),{action:"wait-text",selector:'.ra-scroll',text:"/home/cua/team/projects/"},check("colleague-handoff")],{colleague:"handoff"}),
   scene("account-labels","Connections distinguishes work and personal accounts",[...accounts,check("colleague-accounts")],accountFixture),
   scene("account-label-edit","The owner names an exact signed-in account",[...accounts,click('[data-conn="account-label"][data-account="work"]'),wait('[data-account-name]'),type('[data-account-name]',"研究信箱"),click('.mb-dialog [data-dlg="save"]'),waitGone('[data-account-name]'),check("colleague-label-saved")],accountFixture),
-  scene("webhook-external","Existing tunnel tools have exact commands and a PC-on reminder",[...hook,scroll('.au-tunnel'),check("colleague-tunnel")],hookFixture),
-  scene("webhook-external-tested","A self-post tests the public URL without a job",[...hook,type('[data-tunnel-url]',"https://sample.ts.net"),click('[data-dlg="tunnel-test"]'),{action:"wait-text",selector:'.au-tunnel',text:"已收到自測 POST"},scroll('.au-tunnel'),check("colleague-tunnel-tested")],hookFixture),
-  scene("webhook-external-hmac","HMAC authentication shares the one-time key and copy actions",[...hook,click('[data-dlg="hook-show"]'),click('[data-auth="hmac"]'),scroll('.au-tunnel'),check("colleague-tunnel-hmac")],hookFixture),
   scene("output-folder-picker","The native folder picker shows the chosen folder's name and path",[...settings("general"),click('[data-act="output-pick"]'),wait('[data-row="output-folder"] .output-path'),check("colleague-output")],{ownerOutputFolder:true}),
   scene("output-folder-picker-cancel","Cancelling the native folder picker keeps the chosen folder",[...settings("general"),click('[data-act="output-pick"]'),check("colleague-output-cancel")],{ownerOutputFolder:true,folderCancel:true}),
 ];

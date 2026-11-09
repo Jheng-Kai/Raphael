@@ -1,7 +1,7 @@
 import { scene, wait, check, click, scroll, member, room } from "./steps.mjs";
 const table = '.rich-block.message-table';
 const diagram = '.message-diagram[data-diagram-state="rendered"]';
-const ready = [wait(table), scroll('.message-code:not(.message-diagram)'), wait('.message-code[data-highlighted="true"]'), scroll('.message-diagram'), wait(diagram), check("rich-content")];
+const ready = [wait(table), scroll('.message-code:not(.message-diagram)'), wait('.message-code[data-highlighted="true"]'), scroll('.message-diagram'), wait(diagram), check("rich-content"), check("reply-measure")];
 export default [
   scene("team-file-reply", "A file of the team folder is a real button in the reply", [wait('[data-act="team-file-open"]')], { richReply: "teamFile" }),
   scene("rich-chief", "Chief reply has ordered rich cards outside text bubbles", [...ready, scroll(table)], { richReply: true }),

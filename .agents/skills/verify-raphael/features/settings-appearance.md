@@ -125,7 +125,7 @@ Computer search opens that member's panel. Host checks and copyable repair
 commands use the location popover, never the retired settings pane.
 
 ```powershell
-npm run look -- settings-raphael-memory settings-raphael-voice desktop-host-local desktop-host-error settings-speech-service settings-owner --theme both --width 1120,720,1920x1080
+npm run look -- settings-raphael-memory desktop-host-local desktop-host-error settings-speech-service settings-owner --theme both --width 1120,720,1920x1080
 ```
 
 ## Owner output folder in General (2026-11-05)
@@ -359,7 +359,7 @@ local-command-settings, local-command-setting-always, local-command-setting-neve
 menu-settings-redraw, missing-vision, missing-search, missing-search-repair,
 missing-voice, missing-voice-repair,
 speaker-draft-chief, speaker-draft-member, speaker-draft-profile,
-settings-raphael-memory, settings-raphael-voice, desktop-host-local,
+settings-raphael-memory, desktop-host-local,
 desktop-host-remote, desktop-host-invalid, desktop-host-error, desktop-install,
 desktop-panel, desktop-viewer, desktop-absent, panel-no-computer.
 

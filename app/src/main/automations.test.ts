@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { AppContext, Member, Routine } from "./types";
 const api = vi.hoisted(() => ({ core:vi.fn(), homeOverview:vi.fn(), membersList:vi.fn(), routinesList:vi.fn(), routineWebhook:vi.fn(), routineRuns:vi.fn(), routinesRun:vi.fn(), routinesCreate:vi.fn(), routinesUpdate:vi.fn(), routinesDelete:vi.fn(), calendarAdd:vi.fn(), calendarUpdate:vi.fn(), calendarDelete:vi.fn(), keepAwakeGet:vi.fn(), keepAwakeSet:vi.fn(), roomsList:vi.fn(), settingsGet:vi.fn(), modelsCatalog:vi.fn(), brainsCli:vi.fn(), groupsCreate:vi.fn(), groupsUpdate:vi.fn(), groupsDelete:vi.fn(), membersUpdate:vi.fn(), roomsCreate:vi.fn(), roomSend:vi.fn(), roomStop:vi.fn(), roomMessages:vi.fn() }));
 vi.mock("./api",()=>api);
-import { openRoutineDialog } from "./routine-dialog";
 import { occurrences } from "./automation-calendar";
 import { createAutomationsPage } from "./pages/automations";
 import { dateKey, localDay, monthGrid, shiftDay } from "./schedule-picker";
@@ -30,31 +29,7 @@ beforeEach(()=>{
   api.keepAwakeGet.mockResolvedValue(false);api.keepAwakeSet.mockResolvedValue(true);api.roomsList.mockResolvedValue({rooms:[]});api.settingsGet.mockResolvedValue({settings:{agent_model:"openai/shared-model"}});
 });
 
-test("the routine editor is wide and short: title with its switch and the instructions beside when it runs, no test run, history or who", async () => {
-  setLocale("zh-TW");
-  const dialog = openRoutineDialog({members, routine: plan});
-  await flush();
-  const grid = document.querySelector(".au-routine-grid")!;
-  expect(grid.querySelectorAll(":scope > .au-col")).toHaveLength(2);
-  expect(grid.querySelector(".au-col-what .au-title-row #au-title")).not.toBeNull();
-  expect(grid.querySelector('.au-col-what .au-title-row [data-dlg="enabled"]')).not.toBeNull();
-  expect(grid.querySelector(".au-col-what #au-prompt")).not.toBeNull();
-  expect(document.querySelector('[data-dlg="test"], .au-run-section, [data-dlg="member"]')).toBeNull();
-  expect(api.routineRuns).not.toHaveBeenCalled();
-  dialog.close();
-});
 
-test("monthly and minute choices save through the existing routine dialog", async () => {
-  openRoutineDialog({members, routine: plan});
-  click('[data-dlg="kind-menu"]'); click('#app-popover [data-value="monthly"]');
-  field('#au-month-day', '31'); click('[data-dlg="save"]'); await flush();
-  expect(api.routinesUpdate).toHaveBeenCalledWith(1, expect.objectContaining({schedule:expect.objectContaining({kind:'monthly',day:31})}));
-  openRoutineDialog({members, routine: plan});
-  click('[data-dlg="kind-menu"]'); click('#app-popover [data-value="every"]'); click('[data-dlg="hours"]');
-  click('#app-popover [data-value="m30"]'); click('[data-dlg="save"]'); await flush();
-  expect(api.routinesUpdate).toHaveBeenLastCalledWith(1, expect.objectContaining({schedule:expect.objectContaining({kind:'every',minutes:30})}));
-  expect(api.routinesUpdate.mock.lastCall?.[1].schedule).not.toHaveProperty('hours');
-});
 
 test("monthly dates clamp in the calendar and minutes remain one rhythm", () => {
   const monthly = {...plan, next_run:new Date('2026-01-31T09:00').getTime(), schedule:{kind:'monthly',day:31,time:'09:00'}} as Routine;
@@ -62,163 +37,17 @@ test("monthly dates clamp in the calendar and minutes remain one rhythm", () => 
   expect(rows.map(row=>dateKey(new Date(row.at)))).toEqual(['2026-02-28','2026-03-31']);
 });
 
-test("webhook choice saves without exposing technical event fields", async () => {
-  openRoutineDialog({members, routine:plan});
-  click('[data-dlg="trigger"]'); click('#app-popover [data-value="webhook"]');
-  expect(document.querySelector('.au-routine-dialog')!.textContent).toContain('this PC');
-  click('[data-dlg="save"]'); await flush();
-  expect(api.routinesUpdate).toHaveBeenCalledWith(1, expect.objectContaining({when:{webhook:true}}));
-});
 
-test("webhook details share the masked secret field and reveal only on request", async () => {
-  api.routineWebhook.mockResolvedValue({address:'http://127.0.0.1:43210/routines/1'});
-  api.core.mockResolvedValue({address:'http://127.0.0.1:43210/routines/1',secret:'sample-secret'});
-  openRoutineDialog({members,routine:{...plan,schedule:null,when:{webhook:true}}}); await flush();
-  expect(document.querySelector('.field.sc-field .au-hook-secret')).not.toBeNull();
-  expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('password');
-  expect(api.routineWebhook).toHaveBeenCalledWith(1);
-  expect(api.core).not.toHaveBeenCalled();
-  expect(document.body.innerHTML).not.toContain('sample-secret');
-  click('[data-dlg="hook-show"]'); await flush();
-  expect(api.core).toHaveBeenLastCalledWith('routines.webhook',{id:1,reveal:true,rotate:true});
-  expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.value).toBe('sample-secret');
-  click('[data-dlg="hook-show"]');
-  expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('password');
-  expect(document.body.innerHTML).not.toContain('sample-secret');
-});
 
-test("copying requires explicit generation and keeps the displayed field without another key request", async () => {
-  const copied = vi.spyOn(navigator.clipboard,'writeText').mockResolvedValue();
-  api.routineWebhook.mockResolvedValue({address:'http://127.0.0.1:43210/routines/1'});
-  api.core.mockResolvedValue({address:'http://127.0.0.1:43210/routines/1',secret:'sample-secret'});
-  openRoutineDialog({members,routine:{...plan,schedule:null,when:{webhook:true}}}); await flush();
-  click('[data-dlg="hook-copy"]'); await flush();
-  expect(copied).not.toHaveBeenCalled(); expect(api.core).not.toHaveBeenCalled();
-  click('[data-dlg="hook-show"]'); await flush();
-  const input = document.querySelector('.au-hook-secret');
-  click('[data-dlg="hook-copy"]'); await flush();
-  expect(copied).toHaveBeenCalledWith('sample-secret');
-  expect(document.querySelector('.au-hook-secret')).toBe(input);
-  expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('text');
-  expect(api.core).toHaveBeenCalledTimes(1); expect(api.routineWebhook).toHaveBeenCalledTimes(1);
-  click('[data-dlg="hook-show"]');
-  expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('password');
-  expect(document.querySelector<HTMLButtonElement>('[data-dlg="hook-copy"]')!.disabled).toBe(true);
-  expect(document.body.innerHTML).not.toContain('sample-secret');
-  copied.mockRestore();
-});
 
-test("explicit generation updates a replacement address and local copying keeps its feedback", async () => {
-  const copied = vi.spyOn(navigator.clipboard,'writeText').mockResolvedValue();
-  api.routineWebhook.mockResolvedValueOnce({address:'http://127.0.0.1:43210/routines/1'});
-  openRoutineDialog({members,routine:{...plan,schedule:null,when:{webhook:true}}}); await flush();
-  let complete!: (value: unknown) => void;
-  api.core.mockImplementationOnce(() => new Promise(resolve => { complete=resolve; }));
-  const generate=document.querySelector<HTMLButtonElement>('[data-dlg="hook-show"]')!;
-  generate.click();
-  expect(generate.disabled).toBe(true);
-  expect(generate.getAttribute('aria-busy')).toBe('true');
-  complete({address:'http://127.0.0.1:43211/routines/1',address_changed:true,secret:'sample-secret'}); await flush();
-  expect(document.querySelector('.au-hook-address')?.textContent).toContain(':43211/');
-  expect(document.querySelector('.au-webhook [role="status"]')?.textContent).toBeTruthy();
-  const button=document.querySelector<HTMLButtonElement>('[data-dlg="hook-copy"]')!;
-  button.click(); await flush();
-  expect(copied).toHaveBeenCalledWith('sample-secret');
-  expect(api.core).toHaveBeenCalledTimes(1); expect(api.routineWebhook).toHaveBeenCalledTimes(1);
-  expect(document.querySelector('[data-dlg="hook-copy"]')).toBe(button);
-  expect(button.getAttribute('aria-label')).toBe('Copied');
-  expect(button.disabled).toBe(false);
-  expect(button.hasAttribute('aria-busy')).toBe(false);
-  expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('text');
-  copied.mockRestore();
-});
 
-test("event choices explain the empty verified catalogue", async () => {
-  openRoutineDialog({members, routine:plan});
-  click('[data-dlg="trigger"]'); click('#app-popover [data-value="event"]'); await flush();
-  expect(document.querySelector('.au-routine-dialog')!.textContent).toContain('verified events');
-  expect(document.querySelector<HTMLButtonElement>('[data-dlg="save"]')!.disabled).toBe(true);
-});
 
-const mailChoice = {id:"gmail-mail",toolkit:"gmail",slug:"GMAIL_FETCH_EMAILS",input:"",label:"New mail",app:"composio:gmail",app_name:"Gmail"};
-const detectedMail = {app:"composio:gmail",event:{tool:"mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL",arguments:{tools:[{tool_slug:"GMAIL_FETCH_EMAILS",arguments:{max_results:20,include_payload:false,verbose:false}}]},items:"data.results.0.response.data.messages",id:"messageId"},filter:{field:"",equals:""}};
-const calendarChoice = {...mailChoice,id:"calendar-event",toolkit:"googlecalendar",slug:"GOOGLECALENDAR_EVENTS_LIST",label:"New event",app:"composio:googlecalendar",app_name:"Google Calendar"};
-const detectedCalendar = {app:calendarChoice.app,event:{tool:detectedMail.event.tool,arguments:{tools:[{tool_slug:calendarChoice.slug,arguments:{calendarId:"primary",maxResults:50,singleEvents:true,orderBy:"updated"}}]},items:"data.results.0.response.data.items",id:"id",since:{arg:"updatedMin",format:"iso"}},filter:{field:"",equals:""}};
 
-test.each([{choice:mailChoice,condition:detectedMail},{choice:calendarChoice,condition:detectedCalendar}])("picking $choice.toolkit reads once and saves the detected ordinary when", async ({choice,condition}) => {
-  api.routinesList.mockImplementation(async (_member:number, pick?:unknown)=>({routines:[],events:[choice],event_apps:[choice.app_name],...(pick?{when:condition}:{})}));
-  openRoutineDialog({members,routine:plan});
-  click('[data-dlg="trigger"]'); click('#app-popover [data-value="event"]'); await flush();
-  click('[data-dlg="event"]'); click(`#app-popover [data-value="${choice.id}"]`); await flush();
-  expect(api.routinesList).toHaveBeenLastCalledWith(plan.member_id,{event:choice.id,value:""});
-  expect(document.querySelector('[data-dlg="event"]')?.textContent).toContain(choice.label);
-  expect(document.querySelector('.au-routine-dialog')!.textContent).not.toContain("data.results");
-  click('[data-dlg="save"]'); await flush();
-  expect(api.routinesUpdate).toHaveBeenCalledWith(1,expect.objectContaining({when:condition}));
-  expect(api.routinesList).toHaveBeenCalledTimes(2);
-});
 
-test("undetectable events keep their choice and retry without creating a routine", async () => {
-  api.routinesList.mockImplementation(async (_member:number,pick?:unknown)=>({routines:[],events:[mailChoice],event_apps:["Gmail"],...(pick?{event_error:"No Gmail items are available yet. Try again after an item arrives."}:{})}));
-  openRoutineDialog({members,routine:plan});
-  click('[data-dlg="trigger"]'); click('#app-popover [data-value="event"]'); await flush();
-  click('[data-dlg="event"]'); click('#app-popover [data-value="gmail-mail"]'); await flush();
-  expect(document.querySelector('[role="alert"]')?.textContent).toContain("No Gmail items");
-  expect(document.querySelector('[data-dlg="event"]')?.textContent).toContain("New mail");
-  expect(document.querySelector<HTMLButtonElement>('[data-dlg="save"]')!.disabled).toBe(true);
-  click('[data-dlg="event-check"]'); await flush();
-  expect(api.routinesList).toHaveBeenCalledTimes(3);
-  expect(api.routinesCreate).not.toHaveBeenCalled();
-  expect(api.routinesUpdate).not.toHaveBeenCalled();
-});
 
-test("repository is a plain field and edits invalidate the previous detection", async () => {
-  const choice={...mailChoice,id:"github-failure",toolkit:"github",app:"composio:github",app_name:"GitHub",label:"Workflow failed",input:"repository"};
-  api.routinesList.mockImplementation(async (_member:number,pick?:unknown)=>({routines:[],events:[choice],event_apps:["GitHub"],...(pick?{when:detectedMail}:{})}));
-  openRoutineDialog({members,routine:plan});
-  click('[data-dlg="trigger"]'); click('#app-popover [data-value="event"]'); await flush();
-  click('[data-dlg="event"]'); click('#app-popover [data-value="github-failure"]'); await flush();
-  expect(document.querySelector('#au-event-value')?.hasAttribute('pattern')).toBe(false);
-  field('#au-event-value','team name/repo.name'); click('[data-dlg="event-check"]'); await flush();
-  expect(api.routinesList).toHaveBeenLastCalledWith(plan.member_id,{event:"github-failure",value:"team name/repo.name"});
-  expect(document.querySelector<HTMLButtonElement>('[data-dlg="save"]')!.disabled).toBe(false);
-  field('#au-event-value','other/repo');
-  document.querySelector('#au-event-value')!.dispatchEvent(new Event('input',{bubbles:true}));
-  expect(document.querySelector<HTMLButtonElement>('[data-dlg="save"]')!.disabled).toBe(true);
-});
 
-test("a webhook replacement address has a visible update notice", async () => {
-  api.routineWebhook.mockResolvedValue({address:'http://127.0.0.1:43211/routines/1',address_changed:true});
-  openRoutineDialog({members,routine:{...plan,schedule:null,when:{webhook:true}}}); await flush();
-  expect(document.querySelector('[role="status"]')?.textContent).toContain("address changed");
-  expect(document.querySelector('.au-hook-address')?.textContent).toContain('43211');
-});
 
-test("editing the scope during a read leaves a usable check button and ignores the late reply", async () => {
-  const choice={...mailChoice,id:"github-failure",input:"repository"};
-  let reply!:(value:unknown)=>void;
-  api.routinesList.mockImplementation((_member:number,pick?:unknown)=>pick ? new Promise(resolve=>{reply=resolve;}) : Promise.resolve({routines:[],events:[choice],event_apps:["Gmail"]}));
-  openRoutineDialog({members,routine:plan});
-  click('[data-dlg="trigger"]'); click('#app-popover [data-value="event"]'); await flush();
-  click('[data-dlg="event"]'); click('#app-popover [data-value="github-failure"]');
-  field('#au-event-value','sample/first'); click('[data-dlg="event-check"]');
-  field('#au-event-value','sample/second');
-  document.querySelector('#au-event-value')!.dispatchEvent(new Event('input',{bubbles:true}));
-  reply({when:detectedMail}); await flush();
-  expect(document.querySelector<HTMLButtonElement>('[data-dlg="save"]')!.disabled).toBe(true);
-  expect(document.querySelector<HTMLButtonElement>('[data-dlg="event-check"]')!.disabled).toBe(false);
-  expect(document.querySelector('[data-dlg="event-check"]')!.textContent).toBe('Check event');
-});
 
-test("one every routine saves and reopens its daytime window through real controls", async () => {
-  openRoutineDialog({members, routine: {...plan, schedule: {kind:"every", hours:3, from:"08:00", to:"23:00"}}});
-  expect(document.querySelector('[data-dlg="window-from"]')?.textContent).toContain("08:00");
-  // The hours are its times: no separate time row stands disabled beside them (owner, 2026-11-08: no dead rows).
-  expect(document.querySelector('#au-time')).toBeNull();
-  click('[data-dlg="window-from"]'); click('#app-popover [data-value="07:00"]');
-  click('[data-dlg="save"]'); await flush();
-  expect(api.routinesUpdate).toHaveBeenCalledWith(1, expect.objectContaining({schedule:expect.objectContaining({kind:"every",hours:3,from:"07:00",to:"23:00"})}));
-});
 
 test.each(["day","month"])("the chosen %s view survives a fresh page but its date starts today", async view => {
   const page=createAutomationsPage(app());document.body.append(page.el);page.show("2026-10-24");await flush();
@@ -292,35 +121,10 @@ test("window occurrences restart at the first time each local day", () => {
   expect(occurrences(routine,shiftDay(from,1),shiftDay(from,2),7).map(o=>new Date(o.at).getHours())).toEqual([8]);
 });
 
-test("routine editor saves the chosen weekdays, owner, date and end count",async()=>{
-  openRoutineDialog({members,memberId:2,date:"2030-10-24",time:"09:00"});
-  field("#au-title","Morning report");field("#au-prompt","Read progress");
-  click('[data-dlg="kind-menu"]');click('#app-popover [data-value="weekly"]');click('[data-day="1"]');click('[data-day="3"]');click('[data-dlg="more"]');click('[data-dlg="end"]');click('#app-popover [data-value="after"]');field("#au-count","5");
-  expect(document.querySelector<HTMLInputElement>("#au-title")!.value).toBe("Morning report");
-  click('[data-dlg="save"]');await flush();
-  expect(api.routinesCreate).toHaveBeenCalledWith(expect.objectContaining({member_id:2,title:"Morning report",prompt:"Read progress",schedule:expect.objectContaining({kind:"weekly",max_runs:5,start_date:"2030-10-24",time:"09:00"})}));
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
-});
 
-test("routine editing preserves an until date and never changes the member",async()=>{
-  openRoutineDialog({members,routine:{...plan,schedule:{kind:"weekdays",time:"08:30",start_date:"2030-01-01",until:"2030-12-31"}}});
-  // A routine is always its member's: no one else can be picked.
-  expect(document.querySelector('[data-dlg="member"]')).toBeNull();
-  click('[data-dlg="save"]');await flush();
-  expect(api.routinesUpdate).toHaveBeenCalledWith(1,expect.objectContaining({schedule:{kind:"weekdays",time:"08:30",start_date:"2030-01-01",until:"2030-12-31",timezone:Intl.DateTimeFormat().resolvedOptions().timeZone}}));
-});
 
-test.each(["25:00","09:61","oops"])("routine editor refuses invalid time %s",async time=>{
-  openRoutineDialog({members,date:"2030-10-24",time});field("#au-title","Review");field("#au-prompt","Check");click('[data-dlg="save"]');await flush();expect(api.routinesCreate).not.toHaveBeenCalled();
-});
 
-test("date picker has real day buttons and leaves the form draft intact",()=>{
-  openRoutineDialog({members,date:"2030-10-24",time:"09:00"});field("#au-title","Draft");click('[data-dlg="date"]');click('[data-date="2030-10-25"]');expect(document.querySelector<HTMLInputElement>("#au-title")!.value).toBe("Draft");expect(document.querySelector('[data-dlg="date"]')!.textContent).toBe("2030-10-25");
-});
 
-test("Escape closes a menu first and the editor second",()=>{
-  openRoutineDialog({members,date:"2030-10-24"});click('[data-dlg="more"]');click('[data-dlg="end"]');document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));expect(document.querySelector('.au-routine-dialog')).not.toBeNull();document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));expect(document.querySelector('.au-routine-dialog')).toBeNull();
-});
 
 test("the calendar opens directly, without a list, and the keep-awake switch persists",async()=>{
   const page=createAutomationsPage(app());document.body.append(page.el);page.show();await flush();
@@ -399,8 +203,11 @@ test("calendar chips keep complete compact times and full task details when edit
   expect(chip.querySelector('time')?.textContent).toBe("09:00");
   expect(chip.title).toContain("Review");expect(chip.title).toContain("09:00");
   expect(chip.getAttribute("aria-label")).toContain("Alice");
-  chip.click();click('[data-pop="open-routine"]');expect(document.querySelector<HTMLInputElement>("#au-title")!.value).toBe("Review");
-  expect(document.querySelector<HTMLInputElement>("#au-time")!.value).toBe("09:00");page.hide();
+  // A routine opens to read: its member changes it in the conversation (owner, 2026-11-09).
+  chip.click();click('[data-pop="open-routine"]');
+  const view=document.querySelector<HTMLElement>(".mb-dialog.rv-dialog")!;
+  expect(view.querySelector("h2")!.textContent).toBe("Review");expect(view.querySelector(".rv-prompt")!.textContent).toBe("Check progress");
+  expect(view.textContent).toContain("09:00");expect(view.querySelector("input, textarea, [data-dlg='save']")).toBeNull();page.hide();
 });
 
 
@@ -408,12 +215,15 @@ test("interval phases and remaining run limits survive calendar boundaries",()=>
  const routine={...plan,schedule:{kind:"every" as const,hours:3}};const from=localDay("2026-10-24");expect(occurrences(routine,from,shiftDay(from,1),2).map(o=>new Date(o.at).getHours())).toEqual([9,12]);expect(occurrences({...routine,next_run:null},from,shiftDay(from,1))).toEqual([]);expect(dateKey(shiftDay(localDay("2026-12-31"),1))).toBe("2027-01-01");
 });
 
-test("calendar accepts member drops with date and hour but ignores unrelated drags",async()=>{
- const page=createAutomationsPage(app());document.body.append(page.el);page.show();await flush();
+test("a member dropped on a time asks it in its conversation for a routine then, and unrelated drags do nothing",async()=>{
+ const host=app();const page=createAutomationsPage(host);document.body.append(page.el);page.show();await flush();
+ const opened:unknown[]=[];const listen=(e:Event):void=>{opened.push((e as CustomEvent).detail);};window.addEventListener("raphael:open-member",listen);
  const slot=page.el.querySelector<HTMLElement>('[data-slot][data-hour="9"]')!;
  const drop=(value:string):void=>{const event=new Event("drop",{bubbles:true,cancelable:true});Object.defineProperty(event,"dataTransfer",{value:{getData:()=>value}});slot.dispatchEvent(event);};
- drop("");expect(document.querySelector('.au-routine-dialog')).toBeNull();drop("2");
- expect(document.querySelector('.au-routine-dialog')).not.toBeNull();expect(document.querySelector('[data-dlg="member"]')).toBeNull();expect(document.querySelector('[data-dlg="date"]')!.textContent).toBe(slot.dataset.slot);expect(document.querySelector<HTMLInputElement>('#au-time')!.value).toBe("09:00");page.hide();
+ drop("");expect(host.go).not.toHaveBeenCalled();drop("2");
+ expect(opened).toEqual([{memberId:2,turnId:undefined,draft:expect.stringMatching(/09:00/)}]);
+ expect(host.go).toHaveBeenLastCalledWith("agent");
+ expect(document.querySelector('.mb-dialog')).toBeNull();window.removeEventListener("raphael:open-member",listen);page.hide();
 });
 
 test("future calendar windows account for occurrences before the visible range",()=>{
@@ -663,10 +473,6 @@ describe("what the calendar says of Google",()=>{
  });
 });
 
-test("routine destination uses an app dropdown",()=>{
- openRoutineDialog({members});click('[data-dlg="more"]');click('[data-dlg="destination"]');
- expect(document.querySelector('#app-popover')!.textContent).toContain("Member's main thread");
-});
 
 
 test("unchanged calendar reads preserve every visible event and face", async () => {

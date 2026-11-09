@@ -470,11 +470,12 @@ describe("商店", () => {
     expect(cards.some((c) => c.includes('data-id="notion"'))).toBe(false);
   });
 
-  test("n8n is the owner's own server: its row and page say so, and an n8n connection takes it out of the store", () => {
+  test("n8n is set up in the conversation: its row asks nothing, and an n8n connection takes it out of the store", () => {
     const card = html.split('<div class="cs-card">').find((c) => c.includes('data-id="n8n"'))!;
-    expect(card).toContain('<b class="need">需要自己的伺服器</b>');
+    // What it needs is said in the conversation, not on a row (owner, 2026-11-09).
+    expect(card).not.toContain('class="need"');
     expect(card).toMatch(/<span class="mono md logo-mono" style="--brand:#EA4B71">/);
-    expect(storePage("n8n")).toContain("n8n 架在你自己的伺服器上");
+    expect(storePage("n8n")).not.toContain('class="cs-needs"');
     // a connection that already is n8n, however it was named, takes it out of the store
     const own: ConnectionGroup = { ...custom, id: "n1", name: "Workflows", transport: "http", url: "https://n8n.example.com/mcp-server/http" };
     expect(connectionsHTML(view({ tab: "store", groups: [...GROUPS, own] }))).not.toContain('data-id="n8n"');
@@ -1041,13 +1042,18 @@ describe("what the tab does", () => {
     } finally { vi.unstubAllGlobals(); await browser.happyDOM.abort(); }
   });
 
-  test("加入 on n8n opens the server form with its type, name and header filled in", async () => {
+  // Owner, 2026-11-09: 「一律全部都在對話中進行…除非真的是登入就結束 或是輸入金鑰匙就結束」.
+  test("加入 on n8n, or on an app that needs a developer app, leaves for the conversation with the owner's words", async () => {
+    api.integrationsCatalog.mockResolvedValue({ services: [...CATALOG, service("acme", "Acme", { needs: "own_app" })] });
     const c = createConnections(host);
     await c.load();
     c.click(button("join", { id: "n8n" }));
-    expect(c.view().form).toMatchObject({ type: "http", name: "n8n", url: "", pairLines: "Authorization=Bearer " });
-    expect(connectionsHTML(c.view())).toContain('placeholder="https://n8n.example.com/mcp-server/http"');
+    expect(host.tryPrompt).toHaveBeenLastCalledWith("幫我連接 n8n");
+    expect(c.view().form).toBeNull();
+    c.click(button("join", { id: "acme" }));
+    expect(host.tryPrompt).toHaveBeenLastCalledWith("幫我連接 Acme");
     expect(api.integrationsConnect).not.toHaveBeenCalled();
+    expect(api.connectorsConnect).not.toHaveBeenCalled();
   });
 
   test.each(["finish", "switch", "reset"])("store paints visible rows first and cancels stale fill on %s", async (ending) => {

@@ -53,13 +53,32 @@ export function mountInlineConnectionSetup(thread: HTMLElement,
   const act = (slot: HTMLElement, action: () => Promise<unknown>): void => {
     void Promise.resolve(action()).catch(() => cardFailure(slot.closest(".conversation-card"), () => act(slot, action)));
   };
+  /** A server of the owner's own (n8n) brings its fields in its card: there is no catalog, guide or redirect to read. */
+  const serverPlan = (slot: HTMLElement): ToolkitPlan | null => {
+    if (slot.dataset.needs !== "own_server") return null;
+    let fields: ToolkitPlan["fields"] = [];
+    try {
+      const given = JSON.parse(slot.dataset.serverFields ?? "[]") as Partial<ToolkitPlan["fields"][number]>[];
+      fields = given.filter(field => typeof field.name === "string" && typeof field.label === "string")
+        .map(field => ({ name: field.name!, label: field.label!, description: field.description ?? "", required: field.required !== false, secret: !!field.secret, default: null }));
+    } catch { /* A card without readable fields offers nothing to type; its member explains in the conversation. */ }
+    return { slug: slot.dataset.toolkit ?? "", name: slot.dataset.name ?? "", needs: "key", scheme: "own_server", fields, redirect_url: null, guide_url: null, app_url: null };
+  };
   const load = async (slot: HTMLElement): Promise<void> => {
     if (loaded.has(slot)) return;
     loaded.add(slot);
     try {
-      const plan = await api.connectorsToolkit(slot.dataset.toolkit ?? "");
+      const server = serverPlan(slot);
+      const plan = server ?? await api.connectorsToolkit(slot.dataset.toolkit ?? "");
       if (!active || !slot.isConnected) return;
       plans.set(slot, plan);
+      if (server) {
+        slot.classList.add("inline-connection-setup");
+        slot.innerHTML = fieldsHTML(plan) + `<div class="card-actions">${btn(esc(t("card.keySave")), "sm pri", " data-inline-submit")}</div>`;
+        const old = slot.closest("[data-connector]")?.querySelector<HTMLElement>('[data-act="card-setup"]');
+        if (old) old.hidden = true;
+        return;
+      }
       // The form arrives after the card: a reader at the latest line stays there, so the card's foot never hides under the composer.
       const scroller = slot.closest<HTMLElement>(".ra-scroll");
       const pinned = !!scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 80;

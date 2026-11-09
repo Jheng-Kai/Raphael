@@ -49,8 +49,8 @@ events and durable handoffs. The same AgentService owns member work.
 A room message carries no speaker name (owner, 2026-11-09: 「開會的時候不用有名字…不用顯示拉菲爾」):
 the face beside it says who spoke, its name in the face's tooltip and for a screen reader (the author
 stays in the markup, visually hidden); a message with nothing else in its meta line has no meta line.
-The face stands beside the message, never above it (owner, 2026-11-09): left of the first bubble and centred on
-its first line, mirroring the owner's face on the right. Whom a message answers is quoted at the top of its bubble
+The face stands beside the message, never above it (owner, 2026-11-09), small (24 px) at its lower left, by its last
+bubble, as Grok Bot's group (owner, 2026-11-10: 「每一個 bots 都是比較小一個，然後是放在對話的左下角」). Whom a message answers is quoted at the top of its bubble
 (owner, 2026-11-09: 「回覆 小晴」 above it did not show who answered whom): the shared conversation quote, the
 source's name over its first words (two lines at most, Markdown marks dropped), a press jumps to it; a source that
 is gone says so without a name. The side thread lays its replies out the same way. Checks: `room-discussion`,

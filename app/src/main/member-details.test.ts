@@ -61,6 +61,7 @@ function mount() {
   return panel;
 }
 
+
 beforeEach(() => {
   document.body.innerHTML = "";
   setAvatar(null);
@@ -183,85 +184,28 @@ describe("a member's panel", () => {
     expect(panel.el.querySelector('[data-det="close"]')?.getAttribute('aria-label')).toBe(t('members.close'));
   });
 
-  test("its routine row opens the editor where a saved switch pauses it", async () => {
+  // Owner, 2026-11-09: 「這邊的所有設定都只能透過 Agent 完成 但是我們看的到內容」.
+  test("its routine row opens the routine to read, with nothing to type, save or delete, and no plus to add one", async () => {
     const panel = mount();
     await flush();
     expect(api.routinesList).toHaveBeenCalledWith(3);
+    expect(panel.el.querySelector('[data-det="routine-add"]')).toBeNull();
     const row = panel.el.querySelector<HTMLElement>('[data-routine="9"]')!;
     expect(row.textContent).toContain("每天的單字");
     expect(row.textContent).toContain("每天 08:00");
     expect(row.querySelector('[role="switch"]')).toBeNull();
     row.click();
-    const toggle = document.querySelector<HTMLButtonElement>('[data-dlg="enabled"]')!;
-    expect(toggle.getAttribute('aria-checked')).toBe('true');
-    toggle.click();
-    document.querySelector<HTMLButtonElement>('[data-dlg="save"]')!.click();
-    await flush();
-    expect(api.routinesUpdate).toHaveBeenCalledWith(9, expect.objectContaining({ enabled: false }));
+    const dialog = document.querySelector<HTMLElement>(".mb-dialog.rv-dialog")!;
+    expect(dialog.querySelector("h2")!.textContent).toBe("每天的單字");
+    expect(dialog.querySelector(".rv-prompt")!.textContent).toBe("出題");
+    expect(dialog.textContent).toContain("每天 08:00");
+    expect(dialog.querySelector("input, textarea, select, [role='switch'], [data-dlg='save'], [data-dlg='delete'], .mb-dlg-act")).toBeNull();
+    expect(api.routinesUpdate).not.toHaveBeenCalled();
   });
 
-  test("a new routine: title, a schedule from the dropdown, what to do; saved with routines.create", async () => {
-    const panel = mount();
-    await flush();
-    panel.el.querySelector<HTMLElement>('[data-det="routine-add"]')!.click();
-    document.querySelector<HTMLInputElement>("#au-title")!.value = "每週回顧";
-    document.querySelector<HTMLTextAreaElement>("#au-prompt")!.value = "整理這週";
-    document.querySelector<HTMLElement>('[data-dlg="kind-menu"]')!.click(); document.querySelector<HTMLElement>('#app-popover [data-value="every"]')!.click();
-    // the title and the prompt typed are kept across the drawing
-    expect(document.querySelector<HTMLInputElement>("#au-title")!.value).toBe("每週回顧");
-    document.querySelector<HTMLElement>('[data-dlg="hours"]')!.click();
-    document.querySelector<HTMLElement>('#app-popover [data-value="6"]')!.click();
-    document.querySelector<HTMLElement>('[data-dlg="save"]')!.click();
-    await flush();
-    expect(api.routinesCreate).toHaveBeenCalledWith({ member_id: 3, title: "每週回顧", prompt: "整理這週", schedule: expect.objectContaining({ kind: "every", hours: 6 }) });
-  });
 
-  test("a routine without a title is not sent", async () => {
-    const panel = mount();
-    await flush();
-    panel.el.querySelector<HTMLElement>('[data-det="routine-add"]')!.click();
-    document.querySelector<HTMLElement>('[data-dlg="save"]')!.click();
-    await flush();
-    expect(api.routinesCreate).not.toHaveBeenCalled();
-  });
 
-  test("the shared HH:MM field rejects invalid times and saves a valid time", async () => {
-    const panel = mount();
-    await flush();
-    panel.el.querySelector<HTMLElement>('[data-det="routine-add"]')!.click();
-    const form = document.querySelector<HTMLElement>(".au-routine-dialog")!;
-    const time = form.querySelector<HTMLInputElement>("#au-time")!;
-    expect(time.type).toBe("text");
-    expect(time.placeholder).toBe("00:00");
-    form.querySelector<HTMLInputElement>("#au-title")!.value = "Review";
-    form.querySelector<HTMLTextAreaElement>("#au-prompt")!.value = "Summarize progress";
-    form.querySelector<HTMLElement>('[data-dlg="kind-menu"]')!.click(); document.querySelector<HTMLElement>('#app-popover [data-value="daily"]')!.click();
-    form.querySelector<HTMLInputElement>("#au-time")!.value = "25:61";
-    form.querySelector<HTMLElement>('[data-dlg="save"]')!.click();
-    await flush();
-    expect(api.routinesCreate).not.toHaveBeenCalled();
-    form.querySelector<HTMLInputElement>("#au-time")!.value = "08:45";
-    form.querySelector<HTMLElement>('[data-dlg="save"]')!.click();
-    await flush();
-    expect(api.routinesCreate).toHaveBeenCalledWith({ member_id: 3, title: "Review", prompt: "Summarize progress", schedule: expect.objectContaining({ kind: "daily", time: "08:45" }) });
-  });
 
-  test("double-clicking routine save while create is in flight sends only one request", async () => {
-    let finish!: () => void;
-    api.routinesCreate.mockImplementation(() => new Promise<Record<string, never>>((r) => (finish = () => r({}))));
-    const panel = mount();
-    await flush();
-    panel.el.querySelector<HTMLElement>('[data-det="routine-add"]')!.click();
-    document.querySelector<HTMLInputElement>("#au-title")!.value = "早報";
-    document.querySelector<HTMLTextAreaElement>("#au-prompt")!.value = "摘要";
-    document.querySelector<HTMLElement>('[data-dlg="kind-menu"]')!.click(); document.querySelector<HTMLElement>('#app-popover [data-value="daily"]')!.click();
-    const save = document.querySelector<HTMLElement>('[data-dlg="save"]')!;
-    save.click();
-    save.click();
-    expect(api.routinesCreate).toHaveBeenCalledTimes(1);
-    finish();
-    await flush();
-  });
 });
 
 describe("Raphael's panel", () => {
@@ -300,6 +244,15 @@ test("a member's face is the button of its picture picker, with a pencil under t
   expect(panel.el.querySelector(".mb-panel-identity > small")!.textContent).toBe("N2 嚴格版");
 });
 
+test("a member's face picker offers the slimes alone, with no tab that draws a picture", async () => {
+  const panel = mount(); await flush();
+  panel.el.querySelector<HTMLElement>('[data-det="avatar"]')!.click();
+  const picker = document.querySelector<HTMLElement>("#app-popover")!;
+  expect(picker.classList.contains("mb-avpop")).toBe(true);
+  expect(picker.querySelectorAll("[data-slime-character], [data-slime-color]").length).toBeGreaterThan(0);
+  expect(picker.querySelector("[data-avp-tab], [data-avp-pane], .tabs, textarea, input")).toBeNull();
+});
+
 test("a late routine response cannot replace the newly selected member's routines", async () => {
   const panel = mount();
   await flush();
@@ -316,19 +269,15 @@ test("a late routine response cannot replace the newly selected member's routine
   expect(panel.el.querySelector('[data-routine="9"]')).toBeNull();
 });
 
-test("a remote deletion keeps the routine draft editable and refresh failure keeps rows", async () => {
+test("a routine being read stays open when the list refreshes, and a failed refresh keeps the rows", async () => {
   const panel = mount();
   await flush();
   panel.el.querySelector<HTMLElement>('[data-det="routine-open"]')!.click();
-  const title = document.querySelector<HTMLInputElement>("#au-title")!;
-  title.value = "Unsaved routine";
-  title.focus();
   api.routinesList.mockResolvedValue({ routines: [] });
   panel.refreshRoutines();
   await flush();
-  expect(document.querySelector<HTMLInputElement>("#au-title")!.value).toBe("Unsaved routine");
-  expect(document.activeElement?.id).toBe("au-title");
-  document.querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();
+  expect(document.querySelector(".mb-dialog.rv-dialog .rv-prompt")!.textContent).toBe(ROUTINE.prompt);
+  document.querySelector<HTMLElement>('.rv-dialog [data-dlg="close"]')!.click();
   api.routinesList.mockResolvedValue({ routines: [ROUTINE] });
   panel.refreshRoutines();
   await flush();
@@ -389,12 +338,3 @@ describe("primary changes do not add face badges", () => {
   });
 });
 
-test("a routine row opens the wide editor with its instructions and no history", async () => {
-  const panel = mount();
-  await flush();
-  panel.el.querySelector<HTMLElement>('[data-det="routine-open"]')!.click();
-  await flush();
-  expect(document.querySelector<HTMLTextAreaElement>(".au-routine-grid #au-prompt")!.value).toBe(ROUTINE.prompt);
-  expect(document.querySelector(".au-run-history, .au-run-section")).toBeNull();
-  document.querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();
-});

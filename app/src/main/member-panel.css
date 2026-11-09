@@ -28,11 +28,26 @@
 .mb-rt-state { display: flex; color: var(--text-3); flex: none; }
 .mb-rt-state.is-on { color: var(--ok); }
 .mb-rt-main { flex: 1; }
-.mb-routine-row { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
+/* The row is one surface with its switch inside it (Grok Bot's Upcoming rows): under the pointer the whole row lights,
+   never the words alone with the switch left outside (owner, 2026-11-09). */
+.mb-routine-row { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; padding-right: var(--sp-2); border-radius: var(--r-md); }
+.mb-routine-row:has(> .mb-rt:hover) { background: var(--hover); }
 .mb-routine-row > .mb-rt { flex: 1; min-width: 0; }
+.mb-det .mb-routine-row > .mb-rt.btn:hover:not(:disabled) { background: transparent; }
 .mb-routine-row > .mb-tool { flex: none; opacity: 0; }
 .mb-routine-row:is(:hover, :focus-within) > .mb-tool, .mb-routine-row > .mb-tool[aria-expanded="true"] { opacity: 1; }
 .mb-routine-row .mb-rt-main > span { white-space: normal; overflow-wrap: anywhere; }
+
+/* A routine to read (routine-view.ts): when it runs, who runs it, and its instructions on one tinted card that grows with
+   them. Nothing in it is a field. */
+.mb-dialog.rv-dialog { width: min(560px, calc(100vw - 32px)); overflow-y: auto; }
+.rv { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); min-width: 0; }
+.rv-part { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-width: 0; }
+.rv-part > h3 { margin: 0; font-size: var(--fs-xs); font-weight: var(--weight-medium); color: var(--text-3); }
+.rv-part > p { margin: 0; font-size: var(--fs-sm); line-height: 1.6; color: var(--text); }
+.rv-part > p.rv-status { font-size: var(--fs-xs); color: var(--text-3); }
+.rv-who { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--fs-sm); color: var(--text-2); }
+.rv-part > p.rv-prompt { padding: var(--sp-3); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .mb-panel-preference { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-3); font-size: var(--fs-sm); line-height: 1.4; }
 .mb-panel-preference + .mb-panel-row.btn { border-top: 1px solid var(--line); }

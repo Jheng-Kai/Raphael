@@ -60,7 +60,7 @@ deletion. Restart closes interrupted calls and retains their transcript.
 Voice chat is not released yet (owner, 2026-11-06, R-UI-106): the voice button records voice messages only, and the call scenes come back with the feature.
 
 Inspect every contact sheet and each new scene at light 720 and dark 1120. Compare
-the busy dialog with dialog-caption-confirm, the settings controls with details-voice, the
+the busy dialog with dialog-caption-confirm, the settings controls with details-notify, the
 receipt shell with card-mcp-done, and the
 repair note with the existing missing-service note. A call receipt is a standalone
 history card.
@@ -865,7 +865,7 @@ existing retract-and-restore behavior after the second Escape.
 npm run look -- esc-main-armed esc-member-armed esc-recording-cancel composer-stop-pending-result composer-stop-background-result composer-stop-voice-result composer-stop-navigation composer-stop-roster chat --theme both --width 1120,720,1920x1080
 npm run look -- member-delete --theme both --width 1120,720,1920x1080
 npm run look -- page-product page-buy page-expand page-gone --theme both --width 1120,720,1920x1080
-npm run look -- composer-model-small composer-model-favorites composer-model-sources composer-model-same composer-model-fold composer-quick-model composer-model-menu model-sync model-sync-member settings-chatgpt-row composer-model-arrives member-brain-saved --theme both --width 1120,720,1920x1080
+npm run look -- composer-model-small composer-model-favorites composer-model-sources composer-model-same composer-model-fold composer-model-unfolded composer-quick-model composer-model-menu model-sync model-sync-member settings-chatgpt-row composer-model-arrives member-brain-saved --theme both --width 1120,720,1920x1080
 ```
 
 R-UI-47: successful conversation deletion invalidates its outstanding history load
@@ -1197,7 +1197,7 @@ npm run look -- owner-bubble-member owner-bubble-other-member owner-bubble-light
 A dialog dims the window caption too and starts below it, and the window buttons still answer:
 
 ```powershell
-npm run look -- dialog-caption-confirm automation-window --theme both --width 1120,720,1920x1080
+npm run look -- dialog-caption-confirm --theme both --width 1120,720,1920x1080
 ```
 
 `composer-voice-recording` measures the button at rest and while recording (same place and size, send glyph and label, no Stop,
@@ -1621,7 +1621,7 @@ npm run look -- event-routine-find-group --theme both --width 1120,720,1920x1080
 R-UI-85..91: fixed sidebar actions, newest window entry, group heading press, copy feedback, isolated drafts, long paste files and bare overlapping room identities. See README daily section for affected existing sidebar consumers and performance assertions.
 
 ```powershell
-npm run look -- daily-footer-hover daily-footer-marks daily-footer-home daily-press-feedback daily-press-surfaces daily-press-event daily-press-card daily-press-desktop daily-newest daily-folder-heading daily-copy-chief daily-copy-member daily-copy-room daily-copy-setup daily-copy-webhook daily-draft-member daily-draft-room daily-paste-chief daily-paste-room daily-long-draft daily-faces-2-rail daily-faces-3-rail daily-faces-4-rail daily-faces-2 daily-faces-3 daily-faces-4 --theme both --width 1120,720,1920x1080
+npm run look -- daily-footer-hover daily-footer-marks daily-footer-home daily-press-feedback daily-press-surfaces daily-press-event daily-press-card daily-press-desktop daily-newest daily-folder-heading daily-copy-chief daily-copy-member daily-copy-room daily-draft-member daily-draft-room daily-paste-chief daily-paste-room daily-long-draft daily-faces-2-rail daily-faces-3-rail daily-faces-4-rail daily-faces-2 daily-faces-3 daily-faces-4 --theme both --width 1120,720,1920x1080
 ```
 
 Local unit authorization excludes judge, native, network and providers. Browser fixture evidence remains separate from native and design acceptance.
