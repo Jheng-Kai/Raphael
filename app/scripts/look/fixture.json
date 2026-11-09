@@ -1194,6 +1194,17 @@
       "connectors": [{ "id": "card-acme", "app": "acme-ledger", "name": "Acme Ledger", "logo": "", "needs": "key", "toolkit": "acme-ledger",
         "state": "pending", "error": null, "reconnect": false, "tool_count": null, "expires_at_ms": 1792893585000, "resumed": false }]
     },
+    "server": {
+      "id": 126, "session_id": "look-connect-server", "member_id": 0, "conversation_id": 1,
+      "created_at_ms": 1792807185000, "question": "用我的 n8n 跑一下每週報表的流程。", "route": "answer", "source": "app",
+      "prefix": "", "text": "n8n 在你自己的伺服器上，填好服務網址和存取權杖後就繼續這項工作。", "detail": null, "status": "done", "cost_usd": 0,
+      "model": "fixture", "steps": [], "attachments": [],
+      "messages": [{ "seq": 1, "kind": "reply", "text": "n8n 在你自己的伺服器上，填好服務網址和存取權杖後就繼續這項工作。", "at_ms": 1792807186000 }],
+      "connectors": [{ "id": "card-n8n", "app": "n8n", "name": "n8n", "logo": "", "needs": "own_server", "toolkit": "n8n",
+        "fields": [{ "name": "url", "label": "服務網址", "required": true, "secret": false, "description": "n8n 的 MCP 伺服器網址" },
+          { "name": "token", "label": "存取權杖", "required": true, "secret": true, "description": "" }],
+        "state": "pending", "error": null, "reconnect": false, "tool_count": null, "expires_at_ms": 1792893585000, "resumed": false }]
+    },
     "app": {
       "id": 125, "session_id": "look-connect-app", "member_id": 0, "conversation_id": 1,
       "created_at_ms": 1792807185000, "question": "看一下 Orbit Ads 上週的廣告成效。", "route": "answer", "source": "app",

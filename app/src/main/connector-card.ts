@@ -57,7 +57,7 @@ export function appMarkHTML(app: string, logo?: string): string {
 /** What the card says of where its sign-in stands. */
 export function cardStateText(card: ConnectorCard): string {
   switch (card.state) {
-    case "pending": return card.reconnect ? plain("card.expiredAuth") : card.needs === "key" || card.needs === "own_server" ? plain("card.needsKey") : card.needs === "own_app" ? plain("card.needsOwnApp") : "";
+    case "pending": return card.reconnect ? plain("card.expiredAuth") : card.needs === "key" ? plain("card.needsKey") : card.needs === "own_server" ? plain("store.needsOwnServer") : card.needs === "own_app" ? plain("card.needsOwnApp") : "";
     case "authorizing": return plain("card.authorizing");
     case "connected": return t(card.reconnect ? "card.reconnected" : "card.connected", { p0: card.tool_count ?? 0 });
     case "cancelled": return plain("card.cancelled");

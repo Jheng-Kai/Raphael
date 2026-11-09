@@ -618,6 +618,15 @@ npm run look -- plugins-store-needs plugins-store-needs-page plugins-setup-key p
 fields, the guide or its fallback, the redirect address for a developer app, a key that is in no page text and no call
 but the one that adds the app, and an emptied masked field after a refusal; `card-*` checks require the same for the chat.
 
+An app on the owner's own server (n8n) is set up in the conversation (owner, 2026-11-09: setup happens in the chat
+unless it ends at a sign-in or a key). Its card (`needs: "own_server"`) says 需要自己的伺服器 and carries the fields
+the core declared: the address plain, the token masked, one 安全儲存, no modal and no catalog guide. Both values leave
+in the card's one `integrations.card_connect` call and in no page text.
+
+```powershell
+npm run look -- connector-server connector-server-sent --theme both --width 1120,720,1920x1080
+```
+
 ## Executable round 10 matrix
 
 ```powershell

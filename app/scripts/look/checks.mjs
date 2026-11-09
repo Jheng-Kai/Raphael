@@ -6154,6 +6154,17 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, state };
   }
+  if (name === "connector-server-sent") {
+    // An app on the owner's own server (n8n): its address and token leave in the card's one call (connection-setup.ts).
+    const token = "zk-look-0123456789", card = document.querySelector('[data-connector="card-n8n"]');
+    const sent = window.__look.calls.filter(call => call.method === "integrations.card_connect");
+    require(card?.dataset.cardState === "connected", "the card follows the core to connected");
+    require(sent.length === 1 && sent[0].params.id === "card-n8n" && sent[0].params.fields.url === "https://flows.example.test/mcp-server/http" && sent[0].params.fields.token === token,
+      "the address and the token cross one call, integrations.card_connect");
+    require(!JSON.stringify(window.__look.calls.filter(call => call.method !== "integrations.card_connect")).includes(token), "no other call carries the token");
+    require(!document.body.textContent.includes(token) && !(document.querySelector('.composer textarea')?.value ?? "").includes(token), "the token is on no page text and was not typed into the chat");
+    return { check: name };
+  }
   if (name.startsWith("connector-")) {
     // A connector card (connector-card.ts): the app's own bare mark, its name, where its sign-in stands and at most
     // one framed action, all inside the card, below the reply that asked for it.
@@ -6184,6 +6195,7 @@ export function checkRendered(name, context = {}) {
       "connector-expired": ["pending", "授權已過期", "重新連結", true],
       "connector-key": ["pending", "需要你的 API 金鑰", "填入金鑰", true],
       "connector-app": ["pending", "需要你自己的開發者應用程式", "設定開發者應用程式", true],
+      "connector-server": ["pending", "需要自己的伺服器", "填入金鑰", true],
       "connector-reconnected": ["connected", "已重新連結 · 2 個工具", null, false],
     }[name];
     require(expected, `no expectation for ${name}`);
@@ -6192,8 +6204,13 @@ export function checkRendered(name, context = {}) {
     require(card.dataset.cardState === state && (!words || said === words), `${app}'s card reads "${words}" (${card.dataset.cardState}: "${said}")`);
     const connectButton = card.querySelector('[data-act="card-connect"],[data-act="card-cancel"]');
     if (action === null) require(card.querySelector('.card-actions button:disabled'), 'connected card keeps its checked disabled button');
-    else if (['connector-key','connector-app'].includes(name)) require(card.querySelector('[data-inline-setup]'), 'setup fields belong to the card');
+    else if (['connector-key','connector-app','connector-server'].includes(name)) require(card.querySelector('[data-inline-setup]'), 'setup fields belong to the card');
     else require(connectButton?.textContent.trim() === action && connectButton.classList.contains('pri') === primary, 'the connection action matches the state');
+    if (name === "connector-server") {
+      const fields = [...card.querySelectorAll('[data-setup-field]')];
+      require(fields.map(field => field.dataset.setupField).join() === "url,token" && fields[0].type === "text" && fields[1].type === "password", "the address is plain and the token is masked, both in the card");
+      require(visible(card.querySelector('[data-inline-submit]')) && !document.querySelector('.cn-setup-dialog'), "one save inside the card and no modal");
+    }
     if (name === "connector-authorizing" || name === "connector-slack-authorizing") {
       require(visible(card.querySelector('.card-status.is-waiting i')), 'the card shows sign-in under way');
       require(window.__look.calls.some(call => call.method === "integrations.card_connect" && call.params?.id === card.dataset.connector),
