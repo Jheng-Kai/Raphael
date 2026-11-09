@@ -207,6 +207,8 @@
 .message-tooltip[hidden], :has([data-cancel-armed="true"]) > .message-tooltip { display: none; }
 .page-agent .btn.quote-pill { position: fixed; z-index: 99; width: auto; min-height: var(--h-ctl); padding: 3px var(--sp-3); gap: var(--sp-1); border: 1px solid var(--edge); border-radius: var(--r-pill); background: var(--panel); color: var(--text); box-shadow: var(--pop); font: var(--fs-xs)/calc(var(--h-ctl) - 8px) var(--ui); }
 .page-agent .btn.quote-pill[hidden], .cmp-quote[hidden] { display: none; }
+/* A reply that failed on a plan's usage limit leads with that plan's Manage usage, under its words. */
+.chat-message > .turn-usage { display: flex; margin-top: var(--sp-2); }
 .message-quote { display: block; min-width: 0; max-width: 100%; padding: 0; padding-inline-start: 10px; border: 0; border-inline-start: 2px solid var(--accent-text); margin-block-end: 8px; white-space: normal; color: var(--text-2); font: var(--fs-xs)/1.5 var(--ui); }
 button.message-quote { width: 100%; text-align: start; background: none; cursor: pointer; }
 .quote-author { display: block; color: var(--accent-text); font-weight: var(--weight-semibold); }

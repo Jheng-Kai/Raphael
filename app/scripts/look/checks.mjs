@@ -2863,6 +2863,15 @@ export function checkRendered(name, context = {}) {
     require(ink.bottom <= card.bottom && grey.bottom <= card.bottom, "both pills stay inside the card");
     return { check: name, items: items.length, columns: lefts.size, headline: getComputedStyle(title).fontSize };
   }
+  if (name === "chat-usage-limit") {
+    // A plan's usage limit leads with its Manage usage, under the failed reply's words (OpenAI's guidance).
+    const button = document.querySelector('.chat-message[data-reply] > .turn-usage > button[data-act="manage-usage"]');
+    require(visible(button) && button.textContent.trim() === "管理用量", "the failed reply offers 管理用量");
+    const words = button.closest(".chat-message").querySelector(".ans").getBoundingClientRect(), box = button.getBoundingClientRect();
+    require(box.top >= words.bottom - 1 && Math.abs(box.left - words.left) <= 2, "it stands under the reply's words, at their left edge");
+    require(document.querySelectorAll('[data-act="manage-usage"]').length === 1, "only the failed reply carries it");
+    return { check: name };
+  }
   if (name === "onboarding-composio") {
     // Without Composio its card comes first across the step, and the apps under it are the ones that need none (owner,
     // 2026-11-09: 「要讓他們先連上 Composio，然後如果沒有的話，才只顯示…沒有 Composio 也可以顯示的 connectors」).

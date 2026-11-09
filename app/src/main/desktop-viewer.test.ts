@@ -581,6 +581,19 @@ test('a private owner request never caches the live card picture in the details 
  expect(api.desktopOpen).toHaveBeenCalledTimes(1);
 });
 
+test('the live view is asked for pictures only while the panel shows one, and asked again after it reconnects',async()=>{
+ panelOpen=true; mounted.show(); await flush();
+ const post=vi.fn(); Object.defineProperty(frame(),'contentWindow',{configurable:true,value:{postMessage:post}});
+ const asks=():boolean[]=>post.mock.calls.map(([data])=>data as {type?:string;on?:boolean}).filter(data=>data.type==='raphael-desktop-frames').map(data=>data.on!);
+ message('connected'); mounted.sync();
+ expect(asks()).toEqual([]);
+ const inline=document.createElement('div'); inline.setAttribute('data-card-desktop-screen',''); host.querySelector('ol')!.append(inline);
+ mounted.sync(); expect(asks()).toEqual([true]);
+ mounted.sync(); expect(asks()).toEqual([true]);
+ message('connected'); mounted.sync(); expect(asks()).toEqual([true,true]);
+ inline.remove(); mounted.sync(); expect(asks()).toEqual([true,true,false]);
+});
+
 test('an unchanged status renewal makes no DOM writes',async()=>{
  panelOpen=true; mounted.show(); await flush(); message('connected');
  const writes: MutationRecord[]=[]; const observer=new MutationObserver(records=>writes.push(...records)); observer.observe(host,{subtree:true,childList:true,attributes:true,characterData:true});

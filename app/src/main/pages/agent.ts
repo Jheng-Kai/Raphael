@@ -89,6 +89,7 @@ import { memberAccent, memberColor, ownerBubble } from "../owner-bubble";
 import { openPeerChat, type PeerChatView } from "../peer-chat";
 import { exchangeView } from "../exchange-line";
 import { dayLabel, describeError } from "../format";
+import { CHATGPT_USAGE_URL } from "../cli-brains";
 import { loadingHTML } from "../loading";
 import {
   type TimelineState,
@@ -2310,6 +2311,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         break;
       case "rerun":
         void rerun(act);
+        break;
+      case "manage-usage":
+        void api.openExternalUrl(CHATGPT_USAGE_URL).catch((error) => toaster.info(describeError(error)));
         break;
       case "attach":
         picker.value = ""; picker.click();

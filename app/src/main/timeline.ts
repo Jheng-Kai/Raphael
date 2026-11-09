@@ -637,8 +637,19 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
   return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
     (reply && origin && sourceOf(turn) === "routine" ? routineLineHTML(turn) : "") +
     (reply ? replyContentHTML(text, query, turn.status === "running") : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`) +
+    (reply && last ? usageActionHTML(turn) : "") +
     // Its links are chips in its words, with no row of cards under it (owner, 2026-11-08; link-previews.ts).
     reactionRowHTML(turn.reactions?.[key]) + messageActionsHTML(time, regenerate, undefined, reply, reply ? workActionHTML(turn, state) + retry : "") + `</div>`;
+}
+
+/** The plans whose usage page the app knows: ChatGPT's, which Codex signs in with too. */
+const USAGE_PROVIDERS = new Set(["chatgpt", "cli:codex"]);
+
+/** A reply that failed on a plan's usage limit leads with Manage usage, the plan's own page (OpenAI's guidance). */
+function usageActionHTML(turn: AgentTurn): string {
+  const failure = turn.failure;
+  if (turn.status !== "error" || failure?.kind !== "usage_limit" || !USAGE_PROVIDERS.has(failure.provider)) return "";
+  return `<div class="turn-usage">${btn(esc(t("brains.manageUsage")), "sm", ` data-act="manage-usage" data-provider="${esc(failure.provider)}"`)}</div>`;
 }
 
 /** A failed reply's Run again: a bare icon first among its actions, which stay in sight on the latest failure. */

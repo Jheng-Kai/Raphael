@@ -68,6 +68,13 @@ export function installMock(fixture, config = {}, target = window) {
     last.task = null;
     data.turns = data.turns.filter(turn => turn.member_id !== 1).concat(first, last);
   }
+  // A member's latest reply failed on ChatGPT's usage limit: the reply leads with Manage usage.
+  if (variant.usageLimit) {
+    const latest = data.turns.filter(turn => turn.member_id === 1 && turn.conversation_id === 11).sort((a, b) => b.id - a.id)[0];
+    const sentence = "ChatGPT 的用量已達上限，請等額度重設或選擇其他模型。";
+    Object.assign(latest, { status: "error", text: sentence, model: "@chatgpt:gpt-6-sol", failure: { kind: "usage_limit", provider: "chatgpt", resets_at: null },
+      messages: [{ seq: 1, kind: "reply", text: sentence, at_ms: latest.created_at_ms }], task: null });
+  }
   if (variant.raphaelVoice) data.settings.tts_fish_voice = "0123456789abcdef0123456789abcdef";
   // The member settings page (member-settings.ts): a voice service with two voices, two connections that are on, and a voice chosen.
   if (variant.memberSettings) {

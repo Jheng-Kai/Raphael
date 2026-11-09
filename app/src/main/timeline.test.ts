@@ -206,6 +206,21 @@ test("a prerequisite the reply already states is not repeated in the opened work
   expect(root.querySelector(".work-section.is-open [data-missing-repair]")).toBeNull();
 });
 
+test("a reply that failed on ChatGPT's usage limit leads with Manage usage under its words, and nothing else does", () => {
+  setLocale("zh-TW");
+  const html = (more: Partial<AgentTurn>): HTMLElement => {
+    const root = document.createElement("div"); root.innerHTML = turnHTML(turn(1, more), emptyTimelineState(), false, LOOK); return root;
+  };
+  const limited = (provider: string): Partial<AgentTurn> => ({ status: "error", text: "ChatGPT 的用量已達上限。", failure: { kind: "usage_limit", provider, resets_at: null } });
+  for (const provider of ["chatgpt", "cli:codex"]) {
+    const button = html(limited(provider)).querySelector<HTMLButtonElement>('.chat-message[data-reply] > .turn-usage > button[data-act="manage-usage"]')!;
+    expect([button.textContent, button.dataset.provider]).toEqual([t("brains.manageUsage"), provider]);
+  }
+  expect(html(limited("openrouter")).querySelector(".turn-usage")).toBeNull();
+  expect(html({ status: "error", failure: { kind: "network", provider: "chatgpt", resets_at: null } }).querySelector(".turn-usage")).toBeNull();
+  expect(html({ status: "done", failure: null }).querySelector(".turn-usage")).toBeNull();
+});
+
 /** What a sighted reader sees: the text outside the tags, without what only a screen reader hears. */
 const visible = (html: string): string =>
   html.replace(/<span class="sr">.*?<\/span>/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();

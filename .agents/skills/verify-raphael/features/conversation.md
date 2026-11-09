@@ -169,6 +169,15 @@ calm-thread light 720 and dark 1120 at full size, plus representative controls.
 Run judge on this same selected evidence. Unit brief: targeted Vitest/pytest only;
 the integrator runs full verify/core. Native/live remain separate acceptance.
 
+A reply that failed on a plan's usage limit leads with 管理用量 under its words (Notion task, 2026-11-09; OpenAI's
+guidance asks for Manage usage as the primary action). The turn carries `failure: {kind, provider, resets_at}`
+(core migration 74); the button shows for `usage_limit` from `chatgpt` or `cli:codex` and opens ChatGPT's usage
+page. Other kinds, providers and finished turns show nothing.
+
+```powershell
+npm run look -- chat-usage-limit calm-thread --theme both --width 1120,720,1920x1080
+```
+
 ## Streaming composer files (2026-11-05)
 
 Private and room composers share twenty-file admission, 250 MiB document limits and

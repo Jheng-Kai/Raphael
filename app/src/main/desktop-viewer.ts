@@ -159,6 +159,14 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   const waitingRequests = (): string[] => (state?.works ?? []).filter(work => work.state === 'waiting_control').map(work => work.request_id || work.id);
   const active = (): boolean => visible && (options.panelVisible() || !!options.timeline.querySelector("[data-card-desktop-screen], [data-card-screen]"));
   const send = (held: boolean, pointer?: { x:number; y:number }): void => { if (session) frame.contentWindow?.postMessage({ type:"raphael-desktop-control", held, pointer }, new URL(session.url).origin); };
+  // The live view draws its screen to a picture only while this panel shows one (the stream then plays in a chat
+  // card): a picture every few seconds is work a view that is watched live does not need.
+  let framesOn = false;
+  const askFrames = (on: boolean): void => {
+    if (on === framesOn || !session) return;
+    framesOn = on;
+    frame.contentWindow?.postMessage({ type: "raphael-desktop-frames", on }, new URL(session.url).origin);
+  };
 
   function paint<T extends object, K extends keyof T>(target: T, key: K, value: T[K]): void {
     if (target[key] !== value) target[key] = value;
@@ -248,6 +256,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       image.toggleAttribute('data-own', !!ownWallpaper);
     };
     paintWallpaper(panel.querySelector<HTMLImageElement>('.desktop-wallpaper')!);
+    askFrames(!!running && connected && !!inline && !expanded && !owner && !pending());
     const picture = running && (!connected || inline && !expanded) ? lastFrames.get(member()) : undefined;
     paint(last, "hidden", !picture);
     if (picture && last.src !== picture) paint(last, "src", picture);
@@ -277,7 +286,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   }
   function closeStream(): void {
     clearTimeout(lingering); clearTimeout(stallTimer); stalled = false;
-    generation++; takeOnConnect = false; watching = false; filesOnly = false; send(false); frame.remove(); frame.removeAttribute('src'); connected = interactive = false;
+    generation++; takeOnConnect = false; watching = false; filesOnly = false; send(false); framesOn = false; frame.remove(); frame.removeAttribute('src'); connected = interactive = false;
     const previous = session; session = undefined;
     if (previous) closePending = closePending.then(() => api.desktopClose(previous.session)).catch(() => {});
     panel.removeAttribute('data-expanded'); document.documentElement.removeAttribute('data-desktop-expanded');
@@ -306,7 +315,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       panel.dataset.inputLatencyMs = String(event.data.latencyMs);
     } else {
       connected = event.data.state === 'connected';
-      if (connected) { clearTimeout(stallTimer); stalled = false; everConnected = true; }
+      // A (re)connected view starts without pictures: ask again if this panel shows one.
+      if (connected) { clearTimeout(stallTimer); stalled = false; everConnected = true; if (framesOn) { framesOn = false; drawn = ""; } }
       if (!connected) {
         // A stream that ends before it ever showed the screen, or says it cannot reach it, is out of reach: it waits for
         // a retry instead of reopening on every poll.
