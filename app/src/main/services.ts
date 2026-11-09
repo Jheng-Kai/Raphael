@@ -13,7 +13,7 @@ import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import type { ServiceIconId } from "./service-icons";
 import type { BrainSettings, ServiceOption, ServicesStatus } from "./types";
-import { type IconName, actionRow, btn, esc, fieldHTML, ico, iconButton, leave, note, st, tg, toaster } from "./ui";
+import { type IconName, actionRow, btn, esc, fieldHTML, ico, iconButton, leave, st, tg, toaster } from "./ui";
 
 /** The capabilities, in the order of the list. */
 export const CAPABILITIES = [
@@ -341,7 +341,6 @@ function subViewHTML(entry: (typeof CAPABILITIES)[number], service: string, v: S
   } else if (option) {
     if (option.id === "searxng") fields = urlLineHTML(option, v, brain?.searxng_url ?? "");
     else if (option.needs_key || option.key_optional) fields = keyLineHTML(option, v);
-    if (entry.kind === "voice") fields += note(esc(t("services.voiceDetails")));
   }
   const inUse = !!row?.chosen && on;
   const idle = v.busy !== null;

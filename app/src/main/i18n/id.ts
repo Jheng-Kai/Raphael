@@ -1323,7 +1323,6 @@ export const id = {
   "services.urlInvalid": "Alamat harus diawali http:// atau https://",
   "services.loadFailed": "Pengaturan layanan tidak dapat dimuat. Buka ulang Pengaturan > Alat > Layanan; jika tetap gagal, mulai ulang Raphael.",
   "services.voice": "Layanan suara",
-  "services.voiceDetails": "Atur dan pratinjau suara Raphael di panel detailnya.",
   "services.voiceId": "ID model suara",
   "services.voiceSample": "Pemberitahuan. Tuan, berikan instruksi Anda.",
   "services.voiceInvalid": "ID model suara terdiri dari 32 karakter heksadesimal",

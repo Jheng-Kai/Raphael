@@ -1003,7 +1003,6 @@ export const zhTW = {
   "services.urlInvalid": "網址要以 http:// 或 https:// 開頭",
   "services.loadFailed": "無法讀取服務設定，請重新開啟「設定 › 工具 › 服務」，若仍失敗請重新啟動拉斐爾。",
   "services.voice": "語音服務",
-  "services.voiceDetails": "拉斐爾的聲音與試聽在他的詳細資訊中設定。",
   "services.voiceId": "聲音模型 ID",
   "services.voiceSample": "告。主人，請下達指示。",
   "services.voiceInvalid": "聲音模型 ID 是 32 個十六進位字元",

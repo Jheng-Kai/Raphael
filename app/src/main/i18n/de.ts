@@ -1323,7 +1323,6 @@ export const de = {
   "services.urlInvalid": "Adresse muss mit http:// oder https:// beginnen",
   "services.loadFailed": "Diensteinstellungen konnten nicht geladen werden. Einstellungen > Werkzeuge > Dienste erneut öffnen; bei weiterem Fehler Raphael neu starten.",
   "services.voice": "Sprachdienst",
-  "services.voiceDetails": "Raphaels Stimme in seinem Detailpanel einstellen und vorhören.",
   "services.voiceId": "Sprachmodell-ID",
   "services.voiceSample": "Hinweis. Meister, bitte geben Sie Ihre Anweisungen.",
   "services.voiceInvalid": "Sprachmodell-ID besteht aus 32 Hexadezimalzeichen",

@@ -1323,7 +1323,6 @@ export const zhCN = {
   "services.urlInvalid": "网址要以 http:// 或 https:// 开头",
   "services.loadFailed": "无法读取服务设置，请重新打开「设置 › 工具 › 服务」，若仍失败请重新启动拉斐尔。",
   "services.voice": "语音服务",
-  "services.voiceDetails": "拉斐尔的声音与试听在他的详细信息中设置。",
   "services.voiceId": "声音模型 ID",
   "services.voiceSample": "告。主人，请下达指示。",
   "services.voiceInvalid": "声音模型 ID 是 32 个十六进位字符",

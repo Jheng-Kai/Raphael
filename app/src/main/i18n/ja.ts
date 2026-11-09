@@ -1004,7 +1004,6 @@ export const ja = {
   "services.urlInvalid": "URL は http:// か https:// で始めてください",
   "services.loadFailed": "サービス設定を読めません。「設定 › ツール › サービス」を開き直し、解決しなければ再起動してください。",
   "services.voice": "音声サービス",
-  "services.voiceDetails": "ラファエルの声と試聴は、本人の詳細情報で設定します。",
   "services.voiceId": "声モデル ID",
   "services.voiceSample": "告。マスター、ご指示をお願いします。",
   "services.voiceInvalid": "声モデル ID は 16 進数 32 文字です",

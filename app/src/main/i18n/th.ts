@@ -1323,7 +1323,6 @@ export const th = {
   "services.urlInvalid": "ที่อยู่ต้องขึ้นต้นด้วย http:// หรือ https://",
   "services.loadFailed": "โหลดการตั้งค่าบริการไม่ได้ เปิด การตั้งค่า > เครื่องมือ > บริการ ใหม่ หากยังไม่ได้ให้เริ่ม Raphael ใหม่",
   "services.voice": "บริการเสียง",
-  "services.voiceDetails": "ตั้งค่าและฟังตัวอย่างเสียง Raphael ในแผงรายละเอียดของเขา",
   "services.voiceId": "ID โมเดลเสียง",
   "services.voiceSample": "แจ้งให้ทราบ. นายท่าน โปรดสั่งการ",
   "services.voiceInvalid": "ID โมเดลเสียงมีอักขระฐานสิบหก 32 ตัว",

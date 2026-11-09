@@ -1323,7 +1323,6 @@ export const es = {
   "services.urlInvalid": "La dirección debe empezar por http:// o https://",
   "services.loadFailed": "No se pudieron cargar los ajustes de servicios. Reabre Configuración > Herramientas > Servicios; si falla, reinicia Raphael.",
   "services.voice": "Servicio de voz",
-  "services.voiceDetails": "Configura y escucha la voz de Raphael en su panel de detalles.",
   "services.voiceId": "ID del modelo de voz",
   "services.voiceSample": "Aviso. Amo, dame tus instrucciones.",
   "services.voiceInvalid": "El ID de voz tiene 32 caracteres hexadecimales",

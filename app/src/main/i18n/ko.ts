@@ -1323,7 +1323,6 @@ export const ko = {
   "services.urlInvalid": "주소는 http:// 또는 https://로 시작해야 합니다",
   "services.loadFailed": "서비스 설정을 불러오지 못했습니다. 설정 > 도구 > 서비스를 다시 열고 계속 실패하면 Raphael을 재시작하세요.",
   "services.voice": "음성 서비스",
-  "services.voiceDetails": "Raphael 상세 패널에서 목소리를 설정하고 미리 들어보세요.",
   "services.voiceId": "음성 모델 ID",
   "services.voiceSample": "알림. 주인님, 지시를 내려주세요.",
   "services.voiceInvalid": "음성 모델 ID는 16진수 32자리입니다",

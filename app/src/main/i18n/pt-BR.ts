@@ -1323,7 +1323,6 @@ export const ptBR = {
   "services.urlInvalid": "O endereço deve começar com http:// ou https://",
   "services.loadFailed": "Não foi possível carregar as configurações dos serviços. Reabra Configurações > Ferramentas > Serviços; se falhar, reinicie o Raphael.",
   "services.voice": "Serviço de fala",
-  "services.voiceDetails": "Defina e ouça a voz do Raphael no painel de detalhes.",
   "services.voiceId": "ID do modelo de voz",
   "services.voiceSample": "Aviso. Mestre, dê suas instruções.",
   "services.voiceInvalid": "O ID de voz tem 32 caracteres hexadecimais",

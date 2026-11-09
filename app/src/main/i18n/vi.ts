@@ -1323,7 +1323,6 @@ export const vi = {
   "services.urlInvalid": "Địa chỉ phải bắt đầu bằng http:// hoặc https://",
   "services.loadFailed": "Không tải được cài đặt dịch vụ. Mở lại Cài đặt > Công cụ > Dịch vụ; nếu vẫn lỗi, khởi động lại Raphael.",
   "services.voice": "Dịch vụ giọng nói",
-  "services.voiceDetails": "Đặt giọng Raphael và nghe thử trong bảng chi tiết.",
   "services.voiceId": "ID mô hình giọng nói",
   "services.voiceSample": "Thông báo. Chủ nhân, xin hãy ra chỉ thị.",
   "services.voiceInvalid": "ID mô hình giọng nói gồm 32 ký tự thập lục phân",

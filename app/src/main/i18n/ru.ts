@@ -1323,7 +1323,6 @@ export const ru = {
   "services.urlInvalid": "Адрес должен начинаться с http:// или https://",
   "services.loadFailed": "Не удалось загрузить настройки сервисов. Откройте Настройки > Инструменты > Сервисы заново; если не помогает, перезапустите Raphael.",
   "services.voice": "Голосовой сервис",
-  "services.voiceDetails": "Задайте и прослушайте голос Raphael в его панели сведений.",
   "services.voiceId": "ID модели голоса",
   "services.voiceSample": "Уведомление. Хозяин, дайте указания.",
   "services.voiceInvalid": "ID модели голоса — 32 шестнадцатеричных символа",

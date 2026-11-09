@@ -37,6 +37,8 @@
 /* A service's own settings: its key, its address, its voice model, then the buttons */
 .svc-line { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 .svc-line .field { flex: 1; min-width: 0; width: auto; }
+/* A button beside a field in one row stands as tall as the field (R-UI-17). */
+.svc-line:has(> .field) .btn { min-height: var(--h-field); }
 .svc-line .val { flex: 1; color: var(--text-2); font-size: var(--fs-sm); }
 .svc-pick { display: grid; grid-template-columns: minmax(0, 1fr); }
 .svc-pick .mp-slot, .svc-pick .sel { width: 100%; max-width: none; }

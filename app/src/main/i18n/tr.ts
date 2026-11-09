@@ -1323,7 +1323,6 @@ export const tr = {
   "services.urlInvalid": "Adres http:// veya https:// ile başlamalıdır",
   "services.loadFailed": "Hizmet ayarları yüklenemedi. Ayarlar > Araçlar > Hizmetler bölümünü yeniden açın; sürerse Raphael’i yeniden başlatın.",
   "services.voice": "Ses hizmeti",
-  "services.voiceDetails": "Raphael’in sesini ayrıntılar panelinde ayarlayıp önizleyin.",
   "services.voiceId": "Ses modeli kimliği",
   "services.voiceSample": "Bildirim. Efendim, lütfen talimatlarınızı verin.",
   "services.voiceInvalid": "Ses modeli kimliği 32 onaltılık karakterdir",
