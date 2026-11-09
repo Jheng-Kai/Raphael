@@ -288,6 +288,16 @@ turn notifications refresh the window without unread/room delivery. Background
 public narration stays on the active TaskRun, projected through the existing task
 view and discarded with it. No RPC, migration, provider call or setting is added.
 
+Since 2026-11-09 (owner, beside Grok Bot's replies: 「不會太多不重要的思考文字 然後重點都有說到」) what a
+CLI member says waits for the CLI's next event (`agent/cli/loop.py` `_release_held`). When a step follows,
+only one opening said before the first step becomes a bubble, as Grok Bot's 「可以，我先…」, and the rest is
+`progress` in the folded work. A message the CLI marks as its answer, and the terminal result, show at once,
+so an answer split with `<<<next message>>>` appears whole. `MESSAGE_RULES` (`agent/answers.py`) ask for at most
+one short opening, an answer that opens with the result and keeps to what the owner needs, long material in a
+file or page, and a second message only for a separate question or exercise. Tests: `tests/agent/test_live_replies.py`.
+Judge it from the owner's database by counts only, never text: messages per turn, the share of turns with
+three or more, and the share opening with process words, per brain family (Claude Code, Codex, API).
+
 Selected matrix (both themes, 1120,720,1920x1080):
 
 ```powershell
