@@ -60,10 +60,24 @@ export function missingText(value: Missing): string {
 
 /** `action` is the note's own button where no repair page exists (a retry). */
 export function missingHTML(value: Missing, text = missingText(value), action = ""): string {
+  const repair = repairButton(value);
+  return `<div class="missing-note" role="status"><span>${esc(text)}</span>` + (repair || action) + `</div>`;
+}
+
+/**
+ * Under a reply that already says what is missing, only its repair: the sentence would say it twice (R-UI-02). A note
+ * with no repair page keeps its sentence, the one thing it has to show.
+ */
+export function missingRepairHTML(value: Missing): string {
+  const repair = repairButton(value);
+  return repair ? `<div class="missing-note is-repair" role="status">${repair}</div>` : missingHTML(value);
+}
+
+function repairButton(value: Missing): string {
   const repair = value.repair && repairs.has(value.repair) ? value.repair : null;
+  if (!repair) return "";
   const resource = value.requirement === "image_generation" ? "image" : value.requirement === "video_generation" ? "video" : value.resource;
-  return `<div class="missing-note" role="status"><span>${esc(text)}</span>` +
-    (repair ? btn(esc(t("missing.open")), "sm", ` data-missing-repair="${esc(repair)}" data-missing-resource="${esc(resource)}"`) : action) + `</div>`;
+  return btn(esc(t("missing.open")), "sm", ` data-missing-repair="${esc(repair)}" data-missing-resource="${esc(resource)}"`);
 }
 
 export function noticeHTML(requirement: string, repair: string | null = null, resource = repair ?? "app"): string {

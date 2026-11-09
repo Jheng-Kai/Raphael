@@ -156,9 +156,9 @@ test.each(["zh-TW", "en", "ja"] as const)("a completed turn keeps the exact miss
     { resource: "pdf", requirement: "no_text", state: "broken", repair: "vision" },
     { resource: "fish", requirement: "setup", state: "missing", repair: "voice" },
   ] as const) {
-    for (const withActions of [false, true]) {
+    for (const [withActions, words] of [[false, ""], [true, ""], [false, "台北現在 24 度。"], [true, "台北現在 24 度。"]] as const) {
       const item = turn(1, {
-        status: "error", steps: [step({ tool: "web_search", outcome: "error", reason: "not_configured", missing })],
+        status: "error", text: words, steps: [step({ tool: "web_search", outcome: "error", reason: "not_configured", missing })],
         messages: withActions ? [{ seq: 1, kind: "event", text: JSON.stringify({ type: "action", id: "search", state: "done", present: "Search", past: "Searched", outcome: "error", reason: "not_configured" }), at_ms: T0 }] : [],
       });
       const root = document.createElement("div"); root.innerHTML = turnHTML(item, emptyTimelineState(), false, LOOK);
@@ -168,7 +168,9 @@ test.each(["zh-TW", "en", "ja"] as const)("a completed turn keeps the exact miss
       expect(notes.querySelector(`[data-missing-resource="${missing.resource}"]`)?.getAttribute("data-missing-repair")).toBe(missing.repair);
       expect(notes.closest(".ra-body")).not.toBeNull();
       expect(root.querySelector(".sys [data-missing-repair],.task-actions [data-missing-repair]")).toBeNull();
-      if (missing.repair === "search") expect(notes.textContent).toContain(t("missing.url"));
+      // Words of the member say what is missing, so under them it is only the repair; with none, the note says it.
+      if (words) expect(notes.textContent?.trim()).toBe(t("missing.open"));
+      else if (missing.repair === "search") expect(notes.textContent).toContain(t("missing.url"));
     }
   }
 });
@@ -202,7 +204,10 @@ test("a prerequisite the reply already states is said once", () => {
   });
   const root = document.createElement("div"); root.innerHTML = turnHTML(item, emptyTimelineState(), false, LOOK);
   expect(root.querySelectorAll('[data-missing-repair="voice"]')).toHaveLength(1);
-  expect(root.querySelector(".turn-prerequisites")).toBeNull();
+  expect(root.textContent).not.toContain(t("missing.voice"));
+  // The repair comes after the reply that says what is missing, never above it.
+  const reply = root.querySelector(".chat-message[data-reply]")!, repair = root.querySelector('.turn-prerequisites [data-missing-repair="voice"]')!;
+  expect(reply.compareDocumentPosition(repair) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test("a reply that failed on ChatGPT's usage limit leads with Manage usage under its words, and nothing else does", () => {

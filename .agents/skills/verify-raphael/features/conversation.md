@@ -5,8 +5,10 @@
 Owner: 「查看過程那個可以拿掉 不用有查看過程」. A reply offers no way to view how it was worked out: no work control,
 and no 查看過程 in its ⋯ menu. What a member said while working is progress, folded out of sight (dev/u-reply);
 the closed work body stays only so a search that finds words in it can open it. What a step was missing stands in
-sight under the reply with its one repair (`.turn-prerequisites`), unless the reply already states it (R-UI-120).
-Scenes: missing-search, missing-provider, generated-audio-missing.
+sight under the reply with its one repair (`.turn-prerequisites`), said once (R-UI-120). Under a reply that speaks it
+is only the 開啟設定 button, after the reply (the judge flagged the sentence as said twice, R-UI-02); a turn with no
+words keeps the note's sentence, its button following the sentence.
+Scenes: missing-search, missing-provider, missing-pdf, generated-audio-missing, generated-image-missing.
 ## Finding by name forgives typos (owner, 2026-11-08, R-FIND-01)
 
 Every place that finds a thing by its name uses `app/src/main/find-match.ts`: the @ and / menus, the store and the

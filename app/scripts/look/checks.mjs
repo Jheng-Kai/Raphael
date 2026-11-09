@@ -1506,8 +1506,15 @@ export function checkRendered(name, context = {}) {
   }
   if (name === 'generated-missing') {
     const note = [...document.querySelectorAll('.ra-body .missing-note')].find(visible);
-    require(visible(note) && /供應商/.test(note.textContent) && /畫圖|影片/.test(note.textContent), 'the visible notice names the capability and provider');
-    require(/尚未選擇.*模型/.test(note.textContent) && /API 費用/.test(note.textContent) && /不會自動/.test(note.textContent), 'the notice explains the explicit choice and separate bill without choosing');
+    if (note?.classList.contains('is-repair')) {
+      // The member's reply says what is missing; under it the note is only the repair (R-UI-02, R-UI-120).
+      const reply = [...note.closest('.tn').querySelectorAll('.chat-message[data-reply]')].find(visible);
+      require(visible(reply) && /模型/.test(reply.textContent) && /費用/.test(reply.textContent), 'the reply names the model to choose and its separate bill');
+      require(reply.getBoundingClientRect().bottom <= note.getBoundingClientRect().top + 1 && note.querySelectorAll('button').length === 1, 'one repair comes after the reply');
+    } else {
+      require(visible(note) && /供應商/.test(note.textContent) && /畫圖|影片/.test(note.textContent), 'the visible notice names the capability and provider');
+      require(/尚未選擇.*模型/.test(note.textContent) && /API 費用/.test(note.textContent) && /不會自動/.test(note.textContent), 'the notice explains the explicit choice and separate bill without choosing');
+    }
     require(visible(note.querySelector('[data-missing-repair="models"]')), 'the existing Models repair is offered');
     return {check:name};
   }
@@ -1621,6 +1628,16 @@ export function checkRendered(name, context = {}) {
     } else if (name === 'missing-model-list') {
       require(visible(document.querySelector('[data-dlg="reload"]')), 'the empty account offers a real reload');
       require(document.querySelector('.mc-list').textContent.includes('重新讀取'), 'the reason names reloading in visible words');
+    } else if (note?.classList.contains('is-repair')) {
+      // Under a reply that says what is missing, the note is only its one repair, after the reply (R-UI-02, R-UI-120).
+      const reply = [...note.closest('.tn').querySelectorAll('.chat-message[data-reply]')].find(visible);
+      require(visible(reply) && reply.textContent.trim().length > 4, 'the reply says what is missing in visible words');
+      require(note.querySelectorAll('button').length === 1 && note.textContent.trim() === '開啟設定', 'under it, only the one repair');
+      require(reply.getBoundingClientRect().bottom <= note.getBoundingClientRect().top + 1, 'the repair comes after the reply');
+      if (name === 'missing-card') {
+        const card = note.closest('.conversation-card');
+        require(card && (card.textContent.match(/設定 › 連接 › 商店/g) ?? []).length === 1, 'the card names its existing repair form once, with one action');
+      }
     } else {
       require(visible(note) && note.textContent.length > 20, 'the reason is visible text');
       require(!note.querySelector('[title]'), 'no reason depends on a hover title');
@@ -1633,8 +1650,11 @@ export function checkRendered(name, context = {}) {
   if (name === "generated-audio-missing" || name === "generated-audio-repair") {
     const thread = document.querySelector('.page-agent:not([hidden])');
     if (name === "generated-audio-missing") {
-      require([...thread.querySelectorAll('[data-missing-repair="voice"]')].filter(visible).length === 1, "the missing voice service is said once with one repair");
-      require(!thread.querySelector('.turn-prerequisites [data-missing-repair="voice"]') && !thread.querySelector('[data-act="thinking"]'), "the repair the reply states is not repeated, and no work is offered to open");
+      const repairs = [...thread.querySelectorAll('[data-missing-repair="voice"]')].filter(visible);
+      require(repairs.length === 1 && repairs[0].closest('.turn-prerequisites .missing-note.is-repair'), "the missing voice service has one repair, under the reply that says it");
+      const reply = [...repairs[0].closest('.tn').querySelectorAll('.chat-message[data-reply]')].find(visible);
+      require(reply && reply.getBoundingClientRect().bottom <= repairs[0].getBoundingClientRect().top + 1, "the repair comes after the reply, not above it");
+      require(!thread.querySelector('[data-act="thinking"]'), "no work is offered to open");
     } else {
       require(visible(document.querySelector('#svc-key-fish')), "the repair reaches the voice service key");
       require(document.querySelector('[data-pane="tools"][aria-current="page"]'), "the voice repair opens the shared Tools pane");

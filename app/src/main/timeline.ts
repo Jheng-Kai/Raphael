@@ -1,5 +1,5 @@
 import { greetingHTML } from "./member-greeting";
-import { missingHTML, missingText } from "./missing";
+import { missingHTML, missingRepairHTML, missingText, type Missing } from "./missing";
 import { fileKind, sentFileHTML } from "./attachments";
 import { computerCardsHTML, computerResumedLineHTML } from "./computer-card";
 import { connectorCardsHTML, resumedLineHTML } from "./connector-card";
@@ -376,8 +376,11 @@ const actionsText = (count: number): string => (count === 1 ? t("agent.stepsDone
 export function conversationCardsHTML(turn: AgentTurn, memberName?: string): string {
   return (turn.task?.state === "done" ? `<div data-task-result-slot="${turn.id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") + connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + permissionCardsHTML(turn, undefined, false, memberName) +
     mailCardsHTML(turn) + pageCardsHTML(turn) + ownerQuestionsHTML(turn) +
-    (turn.messages ?? []).filter(message => message.kind === "media").map(message => artifactHTML(message.text, message.seq)).join("");
+    (turn.messages ?? []).filter(message => message.kind === "media").map(message => artifactHTML(message.text, message.seq, replySpeaks(turn))).join("");
 }
+
+/** Whether the member said something in the turn: then a missing setup under it needs only its repair, not its sentence. */
+const replySpeaks = (turn: AgentTurn): boolean => !!turn.text?.trim() || (turn.messages ?? []).some(message => message.kind === "reply" && message.text.trim());
 
 /** The words of a summary: how many things were done, how long it took, how many failed; or that a task is under way. */
 export function summaryText(turn: AgentTurn, nowMs: number): { lead: string; time: string; failed: number } {
@@ -722,13 +725,19 @@ export function safeYoutubeEmbedUrl(embed: unknown, fallbackUrl?: unknown): stri
   return null;
 }
 
-function artifactHTML(text: string, seq: number): string {
+/** A media message that says what a step was missing (`{missing}`), or null. */
+function mediaMissing(text: string): Missing | null {
+  try {
+    const prerequisite = JSON.parse(text)?.missing;
+    return prerequisite && typeof prerequisite.resource === "string" && typeof prerequisite.requirement === "string" && ["missing", "broken", "unknown", "off"].includes(prerequisite.state) && (prerequisite.repair === null || typeof prerequisite.repair === "string") ? prerequisite as Missing : null;
+  } catch { return null; }
+}
+
+function artifactHTML(text: string, seq: number, replied = false): string {
+  const prerequisite = mediaMissing(text);
+  if (prerequisite) return `<div class="chat-message" data-message="${seq}">${replied ? missingRepairHTML(prerequisite) : missingHTML(prerequisite)}</div>`;
   try {
     const payload = JSON.parse(text);
-    const prerequisite = payload?.missing;
-    if (prerequisite && typeof prerequisite.resource === "string" && typeof prerequisite.requirement === "string" && ["missing", "broken", "unknown", "off"].includes(prerequisite.state) && (prerequisite.repair === null || typeof prerequisite.repair === "string")) {
-      return `<div class="chat-message" data-message="${seq}">${missingHTML(prerequisite)}</div>`;
-    }
     const file = payload?.attachment as TurnAttachment | undefined;
     if (file && typeof file.id === "string" && /^[a-f0-9]{32}\.[a-z0-9]{1,12}$/.test(file.id) && typeof file.name === "string" && typeof file.mime === "string") {
       return `<div class="chat-message" data-message="${seq}">${sentFileHTML({ id: file.id, name: file.name, mime: file.mime, size: typeof file.size === "number" && Number.isFinite(file.size) && file.size >= 0 ? file.size : undefined })}</div>`;
@@ -787,10 +796,13 @@ export function latestProgress(turn: AgentTurn): string | undefined {
 function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, revealing = false, waitingForOwner = false): string {
   const messages = (turn.messages ?? []).filter(m => m.kind !== "reply" && m.kind !== "media" && m.kind !== "event" && m.text.trim())
     .map(m => ({ ...m, text: composioText(plainLine(m.text), composioAction(turn)) }));
+  // The work itself is never shown (owner, 2026-11-10: 「不用有查看過程」): what a step was missing stands in sight with its
+  // repair, live or not, and the closed body stays only for a search that finds words in it.
+  const prerequisites = prerequisitesHTML(turn);
   const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
-  if (live) return "";
+  if (live) return prerequisites;
   const events = [...publicEventsHTML(turn, false).values()].join("");
-  if (!messages.length && !events && !hasDetail(turn) && !workActions(turn).length && !(turn.steps?.length) && !turn.model && !revealing) return "";
+  if (!messages.length && !events && !hasDetail(turn) && !workActions(turn).length && !(turn.steps?.length) && !turn.model && !revealing) return prerequisites;
   const open = state.thinkingOpen.get(turn.id) ?? false;
   const actions = workActions(turn).filter(action => action.state === "done").map(action => ({ ...action, past: composioText(action.past, composioAction(turn)) }));
   const steps = shownSteps(turn).filter(step => step.kind !== "model");
@@ -798,18 +810,23 @@ function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, r
   const meta = [esc(answerMeta(turn)), ...shownSteps(turn).map(mediaBillHTML)].filter(Boolean).join(" · ");
   const detail = hasDetail(turn) && (!turn.messages?.length || turn.status === "error" || turn.task?.state === "failed");
   const body = (rows ? `<ol class="work-sentences">${rows}</ol>` : "") + events + (detail ? `<pre class="failure-detail">${highlightHTML(turn.detail, query)}</pre>` : "") + (meta ? `<p class="work-meta">${meta}</p>` : "");
-  // The work itself is never shown (owner, 2026-11-10: 「不用有查看過程」): what a step was missing stands in sight with its
-  // repair, and the closed body stays only for a search that finds words in it.
-  const prerequisites = prerequisitesHTML(turn);
   if (!body) return prerequisites;
   return prerequisites + `<div class="work-section think-box${open ? " is-open" : ""}" data-thinking-turn="${turn.id}">` +
     `<div class="work-body think-body" id="work-${turn.id}"${open ? "" : " hidden"}>${body}</div></div>`;
 }
 
-/** What a step of the turn was missing, each with its one repair, unless the reply already states it (then it is said once). */
+/**
+ * What a step of the turn was missing, each with its one repair, unless a message of the turn already carries it (then it
+ * is there once). Under a reply that speaks, only the repair: the reply says what is missing.
+ */
 function prerequisitesHTML(turn: AgentTurn): string {
-  const stated = new Set((turn.messages ?? []).filter(m => m.kind === "media").map(m => missingKey(m.text)).filter(Boolean));
-  const notes = shownSteps(turn).map(step => step.missing && !stated.has(`${step.missing.resource}:${step.missing.requirement}`) ? missingHTML(step.missing) : "").join("");
+  const media = (turn.messages ?? []).filter(m => m.kind === "media");
+  const stated = new Set(media.map(m => missingKey(m.text)).filter(Boolean));
+  const replied = replySpeaks(turn);
+  const note = replied ? missingRepairHTML : missingHTML;
+  // A spoken turn's own missing message moves here, under the reply, as its repair (turnMessagesHTML leaves it out).
+  const said = replied ? media.map(m => mediaMissing(m.text)).filter((value): value is Missing => value !== null).map(missingRepairHTML) : [];
+  const notes = said.join("") + shownSteps(turn).map(step => step.missing && !stated.has(`${step.missing.resource}:${step.missing.requirement}`) ? note(step.missing) : "").join("");
   return notes ? `<div class="turn-prerequisites">${notes}</div>` : "";
 }
 
@@ -894,6 +911,8 @@ function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, 
     const text = message.kind === "reply" ? said.get(message.seq) ?? "" : message.text.trim();
     if (!text) return "";
     if (message.kind === "media") {
+      // Under a reply that speaks, a missing setup is only its repair, drawn below the reply (prerequisitesHTML).
+      if (replySpeaks(turn) && mediaMissing(text)) return "";
       const artifact = artifactHTML(text, message.seq);
       if (artifact) return artifact;
       const media = parseMediaPayload(text);
